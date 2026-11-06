@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { DownloadIcon, PlayIcon, ScanIcon } from './icons'
+import { CenterFocusIcon, Download04Icon, PlayIcon } from '@hugeicons/core-free-icons'
 import { animate, type AnimationPlaybackControls } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
@@ -640,30 +640,27 @@ export const CanvasView = memo(function CanvasView({
                   <BarButton
                     label={t('canvas.downloadPng')}
                     size="pane"
+                    icon={Download04Icon}
                     onClick={() => actions.download?.(i)}
-                  >
-                    <DownloadIcon />
-                  </BarButton>
+                  />
                 )}
                 <BarButton
                   label={t('canvas.presentFrom')}
                   size="pane"
+                  icon={PlayIcon}
                   onClick={() => actions.present(i)}
-                >
-                  <PlayIcon />
-                </BarButton>
+                />
                 <BarButton
                   label={t('canvas.focusPage')}
                   shortcut="↵"
                   size="pane"
+                  icon={CenterFocusIcon}
                   onClick={() => {
                     setSelected(i)
                     setChosen(true)
                     setFocused(i)
                   }}
-                >
-                  <ScanIcon />
-                </BarButton>
+                />
               </div>
             ))}
           </div>

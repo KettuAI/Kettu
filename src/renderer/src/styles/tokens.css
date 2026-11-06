@@ -403,9 +403,6 @@
   --series-4: #f59e0b;
   --series-5: #ec4899;
   --series-6: #64748b;
-  /* A project's folder: its tab and its front. */
-  --pages-folder-tab: #00a1ff;
-  --pages-folder-front: #3cc7ff;
 
   /* composer: the composer's tray, popovers and menus (affectUI's Chat Composer and Model
      Picker), New session's list, and the meters' four levels by how much is used. */
@@ -730,8 +727,6 @@
     --series-4: #f59e0b;
     --series-5: #ec4899;
     --series-6: #64748b;
-    --pages-folder-tab: #00a1ff;
-    --pages-folder-front: #3cc7ff;
 
     /* composer: the composer's tray, popovers and menus, New session's list. */
     --composer-strong: #ffffff;
@@ -1040,8 +1035,6 @@
   --series-4: #f59e0b;
   --series-5: #ec4899;
   --series-6: #64748b;
-  --pages-folder-tab: #00a1ff;
-  --pages-folder-front: #3cc7ff;
 
   /* composer: the composer's tray, popovers and menus, New session's list. */
   --composer-strong: #ffffff;

@@ -74,28 +74,3 @@ export function KindSketch({ kind, title }: { kind: ArtifactKind; title: string 
     </span>
   )
 }
-
-/** A project's folder, closed. */
-export function FolderMark() {
-  return (
-    <svg className="k-folder" viewBox="0 0 67 67" aria-hidden="true">
-      <path
-        className="k-folder__tab"
-        d="M11.17 15.35v15.36h44.67v-6.98c0-3.86-3.13-6.98-6.98-6.98H33.5l-3.93-5.89a5.58 5.58 0 0 0-4.64-2.49h-6.78c-3.86 0-6.98 3.13-6.98 6.98Z"
-      />
-      <path
-        className="k-folder__tab-edge"
-        d="M33.5 16.75l-3.93-5.89a5.58 5.58 0 0 0-4.64-2.49h-6.78c-3.86 0-6.98 3.13-6.98 6.98v15.36h44.67v-6.98c0-3.86-3.13-6.98-6.98-6.98H33.5Zm0 0h-9.77"
-        strokeWidth="4.19"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        className="k-folder__front"
-        d="M18.15 16.75h30.71c3.86 0 6.98 3.13 6.98 6.98v25.83c0 3.86-3.13 6.98-6.98 6.98H18.15c-3.86 0-6.98-3.13-6.98-6.98V23.73c0-3.86 3.13-6.98 6.98-6.98Z"
-        strokeWidth="4.19"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}

@@ -56,6 +56,7 @@ import {
   fromCache,
   hourBars,
   hoursSoFar,
+  legendHidden,
   metricKind,
   modelRows,
   namesYear,
@@ -63,6 +64,7 @@ import {
   projectRows,
   RANGE_KINDS,
   seriesOf,
+  shownSeries,
   tokenParts,
   tokensPerRequest,
   trend,
@@ -1045,6 +1047,8 @@ function Breakdown({
           : (row.name ?? t('breakdown.unknownModel')),
     value: row.value ?? 0,
     color: grouping === 'agent' ? color(row.key as AgentId) : ranked(i),
+    // A project's name is its folder's; its path tells two of one name apart.
+    title: grouping === 'project' ? (row.path ?? undefined) : undefined,
   }))
   if (folded.rest) {
     items.push({
@@ -1158,8 +1162,16 @@ function OverTime({
       ),
     }
   }, [unit, froms, bars, i18n.language, hourText, rangeText])
+  // What the legend hides, until the agents drawn change.
+  const drawn = series.join(' ')
+  const [legend, setLegend] = useState<{ drawn: string; hidden: readonly AgentId[] }>({
+    drawn,
+    hidden: [],
+  })
+  const hidden = legend.drawn === drawn ? legend.hidden : []
+  const shown = shownSeries(series, hidden)
   const later = (bar: TrendBar) => begun !== null && bar.from >= begun
-  const lines = series.map((id) => ({
+  const lines = shown.map((id) => ({
     label: agentName(id),
     color: color(id),
     values: bars.map((bar) => (later(bar) ? Number.NaN : (bar.byAgent[id] ?? 0))),
@@ -1178,9 +1190,43 @@ function OverTime({
       emptyText={kind === 'cost' && tokensUsed ? t('noCost') : t('noUsage')}
       plotLabel={t('trend.plot', { title })}
       footer={
-        series.length === 1
-          ? t('trend.footerOne', { agent: agentName(series[0]!), range: rangeLabel })
-          : t('trend.footer', { range: rangeLabel })
+        <span className="k-u-trend-foot">
+          <span>
+            {series.length === 1
+              ? t('trend.footerOne', { agent: agentName(series[0]!), range: rangeLabel })
+              : t('trend.footer', { range: rangeLabel })}
+          </span>
+          {series.length > 1 && (
+            <span role="group" aria-label={t('trend.legend')} className="k-u-legend">
+              {series.map((id) => {
+                const on = shown.includes(id)
+                const last = on && shown.length === 1
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-pressed={on}
+                    title={last ? t('trend.keepOne') : undefined}
+                    onClick={() =>
+                      setLegend({
+                        drawn,
+                        hidden: legendHidden(
+                          series,
+                          on ? shown.filter((other) => other !== id) : [...shown, id],
+                          hidden,
+                        ),
+                      })
+                    }
+                    className="k-u-legend__item"
+                  >
+                    <i style={{ background: color(id) }} />
+                    {agentName(id)}
+                  </button>
+                )
+              })}
+            </span>
+          )}
+        </span>
       }
     />
   )

@@ -19,6 +19,8 @@ export type BreakdownItem = {
   value: number;
   /** Any CSS color – defaults to shades of the accent, then grays */
   color?: string;
+  /** Kettu: the label's tooltip in place of the label, such as a project's path */
+  title?: string;
 };
 
 export type BreakdownPeriod = { id: string; label: string };
@@ -116,7 +118,7 @@ export function CompactBreakdown({
   const [active, setActive] = useState<string | null>(null);
 
   // Every part ever shown keeps its place in the bar and its color, so the bar only glides – never reshuffles
-  const known = useRef<{ key: string; label: string; color: string }[]>([]);
+  const known = useRef<{ key: string; label: string; color: string; title?: string }[]>([]);
   // Parts with the same label or id keep their own row: the second one becomes "label#1"
   const counts = new Map<string, number>();
   const keyed = items.map((item) => {
@@ -129,9 +131,10 @@ export function CompactBreakdown({
     const seen = known.current.find((k) => k.key === key);
     if (seen) {
       seen.label = item.label;
+      seen.title = item.title;
       if (item.color) seen.color = item.color;
     } else {
-      known.current.push({ key, label: item.label, color: item.color ?? PALETTE[known.current.length] ?? "var(--ui-cbc-c5)" });
+      known.current.push({ key, label: item.label, title: item.title, color: item.color ?? PALETTE[known.current.length] ?? "var(--ui-cbc-c5)" });
     }
   }
 
@@ -319,7 +322,7 @@ export function CompactBreakdown({
                 onBlur={() => setActive(null)}
               >
                 <i className="ui-cbc__swatch" style={{ background: r.color }} />
-                <span className="ui-cbc__label" title={r.label} dir="auto">
+                <span className="ui-cbc__label" title={r.title ?? r.label} dir="auto">
                   {r.label}
                 </span>
                 <span className="ui-cbc__value">{format(shown[r.key] ?? 0)}</span>

@@ -1,7 +1,7 @@
 // affectUI Pro - licensed under https://www.affectui.com/license, not under this project's open-source license. Don't copy it out of this project.
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
 /*
  * KPI Chart (clean style) – a metric card with a multi-line chart and a hover tooltip, in a single self-contained file.
@@ -30,8 +30,8 @@ export type KpiChartProps = {
   series: KpiSeries[];
   /** Formats the axis, tooltip and delta values */
   format?: (n: number) => string;
-  /** Line under the chart */
-  footer?: string;
+  /** Line under the chart; Kettu: it may hold controls, such as a legend */
+  footer?: ReactNode;
   /** Point that stays highlighted while nobody hovers – leave empty to hide the tooltip at rest */
   defaultIndex?: number;
   /** Quiet text in the plot when there is nothing to draw */

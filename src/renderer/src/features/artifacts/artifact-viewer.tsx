@@ -1,31 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowLeftIcon,
-  ChevronLeftIcon,
-  CircleAlertIcon,
-  EllipsisIcon,
-  ExternalLinkIcon,
-  HistoryIcon,
+  AlertCircleIcon,
+  ArrowLeft01Icon,
+  Cancel01Icon,
+  Clock01Icon,
+  Delete02Icon,
+  LinkSquare02Icon,
   PlayIcon,
-  TrashIcon,
-} from './icons'
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { backTo } from '@renderer/app/history'
-import { Button } from '@renderer/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
-import { Tabs, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
@@ -35,7 +22,7 @@ import { isWeb } from '@renderer/lib/platform'
 import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
 import { closeArtifact, useViewStore } from '@renderer/stores/view'
 import { anchorOf, pinsOf } from './anchors'
-import { ArtifactMenuItems } from './artifact-menu'
+import { ArtifactMoreButton } from './artifact-menu'
 import { ShareButton } from './share-popover'
 import { CanvasControls, useCanvasState } from './canvas-controls'
 import type { PageActions } from './canvas-view'
@@ -43,6 +30,8 @@ import { CommentBox, CommentsPanel } from './comments'
 import { EditPanel } from './edit-panel'
 import { ArtifactEditor, useEditorState } from './editor'
 import { isEditable, isModeKey } from './keys'
+import { KIND_ICON } from './kinds'
+import { artifactKind } from './model'
 import { Waiting } from './page-frame'
 import { Presenter } from './present'
 import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
@@ -59,6 +48,7 @@ import {
   Presence,
   StatusBar,
   VersionChip,
+  ViewerEmpty,
   ViewerTitle,
 } from './viewer-parts'
 
@@ -86,7 +76,7 @@ function clampSize(width: number, height: number): { width: number; height: numb
  * area's size, or a canvas of its pages; beside it, on request, its version history.
  */
 export default function ArtifactViewer({ id, history }: { id: string; history: boolean }) {
-  const { t } = useTranslation('artifacts')
+  const { t } = useTranslation(['artifacts', 'common'])
   const [picked, setPicked] = useState<number | null>(null)
   const [panel, setPanel] = useState<Panel | null>(history ? 'history' : null)
   const historyOpen = panel === 'history'
@@ -212,59 +202,44 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   let body: React.ReactNode
   if (states.error) {
     body = (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <CircleAlertIcon className="text-danger" />
-          </EmptyMedia>
-          <EmptyTitle>{t('viewer.errorTitle')}</EmptyTitle>
-          <EmptyDescription>{t(`viewer.error.${states.error}`)}</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button variant="outline" size="compact" onClick={artifact.retry}>
-            {t('viewer.retry')}
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <ViewerEmpty
+        icon={AlertCircleIcon}
+        danger
+        title={t('viewer.errorTitle')}
+        text={t(`viewer.error.${states.error}`)}
+      >
+        <Button variant="secondary" size="sm" onClick={artifact.retry}>
+          {t('viewer.retry')}
+        </Button>
+      </ViewerEmpty>
     )
   } else if (states.gone) {
     body = (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <TrashIcon />
-          </EmptyMedia>
-          <EmptyTitle>{t('viewer.goneTitle')}</EmptyTitle>
-          <EmptyDescription>{t('viewer.goneDescription')}</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent className="flex-row justify-center">
-          <Button
-            variant="outline"
-            size="compact"
-            onClick={() => void restoreArtifact(id).catch(failed)}
-          >
-            {t('menu.restore')}
-          </Button>
-          <Button variant="outline" size="compact" onClick={leaveArtifact}>
-            <ArrowLeftIcon data-icon="inline-start" />
-            {t('viewer.back')}
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <ViewerEmpty
+        icon={Delete02Icon}
+        title={t('viewer.goneTitle')}
+        text={t('viewer.goneDescription')}
+      >
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={<Icon icon={ArrowLeft01Icon} size={14} />}
+          onClick={leaveArtifact}
+        >
+          {t('viewer.back')}
+        </Button>
+        <Button size="sm" onClick={() => void restoreArtifact(id).catch(failed)}>
+          {t('menu.restore')}
+        </Button>
+      </ViewerEmpty>
     )
   } else if (artifact.stopped) {
     body = (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyTitle>{t('viewer.stoppedTitle')}</EmptyTitle>
-          <EmptyDescription>{t('viewer.stoppedDescription')}</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button variant="outline" size="compact" onClick={artifact.restart}>
-            {t('viewer.reload')}
-          </Button>
-        </EmptyContent>
-      </Empty>
+      <ViewerEmpty title={t('viewer.stoppedTitle')} text={t('viewer.stoppedDescription')}>
+        <Button variant="secondary" size="sm" onClick={artifact.restart}>
+          {t('viewer.reload')}
+        </Button>
+      </ViewerEmpty>
     )
   } else if (url && shown) {
     body = (
@@ -319,20 +294,37 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
     if (next !== 'history') setPicked(null)
     setPanel(next)
   }
-  const tabs = (
-    <Tabs value={shownPanel} onValueChange={(next) => choosePanel(next as Panel)}>
-      <TabsList className="mx-3 mt-2.5 mb-2">
-        <TabsTrigger value="history">{t('viewer.history')}</TabsTrigger>
-        <TabsTrigger value="comments">
-          {t('comments.title')}
-          {threads && threads.some((thread) => thread.resolvedAt === null) && (
-            <span className="text-tertiary tabular-nums">
-              {threads.filter((thread) => thread.resolvedAt === null).length}
-            </span>
-          )}
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+  // Closing the column leaves comment mode too, which would show the comments again.
+  const closeColumn = () => {
+    closeHistory()
+    if (editing.mode === 'comment') editor?.toggle('comment')
+  }
+  const openThreads = threads?.filter((thread) => thread.resolvedAt === null).length ?? 0
+  const sideHead = (
+    <div className="k-av-side__head">
+      <SegmentedControl<Panel>
+        kind="tabs"
+        variant="tray"
+        size="sm"
+        aria-label={t('viewer.sideLabel')}
+        value={shownPanel ?? undefined}
+        onChange={choosePanel}
+        options={[
+          { value: 'history', label: t('viewer.history') },
+          {
+            value: 'comments',
+            label: t('comments.title'),
+            count: openThreads > 0 ? openThreads : undefined,
+          },
+        ]}
+      />
+      <BarButton
+        label={t('common:actions.close')}
+        size="group"
+        icon={Cancel01Icon}
+        onClick={closeColumn}
+      />
+    </div>
   )
   const editingPicked = editing.mode === 'select' && editing.picked && editor && shown && head
   let column: React.ReactNode = null
@@ -354,16 +346,13 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         error={versionsError}
         shown={picked}
         onPick={(version) => setPicked(version === head ? null : version)}
-        header={tabs}
+        header={sideHead}
       />
     )
   } else if (shownPanel === 'comments' && summary) {
     column = (
-      <aside
-        aria-label={t('comments.title')}
-        className="flex w-80 shrink-0 animate-in flex-col bg-app shadow-[inset_1px_0_0_var(--border-subtle)] fade-in duration-(--duration-fast)"
-      >
-        {tabs}
+      <aside aria-label={t('comments.title')} className="k-av-side">
+        {sideHead}
         <CommentsPanel
           artifact={{ id, title, version: head ?? summary.version, project: summary.project }}
           threads={threads}
@@ -381,22 +370,18 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
       </aside>
     )
   }
+  const kind = summary ? artifactKind(summary) : null
+  const toggleHistory = () => (historyOpen ? closeHistory() : setHistoryOpen(true))
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <TopBar className="gap-2 pr-2.5 pl-3">
-        <NoDrag className="min-w-0 gap-2">
+    <div className="k-av">
+      <TopBar>
+        <NoDrag className="k-av__crumbs">
           <Tooltip>
             <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  onClick={leaveArtifact}
-                  className="flex h-7 shrink-0 items-center gap-1 rounded-tile pr-2 pl-1 text-lede text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-secondary focus-ring"
-                />
-              }
+              render={<button type="button" onClick={leaveArtifact} className="k-av__back" />}
             >
-              <ChevronLeftIcon className="size-4" />
+              <Icon icon={ArrowLeft01Icon} size={15} />
               {backToList ? t('page.title') : t('viewer.back')}
             </TooltipTrigger>
             <TooltipContent>
@@ -404,36 +389,74 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
               <span className="opacity-60">Esc</span>
             </TooltipContent>
           </Tooltip>
-          <span aria-hidden className="text-border-strong">
-            /
-          </span>
+          {(kind || title) && <i aria-hidden>/</i>}
+          {kind && (
+            <span aria-hidden className="k-av__mark" data-kind={kind}>
+              <Icon icon={KIND_ICON[kind]} size={15} />
+            </span>
+          )}
           <ViewerTitle title={title} controls={controls} pageName={showing ? pageName : null} />
           {shown && (
             <VersionChip
               version={shown.version}
               at={versions?.find((v) => v.version === shown.version)?.createdAt ?? null}
               open={historyOpen}
-              onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
+              onClick={toggleHistory}
+            />
+          )}
+          {summary && (
+            <ArtifactMoreButton
+              target={{
+                id,
+                title,
+                version: shown?.version ?? summary.version,
+                versions: summary.version,
+                files: shown?.files ?? summary.files,
+                sessionId: summary.sessionId,
+                deletedAt: summary.deletedAt,
+                type: summary.type,
+              }}
+              onReload={artifact.reload}
+              historyOpen={historyOpen}
+              onVersionHistory={toggleHistory}
+              onDeleted={closeArtifact}
+              onDownloadPng={
+                renders && shown && !shown.canvas ? () => downloadPng(null) : undefined
+              }
             />
           )}
         </NoDrag>
-        <span className="min-w-2 flex-1" />
+        <span className="k-av__gap" />
         {showing && (
-          <NoDrag className="min-w-0 shrink-0 gap-2">
+          <NoDrag className="k-av__tools">
             <Presence id={id} presence={artifact.presence} deleted={summary?.deletedAt != null} />
-            {pageName && <CanvasBarControls controls={controls} pageName={pageName} zoom={false} />}
+            {pageName && <CanvasBarControls controls={controls} pageName={pageName} />}
             {/* A type's viewer presents its content itself, as a deck does. */}
             {shown && !summary?.type && (
-              <Button
-                variant="quiet"
-                size="sm"
+              <BarButton
+                label={t('viewer.present')}
+                icon={PlayIcon}
                 onClick={() => setPresenting(shown.canvas ? canvasState.selected : 0)}
-                className="h-7.5 gap-1.5 rounded-tile px-2.5 text-control font-normal text-secondary"
-              >
-                <PlayIcon data-icon="inline-start" />
-                {t('viewer.present')}
-              </Button>
+              />
             )}
+            {/* The web client shows it in a browser already; a type's viewer needs Kettu. */}
+            {shown && !isWeb && !summary?.type && (
+              <BarButton
+                label={t('viewer.openInBrowser')}
+                icon={LinkSquare02Icon}
+                onClick={() =>
+                  void window.kettu.artifacts
+                    .openExternal(id, shown.version)
+                    .catch((error: unknown) => console.error(`Could not open ${id}`, error))
+                }
+              />
+            )}
+            <BarButton
+              label={t('viewer.history')}
+              icon={Clock01Icon}
+              pressed={historyOpen}
+              onClick={toggleHistory}
+            />
             {shown && shares && (
               <ShareButton
                 id={id}
@@ -442,75 +465,11 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                 head={head ?? shown.version}
               />
             )}
-            {/* The web client shows it in a browser already; a type's viewer needs Kettu. */}
-            {shown && !isWeb && !summary?.type && (
-              <BarButton
-                label={t('viewer.openInBrowser')}
-                onClick={() =>
-                  void window.kettu.artifacts
-                    .openExternal(id, shown.version)
-                    .catch((error: unknown) => console.error(`Could not open ${id}`, error))
-                }
-              >
-                <ExternalLinkIcon />
-              </BarButton>
-            )}
-            <BarButton
-              label={t('viewer.history')}
-              pressed={historyOpen}
-              onClick={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
-            >
-              <HistoryIcon />
-            </BarButton>
-            {summary && (
-              <DropdownMenu>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            variant="quiet"
-                            size="icon-sm"
-                            aria-label={t('viewer.more')}
-                            className="size-7.5 rounded-tile text-secondary"
-                          />
-                        }
-                      />
-                    }
-                  >
-                    <EllipsisIcon />
-                  </TooltipTrigger>
-                  <TooltipContent>{t('viewer.more')}</TooltipContent>
-                </Tooltip>
-                <DropdownMenuContent align="end" className="min-w-55">
-                  <ArtifactMenuItems
-                    target={{
-                      id,
-                      title,
-                      version: shown?.version ?? summary.version,
-                      versions: summary.version,
-                      files: shown?.files ?? summary.files,
-                      sessionId: summary.sessionId,
-                      deletedAt: summary.deletedAt,
-                      type: summary.type,
-                    }}
-                    onReload={artifact.reload}
-                    historyOpen={historyOpen}
-                    onVersionHistory={() => (historyOpen ? closeHistory() : setHistoryOpen(true))}
-                    onDeleted={closeArtifact}
-                    onDownloadPng={
-                      renders && shown && !shown.canvas ? () => downloadPng(null) : undefined
-                    }
-                  />
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
           </NoDrag>
         )}
       </TopBar>
-      <div className="flex min-h-0 flex-1">
-        <div ref={area} className="relative min-w-0 flex-1 bg-sidebar">
+      <div className="k-av__body">
+        <div ref={area} className="k-av__area">
           {body}
         </div>
         {column}
