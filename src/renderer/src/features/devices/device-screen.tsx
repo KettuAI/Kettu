@@ -332,16 +332,18 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
     element.value = ''
   }
 
-  const status = drawn ? null : state === 'error' ? (
-    <span className="max-w-60 px-4 text-center">{error ?? t('screen.error')}</span>
-  ) : state === 'stopped' ? (
-    <span>{t('screen.stopped')}</span>
-  ) : (
-    <>
-      <Spinner />
-      <span>{t('screen.starting')}</span>
-    </>
-  )
+  // A simulator's frame can take seconds the first time its model's pictures are drawn.
+  const status =
+    drawn && ready ? null : state === 'error' ? (
+      <span className="max-w-60 px-4 text-center">{error ?? t('screen.error')}</span>
+    ) : state === 'stopped' ? (
+      <span>{t('screen.stopped')}</span>
+    ) : (
+      <>
+        <Spinner />
+        <span>{t('screen.starting')}</span>
+      </>
+    )
 
   return (
     <div className={cn('relative flex min-h-0 min-w-0 flex-1 p-6', className)}>
