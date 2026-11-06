@@ -179,7 +179,8 @@
     "placesTip_other": "This artifact is open in {{count}} places in Kettu",
     "history": "History",
     "versionChip": "Version {{version}}, history",
-    "present": "Present"
+    "present": "Present",
+    "sideLabel": "History and comments"
   },
   "canvas": {
     "role": "Canvas",
@@ -206,7 +207,8 @@
   },
   "history": {
     "title": "History",
-    "you": "You"
+    "you": "You",
+    "latest": "Latest"
   },
   "share": {
     "open": "Share",

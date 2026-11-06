@@ -237,8 +237,9 @@ export function useArtifactMenu(target: MenuTarget, options: MenuOptions): MenuI
     divider: entry.divider,
     checked: entry.checked,
     submenu: entry.submenu?.map(toItem),
-    // A blocked choice stays listed with its reason, and does nothing.
-    onSelect: entry.disabled ? undefined : entry.run,
+    // A blocked choice stays listed with its reason.
+    disabled: entry.disabled,
+    onSelect: entry.run,
   })
   return useEntries(target, options).map(toItem)
 }

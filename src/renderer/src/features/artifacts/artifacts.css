@@ -523,3 +523,8 @@ button.k-arts__session-row:hover {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* Room for a format's whole name in the Export submenu. */
+.k-art__more .ui-as-menu__subpanel {
+  min-width: 220px;
+}

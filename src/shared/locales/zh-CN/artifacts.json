@@ -174,7 +174,8 @@
     "placesTip_other": "这个 artifact 在 Kettu 中的 {{count}} 处打开",
     "history": "历史",
     "versionChip": "版本 {{version}}，历史",
-    "present": "演示"
+    "present": "演示",
+    "sideLabel": "历史与评论"
   },
   "canvas": {
     "role": "画布",
@@ -201,7 +202,8 @@
   },
   "history": {
     "title": "历史",
-    "you": "你"
+    "you": "你",
+    "latest": "最新"
   },
   "share": {
     "open": "分享",

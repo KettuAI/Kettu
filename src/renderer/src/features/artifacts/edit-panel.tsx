@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlignCenterIcon, AlignLeftIcon, AlignRightIcon } from './icons'
+import {
+  TextAlignCenterIcon,
+  TextAlignLeftIcon,
+  TextAlignRightIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   isEditableValue,
@@ -7,19 +11,11 @@ import {
   type PreviewStyle,
 } from '@shared/artifact-runtime/page-messages'
 import { decodeText, startTagAt, textContentRange } from '@shared/artifact-source'
-import { Input } from '@renderer/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/components/ui/select'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
-import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
+import { Select, SettingsStyles } from '@renderer/features/routines/kit'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import type { ArtifactEditor, Picked } from './editor'
@@ -28,9 +24,9 @@ const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const
 /** How long the fields rest before what changed is written. */
 const AUTOSAVE_MS = 800
 const ALIGNS = [
-  { value: 'left', Icon: AlignLeftIcon },
-  { value: 'center', Icon: AlignCenterIcon },
-  { value: 'right', Icon: AlignRightIcon },
+  { value: 'left', icon: TextAlignLeftIcon },
+  { value: 'center', icon: TextAlignCenterIcon },
+  { value: 'right', icon: TextAlignRightIcon },
 ] as const
 
 /** The fields as the user types them, each its CSS value once checked. */
@@ -314,7 +310,7 @@ export function EditPanel({
     body = <Note>{t(editable === 'earlier' ? 'edit.earlier' : 'edit.deleted')}</Note>
   } else if (source === null) {
     body = (
-      <div aria-busy className="flex flex-col gap-3">
+      <div aria-busy className="k-av-side__wait">
         <Skeleton className="h-8 w-full" />
         <Skeleton className="h-8 w-full" />
       </div>
@@ -324,27 +320,38 @@ export function EditPanel({
   } else {
     body = (
       <>
-        <Note>{t('edit.autosave')}</Note>
         {fields.text !== null && (
-          <Field label={t('edit.text')}>
-            <Textarea
-              value={fields.text}
-              rows={1}
-              maxLength={10_000}
-              onChange={(event) => set({ text: event.target.value })}
-              className="min-h-9 resize-none"
+          <div className="ui-sg-card k-av-props">
+            <label className="k-av-prop k-av-prop--stack">
+              <span className="k-av-prop__name">{t('edit.text')}</span>
+              <textarea
+                value={fields.text}
+                rows={1}
+                maxLength={10_000}
+                onChange={(event) => set({ text: event.target.value })}
+                className="k-av-text k-av-text--grow"
+              />
+            </label>
+          </div>
+        )}
+        <div className="ui-sg-card k-av-props">
+          <Field label={t('edit.color')}>
+            <ColorInput
+              label={t('edit.color')}
+              value={fields.color}
+              onChange={(color) => set({ color })}
             />
           </Field>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={t('edit.color')}>
-            <ColorInput value={fields.color} onChange={(color) => set({ color })} />
-          </Field>
           <Field label={t('edit.background')}>
-            <ColorInput value={fields.background} onChange={(background) => set({ background })} />
+            <ColorInput
+              label={t('edit.background')}
+              value={fields.background}
+              onChange={(background) => set({ background })}
+            />
           </Field>
           <Field label={t('edit.size')}>
             <PxInput
+              label={t('edit.size')}
               value={fields.size}
               invalid={!!fields.size && !cssOf('size', fields.size)}
               onChange={(size) => set({ size })}
@@ -352,54 +359,36 @@ export function EditPanel({
           </Field>
           <Field label={t('edit.weight')}>
             <Select
-              value={fields.weight || null}
-              items={WEIGHTS.map((weight) => ({
+              label={t('edit.weight')}
+              value={fields.weight}
+              width={CONTROL_WIDTH}
+              options={WEIGHTS.map((weight) => ({
                 value: String(weight),
                 label: t(`edit.weights.${weight}`),
               }))}
-              onValueChange={(next) => {
-                if (typeof next === 'string') set({ weight: next })
-              }}
-            >
-              <SelectTrigger
-                aria-label={t('edit.weight')}
-                className="h-8 w-full gap-2 rounded-lg pr-2 pl-2.5 text-control"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {WEIGHTS.map((weight) => (
-                    <SelectItem key={weight} value={String(weight)}>
-                      {t(`edit.weights.${weight}`)}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+              onChange={(weight) => set({ weight })}
+            />
+          </Field>
+          <Field label={t('edit.align')}>
+            {/* No option is on while the element's alignment is not one of them. */}
+            <SegmentedControl<string>
+              aria-label={t('edit.align')}
+              variant="tray"
+              size="sm"
+              value={fields.align || 'none'}
+              onChange={(align) => set({ align })}
+              options={ALIGNS.map(({ value, icon }) => ({
+                value,
+                icon: <Icon icon={icon} size={15} />,
+                ariaLabel: t(`edit.aligns.${value}`),
+              }))}
+            />
           </Field>
         </div>
-        <Field label={t('edit.align')}>
-          <ToggleGroup
-            value={fields.align ? [fields.align] : []}
-            onValueChange={(next: unknown[]) => {
-              const value = next[0]
-              if (typeof value === 'string') set({ align: value })
-            }}
-            variant="outline"
-            size="sm"
-            className="self-start"
-          >
-            {ALIGNS.map(({ value, Icon }) => (
-              <ToggleGroupItem key={value} value={value} aria-label={t(`edit.aligns.${value}`)}>
-                <Icon />
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="ui-sg-card k-av-props">
           <Field label={t('edit.padding')}>
             <PxInput
+              label={t('edit.padding')}
               value={fields.padding}
               invalid={!!fields.padding && !cssOf('padding', fields.padding)}
               onChange={(padding) => set({ padding })}
@@ -407,38 +396,35 @@ export function EditPanel({
           </Field>
           <Field label={t('edit.radius')}>
             <PxInput
+              label={t('edit.radius')}
               value={fields.radius}
               invalid={!!fields.radius && !cssOf('radius', fields.radius)}
               onChange={(radius) => set({ radius })}
             />
           </Field>
         </div>
+        <Note>{t('edit.autosave')}</Note>
       </>
     )
   }
 
   return (
-    <aside
-      aria-label={t('edit.title')}
-      className="flex w-70 shrink-0 animate-in flex-col bg-app shadow-[inset_1px_0_0_var(--border-subtle)] fade-in duration-(--duration-fast)"
-    >
-      <div className="flex h-11 shrink-0 items-center gap-2 px-4">
-        <h2 className="flex-1 text-lede font-semibold">{t('edit.title')}</h2>
-        <code className="truncate font-mono text-xs text-tertiary">{selection.tag}</code>
+    <aside aria-label={t('edit.title')} className="k-av-side">
+      <SettingsStyles />
+      <div className="k-av-side__head">
+        <h2 className="k-av-side__title">{t('edit.title')}</h2>
+        <code className="k-av-side__tag">{selection.tag}</code>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 pb-4">
+      <div className="k-av-side__body">
         {body}
         {notice && (
-          <p role="alert" className="text-xs text-danger">
+          <p role="alert" className="k-av-error">
             {notice}
           </p>
         )}
       </div>
       {target && (saving > 0 || savedAs !== null) && (
-        <p
-          role="status"
-          className="shrink-0 px-4 py-3 text-small text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]"
-        >
+        <p role="status" className="k-av-side__foot">
           {saving > 0 ? t('edit.saving') : t('edit.saved', { version: savedAs })}
         </p>
       )}
@@ -446,77 +432,80 @@ export function EditPanel({
   )
 }
 
+/** The width of a property's control, so the names line up in one column. */
+const CONTROL_WIDTH = 136
+
 function Note({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-xl bg-subtle px-3 py-2.5 text-small text-secondary">{children}</p>
+  return <p className="k-av-note">{children}</p>
 }
 
+/** A property's row: its name, then its control, which carries the name for assistive tech. */
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    // A label around its control names it, as the field rows elsewhere do.
-    <label className="flex min-w-0 flex-col gap-1.5 text-small text-secondary">
-      {label}
+    <div className="k-av-prop">
+      <span aria-hidden className="k-av-prop__name">
+        {label}
+      </span>
       {children}
-    </label>
+    </div>
   )
 }
 
 function PxInput({
+  label,
   value,
   invalid,
   onChange,
 }: {
+  label: string
   value: string
   invalid: boolean
   onChange: (value: string) => void
 }) {
   return (
-    <span className="relative flex">
-      <Input
+    <span className="k-av-px" style={{ width: CONTROL_WIDTH }}>
+      <input
         value={value}
         inputMode="decimal"
+        aria-label={label}
         aria-invalid={invalid}
         onChange={(event) => onChange(event.target.value)}
-        className="h-8 pr-8 text-control tabular-nums"
+        className="ui-sg-input k-av-input"
       />
-      <span
-        aria-hidden
-        className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-xs text-tertiary"
-      >
-        px
-      </span>
+      <span aria-hidden>px</span>
     </span>
   )
 }
 
-function ColorInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function ColorInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+}) {
   const css = cssOf('color', value)
   return (
-    <span className="relative flex">
+    <span className="k-av-color" style={{ width: CONTROL_WIDTH }}>
       {/* No color yet: an empty swatch, as the picker itself can only show one. */}
-      {!css && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2 size-4.5 -translate-y-1/2 rounded-sm border border-dashed border-strong"
-        />
-      )}
+      <span aria-hidden className="k-av-color__empty" data-shown={css ? undefined : ''} />
       <input
         type="color"
         tabIndex={-1}
         aria-hidden
         value={css ? css.slice(0, 7).toLowerCase() : ''}
         onChange={(event) => onChange(event.target.value.toUpperCase())}
-        className={cn(
-          'absolute top-1/2 left-2 size-4.5 -translate-y-1/2 cursor-pointer rounded-sm border-0 bg-transparent p-0',
-          '[&::-webkit-color-swatch]:rounded-sm [&::-webkit-color-swatch]:border-(--border-default) [&::-webkit-color-swatch-wrapper]:p-0',
-          !css && 'opacity-0',
-        )}
+        className={cn('k-av-color__swatch', !css && 'opacity-0')}
       />
-      <Input
+      <input
         value={value}
         spellCheck={false}
+        aria-label={label}
         aria-invalid={!!value && !css}
         onChange={(event) => onChange(event.target.value)}
-        className="h-8 pl-8.5 font-mono text-control uppercase"
+        className="ui-sg-input k-av-input k-av-input--hex"
       />
     </span>
   )

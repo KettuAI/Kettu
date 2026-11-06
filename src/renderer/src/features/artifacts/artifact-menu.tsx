@@ -1,11 +1,50 @@
 import { Fragment } from 'react'
-import { Icon } from '@renderer/components/affect/app-shell'
+import { MoreHorizontalIcon } from '@hugeicons/core-free-icons'
+import { useTranslation } from 'react-i18next'
+import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
 import {
   DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@renderer/components/ui/dropdown-menu'
-import { useEntries, type MenuOptions, type MenuTarget } from './menu-entries'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { useArtifactMenu, useEntries, type MenuOptions, type MenuTarget } from './menu-entries'
+
+/** The menu behind a More button: the top bar's, or in a pane's head the pane's own tool. */
+export function ArtifactMoreButton({
+  target,
+  pane = false,
+  ...options
+}: { target: MenuTarget; pane?: boolean } & MenuOptions) {
+  const { t } = useTranslation('artifacts')
+  const items = useArtifactMenu(target, options)
+  return (
+    <Dropdown
+      align={pane ? 'end' : 'start'}
+      className="k-av-more"
+      items={items}
+      trigger={({ open, toggle }) => (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                aria-label={t('viewer.more')}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                onClick={toggle}
+                className={pane ? 'kp-tool' : 'ui-as-icon-btn k-av-btn'}
+              />
+            }
+          >
+            <Icon icon={MoreHorizontalIcon} size={16} />
+          </TooltipTrigger>
+          <TooltipContent>{t('viewer.more')}</TooltipContent>
+        </Tooltip>
+      )}
+    />
+  )
+}
 
 /** The same menu as a context menu's items. */
 export function ArtifactMenuItems({ target, ...options }: { target: MenuTarget } & MenuOptions) {
