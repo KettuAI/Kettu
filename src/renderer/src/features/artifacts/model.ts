@@ -68,10 +68,10 @@ export interface ListFilter {
   /** Text the title holds; blank keeps every title. */
   title: string
   kind: ArtifactKind | null
-  /** A project's folder, or NO_PROJECT; null keeps every project. */
-  project: string | null
-  /** The agent of the session it shows under; null keeps every artifact. */
-  agent?: AgentId | null
+  /** Projects' folders, or NO_PROJECT; none keeps every project. */
+  project: readonly string[]
+  /** The agents of the session it shows under; none keeps every artifact. */
+  agent?: readonly AgentId[]
   /** The agent of an artifact's session, null when it was imported or its session is gone. */
   agentOf?: (sessionId: string) => AgentId | null
 }
@@ -117,18 +117,16 @@ export function foldForMatch(text: string): string {
 /** The artifacts the filter keeps: the title holds its text, of its kind, in its project. */
 export function filterArtifacts(
   list: readonly ArtifactSummary[],
-  { title, kind, project, agent = null, agentOf }: ListFilter,
+  { title, kind, project, agent = [], agentOf }: ListFilter,
 ): ArtifactSummary[] {
   const wanted = foldForMatch(title.trim())
   return list.filter(
     (artifact) =>
       (!wanted || foldForMatch(artifact.title).includes(wanted)) &&
       (!kind || artifactKind(artifact) === kind) &&
-      (agent === null || agentOf?.(artifact.sessionId) === agent) &&
-      (project === null ||
-        (project === NO_PROJECT
-          ? artifact.scratch
-          : !artifact.scratch && artifact.project === project)),
+      (agent.length === 0 || agent.includes(agentOf?.(artifact.sessionId) as AgentId)) &&
+      (project.length === 0 ||
+        (artifact.scratch ? project.includes(NO_PROJECT) : project.includes(artifact.project))),
   )
 }
 

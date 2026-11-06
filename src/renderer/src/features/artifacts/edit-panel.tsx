@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlignCenterIcon, AlignLeftIcon, AlignRightIcon } from 'lucide-react'
+import { AlignCenterIcon, AlignLeftIcon, AlignRightIcon } from './icons'
 import { useTranslation } from 'react-i18next'
 import {
   isEditableValue,

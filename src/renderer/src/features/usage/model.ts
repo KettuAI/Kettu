@@ -1,7 +1,7 @@
 // The usage page's arithmetic: local days, the chosen range, and the figures, trend, heatmap and
 // breakdowns summed from the host's per-day rows. Pure, so it is tested without a window.
 
-import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
+import type { AgentId } from '@shared/thread'
 import {
   partsTotal,
   type ClockZone,
@@ -920,46 +920,23 @@ export function resetForm(resetsAt: number, now: number): 'in' | 'at' {
   return left > 0 && left < 86_400_000 ? 'in' : 'at'
 }
 
-/** The agents whose series color is their own, from their mark, by harness. */
-const AGENT_COLORS: Partial<Record<HarnessId, string>> = {
-  'claude-code': 'var(--agent-claude-code)',
-  codex: 'var(--agent-codex)',
-  opencode: 'var(--agent-opencode)',
-  pi: 'var(--agent-pi)',
-  omp: 'var(--agent-omp)',
-  muse: 'var(--agent-muse)',
-  codewhale: 'var(--agent-codewhale)',
-}
-
-/** The harnesses that can have several agents, and the steps of color their further agents take. */
-const AGENT_STEPS: Partial<Record<HarnessId, readonly string[]>> = {
-  'claude-code': [
-    'var(--agent-claude-code)',
-    'var(--agent-claude-code-2)',
-    'var(--agent-claude-code-3)',
-    'var(--agent-claude-code-4)',
-  ],
-  codex: [
-    'var(--agent-codex)',
-    'var(--agent-codex-2)',
-    'var(--agent-codex-3)',
-    'var(--agent-codex-4)',
-  ],
-}
+/** The series colors, in the order the agents are listed. */
+const SERIES = [
+  'var(--series-1)',
+  'var(--series-2)',
+  'var(--series-3)',
+  'var(--series-4)',
+  'var(--series-5)',
+  'var(--series-6)',
+] as const
 
 /**
- * An agent's series color: its harness's, a step further from the card for each agent of the
- * harness before it in `order`, so a color follows the agent whatever a filter leaves. An agent
- * no longer in `order` takes the step after those that are; one without a color of its own
- * shares the neutral one.
+ * An agent's series color, by its place in `order`, so a color follows the agent whatever a
+ * filter leaves; one no longer in `order` takes the place after those that are.
  */
 export function agentColor(agentId: AgentId, order: readonly AgentId[]): string {
-  const harness = harnessOf(agentId)
-  const steps = AGENT_STEPS[harness]
-  if (!steps) return AGENT_COLORS[harness] ?? 'var(--agent-other)'
-  const same = order.filter((id) => harnessOf(id) === harness)
-  const index = same.indexOf(agentId)
-  return steps[(index < 0 ? same.length : index) % steps.length]!
+  const index = order.indexOf(agentId)
+  return SERIES[(index < 0 ? order.length : index) % SERIES.length]!
 }
 
 /**

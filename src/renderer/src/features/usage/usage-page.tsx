@@ -1,42 +1,36 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ChartPieIcon, ChevronDownIcon, CircleAlertIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import type { AgentId } from '@shared/thread'
-import { partsTotal, type TokenParts, type UsageScope } from '@shared/usage'
+// Usage on affectUI's Analytics screen: the head with the period, the filters, then the plan
+// limits, the figures, where the tokens come from and what they went to, the usage over time
+// with one line per agent, the time of day and the activity of the last year.
+
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import {
+  Alert02Icon,
+  ArrowDown01Icon,
+  ChartLineData01Icon,
+  ComputerIcon,
+  RefreshIcon,
+} from '@hugeicons/core-free-icons'
+import { Trans, useTranslation } from 'react-i18next'
+import { sortAgentIds, type AgentId } from '@shared/thread'
+import type { UsageScope } from '@shared/usage'
+import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
+import { CompactBreakdown, type BreakdownItem } from '@renderer/components/affect/compact-breakdown'
+import { DateRangePicker } from '@renderer/components/affect/date-range-picker'
+import { KpiChart } from '@renderer/components/affect/kpi-chart'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
-import { RefreshIcon } from '@renderer/components/refresh-icon'
-import { SegmentedControl } from '@renderer/components/segmented-control'
-import { exportDiagnostics } from '@renderer/app/actions'
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
-import { Button } from '@renderer/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
-import { Progress } from '@renderer/components/ui/progress'
-import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { exportDiagnostics } from '@renderer/app/actions'
+import { Notice } from '@renderer/features/routines/kit'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
-import { bytes, count, longAgo, percent, tokens, usd } from '@renderer/lib/format'
+import { basename, bytes, count, longAgo, percent, tokens, usd } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
 import { hasBand, isMac } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
@@ -50,34 +44,55 @@ import {
 } from '@renderer/stores/usage'
 import { useViewStore } from '@renderer/stores/view'
 import { Activity } from './activity'
-import { Breakdown } from './breakdown'
 import {
   addDays,
+  agentRows,
   clocksChange,
   dayOf,
   dayTotals,
   figures,
   firstDayOfWeek,
+  foldRows,
   fromCache,
+  hourBars,
   hoursSoFar,
   metricKind,
+  modelRows,
+  namesYear,
+  presets,
+  projectRows,
   RANGE_KINDS,
+  seriesOf,
   tokenParts,
   tokensPerRequest,
+  trend,
   unpricedTokens,
+  wholeMonth,
+  type AgentFilter,
+  type DayTotal,
   type Metric,
   type MetricKind,
   type RangeKind,
+  type TrendBar,
+  type TrendUnit,
 } from './model'
-import { OverTime, type HourTotals } from './over-time'
 import { PlanLimits } from './plan-limits'
+import { useAgentColor } from './series'
 import { TimeOfDay } from './time-of-day'
-import { RangePicker } from './range-picker'
 import { Count, FigureValue } from './count'
-import { dayText, sharePercent, useHourText, useRangeText } from './text'
+import { dayText, useHourText, useRangeText } from './text'
+import './usage.css'
 
 /** A scan with less than this to read is over before its progress is worth showing. */
 const IMPORT_SHOWN = 50_000_000
+
+/** A one-day range's totals per hour, and the hour starts they were summed over. */
+interface HourTotals {
+  totals: DayTotal[]
+  starts: number[]
+  /** The clocks change that day, so its hours name their time zones. */
+  zoned: boolean
+}
 
 /** The usage page: a dashboard of the tokens the agents used, for a chosen agent and range. */
 export default function UsagePage() {
@@ -95,37 +110,38 @@ export default function UsagePage() {
   }, [])
 
   const empty = !!page && page.summary.first === null && !narrowed
-  const title = (
-    <h1 className="truncate font-display text-title font-semibold">{t('page.title')}</h1>
-  )
   let body: ReactNode
   if (unavailable) {
     body = (
       <>
-        {title}
-        <Unavailable />
+        <Head page={null} used={NO_DAYS} bare />
+        <div className="k-u__alone">
+          <Unavailable />
+        </div>
       </>
     )
   } else if (empty) {
     // A first import fills the page as it goes; until then its progress stands in for it.
     body = (
       <>
-        {title}
-        {importing ? <ImportProgress alone /> : <FirstRun />}
+        <Head page={null} used={NO_DAYS} bare />
+        <div className="k-u__alone">{importing ? <ImportProgress alone /> : <FirstRun />}</div>
       </>
     )
   } else if (!page) {
     body = (
       <>
-        <Header title={title} page={null} used={NO_DAYS} />
-        {error ? <ReadFailed error={error} kept={false} /> : <LoadingState />}
+        <Head page={null} used={NO_DAYS} />
+        <Filters page={null} />
+        <div className="k-u__content">
+          {error ? <ReadFailed error={error} kept={false} /> : <LoadingState />}
+        </div>
       </>
     )
   } else {
     // The figures stay until a read replaces them, so a failure shows above them.
     body = (
       <Dashboard
-        title={title}
         page={page}
         notice={
           <>
@@ -136,89 +152,236 @@ export default function UsagePage() {
       />
     )
   }
-
   return (
-    <div className="flex h-full flex-col">
-      <PageBar />
-      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-        <div className="px-9 pb-10">
-          <div className="@container mx-auto flex w-full max-w-270 flex-col gap-4.5">{body}</div>
-        </div>
-      </div>
+    <div className="k-u">
+      <h1 className="sr-only">{t('page.title')}</h1>
+      {body}
     </div>
   )
 }
+
+const NO_DAYS: ReadonlySet<number> = new Set()
 
 /**
- * The strip of sheet above the page, which drags the window. On macOS with the sidebar collapsed
- * it is a top bar's height, beside the traffic lights, and holds the sidebar toggle.
+ * The sticky head: the title, then the range picker and the periods. On macOS with the sidebar
+ * collapsed it leaves room for the controls in the corner.
  */
-function PageBar() {
+function Head({
+  page,
+  used,
+  bare = false,
+}: {
+  page: PageData | null
+  used: ReadonlySet<number>
+  /** Only the title, with nothing to filter yet. */
+  bare?: boolean
+}) {
+  const { t } = useTranslation('usage')
   const cornered = useViewStore((s) => s.sidebarCollapsed) && !hasBand
+  const range = useUsageStore((s) => s.filters.range)
+  const clockDay = useClock(dayOf)
+  const today = page?.today ?? clockDay
+  const firstDay = page?.firstDay ?? firstDayOfWeek(currentLocale())
+  const first = page?.summary.first ?? null
+  const custom = range.kind === 'custom' ? range : null
+  const shown = custom
+    ? { start: new Date(custom.from), end: new Date(custom.to) }
+    : page
+      ? { start: new Date(page.range.from), end: new Date(addDays(page.range.to, -1)) }
+      : { start: new Date(today), end: new Date(today) }
+  const choices = useMemo(
+    () =>
+      presets(today, firstDay).map((preset) => ({
+        id: preset.id,
+        label: t(`picker.presets.${preset.id}`),
+        range: () => ({ start: new Date(preset.from), end: new Date(preset.to) }),
+      })),
+    [today, firstDay, t],
+  )
   return (
-    <div
-      className={cn(
-        'app-region-drag flex shrink-0 items-center',
-        cornered ? 'h-top-bar pl-(--corner-inset)' : 'h-8',
+    <header className="k-u__head app-region-drag">
+      <span className="k-u__lead">
+        {cornered && <CornerControlsSpace />}
+        <span aria-hidden className="k-u__title">
+          {t('page.title')}
+        </span>
+      </span>
+      {!bare && (
+        <span className="k-u__actions">
+          <DateRangePicker
+            className="k-u__range"
+            align="end"
+            compare={false}
+            locale={currentLocale()}
+            weekStartsOn={firstDay === 0 ? 0 : 1}
+            today={new Date(today)}
+            max={new Date(today)}
+            min={first === null ? undefined : new Date(dayOf(first))}
+            presets={choices}
+            value={shown}
+            marked={(day) => used.has(day.getTime())}
+            labels={{
+              choose: t('picker.label'),
+              presets: t('picker.presetsLabel'),
+              custom: t('picker.custom'),
+              previousMonth: t('picker.previousMonth'),
+              nextMonth: t('picker.nextMonth'),
+              pickEnd: (start) => t('picker.pickEnd', { start }),
+              days: (n) => t('picker.days', { count: n }),
+              cancel: t('picker.cancel'),
+              apply: t('picker.apply'),
+            }}
+            onChange={(chosen) =>
+              setUsageFilters({
+                range: {
+                  kind: 'custom',
+                  from: dayOf(chosen.start.getTime()),
+                  to: dayOf(chosen.end.getTime()),
+                },
+              })
+            }
+          />
+          <SegmentedControl<RangeKind>
+            aria-label={t('page.range')}
+            variant="tray"
+            size="lg"
+            value={(custom ? '' : range.kind) as RangeKind}
+            onChange={(kind) => setUsageFilters({ range: { kind } })}
+            options={RANGE_KINDS.map((kind) => ({
+              value: kind,
+              label: (
+                <>
+                  <span aria-hidden>{t(`page.rangesShort.${kind}`)}</span>
+                  <span className="sr-only">{t(`page.ranges.${kind}`)}</span>
+                </>
+              ),
+            }))}
+          />
+        </span>
       )}
-    >
-      {cornered && <CornerControlsSpace />}
-    </div>
+    </header>
   )
 }
 
-/** A read that failed: what failed, that the figures below stay, and Retry. */
-function ReadFailed({ error, kept }: { error: string; kept: boolean }) {
-  const { t } = useTranslation('usage')
+/** A filter's button, as wide as its longest choice, so picking one never moves what follows. */
+function Picker<T extends string>({
+  label,
+  value,
+  choices,
+  onChange,
+}: {
+  label: string
+  value: T
+  choices: readonly (Omit<MenuItem, 'checked' | 'onSelect'> & { value: T })[]
+  onChange: (value: T) => void
+}) {
   return (
-    <Alert variant="error">
-      <CircleAlertIcon />
-      <AlertTitle>{t('error.title')}</AlertTitle>
-      <AlertDescription>{kept ? t('error.kept') : error}</AlertDescription>
-      <AlertAction>
-        <Button variant="outline" size="sm" onClick={() => void loadUsagePage()}>
-          {t('error.retry')}
-        </Button>
-      </AlertAction>
-    </Alert>
-  )
-}
-
-/** The database cannot be read, even after its worker was started again. */
-function Unavailable() {
-  const { t } = useTranslation('usage')
-  const [saving, setSaving] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  const save = async () => {
-    setSaving(true)
-    setNote(null)
-    try {
-      const path = await exportDiagnostics()
-      if (path) setNote(t('error.savedTo', { path }))
-    } catch (e) {
-      setNote(errorMessage(e))
-    } finally {
-      setSaving(false)
-    }
-  }
-  return (
-    <Alert variant="error">
-      <CircleAlertIcon />
-      <AlertTitle>{t('error.title')}</AlertTitle>
-      <AlertDescription>
-        {t('error.unavailable')}
-        {note && (
-          <span data-selectable="" className="mt-1 block">
-            {note}
+    <Dropdown
+      align="start"
+      items={choices.map(({ value: choice, ...item }) => ({
+        ...item,
+        checked: choice === value,
+        onSelect: () => onChange(choice),
+      }))}
+      trigger={({ open, toggle }) => (
+        <button
+          type="button"
+          className="ui-as-tool ui-as-tool--label k-u-pick"
+          aria-label={label}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={toggle}
+        >
+          <span className="k-u-pick__label">{label}</span>
+          <span className="k-u-pick__value">
+            {choices.map((choice) => (
+              <span
+                key={choice.value}
+                className="k-u-pick__opt"
+                data-on={choice.value === value || undefined}
+                aria-hidden={choice.value !== value || undefined}
+              >
+                {choice.logo}
+                {choice.label}
+              </span>
+            ))}
           </span>
-        )}
-      </AlertDescription>
-      <AlertAction>
-        <Button variant="outline" size="sm" disabled={saving} onClick={() => void save()}>
-          {t('error.export')}
-        </Button>
-      </AlertAction>
-    </Alert>
+          <Icon icon={ArrowDown01Icon} size={13} />
+        </button>
+      )}
+    />
+  )
+}
+
+/** What is counted: the agents and the source, the metric, then the sync state at the end. */
+function Filters({ page }: { page: PageData | null }) {
+  const { t } = useTranslation('usage')
+  const onHost = useHostContext()
+  const filters = useUsageStore((s) => s.filters)
+  // null until the status arrives, when the sync state shows nothing either.
+  const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? null)
+  const { agent, scope, metric } = filters
+  const agents = page?.summary.agents ?? []
+  // A chosen agent stays a choice once its usage is gone, as after clearing the record.
+  const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
+  // This computer is "This Mac" on a Mac, and the host's name on another host or in a browser.
+  const computer = t(
+    'page.scopes.computer',
+    onHost.context ? onHost : isMac ? { context: 'mac' } : {},
+  )
+  return (
+    <div className="k-u__filters">
+      {/* With usage from one agent only, All is the only choice. */}
+      {choices.length > 1 && (
+        <Picker<AgentFilter>
+          label={t('page.agents')}
+          value={agent}
+          choices={[
+            { value: 'all', label: t('page.allAgents') },
+            ...choices.map((id, i) => ({
+              value: id,
+              label: agentName(id),
+              logo: <AgentMark agent={id} size={16} />,
+              divider: i === 0,
+            })),
+          ]}
+          onChange={(next) => setUsageFilters({ agent: next })}
+        />
+      )}
+      {fromComputer && (
+        <Picker<UsageScope>
+          label={t('page.scope')}
+          value={scope}
+          choices={[
+            {
+              value: 'computer',
+              label: computer,
+              icon: ComputerIcon,
+              description: t('page.scopeNotes.computer'),
+            },
+            {
+              value: 'kettu',
+              label: t('page.scopes.kettu'),
+              description: t('page.scopeNotes.kettu'),
+            },
+          ]}
+          onChange={(next) => setUsageFilters({ scope: next })}
+        />
+      )}
+      <SegmentedControl<Metric>
+        aria-label={t('page.metric')}
+        variant="tray"
+        size="md"
+        value={metric}
+        onChange={(next) => setUsageFilters({ metric: next })}
+        options={[
+          { value: 'tokens', label: t('metrics.tokens') },
+          { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
+          { value: 'cost', label: t('metrics.cost') },
+        ]}
+      />
+      <SyncState />
+    </div>
   )
 }
 
@@ -241,46 +404,92 @@ function SyncState() {
   const refresh = useRefresh({ busy: reading })
   const [failed, setFailed] = useState<string | null>(null)
   if (fromComputer === null) return null
-  if (!fromComputer) {
-    return <span className="text-hint text-tertiary">{t('page.record')}</span>
-  }
+  if (!fromComputer) return <span className="k-u__sync">{t('page.record')}</span>
   const scanning = refresh.phase === 'turning'
   return (
-    <div className="flex items-center gap-2">
+    <span className="k-u__sync">
       {failed && !scanning ? (
         <Tooltip>
-          <TooltipTrigger render={<span role="alert" className="text-hint text-danger" />}>
-            {t('page.syncFailed')}
-          </TooltipTrigger>
+          <TooltipTrigger render={<span role="alert" />}>{t('page.syncFailed')}</TooltipTrigger>
           <TooltipContent className="max-w-80">{failed}</TooltipContent>
         </Tooltip>
-      ) : (
-        <span className="flex items-center gap-1.5 text-hint text-tertiary">
-          {!scanning && synced !== null && (
-            <span aria-hidden className="size-1.5 rounded-full bg-success" />
-          )}
-          {scanning
-            ? t('page.syncing')
-            : synced !== null
-              ? t('page.synced', { ago: longAgo(synced, now) })
-              : ''}
-        </span>
-      )}
+      ) : scanning ? (
+        t('page.syncing')
+      ) : synced !== null ? (
+        t('page.synced', { ago: longAgo(synced, now) })
+      ) : null}
       <Button
-        variant="quiet"
-        size="sm"
+        size="md"
+        variant="secondary"
+        className={scanning ? 'k-u-spin' : undefined}
         aria-busy={scanning}
         disabled={scanning}
-        className="h-7 gap-1.5 px-2 text-hint text-secondary"
+        icon={<Icon icon={RefreshIcon} size={14} />}
         onClick={() => {
           setFailed(null)
           void refresh.run(syncUsage).catch((e: unknown) => setFailed(errorMessage(e)))
         }}
       >
-        <RefreshIcon phase={refresh.phase} className="size-3.5" />
         {t('page.syncAction')}
       </Button>
-    </div>
+    </span>
+  )
+}
+
+/** A read that failed: what failed, that the figures below stay, and Retry. */
+function ReadFailed({ error, kept }: { error: string; kept: boolean }) {
+  const { t } = useTranslation('usage')
+  return (
+    <Notice
+      tone="red"
+      mark={<Icon icon={Alert02Icon} size={16} />}
+      title={t('error.title')}
+      action={
+        <Button size="sm" variant="secondary" onClick={() => void loadUsagePage()}>
+          {t('error.retry')}
+        </Button>
+      }
+    >
+      {kept ? t('error.kept') : error}
+    </Notice>
+  )
+}
+
+/** The database cannot be read, even after its worker was started again. */
+function Unavailable() {
+  const { t } = useTranslation('usage')
+  const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const save = async () => {
+    setSaving(true)
+    setNote(null)
+    try {
+      const path = await exportDiagnostics()
+      if (path) setNote(t('error.savedTo', { path }))
+    } catch (e) {
+      setNote(errorMessage(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+  return (
+    <Notice
+      tone="red"
+      mark={<Icon icon={Alert02Icon} size={16} />}
+      title={t('error.title')}
+      action={
+        <Button size="sm" variant="secondary" disabled={saving} onClick={() => void save()}>
+          {t('error.export')}
+        </Button>
+      }
+    >
+      {t('error.unavailable')}
+      {note && (
+        <span data-selectable="" style={{ display: 'block', marginTop: 4 }}>
+          {note}
+        </span>
+      )}
+    </Notice>
   )
 }
 
@@ -290,7 +499,7 @@ function ImportProgress({ alone }: { alone: boolean }) {
   const scanning = useUsageStore((s) => s.status?.scanning ?? null)
   const logs = useUsageStore((s) => s.status?.logs ?? null)
   if (!scanning) return null
-  const share = scanning.bytes > 0 ? (scanning.doneBytes / scanning.bytes) * 100 : 0
+  const share = scanning.bytes > 0 ? scanning.doneBytes / scanning.bytes : 0
   const found = (logs ?? []).filter((log) => log.found === true || log.rows > 0)
   const since = found.reduce<number | null>(
     (first, log) =>
@@ -302,26 +511,22 @@ function ImportProgress({ alone }: { alone: boolean }) {
       ? new Intl.ListFormat(currentLocale()).format(found.map((log) => agentName(log.agentId)))
       : null
   return (
-    <div
-      role="status"
-      className={cn(
-        'flex flex-col gap-2.5 rounded-xl bg-card px-5 py-4.5 shadow-card',
-        alone && 'mx-auto my-12 w-full max-w-130',
-      )}
-    >
-      <div className="flex items-center gap-2 font-medium">
-        <Spinner aria-hidden className="size-3 text-tertiary" />
-        <span className="tabular-nums">
-          {t('page.importing', { done: bytes(scanning.doneBytes), total: bytes(scanning.bytes) })}
-        </span>
-      </div>
-      <Progress
-        value={share}
+    <div role="status" className="k-u-card k-u-import" data-alone={alone || undefined}>
+      <b className="k-num">
+        {t('page.importing', { done: bytes(scanning.doneBytes), total: bytes(scanning.bytes) })}
+      </b>
+      <span
+        className="k-u-import__bar"
+        role="progressbar"
         aria-label={t('page.syncing')}
-        className="[&_[data-slot=progress-indicator]]:text-foreground"
-      />
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(share * 100)}
+      >
+        <i style={{ transform: `scaleX(${share})` }} />
+      </span>
       {alone && (
-        <p className="text-xs text-tertiary">
+        <p>
           {agents === null
             ? t('page.importingNote')
             : since === null
@@ -340,18 +545,31 @@ function ImportProgress({ alone }: { alone: boolean }) {
 
 function LoadingState() {
   const { t } = useTranslation('usage')
+  const card = (height: number) => (
+    <div className="k-u-card" style={{ height }}>
+      <span className="k-u-bone" style={{ width: 120 }} />
+    </div>
+  )
   return (
-    <div aria-busy className="flex flex-col gap-4.5">
+    <div aria-busy className="k-u-loading">
       <span role="status" className="sr-only">
         {t('page.loading')}
       </span>
-      <Skeleton className="h-36 rounded-xl" />
-      <Skeleton className="h-50 rounded-xl" />
-      <Skeleton className="h-70 rounded-xl" />
-      <div className="grid gap-4.5 @min-[45rem]:grid-cols-2">
-        <Skeleton className="h-58 rounded-xl" />
-        <Skeleton className="h-58 rounded-xl" />
+      <div className="k-u-plans" data-cols={2}>
+        {card(128)}
+        {card(128)}
       </div>
+      <div className="k-u-figs">
+        {card(96)}
+        {card(96)}
+        {card(96)}
+        {card(96)}
+      </div>
+      <div className="k-u-row">
+        {card(232)}
+        {card(232)}
+      </div>
+      {card(280)}
     </div>
   )
 }
@@ -362,204 +580,27 @@ function FirstRun() {
   const onHost = useHostContext()
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
   return (
-    <Empty className="py-18">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <ChartPieIcon />
-        </EmptyMedia>
-        <EmptyTitle>{t('empty.title')}</EmptyTitle>
-        <EmptyDescription>
-          {fromComputer ? t('empty.waiting') : t('empty.description', onHost)}
-        </EmptyDescription>
-      </EmptyHeader>
+    <div className="ui-as-empty" data-tall>
+      <span className="ui-as-empty__icon">
+        <Icon icon={ChartLineData01Icon} size={18} />
+      </span>
+      <b className="ui-as-empty__title">{t('empty.title')}</b>
+      <p className="ui-as-empty__text">
+        {fromComputer ? t('empty.waiting') : t('empty.description', onHost)}
+      </p>
       {!fromComputer && (
-        <EmptyContent>
-          <Button
-            size="sm"
-            onClick={() =>
-              void useSettingsStore.getState().update({ usage: { fromComputer: true } })
-            }
-          >
-            {t('empty.fromComputer', onHost)}
-          </Button>
-        </EmptyContent>
-      )}
-    </Empty>
-  )
-}
-
-const NO_DAYS: ReadonlySet<number> = new Set()
-
-/** A filter's button: what it filters, then the current choice, which opens the choices. */
-const FILTER_BUTTON =
-  'h-7.5 gap-1.5 pr-2 pl-2.5 text-hint font-normal text-primary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] hover:text-primary aria-expanded:text-primary'
-
-function FilterMenu<T extends string>({
-  label,
-  value,
-  current,
-  choices,
-  onChange,
-}: {
-  label: string
-  value: T
-  /** The current choice as the button shows it. */
-  current: ReactNode
-  choices: readonly { value: T; label: ReactNode }[]
-  onChange: (value: T) => void
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="ghost" className={FILTER_BUTTON} />}>
-        <span className="text-tertiary">{label}</span>
-        {current}
-        <ChevronDownIcon aria-hidden strokeWidth={1.75} className="size-3 text-tertiary" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={6} className="max-w-72 min-w-44">
-        <DropdownMenuRadioGroup
-          value={value}
-          onValueChange={(next) => {
-            const picked = choices.find((choice) => choice.value === next)
-            if (picked) onChange(picked.value)
-          }}
+        <Button
+          size="md"
+          onClick={() => void useSettingsStore.getState().update({ usage: { fromComputer: true } })}
         >
-          {choices.map((choice) => (
-            <DropdownMenuRadioItem key={choice.value} value={choice.value} closeOnClick>
-              {choice.label}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-/** An agent's mark and name, as a filter shows it. */
-function AgentChoice({ agentId }: { agentId: AgentId }) {
-  return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <AgentMark agent={agentId} size={14} className="size-3.5" />
-      <span className="truncate">{agentName(agentId)}</span>
-    </span>
-  )
-}
-
-/**
- * The title with the range beside it, then what is counted: the agents and the source, and the
- * sync state at the end. Before the first figures arrive, the agents are not known yet.
- */
-function Header({
-  title,
-  page,
-  used,
-}: {
-  title: ReactNode
-  page: PageData | null
-  used: ReadonlySet<number>
-}) {
-  const { t } = useTranslation('usage')
-  const onHost = useHostContext()
-  const filters = useUsageStore((s) => s.filters)
-  // null until the status arrives, when the sync state shows nothing either.
-  const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? null)
-  const rangeText = useRangeText()
-  const { agent, scope, metric } = filters
-  const agents = page?.summary.agents ?? []
-  // A chosen agent stays a choice once its usage is gone, as after clearing the record.
-  const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
-  const clockDay = useClock(dayOf)
-  const today = page?.today ?? clockDay
-  const custom = filters.range.kind === 'custom' ? filters.range : null
-  // This computer is "This Mac" on a Mac, and the host's name on another host or in a browser.
-  const computer = t(
-    'page.scopes.computer',
-    onHost.context ? onHost : isMac ? { context: 'mac' } : {},
-  )
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <div className="min-w-0 flex-auto">{title}</div>
-        <div className="flex items-center gap-2.5">
-          <SegmentedControl
-            aria-label={t('page.range')}
-            value={filters.range.kind}
-            onChange={(value) => setUsageFilters({ range: { kind: value as RangeKind } })}
-            segments={RANGE_KINDS.map((rangeKind) => ({
-              value: rangeKind,
-              label: (
-                <>
-                  <span aria-hidden>{t(`page.rangesShort.${rangeKind}`)}</span>
-                  <span className="sr-only">{t(`page.ranges.${rangeKind}`)}</span>
-                </>
-              ),
-            }))}
-          />
-          <RangePicker
-            value={custom}
-            shown={page && { from: page.range.from, to: addDays(page.range.to, -1) }}
-            label={custom ? rangeText(custom.from, addDays(custom.to, 1)) : null}
-            today={today}
-            firstDay={page?.firstDay ?? firstDayOfWeek(currentLocale())}
-            first={page?.summary.first ?? null}
-            used={used}
-            onApply={(chosen) => setUsageFilters({ range: { kind: 'custom', ...chosen } })}
-          />
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {/* With usage from one agent only, All is the only choice. */}
-        {choices.length > 1 && (
-          <FilterMenu
-            label={t('page.agents')}
-            value={agent}
-            current={agent === 'all' ? t('page.allShort') : <AgentChoice agentId={agent} />}
-            choices={[
-              { value: 'all', label: t('page.allShort') },
-              ...choices.map((id) => ({ value: id, label: <AgentChoice agentId={id} /> })),
-            ]}
-            onChange={(next) => setUsageFilters({ agent: next })}
-          />
-        )}
-        {fromComputer && (
-          <FilterMenu<UsageScope>
-            label={t('page.scope')}
-            value={scope}
-            current={scope === 'computer' ? computer : t('page.scopes.kettu')}
-            choices={[
-              { value: 'computer', label: computer },
-              { value: 'kettu', label: t('page.scopes.kettu') },
-            ]}
-            onChange={(next) => setUsageFilters({ scope: next })}
-          />
-        )}
-        <FilterMenu<Metric>
-          label={t('page.metric')}
-          value={metric}
-          current={t(`metrics.${metricKind(metric, scope)}`)}
-          choices={[
-            { value: 'tokens', label: t('metrics.tokens') },
-            { value: 'requests', label: t(`metrics.${metricKind('requests', scope)}`) },
-            { value: 'cost', label: t('metrics.cost') },
-          ]}
-          onChange={(next) => setUsageFilters({ metric: next })}
-        />
-        <span className="flex-1" />
-        <SyncState />
-      </div>
+          {t('empty.fromComputer', onHost)}
+        </Button>
+      )}
     </div>
   )
 }
 
-function Dashboard({
-  title,
-  page,
-  notice,
-}: {
-  title: ReactNode
-  page: PageData
-  notice: ReactNode
-}) {
-  const { t } = useTranslation('usage')
+function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
   const filters = useUsageStore((s) => s.filters)
   const { summary, starts, range } = page
   const { agent, metric, scope } = filters
@@ -591,105 +632,148 @@ function Dashboard({
     () => new Set(allDays.filter((d) => d.total > 0).map((d) => d.day)),
     [allDays],
   )
+  // Re-renders as an hour begins; a range of days never does.
+  const begun = useClock((now) => (hours ? hoursSoFar(hours.starts, now).to : 0))
+  const main = useMemo(
+    () => periods(hours, days, range, page.firstDay, metric, scope),
+    [hours, days, range, page.firstDay, metric, scope],
+  )
+  const other = kind === 'requests' || kind === 'turns' ? 'tokens' : 'requests'
+  const side = useMemo(
+    () => periods(hours, days, range, page.firstDay, other, scope),
+    [hours, days, range, page.firstDay, other, scope],
+  )
+  const past = (bars: TrendBar[]) => (hours ? bars.filter((bar) => bar.from < begun) : bars)
   const rangeText = useRangeText()
+  const rangeLabel = rangeText(range.from, range.to)
 
   return (
     <>
-      <Header title={title} page={page} used={used} />
-      {notice}
-      <PlanLimits used={summary.agents} />
-      <div className="flex flex-col gap-2">
-        <section
-          aria-label={t('figures.label')}
-          className="min-w-0 overflow-hidden rounded-xl bg-card shadow-card"
-        >
-          <Figures
-            facts={facts}
-            requestFacts={requestFacts}
-            hours={hours}
-            kind={kind}
-            metric={metric}
-            scope={scope}
-            rangeLabel={rangeText(range.from, range.to)}
-          />
-          <Composition
-            parts={tokenFacts.parts}
-            saved={kind === 'cost' && facts.priced ? facts.parts.cacheSaved : null}
-          />
-        </section>
-        {kind === 'cost' && (
-          <EstimateNote asOf={summary.pricesAsOf} unpriced={unpricedTokens(facts)} />
-        )}
-      </div>
-      <OverTime days={days} hours={hours} page={page} metric={metric} scope={scope} />
-      <div className="grid gap-4.5 @min-[45rem]:grid-cols-2">
-        <Breakdown
-          summary={summary}
-          agent={agent}
+      <Head page={page} used={used} />
+      <Filters page={page} />
+      <div className="k-u__content">
+        {notice}
+        <PlanLimits used={summary.agents} />
+        <Figures
+          facts={facts}
+          requestFacts={requestFacts}
+          hours={hours}
+          begun={begun}
+          kind={kind}
           metric={metric}
           scope={scope}
+          rangeLabel={rangeLabel}
+          bars={past(main.bars).map((bar) => bar.total)}
+          sideBars={past(side.bars).map((bar) => bar.total)}
+        />
+        <div className="k-u-row">
+          <Sources
+            kind={kind}
+            facts={facts}
+            tokenFacts={tokenFacts}
+            agent={agent}
+            rangeLabel={rangeLabel}
+            asOf={summary.pricesAsOf}
+          />
+          <Breakdown
+            summary={summary}
+            agent={agent}
+            metric={metric}
+            scope={scope}
+            kind={kind}
+            rangeLabel={rangeLabel}
+          />
+        </div>
+        <OverTime
+          unit={main.unit}
+          bars={main.bars}
+          begun={hours ? begun : null}
+          zoned={hours?.zoned ?? false}
           kind={kind}
           total={facts.total}
+          rangeLabel={rangeLabel}
+          tokensUsed={days.some((d) => d.total > 0)}
         />
-        <TimeOfDay page={page} agent={agent} metric={metric} scope={scope} />
+        <div className="k-u-row k-u-row--tod">
+          <TimeOfDay
+            page={page}
+            agent={agent}
+            metric={metric}
+            scope={scope}
+            rangeLabel={rangeLabel}
+          />
+          <Activity days={days} page={page} metric={metric} scope={scope} />
+        </div>
       </div>
-      <Activity days={days} page={page} metric={metric} scope={scope} />
     </>
   )
 }
 
-/** The estimate's wording and the tokens no cost counts, under the Cost figures. */
-function EstimateNote({ asOf, unpriced }: { asOf: string; unpriced: number | null }) {
-  const { t, i18n } = useTranslation('usage')
-  const [year, month, day] = asOf.split('-').map(Number)
-  const date = new Intl.DateTimeFormat(i18n.language, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(new Date(year!, month! - 1, day!))
+/** The range's periods in a metric: by hour for one day, else by day, week or month. */
+function periods(
+  hours: HourTotals | null,
+  days: readonly DayTotal[],
+  range: PageData['range'],
+  firstDay: number,
+  metric: Metric,
+  scope: UsageScope,
+): { unit: TrendUnit; bars: TrendBar[] } {
+  return hours
+    ? { unit: 'hour', bars: hourBars(hours.totals, hours.starts, metric, scope) }
+    : trend(days, range, firstDay, metric, scope)
+}
+
+/** A figure's small bars: the last seven periods, the one marked darker. */
+function MiniBars({ values, mark }: { values: readonly number[]; mark: 'last' | 'peak' }) {
+  const shown = values.slice(-7)
+  if (shown.length === 0) return null
+  const max = Math.max(...shown)
+  const on = mark === 'last' ? shown.length - 1 : max > 0 ? shown.indexOf(max) : -1
   return (
-    <div className="flex flex-col gap-0.5 px-0.5 text-xs text-tertiary">
-      <span>{t('figures.estimated', { date })}</span>
-      {unpriced !== null && <span>{t('figures.unpriced', { tokens: tokens(unpriced) })}</span>}
-    </div>
+    <span className="k-u-minibars" aria-hidden="true">
+      {shown.map((value, i) => (
+        <i
+          key={i}
+          data-on={i === on || undefined}
+          style={{ height: `${max > 0 ? Math.max(8, (value / max) * 100) : 8}%` }}
+        />
+      ))}
+    </span>
   )
 }
 
-/** Each figure's lines: two to a row while the page is narrow, then four in one row. */
-const FIGURE_LINES = [
-  '',
-  'shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
-  'shadow-[inset_0_var(--hairline)_0_var(--border-subtle)] @min-[45rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
-  'shadow-[inset_var(--hairline)_var(--hairline)_0_var(--border-subtle)] @min-[45rem]:shadow-[inset_var(--hairline)_0_0_var(--border-subtle)]',
-] as const
-
 /**
  * Four figures in a row, two to a row while the page is narrow: the range's total, its average,
- * its busiest day and its requests, or by the hour for one day. The number is compact, with the exact value in its
- * tooltip.
+ * its busiest day and its requests, or by the hour for one day. The number is compact, with the
+ * exact value in its tooltip.
  */
 function Figures({
   facts,
   requestFacts,
   hours,
+  begun,
   kind,
   metric,
   scope,
   rangeLabel,
+  bars,
+  sideBars,
 }: {
   facts: ReturnType<typeof figures>
   /** The range in requests, or turns under Kettu only, whatever the metric. */
   requestFacts: ReturnType<typeof figures>
   hours: HourTotals | null
+  /** The end of the hour under way, for a one-day range. */
+  begun: number
   kind: MetricKind
   metric: Metric
   scope: UsageScope
   rangeLabel: string
+  /** The metric's periods so far, and those of the last figure's measure. */
+  bars: readonly number[]
+  sideBars: readonly number[]
 }) {
-  const { t } = useTranslation('usage')
-  const hourText = useHourText(hours?.zoned ?? false)
-  // Re-renders as an hour begins, not on every tick of the clock.
-  const begun = useClock((now) => (hours ? hoursSoFar(hours.starts, now).to : 0))
+  const { t, i18n } = useTranslation('usage')
   const hourly = useMemo(
     () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }, metric, scope),
     [hours, begun, metric, scope],
@@ -698,12 +782,19 @@ function Figures({
     () => hours && figures(hours.totals, { from: hours.starts[0]!, to: begun }, 'requests', scope),
     [hours, begun, scope],
   )
-  const hourEnd = (start: number) => hours?.starts[hours.starts.indexOf(start) + 1] ?? start
-  const none = <span className="text-tertiary">—</span>
+  const clock = new Intl.DateTimeFormat(i18n.language, {
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(hours?.zoned ? { timeZoneName: 'short' } : {}),
+  })
+  const amount = (value: number): string =>
+    kind === 'cost'
+      ? usd(value)
+      : kind === 'tokens'
+        ? t('units.tokens', { value: count(value) })
+        : t(kind === 'requests' ? 'units.requests' : 'units.turns', { value: count(value) })
   const shown = (value: number | null, priced = true): ReactNode =>
-    value === null || (kind === 'cost' && !priced) ? (
-      none
-    ) : (
+    value === null || (kind === 'cost' && !priced) ? null : (
       <FigureValue value={value} kind={kind} />
     )
   const current = hourly ?? facts
@@ -717,56 +808,59 @@ function Figures({
     requests: t('figures.totalRequests'),
     turns: t('figures.totalTurns'),
   }[kind]
-  const cells: { label: string; value: ReactNode; note: string }[] = []
-  cells.push({
-    label: totalLabel,
-    value: shown(facts.activeDays > 0 ? facts.total : null, facts.priced),
-    note: t('figures.days', { range: rangeLabel, count: facts.days }),
-  })
-  cells.push(
+  const cells: { label: string; value: ReactNode; note: string; bars: ReactNode }[] = [
+    {
+      label: totalLabel,
+      value: shown(facts.activeDays > 0 ? facts.total : null, facts.priced),
+      note: t('figures.days', { range: rangeLabel, count: facts.days }),
+      bars: <MiniBars values={bars} mark="last" />,
+    },
     hourly
       ? {
           label: t('figures.hourlyAverage'),
           value: shown(average, hourly.priced),
           note: t('figures.activeHours', { active: hourly.activeDays, count: hourly.days }),
+          bars: <MiniBars values={bars} mark="last" />,
         }
       : {
           label: t('figures.average'),
           value: shown(average, facts.priced),
           note: t('figures.active', { active: facts.activeDays, count: facts.days }),
+          bars: <MiniBars values={bars} mark="last" />,
         },
-  )
-  cells.push(
     hourly
       ? {
           label: t('figures.peakHour'),
-          value: peak ? shown(peak.total) : none,
-          note: peak ? hourText(peak.day, hourEnd(peak.day)) : t('figures.none'),
+          value: peak ? clock.format(peak.day) : null,
+          note: peak ? amount(peak.total) : t('figures.none'),
+          bars: <MiniBars values={bars} mark="peak" />,
         }
       : {
           label: t('figures.peak'),
-          value: peak ? shown(peak.total) : none,
-          note: peak ? dayText(peak.day) : t('figures.none'),
+          value: peak ? dayText(peak.day) : null,
+          note: peak ? amount(peak.total) : t('figures.none'),
+          bars: <MiniBars values={bars} mark="peak" />,
         },
-  )
+  ]
   if (kind === 'requests' || kind === 'turns') {
     // Requests lead the card already, so the last figure is the tokens they took.
     const perRequest = tokensPerRequest(facts)
     cells.push({
       label: t('figures.total'),
-      value: facts.activeDays > 0 ? <Count value={facts.tokens} /> : none,
+      value: facts.activeDays > 0 ? <Count value={facts.tokens} /> : null,
       note:
         perRequest === null
           ? t('figures.none')
           : t(kind === 'turns' ? 'figures.perTurn' : 'figures.perRequest', {
               value: count(Math.round(perRequest)),
             }),
+      bars: <MiniBars values={sideBars} mark="last" />,
     })
   } else {
     const perPeriod = (hourlyRequests ?? requestFacts).average
     cells.push({
       label: t(`metrics.${requestKind}`),
-      value: requestFacts.total > 0 ? <Count value={requestFacts.total} /> : none,
+      value: requestFacts.total > 0 ? <Count value={requestFacts.total} /> : null,
       note:
         perPeriod === null || requestFacts.total <= 0
           ? t('figures.none')
@@ -780,106 +874,314 @@ function Figures({
                   : 'figures.requestsPerDay',
               { value: count(Math.round(perPeriod)) },
             ),
+      bars: <MiniBars values={sideBars} mark="last" />,
     })
   }
   return (
-    <div className="grid min-w-0 grid-cols-2 @min-[45rem]:grid-cols-4">
-      {cells.map((cell, i) => (
-        <div key={i} className={cn('flex min-w-0 flex-col gap-0.75 px-5 py-4.5', FIGURE_LINES[i])}>
-          <span className="text-hint text-tertiary">{cell.label}</span>
-          <span className="font-display text-figure font-semibold tracking-[-0.02em] text-primary tabular-nums lining-nums">
-            {cell.value}
-          </span>
-          <span className="text-small text-pretty text-tertiary">{cell.note}</span>
-        </div>
-      ))}
-    </div>
+    <section aria-label={t('figures.label')}>
+      <div className="k-u-figs">
+        {cells.map((cell, i) => (
+          <div
+            key={i}
+            className="k-u-card k-u-fig ui-as-rise"
+            style={{ '--i': i } as CSSProperties}
+          >
+            <span className="k-u-cap">{cell.label}</span>
+            <span className="k-u-fig__row">
+              <strong className="k-num" data-none={cell.value === null || undefined}>
+                {cell.value ?? '—'}
+              </strong>
+              {cell.bars}
+            </span>
+            <small>{cell.note}</small>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
-/** The kinds of tokens in the order the bar draws them, the cache's first. */
-const COMPOSITION = ['cacheRead', 'cacheWrite', 'input', 'output', 'reasoning'] as const
-const PART_COLORS: Record<(typeof COMPOSITION)[number], string> = {
-  cacheRead: 'var(--part-cache-read)',
-  cacheWrite: 'var(--part-cache-write)',
-  input: 'var(--part-input)',
-  output: 'var(--part-output)',
-  reasoning: 'var(--part-reasoning)',
+/** The day the prices are from, "Nov 1, 2026". */
+function priceDate(asOf: string, language: string): string {
+  const [year, month, day] = asOf.split('-').map(Number)
+  return new Intl.DateTimeFormat(language, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(year!, month! - 1, day!))
 }
 
+/** The kinds of tokens in the order a tie keeps, the cache's first. */
+const COMPOSITION = ['cacheRead', 'input', 'output', 'cacheWrite', 'reasoning'] as const
+/** The vendored card's shades, by rank. */
+const RANKED = [
+  'var(--ui-cbc-c1)',
+  'var(--ui-cbc-c2)',
+  'var(--ui-cbc-c3)',
+  'var(--ui-cbc-c4)',
+  'var(--ui-cbc-c5)',
+] as const
+const ranked = (i: number) => RANKED[Math.min(i, RANKED.length - 1)]!
+
 /**
- * At the foot of the figures, what the range's tokens are made of: how much the prompt cache
- * served, then a bar of each kind and each kind's tokens and share. Always in tokens, whatever
- * the metric; under Cost, what the cache saved.
+ * What the range's tokens are made of, always in tokens whatever the metric, with how much the
+ * prompt cache served and, at API prices, what it saved. Requests split into no kinds.
  */
-function Composition({ parts, saved }: { parts: TokenParts; saved: number | null }) {
-  const { t } = useTranslation('usage')
-  const total = partsTotal(parts)
-  const cache = fromCache(parts)
+function Sources({
+  kind,
+  facts,
+  tokenFacts,
+  agent,
+  rangeLabel,
+  asOf,
+}: {
+  kind: MetricKind
+  facts: ReturnType<typeof figures>
+  tokenFacts: ReturnType<typeof figures>
+  agent: AgentFilter
+  rangeLabel: string
+  asOf: string
+}) {
+  const { t, i18n } = useTranslation('usage')
+  if (kind === 'requests' || kind === 'turns') {
+    return (
+      <div className="k-u-card k-u-cb-empty">
+        <span className="k-u-cap">{t('cache.title')}</span>
+        <p>{t(`cache.noSplit.${kind}`)}</p>
+      </div>
+    )
+  }
+  const { parts } = tokenFacts
+  const total = COMPOSITION.reduce((sum, part) => sum + parts[part], 0)
   const shares = new Map(tokenParts(parts, total).map((p) => [p.part, p]))
-  const kinds = COMPOSITION.filter((part) => shares.has(part))
+  const items: BreakdownItem[] = COMPOSITION.filter((part) => shares.has(part))
+    .map((part) => ({ id: part, label: t(`parts.${part}`), value: parts[part] }))
+    .sort((a, b) => b.value - a.value)
+    .map((item, i) => ({ ...item, color: ranked(i) }))
+  const cache = fromCache(parts)
+  const saved = facts.priced ? facts.parts.cacheSaved : 0
   const line =
     cache.share === null
       ? t('noUsage')
       : cache.read === 0
         ? t('cache.none')
-        : t('cache.share', { share: percent(cache.share) })
-  const spoken = kinds
-    .map((part) => `${t(`parts.${part}`)} ${sharePercent(shares.get(part)!.share ?? 0)}`)
-    .join(', ')
+        : t('cache.fromCache', { share: percent(cache.share) })
+  const unpriced = unpricedTokens(facts)
   return (
-    <div className="flex flex-col gap-3 px-5 pt-4 pb-4.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <h2 className="text-control font-semibold text-primary">{t('cache.title')}</h2>
-        <span className="text-hint text-tertiary">
-          {saved !== null && saved > 0
-            ? t('cache.withSaved', { line, saved: t('cache.saved', { cost: usd(saved) }) })
-            : line}
+    <CompactBreakdown
+      className="k-u-cb"
+      title={t('cache.title')}
+      items={items}
+      format={count}
+      totalLabel={
+        agent === 'all'
+          ? t('cache.totalAll', { range: rangeLabel })
+          : t('cache.totalOne', { range: rangeLabel, agent: agentName(agent) })
+      }
+      footer={
+        <span className="k-u-cb__foot">
+          {kind === 'cost' ? (
+            <>
+              {t('cache.prices', { date: priceDate(asOf, i18n.language) })}
+              {unpriced !== null && ` · ${t('cache.unpriced', { tokens: tokens(unpriced) })}`}
+            </>
+          ) : saved > 0 && cache.read > 0 ? (
+            <Trans
+              t={t}
+              i18nKey="cache.savedLine"
+              values={{ line, cost: usd(saved) }}
+              components={{ b: <b /> }}
+            />
+          ) : (
+            line
+          )}
         </span>
-      </div>
-      {total > 0 && (
-        <div role="img" aria-label={spoken} className="flex h-2.5 gap-0.5">
-          {kinds
-            .filter((part) => parts[part] > 0)
-            .map((part, i, shown) => (
-              <span
-                key={part}
-                className={cn(
-                  'block h-full min-w-1',
-                  i === 0 && 'rounded-l-sm',
-                  i === shown.length - 1 && 'rounded-r-sm',
-                )}
-                style={{ flex: `${parts[part]} 1 0`, backgroundColor: PART_COLORS[part] }}
-              />
-            ))}
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-3 @min-[35rem]:grid-cols-5">
-        {kinds.map((part) => (
-          <div key={part} className="flex min-w-0 flex-col gap-0.75">
-            <span className="flex items-center gap-1.5 text-small text-tertiary">
-              <span
-                aria-hidden
-                className="size-2 shrink-0 rounded-xs"
-                style={{ backgroundColor: PART_COLORS[part] }}
-              />
-              <span className="truncate">{t(`parts.${part}`)}</span>
-            </span>
-            <span className="text-control tabular-nums">
-              {cache.share === null ? (
-                <span className="text-tertiary">—</span>
-              ) : (
-                <>
-                  <Count value={parts[part]} className="font-semibold text-primary" />
-                  <span className="ml-1.5 text-tertiary">
-                    {sharePercent(shares.get(part)!.share ?? 0)}
-                  </span>
-                </>
-              )}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+      }
+    />
+  )
+}
+
+type Grouping = 'model' | 'project' | 'agent'
+
+/** The range by model, project or agent: the five largest, then the rest folded into one. */
+function Breakdown({
+  summary,
+  agent,
+  metric,
+  scope,
+  kind,
+  rangeLabel,
+}: {
+  summary: PageData['summary']
+  agent: AgentFilter
+  metric: Metric
+  scope: UsageScope
+  kind: MetricKind
+  rangeLabel: string
+}) {
+  const { t } = useTranslation('usage')
+  const color = useAgentColor()
+  const groupings: Grouping[] =
+    agent === 'all' ? ['model', 'project', 'agent'] : ['model', 'project']
+  const [chosen, setGrouping] = useState<Grouping>('model')
+  const grouping = groupings.includes(chosen) ? chosen : 'model'
+  const rows = useMemo(
+    () =>
+      grouping === 'model'
+        ? modelRows(summary, agent, metric, scope)
+        : grouping === 'project'
+          ? projectRows(summary, agent, basename, metric, scope)
+          : agentRows(summary, agent, metric, scope),
+    [grouping, summary, agent, metric, scope],
+  )
+  const folded = foldRows(rows)
+  const items: BreakdownItem[] = folded.rows.map((row, i) => ({
+    id: `${grouping}\n${row.key}`,
+    label:
+      grouping === 'agent'
+        ? agentName(row.key as AgentId)
+        : grouping === 'project'
+          ? (row.name ?? t('breakdown.noProject'))
+          : (row.name ?? t('breakdown.unknownModel')),
+    value: row.value ?? 0,
+    color: grouping === 'agent' ? color(row.key as AgentId) : ranked(i),
+  }))
+  if (folded.rest) {
+    items.push({
+      id: `${grouping}\nrest`,
+      label: t(`breakdown.others.${grouping}`, { count: folded.rest.count }),
+      value: folded.rest.value ?? 0,
+      color: ranked(RANKED.length),
+    })
+  }
+  return (
+    <CompactBreakdown
+      className="k-u-cb"
+      title={t('breakdown.title')}
+      periods={groupings.map((id) => ({ id, label: t(`breakdown.groups.${id}`) }))}
+      period={grouping}
+      onPeriodChange={(id) => setGrouping(id as Grouping)}
+      switchLabel={t('breakdown.groupBy')}
+      items={items}
+      format={kind === 'cost' ? usd : count}
+      totalLabel={t('breakdown.total', { metric: t(`metrics.${kind}`), range: rangeLabel })}
+      footer={null}
+    />
+  )
+}
+
+/** What the chart counts and by what unit. */
+const TREND_TITLE = {
+  tokens: {
+    hour: 'trend.hourly',
+    day: 'trend.daily',
+    week: 'trend.weekly',
+    month: 'trend.monthly',
+  },
+  requests: {
+    hour: 'trend.requestsHourly',
+    day: 'trend.requestsDaily',
+    week: 'trend.requestsWeekly',
+    month: 'trend.requestsMonthly',
+  },
+  turns: {
+    hour: 'trend.turnsHourly',
+    day: 'trend.turnsDaily',
+    week: 'trend.turnsWeekly',
+    month: 'trend.turnsMonthly',
+  },
+  cost: {
+    hour: 'trend.costHourly',
+    day: 'trend.costDaily',
+    week: 'trend.costWeekly',
+    month: 'trend.costMonthly',
+  },
+} as const satisfies Record<MetricKind, Record<TrendUnit, string>>
+
+/** The range over time, one line per agent; the hours still to come of today are left out. */
+function OverTime({
+  unit,
+  bars,
+  begun,
+  zoned,
+  kind,
+  total,
+  rangeLabel,
+  tokensUsed,
+}: {
+  unit: TrendUnit
+  bars: TrendBar[]
+  /** The end of the hour under way for a one-day range; null for a range of days. */
+  begun: number | null
+  zoned: boolean
+  kind: MetricKind
+  total: number
+  rangeLabel: string
+  tokensUsed: boolean
+}) {
+  const { t, i18n } = useTranslation('usage')
+  const color = useAgentColor()
+  const rangeText = useRangeText()
+  const hourText = useHourText(zoned)
+  const series = useMemo(
+    () =>
+      seriesOf(
+        bars,
+        sortAgentIds(new Set(bars.flatMap((bar) => Object.keys(bar.byAgent))) as Set<AgentId>),
+      ),
+    [bars],
+  )
+  const froms = useMemo(() => bars.map((bar) => bar.from), [bars])
+  const { labels, long } = useMemo(() => {
+    if (unit === 'hour') {
+      const time = new Intl.DateTimeFormat(i18n.language, { hour: 'numeric' })
+      return {
+        labels: froms.map((from) => time.format(from)),
+        long: bars.map((bar) => hourText(bar.from, bar.to)),
+      }
+    }
+    const date: Intl.DateTimeFormatOptions =
+      unit === 'month' ? { month: 'short' } : { month: 'short', day: 'numeric' }
+    const plain = new Intl.DateTimeFormat(i18n.language, date)
+    const dated = new Intl.DateTimeFormat(i18n.language, { ...date, year: 'numeric' })
+    const monthYear = new Intl.DateTimeFormat(i18n.language, { month: 'short', year: 'numeric' })
+    return {
+      labels: froms.map((from, i) =>
+        (namesYear(froms, i, i > 0 ? i - 1 : null) ? dated : plain).format(from),
+      ),
+      long: bars.map((bar) =>
+        unit === 'day'
+          ? dayText(bar.from)
+          : unit === 'month' && wholeMonth(bar)
+            ? monthYear.format(bar.from)
+            : rangeText(bar.from, bar.to),
+      ),
+    }
+  }, [unit, froms, bars, i18n.language, hourText, rangeText])
+  const later = (bar: TrendBar) => begun !== null && bar.from >= begun
+  const lines = series.map((id) => ({
+    label: agentName(id),
+    color: color(id),
+    values: bars.map((bar) => (later(bar) ? Number.NaN : (bar.byAgent[id] ?? 0))),
+  }))
+  const format = kind === 'cost' ? usd : count
+  const title = t(TREND_TITLE[kind][unit])
+  return (
+    <KpiChart
+      className="k-u-chart"
+      title={title}
+      value={format(total)}
+      format={format}
+      labels={labels}
+      tooltipLabels={long}
+      series={lines}
+      emptyText={kind === 'cost' && tokensUsed ? t('noCost') : t('noUsage')}
+      plotLabel={t('trend.plot', { title })}
+      footer={
+        series.length === 1
+          ? t('trend.footerOne', { agent: agentName(series[0]!), range: rangeLabel })
+          : t('trend.footer', { range: rangeLabel })
+      }
+    />
   )
 }

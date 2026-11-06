@@ -47,7 +47,39 @@ export type DateRangePickerProps = {
   today?: Date;
   /** Which edge of the trigger the panel lines up with – "end" for a trigger at the right of the page */
   align?: "start" | "end";
+  /** Kettu: the locale dates are written in */
+  locale?: string;
+  /** Kettu: the panel's words, translated (the compare control keeps its English) */
+  labels?: Partial<DateRangeLabels>;
+  /** Kettu: days that get a faint dot under their number, such as days with usage */
+  marked?: (day: Date) => boolean;
   className?: string;
+};
+
+/** Kettu: the words the picker shows, with English defaults */
+export type DateRangeLabels = {
+  choose: string;
+  presets: string;
+  custom: string;
+  previousMonth: string;
+  nextMonth: string;
+  /** The draft's start while its end is not picked yet */
+  pickEnd: (start: string) => string;
+  days: (count: number, formatted: string) => string;
+  cancel: string;
+  apply: string;
+};
+
+const englishLabels: DateRangeLabels = {
+  choose: "Choose a date range",
+  presets: "Presets",
+  custom: "Custom",
+  previousMonth: "Previous month",
+  nextMonth: "Next month",
+  pickEnd: (start) => `${start} – pick an end`,
+  days: (n, formatted) => `${formatted} ${n === 1 ? "day" : "days"}`,
+  cancel: "Cancel",
+  apply: "Apply",
 };
 
 /* ---------- Dates (local days, no library) ---------- */
@@ -67,15 +99,19 @@ const valid = (d?: Date | null): d is Date => d instanceof Date && !Number.isNaN
 /** Both ends real days, the start first – or the fallback */
 const sane = (r: DateRange | null | undefined, fallback: DateRange): DateRange =>
   r && valid(r.start) && valid(r.end) ? order(day(r.start), day(r.end)) : fallback;
-const count = new Intl.NumberFormat("en-US");
-
-const fmtDay = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-const fmtDayYear = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
-const fmtMonth = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
-const fmtLong = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+/** Kettu: the date and number formats of a locale */
+const formatsOf = (locale: string) => ({
+  count: new Intl.NumberFormat(locale),
+  fmtDay: new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }),
+  fmtDayYear: new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", year: "numeric" }),
+  fmtMonth: new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" }),
+  fmtLong: new Intl.DateTimeFormat(locale, { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
+  weekday: new Intl.DateTimeFormat(locale, { weekday: "short" }),
+});
+const english = formatsOf("en-US");
 
 /** "Sep 9 – Oct 8, 2026", "Dec 20, 2025 – Jan 5, 2026", "Oct 8, 2026" */
-export function formatRange({ start, end }: DateRange) {
+export function formatRange({ start, end }: DateRange, { fmtDay, fmtDayYear } = english) {
   if (!valid(start) || !valid(end)) return "–";
   if (same(start, end)) return fmtDayYear.format(start);
   const sameYear = start.getFullYear() === end.getFullYear();
@@ -159,8 +195,14 @@ export function DateRangePicker({
   defaultOpen = false,
   today: todayProp,
   align = "start",
+  locale = "en-US",
+  labels: labelsProp,
+  marked,
   className,
 }: DateRangePickerProps) {
+  const formats = useMemo(() => formatsOf(locale), [locale]);
+  const { count, fmtDayYear, fmtMonth, fmtLong } = formats;
+  const labels = { ...englishLabels, ...labelsProp };
   // Invalid dates, an unknown week start or compare mode fall back instead of crashing
   const wso = weekStartsOn === 0 ? 0 : 1;
   const today = useMemo(() => day(valid(todayProp) ? todayProp : new Date()), [todayProp?.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -292,7 +334,7 @@ export function DateRangePicker({
   };
 
   const weekdays = Array.from({ length: 7 }, (_, i) =>
-    new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(new Date(2026, 0, 4 + wso + i)).slice(0, 2),
+    formats.weekday.format(new Date(2026, 0, 4 + wso + i)).slice(0, 2),
   );
   const months = [month, addMonths(month, 1)];
   const rows = Math.max(...months.map((m) => weeks(m, wso).length));
@@ -369,9 +411,9 @@ export function DateRangePicker({
       >
         <span ref={triggerInner} className="ui-drpc__trigger-inner">
           <Glyph d={icons.calendar} />
-          <span className="ui-drpc__trigger-text" key={`${formatRange(applied)}-${appliedMode}`}>
-            <span className="ui-drpc__trigger-range">{formatRange(applied)}</span>
-            {appliedCompare && <span className="ui-drpc__trigger-compare">vs. {formatRange(appliedCompare)}</span>}
+          <span className="ui-drpc__trigger-text" key={`${formatRange(applied, formats)}-${appliedMode}`}>
+            <span className="ui-drpc__trigger-range">{formatRange(applied, formats)}</span>
+            {appliedCompare && <span className="ui-drpc__trigger-compare">vs. {formatRange(appliedCompare, formats)}</span>}
           </span>
           <Glyph d={icons.chevron} className="ui-drpc__chevron" />
         </span>
@@ -381,7 +423,7 @@ export function DateRangePicker({
         <div
           id={`${uid}-panel`}
           role="dialog"
-          aria-label="Choose a date range"
+          aria-label={labels.choose}
           className="ui-drpc__panel"
           onKeyDown={(e) => {
             if (e.key === "Escape") {
@@ -392,7 +434,7 @@ export function DateRangePicker({
         >
           <div ref={panel} className="ui-drpc__clip">
           <div ref={panelInner} className="ui-drpc__body">
-            <div ref={presetList} className="ui-drpc__presets" role="listbox" aria-label="Presets">
+            <div ref={presetList} className="ui-drpc__presets" role="listbox" aria-label={labels.presets}>
               {presets.map((p, i) => (
                 <button
                   key={`${p.id}-${i}`}
@@ -408,16 +450,16 @@ export function DateRangePicker({
                 </button>
               ))}
               <span className="ui-drpc__preset ui-drpc__preset-custom" aria-hidden={!!preset} data-active={!preset || undefined}>
-                Custom
+                {labels.custom}
               </span>
             </div>
 
             <div className="ui-drpc__cal">
               <div className="ui-drpc__nav">
-                <button type="button" className="ui-drpc__icon-btn" aria-label="Previous month" onClick={() => shift(-1)}>
+                <button type="button" className="ui-drpc__icon-btn" aria-label={labels.previousMonth} onClick={() => shift(-1)}>
                   <Glyph d={icons.left} />
                 </button>
-                <button type="button" className="ui-drpc__icon-btn" aria-label="Next month" onClick={() => shift(1)}>
+                <button type="button" className="ui-drpc__icon-btn" aria-label={labels.nextMonth} onClick={() => shift(1)}>
                   <Glyph d={icons.right} />
                 </button>
               </div>
@@ -468,6 +510,7 @@ export function DateRangePicker({
                                 data-compare-end={cmp && same(d, cmp.end) || undefined}
                                 data-row-start={di === 0 || d.getDate() === 1 || undefined}
                                 data-row-end={di === 6 || same(d, endOfMonth(d)) || undefined}
+                                data-marked={marked?.(d) || undefined}
                               >
                                 <button
                                   type="button"
@@ -499,10 +542,10 @@ export function DateRangePicker({
             <div className="ui-drpc__summary">
               <div className="ui-drpc__summary-range">
                 <span key={`${shown.start.getTime()}-${shown.end.getTime()}`}>
-                  {draft.end || hover ? formatRange(shown) : `${fmtDayYear.format(draft.start)} – pick an end`}
+                  {draft.end || hover ? formatRange(shown, formats) : labels.pickEnd(fmtDayYear.format(draft.start))}
                 </span>
                 <span className="ui-drpc__count" key={length}>
-                  {count.format(length)} {length === 1 ? "day" : "days"}
+                  {labels.days(length, count.format(length))}
                 </span>
               </div>
               {compare && (
@@ -530,7 +573,7 @@ export function DateRangePicker({
                   <div>
                     {lastCompare.current && (
                       <div className="ui-drpc__compare-range" key={`${lastCompare.current.start.getTime()}-${lastCompare.current.end.getTime()}`}>
-                        vs. {formatRange(lastCompare.current)}
+                        vs. {formatRange(lastCompare.current, formats)}
                       </div>
                     )}
                   </div>
@@ -539,10 +582,10 @@ export function DateRangePicker({
             </div>
             <div className="ui-drpc__buttons">
               <button type="button" className="ui-drpc__btn" onClick={() => close()}>
-                Cancel
+                {labels.cancel}
               </button>
               <button type="button" className="ui-drpc__btn ui-drpc__btn-primary" disabled={!draft.end} onClick={apply}>
-                Apply
+                {labels.apply}
               </button>
             </div>
           </div>
@@ -705,6 +748,8 @@ button.ui-drpc__preset:hover:not([aria-selected="true"]) { background: var(--ui-
 /* Today: a small blue dot under the number */
 .ui-drpc__day button[aria-current="date"] { color: var(--ui-drpc-accent); font-weight: 500; }
 .ui-drpc__day button[aria-current="date"]::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--ui-drpc-accent); }
+/* Kettu: a marked day's dot, fainter than today's */
+.ui-drpc__day[data-marked] button:not([aria-current="date"])::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 3px; height: 3px; margin-left: -1.5px; border-radius: 50%; background: currentColor; opacity: .35; }
 /* The ends of the range: dark chips */
 .ui-drpc__day[data-start] button, .ui-drpc__day[data-end] button { background: var(--ui-drpc-chip) !important; color: var(--ui-drpc-on-chip); font-weight: 500; box-shadow: none !important; animation: ui-drpc-pick 380ms var(--ui-drpc-spring); }
 .ui-drpc__day[data-start] button[aria-current="date"]::after, .ui-drpc__day[data-end] button[aria-current="date"]::after { background: var(--ui-drpc-today-on-chip); }

@@ -46,7 +46,12 @@
     "importingFrom": "{{agents}}，{{date}} 以来的日志。读完后页面就会填满。",
     "importingAgents": "{{agents}}。日志读完后，页面就会填满。",
     "importingNote": "日志读完后，页面就会填满。",
-    "loading": "正在载入用量"
+    "loading": "正在载入用量",
+    "allAgents": "全部 Agent",
+    "scopeNotes": {
+      "computer": "Kettu 和各 Agent 自己的日志",
+      "kettu": "只算 Kettu 运行的轮次"
+    }
   },
   "metrics": {
     "tokens": "Token",
@@ -89,7 +94,17 @@
     "none": "这些 token 都不是从 prompt cache 读取的。",
     "saved": "按 API 价格估算，大约节省了 {{cost}}。",
     "share": "其中 {{share}} 是从 prompt cache 读取的。",
-    "withSaved": "{{line}}{{saved}}"
+    "withSaved": "{{line}}{{saved}}",
+    "fromCache": "{{share}} 来自 prompt cache",
+    "savedLine": "{{line}} · 按 API 价格<b>约省 {{cost}}</b>",
+    "totalAll": "{{range}} · 全部 Agent",
+    "totalOne": "{{range}} · {{agent}}",
+    "noSplit": {
+      "requests": "请求数不按 token 类型拆分。把统计指标切换到 Token 或费用即可查看。",
+      "turns": "轮数不按 token 类型拆分。把统计指标切换到 Token 或费用即可查看。"
+    },
+    "prices": "按 {{date}} 的 API 价格估算",
+    "unpriced": "{{tokens}} token 没有价格"
   },
   "trend": {
     "title": "趋势",
@@ -117,7 +132,10 @@
     "agentCount": "{{agent}} {{value}}",
     "agentCost": "{{agent}} {{cost}}",
     "legend": "图表中显示的 Agent",
-    "keepOne": "图表中至少保留一个 Agent"
+    "keepOne": "图表中至少保留一个 Agent",
+    "plot": "{{title}}，用方向键逐个查看数值",
+    "footer": "每个 Agent 一条线 · {{range}}",
+    "footerOne": "{{agent}} · {{range}}"
   },
   "limits": {
     "title": "套餐限额",
@@ -140,7 +158,10 @@
       "days": "{{count}} 天"
     },
     "windowUsed": "{{window}}：已用 {{percent}}%。",
-    "windowStale": "{{window}}：已重置，还没重新读取。"
+    "windowStale": "{{window}}：已重置，还没重新读取。",
+    "showMore_other": "再显示 {{count}} 个",
+    "showFewer": "收起",
+    "near_other": "· {{count}} 个接近上限"
   },
   "activity": {
     "title": "活动",
@@ -192,7 +213,8 @@
       "requests": "次请求",
       "turns": "轮",
       "cost": "按 API 价格"
-    }
+    },
+    "total": "{{metric}} · {{range}}"
   },
   "noUsage": "这段时间没有用量。",
   "noCost": "这段时间没有费用。",
@@ -234,7 +256,12 @@
       "order": "开始日期晚于结束日期"
     },
     "cancel": "取消",
-    "apply": "应用"
+    "apply": "应用",
+    "presetsLabel": "预设",
+    "custom": "自定义",
+    "previousMonth": "上个月",
+    "nextMonth": "下个月",
+    "pickEnd": "{{start}} – 请选择结束日期"
   },
   "settings": {
     "title": "用量",

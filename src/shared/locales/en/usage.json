@@ -46,7 +46,12 @@
     "importingFrom": "{{agents}}, since {{date}}. The page fills in when the logs are read.",
     "importingAgents": "{{agents}}. The page fills in when the logs are read.",
     "importingNote": "The page fills in when the logs are read.",
-    "loading": "Loading usage"
+    "loading": "Loading usage",
+    "allAgents": "All agents",
+    "scopeNotes": {
+      "computer": "Kettu, and the agents’ own logs",
+      "kettu": "Only the turns Kettu ran"
+    }
   },
   "metrics": {
     "tokens": "Tokens",
@@ -92,7 +97,17 @@
     "none": "None of these tokens came from the prompt cache.",
     "saved": "At API prices, that saved about {{cost}}.",
     "share": "{{share}} of them were read from the prompt cache.",
-    "withSaved": "{{line}} {{saved}}"
+    "withSaved": "{{line}} {{saved}}",
+    "fromCache": "{{share}} came from the prompt cache",
+    "savedLine": "{{line}} · <b>about {{cost}} saved</b> at API prices",
+    "totalAll": "{{range}} · all agents",
+    "totalOne": "{{range}} · {{agent}}",
+    "noSplit": {
+      "requests": "Requests don’t split by token type. Switch the metric to Tokens or Cost.",
+      "turns": "Turns don’t split by token type. Switch the metric to Tokens or Cost."
+    },
+    "prices": "Estimated at API prices as of {{date}}",
+    "unpriced": "{{tokens}} tokens have no price"
   },
   "trend": {
     "title": "Over time",
@@ -120,7 +135,10 @@
     "agentCount": "{{agent}} {{value}}",
     "agentCost": "{{agent}} {{cost}}",
     "legend": "Agents shown in the chart",
-    "keepOne": "At least one agent stays in the chart"
+    "keepOne": "At least one agent stays in the chart",
+    "plot": "{{title}}; use the arrow keys to read each value",
+    "footer": "One line per agent · {{range}}",
+    "footerOne": "{{agent}} · {{range}}"
   },
   "limits": {
     "title": "Plan limits",
@@ -145,7 +163,12 @@
       "days": "{{count}}d"
     },
     "windowUsed": "{{window}}: {{percent}}% used.",
-    "windowStale": "{{window}}: reset, not read again yet."
+    "windowStale": "{{window}}: reset, not read again yet.",
+    "showMore_one": "Show {{count}} more",
+    "showMore_other": "Show {{count}} more",
+    "showFewer": "Show fewer",
+    "near_one": "· {{count}} near a limit",
+    "near_other": "· {{count}} near a limit"
   },
   "activity": {
     "title": "Activity",
@@ -201,7 +224,8 @@
       "requests": "requests",
       "turns": "turns",
       "cost": "at API prices"
-    }
+    },
+    "total": "{{metric}} · {{range}}"
   },
   "noUsage": "No usage in this range.",
   "noCost": "No cost in this range.",
@@ -244,7 +268,12 @@
       "order": "The start is after the end"
     },
     "cancel": "Cancel",
-    "apply": "Apply"
+    "apply": "Apply",
+    "presetsLabel": "Presets",
+    "custom": "Custom",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "pickEnd": "{{start}} – pick an end"
   },
   "settings": {
     "title": "Usage",

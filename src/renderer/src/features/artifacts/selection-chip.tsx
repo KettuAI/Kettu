@@ -1,4 +1,4 @@
-import { MousePointer2Icon, XIcon } from 'lucide-react'
+import { MousePointer2Icon, XIcon } from './icons'
 import { useTranslation } from 'react-i18next'
 import type { PaneSelection } from '@renderer/stores/artifacts'
 import { anchorLabel } from './anchors'

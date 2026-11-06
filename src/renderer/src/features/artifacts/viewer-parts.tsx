@@ -9,7 +9,7 @@ import {
   PlusIcon,
   RotateCcwIcon,
   ScanIcon,
-} from 'lucide-react'
+} from './icons'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
