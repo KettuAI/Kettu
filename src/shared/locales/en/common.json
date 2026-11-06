@@ -57,5 +57,11 @@
   },
   "toasts": {
     "region": "Notifications"
+  },
+  "pane": {
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "collapse": "Hide side panel",
+    "open": "Show side panel"
   }
 }

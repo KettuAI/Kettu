@@ -271,13 +271,13 @@
   /* Terminal, read by xterm.js: sixteen colors toned to read on white. */
   --ansi-black: #222222;
   --ansi-red: #c4352b;
-  --ansi-green: #2e7d4f;
-  --ansi-yellow: #956700;
+  --ansi-green: #16a34a;
+  --ansi-yellow: #b25b0c;
   --ansi-blue: #2f5d9c;
-  --ansi-magenta: #8d3d84;
-  --ansi-cyan: #2d6e7e;
+  --ansi-magenta: #5b5bd6;
+  --ansi-cyan: #1988b4;
   --ansi-white: #737373;
-  --ansi-bright-black: #8a8a8a;
+  --ansi-bright-black: #b7b7b7;
   --ansi-bright-red: #d4473c;
   --ansi-bright-green: #3a9160;
   --ansi-bright-yellow: #b07c00;
@@ -293,6 +293,20 @@
   --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* panes: the side panel's terminal, browser, devices and files. The terminal's screen and its
+     prompt colors above, the fox that marks an agent at work there, the running and changed
+     marks. */
+  --terminal-screen: #fafafa;
+  --terminal-selection-tint: rgb(242 88 27 / 22%);
+  --pane-fox: #f2581b;
+  /* An icon at rest in a pane's head and the session's pane buttons, as affectUI's shell draws it. */
+  --pane-muted: rgb(0 0 0 / 45%);
+  --pane-live: #22a06b;
+  --pane-modified: #b25b0c;
+  --pane-added: #16a34a;
+  --pane-phone: #0d0d0f;
+  --pane-phone-edge: #2a2a2e;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -468,13 +482,13 @@
 
     --ansi-black: #3a3a3a;
     --ansi-red: #f07167;
-    --ansi-green: #5bb98a;
-    --ansi-yellow: #d9a441;
+    --ansi-green: #4ade80;
+    --ansi-yellow: #f2a65a;
     --ansi-blue: #7fa8e8;
-    --ansi-magenta: #d88bd0;
-    --ansi-cyan: #6cc0d2;
+    --ansi-magenta: #a5a5ff;
+    --ansi-cyan: #5fc8e8;
     --ansi-white: #d4d4d4;
-    --ansi-bright-black: #6b6b6b;
+    --ansi-bright-black: #5c5c5f;
     --ansi-bright-red: #f4948c;
     --ansi-bright-green: #7fcca4;
     --ansi-bright-yellow: #e5bd6a;
@@ -486,6 +500,17 @@
     --elevation-sheet: 0 0 #0000;
     --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+    /* panes */
+    --terminal-screen: #1c1c1f;
+    --terminal-selection-tint: rgb(242 88 27 / 22%);
+    --pane-fox: #f2581b;
+    --pane-muted: rgb(255 255 255 / 45%);
+    --pane-live: #22a06b;
+    --pane-modified: #f2a65a;
+    --pane-added: #4ade80;
+    --pane-phone: #0d0d0f;
+    --pane-phone-edge: #2a2a2e;
   }
 }
 
@@ -660,13 +685,13 @@
 
   --ansi-black: #3a3a3a;
   --ansi-red: #f07167;
-  --ansi-green: #5bb98a;
-  --ansi-yellow: #d9a441;
+  --ansi-green: #4ade80;
+  --ansi-yellow: #f2a65a;
   --ansi-blue: #7fa8e8;
-  --ansi-magenta: #d88bd0;
-  --ansi-cyan: #6cc0d2;
+  --ansi-magenta: #a5a5ff;
+  --ansi-cyan: #5fc8e8;
   --ansi-white: #d4d4d4;
-  --ansi-bright-black: #6b6b6b;
+  --ansi-bright-black: #5c5c5f;
   --ansi-bright-red: #f4948c;
   --ansi-bright-green: #7fcca4;
   --ansi-bright-yellow: #e5bd6a;
@@ -678,6 +703,17 @@
   --elevation-sheet: 0 0 #0000;
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* panes */
+  --terminal-screen: #1c1c1f;
+  --terminal-selection-tint: rgb(242 88 27 / 22%);
+  --pane-fox: #f2581b;
+  --pane-muted: rgb(255 255 255 / 45%);
+  --pane-live: #22a06b;
+  --pane-modified: #f2a65a;
+  --pane-added: #4ade80;
+  --pane-phone: #0d0d0f;
+  --pane-phone-edge: #2a2a2e;
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
@@ -797,11 +833,18 @@
   /* The tile after the themes in Settings › Appearance, which offers more: faint diagonal lines. */
   --tile-hatch: repeating-linear-gradient(135deg, transparent 0 6px, var(--bg-hover) 6px 7px);
 
-  --terminal-background: var(--bg-code-block);
-  /* As drawn: output in the secondary ink, the cursor in the primary. */
-  --terminal-foreground: var(--text-secondary);
+  /* panes: the terminal's screen, output in the primary ink with the fox's selection. */
+  --terminal-background: var(--terminal-screen);
+  --terminal-foreground: var(--text-primary);
   --terminal-cursor: var(--text-primary);
-  --terminal-selection: var(--selection);
+  --terminal-selection: var(--terminal-selection-tint);
+  /* The glow of a page or a device an agent drives, and its tap. */
+  --pane-drive-glow:
+    0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 60%, transparent),
+    0 0 22px -4px color-mix(in srgb, var(--pane-fox) 40%, transparent);
+  --pane-drive-glow-inset:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 60%, transparent),
+    inset 0 0 22px -4px color-mix(in srgb, var(--pane-fox) 40%, transparent);
 
   /* The primary button's gradients, from their stops, so a theme sets them as colors. */
   --primary-gradient: linear-gradient(180deg, var(--primary-from), var(--primary-to));
