@@ -11,7 +11,7 @@ export const ON_DESK =
   'relative before:pointer-events-none before:absolute before:inset-0 before:app-region-no-drag'
 
 /** A sheet laid on the desk: the main area, a page or a side pane. */
-export const SHEET = `${ON_DESK} overflow-clip rounded-xl bg-app shadow-sheet`
+export const SHEET = `${ON_DESK} overflow-clip rounded-card bg-app shadow-sheet`
 
 /**
  * The style of a resizable panel, or a group of them, that holds a sheet, whose ring and shadow

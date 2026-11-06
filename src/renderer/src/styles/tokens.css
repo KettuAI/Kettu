@@ -138,7 +138,7 @@
   /* A selected row and the chosen segment. */
   --elevation-raised: 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px rgb(0 0 0 / 5%);
   --elevation-dialog: 0 24px 56px -16px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
-  --elevation-primary: 0 1px 2px rgb(16 22 30 / 18%);
+  --elevation-primary: 0 2px 4px rgb(0 0 0 / 10%);
   /* A picture's faint drop under its ring, and a clip's play button over its picture. */
   --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
   --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
@@ -147,13 +147,13 @@
 
   /* The primary button: its fill as gradient stops, a ring a shade darker, a highlight along its
      top edge and its label, which a theme may set; the built-in one is solid ink. */
-  --primary-from: #141a22;
-  --primary-to: #141a22;
-  --primary-hover-from: #232b36;
-  --primary-hover-to: #232b36;
+  --primary-from: #323137;
+  --primary-to: #201e25;
+  --primary-hover-from: #3c3b42;
+  --primary-hover-to: #29272f;
   /* The built-in primary button draws no edge; a theme may give it one. */
-  --primary-ring: transparent;
-  --primary-highlight: rgb(255 255 255 / 12%);
+  --primary-ring: #0d0d0d;
+  --primary-highlight: rgb(255 255 255 / 16%);
   --primary-foreground: #ffffff;
 
   /* On, checked and chosen controls in the fox orange: a switch, a check box, a radio, an option
@@ -284,7 +284,7 @@
   --ansi-bright-white: #9a9a9a;
 
   /* The main area and the panes are sheets on the desk: a ring and a long, soft drop. */
-  --elevation-sheet: 0 1px 0 rgb(20 26 34 / 3%), 0 18px 44px -26px rgb(30 45 70 / 28%);
+  --elevation-sheet: 0 0 #0000;
   /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted, over a
      soft drop; the canvas draws its own hairline at every zoom, so it takes the drop alone. */
   --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
@@ -378,19 +378,19 @@
     --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
     --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
     --elevation-dialog: 0 24px 56px -16px rgb(0 0 0 / 60%), 0 1px 2px rgb(0 0 0 / 40%);
-    --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-primary: 0 2px 4px rgb(0 0 0 / 40%);
     --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
     --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
     --highlight: 0 0 #0000;
 
     /* Inverted: a near-white button with dark text. */
-    --primary-from: #e8ecf1;
-    --primary-to: #e8ecf1;
+    --primary-from: #f4f4f5;
+    --primary-to: #e4e4e7;
     --primary-hover-from: #ffffff;
-    --primary-hover-to: #ffffff;
-    --primary-ring: transparent;
-    --primary-highlight: rgb(255 255 255 / 12%);
-    --primary-foreground: #10161e;
+    --primary-hover-to: #ececef;
+    --primary-ring: rgb(0 0 0 / 60%);
+    --primary-highlight: rgb(255 255 255 / 90%);
+    --primary-foreground: #121213;
 
     --control-on: #ff6a2b;
     --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
@@ -478,7 +478,7 @@
     --ansi-bright-cyan: #90d2e0;
     --ansi-bright-white: #ececec;
 
-    --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
+    --elevation-sheet: 0 0 #0000;
     --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
   }
@@ -568,19 +568,19 @@
   --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
   --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
   --elevation-dialog: 0 24px 56px -16px rgb(0 0 0 / 60%), 0 1px 2px rgb(0 0 0 / 40%);
-  --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-primary: 0 2px 4px rgb(0 0 0 / 40%);
   --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
   --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
   --highlight: 0 0 #0000;
 
   /* Inverted: a near-white button with dark text. */
-  --primary-from: #e8ecf1;
-  --primary-to: #e8ecf1;
+  --primary-from: #f4f4f5;
+  --primary-to: #e4e4e7;
   --primary-hover-from: #ffffff;
-  --primary-hover-to: #ffffff;
-  --primary-ring: transparent;
-  --primary-highlight: rgb(255 255 255 / 12%);
-  --primary-foreground: #10161e;
+  --primary-hover-to: #ececef;
+  --primary-ring: rgb(0 0 0 / 60%);
+  --primary-highlight: rgb(255 255 255 / 90%);
+  --primary-foreground: #121213;
 
   --control-on: #ff6a2b;
   --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
@@ -668,7 +668,7 @@
   --ansi-bright-cyan: #90d2e0;
   --ansi-bright-white: #ececec;
 
-  --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
+  --elevation-sheet: 0 0 #0000;
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 }

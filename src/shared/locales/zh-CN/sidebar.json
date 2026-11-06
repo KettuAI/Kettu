@@ -7,7 +7,8 @@
     "routines": "例程",
     "sessions": "会话",
     "unavailable": "暂时无法加载项目。",
-    "empty": "会话会显示在这里。"
+    "empty": "会话会显示在这里。",
+    "searchField": "搜索…"
   },
   "search": {
     "placeholder": "搜索会话、Artifacts、例程等",

@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from 'cn'
 
 const variants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg text-ui font-medium whitespace-nowrap transition-all outline-none select-none focus-ring active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-40 aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-xl text-ui font-medium whitespace-nowrap transition-all outline-none select-none focus-ring active:not-aria-[haspopup]:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
@@ -16,8 +16,7 @@ const variants = cva(
         ghost:
           'text-secondary hover:bg-hover hover:text-foreground aria-expanded:bg-hover aria-expanded:text-foreground',
         // Confirms a deletion in a dialog, and nowhere else.
-        destructive:
-          'bg-destructive text-destructive-foreground shadow-destructive hover:brightness-107',
+        destructive: 'bg-destructive-tint text-destructive hover:brightness-97',
         // Delete and remove in rows and popovers: the surface with a thin red ring.
         'destructive-outline':
           'bg-card text-destructive shadow-destructive-ring hover:shadow-destructive-ring-hover aria-expanded:bg-accent disabled:text-tertiary',
