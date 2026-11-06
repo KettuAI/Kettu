@@ -99,10 +99,10 @@ export function PaneSheet({
   return (
     <div
       data-pane={pane}
+      data-maximized={maximized || undefined}
       className={cn(
         'kp-pane animate-in fade-in animation-duration-(--duration-fast)',
         SHEET,
-        maximized && 'absolute inset-0 z-10',
         className,
       )}
       {...props}

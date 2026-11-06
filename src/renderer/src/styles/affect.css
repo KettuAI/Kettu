@@ -633,6 +633,12 @@
   font-size: 13px;
   color: var(--text-secondary);
 }
+/* Maximized, it leaves its slot and covers the whole area. */
+.kp-pane[data-maximized] {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
 .kp-head {
   display: flex;
   flex: none;
