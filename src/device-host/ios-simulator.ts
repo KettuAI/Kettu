@@ -72,7 +72,12 @@ export class IosSimulatorDriver implements DeviceDriver {
         '--disable',
         'clipboard',
       ],
-      { env: node.env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true },
+      {
+        // Kettu's patch of serve-sim: it would otherwise open a Device Hub window for the device.
+        env: { ...node.env, SERVE_SIM_DEVICE_HUB: '0' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      },
     )
     this.child = child
     child.stderr?.on('data', (chunk: Buffer) => this.log(chunk.toString().trimEnd()))
