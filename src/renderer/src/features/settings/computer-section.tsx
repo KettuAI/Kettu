@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { MonitorIcon } from 'lucide-react'
+import { Cursor01Icon } from '@hugeicons/core-free-icons'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type { ComputerUseStatus } from '@shared/computer-use'
@@ -170,7 +170,7 @@ export function useComputerUseSection(): SectionDef {
     id: 'computer-use',
     title: t('sections.computer-use'),
     description: t('pages.computer-use'),
-    icon: MonitorIcon,
+    icon: Cursor01Icon,
     rows,
   }
 }

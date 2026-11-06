@@ -1,22 +1,13 @@
 import { useState } from 'react'
-import { ShapesIcon } from 'lucide-react'
+import { DashboardSquare02Icon, RefreshIcon, ShapesIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { ControlError, GROUP_ACTION, Pill, ROW_BUTTON } from './controls'
-import { DeviceTile } from './remote-parts'
-import { ItemLine } from './rows'
+import { ControlError, Pill, SetButton, Spin } from './controls'
+import { ItemLine, Notice, Thing } from './rows'
 
 /** An artifact the user allowed something: what, and Revoke, which takes all of it back. */
 export function ConsentRow({ row, where }: { row: ArtifactConsentRow; where: string }) {
@@ -37,14 +28,15 @@ export function ConsentRow({ row, where }: { row: ArtifactConsentRow; where: str
     }
   }
   return (
-    <div className="flex items-center gap-3.5 py-3.25">
-      <DeviceTile icon={<ShapesIcon className="size-4.25" />} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-[normal]">{row.title}</span>
+    <div className="ui-sg-row">
+      <Thing
+        mark={<Icon icon={ShapesIcon} size={20} />}
+        name={<span className="k-name">{row.title}</span>}
+      >
         <ItemLine>{where}</ItemLine>
-      </div>
-      <ControlError error={error} />
-      <div className="flex shrink-0 items-center gap-2">
+      </Thing>
+      <span className="ui-sg-control">
+        <ControlError error={error} />
         {row.capabilities.map((capability) => (
           <Pill key={capability}>
             {capability === 'files'
@@ -52,16 +44,10 @@ export function ConsentRow({ row, where }: { row: ArtifactConsentRow; where: str
               : t('artifacts.sample', { agent: row.agent ?? t('artifacts.yourAgent') })}
           </Pill>
         ))}
-        <Button
-          variant="outline"
-          className={ROW_BUTTON}
-          disabled={busy}
-          onClick={() => void revoke()}
-        >
-          {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+        <SetButton loading={busy} onClick={() => void revoke()}>
           {t('artifacts.revoke')}
-        </Button>
-      </div>
+        </SetButton>
+      </span>
     </div>
   )
 }
@@ -79,33 +65,33 @@ export function ConsentsState({
   const { t } = useTranslation('settings')
   if (state === 'loading') {
     return (
-      <div className="flex items-center gap-2 py-6 text-group text-tertiary">
-        <Spinner className="size-3.5" />
+      <div className="k-loading">
+        <Spin />
         {t('artifacts.loading')}
       </div>
     )
   }
   if (state === 'failed') {
     return (
-      <div className="flex items-center gap-3 py-6">
-        <span className="text-group text-danger">
-          {t('artifacts.loadFailed', { error: error ?? '' })}
-        </span>
-        <Button variant="ghost" className={GROUP_ACTION} onClick={onRetry}>
-          {t('artifacts.retry')}
-        </Button>
-      </div>
+      <Notice
+        variant="error"
+        className="k-pending"
+        title={t('artifacts.loadFailed', { error: error ?? '' })}
+        action={
+          <SetButton icon={<Icon icon={RefreshIcon} size={14} />} onClick={onRetry}>
+            {t('artifacts.retry')}
+          </SetButton>
+        }
+      />
     )
   }
   return (
-    <Empty className="px-6 py-14">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <ShapesIcon />
-        </EmptyMedia>
-        <EmptyTitle>{t('artifacts.emptyTitle')}</EmptyTitle>
-        <EmptyDescription>{t('artifacts.emptyHint')}</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <div className="ui-as-empty">
+      <span className="ui-as-empty__icon">
+        <Icon icon={DashboardSquare02Icon} size={18} />
+      </span>
+      <b className="ui-as-empty__title">{t('artifacts.emptyTitle')}</b>
+      <p className="ui-as-empty__text">{t('artifacts.emptyHint')}</p>
+    </div>
   )
 }

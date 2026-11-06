@@ -1281,12 +1281,14 @@ export type MenuItem = {
   submenu?: MenuItem[];
   /** A small gray title over the items after it, not something to pick – its description sits at its end */
   heading?: boolean;
+  /** Shown but not pickable, e.g. a host that is offline */
+  disabled?: boolean;
   onSelect?: () => void;
 };
 
 /** The items of one menu level – not the ones in its submenus */
 const menuItems = (menu: Element | null) =>
-  menu ? [...menu.querySelectorAll<HTMLElement>(':scope > [role^="menuitem"], :scope > .ui-as-menu__sub > [role^="menuitem"]')] : [];
+  menu ? [...menu.querySelectorAll<HTMLElement>(':scope > [role^="menuitem"]:not(:disabled), :scope > .ui-as-menu__sub > [role^="menuitem"]')] : [];
 
 /** Focuses a menu's checked item, or its first one */
 function focusMenu(menu: HTMLElement | null) {
@@ -1386,6 +1388,7 @@ export function MenuList({ items, onPick }: { items: MenuItem[]; onPick: () => v
                 className="ui-as-menu__item"
                 data-danger={item.danger || undefined}
                 data-rich={item.description ? true : undefined}
+                disabled={item.disabled}
                 onClick={() => {
                   item.onSelect?.();
                   onPick();
@@ -2423,7 +2426,7 @@ const workspaceCss = /* css */ `
 .ui-asw__source:hover .ui-asw__go { opacity: 1; translate: 0 0; }
 `;
 
-const css = /* css */ `
+export const css = /* css */ `
 /* Design tokens – same values as the affectUI library components */
 .ui-as {
   --tray: #f4f4f4;
@@ -3223,6 +3226,7 @@ a.ui-as-side__item { text-decoration: none; cursor: pointer; }
 .ui-as-menu__item[aria-checked="true"] { color: var(--ink); font-weight: 500; }
 .ui-as-menu__item[aria-checked="true"] small { font-weight: 400; }
 .ui-as-menu__item[data-danger] { color: #dc2626; }
+.ui-as-menu__item:disabled { opacity: 0.45; cursor: default; background: none; }
 /* Shortcuts, dividers and menus that open to the side */
 .ui-as-menu__kbd { flex: none; margin-left: auto; padding-left: 16px; font: inherit; font-size: 12px; letter-spacing: 0.04em; color: var(--faint); }
 .ui-as-menu__item > .ui-as-menu__kbd + svg { margin-left: 8px; }

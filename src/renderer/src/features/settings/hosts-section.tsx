@@ -1,43 +1,39 @@
 import { useState } from 'react'
-import { CircleAlertIcon, LaptopIcon, MonitorIcon, PlusIcon } from 'lucide-react'
+import { Add01Icon, ComputerIcon, LaptopIcon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { HostStatus, HostsStatus } from '@shared/remote/hosts'
-import { Button } from '@renderer/components/ui/button'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { useHostsStore } from '@renderer/stores/hosts'
 import { openSettings, openSettingsItem } from '@renderer/stores/view'
 import { AddHostDialog } from './host-add'
 import { connectionText, platformName, routeText } from './host-text'
-import { DeviceTile, HostIcon, OnlineDot } from './remote-parts'
+import { DeviceTile, HostIcon } from './remote-parts'
 import { deviceShape } from './remote-text'
-import { Pill, ROW_BUTTON } from './controls'
-import { GroupNote, ItemLine, ItemRow, PageHeader } from './rows'
+import { Pill, SetButton, Spin } from './controls'
+import { GroupNote, ItemLine, ItemRow, Thing } from './rows'
 
-/** The page's title and line, with Add host at their end. */
-export function HostsHeader({ id }: { id: string }) {
+/** Add host, at the end of the list's heading. */
+export function AddHostButton() {
   const { t } = useTranslation('settings')
   const keyFailed = useHostsStore((s) => s.status?.keyFailed === true)
   const [open, setOpen] = useState(false)
   return (
-    <header className="flex flex-col [&_p]:pr-28">
-      <PageHeader id={id} title={t('sections.hosts')}>
-        {t('pages.hosts')}
-      </PageHeader>
-      {/* Up beside the description's last line, which stops short of it. */}
-      <div className="-mt-9.5 flex justify-end">
-        <Button className={ROW_BUTTON} disabled={keyFailed} onClick={() => setOpen(true)}>
-          <PlusIcon data-icon="inline-start" className="size-3.5" />
-          {t('hosts.add.button')}
-        </Button>
-      </div>
+    <>
+      <SetButton
+        variant="primary"
+        icon={<Icon icon={Add01Icon} size={14} />}
+        disabled={keyFailed}
+        onClick={() => setOpen(true)}
+      >
+        {t('hosts.add.button')}
+      </SetButton>
       <AddHostDialog open={open} onOpenChange={setOpen} />
-    </header>
+    </>
   )
 }
 
-/** Whether a host is online, or how it is not, as its row and its page say it. */
+/** Whether a host is online, or how it is not, as a badge on its row and its page. */
 export function HostState({
   host,
   className,
@@ -48,27 +44,26 @@ export function HostState({
   const { t } = useTranslation('settings')
   const now = useNow()
   const { state } = host.connection
-  // A host that cannot be used until Kettu is updated says so as a warning pill.
+  const text = connectionText(t, host, now)
+  // A host that cannot be used until Kettu is updated says so as a warning.
   if (state === 'stopped') {
     return (
       <Pill tone="warning" className={className}>
-        {connectionText(t, host, now)}
+        {text}
+      </Pill>
+    )
+  }
+  if (state === 'online') {
+    return (
+      <Pill tone="success" className={className}>
+        {text}
       </Pill>
     )
   }
   return (
-    <span
-      className={cn(
-        'flex items-center gap-1.5 text-hint whitespace-nowrap text-secondary',
-        className,
-      )}
-    >
-      {state === 'online' && <OnlineDot />}
-      {state === 'offline' && (
-        <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
-      )}
-      {state === 'connecting' && <Spinner className="size-3" />}
-      {connectionText(t, host, now)}
+    <span className="k-end">
+      {state === 'connecting' && <Spin />}
+      <Pill className={className}>{text}</Pill>
     </span>
   )
 }
@@ -77,19 +72,23 @@ export function HostState({
 export function SelfRow({ self }: { self: HostsStatus['self'] }) {
   const { t } = useTranslation('settings')
   const laptop = deviceShape({ kind: 'desktop', model: self.model }) === 'laptop'
-  const Icon = laptop ? LaptopIcon : MonitorIcon
   return (
-    <div className="flex items-center gap-3.5 py-3.25">
-      <DeviceTile icon={<Icon className="size-4.25" />} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-2 text-label leading-[normal]">
-          <span className="truncate">{t('hosts.self.label')}</span>
-          <Pill>{t('hosts.self.badge')}</Pill>
-        </div>
+    <div className="ui-sg-row">
+      <Thing
+        mark={<Icon icon={laptop ? LaptopIcon : ComputerIcon} size={20} />}
+        name={<span className="k-name">{self.name || t('hosts.self.label')}</span>}
+      >
         <ItemLine>
-          {[platformName(self.platform), t('hosts.version', { version: self.version })].join(' · ')}
+          {[
+            t('hosts.self.label'),
+            platformName(self.platform),
+            t('hosts.version', { version: self.version }),
+          ].join(' · ')}
         </ItemLine>
-      </div>
+      </Thing>
+      <span className="ui-sg-control">
+        <Pill>{t('hosts.self.badge')}</Pill>
+      </span>
     </div>
   )
 }
@@ -102,8 +101,8 @@ export function HostRow({ host }: { host: HostStatus }) {
       item={host.id}
       label={host.name}
       onOpen={() => openSettingsItem('hosts', host.id)}
-      tile={<DeviceTile icon={<HostIcon platform={host.platform} className="size-4.25" />} />}
-      name={<span className="truncate">{host.name}</span>}
+      tile={<DeviceTile icon={<HostIcon platform={host.platform} />} />}
+      name={<span className="k-name">{host.name}</span>}
       right={<HostState host={host} />}
     >
       <ItemLine>{routeText(t, host)}</ItemLine>
@@ -114,8 +113,8 @@ export function HostRow({ host }: { host: HostStatus }) {
 /** In place of the hosts while the remote host has not reported them. */
 export function HostsLoading() {
   return (
-    <div className="flex h-12 items-center px-1">
-      <Spinner className="size-3.5 text-icon" />
+    <div className="ui-sg-row">
+      <Spin />
     </div>
   )
 }
@@ -128,10 +127,9 @@ export function HostsNote() {
   return (
     <>
       {failed && (
-        <p className="mt-2.5 flex items-start gap-1.5 text-hint text-pretty text-danger">
-          <CircleAlertIcon className="mt-px size-3.5 shrink-0" />
-          {t('hosts.keyFailed')}
-        </p>
+        <GroupNote>
+          <span className="k-danger">{t('hosts.keyFailed')}</span>
+        </GroupNote>
       )}
       <GroupNote>
         <Trans
@@ -139,11 +137,7 @@ export function HostsNote() {
           i18nKey="hosts.note"
           components={{
             link: (
-              <button
-                type="button"
-                onClick={() => openSettings('remote')}
-                className="rounded-sm text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
-              />
+              <button type="button" onClick={() => openSettings('remote')} className="k-link" />
             ),
           }}
         />

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CircleAlertIcon, SearchIcon } from 'lucide-react'
+import { AlertCircleIcon, Search01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type {
   CatalogInstallError,
@@ -7,17 +7,13 @@ import type {
   CatalogTheme,
   ThemeColors,
 } from '@shared/themes'
-import { SearchField } from '@renderer/components/search-field'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
-import { Empty, EmptyContent, EmptyHeader, EmptyTitle } from '@renderer/components/ui/empty'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { isMod } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import { useThemesStore } from '@renderer/stores/themes'
 import { catalogView, type CatalogAnswer } from './catalog-view'
-import { ROW_BUTTON } from './controls'
+import { FindField, SetButton, Spin } from './controls'
 import {
   SettingsDialogContent,
   SettingsDialogFooter,
@@ -37,17 +33,14 @@ export function BrowseThemes() {
   const [opened, setOpened] = useState(0)
   return (
     <>
-      <Button
-        className={ROW_BUTTON}
-        variant="outline"
-
+      <SetButton
         onClick={() => {
           setOpened((count) => count + 1)
           setOpen(true)
         }}
       >
         {t('appearance.catalog.browse')}
-      </Button>
+      </SetButton>
       {opened > 0 && <CatalogDialog key={opened} open={open} onOpenChange={setOpen} />}
     </>
   )
@@ -141,55 +134,50 @@ function CatalogDialog({
           {t('appearance.catalog.description')}
         </SettingsDialogHeader>
         {listed && (
-          <div className="px-6 pt-3 [--control-height:--spacing(8.5)]">
-            <SearchField
+          <div className="kettu-sd__pad">
+            <FindField
               value={query}
               onChange={setQuery}
               label={t('appearance.catalog.search')}
               clearLabel={t('page.clearSearch')}
               inputRef={search}
-              className="rounded-segments border-0 bg-subtle text-tertiary shadow-none [&_[data-slot=input-group-addon]]:pl-2.5 [&_[data-slot=input-group-addon]_svg]:size-3.75 [&_input]:pl-2 [&_input]:text-lede [&_[data-slot=kbd]]:hidden"
             />
           </div>
         )}
-        <div className="flex min-h-0 flex-col overflow-y-auto px-6 pt-2 pb-2">
+        <div className="kettu-sd__scroll">
           {view.kind === 'loading' && (
-            <p className="flex items-center justify-center gap-2 py-16 text-control text-secondary">
-              <Spinner aria-hidden className="size-3.5" />
+            <p className="kettu-sd__loading">
+              <Spin />
               {t('appearance.catalog.loading')}
             </p>
           )}
           {(view.kind === 'failed' || view.kind === 'error') && (
-            <Empty className="py-12">
-              <EmptyHeader>
-                <CircleAlertIcon className="size-4 text-danger" />
-                <EmptyTitle data-selectable="">
-                  {view.kind === 'failed'
-                    ? t(`appearance.catalog.errors.${view.error}`)
-                    : view.message}
-                </EmptyTitle>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button className={ROW_BUTTON} variant="outline" onClick={retry}>
-                  {t('appearance.catalog.tryAgain')}
-                </Button>
-              </EmptyContent>
-            </Empty>
+            <div className="ui-as-empty" data-bare="">
+              <span className="ui-as-empty__icon">
+                <Icon icon={AlertCircleIcon} size={18} />
+              </span>
+              <b className="ui-as-empty__title" data-selectable="">
+                {view.kind === 'failed'
+                  ? t(`appearance.catalog.errors.${view.error}`)
+                  : view.message}
+              </b>
+              <SetButton onClick={retry}>{t('appearance.catalog.tryAgain')}</SetButton>
+            </div>
           )}
           {(view.kind === 'none' || view.kind === 'no-match') && (
-            <Empty className="py-12">
-              <EmptyHeader>
-                <SearchIcon className="size-4 text-icon" />
-                <EmptyTitle>
-                  {view.kind === 'none'
-                    ? t('appearance.catalog.none')
-                    : t('appearance.catalog.noMatch', { query: view.query })}
-                </EmptyTitle>
-              </EmptyHeader>
-            </Empty>
+            <div className="ui-as-empty" data-bare="">
+              <span className="ui-as-empty__icon">
+                <Icon icon={Search01Icon} size={18} />
+              </span>
+              <b className="ui-as-empty__title">
+                {view.kind === 'none'
+                  ? t('appearance.catalog.none')
+                  : t('appearance.catalog.noMatch', { query: view.query })}
+              </b>
+            </div>
           )}
           {view.kind === 'themes' && (
-            <ul className="flex flex-col">
+            <ul className="kettu-sd__list">
               {view.themes.map((theme) => (
                 <CatalogRow
                   key={theme.id}
@@ -202,7 +190,7 @@ function CatalogDialog({
             </ul>
           )}
           {failure && (
-            <p role="alert" className="pt-3 text-hint text-danger" data-selectable="">
+            <p role="alert" className="kettu-sd__error" data-selectable="">
               {'message' in failure
                 ? failure.message
                 : t('appearance.catalog.installFailed', {
@@ -213,11 +201,7 @@ function CatalogDialog({
           )}
         </div>
         <SettingsDialogFooter>
-          <DialogClose
-            render={<Button variant="ghost" className={cn(ROW_BUTTON, 'text-secondary')} />}
-          >
-            {t('appearance.catalog.done')}
-          </DialogClose>
+          <DialogClose render={<SetButton size="md" />}>{t('appearance.catalog.done')}</DialogClose>
         </SettingsDialogFooter>
       </SettingsDialogContent>
       <ReplaceDialog
@@ -241,12 +225,9 @@ const SWATCHES: PreviewToken[] = ['bg-app', 'bg-sidebar', 'primary-to']
 function Swatches({ light }: { light?: ThemeColors }) {
   const colors = previewColors(light, 'light')
   return (
-    <span
-      aria-hidden
-      className="flex shrink-0 overflow-hidden rounded-segment shadow-[0_0_0_var(--hairline)_var(--border-default)]"
-    >
+    <span aria-hidden className="kettu-sd__swatches">
       {SWATCHES.map((token) => (
-        <span key={token} className="h-7 w-3.5" style={{ backgroundColor: colors[token] }} />
+        <span key={token} style={{ backgroundColor: colors[token] }} />
       ))}
     </span>
   )
@@ -266,35 +247,31 @@ function CatalogRow({
 }) {
   const { t } = useTranslation('settings')
   return (
-    <li className="flex items-center gap-3.5 py-3 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
+    <li className="kettu-sd__row">
       <Swatches light={theme.preview.light} />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-row leading-tight text-primary">{theme.name}</span>
-        <span className="truncate text-hint leading-tight text-tertiary">
+      <span className="ui-sg-label k-lines">
+        <b>{theme.name}</b>
+        <small>
           {t('appearance.catalog.byline', { author: theme.author, license: theme.license })}
-        </span>
+        </small>
       </span>
       {theme.action === 'installed' ? (
-        <span className="shrink-0 text-control text-tertiary">
-          {t('appearance.catalog.installed')}
-        </span>
+        <span className="ui-ss-badge">{t('appearance.catalog.installed')}</span>
       ) : (
-        <Button
-          variant="outline"
-          disabled={disabled}
+        <SetButton
+          loading={busy}
+          disabled={disabled && !busy}
           onClick={onInstall}
           aria-label={
             theme.action === 'update'
               ? t('appearance.catalog.updateLabel', { name: theme.name, version: theme.version })
               : t('appearance.catalog.installLabel', { name: theme.name })
           }
-          className={cn(ROW_BUTTON, 'shrink-0')}
         >
-          {busy && <Spinner aria-hidden data-icon="inline-start" className="size-3" />}
           {theme.action === 'update'
             ? t('appearance.catalog.update', { version: theme.version })
             : t('appearance.catalog.install')}
-        </Button>
+        </SetButton>
       )}
     </li>
   )

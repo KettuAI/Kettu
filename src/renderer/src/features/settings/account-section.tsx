@@ -1,14 +1,10 @@
 // Settings › Account: the Kettu account this computer signs in to through the system browser.
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { CircleAlertIcon, ExternalLinkIcon, LogOutIcon, UserRoundIcon } from 'lucide-react'
+import { ArrowUpRight01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AccountStatus } from '@shared/account'
-import { Avatar, AvatarFallback, AvatarImage } from '@renderer/components/ui/avatar'
-import { Badge } from '@renderer/components/ui/badge'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
-import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   cancelSignIn,
@@ -17,7 +13,7 @@ import {
   signOut,
   useAccountStore,
 } from '@renderer/stores/account'
-import { Masked, Pill, ROW_BUTTON } from './controls'
+import { LinkButton, Masked, Pill, SetButton, Skel, Spin } from './controls'
 import { subscriptionLabel } from './subscription-label'
 
 type SignedIn = Extract<AccountStatus, { state: 'signed-in' }>
@@ -49,7 +45,12 @@ export function AccountRow() {
   }
 
   let content: ReactNode
-  if (!status) content = <Skeleton className="my-3 h-9 w-full rounded-lg" />
+  if (!status)
+    content = (
+      <div className="ui-sg-row">
+        <Skel width="60%" />
+      </div>
+    )
   else if (status.state === 'signed-in') {
     content = <SignedInRow status={status} onSignOut={act(signOut)} />
   } else if (status.state === 'signing-in') {
@@ -70,20 +71,22 @@ function RowFrame({
   children: ReactNode
 }) {
   return (
-    <div className="flex items-center gap-3.5 py-4.5">
-      {tile}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-label leading-[normal] font-medium">{name}</span>
-        <span className="text-group leading-[normal] text-pretty text-tertiary">{line}</span>
-      </div>
-      <div className="flex shrink-0 items-center gap-3.5">{children}</div>
+    <div className="ui-sg-row k-account">
+      <span className="k-thing">
+        {tile}
+        <span className="ui-sg-label">
+          <b>{name}</b>
+          <small>{line}</small>
+        </span>
+      </span>
+      <span className="ui-sg-control">{children}</span>
     </div>
   )
 }
 
 const ACCOUNT_TILE = (
-  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-selected text-secondary">
-    <UserRoundIcon className="size-4.5" />
+  <span className="k-avatar" aria-hidden>
+    <Icon icon={UserIcon} size={16} />
   </span>
 )
 
@@ -103,21 +106,11 @@ function SignedOutRow({
       : t('account.description')
   return (
     <RowFrame tile={ACCOUNT_TILE} name={t('account.name')} line={line}>
-      {reason && (
-        <Badge variant="warning">
-          <LogOutIcon />
-          {t('account.signedOut')}
-        </Badge>
-      )}
-      {!reason && failure && (
-        <Badge variant="error">
-          <CircleAlertIcon />
-          {t('account.notSignedIn')}
-        </Badge>
-      )}
-      <Button className={ROW_BUTTON} data-account-action="" onClick={onSignIn}>
+      {reason && <Pill tone="warning">{t('account.signedOut')}</Pill>}
+      {!reason && failure && <Pill tone="warning">{t('account.notSignedIn')}</Pill>}
+      <SetButton variant="primary" data-account-action="" onClick={onSignIn}>
         {t('account.signIn')}
-      </Button>
+      </SetButton>
     </RowFrame>
   )
 }
@@ -126,13 +119,13 @@ function SigningInRow({ onCancel }: { onCancel: () => void }) {
   const { t } = useTranslation('settings')
   return (
     <RowFrame tile={ACCOUNT_TILE} name={t('account.name')} line={t('account.waitingHint')}>
-      <Badge variant="neutral">
-        <Spinner />
+      <span className="k-end k-muted">
+        <Spin />
         {t('account.waiting')}
-      </Badge>
-      <Button variant="ghost" className={ROW_BUTTON} data-account-action="" onClick={onCancel}>
+      </span>
+      <SetButton variant="ghost" data-account-action="" onClick={onCancel}>
         {t('account.cancel')}
-      </Button>
+      </SetButton>
     </RowFrame>
   )
 }
@@ -143,14 +136,12 @@ function SignedInRow({ status, onSignOut }: { status: SignedIn; onSignOut: () =>
   const [busy, setBusy] = useState(false)
   const { account } = status
   const initial = (account.name ?? account.email).trim().charAt(0).toUpperCase()
+  // A face or a letter tells who it is, so hiding accounts hides them too.
   const tile = (
-    <Avatar aria-hidden className="size-10 after:border-transparent">
-      {/* A face or a letter tells who it is, so hiding accounts hides them too. */}
-      {account.avatar && !hidden && <AvatarImage src={account.avatar} alt="" />}
-      <AvatarFallback className="bg-selected text-subheading font-semibold text-secondary">
-        {hidden ? <UserRoundIcon className="size-4.5" /> : initial}
-      </AvatarFallback>
-    </Avatar>
+    <span className="k-avatar" aria-hidden>
+      {hidden ? <Icon icon={UserIcon} size={16} /> : initial}
+      {account.avatar && !hidden && <img src={account.avatar} alt="" />}
+    </span>
   )
   return (
     <RowFrame
@@ -158,28 +149,19 @@ function SignedInRow({ status, onSignOut }: { status: SignedIn; onSignOut: () =>
       name={<Masked>{account.name ?? account.email}</Masked>}
       line={account.name ? <Masked>{account.email}</Masked> : t('account.name')}
     >
-      <a
-        href={status.manageUrl}
-        target="_blank"
-        rel="noreferrer"
-        className={buttonVariants({ variant: 'outline', className: ROW_BUTTON })}
-      >
-        <ExternalLinkIcon data-icon="inline-start" className="size-3.5" />
+      <LinkButton href={status.manageUrl} icon={<Icon icon={ArrowUpRight01Icon} size={14} />}>
         {t('account.manage')}
-      </a>
-      <Button
-        variant="ghost"
-        className={ROW_BUTTON}
+      </LinkButton>
+      <SetButton
         data-account-action=""
-        disabled={busy}
+        loading={busy}
         onClick={() => {
           setBusy(true)
           void onSignOut().finally(() => setBusy(false))
         }}
       >
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('account.signOut')}
-      </Button>
+      </SetButton>
     </RowFrame>
   )
 }
@@ -194,9 +176,5 @@ export function SubscriptionState({ status }: { status: string }) {
 /** Under the account: what works without one. */
 export function AccountNote() {
   const { t } = useTranslation('settings')
-  return (
-    <p className="mt-7 rounded-2xl bg-subtle px-4 py-3.5 text-group leading-normal text-secondary">
-      {t('account.note')}
-    </p>
-  )
+  return <p className="ui-sg-hint">{t('account.note')}</p>
 }

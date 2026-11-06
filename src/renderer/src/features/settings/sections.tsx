@@ -1,12 +1,12 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import {
-  CheckIcon,
-  CircleAlertIcon,
-  GlobeIcon,
-  MinusIcon,
-  PlusIcon,
-  RotateCwIcon,
-} from 'lucide-react'
+  Copy01Icon,
+  Globe02Icon,
+  MinusSignIcon,
+  PlusSignIcon,
+  RefreshIcon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { originLabel } from '@shared/browser'
@@ -20,6 +20,7 @@ import {
 } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { BrandIcon } from '@renderer/components/brand'
 import {
   AlertDialog,
@@ -31,11 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
 import { Kbd } from '@renderer/components/ui/kbd'
-import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { forgetSite } from '@renderer/features/session/link-open'
@@ -44,7 +41,6 @@ import { systemLocale } from '@renderer/lib/i18n'
 import { basename } from '@renderer/lib/format'
 import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
-import { cn } from '@renderer/lib/utils'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -55,27 +51,25 @@ import {
   CONFIRM,
   ControlError,
   CopyAction,
+  DangerButton,
   Masked,
-  GROUP_ACTION,
   PathText,
   Pill,
   RevealButton,
-  ROW_BUTTON,
-  ROW_FIELD,
   Segmented,
+  SetButton,
+  SetInput,
   SettingSelect,
   SettingSwitch,
+  Skel,
+  Spin,
 } from './controls'
 import type { AllowedSite } from './allowed-sites'
-import { DeviceTile } from './remote-parts'
-import { FlashMark, GroupNote, ItemLine, Notice } from './rows'
+import { BlockLine, FlashMark, GroupNote, ItemLine, Notice, Thing } from './rows'
 import { useApply } from './use-apply'
 
 /** The settings of the host the section shows, this computer's own keys among them. */
 const useSettings = () => useHostScope().useSettingsStore((s) => s.settings)
-
-// A block row's first line: the row's text on the left, its control on the right.
-const BLOCK_LINE = 'flex items-center gap-x-7 gap-y-3'
 
 // ---- General
 
@@ -97,6 +91,7 @@ export function Language() {
         label={t('general.language.name')}
         value={value}
         options={options}
+        lead={<Icon icon={Globe02Icon} size={14} />}
         onChange={(v) => apply({ general: { language: v } })}
       />
     </>
@@ -119,7 +114,7 @@ export function DefaultAgent() {
       return {
         value: agent.id as string,
         label: agent.name,
-        icon: <AgentMark agent={agent.id} className="size-3.5" />,
+        icon: <AgentMark agent={agent.id} className="size-4" />,
         disabled: absent || off,
         hint: absent ? t('harnesses.groups.notInstalled') : off ? t('agents.turnedOff') : undefined,
       }
@@ -266,7 +261,7 @@ export function ColorMode() {
   const value = useSettings().appearance.theme
   const [apply, error] = useApply()
   return (
-    <span data-setting-row="color-mode" className="relative mr-0.5 flex items-center gap-2">
+    <span data-setting-row="color-mode" className="k-row k-end">
       <FlashMark id="color-mode" />
       <ControlError error={error} />
       <Segmented
@@ -299,18 +294,9 @@ function StepButton({
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
-            variant="quiet"
-            size="icon-xs"
-            aria-label={label}
-            disabled={disabled}
-            onClick={onClick}
-            className="size-7 rounded-segment text-secondary hover:bg-hover hover:text-primary disabled:opacity-40 [&_svg:not([class*='size-'])]:size-3.5"
-          />
+          <SetButton aria-label={label} disabled={disabled} onClick={onClick} icon={children} />
         }
-      >
-        {children}
-      </TooltipTrigger>
+      />
       <TooltipContent>
         {label}
         <Kbd>{formatShortcut(shortcut)}</Kbd>
@@ -325,43 +311,35 @@ export function Zoom() {
   const [apply, error] = useApply()
   const step = (by: ZoomStep) => apply({ appearance: { zoom: stepZoom(zoom, by) } })
   return (
-    <div className="flex items-center gap-2">
+    <>
       <ControlError error={error} />
-      <div
-        role="group"
-        aria-label={t('appearance.zoom.name')}
-        className="inline-flex items-center gap-0.5 rounded-segments bg-surface p-0.5 shadow-outline"
-      >
+      <span role="group" aria-label={t('appearance.zoom.name')} className="k-end">
         <StepButton
           label={t('appearance.zoom.zoomOut')}
           shortcut="Mod+-"
           disabled={zoom === ZOOM_LEVELS[0]}
           onClick={() => step(-1)}
         >
-          <MinusIcon />
+          <Icon icon={MinusSignIcon} size={14} />
         </StepButton>
-        <span
-          aria-live="polite"
-          className="min-w-12 text-center text-control text-primary tabular-nums"
-        >{`${Math.round(zoom * 100)}%`}</span>
+        <span aria-live="polite" className="k-zoom k-num">{`${Math.round(zoom * 100)}%`}</span>
         <StepButton
           label={t('appearance.zoom.zoomIn')}
           shortcut="Mod+="
           disabled={zoom === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
           onClick={() => step(1)}
         >
-          <PlusIcon />
+          <Icon icon={PlusSignIcon} size={14} />
         </StepButton>
-      </div>
-      <Button
+      </span>
+      <SetButton
         variant="ghost"
-        className={ROW_BUTTON}
         disabled={zoom === DEFAULT_SETTINGS.appearance.zoom}
         onClick={() => step(0)}
       >
         {t('appearance.zoom.reset')}
-      </Button>
-    </div>
+      </SetButton>
+    </>
   )
 }
 
@@ -372,13 +350,8 @@ export function TextSize({ label }: { label: ReactNode }) {
   const [apply, error] = useApply()
   return (
     <>
-      <div
-        className={cn(
-          BLOCK_LINE,
-          'py-3.75 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-        )}
-      >
-        <div className="min-w-0 flex-1">{label}</div>
+      <div className="ui-sg-row">
+        {label}
         <ControlError error={error} />
         <Segmented
           label={t('appearance.textSize.name')}
@@ -392,7 +365,7 @@ export function TextSize({ label }: { label: ReactNode }) {
         />
       </div>
       {/* The thread's own prose rules, its inline code included. */}
-      <p aria-hidden className="markdown mb-3.75 rounded-2xl bg-subtle px-3.5 py-3 text-prose">
+      <p aria-hidden className="markdown k-inset text-prose">
         <Trans
           t={t}
           i18nKey="appearance.textSize.previewAgent"
@@ -445,26 +418,14 @@ export function ShellPicker() {
   return (
     <>
       <ControlError error={error ?? pickError} />
-      <span
-        title={shellPath ?? undefined}
-        className={cn(
-          'max-w-56 min-w-0 truncate',
-          isProgram ? 'font-mono text-hint text-secondary' : 'text-lede text-tertiary',
-        )}
-      >
+      <span title={shellPath ?? undefined} className={isProgram ? 'k-value k-mono' : 'k-value'}>
         {shellPath ?? program}
       </span>
-      <Button className={ROW_BUTTON} variant="outline" onClick={() => void choose()}>
-        {t('terminal.shell.choose')}
-      </Button>
+      <SetButton onClick={() => void choose()}>{t('terminal.shell.choose')}</SetButton>
       {shellPath && (
-        <Button
-          variant="ghost"
-          className={GROUP_ACTION}
-          onClick={() => apply({ terminal: { shellPath: null } })}
-        >
+        <SetButton variant="ghost" onClick={() => apply({ terminal: { shellPath: null } })}>
           {t('terminal.shell.reset')}
-        </Button>
+        </SetButton>
       )}
     </>
   )
@@ -475,9 +436,8 @@ export function FontSize({ label }: { label: ReactNode }) {
   const value = useSettings().terminal.fontSize
   const [apply, error] = useApply()
   return (
-    <div className="flex w-full flex-col gap-3 py-3.75">
-      <div className={BLOCK_LINE}>
-        <div className="min-w-0 flex-1">{label}</div>
+    <>
+      <BlockLine text={label}>
         <ControlError error={error} />
         <Segmented
           label={t('terminal.fontSize.name')}
@@ -489,22 +449,18 @@ export function FontSize({ label }: { label: ReactNode }) {
           ]}
           onChange={(v) => apply({ terminal: { fontSize: v } })}
         />
-      </div>
-      <div
-        aria-hidden
-        className="overflow-hidden rounded-segments bg-code-block px-3.5 py-3 font-mono leading-[1.6] shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
-        style={{ fontSize: value }}
-      >
-        <div className="whitespace-pre">
-          <span className="text-(--control-on)">~/code/kettu</span>{' '}
-          <span className="text-merged">main</span> $ pnpm vitest run src/usage
+      </BlockLine>
+      <div aria-hidden className="k-term" style={{ fontSize: value }}>
+        <div>
+          <span className="k-term__path">~/code/kettu</span>{' '}
+          <span className="k-term__branch">main</span> $ pnpm vitest run src/usage
         </div>
-        <div className="whitespace-pre">
-          <span className="text-success">{'\u2713'}</span> 29 passed{' '}
-          <span className="text-tertiary">(1.18s)</span>
+        <div>
+          <span className="k-term__ok">{'\u2713'}</span> 29 passed{' '}
+          <span className="k-term__faint">(1.18s)</span>
         </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -514,14 +470,12 @@ function ToolsPending() {
   const { t } = useTranslation()
   const { useGitStore, loadGitTools } = useHostScope()
   const error = useGitStore((s) => s.toolsError)
-  if (!error) return <Spinner className="size-3.5 text-tertiary" />
+  if (!error) return <Spin />
   return (
-    <span className="flex items-center gap-2">
+    <>
       <ControlError error={error} />
-      <Button className={ROW_BUTTON} variant="outline" onClick={() => void loadGitTools()}>
-        {t('actions.retry')}
-      </Button>
-    </span>
+      <SetButton onClick={() => void loadGitTools()}>{t('actions.retry')}</SetButton>
+    </>
   )
 }
 
@@ -535,7 +489,7 @@ export function GitTool() {
   return (
     <>
       {version && (
-        <span className="font-mono text-code text-tertiary" data-selectable="">
+        <span className="k-mono k-muted" data-selectable="">
           {version}
         </span>
       )}
@@ -555,25 +509,18 @@ export function GhTool() {
   const { gh } = tools
   if (gh.state === 'not-installed') {
     return (
-      <a
-        href="https://cli.github.com"
-        target="_blank"
-        rel="noreferrer"
-        className="rounded-sm text-lede text-secondary underline decoration-border-strong underline-offset-3 outline-none hover:text-primary focus-ring"
-      >
+      <a href="https://cli.github.com" target="_blank" rel="noreferrer" className="k-link">
         {t('git.gh.install')}
       </a>
     )
   }
   if (gh.state === 'signed-out') {
     return (
-      <span className="flex items-center gap-2">
-        <code className="rounded-md bg-subtle px-1.5 py-0.5 font-mono text-code">
-          gh auth login
-        </code>
+      <>
+        <code className="k-code">gh auth login</code>
         <CopyAction text="gh auth login" label={t('git.gh.copyCommand')} />
         <Pill tone="warning">{t('git.gh.signedOut')}</Pill>
-      </span>
+      </>
     )
   }
   const [before = '', after = ''] = gh.account
@@ -581,10 +528,7 @@ export function GhTool() {
     : [t('git.gh.signedIn')]
   return (
     <>
-      <span
-        className="text-control text-secondary has-data-[slot=masked]:-me-1.5"
-        title={gh.version ? `gh ${gh.version}` : undefined}
-      >
+      <span className="k-value" title={gh.version ? `gh ${gh.version}` : undefined}>
         {before}
         {gh.account && <Masked>{gh.account}</Masked>}
         {after}
@@ -642,31 +586,22 @@ export function NotificationPreview() {
     command: COMMAND_MARK,
   }).split(COMMAND_MARK)
   return (
-    <div className="flex items-center gap-6 py-4.5">
-      <div
-        aria-hidden
-        className="flex w-97 max-w-full shrink-0 gap-3 rounded-dialog bg-tray px-3.5 py-3 shadow-[0_0_0_var(--hairline)_var(--border-subtle),var(--elevation-notification)]"
-      >
-        <BrandIcon size={34} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-control leading-[normal]">
-          <div className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate font-semibold">
-              {t('notifications.previewTitle')}
-            </span>
-            <span className="shrink-0 text-meta text-tertiary">
-              {t('notifications.previewTime')}
-            </span>
-          </div>
-          <span className="truncate text-secondary">
+    <div className="k-notify">
+      <div aria-hidden className="k-notify__mock">
+        <BrandIcon size={32} />
+        <div className="k-notify__text">
+          <span className="k-notify__top">
+            <b>{t('notifications.previewTitle')}</b>
+            <small>{t('notifications.previewTime')}</small>
+          </span>
+          <small>
             {before}
             pnpm vitest run src/usage
             {after}
-          </span>
+          </small>
         </div>
       </div>
-      <span className="text-group leading-normal text-tertiary">
-        {t(isWeb ? 'notifications.footerWeb' : 'notifications.footer')}
-      </span>
+      <TestNotification />
     </div>
   )
 }
@@ -721,7 +656,7 @@ export function TestNotification() {
   return (
     <>
       {unsupported && (
-        <span role="status" className="text-xs text-secondary">
+        <span role="status" className="k-error k-muted">
           {unsupportedText()}
         </span>
       )}
@@ -729,29 +664,19 @@ export function TestNotification() {
         {sent ? t('notifications.sent') : ''}
       </span>
       <ControlError error={error} />
-      <Button
-        variant="outline"
-        disabled={busy}
+      <SetButton
+        loading={busy}
         title={unsupported ? unsupportedText() : undefined}
+        icon={sent ? <Icon icon={Tick02Icon} size={14} /> : undefined}
         onClick={() => void run()}
-        className={ROW_BUTTON}
       >
-        {busy ? (
-          <Spinner data-icon="inline-start" className="size-3.5" />
-        ) : (
-          sent && <CheckIcon data-icon="inline-start" className="text-success" />
-        )}
         {t('notifications.test')}
-      </Button>
+      </SetButton>
     </>
   )
 }
 
 // ---- Advanced
-
-// A custom proxy's field, as a row of its own under Proxy.
-const PROXY_ROW =
-  'flex min-h-15.5 items-center gap-7 pl-8 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
 
 const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
   event.nativeEvent.isComposing || event.keyCode === 229
@@ -794,9 +719,8 @@ export function Proxy({ label }: { label: ReactNode }) {
   }
   const note = invalid ? 'advanced.proxy.invalid' : inUse ? null : 'advanced.proxy.environmentNote'
   return (
-    <div className="flex w-full flex-col">
-      <div className={BLOCK_LINE}>
-        <div className="min-w-0 flex-1">{label}</div>
+    <>
+      <BlockLine text={label}>
         <ControlError error={error} />
         <Segmented
           label={t('advanced.proxy.name')}
@@ -807,12 +731,14 @@ export function Proxy({ label }: { label: ReactNode }) {
           ]}
           onChange={choose}
         />
-      </div>
+      </BlockLine>
       {custom && (
-        <div className="-mb-3.75 mt-3.75 flex animate-in flex-col fade-in animation-duration-(--duration-base)">
-          <label className={PROXY_ROW}>
-            <span className="flex-1 text-label">{t('advanced.proxy.url')}</span>
-            <Input
+        <div className="k-subrows ui-ss-rise">
+          <label className="k-subrow">
+            <span className="ui-sg-label">
+              <b>{t('advanced.proxy.url')}</b>
+            </span>
+            <SetInput
               ref={urlInput}
               value={url}
               placeholder="http://proxy.example.com:8080"
@@ -822,36 +748,30 @@ export function Proxy({ label }: { label: ReactNode }) {
               onChange={(e) => setUrl(e.target.value)}
               onBlur={() => (url.trim() || proxy.mode === 'custom') && save()}
               onKeyDown={(e) => e.key === 'Enter' && !isComposing(e) && save()}
-              className={cn(ROW_FIELD, 'w-65 md:text-lede')}
+              className="k-input--wide"
             />
           </label>
-          <label className={PROXY_ROW}>
-            <span className="flex-1 text-label">{t('advanced.proxy.noProxyFor')}</span>
-            <Input
+          <label className="k-subrow">
+            <span className="ui-sg-label">
+              <b>{t('advanced.proxy.noProxyFor')}</b>
+            </span>
+            <SetInput
               value={noProxy}
               placeholder="localhost, 127.0.0.1, .internal"
               spellCheck={false}
               onChange={(e) => setNoProxy(e.target.value)}
               onBlur={() => url.trim() && save()}
               onKeyDown={(e) => e.key === 'Enter' && !isComposing(e) && save()}
-              className={cn(ROW_FIELD, 'w-65 md:text-lede')}
+              className="k-input--wide"
             />
           </label>
           {/* Mounted while the fields show, so a screen reader hears each change of its text. */}
-          <p
-            id={noteId}
-            role="status"
-            className={cn(
-              'pl-8 text-hint',
-              note && 'pb-3.75',
-              invalid ? 'text-danger' : 'text-tertiary',
-            )}
-          >
+          <p id={noteId} role="status" className="k-subnote" data-invalid={invalid || undefined}>
             {note && t(note)}
           </p>
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -876,29 +796,25 @@ export function Diagnostics({ label }: { label: ReactNode }) {
     }
   }
   return (
-    <div className={BLOCK_LINE}>
-      <div className="min-w-0 flex-1">
+    <div className="k-line">
+      <div className="k-grow">
         {label}
         {note &&
           ('error' in note ? (
-            <p role="alert" className="mt-1.5 text-hint text-danger">
+            <p role="alert" className="k-error" data-wrap="">
               {note.error}
             </p>
           ) : (
             <SavedTo path={note.path} />
           ))}
       </div>
-      <Button
-        className={ROW_BUTTON}
-        variant="outline"
-
-        disabled={busy}
+      <SetButton
+        loading={busy}
         aria-label={t('advanced.diagnostics.export')}
         onClick={() => void run()}
       >
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
         {t('advanced.diagnostics.exportShort')}
-      </Button>
+      </SetButton>
     </div>
   )
 }
@@ -912,9 +828,27 @@ export function LogsFolderActions() {
   if (!path) return null
   return (
     <>
-      <RevealButton path={path} outline />
-      <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
+      <RevealButton path={path} />
+      <CopyButton text={path} label={t('advanced.dataFolder.copy')} />
     </>
+  )
+}
+
+/** Copies `text` from a labelled row button; its icon turns into a check for a moment. */
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <SetButton
+      icon={<Icon icon={copied ? Tick02Icon : Copy01Icon} size={14} />}
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        })
+      }}
+    >
+      {label}
+    </SetButton>
   )
 }
 
@@ -941,13 +875,13 @@ export function DetailedRecords({ label }: { label: string }) {
     <>
       <ControlError error={error ?? deleteError} />
       {on ? (
-        <span className="text-hint text-tertiary tabular-nums">
+        <span className="k-value k-num">
           {t('advanced.detailedRecords.left', { count: Math.ceil((until - now) / HOUR_MS) })}
         </span>
       ) : (
-        <Button variant="ghost" className={GROUP_ACTION} onClick={remove}>
+        <SetButton variant="ghost" onClick={remove}>
           {t('advanced.detailedRecords.delete')}
-        </Button>
+        </SetButton>
       )}
       <SettingSwitch
         label={label}
@@ -968,10 +902,7 @@ function SavedTo({ path }: { path: string }) {
   const [error, setError] = useState<string | null>(null)
   const [before, after] = t('advanced.diagnostics.saved', { path: SLOT }).split(SLOT)
   return (
-    <div
-      role="status"
-      className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-hint text-secondary"
-    >
+    <div role="status" className="k-saved">
       <span className="flex max-w-full min-w-0 items-center whitespace-pre">
         {before}
         <PathText path={path} />
@@ -981,7 +912,7 @@ function SavedTo({ path }: { path: string }) {
       {!isWeb && (
         <button
           type="button"
-          className="rounded-sm font-medium text-primary underline decoration-border-strong underline-offset-2 outline-none hover:decoration-current focus-ring"
+          className="k-link"
           onClick={() => {
             setError(null)
             window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
@@ -999,17 +930,13 @@ function SavedTo({ path }: { path: string }) {
 export function DataFolderText() {
   const path = useAppInfo()?.userDataPath
   return path ? (
-    <span
-      title={path}
-      data-selectable=""
-      className="block truncate text-left font-mono text-code [direction:rtl]"
-    >
+    <span title={path} data-selectable="" className="k-mono k-rtl">
       {'\u200E'}
       {path}
       {'\u200E'}
     </span>
   ) : (
-    <Skeleton className="my-0.5 h-3.5 w-48" />
+    <Skel width={192} />
   )
 }
 
@@ -1019,7 +946,7 @@ export function DataFolderActions() {
   if (!path) return null
   return (
     <>
-      <RevealButton path={path} outline />
+      <RevealButton path={path} />
       <CopyAction text={path} label={t('advanced.dataFolder.copy')} />
     </>
   )
@@ -1045,15 +972,9 @@ export function ClearBrowsingData() {
   return (
     <>
       <ControlError error={error} />
-      <Button
-        variant="outline"
-        className={ROW_BUTTON}
-        disabled={busy}
-        onClick={() => setOpen(true)}
-      >
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+      <SetButton loading={busy} onClick={() => setOpen(true)}>
         {t('browser.clearData.button')}
-      </Button>
+      </SetButton>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>
@@ -1089,16 +1010,13 @@ export function AllowedSiteRow({ site, onRemove }: { site: AllowedSite; onRemove
   )
   const removing = site.removing
   return (
-    <div className="flex items-center gap-3.5 py-3.25">
-      <DeviceTile icon={<GlobeIcon className="size-4" />} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-[normal]">{originLabel(site.origin)}</span>
+    <div className="ui-sg-row">
+      <Thing mark={<Icon icon={Globe02Icon} size={20} />} name={originLabel(site.origin)}>
         <ItemLine>{t('browser.allowedSites.in', { projects: names.join(', ') })}</ItemLine>
-      </div>
-      <Button variant="ghost" className={ROW_BUTTON} disabled={removing} onClick={onRemove}>
-        {removing && <Spinner data-icon="inline-start" className="size-3.5" />}
+      </Thing>
+      <SetButton loading={removing} onClick={onRemove}>
         {t('browser.allowedSites.remove')}
-      </Button>
+      </SetButton>
     </div>
   )
 }
@@ -1116,36 +1034,33 @@ export function AllowedSitesState({
   const { t } = useTranslation(['settings', 'common'])
   if (error) {
     return (
-      <div className="py-3.75">
-        <Notice
-          variant="error"
-          icon={<CircleAlertIcon />}
-          title={t('browser.allowedSites.readFailed')}
-          action={
-            onRetry && (
-              <Button className={ROW_BUTTON} variant="outline" onClick={onRetry}>
-                <RotateCwIcon data-icon="inline-start" />
-                {t('common:actions.retry')}
-              </Button>
-            )
-          }
-        >
-          <span className="font-mono text-code break-words" data-selectable="">
-            {error}
-          </span>
-        </Notice>
-      </div>
+      <Notice
+        variant="error"
+        className="k-notice--row"
+        title={t('browser.allowedSites.readFailed')}
+        action={
+          onRetry && (
+            <SetButton icon={<Icon icon={RefreshIcon} size={14} />} onClick={onRetry}>
+              {t('common:actions.retry')}
+            </SetButton>
+          )
+        }
+      >
+        <span className="k-mono" data-selectable="">
+          {error}
+        </span>
+      </Notice>
     )
   }
   if (loading) {
     return (
-      <div className="flex flex-col gap-2 py-3.75">
-        <Skeleton className="h-5 w-40" />
-        <Skeleton className="h-5 w-32" />
+      <div className="k-block">
+        <Skel width={160} />
+        <Skel width={128} />
       </div>
     )
   }
-  return <p className="py-3.75 text-group text-tertiary">{t('browser.allowedSites.empty')}</p>
+  return <p className="ui-ss-empty">{t('browser.allowedSites.empty')}</p>
 }
 
 /** The sites the "Open link?" dialog was told to always open in one place, and where. */
@@ -1174,38 +1089,34 @@ export function RememberedSitesList({ label }: { label: ReactNode }) {
 
   const entries = Object.entries(sites)
   return (
-    <div className="flex w-full flex-col gap-2">
-      <div className={BLOCK_LINE}>
-        <div className="min-w-0 flex-1">{label}</div>
-      </div>
-      <ControlError error={error} />
-      {entries.length === 0 && (
-        <p className="text-ui text-tertiary">{t('browser.rememberedSites.empty')}</p>
-      )}
+    <>
+      <BlockLine text={label}>
+        <ControlError error={error} />
+      </BlockLine>
+      {entries.length === 0 && <p className="k-muted">{t('browser.rememberedSites.empty')}</p>}
       {entries.length > 0 && (
-        <div className="flex flex-col gap-1">
+        <div className="k-inset k-list">
           {entries.map(([site, destination]) => (
-            <div key={site} className="flex items-center gap-2 py-0.5">
-              <span className="min-w-0 flex-1 truncate text-ui text-primary">{site}</span>
-              <span className="shrink-0 text-ui text-tertiary">
+            <div key={site} className="k-list__row">
+              <span className="k-list__name">{site}</span>
+              <span className="k-muted">
                 {destination === 'session'
                   ? t('browser.openLinksIn.session')
                   : (browser.name ?? t('browser.openLinksIn.defaultBrowser'))}
               </span>
-              <Button
+              <SetButton
                 variant="ghost"
-                size="sm"
-                disabled={busy !== null}
+                loading={busy === site}
+                disabled={busy !== null && busy !== site}
                 onClick={() => void remove(site)}
               >
-                {busy === site && <Spinner data-icon="inline-start" className="size-3.5" />}
                 {t('browser.rememberedSites.remove')}
-              </Button>
+              </SetButton>
             </div>
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -1234,16 +1145,9 @@ export function RemoveAll() {
   return (
     <>
       <ControlError error={error} />
-      <Button
-        className={ROW_BUTTON}
-        variant="destructive-outline"
-
-        disabled={count === 0 || busy}
-        onClick={() => setOpen(true)}
-      >
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+      <DangerButton busy={busy} disabled={count === 0} onClick={() => setOpen(true)}>
         {t('advanced.removeSessions.button')}
-      </Button>
+      </DangerButton>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

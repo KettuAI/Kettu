@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SmartphoneIcon } from 'lucide-react'
+import { SmartPhone01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { errorMessage, host } from '@renderer/lib/host'
 import { loadDevices } from '@renderer/stores/devices'
@@ -54,7 +54,7 @@ export function useDevicesSection(): SectionDef {
       group,
       layout: 'custom',
       render: () => (
-        <p className="py-3.25 text-hint text-tertiary">
+        <p className="ui-ss-empty">
           {error ?? (ids === null ? t('devices.allowed.loading') : t('devices.allowed.none'))}
         </p>
       ),
@@ -72,7 +72,7 @@ export function useDevicesSection(): SectionDef {
     id: 'devices',
     title: t('sections.devices'),
     description: t('pages.devices'),
-    icon: SmartphoneIcon,
+    icon: SmartPhone01Icon,
     rows,
   }
 }

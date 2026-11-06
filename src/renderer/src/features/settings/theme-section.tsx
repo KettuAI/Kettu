@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Toggle } from '@base-ui/react/toggle'
+import { ToggleGroup } from '@base-ui/react/toggle-group'
 import {
-  CopyIcon,
-  EllipsisIcon,
-  FileDownIcon,
-  FolderIcon,
-  TrashIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+  Alert02Icon,
+  Copy01Icon,
+  Delete02Icon,
+  FileExportIcon,
+  FolderOpenIcon,
+  MoreHorizontalIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   BUILTIN_THEME_ID,
@@ -18,7 +20,7 @@ import {
   type ThemeInstallResult,
   type ThemeLoadFailure,
 } from '@shared/themes'
-import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,23 +31,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
 import { toast } from '@renderer/components/ui/toast'
-import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { isCodeTheme } from '@renderer/features/session/markdown/code-themes'
 import { basename, dirname } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { receiveThemes, useThemesStore } from '@renderer/stores/themes'
-import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
+import { CONFIRM, ControlError, SetButton } from './controls'
+import { Notice } from './rows'
 import { BrowseThemes } from './theme-catalog'
 import { themeContrast, themeFile } from './theme-colors'
 import { ThemePreview } from './theme-preview'
@@ -133,7 +127,7 @@ export function ThemeTiles() {
   )
 
   return (
-    <div className="@container flex flex-col gap-3.5 pt-4.5 pb-5">
+    <div className="k-themes-wrap">
       {failed && (
         <LoadFailure
           id={failed.id}
@@ -144,13 +138,12 @@ export function ThemeTiles() {
       )}
       <ToggleGroup
         aria-label={t('appearance.theme.name')}
-        spacing={0}
         value={[chosen]}
         onValueChange={(next) => {
           const picked = next[0] as string | undefined
           if (picked && picked !== chosen) apply({ appearance: { colorTheme: picked } })
         }}
-        className="grid w-full grid-cols-2 items-start gap-x-4 gap-y-4.5 rounded-none @min-[600px]:grid-cols-3"
+        className="k-themes"
       >
         {tile(BUILTIN_THEME_ID, null)}
         {installed.map((item) => tile(item.id, item.theme, item))}
@@ -223,64 +216,55 @@ function ThemeTile({
   const { t } = useTranslation(['settings', 'files'])
   const name = theme?.name ?? 'Kettu'
   const issues = useMemo(() => themeContrast(theme), [theme])
-  const more = useRef<HTMLButtonElement>(null)
+  // State rather than a ref, since the menu's items are built during render.
+  const [more, setMore] = useState<HTMLButtonElement | null>(null)
+  const items: MenuItem[] = []
+  if (onExport)
+    items.push({ label: t('appearance.theme.export'), icon: FileExportIcon, onSelect: onExport })
+  // A browser cannot show the host's files, so it copies the file's path there.
+  if (onReveal)
+    items.push({
+      label: isWeb ? t('files:preview.copyPath') : t('agents.showIn', { name: fileManagerName() }),
+      icon: isWeb ? Copy01Icon : FolderOpenIcon,
+      onSelect: onReveal,
+    })
+  if (onRemove)
+    items.push({
+      label: t('appearance.theme.remove'),
+      icon: Delete02Icon,
+      danger: true,
+      divider: items.length > 0,
+      onSelect: () => onRemove(more),
+    })
   return (
-    <div className="group/tile relative min-w-0">
-      <ToggleGroupItem
-        value={id}
-        className="h-auto w-full flex-col items-stretch gap-2 rounded-2xl bg-transparent p-0 text-left font-normal whitespace-normal group-data-[spacing=0]/toggle-group:rounded-2xl group-data-[spacing=0]/toggle-group:px-0 hover:bg-transparent aria-pressed:bg-transparent"
-      >
+    <div className="k-theme-cell">
+      <Toggle value={id} className="k-theme">
         <ThemePreview light={theme?.light.colors} dark={theme?.dark.colors} />
-        <span className="flex min-w-0 items-center gap-1.5 text-lede text-primary">
-          <span className="truncate group-aria-pressed/toggle:font-medium">{name}</span>
+        <span className="k-theme__name">
+          <b>{name}</b>
           {issues.length > 0 && <ContrastWarning issues={issues} />}
-          <span className="shrink-0 text-meta text-tertiary">
-            {t(`appearance.theme.${source}`)}
-          </span>
         </span>
-      </ToggleGroupItem>
-      {(onExport ?? onReveal ?? onRemove) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                ref={more}
-                variant="quiet"
-                size="icon-xs"
-                aria-label={t('appearance.theme.more', { name })}
-                className="absolute top-2 right-2 bg-surface opacity-0 shadow-outline transition-opacity duration-(--duration-fast) group-hover/tile:opacity-100 group-has-focus-visible/tile:opacity-100 hover:bg-surface data-popup-open:opacity-100"
-              />
-            }
-          >
-            <EllipsisIcon />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-47.5">
-            {onExport && (
-              <DropdownMenuItem onClick={onExport}>
-                <FileDownIcon />
-                {t('appearance.theme.export')}
-              </DropdownMenuItem>
-            )}
-            {/* A browser cannot show the host's files, so it copies the file's path there. */}
-            {onReveal && (
-              <DropdownMenuItem onClick={onReveal}>
-                {isWeb ? <CopyIcon /> : <FolderIcon />}
-                {isWeb
-                  ? t('files:preview.copyPath')
-                  : t('agents.showIn', { name: fileManagerName() })}
-              </DropdownMenuItem>
-            )}
-            {onRemove && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => onRemove(more.current)}>
-                  <TrashIcon />
-                  {t('appearance.theme.remove')}
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <small>{t(`appearance.theme.${source}`)}</small>
+      </Toggle>
+      {items.length > 0 && (
+        <Dropdown
+          align="end"
+          className="k-theme__more"
+          items={items}
+          trigger={({ open, toggle }) => (
+            <button
+              ref={setMore}
+              type="button"
+              className="ui-as-icon-btn"
+              aria-label={t('appearance.theme.more', { name })}
+              aria-haspopup="menu"
+              aria-expanded={open}
+              onClick={toggle}
+            >
+              <Icon icon={MoreHorizontalIcon} size={16} />
+            </button>
+          )}
+        />
       )}
     </div>
   )
@@ -331,12 +315,12 @@ function ContrastWarning({ issues }: { issues: ContrastIssue[] }) {
   const lowest = [...issues].sort((a, b) => a.ratio - b.ratio)
   return (
     <Tooltip>
-      <TooltipTrigger render={<span className="inline-flex shrink-0 text-warning" />}>
-        <TriangleAlertIcon
-          role="img"
-          aria-label={t('appearance.theme.lowContrast')}
-          className="size-3.5"
-        />
+      <TooltipTrigger
+        render={
+          <span role="img" aria-label={t('appearance.theme.lowContrast')} className="k-warn" />
+        }
+      >
+        <Icon icon={Alert02Icon} size={14} />
       </TooltipTrigger>
       <TooltipContent className="flex-col items-start gap-0.5">
         <span className="font-medium">{t('appearance.theme.lowContrast')}</span>
@@ -364,14 +348,12 @@ function ContrastWarning({ issues }: { issues: ContrastIssue[] }) {
 function MoreThemes({ onInstall }: { onInstall: () => void }) {
   const { t } = useTranslation('settings')
   return (
-    <div className="flex aspect-16/10 min-w-0 flex-col justify-center gap-2 rounded-2xl bg-(image:--tile-hatch) p-3.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
-      <span className="text-lede font-medium text-primary">{t('appearance.theme.moreThemes')}</span>
-      <span className="text-small text-tertiary">{t('appearance.theme.moreDescription')}</span>
-      <span className="flex flex-wrap gap-1.5">
+    <div className="k-theme k-theme--more">
+      <b>{t('appearance.theme.moreThemes')}</b>
+      <small>{t('appearance.theme.moreDescription')}</small>
+      <span className="k-theme__actions">
         <BrowseThemes />
-        <Button variant="ghost" className={ROW_BUTTON} onClick={onInstall}>
-          {t('appearance.theme.install')}
-        </Button>
+        <SetButton onClick={onInstall}>{t('appearance.theme.install')}</SetButton>
       </span>
     </div>
   )
@@ -391,14 +373,14 @@ function ThemeNotice({
   const reason = useReason()
   if (notice.kind === 'error') {
     return (
-      <p role="alert" className="text-small text-danger" data-selectable="">
+      <p role="alert" className="k-error" data-wrap="" data-selectable="">
         {notice.message}
       </p>
     )
   }
   if (notice.kind === 'failed') {
     return (
-      <p role="alert" className="text-small text-danger" data-selectable="">
+      <p role="alert" className="k-error" data-wrap="" data-selectable="">
         {t('appearance.theme.installFailed', { file: notice.file, reason: reason(notice.error) })}
       </p>
     )
@@ -416,23 +398,16 @@ function ThemeNotice({
   const low = themeContrast(item.theme).length > 0
   if (unused.length === 0 && !low) return null
   return (
-    <Alert variant="warning">
-      <TriangleAlertIcon />
-      <AlertTitle>{t('appearance.theme.installed', { name: item.theme.name })}</AlertTitle>
-      <AlertDescription className="flex flex-col gap-2.5">
-        {unused.length > 0 && (
-          <span className="break-words" data-selectable="">
-            {t('appearance.theme.unused', { list: unused.join(', ') })}
-          </span>
-        )}
-        {low && <span>{t('appearance.theme.lowContrastNotice')}</span>}
-        <span>
-          <Button className={ROW_BUTTON} variant="outline" onClick={onDismiss}>
-            {t('appearance.theme.gotIt')}
-          </Button>
-        </span>
-      </AlertDescription>
-    </Alert>
+    <Notice
+      variant="warning"
+      title={t('appearance.theme.installed', { name: item.theme.name })}
+      action={<SetButton onClick={onDismiss}>{t('appearance.theme.gotIt')}</SetButton>}
+    >
+      {unused.length > 0 && (
+        <p data-selectable="">{t('appearance.theme.unused', { list: unused.join(', ') })}</p>
+      )}
+      {low && <p>{t('appearance.theme.lowContrastNotice')}</p>}
+    </Notice>
   )
 }
 
@@ -451,24 +426,19 @@ function LoadFailure({
   const { t } = useTranslation('settings')
   const reason = useReason()
   return (
-    <Alert variant="warning">
-      <TriangleAlertIcon />
-      <AlertTitle>{t('appearance.theme.loadFailed', { id })}</AlertTitle>
-      <AlertDescription className="flex flex-col gap-2.5">
-        <span>
-          {t('appearance.theme.loadFailedDescription', {
-            reason: reason(failure.code === 'invalid' ? failure.error : failure),
-          })}
+    <Notice
+      variant="warning"
+      title={t('appearance.theme.loadFailed', { id })}
+      more={
+        <span className="k-end">
+          <SetButton onClick={onUseBuiltIn}>{t('appearance.theme.useBuiltIn')}</SetButton>
+          <SetButton onClick={onInstall}>{t('appearance.theme.install')}</SetButton>
         </span>
-        <span className="flex flex-wrap gap-1.5">
-          <Button className={ROW_BUTTON} variant="outline" onClick={onUseBuiltIn}>
-            {t('appearance.theme.useBuiltIn')}
-          </Button>
-          <Button className={ROW_BUTTON} variant="outline" onClick={onInstall}>
-            {t('appearance.theme.install')}
-          </Button>
-        </span>
-      </AlertDescription>
-    </Alert>
+      }
+    >
+      {t('appearance.theme.loadFailedDescription', {
+        reason: reason(failure.code === 'invalid' ? failure.error : failure),
+      })}
+    </Notice>
   )
 }

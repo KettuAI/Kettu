@@ -293,6 +293,19 @@
   --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* settings: the Settings modal, in affectUI's look. */
+  --settings-scrim: rgb(0 0 0 / 12%);
+  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+  --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 25%);
+  --settings-warn-bg: rgb(217 119 6 / 10%);
+  --settings-warn-ink: #b45309;
+  --settings-term-bg: #17181c;
+  --settings-term-ink: #e6e6e6;
+  --settings-term-faint: #8a8a8a;
+  --settings-term-path: #7fa8e8;
+  --settings-term-branch: #c79bf2;
+  --settings-term-ok: #5bb98a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -486,6 +499,19 @@
     --elevation-sheet: 0 0 #0000;
     --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+    /* settings: the Settings modal, in affectUI's look. */
+    --settings-scrim: rgb(0 0 0 / 45%);
+    --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+    --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
+    --settings-warn-bg: rgb(251 191 36 / 12%);
+    --settings-warn-ink: #fbbf24;
+    --settings-term-bg: #17181c;
+    --settings-term-ink: #e6e6e6;
+    --settings-term-faint: #8a8a8a;
+    --settings-term-path: #7fa8e8;
+    --settings-term-branch: #c79bf2;
+    --settings-term-ok: #5bb98a;
   }
 }
 
@@ -678,6 +704,19 @@
   --elevation-sheet: 0 0 #0000;
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* settings: the Settings modal, in affectUI's look. */
+  --settings-scrim: rgb(0 0 0 / 45%);
+  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+  --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
+  --settings-warn-bg: rgb(251 191 36 / 12%);
+  --settings-warn-ink: #fbbf24;
+  --settings-term-bg: #17181c;
+  --settings-term-ink: #e6e6e6;
+  --settings-term-faint: #8a8a8a;
+  --settings-term-path: #7fa8e8;
+  --settings-term-branch: #c79bf2;
+  --settings-term-ok: #5bb98a;
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
