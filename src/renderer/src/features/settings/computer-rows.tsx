@@ -1,14 +1,12 @@
 import { useState } from 'react'
-import { AppWindowIcon } from 'lucide-react'
+import { BrowserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ComputerApp, ComputerPermission, ComputerPermissionKind } from '@shared/computer-use'
-import { Button } from '@renderer/components/ui/button'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { errorMessage } from '@renderer/lib/host'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { ControlError, Pill, ROW_BUTTON, SettingSwitch } from './controls'
-import { DeviceTile } from './remote-parts'
-import { ItemLine } from './rows'
+import { ControlError, Pill, SetButton, SettingSwitch } from './controls'
+import { ItemLine, Thing } from './rows'
 
 /** The switch, on this computer's own settings whichever host the page shows. */
 export function ComputerSwitch({ label }: { label: string }) {
@@ -60,10 +58,9 @@ export function PermissionRow({
   return (
     <>
       <ControlError error={error} />
-      <Button variant="outline" className={ROW_BUTTON} disabled={busy} onClick={() => void ask()}>
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+      <SetButton loading={busy} onClick={() => void ask()}>
         {state === 'denied' ? t('computer.permission.open') : t('computer.permission.ask')}
-      </Button>
+      </SetButton>
     </>
   )
 }
@@ -71,15 +68,11 @@ export function PermissionRow({
 export function AllowedAppRow({ app, onRemove }: { app: ComputerApp; onRemove: () => void }) {
   const { t } = useTranslation('settings')
   return (
-    <div className="flex items-center gap-3.5 py-3.25">
-      <DeviceTile icon={<AppWindowIcon className="size-4" />} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-[normal]">{app.name}</span>
+    <div className="ui-sg-row">
+      <Thing mark={<Icon icon={BrowserIcon} size={20} />} name={app.name}>
         <ItemLine>{app.id}</ItemLine>
-      </div>
-      <Button variant="ghost" className={ROW_BUTTON} onClick={onRemove}>
-        {t('computer.allowedApps.remove')}
-      </Button>
+      </Thing>
+      <SetButton onClick={onRemove}>{t('computer.allowedApps.remove')}</SetButton>
     </div>
   )
 }

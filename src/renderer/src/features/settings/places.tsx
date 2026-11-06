@@ -26,10 +26,10 @@ export function PathLine({
   actions?: ReactNode
 }) {
   return (
-    <div className="flex min-h-6.5 min-w-0 items-center gap-2">
+    <div className="k-pathline">
       <PathText path={path} missing={missing} />
       {children}
-      {actions && <span className="ml-auto flex shrink-0 items-center gap-0.5">{actions}</span>}
+      {actions && <span className="k-end k-push">{actions}</span>}
     </div>
   )
 }
@@ -83,17 +83,13 @@ export function PlaceRow({
           name={name}
           description={
             item.exists ? (
-              <span className="flex min-w-0 items-baseline gap-1">
-                <span
-                  title={item.path}
-                  data-selectable=""
-                  className="min-w-0 truncate font-mono text-code [direction:rtl]"
-                >
+              <span className="k-place">
+                <span title={item.path} data-selectable="" className="k-mono k-rtl">
                   {'\u200E'}
                   {item.path}
                   {'\u200E'}
                 </span>
-                {after && <span className="shrink-0">· {after}</span>}
+                {after && <span className="k-place__after">· {after}</span>}
               </span>
             ) : (
               t('agents.notCreatedLine')

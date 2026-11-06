@@ -2,6 +2,7 @@ import { useDevicesSection } from './devices-section'
 import {
   Fragment,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -9,27 +10,17 @@ import {
   type RefObject,
 } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
-import { ChevronRightIcon, SearchIcon, XIcon } from 'lucide-react'
+import { ArrowRight01Icon, Cancel01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { popupOpen } from '@renderer/app/shortcuts'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-} from '@renderer/components/ui/dialog'
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
+import { css as shellCss, Icon } from '@renderer/components/affect/app-shell'
+import { css as generalCss } from '@renderer/components/affect/settings-general'
+import { css as modelsCss } from '@renderer/components/affect/settings-models'
+import { css as prefsCss } from '@renderer/components/affect/settings-preferences'
+import { css as securityCss } from '@renderer/components/affect/settings-security'
+import { Dialog, DialogPortal } from '@renderer/components/ui/dialog'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import {
   hostScope,
   HostScopeContext,
@@ -75,14 +66,13 @@ import { useComputerUseSection } from './computer-section'
 const FLASH_MS = 1200
 
 /**
- * Settings open as a sheet over the app, which stays in view under the scrim: a list of sections
- * and search on the left, the selected section on the right. While searching, the page gives way
- * to the matching rows, each of which opens its page at the row. The client's own sections are
- * this computer's; the host's show the host the picker chose.
+ * Settings open as a modal over the app, which stays in view under the scrim: the list of
+ * sections and search on the left, the selected section on the right. The view store opens and
+ * closes it; Esc steps back from an item's page first.
  */
 export default function SettingsPage() {
-  const { t } = useTranslation('settings')
   const open = useViewStore((s) => s.settings.open)
+  const title = useId()
   return (
     <Dialog
       open={open}
@@ -98,7 +88,7 @@ export default function SettingsPage() {
       }}
     >
       <DialogPortal>
-        <DialogOverlay />
+        <DialogPrimitive.Backdrop className="kettu-settings-scrim app-region-no-drag" />
         <DialogPrimitive.Popup
           // The section in the list takes the focus, so Tab starts from it, without scrolling the
           // list down to a section near its end, which would hide the search above it.
@@ -110,28 +100,12 @@ export default function SettingsPage() {
             current.focus({ preventScroll: true })
             return false
           }}
+          aria-labelledby={title}
           data-overlay-layer=""
           data-settings-dialog=""
-          className="fixed top-14 left-1/2 z-50 flex h-[calc(100%-112px)] w-[calc(100%-48px)] max-w-265 -translate-x-1/2 flex-col overflow-hidden rounded-modal bg-surface text-primary shadow-dialog outline-none duration-(--duration-fast) [--segment-thumb:var(--bg-surface)] data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-1 data-closed:animate-out data-closed:fade-out-0"
+          className="ui-as kettu-settings app-region-no-drag"
         >
-          <header className="flex h-13.5 shrink-0 items-center pr-3 pl-5.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
-            <DialogTitle className="flex-1 font-sans text-label font-semibold tracking-normal">
-              {t('page.title')}
-            </DialogTitle>
-            <DialogClose
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={t('page.close')}
-                  className="rounded-xl text-secondary [&_svg:not([class*='size-'])]:size-4.25"
-                />
-              }
-            >
-              <XIcon />
-            </DialogClose>
-          </header>
-          <SettingsBody />
+          <SettingsContent titleId={title} />
         </DialogPrimitive.Popup>
       </DialogPortal>
     </Dialog>
@@ -149,7 +123,35 @@ function isEditable(target: EventTarget | null): boolean {
   )
 }
 
-function SettingsBody() {
+/** The sheets the settings screens are drawn with; React hoists each once. */
+function SettingsStyles() {
+  return (
+    <>
+      <style href="ui-app-shell" precedence="default">
+        {shellCss}
+      </style>
+      <style href="ui-settings-general" precedence="default">
+        {generalCss}
+      </style>
+      <style href="ui-settings-security" precedence="default">
+        {securityCss}
+      </style>
+      <style href="ui-settings-models" precedence="default">
+        {modelsCss}
+      </style>
+      <style href="ui-settings-preferences" precedence="default">
+        {prefsCss}
+      </style>
+    </>
+  )
+}
+
+/**
+ * The modal's content, for whatever holds it: the section list and the shown section. It reads
+ * and changes the view store itself, and its close button closes Settings. The element holding it
+ * carries `ui-as kettu-settings`, which give it the box and the shell's variables.
+ */
+export function SettingsContent({ titleId }: { titleId?: string }) {
   const client = [
     useGeneralSection(),
     useAppearanceSection(),
@@ -168,7 +170,8 @@ function SettingsBody() {
   return (
     <HostScopeContext.Provider value={scope}>
       <AgentMarkHost.Provider value={scope.hostId}>
-        <SettingsLayout client={client} about={about} scope={scope} />
+        <SettingsStyles />
+        <SettingsLayout client={client} about={about} scope={scope} titleId={titleId} />
       </AgentMarkHost.Provider>
     </HostScopeContext.Provider>
   )
@@ -192,10 +195,12 @@ function SettingsLayout({
   client,
   about,
   scope,
+  titleId,
 }: {
   client: SectionDef[]
   about: SectionDef
   scope: HostScope
+  titleId?: string
 }) {
   const { t } = useTranslation('settings')
   // The list in clusters: what belongs to this client first, then the host's, then About.
@@ -216,6 +221,9 @@ function SettingsLayout({
   const clusters = isWeb ? webClusters(all) : all
   const picker = !isWeb
   const sections = clusters.flat()
+  // Drawn as three groups, as the settings list has them: this client's, the host's, About.
+  const groups =
+    clusters.length > 2 ? [clusters[0]!, clusters.slice(1, -1).flat(), clusters.at(-1)!] : clusters
   const [query, setQuery] = useState('')
   const needle = query.trim()
   const searching = needle.length > 0
@@ -301,18 +309,19 @@ function SettingsLayout({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
+  const hostPage = HOST_SECTIONS.has(page.id)
   return (
-    <div className="flex min-h-0 flex-1">
-      <nav
-        aria-label={t('page.sections')}
-        className="flex w-59 shrink-0 flex-col overflow-y-auto px-3 py-3.5 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)]"
-      >
+    <>
+      <nav aria-label={t('page.sections')} className="kettu-settings__nav">
+        <h2 id={titleId} className="kettu-settings__title">
+          {t('page.title')}
+        </h2>
         <SettingsSearch value={query} onChange={setQuery} inputRef={search} />
-        {clusters.map((cluster, i) => (
-          <Fragment key={i}>
-            {picker && i === 1 && <HostPicker hostId={scope.hostId} />}
-            <div className="mt-2 flex flex-col gap-px">
-              {cluster.map((section) => {
+        <div className="kettu-settings__list">
+          {groups.map((group, i) => (
+            <div key={i} className="kettu-settings__group">
+              {picker && i === 1 && <HostPicker hostId={scope.hostId} />}
+              {group.map((section) => {
                 const count = hits.find((h) => h.id === section.id)?.rows.length ?? 0
                 return (
                   <NavRow
@@ -326,30 +335,35 @@ function SettingsLayout({
                 )
               })}
             </div>
-          </Fragment>
-        ))}
+          ))}
+        </div>
       </nav>
-      <div
-        ref={scroller}
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto px-8 pt-6.5 pb-12 [scrollbar-gutter:stable]"
-      >
+      <div ref={scroller} className="kettu-settings__page">
+        <button
+          type="button"
+          className="ui-as-icon-btn kettu-settings__close"
+          aria-label={t('page.close')}
+          onClick={closeSettings}
+        >
+          <Icon icon={Cancel01Icon} size={16} />
+        </button>
         <FlashContext.Provider value={flash}>
           {/* A client's section shows this computer's own, whichever host the picker chose. */}
-          <HostScopeContext.Provider value={HOST_SECTIONS.has(page.id) ? scope : LOCAL_SCOPE}>
-            <AgentMarkHost.Provider value={HOST_SECTIONS.has(page.id) ? scope.hostId : null}>
+          <HostScopeContext.Provider value={hostPage ? scope : LOCAL_SCOPE}>
+            <AgentMarkHost.Provider value={hostPage ? scope.hostId : null}>
               <div
                 key={
                   (searching ? 'results' : item ? `${page.id}/${item}` : page.id) +
-                  (HOST_SECTIONS.has(page.id) ? `@${scope.hostId ?? ''}` : '')
+                  (hostPage ? `@${scope.hostId ?? ''}` : '')
                 }
-                className="flex animate-in flex-col fade-in animation-duration-(--duration-fast)"
+                className="ui-as-page ui-sg ui-ss ui-sm ui-spf kettu-settings__body"
               >
                 {searching ? (
                   <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
                 ) : item && page.itemPage ? (
                   page.itemPage(item)
                 ) : (
-                  <section aria-labelledby={`settings-${page.id}`} className="flex flex-col">
+                  <section aria-labelledby={`settings-${page.id}`}>
                     {page.hero ?? (
                       <PageHeader id={`settings-${page.id}`} title={page.title}>
                         {page.description}
@@ -364,7 +378,7 @@ function SettingsLayout({
           </HostScopeContext.Provider>
         </FlashContext.Provider>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -379,8 +393,8 @@ function SettingsSearch({
 }) {
   const { t } = useTranslation('settings')
   return (
-    <label className="flex h-row shrink-0 items-center gap-2.25 rounded-xl bg-subtle pr-2 pl-2.5 text-tertiary transition-shadow duration-(--duration-fast) has-focus-visible:shadow-[0_0_0_var(--hairline)_var(--focus),var(--focus-halo)]">
-      <SearchIcon className="size-3.75 shrink-0" />
+    <label className="kettu-settings__search">
+      <Icon icon={Search01Icon} size={14} />
       <input
         ref={inputRef}
         value={value}
@@ -394,24 +408,21 @@ function SettingsSearch({
           if (value) onChange('')
           else event.currentTarget.blur()
         }}
-        className="min-w-0 flex-1 bg-transparent text-lede text-primary outline-none placeholder:text-tertiary"
       />
       {value ? (
         <button
           type="button"
           aria-label={t('page.clearSearch')}
+          className="kettu-settings__clear"
           onClick={() => {
             onChange('')
             inputRef.current?.focus()
           }}
-          className="flex size-5 shrink-0 items-center justify-center rounded-md outline-none hover:bg-hover hover:text-primary focus-ring"
         >
-          <XIcon className="size-3" strokeWidth={1.75} />
+          <Icon icon={Cancel01Icon} size={10} />
         </button>
       ) : (
-        <span aria-hidden className="shrink-0 pr-0.5 text-caption">
-          {formatShortcut('Mod+F')}
-        </span>
+        <kbd aria-hidden>{formatShortcut('Mod+F')}</kbd>
       )}
     </label>
   )
@@ -431,35 +442,26 @@ function NavRow({
   count: number | null
   onChoose: () => void
 }) {
-  const Icon = section.icon
   return (
     <button
       type="button"
       aria-current={selected ? 'page' : undefined}
+      data-dim={dim || undefined}
       onClick={onChoose}
-      className={cn(
-        'flex h-row shrink-0 items-center gap-2.75 rounded-tile px-2.5 text-left text-row outline-none transition-[background-color,color,opacity] duration-(--duration-fast) focus-ring [&>svg]:text-tertiary',
-        selected
-          ? 'bg-selected font-medium text-foreground [&>svg]:text-secondary'
-          : 'text-secondary hover:bg-hover hover:text-foreground',
-        dim && 'opacity-42',
-      )}
+      className="ui-as-side__item"
     >
-      <Icon className="size-4 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{section.title}</span>
+      <Icon icon={section.icon} size={15} />
+      <span className="ui-as-side__text">{section.title}</span>
       {section.mark && count === null && (
         <span
           role="img"
           aria-label={section.mark}
           title={section.mark}
-          className="size-1.75 shrink-0 rounded-full bg-attention-dot"
+          className="kettu-settings__dot"
         />
       )}
       {count !== null && (
-        <span
-          key={count}
-          className="h-4.5 min-w-4.5 shrink-0 animate-in rounded-full bg-surface px-1.25 text-center text-meta leading-4.5 font-normal text-secondary tabular shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] fade-in animation-duration-(--duration-base)"
-        >
+        <span key={count} className="ui-as-side__count">
           {count}
         </span>
       )}
@@ -485,53 +487,51 @@ function SearchResults({
         {count > 0 && t('page.resultsLine', { query, count })}
       </PageHeader>
       {count === 0 ? (
-        <Empty className="px-6 py-14">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <SearchIcon />
-            </EmptyMedia>
-            <EmptyTitle>{t('page.noMatch', { query })}</EmptyTitle>
-            <EmptyDescription>{t('page.noMatchHint')}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
+        <div className="ui-as-empty">
+          <span className="ui-as-empty__icon">
+            <Icon icon={Search01Icon} size={18} />
+          </span>
+          <b className="ui-as-empty__title">{t('page.noMatch', { query })}</b>
+          <p className="ui-as-empty__text">{t('page.noMatchHint')}</p>
+        </div>
       ) : (
-        hits.map(
-          (section) =>
-            section.rows.length > 0 && (
-              <section key={section.id} aria-label={section.title} className="flex flex-col">
-                <GroupLabel
-                  group={{ id: section.id, label: section.title, count: section.rows.length }}
-                />
-                <div className="shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-                  {section.rows.map((row) => (
-                    // The hairline sits on the row, straight, under the rounded hover of its button.
-                    <div
-                      key={row.id}
-                      className="shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onGo(section, row)}
-                        className="flex w-full items-center gap-4 rounded-lg py-3.75 text-left outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
-                      >
-                        <span className="flex min-w-0 flex-1 flex-col gap-0.75">
-                          <span className="text-label">
-                            <Marked text={row.name} query={query} />
+        <div className="k-groups">
+          {hits.map(
+            (section) =>
+              section.rows.length > 0 && (
+                <section key={section.id} aria-label={section.title} className="k-group">
+                  <GroupLabel
+                    group={{ id: section.id, label: section.title, count: section.rows.length }}
+                  />
+                  <div className="ui-sg-card">
+                    {section.rows.map((row) => (
+                      <div key={row.id} className="k-row">
+                        <button
+                          type="button"
+                          onClick={() => onGo(section, row)}
+                          className="ui-sg-row k-item k-result"
+                        >
+                          <span className="ui-sg-label">
+                            <b>
+                              <Marked text={row.name} query={query} />
+                            </b>
+                            {row.description && (
+                              <small className="k-clamp">
+                                <Marked text={excerpt(row.description, query)} query={query} />
+                              </small>
+                            )}
                           </span>
-                          {row.description && (
-                            <span className="line-clamp-2 text-group leading-normal text-tertiary">
-                              <Marked text={excerpt(row.description, query)} query={query} />
-                            </span>
-                          )}
-                        </span>
-                        <ChevronRightIcon className="size-3.5 shrink-0 text-tertiary" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ),
-        )
+                          <span className="k-chevron">
+                            <Icon icon={ArrowRight01Icon} size={14} />
+                          </span>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ),
+          )}
+        </div>
       )}
     </>
   )
@@ -540,7 +540,7 @@ function SearchResults({
 function Marked({ text, query }: { text: string; query: string }) {
   return highlight(text, query).map((part, i) =>
     part.match ? (
-      <mark key={i} className="rounded-sm bg-mark text-inherit">
+      <mark key={i} className="k-hl">
         {part.text}
       </mark>
     ) : (

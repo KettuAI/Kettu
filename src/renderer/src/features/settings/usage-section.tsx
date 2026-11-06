@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SettingsFile } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
+import { RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
-import { RefreshIcon } from '@renderer/components/refresh-icon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,26 +17,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { bytes, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import {
   CONFIRM,
   ControlError,
-  GROUP_ACTION,
-  ROW_BUTTON,
+  DangerButton,
+  SetButton,
   SettingSelect,
   SettingSwitch,
 } from './controls'
-import { ItemLine } from './rows'
+import { ItemLine, Thing } from './rows'
 import { useApply } from './use-apply'
 
 export function FromComputer() {
@@ -67,27 +65,23 @@ export function SyncLogs() {
   return (
     <>
       {scanning && scanning.bytes > 0 && (
-        <span role="status" className="text-xs text-tertiary tabular-nums">
+        <span role="status" className="k-head-meta k-muted k-num">
           {t('page.importing', { done: bytes(scanning.doneBytes), total: bytes(scanning.bytes) })}
         </span>
       )}
       <ControlError error={error} />
-      <Button
-        variant="ghost"
-
-        aria-busy={running}
-        disabled={running}
+      <SetButton
+        loading={running}
+        icon={<Icon icon={refresh.phase === 'done' ? Tick02Icon : RefreshIcon} size={14} />}
         onClick={() => {
           setError(null)
           void refresh
             .run(() => request('usage.sync', undefined))
             .catch((e: unknown) => setError(errorMessage(e)))
         }}
-        className={cn(ROW_BUTTON, GROUP_ACTION)}
       >
-        <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
         {t('page.sync')}
-      </Button>
+      </SetButton>
     </>
   )
 }
@@ -149,24 +143,18 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
 
   return (
     <>
-      <div className="flex items-center gap-3.5 py-3.25">
-        <AgentTile agent={agentId} size={30} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-label leading-[normal]">{name}</span>
+      <div className="ui-sg-row">
+        <Thing
+          mark={<AgentTile agent={agentId} size={24} />}
+          name={<span className="k-name">{name}</span>}
+        >
           <ItemLine>
             {shownError ? (
-              <span className="text-danger">{shownError}</span>
+              <span className="k-danger">{shownError}</span>
             ) : (
               <>
                 {locations.length > 0 && (
-                  <span
-                    title={locations.join('\n')}
-                    data-selectable=""
-                    className={cn(
-                      'font-mono text-code leading-[normal]',
-                      log.found === false && 'text-tertiary',
-                    )}
-                  >
+                  <span title={locations.join('\n')} data-selectable="" className="k-mono">
                     {locations.join(', ')}
                   </span>
                 )}
@@ -175,15 +163,12 @@ export function LogRow({ agentId }: { agentId: AgentId }) {
               </>
             )}
           </ItemLine>
-        </div>
-        <Button
-          variant="ghost"
-          className={GROUP_ACTION}
-          disabled={!log.found || scanning}
-          onClick={() => setOpen(true)}
-        >
-          {t('settings.reimport.button')}
-        </Button>
+        </Thing>
+        <span className="ui-sg-control">
+          <SetButton disabled={!log.found || scanning} onClick={() => setOpen(true)}>
+            {t('settings.reimport.button')}
+          </SetButton>
+        </span>
       </div>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
@@ -256,16 +241,9 @@ export function ClearRecord() {
   return (
     <>
       <ControlError error={error} />
-      <Button
-        className={ROW_BUTTON}
-        variant="destructive-outline"
-
-        disabled={empty || busy}
-        onClick={() => setOpen(true)}
-      >
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+      <DangerButton busy={busy} disabled={empty} onClick={() => setOpen(true)}>
         {t('settings.clear.button')}
-      </Button>
+      </DangerButton>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

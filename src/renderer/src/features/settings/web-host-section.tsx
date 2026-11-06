@@ -11,15 +11,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
-import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
+import { CONFIRM, ControlError, DangerButton, SetInput, Spin } from './controls'
 import { webHostLine } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
+import { ItemLine, Thing } from './rows'
 
 // The parts of Settings > Hosts in the web client: the host that served the page, this browser's
 // name on it, and forgetting it here.
@@ -34,17 +33,14 @@ const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
 export function WebHostRow({ host }: { host: WebHost }) {
   const { t } = useTranslation('settings')
   return (
-    <div className="-mx-3 flex items-start gap-3 py-3 pr-3 pl-4">
-      <DeviceTile icon={<HostIcon platform={host.platform ?? ''} className="size-4" />} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex min-h-5.5 items-center truncate text-ui font-medium">
-          {host.name}
-        </span>
-        <span className="truncate text-command leading-4.5 text-secondary">
-          {webHostLine(t, host)}
-        </span>
-      </div>
-      <span className="flex h-5.5 shrink-0 items-center">
+    <div className="ui-sg-row">
+      <Thing
+        mark={<DeviceTile icon={<HostIcon platform={host.platform ?? ''} />} />}
+        name={<span className="k-name">{host.name}</span>}
+      >
+        <ItemLine>{webHostLine(t, host)}</ItemLine>
+      </Thing>
+      <span className="ui-sg-control">
         <HostState host={host} />
       </span>
     </div>
@@ -90,15 +86,15 @@ export function BrowserNameField() {
   }
   return (
     <>
-      {sent !== null && <Spinner className="size-3.5 text-icon" />}
-      <Input
+      {sent !== null && <Spin />}
+      <SetInput
         aria-label={t('hosts.web.self', { name: host?.name ?? '' })}
         value={draft ?? sent ?? current}
         disabled={!online}
         maxLength={256}
         spellCheck={false}
         autoComplete="off"
-        className="h-7 w-55 text-ui md:text-ui"
+        className="k-input--wide"
         onFocus={() => setDraft(sent ?? current)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
@@ -130,9 +126,7 @@ export function ForgetHost() {
   return (
     <>
       <ControlError error={open ? null : error} />
-      <Button className={ROW_BUTTON} variant="destructive-outline" onClick={() => setOpen(true)}>
-        {t('hosts.web.forget.button')}
-      </Button>
+      <DangerButton onClick={() => setOpen(true)}>{t('hosts.web.forget.button')}</DangerButton>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

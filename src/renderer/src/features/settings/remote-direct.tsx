@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { CircleAlertIcon, XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import {
   addressKey,
@@ -19,14 +19,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
 import { useHostContext } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useOtherHost } from '@renderer/stores/hosts'
-import { CONFIRM, ControlError, ROW_BUTTON, ROW_FIELD } from './controls'
+import { CONFIRM, ControlError, IconAction, SetButton, SetInput } from './controls'
+import { BlockLine } from './rows'
 import { DIRECT_PORT_FIELD } from './remote-text'
 import { useApply } from './use-apply'
 
@@ -69,7 +67,7 @@ export function DirectPortField({ label }: { label: string }) {
   return (
     <>
       <ControlError error={invalid ? t('remote.direct.port.invalid') : error} />
-      <Input
+      <SetInput
         id={DIRECT_PORT_FIELD}
         aria-label={label}
         aria-invalid={invalid || undefined}
@@ -78,7 +76,7 @@ export function DirectPortField({ label }: { label: string }) {
         maxLength={5}
         spellCheck={false}
         autoComplete="off"
-        className={cn(ROW_FIELD, 'w-28 md:text-lede')}
+        className="k-input--short"
         onFocus={() => setDraft((current) => current ?? shown)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
@@ -109,17 +107,13 @@ export function DirectPortField({ label }: { label: string }) {
 }
 
 function AddressList({ children }: { children: ReactNode }) {
-  return (
-    <ul className="mt-3.5 flex flex-col py-1 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-      {children}
-    </ul>
-  )
+  return <ul className="k-inset k-list k-addresses">{children}</ul>
 }
 
 function AddressLine({ address, children }: { address: DirectAddress; children?: ReactNode }) {
   return (
-    <li className="flex min-h-8 items-center gap-3">
-      <span data-selectable="" className="min-w-0 flex-1 truncate font-mono text-code">
+    <li className="k-list__row">
+      <span data-selectable="" className="k-list__name k-mono">
         {addressText(address)}
       </span>
       {children}
@@ -148,7 +142,7 @@ export function FoundAddresses({ text }: { text: ReactNode }) {
           ))}
         </AddressList>
       ) : (
-        <p className="mt-2 text-hint text-tertiary">
+        <p className="k-block-note">
           {direct?.state === 'listening'
             ? t('remote.direct.found.none')
             : t('remote.direct.found.notListening')}
@@ -185,12 +179,12 @@ export function OwnAddresses({ text }: { text: ReactNode }) {
       },
     })
   const form = full ? (
-    <p className="text-hint text-tertiary">
+    <span className="k-block-note">
       {t('remote.direct.own.full', { count: MAX_OWN_ADDRESSES })}
-    </p>
+    </span>
   ) : (
-    <form className="flex shrink-0 items-center gap-2" onSubmit={add}>
-      <Input
+    <form className="k-end" onSubmit={add}>
+      <SetInput
         value={draft}
         aria-label={t('remote.direct.own.label')}
         aria-invalid={problem !== null || undefined}
@@ -199,62 +193,57 @@ export function OwnAddresses({ text }: { text: ReactNode }) {
         spellCheck={false}
         autoComplete="off"
         maxLength={300}
-        className={cn(ROW_FIELD, 'w-50 md:text-lede')}
+        className="k-input--wide k-mono"
         onChange={(event) => {
           setDraft(event.target.value)
           setProblem(null)
         }}
       />
-      <Button className={ROW_BUTTON} type="submit" variant="outline" disabled={draft.trim() === ''}>
+      <SetButton type="submit" disabled={draft.trim() === ''}>
         {t('remote.direct.own.add')}
-      </Button>
+      </SetButton>
     </form>
   )
   return (
     <>
-      <div className="flex items-center gap-x-7 gap-y-3">
-        <div className="min-w-0 flex-[1_1_280px]">{text}</div>
-        {form}
-      </div>
+      <BlockLine text={text}>{form}</BlockLine>
       {own.length > 0 && (
         <AddressList>
           {own.map((address) => {
             const shown = addressText(address)
             return (
               <AddressLine key={addressKey(address)} address={address}>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  aria-label={t('remote.direct.own.remove', { address: shown })}
+                <IconAction
+                  label={t('remote.direct.own.remove', { address: shown })}
+                  icon={Cancel01Icon}
                   onClick={() => remove(address)}
-                >
-                  <XIcon />
-                </Button>
+                />
               </AddressLine>
             )
           })}
         </AddressList>
       )}
       {problem && (
-        <p id={errorId} className="mt-2 flex items-start gap-1.25 text-hint text-secondary">
-          <CircleAlertIcon className="mt-px size-3.5 shrink-0 text-danger" />
-          <span>
-            {problem === 'repeat' ? (
-              t('remote.direct.own.repeat')
-            ) : (
-              <Trans
-                t={t}
-                i18nKey="remote.direct.own.invalid"
-                components={{
-                  strong: <span className="text-danger" />,
-                  code: <span className="font-mono text-primary" />,
-                }}
-              />
-            )}
-          </span>
+        <p id={errorId} className="k-error" data-wrap="">
+          {problem === 'repeat' ? (
+            t('remote.direct.own.repeat')
+          ) : (
+            <Trans
+              t={t}
+              i18nKey="remote.direct.own.invalid"
+              components={{
+                strong: <span />,
+                code: <span className="k-mono" />,
+              }}
+            />
+          )}
         </p>
       )}
-      {error && <p className="mt-2 text-hint text-danger">{error}</p>}
+      {error && (
+        <p className="k-error" data-wrap="">
+          {error}
+        </p>
+      )}
     </>
   )
 }

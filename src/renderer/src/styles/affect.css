@@ -2013,3 +2013,1896 @@
 .kp-resizer:is([data-separator='hover'], [data-separator='active'], :focus-visible)::before {
   opacity: 1;
 }
+
+/* settings: the Settings modal over the app, drawn as the hi-fi draws it: the command menu's scrim,
+   a box with the section list on the left in the sidebar's rows, and the section on the right in
+   affectUI's settings cards of rows. The box carries .ui-as, so the shell's variables hold inside
+   it wherever it is mounted. Rules sit under .kettu-settings to outrank the vendored sheets,
+   whose order among the hoisted styles is not fixed. */
+
+.kettu-settings-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--settings-scrim);
+  transition: opacity 200ms ease;
+}
+.kettu-settings-scrim[data-starting-style],
+.kettu-settings-scrim[data-ending-style] {
+  opacity: 0;
+}
+
+.kettu-settings.ui-as {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  z-index: 50;
+  display: flex;
+  width: min(1060px, calc(100% - 64px));
+  height: calc(100% - 112px);
+  translate: -50% 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    var(--settings-drop);
+  outline: none;
+  transition:
+    opacity 260ms var(--ease),
+    transform 260ms var(--ease);
+}
+.kettu-settings.ui-as[data-starting-style],
+.kettu-settings.ui-as[data-ending-style] {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
+/* The section list */
+.kettu-settings .kettu-settings__nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 236px;
+  padding: 16px 10px 12px 12px;
+  background: var(--frame);
+  box-shadow: inset -0.5px 0 0 var(--line);
+}
+.kettu-settings .kettu-settings__title {
+  margin: 0;
+  padding: 2px 6px 12px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.kettu-settings .kettu-settings__search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-bottom: 8px;
+  padding: 0 8px 0 10px;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  color: var(--muted);
+  transition: box-shadow 140ms ease;
+}
+.kettu-settings .kettu-settings__search:focus-within {
+  box-shadow:
+    var(--card-shadow),
+    0 0 0 3px var(--accent-soft);
+}
+.kettu-settings .kettu-settings__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.kettu-settings .kettu-settings__search input::placeholder {
+  color: var(--faint);
+}
+.kettu-settings .kettu-settings__search kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+}
+.kettu-settings .kettu-settings__clear {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--muted);
+}
+.kettu-settings .kettu-settings__clear::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+.kettu-settings .kettu-settings__clear:hover {
+  color: var(--ink);
+}
+.kettu-settings .kettu-settings__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.kettu-settings .kettu-settings__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.kettu-settings .kettu-settings__group + .kettu-settings__group {
+  margin-top: 6px;
+  padding-top: 6px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-settings .kettu-settings__group .ui-as-side__item {
+  flex: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+.kettu-settings .kettu-settings__group .ui-as-side__item[data-dim] {
+  opacity: 0.42;
+}
+.kettu-settings .kettu-settings__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 4px 0 auto;
+  border-radius: 50%;
+  background: var(--attention-dot);
+}
+.kettu-settings .kettu-settings__group .ui-as-side__count {
+  margin-right: 4px;
+  animation: ui-as-cmd-fade 200ms ease both;
+}
+.kettu-settings .kettu-settings__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 6px;
+}
+.kettu-settings .kettu-settings__scope > .ui-as-side__label {
+  margin: 0;
+}
+.kettu-settings .kettu-settings__scope .ui-as-anchor {
+  display: block;
+}
+.kettu-settings .kettu-settings__scope .ui-ss-select {
+  width: 100%;
+}
+.kettu-settings .kettu-settings__scope .ui-as-menu {
+  width: 100%;
+}
+
+/* The page */
+.kettu-settings .kettu-settings__page {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  container: ui-as-main / inline-size;
+}
+.kettu-settings .kettu-settings__close {
+  position: sticky;
+  top: 12px;
+  z-index: 2;
+  float: right;
+  margin: 12px 12px 0 0;
+}
+.kettu-settings .kettu-settings__body {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 32px 48px;
+  animation: ui-as-cmd-in 220ms var(--ease) both;
+}
+@container ui-as-main (max-width: 600px) {
+  .kettu-settings .kettu-settings__body {
+    padding: 36px 16px 40px;
+  }
+}
+
+/* A page's title, then its groups: a head, a card of rows, a note under it */
+:is(.kettu-settings, .kettu-sd) .k-page-sub {
+  text-wrap: pretty;
+}
+:is(.kettu-settings, .kettu-sd) .k-groups > .k-group:first-child > .ui-sg-head {
+  margin-top: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .ui-sg-card:first-child {
+  margin-top: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-ss-head > span {
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-head-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .ui-sg-hint + .ui-sg-hint {
+  margin-top: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .k-plain {
+  margin-top: 12px;
+}
+
+/* Rows: the hairline between them is drawn by each row after the first, since each row is wrapped
+   to carry the light a search result leaves on it */
+:is(.kettu-settings, .kettu-sd) .k-row {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card > * + .k-row {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-flash {
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  background: var(--mark);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-flash[data-on] {
+  opacity: 1;
+}
+:is(.kettu-settings, .kettu-sd) .k-row > .ui-sg-row,
+:is(.kettu-settings, .kettu-sd) .k-row > .k-block {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-row > .ui-sg-label {
+  flex: 1 1 auto;
+}
+:is(.kettu-settings, .kettu-sd) .k-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 10px 12px 10px 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 40px;
+}
+:is(.kettu-settings, .kettu-sd) .k-line > .ui-sg-label,
+:is(.kettu-settings, .kettu-sd) .k-line > .k-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Buttons never squeeze into an ellipsis next to a long label, as in affectUI's rows */
+:is(.kettu-settings, .kettu-sd) .k-line > :is(button, .ui-buttonc) {
+  flex: none;
+}
+/* A grid item keeps its content's width, so a long path would push the control out */
+:is(.kettu-settings, .kettu-sd) .ui-sg-label > :is(b, small) {
+  min-width: 0;
+}
+/* A gray block inside a card: a preview, or what a row reveals */
+:is(.kettu-settings, .kettu-sd) .k-inset {
+  margin: 0 12px 12px 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--frame);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-block .k-inset {
+  margin: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-error {
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--danger);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-error[data-wrap] {
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-muted {
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-num {
+  font-variant-numeric: tabular-nums;
+}
+:is(.kettu-settings, .kettu-sd) .k-mono {
+  font-family: var(--code-face);
+  font-size: 12.5px;
+}
+:is(.kettu-settings, .kettu-sd) .k-link {
+  border-radius: 4px;
+  font: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+:is(.kettu-settings, .kettu-sd) .k-link:hover {
+  text-decoration-color: currentColor;
+}
+:is(.kettu-settings, .kettu-sd) .k-code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--chip);
+  font-family: var(--code-face);
+  font-size: 11.5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* A thing with its mark: agents, hosts, devices, servers; the mark has no tile, 24px beside two
+   lines of text */
+:is(.kettu-settings, .kettu-sd) .k-thing {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-mark > :is(svg, img) {
+  max-width: 24px;
+  max-height: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .k-thing .ui-sg-label b {
+  font-weight: 500;
+}
+:is(.kettu-settings, .kettu-sd) .k-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-row-title > .k-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-thing .ui-sg-label small {
+  overflow-wrap: normal;
+}
+:is(.kettu-settings, .kettu-sd) .k-lines {
+  display: grid;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-lines > small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A row that opens a page of its own: the whole row is a button laid under its content */
+:is(.kettu-settings, .kettu-sd) .k-item > .k-hit {
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-item > .k-hit:hover {
+  background: var(--hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-item > :not(.k-hit) {
+  position: relative;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-item > :not(.k-hit) :is(button, a, [role='switch']) {
+  pointer-events: auto;
+}
+:is(.kettu-settings, .kettu-sd) .k-chevron {
+  color: var(--faint);
+}
+
+/* States */
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge[data-tone='warn'] {
+  background: var(--settings-warn-bg);
+  color: var(--settings-warn-ink);
+}
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge {
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-skel {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--chip);
+  animation: k-skel-pulse 1.4s ease-in-out infinite;
+}
+@keyframes k-skel-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+:is(.kettu-settings, .kettu-sd) .ui-as-empty {
+  margin-top: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-as-empty > .ui-buttonc {
+  margin-top: 18px;
+}
+
+/* Controls. The select also sits outside Settings, as in an agent's question in the thread. */
+.ui-ss-select.k-select {
+  width: 210px;
+}
+.ui-ss-select.k-select > .k-select__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ui-ss-select.k-select > .k-select__lead {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+.ui-ss-select.k-select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+:is(.kettu-settings, .kettu-sd) .k-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-path {
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-path__name {
+  font-weight: 500;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-row .ui-as-menu {
+  min-width: 210px;
+}
+:is(.kettu-settings, .kettu-sd) .k-input.ui-sg-input {
+  width: 200px;
+  height: 30px;
+}
+:is(.kettu-settings, .kettu-sd) .k-input.ui-sg-input[aria-invalid='true'] {
+  box-shadow:
+    inset 0 0 0 0.5px var(--danger),
+    0 0 0 3px var(--danger-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-input--short.ui-sg-input {
+  width: 90px;
+}
+:is(.kettu-settings, .kettu-sd) .k-input--wide.ui-sg-input {
+  width: 260px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-danger {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-danger[aria-busy='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar {
+  width: 72px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--chip);
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--k-level, var(--usage-green));
+}
+
+/* An item's own page: the way back, then its mark, title and state */
+:is(.kettu-settings, .kettu-sd) .k-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 16px -4px;
+  padding: 2px 6px 2px 2px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+  transition: color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-back:hover {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head > .k-flash {
+  inset: -8px;
+  border-radius: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__mark {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__text {
+  position: relative;
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__text > .ui-as-page-title {
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__actions {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A notice: the settings' gray block, tinted by what it means */
+:is(.kettu-settings, .kettu-sd) .k-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--frame);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='success'] {
+  background: var(--success-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='warning'] {
+  background: var(--warning-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='error'] {
+  background: var(--danger-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='success'] .k-notice__icon {
+  color: var(--success);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='warning'] .k-notice__icon {
+  color: var(--warning);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='error'] .k-notice__icon {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__body {
+  display: grid;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__text > b {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__desc {
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__more {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card .k-notice {
+  margin: 0 12px 12px 16px;
+}
+
+/* Search results: each row a button to its place */
+:is(.kettu-settings, .kettu-sd) .k-result {
+  position: relative;
+  width: 100%;
+  text-align: left;
+}
+:is(.kettu-settings, .kettu-sd) .k-result::before {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-result:hover::before {
+  background: var(--hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-result > * {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .k-hl {
+  border-radius: 3px;
+  background: var(--mark);
+  color: inherit;
+}
+:is(.kettu-settings, .kettu-sd) .k-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Parts of single rows */
+:is(.kettu-settings, .kettu-sd) .k-zoom {
+  width: 44px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-value {
+  max-width: 224px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-rtl {
+  display: block;
+  overflow: hidden;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+}
+:is(.kettu-settings, .kettu-sd) .k-term {
+  margin: 0 12px 12px 16px;
+  padding: 10px 12px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--settings-term-bg);
+  color: var(--settings-term-ink);
+  font-family: var(--code-face);
+  line-height: 1.6;
+  white-space: pre;
+}
+:is(.kettu-settings, .kettu-sd) .k-term__path {
+  color: var(--settings-term-path);
+}
+:is(.kettu-settings, .kettu-sd) .k-term__branch {
+  color: var(--settings-term-branch);
+}
+:is(.kettu-settings, .kettu-sd) .k-term__ok {
+  color: var(--settings-term-ok);
+}
+:is(.kettu-settings, .kettu-sd) .k-term__faint {
+  color: var(--settings-term-faint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notify {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--frame);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__mock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 360px;
+  min-width: 0;
+  padding: 10px 14px 10px 10px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow:
+    var(--settings-notify-drop),
+    inset 0 0 0 0.5px var(--line-strong);
+  font-size: 12.5px;
+  line-height: 17px;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__top > b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__text small {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify > :last-child {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-groups > .k-group:first-child > .k-plain {
+  margin-top: 20px;
+}
+@container ui-as-main (max-width: 600px) {
+  :is(.kettu-settings, .kettu-sd) .k-notify {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  :is(.kettu-settings, .kettu-sd) .k-notify__mock {
+    width: auto;
+  }
+}
+:is(.kettu-settings, .kettu-sd) .k-subrows {
+  margin: 0 -12px -10px -16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 52px;
+  padding: 8px 12px 8px 32px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-subnote {
+  padding: 0 12px 0 32px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-subnote:not(:empty) {
+  padding-bottom: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-subnote[data-invalid] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-list {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px 6px 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-list__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+:is(.kettu-settings, .kettu-sd) .k-list__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card .k-notice.k-notice--row {
+  margin: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-avatar {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--chip);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-avatar > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+:is(.kettu-settings, .kettu-sd) .k-account {
+  min-height: 68px;
+}
+:is(.kettu-settings, .kettu-sd) .k-about {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-about > .ui-sg-label {
+  flex: 1;
+}
+:is(.kettu-settings, .kettu-sd) .k-about__skel {
+  margin-top: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ok {
+  display: inline-grid;
+  color: var(--success);
+  animation: ui-as-cmd-fade 200ms ease both;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar--long {
+  width: 200px;
+}
+.ui-ss-select.k-select.k-select--wide {
+  width: 240px;
+}
+
+/* Inside Settings, on, checked and picked are blue, as everywhere in affectUI */
+.kettu-settings.ui-as,
+.kettu-sd.ui-as {
+  --control-on: var(--switch-on);
+  --control-on-tint: var(--accent-soft);
+}
+
+/* A dialog over Settings, on the settings' panel */
+.kettu-sd.ui-as {
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    var(--settings-drop);
+  font-size: 13px;
+  color: var(--text);
+}
+.kettu-sd .kettu-sd__head {
+  padding: 20px 20px 4px 24px;
+}
+.kettu-sd .kettu-sd__titles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kettu-sd .kettu-sd__title {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  color: var(--strong);
+}
+.kettu-sd .kettu-sd__desc {
+  margin: 4px 4px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+  text-wrap: pretty;
+}
+.kettu-sd .kettu-sd__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 24px 4px;
+}
+.kettu-sd .kettu-sd__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px 20px;
+}
+.kettu-sd .kettu-sd__start {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+.kettu-sd .kettu-sd__field > label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__input.ui-sg-input {
+  width: 100%;
+  height: 32px;
+}
+.kettu-sd .kettu-sd__input--mono.ui-sg-input {
+  font-family: var(--code-face);
+  font-size: 12.5px;
+}
+.kettu-sd .kettu-sd__input.ui-sg-input[aria-invalid='true'] {
+  box-shadow:
+    inset 0 0 0 0.5px var(--danger),
+    0 0 0 3px var(--danger-tint);
+}
+.kettu-sd .kettu-sd__tile {
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__tile:not([data-checked]):not([data-disabled]):hover {
+  box-shadow: inset 0 0 0 0.5px var(--edge-active);
+}
+.kettu-sd .kettu-sd__tile[data-checked] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--switch-on);
+}
+.kettu-sd .kettu-sd__tile > [aria-hidden] {
+  margin-top: 1px;
+}
+.kettu-sd .ui-sg-card {
+  margin-top: 0;
+}
+.kettu-sd .kettu-sd__error {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+/* Appearance: the themes as cards in two columns, the chosen one ringed in ink */
+:is(.kettu-settings, .kettu-sd) .k-themes-wrap {
+  display: grid;
+  gap: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-themes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@container ui-as-main (max-width: 420px) {
+  :is(.kettu-settings, .kettu-sd) .k-themes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+:is(.kettu-settings, .kettu-sd) .k-theme-cell {
+  position: relative;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  text-align: left;
+  transition: box-shadow 160ms ease;
+}
+:is(.kettu-settings, .kettu-sd) button.k-theme:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 1.5px var(--ink),
+    var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme b {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__name > b {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__swatch {
+  display: block;
+  width: 100%;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__swatch > span {
+  border-radius: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme--more {
+  justify-content: flex-end;
+  min-height: 108px;
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--line-strong);
+  outline-offset: -1px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__more {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__more > .ui-as-icon-btn {
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme-cell:is(:hover, :focus-within) .k-theme__more,
+:is(.kettu-settings, .kettu-sd) .k-theme__more:has([aria-expanded='true']) {
+  opacity: 1;
+}
+:is(.kettu-settings, .kettu-sd) .k-warn {
+  display: inline-grid;
+  flex: none;
+  color: var(--warning);
+}
+.kettu-sd .kettu-sd__pad {
+  padding: 12px 24px 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-find.ui-sm-search {
+  width: 100%;
+}
+.kettu-sd .kettu-sd__scroll {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 8px 24px;
+}
+.kettu-sd .kettu-sd__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 64px 0;
+  color: var(--muted);
+}
+.kettu-sd .ui-as-empty[data-bare] {
+  padding: 40px 0;
+}
+.kettu-sd .ui-as-empty > .ui-buttonc {
+  margin-top: 16px;
+}
+.kettu-sd .kettu-sd__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kettu-sd .kettu-sd__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 0;
+}
+.kettu-sd .kettu-sd__row + .kettu-sd__row {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__row > .ui-sg-label {
+  flex: 1;
+}
+.kettu-sd .kettu-sd__swatches {
+  display: flex;
+  flex: none;
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.kettu-sd .kettu-sd__swatches > span {
+  width: 14px;
+  height: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__value {
+  min-width: 30px;
+  text-align: right;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar > span:not([class]) {
+  background: var(--usage-green);
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 2px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd > code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--code-face);
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-log {
+  max-height: 86px;
+  min-width: 0;
+  overflow: auto;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  font-family: var(--code-face);
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-log > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-log > span[data-last] {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-log > span[data-failed] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-figure {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--strong);
+  font-variant-numeric: tabular-nums;
+}
+:is(.kettu-settings, .kettu-sd) .k-reading {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-mask-pad:has([data-slot='masked']) {
+  margin-right: -6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-fact {
+  max-width: 280px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-wrap {
+  flex-wrap: wrap;
+}
+
+/* Agents */
+:is(.kettu-settings, .kettu-sd) .k-agent-mark {
+  display: grid;
+  place-items: center;
+}
+:is(.kettu-settings, .kettu-sd) .k-off {
+  opacity: 0.5;
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row {
+  position: relative;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row::before {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row:hover {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row:hover::before {
+  background: var(--hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row > * {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .k-empty-actions {
+  margin-top: 18px;
+}
+:is(.kettu-settings, .kettu-sd) .k-shrink {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-tall {
+  line-height: 26px;
+}
+:is(.kettu-settings, .kettu-sd) .k-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-dot[data-tone='ok'] {
+  background: var(--success);
+}
+:is(.kettu-settings, .kettu-sd) .k-row-note {
+  margin: -6px 12px 0 16px;
+  padding-bottom: 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-skel.k-skel--field {
+  height: 32px;
+  border-radius: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-swatches {
+  display: flex;
+  gap: 10px;
+}
+.kettu-sd .kettu-sd__choices {
+  display: grid;
+  gap: 8px;
+}
+.kettu-sd .kettu-sd__choice {
+  display: grid;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.kettu-sd .kettu-sd__choice:not([data-checked]):hover {
+  box-shadow: inset 0 0 0 0.5px var(--edge-active);
+}
+.kettu-sd .kettu-sd__choice[data-checked] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--switch-on);
+}
+.kettu-sd .kettu-sd__choice > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.kettu-sd .kettu-sd__choice-extra {
+  padding-left: 26px;
+}
+.kettu-sd .kettu-sd__stack {
+  display: grid;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-push {
+  margin-left: auto;
+}
+:is(.kettu-settings, .kettu-sd) .k-list__name.k-grow-0 {
+  flex: 0 1 auto;
+}
+.kettu-sd .kettu-sd__picklist {
+  max-height: 384px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Harnesses */
+:is(.kettu-settings, .kettu-sd) .k-danger {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-dot[data-tone='new'] {
+  background: var(--accent);
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-label small > .k-dot {
+  display: inline-block;
+  margin: 0 6px 1px 0;
+}
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge.k-badge-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 3px;
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-badge-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+}
+:is(.kettu-settings, .kettu-sd) .k-pill-close {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+}
+:is(.kettu-settings, .kettu-sd) .k-pill-close:hover {
+  background: var(--chip-hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-head-meta {
+  font-size: 12px;
+  font-weight: 400;
+}
+:is(.kettu-settings, .kettu-sd) .k-self-start {
+  align-self: flex-start;
+}
+:is(.kettu-settings, .kettu-sd) .k-break {
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd.k-cmd--wrap {
+  align-items: flex-start;
+  padding: 8px 4px 8px 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd.k-cmd--wrap > code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.kettu-sd .kettu-sd__text {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--strong);
+  text-align: left;
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure > svg {
+  color: var(--muted);
+  rotate: -90deg;
+  transition: rotate 200ms var(--ease);
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure[data-panel-open] > svg {
+  rotate: 0deg;
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure__body > .ui-sg-card {
+  margin-top: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-env {
+  margin-top: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-env__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-pathline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+:is(.kettu-settings, .kettu-sd) .k-place {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-place__after {
+  flex: none;
+}
+
+/* MCP servers */
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge[data-tone='danger'] {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-skel.k-skel--mark {
+  height: 24px;
+  border-radius: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-device {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-device > svg {
+  width: 20px;
+  height: 20px;
+}
+:is(.kettu-settings, .kettu-sd) .k-device--large > svg {
+  width: 28px;
+  height: 28px;
+}
+.kettu-sd .kettu-sd__address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.kettu-sd .kettu-sd__address + .kettu-sd__address {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__address > .k-mono {
+  flex: 1;
+}
+.kettu-sd .kettu-sd__inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kettu-sd .kettu-sd__tabs {
+  display: flex;
+}
+.kettu-sd .kettu-sd__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.kettu-sd .k-inset > b {
+  display: block;
+  font-weight: 500;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 6px 0 0;
+  list-style: none;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__step-mark {
+  display: grid;
+  flex: none;
+  width: 16px;
+  height: 18px;
+  place-items: center;
+}
+.kettu-sd .kettu-sd__step[data-state='done'] .kettu-sd__step-mark {
+  color: var(--success);
+}
+.kettu-sd .kettu-sd__step[data-state='failed'] .kettu-sd__step-mark {
+  color: var(--danger);
+}
+.kettu-sd .kettu-sd__step[data-state='pending'] {
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__step-ring {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.kettu-sd .kettu-sd__step-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.kettu-sd .kettu-sd__output {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--frame);
+  font-family: var(--code-face);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.kettu-sd .kettu-sd__inline > .kettu-sd__input {
+  flex: 1;
+}
+
+/* Remote access */
+:is(.kettu-settings, .kettu-sd) .ui-sg-label > .k-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-status[data-failed] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card .ui-as-empty[data-bare] {
+  margin: 0;
+  padding: 36px 24px 32px;
+}
+:is(.kettu-settings, .kettu-sd) .k-activities {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-row.k-activity {
+  justify-content: flex-start;
+  gap: 16px;
+  min-height: 40px;
+  font-size: 13px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-activity__when {
+  flex: none;
+  width: 112px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-activity__what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-activity__where {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-title-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-title-edit > .ui-ss-badge {
+  font-family: var(--font-sans, inherit);
+}
+:is(.kettu-settings, .kettu-sd) .k-title-input {
+  min-width: 32px;
+  max-width: 100%;
+  margin: 0 -2px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--line-strong);
+  font: inherit;
+  color: inherit;
+  outline: none;
+  field-sizing: content;
+}
+:is(.kettu-settings, .kettu-sd) .k-title-input:focus-visible {
+  box-shadow: inset 0 -1.5px 0 var(--switch-on);
+}
+:is(.kettu-settings, .kettu-sd) .k-title-error {
+  display: block;
+  margin-top: 4px;
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+:is(.kettu-settings, .kettu-sd) .k-block-note {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-input.k-mono {
+  font-family: var(--code-face);
+  font-size: 12.5px;
+}
+.kettu-sd .kettu-sd__pair {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px 4px;
+}
+.kettu-sd .kettu-sd__qr {
+  position: relative;
+  flex: none;
+  width: 224px;
+  height: 224px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--canvas);
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.kettu-sd .kettu-sd__qr-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--canvas-ink) 60%, transparent);
+}
+.kettu-sd .kettu-sd__pair-text {
+  display: flex;
+  max-width: 360px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+  text-align: center;
+  text-wrap: pretty;
+}
+.kettu-sd .kettu-sd__end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__end > svg {
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__end[data-tone='danger'] > svg {
+  color: var(--danger);
+}
+.kettu-sd .kettu-sd__linkbox {
+  width: 100%;
+}
+.kettu-sd .kettu-sd__link.ui-sg-input {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  line-height: 32px;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-sd .kettu-sd__link[data-disabled] {
+  color: var(--faint);
+}
+.kettu-sd .kettu-sd__waiting {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__waiting-text {
+  flex: 1;
+}
+
+/* Sharing */
+.ui-ss-select.k-select.k-select--full {
+  width: 100%;
+}
+:is(.kettu-settings, .kettu-sd) .k-block-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: 12px;
+  line-height: 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-link.k-mono {
+  font-family: var(--code-face);
+  font-size: 11.5px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card.k-pending {
+  margin-top: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice.k-pending {
+  margin-top: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-state[data-tone='danger'] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-dot[data-tone='warn'] {
+  background: var(--warning);
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-label small .k-mono {
+  font-size: 11.5px;
+}

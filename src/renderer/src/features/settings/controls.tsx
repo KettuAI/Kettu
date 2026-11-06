@@ -1,43 +1,51 @@
-import { useState, type ReactNode } from 'react'
-import { FolderIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { IconAction } from '@renderer/components/copy-action'
-import { SegmentedControl } from '@renderer/components/segmented-control'
+import { useState, type ComponentProps, type ReactNode, type Ref, type RefObject } from 'react'
+import type { IconSvgElement } from '@hugeicons/react'
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/components/ui/select'
-import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
-import { Switch } from '@renderer/components/ui/switch'
+  ArrowDown01Icon,
+  Cancel01Icon,
+  Copy01Icon,
+  FolderOpenIcon,
+  Search01Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
+import { useTranslation } from 'react-i18next'
+import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
+import { Button, css as buttonCss, type ButtonProps } from '@renderer/components/affect/button'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
+import { css as securityCss } from '@renderer/components/affect/settings-security'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage } from '@renderer/lib/host'
+import { LIMIT_FILL, LIMIT_TEXT, type LimitLevel } from '@renderer/lib/plan-limit'
 import { fileManagerName, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useSettingsStore } from '@renderer/stores/settings'
 
-export { CopyAction, IconAction } from '@renderer/components/copy-action'
-
 /** The width of Settings' confirmations, whose sentences run longer than most. */
 export const CONFIRM = 'data-[size=default]:sm:max-w-105'
 
 /** A field's label above it, as the Cloudflare account and a custom proxy take them. */
-export const FIELD_LABEL = 'flex min-w-0 flex-col gap-1.5 text-xs font-medium text-secondary'
+export const FIELD_LABEL = 'k-field'
 
-export function ControlError({ error }: { error: string | null }) {
+export function ControlError({ error, wrap }: { error: string | null; wrap?: boolean }) {
   if (!error) return null
   return (
-    <span className="max-w-48 truncate text-xs text-danger" title={error}>
+    <span role="alert" className="k-error" data-wrap={wrap || undefined} title={error}>
       {error}
     </span>
   )
 }
 
+/** The settings' own sheet, for a control drawn outside the Settings modal, as in the thread. */
+function SecurityStyles() {
+  return (
+    <style href="ui-settings-security" precedence="default">
+      {securityCss}
+    </style>
+  )
+}
+
+/** A switch as affectUI's settings draw it: the blue square one. */
 export function SettingSwitch({
   label,
   checked,
@@ -50,47 +58,129 @@ export function SettingSwitch({
   disabled?: boolean
 }) {
   return (
-    <Switch
-      aria-label={label}
-      checked={checked}
-      disabled={disabled}
-      onCheckedChange={(value) => onChange(value)}
-    />
+    <>
+      <SecurityStyles />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
+        className="ui-ss-switch"
+        onClick={() => onChange(!checked)}
+      />
+    </>
   )
 }
 
+/** affectUI's Segmented Control at `lg`, 32 px like the selects beside it. */
 export function Segmented<T extends string | number>({
   label,
   value,
   options,
   onChange,
+  disabled,
 }: {
   label: string
   value: T
-  options: { value: T; label: string }[]
+  options: { value: T; label: string; disabled?: boolean }[]
   onChange: (value: T) => void
+  disabled?: boolean
 }) {
   return (
     <SegmentedControl
+      size="lg"
+      variant="tray"
       aria-label={label}
-      className="h-8 rounded-segments"
-      itemClassName="h-7 rounded-segment px-3 text-control font-medium"
-      thumbClassName={() => 'rounded-segment'}
+      disabled={disabled}
       value={String(value)}
-      segments={options.map((o) => ({ value: String(o.value), label: o.label }))}
+      options={options.map((o) => ({
+        value: String(o.value),
+        label: o.label,
+        disabled: o.disabled,
+      }))}
       onChange={(next) => {
         const picked = options.find((o) => String(o.value) === next)
-        if (picked) onChange(picked.value)
+        if (picked && picked.value !== value) onChange(picked.value)
       }}
     />
   )
 }
 
-/** The buttons in a row: 30 px, as a row's controls are. */
-export const ROW_BUTTON =
-  "h-7.5 gap-1.5 rounded-xl px-3 text-control [&_svg:not([class*='size-'])]:size-3.5"
+/** A row's button: affectUI's small Button, white with a hairline unless `variant` says otherwise. */
+export function SetButton({ variant = 'secondary', size = 'sm', ...props }: ButtonProps) {
+  return <Button variant={variant} size={size} {...props} />
+}
 
-/** A state as a 20 px pill: neutral, or tinted by what it means. */
+/** A link that opens elsewhere, drawn as the row's button: affectUI's Button has no link form. */
+export function LinkButton({
+  href,
+  icon,
+  children,
+}: {
+  href: string
+  icon?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <>
+      <style href="ui-button-clean" precedence="default">
+        {buttonCss}
+      </style>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="ui-buttonc"
+        data-variant="secondary"
+        data-size="sm"
+        data-icon-left={icon ? '' : undefined}
+      >
+        {icon && (
+          <span className="ui-buttonc__icon" aria-hidden="true">
+            {icon}
+          </span>
+        )}
+        <span className="ui-buttonc__label">{children}</span>
+      </a>
+    </>
+  )
+}
+
+/** A destructive action, in red on a red hairline, as the settings' danger zone draws it. */
+export function DangerButton({
+  busy,
+  className,
+  children,
+  disabled,
+  ...props
+}: ComponentProps<'button'> & { busy?: boolean }) {
+  return (
+    <button
+      type="button"
+      className={cn('ui-sg-danger', className)}
+      aria-busy={busy || undefined}
+      disabled={disabled || busy}
+      {...props}
+    >
+      {busy && <Spin />}
+      {children}
+    </button>
+  )
+}
+
+/** The settings' small spinner. */
+export function Spin({ label }: { label?: string }) {
+  const { t } = useTranslation('common')
+  return <span role="status" aria-label={label ?? t('loading')} className="ui-ss-spinner" />
+}
+
+/** A loading line, as wide as `width`. */
+export function Skel({ width, className }: { width: number | string; className?: string }) {
+  return <span aria-hidden className={cn('k-skel', className)} style={{ width }} />
+}
+
+/** A state as a quiet badge: gray, green when it is fine, amber when it waits on the user. */
 export function Pill({
   tone = 'neutral',
   className,
@@ -101,26 +191,124 @@ export function Pill({
   children: ReactNode
 }) {
   return (
-    <Badge
-      variant={tone}
-      className={cn(
-        'rounded-tile border-0',
-        tone === 'neutral' && 'font-medium shadow-none',
-        className,
-      )}
+    <span
+      className={cn('ui-ss-badge', className)}
+      data-tone={tone === 'success' ? 'ok' : tone === 'neutral' ? undefined : 'warn'}
     >
       {children}
-    </Badge>
+    </span>
   )
 }
 
-/** A quiet button at a group heading's end, such as Check for updates. */
-export const GROUP_ACTION = `${ROW_BUTTON} text-secondary`
+/** A plan limit or a download as a 4 px bar and its percent, in the plan limits' level colors. */
+export function Meter({
+  value,
+  label,
+  level = 'ok',
+  text,
+  long,
+}: {
+  /** 0 to 100. */
+  value: number
+  /** The accessible name of the bar. */
+  label: string
+  level?: LimitLevel
+  /** The percent as shown; the rounded value otherwise. */
+  text?: string
+  long?: boolean
+}) {
+  return (
+    <span className="k-meter">
+      <span
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={Math.round(value)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className={cn('k-meter__bar', long && 'k-meter__bar--long')}
+      >
+        <span className={LIMIT_FILL[level]} style={{ width: `${Math.min(100, value)}%` }} />
+      </span>
+      <span className={cn('k-num k-meter__value', level !== 'ok' && LIMIT_TEXT[level])}>
+        {text ?? `${Math.round(value)}%`}
+      </span>
+    </span>
+  )
+}
 
-/** A field in a row, as wide as the board draws each, with the row's 13.5 px text. */
-export const ROW_FIELD = 'h-8 rounded-xl px-2.75 text-lede'
+/** A command as it runs, in the code face on the settings' gray, which can be copied. */
+export function CommandLine({ command, label }: { command: string; label?: string }) {
+  const { t } = useTranslation('common')
+  return (
+    <span className="k-cmd">
+      <code data-selectable="" title={command}>
+        {command}
+      </code>
+      <CopyAction text={command} label={label ?? t('actions.copyCommand')} />
+    </span>
+  )
+}
 
-/** A choice from a list, framed as a field, 200 px wide unless `className` says otherwise. */
+/** A field in a row, in the settings' look. */
+export function SetInput({ className, ...props }: ComponentProps<'input'>) {
+  return <input className={cn('ui-sg-input k-input', className)} {...props} />
+}
+
+/** A search field as the settings screens draw one; Esc clears it, then leaves it. */
+export function FindField({
+  value,
+  onChange,
+  label,
+  clearLabel,
+  inputRef,
+  className,
+  autoFocus,
+}: {
+  value: string
+  onChange: (value: string) => void
+  /** The placeholder and the field's name. */
+  label: string
+  clearLabel: string
+  inputRef?: RefObject<HTMLInputElement | null>
+  className?: string
+  autoFocus?: boolean
+}) {
+  return (
+    <label className={cn('ui-sm-search k-find', className)}>
+      <Icon icon={Search01Icon} size={14} />
+      <input
+        ref={inputRef}
+        value={value}
+        autoFocus={autoFocus}
+        autoComplete="off"
+        spellCheck={false}
+        placeholder={label}
+        aria-label={label}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || event.nativeEvent.isComposing) return
+          event.stopPropagation()
+          if (value) onChange('')
+          else event.currentTarget.blur()
+        }}
+      />
+      {value && (
+        <button
+          type="button"
+          aria-label={clearLabel}
+          onClick={() => {
+            onChange('')
+            inputRef?.current?.focus()
+          }}
+        >
+          <Icon icon={Cancel01Icon} size={10} />
+        </button>
+      )}
+    </label>
+  )
+}
+
+/** A choice from a list on the shell's menu, framed as a field, 210 px wide unless `className` says otherwise. */
 export function SettingSelect<T extends string>({
   label,
   value,
@@ -128,6 +316,7 @@ export function SettingSelect<T extends string>({
   onChange,
   disabled,
   className,
+  lead,
 }: {
   label: string
   value: T
@@ -135,47 +324,97 @@ export function SettingSelect<T extends string>({
   onChange: (value: T) => void
   disabled?: boolean
   className?: string
+  /** Shown before the value when the chosen option has no icon, as Language's globe. */
+  lead?: ReactNode
+}) {
+  const chosen = options.find((o) => o.value === value)
+  const mark = chosen?.icon ?? lead
+  return (
+    <>
+      <SecurityStyles />
+      <Dropdown
+        align="end"
+        items={options.map((o) => ({
+          label: o.label,
+          logo: o.icon,
+          description: o.hint,
+          checked: o.value === value,
+          disabled: o.disabled,
+          onSelect: () => {
+            if (o.value !== value) onChange(o.value)
+          },
+        }))}
+        trigger={({ open, toggle }) => (
+          <button
+            type="button"
+            className={cn('ui-ss-select k-select', className)}
+            aria-label={label}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            disabled={disabled}
+            onClick={toggle}
+          >
+            {mark && <span className="k-select__lead">{mark}</span>}
+            <span className="k-select__value">{chosen?.label}</span>
+            <Icon icon={ArrowDown01Icon} size={14} />
+          </button>
+        )}
+      />
+    </>
+  )
+}
+
+/** An icon-only quiet button, named by its tooltip and its accessible name. */
+export function IconAction({
+  label,
+  icon,
+  onClick,
+  disabled,
+  busy,
+  ref,
+}: {
+  label: string
+  icon: IconSvgElement
+  onClick: () => void
+  disabled?: boolean
+  busy?: boolean
+  ref?: Ref<HTMLButtonElement>
 }) {
   return (
-    <Select
-      value={value}
-      items={options}
-      disabled={disabled}
-      onValueChange={(next) => {
-        if (next !== null && next !== value) onChange(next as T)
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            ref={ref}
+            variant="ghost"
+            size="sm"
+            aria-label={label}
+            loading={busy}
+            disabled={disabled}
+            onClick={onClick}
+            icon={<Icon icon={icon} size={14} />}
+          />
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/** Copies `text`; the icon turns into a check for a moment, which is the confirmation. */
+export function CopyAction({ text, label }: { text: string | (() => string); label: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <IconAction
+      label={label}
+      icon={copied ? Tick02Icon : Copy01Icon}
+      onClick={() => {
+        void navigator.clipboard.writeText(typeof text === 'function' ? text() : text).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        })
       }}
-    >
-      <SelectTrigger
-        aria-label={label}
-        className={cn(
-          'h-8 w-50 shrink-0 gap-2 rounded-xl pr-2.5 pl-3 text-lede *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate [&>svg]:size-3.25 [&>svg]:text-tertiary',
-          className,
-        )}
-      >
-        <SelectValue>
-          {(current: T) => {
-            const chosen = options.find((o) => o.value === current)
-            return (
-              <>
-                {chosen?.icon}
-                {chosen?.label}
-              </>
-            )
-          }}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent align="end">
-        <SelectGroup>
-          {options.map((o) => (
-            <SelectItem key={o.value} value={o.value} disabled={o.disabled}>
-              {o.icon}
-              {o.label}
-              {o.hint && <span className="text-tertiary">{o.hint}</span>}
-            </SelectItem>
-          ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
+    />
   )
 }
 
@@ -194,19 +433,18 @@ export function RevealAction({ path }: { path: string }) {
       <ControlError error={error} />
       <IconAction
         label={t('agents.showIn', { name: fileManagerName() })}
+        icon={FolderOpenIcon}
         onClick={() => {
           setError(null)
           window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
         }}
-      >
-        <FolderIcon />
-      </IconAction>
+      />
     </>
   )
 }
 
-/** Show in Finder as a row's text button, quiet unless `outline`, where the path is the row's line. */
-export function RevealButton({ path, outline }: { path: string; outline?: boolean }) {
+/** Show in Finder as a row's button, with the folder's icon. */
+export function RevealButton({ path }: { path: string; outline?: boolean }) {
   const { t } = useTranslation('settings')
   const { hostId } = useHostScope()
   const [error, setError] = useState<string | null>(null)
@@ -214,16 +452,15 @@ export function RevealButton({ path, outline }: { path: string; outline?: boolea
   return (
     <>
       <ControlError error={error} />
-      <Button
-        variant={outline ? 'outline' : 'ghost'}
-        className={outline ? ROW_BUTTON : GROUP_ACTION}
+      <SetButton
+        icon={<Icon icon={FolderOpenIcon} size={14} />}
         onClick={() => {
           setError(null)
           window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
         }}
       >
         {t('agents.showIn', { name: fileManagerName() })}
-      </Button>
+      </SetButton>
     </>
   )
 }
@@ -243,24 +480,22 @@ export function PathText({ path, missing }: { path: string; missing?: boolean })
     <span
       title={path}
       data-selectable=""
-      className="flex min-w-0 text-xs leading-normal whitespace-nowrap text-tertiary"
+      className="k-path flex min-w-0 text-xs leading-normal whitespace-nowrap"
     >
       {parts.length > 0 && (
         // Right to left puts the ellipsis at the start; the marks keep the slashes in place.
         <span className="min-w-0 truncate [direction:rtl]">
-          {'\u200E'}
+          {'‎'}
           {parts.map((part, i) => (
             <span key={i}>
               {part}
               {slash}
             </span>
           ))}
-          {'\u200E'}
+          {'‎'}
         </span>
       )}
-      <span className={cn('max-w-full shrink-0 truncate', !missing && 'font-medium text-primary')}>
-        {name}
-      </span>
+      <span className={cn('max-w-full shrink-0 truncate', !missing && 'k-path__name')}>{name}</span>
     </span>
   )
 }

@@ -1,36 +1,31 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  ArchiveIcon,
-  BellIcon,
-  BotIcon,
-  ChartPieIcon,
-  CodeIcon,
-  ContrastIcon,
+  AiBrain01Icon,
+  Analytics01Icon,
+  Archive01Icon,
+  DashboardSquare02Icon,
   GitBranchIcon,
-  GlobeIcon,
-  InfoIcon,
-  MonitorSmartphoneIcon,
-  PlugIcon,
-  ServerIcon,
-  Settings2Icon,
-  ShapesIcon,
-  ShareIcon,
-  SquareTerminalIcon,
-  UserRoundIcon,
-} from 'lucide-react'
+  Globe02Icon,
+  InformationCircleIcon,
+  Notification01Icon,
+  PackageIcon,
+  PaintBoardIcon,
+  PlugSocketIcon,
+  ServerStack02Icon,
+  Setting07Icon,
+  Settings02Icon,
+  Share08Icon,
+  ComputerTerminal01Icon,
+  UserCircleIcon,
+  Wifi01Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { originLabel } from '@shared/browser'
 import type { AgentId, HarnessId } from '@shared/thread'
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
@@ -72,11 +67,11 @@ import {
 import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
 import { ConsentRow, ConsentsState } from './artifacts-section'
-import { GroupLabel, GroupNote, RowGroup, RowShell } from './rows'
+import { Group, GroupNote } from './rows'
 import { SettingSwitch } from './controls'
 import { HostPage } from './host-page'
 import { hostLine, webHostLine } from './host-text'
-import { HostRow, HostsHeader, HostsLoading, HostsNote, SelfRow } from './hosts-section'
+import { AddHostButton, HostRow, HostsLoading, HostsNote, SelfRow } from './hosts-section'
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
 import {
@@ -85,7 +80,7 @@ import {
   HostNameField,
   NoDevices,
   PlainKeyNote,
-  RemoteHeader,
+  RemoteSwitchRow,
   ResetRemote,
   StaleNote,
   TerminalSwitch,
@@ -125,7 +120,6 @@ import {
   RemoveAll,
   SendKey,
   ShellPicker,
-  TestNotification,
   WebNotificationsNote,
   TextSize,
   Zoom,
@@ -165,7 +159,7 @@ export function useGeneralSection(): SectionDef {
     id: 'general',
     title: t('sections.general'),
     description: t('pages.general'),
-    icon: Settings2Icon,
+    icon: Settings02Icon,
     rows: [
       {
         id: 'language',
@@ -281,14 +275,17 @@ export function useAppearanceSection(): SectionDef {
     id: 'appearance',
     title: t('sections.appearance'),
     description: t('pages.appearance'),
-    icon: ContrastIcon,
+    icon: PaintBoardIcon,
     rows: [
       {
         id: 'theme',
         name: t('appearance.theme.name'),
         english: en('appearance.theme.name'),
         keywords: t('appearance.theme.keywords'),
-        group: group('theme', t('appearance.groups.theme'), { actions: <ColorMode /> }),
+        group: group('theme', t('appearance.groups.theme'), {
+          actions: <ColorMode />,
+          plain: true,
+        }),
         layout: 'custom',
         render: () => <ThemeTiles />,
       },
@@ -346,9 +343,16 @@ export function useNotificationsSection(): SectionDef {
       name: t('notifications.groups.preview'),
       english: en('notifications.groups.preview'),
       description: t('notifications.test'),
+      // The preview stands on the page with its test button, as a notification would.
       group: group('preview', t('notifications.groups.preview'), {
-        actions: <TestNotification />,
-        ...(isWeb && { note: <WebNotificationsNote /> }),
+        unlabeled: true,
+        plain: true,
+        note: (
+          <>
+            <GroupNote>{t(isWeb ? 'notifications.footerWeb' : 'notifications.footer')}</GroupNote>
+            {isWeb && <WebNotificationsNote />}
+          </>
+        ),
       }),
       layout: 'custom',
       render: () => <NotificationPreview />,
@@ -418,7 +422,7 @@ export function useNotificationsSection(): SectionDef {
     id: 'notifications',
     title: t('sections.notifications'),
     description: t('pages.notifications', onHost),
-    icon: BellIcon,
+    icon: Notification01Icon,
     rows,
   }
 }
@@ -460,7 +464,7 @@ export function useAccountSection(): SectionDef {
     id: 'account',
     title: t('sections.account'),
     description: t('pages.account'),
-    icon: UserRoundIcon,
+    icon: UserCircleIcon,
     rows,
     footer: <AccountNote />,
   }
@@ -528,7 +532,7 @@ export function useUsageSection(): SectionDef {
     id: 'usage',
     title: t('settings.title'),
     description: t('settings.description'),
-    icon: ChartPieIcon,
+    icon: Analytics01Icon,
     rows,
   }
 }
@@ -569,7 +573,7 @@ export function useAgentsSection(): SectionDef {
     id: 'agents',
     title: t('sections.agents'),
     description: t('pages.agents', onHost),
-    icon: BotIcon,
+    icon: AiBrain01Icon,
     rows:
       agents.length === 0
         ? [
@@ -631,7 +635,7 @@ export function useHarnessesSection(): SectionDef {
     id: 'harnesses',
     title: t('sections.harnesses'),
     description: t('pages.harnesses'),
-    icon: SquareTerminalIcon,
+    icon: PackageIcon,
     rows: [
       ...installed.map((h) => row(h, groups.installed)),
       ...missing.map((h) => row(h, groups.missing)),
@@ -661,7 +665,7 @@ export function useTerminalSection(): SectionDef {
     id: 'terminal',
     title: t('sections.terminal'),
     description: t('pages.terminal'),
-    icon: SquareTerminalIcon,
+    icon: ComputerTerminal01Icon,
     rows: [
       {
         id: 'shell',
@@ -816,7 +820,7 @@ export function useBrowserSection(): SectionDef {
     title: t('sections.browser'),
     // The web client shows only the links rows: the built-in browser runs in the desktop app.
     description: isWeb ? t('pages.browserWeb') : t('pages.browser'),
-    icon: GlobeIcon,
+    icon: Globe02Icon,
     rows,
   }
 }
@@ -831,7 +835,7 @@ export function useAdvancedSection(): SectionDef {
     id: 'advanced',
     title: t('sections.advanced'),
     description: t('pages.advanced', onHost),
-    icon: CodeIcon,
+    icon: Setting07Icon,
     rows: [
       {
         id: 'proxy',
@@ -910,7 +914,7 @@ export function useAboutSection(): SectionDef {
     id: 'about',
     title: t('sections.about'),
     description: t('pages.about'),
-    icon: InfoIcon,
+    icon: InformationCircleIcon,
     hero: <AboutHero info={info} />,
     rows: [
       {
@@ -985,7 +989,7 @@ export function useMcpSection(): SectionDef {
     id: 'mcp',
     title: t('sections.mcp'),
     description: t('pages.mcp'),
-    icon: PlugIcon,
+    icon: PlugSocketIcon,
     // A read that failed shows its notice in place of both groups.
     rows: error ? [] : rows,
     itemPage: (item) => <McpServerPage name={item} />,
@@ -1009,7 +1013,7 @@ export function useArchivedSection(): SectionDef {
     id: 'archived',
     title: t('sections.archived'),
     description: t('pages.archived'),
-    icon: ArchiveIcon,
+    icon: Archive01Icon,
     rows: archived.map((summary) => ({
       id: summary.id,
       name: sessionTitle(summary),
@@ -1021,15 +1025,13 @@ export function useArchivedSection(): SectionDef {
       render: () => <ArchivedRow summary={summary} where={where(summary)} />,
     })),
     footer: archived.length === 0 && (
-      <Empty className="px-6 py-14">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <ArchiveIcon />
-          </EmptyMedia>
-          <EmptyTitle>{t('archived.emptyTitle')}</EmptyTitle>
-          <EmptyDescription>{t('archived.emptyHint')}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <div className="ui-as-empty">
+        <span className="ui-as-empty__icon">
+          <Icon icon={Archive01Icon} size={18} />
+        </span>
+        <b className="ui-as-empty__title">{t('archived.emptyTitle')}</b>
+        <p className="ui-as-empty__text">{t('archived.emptyHint')}</p>
+      </div>
     ),
   }
 }
@@ -1048,7 +1050,7 @@ function useWebHostsSection(): SectionDef {
     id: 'hosts',
     title: t('sections.hosts'),
     description: t('pages.hostsWeb'),
-    icon: ServerIcon,
+    icon: ServerStack02Icon,
     rows: [
       {
         id: 'hosts',
@@ -1106,7 +1108,10 @@ function useDesktopHostsSection(): SectionDef {
   useEffect(() => {
     void loadHosts()
   }, [])
-  const list = group('hosts', t('sections.hosts'), { unlabeled: true, note: <HostsNote /> })
+  const list = group('hosts', t('sections.hosts'), {
+    actions: <AddHostButton />,
+    note: <HostsNote />,
+  })
   const hosts = status?.hosts
   const rows: RowDef[] = [
     {
@@ -1158,8 +1163,7 @@ function useDesktopHostsSection(): SectionDef {
     id: 'hosts',
     title: t('sections.hosts'),
     description: t('pages.hosts'),
-    icon: ServerIcon,
-    hero: <HostsHeader id="settings-hosts" />,
+    icon: ServerStack02Icon,
     rows,
     itemPage: (id: string) => <HostPage id={id} />,
   }
@@ -1173,21 +1177,25 @@ export function useRemoteSection(): SectionDef {
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
   const status = useRemoteStore((s) => s.status)
   const resettable = useHostHas('remoteReset')
+  const state = group('status', t('remote.switch'), {
+    unlabeled: true,
+    note: enabled && <PlainKeyNote />,
+  })
   const switchRow: RowDef = {
     id: 'remote',
     name: t('remote.switch'),
     english: en('remote.switch'),
     description: t('pages.remote', onHost),
     keywords: t('remote.keywords'),
-    searchOnly: true,
-    render: () => null,
+    group: state,
+    layout: 'custom',
+    render: () => <RemoteSwitchRow />,
   }
   const base = {
     id: 'remote' as const,
     title: t('sections.remote'),
     description: t('pages.remote', onHost),
-    icon: MonitorSmartphoneIcon,
-    hero: <RemoteHeader id="settings-remote" />,
+    icon: Wifi01Icon,
     itemPage: (id: string) => <DevicePage id={id} />,
   }
   const devices = status?.devices ?? []
@@ -1229,10 +1237,6 @@ export function useRemoteSection(): SectionDef {
   // Off, the devices are still listed to rename and remove; only adding one waits.
   if (!enabled)
     return { ...base, rows: devices.length > 0 ? [switchRow, ...deviceRows] : [switchRow] }
-  const state = group('status', t('remote.switch'), {
-    unlabeled: true,
-    note: <PlainKeyNote />,
-  })
   const direct = group('direct', t('remote.direct.group'))
   const rows: RowDef[] = [
     switchRow,
@@ -1338,7 +1342,7 @@ export function useSharingSection(): SectionDef {
     id: 'sharing' as const,
     title: t('sections.sharing'),
     description: t('pages.sharing'),
-    icon: ShareIcon,
+    icon: Share08Icon,
   }
   // A host that publishes nothing, as the daemon, says so in place of the account and the pages.
   if (shares !== true) {
@@ -1396,14 +1400,9 @@ export function useSharingSection(): SectionDef {
     ...base,
     rows,
     footer: pages.length === 0 && (
-      <section aria-label={t('sharing.groups.published')} className="flex flex-col">
-        <GroupLabel group={{ id: 'published', label: t('sharing.groups.published') }} />
-        <RowGroup>
-          <RowShell>
-            <p className="py-3.75 text-group text-tertiary">{t('sharing.published.empty')}</p>
-          </RowShell>
-        </RowGroup>
-      </section>
+      <Group label={t('sharing.groups.published')}>
+        <p className="ui-ss-empty">{t('sharing.published.empty')}</p>
+      </Group>
     ),
   }
 }
@@ -1453,7 +1452,7 @@ export function useArtifactsSection(): SectionDef {
     id: 'artifacts',
     title: t('sections.artifacts'),
     description: t('pages.artifacts'),
-    icon: ShapesIcon,
+    icon: DashboardSquare02Icon,
     rows: (rows ?? []).map((row) => ({
       id: `consent-${row.artifactId}`,
       name: row.title,

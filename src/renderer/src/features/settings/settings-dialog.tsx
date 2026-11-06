@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import {
   DialogClose,
   DialogContent,
@@ -11,8 +11,9 @@ import {
 import { cn } from '@renderer/lib/utils'
 
 /**
- * A dialog over Settings: 132 px from the top of the window rather than centred, so a step that
- * grows it grows downward, with its title and close at the top and its actions at the end.
+ * A dialog over Settings, on the settings' panel: 132 px from the top of the window rather than
+ * centred, so a step that grows it grows downward, with its title and close at the top and its
+ * actions at the end. It carries .ui-as, so the settings screens' parts draw inside it.
  */
 export function SettingsDialogContent({
   className,
@@ -24,7 +25,7 @@ export function SettingsDialogContent({
       showCloseButton={false}
       forceOverlay
       className={cn(
-        'top-33 max-h-[calc(100%-164px)] [--segment-thumb:var(--bg-surface)] max-w-[calc(100%-64px)] translate-y-0 grid-cols-1 gap-0 overflow-hidden overflow-y-auto rounded-dialog p-0 data-open:slide-in-from-bottom-1 data-open:zoom-in-100 sm:max-w-130',
+        'ui-as kettu-sd top-33 max-h-[calc(100%-164px)] max-w-[calc(100%-64px)] translate-y-0 grid-cols-1 gap-0 overflow-hidden overflow-y-auto p-0 data-open:slide-in-from-bottom-1 data-open:zoom-in-100 sm:max-w-130',
         className,
       )}
       {...props}
@@ -45,27 +46,18 @@ export function SettingsDialogHeader({
 }) {
   const { t } = useTranslation('common')
   return (
-    <div className="px-6 pt-5.5 pb-1">
-      <div className="flex items-center gap-2">
-        <DialogTitle className="flex-1 text-sheet-title">{title}</DialogTitle>
+    <div className="kettu-sd__head">
+      <div className="kettu-sd__titles">
+        <DialogTitle className="kettu-sd__title">{title}</DialogTitle>
         <DialogClose
           render={
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7.5 rounded-segment text-tertiary"
-              aria-label={t('actions.close')}
-            />
+            <button type="button" className="ui-as-icon-btn" aria-label={t('actions.close')} />
           }
         >
-          <XIcon className="size-4" />
+          <Icon icon={Cancel01Icon} size={16} />
         </DialogClose>
       </div>
-      {children && (
-        <DialogDescription className="mt-1.5 text-lede leading-normal text-tertiary">
-          {children}
-        </DialogDescription>
-      )}
+      {children && <DialogDescription className="kettu-sd__desc">{children}</DialogDescription>}
     </div>
   )
 }
@@ -78,11 +70,7 @@ export function SettingsDialogBody({
   className?: string
   children: ReactNode
 }) {
-  return (
-    <div className={cn('flex min-w-0 flex-col gap-3.5 px-6 pt-3.5 pb-1', className)}>
-      {children}
-    </div>
-  )
+  return <div className={cn(DIALOG_BODY, className)}>{children}</div>
 }
 
 /** The actions at the dialog's end, on the right. */
@@ -95,14 +83,14 @@ export function SettingsDialogFooter({
   start?: ReactNode
 }) {
   return (
-    <div className="flex items-center gap-2 px-6 pt-4 pb-5">
-      <div className="flex min-w-0 flex-1 items-center gap-2">{start}</div>
+    <div className={DIALOG_FOOTER}>
+      <div className="kettu-sd__start">{start}</div>
       {children}
     </div>
   )
 }
 
-/** A field's label over it, in the 13 px medium role. */
+/** A field's label over it, and a hint under it. */
 export function SettingsField({
   label,
   htmlFor,
@@ -115,28 +103,25 @@ export function SettingsField({
   children: ReactNode
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1.75">
-      <label htmlFor={htmlFor} className="text-control leading-[normal] font-medium text-primary">
-        {label}
-      </label>
+    <div className="kettu-sd__field">
+      <label htmlFor={htmlFor}>{label}</label>
       {children}
-      {hint && <span className="text-hint leading-[normal] text-tertiary">{hint}</span>}
+      {hint && <span className="kettu-sd__hint">{hint}</span>}
     </div>
   )
 }
 
-/** An option tile as Settings' dialogs draw it: a raised gray once chosen, not the fox tint. */
-export const SETTINGS_TILE =
-  'gap-2.5 rounded-2xl px-3 py-2.75 text-lede shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] data-checked:bg-subtle data-checked:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] [&>[aria-hidden]]:mt-0.5'
+/** An option tile in Settings' dialogs: a hairline, blue once chosen. */
+export const SETTINGS_TILE = 'kettu-sd__tile'
 
 /** The body's frame, for a dialog that lays its body out itself. */
-export const DIALOG_BODY = 'flex flex-col gap-3.5 px-6 pt-3.5 pb-1'
+export const DIALOG_BODY = 'kettu-sd__body'
 
-/** The footer's frame on the foundation's `DialogFooter`, for a dialog that lays it out itself. */
-export const DIALOG_FOOTER = 'flex-row items-center gap-2 px-6 pt-4 pb-5'
+/** The footer's frame, for a dialog that lays it out itself. */
+export const DIALOG_FOOTER = 'kettu-sd__foot'
 
-/** A 32 px field with the dialog's 12.5 px code face, as an address or a key takes it. */
-export const DIALOG_MONO_FIELD = 'h-8 rounded-xl px-2.75 font-mono text-hint md:text-hint'
+/** A 32 px field in the code face, as an address or a key takes it. */
+export const DIALOG_MONO_FIELD = 'ui-sg-input kettu-sd__input kettu-sd__input--mono'
 
-/** A 32 px field in the dialog's 13.5 px text. */
-export const DIALOG_FIELD = 'h-8 rounded-xl px-2.75 text-lede md:text-lede'
+/** A 32 px field in the dialog's text. */
+export const DIALOG_FIELD = 'ui-sg-input kettu-sd__input'
