@@ -210,6 +210,33 @@
   background: var(--send-active) !important;
   box-shadow: none;
 }
+/* Send outside a composer, as a reply to a passage: the Chat Composer's button on its own. */
+.kettu-send:not(.ui-ccc .kettu-send) {
+  --ui-ccc-fill: var(--composer-chip-hover);
+  --ui-ccc-faint: var(--composer-faint);
+  --ui-ccc-solid: var(--composer-ink);
+  --ui-ccc-on-solid: var(--composer-card);
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ui-ccc-solid);
+  color: var(--ui-ccc-on-solid);
+  cursor: pointer;
+}
+.kettu-send:not(.ui-ccc .kettu-send):disabled {
+  background: var(--ui-ccc-fill);
+  color: var(--ui-ccc-faint);
+  cursor: default;
+}
+.kettu-send:not(.ui-ccc .kettu-send) svg {
+  width: 16px;
+  height: 16px;
+}
 .kettu-send-wrap {
   display: inline-flex;
   flex: none;
