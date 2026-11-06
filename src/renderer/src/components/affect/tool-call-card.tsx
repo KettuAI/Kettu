@@ -680,8 +680,9 @@ const css = /* css */ `
 /* The header and anything beside it at its end, outside the toggle */
 .ui-tcc__top { display: flex; align-items: center; min-width: 0; }
 .ui-tcc__top > .ui-tcc__head { flex: 1; min-width: 0; }
-.ui-tcc-group__top { display: flex; align-items: center; justify-self: start; max-width: 100%; min-width: 0; }
-.ui-tcc-group__top > .ui-tcc-group__head { min-width: 0; }
+/* The head's pull to the left moves to the row, so the row's fit-content width counts it */
+.ui-tcc-group__top { display: flex; align-items: center; justify-self: start; max-width: calc(100% + 6px); min-width: 0; margin-left: -6px; }
+.ui-tcc-group__top > .ui-tcc-group__head { min-width: 0; margin-left: 0; }
 .ui-tcc__trail { display: flex; flex: none; align-items: center; gap: 4px; padding: 0 10px 0 2px; }
 .ui-tcc__head[data-bodyless] { cursor: default; }
 .ui-tcc__head[data-bodyless] .ui-tcc__chevron { visibility: hidden; }
