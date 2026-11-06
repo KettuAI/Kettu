@@ -60,7 +60,7 @@ const ALWAYS_HIGHLIGHT = 'always' as unknown as boolean
 const keepFocus = (event: MouseEvent) => event.preventDefault()
 
 /** The list keeps one height, so the centered palette does not move as results change. */
-const LIST_HEIGHT = { height: 'min(400px, 52svh)', maxHeight: 'none' }
+const LIST_HEIGHT = { height: 'min(460px, 56svh)', maxHeight: 'none' }
 
 /** The command menu's own glyph size and stroke, for Lucide's icons. */
 const GLYPH = 'ui-cm__glyph'
@@ -77,7 +77,7 @@ export function SearchDialog() {
     <Dialog open={open} onOpenChange={showSearch}>
       <DialogContent
         showCloseButton={false}
-        className="gap-0 rounded-[20px] bg-transparent p-0 sm:max-w-[600px]"
+        className="gap-0 rounded-[20px] bg-transparent p-0 sm:max-w-[680px]"
       >
         <DialogTitle className="sr-only">{t('nav.search')}</DialogTitle>
         {open && <SearchPalette />}
@@ -172,7 +172,7 @@ function SearchPalette() {
   }
 
   return (
-    <div className="ui-cm">
+    <div className="kettu-search ui-cm">
       <style href="ui-command-menu" precedence="default">
         {commandMenuStyles}
       </style>
@@ -295,7 +295,7 @@ function ScopeTab({
       tabIndex={-1}
       onMouseDown={keepFocus}
       style={TAB_PADDING}
-      className="group/tab relative isolate flex h-7 shrink-0 items-center gap-1.5 rounded-tile"
+      className="group/tab relative isolate flex h-8 shrink-0 items-center gap-1.5 rounded-tile"
     >
       {active && (
         <motion.span
@@ -307,7 +307,7 @@ function ScopeTab({
       )}
       <span
         className={cn(
-          'text-control transition-colors duration-(--duration-fast)',
+          'ui-cm__tab transition-colors duration-(--duration-fast)',
           active
             ? 'font-medium text-(--ui-cm-ink)'
             : 'text-(--ui-cm-muted) group-hover/tab:text-(--ui-cm-ink)',
@@ -315,7 +315,7 @@ function ScopeTab({
       >
         {t(`search.scope.${scope}`)}
       </span>
-      {count > 0 && <span className="text-control text-(--ui-cm-faint) tabular-nums">{count}</span>}
+      {count > 0 && <span className="ui-cm__tab text-(--ui-cm-faint) tabular-nums">{count}</span>}
     </button>
   )
 }
@@ -448,12 +448,12 @@ function SearchRow({ entry, words }: { entry: SearchEntry; words: readonly strin
         </span>
       </span>
       {entry.meta && (
-        <span className="max-w-[46%] shrink-0 truncate text-hint text-(--ui-cm-muted)">
+        <span className="ui-cm__meta max-w-[46%] shrink-0 truncate text-(--ui-cm-muted)">
           <Marked text={entry.meta} words={words} />
         </span>
       )}
       {entry.trailing && (
-        <span className="shrink-0 text-hint text-(--ui-cm-muted) tabular-nums">
+        <span className="ui-cm__meta shrink-0 text-(--ui-cm-muted) tabular-nums">
           {entry.trailing}
         </span>
       )}
