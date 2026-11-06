@@ -11,7 +11,10 @@
     "allFiles": "All files",
     "findFile": "Find file",
     "openInEditor": "Open in editor",
-    "close": "Close panel"
+    "close": "Close panel",
+    "title": "Files",
+    "hideTree": "Hide files",
+    "showTree": "Show files"
   },
   "browser": {
     "empty": "No files in this project.",
@@ -106,7 +109,7 @@
     "file": "File",
     "mentionLine": "Mention line {{line}}",
     "mentionLines": "Mention lines {{start}}–{{end}}",
-    "selectHint": "Select lines to mention them",
+    "selectHint": "Click line numbers to mention them",
     "atCommit": "As this commit changed it",
     "noComposer": "Open a session to mention lines in",
     "hunks_one": "{{count}} hunk",

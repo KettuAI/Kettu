@@ -1,47 +1,43 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  ChevronRightIcon,
+  ArrowRight01Icon,
   CodeIcon,
-  FolderIcon,
-  Maximize2Icon,
-  Minimize2Icon,
-  SearchIcon,
-  XIcon,
-} from 'lucide-react'
+  File01Icon,
+  Folder01Icon,
+  FolderOpenIcon,
+  Search01Icon,
+  SidebarLeftIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useDefaultLayout } from 'react-resizable-panels'
+import { useDefaultLayout, usePanelRef } from 'react-resizable-panels'
 import type { FileSearch } from '@shared/files'
 import type { ChangeStatus } from '@shared/git'
-import { SegmentedControl } from '@renderer/components/segmented-control'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { LineCounts } from '@renderer/features/git/rows'
-import { PanelButton } from '@renderer/features/shell/panel-button'
-import { SHEET } from '@renderer/features/shell/sheet'
-import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
+import {
+  PaneEmpty,
+  PaneHead,
+  PaneIcon,
+  PaneSheet,
+  PaneSpinner,
+  PanelButton,
+} from '@renderer/features/shell/panel-button'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { formatShortcut, hasBand, isMod, isWeb } from '@renderer/lib/platform'
+import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
-import { cn } from '@renderer/lib/utils'
 import {
+  activateTab,
   activeFile,
+  closeDiff,
   loadFiles,
   openDiff,
   openFile,
@@ -49,12 +45,11 @@ import {
   useFilesStore,
 } from '@renderer/stores/files'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
-import { toggleSidePane, useViewStore } from '@renderer/stores/view'
 import { ChangeBadge } from './change-badge'
-import { useFileChanges, type FileChanges } from './changes'
+import { useFileChanges, type FileChanges, type ProjectChange } from './changes'
 import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
-import { FileTypeIcon } from './file-type-icon'
+import { FileTabs } from './file-tabs'
 import { UnsavedPrompt } from './unsaved-prompt'
 import {
   filterPaths,
@@ -72,6 +67,8 @@ const FILTER_LIMIT = 1000
 const SEARCH_DELAY_MS = 250
 // A single click in a list opens the preview tab, which the next single click replaces.
 const PREVIEW = { preview: true }
+// A change's row: its name, its folder under it.
+const CHANGE_ROW = 40
 
 /** Opens the project in the editor used last, else the first one found, else asks for an app. */
 async function openInEditor(path: string): Promise<void> {
@@ -81,7 +78,10 @@ async function openInEditor(path: string): Promise<void> {
   else await window.kettu.editors.choose(path)
 }
 
-/** The side panel's Files pane: the changes or the project's files, beside the one that is open. */
+/**
+ * The side panel's Files pane: the changes or the project's files, beside the open files. Its head
+ * switches between Changes and All files, or holds the filter while one is typed.
+ */
 export default function FilesPanel({
   projectPath,
   panel,
@@ -93,7 +93,6 @@ export default function FilesPanel({
   maximized: boolean
 }) {
   const { t } = useTranslation(['files', 'common'])
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const tabs = useFilesStore((s) => s.open[projectPath] ?? null)
   const open = activeFile(tabs)
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
@@ -108,6 +107,8 @@ export default function FilesPanel({
   const [chosenMode, setMode] = useState<'changes' | 'all' | null>(null)
   const mode = !isRepo || searching ? 'all' : (chosenMode ?? (changed > 0 ? 'changes' : 'all'))
   const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
+  const tree = usePanelRef()
+  const [treeShown, setTreeShown] = useState(true)
   // A folder with no files yet, as a new scratch session's, has nothing to list or open, so the
   // pane says so once, in its middle, instead of in each half.
   const bare = useFilesStore((s) => {
@@ -133,14 +134,15 @@ export default function FilesPanel({
     setSearching(false)
   }
 
+  // The tab the open files show: the active one, unless a change from elsewhere covers them.
+  const shownTab =
+    !diff || (diff.ref === null && diff.projectFile === open?.path) ? (open?.path ?? null) : null
+
   return (
-    <div
+    <PaneSheet
+      pane="files"
+      maximized={maximized}
       data-files-panel={projectPath}
-      className={cn(
-        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
-        SHEET,
-        maximized && 'absolute inset-0 z-10',
-      )}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return
         if (isMod(event) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'p') {
@@ -149,20 +151,41 @@ export default function FilesPanel({
         }
       }}
     >
-      {/* A window drag region, as the terminal's header; its controls opt out. */}
-      <div
-        className={cn(
-          'app-region-drag flex h-11 shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-          cornered && 'pl-(--corner-inset)',
-        )}
+      <PaneHead
+        panel={panel}
+        pane="files"
+        maximized={maximized}
+        tools={
+          <>
+            {!bare && (
+              <PanelButton
+                label={t('panel.findFile')}
+                shortcut={formatShortcut('Mod+P')}
+                pressed={searching}
+                onClick={() => (searching ? stopSearching() : setSearching(true))}
+              >
+                <PaneIcon icon={Search01Icon} />
+              </PanelButton>
+            )}
+            {local && (
+              <PanelButton
+                label={t('panel.openInEditor')}
+                onClick={() =>
+                  void openInEditor(projectPath).catch((failure: unknown) =>
+                    toast(errorMessage(failure)),
+                  )
+                }
+              >
+                <PaneIcon icon={CodeIcon} />
+              </PanelButton>
+            )}
+          </>
+        }
       >
-        {cornered && <CornerControlsSpace className="mr-1" />}
         {searching ? (
-          <InputGroup className="app-region-no-drag h-7 w-80 min-w-0">
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
+          <label className="kp-find">
+            <PaneIcon icon={Search01Icon} size={14} />
+            <input
               value={query}
               autoFocus
               onChange={(event) => setQuery(event.target.value)}
@@ -171,154 +194,212 @@ export default function FilesPanel({
               placeholder={t('panel.filterPlaceholder')}
               aria-label={t('panel.filterLabel')}
               spellCheck={false}
-              className="text-ui"
             />
-          </InputGroup>
+            <kbd>esc</kbd>
+          </label>
+        ) : isRepo ? (
+          <SegmentedControl
+            aria-label={t('panel.show')}
+            variant="tray"
+            size="md"
+            value={mode}
+            onChange={setMode}
+            options={[
+              {
+                value: 'changes',
+                label: t('panel.changes'),
+                ...(changed > 0 && { count: changed }),
+              },
+              { value: 'all', label: t('panel.allFiles') },
+            ]}
+          />
         ) : (
-          isRepo && (
-            <SegmentedControl
-              aria-label={t('panel.show')}
-              value={mode}
-              onChange={setMode}
-              size="small"
-              className="app-region-no-drag shrink-0"
-              itemClassName="h-6 px-2.25 text-hint"
-              segments={[
-                {
-                  value: 'changes',
-                  label: (
-                    <span className="inline-flex items-center gap-1.5">
-                      {t('panel.changes')}
-                      {changed > 0 && (
-                        <span className="font-normal text-tertiary tabular">{changed}</span>
-                      )}
-                    </span>
-                  ),
-                },
-                { value: 'all', label: t('panel.allFiles') },
-              ]}
-            />
-          )
+          <span className="kp-head__title">{t('panel.title')}</span>
         )}
-        <span className="flex-1" />
-        {!bare && !searching && (
-          <PanelButton
-            size="icon-sm"
-            label={t('panel.findFile')}
-            shortcut={formatShortcut('Mod+P')}
-            onClick={() => setSearching(true)}
+      </PaneHead>
+      <div className="kp-body">
+        {bare ? (
+          <PaneEmpty
+            icon={<PaneIcon icon={Folder01Icon} size={20} />}
+            title={t('panel.emptyTitle')}
+            text={t('panel.emptyDescription')}
+          />
+        ) : (
+          <ResizablePanelGroup
+            orientation="horizontal"
+            defaultLayout={layout.defaultLayout}
+            onLayoutChanged={layout.onLayoutChanged}
+            className="min-h-0 flex-1"
           >
-            <SearchIcon className="size-3.75" />
-          </PanelButton>
+            <ResizablePanel
+              id="files-tree"
+              panelRef={tree}
+              defaultSize="30%"
+              minSize="132px"
+              collapsible
+              collapsedSize="0px"
+              onResize={(size) => setTreeShown(size.inPixels > 0)}
+              className="min-w-0"
+            >
+              {mode === 'changes' ? (
+                <ChangesList projectPath={projectPath} changes={changes} openPath={open?.path} />
+              ) : (
+                <Browser
+                  projectPath={projectPath}
+                  query={query}
+                  openPath={open?.path}
+                  changes={changes.byPath}
+                />
+              )}
+            </ResizablePanel>
+            <ResizableHandle className="kp-resizer kp-files-handle" />
+            <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
+              <section className="kp-doc" aria-label={t('tabs.label')}>
+                <div className="kp-doc__tabs">
+                  <PanelButton
+                    label={treeShown ? t('panel.hideTree') : t('panel.showTree')}
+                    pressed={treeShown}
+                    onClick={() =>
+                      tree.current?.isCollapsed() ? tree.current.expand() : tree.current?.collapse()
+                    }
+                  >
+                    <PaneIcon icon={SidebarLeftIcon} />
+                  </PanelButton>
+                  <FileTabs
+                    projectPath={projectPath}
+                    files={tabs?.files ?? []}
+                    active={shownTab}
+                    onSelect={(path) => {
+                      if (path !== shownTab) closeDiff(projectPath)
+                      activateTab(projectPath, path)
+                    }}
+                  />
+                </div>
+                {diff ? (
+                  <DiffPreview projectPath={projectPath} diff={diff} />
+                ) : (
+                  <FilePreview
+                    projectPath={projectPath}
+                    file={open}
+                    changes={changes.byPath}
+                    onShowDiff={
+                      open && changes.byPath.has(open.path)
+                        ? () => showChange(projectPath, changes, open.path, false)
+                        : undefined
+                    }
+                  />
+                )}
+              </section>
+            </ResizablePanel>
+          </ResizablePanelGroup>
         )}
-        {local && (
-          <PanelButton
-            size="icon-sm"
-            label={t('panel.openInEditor')}
-            onClick={() =>
-              void openInEditor(projectPath).catch((failure: unknown) =>
-                toast(errorMessage(failure)),
-              )
-            }
-          >
-            <CodeIcon className="size-3.75" />
-          </PanelButton>
-        )}
-        {/* The only way to maximize the pane, so it stays though the design leaves it out. */}
-        <PanelButton
-          size="icon-sm"
-          label={maximized ? t('panel.restore') : t('panel.maximize')}
-          onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
-        >
-          {maximized ? (
-            <Minimize2Icon className="size-3.75" />
-          ) : (
-            <Maximize2Icon className="size-3.75" />
-          )}
-        </PanelButton>
-        <PanelButton
-          size="icon-sm"
-          label={t('panel.close')}
-          onClick={() => toggleSidePane(panel, 'files', false)}
-        >
-          <XIcon className="size-3.75" />
-        </PanelButton>
+        {mode === 'changes' && !bare && <ChangesFoot projectPath={projectPath} changes={changes} />}
       </div>
-      {bare ? (
-        <Empty className="min-h-0 flex-1">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <FolderIcon />
-            </EmptyMedia>
-            <EmptyTitle>{t('panel.emptyTitle')}</EmptyTitle>
-            <EmptyDescription>{t('panel.emptyDescription')}</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <ResizablePanelGroup
-          orientation="horizontal"
-          defaultLayout={layout.defaultLayout}
-          onLayoutChanged={layout.onLayoutChanged}
-          className="min-h-0 flex-1"
-        >
-          <ResizablePanel
-            id="files-tree"
-            defaultSize="220px"
-            minSize="160px"
-            collapsible
-            collapsedSize="0px"
-            className="min-w-0 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)]"
-          >
-            {mode === 'changes' ? (
-              <ChangesList projectPath={projectPath} changes={changes} />
-            ) : (
-              <Browser
-                projectPath={projectPath}
-                query={query}
-                openPath={open?.path}
-                changes={changes.byPath}
-              />
-            )}
-          </ResizablePanel>
-          <ResizableHandle className="bg-transparent" />
-          <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
-            {diff ? (
-              <DiffPreview projectPath={projectPath} diff={diff} />
-            ) : (
-              <FilePreview
-                projectPath={projectPath}
-                files={tabs?.files ?? []}
-                file={open}
-                changes={changes.byPath}
-                onShowDiff={
-                  open && changes.byPath.has(open.path)
-                    ? () => showChange(projectPath, changes, open.path)
-                    : undefined
-                }
-              />
-            )}
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      )}
       <UnsavedPrompt projectPath={projectPath} />
-    </div>
+    </PaneSheet>
   )
 }
 
-/** Opens the working tree's change to a listed file in the preview's place. */
-function showChange(projectPath: string, changes: FileChanges, path: string): void {
+/**
+ * Opens the working tree's change to a listed file: from the list, in the preview tab with the
+ * diff over it; from the File view's toggle, over the tab it already has.
+ */
+function showChange(
+  projectPath: string,
+  changes: FileChanges,
+  path: string,
+  fromList: boolean,
+): void {
   const change = changes.list?.find((c) => c.path === path)
   if (!change) return
+  const deleted = change.file.status === 'deleted'
+  if (fromList && !deleted) openFile(projectPath, change.path, null, PREVIEW)
   openDiff(projectPath, {
     path: change.file.path,
     oldPath: change.file.oldPath,
     ref: null,
-    projectFile: change.file.status === 'deleted' ? null : change.path,
+    projectFile: deleted ? null : change.path,
   })
 }
 
-/** The uncommitted changes as a tree, with their totals, Commit… and Discard under it. */
-function ChangesList({ projectPath, changes }: { projectPath: string; changes: FileChanges }) {
+/** The uncommitted changes, one row each: the file's name with its folder under it. */
+function ChangesList({
+  projectPath,
+  changes,
+  openPath,
+}: {
+  projectPath: string
+  changes: FileChanges
+  openPath: string | undefined
+}) {
+  const { t } = useTranslation('files')
+  const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
+  const list = changes.list
+  // The working tree's change shown in the preview, or the open file's when it is one.
+  const selectedPath =
+    diff && diff.ref === null
+      ? ((list ?? []).find((c) => c.file.path === diff.path)?.path ?? null)
+      : !diff && openPath
+        ? openPath
+        : null
+
+  if (!list) {
+    return changes.error ? <Message tone="error">{changes.error}</Message> : <LoadingRows />
+  }
+  if (list.length === 0) {
+    return <PaneEmpty title={t('changes.emptyTitle')} text={t('changes.emptyDescription')} />
+  }
+  return (
+    <VirtualRows count={list.length} rowHeight={CHANGE_ROW} className="kp-tree">
+      {(i) => {
+        const change = list[i]!
+        return (
+          <ChangeRow
+            key={change.path}
+            change={change}
+            selected={change.path === selectedPath}
+            onOpen={() => showChange(projectPath, changes, change.path, true)}
+            onKeep={() => openFile(projectPath, change.path)}
+          />
+        )
+      }}
+    </VirtualRows>
+  )
+}
+
+function ChangeRow({
+  change,
+  selected,
+  onOpen,
+  onKeep,
+}: {
+  change: ProjectChange
+  selected: boolean
+  onOpen: () => void
+  onKeep: () => void
+}) {
+  const folder = folderOf(change.path)
+  return (
+    <button
+      type="button"
+      className="kp-node kp-node--change"
+      aria-current={selected || undefined}
+      title={change.file.oldPath ? `${change.file.oldPath} → ${change.path}` : change.path}
+      onClick={onOpen}
+      onDoubleClick={change.file.status === 'deleted' ? undefined : onKeep}
+    >
+      <PaneIcon icon={File01Icon} size={14} className="text-disabled" />
+      <span className="kp-node__name">
+        <span>{nameOf(change.path)}</span>
+        {folder && <small>{folder}</small>}
+      </span>
+      <ChangeBadge status={change.file.status} />
+    </button>
+  )
+}
+
+/** Under the changes: how many and how large, with Discard for the shown one and Commit… */
+function ChangesFoot({ projectPath, changes }: { projectPath: string; changes: FileChanges }) {
   const { t } = useTranslation('files')
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const openPath = useFilesStore((s) => s.open[projectPath]?.active ?? null)
@@ -328,111 +409,59 @@ function ChangesList({ projectPath, changes }: { projectPath: string; changes: F
       !!s.status[projectPath]?.operation || (s.status[projectPath]?.changes.conflicted ?? 0) > 0,
   )
   const list = changes.list
-  const index = useMemo(() => indexFolders((list ?? []).map((c) => c.path)), [list])
-  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set())
-  const rows = useMemo(() => {
-    const folders = new Set([...index.keys()].filter((path) => path !== '' && !closed.has(path)))
-    return treeRows(index, folders)
-  }, [index, closed])
   const byPath = useMemo(() => new Map((list ?? []).map((c) => [c.path, c])), [list])
+  if (!list || list.length === 0) return null
   // The working tree's change shown in the preview, or the open file's when it is one.
   const selectedPath =
     diff && diff.ref === null
-      ? ((list ?? []).find((c) => c.file.path === diff.path)?.path ?? null)
+      ? (list.find((c) => c.file.path === diff.path)?.path ?? null)
       : !diff && openPath && byPath.has(openPath)
         ? openPath
         : null
   const selected = selectedPath ? byPath.get(selectedPath) : undefined
-
-  if (!list) {
-    return changes.error ? <Message tone="error">{changes.error}</Message> : <LoadingRows />
-  }
-  if (list.length === 0) {
-    return (
-      <Empty className="h-full p-4">
-        <EmptyHeader>
-          <EmptyTitle className="text-control">{t('changes.emptyTitle')}</EmptyTitle>
-          <EmptyDescription className="text-small">
-            {t('changes.emptyDescription')}
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
-  }
-
-  const toggle = (folder: string): void => {
-    const next = new Set(closed)
-    if (next.has(folder)) next.delete(folder)
-    else next.add(folder)
-    setClosed(next)
-  }
-
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <VirtualRows count={rows.length} className="flex-1 py-2">
-        {(i) => {
-          const row = rows[i]!
-          const change = row.folder ? undefined : byPath.get(row.path)
-          const isOpen = row.folder && !closed.has(row.path)
-          return (
-            <Row
-              key={row.path}
-              depth={row.depth}
-              folder={row.folder}
-              open={isOpen}
-              selected={row.path === selectedPath}
-              title={change?.file.oldPath ? `${change.file.oldPath} → ${row.path}` : row.path}
-              aria-expanded={row.folder ? isOpen : undefined}
+    <div className="kp-files__foot">
+      <span className="inline-flex items-center gap-1.5 tabular">
+        {t('changes.files', { count: list.length })}
+        {totals && (
+          <>
+            <span aria-hidden>·</span>
+            <LineCounts insertions={totals.insertions} deletions={totals.deletions} />
+          </>
+        )}
+      </span>
+      <span className="kp-files__acts">
+        <Tooltip>
+          <TooltipTrigger render={<span className="inline-flex" />}>
+            <button
+              type="button"
+              className="kp-btn kp-btn--sm"
+              disabled={!selected || selected.file.status === 'conflicted' || blocked}
               onClick={() =>
-                row.folder ? toggle(row.path) : showChange(projectPath, changes, row.path)
+                selected &&
+                openGitDialog(projectPath, { kind: 'discard', paths: [selected.file.path] })
               }
             >
-              <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
-              <span className="min-w-0 flex-1 truncate">{nameOf(row.path)}</span>
-              {change && <ChangeBadge status={change.file.status} />}
-            </Row>
-          )
-        }}
-      </VirtualRows>
-      <div className="mx-2.5 flex shrink-0 flex-col gap-2 px-0.5 pt-2.5 pb-2.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-        <div className="flex items-center text-small text-tertiary">
-          <span className="flex-1 tabular">{t('changes.files', { count: list.length })}</span>
-          {totals && <LineCounts insertions={totals.insertions} deletions={totals.deletions} />}
-        </div>
-        {/* A narrow tree puts Discard under Commit. */}
-        <div className="flex flex-wrap gap-1.5">
-          <Button
-            size="sm"
-            className="flex-1"
-            disabled={blocked}
-            onClick={() =>
-              openGitDialog(projectPath, { kind: 'commit', paths: list.map((c) => c.file.path) })
-            }
-          >
-            {t('changes.commit')}
-          </Button>
-          <Tooltip>
-            <TooltipTrigger render={<span className="inline-flex" />}>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={!selected || selected.file.status === 'conflicted' || blocked}
-                onClick={() =>
-                  selected &&
-                  openGitDialog(projectPath, { kind: 'discard', paths: [selected.file.path] })
-                }
-              >
-                {t('changes.discard')}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {selected
-                ? t('changes.discardFile', { name: nameOf(selected.path) })
-                : t('changes.discardPick')}
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
+              {t('changes.discard')}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {selected
+              ? t('changes.discardFile', { name: nameOf(selected.path) })
+              : t('changes.discardPick')}
+          </TooltipContent>
+        </Tooltip>
+        <button
+          type="button"
+          className="kp-btn kp-btn--sm kp-btn--solid"
+          disabled={blocked}
+          onClick={() =>
+            openGitDialog(projectPath, { kind: 'commit', paths: list.map((c) => c.file.path) })
+          }
+        >
+          {t('changes.commit')}
+        </button>
+      </span>
     </div>
   )
 }
@@ -508,7 +537,7 @@ function Tree({
     <VirtualRows
       count={rows.length}
       scrollTo={openIndex < 0 ? null : openIndex}
-      className="h-full py-2"
+      className="kp-tree"
     >
       {(i) => {
         const row = rows[i]!
@@ -519,7 +548,6 @@ function Tree({
             key={row.path}
             depth={row.depth}
             folder={row.folder}
-            open={isOpen}
             selected={row.path === openPath}
             title={row.path}
             aria-expanded={row.folder ? isOpen : undefined}
@@ -528,8 +556,14 @@ function Tree({
             }
             onDoubleClick={row.folder ? undefined : () => openFile(projectPath, row.path)}
           >
-            <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
-            <span className="min-w-0 flex-1 truncate">{nameOf(row.path)}</span>
+            <PaneIcon
+              icon={row.folder ? (isOpen ? FolderOpenIcon : Folder01Icon) : File01Icon}
+              size={14}
+              className="text-disabled"
+            />
+            <span className="kp-node__name">
+              <span>{nameOf(row.path)}</span>
+            </span>
             {change && <ChangeBadge status={change} />}
           </Row>
         )
@@ -556,8 +590,8 @@ function FilteredList({
   if (total === 0) return <Message>{t('browser.noMatch', { query: query.trim() })}</Message>
   const more = total - matches.length
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <VirtualRows count={matches.length} className="flex-1 py-2">
+    <div className="kp-tree">
+      <VirtualRows count={matches.length} className="flex-1">
         {(i) => (
           <FileRow
             key={matches[i]!.path}
@@ -568,11 +602,7 @@ function FilteredList({
           />
         )}
       </VirtualRows>
-      {more > 0 && (
-        <p className="shrink-0 border-t border-subtle px-3.5 py-1.5 text-xs text-tertiary">
-          {t('browser.moreMatches', { count: more })}
-        </p>
-      )}
+      {more > 0 && <p className="kp-tree__more">{t('browser.moreMatches', { count: more })}</p>}
     </div>
   )
 }
@@ -600,24 +630,15 @@ function FileRow({
       onClick={() => openFile(projectPath, path, null, PREVIEW)}
       onDoubleClick={() => openFile(projectPath, path)}
     >
-      <FileTypeIcon path={path} className="size-4" />
+      <PaneIcon icon={File01Icon} size={14} className="text-disabled" />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-        <span className="shrink-0">
+        <span className="max-w-full shrink-0 truncate text-primary">
           {[...path.slice(nameStart)].map((char, i) =>
-            marked.has(nameStart + i) ? (
-              <mark key={i} className="bg-transparent font-semibold text-primary">
-                {char}
-              </mark>
-            ) : (
-              char
-            ),
+            marked.has(nameStart + i) ? <mark key={i}>{char}</mark> : char,
           )}
         </span>
-        {folder && (
-          <span className={cn('truncate text-xs', selected ? 'text-secondary' : 'text-tertiary')}>
-            {folder}
-          </span>
-        )}
+        {/* The folder gives way first, so a narrow tree still shows the name. */}
+        {folder && <span className="min-w-0 truncate text-caption text-disabled">{folder}</span>}
       </span>
       {change && <ChangeBadge status={change} />}
     </Row>
@@ -670,25 +691,21 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
   if (state.status !== 'done' || state.query !== query) {
     return (
       <Message>
-        <Spinner className="size-3.5" />
+        <PaneSpinner />
         {t('browser.searching')}
       </Message>
     )
   }
   if (rows.length === 0) return <Message>{t('browser.noLine', { query })}</Message>
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <VirtualRows count={rows.length} className="flex-1 py-2">
+    <div className="kp-tree">
+      <VirtualRows count={rows.length} className="flex-1">
         {(i) => {
           const row = rows[i]!
           if (row.kind === 'file') {
             return (
-              <div
-                key={`f:${row.path}`}
-                title={row.path}
-                className="mx-1.5 flex h-7 items-center gap-2 truncate px-2 text-xs font-medium text-primary"
-              >
-                <FileTypeIcon path={row.path} className="size-4" />
+              <div key={`f:${row.path}`} title={row.path} className="kp-node__group">
+                <PaneIcon icon={File01Icon} size={14} className="text-disabled" />
                 <span className="truncate">{row.path}</span>
               </div>
             )
@@ -696,15 +713,12 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
           return (
             <Row
               key={`l:${row.path}:${row.line}`}
-              depth={1}
               title={row.text}
               onClick={() => openFile(projectPath, row.path, row.line, PREVIEW)}
               onDoubleClick={() => openFile(projectPath, row.path, row.line)}
             >
-              <span className="w-8 shrink-0 text-right font-mono text-meta text-tertiary tabular">
-                {row.line}
-              </span>
-              <span className="truncate font-mono text-xs">
+              <span className="kp-node__line">{row.line}</span>
+              <span className="kp-mono truncate text-caption text-secondary">
                 <Highlight text={row.text.trim()} query={query} />
               </span>
             </Row>
@@ -712,7 +726,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
         }}
       </VirtualRows>
       {state.result.truncated && (
-        <p className="shrink-0 border-t border-subtle px-3.5 py-1.5 text-xs text-tertiary">
+        <p className="kp-tree__more">
           {t('browser.truncated', { count: state.result.matches.length })}
         </p>
       )}
@@ -735,7 +749,6 @@ function Highlight({ text, query }: { text: string; query: string }) {
 function Row({
   depth = 0,
   folder = false,
-  open = false,
   selected = false,
   title,
   onClick,
@@ -746,7 +759,6 @@ function Row({
   depth?: number
   /** A folder's row leads with its chevron; a file's keeps the chevron's room. */
   folder?: boolean
-  open?: boolean
   selected?: boolean
   title: string
   onClick: () => void
@@ -762,22 +774,11 @@ function Row({
       onDoubleClick={onDoubleClick}
       {...aria}
       style={{ paddingLeft: 8 + depth * 14 }}
-      className={cn(
-        'mx-1.5 flex h-7 w-[calc(100%-var(--spacing)*3)] min-w-0 items-center gap-1.5 rounded-lg pr-2 text-left text-ui text-primary outline-none transition-colors duration-(--duration-fast) focus-ring',
-        selected ? 'bg-selected' : 'hover:bg-hover',
-      )}
+      aria-current={selected || undefined}
+      className={folder ? 'kp-node kp-node--dir' : 'kp-node'}
     >
-      <span className="flex w-2.75 shrink-0 text-tertiary">
-        {folder && (
-          <ChevronRightIcon
-            aria-hidden
-            strokeWidth={2}
-            className={cn(
-              'size-2.75 transition-transform duration-(--duration-fast) motion-reduce:transition-none',
-              open && 'rotate-90',
-            )}
-          />
-        )}
+      <span className="kp-node__chev">
+        {folder && <PaneIcon icon={ArrowRight01Icon} size={12} />}
       </span>
       {children}
     </button>
@@ -786,12 +787,7 @@ function Row({
 
 function Message({ tone, children }: { tone?: 'error'; children: ReactNode }) {
   return (
-    <p
-      className={cn(
-        'flex items-center gap-2 px-3.5 py-3 text-xs leading-normal',
-        tone === 'error' ? 'text-danger' : 'text-secondary',
-      )}
-    >
+    <p className="kp-tree__note" data-tone={tone}>
       {children}
     </p>
   )
@@ -799,7 +795,7 @@ function Message({ tone, children }: { tone?: 'error'; children: ReactNode }) {
 
 function LoadingRows() {
   return (
-    <div className="flex flex-col gap-2.5 px-3.5 py-3">
+    <div className="flex flex-col gap-2.5 px-2 py-3">
       {[60, 45, 70, 50, 35].map((w) => (
         <Skeleton key={w} className="h-3" style={{ width: `${w}%` }} />
       ))}

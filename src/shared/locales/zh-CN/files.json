@@ -11,7 +11,10 @@
     "allFiles": "所有文件",
     "findFile": "查找文件",
     "openInEditor": "在编辑器中打开",
-    "close": "关闭面板"
+    "close": "关闭面板",
+    "title": "文件",
+    "hideTree": "隐藏文件列表",
+    "showTree": "显示文件列表"
   },
   "browser": {
     "empty": "此项目中没有文件。",
@@ -105,7 +108,7 @@
     "file": "文件",
     "mentionLine": "提及第 {{line}} 行",
     "mentionLines": "提及第 {{start}}–{{end}} 行",
-    "selectHint": "选中行即可提及",
+    "selectHint": "点击行号即可提及这些行",
     "atCommit": "此提交中的改动",
     "noComposer": "先打开一个会话再提及",
     "hunks_one": "{{count}} 处改动",
