@@ -22,6 +22,8 @@ pnpm dev
 
 Development builds also list a **Fake agent**, which needs no account or network and plays scripted scenarios such as a long answer, a burst of tool calls or three approvals at once. Type `/` in its composer to see them; they are written in [`tools/fake-agent/scenarios.ts`](./tools/fake-agent/scenarios.ts).
 
+Computer use runs Cua Driver's `cua-driver` program, which is not an npm package: `pnpm fetch:cua-driver` downloads the pinned release for your platform into `resources/cua-driver/` and checks its SHA-256. Without it, Settings › Computer use says the build has no driver. The Fake agent's `/computer` scenario calls one of the `computer_*` tools, for trying the checks, cards and bar without a model.
+
 | Command                                               | What it does                                         |
 | ----------------------------------------------------- | ---------------------------------------------------- |
 | `pnpm dev`                                            | Start the app in development mode with hot reload    |

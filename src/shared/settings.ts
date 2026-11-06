@@ -1,3 +1,4 @@
+import type { ComputerUseSettings } from './computer-use'
 import type { LanguageSetting, Locale } from './locale'
 import type { DirectAddress } from './remote/protocol'
 import { BUILTIN_THEME_ID } from './themes'
@@ -77,6 +78,8 @@ export interface SettingsFile {
     direct: DirectSettings // on while remote access is, since devices have no other way yet
     terminal: boolean // devices may use this computer's terminals, which run any command
   }
+  // Agents using this computer's desktop apps; a paired device can neither see nor change it.
+  computerUse: ComputerUseSettings
 }
 
 /** Devices connecting over TCP on the same network or a VPN, without the relay. */
@@ -197,6 +200,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     direct: { enabled: false, port: null, addresses: [] },
     terminal: false,
   },
+  computerUse: { enabled: false, allowedApps: [] },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -237,6 +241,7 @@ export interface SettingsPatch {
   updates?: Partial<SettingsFile['updates']>
   privacy?: Partial<SettingsFile['privacy']>
   diagnostics?: Partial<SettingsFile['diagnostics']>
+  computerUse?: Partial<SettingsFile['computerUse']> // allowedApps is replaced whole
   usage?: Partial<SettingsFile['usage']>
   remote?: {
     enabled?: boolean
@@ -260,6 +265,7 @@ export interface HostSettings {
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled
   defaultAgent: AgentId | null // the agent new sessions start with, which answers artifacts' questions
+  computerUse: ComputerUseSettings
 }
 
 /** The part of the settings the terminal host receives. */

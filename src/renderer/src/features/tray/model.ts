@@ -17,6 +17,7 @@ export type PendingTool = Pick<
 export type PendingRequest =
   | { kind: 'tool'; entryId: string; tool: PendingTool; permission: PendingPermission }
   | { kind: 'origin'; entryId: string; origin: string }
+  | { kind: 'app'; entryId: string; app: string }
 
 /** What the panel reads from a session's thread: its requests, current step and changed files. */
 export interface SessionDetail {
@@ -111,6 +112,8 @@ export function readDetail(
       }
     } else if (entry.kind === 'browser_origin' && entry.decision === null) {
       requests.push({ kind: 'origin', entryId: entry.id, origin: entry.origin })
+    } else if (entry.kind === 'computer_app' && entry.decision === null) {
+      requests.push({ kind: 'app', entryId: entry.id, app: entry.appName })
     }
   })
   return {

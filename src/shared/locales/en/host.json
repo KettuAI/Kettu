@@ -90,6 +90,7 @@
   },
   "attention": {
     "browserOrigin": "Wants to open {{site}}",
+    "computerApp": "Wants to use {{app}}",
     "permission": "Asks for permission",
     "turnEnd": {
       "end_turn": "Finished",

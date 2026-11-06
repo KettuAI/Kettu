@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import type { SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
+import type { ComputerAppDecision } from '@shared/computer-use'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayTarget } from '@shared/tray'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -44,6 +45,7 @@ import {
 } from './model'
 
 const ORIGIN_DECISIONS: BrowserOriginDecision[] = ['session', 'project', 'deny']
+const APP_DECISIONS: ComputerAppDecision[] = ['session', 'always', 'deny']
 
 const WANTS_KEY = {
   read: 'read',
@@ -86,6 +88,7 @@ function requestTarget(
   projectPath: string,
 ): { text: string; code: boolean } {
   if (request.kind === 'origin') return { text: request.origin, code: false }
+  if (request.kind === 'app') return { text: request.app, code: false }
   const { tool } = request
   if (request.permission.questions && tool.question !== undefined) {
     return { text: tool.question, code: false }
@@ -316,6 +319,7 @@ function toolLine(tool: PendingTool, projectPath: string): string {
 function waitingLine(summary: SessionSummary, detail: SessionDetail | undefined): string {
   const request = detail?.requests[0]
   if (!request) return ''
+  if (request.kind === 'app') return request.app
   return request.kind === 'origin' ? request.origin : toolLine(request.tool, summary.projectPath)
 }
 
@@ -657,10 +661,15 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
     ? [{ label: t('answerInKettu'), choice: null }]
     : request.kind === 'tool'
       ? request.permission.options.map((o) => ({ label: o.name, choice: { optionId: o.id } }))
-      : ORIGIN_DECISIONS.map((decision) => ({
-          label: t(`session:browserOrigin.decision.${decision}`),
-          choice: { decision },
-        }))
+      : request.kind === 'app'
+        ? APP_DECISIONS.map((decision) => ({
+            label: t(`session:computerApp.decision.${decision}`, { app: request.app }),
+            choice: { appDecision: decision },
+          }))
+        : ORIGIN_DECISIONS.map((decision) => ({
+            label: t(`session:browserOrigin.decision.${decision}`),
+            choice: { decision },
+          }))
   const primary =
     request.kind === 'tool' && !asks
       ? Math.max(
@@ -676,7 +685,9 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
     ? t('wants.question')
     : request.kind === 'origin'
       ? t('wants.origin')
-      : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
+      : request.kind === 'app'
+        ? t('wants.app')
+        : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
 
   const choose = (index: number) => {
     const option = options[index]

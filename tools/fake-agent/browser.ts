@@ -12,7 +12,7 @@ interface CallResult {
 
 type Call = (name: string, args: Record<string, unknown>) => Promise<CallResult>
 
-function kettu(servers: readonly McpServer[]): Extract<McpServer, { type: 'http' }> | null {
+export function kettu(servers: readonly McpServer[]): Extract<McpServer, { type: 'http' }> | null {
   for (const server of servers) {
     if ('type' in server && server.type === 'http' && server.name.startsWith('kettu')) {
       return server
@@ -21,7 +21,7 @@ function kettu(servers: readonly McpServer[]): Extract<McpServer, { type: 'http'
   return null
 }
 
-async function say(turn: Turn, text: string): Promise<void> {
+export async function say(turn: Turn, text: string): Promise<void> {
   await turn.send({
     sessionUpdate: 'agent_message_chunk',
     content: { type: 'text', text },

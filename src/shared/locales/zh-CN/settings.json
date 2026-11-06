@@ -16,7 +16,8 @@
     "browser": "浏览器",
     "mcp": "MCP 服务器",
     "harnesses": "Harness",
-    "hosts": "主机"
+    "hosts": "主机",
+    "computer-use": "Computer use"
   },
   "page": {
     "title": "设置",
@@ -378,6 +379,54 @@
       "removeFailed": "无法移除 {{origin}}：{{reason}}",
       "in": "在 {{projects}} 中允许",
       "note": "Agent 无需询问即可打开这些站点。在站点卡片上选择“此项目始终允许”时，站点会添加到这里。"
+    }
+  },
+  "computer": {
+    "groups": {
+      "use": "Computer use",
+      "permissions": "这台电脑",
+      "allowedApps": "始终允许"
+    },
+    "enabled": {
+      "name": "允许 Agent 使用这台电脑",
+      "description": "在你从这台电脑发出的回合里，Agent 可以读取应用的窗口，并在后台点击和输入。每个应用在一个会话里第一次使用前都会先问你。",
+      "keywords": "computer use 电脑 桌面 应用 屏幕 鼠标 键盘 辅助功能 自动化"
+    },
+    "blocked": "密码管理器、终端、系统设置、浏览器和 Kettu 自己永远不会被使用。网页请在 Kettu 的浏览器里打开。",
+    "noDriver": "这个版本没有带 Cua Driver，Agent 无法使用电脑。在开发目录里运行 pnpm fetch:cua-driver。",
+    "accessibility": {
+      "name": "辅助功能",
+      "description": "让 Kettu 读取应用的窗口，并在里面点击和输入。"
+    },
+    "screenRecording": {
+      "name": "屏幕录制",
+      "description": "让 Kettu 截取应用窗口的画面。"
+    },
+    "permission": {
+      "granted": "已允许",
+      "ask": "允许…",
+      "open": "打开系统设置",
+      "none": "无需授权",
+      "note": "这两项权限由 macOS 授予 Kettu。允许屏幕录制后如果截图仍然失败，请退出并重新打开 Kettu。"
+    },
+    "windows": {
+      "name": "Windows",
+      "description": "不需要额外授权。以管理员身份运行的应用窗口无法使用，Electron 应用里的多数操作会把窗口切到前台。"
+    },
+    "desktop": {
+      "name": "桌面",
+      "unknown": "未知桌面",
+      "x11": "{{desktop}}（X11）：可以读取和操作应用，多数操作在前台进行。",
+      "gnome": "{{desktop}}（Wayland）：截图前会先问你，输入需要 Cua 的 GNOME 辅助程序。",
+      "kde": "{{desktop}}（Wayland）：目前只能读取应用，不能操作。",
+      "wayland": "{{desktop}}（Wayland）：截图前会先问你，部分输入可能无效。",
+      "none": "没有找到 Kettu 可用的图形桌面。"
+    },
+    "allowedApps": {
+      "none": "还没有应用",
+      "description": "你在会话卡片上选了“始终允许”的应用会显示在这里。",
+      "keywords": "始终允许 应用 computer use",
+      "remove": "移除"
     }
   },
   "advanced": {
@@ -814,7 +863,8 @@
     "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
-    "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。"
+    "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。",
+    "computer-use": "让 Agent 读取并操作这台电脑上的桌面应用，同一时间只用一个应用、只给一个会话。"
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",

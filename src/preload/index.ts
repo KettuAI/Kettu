@@ -231,6 +231,10 @@ const api: KettuApi = {
   notifications: {
     test: () => invoke('notifications:test'),
   },
+  computer: {
+    status: () => invoke('computer:status'),
+    requestPermission: (kind) => invoke('computer:request-permission', kind),
+  },
   browser: {
     show: (id) => invoke('browser:show', id),
     hide: (id) => invoke('browser:hide', id),

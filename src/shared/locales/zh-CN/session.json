@@ -116,6 +116,32 @@
     "wants": "{{agent}} 想打开 <site>{{site}}</site>",
     "where": "在本会话的浏览器里打开 · 带着你的登录状态"
   },
+  "computerApp": {
+    "label": "使用应用",
+    "ask": "{{agent}} 想使用你电脑上的这个应用。",
+    "answerGroup": "答复",
+    "decision": {
+      "session": "本会话内允许",
+      "always": "始终允许 {{app}}",
+      "deny": "不允许"
+    },
+    "answer": {
+      "session": "本次会话已允许",
+      "always": "已始终允许",
+      "deny": "已拒绝",
+      "timeout": "未在限定时间内得到答复"
+    },
+    "use": "使用",
+    "newApp": "新应用",
+    "wants": "{{agent}} 想使用 <app>{{app}}</app>",
+    "where": "读取它的窗口，在后台点击和输入"
+  },
+  "computerBar": {
+    "using": "正在使用电脑",
+    "usingApp": "正在使用电脑 · {{app}}",
+    "stop": "停止",
+    "stopLabel": "这一轮不再使用电脑"
+  },
   "subagent": {
     "fallbackTitle": "子 Agent",
     "tools_other": "{{count}} 个工具",

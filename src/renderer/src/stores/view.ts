@@ -118,6 +118,7 @@ export type SettingsSection =
   | 'remote'
   | 'hosts'
   | 'browser'
+  | 'computer-use'
   | 'advanced'
   | 'about'
 

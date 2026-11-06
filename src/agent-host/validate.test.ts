@@ -521,3 +521,20 @@ describe('comment and direct edit requests', () => {
     rejects(() => posix['usage.summary']({ ...base, clock: 'all' }))
   })
 })
+
+describe('computer use requests', () => {
+  it('takes an answer to an app card and Stop', () => {
+    expect(
+      posix['computer.answerApp']({ sessionId: 's', entryId: 'e:1', decision: 'always' }),
+    ).toEqual({ sessionId: 's', entryId: 'e:1', decision: 'always' })
+    expect(posix['computer.stop']({ sessionId: 's' })).toEqual({ sessionId: 's' })
+  })
+
+  it('refuses another answer or a missing session', () => {
+    rejects(() =>
+      posix['computer.answerApp']({ sessionId: 's', entryId: 'e', decision: 'project' }),
+    )
+    rejects(() => posix['computer.answerApp']({ entryId: 'e', decision: 'deny' }))
+    rejects(() => posix['computer.stop']({}))
+  })
+})

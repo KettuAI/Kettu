@@ -34,6 +34,7 @@ import type {
   HostToMain,
   MainToHost,
 } from '@shared/host-control'
+import { isComputerApp, type ComputerApp } from '@shared/computer-use'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { PortDevice } from '@shared/remote/device'
 import type { HostSettings } from '@shared/settings'
@@ -43,6 +44,7 @@ import sessionRouterPath from '../agent-host/session-router/router?modulePath'
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
 import usageWorkerPath from '../agent-host/usage/worker?modulePath'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
+import { computerHostOptions } from './computer-use'
 import { GrantRequests } from './grant-requests'
 import { t } from './i18n'
 import { createLogger } from './log'
@@ -77,6 +79,8 @@ export interface AgentHostDeps {
   browser?: (request: BrowserCallRequest) => Promise<BrowserCallAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
+  /** A session's card allowed an app always, for the settings to keep. */
+  onComputerAppAllowed?(app: ComputerApp): void
 }
 
 const MAX_LIST = 10_000
@@ -278,6 +282,7 @@ export class AgentHost {
         // The router runs on the user's Node.js, which cannot read inside app.asar.
         sessionRouterPath: unpackedPath(sessionRouterPath),
         settings: deps.settings(),
+        computer: computerHostOptions(),
       }),
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
       shutdownMessage: { type: 'host:shutdown' },
@@ -555,6 +560,9 @@ export class AgentHost {
         break
       case 'host:auth-commands':
         if (isStringList(message.commands)) this.deps.onAuthCommands(message.commands)
+        break
+      case 'host:computer-app-allow':
+        if (isComputerApp(message.app)) this.deps.onComputerAppAllowed?.(message.app)
         break
       case 'host:attention':
         this.deps.onAttention(message)

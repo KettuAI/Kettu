@@ -331,6 +331,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       usage: { fromComputer: false },
       sessionTitles: true,
       defaultAgent: null,
+      computerUse: DEFAULT_SETTINGS.computerUse,
     },
     baseEnv: { ...process.env, ...options.agentEnv },
     send: (message) => sent.push(structuredClone(message)),

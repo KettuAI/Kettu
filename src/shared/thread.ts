@@ -3,6 +3,7 @@
 
 import type { AgentId } from './agents'
 import type { BrowserOriginAnswer } from './browser'
+import type { ComputerAppAnswer } from './computer-use'
 import type { ContextReport } from './context'
 import type { RoutineRef } from './routines'
 
@@ -52,6 +53,14 @@ export interface SessionView {
   routine: RoutineRef | null // set when origin is 'routine'
   queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
   queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
+  /** Ephemeral: set while the session holds the computer, with the app it last used. */
+  computer?: ComputerUseView | null
+}
+
+/** A session's hold on the computer, which the bar above its composer shows. */
+export interface ComputerUseView {
+  /** The name of the app it last read or drove; null before its first. */
+  app: string | null
 }
 
 export interface QueuedPrompt {
@@ -216,6 +225,7 @@ export type ThreadEntry =
   | GitEntry // Kettu's own observation of the repository, see the git design
   | ArtifactEntry // Kettu's own record of a write to the artifacts service
   | BrowserOriginEntry // Kettu's own record of a new site's request and answer
+  | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
 
 /** `after`: the agent's entry before it, to put it back after a replay; older entries lack it. */
 export type GitEntry =
@@ -271,6 +281,25 @@ export interface BrowserOriginEntry {
   requestId: number
   origin: string
   decision: BrowserOriginAnswer | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * An agent asked to read or drive a desktop app for the first time in the session. `decision` is
+ * null while it waits for the user, then the answer they gave, `timeout` when none came.
+ */
+export interface ComputerAppEntry {
+  kind: 'computer_app'
+  id: string
+  /** The host's id for the request, which the card's answer names. */
+  requestId: number
+  /** The app's identity, which an Always allow is kept under, and its name. */
+  appId: string
+  appName: string
+  decision: ComputerAppAnswer | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
@@ -832,6 +861,18 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.decision === null ||
           value.decision === 'session' ||
           value.decision === 'project' ||
+          value.decision === 'deny' ||
+          value.decision === 'timeout') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'computer_app':
+      return (
+        Number.isSafeInteger(value.requestId) &&
+        typeof value.appId === 'string' &&
+        typeof value.appName === 'string' &&
+        (value.decision === null ||
+          value.decision === 'session' ||
+          value.decision === 'always' ||
           value.decision === 'deny' ||
           value.decision === 'timeout') &&
         (value.after === null || typeof value.after === 'string')

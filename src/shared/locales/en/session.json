@@ -125,6 +125,32 @@
     "wants": "{{agent}} wants to open <site>{{site}}</site>",
     "where": "In this session’s browser · with your sign-ins"
   },
+  "computerApp": {
+    "label": "App use",
+    "ask": "{{agent}} wants to use this app on your computer.",
+    "answerGroup": "Answer",
+    "decision": {
+      "session": "Allow for this session",
+      "always": "Always allow {{app}}",
+      "deny": "Don’t allow"
+    },
+    "answer": {
+      "session": "Allowed for this session",
+      "always": "Always allowed",
+      "deny": "Denied",
+      "timeout": "Not answered in time"
+    },
+    "use": "Use",
+    "newApp": "New app",
+    "wants": "{{agent}} wants to use <app>{{app}}</app>",
+    "where": "Reads its windows and clicks and types in them, in the background"
+  },
+  "computerBar": {
+    "using": "Using your computer",
+    "usingApp": "Using your computer · {{app}}",
+    "stop": "Stop",
+    "stopLabel": "Stop using the computer for this turn"
+  },
   "subagent": {
     "fallbackTitle": "Sub-agent",
     "tools_one": "{{count}} tool",

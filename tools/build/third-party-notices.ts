@@ -145,6 +145,22 @@ export function readNotice(dir: string): Notice {
   return { name, version, license, files, lines: [] }
 }
 
+/**
+ * Cua Driver's program, which tools/install/cua-driver.mjs puts in resources/cua-driver with its
+ * license and notices; null for a build without it.
+ */
+function cuaDriverNotice(root: string): Notice | null {
+  const dir = path.join(root, 'resources', 'cua-driver')
+  const stamp = path.join(dir, 'version')
+  if (!existsSync(stamp)) return null
+  const files = ['LICENSE.md', 'THIRD_PARTY_NOTICES.md'].map((name) => ({
+    name,
+    text: readFileSync(path.join(dir, name), 'utf8').trim(),
+  }))
+  const version = readFileSync(stamp, 'utf8').split(' ')[0]!.trim()
+  return { name: 'cua-driver', version, license: 'MIT', files, lines: [] }
+}
+
 /** The notices for the bundled packages, the packed ones and Electron, each package once. */
 export function collectNotices(root: string, bundled: Iterable<string>): Notice[] {
   const dirs = new Set([...bundled].map((dir) => realpathSync(dir)))
@@ -158,6 +174,8 @@ export function collectNotices(root: string, bundled: Iterable<string>): Notice[
     }
     return notice
   })
+  const driver = cuaDriverNotice(root)
+  if (driver) notices.push(driver)
   const electron = locate(root, 'electron')
   if (!electron) throw new Error('electron is not installed')
   const notice = readNotice(electron)

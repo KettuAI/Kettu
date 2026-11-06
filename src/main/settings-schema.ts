@@ -18,6 +18,7 @@ import {
   type TerminalSettings,
   ZOOM_LEVELS,
 } from '@shared/settings'
+import { isComputerApp } from '@shared/computer-use'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
@@ -81,6 +82,22 @@ const isThemeId: Check = (value, path) =>
   typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
 
 /** The sites the "Always open" choice remembers, each a host mapped to where it opens. */
+/** Apps the user always allows, each once, with an identity the host would make. */
+const MAX_ALLOWED_APPS = 500
+const isComputerApps: Check = (value, path) => {
+  if (!Array.isArray(value) || value.length > MAX_ALLOWED_APPS) {
+    return `"${path}" must list at most ${MAX_ALLOWED_APPS} apps`
+  }
+  const ids = new Set<string>()
+  for (const app of value) {
+    if (!isComputerApp(app) || Object.keys(app).length !== 2 || ids.has(app.id)) {
+      return `"${path}" must list apps as { id, name }, each id once`
+    }
+    ids.add(app.id)
+  }
+  return null
+}
+
 const isLinkSites: Check = (value, path) => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return `"${path}" must be an object`
@@ -135,6 +152,7 @@ const SECTION_FIELDS = {
   privacy: { hideAccount: isBoolean },
   diagnostics: { verboseUntil: isVerboseUntil },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
+  computerUse: { enabled: isBoolean, allowedApps: isComputerApps },
 } as const satisfies Record<string, Record<string, Check>>
 
 type FieldSection = keyof typeof SECTION_FIELDS
@@ -822,7 +840,20 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
     defaultAgent: settings.general.defaultAgent,
+    computerUse: structuredClone(settings.computerUse),
   }
+}
+
+/** Always allows an app that a session's card allowed, once, keeping the list's order. */
+export function withAllowedComputerApp(current: SettingsFile, app: unknown): SettingsFile {
+  if (!isComputerApp(app)) throw new SettingsError('An allowed app needs an id and a name')
+  const allowed = current.computerUse.allowedApps
+  if (allowed.some((known) => known.id === app.id) || allowed.length >= MAX_ALLOWED_APPS) {
+    return current
+  }
+  const next = structuredClone(current)
+  next.computerUse.allowedApps.push({ id: app.id, name: app.name })
+  return next
 }
 
 // The sections `hostSettings` reads, besides the language.
@@ -835,6 +866,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'mcp',
   'startModes',
   'usage',
+  'computerUse',
 ])
 
 /** Whether a change touches what the agent host is sent; a language change is checked apart. */
