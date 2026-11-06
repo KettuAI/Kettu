@@ -54,42 +54,34 @@ function defaultStandsFor(
     .find((l) => mentions(said, l.name))
 }
 
+// The providers' documented default effort, for an agent whose Default choice sends none, such as
+// OpenCode's (platform.claude.com/docs/en/build-with-claude/effort).
+const PROVIDER_DEFAULT_EFFORT: [pattern: RegExp, level: string][] = [
+  [/claude-(opus|haiku)-5-5/, 'medium'],
+  [/claude-/, 'high'],
+]
+
+/** The level a model runs at when the agent sends none, as its provider documents it. */
+function providerDefault(model: string | undefined, levels: { value: string }[]) {
+  const id = model?.toLowerCase() ?? ''
+  const level = PROVIDER_DEFAULT_EFFORT.find(([pattern]) => pattern.test(id))?.[1]
+  return levels.find((l) => l.value === level)
+}
+
 /**
- * The option's levels without the choice that leaves the level to the agent. That choice is one
- * of the levels in effect, so it gets no segment of its own; when the agent names the level it
- * stands for, as in "Default (High)", the thumb rests there.
+ * The option's levels without the choice that leaves the level to the agent, and the level shown
+ * as chosen. That choice is one of the levels in effect, so it gets no segment of its own: it
+ * shows as the level it names, as in "Default (High)", else the level the model's provider
+ * documents, else the middle level, a guess for a provider that documents none.
  */
-export function levelsOf(effort: SelectOption, value: string | undefined) {
+export function levelsOf(effort: SelectOption, value: string | undefined, model?: string) {
   const levels = effort.choices.filter((c) => !isDefaultChoice(c))
   const fallback = effort.choices.find(isDefaultChoice)
-  const usesDefault = !!fallback && fallback.value === value
-  const standsFor = defaultStandsFor(fallback, levels)
-  return {
-    levels,
-    fallback,
-    usesDefault,
-    /** The level shown as chosen; none while the default stands for a level the agent does not name. */
-    shown: usesDefault ? standsFor?.value : value,
-  }
-}
-
-export interface LevelRow {
-  value: string
-  label: string
-  description?: string
-}
-
-/** Every choice as one row, in the agent's order, the Default one named with the level it stands for. */
-export function levelRows(effort: SelectOption): LevelRow[] {
-  const levels = effort.choices.filter((c) => !isDefaultChoice(c))
-  const fallback = effort.choices.find(isDefaultChoice)
-  const standsFor = defaultStandsFor(fallback, levels)
-  return effort.choices.map((choice) => ({
-    value: choice.value,
-    label:
-      choice === fallback && standsFor && !mentions(choice.name.toLowerCase(), standsFor.name)
-        ? `${choice.name} (${standsFor.name})`
-        : choice.name,
-    ...(choice.description ? { description: choice.description } : {}),
-  }))
+  const isLevel = levels.some((l) => l.value === value)
+  const standsFor = isLevel
+    ? undefined
+    : (defaultStandsFor(fallback, levels) ??
+      providerDefault(model, levels) ??
+      levels[Math.floor((levels.length - 1) / 2)])
+  return { levels, shown: isLevel ? value : standsFor?.value }
 }

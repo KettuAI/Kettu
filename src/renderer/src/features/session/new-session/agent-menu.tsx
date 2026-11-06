@@ -65,7 +65,7 @@ import {
 } from './start-options'
 import { readFirstOptions, refreshOnMenu, retryPrepare, setOption } from './prepared'
 import { useStartConfig } from './use-start-config'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
   !!o && o.type === 'select' && !!o.choices?.length
@@ -418,10 +418,10 @@ function AgentButtonLabel({
   const modelName = isSelect(model)
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  const level = isSelect(effort) ? levelsOf(effort, String(effort.value)) : null
-  const levelName = isSelect(effort)
-    ? effort.choices.find((c) => c.value === effort.value)?.name
-    : undefined
+  const level = isSelect(effort)
+    ? levelsOf(effort, String(effort.value), isSelect(model) ? String(model.value) : undefined)
+    : null
+  const levelName = level?.levels.find((c) => c.value === level.shown)?.name
   return (
     <>
       <AgentMark agent={agentId} size={14} />
@@ -434,9 +434,7 @@ function AgentButtonLabel({
           {splitName(modelName)[1]}
         </span>
       )}
-      {levelName && !(modelName && level?.usesDefault) && (
-        <span className="shrink-0 text-secondary">{levelName}</span>
-      )}
+      {levelName && <span className="shrink-0 text-secondary">{levelName}</span>}
     </>
   )
 }
@@ -458,18 +456,16 @@ function ModelButtonLabel({
   const modelName = isSelect(model)
     ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
     : null
-  const level = isSelect(effort) ? levelsOf(effort, String(effort.value)) : null
-  const levelName = isSelect(effort)
-    ? effort.choices.find((c) => c.value === effort.value)?.name
-    : undefined
+  const level = isSelect(effort)
+    ? levelsOf(effort, String(effort.value), isSelect(model) ? String(model.value) : undefined)
+    : null
+  const levelName = level?.levels.find((c) => c.value === level.shown)?.name
   return (
     <>
       <span className="min-w-0 truncate text-secondary" title={modelName ?? undefined}>
         {modelName ? splitName(modelName)[1] : t('newSession.modelMenu.model')}
       </span>
-      {levelName && !(modelName && level?.usesDefault) && (
-        <span className="shrink-0">{levelName}</span>
-      )}
+      {levelName && <span className="shrink-0">{levelName}</span>}
     </>
   )
 }
@@ -766,6 +762,7 @@ function Pane({
               <EffortSegments
                 effort={effort}
                 value={String(effort.value)}
+                model={isSelect(model) ? String(model.value) : undefined}
                 onPick={(v) => onOption(status.id, effort.id, v)}
                 plain
               />

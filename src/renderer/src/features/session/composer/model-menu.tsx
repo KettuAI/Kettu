@@ -14,7 +14,7 @@ import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
 import { formatShortcut } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { levelsOf, splitName, type SelectOption } from './levels'
 import { mainModels, shownValue, splitModels } from './model-list'
 import { modelRating } from './model-ratings'
@@ -88,7 +88,7 @@ export function ModelMenu({
   const models = mainModels(choices, modelValue).map((c) => row(c))
   const more = splitModels(choices).older.map((c) => row(c, true))
 
-  const levels = effort ? levelsOf(effort, effortValue) : null
+  const levels = effort ? levelsOf(effort, effortValue, modelValue) : null
   const efforts = levels?.levels.map((c) => ({ id: c.value, label: c.name })) ?? []
 
   const toggles: PickerToggle[] = switches.map((o) => {
@@ -161,7 +161,6 @@ export function ModelMenu({
       onEffortChange={pickEffort}
       effortLabel={effort?.name ?? t('controls.effort')}
       effortHint={t('controls.effortHint', { shortcut: formatShortcut('Alt+E') })}
-      effortFallback={levels?.usesDefault ? levels.fallback?.name : undefined}
       toggles={toggles}
       onToggle={(id, on) => {
         const option = switches.find((o) => o.id === id)

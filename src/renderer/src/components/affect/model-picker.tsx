@@ -145,8 +145,6 @@ export type ModelPickerProps = {
   note?: ReactNode;
   /** A switch was flipped; with `on` on the toggles the parent keeps their values */
   onToggle?: (id: string, on: boolean) => void;
-  /** What the trigger names while the effort is none of `efforts`, such as a level the agent picks itself */
-  effortFallback?: string;
   /** A quiet line at the foot of the More models card, such as where the list comes from */
   moreNote?: ReactNode;
   /** Something before the glyph on the trigger, such as a warning dot */
@@ -398,7 +396,6 @@ export function ModelPicker({
   keys = false,
   note,
   onToggle,
-  effortFallback,
   moreNote,
   triggerLead,
   triggerLabel,
@@ -682,7 +679,7 @@ export function ModelPicker({
   const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
   useLayoutEffect(() => {
     const btn = segRef.current?.querySelector<HTMLElement>(`[data-effort="${effortNow}"]`);
-    setThumb(btn ? { x: btn.offsetLeft, w: btn.offsetWidth } : null);
+    if (btn) setThumb({ x: btn.offsetLeft, w: btn.offsetWidth });
   }, [effortNow, isOpen, isThinking]);
   const onEffortKey = (e: KeyboardEvent) => {
     const i = efforts.findIndex((x) => x.id === effortNow);
@@ -810,7 +807,7 @@ export function ModelPicker({
         {ownEffort && (
           <span className="ui-mdpc__detail">
             <Swap id={effortNow} glide>
-              {efforts.find((x) => x.id === effortNow)?.label ?? effortFallback}
+              {efforts.find((x) => x.id === effortNow)?.label}
             </Swap>
           </span>
         )}

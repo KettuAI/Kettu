@@ -25,8 +25,6 @@
     "modelOutOfCredit": "Model, out of credit",
     "options": "Options",
     "changesBetweenTurns": "Changes between turns",
-    "useFallback": "Use {{name}}",
-    "useDefault": "Use the agent's default",
     "levelsHint": "Higher effort thinks longer and uses more of your plan. <shortcut>{{shortcut}}</shortcut> cycles it.",
     "moreModels": "More models",
     "searchModels": "Search models",
