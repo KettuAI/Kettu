@@ -331,8 +331,8 @@ function DraftComposer({
 
   return (
     <>
-      {/* Taller and rounder than a session's composer, which keeps its own look. */}
-      <div className="@container/draft w-full shrink-0 [&>[data-slot=input-group]]:rounded-[18px]">
+      {/* The card sits in a gray tray, as a session's composer does. */}
+      <div className="@container/draft w-full shrink-0 rounded-[26px] bg-sidebar p-1.25">
         <PromptBox
           box={box}
           agentId={agentId}

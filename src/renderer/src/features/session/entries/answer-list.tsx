@@ -232,7 +232,7 @@ export function WaitingCard({
       data-entry-id={entryId}
       onKeyDownCapture={onKeyDownCapture}
       className={cn(
-        'flex animate-attention flex-col rounded-dialog bg-card text-card-foreground shadow-attention',
+        'flex animate-attention flex-col rounded-[16px] bg-card text-card-foreground shadow-card',
         className,
       )}
     >
