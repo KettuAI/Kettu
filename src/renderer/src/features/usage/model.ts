@@ -82,11 +82,6 @@ export function addDays(day: number, n: number): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + n).getTime()
 }
 
-/** Whole local days from `from` to `to`. */
-export function daysBetween(from: number, to: number): number {
-  return Math.round((to - from) / 86_400_000)
-}
-
 /** The locale's first day of the week, 0 for Sunday as in `Date.getDay`. */
 export function firstDayOfWeek(locale: string): number {
   try {
@@ -500,133 +495,6 @@ export interface Generations {
   figures: number
 }
 
-/** What the legend hides, and the generations of the filters the trend was drawn under then. */
-export interface LegendChoice extends Generations {
-  hidden: readonly AgentId[]
-}
-
-export const NO_SERIES: readonly AgentId[] = []
-
-/** What the legend hides in a trend drawn under `drawn`: nothing once any filter has changed. */
-export function legendHides(legend: LegendChoice, drawn: Generations): readonly AgentId[] {
-  return legend.agent === drawn.agent && legend.figures === drawn.figures
-    ? legend.hidden
-    : NO_SERIES
-}
-
-/** Each bar's tokens from the series shown, which the trend's scale follows. */
-export function shownTotals(bars: readonly TrendBar[], series: readonly AgentId[]): number[] {
-  return bars.map((bar) => series.reduce((sum, id) => sum + (bar.byAgent[id] ?? 0), 0))
-}
-
-/** The bar with the most tokens, the first of equals; null when none has any. */
-export function busiest(totals: readonly number[]): number | null {
-  let best: number | null = null
-  totals.forEach((total, i) => {
-    if (total > 0 && (best === null || total > totals[best]!)) best = i
-  })
-  return best
-}
-
-/** The trend's bars are at most this wide, in px; the chart draws them so. */
-export const BAR_WIDTH = 48
-/** Up to this many bars stand 4 px apart, more of them 1 px, so they stay wider than the gaps. */
-const SPACED_BARS = 45
-
-/** The room between two of `count` bars, in px. */
-export function barGap(count: number): number {
-  return count <= SPACED_BARS ? 4 : 1
-}
-
-/** The middle of each bar in a row `width` px wide, where the bars sit centred. */
-export function barCenters(count: number, width: number): number[] {
-  const gap = barGap(count)
-  const bar = Math.max(0, Math.min(BAR_WIDTH, (width - (count - 1) * gap) / count))
-  const offset = (width - count * bar - (count - 1) * gap) / 2
-  return Array.from({ length: count }, (_, i) => offset + i * (bar + gap) + bar / 2)
-}
-
-export interface AxisLabel {
-  /** The bar it names. */
-  index: number
-  text: string
-  /** Its left edge, in px from the row's. */
-  left: number
-}
-
-/**
- * The bars that name their date under the trend: every `step`th one, counted from the first or
- * the last bar, or those `pick` gives for a step, with the smallest step (one of `steps`, when
- * given) whose labels, centred under their bars and kept inside the row, leave `gap` px between
- * them; one label, at the anchor, when none does. `text` gets the bar and the one labelled before
- * it, so a label can add what changed since.
- */
-export function axisLabels({
-  count,
-  width,
-  anchor,
-  steps,
-  pick,
-  gap,
-  text,
-  measure,
-}: {
-  count: number
-  width: number
-  anchor: 'start' | 'end'
-  steps?: readonly number[]
-  pick?: (step: number) => number[]
-  gap: number
-  text: (index: number, previous: number | null) => string
-  measure: (text: string) => number
-}): AxisLabel[] {
-  if (count <= 0 || width <= 0) return []
-  const centers = barCenters(count, width)
-  const every = (step: number) => {
-    const indices: number[] = []
-    for (let i = 0; i < count; i += step) indices.push(anchor === 'start' ? i : count - 1 - i)
-    return anchor === 'end' ? indices.reverse() : indices
-  }
-  const layout = (indices: readonly number[]) => {
-    let right = -Infinity
-    const labels: AxisLabel[] = []
-    for (const [k, index] of indices.entries()) {
-      const label = text(index, k > 0 ? indices[k - 1]! : null)
-      const size = measure(label)
-      const left = Math.max(0, Math.min(centers[index]! - size / 2, width - size))
-      if (left < right + gap) return null
-      labels.push({ index, text: label, left })
-      right = left + size
-    }
-    return labels
-  }
-  const tried = steps ?? Array.from({ length: count }, (_, i) => i + 1)
-  for (const step of tried) {
-    if (step >= count) break
-    const labels = layout(pick ? pick(step) : every(step))
-    if (labels && labels.length > 0) return labels
-  }
-  return layout([anchor === 'start' ? 0 : count - 1])!
-}
-
-/**
- * The hour bars to label for a step of `step` hours: those starting on a local hour that is a
- * multiple of it, by the clock rather than by count, so a day of 23 or 25 hours keeps the times
- * of any other. An hour the clocks repeat is labelled once, and one that starts on the half hour
- * after a change of 30 minutes not at all.
- */
-export function hourLabels(starts: readonly number[], step: number): number[] {
-  const picked: number[] = []
-  let last: number | null = null
-  starts.forEach((start, i) => {
-    const date = new Date(start)
-    const hour = date.getHours()
-    if (date.getMinutes() === 0 && hour % step === 0 && hour !== last) picked.push(i)
-    last = hour
-  })
-  return picked
-}
-
 /**
  * Whether the label of the bar starting at `froms[index]` names the year: across a new year, the
  * first label and the first of each year do; otherwise none does.
@@ -656,15 +524,6 @@ export function heatLevels(totals: readonly number[]): number[] {
   const at = (p: number) => used[Math.min(used.length - 1, Math.floor(used.length * p))]!
   const [q1, q2, q3] = [at(0.25), at(0.5), at(0.75)]
   return totals.map((t) => (t <= 0 ? 0 : t <= q1 ? 1 : t <= q2 ? 2 : t <= q3 ? 3 : 4))
-}
-
-/** Whether a day outside the range has usage, which the heatmap then draws in gray. */
-export function usedOutside(
-  days: readonly number[],
-  values: readonly number[],
-  range: DayRange,
-): boolean {
-  return days.some((day, i) => (day < range.from || day >= range.to) && (values[i] ?? 0) > 0)
 }
 
 export interface BreakdownRow {
@@ -830,74 +689,6 @@ export function presets(today: number, firstDay: number): Preset[] {
     { id: 'lastMonth', from: lastMonth, to: addDays(month, -1) },
     { id: 'thisYear', from: year, to: today },
   ]
-}
-
-/**
- * Why typed dates make no range: not a date, after today, before the calendar's first day, or a
- * start after the end.
- */
-export type DateError = 'format' | 'future' | 'early' | 'order'
-
-/** A range being chosen: the start, then the end once a second day is picked. */
-export interface RangeDraft {
-  from: number | null
-  to: number | null
-}
-
-const TYPED_DAY = /^(\d{4})-(\d{2})-(\d{2})$/
-
-/**
- * A date typed as YYYY-MM-DD as a local day, why it is none, or null while it may still be
- * incomplete: a field validates once it holds ten characters or is left. `earliest` is the first
- * day the calendar offers.
- */
-export function typedDay(
-  text: string,
-  today: number,
-  complete: boolean,
-  earliest: number,
-): number | Exclude<DateError, 'order'> | null {
-  const value = text.trim()
-  const match = TYPED_DAY.exec(value)
-  if (!match) return complete || value.length >= 10 ? 'format' : null
-  const [year, month, date] = [Number(match[1]), Number(match[2]) - 1, Number(match[3])]
-  const day = new Date(year, month, date)
-  if (day.getFullYear() !== year || day.getMonth() !== month || day.getDate() !== date) {
-    return 'format'
-  }
-  const time = day.getTime()
-  if (time > today) return 'future'
-  return time < earliest ? 'early' : time
-}
-
-/**
- * The range the picker's fields make: a typed end stands in for the draft's, and an end alone is
- * that one day. Null while a typed end is unfinished or wrong, with the reason once it is known.
- */
-export function typedRange(
-  draft: RangeDraft,
-  typed: { from: string | null; to: string | null },
-  complete: { from: boolean; to: boolean },
-  today: number,
-  earliest: number,
-): { range: RangeDraft | null; error: DateError | null } {
-  let error: DateError | null = null
-  let pending = false
-  const end = (which: 'from' | 'to'): number | null => {
-    const text = typed[which]
-    if (text === null) return draft[which]
-    if (text.trim() === '') return null
-    const day = typedDay(text, today, complete[which], earliest)
-    if (typeof day === 'number') return day
-    if (day === null) pending = true
-    else error ??= day
-    return null
-  }
-  const from = end('from')
-  const to = end('to')
-  if (error === null && from !== null && to !== null && from > to) error = 'order'
-  if (error !== null || pending) return { range: null, error }
-  return { range: from === null ? { from: to, to } : { from, to }, error: null }
 }
 
 /** The agents whose plan limits are worth asking for when the page opens. */
