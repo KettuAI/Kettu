@@ -30,6 +30,8 @@ export type ContextPart = {
   compact?: boolean | number;
   /** Any CSS color – defaults to a fixed palette in the order of the parts */
   color?: string;
+  /** Held back rather than used, e.g. an autocompact buffer: drawn and listed, not in the total */
+  reserved?: boolean;
 };
 
 export type ContextWindowProps = {
@@ -342,7 +344,8 @@ export function ContextWindow({
       color: p.color ?? PALETTE[i % PALETTE.length],
     };
   });
-  const used = list.reduce((sum, p) => sum + p.tokens, 0);
+  const used = list.reduce((sum, p) => sum + (p.reserved ? 0 : p.tokens), 0);
+  const held = list.reduce((sum, p) => sum + (p.reserved ? p.tokens : 0), 0);
   // Without a usable limit there is no window to fill
   const cap = count(limit);
   const share = cap > 0 ? used / cap : 0;
@@ -433,7 +436,7 @@ export function ContextWindow({
 
   /* ---------- What the last row says ---------- */
 
-  const free = Math.max(0, cap - used);
+  const free = Math.max(0, cap - used - held);
   let caption: ReactNode = labels.free(plain(free));
   let captionKey = "rest";
   let captionTone: string | undefined;

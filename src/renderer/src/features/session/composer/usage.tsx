@@ -447,7 +447,9 @@ function ContextPart({
             label: row.name,
             tokens: row.tokens,
             locked: true,
-            ...(row.part.kind === 'buffer' ? { color: 'var(--composer-faint)' } : {}),
+            ...(row.part.kind === 'buffer'
+              ? { color: 'var(--composer-faint)', reserved: true }
+              : {}),
             ...(list
               ? {
                   items: list.items.map((item, index) => ({
