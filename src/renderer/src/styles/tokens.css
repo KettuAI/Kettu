@@ -293,6 +293,46 @@
   --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* composer: the composer's tray, popovers and menus (affectUI's Chat Composer and Model
+     Picker), New session's list, and the meters' four levels by how much is used. */
+  --composer-strong: #000000;
+  --composer-ink: rgb(0 0 0 / 88%);
+  --composer-text: rgb(0 0 0 / 61%);
+  --composer-muted: rgb(0 0 0 / 45%);
+  --composer-faint: rgb(0 0 0 / 27%);
+  --composer-line: rgb(0 0 0 / 6%);
+  --composer-line-strong: rgb(0 0 0 / 10%);
+  --composer-chip: rgb(0 0 0 / 4%);
+  --composer-chip-hover: rgb(0 0 0 / 6%);
+  --composer-hover-fill: rgb(0 0 0 / 3%);
+  --composer-card: #ffffff;
+  --composer-panel: #ffffff;
+  --composer-pop-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 10%), 0 16px 36px -12px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
+  --composer-queue-drop: rgb(0 0 0 / 28%);
+  --composer-thumb: #ffffff;
+  --composer-thumb-shadow: 0 0 0 0.5px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 10%);
+  --composer-meter-ok: #22a06b;
+  --composer-meter-ok-wash: rgb(34 160 107 / 16%);
+  --composer-meter-mid: #3e7bfa;
+  --composer-meter-mid-wash: rgb(62 123 250 / 16%);
+  --composer-meter-high: #e8833a;
+  --composer-meter-high-wash: rgb(232 131 58 / 18%);
+  --composer-meter-full: #e5484d;
+  --composer-meter-full-wash: rgb(229 72 77 / 16%);
+  --composer-waiting: #d9480f;
+  --composer-waiting-dot: #f2581b;
+  --composer-waiting-halo: rgb(242 88 27 / 18%);
+  /* Ultracode: its violet words and the glow under the model menu, from its crest down. */
+  --composer-ultra-text: #7c3aed;
+  --composer-ultra-shine: #e9d5ff;
+  --composer-ultra-1: #e879f9;
+  --composer-ultra-2: #8b5cf6;
+  --composer-ultra-3: #3b82f6;
+  /* A closed project's folder: its tab and its front, in the start screen's two blues. */
+  --composer-folder-tab: #00a1ff;
+  --composer-folder-front: #3cc7ff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -486,6 +526,28 @@
     --elevation-sheet: 0 0 #0000;
     --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+    /* composer: the composer's tray, popovers and menus, New session's list. */
+    --composer-strong: #ffffff;
+    --composer-ink: rgb(255 255 255 / 90%);
+    --composer-text: rgb(255 255 255 / 62%);
+    --composer-muted: rgb(255 255 255 / 45%);
+    --composer-faint: rgb(255 255 255 / 28%);
+    --composer-line: rgb(255 255 255 / 8%);
+    --composer-line-strong: rgb(255 255 255 / 14%);
+    --composer-chip: rgb(255 255 255 / 6%);
+    --composer-chip-hover: rgb(255 255 255 / 9%);
+    --composer-hover-fill: rgb(255 255 255 / 5%);
+    --composer-card: #1b1b1e;
+    --composer-panel: #141416;
+    --composer-pop-shadow:
+      0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
+      0 1px 2px rgb(0 0 0 / 5%);
+    --composer-thumb: rgb(255 255 255 / 16%);
+    --composer-thumb-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    --composer-waiting: #ff8a5c;
+    --composer-ultra-text: #a78bfa;
+    --composer-ultra-shine: #faf5ff;
   }
 }
 
@@ -678,6 +740,28 @@
   --elevation-sheet: 0 0 #0000;
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* composer: the composer's tray, popovers and menus, New session's list. */
+  --composer-strong: #ffffff;
+  --composer-ink: rgb(255 255 255 / 90%);
+  --composer-text: rgb(255 255 255 / 62%);
+  --composer-muted: rgb(255 255 255 / 45%);
+  --composer-faint: rgb(255 255 255 / 28%);
+  --composer-line: rgb(255 255 255 / 8%);
+  --composer-line-strong: rgb(255 255 255 / 14%);
+  --composer-chip: rgb(255 255 255 / 6%);
+  --composer-chip-hover: rgb(255 255 255 / 9%);
+  --composer-hover-fill: rgb(255 255 255 / 5%);
+  --composer-card: #1b1b1e;
+  --composer-panel: #141416;
+  --composer-pop-shadow:
+    0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
+    0 1px 2px rgb(0 0 0 / 5%);
+  --composer-thumb: rgb(255 255 255 / 16%);
+  --composer-thumb-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --composer-waiting: #ff8a5c;
+  --composer-ultra-text: #a78bfa;
+  --composer-ultra-shine: #faf5ff;
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
