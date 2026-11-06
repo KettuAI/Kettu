@@ -60,6 +60,8 @@
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@fontsource-variable/manrope": "^5.3.0",
     "@fontsource-variable/source-serif-4": "^5.3.1",
+    "@hugeicons/core-free-icons": "1.2.1",
+    "@hugeicons/react": "1.1.10",
     "@lezer/highlight": "1.2.5",
     "@lezer/markdown": "1.8.1",
     "@modelcontextprotocol/sdk": "1.32.1",

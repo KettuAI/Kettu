@@ -4,7 +4,9 @@
 import { memo, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from "react";
 
 /*
- * Command Menu – search and run anything from one field, in a single self-contained file.
+ * Command Menu (Clean) – search and run anything from one field, in a single self-contained file.
+ * Clean style: no tray – one white panel with hairline shadows, small uppercase group labels, quiet key chips
+ * and a last row with hints under a hairline.
  * Actions that use another tool carry its logo (Gmail, Slack, ClickUp …) and a ⌘1–⌘5 shortcut;
  * everyday commands use simple icons. Typing filters every group and offers to ask the assistant about it.
  * ↑ ↓ move row by row, Tab jumps section by section, ↵ runs, ⌘1–⌘5 run a suggestion straight away,
@@ -24,21 +26,13 @@ export type Command = {
   keys?: string[];
   /** Extra words that should find this command */
   keywords?: string;
+  /** A quiet value at the row's end, e.g. "2 h ago" or "On" */
+  trail?: string;
 };
 
-/** "empty" shows the group only while nothing is typed, "query" only while something is */
-export type CommandGroup = { id: string; label: string; commands: Command[]; when?: "empty" | "query" };
+export type CommandScope = { id: string; label: string; count?: number };
 
-/** The menu's own words, for another language */
-export type CommandMenuLabels = { field: string; list: string; enter: string; tip: string; open: string };
-
-const defaultLabels: CommandMenuLabels = {
-  field: "Command",
-  list: "Commands",
-  enter: "Enter",
-  tip: "to jump between sections",
-  open: "to open",
-};
+export type CommandGroup = { id: string; label: string; commands: Command[] };
 
 export type CommandMenuProps = {
   groups?: CommandGroup[];
@@ -49,16 +43,27 @@ export type CommandMenuProps = {
   onClose?: () => void;
   /** Focus the field when the menu appears */
   autoFocus?: boolean;
-  /** Offer to ask the assistant about the typed text, as the first row */
+  /** Tabs under the field that narrow the search – Tab and Shift Tab move between them */
+  scopes?: CommandScope[];
+  scope?: string;
+  onScopeChange?: (id: string) => void;
+  /** Called as the search text changes */
+  onQueryChange?: (query: string) => void;
+  /** false: the groups passed in are already the results for the text, so the menu doesn't filter them again */
+  filter?: boolean;
+  /** Offer to ask the assistant about the typed text (default true) */
   ask?: boolean;
-  labels?: Partial<CommandMenuLabels>;
+  /** Shown in the list when there is nothing to show */
+  empty?: ReactNode;
+  /** Replaces the hints in the last row */
+  hints?: ReactNode;
   className?: string;
 };
 
 /* ---------- Icons ---------- */
 
 const Glyph = ({ d }: { d: string }) => (
-  <svg viewBox="0 0 24 24" className="ui-cm__glyph" aria-hidden="true">
+  <svg viewBox="0 0 24 24" className="ui-cmc__glyph" aria-hidden="true">
     <path d={d} />
   </svg>
 );
@@ -77,12 +82,12 @@ const icons = {
 const SparkTile = () => (
   <svg viewBox="0 0 24 24" aria-hidden="true">
     <defs>
-      <linearGradient id="ui-cm-spark" x1="0" y1="0" x2="1" y2="1">
+      <linearGradient id="ui-cmc-spark" x1="0" y1="0" x2="1" y2="1">
         <stop stopColor="#7C5CFF" />
         <stop offset="1" stopColor="#2F9BFF" />
       </linearGradient>
     </defs>
-    <path fill="url(#ui-cm-spark)" d="M12 2.5c.6 3.9 2.1 6.4 4.4 7.6 1.1.6 2.4.9 4.1 1.1v1.6c-4.6.6-7.3 3-8.5 8.7h-1.6c-.6-3.9-2.1-6.4-4.4-7.6-1.1-.6-2.4-.9-4.1-1.1v-1.6c4.6-.6 7.3-3 8.5-8.7z" />
+    <path fill="url(#ui-cmc-spark)" d="M12 2.5c.6 3.9 2.1 6.4 4.4 7.6 1.1.6 2.4.9 4.1 1.1v1.6c-4.6.6-7.3 3-8.5 8.7h-1.6c-.6-3.9-2.1-6.4-4.4-7.6-1.1-.6-2.4-.9-4.1-1.1v-1.6c4.6-.6 7.3-3 8.5-8.7z" />
   </svg>
 );
 
@@ -338,32 +343,33 @@ const Item = memo(function Item({ cmd, domId, selected, ran, mod, q, on }: ItemP
       role="option"
       aria-selected={selected}
       data-ran={ran || undefined}
-      className="ui-cm__item"
+      className="ui-cmc__item"
       tabIndex={-1}
       onMouseMove={() => on.current.move(cmd)}
       onClick={() => on.current.run(cmd)}
     >
       {cmd.logo ? (
-        <span className="ui-cm__logo" data-letter={initial(cmd.label)} onErrorCapture={onBroken}>
+        <span className="ui-cmc__logo" data-letter={initial(cmd.label)} onErrorCapture={onBroken}>
           {cmd.logo}
         </span>
       ) : (
-        <span className="ui-cm__icon" data-letter={initial(cmd.label)} onErrorCapture={onBroken}>
+        <span className="ui-cmc__icon" data-letter={initial(cmd.label)} onErrorCapture={onBroken}>
           {cmd.icon}
         </span>
       )}
-      <span className="ui-cm__text">
-        <span className="ui-cm__name" dir="auto" title={cmd.label}>
+      <span className="ui-cmc__text">
+        <span className="ui-cmc__name" dir="auto" title={cmd.label}>
           <Highlight text={cmd.label} query={q} />
         </span>
         {cmd.hint && (
-          <span className="ui-cm__hint" dir="auto" title={cmd.hint}>
+          <span className="ui-cmc__hint" dir="auto" title={cmd.hint}>
             <Highlight text={cmd.hint} query={q} />
           </span>
         )}
       </span>
+      {cmd.trail && <span className="ui-cmc__trail">{cmd.trail}</span>}
       {keys && (
-        <span className="ui-cm__keys" aria-hidden="true">
+        <span className="ui-cmc__keys" aria-hidden="true">
           {keys.map((k, i) => (
             <kbd key={i}>{k}</kbd>
           ))}
@@ -381,12 +387,17 @@ export function CommandMenu({
   onRun,
   onClose,
   autoFocus,
+  scopes,
+  scope,
+  onScopeChange,
+  onQueryChange,
+  filter = true,
   ask = true,
-  labels: given,
+  empty,
+  hints,
   className,
 }: CommandMenuProps) {
-  const labels = { ...defaultLabels, ...given };
-  const id = "ui-cm" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const id = "ui-cmc" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const input = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -395,6 +406,8 @@ export function CommandMenu({
   const [active, setActive] = useState<string | null>(null);
   const [ran, setRan] = useState<{ id: string; label: string } | null>(null);
   const [pill, setPill] = useState<{ y: number; h: number } | null>(null);
+  // The highlight shows while the pointer is over the list or the keyboard moves – leaving the list fades it out
+  const [lit, setLit] = useState(true);
   const mod = isMac() ? "⌘" : "Ctrl";
 
   // Every row gets a key of its own and a search text, once per groups – missing labels or commands from an API never crash
@@ -403,7 +416,6 @@ export function CommandMenu({
       (groups ?? []).filter(Boolean).map((g, gi) => ({
         key: `g${gi}`,
         id: g.id,
-        when: g.when,
         label: String(g.label ?? ""),
         commands: (Array.isArray(g.commands) ? g.commands : []).filter(Boolean).map((c, ci) => {
           const label = String(c.label ?? "");
@@ -421,15 +433,15 @@ export function CommandMenu({
       .map((g) => ({
         ...g,
         commands: g.commands
-          .filter((c) => !needle || c.text.includes(needle))
+          .filter((c) => !filter || !needle || c.text.includes(needle))
           // ⌘1–⌘5 go to the first five suggestions shown – none beyond, since ⌘6 does nothing
           .map((c, i) => (g.id === "suggestions" && i < 5 ? { ...c.row, n: i + 1 } : c.row)),
       }))
-      .filter((g) => g.commands.length && (!g.when || (g.when === "query") === Boolean(needle)));
+      .filter((g) => g.commands.length);
     // With text typed, the first row always offers to ask the assistant about it
-    if (needle && ask) result.unshift({ key: "ask", id: "ask-about", when: undefined, label: "Assistant", commands: [{ key: "ask", n: 0, id: "ask-about", label: `Ask assistant about “${q}”`, logo: <SparkTile /> }] });
+    if (needle && ask) result.unshift({ key: "ask", id: "ask-about", label: "Assistant", commands: [{ key: "ask", n: 0, id: "ask-about", label: `Ask assistant about “${q}”`, logo: <SparkTile /> }] });
     return result;
-  }, [all, q, ask]);
+  }, [all, q, filter, ask]);
   const order = useMemo(() => shown.flatMap((g) => g.commands), [shown]);
   const suggestions = order.filter((c) => c.n);
   const current = order.find((c) => c.key === active) ?? order[0];
@@ -447,7 +459,7 @@ export function CommandMenu({
     byKeyboard.current = false;
     // Scroll only the list (never the page), keeping a little room and the group title above the first row in view
     const pad = 8;
-    const label = row.previousElementSibling?.classList.contains("ui-cm__label") ? (row.previousElementSibling as HTMLElement).offsetHeight : 0;
+    const label = row.previousElementSibling?.classList.contains("ui-cmc__label") ? (row.previousElementSibling as HTMLElement).offsetHeight : 0;
     const top = row.offsetTop - pad - label;
     const bottom = row.offsetTop + row.offsetHeight + pad;
     if (top < list.scrollTop) list.scrollTop = top;
@@ -488,7 +500,7 @@ export function CommandMenu({
     if (autoFocus) input.current?.focus();
   }, [autoFocus]);
 
-  // A short confirmation in the tray after running a command
+  // A short confirmation in the last row after running a command
   useEffect(() => {
     if (!ran) return;
     const t = window.setTimeout(() => setRan(null), 1800);
@@ -506,6 +518,7 @@ export function CommandMenu({
   const on = useRef({ move: (_: Row) => {}, run: (_: Row) => {} });
   on.current = {
     move: (cmd) => {
+      setLit(true);
       if (cmd.key !== current?.key) setActive(cmd.key);
     },
     run: (cmd) => {
@@ -517,6 +530,7 @@ export function CommandMenu({
   const move = (step: number) => {
     if (!order.length || !current) return;
     byKeyboard.current = true;
+    setLit(true);
     const i = order.findIndex((c) => c.key === current.key);
     setActive(order[(i + step + order.length) % order.length].key);
   };
@@ -528,12 +542,20 @@ export function CommandMenu({
     } else if (e.key === "Enter" && current) {
       e.preventDefault();
       run(current);
+    } else if (e.key === "Tab" && scopes?.length) {
+      // With scopes, Tab moves to the next scope and Shift Tab to the one before
+      e.preventDefault();
+      const i = Math.max(0, scopes.findIndex((s) => s.id === scope));
+      const next = scopes[(i + (e.shiftKey ? scopes.length - 1 : 1)) % scopes.length];
+      setActive(null);
+      onScopeChange?.(next.id);
     } else if (e.key === "Tab" && shown.length > 1) {
       // Tab jumps to the first row of the next section, Shift Tab to the previous one
       e.preventDefault();
       const g = shown.findIndex((group) => group.commands.some((c) => c.key === current?.key));
       const next = e.shiftKey ? (g <= 0 ? shown.length - 1 : g - 1) : (g + 1) % shown.length;
       byKeyboard.current = true;
+      setLit(true);
       setActive(shown[next].commands[0].key);
     } else if (e.key === "Escape") {
       if (query) setQuery("");
@@ -548,24 +570,24 @@ export function CommandMenu({
   };
 
   return (
-    <div className={["ui-cm", className].filter(Boolean).join(" ")}>
+    <div className={["ui-cmc", className].filter(Boolean).join(" ")}>
       {/* React 19 hoists this into <head> once, no matter how many instances render */}
-      <style href="ui-command-menu" precedence="default">
+      <style href="ui-command-menu-clean" precedence="default">
         {css}
       </style>
 
-      <div className="ui-cm__card">
-        <label className="ui-cm__search">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m20 20-3.5-3.5" />
+      <div className="ui-cmc__card">
+        <label className="ui-cmc__search">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7.25" cy="7.25" r="4.75" />
+            <path d="m13.5 13.5-2.9-2.9" />
           </svg>
           <input
             ref={input}
             value={query}
             dir="auto"
             placeholder={placeholder}
-            aria-label={labels.field}
+            aria-label="Command"
             role="combobox"
             aria-expanded="true"
             aria-controls={`${id}-list`}
@@ -573,24 +595,55 @@ export function CommandMenu({
             onChange={(e) => {
               setQuery(e.target.value);
               setActive(null);
+              onQueryChange?.(e.target.value);
             }}
             onKeyDown={onKeyDown}
           />
-          <span className="ui-cm__enter" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M19 6v5a3 3 0 0 1-3 3H6m4-4-4 4 4 4" />
+          <kbd className="ui-cmc__enter" aria-hidden="true">
+            <svg viewBox="0 0 16 16">
+              <path d="M12.5 4v3a2 2 0 0 1-2 2h-7M6 6.5 3.5 9 6 11.5" />
             </svg>
-            {labels.enter}
-          </span>
+          </kbd>
         </label>
 
-        <div ref={listRef} id={`${id}-list`} className="ui-cm__list" role="listbox" aria-label={labels.list} style={listHeight ? { height: listHeight } : undefined}>
-          {pill && <span className="ui-cm__pill" style={{ transform: `translateY(${pill.y}px)`, height: pill.h }} aria-hidden="true" />}
-          <div ref={innerRef} className="ui-cm__inner">
+        {scopes?.length ? (
+          <div className="ui-cmc__scopes" role="tablist" aria-label="Search in">
+            {scopes.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                tabIndex={-1}
+                aria-selected={s.id === scope}
+                className="ui-cmc__scope"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setActive(null);
+                  onScopeChange?.(s.id);
+                }}
+              >
+                {s.label}
+                {s.count != null && <span className="ui-cmc__scope-count">{s.count}</span>}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        <div
+          ref={listRef}
+          id={`${id}-list`}
+          className="ui-cmc__list"
+          role="listbox"
+          aria-label="Commands"
+          style={listHeight ? { height: listHeight } : undefined}
+          onMouseLeave={() => setLit(false)}
+        >
+          {pill && <span className="ui-cmc__pill" data-lit={lit || undefined} style={{ transform: `translateY(${pill.y}px)`, height: pill.h }} aria-hidden="true" />}
+          <div ref={innerRef} className="ui-cmc__inner">
           {shown.map((group) => (
-            <div key={group.key} role="group" aria-label={group.label} className="ui-cm__group">
+            <div key={group.key} role="group" aria-label={group.label} className="ui-cmc__group">
               {group.key !== "ask" && group.label && (
-                <span className="ui-cm__label" dir="auto">
+                <span className="ui-cmc__label" dir="auto">
                   {group.label}
                 </span>
               )}
@@ -608,32 +661,37 @@ export function CommandMenu({
               ))}
             </div>
           ))}
+          {!shown.length && empty}
           </div>
         </div>
-      </div>
 
-      {/* The tray below the card: a hint, or what just ran */}
-      <footer className="ui-cm__foot" aria-live="polite">
-        {ran ? (
-          <span className="ui-cm__done" key={ran.label}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m5 12.5 4.5 4.5L19 7.5" />
-            </svg>
-            <span className="ui-cm__done-text">{ran.label}</span>
-          </span>
-        ) : (
-          <span className="ui-cm__tip">
-            <kbd>Tab</kbd> {labels.tip}
-          </span>
-        )}
-        <span className="ui-cm__foot-right">
-          <span className="ui-cm__keys">
-            <kbd>{mod}</kbd>
-            <kbd>K</kbd>
-          </span>
-          {labels.open}
-        </span>
-      </footer>
+        {/* The last row of the panel, under a hairline: a hint, or what just ran */}
+        <footer className="ui-cmc__foot" aria-live="polite">
+          {ran ? (
+            <span className="ui-cmc__done" key={ran.label}>
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="m3.5 8.5 3 3 6-7" />
+              </svg>
+              <span className="ui-cmc__done-text">{ran.label}</span>
+            </span>
+          ) : hints ? null : (
+            <span className="ui-cmc__tip">
+              <kbd>Tab</kbd> to jump between sections
+            </span>
+          )}
+          {hints ? (
+            !ran && <span className="ui-cmc__hints">{hints}</span>
+          ) : (
+            <span className="ui-cmc__foot-right">
+              <span className="ui-cmc__keys">
+                <kbd>{mod}</kbd>
+                <kbd>K</kbd>
+              </span>
+              to open
+            </span>
+          )}
+        </footer>
+      </div>
     </div>
   );
 }
@@ -641,22 +699,26 @@ export function CommandMenu({
 /* ---------- Styles ---------- */
 
 const css = /* css */ `
-.ui-cm {
-  --ui-cm-tray: #f0f0f0;
-  --ui-cm-card: #ffffff;
-  --ui-cm-line: #ececec;
-  --ui-cm-ink: #171717;
-  --ui-cm-text: #404040;
-  --ui-cm-muted: #8f8f8f;
-  --ui-cm-faint: #b5b5b5;
-  --ui-cm-active: #f0f0f1;
-  --ui-cm-tile: #ffffff;
-  --ui-cm-tile-ring: rgba(0, 0, 0, 0.09);
-  --ui-cm-kbd: #ffffff;
-  --ui-cm-mark: rgba(47, 107, 255, 0.14);
-  --ui-cm-ok: #1f8a4c;
-  --ui-cm-accent: #2f6bff;
-  --ui-cm-ease: cubic-bezier(0.22, 1, 0.36, 1);
+/* Colors and motion as variables – override them on .ui-cmc */
+.ui-cmc {
+  --ui-cmc-card: #ffffff;
+  --ui-cmc-ink: rgba(0, 0, 0, 0.88);
+  --ui-cmc-strong: #000000;
+  --ui-cmc-text: rgba(0, 0, 0, 0.61);
+  --ui-cmc-muted: rgba(0, 0, 0, 0.45);
+  --ui-cmc-faint: rgba(0, 0, 0, 0.27);
+  --ui-cmc-icon: rgba(0, 0, 0, 0.447);
+  --ui-cmc-line: rgba(0, 0, 0, 0.06);
+  --ui-cmc-line-strong: rgba(0, 0, 0, 0.1);
+  --ui-cmc-active: rgba(0, 0, 0, 0.06);
+  --ui-cmc-tile: #ffffff;
+  --ui-cmc-tile-ring: rgba(0, 0, 0, 0.1);
+  --ui-cmc-mark: rgba(0, 96, 226, 0.12);
+  --ui-cmc-accent: rgba(0, 96, 226, 0.765);
+  --ui-cmc-ok: #1a9a52;
+  /* Strokes are shadows: a 0.5px hairline plus a soft lift, like a popover */
+  --ui-cmc-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.08), 0 12px 28px -10px rgba(0, 0, 0, 0.16), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --ui-cmc-ease: cubic-bezier(0.22, 1, 0.36, 1);
   box-sizing: border-box;
   container-type: inline-size;
   display: grid;
@@ -664,124 +726,163 @@ const css = /* css */ `
   grid-template-columns: minmax(0, 1fr);
   width: 100%;
   max-width: 600px;
-  padding: 4px;
-  border-radius: 20px;
-  background: var(--ui-cm-tray);
-  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 13.5px;
-  color: var(--ui-cm-text);
+  font-family: "Inter", "InterVariable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--ui-cmc-ink);
   -webkit-font-smoothing: antialiased;
 }
-.ui-cm *, .ui-cm *::before, .ui-cm *::after { box-sizing: border-box; }
-:where(.ui-cm) button { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
-:where(.ui-cm) svg { display: block; flex: none; }
+.ui-cmc *, .ui-cmc *::before, .ui-cmc *::after { box-sizing: border-box; }
+:where(.ui-cmc) button { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
+:where(.ui-cmc) svg { display: block; flex: none; }
 
-/* The white card: search and results */
-.ui-cm__card { overflow: hidden; border-radius: 16px; background: var(--ui-cm-card); box-shadow: 0 0 0 1px var(--ui-cm-line), 0 1px 2px rgba(0, 0, 0, 0.04); }
-.ui-cm__search { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--ui-cm-line); cursor: text; }
-.ui-cm__search > svg { width: 18px; height: 18px; fill: none; stroke: var(--ui-cm-muted); stroke-width: 1.8; stroke-linecap: round; }
-.ui-cm__search input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; font: inherit; font-size: 15px; color: var(--ui-cm-ink); outline: none; }
-.ui-cm__search input::placeholder { color: var(--ui-cm-faint); }
-.ui-cm__search input:focus-visible { outline: none; }
-.ui-cm__enter { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ui-cm-faint); }
-.ui-cm__enter svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* One white panel: search, results and the last row – the edge is a shadow, not a border */
+.ui-cmc__card { overflow: hidden; border-radius: 12px; background: var(--ui-cmc-card); box-shadow: var(--ui-cmc-shadow); }
 
-.ui-cm__list { position: relative; max-height: 340px; padding: 4px 6px 8px; overflow-y: auto; scrollbar-width: thin; transition: height 320ms var(--ui-cm-ease); }
-.ui-cm__group { display: flex; flex-direction: column; }
-.ui-cm__label { padding: 10px 10px 4px; overflow-wrap: anywhere; font-size: 12px; font-weight: 500; color: var(--ui-cm-faint); }
-.ui-cm__pill {
+/* Search row */
+.ui-cmc__search { display: flex; align-items: center; gap: 12px; height: 48px; padding: 0 12px 0 14px; border-bottom: 0.5px solid var(--ui-cmc-line); cursor: text; }
+.ui-cmc__search > svg { width: 16px; height: 16px; fill: none; stroke: var(--ui-cmc-icon); stroke-width: 1.1; stroke-linecap: round; }
+.ui-cmc__search input { flex: 1; min-width: 0; height: 20px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 13px; line-height: 20px; color: var(--ui-cmc-ink); caret-color: var(--ui-cmc-accent); outline: none; }
+.ui-cmc__search input::placeholder { color: var(--ui-cmc-faint); }
+.ui-cmc__search input:focus-visible { outline: none; }
+.ui-cmc__enter svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Results */
+/* Scopes: a row of quiet tabs under the field, the chosen one on a soft fill */
+.ui-cmc__scopes { display: flex; gap: 2px; padding: 8px; overflow-x: auto; scrollbar-width: none; box-shadow: inset 0 -0.5px 0 var(--ui-cmc-line); margin-bottom: 4px; }
+.ui-cmc__scope { display: inline-flex; flex: none; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border-radius: 7px; font-size: 12.5px; color: var(--ui-cmc-muted); transition: background-color 140ms ease, color 140ms ease; }
+.ui-cmc__scope:hover { color: var(--ui-cmc-ink); }
+.ui-cmc__scope[aria-selected="true"] { background: var(--ui-cmc-chip, rgba(0, 0, 0, 0.05)); color: var(--ui-cmc-ink); }
+:where(.dark, [data-theme="dark"]) .ui-cmc__scope[aria-selected="true"] { background: rgba(255, 255, 255, 0.08); }
+.ui-cmc__scope-count { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ui-cmc-faint, var(--ui-cmc-muted)); }
+.ui-cmc__trail { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--ui-cmc-muted); }
+.ui-cmc__hints { display: flex; align-items: center; gap: 14px; }
+.ui-cmc__hints > span { display: inline-flex; align-items: center; gap: 4px; }
+.ui-cmc__list { position: relative; max-height: 360px; padding: 0 4px 4px; overflow-y: auto; scrollbar-width: thin; transition: height 320ms var(--ui-cmc-ease); }
+.ui-cmc__group { display: flex; flex-direction: column; }
+.ui-cmc__label { padding: 10px 8px 4px; overflow-wrap: anywhere; font-size: 10px; font-weight: 500; line-height: 16px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--ui-cmc-muted); }
+/* With text typed, the assistant row sits on top without a label */
+.ui-cmc__group:first-child:not(:has(.ui-cmc__label)) { padding-top: 4px; }
+/* The highlight follows the active row */
+.ui-cmc__pill {
   position: absolute;
   top: 0;
-  left: 6px;
-  right: 6px;
-  border-radius: 10px;
-  background: var(--ui-cm-active);
-  transition: transform 220ms var(--ui-cm-ease), height 220ms var(--ui-cm-ease);
+  left: 4px;
+  right: 4px;
+  border-radius: 6px;
+  background: var(--ui-cmc-active);
+  opacity: 0;
+  /* A short, crisp move between rows – no long glide; it fades out when the pointer leaves the list */
+  transition: transform 90ms ease-out, height 90ms ease-out, opacity 140ms ease;
 }
-.ui-cm__item { position: relative; display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 10px; border-radius: 10px; text-align: start; }
-.ui-cm__logo {
+.ui-cmc__pill[data-lit] { opacity: 1; }
+.ui-cmc__item { position: relative; display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px; border-radius: 6px; text-align: start; }
+.ui-cmc__logo {
   display: grid;
   place-items: center;
   flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--ui-cm-tile);
-  box-shadow: inset 0 0 0 1px var(--ui-cm-tile-ring);
-  color: var(--ui-cm-ink);
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--ui-cmc-tile);
+  box-shadow: 0 0 0 0.5px var(--ui-cmc-tile-ring), 0 1px 1px -1px rgba(0, 0, 0, 0.1);
+  color: var(--ui-cmc-strong);
 }
-.ui-cm__logo svg { width: 14px; height: 14px; }
+.ui-cmc__logo svg { width: 12px; height: 12px; }
 /* Image logos fit the tile; a broken one shows the command's first letter instead */
-.ui-cm__logo, .ui-cm__icon { overflow: hidden; }
-.ui-cm__logo img { width: 14px; height: 14px; object-fit: contain; }
-.ui-cm__icon img { width: 17px; height: 17px; object-fit: contain; }
-.ui-cm__logo[data-broken] > *, .ui-cm__icon[data-broken] > * { display: none; }
-.ui-cm__logo[data-broken]::after, .ui-cm__icon[data-broken]::after { content: attr(data-letter); font-size: 11px; font-weight: 600; line-height: 1; color: var(--ui-cm-text); }
-.ui-cm__icon { display: grid; place-items: center; flex: none; width: 26px; height: 26px; color: var(--ui-cm-muted); }
-.ui-cm__glyph { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.ui-cm__item[aria-selected="true"] .ui-cm__icon { color: var(--ui-cm-ink); }
-.ui-cm__text { display: flex; flex: 1; align-items: baseline; gap: 8px; min-width: 0; }
-.ui-cm__name { overflow: hidden; color: var(--ui-cm-ink); white-space: nowrap; text-overflow: ellipsis; }
-.ui-cm__hint { overflow: hidden; color: var(--ui-cm-muted); white-space: nowrap; text-overflow: ellipsis; }
-.ui-cm mark { border-radius: 3px; background: var(--ui-cm-mark); color: inherit; }
-.ui-cm__keys { display: inline-flex; flex: none; gap: 3px; opacity: 0.85; }
-.ui-cm kbd {
+.ui-cmc__logo, .ui-cmc__icon { overflow: hidden; }
+.ui-cmc__logo img { width: 12px; height: 12px; object-fit: contain; }
+.ui-cmc__icon img { width: 16px; height: 16px; object-fit: contain; }
+.ui-cmc__logo[data-broken] > *, .ui-cmc__icon[data-broken] > * { display: none; }
+.ui-cmc__logo[data-broken]::after, .ui-cmc__icon[data-broken]::after { content: attr(data-letter); font-size: 10px; font-weight: 600; line-height: 1; color: var(--ui-cmc-text); }
+.ui-cmc__icon { display: grid; place-items: center; flex: none; width: 20px; height: 20px; color: var(--ui-cmc-icon); transition: color 140ms ease; }
+.ui-cmc__glyph { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+.ui-cmc__glyph path { vector-effect: non-scaling-stroke; }
+.ui-cmc__item[aria-selected="true"] .ui-cmc__icon { color: var(--ui-cmc-ink); }
+.ui-cmc__text { display: flex; flex: 1; align-items: baseline; gap: 8px; min-width: 0; }
+.ui-cmc__name { overflow: hidden; color: var(--ui-cmc-ink); white-space: nowrap; text-overflow: ellipsis; }
+.ui-cmc__hint { overflow: hidden; color: var(--ui-cmc-muted); white-space: nowrap; text-overflow: ellipsis; }
+.ui-cmc mark { border-radius: 3px; background: var(--ui-cmc-mark); color: inherit; }
+
+/* Keyboard hints: small chips with an inset hairline */
+.ui-cmc__keys { display: inline-flex; flex: none; gap: 2px; }
+.ui-cmc kbd {
   display: inline-grid;
   place-items: center;
   min-width: 20px;
   height: 20px;
   padding: 0 5px;
   border-radius: 5px;
-  background: var(--ui-cm-kbd);
-  box-shadow: inset 0 0 0 1px var(--ui-cm-line), 0 1px 0 var(--ui-cm-line);
+  box-shadow: inset 0 0 0 0.5px var(--ui-cmc-line-strong);
   font-family: inherit;
   font-size: 11px;
   font-weight: 500;
-  color: var(--ui-cm-muted);
+  line-height: 16px;
+  color: var(--ui-cmc-muted);
+  transition: color 140ms ease;
 }
-.ui-cm__item[aria-selected="true"] .ui-cm__keys { opacity: 1; }
-/* A short flash on the row that just ran */
-.ui-cm__item[data-ran] { animation: ui-cm-ran 600ms var(--ui-cm-ease); }
-@keyframes ui-cm-ran { 30% { transform: scale(0.985); } }
+.ui-cmc__item[aria-selected="true"] kbd { color: var(--ui-cmc-text); }
+.ui-cmc__enter { padding: 0 4px; color: var(--ui-cmc-icon); }
+/* A short press on the row that just ran */
+.ui-cmc__item[data-ran] { animation: ui-cmc-ran 600ms var(--ui-cmc-ease); }
+@keyframes ui-cmc-ran { 30% { transform: scale(0.985); } }
 
-/* The tray below the card */
-.ui-cm__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 38px; padding: 0 12px; font-size: 12.5px; color: var(--ui-cm-muted); }
-.ui-cm__foot > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
-.ui-cm__done-text { overflow: hidden; text-overflow: ellipsis; }
-.ui-cm__foot-right { flex: none; }
-.ui-cm__foot .ui-cm__keys { opacity: 1; }
-.ui-cm__done { color: var(--ui-cm-ink); animation: ui-cm-in 260ms var(--ui-cm-ease); }
-.ui-cm__done svg { width: 14px; height: 14px; fill: none; stroke: var(--ui-cm-ok); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-@keyframes ui-cm-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+/* The last row of the panel */
+.ui-cmc__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 40px;
+  padding: 0 12px;
+  border-top: 0.5px solid var(--ui-cmc-line);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ui-cmc-muted);
+}
+.ui-cmc__foot > span { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.ui-cmc__done { color: var(--ui-cmc-ink); animation: ui-cmc-in 260ms var(--ui-cmc-ease); }
+.ui-cmc__done-text { overflow: hidden; text-overflow: ellipsis; }
+.ui-cmc__done svg { width: 16px; height: 16px; fill: none; stroke: var(--ui-cmc-ok); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.ui-cmc__foot-right { flex: none; }
+@keyframes ui-cmc-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
 /* Narrow (phones): no shortcut keys or hints – there's no keyboard to use them with */
 @container (max-width: 480px) {
-  .ui-cm__item .ui-cm__keys, .ui-cm__foot > .ui-cm__foot-right, .ui-cm__foot > .ui-cm__tip, .ui-cm__enter, .ui-cm__hint { display: none; }
-  .ui-cm__item { height: 44px; }
-  .ui-cm__list { max-height: 360px; }
+  .ui-cmc__item .ui-cmc__keys, .ui-cmc__foot > .ui-cmc__foot-right, .ui-cmc__foot > .ui-cmc__tip, .ui-cmc__enter, .ui-cmc__hint { display: none; }
+  .ui-cmc__item { height: 40px; }
+  .ui-cmc__list { max-height: 360px; }
+  .ui-cmc__foot:not(:has(.ui-cmc__done)) { display: none; }
+}
+/* Touch screens: taller rows */
+@media (hover: none) and (pointer: coarse) {
+  .ui-cmc__item { height: 44px; }
+  .ui-cmc__search { height: 52px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ui-cm *, .ui-cm *::before, .ui-cm *::after { animation: none !important; transition: none !important; }
+  .ui-cmc *, .ui-cmc *::before, .ui-cmc *::after { animation: none !important; transition: none !important; }
 }
 
 /* Dark mode: follows a .dark class or data-theme="dark" on any ancestor, e.g. <html> */
-:where(.dark, [data-theme="dark"]) .ui-cm {
-  --ui-cm-tray: #111113;
-  --ui-cm-card: #19191b;
-  --ui-cm-line: #2a2a2e;
-  --ui-cm-ink: #ededed;
-  --ui-cm-text: #c8c8cc;
-  --ui-cm-muted: #8b8b92;
-  --ui-cm-faint: #5c5c63;
-  --ui-cm-active: #26262a;
-  --ui-cm-tile: #26262a;
-  --ui-cm-tile-ring: rgba(255, 255, 255, 0.1);
-  --ui-cm-kbd: #232326;
-  --ui-cm-mark: rgba(109, 139, 255, 0.24);
-  --ui-cm-ok: #3ec27a;
-  --ui-cm-accent: #6d8bff;
+:where(.dark, [data-theme="dark"]) .ui-cmc {
+  --ui-cmc-card: #1c1c1e;
+  --ui-cmc-ink: rgba(255, 255, 255, 0.9);
+  --ui-cmc-strong: #ffffff;
+  --ui-cmc-text: rgba(255, 255, 255, 0.62);
+  --ui-cmc-muted: rgba(255, 255, 255, 0.46);
+  --ui-cmc-faint: rgba(255, 255, 255, 0.3);
+  --ui-cmc-icon: rgba(255, 255, 255, 0.5);
+  --ui-cmc-line: rgba(255, 255, 255, 0.08);
+  --ui-cmc-line-strong: rgba(255, 255, 255, 0.12);
+  --ui-cmc-active: rgba(255, 255, 255, 0.08);
+  --ui-cmc-tile: #2a2a2d;
+  --ui-cmc-tile-ring: rgba(255, 255, 255, 0.12);
+  --ui-cmc-mark: rgba(77, 141, 255, 0.24);
+  --ui-cmc-accent: #4d8dff;
+  --ui-cmc-ok: #3ec27a;
+  --ui-cmc-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.4);
 }
 `;
 
-/** The stylesheet alone, for a menu that keeps its own markup and takes this look */
 export const commandMenuStyles = css;
