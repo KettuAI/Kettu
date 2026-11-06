@@ -1236,6 +1236,43 @@
   }
 }
 
+/* A run's steps on a rail with a dot each, as affectUI's agent checkpoints draw a run: a hollow dot
+   for a finished step, the fox's for one at work, red for one that failed. A step without a tool
+   in it, such as a thought, keeps the rail and takes no dot. */
+[data-steps] {
+  box-shadow: inset 1.5px 0 0 var(--border-default);
+}
+[data-step] {
+  position: relative;
+}
+[data-step]:has([data-step-status])::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  /* On the rail: the steps' 14 px indent, then half the rail and half the dot. */
+  left: calc(-14px - 4px + 0.75px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bg-app);
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+  animation: step-dot 180ms var(--ease-out-quint) both;
+}
+[data-step]:has([data-step-status='in_progress'], [data-step-status='pending'])::before {
+  background: var(--control-on);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--control-on) 22%, transparent);
+}
+[data-step]:has([data-step-status='failed'])::before {
+  background: var(--danger);
+  box-shadow: none;
+}
+@keyframes step-dot {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
 /* Reduce motion: movement and loops stop; opacity and color changes remain. The transform
    variables do not inherit, so they are reset on every element. */
 @media (prefers-reduced-motion: reduce) {
@@ -1259,7 +1296,8 @@
   .shimmer,
   [data-caret],
   [data-sd-animate],
-  [data-sd-animate-marker]::marker {
+  [data-sd-animate-marker]::marker,
+  [data-step]::before {
     animation: none !important;
   }
   /* Held, not removed: each dot keeps the frame its delay starts it on. */
@@ -1301,7 +1339,8 @@
   & .shimmer,
   & [data-caret],
   & [data-sd-animate],
-  & [data-sd-animate-marker]::marker {
+  & [data-sd-animate-marker]::marker,
+  & [data-step]::before {
     animation: none !important;
   }
   & [data-turn-dots] circle {

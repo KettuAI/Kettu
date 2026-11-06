@@ -130,7 +130,14 @@ export const ToolCard = memo(function ToolCard({
     <Collapsible
       open={open}
       onOpenChange={(next) => setUserOpen(next)}
-      render={<div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)} />}
+      render={
+        <div
+          ref={ref}
+          data-entry-id={entryId}
+          data-step-status={entry.status}
+          className={cn('min-w-0', animation)}
+        />
+      }
     >
       <ToolHeader
         sessionId={sessionId}

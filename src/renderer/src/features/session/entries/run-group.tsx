@@ -135,19 +135,20 @@ export const RunGroup = memo(function RunGroup({
         </CollapsibleTrigger>
       </ThumbRow>
       <CollapsibleContent className={PANEL}>
-        <div className="mt-1 ml-1.5 flex flex-col gap-0.5 border-l border-subtle pl-3.5">
+        <div data-steps="" className="mt-1 ml-1.5 flex flex-col gap-0.5 pl-3.5">
           {items.map((item) =>
             item.type === 'group' ? (
-              <ToolGroup
-                key={item.key}
-                sessionId={sessionId}
-                entryIds={item.ids}
-                projectPath={projectPath}
-                agentName={agentName}
-              />
+              <div key={item.key} data-step="">
+                <ToolGroup
+                  sessionId={sessionId}
+                  entryIds={item.ids}
+                  projectPath={projectPath}
+                  agentName={agentName}
+                />
+              </div>
             ) : (
               // A compaction or thought is not a row, so it keeps room from them.
-              <div key={item.key} className={cn(spaced.has(item.id) && 'py-1.5')}>
+              <div key={item.key} data-step="" className={cn(spaced.has(item.id) && 'py-1.5')}>
                 <Entry
                   sessionId={sessionId}
                   entryId={item.id}
