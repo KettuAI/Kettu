@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FolderIcon, SparkleIcon } from 'lucide-react'
+import { FolderIcon, SparkleIcon } from './icons'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactConsentAsk } from '@shared/artifact-capabilities'
 import {
