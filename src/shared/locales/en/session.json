@@ -764,7 +764,9 @@
     "copy": "Copy the plan",
     "copied": "Plan copied",
     "copyFailed": "Couldn't copy the plan",
-    "showWhole": "Show the whole plan"
+    "showWhole": "Show the whole plan",
+    "finishedBuild": "{{agent}} finished planning. Start building, or keep planning with a note.",
+    "finishedImplement": "{{agent}} finished planning. Implement it, or keep planning with a note."
   },
   "elicitation": {
     "inAgent": "MCP server in {{agent}}",

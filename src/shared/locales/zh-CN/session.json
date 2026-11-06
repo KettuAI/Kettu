@@ -732,7 +732,9 @@
     "copy": "复制计划",
     "copied": "已复制计划",
     "copyFailed": "无法复制计划",
-    "showWhole": "显示完整计划"
+    "showWhole": "显示完整计划",
+    "finishedBuild": "{{agent}} 已完成计划。开始构建，或附上意见继续计划。",
+    "finishedImplement": "{{agent}} 已完成计划。按它实施，或附上意见继续计划。"
   },
   "elicitation": {
     "inAgent": "{{agent}} 里的 MCP 服务器",

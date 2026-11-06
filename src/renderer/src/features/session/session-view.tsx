@@ -339,7 +339,7 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
       const scope = `[data-entry-id="${CSS.escape(id)}"]`
       const target = document.querySelector<HTMLElement>(
         confirm
-          ? `${scope} :is(.ui-prc__btn--primary, .ui-xcc__action, [data-answer-enter])`
+          ? `${scope} :is(.ui-prc__btn--primary, .ui-xcc__action, .ui-apc__approve, [data-answer-enter])`
           : enter
             ? `${scope} :is(.ui-prc__btn--primary, [data-answer-enter], [data-answer-option][data-highlighted])`
             : `${scope} :is([data-answer-option="${n}"], .ui-xcc__rows > .ui-xcc__row:nth-child(${n}))`,
@@ -391,15 +391,17 @@ function useEscapeToCancel(
       const target = event.target
       // The composer handles its own Esc; other fields keep theirs.
       if (isEditable(target)) return
-      // A request waiting for the user takes Esc as its Deny, as its button shows.
+      // A request or a plan waiting for the user takes Esc as its Deny, as its button shows.
       const waiting = firstWaiting(sessionId)
-      const deny = waiting
-        ? document.querySelector(`[data-entry-id="${CSS.escape(waiting)}"] .ui-prc__btn--primary`)
-            ?.previousElementSibling
+      const card = waiting
+        ? document.querySelector(`[data-entry-id="${CSS.escape(waiting)}"]`)
         : null
+      const deny =
+        card?.querySelector('.ui-apc__deny') ??
+        card?.querySelector('.ui-prc__btn--primary')?.previousElementSibling
       if (deny instanceof HTMLButtonElement) {
         event.preventDefault()
-        if (!deny.disabled) deny.click()
+        if (!deny.disabled && deny.getAttribute('aria-disabled') !== 'true') deny.click()
         return
       }
       host('sessions.cancel', { sessionId }).catch(onError)

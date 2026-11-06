@@ -211,6 +211,16 @@
   color: var(--thread-muted);
 }
 
+/* Marks stand on their own in a card's head, with no tile around them, as the screen sets them. */
+.ks-thread :is(.ui-prc__avatar, .ui-apc__icon) {
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
 /* A request for permission on Permission Request, across the column as the screen sets it: the
    target in mono, what it touches two to a row, how long at the left of the answer and the
    buttons at the right, which wrap under it when the agent offers more answers. */
@@ -323,7 +333,10 @@
   align-items: center;
   gap: 10px;
   min-height: 44px;
-  padding: 10px 14px 0 16px;
+  padding: 10px 10px 0 16px;
+  color: var(--thread-muted);
+}
+.ks-answered[data-kind='done'] .ks-answered__head {
   color: var(--thread-add);
 }
 .ks-answered__title {
@@ -332,6 +345,7 @@
   color: var(--thread-ink);
 }
 .ks-answered__device {
+  margin-left: -4px;
   min-width: 0;
   overflow: hidden;
   font-size: 12px;
@@ -363,4 +377,148 @@
   align-items: center;
   gap: 6px;
   color: var(--thread-muted);
+}
+.ks-answered__toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 8px 0 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--thread-text);
+  transition: background-color 140ms ease;
+}
+.ks-answered__toggle:hover {
+  background: var(--thread-hover);
+}
+.ks-answered__toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.ks-answered__toggle svg {
+  transition: transform 160ms ease;
+}
+.ks-answered__quote {
+  margin: 2px 16px 12px 42px;
+  padding-left: 10px;
+  border-left: 2px solid var(--thread-line-strong);
+  font-size: 12.5px;
+  color: var(--thread-text);
+}
+.ks-answered__plan {
+  padding: 8px 12px 12px;
+}
+.ks-answered__end {
+  height: 10px;
+}
+
+/* A plan on Approval Card: its text, the mode it builds in and a note for keeping on planning. */
+.ks-thread .ui-apc.ks-plan {
+  max-width: none;
+}
+.ks-plan__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--thread-ink);
+}
+.ks-plan__label {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--thread-muted);
+}
+.ks-plan__body {
+  position: relative;
+  min-width: 0;
+  padding-right: 28px;
+}
+.ks-plan__copy {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--thread-faint);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.ks-plan__copy:hover {
+  background: var(--thread-hover);
+  color: var(--thread-text);
+}
+.ks-plan__changes ul {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+}
+.ks-plan__changes li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.ks-plan__changes li[data-kind='same'] {
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-plan__changes li[data-kind='added'] {
+  background: var(--success-tint);
+}
+.ks-plan__changes li[data-kind='removed'] {
+  background: var(--danger-tint);
+  color: var(--thread-text);
+  text-decoration: line-through;
+}
+.ks-plan__changes li > span:first-child {
+  flex: none;
+  width: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-decoration: none;
+}
+.ks-plan__changes li[data-kind='added'] > span:first-child {
+  color: var(--thread-add);
+}
+.ks-plan__changes li[data-kind='removed'] > span:first-child {
+  color: var(--thread-del);
+}
+.ks-plan__note {
+  height: 34px;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--thread-line-strong);
+  font-size: 13px;
+  color: var(--thread-ink);
+  outline: none;
+  transition: box-shadow 140ms ease;
+}
+.ks-plan__note::placeholder {
+  color: var(--thread-muted);
+}
+.ks-plan__note:focus {
+  box-shadow: inset 0 0 0 1px var(--thread-muted);
+}
+.ks-plan__moved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+}
+.ks-plan__moved b {
+  font-weight: 500;
+  color: var(--thread-text);
 }
