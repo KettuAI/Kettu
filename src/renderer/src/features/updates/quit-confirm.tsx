@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { SquareTerminalIcon } from 'lucide-react'
+import { ComputerTerminal01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { QuitRequest } from '@shared/ipc'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -21,6 +21,7 @@ import { runningFor } from '@renderer/lib/format'
 import { saveAll } from '@renderer/stores/files'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /**
  * Main asks before a quit or an update restart would stop agents or terminal commands, or would
@@ -122,7 +123,7 @@ export function QuitConfirm() {
                 key={terminal.id}
                 className="flex h-8.5 items-center gap-2.5 border-b border-border-soft"
               >
-                <SquareTerminalIcon aria-hidden className="size-4 text-icon" />
+                <Glyph icon={ComputerTerminal01Icon} className="text-icon" />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs">{terminal.title}</span>
                 <span className="text-small text-tertiary">{t('quit.terminal')}</span>
               </li>

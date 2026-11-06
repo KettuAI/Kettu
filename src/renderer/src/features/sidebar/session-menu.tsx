@@ -1,27 +1,29 @@
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import {
-  AppWindowIcon,
-  ArchiveIcon,
-  CheckIcon,
-  CircleDotIcon,
+  Archive01Icon,
+  ArrowMoveDownRightIcon,
   CodeIcon,
-  Columns2Icon,
-  CopyIcon,
-  CornerDownRightIcon,
-  ExternalLinkIcon,
-  FolderIcon,
+  ComputerIcon,
+  ComputerTerminal01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  FolderOpenIcon,
   GitBranchIcon,
-  PanelBottomIcon,
-  PanelRightIcon,
-  PencilIcon,
+  Layout2ColumnIcon,
+  LinkSquare02Icon,
+  PencilEdit02Icon,
   PinIcon,
   PinOffIcon,
-  RotateCwIcon,
+  RefreshIcon,
+  SidebarBottomIcon,
+  SidebarRightIcon,
   SlidersHorizontalIcon,
-  SquareIcon,
-  SquareTerminalIcon,
-  TrashIcon,
-} from 'lucide-react'
+  StopCircleIcon,
+  Tick02Icon,
+  ViewIcon,
+} from '@hugeicons/core-free-icons'
+// The toast takes a Lucide icon.
+import { ArchiveIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
@@ -62,6 +64,7 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { toast } from '@renderer/components/ui/toast'
 import { PrIcon } from '@renderer/features/git/pr-icon'
+import { Glyph, MenuGlyph } from '@renderer/features/shell/glyph'
 import { basename, tokens } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
@@ -220,8 +223,7 @@ export function SessionMenuItems({
             {...props}
             onClick={() => void host('sessions.cancel', { sessionId: id })}
           >
-            {/* As drawn, Stop's square fills half its box, not lucide's three quarters. */}
-            <SquareIcon className="scale-67" strokeWidth={3} />
+            <MenuGlyph icon={StopCircleIcon} />
             {t('row.stop')}
             {shortcut}
           </DropdownMenuItem>
@@ -232,7 +234,7 @@ export function SessionMenuItems({
             {...props}
             onClick={() => void host('sessions.retry', { sessionId: id })}
           >
-            <RotateCwIcon />
+            <MenuGlyph icon={RefreshIcon} />
             {t('row.retry')}
             {shortcut}
           </DropdownMenuItem>
@@ -244,7 +246,7 @@ export function SessionMenuItems({
             disabled={inFront}
             onClick={() => openSession(id, summary.projectPath)}
           >
-            <ExternalLinkIcon />
+            <MenuGlyph icon={LinkSquare02Icon} />
             {t('row.open')}
             {/* What opens it from its row; in the menu Enter runs the highlighted item. */}
             <DropdownMenuShortcut>{formatShortcut('Enter')}</DropdownMenuShortcut>
@@ -253,7 +255,7 @@ export function SessionMenuItems({
       case 'pin':
         return (
           <DropdownMenuItem {...props} onClick={() => void pinSession(id, !summary.pinnedAt)}>
-            {summary.pinnedAt ? <PinOffIcon /> : <PinIcon />}
+            {summary.pinnedAt ? <MenuGlyph icon={PinOffIcon} /> : <MenuGlyph icon={PinIcon} />}
             {summary.pinnedAt ? t('row.unpin') : t('row.pin')}
             {shortcut}
           </DropdownMenuItem>
@@ -265,7 +267,7 @@ export function SessionMenuItems({
             disabled={inFront}
             onClick={() => void markSessionUnread(id, !unread)}
           >
-            <CircleDotIcon />
+            <MenuGlyph icon={ViewIcon} />
             {unread ? t('row.markRead') : t('row.markUnread')}
             {shortcut}
           </DropdownMenuItem>
@@ -273,7 +275,7 @@ export function SessionMenuItems({
       case 'rename':
         return (
           <DropdownMenuItem {...props} onClick={onRename}>
-            <PencilIcon />
+            <MenuGlyph icon={PencilEdit02Icon} />
             {t('row.rename')}
             {shortcut}
           </DropdownMenuItem>
@@ -290,7 +292,7 @@ export function SessionMenuItems({
         return (
           <DropdownMenuSub key={name}>
             <DropdownMenuSubTrigger>
-              <CornerDownRightIcon />
+              <MenuGlyph icon={ArrowMoveDownRightIcon} />
               {t('row.newSubSession')}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-59">
@@ -321,7 +323,7 @@ export function SessionMenuItems({
                   openNewSubSession(summary, summary.agentId)
                 }}
               >
-                <SlidersHorizontalIcon />
+                <MenuGlyph icon={SlidersHorizontalIcon} />
                 {t('row.moreOptions')}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
@@ -350,7 +352,7 @@ export function SessionMenuItems({
             {...props}
             onClick={() => void window.kettu.shell.showItem(summary.projectPath)}
           >
-            <FolderIcon />
+            <MenuGlyph icon={FolderOpenIcon} />
             {t('row.showIn', { name: fileManagerName() })}
             {shortcut}
           </DropdownMenuItem>
@@ -358,7 +360,7 @@ export function SessionMenuItems({
       case 'openTerminal':
         return (
           <DropdownMenuItem {...props} onClick={() => toggleTerminal(summary.id, true)}>
-            <SquareTerminalIcon />
+            <MenuGlyph icon={ComputerTerminal01Icon} />
             {t('row.openTerminal')}
             {shortcut}
           </DropdownMenuItem>
@@ -370,7 +372,11 @@ export function SessionMenuItems({
               {...props}
               onClick={() => copyWithToast(resume, t('row.copiedResume'))}
             >
-              {place === 'more' ? <CopyIcon /> : <SquareTerminalIcon />}
+              {place === 'more' ? (
+                <MenuGlyph icon={Copy01Icon} />
+              ) : (
+                <MenuGlyph icon={ComputerTerminal01Icon} />
+              )}
               {t('row.copyResume')}
             </DropdownMenuItem>
           )
@@ -383,7 +389,7 @@ export function SessionMenuItems({
               copyWithToast(summary.acpSessionId ?? summary.id, t('row.copiedSessionId'))
             }
           >
-            <CopyIcon />
+            <MenuGlyph icon={Copy01Icon} />
             {t('row.copySessionId')}
           </DropdownMenuItem>
         )
@@ -398,7 +404,7 @@ export function SessionMenuItems({
               if (parent) openSession(parent.id, parent.projectPath)
             }}
           >
-            <CornerDownRightIcon />
+            <MenuGlyph icon={ArrowMoveDownRightIcon} />
             {t('row.showInParent')}
           </DropdownMenuItem>
         )
@@ -410,7 +416,7 @@ export function SessionMenuItems({
               archiveWithUndo([id], t('row.archived', { title: sessionTitle(summary) }))
             }
           >
-            <ArchiveIcon />
+            <MenuGlyph icon={Archive01Icon} />
             {t('row.archive')}
             {shortcut}
           </DropdownMenuItem>
@@ -430,7 +436,7 @@ export function SessionMenuItems({
               else onDelete()
             }}
           >
-            <TrashIcon />
+            <Glyph icon={Delete02Icon} size={15} />
             {t('row.deleteMenu')}
             {shortcut}
           </DropdownMenuItem>
@@ -532,7 +538,7 @@ function OpenInEditor({ path }: { path: string }) {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
-        <CodeIcon />
+        <MenuGlyph icon={CodeIcon} />
         <span className="min-w-0 flex-1 truncate">{t('row.openInEditor')}</span>
         {current && (
           <span className="max-w-24 shrink-0 truncate pl-4 text-hint text-tertiary">
@@ -553,18 +559,18 @@ function OpenInEditor({ path }: { path: string }) {
               {editor.icon ? (
                 <img src={editor.icon} alt="" className="size-4 shrink-0" draggable={false} />
               ) : (
-                <AppWindowIcon />
+                <MenuGlyph icon={ComputerIcon} />
               )}
               <span className="min-w-0 truncate">{editor.name}</span>
               {editor.id === current?.id && (
-                <CheckIcon strokeWidth={1.6} className="ml-auto size-3" />
+                <Glyph icon={Tick02Icon} size={12} className="ml-auto size-3" />
               )}
             </DropdownMenuItem>
           ))
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={choose}>
-          <FolderIcon />
+          <MenuGlyph icon={FolderOpenIcon} />
           {t('row.chooseApp')}
         </DropdownMenuItem>
       </DropdownMenuSubContent>
@@ -629,7 +635,7 @@ export function MultiSessionMenuItems({
                     {...props}
                     onClick={each((s) => host('sessions.cancel', { sessionId: s.id }))}
                   >
-                    <SquareIcon className="scale-67" strokeWidth={3} />
+                    <MenuGlyph icon={StopCircleIcon} />
                     {t('row.stopCount', { count })}
                     {shortcut(accelerator)}
                   </DropdownMenuItem>
@@ -641,7 +647,7 @@ export function MultiSessionMenuItems({
                     {...props}
                     onClick={each((s) => markSessionUnread(s.id, name === 'unread'))}
                   >
-                    <CircleDotIcon />
+                    <MenuGlyph icon={ViewIcon} />
                     {name === 'read' ? t('row.markRead') : t('row.markUnread')}
                   </DropdownMenuItem>
                 )
@@ -652,7 +658,11 @@ export function MultiSessionMenuItems({
                     {...props}
                     onClick={each((s) => pinSession(s.id, name === 'pin'))}
                   >
-                    {name === 'pin' ? <PinIcon /> : <PinOffIcon />}
+                    {name === 'pin' ? (
+                      <MenuGlyph icon={PinIcon} />
+                    ) : (
+                      <MenuGlyph icon={PinOffIcon} />
+                    )}
                     {name === 'pin' ? t('row.pin') : t('row.unpin')}
                   </DropdownMenuItem>
                 )
@@ -668,7 +678,7 @@ export function MultiSessionMenuItems({
                       )
                     }}
                   >
-                    <ArchiveIcon />
+                    <MenuGlyph icon={Archive01Icon} />
                     {t('row.archiveCount', { count })}
                     {shortcut(accelerator)}
                   </DropdownMenuItem>
@@ -684,7 +694,7 @@ export function MultiSessionMenuItems({
                       } else onDelete()
                     }}
                   >
-                    <TrashIcon />
+                    <Glyph icon={Delete02Icon} size={15} />
                     {t('row.deleteCount', { count })}
                   </DropdownMenuItem>
                 )
@@ -717,7 +727,7 @@ function OpenInSplit({ summary }: { summary: SessionSummary }) {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
-        <Columns2Icon />
+        <MenuGlyph icon={Layout2ColumnIcon} />
         {t('row.openInSplit')}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
@@ -757,7 +767,11 @@ function OpenInSplitItem({
   const accelerator = SPLIT_ACCELERATORS[side]
   return (
     <DropdownMenuItem disabled={reason !== null} onClick={onClick} data-accelerator={accelerator}>
-      {side === 'right' ? <PanelRightIcon /> : <PanelBottomIcon />}
+      {side === 'right' ? (
+        <MenuGlyph icon={SidebarRightIcon} />
+      ) : (
+        <MenuGlyph icon={SidebarBottomIcon} />
+      )}
       {label}
       {reason ? (
         <span className="ml-auto pl-3 text-xs text-tertiary">{t(`row.noRoom.${reason}`)}</span>
@@ -954,7 +968,11 @@ export function DeleteSessionDialog({
                 key={path}
                 className="flex gap-2.5 rounded-2xl bg-subtle px-3 py-2.5 text-control leading-normal text-secondary"
               >
-                <GitBranchIcon className="mt-0.5 size-3.75 shrink-0 text-icon" />
+                <Glyph
+                  icon={GitBranchIcon}
+                  size={15}
+                  className="mt-0.5 size-3.75 shrink-0 text-icon"
+                />
                 <span>
                   {/* A folder the host could not read says so, as the reason this asks. */}
                   <Trans

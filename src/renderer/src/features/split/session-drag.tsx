@@ -7,8 +7,9 @@ import {
   type DragMoveEvent,
   type DragStartEvent,
 } from '@dnd-kit/react'
-import { BotIcon } from 'lucide-react'
+import { BotIcon } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { dropViewAt } from '@renderer/stores/view'
 import {
@@ -71,7 +72,7 @@ function SessionChip({ sessionId }: { sessionId: string | undefined }) {
   return (
     <div className="flex h-8 max-w-60 items-center gap-[9px] rounded-lg bg-surface py-1.5 pr-2.5 pl-2 text-ui text-primary shadow-menu">
       {summary.origin === 'subagent' ? (
-        <BotIcon className="size-3.5 shrink-0 text-secondary" />
+        <Glyph icon={BotIcon} size={14} className="shrink-0 text-secondary" />
       ) : (
         <AgentMark agent={summary.agentId} size={14} />
       )}

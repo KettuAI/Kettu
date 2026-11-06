@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { ShieldAlertIcon } from 'lucide-react'
+import { Shield01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   Popover,
@@ -8,6 +8,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from '@renderer/components/ui/popover'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { NoticeCard } from '@renderer/features/updates/update-notice'
 
 /** How far the popover sits from the card, past the sidebar's edge as other notices' do. */
@@ -24,7 +25,7 @@ export function InsecureCard() {
     <Popover>
       <NoticeCard
         ref={card}
-        icon={<ShieldAlertIcon className="size-3.5 text-warning" />}
+        icon={<Glyph icon={Shield01Icon} size={14} className="text-warning" />}
         text={t('insecure.title')}
         label={t('insecure.title')}
         opener={<PopoverTrigger />}

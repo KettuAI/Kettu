@@ -1,14 +1,15 @@
 import {
+  Analytics01Icon,
   BotIcon,
-  CalendarClockIcon,
-  ChartPieIcon,
-  PlusIcon,
-  Settings2Icon,
-  ShapesIcon,
-} from 'lucide-react'
+  DashboardSquare02Icon,
+  PencilEdit02Icon,
+  RepeatIcon,
+  Settings01Icon,
+} from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import type { HistoryPlace } from '@renderer/stores/view'
+import { Glyph } from './glyph'
 import { usePlaceTitle } from './place-title'
 
 /** A place's mark in the history's lists: its session's agent, or the page's own icon. */
@@ -26,24 +27,24 @@ export function PlaceIcon({ place }: { place: HistoryPlace }) {
 
 function SessionMark({ sessionId }: { sessionId: string }) {
   const summary = useSessionsStore((s) => s.byId[sessionId])
-  if (!summary || summary.origin === 'subagent') return <BotIcon className="size-3.75" />
+  if (!summary || summary.origin === 'subagent') return <Glyph icon={BotIcon} size={15} />
   return <AgentMark agent={summary.agentId} size={15} />
 }
 
 function PageIcon({ place }: { place: HistoryPlace }) {
   switch (place.kind) {
     case 'settings':
-      return <Settings2Icon className="size-3.5" />
+      return <Glyph icon={Settings01Icon} size={15} />
     case 'usage':
-      return <ChartPieIcon className="size-3.75" />
+      return <Glyph icon={Analytics01Icon} size={15} />
     case 'routines':
     case 'routine':
-      return <CalendarClockIcon className="size-3.75" />
+      return <Glyph icon={RepeatIcon} size={15} />
     case 'artifacts':
     case 'artifact':
-      return <ShapesIcon className="size-3.75" />
+      return <Glyph icon={DashboardSquare02Icon} size={15} />
     default:
-      return <PlusIcon className="size-3.75" />
+      return <Glyph icon={PencilEdit02Icon} size={15} />
   }
 }
 

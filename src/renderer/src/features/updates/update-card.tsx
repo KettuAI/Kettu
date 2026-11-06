@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from 'react'
 import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
-import { XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { CommandLine } from '@renderer/components/command-line'
 import { Button } from '@renderer/components/ui/button'
@@ -50,6 +50,7 @@ import {
 } from './update-parts'
 import { CARD_BUTTON, runAppAction } from './update-actions'
 import { UpdateReview } from './update-review'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 // From the card's edge past the footer's padding and the sidebar's border, to sit beside it.
 const BESIDE_SIDEBAR = 18
@@ -181,7 +182,7 @@ function CardFrame({
               />
             }
           >
-            <XIcon strokeWidth={1.8} />
+            <Glyph icon={Cancel01Icon} size={12} />
           </TooltipTrigger>
           <TooltipContent>{closeLabel ?? t('close')}</TooltipContent>
         </Tooltip>
@@ -480,7 +481,7 @@ function FailedCard({ failure, label }: { failure: HarnessFailure; label: string
             aria-hidden
             className="absolute -right-0.75 -bottom-0.75 grid size-2.75 place-items-center rounded-full bg-danger text-(--on-fill) shadow-[0_0_0_1.5px_var(--bg-surface)]"
           >
-            <XIcon strokeWidth={1.2} className="size-2" />
+            <Glyph icon={Cancel01Icon} size={8} />
           </span>
         </span>
       }

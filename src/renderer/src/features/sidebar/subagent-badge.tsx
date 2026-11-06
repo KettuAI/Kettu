@@ -1,4 +1,4 @@
-import { BotIcon, CheckIcon, CircleAlertIcon } from 'lucide-react'
+import { Alert02Icon, BotIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import {
@@ -11,6 +11,7 @@ import { RingSpinner } from '@renderer/components/ui/spinner'
 import { Switch } from '@renderer/components/ui/switch'
 import { revealSubagent } from '@renderer/features/session/reveal-subagent'
 import { subagentRunning, useSubagentProgress } from '@renderer/features/session/subagent/progress'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { duration } from '@renderer/lib/format'
 import { isMac } from '@renderer/lib/platform'
 import { sessionTitle } from '@renderer/stores/sessions'
@@ -61,7 +62,7 @@ export function SubagentBadge({
           />
         }
       >
-        <BotIcon aria-hidden strokeWidth={1.4} className="size-[11px]! text-tertiary" />
+        <Glyph icon={BotIcon} size={11} className="size-[11px]! text-tertiary" />
         {count}
         {running > 0 && <RingSpinner aria-hidden className="size-[9px] border-[1.25px]" />}
       </HoverCardTrigger>
@@ -116,7 +117,7 @@ function SubagentItem({ parent, child }: { parent: SessionSummary; child: Sessio
         }
       >
         <span className="grid size-[22px] shrink-0 place-items-center rounded-tile bg-subtle text-secondary">
-          <BotIcon aria-hidden strokeWidth={1.4} className="size-[13px]" />
+          <Glyph icon={BotIcon} size={13} />
         </span>
         <span className="flex min-w-0 flex-1 flex-col leading-[1.3]">
           <span className="truncate text-[13px] text-primary">
@@ -135,23 +136,18 @@ function SubagentItem({ parent, child }: { parent: SessionSummary; child: Sessio
               className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]"
             />
           ) : failed ? (
-            <CircleAlertIcon
-              role="img"
-              aria-label={t('indicator.error')}
-              className="size-3.5 text-danger"
-            />
+            <span role="img" aria-label={t('indicator.error')} className="grid text-danger">
+              <Glyph icon={Alert02Icon} size={14} />
+            </span>
           ) : running ? (
             <RingSpinner
               aria-label={t('indicator.running')}
               className="size-[11.5px] border-[1.6px]"
             />
           ) : (
-            <CheckIcon
-              role="img"
-              aria-label={t('subagents.done')}
-              strokeWidth={1.9}
-              className="size-3 text-success"
-            />
+            <span role="img" aria-label={t('subagents.done')} className="grid text-success">
+              <Glyph icon={Tick02Icon} size={12} />
+            </span>
           )}
         </span>
       </ContextMenuTrigger>

@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  AppWindowIcon,
-  CheckIcon,
-  ChevronLeftIcon,
-  PlusIcon,
-  Settings2Icon,
-  XIcon,
-  type LucideIcon,
-} from 'lucide-react'
+  ArrowLeft01Icon,
+  Cancel01Icon,
+  ComputerIcon,
+  PencilEdit02Icon,
+  Settings01Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
+import type { IconSvgElement } from '@hugeicons/react'
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
@@ -18,7 +18,8 @@ import type { RemoteStatus } from '@shared/remote/status'
 import type { TrayTarget } from '@shared/tray'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
-import { RingSpinner } from '@renderer/components/ui/spinner'
+import { TurnDots } from '@renderer/features/session/turn-dots'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { relativePath } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { glide } from '@renderer/lib/motion'
@@ -176,10 +177,15 @@ function List() {
   const groups = groupSessions(Object.values(sessions))
   const idle = loaded && !busy(groups)
   const rows = [...groups.needsYou, ...groups.running, ...groups.finished, ...groups.recent]
-  const menu: { icon: LucideIcon; label: string; keys: string; target: TrayTarget }[] = idle
+  const menu: { icon: IconSvgElement; label: string; keys: string; target: TrayTarget }[] = idle
     ? [
-        { icon: PlusIcon, label: t('newSession'), keys: '⌘N', target: { kind: 'new-session' } },
-        { icon: AppWindowIcon, label: t('openKettu'), keys: '⌘O', target: { kind: 'app' } },
+        {
+          icon: PencilEdit02Icon,
+          label: t('newSession'),
+          keys: '⌘N',
+          target: { kind: 'new-session' },
+        },
+        { icon: ComputerIcon, label: t('openKettu'), keys: '⌘O', target: { kind: 'app' } },
       ]
     : []
   const items = [...menu.map((m) => `menu:${m.target.kind}`), ...rows.map((s) => s.id)]
@@ -259,7 +265,15 @@ function List() {
           {groups.running.length > 0 && <GroupLabel>{t('group.running')}</GroupLabel>}
           {groups.running.map((s) => (
             <RunningRow key={s.id} summary={s} detail={details[s.id]}>
-              {(line) => row(s, <RingSpinner aria-label={t('status.running')} />, line)}
+              {(line) =>
+                row(
+                  s,
+                  <span role="img" aria-label={t('status.running')} className="grid">
+                    <TurnDots phase="working" />
+                  </span>,
+                  line,
+                )
+              }
             </RunningRow>
           ))}
           {groups.finished.length > 0 && <GroupLabel>{t('group.finished')}</GroupLabel>}
@@ -274,17 +288,13 @@ function List() {
                 row(
                   s,
                   s.status === 'failed' ? (
-                    <XIcon
-                      aria-label={t('status.failed')}
-                      strokeWidth={1.9}
-                      className="size-3 text-danger"
-                    />
+                    <span role="img" aria-label={t('status.failed')} className="grid text-danger">
+                      <Glyph icon={Cancel01Icon} size={12} />
+                    </span>
                   ) : (
-                    <CheckIcon
-                      aria-label={t('status.done')}
-                      strokeWidth={1.9}
-                      className="size-3 text-success"
-                    />
+                    <span role="img" aria-label={t('status.done')} className="grid text-success">
+                      <Glyph icon={Tick02Icon} size={12} />
+                    </span>
                   ),
                   when(s.updatedAt),
                 ),
@@ -394,10 +404,10 @@ function Header({ groups, idle }: { groups: TrayGroups; idle: boolean }) {
         )}
       </div>
       <IconButton label={`${t('newSession')} ⌘N`} onClick={() => open({ kind: 'new-session' })}>
-        <PlusIcon className="size-3.75" />
+        <Glyph icon={PencilEdit02Icon} />
       </IconButton>
       <IconButton label={t('settings')} onClick={() => open({ kind: 'settings' })}>
-        <Settings2Icon className="size-3.75" />
+        <Glyph icon={Settings01Icon} />
       </IconButton>
     </div>
   )
@@ -521,20 +531,20 @@ function UnreadDot({ failed }: { failed: boolean }) {
     <span
       role="img"
       aria-label={t(failed ? 'status.failed' : 'status.unread')}
-      className={cn('size-1.5 rounded-full', failed ? 'bg-danger' : 'bg-muted-foreground')}
+      className={cn('size-1.5 rounded-full', failed ? 'bg-danger' : 'bg-(--shell-accent)')}
     />
   )
 }
 
 function MenuRow({
-  icon: Icon,
+  icon,
   label,
   keys,
   target,
   highlighted,
   onHover,
 }: {
-  icon: LucideIcon
+  icon: IconSvgElement
   label: string
   keys: string
   target: TrayTarget
@@ -552,7 +562,7 @@ function MenuRow({
       )}
     >
       <span className="flex w-4 justify-center text-secondary">
-        <Icon strokeWidth={1.4} className="size-3.75" />
+        <Glyph icon={icon} />
       </span>
       <span className="min-w-0">{label}</span>
       <span className="ml-auto pl-4 text-small text-tertiary tabular">{keys}</span>
@@ -732,7 +742,7 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
     <>
       <div className="flex items-center gap-2 px-3 py-2.5 shadow-[inset_0_-1px_0_var(--border-subtle)]">
         <IconButton label={t('back')} onClick={() => review(null)} className="size-6">
-          <ChevronLeftIcon className="size-3.5" />
+          <Glyph icon={ArrowLeft01Icon} size={14} />
         </IconButton>
         <SessionMark agent={summary.agentId} />
         <span className="min-w-0 flex-1 truncate text-control font-semibold text-primary">
