@@ -10,6 +10,7 @@ import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
+import { useNarrowWindow } from './narrow'
 
 /**
  * A sheet's head, as App Shell's chat bar: 52 px, the window's drag region. In the window's top
@@ -26,7 +27,9 @@ export function TopBar({
   cornered?: boolean
 }) {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  const cornered = (given ?? true) && collapsed && !hasBand
+  // A narrow window's sidebar is a drawer, so the main area always starts at the corner.
+  const narrow = useNarrowWindow()
+  const cornered = (given ?? true) && (collapsed || narrow) && !hasBand
   return (
     <header
       className={cn(

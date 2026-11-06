@@ -140,12 +140,26 @@
 /* The main area holds the sheets (features/shell/sheet.ts) on the desk: its gaps are padding, so
    the desk around them drags the window, and it draws no panel of its own. */
 .kettu-frame.ui-as-app > .ui-as-main {
+  min-height: 0;
   margin: 0;
   padding: var(--frame-gap) var(--frame-gap) var(--frame-gap) 0;
   overflow: visible;
   border: 0;
   border-radius: 0;
   background: none;
+}
+/* A narrow window's sidebar is a drawer: the sheets keep the gap on their left too, the drawer
+   takes the sidebar's color, and the corner controls stay over it. */
+@container ui-as (max-width: 900px) {
+  .kettu-frame.ui-as-app > .ui-as-main {
+    padding-left: var(--frame-gap);
+  }
+  .kettu-frame.ui-as-app > .ui-as-side {
+    background: var(--bg-sidebar);
+  }
+  .kettu-frame.ui-as-app > .ui-as-corner {
+    z-index: 51;
+  }
 }
 /* While the sidebar slides, the frame cuts the sheets to its shape and draws their edge, and a
    wing of sheet fills it where it is wider than they are (app/app.tsx). */
