@@ -7,7 +7,9 @@
   "empty": {
     "title": "尚未打开页面",
     "noSession": "没有正在显示的会话",
-    "noSessionHint": "打开一个会话后即可使用浏览器。"
+    "noSessionHint": "打开一个会话后即可使用浏览器。",
+    "hint": "{{agent}} 打开的页面也会显示在这里，并沿用你在此浏览器中的登录。",
+    "agent": "Agent"
   },
   "loading": "正在加载",
   "actions": {
@@ -19,7 +21,8 @@
     "openExternal": "在浏览器中打开",
     "maximize": "最大化",
     "restore": "还原",
-    "closeBrowser": "关闭浏览器"
+    "closeBrowser": "关闭浏览器",
+    "closePage": "关闭页面"
   },
   "notice": {
     "downloadBlocked": "Kettu 的浏览器会拦截下载",
@@ -46,5 +49,6 @@
     },
     "asks": "{{agent}} 想要打开"
   },
-  "tabs": "页面"
+  "tabs": "页面",
+  "title": "浏览器"
 }

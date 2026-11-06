@@ -34,9 +34,8 @@ export const NAVIGATION_TIMEOUT_MS = 30_000
 const CAPTURE_MS = 10_000
 
 // On macOS a page draws in its window's own compositor, so a view around it clips it: a frame
-// rounds the page's lower corners and leaves its upper ones square under the pane's header.
-// Elsewhere a page is a native window of its own that only its own radius clips, on all four
-// corners alike.
+// rounds the page's corners as the pane's frame for it is rounded. Elsewhere a page is a native
+// window of its own that only its own radius clips, on all four corners alike.
 const FRAMED = process.platform === 'darwin'
 
 /** A navigation that ended, or the Chromium error that stopped it. */
@@ -124,21 +123,11 @@ export interface BrowserViewsDeps {
   originWaitMs?: number
 }
 
-/**
- * A page's frame and the page inside it. The frame reaches `radius` above the page, as far as
- * the window allows, so its own rounded upper corners fall outside the page and only the page's
- * lower corners round, as the pane's do.
- */
+/** A page's frame and the page inside it: the frame is the page's own box, all four corners round. */
 export function framePage(bounds: BrowserBounds): { frame: Rectangle; page: Rectangle } {
-  const above = Math.min(bounds.radius, bounds.y)
   return {
-    frame: {
-      x: bounds.x,
-      y: bounds.y - above,
-      width: bounds.width,
-      height: bounds.height + above,
-    },
-    page: { x: 0, y: above, width: bounds.width, height: bounds.height },
+    frame: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
+    page: { x: 0, y: 0, width: bounds.width, height: bounds.height },
   }
 }
 
@@ -634,7 +623,7 @@ export class BrowserViews {
     return view
   }
 
-  /** Puts the page where the pane reported it, its lower corners rounded as the pane's are. */
+  /** Puts the page where the pane reported it, its corners rounded as the pane's frame is. */
   private place(page: Page): void {
     const { view, frame, bounds } = page
     if (!view) return

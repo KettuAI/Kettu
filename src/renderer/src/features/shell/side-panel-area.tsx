@@ -31,12 +31,13 @@ const BrowserPane = lazy(() =>
 
 // Each pane is a panel of its own, so each keeps the width the user gives it. The terminal keeps
 // the id it had when it was the only pane.
+const PANE_SIZE = { defaultSize: '480px', minSize: '360px', maxSize: '760px' } as const
 const PANES = {
-  terminal: { id: 'side-panel', defaultSize: '600px', minSize: '280px' },
-  files: { id: 'side-panel-files', defaultSize: '600px', minSize: '360px' },
+  terminal: { id: 'side-panel', ...PANE_SIZE },
+  files: { id: 'side-panel-files', ...PANE_SIZE },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
-  browser: { id: 'side-panel-browser', defaultSize: '600px', minSize: '360px' },
-  devices: { id: 'side-panel-devices', defaultSize: '480px', minSize: '320px' },
+  browser: { id: 'side-panel-browser', ...PANE_SIZE },
+  devices: { id: 'side-panel-devices', ...PANE_SIZE },
 } as const
 
 /**
@@ -134,10 +135,12 @@ export function SidePanelArea({
       </ResizablePanel>
       {pane && (
         <>
-          {/* The desk between the two sheets. */}
+          {/* The desk between the two sheets, with a faint line along it while it is dragged. */}
           <ResizableHandle
-            withHandle={!maximized}
-            className={cn('app-region-no-drag w-(--sheet-gap)', maximized && 'pointer-events-none')}
+            className={cn(
+              'kp-resizer app-region-no-drag w-(--sheet-gap)',
+              maximized && 'pointer-events-none',
+            )}
           />
           <ResizablePanel
             key={pane}

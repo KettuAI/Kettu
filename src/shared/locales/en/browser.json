@@ -7,7 +7,9 @@
   "empty": {
     "title": "No page open",
     "noSession": "No session is showing",
-    "noSessionHint": "Open a session to use the browser."
+    "noSessionHint": "Open a session to use the browser.",
+    "hint": "Pages {{agent}} opens show here too, with the sign-ins you make in this browser.",
+    "agent": "the agent"
   },
   "loading": "Loading",
   "actions": {
@@ -19,7 +21,8 @@
     "openExternal": "Open in browser",
     "maximize": "Maximize",
     "restore": "Restore",
-    "closeBrowser": "Close browser"
+    "closeBrowser": "Close browser",
+    "closePage": "Close page"
   },
   "notice": {
     "downloadBlocked": "Downloads are blocked in Kettu's browser",
@@ -46,5 +49,6 @@
     },
     "asks": "{{agent}} wants to open"
   },
-  "tabs": "Pages"
+  "tabs": "Pages",
+  "title": "Browser"
 }

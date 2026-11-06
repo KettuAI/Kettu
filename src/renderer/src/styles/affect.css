@@ -156,3 +156,1398 @@
   padding: 0 14px;
   font-size: 14px;
 }
+
+/* ---------- panes: the side panel's Terminal, Browser, Mobile devices and Files ---------- */
+
+/* A pane is a sheet of its own: its head on top, its body under it, each a column. */
+.kp-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 10px 10px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.kp-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+.kp-head--cornered {
+  padding-left: var(--corner-inset);
+}
+.kp-head__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 28px;
+}
+.kp-head__main > * {
+  -webkit-app-region: no-drag;
+}
+.kp-head__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+}
+.kp-head__tools > :last-child {
+  margin-left: 2px;
+}
+.kp-head__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.kp-head__tabs::-webkit-scrollbar {
+  display: none;
+}
+.kp-head__title {
+  padding-left: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-head__error {
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--danger);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 0 4px;
+}
+
+.kp-tool {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--pane-muted);
+  outline: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.kp-tool--sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.kp-tool:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-tool[aria-pressed='true'],
+.kp-tool[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kp-tool:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.kp-tool:focus-visible,
+.kp-btn:focus-visible,
+.kp-tab__btn:focus-visible,
+.kp-tab__x:focus-visible,
+.kp-node:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+/* A tab in a pane's head: a name with a quiet mark before it, and a close button that shows on
+   hover or while chosen; another tab's floats over its end. */
+.kp-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 58px;
+  max-width: 220px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.kp-tab:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-tab[data-selected] {
+  flex-shrink: 0;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kp-tab[data-dragging] {
+  background: var(--bg-selected);
+}
+.kp-tab[data-editing] {
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.kp-tab__btn {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  border-radius: inherit;
+  text-align: left;
+  outline: none;
+}
+.kp-tab[data-selected] .kp-tab__btn {
+  padding-right: 25px;
+}
+.kp-tab__icon {
+  flex: none;
+  color: var(--text-disabled);
+}
+.kp-tab[data-selected] .kp-tab__icon:not(.kp-tab__icon--mark) {
+  color: var(--pane-muted);
+}
+.kp-tab__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-tab__note {
+  color: var(--text-tertiary);
+}
+.kp-tab[data-italic] .kp-tab__name {
+  padding-right: 2px;
+  font-style: italic;
+}
+.kp-tab__code {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.kp-tab__code[data-failed] {
+  color: var(--danger);
+}
+.kp-tab__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pane-live);
+}
+.kp-tab__dot[data-dot='output'] {
+  background: var(--pane-fox);
+}
+.kp-tab__dot[data-dot='unsaved'] {
+  background: var(--text-tertiary);
+}
+.kp-tab__x {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: var(--text-disabled);
+  opacity: 0;
+  outline: none;
+  transition: opacity 120ms ease;
+}
+.kp-tab:is(:hover, :focus-within, [data-selected]) .kp-tab__x {
+  opacity: 1;
+}
+.kp-tab__x:hover {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__name {
+  mask-image: linear-gradient(to left, transparent 14px, var(--on-fill) 26px);
+}
+.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__dot {
+  opacity: 0;
+}
+.kp-tab__rename {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 28px;
+}
+.kp-tab__rename input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-primary);
+}
+
+.kp-spin {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--border-default);
+  border-top-color: var(--text-tertiary);
+  border-radius: 50%;
+  animation: kp-spin 800ms linear infinite;
+}
+@keyframes kp-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+.kp-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: var(--bg-surface);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  outline: none;
+}
+.kp-btn:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, var(--bg-surface));
+}
+.kp-btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.kp-btn--sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.kp-btn--solid {
+  background: var(--text-primary);
+  box-shadow: none;
+  color: var(--bg-surface);
+}
+.kp-btn--solid:hover {
+  background: var(--text-primary);
+  opacity: 0.88;
+}
+.kp-btn--danger {
+  background: var(--danger);
+  box-shadow: none;
+  color: var(--on-fill);
+}
+.kp-btn--danger:hover {
+  background: color-mix(in srgb, var(--danger) 90%, var(--text-primary));
+}
+.kp-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  outline: none;
+}
+.kp-link:hover {
+  color: var(--text-primary);
+}
+.kp-mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+.kp-pane kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-disabled);
+}
+
+.kp-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 24px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.kp-empty__icon {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  margin-bottom: 8px;
+  color: var(--text-disabled);
+}
+.kp-empty b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-empty p {
+  max-width: 280px;
+  margin: 0;
+  line-height: 19px;
+  text-wrap: balance;
+}
+.kp-empty > .kp-btn {
+  margin-top: 12px;
+}
+.kp-empty .kp-spin {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
+/* A question the pane asks over itself, such as ending a running terminal. */
+.kp-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--bg-app) 60%, transparent);
+  backdrop-filter: blur(2px);
+}
+.kp-confirm__card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(calc(100% - 32px), 300px);
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-dialog);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  translate: -50% -50%;
+  outline: none;
+}
+.kp-confirm__card h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-confirm__card p {
+  margin: 0;
+  line-height: 19px;
+}
+.kp-confirm__acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* "Claude Code is driving", over a page or a device's screen, with the control to swap who drives. */
+.kp-drive {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 5px 0 10px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-popover);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.kp-drive[data-driver='user'] > svg {
+  color: var(--pane-added);
+}
+
+/* ---------- panes: Terminal ---------- */
+.kp-tview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.kp-towner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px 0 10px;
+  border-radius: 9px;
+  background: var(--bg-hover);
+  font-size: 12px;
+  color: var(--text-tertiary);
+  container-type: inline-size;
+}
+.kp-towner__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-towner__dir {
+  margin-left: 8px;
+  font-size: 11.5px;
+  color: var(--text-disabled);
+}
+@container (inline-size < 320px) {
+  .kp-towner__url {
+    display: none;
+  }
+}
+.kp-towner .kp-link {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.kp-tbox {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--terminal-background);
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
+  transition: opacity 140ms ease;
+}
+.kp-tview[data-split]:not([data-focused]) .kp-tbox {
+  opacity: 0.72;
+}
+.kp-tview[data-split][data-focused] .kp-tbox {
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+.kp-tscreen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px;
+}
+.kp-tscreen__xterm {
+  width: 100%;
+  height: 100%;
+}
+.kp-texit {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 6px 0 14px;
+  border-top: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-texit[data-failed] > span {
+  color: var(--danger);
+}
+.kp-tlock {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 12px 9px;
+  border-top: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-tertiary);
+}
+.kp-tlock > svg {
+  margin-top: 2px;
+  color: var(--text-disabled);
+}
+.kp-tlock kbd {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.kp-ask {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-popover);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  animation: kp-rise 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kp-ask kbd {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-disabled);
+}
+.kp-split-handle {
+  width: 8px;
+  background: transparent;
+}
+@keyframes kp-rise {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+/* ---------- panes: Browser ---------- */
+.kp-addr-row {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  container-type: inline-size;
+}
+.kp-addr {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 30px;
+  margin-left: 4px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  color: var(--text-disabled);
+  transition: box-shadow 140ms ease;
+}
+.kp-addr:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--border-default),
+    0 0 0 3px var(--bg-hover);
+}
+.kp-addr[data-invalid] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.kp-addr input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+.kp-addr input::placeholder {
+  color: var(--text-disabled);
+}
+.kp-addr-row--empty {
+  width: min(100%, 300px);
+  margin-top: 14px;
+}
+.kp-addr-row--empty .kp-addr {
+  margin: 0;
+}
+.kp-addr-row .kp-drive {
+  height: 30px;
+  margin-left: 6px;
+  box-shadow: 0 0 0 var(--hairline) var(--border-default);
+}
+/* At the pane's usual width the address keeps the room; the label stays for screen readers. */
+@container (inline-size < 560px) {
+  .kp-addr-row .kp-drive__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+.kp-load {
+  position: absolute;
+  right: 0;
+  bottom: -5px;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: var(--bg-hover);
+}
+.kp-load::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--pane-fox);
+  animation: kp-load 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes kp-load {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 250% 0;
+  }
+}
+.kp-origin {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  animation: kp-rise 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kp-origin b {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-origin__text {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.kp-origin__text > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-origin__acts {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 6px;
+}
+.kp-origin__gap {
+  flex: 1;
+}
+.kp-origin[data-answered] {
+  padding-block: 8px;
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 var(--hairline) var(--border-subtle);
+}
+.kp-origin[data-answered] svg {
+  color: var(--pane-added);
+}
+.kp-origin[data-answered][data-denied] svg {
+  color: var(--text-tertiary);
+}
+.kp-origin .kp-link {
+  margin-left: auto;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+/* The page itself is a view main draws over this frame, so the frame's ring and the glow of an
+   agent driving it sit outside it. */
+.kp-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 10px;
+  background: var(--bg-app);
+  box-shadow: 0 0 0 var(--hairline) var(--border-default);
+  transition: box-shadow 260ms ease;
+}
+.kp-view[data-driver='agent'] {
+  box-shadow: var(--pane-drive-glow);
+}
+.kp-view__still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: fill;
+  pointer-events: none;
+}
+.kp-sitemark {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* ---------- panes: Mobile devices ---------- */
+.kp-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 52px;
+}
+.kp-stage > .kp-drive {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 3;
+  translate: -50% 0;
+}
+.kp-device-screen {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 0;
+}
+.kp-device-screen__room {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-self: center;
+  height: 100%;
+  max-height: 640px;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+.kp-device-screen__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.kp-device-screen__status[data-on-screen] {
+  color: var(--media-control);
+}
+.kp-device-screen__note {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.kp-screen-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  box-shadow: var(--pane-drive-glow-inset);
+  pointer-events: none;
+}
+.kp-tap {
+  position: absolute;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pane-fox) 22%, transparent);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 70%, transparent);
+  pointer-events: none;
+  animation: kp-tap 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes kp-tap {
+  0% {
+    scale: 0.5;
+    opacity: 0;
+  }
+  25% {
+    scale: 1;
+    opacity: 1;
+  }
+  100% {
+    scale: 1.5;
+    opacity: 0;
+  }
+}
+.kp-hw {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--bg-hover);
+  translate: -50% 0;
+}
+.kp-hw__gap {
+  width: 1px;
+  height: 14px;
+  margin: 0 3px;
+  background: var(--border-default);
+}
+.kp-devlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(100%, 320px);
+  margin-top: 14px;
+  text-align: left;
+}
+.kp-devlist__head {
+  padding: 8px 8px 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+.kp-devrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  text-align: left;
+  outline: none;
+}
+.kp-devrow:hover,
+.kp-devrow:focus-visible {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+}
+.kp-devrow > svg {
+  color: var(--pane-muted);
+}
+.kp-devrow__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.kp-devrow__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-devrow__detail {
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-checklist {
+  flex: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.kp-checklist b {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-checklist li {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  line-height: 17px;
+}
+.kp-checklist li > svg {
+  margin-top: 2px;
+  color: var(--text-disabled);
+}
+.kp-alert {
+  flex: none;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* ---------- panes: Files ---------- */
+.kp-find {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 340px;
+  height: 28px;
+  margin-left: 2px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  color: var(--text-disabled);
+}
+.kp-find input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+.kp-find input::placeholder {
+  color: var(--text-disabled);
+}
+.kp-find kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-disabled);
+}
+.kp-tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.kp-tree__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-disabled);
+}
+.kp-tree__note[data-tone='error'] {
+  color: var(--danger);
+}
+.kp-tree__more {
+  flex: none;
+  margin: 0;
+  padding: 6px 8px;
+  border-top: var(--hairline) solid var(--border-subtle);
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.kp-node {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding: 0 6px 0 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: left;
+  outline: none;
+}
+.kp-node:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-node[aria-current] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kp-node > svg,
+.kp-node > img {
+  flex: none;
+}
+.kp-node__chev {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 12px;
+  margin-right: -2px;
+  color: var(--text-disabled);
+}
+.kp-node__chev svg {
+  transition: rotate 160ms ease;
+}
+.kp-node[aria-expanded='true'] .kp-node__chev svg {
+  rotate: 90deg;
+}
+.kp-node__name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-node__name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-node--dir .kp-node__name {
+  color: var(--text-tertiary);
+}
+.kp-node--change {
+  height: 40px;
+  padding: 4px 8px;
+}
+.kp-node__name small {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-disabled);
+  text-overflow: ellipsis;
+}
+.kp-node__line {
+  width: 30px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-disabled);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.kp-node mark {
+  background: transparent;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.kp-node__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+.kp-badge[data-tone='modified'] {
+  background: color-mix(in srgb, var(--pane-modified) 12%, transparent);
+  color: var(--pane-modified);
+}
+.kp-badge[data-tone='added'] {
+  background: color-mix(in srgb, var(--pane-added) 12%, transparent);
+  color: var(--pane-added);
+}
+.kp-badge[data-tone='deleted'] {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.kp-files-handle {
+  width: 8px;
+  background: transparent;
+}
+.kp-doc {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+/* Drawn over the content, whose own backgrounds would cover an inset ring. */
+.kp-doc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
+  pointer-events: none;
+}
+.kp-doc__tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+}
+.kp-doc__tabs::-webkit-scrollbar {
+  display: none;
+}
+.kp-doc__tabs .kp-tool {
+  width: 26px;
+  height: 26px;
+}
+.kp-doc__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 4px 0 12px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+}
+.kp-doc__path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 24px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  outline: none;
+}
+.kp-doc__path > span {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.kp-doc__path > svg {
+  color: var(--text-disabled);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.kp-doc__path:hover,
+.kp-doc__path:focus-visible {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-doc__path:is(:hover, :focus-visible, [data-copied]) > svg {
+  opacity: 1;
+}
+.kp-doc__ref {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.kp-doc__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.kp-doc__hunks {
+  display: flex;
+  align-items: center;
+  margin-right: 2px;
+}
+.kp-doc__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+/* In the pane the diff lies on the document's card, as the editor does. */
+.kp-doc .files-diff {
+  --diffs-light-bg: var(--bg-surface);
+  --diffs-dark-bg: var(--bg-surface);
+}
+.kp-doc__note {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-doc__note[data-tone='notice'] {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.kp-doc__note[data-tone='error'] {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+.kp-doc__hint {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  padding: 6px 12px;
+  background: linear-gradient(transparent, var(--bg-surface) 40%);
+  font-size: 11.5px;
+  color: var(--text-disabled);
+  pointer-events: none;
+}
+.kp-doc__hint[data-tone='error'] {
+  color: var(--danger);
+}
+.kp-lines {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-popover);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  translate: -50% 0;
+  animation: kp-rise 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kp-lines > svg {
+  color: var(--pane-fox);
+}
+.kp-lines kbd {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-disabled);
+}
+.kp-files__foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 0 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-files__acts {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---------- panes: the pane buttons in a session's top bar ---------- */
+.kp-bar-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+.kp-bar-tools .kp-tool {
+  position: relative;
+}
+.kp-bar-tools .kp-tool[aria-pressed='true'] {
+  background: var(--bg-selected);
+}
+.kp-bar-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pane-fox);
+  box-shadow: 0 0 0 2px var(--bg-app);
+}
+
+/* The edge between the main area and a pane: no grip, a line fading at both ends while dragged. */
+.kp-resizer.kp-resizer {
+  background: transparent;
+}
+.kp-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--border-strong) 22%,
+    var(--border-strong) 78%,
+    transparent
+  );
+  opacity: 0;
+  translate: -50% 0;
+  transition: opacity 180ms ease;
+}
+.kp-resizer:is([data-separator='hover'], [data-separator='active'], :focus-visible)::before {
+  opacity: 1;
+}

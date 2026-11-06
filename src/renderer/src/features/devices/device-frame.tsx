@@ -82,6 +82,7 @@ export function DeviceFrame({
   orientation,
   room,
   focused,
+  glow = false,
   className,
   children,
 }: {
@@ -91,6 +92,8 @@ export function DeviceFrame({
   orientation: DeviceOrientation
   room: Size
   focused: boolean
+  /** An agent drives the device: the fox glows along the screen's edge. */
+  glow?: boolean
   className?: string
   children: ReactNode
 }) {
@@ -128,7 +131,7 @@ export function DeviceFrame({
         {layout.body !== null && (
           <div
             aria-hidden
-            className="absolute inset-0 bg-(--media-control-ink) shadow-[0_0_0_var(--hairline)_var(--border-default)]"
+            className="absolute inset-0 bg-(--pane-phone) shadow-[0_0_0_var(--hairline)_var(--border-default),inset_0_0_0_1.5px_var(--pane-phone-edge)]"
             style={{ borderRadius: px(layout.body) }}
           />
         )}
@@ -145,7 +148,7 @@ export function DeviceFrame({
         ))}
         <div
           className={cn(
-            'absolute overflow-hidden bg-(--media-control-ink)',
+            'absolute overflow-hidden bg-(--pane-phone)',
             focused && 'ring-2 ring-focus',
           )}
           style={{
@@ -154,6 +157,7 @@ export function DeviceFrame({
           }}
         >
           {children}
+          {glow && <span aria-hidden className="kp-screen-glow" />}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { GlobeIcon, LockIcon } from 'lucide-react'
+import { Globe02Icon, SquareLock02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { cn } from '@renderer/lib/utils'
 import { addressText, isLocalHost, normalizeAddress } from './address'
 
@@ -38,23 +39,14 @@ export function AddressField({
     onNavigate(url)
   }
 
-  const secure = url ? isSecure(url) : false
+  const secure = url && !editing ? isSecure(url) : false
 
   return (
     <label
-      className={cn(
-        'app-region-no-drag flex h-7.5 min-w-0 items-center gap-2 rounded-xl bg-subtle px-2.5 text-tertiary transition-[background-color,box-shadow] duration-(--duration-fast)',
-        'hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] focus-within:bg-surface focus-within:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]',
-        invalid && 'shadow-[inset_0_0_0_var(--hairline)_var(--danger)]!',
-        className,
-      )}
+      className={cn('kp-addr app-region-no-drag', className)}
+      data-invalid={invalid || undefined}
     >
-      {url &&
-        (secure ? (
-          <LockIcon aria-hidden strokeWidth={1.5} className="size-3.25 shrink-0" />
-        ) : (
-          <GlobeIcon aria-hidden className="size-3.25 shrink-0" />
-        ))}
+      <PaneIcon icon={secure ? SquareLock02Icon : Globe02Icon} size={14} />
       <input
         autoFocus={autoFocus}
         aria-label={t('address.label')}
@@ -93,7 +85,6 @@ export function AddressField({
             event.currentTarget.blur()
           }
         }}
-        className="h-full w-full min-w-0 bg-transparent text-hint text-primary outline-none placeholder:text-placeholder"
       />
     </label>
   )
