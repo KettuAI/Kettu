@@ -8,7 +8,7 @@ import { readFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { Env } from '../agent-host/find-command'
 import type { DeviceAction, DeviceActionResult } from '@shared/device-agent'
-import type { FoundDevice } from './discovery'
+import type { FoundDevice, Tools } from './discovery'
 import { nodeCommand, packageRoot } from './runtime'
 
 const COMMAND_TIMEOUT_MS = 180_000
@@ -65,6 +65,7 @@ export class AgentActions {
   constructor(
     private readonly dataDir: string,
     private readonly env: () => Promise<Env>,
+    private readonly tools: () => Promise<Tools>,
     private readonly log: (message: string) => void,
   ) {}
 
@@ -341,6 +342,16 @@ export class AgentActions {
     const extra: Env = {
       AGENT_DEVICE_HOME: path.join(this.dataDir, 'agent-device'),
       AGENT_DEVICE_NO_UPDATE_NOTIFIER: '1',
+    }
+    // agent-device looks for adb on PATH; an SDK Kettu found elsewhere, as Homebrew's, joins it.
+    const { adb, emulator } = await this.tools()
+    const dirs = [adb, emulator]
+      .filter((file): file is string => !!file)
+      .map((file) => path.dirname(file))
+    if (dirs.length > 0) {
+      const sdk = adb ? path.dirname(path.dirname(adb)) : null
+      extra.PATH = [...new Set(dirs), base.PATH].filter(Boolean).join(path.delimiter)
+      if (sdk && !base.ANDROID_HOME && !base.ANDROID_SDK_ROOT) extra.ANDROID_HOME = sdk
     }
     if (device.platform === 'ios' && device.kind === 'physical') {
       this.team ??= developmentTeam(base)

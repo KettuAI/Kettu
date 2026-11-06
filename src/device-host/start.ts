@@ -59,7 +59,12 @@ export function startDeviceHost(
       log: (line) => console.log(line),
     })
     const devices = manager
-    actions = new AgentActions(message.dataDir, loadEnv, (line) => console.log(line))
+    actions = new AgentActions(
+      message.dataDir,
+      loadEnv,
+      () => devices.toolPaths(),
+      (line) => console.log(line),
+    )
     server = new PortServer(
       {
         'devices.environment': () => devices.environment(),

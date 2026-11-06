@@ -325,6 +325,11 @@ export class DeviceManager {
     await Promise.all([...this.live.keys()].map((id) => this.stopLive(id)))
   }
 
+  /** Where the tools are, which agent-device needs on its PATH as well. */
+  toolPaths(): Promise<Tools> {
+    return this.loadTools()
+  }
+
   private async loadTools(): Promise<Tools> {
     if (!this.tools) this.tools = await findTools(await this.deps.env(), this.deps.platform)
     return this.tools
