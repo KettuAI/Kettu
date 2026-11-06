@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import { ArrowUpFromLineIcon, TriangleAlertIcon } from 'lucide-react'
+import { Alert02Icon, Upload04Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { GitStatus } from '@shared/git'
 import { Button } from '@renderer/components/ui/button'
@@ -9,6 +9,7 @@ import { cn } from '@renderer/lib/utils'
 import { useGitStore, type RunningOperation } from '@renderer/stores/git'
 import { pushNow, runStep } from './steps'
 import { commandOf, HINT_TONE, planSync, pushesToDefault, stepOf, type SyncButton } from './sync'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 
 /** The values the reasons and hints name: where the branch tracks, and what blocks it. */
 function syncWords(
@@ -79,7 +80,7 @@ export function SyncStrip({ status, onClose }: { status: GitStatus; onClose: () 
       </div>
       {plan.hint && HINT_TONE[plan.hint] === 'warning' && !running && (
         <p className="mt-2 flex items-start gap-1.5 text-small text-secondary">
-          <TriangleAlertIcon aria-hidden className="mt-px size-3.5 shrink-0 text-warning" />
+          <Glyph icon={Alert02Icon} className="mt-px size-3.5 shrink-0 text-warning" />
           <span className="min-w-0 [overflow-wrap:anywhere]">{t(`hint.${plan.hint}`, words)}</span>
         </p>
       )}
@@ -114,7 +115,7 @@ function SyncButtonView({
       onClick={onRun}
       className={cn('px-2.5 text-hint', mine && 'disabled:opacity-100')}
     >
-      {mine ? <Spinner className="size-3.5" /> : isPush && <ArrowUpFromLineIcon />}
+      {mine ? <Spinner className="size-3.5" /> : isPush && <Glyph icon={Upload04Icon} />}
       {label}
     </Button>
   )
