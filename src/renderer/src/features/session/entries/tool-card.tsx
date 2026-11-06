@@ -1,15 +1,13 @@
 import { memo, useEffect, useMemo, useRef } from 'react'
-import { CheckIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { AnsweredQuestion } from '@shared/thread'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { cn } from '@renderer/lib/utils'
 import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { ElicitationCard, ElicitationSettled } from './elicitation-card'
-import { PermissionCard } from './permission-card'
+import { PermissionEntry } from './permission-card'
 import { PlanCard, PlanSettled } from './plan-card'
-import { AnsweredQuestions, QuestionCard } from './question-card'
-import { Icon } from '@renderer/components/affect/app-shell'
+import { AnsweredAsk, OptionQuestionCard, QuestionCard } from './question-card'
 import { StepCard } from './tool-call'
 import { stepFacts, useToolCallLabels } from './tool-call-model'
 
@@ -30,6 +28,7 @@ export const ToolCard = memo(function ToolCard({
   projectPath,
   agentName,
 }: ToolCardProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'tool')
   const animation = useEntryAnimation(sessionId, entryId)
   const labels = useToolCallLabels()
@@ -42,6 +41,7 @@ export const ToolCard = memo(function ToolCard({
   }, [permission])
 
   if (!entry) return null
+  const result = entry.permissionResult
   if (permission) {
     // Each request gets a card of its own, so an agent's next question in the same entry starts
     // unanswered rather than inheriting the last one's pending answer.
@@ -55,14 +55,9 @@ export const ToolCard = memo(function ToolCard({
     if (permission.plan) return <PlanCard key={permission.requestId} {...props} />
     if (permission.elicitation) return <ElicitationCard key={permission.requestId} {...props} />
     if (permission.questions) return <QuestionCard key={permission.requestId} {...props} />
-    return (
-      <PermissionCard
-        key={permission.requestId}
-        {...props}
-        projectPath={projectPath}
-        media={media}
-      />
-    )
+    if (entry.question !== undefined) {
+      return <OptionQuestionCard key={permission.requestId} {...props} />
+    }
   }
   if (entry.planVersion !== undefined) {
     return (
@@ -78,12 +73,43 @@ export const ToolCard = memo(function ToolCard({
       </div>
     )
   }
-  const result = entry.permissionResult
   if (typeof result === 'object' && result?.questions) {
     return (
       <div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)}>
         <AnsweredAsk questions={result.questions} device={result.device?.name ?? null} />
       </div>
+    )
+  }
+  if (entry.question !== undefined && result) {
+    const answer =
+      typeof result !== 'object'
+        ? t(`permission.answer.${result}`)
+        : (result.name ??
+          (result.kind === 'allow_once' || result.kind === 'allow_always'
+            ? t('question.answeredOne')
+            : t('question.answeredOther')))
+    return (
+      <div ref={ref} data-entry-id={entryId} className={cn('min-w-0', animation)}>
+        <AnsweredAsk
+          questions={[{ question: entry.question, answered: true, answer }]}
+          device={typeof result === 'object' ? (result.device?.name ?? null) : null}
+        />
+      </div>
+    )
+  }
+  // A request waiting for the user, and once answered its folded card over the call: one element
+  // throughout, so the card folds where it stands.
+  if (permission || (result && (typeof result !== 'object' || result.by !== 'routine'))) {
+    return (
+      <PermissionEntry
+        ref={ref}
+        sessionId={sessionId}
+        entry={entry}
+        projectPath={projectPath}
+        agentName={agentName}
+        media={media}
+        className={animation}
+      />
     )
   }
   const { glyph, ...facts } = stepFacts(sessionId, entry)!
@@ -100,31 +126,3 @@ export const ToolCard = memo(function ToolCard({
     </div>
   )
 })
-
-/** An ask once answered: how many questions got an answer, and each question over its answer. */
-function AnsweredAsk({
-  questions,
-  device,
-}: {
-  questions: AnsweredQuestion[]
-  device: string | null
-}) {
-  const { t } = useTranslation('session')
-  const given = questions.filter((q) => q.answered).length
-  return (
-    <div className="min-w-0 rounded-card bg-card shadow-card">
-      <div className="flex min-h-12 min-w-0 items-center gap-2.5 py-2 pr-4 pl-4">
-        <CheckIcon aria-hidden strokeWidth={2} className="size-4 shrink-0 text-secondary" />
-        <span className="shrink-0 text-ui font-medium text-foreground">
-          {given === 0
-            ? t('question.skipped')
-            : t('question.answered', { answered: given, total: questions.length })}
-        </span>
-        {device && <span className="min-w-0 truncate text-control text-tertiary">· {device}</span>}
-      </div>
-      <div className="px-4 pb-3 pl-11">
-        <AnsweredQuestions questions={questions} />
-      </div>
-    </div>
-  )
-}

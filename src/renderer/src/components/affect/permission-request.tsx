@@ -82,7 +82,39 @@ export type PermissionRequestProps = {
   onDecisionChange?: (decision: PermissionDecision | null) => void;
   /** The clock for the countdown – defaults to now */
   now?: number;
+  /** false leaves out Change and Revoke, e.g. where an answer can't be taken back */
+  revocable?: boolean;
+  /** More buttons before Deny, e.g. the agent's other answers */
+  actions?: ReactNode;
+  /** More of what will happen under the preview, e.g. a diff or the whole command */
+  children?: ReactNode;
+  /** Locks the buttons, e.g. while the answer is on its way */
+  disabled?: boolean;
+  /** Every word the card shows, for a translation */
+  labels?: Partial<PermissionLabels>;
   className?: string;
+};
+
+export type PermissionLabels = {
+  /** The title: who asks for what */
+  title: (name: string, action: string) => ReactNode;
+  risk: (risk: Exclude<PermissionRisk, "safe">) => string;
+  scope: (scope: PermissionScope, minutes: number) => ReactNode;
+  allow: (scope: PermissionScope, minutes: number) => ReactNode;
+  deny: string;
+  howLong: string;
+  more: (count: number) => string;
+  showLess: string;
+  noAlways: string;
+  /** The decided line's head and note */
+  result: (
+    kind: "allowed" | "denied" | "expired",
+    decision: PermissionDecision,
+    context: { name: string; minutes: number; left?: string; until?: string; at: string },
+  ) => { headline: string; note: string };
+  change: string;
+  revoke: string;
+  askAgain: string;
 };
 
 /* ---------- Helpers ---------- */
@@ -297,6 +329,11 @@ export function PermissionRequest({
   defaultDecision = null,
   onDecisionChange,
   now: nowIn,
+  revocable = true,
+  actions,
+  children,
+  disabled = false,
+  labels,
   className,
 }: PermissionRequestProps) {
   const uid = useId();
@@ -351,7 +388,7 @@ export function PermissionRequest({
   const deny = () => decide({ allow: false, scope, at: nowProp ?? Date.now() });
 
   const onKey = (e: KeyboardEvent) => {
-    if (current) return;
+    if (current || disabled) return;
     const tag = (e.target as HTMLElement).tagName;
     if (e.key === "Enter" && tag !== "BUTTON") {
       e.preventDefault();
@@ -392,14 +429,16 @@ export function PermissionRequest({
     }
   }, [shape]);
 
-  const allowLabel =
-    scope === "once"
+  const allowLabel = labels?.allow
+    ? labels.allow(scope, duration)
+    : scope === "once"
       ? "Allow once"
       : scope === "timed"
         ? `Allow for ${span(duration)}`
         : "Always allow";
-  const scopeLabel = (s: PermissionScope) =>
+  const scopeLabel = (s: PermissionScope): string =>
     s === "once" ? "Just once" : s === "timed" ? span(duration) : "Always";
+  const scopeWords = (s: PermissionScope) => labels?.scope?.(s, duration) ?? scopeLabel(s);
   const shown = open ? preview : preview.slice(0, previewLimit);
   const hidden = preview.length - shown.length;
 
@@ -412,7 +451,14 @@ export function PermissionRequest({
     const total = until !== undefined ? until - at : 0;
     const share = total > 0 ? Math.max(0, Math.min(1, (until! - now) / total)) : 0;
     const kind = expired ? "expired" : current.allow ? "allowed" : "denied";
-    const headline = expired
+    const words = labels?.result?.(kind, current, {
+      name,
+      minutes: Math.round(total / MIN),
+      left: until !== undefined ? left(until - now) : undefined,
+      until: until !== undefined ? hhmm(until, now) : undefined,
+      at: hhmm(at, now),
+    });
+    const headline = words ? words.headline : expired
       ? "Access expired"
       : !current.allow
         ? "Denied"
@@ -423,7 +469,7 @@ export function PermissionRequest({
               ? `Allowed for ${span(Math.round(total / MIN))}`
               : "Allowed"
             : "Always allowed";
-    const note = expired
+    const note = words ? words.note : expired
       ? `${name} will ask again`
       : !current.allow
         ? `${name} was told and won't do it`
@@ -457,13 +503,13 @@ export function PermissionRequest({
             {note}
           </span>
         </span>
-        {current.allow && !expired && current.scope !== "once" ? (
+        {!revocable ? null : current.allow && !expired && current.scope !== "once" ? (
           <button
             type="button"
             className="ui-prc__ghost"
             onClick={() => decide(null)}
           >
-            Revoke
+            {labels?.revoke ?? "Revoke"}
           </button>
         ) : (
           <button
@@ -471,7 +517,7 @@ export function PermissionRequest({
             className="ui-prc__ghost"
             onClick={() => decide(null)}
           >
-            {expired ? "Ask again" : "Change"}
+            {expired ? (labels?.askAgain ?? "Ask again") : (labels?.change ?? "Change")}
           </button>
         )}
         {current.allow && current.scope === "timed" && until !== undefined && !expired && (
@@ -517,7 +563,13 @@ export function PermissionRequest({
                 </span>
                 <span className="ui-prc__heading">
                   <span className="ui-prc__title" id={`${uid}-title`}>
-                    <b dir="auto">{name}</b> wants to <b dir="auto">{action}</b>
+                    {labels?.title ? (
+                      labels.title(name, action)
+                    ) : (
+                      <>
+                        <b dir="auto">{name}</b> wants to <b dir="auto">{action}</b>
+                      </>
+                    )}
                   </span>
                   {(target || agent.model) && (
                     <span className="ui-prc__sub" title={target ?? agent.model}>
@@ -535,7 +587,7 @@ export function PermissionRequest({
                 {risk !== "safe" && (
                   <span className="ui-prc__risk" data-risk={risk}>
                     {risk === "risky" ? <RiskyIcon /> : <DestructiveIcon />}
-                    {RISK[risk]}
+                    {labels?.risk?.(risk) ?? RISK[risk]}
                   </span>
                 )}
               </header>
@@ -585,21 +637,23 @@ export function PermissionRequest({
                       aria-expanded={open}
                       onClick={() => setOpen((o) => !o)}
                     >
-                      {open ? "Show less" : `${count.format(hidden)} more`}
+                      {open ? (labels?.showLess ?? "Show less") : (labels?.more?.(hidden) ?? `${count.format(hidden)} more`)}
                     </button>
                   )}
                 </section>
               )}
+              {children != null && <div className="ui-prc__more-body">{children}</div>}
             </div>
 
             {/* ----- How long, and the answer ----- */}
             <div className="ui-prc__answer">
               {offered.length > 1 && renderScopes?.({ scopes: offered, scope, onChange: setScope, label: scopeLabel })}
+              {/* The words a translation gives the built-in chips */}
               {offered.length > 1 && !renderScopes && (
                 <div
                   className="ui-prc__scopes"
                   role="radiogroup"
-                  aria-label="How long"
+                  aria-label={labels?.howLong ?? "How long"}
                 >
                   {offered.map((s) => (
                     <button
@@ -633,27 +687,29 @@ export function PermissionRequest({
                       data-scope={s}
                       tabIndex={s === scope ? 0 : -1}
                     >
-                      {scopeLabel(s)}
+                      {scopeWords(s)}
                     </button>
                   ))}
                 </div>
               )}
               {risk === "destructive" && scopes.includes("always") && (
                 <span className="ui-prc__hint">
-                  Destructive actions can't be allowed for always
+                  {labels?.noAlways ?? "Destructive actions can't be allowed for always"}
                 </span>
               )}
               <div className="ui-prc__buttons">
-                <button type="button" className="ui-prc__btn" onClick={deny}>
-                  Deny
+                {actions}
+                <button type="button" className="ui-prc__btn" onClick={deny} disabled={disabled}>
+                  {labels?.deny ?? "Deny"}
                   <kbd className="ui-prc__kbd">Esc</kbd>
                 </button>
                 <button
                   type="button"
                   className="ui-prc__btn ui-prc__btn--primary"
                   onClick={allow}
+                  disabled={disabled}
                 >
-                  <span key={allowLabel} className="ui-prc__btn-label">
+                  <span key={scope} className="ui-prc__btn-label">
                     {allowLabel}
                   </span>
                   <kbd className="ui-prc__kbd">↵</kbd>
@@ -771,6 +827,8 @@ const css = /* css */ `
 .ui-prc__btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 28px; padding: 0 8px 0 12px; border-radius: 6px; background: var(--ui-prc-card); box-shadow: var(--ui-prc-shadow); font-size: 13px; font-weight: 500; color: var(--ui-prc-ink); white-space: nowrap; transition: background-color 160ms ease, transform 120ms ease; }
 .ui-prc__btn:hover { background: var(--ui-prc-wash); }
 .ui-prc__btn:active { transform: scale(0.98); }
+.ui-prc__more-body { display: grid; gap: 8px; min-width: 0; padding: 10px 16px 0; }
+.ui-prc__btn:disabled { opacity: 0.6; cursor: default; transform: none; }
 .ui-prc__btn--primary { background: var(--ui-prc-primary); box-shadow: none; color: var(--ui-prc-on-primary); }
 .ui-prc__btn--primary:hover { background: var(--ui-prc-primary); opacity: 0.88; }
 /* Destructive: the Allow button carries the warning */

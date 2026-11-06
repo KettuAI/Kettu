@@ -19,7 +19,7 @@ const COMPACTION_KEY = {
 /**
  * A step of the thread's work on affectUI's Tool Call Card: a tool call, a thought or a
  * compaction. Its facts come as props of their own (tool-call-model.ts), which a group reads.
- * `note` follows a tool call's target, such as who allowed it.
+ * `note` follows a tool call's target; a call a routine allowed says so by default.
  */
 export function StepCard({
   sessionId,
@@ -45,6 +45,10 @@ export function StepCard({
   if (entry.kind === 'tool') {
     const label = toolLabel(entry, projectPath, entry.status === 'completed')
     const pictures = entryPictures(entry)
+    const result = entry.permissionResult
+    if (note === undefined && typeof result === 'object' && result?.by === 'routine') {
+      note = t('permission.answer.allowedByRoutine')
+    }
     return (
       <ToolCallCard
         {...facts}

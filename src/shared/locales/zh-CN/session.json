@@ -94,7 +94,38 @@
     "answeredOn": "已在 {{device}} 上回答过。",
     "answeredInWindow": "已在另一个窗口中回答过。",
     "needsYou": "需要你",
-    "runCommand": "运行命令"
+    "runCommand": "运行命令",
+    "card": {
+      "title": "<b>{{agent}}</b> 想要<b>{{action}}</b>",
+      "action": {
+        "read": "读取文件",
+        "edit": "编辑文件",
+        "delete": "删除文件",
+        "move": "移动文件",
+        "search": "搜索项目",
+        "execute": "运行命令",
+        "fetch": "获取网页",
+        "switchMode": "切换模式",
+        "other": "使用工具"
+      },
+      "risky": "有风险",
+      "destructive": "破坏性",
+      "once": "仅这一次",
+      "always": "始终",
+      "deny": "拒绝",
+      "howLong": "有效期",
+      "touches": "涉及的内容",
+      "more": "还有 {{count}} 项",
+      "showLess": "收起",
+      "note": {
+        "allowOnce": "仅此一次，不会延续到下次",
+        "allowAlways": "{{agent}} 不会再为此询问",
+        "rejectOnce": "已告知 {{agent}}，它不会执行",
+        "rejectAlways": "{{agent}} 不会再为此询问",
+        "cancelled": "回合在回答前已结束",
+        "withdrawn": "{{agent}} 已不再需要"
+      }
+    }
   },
   "browserOrigin": {
     "label": "新站点",
@@ -647,7 +678,24 @@
     "skipped": "已跳过",
     "secret": "已隐藏",
     "count_other": "{{count}} 个问题",
-    "secretHint": "输入时隐藏，也不留在对话里"
+    "secretHint": "输入时隐藏，也不留在对话里",
+    "hint": {
+      "one": "选一项",
+      "oneOrOwn": "选一项，或写下你自己的回答",
+      "any": "选择所有适用的",
+      "anyOrOwn": "选择所有适用的，或写下你自己的回答"
+    },
+    "picked_other": "已选 {{count}} 项",
+    "ownAnswer": "你自己的回答",
+    "typing": "写下你的回答",
+    "separator": "、",
+    "sendStep": "发送",
+    "send": "发送回答",
+    "back": "返回",
+    "review": "把这些回答发给 {{agent}}？",
+    "reviewHint": "点一个回答可以修改它",
+    "of": "{{agent}} · 第 {{number}} 个问题，共 {{count}} 个",
+    "otherTell": "还有别的？告诉 {{agent}}"
   },
   "reply": {
     "button": "回复",

@@ -9,6 +9,7 @@ import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
+import { isMac } from '@renderer/lib/platform'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
@@ -300,8 +301,11 @@ const isEditable = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   (target.isContentEditable || target.closest('input, textarea, select, [role="textbox"], .xterm'))
 
+// A waiting permission card is a dialog of the thread's own, not one over it.
 const overlayOpen = () =>
-  !!document.querySelector('[role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"]')
+  !!document.querySelector(
+    '[role="menu"], [role="dialog"]:not(.ui-prc__card), [role="alertdialog"], [role="listbox"]',
+  )
 
 // What answers Enter itself, so it never also answers a request.
 const handlesEnter = (target: EventTarget | null) =>
@@ -311,51 +315,65 @@ const handlesEnter = (target: EventTarget | null) =>
   )
 
 /**
- * Number keys 1 to 9 answer the first card waiting for the user (a permission request, a question
- * or a new site) while the composer is empty, and Enter answers it with its highlighted option,
- * unless the focus is on a control of its own. On a card of questions the numbers only select.
+ * Number keys 1 to 9 pick a row of the first card waiting for the user (a question or a new site)
+ * while the composer is empty, Enter allows a request or takes a card's highlighted option, and
+ * Mod+Enter confirms any card, unless the focus is on a control of its own.
  */
 function usePermissionKeys(sessionId: string, focused: boolean): void {
   useEffect(() => {
     if (!focused) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.repeat) return
-      const enter = event.key === 'Enter'
+      if (event.altKey || event.shiftKey || event.repeat) return
+      const confirm = event.key === 'Enter' && (isMac ? event.metaKey : event.ctrlKey)
+      if (!confirm && (event.metaKey || event.ctrlKey)) return
+      const enter = event.key === 'Enter' && !confirm
       const n = Number(event.key)
-      if (!enter && (!Number.isInteger(n) || n < 1 || n > NUMBERED)) return
-      if (enter && (event.defaultPrevented || event.isComposing || handlesEnter(event.target))) {
-        return
-      }
+      if (!enter && !confirm && (!Number.isInteger(n) || n < 1 || n > NUMBERED)) return
+      if (event.defaultPrevented || event.isComposing) return
+      if (enter && handlesEnter(event.target)) return
       if (isEditable(event.target) || overlayOpen() || readDraft(sessionId).trim()) return
-      const state = useThreadsStore.getState().replicas[sessionId]?.state
-      if (!state) return
-      for (const id of state.order) {
-        const entry = state.byId[id]
-        const waiting =
-          (entry?.kind === 'tool' && !!entry.permission) ||
-          (entry?.kind === 'browser_origin' && entry.decision === null) ||
-          (entry?.kind === 'device_access' && entry.decision === null) ||
-          (entry?.kind === 'computer_app' && entry.decision === null) ||
-          (entry?.kind === 'computer_setup' && entry.outcome === null)
-        if (!waiting) continue
-        // Through the card's own control, so a failure shows where the answer was given. A
-        // question card's Enter goes on to its next question, and its own-answer field takes focus.
-        const scope = `[data-entry-id="${CSS.escape(id)}"]`
-        const target = document.querySelector<HTMLButtonElement | HTMLInputElement>(
-          enter
-            ? `${scope} [data-answer-enter], ${scope} [data-answer-option][data-highlighted]`
-            : `${scope} [data-answer-option="${n}"]`,
-        )
-        if (!target || target.disabled) return
-        event.preventDefault()
-        if (target instanceof HTMLInputElement) target.focus()
-        else target.click()
-        return
-      }
+      const id = firstWaiting(sessionId)
+      if (!id) return
+      // Through the card's own control, so a failure shows where the answer was given: Enter
+      // allows a request, Mod+Enter confirms any card, and a number picks that row.
+      const scope = `[data-entry-id="${CSS.escape(id)}"]`
+      const target = document.querySelector<HTMLElement>(
+        confirm
+          ? `${scope} :is(.ui-prc__btn--primary, .ui-xcc__action, [data-answer-enter])`
+          : enter
+            ? `${scope} :is(.ui-prc__btn--primary, [data-answer-enter], [data-answer-option][data-highlighted])`
+            : `${scope} :is([data-answer-option="${n}"], .ui-xcc__rows > .ui-xcc__row:nth-child(${n}))`,
+      )
+      if (!target || (target instanceof HTMLButtonElement && target.disabled)) return
+      event.preventDefault()
+      // The row of the user's own answer is a field to type in.
+      const field =
+        target instanceof HTMLInputElement
+          ? target
+          : target.querySelector<HTMLInputElement>('input')
+      if (field) field.focus()
+      else target.click()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [sessionId, focused])
+}
+
+/** The first card in the thread that waits for the user's answer. */
+function firstWaiting(sessionId: string): string | null {
+  const state = useThreadsStore.getState().replicas[sessionId]?.state
+  if (!state) return null
+  for (const id of state.order) {
+    const entry = state.byId[id]
+    const waiting =
+      (entry?.kind === 'tool' && !!entry.permission) ||
+      (entry?.kind === 'browser_origin' && entry.decision === null) ||
+      (entry?.kind === 'device_access' && entry.decision === null) ||
+      (entry?.kind === 'computer_app' && entry.decision === null) ||
+      (entry?.kind === 'computer_setup' && entry.outcome === null)
+    if (waiting) return id
+  }
+  return null
 }
 
 /** Esc cancels the running turn from anywhere in the session, unless something else takes it. */
@@ -373,6 +391,17 @@ function useEscapeToCancel(
       const target = event.target
       // The composer handles its own Esc; other fields keep theirs.
       if (isEditable(target)) return
+      // A request waiting for the user takes Esc as its Deny, as its button shows.
+      const waiting = firstWaiting(sessionId)
+      const deny = waiting
+        ? document.querySelector(`[data-entry-id="${CSS.escape(waiting)}"] .ui-prc__btn--primary`)
+            ?.previousElementSibling
+        : null
+      if (deny instanceof HTMLButtonElement) {
+        event.preventDefault()
+        if (!deny.disabled) deny.click()
+        return
+      }
       host('sessions.cancel', { sessionId }).catch(onError)
     }
     window.addEventListener('keydown', onKeyDown)

@@ -6,7 +6,7 @@ import { useThreadsStore } from '@renderer/stores/threads'
 // loaded has none, and its card shows no time rather than a guess.
 
 interface Seen {
-  status: ToolEntry['status']
+  running: boolean
   start?: number
   end?: number
 }
@@ -16,7 +16,9 @@ const bySession = new Map<string, { state: ThreadState; tools: Map<string, Seen>
 // Statuses change near the thread's end, so a patch is read no further back.
 const LOOKBACK = 64
 
-const isRunning = (status: ToolEntry['status']) => status === 'pending' || status === 'in_progress'
+// A call waiting for the user's permission has not started yet.
+const isRunning = (entry: ToolEntry) =>
+  (entry.status === 'pending' || entry.status === 'in_progress') && !entry.permission
 
 function observe(sessionId: string, state: ThreadState): void {
   const known = bySession.get(sessionId)
@@ -29,23 +31,19 @@ function observe(sessionId: string, state: ThreadState): void {
     const entry = byId[order[i]!]
     if (entry?.kind !== 'tool') continue
     const seen = tools.get(entry.id)
+    const running = isRunning(entry)
     if (!known) {
-      tools.set(entry.id, { status: entry.status })
+      tools.set(entry.id, { running })
       continue
     }
     if (!seen) {
-      tools.set(
-        entry.id,
-        isRunning(entry.status) ? { status: entry.status, start: now } : { status: entry.status },
-      )
+      tools.set(entry.id, running ? { running, start: now } : { running })
       continue
     }
-    if (seen.status === entry.status) continue
-    if (isRunning(entry.status) && seen.start === undefined) seen.start = now
-    if (!isRunning(entry.status) && isRunning(seen.status) && seen.start !== undefined) {
-      seen.end = now
-    }
-    seen.status = entry.status
+    if (seen.running === running) continue
+    if (running && seen.start === undefined) seen.start = now
+    if (!running && seen.start !== undefined) seen.end = now
+    seen.running = running
   }
   bySession.set(sessionId, { state, tools })
 }

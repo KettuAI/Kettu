@@ -1,11 +1,10 @@
 import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { ThreadState } from '@shared/thread'
 import { duration, tokens } from '@renderer/lib/format'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { TurnDots } from './turn-dots'
-import { turnPhase, turnTokens } from './turn-phase'
+import { turnPhase, turnTokens, writingId } from './turn-phase'
 
 /** The time since `since` in whole seconds, ticking on its own so nothing around it re-renders. */
 function TurnClock({ since }: { since: number }) {
@@ -28,20 +27,6 @@ function TurnClock({ since }: { since: number }) {
   return <span className="tabular">{duration(elapsed - (elapsed % 1000))}</span>
 }
 
-/** Whether the turn's latest entry is a message the agent is still writing. */
-function writingNow(state: ThreadState | null | undefined): boolean {
-  if (!state) return false
-  for (let i = state.order.length - 1; i >= 0; i--) {
-    const entry = state.byId[state.order[i]!]
-    if (!entry || QUIET.has(entry.kind)) continue
-    return entry.kind === 'agent' && entry.streaming
-  }
-  return false
-}
-
-// Entries that leave the reply's label in place under the message before them.
-const QUIET = new Set(['plan', 'notice', 'git', 'artifact', 'subagent'])
-
 /**
  * The running turn's status, the thread's last line at the left, where the reply will start: how
  * long it has run, its tokens and its phase, with the attention dot in place of the running dots
@@ -63,7 +48,7 @@ export const TurnStatus = memo(function TurnStatus({
   const { phase, count } = useThreadsStore(
     useShallow((s) => turnPhase(s.replicas[sessionId]?.state)),
   )
-  const writing = useThreadsStore((s) => writingNow(s.replicas[sessionId]?.state))
+  const writing = useThreadsStore((s) => writingId(s.replicas[sessionId]?.state) !== null)
   if (writing) return null
   const separator = <i aria-hidden>·</i>
   return (

@@ -38,6 +38,7 @@ import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { TurnDots } from '../turn-dots'
+import { writingId } from '../turn-phase'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
 import { OutOfCreditEnd } from './out-of-credit'
@@ -129,13 +130,14 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
   const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'agent')
   const animation = useEntryAnimation(sessionId, entryId)
+  const writing = useThreadsStore((s) => writingId(s.replicas[sessionId]?.state) === entryId)
   if (!entry) return null
   return (
     <div className={cn('ks-answer min-w-0', animation)} data-selectable="" data-agent-message="">
       <AIAnswer
         sources={NO_SOURCES}
         answer=""
-        streaming={entry.streaming}
+        streaming={writing}
         mark={<TurnDots phase="writing" />}
         labels={{ writing: t('thread.phase.writing', { count: 1 }) }}
       >

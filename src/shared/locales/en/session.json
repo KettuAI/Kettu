@@ -92,8 +92,8 @@
     "answer": {
       "allowOnce": "Allowed once",
       "allowAlways": "Always allowed",
-      "rejectOnce": "Rejected",
-      "rejectAlways": "Always rejected",
+      "rejectOnce": "Denied",
+      "rejectAlways": "Always denied",
       "allowedByRoutine": "Allowed by the routine",
       "cancelled": "Cancelled",
       "withdrawn": "No longer needed",
@@ -103,7 +103,38 @@
     "answeredOn": "Already answered on {{device}}.",
     "answeredInWindow": "Already answered in another window.",
     "needsYou": "Needs you",
-    "runCommand": "Run a command"
+    "runCommand": "Run a command",
+    "card": {
+      "title": "<b>{{agent}}</b> wants to <b>{{action}}</b>",
+      "action": {
+        "read": "read a file",
+        "edit": "edit a file",
+        "delete": "delete a file",
+        "move": "move a file",
+        "search": "search the project",
+        "execute": "run a command",
+        "fetch": "fetch a page",
+        "switchMode": "switch modes",
+        "other": "use a tool"
+      },
+      "risky": "Risky",
+      "destructive": "Destructive",
+      "once": "Just once",
+      "always": "Always",
+      "deny": "Deny",
+      "howLong": "How long",
+      "touches": "What it touches",
+      "more": "{{count}} more",
+      "showLess": "Show less",
+      "note": {
+        "allowOnce": "Just this once, it will not carry over",
+        "allowAlways": "{{agent}} will not ask for this again",
+        "rejectOnce": "{{agent}} was told and will not do it",
+        "rejectAlways": "{{agent}} will not ask for this again",
+        "cancelled": "The turn ended before an answer",
+        "withdrawn": "{{agent}} went on without it"
+      }
+    }
   },
   "browserOrigin": {
     "label": "New site",
@@ -677,7 +708,25 @@
     "secret": "Hidden",
     "count_one": "{{count}} question",
     "count_other": "{{count}} questions",
-    "secretHint": "Hidden as you type, and not kept in the conversation"
+    "secretHint": "Hidden as you type, and not kept in the conversation",
+    "hint": {
+      "one": "Pick one",
+      "oneOrOwn": "Pick one, or type your own",
+      "any": "Pick any that apply",
+      "anyOrOwn": "Pick any that apply, or type your own"
+    },
+    "picked_one": "{{count}} picked",
+    "picked_other": "{{count}} picked",
+    "ownAnswer": "Your own answer",
+    "typing": "Type your answer",
+    "separator": ", ",
+    "sendStep": "Send",
+    "send": "Send answers",
+    "back": "Back",
+    "review": "Send these answers to {{agent}}?",
+    "reviewHint": "Click an answer to change it",
+    "of": "{{agent}} · question {{number}} of {{count}}",
+    "otherTell": "Something else? Tell {{agent}}"
   },
   "reply": {
     "button": "Reply",

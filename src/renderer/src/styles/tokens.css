@@ -34,6 +34,8 @@
   /* session: the thread and its header, in affectUI's stepped inks over the sheet. */
   --thread-ink: rgb(0 0 0 / 88%);
   --thread-text: rgb(0 0 0 / 61%);
+  --thread-prose: rgb(0 0 0 / 70%);
+  --thread-quiet: rgb(0 0 0 / 55%);
   --thread-muted: rgb(0 0 0 / 45%);
   --thread-faint: rgb(0 0 0 / 27%);
   --thread-chip: rgb(0 0 0 / 4%);
@@ -488,6 +490,8 @@
     /* session: the thread and its header. */
     --thread-ink: rgb(255 255 255 / 90%);
     --thread-text: rgb(255 255 255 / 62%);
+    --thread-prose: rgb(255 255 255 / 74%);
+    --thread-quiet: rgb(255 255 255 / 56%);
     --thread-muted: rgb(255 255 255 / 45%);
     --thread-faint: rgb(255 255 255 / 28%);
     --thread-chip: rgb(255 255 255 / 6%);
@@ -818,6 +822,8 @@
   /* session: the thread and its header. */
   --thread-ink: rgb(255 255 255 / 90%);
   --thread-text: rgb(255 255 255 / 62%);
+  --thread-prose: rgb(255 255 255 / 74%);
+  --thread-quiet: rgb(255 255 255 / 56%);
   --thread-muted: rgb(255 255 255 / 45%);
   --thread-faint: rgb(255 255 255 / 28%);
   --thread-chip: rgb(255 255 255 / 6%);

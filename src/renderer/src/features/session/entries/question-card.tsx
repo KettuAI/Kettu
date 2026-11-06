@@ -1,61 +1,82 @@
-import { useRef, useState, type KeyboardEvent, type Ref } from 'react'
-import { CheckIcon, EyeOffIcon, LockIcon } from 'lucide-react'
+import { useMemo, useRef, useState, type Ref } from 'react'
+import { CheckmarkCircle02Icon, LockIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { AnsweredQuestion, PendingQuestion, ToolEntry } from '@shared/thread'
+import type { AnsweredQuestion, PendingQuestion, PermissionOption, ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
-import { Tabs, TabsList, TabsTrigger } from '@renderer/components/ui/tabs'
+import { Icon } from '@renderer/components/affect/app-shell'
+import {
+  ExperimentCard,
+  type ExperimentLabels,
+  type ExperimentMetric,
+} from '@renderer/components/affect/experiment-card'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { cn } from '@renderer/lib/utils'
+import { useSessionsStore } from '@renderer/stores/sessions'
+import { codeSpans, respondToPermission, respondToQuestions } from './helpers'
 import {
-  AgentWho,
-  CardError,
-  CardFooter,
-  CheckMark,
-  ConfirmButton,
-  FooterButton,
-  NUMBERED,
-  OptionName,
-  RadioMark,
-  TileKey,
-  WaitingCard,
-  WaitingHeader,
-  WaitingStatus,
-} from './answer-list'
-import { isConfirmKey, tileClass } from './card-style'
-import { respondToQuestions } from './helpers'
-import {
-  answeredCount,
   choose,
   chooseOwn,
   goTo,
   isAnswered,
-  keyIntent,
-  skipStep,
   startQuestions,
   toAnswers,
   typeText,
+  withDraft,
+  type QuestionState,
 } from './question-state'
 import { useAnswering } from './use-answering'
 
-/** Choices this short sit two to a row on a question that takes several. */
-const SHORT_LABEL = 28
-const SHORT_DESCRIPTION = 44
+const OWN = 'other'
+const SEND = 'send'
 
-function twoPerRow(question: PendingQuestion): boolean {
-  return (
-    question.multiSelect &&
-    question.options.length > 1 &&
-    question.options.every(
-      (option) =>
-        option.label.length <= SHORT_LABEL &&
-        (option.description?.length ?? 0) <= SHORT_DESCRIPTION,
-    )
+/** An option's name as plain words; a card's rows set no code. */
+const plainName = (name: string): string =>
+  codeSpans(name)
+    .map((part) => part.text)
+    .join('')
+
+/** What every question card shares: the agent's mark, the waiting tag and the last row's words. */
+function useChoiceCard(sessionId: string) {
+  const { t } = useTranslation('session')
+  const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
+  const labels = useMemo<Partial<ExperimentLabels>>(
+    () => ({
+      pickOne: t('question.hint.one'),
+      pickAny: t('question.hint.any'),
+      picked: (count) => t('question.picked', { count }),
+      ownAnswer: t('question.ownAnswer'),
+      typing: t('question.typing'),
+    }),
+    [t],
   )
+  return {
+    kind: 'choice' as const,
+    className: 'ks-question',
+    mark: agentId ? <AgentMark agent={agentId} size={16} /> : undefined,
+    status: { label: t('question.asksYou'), tone: 'amber' as const },
+    lead: null,
+    trigger: 'click' as const,
+    defaultOpen: true,
+    closeOnOutside: false,
+    labels,
+  }
+}
+
+function hintOf(
+  t: ReturnType<typeof useTranslation<'session'>>['t'],
+  question: PendingQuestion,
+): string {
+  if (question.secret) return t('question.secretHint')
+  if (question.options.length === 0) return t('question.typing')
+  if (question.multiSelect)
+    return t(question.allowsText ? 'question.hint.anyOrOwn' : 'question.hint.any')
+  return t(question.allowsText ? 'question.hint.oneOrOwn' : 'question.hint.one')
 }
 
 /**
- * An agent's questions as one card: the question shown, its choices as tiles and a tile for an
- * answer of the user's own, and steps to switch question. Nothing goes until Submit, which sends
- * only the questions that have an answer.
+ * An agent's questions on affectUI's Experiment Card as a question: its switch steps through the
+ * questions and, for more than one, a last Send step that reviews every answer before it goes.
+ * Each answer is one choice, several or the user's own words; nothing goes until it is sent.
  */
 export function QuestionCard({
   ref,
@@ -71,304 +92,327 @@ export function QuestionCard({
   className?: string
 }) {
   const { t } = useTranslation('session')
+  const shared = useChoiceCard(sessionId)
   const permission = entry.permission!
   const questions = permission.questions!
-  const [state, setState] = useState(() => startQuestions(questions.length))
-  const { answering, error, away, send } = useAnswering(sessionId)
-  const body = useRef<HTMLDivElement>(null)
   const count = questions.length
-  const question = questions[state.step]!
-  const draft = state.drafts[state.step]!
-  const last = state.step === count - 1
-  const given = answeredCount(state)
+  const [state, setState] = useState(() => startQuestions(count))
+  const [review, setReview] = useState(false)
+  // The question whose own answer row is picked while it is still empty.
+  const [ownOpen, setOwnOpen] = useState<number | null>(null)
+  const { answering, error, away, send } = useAnswering(sessionId)
+  const root = useRef<HTMLDivElement>(null)
   const busy = away || answering !== null
 
-  const submit = async () => {
+  const submit = async (from: QuestionState) => {
     if (busy) return
     // An answer from the card's own controls would leave the focus on nothing once the card goes.
-    const focused = !!body.current?.contains(document.activeElement)
+    const focused = !!root.current?.contains(document.activeElement)
     const sent = await send('submit', () =>
-      respondToQuestions(sessionId, permission.requestId, toAnswers(state)),
+      respondToQuestions(sessionId, permission.requestId, toAnswers(from)),
     )
     if (sent && focused) emitAppEvent({ kind: 'focus-composer' })
   }
 
-  const confirm = () => {
-    if (last) void submit()
+  const next = () => {
+    if (state.step >= count - 1) setReview(true)
     else setState((s) => goTo(s, s.step + 1))
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (isConfirmKey(event)) {
-      event.preventDefault()
-      event.stopPropagation()
-      confirm()
-      return
-    }
-    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-    const target = event.target as HTMLElement
-    const onTab = !!target.closest('[role="tab"]')
-    // The tabs move among themselves with the arrows, and a tile or button presses itself.
-    if (onTab && event.key !== 'Enter') return
-    const intent = keyIntent(
-      { key: event.key, isComposing: event.nativeEvent.isComposing || event.keyCode === 229 },
-      {
-        step: state.step,
-        count,
-        inText: target instanceof HTMLInputElement,
-        onButton:
-          onTab || !!target.closest('[data-card-action], [role="radio"], [role="checkbox"]'),
-      },
-    )
-    if (!intent) return
-    event.preventDefault()
-    event.stopPropagation()
-    if (intent === 'submit') void submit()
-    else setState((s) => goTo(s, s.step + (intent === 'next' ? 1 : -1)))
+  const answerOf = (i: number): string | null => {
+    const draft = state.drafts[i]!
+    if (!isAnswered(draft)) return null
+    const asked = questions[i]!
+    if (asked.secret) return t('question.secret')
+    const words = draft.choices.map((c) => asked.options[c]?.label ?? '')
+    if (draft.text.trim()) words.push(draft.text.trim())
+    return words.filter(Boolean).join(t('question.separator'))
   }
 
-  return (
-    <WaitingCard
-      ref={ref}
-      entryId={entry.id}
-      label={t('question.label')}
-      description={t('question.ask', { agent: agentName })}
-      className={className}
-    >
-      <WaitingHeader>
-        <AgentWho
-          sessionId={sessionId}
-          name={agentName}
-          sub={count > 1 ? t('question.count', { count }) : question.header || null}
-        />
-        <WaitingStatus>{t('question.asksYou')}</WaitingStatus>
-      </WaitingHeader>
-      {/* The card's own keys: the arrows switch question, Enter goes on, Mod+Enter confirms. */}
-      <div ref={body} onKeyDownCapture={onKeyDown} className="flex min-w-0 flex-col">
-        {count > 1 && (
-          <Tabs
-            value={String(state.step)}
-            onValueChange={(value) => setState((s) => goTo(s, Number(value)))}
-            className="px-5 pt-3"
-          >
-            <TabsList activateOnFocus aria-label={t('question.steps')}>
-              {questions.map((asked, i) => {
-                const done = isAnswered(state.drafts[i]!)
-                return (
-                  <TabsTrigger
-                    key={i}
-                    value={String(i)}
-                    disabled={busy}
-                    aria-label={t(done ? 'question.stepAnswered' : 'question.step', {
-                      number: i + 1,
-                    })}
-                    title={asked.header || undefined}
-                  >
-                    {done && i !== state.step ? (
-                      <CheckIcon aria-hidden strokeWidth={2.4} className="size-3" />
-                    ) : (
-                      <span className="font-semibold tabular">{i + 1}</span>
-                    )}
-                    {asked.header && <span className="max-w-32 truncate">{asked.header}</span>}
-                  </TabsTrigger>
-                )
-              })}
-            </TabsList>
-          </Tabs>
-        )}
-        <p data-selectable="" className="px-5 pt-2.5 text-heading font-semibold text-foreground">
-          {question.question}
-        </p>
-        {question.multiSelect && (
-          <p className="px-5 pt-0.5 text-control text-tertiary">{t('question.selectMany')}</p>
-        )}
-        <Choices
-          question={question}
-          selected={draft.choices}
-          text={draft.text}
-          disabled={busy}
-          onChoose={(index) => setState((s) => choose(s, question, index))}
-          onText={(text) => setState((s) => typeText(s, question, text))}
-          onOwn={() => setState((s) => chooseOwn(s, question))}
-        />
-        <CardError error={error} />
-        <CardFooter>
-          <FooterButton
-            disabled={busy || (last && !isAnswered(draft))}
-            onClick={() => setState(skipStep)}
-          >
-            {t('question.skip')}
-          </FooterButton>
-          <ConfirmButton busy={answering === 'submit'} disabled={busy} onClick={confirm}>
-            {last
-              ? given > 0
-                ? t('question.submit')
-                : t(count > 1 ? 'question.skipAll' : 'question.skip')
-              : t('question.next')}
-          </ConfirmButton>
-        </CardFooter>
-      </div>
-    </WaitingCard>
-  )
-}
+  const steps: ExperimentMetric[] = questions.map((asked, i) => ({
+    id: String(i),
+    label: asked.header || t('question.step', { number: i + 1 }),
+  }))
+  if (count > 1) steps.push({ id: SEND, label: t('question.sendStep') })
+  const switching = {
+    metrics: steps,
+    metric: review ? SEND : String(state.step),
+    onMetricChange: (id: string) => {
+      if (id === SEND) {
+        setReview(true)
+        return
+      }
+      setReview(false)
+      setState((s) => goTo(s, Number(id)))
+    },
+    switchLabel: t('question.steps'),
+  }
 
-/** A question's choices as tiles, then the tile for an answer of the user's own. */
-function Choices({
-  question,
-  selected,
-  text,
-  disabled,
-  onChoose,
-  onText,
-  onOwn,
-}: {
-  question: PendingQuestion
-  selected: number[]
-  text: string
-  disabled: boolean
-  onChoose: (index: number) => void
-  onText: (text: string) => void
-  onOwn: () => void
-}) {
-  const { t } = useTranslation('session')
-  const options = question.options
-  const own = options.length
-  const written = text.trim() !== ''
-  const two = twoPerRow(question)
-  const Mark = question.multiSelect ? CheckMark : RadioMark
-
-  // A question that takes only words: one field, with no key, and a lock when it is a secret.
-  if (options.length === 0) {
+  if (review) {
+    const answered = questions.flatMap((_, i) => (answerOf(i) !== null ? [String(i)] : []))
     return (
-      <div className="flex flex-col px-5 pt-3.5">
-        <label
-          className={cn(
-            'flex min-h-12 cursor-text items-center gap-2.5 rounded-card border border-input bg-card pr-3 pl-3.5 shadow-field transition-[border-color,box-shadow] duration-(--duration-fast)',
-            'hover:border-strong focus-within:border-focused focus-within:shadow-field-focus',
-          )}
-        >
-          {question.secret && <LockIcon aria-hidden className="size-4 shrink-0 text-tertiary" />}
-          <input
-            type={question.secret ? 'password' : 'text'}
-            autoComplete="off"
-            value={text}
-            disabled={disabled}
-            aria-label={question.question}
-            data-answer-option={1}
-            onChange={(event) => onText(event.target.value)}
-            className="h-11 min-w-0 flex-1 bg-transparent text-label text-foreground outline-none placeholder:text-tertiary"
+      <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
+        <div ref={root} className="min-w-0">
+          <ExperimentCard
+            key={SEND}
+            {...shared}
+            {...switching}
+            title={t('question.review', { agent: agentName })}
+            note={`${agentName} · ${t('question.count', { count })}`}
+            variants={questions.map((asked, i) => ({
+              id: String(i),
+              key: String(i + 1),
+              name: answerOf(i) ?? t('question.skipped'),
+              description: asked.header || asked.question,
+            }))}
+            multiple
+            picks={answered}
+            onPicksChange={(picked) => {
+              const changed = questions.findIndex(
+                (_, i) => answered.includes(String(i)) !== picked.includes(String(i)),
+              )
+              if (changed < 0) return
+              setReview(false)
+              setState((s) => goTo(s, changed))
+            }}
+            hint={t('question.reviewHint')}
+            actionReady
+            secondary={{ label: t('question.back'), onClick: () => setReview(false) }}
+            action={{
+              label: answered.length > 0 ? t('question.send') : t('question.skipAll'),
+              onClick: () => void submit(state),
+            }}
           />
-        </label>
-        {question.secret && <SecretHint className="px-0.5" />}
+        </div>
+        <CardError error={error} />
       </div>
     )
   }
 
+  const question = questions[state.step]!
+  const draft = state.drafts[state.step]!
+  const own = ownOpen === state.step || draft.text.trim() !== ''
+  const takesText = question.allowsText || question.options.length === 0
+  const cleared = withDraft(state, { choices: [], text: '' })
+
   return (
-    <div className="flex flex-col">
-      <div
-        role={question.multiSelect ? 'group' : 'radiogroup'}
-        aria-label={question.question}
-        className={cn('grid gap-2 px-5 pt-3.5', two ? 'grid-cols-2' : 'grid-cols-1')}
-      >
-        {options.map((option, i) => {
-          const chosen = selected.includes(i)
-          return (
-            <button
-              key={i}
-              type="button"
-              role={question.multiSelect ? 'checkbox' : 'radio'}
-              aria-checked={chosen}
-              disabled={disabled}
-              data-answer-option={i < NUMBERED ? i + 1 : undefined}
-              aria-keyshortcuts={i < NUMBERED ? String(i + 1) : undefined}
-              onClick={() => onChoose(i)}
-              className={cn(tileClass(chosen), 'min-h-14 py-2.5 pr-3 pl-3.5')}
-            >
-              <Mark on={chosen} />
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="min-w-0 text-row font-medium wrap-anywhere">
-                  <OptionName name={option.label} />
-                </span>
-                {option.description && (
-                  <span className="min-w-0 text-control text-tertiary wrap-anywhere">
-                    {option.description}
-                  </span>
-                )}
-              </span>
-              <TileKey n={i + 1} on={chosen} />
-            </button>
-          )
-        })}
-        {question.allowsText && (
-          <label
-            className={cn(
-              'flex min-h-12 min-w-0 cursor-text items-center gap-3 rounded-card py-1.5 pr-3 pl-3.5 transition-[background-color,box-shadow] duration-(--duration-fast)',
-              two && 'col-span-2',
-              written
-                ? 'bg-control-on-tint shadow-tile-on'
-                : 'border border-dashed border-border-strong focus-within:border-transparent focus-within:bg-control-on-tint focus-within:shadow-tile-on',
-            )}
-          >
-            <Mark on={written} />
-            <input
-              type={question.secret ? 'password' : 'text'}
-              autoComplete="off"
-              value={text}
-              disabled={disabled}
-              placeholder={t('question.other')}
-              aria-label={t('question.other')}
-              data-answer-option={own < NUMBERED ? own + 1 : undefined}
-              onFocus={onOwn}
-              onChange={(event) => onText(event.target.value)}
-              className="h-8 min-w-0 flex-1 bg-transparent text-row text-foreground outline-none placeholder:text-tertiary"
-            />
-            <TileKey n={own + 1} on={written} />
-          </label>
-        )}
+    <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
+      <div ref={root} className="min-w-0">
+        <ExperimentCard
+          key={state.step}
+          {...shared}
+          {...switching}
+          title={question.question}
+          note={
+            count > 1
+              ? t('question.of', { agent: agentName, number: state.step + 1, count })
+              : agentName
+          }
+          variants={question.options.map((option, i) => ({
+            id: String(i),
+            key: String(i + 1),
+            name: option.label,
+            description: option.description,
+          }))}
+          multiple={question.multiSelect}
+          picks={
+            question.multiSelect ? [...draft.choices.map(String), ...(own ? [OWN] : [])] : undefined
+          }
+          onPicksChange={(ids) => {
+            const choices = ids
+              .filter((id) => id !== OWN)
+              .map(Number)
+              .sort((a, b) => a - b)
+            const keepsOwn = ids.includes(OWN)
+            setOwnOpen(keepsOwn ? state.step : null)
+            setState((s) =>
+              withDraft(s, { choices, text: keepsOwn ? (s.drafts[s.step]?.text ?? '') : '' }),
+            )
+          }}
+          winner={
+            question.multiSelect
+              ? undefined
+              : own
+                ? OWN
+                : draft.choices[0] !== undefined
+                  ? String(draft.choices[0])
+                  : null
+          }
+          onWinnerChange={(id) => {
+            if (id === OWN) {
+              setOwnOpen(state.step)
+              setState((s) => chooseOwn(s, question))
+            } else if (id === null) {
+              setOwnOpen(null)
+              setState((s) => withDraft(s, { choices: [], text: '' }))
+            } else {
+              setOwnOpen(null)
+              setState((s) => choose(s, question, Number(id)))
+            }
+          }}
+          other={
+            takesText
+              ? {
+                  id: OWN,
+                  placeholder:
+                    question.options.length === 0
+                      ? t('question.otherPlaceholder')
+                      : t('question.otherTell', { agent: agentName }),
+                  value: draft.text,
+                  onChange: (text) => setState((s) => typeText(s, question, text)),
+                  secret: question.secret,
+                }
+              : undefined
+          }
+          hint={hintOf(t, question)}
+          secondary={{
+            label: t('question.skip'),
+            onClick: () => {
+              setOwnOpen(null)
+              if (count === 1) void submit(cleared)
+              else {
+                setState(cleared)
+                next()
+              }
+            },
+          }}
+          action={{
+            label: count === 1 ? t('question.submit') : t('question.next'),
+            onClick: () => (count === 1 ? void submit(state) : next()),
+          }}
+        />
       </div>
-      {question.secret && <SecretHint className="px-5.5" />}
+      <CardError error={error} />
     </div>
   )
 }
 
-function SecretHint({ className }: { className?: string }) {
+/**
+ * A question asked as a request for permission, whose options are its answers: the choices as the
+ * card's rows, and the agent's answer that leaves it to the user's next message as Skip's place.
+ */
+export function OptionQuestionCard({
+  ref,
+  sessionId,
+  entry,
+  agentName,
+  className,
+}: {
+  ref: Ref<HTMLDivElement>
+  sessionId: string
+  entry: ToolEntry
+  agentName: string
+  className?: string
+}) {
   const { t } = useTranslation('session')
+  const shared = useChoiceCard(sessionId)
+  const permission = entry.permission!
+  const [winner, setWinner] = useState<string | null>(null)
+  const { answering, error, away, send } = useAnswering(sessionId)
+  const root = useRef<HTMLDivElement>(null)
+  const choices = permission.options.filter(
+    (o) => o.kind === 'allow_once' || o.kind === 'allow_always',
+  )
+  const elsewhere = permission.options.find((o) => !choices.includes(o)) ?? null
+
+  const respond = async (option: PermissionOption | undefined) => {
+    if (!option || away || answering !== null) return
+    const focused = !!root.current?.contains(document.activeElement)
+    const sent = await send(option.id, () =>
+      respondToPermission(sessionId, permission.requestId, option.id),
+    )
+    // The answer of the user's own goes on in the composer.
+    if (sent && (focused || option === elsewhere)) emitAppEvent({ kind: 'focus-composer' })
+  }
+
   return (
-    <p className={cn('flex items-center gap-1.5 pt-2 text-hint text-tertiary', className)}>
-      <EyeOffIcon aria-hidden className="size-3.25 shrink-0" />
-      {t('question.secretHint')}
+    <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
+      <div ref={root} className="min-w-0">
+        <ExperimentCard
+          {...shared}
+          metrics={[]}
+          title={entry.question ?? ''}
+          note={agentName}
+          variants={choices.map((option, i) => ({
+            id: option.id,
+            key: String(i + 1),
+            name: plainName(option.name),
+            description: option.description,
+          }))}
+          winner={winner}
+          onWinnerChange={setWinner}
+          hint={t('question.hint.one')}
+          secondary={
+            elsewhere
+              ? { label: plainName(elsewhere.name), onClick: () => void respond(elsewhere) }
+              : undefined
+          }
+          action={{
+            label: t('question.submit'),
+            onClick: (variant) => void respond(choices.find((o) => o.id === variant.id)),
+          }}
+        />
+      </div>
+      <CardError error={error} />
+    </div>
+  )
+}
+
+function CardError({ error }: { error: string | null }) {
+  if (!error) return null
+  return (
+    <p role="alert" className="ks-card-error">
+      {error}
     </p>
   )
 }
 
-/** What each question of an answered ask got: the question in gray, the answer under it. */
-export function AnsweredQuestions({ questions }: { questions: AnsweredQuestion[] }) {
+/** An ask once answered: how many questions got an answer, and each question over its answer. */
+export function AnsweredAsk({
+  questions,
+  device,
+}: {
+  questions: AnsweredQuestion[]
+  device: string | null
+}) {
   const { t } = useTranslation('session')
+  const given = questions.filter((q) => q.answered).length
   return (
-    <ul className="flex flex-col">
-      {questions.map((asked, i) => (
-        <li
-          key={i}
-          className="flex min-w-0 flex-col gap-0.5 border-t border-border-soft py-2.5 first:border-t-0 first:pt-0"
-        >
-          <span data-selectable="" className="text-control text-tertiary">
-            {asked.question}
-          </span>
-          {asked.answer !== undefined ? (
-            <span data-selectable="" className="text-row wrap-anywhere text-foreground">
-              {asked.answer}
+    <div className="ks-answered">
+      <div className="ks-answered__head">
+        <Icon icon={CheckmarkCircle02Icon} size={16} />
+        <span className="ks-answered__title">
+          {given === 0
+            ? t('question.skipped')
+            : questions.length === 1
+              ? t('question.answeredOne')
+              : t('question.answered', { answered: given, total: questions.length })}
+        </span>
+        {device && <span className="ks-answered__device">· {device}</span>}
+      </div>
+      <ul className="ks-answered__list">
+        {questions.map((asked, i) => (
+          <li key={i}>
+            <span data-selectable="" className="ks-answered__question">
+              {asked.question}
             </span>
-          ) : asked.answered ? (
-            <span className="flex items-center gap-1.5 text-row text-tertiary">
-              <LockIcon aria-hidden className="size-3.5 shrink-0" />
-              {t('question.secret')}
-            </span>
-          ) : (
-            <span className="text-row text-tertiary">{t('question.skipped')}</span>
-          )}
-        </li>
-      ))}
-    </ul>
+            {asked.answer !== undefined ? (
+              <span data-selectable="" className="ks-answered__answer">
+                {asked.answer}
+              </span>
+            ) : asked.answered ? (
+              <span className="ks-answered__answer ks-answered__answer--quiet">
+                <Icon icon={LockIcon} size={13} />
+                {t('question.secret')}
+              </span>
+            ) : (
+              <span className="ks-answered__answer ks-answered__answer--quiet">
+                {t('question.skipped')}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
