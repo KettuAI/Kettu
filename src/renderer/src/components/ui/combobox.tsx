@@ -5,6 +5,7 @@ import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox'
 import { cn } from 'cn'
 import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react'
 import { useOverlayRoot } from '@renderer/stores/overlays'
+import { GlideHighlight } from '@renderer/components/glide-highlight'
 
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -140,12 +141,21 @@ function ComboboxContent({
   )
 }
 
-function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
+function ComboboxList({ className, render, ...props }: ComboboxPrimitive.List.Props) {
   return (
     <ComboboxPrimitive.List
       data-slot="combobox-list"
+      render={
+        render ??
+        ((listProps) => (
+          <div {...listProps}>
+            <GlideHighlight />
+            {listProps.children}
+          </div>
+        ))
+      }
       className={cn(
-        'max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1.25 overflow-y-auto overscroll-contain p-1.25 data-empty:p-0',
+        'relative max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1.25 overflow-y-auto overscroll-contain p-1.25 data-empty:p-0',
         className,
       )}
       {...props}
@@ -158,7 +168,7 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "relative flex min-h-7.5 w-full cursor-default items-center gap-2.5 rounded-md py-1 pr-8 pl-2 text-menu outline-hidden select-none data-highlighted:bg-selected data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.75",
+        "relative flex min-h-8 w-full cursor-default items-center gap-2.5 rounded-lg py-1 pr-8 pl-2 text-menu outline-hidden select-none data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.75",
         className,
       )}
       {...props}

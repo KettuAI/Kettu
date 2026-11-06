@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SearchIcon } from 'lucide-react'
+import { motion } from 'motion/react'
 import { newSession, openProjectDialog } from '@renderer/app/actions'
 import {
   Combobox,
@@ -14,7 +15,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from '@renderer/components/ui/dialog'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Toggle } from '@renderer/components/ui/toggle'
-import { cn } from '@renderer/lib/utils'
+import { glide } from '@renderer/lib/motion'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import {
@@ -38,7 +39,7 @@ import {
   type SearchEntry,
   type SearchScope,
 } from './search-model'
-import { SearchRow } from './search-row'
+import { PALETTE_KEY, SearchRow } from './search-row'
 import { useSearchEntries } from './use-search-entries'
 
 /**
@@ -61,7 +62,7 @@ export function SearchDialog() {
     <Dialog open={open} onOpenChange={showSearch}>
       <DialogContent
         showCloseButton={false}
-        className="top-[12svh] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[620px]"
+        className="top-[12svh] translate-y-0 gap-0 overflow-hidden rounded-card p-0 sm:max-w-[600px]"
       >
         <DialogTitle className="sr-only">{t('nav.search')}</DialogTitle>
         {open && <SearchPalette />}
@@ -168,22 +169,22 @@ function SearchPalette() {
       onInputValueChange={setQuery}
       itemToStringLabel={(entry) => entry.title}
     >
-      <div className="flex items-center gap-2.5 px-4">
-        <SearchIcon aria-hidden className="size-4.5 shrink-0 text-tertiary" />
+      <div className="flex items-center gap-2.5 pr-3 pl-3.5">
+        <SearchIcon aria-hidden className="size-4 shrink-0 text-tertiary" />
         <ComboboxInput
           showTrigger={false}
           autoFocus
           placeholder={t('search.placeholder')}
           onKeyDown={onKeyDown}
-          className="h-13 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none has-[[data-slot=input-group-control]:focus-visible]:shadow-none! **:data-[slot=input-group-control]:px-0 **:data-[slot=input-group-control]:text-label"
+          className="h-12 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none has-[[data-slot=input-group-control]:focus-visible]:shadow-none! **:data-[slot=input-group-control]:px-0 **:data-[slot=input-group-control]:text-menu"
         />
-        <Kbd>Esc</Kbd>
+        <Kbd className={PALETTE_KEY}>Esc</Kbd>
       </div>
       <div className="hairline-x bg-border-soft" />
       <div
         role="group"
         aria-label={t('search.scopes')}
-        className="flex gap-1 overflow-x-auto px-3 py-2"
+        className="flex gap-0.5 overflow-x-auto px-1 py-1.5"
       >
         {SCOPES.map((item) => (
           <ScopeTab
@@ -208,7 +209,7 @@ function SearchPalette() {
       </ComboboxEmpty>
       <ComboboxList
         aria-label={t('nav.search')}
-        className="max-h-[min(440px,58svh)] p-1.5 data-empty:hidden"
+        className="max-h-[min(440px,58svh)] p-1 data-empty:hidden"
       >
         {(group: ResultGroup) => (
           <ComboboxGroup key={group.key} items={group.items}>
@@ -222,10 +223,12 @@ function SearchPalette() {
         )}
       </ComboboxList>
       <div className="hairline-x bg-border-soft" />
-      <div className="flex h-10 items-center gap-4 px-4 text-hint text-tertiary">
-        <Hint keys={['↑', '↓']} label={t('search.hint.navigate')} />
-        <Hint keys={['↵']} label={t('search.hint.open')} />
-        <Hint keys={['⇥']} label={t('search.hint.scope')} />
+      <div className="flex h-10 items-center justify-between gap-4 px-3.5 text-small text-tertiary">
+        <Hint keys={['Tab']} label={t('search.hint.scope')} />
+        <span className="flex items-center gap-4">
+          <Hint keys={['↑', '↓']} label={t('search.hint.navigate')} />
+          <Hint keys={['↵']} label={t('search.hint.open')} />
+        </span>
       </div>
     </Combobox>
   )
@@ -236,7 +239,9 @@ function Hint({ keys, label }: { keys: string[]; label: string }) {
     <span className="flex items-center gap-1.5">
       <span className="flex gap-1">
         {keys.map((key) => (
-          <Kbd key={key}>{key}</Kbd>
+          <Kbd key={key} className={PALETTE_KEY}>
+            {key}
+          </Kbd>
         ))}
       </span>
       {label}
@@ -264,8 +269,16 @@ function ScopeTab({
       // Tab steps through the scopes from the field, so the tabs themselves take no focus.
       tabIndex={-1}
       onMouseDown={keepFocus}
-      className={cn('gap-1.5 text-secondary aria-pressed:font-medium aria-pressed:text-foreground')}
+      className="relative isolate h-7 gap-1.5 rounded-tile px-2 text-small font-normal text-secondary hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent aria-pressed:font-medium aria-pressed:text-foreground"
     >
+      {active && (
+        <motion.span
+          aria-hidden
+          layoutId="search-scope"
+          transition={glide}
+          className="absolute inset-0 -z-10 rounded-tile bg-selected"
+        />
+      )}
       {t(`search.scope.${scope}`)}
       {count > 0 && <span className="font-normal text-tertiary tabular-nums">{count}</span>}
     </Toggle>
@@ -284,14 +297,16 @@ function GroupHeader({
   const scope = SCOPE_OF_KIND[group.key]
   return (
     <div className="flex items-center justify-between pr-2">
-      <ComboboxLabel className="px-2.5">{t(`search.group.${group.key}`)}</ComboboxLabel>
+      <ComboboxLabel className="h-auto px-2 pt-1.5 pb-1 text-caption tracking-wider text-tertiary uppercase">
+        {t(`search.group.${group.key}`)}
+      </ComboboxLabel>
       {more && scope && (
         <button
           type="button"
           tabIndex={-1}
           onMouseDown={keepFocus}
           onClick={() => onShowAll(scope)}
-          className="rounded-md px-1.5 text-small text-tertiary transition-colors hover:text-foreground"
+          className="rounded-md px-1.5 pt-1.5 pb-1 text-caption text-tertiary transition-colors hover:text-foreground"
         >
           {t('search.showAll', { count: group.total })}
         </button>

@@ -46,53 +46,59 @@ function Marked({ text, words }: { text: string; words: readonly string[] }) {
 function RowIcon({ entry }: { entry: SearchEntry }) {
   switch (entry.kind) {
     case 'session':
-      return <AgentMark agent={entry.agentId} size={18} hostId={entry.hostId} />
+      return <AgentMark agent={entry.agentId} size={12} hostId={entry.hostId} />
     case 'artifact': {
       const look = KIND_LOOK[entry.artifactKind]
-      return (
-        <span className={cn('grid size-5 place-items-center rounded-md', look.tint)}>
-          <look.icon className={cn('size-3.5', look.color)} />
-        </span>
-      )
+      return <look.icon className={cn('size-3', look.color)} />
     }
     case 'routine':
-      return <ClockIcon className="size-4 text-icon" />
+      return <ClockIcon className="size-3 text-icon" />
     case 'project':
-      return <FolderIcon className="size-4 text-icon" />
+      return <FolderIcon className="size-3 text-icon" />
     case 'section':
-      return <Settings2Icon className="size-4 text-icon" />
+      return <Settings2Icon className="size-3 text-icon" />
     case 'action': {
       const Icon = ACTION_ICON[entry.action]
-      return <Icon className="size-4 text-icon" />
+      return <Icon className="size-3 text-icon" />
     }
   }
 }
 
-/** One result: what it is, its name, a line about it and, for an action, its keys. */
+/** One result: its mark in a raised tile, its name with a line about it, and its keys. */
 export function SearchRow({ entry, words }: { entry: SearchEntry; words: readonly string[] }) {
   return (
-    <ComboboxItem value={entry} className="min-h-10 gap-3 rounded-lg px-2.5">
-      <span aria-hidden className="grid size-5 shrink-0 place-items-center">
+    <ComboboxItem value={entry} className="h-9 min-h-0 gap-2.5 rounded-lg px-2 py-0 text-menu">
+      <span
+        aria-hidden
+        className="grid size-5 shrink-0 place-items-center rounded-lg bg-raised shadow-raised"
+      >
         <RowIcon entry={entry} />
       </span>
-      <span className="min-w-0 flex-1 truncate">
-        <Marked text={entry.title} words={words} />
-      </span>
-      {entry.meta && (
-        <span className="max-w-[46%] shrink-0 truncate text-hint text-tertiary">
-          <Marked text={entry.meta} words={words} />
+      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="max-w-full shrink-0 truncate text-foreground">
+          <Marked text={entry.title} words={words} />
         </span>
-      )}
+        {entry.meta && (
+          <span className="min-w-0 truncate text-tertiary">
+            <Marked text={entry.meta} words={words} />
+          </span>
+        )}
+      </span>
       {entry.trailing && (
-        <span className="shrink-0 text-hint text-tertiary tabular-nums">{entry.trailing}</span>
+        <span className="shrink-0 text-small text-tertiary tabular-nums">{entry.trailing}</span>
       )}
       {entry.kind === 'action' && entry.shortcut && (
         <KbdGroup>
           {keyCaps(entry.shortcut).map((cap, i) => (
-            <Kbd key={i}>{cap}</Kbd>
+            <Kbd key={i} className={PALETTE_KEY}>
+              {cap}
+            </Kbd>
           ))}
         </KbdGroup>
       )}
     </ComboboxItem>
   )
 }
+
+/** A key cap in the palette: smaller and quieter than a button's. */
+export const PALETTE_KEY = 'h-5 min-w-5 rounded-lg px-1 font-normal text-tertiary'
