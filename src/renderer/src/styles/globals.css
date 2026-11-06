@@ -448,7 +448,7 @@
 
   --ui-face: var(--face-inter);
   --prose-face: var(--face-inter);
-  --display-face: var(--face-manrope);
+  --display-face: var(--ui-face);
   --greeting-face:
     'Source Serif 4 Variable', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', ui-serif, Georgia,
     serif;

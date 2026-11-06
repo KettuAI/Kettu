@@ -319,7 +319,7 @@ function DeviceName({ device, online }: { device: PairedDevice; online: boolean 
 
   return (
     <span className="flex min-w-0 flex-1 flex-col gap-1 font-sans font-normal">
-      <span className="flex w-full min-w-0 items-center gap-1.5 font-display text-section font-bold">
+      <span className="flex w-full min-w-0 items-center gap-1.5 font-display text-section font-semibold">
         {editing ? (
           <input
             aria-label={t('remote.device.rename')}

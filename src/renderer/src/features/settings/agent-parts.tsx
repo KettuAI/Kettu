@@ -248,7 +248,7 @@ export function SpendGroup({
           {cost === undefined ? (
             !error && <Spinner className="size-3.5 text-tertiary" />
           ) : (
-            <span className="font-display text-sheet-title font-bold tabular">
+            <span className="font-display text-sheet-title font-semibold tabular">
               {cost === null ? t('agents.spend.unpriced') : money(cost, 'USD')}
             </span>
           )}

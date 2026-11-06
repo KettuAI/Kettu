@@ -98,7 +98,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
         )}
       </div>
       {cards.length === 0 ? (
-        <p className="rounded-tile bg-subtle px-4.5 py-4 text-hint text-tertiary">
+        <p className="rounded-card bg-card px-4.5 py-4 text-hint text-tertiary shadow-card">
           {t('limits.none')}
         </p>
       ) : (
@@ -249,7 +249,7 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
     </>
   )
   const tile =
-    '@container flex min-w-0 flex-col gap-3 rounded-tile bg-subtle px-4 pt-3.5 pb-4 outline-none focus-ring'
+    '@container flex min-w-0 flex-col gap-3 rounded-card bg-card px-4 pt-3.5 pb-4 shadow-card outline-none focus-ring'
   if (card.rings.length === 0) {
     return (
       <article aria-label={card.name} className={tile}>

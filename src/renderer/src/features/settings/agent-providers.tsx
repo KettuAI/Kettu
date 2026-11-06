@@ -481,7 +481,7 @@ function ProviderBalances({ providers }: { providers: readonly AgentProvider[] }
               />
             }
           >
-            <span className="font-display text-sheet-title font-bold" data-selectable="">
+            <span className="font-display text-sheet-title font-semibold" data-selectable="">
               {balanceText(balance)}
             </span>
           </RowFrame>
