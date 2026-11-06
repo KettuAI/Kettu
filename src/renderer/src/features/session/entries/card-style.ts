@@ -7,7 +7,7 @@ import { cn } from '@renderer/lib/utils'
 /** An option tile: a hairline edge, and once chosen or highlighted, the fox edge on its tint. */
 export function tileClass(on: boolean): string {
   return cn(
-    'flex w-full min-w-0 cursor-default items-center gap-3 rounded-card bg-card text-left text-foreground outline-none transition-[background-color,box-shadow] duration-(--duration-fast) focus-ring disabled:opacity-60',
+    'flex w-full min-w-0 cursor-default items-center gap-3 rounded-xl bg-card text-left text-foreground outline-none transition-[background-color,box-shadow] duration-(--duration-fast) focus-ring disabled:opacity-60',
     on ? 'bg-control-on-tint shadow-tile-on' : 'shadow-tile hover:enabled:bg-hover',
   )
 }

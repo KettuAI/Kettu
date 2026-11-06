@@ -440,7 +440,7 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<'li'>) {
 }
 
 const sidebarMenuButtonVariants = cva(
-  'peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden transition-[width,height,padding] group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-ring active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none aria-disabled:opacity-40 data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground data-popup-open:not-data-active:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground data-active:bg-raised data-active:text-primary data-active:shadow-raised data-active:hover:bg-raised [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate',
+  'peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden transition-[width,height,padding] group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-ring active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none aria-disabled:opacity-40 data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground data-popup-open:not-data-active:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground data-active:bg-selected data-active:text-foreground data-active:hover:bg-selected [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate',
   {
     variants: {
       variant: {
@@ -452,7 +452,7 @@ const sidebarMenuButtonVariants = cva(
         default: 'h-8 text-sm',
         sm: 'h-7 text-xs',
         lg: 'h-12 text-sm group-data-[collapsible=icon]:p-0!',
-        row: 'h-row gap-2.5 rounded-lg px-2.5 text-ui [&_svg]:size-3.5',
+        row: 'h-row gap-2.5 rounded-tile px-2.5 text-ui text-secondary hover:text-foreground [&_svg]:size-3.5',
         label: 'h-6 w-auto gap-1 rounded-md px-1.5',
       },
     },

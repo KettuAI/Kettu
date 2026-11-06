@@ -53,5 +53,8 @@
   },
   "windowTitle": {
     "onHost": "{{host}} — Kettu"
+  },
+  "toasts": {
+    "region": "通知"
   }
 }

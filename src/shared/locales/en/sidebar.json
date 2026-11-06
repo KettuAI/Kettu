@@ -7,7 +7,8 @@
     "routines": "Routines",
     "sessions": "Sessions",
     "unavailable": "Projects are unavailable right now.",
-    "empty": "Sessions appear here."
+    "empty": "Sessions appear here.",
+    "searchField": "Search…"
   },
   "search": {
     "placeholder": "Search sessions, artifacts, routines and more",

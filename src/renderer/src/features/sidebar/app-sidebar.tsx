@@ -137,17 +137,12 @@ export function AppSidebar() {
     >
       <SidebarTitleBar />
       <div className="flex shrink-0 flex-col gap-0.5 px-2 pt-0.5">
+        <SearchField />
         <NavRow
           icon={<PlusIcon />}
           label={t('nav.newSession')}
           shortcut="Mod+N"
           onClick={() => newSession()}
-        />
-        <NavRow
-          icon={<SearchIcon />}
-          label={t('nav.search')}
-          shortcut="Mod+K"
-          onClick={() => showSearch(true)}
         />
         <NavRow
           icon={<ShapesIcon />}
@@ -241,6 +236,28 @@ export function AppSidebar() {
   )
 }
 
+/** Search as a field at the top of the sidebar, with its shortcut, opening the palette. */
+function SearchField() {
+  const { t } = useTranslation('sidebar')
+  return (
+    <button
+      type="button"
+      onClick={() => showSearch(true)}
+      aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
+      className="mb-1.5 flex h-7 w-full items-center gap-2 rounded-lg bg-surface pr-2 pl-2.5 text-row text-placeholder shadow-card transition-[box-shadow,color] duration-(--duration-fast) outline-none hover:text-secondary hover:shadow-outline-hover focus-ring"
+    >
+      <SearchIcon aria-hidden className="size-[15px] shrink-0" />
+      <span className="min-w-0 flex-1 truncate text-left">{t('nav.searchField')}</span>
+      <kbd
+        aria-hidden
+        className="shrink-0 rounded-sm px-1.25 font-sans text-caption leading-[18px] text-placeholder shadow-[inset_0_0_0_0.5px_var(--border-strong)]"
+      >
+        {formatShortcut('Mod+K')}
+      </kbd>
+    </button>
+  )
+}
+
 export function NavRow({
   icon,
   label,
@@ -266,7 +283,7 @@ export function NavRow({
       onClick={onClick}
       aria-label={ariaLabel}
       aria-keyshortcuts={shortcut?.replace('Mod', isMac ? 'Meta' : 'Control')}
-      className="gap-2.5 pr-2.5 text-row data-active:font-medium [&_svg]:size-[18px]"
+      className="gap-2.5 pr-2.5 text-row data-active:font-medium [&>svg]:size-4 [&>svg]:text-tertiary data-active:[&>svg]:text-secondary"
     >
       {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>

@@ -194,7 +194,7 @@ export default function RoutinesPage() {
           <RunAnnouncements />
           <header className="mb-7 flex items-start gap-4 pt-5">
             <div className="min-w-0 flex-1">
-              <h1 className="font-display text-title font-bold">{t('page.title')}</h1>
+              <h1 className="font-display text-title font-semibold">{t('page.title')}</h1>
               <p className="mt-1.5 text-lede text-tertiary">{t('page.description')}</p>
             </div>
             {!empty && (

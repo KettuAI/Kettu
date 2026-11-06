@@ -365,13 +365,13 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                   {t('page.backToArtifacts')} <span className="opacity-60">Esc</span>
                 </TooltipContent>
               </Tooltip>
-              <h1 className="font-display text-title font-bold">{t('page.recentlyDeleted')}</h1>
+              <h1 className="font-display text-title font-semibold">{t('page.recentlyDeleted')}</h1>
               <p className="mt-1.5 text-row text-tertiary">{t('page.deletedDescription')}</p>
             </header>
           ) : (
             <>
               <header className="flex min-h-8 flex-wrap items-center gap-4">
-                <h1 className="min-w-0 flex-1 font-display text-title font-bold">
+                <h1 className="min-w-0 flex-1 font-display text-title font-semibold">
                   {t('page.title')}
                 </h1>
                 {any && (

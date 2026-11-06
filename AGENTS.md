@@ -47,6 +47,7 @@ Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu inst
 | Concern                     | Library                                                               |
 | --------------------------- | --------------------------------------------------------------------- |
 | Components and visual style | shadcn/ui, `base-nova` style on Base UI                               |
+| AI, agent and team views    | affectUI, in `components/affect`                                      |
 | Icons                       | Lucide (`lucide-react`)                                               |
 | Animation                   | Motion (`motion/react`)                                               |
 | Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`         |
@@ -58,6 +59,8 @@ Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu inst
 | Code editing                | CodeMirror 6 (`codemirror`): the Files pane's editor and the composer |
 | Terminal                    | xterm.js in the renderer, `node-pty` in the terminal host             |
 | Localization                | i18next with react-i18next, catalogs in `src/shared/locales`          |
+
+affectUI items come from its registry with `pnpm shadcn add @affectui/<item> -p src/renderer/src/components/affect`, which needs `AFFECTUI_TOKEN` for Pro items. Pro files keep the license notice at their top and are not under this project's license; change them only where wiring and translated copy need it, and point their color variables at the theme's tokens in `styles/affect.css`.
 
 Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
 

@@ -186,7 +186,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
             : t('prompt.placeholder.ask', { agent: agentName })
 
   return (
-    <div data-composer="" className="flex flex-col">
+    <div data-composer="" className="flex flex-col rounded-[26px] bg-sidebar p-1.25 pb-0">
       <PromptBox
         box={box}
         agentId={session.agentId}
@@ -245,7 +245,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         }
       />
       {/* Holds the row's height while the agent starts, so nothing jumps when the options arrive. */}
-      <div className="flex min-h-9 flex-col">
+      <div className="flex min-h-9 flex-col px-1">
         {(error || blocked?.notice) && (
           <p className="animate-in px-2 pt-1 text-xs text-danger fade-in" role="alert">
             {error ?? blocked?.message}

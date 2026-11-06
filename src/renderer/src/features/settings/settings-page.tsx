@@ -438,8 +438,10 @@ function NavRow({
       aria-current={selected ? 'page' : undefined}
       onClick={onChoose}
       className={cn(
-        'flex h-row shrink-0 items-center gap-2.75 rounded-xl px-2.5 text-left text-lede text-primary outline-none transition-[background-color,opacity] duration-(--duration-fast) focus-ring',
-        selected ? 'bg-raised font-medium shadow-raised' : 'hover:bg-hover',
+        'flex h-row shrink-0 items-center gap-2.75 rounded-tile px-2.5 text-left text-row outline-none transition-[background-color,color,opacity] duration-(--duration-fast) focus-ring [&>svg]:text-tertiary',
+        selected
+          ? 'bg-selected font-medium text-foreground [&>svg]:text-secondary'
+          : 'text-secondary hover:bg-hover hover:text-foreground',
         dim && 'opacity-42',
       )}
     >

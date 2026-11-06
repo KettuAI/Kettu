@@ -8,6 +8,7 @@
 @import '@fontsource-variable/jetbrains-mono/wght.css';
 @import '@fontsource-variable/manrope/wght.css';
 @import './tokens.css';
+@import './affect.css';
 
 /* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
    its Light. Each range takes the Regular, Medium or Semibold, or the nearest weight a face has. */
@@ -232,11 +233,11 @@
   --radius-3xl: calc(var(--radius) * 2);
   /* Settings over the app, a card in it such as Remote access's status, and a dialog over
      Settings; Settings' segmented choices, whose chosen segment sits 2 px inside the track. */
-  --radius-modal: 14px;
+  --radius-modal: 12px;
   --radius-card: 12px;
-  --radius-dialog: 16px;
-  --radius-segments: 9px;
-  --radius-segment: 7px;
+  --radius-dialog: 12px;
+  --radius-segments: 8px;
+  --radius-segment: 6px;
 
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -319,16 +320,16 @@
   --text-subheading--line-height: 20px;
   --text-subheading--letter-spacing: -0.006em;
   /* A sidebar row, and a settings row's label. */
-  --text-row: 14px;
+  --text-row: 13px;
   --text-row--line-height: 20px;
-  --text-label: 14.5px;
+  --text-label: 13px;
   --text-label--line-height: 20px;
   --text-group: 13px;
   --text-group--line-height: 18px;
   --text-small: 12px;
   --text-small--line-height: 1.45;
   /* Hints and a segmented control's segments. */
-  --text-hint: 12.5px;
+  --text-hint: 12px;
   --text-hint--line-height: 18px;
   --text-control: 13px;
   --text-control--line-height: 18px;
@@ -340,13 +341,13 @@
   --text-meta: 12px;
   --text-meta--line-height: 16px;
   /* Tooltips and a menu item's shortcut. */
-  --text-caption: 11.5px;
+  --text-caption: 11px;
   --text-caption--line-height: 16px;
   /* A file card's name in a reply. */
-  --text-file: 13.5px;
+  --text-file: 13px;
   --text-file--line-height: 18px;
   /* A menu item, and rows read like one. */
-  --text-menu: 13.5px;
+  --text-menu: 13px;
   --text-menu--line-height: 18px;
   --text-menu--letter-spacing: -0.003em;
   /* A count over a picture, such as a grid's +3. */
@@ -379,11 +380,18 @@
   --text-sheet-title--line-height: 1.3;
 }
 
+/* On a high-density screen a hairline is one device pixel, as fine as the reference's rings. */
+@media (min-resolution: 2dppx) {
+  :root {
+    --hairline: 0.5px;
+  }
+}
+
 :root {
   --hairline: 1px;
 
   /* Density: heights on 4 px steps. */
-  --radius: 5px;
+  --radius: 6px;
   --control-height: 28px;
   --control-height-sm: 24px;
   --row-height: 32px;
@@ -440,7 +448,7 @@
 
   --ui-face: var(--face-inter);
   --prose-face: var(--face-inter);
-  --display-face: var(--face-manrope);
+  --display-face: var(--ui-face);
   --greeting-face:
     'Source Serif 4 Variable', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', ui-serif, Georgia,
     serif;

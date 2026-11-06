@@ -1,0 +1,158 @@
+/* affectUI components keep their colors in variables on their root class. These point them at the
+   theme's tokens, so they follow the chosen theme and color mode. The doubled class outranks the
+   component's own rules, which it injects after this sheet. */
+
+.ui-pr.ui-pr {
+  --ui-pr-tray: var(--bg-subtle);
+  --ui-pr-card: var(--bg-surface);
+  --ui-pr-ink: var(--text-primary);
+  --ui-pr-text: var(--text-secondary);
+  --ui-pr-muted: var(--text-tertiary);
+  --ui-pr-faint: var(--text-disabled);
+  --ui-pr-line: var(--border-subtle);
+  --ui-pr-chip: var(--bg-subtle);
+  --ui-pr-track: var(--border-default);
+  --ui-pr-accent: var(--control-on);
+  --ui-pr-ok-bg: var(--success-tint);
+  --ui-pr-ok-fg: var(--success);
+  --ui-pr-warn-bg: var(--warning-tint);
+  --ui-pr-warn-fg: var(--warning);
+  --ui-pr-danger-bg: var(--danger-tint);
+  --ui-pr-danger-fg: var(--danger);
+  --ui-pr-primary: var(--primary);
+  --ui-pr-on-primary: var(--primary-foreground);
+  --ui-pr-ring: color-mix(in srgb, var(--focus) 50%, transparent);
+}
+
+.ui-ts.ui-ts {
+  --ui-ts-card: var(--bg-surface);
+  --ui-ts-line: var(--border-subtle);
+  --ui-ts-ink: var(--text-primary);
+  --ui-ts-text: var(--text-secondary);
+  --ui-ts-muted: var(--text-tertiary);
+  --ui-ts-faint: var(--text-disabled);
+  --ui-ts-button: var(--bg-subtle);
+  --ui-ts-button-hover: var(--bg-selected);
+  --ui-ts-hairline: var(--border-default);
+  --ui-ts-success: var(--success);
+  --ui-ts-danger: var(--danger);
+  --ui-ts-focus: color-mix(in srgb, var(--focus) 50%, transparent);
+}
+
+.ui-mdp.ui-mdp {
+  --ui-mdp-tray: var(--bg-subtle);
+  --ui-mdp-card: var(--bg-surface);
+  --ui-mdp-line: var(--border-subtle);
+  --ui-mdp-ink: var(--text-primary);
+  --ui-mdp-text: var(--text-secondary);
+  --ui-mdp-muted: var(--text-tertiary);
+  --ui-mdp-well: var(--bg-subtle);
+  --ui-mdp-bar: var(--border-strong);
+  --ui-mdp-bar-off: var(--border-subtle);
+  --ui-mdp-switch: var(--border-strong);
+  --ui-mdp-knob: var(--switch-thumb);
+  --ui-mdp-focus: color-mix(in srgb, var(--focus) 50%, transparent);
+}
+
+.ui-cw.ui-cw {
+  --ui-cw-tray: var(--bg-subtle);
+  --ui-cw-card: var(--bg-surface);
+  --ui-cw-line: var(--border-subtle);
+  --ui-cw-ink: var(--text-primary);
+  --ui-cw-text: var(--text-secondary);
+  --ui-cw-muted: var(--text-tertiary);
+  --ui-cw-well: var(--bg-subtle);
+  --ui-cw-free: var(--border-subtle);
+  --ui-cw-warn: var(--warning);
+  --ui-cw-warn-bg: var(--warning-tint);
+  --ui-cw-full: var(--danger);
+  --ui-cw-full-bg: var(--danger-tint);
+  --ui-cw-ok: var(--success);
+  --ui-cw-ok-bg: var(--success-tint);
+  --ui-cw-focus: color-mix(in srgb, var(--focus) 50%, transparent);
+}
+
+.ui-tc.ui-tc,
+.ui-tc-group.ui-tc-group {
+  --ui-tc-ink: var(--text-primary);
+  --ui-tc-text: var(--text-secondary);
+  --ui-tc-muted: var(--text-tertiary);
+  --ui-tc-bg: var(--bg-surface);
+  --ui-tc-line: var(--border-subtle);
+  --ui-tc-hover: var(--bg-hover);
+  --ui-tc-tile: var(--bg-subtle);
+  --ui-tc-code: var(--bg-code-block);
+  --ui-tc-ring: var(--bg-surface);
+  --ui-tc-red: var(--danger);
+  --ui-tc-red-bg: var(--danger-tint);
+  --ui-tc-red-line: var(--danger-border);
+  --ui-tc-key: var(--text-primary);
+  --ui-tc-str: var(--syntax-string);
+  --ui-tc-num: var(--syntax-number);
+  --ui-tc-lit: var(--syntax-keyword);
+  --ui-tc-focus: color-mix(in srgb, var(--focus) 50%, transparent);
+}
+
+.ui-cm.ui-cm {
+  --ui-cm-tray: var(--bg-sidebar);
+  --ui-cm-card: var(--bg-surface);
+  --ui-cm-line: var(--border-subtle);
+  --ui-cm-ink: var(--text-primary);
+  --ui-cm-text: var(--text-secondary);
+  --ui-cm-muted: var(--text-tertiary);
+  --ui-cm-faint: var(--text-disabled);
+  --ui-cm-active: var(--bg-selected);
+  --ui-cm-tile: var(--bg-raised);
+  --ui-cm-tile-ring: var(--border-subtle);
+  --ui-cm-kbd: var(--bg-raised);
+  --ui-cm-mark: var(--mark);
+  --ui-cm-ok: var(--success);
+  --ui-cm-accent: var(--control-on);
+}
+
+/* Search wears the command menu a size up, as Kettu's palette had it. */
+.kettu-search.ui-cm {
+  max-width: none;
+  font-size: 15px;
+}
+.kettu-search .ui-cm__search {
+  height: 56px;
+  padding: 0 18px;
+}
+.kettu-search .ui-cm__search input {
+  font-size: 16px;
+}
+.kettu-search .ui-cm__search > svg {
+  width: 20px;
+  height: 20px;
+}
+.kettu-search .ui-cm__item {
+  height: 44px;
+  gap: 14px;
+}
+.kettu-search .ui-cm__label {
+  padding: 12px 10px 6px;
+  font-size: 13px;
+}
+.kettu-search .ui-cm__logo {
+  width: 28px;
+  height: 28px;
+}
+.kettu-search .ui-cm__glyph {
+  width: 18px;
+  height: 18px;
+}
+.kettu-search.ui-cm kbd {
+  min-width: 22px;
+  height: 22px;
+  font-size: 12px;
+}
+.kettu-search .ui-cm__tab,
+.kettu-search .ui-cm__meta {
+  font-size: 14px;
+}
+.kettu-search .ui-cm__foot {
+  height: 44px;
+  padding: 0 14px;
+  font-size: 14px;
+}

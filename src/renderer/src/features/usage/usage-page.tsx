@@ -95,7 +95,9 @@ export default function UsagePage() {
   }, [])
 
   const empty = !!page && page.summary.first === null && !narrowed
-  const title = <h1 className="truncate font-display text-title font-bold">{t('page.title')}</h1>
+  const title = (
+    <h1 className="truncate font-display text-title font-semibold">{t('page.title')}</h1>
+  )
   let body: ReactNode
   if (unavailable) {
     body = (
@@ -785,7 +787,7 @@ function Figures({
       {cells.map((cell, i) => (
         <div key={i} className={cn('flex min-w-0 flex-col gap-0.75 px-5 py-4.5', FIGURE_LINES[i])}>
           <span className="text-hint text-tertiary">{cell.label}</span>
-          <span className="font-display text-figure font-bold tracking-[-0.02em] text-primary tabular-nums lining-nums">
+          <span className="font-display text-figure font-semibold tracking-[-0.02em] text-primary tabular-nums lining-nums">
             {cell.value}
           </span>
           <span className="text-small text-pretty text-tertiary">{cell.note}</span>

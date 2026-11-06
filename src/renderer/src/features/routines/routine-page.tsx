@@ -325,7 +325,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
       }}
     />
   ) : (
-    <h1 className="flex font-display text-title font-bold">
+    <h1 className="flex font-display text-title font-semibold">
       <Tooltip>
         <TooltipTrigger
           render={
@@ -737,7 +737,7 @@ function NameField({ className, ...props }: ComponentProps<'input'>) {
       autoComplete="off"
       spellCheck={false}
       className={cn(
-        '-mx-1.25 block h-7.5 w-105 max-w-full rounded-t-md bg-transparent px-1.25 font-display text-title font-bold text-primary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)] transition-shadow duration-(--duration-fast) outline-none placeholder:text-placeholder selection:bg-edit-selection hover:shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-strong)] focus-visible:rounded-md focus-visible:shadow-none focus-visible:outline-[1.5px] focus-visible:outline-offset-1 focus-visible:outline-edit-ring focus-visible:outline-solid',
+        '-mx-1.25 block h-7.5 w-105 max-w-full rounded-t-md bg-transparent px-1.25 font-display text-title font-semibold text-primary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-default)] transition-shadow duration-(--duration-fast) outline-none placeholder:text-placeholder selection:bg-edit-selection hover:shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-strong)] focus-visible:rounded-md focus-visible:shadow-none focus-visible:outline-[1.5px] focus-visible:outline-offset-1 focus-visible:outline-edit-ring focus-visible:outline-solid',
         className,
       )}
       {...props}

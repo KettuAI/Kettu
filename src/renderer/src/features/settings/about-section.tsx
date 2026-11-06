@@ -42,7 +42,7 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
       <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card bg-subtle px-4.5 py-4">
         <BrandIcon size={52} />
         <div className="flex min-w-0 flex-[1_1_240px] flex-col">
-          <span className="font-display text-app-name font-extrabold">Kettu</span>
+          <span className="font-display text-app-name font-bold">Kettu</span>
           <p className="mt-0.5 text-group text-pretty text-secondary">
             {t('about.version.description')}
           </p>
