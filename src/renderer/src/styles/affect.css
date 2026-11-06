@@ -439,6 +439,14 @@
   flex: 1 1 auto;
   min-width: 0;
 }
+/* Buttons never squeeze into an ellipsis next to a long label, as in affectUI's rows */
+:is(.kettu-settings, .kettu-sd) .k-line > :is(button, .ui-buttonc) {
+  flex: none;
+}
+/* A grid item keeps its content's width, so a long path would push the control out */
+:is(.kettu-settings, .kettu-sd) .ui-sg-label > :is(b, small) {
+  min-width: 0;
+}
 /* A gray block inside a card: a preview, or what a row reveals */
 :is(.kettu-settings, .kettu-sd) .k-inset {
   margin: 0 12px 12px 16px;
