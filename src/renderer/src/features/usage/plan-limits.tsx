@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react'
+import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
-import { Skeleton } from '@renderer/components/ui/skeleton'
 import { countdown } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
-import { LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { isInstalled, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { limitsToRead, resetForm } from './model'
@@ -27,16 +26,11 @@ import {
 } from './plan-cards'
 
 const RINGS = 72
-/** The grid for each column count; two a row while the page is narrow. */
-const COLUMNS = {
-  2: 'grid-cols-2',
-  3: 'grid-cols-2 @min-[45rem]:grid-cols-3',
-  4: 'grid-cols-2 @min-[45rem]:grid-cols-4',
-} as const
 
 /**
  * The plans as they stand, across the page: a card per account that reports limits, as many to
  * a row as leave the last row fullest, then one line for the agents with usage that report none.
+ * Past two full rows the rest folds away, so the page's own figures stay in view.
  */
 export function PlanLimits({ used }: { used: readonly AgentId[] }) {
   const { t } = useTranslation('usage')
@@ -57,6 +51,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
   const [reads, setReads] = useState<Partial<Record<AgentId, LimitRead>>>(() =>
     Object.fromEntries(toRead.map((agent) => [agent.id, 'reading' as const])),
   )
+  const [open, setOpen] = useState(false)
   useEffect(() => {
     for (const agent of toRead) {
       refreshLimits(agent.id).then(
@@ -79,37 +74,49 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
     unreported.map((a) => a.name),
   )
   const columns = planColumns(cards.length)
+  const fold = columns * 2
+  const shown = open || cards.length <= fold ? cards : cards.slice(0, fold)
+  const hidden = cards.slice(fold)
+  const near = hidden.filter((card) =>
+    card.rings.some((ring) => ring.level === 'warn' || ring.level === 'bad'),
+  ).length
+  const head = [
+    cards.length > 0 ? t('limits.accounts', { count: cards.length }) : null,
+    read > 0 ? t('limits.read', { ago: longAgo(read, now) }) : null,
+  ].filter(Boolean)
   return (
-    <section aria-labelledby="plan-limits-title" className="flex min-w-0 flex-col gap-2.5">
-      <div className="flex items-baseline gap-2 px-0.5">
-        <h2 id="plan-limits-title" className="text-row font-semibold text-primary">
-          {t('limits.title')}
-        </h2>
-        {cards.length > 0 && (
-          <span className="text-hint text-tertiary">
-            {t('limits.accounts', { count: cards.length })}
-          </span>
-        )}
-        <span className="flex-1" />
-        {read > 0 && (
-          <span className="text-small text-tertiary">
-            {t('limits.read', { ago: longAgo(read, now) })}
-          </span>
-        )}
-      </div>
+    <section className="k-u-sec" aria-labelledby="plan-limits-title">
+      <header className="k-u-sec__head">
+        <h2 id="plan-limits-title">{t('limits.title')}</h2>
+        {head.length > 0 && <span>{head.join(' · ')}</span>}
+      </header>
       {cards.length === 0 ? (
-        <p className="rounded-card bg-card px-4.5 py-4 text-hint text-tertiary shadow-card">
-          {t('limits.none')}
-        </p>
+        <div className="k-u-card">
+          <p className="k-u-none">{t('limits.none')}</p>
+        </div>
       ) : (
-        <div className={cn('grid gap-2.5', COLUMNS[columns])}>
-          {cards.map((card) => (
+        <div className="k-u-plans" data-cols={columns}>
+          {shown.map((card) => (
             <PlanCard key={card.key} card={card} now={now} />
           ))}
         </div>
       )}
+      {hidden.length > 0 && (
+        <button
+          type="button"
+          className="k-u-plans__more"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? t('limits.showFewer') : t('limits.showMore', { count: hidden.length })}
+          {!open && near > 0 && (
+            <span className="k-u-plans__near">{t('limits.near', { count: near })}</span>
+          )}
+          <Icon icon={ArrowDown01Icon} size={13} />
+        </button>
+      )}
       {unreported.length > 0 && (
-        <p className="px-0.5 text-hint text-tertiary">
+        <p className="k-u-note">
           {t('limits.notReported', { name: names, count: unreported.length })}
         </p>
       )}
@@ -117,7 +124,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
   )
 }
 
-/** When a window resets, as its line and tooltip say it. */
+/** When a window resets, as its line and hover card say it. */
 function useResetText(): (ring: CardRing, now: number) => string | null {
   const { t } = useTranslation('usage')
   return (ring, now) => {
@@ -144,44 +151,33 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
   const shortName = useShortWindow()
   const face = (
     <>
-      <div className="flex h-5.5 min-w-0 items-center gap-2">
+      <header>
         <AgentMark agent={card.agentId} size={16} mono={!installed} />
-        <span className="min-w-0 flex-1 truncate text-row font-semibold text-primary">
-          {card.name}
-        </span>
+        <b>{card.name}</b>
         {failed ? (
-          <span className="shrink-0 rounded-md bg-danger-tint px-2 text-small leading-5.5 text-danger">
-            {t('limits.failed')}
-          </span>
+          <span className="k-u-tier k-u-tier--bad">{t('limits.failed')}</span>
         ) : (
-          card.tier && (
-            <span className="shrink-0 rounded-md bg-popover px-2 text-small leading-5.5 text-secondary shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">
-              {card.tier}
-            </span>
-          )
+          card.tier && <span className="k-u-tier">{card.tier}</span>
         )}
-      </div>
+      </header>
       {card.state === 'reading' ? (
-        <div aria-busy className="flex items-center gap-4">
+        <div aria-busy className="k-u-plan__body">
           <span className="sr-only">{t('limits.reading')}</span>
-          <Skeleton className="size-16 shrink-0 rounded-full" />
-          <span className="flex flex-1 flex-col gap-2.25">
-            <Skeleton className="h-2.5 w-4/5 rounded-sm" />
-            <Skeleton className="h-2.5 w-3/5 rounded-sm" />
+          <span aria-hidden className="k-u-rings--empty" data-reading />
+          <span aria-hidden className="k-u-plan__reading">
+            <span className="k-u-bone" style={{ width: '80%' }} />
+            <span className="k-u-bone" style={{ width: '60%' }} />
           </span>
         </div>
       ) : card.rings.length === 0 ? (
-        <div className="flex items-center gap-4">
-          <span
-            aria-hidden
-            className="size-15.5 shrink-0 rounded-full shadow-[inset_0_0_0_1.5px_var(--border-default)]"
-          />
-          <span className={cn('text-hint', failed ? 'text-danger' : 'text-tertiary')}>
+        <div className="k-u-plan__body">
+          <span aria-hidden className="k-u-rings--empty" />
+          <span className="k-u-plan__none" data-failed={failed || undefined}>
             {failed ? t('limits.neverRead') : t('limits.notYet')}
           </span>
         </div>
       ) : (
-        <div className="flex min-w-0 items-center gap-4">
+        <div className="k-u-plan__body">
           <PlanRings
             rings={[...card.rings].reverse().map((ring) => ({
               id: ring.limit.window,
@@ -190,45 +186,25 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
             }))}
             size={RINGS}
             {...ringStroke(card.rings.length, RINGS)}
-            className={cn('size-18', failed && 'opacity-50')}
+            className="k-u-rings"
           />
-          <div className="flex min-w-0 flex-1 flex-col gap-0.75">
+          <div className="k-u-plan__lines">
             {card.rings.map((ring) => {
               const name = limitLabel(ring.limit)
               const reset = resetText(ring, now)
               return (
-                <span
-                  key={ring.limit.window}
-                  className={cn('flex items-baseline gap-2.5 text-control', failed && 'opacity-50')}
-                >
-                  <span aria-hidden className="min-w-0 flex-1 truncate text-tertiary">
+                <span key={ring.limit.window} className="k-u-plan__line">
+                  <span aria-hidden className="k-u-plan__win">
                     {shortName(ring.limit)}
                   </span>
-                  <span
-                    aria-hidden
-                    className={cn(
-                      'shrink-0 font-semibold whitespace-nowrap tabular-nums',
-                      ring.level === null
-                        ? 'text-tertiary'
-                        : ring.level === 'ok'
-                          ? 'text-primary'
-                          : LIMIT_TEXT[ring.level],
-                    )}
-                  >
+                  <b aria-hidden className="k-num" data-level={ring.level ?? 'stale'}>
                     {ring.percent === null
                       ? '—'
                       : ring.reached && ring.limit.resetsAt! > now
                         ? t('limits.backIn', { time: countdown(ring.limit.resetsAt! - now)! })
                         : `${ring.percent}%`}
-                  </span>
-                  {reset && (
-                    <span
-                      aria-hidden
-                      className="hidden w-35 shrink-0 text-right text-small whitespace-nowrap text-tertiary @min-[25rem]:block"
-                    >
-                      {reset}
-                    </span>
-                  )}
+                  </b>
+                  {reset && <small aria-hidden>{reset}</small>}
                   <span className="sr-only">
                     {ring.percent === null
                       ? t('limits.windowStale', { window: name })
@@ -239,7 +215,7 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
               )
             })}
             {failed && card.readAt !== null && (
-              <span className="mt-0.75 text-small text-danger">
+              <span className="k-u-plan__last">
                 {t('limits.lastRead', { ago: longAgo(card.readAt, now) })}
               </span>
             )}
@@ -248,11 +224,13 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
       )}
     </>
   )
-  const tile =
-    '@container flex min-w-0 flex-col gap-3 rounded-card bg-card px-4 pt-3.5 pb-4 shadow-card outline-none focus-ring'
   if (card.rings.length === 0) {
     return (
-      <article aria-label={card.name} className={tile}>
+      <article
+        aria-label={card.name}
+        className="k-u-card k-u-plan"
+        data-failed={failed || undefined}
+      >
         {face}
       </article>
     )
@@ -266,7 +244,8 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
           <article
             tabIndex={0}
             aria-label={card.plan ? `${card.name}, ${card.plan}` : card.name}
-            className={tile}
+            className="k-u-card k-u-plan"
+            data-failed={failed || undefined}
           />
         }
       >
@@ -274,13 +253,13 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
       </HoverCardTrigger>
       <HoverCardContent side="bottom" align="start" sideOffset={6} className="w-72">
         <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 gap-y-1.5 text-hint">
-          <span className="col-span-3 truncate font-semibold text-primary">
+          <span className="col-span-3 truncate font-medium text-primary">
             {card.plan ? `${card.name} · ${card.plan}` : card.name}
           </span>
           {card.rings.map((ring) => (
             <span key={ring.limit.window} className="contents">
               <span className="truncate text-tertiary">{limitLabel(ring.limit)}</span>
-              <span className="text-right font-semibold text-primary tabular-nums">
+              <span className="text-right font-medium text-primary tabular-nums">
                 {ring.percent === null ? '—' : `${ring.percent}%`}
               </span>
               <span className="text-right whitespace-nowrap text-secondary">

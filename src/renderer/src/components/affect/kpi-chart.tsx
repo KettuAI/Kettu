@@ -36,6 +36,8 @@ export type KpiChartProps = {
   defaultIndex?: number;
   /** Quiet text in the plot when there is nothing to draw */
   emptyText?: string;
+  /** Kettu: the plot's name for screen readers, translated */
+  plotLabel?: string;
   className?: string;
 };
 
@@ -80,6 +82,7 @@ export function KpiChart({
   footer,
   defaultIndex,
   emptyText = "No data yet",
+  plotLabel,
   className,
 }: KpiChartProps) {
   const count = labels.length;
@@ -199,7 +202,7 @@ export function KpiChart({
               className="ui-kpic__plot"
               tabIndex={empty ? undefined : 0}
               role="group"
-              aria-label={empty ? `${title} chart – ${emptyText}` : `${title} chart – use the arrow keys to read the values per day`}
+              aria-label={plotLabel ?? (empty ? `${title} chart – ${emptyText}` : `${title} chart – use the arrow keys to read the values per day`)}
               data-empty={empty || undefined}
               ref={plotRef}
               onPointerMove={(e) => setHover(indexAt(e))}

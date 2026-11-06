@@ -315,8 +315,6 @@
   --plan-bad-text: #d1342f;
   --plan-bad-chip: rgb(220 63 58 / 10%);
   --plan-bad-chip-text: #c9302b;
-  /* How strongly a plan ring's track shows its fill's color. */
-  --plan-ring-track: 16%;
   /* Usage's time of day, its busiest hour, and the activity grid's four steps. */
   --tod-bar: #b3cff6;
   --tod-peak: #3c85e9;
@@ -332,6 +330,13 @@
   --sketch-on-accent: #ffffff;
   --sketch-on-accent-soft: rgb(255 255 255 / 55%);
   --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+  /* Usage's lines and parts per agent, in the agents' order. */
+  --series-1: #2f6bff;
+  --series-2: #8b5cf6;
+  --series-3: #14b8a6;
+  --series-4: #f59e0b;
+  --series-5: #ec4899;
+  --series-6: #64748b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -542,7 +547,6 @@
     --plan-bad-text: #f0716b;
     --plan-bad-chip: rgb(229 96 90 / 16%);
     --plan-bad-chip-text: #f0716b;
-    --plan-ring-track: 24%;
     --tod-bar: #b3cff6;
     --tod-peak: #3c85e9;
     --activity-1: #1d3354;
@@ -555,6 +559,12 @@
     --sketch-on-accent: #ffffff;
     --sketch-on-accent-soft: rgb(255 255 255 / 55%);
     --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+    --series-1: #2f6bff;
+    --series-2: #8b5cf6;
+    --series-3: #14b8a6;
+    --series-4: #f59e0b;
+    --series-5: #ec4899;
+    --series-6: #64748b;
   }
 }
 
@@ -764,7 +774,6 @@
   --plan-bad-text: #f0716b;
   --plan-bad-chip: rgb(229 96 90 / 16%);
   --plan-bad-chip-text: #f0716b;
-  --plan-ring-track: 24%;
   --tod-bar: #b3cff6;
   --tod-peak: #3c85e9;
   --activity-1: #1d3354;
@@ -777,6 +786,12 @@
   --sketch-on-accent: #ffffff;
   --sketch-on-accent-soft: rgb(255 255 255 / 55%);
   --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+  --series-1: #2f6bff;
+  --series-2: #8b5cf6;
+  --series-3: #14b8a6;
+  --series-4: #f59e0b;
+  --series-5: #ec4899;
+  --series-6: #64748b;
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
