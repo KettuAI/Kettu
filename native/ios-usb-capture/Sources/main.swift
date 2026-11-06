@@ -30,7 +30,7 @@ final class Stream {
   func run() -> Never {
     writer.start()
     readHostMessages(
-      onKeyframeRequest: { [unowned self] in encoder.requestKeyframe() },
+      onKeyframeRequest: { [unowned self] in self.encoder.requestKeyframe() },
       onEnd: { [unowned self] in stop() })
     do {
       try allowScreenCaptureDevices()
