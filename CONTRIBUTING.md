@@ -4,7 +4,7 @@ Thanks for helping shape Kettu.
 
 ## How to contribute
 
-Kettu takes issues from outside, not code: fixes and features are written by the project, and pull requests are opened by collaborators only.
+Kettu takes issues from outside, not code: fixes and features are written by the project, and pull requests are opened by collaborators only. The code is under the [AGPL-3.0](./LICENSE) with the [additional permission](./LICENSE-EXCEPTION) for affectUI, and a contribution comes under the same terms.
 
 - **Bugs and ideas**: open an issue through the [issue forms](https://github.com/KettuAI/Kettu/issues/new/choose), in any language. A screenshot helps.
 - **Security problems**: follow [SECURITY.md](./SECURITY.md); never post them in a public issue.

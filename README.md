@@ -137,4 +137,4 @@ Open an [issue](https://github.com/KettuAI/Kettu/issues/new/choose) in any langu
 
 ## License
 
-[Apache-2.0](./LICENSE)
+[AGPL-3.0](./LICENSE), with an [additional permission](./LICENSE-EXCEPTION) for the affectUI components in `src/renderer/src/components/affect`, which stay under [affectUI's license](https://www.affectui.com/license).
