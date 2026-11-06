@@ -60,6 +60,11 @@
       "navigate": "Navigate",
       "open": "Open",
       "scope": "Next scope"
+    },
+    "menu": {
+      "enter": "Enter",
+      "tip": "to jump between sections",
+      "open": "to open"
     }
   },
   "project": {

@@ -92,3 +92,20 @@
   --ui-tc-lit: var(--syntax-keyword);
   --ui-tc-focus: color-mix(in srgb, var(--focus) 50%, transparent);
 }
+
+.ui-cm.ui-cm {
+  --ui-cm-tray: var(--bg-sidebar);
+  --ui-cm-card: var(--bg-surface);
+  --ui-cm-line: var(--border-subtle);
+  --ui-cm-ink: var(--text-primary);
+  --ui-cm-text: var(--text-secondary);
+  --ui-cm-muted: var(--text-tertiary);
+  --ui-cm-faint: var(--text-disabled);
+  --ui-cm-active: var(--bg-selected);
+  --ui-cm-tile: var(--bg-raised);
+  --ui-cm-tile-ring: var(--border-subtle);
+  --ui-cm-kbd: var(--bg-raised);
+  --ui-cm-mark: var(--mark);
+  --ui-cm-ok: var(--success);
+  --ui-cm-accent: var(--control-on);
+}

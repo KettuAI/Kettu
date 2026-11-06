@@ -1,22 +1,29 @@
-import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { SearchIcon } from 'lucide-react'
-import { motion } from 'motion/react'
+import {
+  ChartPieIcon,
+  ClockIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  KeyboardIcon,
+  PanelLeftIcon,
+  PlusIcon,
+  Settings2Icon,
+  ShapesIcon,
+  type LucideIcon,
+} from 'lucide-react'
 import { newSession, openProjectDialog } from '@renderer/app/actions'
 import {
-  Combobox,
-  ComboboxCollection,
-  ComboboxEmpty,
-  ComboboxGroup,
-  ComboboxInput,
-  ComboboxLabel,
-  ComboboxList,
-} from '@renderer/components/ui/combobox'
+  CommandMenu,
+  type Command,
+  type CommandGroup,
+} from '@renderer/components/affect/command-menu'
 import { Dialog, DialogContent, DialogTitle } from '@renderer/components/ui/dialog'
-import { Kbd } from '@renderer/components/ui/kbd'
-import { Toggle } from '@renderer/components/ui/toggle'
-import { glide } from '@renderer/lib/motion'
-import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { KIND_LOOK } from '@renderer/features/artifacts/kinds'
+import { keyCaps } from '@renderer/features/shell/shortcuts'
+import { cn } from '@renderer/lib/utils'
+import { artifactListShown } from '@renderer/stores/artifacts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import {
   openArtifact,
@@ -31,25 +38,8 @@ import {
   toggleSidebar,
   useViewStore,
 } from '@renderer/stores/view'
-import {
-  runSearch,
-  SCOPES,
-  type ResultGroup,
-  type SearchAction,
-  type SearchEntry,
-  type SearchScope,
-} from './search-model'
-import { PALETTE_KEY, SearchRow } from './search-row'
+import { runSearch, type SearchAction, type SearchEntry, type SearchKind } from './search-model'
 import { useSearchEntries } from './use-search-entries'
-
-/**
- * Base UI takes 'always' to keep the first row highlighted, on open and when the list changes with
- * the scope; its prop type only says boolean.
- */
-const ALWAYS_HIGHLIGHT = 'always' as unknown as boolean
-
-/** Keeps the focus in the field when a control beside it is pressed. */
-const keepFocus = (event: MouseEvent) => event.preventDefault()
 
 /**
  * Search over the window, from the sidebar or Mod+K: sessions, artifacts, routines, projects,
@@ -62,7 +52,7 @@ export function SearchDialog() {
     <Dialog open={open} onOpenChange={showSearch}>
       <DialogContent
         showCloseButton={false}
-        className="top-[12svh] translate-y-0 gap-0 overflow-hidden rounded-card p-0 sm:max-w-[600px]"
+        className="top-[12svh] translate-y-0 gap-0 rounded-[20px] bg-transparent p-0 sm:max-w-[600px]"
       >
         <DialogTitle className="sr-only">{t('nav.search')}</DialogTitle>
         {open && <SearchPalette />}
@@ -123,13 +113,67 @@ function openEntry(entry: SearchEntry): void {
   }
 }
 
+const ACTION_ICON: Record<SearchAction, LucideIcon> = {
+  newSession: PlusIcon,
+  openProject: FolderOpenIcon,
+  openUsage: ChartPieIcon,
+  openArtifacts: ShapesIcon,
+  openRoutines: ClockIcon,
+  openSettings: Settings2Icon,
+  showShortcuts: KeyboardIcon,
+  toggleSidebar: PanelLeftIcon,
+}
+
+/** The command menu's own glyph size and stroke, for Lucide's icons. */
+const GLYPH = 'ui-cm__glyph'
+
+/** A session's agent and an artifact's kind sit on a tile; the rest are plain glyphs. */
+function mark(entry: SearchEntry): Pick<Command, 'logo' | 'icon'> {
+  switch (entry.kind) {
+    case 'session':
+      return { logo: <AgentMark agent={entry.agentId} size={14} hostId={entry.hostId} /> }
+    case 'artifact': {
+      const look = KIND_LOOK[entry.artifactKind]
+      return { logo: <look.icon className={cn('size-3.5', look.color)} /> }
+    }
+    case 'routine':
+      return { icon: <ClockIcon className={GLYPH} /> }
+    case 'project':
+      return { icon: <FolderIcon className={GLYPH} /> }
+    case 'section':
+      return { icon: <Settings2Icon className={GLYPH} /> }
+    case 'action': {
+      const Icon = ACTION_ICON[entry.action]
+      return { icon: <Icon className={GLYPH} /> }
+    }
+  }
+}
+
+/** One result as a command menu row: its mark, its name, a line about it and its keys. */
+function commandOf(entry: SearchEntry): Command {
+  // A settings section's line is a whole sentence: it is searched, not shown, so the name stays whole.
+  const hint =
+    entry.kind === 'section' ? '' : [entry.meta, entry.trailing].filter(Boolean).join(' · ')
+  return {
+    id: entry.key,
+    label: entry.title,
+    ...(hint && { hint }),
+    ...mark(entry),
+    keywords: entry.haystack,
+    ...(entry.kind === 'action' && entry.shortcut && { keys: keyCaps(entry.shortcut) }),
+  }
+}
+
+/** Kinds listed, most recent first, once something is typed. */
+const SEARCHED: readonly SearchKind[] = ['session', 'artifact', 'routine', 'project']
+
+/**
+ * The palette is affectUI's command menu: an empty field lists Recent, whose first five take
+ * Mod+1 to Mod+5, and the actions; typing searches every kind, and Tab jumps between the groups.
+ */
 function SearchPalette() {
   const { t } = useTranslation('sidebar')
   const entries = useSearchEntries()
-  const [query, setQuery] = useState('')
-  const [scope, setScope] = useState<SearchScope>('all')
-  const results = useMemo(() => runSearch(entries, query, scope), [entries, query, scope])
-  const trimmed = query.trim()
 
   // The artifact list is read while the palette shows; routines load with the window.
   useEffect(() => {
@@ -138,211 +182,58 @@ function SearchPalette() {
     if (!routines.loaded) void routines.load()
     return () => artifactListShown(false)
   }, [])
-  const artifactsLoaded = useArtifactsStore((s) => s.list !== null)
 
-  const choose = (entry: SearchEntry | null) => {
-    if (!entry) return
-    showSearch(false)
-    openEntry(entry)
-  }
-
-  const step = (by: 1 | -1) => {
-    const at = SCOPES.indexOf(scope)
-    setScope(SCOPES[(at + by + SCOPES.length) % SCOPES.length]!)
-  }
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Tab' || event.nativeEvent.isComposing) return
-    event.preventDefault()
-    step(event.shiftKey ? -1 : 1)
-  }
+  const byKey = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries])
+  const groups = useMemo<CommandGroup[]>(() => {
+    const recent = runSearch(entries, '', 'all').groups.find((g) => g.key === 'recent')
+    const ofKind = (kind: SearchKind) =>
+      entries
+        .filter((entry) => entry.kind === kind)
+        .sort((a, b) => b.at - a.at)
+        .map(commandOf)
+    return [
+      {
+        id: 'suggestions',
+        label: t('search.group.recent'),
+        when: 'empty',
+        commands: (recent?.items ?? []).map(commandOf),
+      },
+      ...SEARCHED.map((kind): CommandGroup => ({
+        id: kind,
+        label: t(`search.group.${kind}`),
+        when: 'query',
+        commands: ofKind(kind),
+      })),
+      { id: 'action', label: t('search.group.action'), commands: ofKind('action') },
+      {
+        id: 'section',
+        label: t('search.group.section'),
+        when: 'query',
+        commands: ofKind('section'),
+      },
+    ]
+  }, [entries, t])
 
   return (
-    <Combobox<SearchEntry>
-      inline
-      open
-      autoHighlight={ALWAYS_HIGHLIGHT}
-      items={results.groups}
-      filter={null}
-      value={null}
-      onValueChange={choose}
-      inputValue={query}
-      onInputValueChange={setQuery}
-      itemToStringLabel={(entry) => entry.title}
-    >
-      <div className="flex items-center gap-2.5 pr-3 pl-3.5">
-        <SearchIcon aria-hidden className="size-4 shrink-0 text-tertiary" />
-        <ComboboxInput
-          showTrigger={false}
-          autoFocus
-          placeholder={t('search.placeholder')}
-          onKeyDown={onKeyDown}
-          className="h-12 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none has-[[data-slot=input-group-control]:focus-visible]:shadow-none! **:data-[slot=input-group-control]:px-0 **:data-[slot=input-group-control]:text-menu"
-        />
-        <Kbd className={PALETTE_KEY}>Esc</Kbd>
-      </div>
-      <div className="hairline-x bg-border-soft" />
-      <div
-        role="group"
-        aria-label={t('search.scopes')}
-        className="flex gap-0.5 overflow-x-auto px-1 py-1.5"
-      >
-        {SCOPES.map((item) => (
-          <ScopeTab
-            key={item}
-            scope={item}
-            active={item === scope}
-            count={item === 'all' && !trimmed ? 0 : results.counts[item]}
-            onSelect={setScope}
-          />
-        ))}
-      </div>
-      <div className="hairline-x bg-border-soft" />
-      <p role="status" className="sr-only">
-        {t('search.results', { count: results.counts[scope] })}
-      </p>
-      <ComboboxEmpty className="flex flex-col items-center gap-1 px-4 py-10 text-center empty:hidden">
-        <EmptyNote
-          query={trimmed}
-          scope={scope}
-          loading={scope === 'artifacts' && !artifactsLoaded}
-        />
-      </ComboboxEmpty>
-      <ComboboxList
-        aria-label={t('nav.search')}
-        className="max-h-[min(440px,58svh)] p-1 data-empty:hidden"
-      >
-        {(group: ResultGroup) => (
-          <ComboboxGroup key={group.key} items={group.items}>
-            {scope === 'all' && <GroupHeader group={group} onShowAll={setScope} />}
-            <ComboboxCollection>
-              {(entry: SearchEntry) => (
-                <SearchRow key={entry.key} entry={entry} words={results.words} />
-              )}
-            </ComboboxCollection>
-          </ComboboxGroup>
-        )}
-      </ComboboxList>
-      <div className="hairline-x bg-border-soft" />
-      <div className="flex h-10 items-center justify-between gap-4 px-3.5 text-small text-tertiary">
-        <Hint keys={['Tab']} label={t('search.hint.scope')} />
-        <span className="flex items-center gap-4">
-          <Hint keys={['↑', '↓']} label={t('search.hint.navigate')} />
-          <Hint keys={['↵']} label={t('search.hint.open')} />
-        </span>
-      </div>
-    </Combobox>
-  )
-}
-
-function Hint({ keys, label }: { keys: string[]; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className="flex gap-1">
-        {keys.map((key) => (
-          <Kbd key={key} className={PALETTE_KEY}>
-            {key}
-          </Kbd>
-        ))}
-      </span>
-      {label}
-    </span>
-  )
-}
-
-function ScopeTab({
-  scope,
-  active,
-  count,
-  onSelect,
-}: {
-  scope: SearchScope
-  active: boolean
-  count: number
-  onSelect: (scope: SearchScope) => void
-}) {
-  const { t } = useTranslation('sidebar')
-  return (
-    <Toggle
-      size="sm"
-      pressed={active}
-      onPressedChange={() => onSelect(scope)}
-      // Tab steps through the scopes from the field, so the tabs themselves take no focus.
-      tabIndex={-1}
-      onMouseDown={keepFocus}
-      className="relative isolate h-7 gap-1.5 rounded-tile px-2 text-small font-normal text-secondary hover:bg-transparent hover:text-foreground aria-pressed:bg-transparent aria-pressed:font-medium aria-pressed:text-foreground"
-    >
-      {active && (
-        <motion.span
-          aria-hidden
-          layoutId="search-scope"
-          transition={glide}
-          className="absolute inset-0 -z-10 rounded-tile bg-selected"
-        />
-      )}
-      {t(`search.scope.${scope}`)}
-      {count > 0 && <span className="font-normal text-tertiary tabular-nums">{count}</span>}
-    </Toggle>
-  )
-}
-
-function GroupHeader({
-  group,
-  onShowAll,
-}: {
-  group: ResultGroup
-  onShowAll: (scope: SearchScope) => void
-}) {
-  const { t } = useTranslation('sidebar')
-  const more = group.total > group.items.length
-  const scope = SCOPE_OF_KIND[group.key]
-  return (
-    <div className="flex items-center justify-between pr-2">
-      <ComboboxLabel className="h-auto px-2 pt-1.5 pb-1 text-caption tracking-wider text-tertiary uppercase">
-        {t(`search.group.${group.key}`)}
-      </ComboboxLabel>
-      {more && scope && (
-        <button
-          type="button"
-          tabIndex={-1}
-          onMouseDown={keepFocus}
-          onClick={() => onShowAll(scope)}
-          className="rounded-md px-1.5 pt-1.5 pb-1 text-caption text-tertiary transition-colors hover:text-foreground"
-        >
-          {t('search.showAll', { count: group.total })}
-        </button>
-      )}
-    </div>
-  )
-}
-
-const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], SearchScope>> = {
-  session: 'sessions',
-  artifact: 'artifacts',
-  routine: 'routines',
-  project: 'projects',
-  section: 'settings',
-}
-
-function EmptyNote({
-  query,
-  scope,
-  loading,
-}: {
-  query: string
-  scope: SearchScope
-  loading: boolean
-}) {
-  const { t } = useTranslation('sidebar')
-  if (loading) return <span className="text-tertiary">{t('search.loading')}</span>
-  if (!query) return <span className="text-tertiary">{t(`search.none.${scope}`)}</span>
-  return (
-    <>
-      <span className="text-secondary">{t('search.noMatch', { query })}</span>
-      <span className="text-hint text-tertiary">
-        {scope === 'all'
-          ? t('search.searchedAll')
-          : t('search.searchedScope', { scope: t(`search.scope.${scope}`) })}
-      </span>
-    </>
+    <CommandMenu
+      autoFocus
+      ask={false}
+      groups={groups}
+      placeholder={t('search.placeholder')}
+      labels={{
+        field: t('nav.search'),
+        list: t('nav.search'),
+        enter: t('search.menu.enter'),
+        tip: t('search.menu.tip'),
+        open: t('search.menu.open'),
+      }}
+      onClose={() => showSearch(false)}
+      onRun={(id) => {
+        const entry = byKey.get(id)
+        if (!entry) return
+        showSearch(false)
+        openEntry(entry)
+      }}
+    />
   )
 }

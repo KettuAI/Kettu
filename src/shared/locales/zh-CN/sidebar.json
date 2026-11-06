@@ -58,6 +58,11 @@
       "navigate": "导航",
       "open": "打开",
       "scope": "下一个范围"
+    },
+    "menu": {
+      "enter": "回车",
+      "tip": "在分组间跳转",
+      "open": "打开"
     }
   },
   "project": {
