@@ -119,7 +119,7 @@ export function AgentPicker({
         <ComboboxContent
           align="start"
           sideOffset={8}
-          className="kettu-agent-menu flex w-80 flex-col"
+          className="kettu-agent-menu flex w-70 flex-col"
         >
           <ComboboxInput
             showTrigger={false}
