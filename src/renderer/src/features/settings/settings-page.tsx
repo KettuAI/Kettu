@@ -1,3 +1,4 @@
+import { useDevicesSection } from './devices-section'
 import {
   Fragment,
   useEffect,
@@ -156,6 +157,7 @@ function SettingsBody() {
     useAccountSection(),
     useHostsSection(),
     useBrowserSection(),
+    useDevicesSection(),
     useComputerUseSection(),
   ]
   const about = useAboutSection()

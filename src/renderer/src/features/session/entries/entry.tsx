@@ -12,6 +12,7 @@ import {
 } from './basic'
 import { ArtifactEntry } from './artifact-entry'
 import { BrowserOriginEntry } from './browser-origin-entry'
+import { DeviceAccessEntry } from './device-access-entry'
 import { ComputerAppEntry } from './computer-app-entry'
 import { SessionStartedEntry } from './session-started-entry'
 import { SubagentCard } from './subagent-card'
@@ -60,6 +61,8 @@ export const Entry = memo(function Entry({
       return <ArtifactEntry {...props} />
     case 'browser_origin':
       return <BrowserOriginEntry {...props} agentName={agentName} />
+    case 'device_access':
+      return <DeviceAccessEntry {...props} agentName={agentName} />
     case 'computer_app':
       return <ComputerAppEntry {...props} agentName={agentName} />
     default:

@@ -21,6 +21,7 @@ import type { RemoteStatus } from './remote/status'
 import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
+import type { DevicesApi } from './device-host'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
 import type { TrayTarget } from './tray'
@@ -225,6 +226,7 @@ export interface IpcInvokeContract {
   'update:dismiss': { args: []; result: void }
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
+  'device-host:restart': { args: []; result: void }
   'artifact:open': { args: [id: string]; result: ArtifactOpenResult }
   'artifact:close': { args: [url: string]; result: void }
   'artifact:thumbnail': {
@@ -365,6 +367,8 @@ export interface IpcEventContract {
   'browser:state': BrowserState
   /** An agent's first navigation opened a session's page, so the pane may show it. */
   'browser:opened': { sessionId: string }
+  /** A session's agent opened a mobile device, which the pane shows if the panel is free. */
+  'devices:opened': { sessionId: string; deviceId: string }
   'browser:site-icon': SiteIconEvent
   /** To the menu bar panel: it came forward. */
   'tray:shown': null
@@ -386,6 +390,7 @@ export interface RemotePairingEvent {
 export interface IpcSendContract {
   'agent-host:connect': []
   'terminal-host:connect': []
+  'device-host:connect': []
   /** The window's port to the sessions on other hosts, as `host-sessions:port`. */
   'host-sessions:connect': []
   'perf:interactive': []
@@ -417,6 +422,8 @@ export interface PreloadEventContract {
   'agent-host:reset': HostResetEvent
   'terminal-host:port': []
   'terminal-host:reset': HostResetEvent
+  'device-host:port': []
+  'device-host:reset': HostResetEvent
   'host-sessions:port': []
 }
 
@@ -728,4 +735,8 @@ export interface KettuApi {
   }
   agents: AgentsApi
   terminals: TerminalsApi
+  /** The mobile devices of this computer, through the device host. */
+  devices: DevicesApi & {
+    onOpened(listener: (event: { sessionId: string; deviceId: string }) => void): () => void
+  }
 }

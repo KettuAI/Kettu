@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "vite build -c vite.viewers.config.mts && electron-vite dev",
     "dev:web": "vite -c vite.web.config.mts",
+    "fetch:device-helpers": "node tools/install/device-helpers.mjs",
     "preview": "electron-vite preview",
     "build": "pnpm typecheck && electron-vite build && vite build -c vite.daemon.config.mts && vite build -c vite.web.config.mts && vite build -c vite.viewers.config.mts",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web && pnpm typecheck:tools",
@@ -39,6 +40,7 @@
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
+    "agent-device": "0.21.36",
     "decompress": "4.2.1",
     "electron-updater": "6.8.9",
     "node-pty": "1.1.0"
@@ -128,7 +130,11 @@
     ],
     "patchedDependencies": {
       "@pierre/theming@1.0.1": "patches/@pierre__theming@1.0.1.patch",
-      "@electron/notarize@2.5.0": "patches/@electron__notarize@2.5.0.patch"
+      "@electron/notarize@2.5.0": "patches/@electron__notarize@2.5.0.patch",
+      "@expo/serve-sim@0.13.3": "patches/@expo__serve-sim@0.13.3.patch"
     }
+  },
+  "optionalDependencies": {
+    "@expo/serve-sim": "0.13.3"
   }
 }

@@ -331,6 +331,7 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
         const waiting =
           (entry?.kind === 'tool' && !!entry.permission) ||
           (entry?.kind === 'browser_origin' && entry.decision === null) ||
+          (entry?.kind === 'device_access' && entry.decision === null) ||
           (entry?.kind === 'computer_app' && entry.decision === null)
         if (!waiting) continue
         // Through the card's own control, so a failure shows where the answer was given. A

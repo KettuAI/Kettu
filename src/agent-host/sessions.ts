@@ -1,6 +1,7 @@
 // Live sessions: the authoritative thread state, prompts, permissions, cancellation, the
 // session lifecycle, sub-sessions, and the session index.
 
+import type { DeviceAccessAnswer, DeviceAccessDecision } from '@shared/device-agent'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -58,6 +59,7 @@ import {
   type StopReason,
   type Attachment,
   type BrowserOriginEntry,
+  type DeviceAccessEntry,
   type ComputerAppEntry,
   type ComputerUseView,
   type ThreadEntry,
@@ -582,6 +584,8 @@ export class SessionManager {
   private readonly shown = new Map<string, Set<string>>()
   /** Each waiting new origin's session and entry, by `originKey`. */
   private readonly originRequests = new Map<string, OriginRequest>()
+  /** Each device card's answer, by its entry id, which the waiting tool call takes. */
+  private readonly deviceWaits = new Map<string, (answer: DeviceAccessAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
   private readonly missing = new Set<string>()
@@ -1037,6 +1041,96 @@ export class SessionManager {
     this.stopWaiting(live)
     this.touch(live.id)
     this.updateBadge()
+  }
+
+  /**
+   * An agent wants a mobile device for the first time in this session: a card in the thread that
+   * waits for the user, as a new site does, and settles with their answer or `timeout`.
+   */
+  deviceAccessAsked(
+    sessionId: string,
+    deviceId: string,
+    deviceName: string,
+    waitMs: number,
+  ): Promise<DeviceAccessAnswer> {
+    const live = this.live.get(sessionId)
+    if (!live) return Promise.resolve('timeout')
+    const entry: DeviceAccessEntry = {
+      kind: 'device_access',
+      id: this.nextId(live),
+      deviceId,
+      deviceName,
+      decision: null,
+      after: agentEntryBefore(live.thread),
+    }
+    const key = `device:${entry.id}`
+    live.origins.set(key, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      t('attention.deviceAccess', { device: deviceName }),
+    )
+    return new Promise((resolve) => {
+      const timer = setTimeout(
+        () => this.settleDeviceAccess(sessionId, entry.id, 'timeout'),
+        waitMs,
+      )
+      this.deviceWaits.set(entry.id, (answer) => {
+        clearTimeout(timer)
+        resolve(answer)
+      })
+    })
+  }
+
+  /** A window's or a device's answer to a device card; the first one counts. */
+  answerDeviceAccess(
+    sessionId: string,
+    entryId: string,
+    decision: DeviceAccessDecision,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'device_access') throw notFound(`No device request in ${entryId}`)
+    if (entry.decision !== null || !this.deviceWaits.has(entryId)) {
+      throw new HostError('not_found', `The device request ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    this.settleDeviceAccess(sessionId, entryId, decision, device)
+  }
+
+  private settleDeviceAccess(
+    sessionId: string,
+    entryId: string,
+    decision: DeviceAccessAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.deviceWaits.get(entryId)
+    this.deviceWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`device:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'device_access' && entry.decision === null) {
+        this.emit(live, [
+          { op: 'entry.update', id: entryId, changes: { decision, ...(device ? { device } : {}) } },
+        ])
+      }
+      this.stopWaiting(live)
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(decision)
   }
 
   /**
@@ -5260,6 +5354,10 @@ export class SessionManager {
     }
     // A new origin still waiting dies with the session's page: its card says it went unanswered.
     for (const [requestId, entryId] of [...live.origins]) {
+      if (requestId.startsWith('device:')) {
+        this.settleDeviceAccess(live.id, entryId, 'timeout')
+        continue
+      }
       live.origins.delete(requestId)
       this.originRequests.delete(requestId)
       const entry = live.thread.byId[entryId]

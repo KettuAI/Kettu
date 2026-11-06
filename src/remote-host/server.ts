@@ -72,6 +72,7 @@ import {
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
+import { DeviceDevices, isDeviceMethod } from './device-devices'
 import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal'
 import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
@@ -134,6 +135,8 @@ export interface RemoteServerOptions {
   terminal?: boolean
   /** A port to the terminal host for a device's terminals, or null while it cannot have one. */
   openTerminalPort?(device: PortDevice): Promise<PortChannel | null>
+  /** A port to the device host for a device's mobile devices, or null while it cannot have one. */
+  openDevicePort?(device: PortDevice): Promise<PortChannel | null>
   /**
    * Hands an owner's call beyond its sessions to the host's parent, which answers it; without it
    * devices are refused these calls.
@@ -737,6 +740,7 @@ class DeviceSession {
   private lastRequest = 0
   private port: PortChannel | null
   private terminal: DeviceTerminal | null = null
+  private devices: DeviceDevices | null = null
   /** Requests to note in the device's activity once they succeed, by id, with the title then. */
   private readonly noted = new Map<
     number,
@@ -832,6 +836,13 @@ class DeviceSession {
     this.welcome(connection, null)
     this.outbox.attach({ channel: connection.channel!, transport: connection.transport }, 0)
     this.terminal = this.deviceTerminal(this.device)
+    const { server } = this
+    this.devices = new DeviceDevices({
+      device: { id: this.device.id, name: this.device.name },
+      open: (portDevice) => server.options.openDevicePort?.(portDevice) ?? Promise.resolve(null),
+      send: (value) => this.send(value),
+      log: server.options.log,
+    })
     port.onMessage((data) => {
       if (this.answered(data)) return
       this.forwards.observe(data)
@@ -889,6 +900,7 @@ class DeviceSession {
     this.port = null
     port?.close()
     this.terminal?.close(null)
+    this.devices?.close(null)
     const connection = this.connection
     this.closing = (connection ? connection.sayClosing(reason) : Promise.resolve()).then(() =>
       this.end(),
@@ -914,6 +926,7 @@ class DeviceSession {
     this.port = null
     port?.close()
     this.terminal?.close(null)
+    this.devices?.close(null)
     const connection = this.connection
     this.connection = null
     connection?.drop()
@@ -1065,6 +1078,10 @@ class DeviceSession {
     }
     if (isTerminalMethod(method)) {
       this.terminal?.request({ type, id, method, params })
+      return
+    }
+    if (isDeviceMethod(method)) {
+      this.devices?.request({ type, id, method, params })
       return
     }
     if (method === 'media.read') return void this.readMedia(id, params)

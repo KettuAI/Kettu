@@ -23,6 +23,7 @@ function fail(error: unknown): never {
 
 let agentHostSocket: string | null = null
 const terminalSockets = new Map<number, (socketPath: string | null) => void>()
+const deviceSockets = new Map<number, (socketPath: string | null) => void>()
 let nextRequest = 1
 
 /** The terminal host's socket, once it runs; null while devices may not use it or it cannot run. */
@@ -32,6 +33,16 @@ function terminalSocket(device: PortDevice): Promise<string | null> {
     const requestId = nextRequest++
     terminalSockets.set(requestId, resolve)
     send({ type: 'remote-host:open-terminal-port', requestId, device })
+  })
+}
+
+/** The device host's socket, once it runs; null while it cannot run. */
+function deviceSocket(device: PortDevice): Promise<string | null> {
+  if (!process.connected) return Promise.resolve(null)
+  return new Promise((resolve) => {
+    const requestId = nextRequest++
+    deviceSockets.set(requestId, resolve)
+    send({ type: 'remote-host:open-device-port', requestId, device })
   })
 }
 
@@ -45,6 +56,12 @@ const host = startRemoteHost(
     onMessage: (listener) => {
       process.on('message', (data) => {
         const message = data as MainToRemoteHost
+        if (message?.type === 'remote-host:device-socket') {
+          const resolve = deviceSockets.get(message.requestId)
+          deviceSockets.delete(message.requestId)
+          resolve?.(typeof message.socketPath === 'string' ? message.socketPath : null)
+          return
+        }
         if (message?.type === 'remote-host:terminal-socket') {
           const resolve = terminalSockets.get(message.requestId)
           terminalSockets.delete(message.requestId)
@@ -88,6 +105,13 @@ const host = startRemoteHost(
       const port = await connectPort(socketPath).catch(() => null)
       // As the agent host's, the terminal host learns whom the port serves from its first message.
       port?.send({ type: 'terminal-host:connect', device })
+      return port
+    },
+    openDevicePort: async (device) => {
+      const socketPath = await deviceSocket(device)
+      if (!socketPath) return null
+      const port = await connectPort(socketPath).catch(() => null)
+      port?.send({ type: 'device-host:connect', device })
       return port
     },
   },

@@ -76,6 +76,8 @@ export interface RemoteHostDeps {
    * it cannot run.
    */
   openTerminalPort(device: PortDevice): MessagePortMain | null
+  /** A port to the device host for a device's mobile devices, or null while it cannot run. */
+  openDevicePort?(device: PortDevice): MessagePortMain | null
   /** Answers an owner's call beyond its sessions, which a device made through the remote host. */
   admin?(deviceId: unknown, method: unknown, params: unknown): Promise<AdminAnswer>
   /** The state or the report changed, for Settings and the tray. */
@@ -745,6 +747,17 @@ export class RemoteHost {
         }
         // Main checks the setting too, so a remote host that misbehaves gets no port.
         const port = this.deps.terminal() ? this.deps.openTerminalPort(device) : null
+        const answer: MainToRemoteHost = { type: 'remote-host:port', requestId: message.requestId }
+        if (!host.post(answer, port ? [port] : [])) port?.close()
+        break
+      }
+      case 'remote-host:open-device-port': {
+        const device = parsePortDevice(message.device)
+        if (!Number.isSafeInteger(message.requestId) || !device) {
+          log.warn('Ignored a device port request that names no device')
+          return
+        }
+        const port = this.deps.openDevicePort?.(device) ?? null
         const answer: MainToRemoteHost = { type: 'remote-host:port', requestId: message.requestId }
         if (!host.post(answer, port ? [port] : [])) port?.close()
         break

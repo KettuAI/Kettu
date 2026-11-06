@@ -125,6 +125,26 @@
     "wants": "{{agent}} wants to open <site>{{site}}</site>",
     "where": "In this session’s browser · with your sign-ins"
   },
+  "deviceAccess": {
+    "label": "Mobile device",
+    "ask": "{{agent}} wants to use this device.",
+    "answerGroup": "Answer",
+    "decision": {
+      "session": "Allow for this session",
+      "always": "Always allow this device",
+      "deny": "Don’t allow"
+    },
+    "answer": {
+      "session": "Allowed for this session",
+      "always": "Always allowed",
+      "deny": "Denied",
+      "timeout": "Not answered in time"
+    },
+    "use": "Use",
+    "status": "Device",
+    "wants": "{{agent}} wants to use <device>{{device}}</device>",
+    "where": "Tap, type and take screenshots, which go to the agent’s model provider"
+  },
   "computerApp": {
     "label": "App use",
     "ask": "{{agent}} wants to use this app on your computer.",

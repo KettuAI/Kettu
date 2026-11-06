@@ -10,6 +10,9 @@ extraResources:
   # The tray's images, read from the file system by src/main/tray.ts.
   - from: resources/tray
     to: tray
+  # The device host's helpers, which tools/install/device-helpers.mjs puts in out/helpers.
+  - from: out/helpers
+    to: helpers
   # Cua Driver's program, which computer use runs, as tools/install/cua-driver.mjs fetched it for
   # the target; a build without it has no computer use.
   - from: resources/cua-driver
@@ -21,6 +24,9 @@ extraResources:
 # The session router runs on the user's Node.js, which cannot read inside app.asar.
 asarUnpack:
   - node_modules/node-pty/**
+  # The device host runs these as programs, and serve-sim loads native code and dylibs.
+  - node_modules/@expo/serve-sim/**
+  - node_modules/agent-device/**
   - out/main/chunks/router-*.js
 # The postinstall step (tools/install/app-deps.mjs) already readied node-pty for Electron: its
 # prebuilt binaries on Windows, a build from source on macOS and Linux.

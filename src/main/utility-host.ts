@@ -32,7 +32,7 @@ export interface UtilityHostConfig<ToChild, FromChild extends { type: string }> 
    * Prefix of the preload channels: `<channel>:port` and `<channel>:reset`. A host no page
    * connects to, as the remote host, has none and no `connectMessage`.
    */
-  channel?: 'agent-host' | 'terminal-host'
+  channel?: 'agent-host' | 'terminal-host' | 'device-host'
   modulePath: string
   serviceName: string
   initMessage(): ToChild

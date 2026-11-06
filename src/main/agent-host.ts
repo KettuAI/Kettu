@@ -1,3 +1,4 @@
+import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
 import { join } from 'node:path'
 import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
 import {
@@ -77,6 +78,8 @@ export interface AgentHostDeps {
    * pages need the host to send their state.
    */
   browser?: (request: BrowserCallRequest) => Promise<BrowserCallAnswer>
+  /** An agent's device tool call, run by the device host. Set after construction, like `browser`. */
+  device?: (call: DeviceCall) => Promise<DeviceCallAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** A session's card allowed an app always, for the settings to keep. */
@@ -540,6 +543,19 @@ export class AgentHost {
     switch (message.type) {
       case 'host:browser-call': {
         this.browserCall(message)
+        break
+      }
+      case 'host:device-call': {
+        const { callId, call } = message
+        if (!Number.isSafeInteger(callId) || typeof call !== 'object' || call === null) break
+        const run = this.deps.device
+        void (
+          run
+            ? run(call)
+            : Promise.resolve<DeviceCallAnswer>({
+                error: { code: 'unavailable', message: 'This build has no device host.' },
+              })
+        ).then((answer) => this.host.post({ type: 'device-result', callId, answer }))
         break
       }
 

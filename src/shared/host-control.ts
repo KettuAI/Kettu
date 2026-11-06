@@ -1,6 +1,7 @@
 // Messages between main and the hosts: over `utilityProcess` messaging in the desktop app, or the
 // IPC of `child_process.fork` when a host runs under Node.js.
 
+import type { DeviceCall, DeviceCallAnswer } from './device-agent'
 import type { RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactImportResult } from './artifacts'
 import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
@@ -105,6 +106,8 @@ export type MainToHost =
   | { type: 'host:permission-answer'; sessionId: string; requestId: string; optionId: string }
   // The answer to a host:browser-call, its result or the error that refused it.
   | { type: 'browser-result'; callId: number; result?: unknown; error?: unknown }
+  // The answer to a host:device-call, from the device host.
+  | { type: 'device-result'; callId: number; answer: DeviceCallAnswer }
   // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
   | { type: 'host:browser-waiting'; callId: number; waiting: boolean }
   // A page waits for a new origin: the session's thread shows it, waiting for the user.
@@ -209,6 +212,8 @@ export type HostToMain =
       /** The calling session's project, which its always-allowed sites are stored under. */
       projectPath: string
     }
+  // An agent's device tool call for the device host; answered by device-result.
+  | { type: 'host:device-call'; callId: number; call: DeviceCall }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
   // A session's card allowed an app always: main keeps it in the settings, which come back.
@@ -239,6 +244,33 @@ export type TerminalHostToMain =
   | { type: 'terminal-host:ready' }
   | { type: 'terminal-host:busy'; requestId: number; terminals: BusyTerminal[] }
   | { type: 'terminal-host:stopped' }
+
+export type MainToDeviceHost =
+  | {
+      type: 'device-host:init'
+      platform: Platform
+      appVersion: string
+      nodeRuntime: NodeRuntime
+      /** Kettu's data folder, where agent-device keeps its state. */
+      dataDir: string
+      /** The packaged app's resources, which hold the helpers; null in development. */
+      resourcesPath: string | null
+      allowDevices: boolean
+      // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
+      socketPath?: string
+    }
+  // The port travels in the transfer list; `device` names the paired device it serves, if any.
+  | { type: 'device-host:connect'; windowId: number; device?: PortDevice }
+  | { type: 'device-host:allow-devices'; allowed: boolean }
+  | { type: 'device-host:sessions-ended'; sessionIds: string[] }
+  /** An agent's device tool call, which the agent host sent its parent. */
+  | { type: 'device-host:call'; callId: number; call: DeviceCall }
+  | { type: 'device-host:shutdown' }
+
+export type DeviceHostToMain =
+  | { type: 'device-host:ready' }
+  | { type: 'device-host:answer'; callId: number; answer: DeviceCallAnswer }
+  | { type: 'device-host:stopped' }
 
 export type RemoteHostStopReason = 'remote_off' | 'stopping'
 
@@ -291,6 +323,8 @@ export type MainToRemoteHost =
   // Under Node.js, the answer to remote-host:open-terminal-port: the terminal host's socket, which
   // the remote host connects to itself; null while devices may not use it or it cannot run.
   | { type: 'remote-host:terminal-socket'; requestId: number; socketPath: string | null }
+  // Under Node.js, the answer to remote-host:open-device-port: the device host's socket.
+  | { type: 'remote-host:device-socket'; requestId: number; socketPath: string | null }
   // The owner allowed devices the terminal or stopped allowing it.
   | { type: 'remote-host:terminal'; allowed: boolean }
   | { type: 'remote-host:add-device'; device: NewDevice }
@@ -392,6 +426,9 @@ export type RemoteHostToMain =
   // A port to the terminal host for a device's terminals; answered by remote-host:port in the
   // desktop app and by remote-host:terminal-socket under Node.js.
   | { type: 'remote-host:open-terminal-port'; requestId: number; device: PortDevice }
+  // A port to the device host for a device's mobile devices; answered by remote-host:port in the
+  // desktop app and by remote-host:device-socket under Node.js.
+  | { type: 'remote-host:open-device-port'; requestId: number; device: PortDevice }
   | { type: 'remote-host:pairing'; codeId: number; pairing: PairingState }
   // The known hosts and their connections, whenever they change.
   | { type: 'remote-host:hosts'; hosts: HostStatus[] }

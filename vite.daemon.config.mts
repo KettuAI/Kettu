@@ -43,6 +43,7 @@ export default defineConfig({
         main: source('src/daemon/main.ts'),
         'agent-host': source('src/agent-host/node-main.ts'),
         'terminal-host': source('src/terminal-host/node-main.ts'),
+        'device-host': source('src/device-host/node-main.ts'),
         'remote-host': source('src/remote-host/node-main.ts'),
         'thread-worker': source('src/agent-host/threads/worker.ts'),
         'usage-worker': source('src/agent-host/usage/worker.ts'),

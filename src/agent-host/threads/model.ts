@@ -156,6 +156,7 @@ export function settled(entry: ThreadEntry): ThreadEntry {
     case 'compaction':
       return entry.status === 'in_progress' ? { ...entry, status: 'cancelled' } : entry
     case 'browser_origin':
+    case 'device_access':
       // A request still waiting went unanswered: its page is gone with the session.
       return entry.decision === null ? { ...entry, decision: 'timeout' } : entry
     case 'computer_app':

@@ -41,7 +41,7 @@ import {
   tokenChunks,
 } from './content.ts'
 import { artifacts } from './artifacts.ts'
-import { openSite } from './browser.ts'
+import { deviceTool, openSite } from './browser.ts'
 import { computer } from './computer.ts'
 import type { ScenarioName } from './options.ts'
 import type { Scenario, Turn } from './turn.ts'
@@ -1573,6 +1573,7 @@ export const SCENARIO_RUNNERS: Record<ScenarioName, Scenario> = {
   report,
   tables,
   'open-site': openSite,
+  device: deviceTool,
   computer,
   approvals,
   content,

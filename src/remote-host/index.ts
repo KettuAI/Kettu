@@ -59,6 +59,8 @@ startRemoteHost(
       askPort((requestId) => ({ type: 'remote-host:open-port', requestId, device })),
     openTerminalPort: (device) =>
       askPort((requestId) => ({ type: 'remote-host:open-terminal-port', requestId, device })),
+    openDevicePort: (device) =>
+      askPort((requestId) => ({ type: 'remote-host:open-device-port', requestId, device })),
     openMainPort: (hostId) =>
       askPort((requestId) => ({ type: 'remote-host:open-host-port', requestId, hostId })),
   },

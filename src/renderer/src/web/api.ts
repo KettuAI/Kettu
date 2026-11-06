@@ -3,6 +3,7 @@
 // what a browser can do itself. What needs the desktop app's own window is never offered: the
 // page hides it, and a call that comes anyway is refused.
 
+import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
 import type { ArtifactContent } from '@shared/artifacts'
 import type { AppCommand, KettuApi } from '@shared/ipc'
@@ -515,5 +516,44 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         await admin('host.restart', { process: 'terminal' })
       },
     },
+    devices: {
+      // Over the channel frames, screenshots and frame pictures are base64; the page gets them
+      // as ArrayBuffers.
+      request: (async (method: string, params: unknown) => {
+        const result = await link.request(method, params)
+        const png = (result as { png?: unknown } | null)?.png
+        if (typeof png === 'string') return { ...(result as object), png: fromBase64(png) }
+        const frame = (result as { frame?: { images?: unknown } | null } | null)?.frame
+        if (frame && Array.isArray(frame.images)) {
+          const images = frame.images.map((image: { png?: unknown }) => ({
+            ...image,
+            png: typeof image.png === 'string' ? fromBase64(image.png) : image.png,
+          }))
+          return { ...(result as object), frame: { ...frame, images } }
+        }
+        return result
+      }) as KettuApi['devices']['request'],
+      onEvent: (listener) =>
+        link.onDeviceEvent((event) => {
+          const frame = event as DeviceEvent
+          if (frame.type === 'device.frame' && typeof (frame.data as unknown) === 'string') {
+            listener({ ...frame, data: fromBase64(frame.data as unknown as string) })
+          } else {
+            listener(frame)
+          }
+        }),
+      onConnection: connectionListener,
+      restart: async () => {
+        link.wake()
+      },
+      onOpened: never,
+    },
   }
+}
+
+function fromBase64(text: string): ArrayBuffer {
+  const binary = atob(text)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return bytes.buffer
 }

@@ -1,5 +1,12 @@
 import { useState, type ReactNode } from 'react'
-import { EllipsisIcon, FolderIcon, GlobeIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
+import {
+  EllipsisIcon,
+  FolderIcon,
+  GlobeIcon,
+  SquareTerminalIcon,
+  XIcon,
+  SmartphoneIcon,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
@@ -19,6 +26,7 @@ import {
 } from '@renderer/features/sidebar/session-menu'
 import { runSessionMenuAccelerator } from '@renderer/features/sidebar/session-menu-model'
 import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
+import { useDevicesStore } from '@renderer/stores/devices'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { sessionTitle } from '@renderer/stores/sessions'
@@ -69,6 +77,15 @@ export function HeaderTools({
   const sessionId = panelSession(panel)
   // An agent opened the session's page while another pane showed: a dot says to look.
   const dot = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
+  const deviceDot = useDevicesStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
+  // Hidden only once the host says it can run no device and the session holds none.
+  const devices = useDevicesStore(
+    (s) =>
+      !s.environment ||
+      s.environment.ios ||
+      s.environment.android ||
+      (!!sessionId && s.devices.some((device) => device.sessionId === sessionId)),
+  )
   return (
     <>
       <NoDrag className="shrink-0 gap-2">
@@ -88,6 +105,11 @@ export function HeaderTools({
         {!isWeb && sessionId && (
           <PaneToggle panel={panel} pane="browser" label={t('headerTools.browser')} dot={dot}>
             <GlobeIcon />
+          </PaneToggle>
+        )}
+        {sessionId && devices && (
+          <PaneToggle panel={panel} pane="devices" label={t('headerTools.devices')} dot={deviceDot}>
+            <SmartphoneIcon />
           </PaneToggle>
         )}
         <PaneToggle panel={panel} pane="files" label={t('headerTools.files')}>

@@ -4,6 +4,7 @@ import type { GrantedAttachment } from '@shared/attachments'
 import type { AppCommand, KettuApi, QuitRequest } from '@shared/ipc'
 import { isLocale, type Locale } from '@shared/locale'
 import { TERMINAL_METHODS, type TerminalEvent, type TerminalsApi } from '@shared/terminal-host'
+import { DEVICE_METHODS, type DeviceEvent } from '@shared/device-host'
 import { filePaths } from './attachments'
 import { HostsClient } from './hosts-client'
 import { hostTransport, invoke, send, subscribe } from './ipc'
@@ -30,6 +31,13 @@ const terminals = new PortClient<TerminalEvent>({
   label: 'terminal host',
   methods: TERMINAL_METHODS,
   transport: hostTransport('terminal-host'),
+  lazy: true,
+})
+
+const devices = new PortClient<DeviceEvent>({
+  label: 'device host',
+  methods: DEVICE_METHODS,
+  transport: hostTransport('device-host'),
   lazy: true,
 })
 
@@ -76,6 +84,7 @@ const onHostsChanged = subscribe('hosts:changed')
 const onHostPairing = subscribe('hosts:pairing')
 const onBrowserState = subscribe('browser:state')
 const onBrowserOpened = subscribe('browser:opened')
+const onDeviceOpened = subscribe('devices:opened')
 const onSiteIcon = subscribe('browser:site-icon')
 
 const pathOf = (file: File) => webUtils.getPathForFile(file)
@@ -300,6 +309,13 @@ const api: KettuApi = {
     onConnection: (listener) => terminals.onConnection(listener),
     restart: () => invoke('terminal-host:restart'),
   } as TerminalsApi,
+  devices: {
+    request: (method, params) => devices.request(method, params),
+    onEvent: (listener) => devices.onEvent(listener),
+    onConnection: (listener) => devices.onConnection(listener),
+    restart: () => invoke('device-host:restart'),
+    onOpened: onDeviceOpened,
+  } as KettuApi['devices'],
 }
 
 contextBridge.exposeInMainWorld('kettu', api)
