@@ -73,7 +73,7 @@ import { pushNow, pushRequest, runStep, showCreatedPr } from './steps'
 import { failureOf, lastLine, pullRequestHead, pushTargetOf, suggestPullRequest } from './sync'
 import { isBranchName } from './switcher-model'
 import { loadCommit, useChanges } from './use-git-data'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 type ReturnFocus = () => HTMLElement | true
 

@@ -22,7 +22,7 @@ import { CopyButton } from './copy-button'
 import { disclosureKeys, kidKeys } from './popover-keys'
 import { projectRelative } from './sync'
 import { loadCommit, useCommit } from './use-git-data'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /**
  * A row of the popover, bleeding into its padding. The highlight is focus, which follows the

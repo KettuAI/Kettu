@@ -1,5 +1,5 @@
 import { File01Icon, Folder01Icon } from '@hugeicons/core-free-icons'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'

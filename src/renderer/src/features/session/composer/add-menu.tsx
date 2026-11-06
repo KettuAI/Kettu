@@ -11,7 +11,7 @@ import type { ComposerAddSection } from '@renderer/components/affect/chat-compos
 import { formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { shownSidePane, useViewStore } from '@renderer/stores/view'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { insertAt } from './mentions'
 import type { PromptBoxState } from './use-prompt-box'
 

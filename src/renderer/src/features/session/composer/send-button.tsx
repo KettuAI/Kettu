@@ -10,7 +10,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { DESCRIBED_ROW, ItemText } from './menu-parts'
 
 // Held this long, the Stop button offers to queue or send the message instead.

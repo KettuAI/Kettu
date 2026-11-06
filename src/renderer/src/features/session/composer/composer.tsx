@@ -161,10 +161,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     const reported = option.value === undefined ? undefined : String(option.value)
     const asked = stepped.current[option.id]
     const current = asked && asked.from === reported ? asked.to : reported
-    const next =
+    const model = config.find((o) => o.category === 'model')?.value
+    const levels =
       category === 'mode'
-        ? nextMode(option.choices, current)
-        : nextChoice(levelsOf(option as SelectOption, current).levels, current)
+        ? null
+        : levelsOf(option as SelectOption, current, typeof model === 'string' ? model : undefined)
+    const next = levels
+      ? nextChoice(levels.levels, levels.shown)
+      : nextMode(option.choices, current)
     if (next === undefined || next === current) return true
     stepped.current[option.id] = { from: reported, to: next }
     host('sessions.setConfigOption', { sessionId, optionId: option.id, value: next }).catch(

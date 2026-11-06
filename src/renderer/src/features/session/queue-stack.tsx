@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { errorMessage, host } from '@renderer/lib/host'
 import { useAgentsStore } from '@renderer/stores/agents'
 import { restoreAttachments } from './composer/attachments'
-import { Glyph } from './composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 function promptText(item: QueuedPrompt): string {
   return item.content

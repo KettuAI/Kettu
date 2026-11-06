@@ -10,7 +10,7 @@ import type { DraftAttachment } from '@renderer/stores/attachments'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { defaultDestination } from '../link-open'
 import type { Chip } from './chips'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 // Lines a file preview shows: the range with one before it, or the file's first lines.
 const PREVIEW_LINES = 6

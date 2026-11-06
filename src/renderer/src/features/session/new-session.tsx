@@ -12,7 +12,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useModeControl } from '@renderer/features/session/composer/mode-control'
 import { isSelect } from '@renderer/features/session/composer/options'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { ModelMenu } from '@renderer/features/session/composer/model-menu'
 import { SendButton } from '@renderer/features/session/composer/send-button'
 import type { SelectOption } from '@renderer/features/session/composer/levels'
@@ -124,8 +124,9 @@ export function NewSessionView({
   return (
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       {/* The screen's own bar names nothing and draws no line: the heading below says where you
-          are. A sub-session still leads with its parent. */}
-      <TopBar className="shadow-none" cornered={cornered}>
+          are. A sub-session still leads with its parent. It lies over the screen, so the start
+          centers in the whole main area as in App Shell. */}
+      <TopBar className="absolute inset-x-0 top-0 z-10 shadow-none" cornered={cornered}>
         {parent && (
           <NoDrag className="min-w-0 gap-0.5">
             <ParentLink parent={parent} />

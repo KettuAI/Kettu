@@ -43,7 +43,7 @@ import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE

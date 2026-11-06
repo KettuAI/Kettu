@@ -8,7 +8,7 @@ import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import { DESCRIBED_ROW, ItemText } from './menu-parts'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** Whether the agent's own setting can stand for the option's value. */
 function inheritsSetting(option: ConfigOption): boolean {

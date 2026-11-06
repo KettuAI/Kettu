@@ -870,7 +870,6 @@ describe('ultracode', () => {
     const s = await setup()
     const { config } = await s.connection.newSession('/repo')
     expect(config.find((item) => item.id === 'effort')?.choices?.map((c) => c.value)).toEqual([
-      'default',
       'low',
       'medium',
       'high',
@@ -1017,6 +1016,79 @@ describe('ultracode', () => {
     expect(flags(reopened)).toEqual([])
     const { config } = await s.connection.resumeSession(sessionId, '/repo')
     expect(option(config)).toMatchObject({ value: 'default', defaultValue: true })
+  })
+})
+
+describe('effort at its default', () => {
+  const ALL_LEVELS: ('low' | 'medium' | 'high' | 'xhigh' | 'max')[] = [
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+  ]
+  const effort = (config: readonly ConfigOption[]) => config.find((item) => item.id === 'effort')
+  const withModel = (resolvedModel: string, levels = ALL_LEVELS) => ({
+    commands: [],
+    models: [
+      {
+        value: 'default',
+        resolvedModel,
+        displayName: 'Default (recommended)',
+        description: '',
+        supportsEffort: true,
+        supportedEffortLevels: levels,
+      },
+    ],
+  })
+
+  it("shows the model's documented default as its value, with no Default choice", async () => {
+    const s = await setup()
+    s.sdk.init = withModel('claude-opus-5-5[1m]')
+    const { config } = await s.connection.newSession('/repo')
+    expect(effort(config)?.value).toBe('medium')
+    expect(effort(config)?.choices?.map((c) => c.value)).toEqual(ALL_LEVELS)
+  })
+
+  it('shows high for a model whose default the docs leave to the general rule', async () => {
+    const s = await setup()
+    s.sdk.init = withModel('claude-fable-5-1')
+    const { config } = await s.connection.newSession('/repo')
+    expect(effort(config)?.value).toBe('high')
+  })
+
+  it('runs a default above what the model offers at its highest level below it', async () => {
+    const s = await setup()
+    s.sdk.init = withModel('claude-opus-4-7', ['low', 'medium', 'high'])
+    const { config } = await s.connection.newSession('/repo')
+    expect(effort(config)?.value).toBe('high')
+  })
+
+  it('takes the level saved for the model, then the environment over it', async () => {
+    const s = await setup()
+    s.sdk.init = withModel('claude-opus-5-5')
+    s.sdk.settings = { modelSettings: { 'claude-opus-5-5-20261001': { effortLevel: 'low' } } }
+    expect(effort((await s.connection.newSession('/repo')).config)?.value).toBe('low')
+    const env = await setup({ CLAUDE_CODE_EFFORT_LEVEL: 'xhigh' })
+    env.sdk.init = s.sdk.init
+    env.sdk.settings = s.sdk.settings
+    expect(effort((await env.connection.newSession('/repo')).config)?.value).toBe('xhigh')
+  })
+
+  it('sends no level while the session keeps its default', async () => {
+    const s = await setup()
+    s.sdk.init = withModel('claude-opus-5-5')
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.sdk.script = (query) => {
+      query.running()
+      query.close()
+    }
+    await expect(
+      s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }]),
+    ).rejects.toBeInstanceOf(AgentRequestError)
+    s.sdk.script = new FakeClaudeSdk().script
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(s.sdk.last.calls.some((call) => call.method === 'applyFlagSettings')).toBe(false)
   })
 })
 

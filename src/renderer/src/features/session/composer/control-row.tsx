@@ -1,9 +1,8 @@
 import { useId, useState, type ComponentProps, type ReactNode } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
-import { ArrowDown01Icon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { SegmentedControl } from '@renderer/components/segmented-control'
-import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,9 +12,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { levelsOf, splitName, tierOf, type SelectOption } from './levels'
 import { CheckColumn, DESCRIBED_ROW, ItemText } from './menu-parts'
 import { shownChoice } from './model-list'
@@ -167,23 +165,25 @@ export function PlainLabel({ className, ...props }: ComponentProps<'div'>) {
 
 /**
  * The reasoning levels as segments. The top levels carry their gradient, and landing on the
- * highest sweeps a light across its thumb once. A level set by hand can be reset to the agent's
- * default when the agent offers one. `plain` drops the menu parts, for a menu built otherwise.
+ * highest sweeps a light across its thumb once. `plain` drops the menu parts, for a menu built
+ * otherwise.
  */
 export function EffortSegments({
   effort,
   value,
+  model,
   onPick,
   plain = false,
 }: {
   effort: SelectOption
   value: string | undefined
+  /** The model the levels are for, whose documented default shows when the agent names none. */
+  model?: string
   onPick: (value: string) => void
   plain?: boolean
 }) {
-  const { t } = useTranslation('composer')
   const labelId = useId()
-  const { levels, fallback, usesDefault, shown } = levelsOf(effort, value)
+  const { levels, shown } = levelsOf(effort, value, model)
   const tier = tierOf(effort, shown)
   const [seen, setSeen] = useState(shown)
   const [sweeps, setSweeps] = useState(0)
@@ -196,32 +196,7 @@ export function EffortSegments({
   const Label = plain ? PlainLabel : DropdownMenuLabel
   return (
     <Group>
-      <div className="flex items-center gap-1 pr-1">
-        <Label id={labelId} className="flex-1">
-          {effort.name}
-        </Label>
-        {usesDefault && fallback ? (
-          <span className="px-1 text-xs text-muted-foreground">{fallback.name}</span>
-        ) : (
-          fallback && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant="quiet"
-                    size="icon-xs"
-                    aria-label={t('controls.useFallback', { name: fallback.name.toLowerCase() })}
-                    onClick={() => onPick(fallback.value)}
-                  />
-                }
-              >
-                <Glyph icon={RefreshIcon} size={14} />
-              </TooltipTrigger>
-              <TooltipContent>{t('controls.useDefault')}</TooltipContent>
-            </Tooltip>
-          )
-        )}
-      </div>
+      <Label id={labelId}>{effort.name}</Label>
       <div className={plain ? 'px-2 pt-0.5 pb-1.5' : 'pb-1'}>
         <SegmentedControl
           aria-labelledby={labelId}

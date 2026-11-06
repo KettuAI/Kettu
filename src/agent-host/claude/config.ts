@@ -88,11 +88,73 @@ export function modelInfo(models: readonly ModelInfo[], value: string): ModelInf
   return models.find((model) => model.value === value)
 }
 
+/** Where a session at its default effort takes the level from, before the model's own default. */
+export interface InheritedEffort {
+  /** `CLAUDE_CODE_EFFORT_LEVEL`. */
+  env?: string
+  /** The settings' `modelSettings`, whose entries may save a level per model. */
+  modelSettings?: unknown
+}
+
+const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max']
+
+// Claude Code's documented default effort per model (code.claude.com/docs/en/model-config).
+const MODEL_DEFAULT_EFFORT: [pattern: RegExp, level: string][] = [
+  [/(opus|sonnet|haiku)-5-5/, 'medium'],
+  [/opus-4-7/, 'xhigh'],
+]
+const DOCUMENTED_DEFAULT_EFFORT = 'high'
+
+/** A model id without its context suffix or date, as `modelSettings` keys it. */
+const canonicalModel = (id: string): string =>
+  id
+    .replace(/\[[^\]]*\]$/, '')
+    .replace(/-\d{8}$/, '')
+    .toLowerCase()
+
+function savedEffort(modelSettings: unknown, model: ModelInfo): string | undefined {
+  if (!modelSettings || typeof modelSettings !== 'object') return undefined
+  const wanted = new Set([model.value, model.resolvedModel ?? model.value].map(canonicalModel))
+  for (const [key, entry] of Object.entries(modelSettings)) {
+    if (!wanted.has(canonicalModel(key)) || !entry || typeof entry !== 'object') continue
+    const level = (entry as { effortLevel?: unknown }).effortLevel
+    if (typeof level === 'string') return level
+  }
+  return undefined
+}
+
+/**
+ * The level a session that picked none runs at, as Claude Code resolves it: the environment, then
+ * the level saved for the model, then the model's documented default, run as the highest level
+ * the model offers at or below it.
+ */
+export function effortInEffect(
+  model: ModelInfo,
+  levels: readonly string[],
+  inherited: InheritedEffort,
+): string {
+  const resolved = canonicalModel(model.resolvedModel ?? model.value)
+  const wanted =
+    [inherited.env, savedEffort(inherited.modelSettings, model)].find(
+      (level) => level !== undefined && EFFORT_ORDER.includes(level),
+    ) ??
+    MODEL_DEFAULT_EFFORT.find(([pattern]) => pattern.test(resolved))?.[1] ??
+    DOCUMENTED_DEFAULT_EFFORT
+  if (levels.includes(wanted)) return wanted
+  const rank = EFFORT_ORDER.indexOf(wanted)
+  const below = levels.filter((level) => {
+    const at = EFFORT_ORDER.indexOf(level)
+    return at >= 0 && at <= rank
+  })
+  return below.at(-1) ?? levels[0]!
+}
+
 export function buildConfig(
   models: readonly ModelInfo[],
   choices: SessionChoices,
   modes: readonly string[],
   ultracodeDefault: boolean | null = null,
+  inherited: InheritedEffort = {},
 ): ConfigOption[] {
   const options: ConfigOption[] = [
     {
@@ -143,18 +205,18 @@ export function buildConfig(
   }
   const current = modelInfo(models, choices.model)
   const levels = current?.supportsEffort ? (current.supportedEffortLevels ?? []) : []
-  if (levels.length > 0) {
+  if (current && levels.length > 0) {
+    // A session at its default shows the level that default runs at; there is no Default level.
     options.push({
       id: OPTION_IDS.effort,
       name: 'Effort',
       description: 'Available effort levels for this model',
       category: 'thought_level',
       type: 'select',
-      value: levels.includes(choices.effort) ? choices.effort : DEFAULT_EFFORT,
-      choices: [
-        { value: DEFAULT_EFFORT, name: 'Default' },
-        ...levels.map((level) => ({ value: level, name: titleCase(level) })),
-      ],
+      value: levels.includes(choices.effort)
+        ? choices.effort
+        : effortInEffect(current, levels, inherited),
+      choices: levels.map((level) => ({ value: level, name: titleCase(level) })),
     })
   }
   if (current?.supportsFastMode) {

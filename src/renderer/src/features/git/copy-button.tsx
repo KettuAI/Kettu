@@ -3,7 +3,7 @@ import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** `text` may be a function, for text too costly to build on every render. */
 export function CopyButton({
