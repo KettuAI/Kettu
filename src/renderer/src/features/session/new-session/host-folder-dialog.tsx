@@ -23,7 +23,7 @@ import { useOtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { homeStart } from '@renderer/web/host-path'
 import { crumbs, foldersOf, listing, parentOf, type HostFolder } from './host-folders'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 type Read = { folder: string; completion: PathCompletion } | { folder: string; error: string }
 

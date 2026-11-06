@@ -9,7 +9,7 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { fadeExit } from '@renderer/lib/motion'
 import { splitName } from './levels'
 import { modelOption, type Notice } from './use-out-of-credit'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** The strip at the top of the composer's box after a turn the provider refused for want of credit. */
 export function OutOfCreditStrip({

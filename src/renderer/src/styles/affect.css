@@ -4610,19 +4610,6 @@
   place-items: center;
   width: 15px;
 }
-.kettu-folder {
-  fill: none;
-}
-.kettu-folder__tab {
-  fill: var(--composer-folder-tab);
-}
-.kettu-folder__tab-edge {
-  stroke: var(--composer-folder-tab);
-}
-.kettu-folder__front {
-  fill: var(--composer-folder-front);
-  stroke: var(--composer-folder-front);
-}
 /* A provider out of credit: a tinted note over the text, inside the writing area. */
 .kettu-credit {
   margin: -4px -6px 10px;

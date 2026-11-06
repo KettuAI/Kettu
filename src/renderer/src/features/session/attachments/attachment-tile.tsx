@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { cn } from '@renderer/lib/utils'
 import { cutName } from './cut-name'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** What a tile shows, the same in the composer and in the thread. */
 export interface TileView {

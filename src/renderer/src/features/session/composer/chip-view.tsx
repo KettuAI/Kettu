@@ -9,7 +9,7 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 import type { Chip } from './chips'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** How a chip stands: as typed, under the pointer, chosen in the text, or naming what is gone. */
 export type ChipState = 'default' | 'selected'

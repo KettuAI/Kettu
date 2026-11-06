@@ -6,7 +6,7 @@ import {
   GitBranchIcon,
   GitCommitIcon,
 } from '@hugeicons/core-free-icons'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { useTranslation } from 'react-i18next'
 import type { GitStatus, PullRequest } from '@shared/git'
 import { useRefresh } from '@renderer/components/refresh'

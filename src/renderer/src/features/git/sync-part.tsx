@@ -9,7 +9,7 @@ import { cn } from '@renderer/lib/utils'
 import { useGitStore, type RunningOperation } from '@renderer/stores/git'
 import { pushNow, runStep } from './steps'
 import { commandOf, HINT_TONE, planSync, pushesToDefault, stepOf, type SyncButton } from './sync'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** The values the reasons and hints name: where the branch tracks, and what blocks it. */
 function syncWords(

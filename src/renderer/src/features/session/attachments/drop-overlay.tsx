@@ -2,7 +2,7 @@ import { Download04Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { cn } from '@renderer/lib/utils'
-import { Glyph } from '@renderer/features/session/composer/glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** Says what a drop does while files are dragged over the column; it never takes the pointer. */
 export function DropOverlay({

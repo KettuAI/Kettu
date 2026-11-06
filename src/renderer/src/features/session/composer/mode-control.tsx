@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import type { ComposerMode } from '@renderer/components/affect/chat-composer'
 import { formatShortcut } from '@renderer/lib/platform'
-import { Glyph } from './glyph'
+import { Glyph } from '@renderer/features/shell/glyph'
 import type { SelectOption } from './levels'
 import { MODE_GLYPH, modeLook } from './modes'
 import { useSelectPick, type Select } from './use-pick'
