@@ -2602,6 +2602,9 @@ export const css = /* css */ `
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* Kettu: the element resets sit in the base layer, under Tailwind's utilities, since the shell wraps
+   the whole window and its pages style their own buttons and focus rings. */
+@layer base {
 :where(.ui-as) button {
   appearance: none;
   margin: 0;
@@ -2617,6 +2620,7 @@ export const css = /* css */ `
    (.ui-x:focus-visible) wins by design, not by the order of the style tags */
 .ui-as :where(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ui-as textarea:focus-visible, .ui-as input:focus-visible { outline: none; }
+}
 
 /* App frame shared by all screens: sidebar on the gray page, main area as a rounded white panel */
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import {
   Analytics01Icon,
@@ -45,6 +45,7 @@ import {
   useViewStore,
 } from '@renderer/stores/view'
 import {
+  markParts,
   runSearch,
   SCOPES,
   type ResultGroup,
@@ -149,6 +150,15 @@ function SearchPalette() {
   const results = useMemo(() => runSearch(entries, query, scope), [entries, query, scope])
   const byKey = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries])
   const trimmed = query.trim()
+  const { words } = results
+  // Each word of the query is marked wherever it matches, as the matching reads them.
+  const mark = useCallback(
+    (text: string) =>
+      markParts(text, words).map((part, i) =>
+        part.match ? <mark key={i}>{part.text}</mark> : <Fragment key={i}>{part.text}</Fragment>,
+      ),
+    [words],
+  )
 
   // The artifact list is read while the palette shows; routines load with the window.
   useEffect(() => {
@@ -218,6 +228,7 @@ function SearchPalette() {
       onQueryChange={setQuery}
       empty={empty}
       labels={{ input: t('nav.search'), scopes: t('search.scopes'), list: t('nav.search') }}
+      mark={mark}
       hints={
         <>
           <span>

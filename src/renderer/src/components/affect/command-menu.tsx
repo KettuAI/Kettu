@@ -59,6 +59,8 @@ export type CommandMenuProps = {
   hints?: ReactNode;
   /** Names the field, the scopes and the list for screen readers, for translation */
   labels?: { input?: string; scopes?: string; list?: string };
+  /** Marks the matches in a row's name and hint, in place of the typed text's first match */
+  mark?: (text: string) => ReactNode;
   className?: string;
 };
 
@@ -331,11 +333,12 @@ type ItemProps = {
   ran: boolean;
   mod: string;
   q: string;
+  mark?: (text: string) => ReactNode;
   on: { current: { move: (cmd: Row) => void; run: (cmd: Row) => void } };
 };
 
 /** One row – memoized, so moving the highlight through thousands of commands only redraws two rows */
-const Item = memo(function Item({ cmd, domId, selected, ran, mod, q, on }: ItemProps) {
+const Item = memo(function Item({ cmd, domId, selected, ran, mod, q, mark, on }: ItemProps) {
   const keys = cmd.n ? [mod, String(cmd.n)] : cmd.keys;
   return (
     <button
@@ -361,11 +364,11 @@ const Item = memo(function Item({ cmd, domId, selected, ran, mod, q, on }: ItemP
       )}
       <span className="ui-cmc__text">
         <span className="ui-cmc__name" dir="auto" title={cmd.label}>
-          <Highlight text={cmd.label} query={q} />
+          {mark ? mark(cmd.label) : <Highlight text={cmd.label} query={q} />}
         </span>
         {cmd.hint && (
           <span className="ui-cmc__hint" dir="auto" title={cmd.hint}>
-            <Highlight text={cmd.hint} query={q} />
+            {mark ? mark(cmd.hint) : <Highlight text={cmd.hint} query={q} />}
           </span>
         )}
       </span>
@@ -398,6 +401,7 @@ export function CommandMenu({
   empty,
   hints,
   labels,
+  mark,
   className,
 }: CommandMenuProps) {
   const id = "ui-cmc" + useId().replace(/[^a-zA-Z0-9_-]/g, "");
@@ -659,6 +663,7 @@ export function CommandMenu({
                   ran={ran?.id === cmd.key}
                   mod={mod}
                   q={q}
+                  mark={mark}
                   on={on}
                 />
               ))}

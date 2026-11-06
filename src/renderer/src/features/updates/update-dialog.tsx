@@ -57,7 +57,7 @@ export function UpdateDialog() {
             ))}
           </ul>
         )}
-        <AlertDialogDescription className="mt-3 flex gap-2 rounded-2xl bg-subtle px-3 py-2.5 text-hint leading-normal text-secondary">
+        <AlertDialogDescription className="mt-3 flex gap-2 rounded-[10px] bg-(--shell-chip) px-3 py-2.5 text-hint leading-normal text-secondary">
           <Glyph icon={InformationCircleIcon} size={14} className="mt-0.5 shrink-0 text-tertiary" />
           {t('dialog.note')}
         </AlertDialogDescription>

@@ -1,5 +1,6 @@
 import { useEffect, useId, useSyncExternalStore } from 'react'
-import { TriangleAlertIcon, type LucideIcon } from 'lucide-react'
+import { Alert02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import {
   Toaster as AffectToaster,
@@ -15,7 +16,7 @@ export type ToastTone = 'success' | 'warning' | 'info'
 export interface ToastOptions {
   tone?: ToastTone
   /** The icon of a toast without a tone, such as an archive box for "Archived". */
-  icon?: LucideIcon
+  icon?: IconSvgElement
 }
 
 // The toasts on screen, so the layer can tell the browser pane it is covered.
@@ -54,17 +55,22 @@ export function toast(
   action?: { label: string; onClick: () => void },
   options: ToastOptions = {},
 ) {
-  const { tone, icon: Icon } = options
+  const { tone, icon } = options
   const show =
     tone === 'success' ? affectToast.success : tone === 'info' ? affectToast.info : affectToast
-  const icon =
+  const mark =
     tone === 'warning' ? (
-      <TriangleAlertIcon aria-hidden className="size-3.75 text-warning" />
-    ) : Icon ? (
-      <Icon aria-hidden className="size-3.75 text-icon" />
+      <HugeiconsIcon
+        icon={Alert02Icon}
+        strokeWidth={1.9}
+        aria-hidden
+        className="size-3.75 text-warning"
+      />
+    ) : icon ? (
+      <HugeiconsIcon icon={icon} strokeWidth={1.9} aria-hidden className="size-3.75 text-icon" />
     ) : undefined
   track((settings) => show(title, settings), {
-    icon,
+    icon: mark,
     ...(action && { action: actionOf(action), duration: 6000 }),
   })
 }

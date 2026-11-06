@@ -1,6 +1,5 @@
 import '@renderer/styles/globals.css'
 
-import { LucideProvider } from 'lucide-react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { initSettings } from '@renderer/stores/settings'
@@ -13,9 +12,7 @@ Promise.all([initSettings(), initThemes(), initTrayPanel()])
   .then(() =>
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
-        <LucideProvider strokeWidth={1.35} nonScalingStroke>
-          <TrayRoot />
-        </LucideProvider>
+        <TrayRoot />
       </StrictMode>,
     ),
   )

@@ -29,7 +29,7 @@ export function HostSwitchBar() {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return
       // Only where Esc has nothing else to do: the page itself or the sidebar.
       const at = document.activeElement
-      if (at && at !== document.body && !at.closest('[data-slot=sidebar]')) return
+      if (at && at !== document.body && !at.closest('.ui-as-side')) return
       event.preventDefault()
       cancelHostSwitch()
     }
@@ -41,7 +41,7 @@ export function HostSwitchBar() {
   return (
     <div
       role="status"
-      className="mb-1.5 flex h-7.5 shrink-0 items-center gap-2 rounded-tile bg-surface px-2.5 text-small text-secondary shadow-card motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-(--duration-fast)"
+      className="mb-1.5 flex h-8 shrink-0 items-center gap-2 rounded-[10px] bg-(--shell-card) px-2.5 text-small text-(--shell-muted) shadow-(--shell-card-shadow) motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-(--duration-fast)"
     >
       <Spinner className="size-3 shrink-0" />
       <span className="min-w-0 flex-1 truncate">
@@ -51,7 +51,7 @@ export function HostSwitchBar() {
         type="button"
         onClick={cancelHostSwitch}
         aria-label={t('account.cancelSwitch')}
-        className="rounded-xs text-tertiary outline-none hover:text-secondary focus-visible:focus-ring"
+        className="rounded-xs text-(--shell-faint) outline-none hover:text-(--shell-ink) focus-visible:focus-ring"
       >
         {t('account.escKey')}
       </button>

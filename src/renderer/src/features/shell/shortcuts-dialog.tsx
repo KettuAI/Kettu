@@ -38,7 +38,7 @@ export function ShortcutsDialog() {
         className="flex max-h-[min(640px,85svh)] flex-col gap-0 px-5.5 pt-5 pb-4.5 sm:max-w-[820px]"
       >
         <DialogTitle>{t('shortcuts.title')}</DialogTitle>
-        <label className="mt-3.5 flex h-8.5 shrink-0 items-center gap-2 rounded-2xl bg-subtle px-2.5 text-tertiary focus-ring-within">
+        <label className="mt-3.5 flex h-8 shrink-0 items-center gap-2 rounded-[9px] bg-(--shell-chip) px-2.5 text-(--shell-muted) focus-ring-within">
           <Glyph icon={Search01Icon} size={14} className="shrink-0" />
           <input
             type="search"
@@ -69,7 +69,7 @@ export function ShortcutsDialog() {
           )}
         </div>
         <div className="mt-4.5 flex shrink-0 items-center justify-end">
-          <DialogClose render={<Button variant="outline" />}>
+          <DialogClose render={<Button variant="outline" size="dialog" />}>
             {t('common:actions.done')}
           </DialogClose>
         </div>
