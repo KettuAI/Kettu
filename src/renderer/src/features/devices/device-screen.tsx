@@ -15,6 +15,7 @@ import type {
   DeviceScreen as Screen,
 } from '@shared/device-host'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { errorMessage } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { DeviceFrame } from './device-frame'
 
@@ -261,7 +262,7 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
         })
         .catch((reason: unknown) => {
           setState('error')
-          setError(reason instanceof Error ? reason.message : String(reason))
+          setError(errorMessage(reason))
         })
     }
     watch()

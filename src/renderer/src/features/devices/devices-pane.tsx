@@ -188,6 +188,14 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
                   {t('actions.boot')}
                 </Button>
               </Empty>
+            ) : selected.state === 'booting' ? (
+              // The host refuses to stream a device until it has booted.
+              <Empty className="flex-1">
+                <EmptyHeader>
+                  <EmptyTitle>{t('empty.opening')}</EmptyTitle>
+                  <EmptyDescription>{t('empty.openingHint')}</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             ) : (
               <DeviceScreen key={selected.id} device={selected} />
             )}
