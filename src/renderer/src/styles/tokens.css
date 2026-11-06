@@ -341,6 +341,11 @@
   --shell-switch-on: rgb(0 96 226 / 76.5%);
   --shell-logo-bg: #ffffff;
   --shell-scrim: rgb(0 0 0 / 12%);
+  --shell-danger: #dc2626;
+  --shell-danger-hover: #c81e1e;
+  --shell-dialog-shadow:
+    inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 28%),
+    0 4px 12px rgb(0 0 0 / 6%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -577,6 +582,9 @@
     --shell-switch-on: #4d8dff;
     --shell-logo-bg: #2a2a2e;
     --shell-scrim: rgb(0 0 0 / 45%);
+    --shell-dialog-shadow:
+      inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
+      0 4px 12px rgb(0 0 0 / 30%);
   }
 }
 
@@ -812,6 +820,9 @@
   --shell-switch-on: #4d8dff;
   --shell-logo-bg: #2a2a2e;
   --shell-scrim: rgb(0 0 0 / 45%);
+  --shell-dialog-shadow:
+    inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
+    0 4px 12px rgb(0 0 0 / 30%);
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
