@@ -141,7 +141,15 @@ function ComboboxContent({
   )
 }
 
-function ComboboxList({ className, render, ...props }: ComboboxPrimitive.List.Props) {
+function ComboboxList({
+  className,
+  render,
+  highlight,
+  ...props
+}: ComboboxPrimitive.List.Props & {
+  /** Classes for the highlight that glides between the rows. */
+  highlight?: string
+}) {
   return (
     <ComboboxPrimitive.List
       data-slot="combobox-list"
@@ -149,7 +157,7 @@ function ComboboxList({ className, render, ...props }: ComboboxPrimitive.List.Pr
         render ??
         ((listProps) => (
           <div {...listProps}>
-            <GlideHighlight />
+            <GlideHighlight className={highlight} />
             {listProps.children}
           </div>
         ))

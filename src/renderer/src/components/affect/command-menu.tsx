@@ -782,3 +782,6 @@ const css = /* css */ `
   --ui-cm-accent: #6d8bff;
 }
 `;
+
+/** The stylesheet alone, for a menu that keeps its own markup and takes this look */
+export const commandMenuStyles = css;
