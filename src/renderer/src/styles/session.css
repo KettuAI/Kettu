@@ -154,8 +154,7 @@
   opacity: 1;
 }
 .ks-reply-foot .ui-mac {
-  width: auto;
-  min-width: 0;
+  flex: 1;
 }
 .ks-reply-foot .ui-mac__after {
   color: var(--thread-faint);
@@ -823,4 +822,144 @@
   80% {
     transform: translateX(1.5px);
   }
+}
+
+/* The message outline: a dash per message at the thread's left, the list on hover. */
+.ks-outline {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 6px 4px;
+}
+.ks-outline__dash {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--thread-line-strong);
+}
+.ks-outline__dash[data-current] {
+  width: 16px;
+  background: var(--thread-muted);
+}
+.ks-outline__item {
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+}
+.ks-outline__item[data-highlighted],
+.ks-outline__item[data-reading] {
+  color: var(--thread-ink);
+}
+.ks-outline__item[data-reading] {
+  font-weight: 500;
+}
+
+/* Reply to a selected passage: an ink pill above it. */
+.ks-reply-pop {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.ks-reply-pill {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--thread-ink);
+  box-shadow: var(--thread-pill-shadow);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bg-app);
+}
+.ks-reply-pill:hover {
+  background: var(--thread-ink);
+  color: var(--bg-app);
+}
+
+/* A turn's changes: the count and the repository's actions, then a row per file. */
+.ks-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--thread-card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--thread-line-strong),
+    var(--thread-card-shadow);
+}
+.ks-changes__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 2px 4px 6px;
+  font-size: 13px;
+  color: var(--thread-ink);
+}
+.ks-changes__head b {
+  font-weight: 500;
+}
+.ks-changes__counts {
+  display: inline-flex;
+  gap: 4px;
+}
+.ks-changes__actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.ks-btn {
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--thread-card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--thread-line-strong),
+    var(--thread-card-shadow);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--thread-ink);
+}
+.ks-btn:hover {
+  background: var(--thread-hover);
+  color: var(--thread-ink);
+}
+.ks-btn--solid,
+.ks-btn--solid:hover {
+  background: var(--thread-ink);
+  box-shadow: none;
+  color: var(--bg-app);
+}
+.ks-btn--solid:hover {
+  opacity: 0.88;
+}
+.ks-file {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+  text-align: left;
+}
+.ks-file:hover,
+.ks-file[data-panel-open] {
+  background: var(--thread-hover);
+}
+.ks-file__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--thread-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-file__dir {
+  color: var(--thread-faint);
 }
