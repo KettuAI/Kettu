@@ -556,7 +556,7 @@ export function openRoutine(
 
 /** The Artifacts page from the sidebar, with its whole list. */
 export function openArtifacts(): void {
-  useArtifactsStore.setState({ filter: '', kindFilter: null, projectFilter: null, opened: null })
+  useArtifactsStore.setState({ filter: '', kindFilter: null, projectFilter: [], opened: null })
   useViewStore.setState((s) => ({
     main: { kind: 'artifacts' },
     settings: { ...s.settings, open: false },

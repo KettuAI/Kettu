@@ -4,13 +4,13 @@
 
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
-  BotIcon,
-  FolderIcon,
-  PencilIcon,
-  PlusIcon,
-  RotateCwIcon,
-  SquareTerminalIcon,
-} from 'lucide-react'
+  Add01Icon,
+  AiBrain01Icon,
+  ComputerTerminal01Icon,
+  Edit02Icon,
+  FolderOpenIcon,
+  RefreshIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentAccount, AgentStatus } from '@shared/agent-host'
@@ -25,8 +25,8 @@ import {
 import { MULTI_AGENT_HARNESSES, type AgentId, type HarnessId } from '@shared/thread'
 import { newSession } from '@renderer/app/actions'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
-import { RefreshIcon } from '@renderer/components/refresh-icon'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,21 +37,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
-import { Input } from '@renderer/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
-import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
@@ -97,13 +85,14 @@ import {
 import {
   CONFIRM,
   ControlError,
+  DangerButton,
   IconAction,
-  GROUP_ACTION,
   PathText,
   Pill,
-  ROW_BUTTON,
+  SetButton,
   SettingSelect,
   SettingSwitch,
+  Skel,
 } from './controls'
 import { PlaceRow } from './places'
 import {
@@ -255,80 +244,55 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
     ) : limits.length > 0 ? (
       <ListMeter limits={limits} />
     ) : status.capabilities.reports ? (
-      <span className="text-group text-tertiary">
+      <span className="k-meter">
         {t(reading ? 'agents.readingUsage' : 'agents.usageOnceRunning')}
       </span>
     ) : (
-      <span className="text-group text-tertiary">{t('agents.noUsage')}</span>
+      <span className="k-meter">{t('agents.noUsage')}</span>
     )
+  // The line under the name: what it runs on when its name says otherwise, the plan and the account.
+  const line = [
+    status.name === status.harnessName ? null : status.harnessName,
+    plan || null,
+    identity.text,
+  ].filter(Boolean)
   return (
     <ItemRow
       item={status.id}
       label={status.name}
       onOpen={() => openAgentSettings(status.id)}
       tile={
-        <span className={cn('block', off && 'opacity-50')}>
-          <AgentTile agent={status.id} size={30} dot={dot} />
+        <span className={cn('k-agent-mark', off && 'k-off')}>
+          <AgentTile agent={status.id} size={32} dot={dot} />
         </span>
       }
       name={
         <>
-          <span className={cn('truncate font-medium', off && 'text-secondary')}>{status.name}</span>
+          <span className="k-name">{status.name}</span>
           {status.isDefault && hasOthers && <Pill>{t('agents.default')}</Pill>}
           {off && <Pill>{t('agents.turnedOff')}</Pill>}
         </>
       }
-      right={off ? null : <span className="pointer-events-auto flex items-center">{end}</span>}
+      right={off ? null : end}
     >
-      <span
-        title={identity.text}
-        className={cn(
-          'min-w-0 text-label leading-[normal] wrap-anywhere',
-          identity.tone === 'failed'
-            ? 'text-danger'
-            : identity.tone === 'quiet' || off
-              ? 'text-tertiary'
-              : 'text-primary',
-        )}
+      <small
+        title={[...line, showFolder && folder ? folder : null].filter(Boolean).join(' · ')}
+        className={identity.tone === 'failed' ? 'k-error' : undefined}
       >
-        {identity.text}
-      </span>
-      <span className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-group leading-[normal] text-tertiary">
-        <span className="min-w-0 wrap-anywhere">{status.harnessName}</span>
-        {plan && (
-          <>
-            <span aria-hidden>·</span>
-            <span className="min-w-0 wrap-anywhere">{plan}</span>
-          </>
-        )}
-        {showFolder && folder && (
-          <>
-            <span aria-hidden>·</span>
-            <span title={folder} className="min-w-0 truncate">
-              {folder}
-            </span>
-          </>
-        )}
-      </span>
+        {line.join(' · ')}
+        {showFolder && folder && ` · ${folder}`}
+      </small>
     </ItemRow>
   )
 }
 
 /** The list's own action: add an agent. */
 export function AgentsGroupActions() {
-  return <AddAgentButton className={GROUP_ACTION} />
+  return <AddAgentButton primary />
 }
 
 /** Adding stays discoverable before the first harness is installed. */
-function AddAgentButton({
-  className,
-  row,
-  primary = false,
-}: {
-  className?: string
-  row?: boolean
-  primary?: boolean
-}) {
+function AddAgentButton({ row, primary = false }: { row?: boolean; primary?: boolean }) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
   const addable = useAddable()
@@ -339,21 +303,20 @@ function AddAgentButton({
   return (
     <>
       {row ? (
-        <button
-          type="button"
-          onClick={add}
-          className="group/add flex w-full items-center gap-3.5 rounded-lg py-3.25 text-left text-row text-secondary outline-none transition-colors duration-(--duration-fast) hover:text-primary focus-ring"
-        >
-          <span className="grid size-7.5 shrink-0 place-items-center rounded-xl shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] transition-shadow duration-(--duration-fast) group-hover/add:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong)]">
-            <PlusIcon className="size-3.75" />
+        <button type="button" onClick={add} className="ui-sg-row k-add-row">
+          <span className="k-mark">
+            <Icon icon={Add01Icon} size={16} />
           </span>
           {t('agents.add.button')}
         </button>
       ) : (
-        <Button variant={primary ? 'default' : 'ghost'} className={className} onClick={add}>
-          <PlusIcon data-icon="inline-start" />
+        <SetButton
+          variant={primary ? 'primary' : 'ghost'}
+          icon={<Icon icon={Add01Icon} size={14} />}
+          onClick={add}
+        >
           {t('agents.add.button')}
-        </Button>
+        </SetButton>
       )}
       <AddAgentDialog open={open} onOpenChange={setOpen} harnesses={addable} />
     </>
@@ -369,23 +332,21 @@ export function NoAgents() {
   const { t } = useTranslation('settings')
   const addable = useAddable()
   return (
-    <Empty className="min-h-72">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <BotIcon />
-        </EmptyMedia>
-        <EmptyTitle>{t('agents.empty.title')}</EmptyTitle>
-        <EmptyDescription>
-          {t(addable.length > 0 ? 'agents.empty.installed' : 'agents.empty.description')}
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
+    <div className="ui-as-empty" data-bare="">
+      <span className="ui-as-empty__icon">
+        <Icon icon={AiBrain01Icon} size={18} />
+      </span>
+      <b className="ui-as-empty__title">{t('agents.empty.title')}</b>
+      <p className="ui-as-empty__text">
+        {t(addable.length > 0 ? 'agents.empty.installed' : 'agents.empty.description')}
+      </p>
+      <span className="k-end k-empty-actions">
         <AddAgentButton primary />
-        <Button variant="ghost" onClick={() => openHarnessSettings(null)}>
+        <SetButton variant="ghost" onClick={() => openHarnessSettings(null)}>
           {t('agents.empty.harnesses')}
-        </Button>
-      </EmptyContent>
-    </Empty>
+        </SetButton>
+      </span>
+    </div>
   )
 }
 
@@ -393,13 +354,9 @@ export function NoAgents() {
 export function AgentsFooter() {
   const { t } = useTranslation('settings')
   return (
-    <p className="mt-2.5 text-hint text-tertiary">
+    <p className="ui-sg-hint">
       {t('agents.footerBefore')}
-      <button
-        type="button"
-        onClick={() => openHarnessSettings(null)}
-        className="rounded-sm outline-none hover:text-primary focus-ring"
-      >
+      <button type="button" onClick={() => openHarnessSettings(null)} className="k-link">
         {t('sections.harnesses')}
       </button>
       {t('agents.footerAfter')}
@@ -520,7 +477,7 @@ function AddAgentDialog({
           <SettingsDialogHeader title={t('agents.add.title')}>
             {t('agents.add.description')}
           </SettingsDialogHeader>
-          <SettingsDialogBody className="gap-4">
+          <SettingsDialogBody>
             <SettingsField label={t('agents.add.harness')}>
               <SettingSelect
                 label={t('agents.add.harness')}
@@ -529,7 +486,7 @@ function AddAgentDialog({
                 options={harnesses.map((h) => ({
                   value: h.harnessId,
                   label: h.harnessName,
-                  icon: <AgentMark agent={h.harnessId} size={15} />,
+                  icon: <AgentMark agent={h.harnessId} size={16} />,
                 }))}
                 onChange={(next) => {
                   setHarness(next)
@@ -544,13 +501,13 @@ function AddAgentDialog({
                 htmlFor="agent-name"
                 hint={
                   tooLong && (
-                    <span className="text-danger">
+                    <span className="kettu-sd__error">
                       {t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS })}
                     </span>
                   )
                 }
               >
-                <Input
+                <input
                   id="agent-name"
                   value={name}
                   autoFocus
@@ -568,7 +525,7 @@ function AddAgentDialog({
                 aria-label={t('agents.add.folder')}
                 value={selectedFolder}
                 onValueChange={(next) => setFolder(next as typeof folder)}
-                className="gap-5"
+                className="kettu-sd__choices"
               >
                 {canUseDefault && (
                   <Choice
@@ -595,17 +552,14 @@ function AddAgentDialog({
                       description={t('agents.add.folderExistingHint')}
                       extra={
                         selectedFolder === 'existing' && (
-                          <span className="flex min-w-0 items-center gap-2">
+                          <span className="k-end k-shrink">
                             {picked && <PathText path={picked} />}
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className={ROW_BUTTON}
+                            <SetButton
+                              icon={<Icon icon={FolderOpenIcon} size={14} />}
                               onClick={() => void pick()}
                             >
-                              <FolderIcon data-icon="inline-start" className="size-3.5" />
                               {t('agents.add.choose')}
-                            </Button>
+                            </SetButton>
                           </span>
                         )
                       }
@@ -620,7 +574,7 @@ function AddAgentDialog({
                   aria-label={t('agents.add.login')}
                   value={login}
                   onValueChange={(next) => setLogin(next as Login)}
-                  className="gap-5"
+                  className="kettu-sd__choices"
                 >
                   <Choice
                     value="terminal"
@@ -645,16 +599,21 @@ function AddAgentDialog({
                 </RadioGroup>
               </SettingsField>
             )}
-            {error && <p className="text-hint text-danger">{error}</p>}
+            {error && <p className="kettu-sd__error">{error}</p>}
           </SettingsDialogBody>
           <SettingsDialogFooter>
-            <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button type="submit" className={ROW_BUTTON} disabled={!valid || busy}>
-              {busy && <Spinner data-icon="inline-start" />}
+            <SetButton
+              size="md"
+              variant="primary"
+              type="submit"
+              loading={busy}
+              disabled={!valid && !busy}
+            >
               {t('agents.add.submit')}
-            </Button>
+            </SetButton>
           </SettingsDialogFooter>
         </form>
       </SettingsDialogContent>
@@ -678,22 +637,15 @@ function Choice({
 }) {
   const id = useId()
   return (
-    <div
-      className={cn(
-        'flex flex-col gap-2.5 rounded-2xl px-3 py-2.75 transition-[background-color,box-shadow] duration-(--duration-fast)',
-        checked
-          ? 'bg-subtle shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]'
-          : 'shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
-      )}
-    >
-      <label htmlFor={id} className="flex items-start gap-2.5 text-left">
+    <div className="kettu-sd__choice" data-checked={checked || undefined}>
+      <label htmlFor={id}>
         <RadioGroupItem id={id} value={value} className="mt-0.5" />
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-lede leading-[normal] text-primary">{title}</span>
-          <span className="text-hint text-tertiary">{description}</span>
+        <span className="ui-sg-label">
+          <b>{title}</b>
+          <small>{description}</small>
         </span>
       </label>
-      {extra && <div className="pl-6.5">{extra}</div>}
+      {extra && <div className="kettu-sd__choice-extra">{extra}</div>}
     </div>
   )
 }
@@ -717,8 +669,8 @@ function ApiKeyFields({
   const { t } = useTranslation('settings')
   const providers = status.apiKey?.providers ?? false
   return (
-    <div className="flex flex-col gap-2">
-      <Input
+    <div className="kettu-sd__stack">
+      <input
         id="agent-key"
         type="password"
         value={value.key}
@@ -731,7 +683,7 @@ function ApiKeyFields({
       />
       {providers && (
         <>
-          <Input
+          <input
             id="agent-base-url"
             value={value.baseUrl}
             autoComplete="off"
@@ -741,7 +693,7 @@ function ApiKeyFields({
             className={DIALOG_MONO_FIELD}
             onChange={(event) => onChange({ ...value, baseUrl: event.target.value })}
           />
-          <Input
+          <input
             id="agent-model"
             value={value.model}
             autoComplete="off"
@@ -753,7 +705,7 @@ function ApiKeyFields({
           />
         </>
       )}
-      <p className="text-hint text-tertiary">
+      <p className="kettu-sd__hint">
         {t(providers ? 'agents.key.noteClaude' : 'agents.key.noteCodex', {
           command: status.cli?.command ?? '',
         })}
@@ -779,7 +731,7 @@ function AgentPageHeader({ status, actions }: { status: AgentStatus | null; acti
       back={t('sections.agents')}
       onBack={() => openAgentSettings(null)}
       item={status?.id ?? 'agent'}
-      icon={status && <AgentTile agent={status.id} size={40} dot={dot} />}
+      icon={status && <AgentTile agent={status.id} size={42} dot={dot} />}
       title={status?.name ?? null}
       subtitle={status && <AgentSubtitle status={status} />}
       actions={actions}
@@ -798,7 +750,7 @@ function AgentSubtitle({ status }: { status: AgentStatus }) {
   return (
     <>
       {/* As tall as the rename button, whether or not it shows. */}
-      <span className="truncate leading-6.5">
+      <span className="k-name k-tall">
         {status.harnessName}
         {account && ` · ${account.label}`}
       </span>
@@ -806,16 +758,11 @@ function AgentSubtitle({ status }: { status: AgentStatus }) {
         hasOthers && <Pill>{t('agents.default')}</Pill>
       ) : (
         <>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t('agents.rename.button')}
-            title={t('agents.rename.button')}
-            className="size-6.5 rounded-segment text-tertiary"
+          <IconAction
+            label={t('agents.rename.button')}
+            icon={Edit02Icon}
             onClick={() => setRenaming(true)}
-          >
-            <PencilIcon className="size-3.5" />
-          </Button>
+          />
           <RenameDialog status={status} open={renaming} onOpenChange={setRenaming} />
         </>
       )}
@@ -833,26 +780,26 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
   })
   if (status.disabled) {
     return (
-      <span className="flex min-h-4.5 min-w-0 items-center gap-1.5 leading-[normal]">
-        <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
-        <span className="truncate">
+      <>
+        <span aria-hidden className="k-dot" />
+        <span className="k-name">
           {t('agents.turnedOff')} · {harness}
         </span>
-      </span>
+      </>
     )
   }
   return ready ? (
-    <span className="flex min-h-4.5 min-w-0 items-center gap-1.5 leading-[normal]">
-      <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-success" />
-      <span className="truncate">
+    <>
+      <span aria-hidden className="k-dot" data-tone="ok" />
+      <span className="k-name">
         {t('agents:state.ready')} · {harness}
       </span>
-    </span>
+    </>
   ) : (
-    <span className="flex min-h-4.5 min-w-0 items-center gap-1 leading-[normal]">
-      <AgentStateLine status={status} className="text-hint leading-[normal]" />
-      <span className="truncate">· {harness}</span>
-    </span>
+    <>
+      <AgentStateLine status={status} />
+      <span className="k-name">· {harness}</span>
+    </>
   )
 }
 
@@ -871,32 +818,27 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const actions = (
     <>
       {r.kind === 'failed' && (
-        <Button
-          className={ROW_BUTTON}
-
-          variant="outline"
-          disabled={busy}
+        <SetButton
+          loading={busy}
+          icon={<Icon icon={RefreshIcon} size={14} />}
           onClick={() => act(() => request('agents.retry', { agentId: status.id }))}
         >
-          {busy ? <Spinner data-icon="inline-start" /> : <RotateCwIcon data-icon="inline-start" />}
           {t('common:actions.retry')}
-        </Button>
+        </SetButton>
       )}
     </>
   )
 
   return (
-    <div className="flex flex-col">
+    <div>
       <AgentPageHeader status={status} actions={actions} />
 
-      <div className="flex flex-col">
+      <div>
         <EnableGroup status={status} />
         {(r.kind === 'failed' || r.kind === 'missing') && (
           <p
-            className={cn(
-              'mt-4 text-group',
-              r.kind === 'failed' ? 'text-danger' : 'text-secondary',
-            )}
+            className={r.kind === 'failed' ? 'ui-sg-hint k-error' : 'ui-sg-hint'}
+            data-wrap=""
             data-selectable=""
           >
             {r.message}{' '}
@@ -904,7 +846,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
               <button
                 type="button"
                 onClick={() => openHarnessSettings(status.harnessId)}
-                className="rounded-sm text-primary underline-offset-2 outline-none hover:underline focus-ring"
+                className="k-link"
               >
                 {t('agents.openHarness', { harness: status.harnessName })}
               </button>
@@ -912,7 +854,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </p>
         )}
         {!providerMode && r.kind === 'sign-in' && status.authMethods.length > 0 && (
-          <div className="mt-5 min-w-0">
+          <div>
             <SignInNotice
               status={status}
               busy={busy}
@@ -925,7 +867,11 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             />
           </div>
         )}
-        {error && <p className="mt-4 text-group text-danger">{error}</p>}
+        {error && (
+          <p className="ui-sg-hint k-error" data-wrap="">
+            {error}
+          </p>
+        )}
 
         {providerMode ? (
           <AgentProviders
@@ -935,7 +881,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             onSignIn={(command) => signInTerminal(status, command)}
           />
         ) : (
-          <section className="flex flex-col">
+          <section className="k-group" aria-label={t('agents.account')}>
             <GroupLabel
               group={{
                 id: 'account',
@@ -943,7 +889,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                 actions: status.capabilities.account ? (
                   <IconAction
                     label={t('agents.refreshAccount')}
-                    disabled={refreshAccount.phase === 'turning'}
+                    icon={RefreshIcon}
                     busy={refreshAccount.phase === 'turning'}
                     onClick={() => {
                       setAccountError(null)
@@ -953,13 +899,15 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                         )
                         .catch((e: unknown) => setAccountError(errorMessage(e)))
                     }}
-                  >
-                    <RefreshIcon phase={refreshAccount.phase} />
-                  </IconAction>
+                  />
                 ) : undefined,
               }}
             />
-            {accountError && <p className="pb-2 text-hint text-danger">{accountError}</p>}
+            {accountError && (
+              <p className="ui-sg-hint k-error" data-wrap="">
+                {accountError}
+              </p>
+            )}
             <RowGroup>
               {/* A subscription's label is its plan; the other kinds name how the agent signs in. */}
               <Fact
@@ -979,25 +927,21 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                   }
                 >
                   {status.canLogout && status.signIn === 'signed-in' && !status.disabled && (
-                    <Button
+                    <SetButton
                       variant="ghost"
-                      className={cn(ROW_BUTTON, 'text-secondary')}
                       disabled={busy}
                       onClick={() => act(() => request('agents.logout', { agentId: status.id }))}
                     >
                       {t('agents.signOut')}
-                    </Button>
+                    </SetButton>
                   )}
                   {terminalSignIn?.command && hostId === null && (
-                    <Button
-                      className={ROW_BUTTON}
-
-                      variant="outline"
+                    <SetButton
+                      icon={<Icon icon={ComputerTerminal01Icon} size={14} />}
                       onClick={() => signInTerminal(status, terminalSignIn.command!)}
                     >
-                      <SquareTerminalIcon data-icon="inline-start" />
                       {t('agents.signInAgain')}
-                    </Button>
+                    </SetButton>
                   )}
                 </RowFrame>
               )}
@@ -1045,7 +989,7 @@ function EnableGroup({ status }: { status: AgentStatus }) {
     apply({ disabledAgents: disabled ? [...others, status.id] : others })
   }
   return (
-    <section className="flex flex-col pt-4">
+    <section className="k-group">
       <RowGroup>
         <RowShell>
           <RowLine
@@ -1063,7 +1007,7 @@ function EnableGroup({ status }: { status: AgentStatus }) {
             />
           </RowLine>
           {error && (
-            <p role="status" className="-mt-1.5 pb-3.75 text-hint text-pretty text-danger">
+            <p role="status" className="k-row-note k-error" data-wrap="">
               {error}
             </p>
           )}
@@ -1118,18 +1062,17 @@ function ApiKeyRow({ status }: { status: AgentStatus }) {
       }
     >
       <ControlError error={error} />
-      <Button className={ROW_BUTTON} variant="outline" onClick={() => setOpen(true)}>
+      <SetButton onClick={() => setOpen(true)}>
         {t(set ? 'agents.key.replace' : 'agents.key.setButton')}
-      </Button>
+      </SetButton>
       {set && (
-        <Button
+        <SetButton
           variant="ghost"
-          className={GROUP_ACTION}
           disabled={busy}
           onClick={() => act(() => request('agents.clearApiKey', { agentId: status.id }))}
         >
           {t('agents.key.clear')}
-        </Button>
+        </SetButton>
       )}
       <ApiKeyDialog status={status} open={open} onOpenChange={setOpen} />
     </RowFrame>
@@ -1188,16 +1131,21 @@ function ApiKeyDialog({
           </SettingsDialogHeader>
           <SettingsDialogBody>
             <ApiKeyFields status={status} value={value} onChange={setValue} />
-            {error && <p className="text-hint text-danger">{error}</p>}
+            {error && <p className="kettu-sd__error">{error}</p>}
           </SettingsDialogBody>
           <SettingsDialogFooter>
-            <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button type="submit" className={ROW_BUTTON} disabled={!value.key.trim() || busy}>
-              {busy && <Spinner data-icon="inline-start" />}
+            <SetButton
+              size="md"
+              variant="primary"
+              type="submit"
+              loading={busy}
+              disabled={!value.key.trim() && !busy}
+            >
               {t('agents.key.save')}
-            </Button>
+            </SetButton>
           </SettingsDialogFooter>
         </form>
       </SettingsDialogContent>
@@ -1212,20 +1160,16 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
   const details = useAgentsStore((s) => s.details[status.id])
   const version = harnessVersion(status)
   return (
-    <section className="flex flex-col">
+    <section className="k-group" aria-label={t('agents.configuration')}>
       <GroupLabel group={{ id: 'configuration', label: t('agents.configuration') }} />
       <RowGroup>
         <RowFrame text={<RowText name={t('agents.harness')} />}>
-          <span className="text-lede text-secondary">
+          <span className="k-fact">
             {version ? `${status.harnessName} ${version}` : status.harnessName}
           </span>
-          <Button
-            variant="ghost"
-            className={GROUP_ACTION}
-            onClick={() => openHarnessSettings(status.harnessId)}
-          >
+          <SetButton variant="ghost" onClick={() => openHarnessSettings(status.harnessId)}>
             {t('agents.openHarnessButton')}
-          </Button>
+          </SetButton>
         </RowFrame>
         {takesStartMode(status.id) && <StartModeRow key={status.id} status={status} />}
         {details?.config.map((item) => (
@@ -1238,7 +1182,7 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
         ))}
         {details && details.config.length === 0 && (
           <RowShell>
-            <p className="py-3.75 text-group text-tertiary">{t('agents.noConfig')}</p>
+            <p className="ui-ss-empty">{t('agents.noConfig')}</p>
           </RowShell>
         )}
       </RowGroup>
@@ -1281,7 +1225,7 @@ function StartModeRow({ status }: { status: AgentStatus }) {
     <RowShell>
       <RowLine text={<RowText name={name} description={t('agents.startMode.description')} />}>
         {view.state === 'loading' ? (
-          <Skeleton aria-hidden className="h-8 w-50 rounded-xl" />
+          <Skel width={210} className="k-skel--field" />
         ) : (
           <SettingSelect
             label={name}
@@ -1308,13 +1252,7 @@ function StartModeRow({ status }: { status: AgentStatus }) {
         )}
       </RowLine>
       {note && (
-        <p
-          role="status"
-          className={cn(
-            '-mt-1.5 pb-3.75 text-hint text-pretty',
-            error ? 'text-danger' : 'text-tertiary',
-          )}
-        >
+        <p role="status" className={error ? 'k-row-note k-error' : 'k-row-note'} data-wrap="">
           {note}
         </p>
       )}
@@ -1327,7 +1265,7 @@ function DangerGroup({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('settings')
   const [removing, setRemoving] = useState(false)
   return (
-    <section className="flex flex-col pt-4">
+    <section className="k-group">
       <RowGroup>
         {status.color && <ColorRow status={status} />}
         <RowFrame
@@ -1335,13 +1273,9 @@ function DangerGroup({ status }: { status: AgentStatus }) {
             <RowText name={t('agents.remove.name')} description={t('agents.remove.description')} />
           }
         >
-          <Button
-            variant="destructive-outline"
-            className={ROW_BUTTON}
-            onClick={() => setRemoving(true)}
-          >
+          <DangerButton onClick={() => setRemoving(true)}>
             {t('agents.remove.buttonEllipsis')}
-          </Button>
+          </DangerButton>
         </RowFrame>
       </RowGroup>
       <RemoveDialog status={status} open={removing} onOpenChange={setRemoving} />
@@ -1367,7 +1301,7 @@ function ColorRow({ status }: { status: AgentStatus }) {
         onValueChange={(next) => {
           if (isAgentColor(next)) act(() => api.settings.setAgentColor(status.id, next))
         }}
-        className="flex w-auto gap-2.5"
+        className="k-swatches"
       >
         {AGENT_COLORS.map((option) => (
           <RadioGroupItem
@@ -1509,13 +1443,13 @@ function RenameDialog({
               htmlFor="agent-rename"
               hint={
                 (tooLong || error) && (
-                  <span className="text-danger">
+                  <span className="kettu-sd__error">
                     {tooLong ? t('agents.add.nameTooLong', { count: AGENT_NAME_CHARS }) : error}
                   </span>
                 )
               }
             >
-              <Input
+              <input
                 id="agent-rename"
                 value={name}
                 autoFocus
@@ -1532,12 +1466,12 @@ function RenameDialog({
             </SettingsField>
           </SettingsDialogBody>
           <SettingsDialogFooter>
-            <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button type="submit" className={ROW_BUTTON} disabled={!valid || busy}>
+            <SetButton size="md" variant="primary" type="submit" disabled={!valid || busy}>
               {t('agents.rename.save')}
-            </Button>
+            </SetButton>
           </SettingsDialogFooter>
         </form>
       </SettingsDialogContent>

@@ -1,8 +1,8 @@
-import { CircleAlertIcon } from 'lucide-react'
+import { AlertCircleIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentStatus } from '@shared/agent-host'
 import { readiness } from './readiness'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 
@@ -13,44 +13,42 @@ import { cn } from '@renderer/lib/utils'
 export function AgentStateLine({ status, className }: { status: AgentStatus; className?: string }) {
   const { t } = useTranslation('agents')
   const r = readiness(status)
-  const base = cn('inline-flex items-center gap-1.5 text-xs', className)
+  const base = cn('k-state', className)
   switch (r.kind) {
     case 'ready':
       return (
         <Tooltip>
           <TooltipTrigger
-            render={
-              <span role="img" aria-label={t('state.ready')} className={cn(base, 'h-4 px-1')} />
-            }
+            render={<span role="img" aria-label={t('state.ready')} className={base} />}
           >
-            <span className="size-1.5 rounded-full bg-current text-success" />
+            <span className="k-dot" data-tone="ok" />
           </TooltipTrigger>
           <TooltipContent>{t('state.ready')}</TooltipContent>
         </Tooltip>
       )
     case 'sign-in':
       return (
-        <span className={cn(base, 'text-secondary')}>
-          <span aria-hidden className="size-1.5 rounded-full bg-current text-warning" />
+        <span className={base}>
+          <span aria-hidden className="k-dot" data-tone="warn" />
           {t('state.signIn')}
         </span>
       )
     case 'installing':
     case 'starting':
       return (
-        <span className={cn(base, 'text-tertiary')}>
-          <Spinner className={cn('size-3', r.kind === 'installing' && 'text-info')} />
+        <span className={base}>
+          <span aria-hidden className="ui-ss-spinner" />
           {t(`state.${r.kind}`)}
         </span>
       )
     case 'failed':
       return (
-        <span className={cn(base, 'text-danger')}>
-          <CircleAlertIcon className="size-3.5" />
+        <span className={base} data-tone="danger">
+          <Icon icon={AlertCircleIcon} size={14} />
           {t('state.failed')}
         </span>
       )
     case 'missing':
-      return <span className={cn(base, 'text-tertiary')}>{t('state.notAvailable')}</span>
+      return <span className={base}>{t('state.notAvailable')}</span>
   }
 }

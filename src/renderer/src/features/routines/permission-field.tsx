@@ -1,19 +1,13 @@
-// A routine's permission scope as rows of its card: three levels, the web switch, and a caption.
+// A routine's permission scope as a card: three levels to choose from, the web switch, and what
+// its agent keeps to under the card.
 
-import { EyeIcon, InfoIcon, PencilIcon, SquareTerminalIcon, type LucideIcon } from 'lucide-react'
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { PermissionScope } from '@shared/routines'
 import type { AgentId } from '@shared/thread'
-import { RadioGroup, RadioGroupItem } from '@renderer/components/ui/radio-group'
-import { Switch } from '@renderer/components/ui/switch'
-import { cn } from '@renderer/lib/utils'
-import { CARD_ROWS } from './fields'
+import { Row, Toggle } from './kit'
 
-const LEVELS: readonly { level: PermissionScope['level']; icon: LucideIcon }[] = [
-  { level: 'read', icon: EyeIcon },
-  { level: 'edit', icon: PencilIcon },
-  { level: 'commands', icon: SquareTerminalIcon },
-]
+const LEVELS: readonly PermissionScope['level'][] = ['read', 'edit', 'commands']
 
 const CAPTIONS = {
   'claude-code': true,
@@ -36,53 +30,40 @@ export function PermissionField({
   onChange: (scope: PermissionScope) => void
 }) {
   const { t } = useTranslation('routines')
+  const name = useId()
   const caption =
     agentId !== null && hasCaption(agentId) ? t(`permission.caption.${agentId}`) : null
   return (
     <>
-      <RadioGroup
-        aria-label={t('permission.levels')}
-        value={scope.level}
-        onValueChange={(level: PermissionScope['level']) => onChange({ ...scope, level })}
-        className={cn('gap-0', CARD_ROWS)}
-      >
-        {LEVELS.map(({ level, icon: Icon }) => (
+      <div className="ui-sg-card" role="radiogroup" aria-label={t('permission.levels')}>
+        {LEVELS.map((level) => (
           <label
             key={level}
-            className="flex cursor-default items-start gap-3 px-4.5 py-3.25 transition-colors duration-(--duration-fast) not-has-data-checked:hover:bg-hover has-data-checked:bg-control-on-tint"
+            className="ui-sg-row k-radio"
+            data-on={scope.level === level || undefined}
           >
-            <RadioGroupItem value={level} className="mt-0.5" />
-            <span className="flex min-w-0 flex-1 flex-col gap-px">
-              <span className="text-lede leading-5 font-medium">
-                {t(`permission.level.${level}.name`)}
-              </span>
-              <span className="text-hint text-pretty text-tertiary">
-                {t(`permission.level.${level}.description`)}
-              </span>
+            <span className="ui-sg-label">
+              <b>{t(`permission.level.${level}.name`)}</b>
+              <small>{t(`permission.level.${level}.description`)}</small>
             </span>
-            <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-tertiary" />
+            <input
+              type="radio"
+              name={name}
+              checked={scope.level === level}
+              onChange={() => onChange({ ...scope, level })}
+            />
+            <span className="k-radio__mark" aria-hidden="true" />
           </label>
         ))}
-      </RadioGroup>
-      <label className="flex min-h-16.5 cursor-default items-center gap-6 px-4.5 py-3.5">
-        <span className="flex min-w-0 flex-1 flex-col gap-px">
-          <span className="text-lede leading-5 font-medium">{t('permission.web.name')}</span>
-          <span className="text-hint text-pretty text-tertiary">
-            {t('permission.web.description')}
-          </span>
-        </span>
-        <Switch
-          checked={scope.web}
-          onCheckedChange={(web) => onChange({ ...scope, web })}
-          aria-label={t('permission.web.name')}
-        />
-      </label>
-      {caption && (
-        <p className="flex gap-2 px-4.5 py-3 text-hint text-pretty text-tertiary">
-          <InfoIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-          {caption}
-        </p>
-      )}
+        <Row title={t('permission.web.name')} note={t('permission.web.description')}>
+          <Toggle
+            on={scope.web}
+            label={t('permission.web.name')}
+            onChange={(web) => onChange({ ...scope, web })}
+          />
+        </Row>
+      </div>
+      {caption && <p className="ui-sg-hint">{caption}</p>}
     </>
   )
 }

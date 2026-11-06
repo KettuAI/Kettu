@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { XIcon } from 'lucide-react'
+import { XIcon } from './icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { Button, buttonVariants } from '@renderer/components/ui/button'

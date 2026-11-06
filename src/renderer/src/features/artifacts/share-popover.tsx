@@ -2,14 +2,7 @@
 // take it down. Main holds the account and makes every request.
 
 import { useRef, useState } from 'react'
-import {
-  CheckIcon,
-  CloudIcon,
-  CopyIcon,
-  ExternalLinkIcon,
-  GlobeIcon,
-  ShareIcon,
-} from 'lucide-react'
+import { CheckIcon, CloudIcon, CopyIcon, ExternalLinkIcon, GlobeIcon, ShareIcon } from './icons'
 import { useTranslation } from 'react-i18next'
 import { CLOUDFLARE_FREE_WORKERS, type SharingResult } from '@shared/sharing'
 import {

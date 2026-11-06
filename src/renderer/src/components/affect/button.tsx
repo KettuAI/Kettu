@@ -179,7 +179,7 @@ function contentKey(node: ReactNode) {
 
 /* ---------- Styles ---------- */
 
-const css = /* css */ `
+export const css = /* css */ `
 /* Colors and motion as variables – override them on .ui-buttonc (see Theming in the docs) */
 .ui-buttonc {
   --ui-btnc-title: #000;

@@ -1,10 +1,17 @@
 import { useContext, type ReactNode } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import {
+  Alert02Icon,
+  AlertCircleIcon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  CheckmarkCircle02Icon,
+  InformationCircleIcon,
+} from '@hugeicons/core-free-icons'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { cn } from '@renderer/lib/utils'
 import { FlashContext, type GroupDef, type RowDef, type SectionDef } from './model'
 
-/** A section's title in the display face and its one line under it. */
+/** A section's title and its one line under it, as the settings screens draw a page's head. */
 export function PageHeader({
   id,
   title,
@@ -15,22 +22,19 @@ export function PageHeader({
   children?: ReactNode
 }) {
   return (
-    <header className="flex flex-col">
-      <h2 id={id} className="text-section font-semibold tracking-tight text-balance">
+    <header className="k-page-head">
+      <h1 id={id} className="ui-as-page-title">
         {title}
-      </h2>
-      {children && <p className="mt-1.5 mb-1 text-lede text-pretty text-tertiary">{children}</p>}
+      </h1>
+      {children && <p className="ui-as-page-sub k-page-sub">{children}</p>}
     </header>
   )
 }
 
-// A hairline under each row of a card but its last.
-const LINE_UNDER = 'shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]'
-
-/** One group's rows on a card, as affectUI's settings lay them out, a hairline between rows. */
-export function RowGroup({ children }: { children: ReactNode }) {
+/** One group's rows on a card, a hairline between rows. */
+export function RowGroup({ children, label }: { children: ReactNode; label?: string }) {
   return (
-    <div className="rounded-card bg-card px-4 shadow-card [&>[data-setting-row]:last-child]:shadow-none">
+    <div className="ui-sg-card" role={label ? 'group' : undefined} aria-label={label}>
       {children}
     </div>
   )
@@ -46,25 +50,23 @@ export function SectionBody({ section }: { section: SectionDef }) {
     else groups.push({ group: row.group, rows: [row] })
   }
   return (
-    <div className="flex flex-col">
+    <div className="k-groups">
       {groups.map(({ group, rows }, i) => (
-        <section key={group?.id ?? i} aria-label={group?.label} className="flex flex-col">
-          {group && !group.unlabeled ? (
-            <GroupLabel group={group} first={i === 0} />
-          ) : (
-            <div className="h-4" />
-          )}
+        <section key={group?.id ?? i} aria-label={group?.label} className="k-group">
+          {group && !group.unlabeled && <GroupLabel group={group} />}
           {group?.plain ? (
-            rows.map((row) => (
-              <RowShell key={row.id} id={row.id} bare>
-                {row.render(null)}
-              </RowShell>
-            ))
+            <div className="k-plain">
+              {rows.map((row) => (
+                <RowShell key={row.id} id={row.id}>
+                  {row.render(null)}
+                </RowShell>
+              ))}
+            </div>
           ) : (
             <RowGroup>
               {rows.map((row) =>
                 row.layout === 'custom' || row.layout === 'bare' ? (
-                  <RowShell key={row.id} id={row.id} plain bare={row.layout === 'bare'}>
+                  <RowShell key={row.id} id={row.id}>
                     {row.render(
                       row.layout === 'bare' ? (
                         <RowText name={row.name} description={row.rich ?? row.description} />
@@ -86,22 +88,46 @@ export function SectionBody({ section }: { section: SectionDef }) {
 
 /** A line under a group's rows, as `GroupDef.note` takes it. */
 export function GroupNote({ children }: { children: ReactNode }) {
-  return <p className="mt-2.5 text-hint text-pretty text-tertiary">{children}</p>
+  return <p className="ui-sg-hint">{children}</p>
 }
 
-/** A group's heading, with its count after it and its actions at the end. */
-/** `first`: right under the page's description, whose 4 px below it count toward the 32 above. */
-export function GroupLabel({ group, first }: { group: GroupDef; first?: boolean }) {
+/** A group's heading, its count after it and its actions at the end, as affectUI's section heads. */
+export function GroupLabel({ group }: { group: GroupDef; first?: boolean }) {
+  const title = (
+    <h2>
+      {group.label}
+      {group.count !== undefined && <span className="k-num">· {group.count}</span>}
+    </h2>
+  )
+  if (!group.actions) return <header className="ui-sg-head">{title}</header>
   return (
-    <div className={cn('mb-2 flex min-h-7.5 items-center gap-2', first ? 'mt-7' : 'mt-8')}>
-      <h3 className="text-subheading font-medium">{group.label}</h3>
-      {group.count !== undefined && (
-        <span className="text-group text-tertiary tabular">{group.count}</span>
-      )}
-      {group.actions && (
-        <span className="ml-auto flex items-center gap-1 font-normal">{group.actions}</span>
-      )}
-    </div>
+    <header className="ui-sg-head ui-ss-head">
+      <span>{title}</span>
+      <span className="k-head-actions">{group.actions}</span>
+    </header>
+  )
+}
+
+/** A group of rows outside the section data: its head, its card and what goes under it. */
+export function Group({
+  label,
+  count,
+  actions,
+  note,
+  children,
+}: {
+  label?: string
+  count?: number
+  actions?: ReactNode
+  note?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <section aria-label={label} className="k-group">
+      {label && <GroupLabel group={{ id: label, label, count, actions }} />}
+      <RowGroup>{children}</RowGroup>
+      {note}
+    </section>
   )
 }
 
@@ -110,7 +136,7 @@ function Row({ row }: { row: RowDef }) {
   if (row.layout === 'block') {
     return (
       <RowShell id={row.id}>
-        <div className="py-3.75">{row.render(text)}</div>
+        <div className="k-block">{row.render(text)}</div>
       </RowShell>
     )
   }
@@ -121,58 +147,51 @@ function Row({ row }: { row: RowDef }) {
   )
 }
 
-/**
- * A row with its hairline under it. `plain` rows draw their own padding, as an item's row does;
- * `bare` ones draw everything, the line included.
- */
+/** A row on a card, with the light a search result leaves on it. */
 export function RowShell({
   id,
-  plain,
-  bare,
   children,
 }: {
   id?: string
+  /** Kept for callers; every row draws its own padding now. */
   plain?: boolean
   bare?: boolean
   children: ReactNode
 }) {
   const flash = useContext(FlashContext)
   return (
-    <div data-setting-row={id} className={cn('relative', !bare && LINE_UNDER)}>
-      {id && (
-        <span
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute -inset-x-2 inset-y-0 rounded-lg bg-mark opacity-0 transition-opacity duration-(--duration-slower)',
-            bare && '-inset-2 rounded-xl',
-            flash === id && 'opacity-100',
-          )}
-        />
-      )}
-      <div className={cn('relative', plain && 'rounded-[inherit]')}>{children}</div>
+    <div data-setting-row={id} className="k-row">
+      {id && <span aria-hidden className="k-flash" data-on={flash === id || undefined} />}
+      {children}
     </div>
   )
 }
 
 export function RowText({ name, description }: { name: ReactNode; description?: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col">
-      <span className="text-label leading-[normal]">{name}</span>
-      {description && (
-        <span className="mt-0.75 text-group leading-normal text-pretty text-tertiary">
-          {description}
-        </span>
-      )}
+    <span className="ui-sg-label">
+      <b>{name}</b>
+      {description && <small>{description}</small>}
+    </span>
+  )
+}
+
+/** A row's line: its text on the left, its control on the right. */
+export function RowLine({ text, children }: { text: ReactNode; children?: ReactNode }) {
+  return (
+    <div className="ui-sg-row">
+      {text}
+      {children && <span className="ui-sg-control">{children}</span>}
     </div>
   )
 }
 
-/** A row's first line: its text on the left, its control on the right. */
-export function RowLine({ text, children }: { text: ReactNode; children?: ReactNode }) {
+/** A block row's first line, for a row that puts more under it. */
+export function BlockLine({ text, children }: { text: ReactNode; children?: ReactNode }) {
   return (
-    <div className="flex items-center gap-x-7 gap-y-3 py-3.75">
-      <div className="min-w-0 flex-[1_1_280px]">{text}</div>
-      {children && <div className="flex shrink-0 items-center gap-2">{children}</div>}
+    <div className="k-line">
+      {text}
+      {children && <span className="ui-sg-control">{children}</span>}
     </div>
   )
 }
@@ -189,19 +208,36 @@ export function RowFrame({ text, children }: { text: ReactNode; children?: React
 /** The light a search result leaves on what it led to, for a part of a page outside the rows. */
 export function FlashMark({ id }: { id: string }) {
   const flash = useContext(FlashContext)
+  return <span aria-hidden className="k-flash" data-on={flash === id || undefined} />
+}
+
+/** A thing's mark and its lines: an agent, a host, a device, a server. The mark is 24 px, unframed. */
+export function Thing({
+  mark,
+  name,
+  children,
+}: {
+  mark: ReactNode
+  /** The first line, with what follows the name, such as a badge. */
+  name: ReactNode
+  /** The lines under it. */
+  children?: ReactNode
+}) {
   return (
-    <span
-      aria-hidden
-      className={cn(
-        'pointer-events-none absolute -inset-2 rounded-xl bg-mark opacity-0 transition-opacity duration-(--duration-slower)',
-        flash === id && 'opacity-100',
-      )}
-    />
+    <span className="k-thing">
+      <span className="k-mark" aria-hidden>
+        {mark}
+      </span>
+      <span className="ui-sg-label k-lines">
+        <b className="k-row-title">{name}</b>
+        {children}
+      </span>
+    </span>
   )
 }
 
 /**
- * A row of an item that opens a page of its own, such as an agent's or a server's: its tile, the
+ * A row of an item that opens a page of its own, such as an agent's or a server's: its mark, the
  * name with what follows it, the lines under it and what sits at its end. The whole row opens it.
  */
 export function ItemRow({
@@ -218,43 +254,43 @@ export function ItemRow({
   tile: ReactNode
   /** The name line's content, before the row's end. */
   name: ReactNode
-  /** The state and the chevron at the row's end. */
+  /** The state at the row's end, before the arrow. */
   right?: ReactNode
   /** The lines under the name. */
   children?: ReactNode
   onOpen: () => void
 }) {
   return (
-    <div className="relative flex items-center gap-3.5 py-3.25">
+    <div className="ui-sg-row k-item">
       {/* Buttons cannot nest, so the row opens through a button laid under its content. */}
       <button
         type="button"
         data-item-row={item}
         aria-label={label}
         onClick={onOpen}
-        className="absolute -inset-x-2 inset-y-px rounded-lg outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-ring"
+        className="k-hit"
       />
-      <span className="pointer-events-none relative">{tile}</span>
-      <div className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="flex min-w-0 items-center gap-2 text-label leading-[normal]">{name}</div>
+      <Thing mark={tile} name={name}>
         {children}
-      </div>
-      <div className="pointer-events-none relative flex shrink-0 items-center gap-2">
+      </Thing>
+      <span className="k-end">
         {right}
-        <ChevronRightIcon strokeWidth={1.6} className="size-3.5 text-tertiary" />
-      </div>
+        <span className="k-chevron">
+          <Icon icon={ArrowRight01Icon} size={14} />
+        </span>
+      </span>
     </div>
   )
 }
 
 /** A line under an item row's name, in the quiet small role. */
 export function ItemLine({ children }: { children: ReactNode }) {
-  return <span className="truncate text-group leading-[normal] text-tertiary">{children}</span>
+  return <small>{children}</small>
 }
 
 /**
- * An item page's header: the way back to its list and the title. The 40 px tile sits under the
- * title, with what the item is beside it, unless `iconFirst` puts the tile in front of the title.
+ * An item page's header: the way back to its list, then the item's mark, its title and what it
+ * is, its state under that, and its actions at the end.
  */
 export function ItemPageHeader({
   back,
@@ -265,60 +301,50 @@ export function ItemPageHeader({
   subtitle,
   children,
   actions,
-  iconFirst,
 }: {
   back: string
   onBack: () => void
   item: string
   icon: ReactNode
   title: ReactNode
-  /** What the item is, beside the tile, such as its harness and how it signs in. */
+  /** What the item is, such as its harness and how it signs in. */
   subtitle?: ReactNode
   /** The state line under it. */
   children?: ReactNode
   actions?: ReactNode
-  /** The tile leads the title, instead of sitting on the line under it. */
+  /** Kept for callers: the mark always leads the title. */
   iconFirst?: boolean
 }) {
   return (
     <>
-      <button
-        type="button"
-        onClick={onBack}
-        className="mb-3 inline-flex w-max items-center gap-1 rounded-md text-group leading-[normal] text-tertiary outline-none transition-colors duration-(--duration-fast) hover:text-primary focus-ring"
-      >
-        <ChevronLeftIcon className="size-3.5" />
+      <button type="button" onClick={onBack} className="k-back">
+        <Icon icon={ArrowLeft01Icon} size={14} />
         {back}
       </button>
-      <header data-setting-row={item} className="relative flex flex-col">
+      <header data-setting-row={item} className="k-item-head">
         <FlashMark id={item} />
-        {!iconFirst && (
-          <h2 className="relative flex min-w-0 font-display text-section font-semibold">{title}</h2>
-        )}
-        {/* 10 px under a title: a page title's 6 px and the 4 px its description would leave. */}
-        <div className={cn('relative flex items-center gap-3.5', !iconFirst && 'mt-2.5')}>
-          <span className="relative grid size-10 shrink-0 place-items-center">{icon}</span>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            {iconFirst && (
-              <h2 className="flex min-w-0 font-display text-section font-semibold">{title}</h2>
-            )}
-            {subtitle && (
-              <div className="flex min-w-0 items-center gap-1.5 text-label">{subtitle}</div>
-            )}
-            {children && (
-              <div className="flex min-w-0 items-center gap-1.75 text-hint text-secondary">
-                {children}
-              </div>
-            )}
-          </div>
-          {actions && <div className="flex shrink-0 items-center gap-1.5">{actions}</div>}
+        <span className="k-item-head__mark" aria-hidden>
+          {icon}
+        </span>
+        <div className="k-item-head__text">
+          <h1 className="ui-as-page-title">{title}</h1>
+          {subtitle && <div className="k-item-head__sub">{subtitle}</div>}
+          {children && <div className="k-item-head__state">{children}</div>}
         </div>
+        {actions && <div className="k-item-head__actions">{actions}</div>}
       </header>
     </>
   )
 }
 
-/** A notice under an item's title: its icon and words, an action at its end, more under it. */
+const NOTICE_ICON = {
+  info: InformationCircleIcon,
+  success: CheckmarkCircle02Icon,
+  warning: Alert02Icon,
+  error: AlertCircleIcon,
+} as const
+
+/** A notice: its icon and words, an action at its end, more under it, on the settings' gray block. */
 export function Notice({
   variant,
   icon,
@@ -326,25 +352,36 @@ export function Notice({
   action,
   children,
   more,
+  className,
 }: {
   variant: 'info' | 'success' | 'warning' | 'error'
-  icon: ReactNode
+  /** In place of the variant's icon, such as a spinner while a task runs. */
+  icon?: ReactNode
   title: ReactNode
   action?: ReactNode
   children?: ReactNode
   more?: ReactNode
+  className?: string
 }) {
   return (
-    <Alert variant={variant}>
-      {icon}
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <AlertTitle>{title}</AlertTitle>
-          {children && <AlertDescription>{children}</AlertDescription>}
+    <div
+      role={variant === 'error' ? 'alert' : undefined}
+      className={cn('k-notice', className)}
+      data-tone={variant}
+    >
+      <span className="k-notice__icon">
+        {icon ?? <Icon icon={NOTICE_ICON[variant]} size={16} />}
+      </span>
+      <div className="k-notice__body">
+        <div className="k-notice__line">
+          <div className="k-notice__text">
+            <b>{title}</b>
+            {children && <div className="k-notice__desc">{children}</div>}
+          </div>
+          {action && <div className="k-notice__action">{action}</div>}
         </div>
-        {action && <div className="-my-1 flex shrink-0 items-center gap-1.5">{action}</div>}
+        {more && <div className="k-notice__more">{more}</div>}
       </div>
-      {more && <div className="col-start-2 mt-2.5 flex min-w-0 flex-col gap-2.5">{more}</div>}
-    </Alert>
+    </div>
   )
 }

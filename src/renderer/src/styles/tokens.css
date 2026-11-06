@@ -346,6 +346,66 @@
   --shell-dialog-shadow:
     inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 28%),
     0 4px 12px rgb(0 0 0 / 6%);
+
+  /* settings: the Settings modal, in affectUI's look. */
+  --settings-scrim: rgb(0 0 0 / 12%);
+  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+  --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 25%);
+  --settings-warn-bg: rgb(217 119 6 / 10%);
+  --settings-warn-ink: #b45309;
+  --settings-term-bg: #17181c;
+  --settings-term-ink: #e6e6e6;
+  --settings-term-faint: #8a8a8a;
+  --settings-term-path: #7fa8e8;
+  --settings-term-branch: #c79bf2;
+  --settings-term-ok: #5bb98a;
+
+  /* pages: Routines, Usage and Artifacts on affectUI. A routine waiting for approval in amber:
+     its text, its dot and halo, and its notice's tint and edge. */
+  --tone-amber: #b45309;
+  --tone-amber-dot: #f59e0b;
+  --tone-amber-halo: rgb(245 158 11 / 18%);
+  --tone-amber-fill: rgb(245 158 11 / 8%);
+  --tone-amber-edge: rgb(245 158 11 / 35%);
+  /* What failed: a run, a routine, a notice's tint and edge. */
+  --tone-red: #dc2626;
+  --tone-red-fill: rgb(220 38 38 / 6%);
+  --tone-red-edge: rgb(220 38 38 / 30%);
+  /* A run that succeeded, and what the prompt cache saved. */
+  --tone-green: #16a34a;
+  /* An artifact an agent is editing now: its dot and halo. */
+  --tone-editing: #22a06b;
+  --tone-editing-halo: rgb(34 160 107 / 20%);
+  /* Plan limits: a figure at 70 and at 90 percent, and the chip of a plan that could not be read. */
+  --plan-warn-text: #b77a00;
+  --plan-bad-text: #d1342f;
+  --plan-bad-chip: rgb(220 63 58 / 10%);
+  --plan-bad-chip-text: #c9302b;
+  /* Usage's time of day, its busiest hour, and the activity grid's four steps. */
+  --tod-bar: #b3cff6;
+  --tod-peak: #3c85e9;
+  --activity-1: #d6e5fb;
+  --activity-2: #9fc2f4;
+  --activity-3: #5f9bec;
+  --activity-4: #2f6fd6;
+  /* The hairline a gray tray takes beside white controls, and a hover card's drop. */
+  --tray-edge: rgb(0 0 0 / 6%);
+  --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
+  /* An artifact kind's sketch: its accent, and white on it. */
+  --sketch-accent: #2f6bff;
+  --sketch-on-accent: #ffffff;
+  --sketch-on-accent-soft: rgb(255 255 255 / 55%);
+  --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+  /* Usage's lines and parts per agent, in the agents' order. */
+  --series-1: #2f6bff;
+  --series-2: #8b5cf6;
+  --series-3: #14b8a6;
+  --series-4: #f59e0b;
+  --series-5: #ec4899;
+  --series-6: #64748b;
+  /* A project's folder: its tab and its front. */
+  --pages-folder-tab: #00a1ff;
+  --pages-folder-front: #3cc7ff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -585,6 +645,56 @@
     --shell-dialog-shadow:
       inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
       0 4px 12px rgb(0 0 0 / 30%);
+
+    /* settings: the Settings modal, in affectUI's look. */
+    --settings-scrim: rgb(0 0 0 / 45%);
+    --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+    --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
+    --settings-warn-bg: rgb(251 191 36 / 12%);
+    --settings-warn-ink: #fbbf24;
+    --settings-term-bg: #17181c;
+    --settings-term-ink: #e6e6e6;
+    --settings-term-faint: #8a8a8a;
+    --settings-term-path: #7fa8e8;
+    --settings-term-branch: #c79bf2;
+    --settings-term-ok: #5bb98a;
+
+    /* pages: Routines, Usage and Artifacts on affectUI. */
+    --tone-amber: #fbbf24;
+    --tone-amber-dot: #f59e0b;
+    --tone-amber-halo: rgb(245 158 11 / 18%);
+    --tone-amber-fill: rgb(245 158 11 / 8%);
+    --tone-amber-edge: rgb(245 158 11 / 35%);
+    --tone-red: #f87171;
+    --tone-red-fill: rgb(248 113 113 / 8%);
+    --tone-red-edge: rgb(248 113 113 / 30%);
+    --tone-green: #16a34a;
+    --tone-editing: #22a06b;
+    --tone-editing-halo: rgb(34 160 107 / 20%);
+    --plan-warn-text: #e0b03a;
+    --plan-bad-text: #f0716b;
+    --plan-bad-chip: rgb(229 96 90 / 16%);
+    --plan-bad-chip-text: #f0716b;
+    --tod-bar: #b3cff6;
+    --tod-peak: #3c85e9;
+    --activity-1: #1d3354;
+    --activity-2: #27508a;
+    --activity-3: #5f9bec;
+    --activity-4: #2f6fd6;
+    --tray-edge: rgb(255 255 255 / 10%);
+    --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
+    --sketch-accent: #2f6bff;
+    --sketch-on-accent: #ffffff;
+    --sketch-on-accent-soft: rgb(255 255 255 / 55%);
+    --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+    --series-1: #2f6bff;
+    --series-2: #8b5cf6;
+    --series-3: #14b8a6;
+    --series-4: #f59e0b;
+    --series-5: #ec4899;
+    --series-6: #64748b;
+    --pages-folder-tab: #00a1ff;
+    --pages-folder-front: #3cc7ff;
   }
 }
 
@@ -823,6 +933,56 @@
   --shell-dialog-shadow:
     inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
     0 4px 12px rgb(0 0 0 / 30%);
+
+  /* settings: the Settings modal, in affectUI's look. */
+  --settings-scrim: rgb(0 0 0 / 45%);
+  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+  --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
+  --settings-warn-bg: rgb(251 191 36 / 12%);
+  --settings-warn-ink: #fbbf24;
+  --settings-term-bg: #17181c;
+  --settings-term-ink: #e6e6e6;
+  --settings-term-faint: #8a8a8a;
+  --settings-term-path: #7fa8e8;
+  --settings-term-branch: #c79bf2;
+  --settings-term-ok: #5bb98a;
+
+  /* pages: Routines, Usage and Artifacts on affectUI. */
+  --tone-amber: #fbbf24;
+  --tone-amber-dot: #f59e0b;
+  --tone-amber-halo: rgb(245 158 11 / 18%);
+  --tone-amber-fill: rgb(245 158 11 / 8%);
+  --tone-amber-edge: rgb(245 158 11 / 35%);
+  --tone-red: #f87171;
+  --tone-red-fill: rgb(248 113 113 / 8%);
+  --tone-red-edge: rgb(248 113 113 / 30%);
+  --tone-green: #16a34a;
+  --tone-editing: #22a06b;
+  --tone-editing-halo: rgb(34 160 107 / 20%);
+  --plan-warn-text: #e0b03a;
+  --plan-bad-text: #f0716b;
+  --plan-bad-chip: rgb(229 96 90 / 16%);
+  --plan-bad-chip-text: #f0716b;
+  --tod-bar: #b3cff6;
+  --tod-peak: #3c85e9;
+  --activity-1: #1d3354;
+  --activity-2: #27508a;
+  --activity-3: #5f9bec;
+  --activity-4: #2f6fd6;
+  --tray-edge: rgb(255 255 255 / 10%);
+  --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
+  --sketch-accent: #2f6bff;
+  --sketch-on-accent: #ffffff;
+  --sketch-on-accent-soft: rgb(255 255 255 / 55%);
+  --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+  --series-1: #2f6bff;
+  --series-2: #8b5cf6;
+  --series-3: #14b8a6;
+  --series-4: #f59e0b;
+  --series-5: #ec4899;
+  --series-6: #64748b;
+  --pages-folder-tab: #00a1ff;
+  --pages-folder-front: #3cc7ff;
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of

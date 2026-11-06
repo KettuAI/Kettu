@@ -5,7 +5,22 @@ import {
   PresentationIcon,
   type LucideIcon,
 } from 'lucide-react'
+import {
+  File01Icon,
+  Globe02Icon,
+  PaintBoardIcon,
+  Presentation01Icon,
+} from '@hugeicons/core-free-icons'
+import type { MenuItem } from '@renderer/components/affect/app-shell'
 import type { ArtifactKind } from './model'
+
+/** Each kind's icon on the Artifacts page: its tabs, menus and the kinds to ask for. */
+export const KIND_ICON: Record<ArtifactKind, NonNullable<MenuItem['icon']>> = {
+  document: File01Icon,
+  slides: Presentation01Icon,
+  web: Globe02Icon,
+  canvas: PaintBoardIcon,
+}
 
 /**
  * Each kind's icon, and its color and tint, which only its icon and the grounds of its tile and

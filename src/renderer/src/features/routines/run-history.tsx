@@ -1,18 +1,17 @@
-// A routine's runs, newest first under its next run: what each did, how long, and its session.
+// A routine's runs beside its settings, newest first under its next run: what each did, how
+// long, and its session.
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { CalendarIcon, CircleAlertIcon, HistoryIcon } from 'lucide-react'
+import { Alert02Icon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { RoutineView } from '@shared/routines'
-import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
-import { Button } from '@renderer/components/ui/button'
-import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
-import { CARD_ROWS, GroupHeading } from './fields'
+import { Notice } from './kit'
 import {
   runDay,
   runDuration,
@@ -21,27 +20,24 @@ import {
   runSummary,
   runsHint,
   runTime,
+  runTone,
   runTrigger,
   untilTime,
   type RunEntry,
 } from './model'
 import { RunMark } from './run-mark'
 
-const RUN_ROW = 'flex w-full items-start gap-2.75 px-4 py-3 text-left'
-
-/** The mark's slot: as wide as an icon, as tall as the row's first line. */
-const MARK_SLOT = 'grid h-5 w-4 shrink-0 place-items-center'
-
-/** The Runs card: its heading and count over the card, empty or loading or listing. */
+/** The Runs card: its head and count, then its next run and its runs, or why there are none. */
 export function RunsCard({ count, children }: { count?: number; children: ReactNode }) {
   const { t } = useTranslation('routines')
   return (
-    <section aria-label={t('routine.runs')}>
-      <GroupHeading title={t('routine.runs')} hint={count ? String(count) : undefined} />
-      <div className={cn('overflow-hidden rounded-card bg-card shadow-card', CARD_ROWS)}>
-        {children}
-      </div>
-    </section>
+    <aside className="ui-sg-card k-runs" aria-label={t('routine.runs')}>
+      <header className="k-runs__head">
+        <b>{t('routine.runs')}</b>
+        <span className="ui-as-section-head__count">{count ?? 0}</span>
+      </header>
+      {children}
+    </aside>
   )
 }
 
@@ -49,15 +45,22 @@ export function RunsCard({ count, children }: { count?: number; children: ReactN
 export function RunsEmpty({ hint }: { hint: string }) {
   const { t } = useTranslation('routines')
   return (
-    <div className="flex flex-col items-center px-6 pt-7 pb-7 text-center">
-      <span
-        aria-hidden
-        className="grid size-8 place-items-center rounded-lg bg-subtle text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
-      >
-        <HistoryIcon className="size-4" />
-      </span>
-      <p className="mt-3 text-control font-semibold">{t('routine.noRunsTitle')}</p>
-      <p className="mt-1 max-w-70 text-hint text-pretty text-tertiary">{hint}</p>
+    <div className="k-runs__empty">
+      <b>{t('routine.noRunsTitle')}</b>
+      <span>{hint}</span>
+    </div>
+  )
+}
+
+/** The next run, in the card's gray line. */
+function NextRun({ at, now }: { at: number; now: number }) {
+  const { t } = useTranslation('routines')
+  return (
+    <div className="k-runs__next">
+      <Icon icon={Clock01Icon} size={14} />
+      <span>{t('routine.next')}</span>
+      <b className="k-num">{runDay(at, now)}</b>
+      <small>{untilTime(at, now)}</small>
     </div>
   )
 }
@@ -82,13 +85,13 @@ export function RunHistory({ routine }: { routine: RoutineView }) {
     return (
       <RunsCard count={routine.runs}>
         {[0, 1, 2].map((i) => (
-          <div key={i} aria-hidden className={RUN_ROW}>
-            <span className={MARK_SLOT}>
-              <Skeleton className="size-3.5 rounded-full" />
+          <div key={i} aria-hidden className="k-run">
+            <span className="k-run__mark">
+              <span className="k-bone" style={{ width: 12, height: 12 }} />
             </span>
-            <span className="flex min-w-0 flex-1 flex-col gap-2 py-1">
-              <Skeleton className="h-3 w-36" />
-              <Skeleton className="h-2.5 w-3/4" />
+            <span className="k-run__body" style={{ gap: 8, paddingBlock: 4 }}>
+              <span className="k-bone" style={{ width: 140 }} />
+              <span className="k-bone" style={{ width: '75%', height: 8 }} />
             </span>
           </div>
         ))}
@@ -99,21 +102,23 @@ export function RunHistory({ routine }: { routine: RoutineView }) {
   if (state.error) {
     return (
       <RunsCard count={routine.runs}>
-        <div className="p-2">
-          <Alert variant="error" className="has-data-[slot=alert-action]:pr-28">
-            <CircleAlertIcon />
-            <AlertTitle>{t('routine.runsFailed')}</AlertTitle>
-            <AlertDescription>{state.error}</AlertDescription>
-            <AlertAction className="top-1/2 right-3.5 -translate-y-1/2">
+        <div className="k-runs__error">
+          <Notice
+            tone="red"
+            mark={<Icon icon={Alert02Icon} size={16} />}
+            title={t('routine.runsFailed')}
+            action={
               <Button
-                variant="outline"
                 size="sm"
+                variant="secondary"
                 onClick={() => void useRoutinesStore.getState().loadRuns(routine.id)}
               >
                 {t('page.retry')}
               </Button>
-            </AlertAction>
-          </Alert>
+            }
+          >
+            {state.error}
+          </Notice>
         </div>
       </RunsCard>
     )
@@ -122,6 +127,7 @@ export function RunHistory({ routine }: { routine: RoutineView }) {
   if (state.items.length === 0) {
     return (
       <RunsCard>
+        {routine.nextRunAt !== null && <NextRun at={routine.nextRunAt} now={now} />}
         <RunsEmpty hint={runsHint(routine, now)} />
       </RunsCard>
     )
@@ -130,22 +136,7 @@ export function RunHistory({ routine }: { routine: RoutineView }) {
   const activeId = routine.activeRun?.id
   return (
     <RunsCard count={routine.runs}>
-      {routine.nextRunAt !== null && (
-        <div className={RUN_ROW}>
-          <span className={MARK_SLOT}>
-            <CalendarIcon aria-hidden className="size-4 text-tertiary" />
-          </span>
-          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-            <span className="truncate text-control leading-5 font-medium text-secondary">
-              {runDay(routine.nextRunAt, now)}
-            </span>
-            <span className="shrink-0 text-meta text-tertiary">{t('routine.next')}</span>
-            <span className="ml-auto shrink-0 pl-2 text-meta text-tertiary">
-              {untilTime(routine.nextRunAt, now)}
-            </span>
-          </span>
-        </div>
-      )}
+      {routine.nextRunAt !== null && <NextRun at={routine.nextRunAt} now={now} />}
       {runEntries(state.items).map((entry) => (
         <RunRow
           key={entry.run.id}
@@ -156,19 +147,19 @@ export function RunHistory({ routine }: { routine: RoutineView }) {
         />
       ))}
       {state.older !== null && (
-        <div className="flex items-center justify-between gap-3 py-2 pr-2.5 pl-4 text-hint text-tertiary">
-          <span className="tabular">
+        <footer className="k-runs__foot">
+          <span className="k-num">
             {t('routine.runsShown', { shown: state.items.length, total: routine.runs })}
           </span>
-          <Button
-            variant="quiet"
-            size="sm"
+          <button
+            type="button"
+            className="k-rs__link"
             disabled={state.loading}
             onClick={() => void useRoutinesStore.getState().loadRuns(routine.id, true)}
           >
             {t('routine.showMore')}
-          </Button>
-        </div>
+          </button>
+        </footer>
       )}
     </RunsCard>
   )
@@ -192,65 +183,44 @@ function RunRow({
   const session = run.session ?? live ?? null
   const time = runTime(run, now)
   const took = runDuration(run, now)
-  const failed = run.status === 'failed' || run.status === 'timed_out'
-  const quiet =
-    run.status === 'skipped' || run.status === 'cancelled' || run.status === 'interrupted'
-  const animation = fresh
-    ? 'animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-slow) ease-out-quint'
-    : undefined
+  const trigger = skipped > 1 ? t('run.skippedTimes', { count: skipped }) : runTrigger(run)
 
   const body = (
     <>
-      <span className={MARK_SLOT}>
+      <span className="k-run__mark">
         <RunMark status={run.status} />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="flex min-w-0 items-baseline gap-1.5">
-          <span className="truncate text-control leading-5 font-medium text-primary">
-            {time ?? runStatus(run)}
+      <span className="k-run__body">
+        <span className="k-run__top">
+          <b>{time ?? runStatus(run)}</b>
+          <span>
+            {trigger}
+            {took && ` · ${took}`}
           </span>
-          <span className="shrink-0 text-meta text-tertiary">
-            {skipped > 1 ? t('run.skippedTimes', { count: skipped }) : runTrigger(run)}
-          </span>
-          {took && (
-            <span className="ml-auto shrink-0 pl-2 font-mono text-caption leading-5 whitespace-nowrap text-tertiary tabular">
-              {took}
-            </span>
-          )}
         </span>
-        {time !== null && (
-          <span
-            className={cn(
-              'line-clamp-2 text-hint text-secondary',
-              failed && 'text-danger',
-              quiet && 'text-tertiary',
-            )}
-          >
-            {runSummary(run)}
-          </span>
-        )}
+        {time !== null && <span className="k-run__line">{runSummary(run)}</span>}
       </span>
     </>
   )
 
-  const lit = active && 'bg-control-on-tint'
-  if (!session) return <div className={cn(RUN_ROW, lit, animation)}>{body}</div>
+  const marks = {
+    'data-tone': runTone(run.status),
+    'data-active': active || undefined,
+    'data-fresh': fresh || undefined,
+  }
+  if (!session)
+    return (
+      <div className="k-run" {...marks}>
+        {body}
+      </div>
+    )
 
   const open = () => {
     useSessionsStore.getState().upsert(session)
     openSession(session.id, session.projectPath)
   }
   return (
-    <button
-      type="button"
-      onClick={open}
-      className={cn(
-        RUN_ROW,
-        'transition-colors duration-(--duration-fast) outline-none focus-ring focus-visible:-outline-offset-2',
-        lit || 'hover:bg-hover',
-        animation,
-      )}
-    >
+    <button type="button" className="k-run" onClick={open} {...marks}>
       {body}
     </button>
   )

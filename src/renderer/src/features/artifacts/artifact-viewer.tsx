@@ -8,7 +8,7 @@ import {
   HistoryIcon,
   PlayIcon,
   TrashIcon,
-} from 'lucide-react'
+} from './icons'
 import { useTranslation } from 'react-i18next'
 import { backTo } from '@renderer/app/history'
 import { Button } from '@renderer/components/ui/button'

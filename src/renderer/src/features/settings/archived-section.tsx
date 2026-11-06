@@ -3,15 +3,14 @@ import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { unarchiveSession } from '@renderer/app/actions'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
-import { Button } from '@renderer/components/ui/button'
 import { toast } from '@renderer/components/ui/toast'
 import { DeleteSessionDialog } from '@renderer/features/sidebar/session-menu'
 import { errorMessage } from '@renderer/lib/host'
 import { mediumAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { sessionTitle } from '@renderer/stores/sessions'
-import { ItemLine } from './rows'
-import { ControlError, GROUP_ACTION, ROW_BUTTON } from './controls'
+import { ItemLine, Thing } from './rows'
+import { ControlError, DangerButton, SetButton } from './controls'
 
 export function ArchivedRow({ summary, where }: { summary: SessionSummary; where: string }) {
   const { t } = useTranslation('settings')
@@ -29,26 +28,23 @@ export function ArchivedRow({ summary, where }: { summary: SessionSummary; where
     }
   }
   return (
-    <div className="flex items-center gap-3.5 py-3.25">
-      <AgentTile agent={summary.agentId} size={22} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-[normal]">{title}</span>
+    <div className="ui-sg-row">
+      <Thing
+        mark={<AgentTile agent={summary.agentId} size={32} />}
+        name={<span className="k-name">{title}</span>}
+      >
         <ItemLine>
           {t('archived.description', {
             project: where,
             when: summary.archivedAt ? mediumAgo(summary.archivedAt, now) : '',
           })}
         </ItemLine>
-      </div>
+      </Thing>
       <ControlError error={error} />
-      <div className="flex shrink-0 items-center gap-2">
-        <Button className={ROW_BUTTON} variant="outline" onClick={() => void restore()}>
-          {t('archived.restore')}
-        </Button>
-        <Button variant="ghost" className={GROUP_ACTION} onClick={() => setDeleting(true)}>
-          {t('archived.delete')}
-        </Button>
-      </div>
+      <span className="ui-sg-control">
+        <SetButton onClick={() => void restore()}>{t('archived.restore')}</SetButton>
+        <DangerButton onClick={() => setDeleting(true)}>{t('archived.delete')}</DangerButton>
+      </span>
       <DeleteSessionDialog
         sessionId={summary.id}
         title={title}

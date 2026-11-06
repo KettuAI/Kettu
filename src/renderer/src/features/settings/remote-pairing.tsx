@@ -8,20 +8,18 @@ import {
   type RefObject,
 } from 'react'
 import {
-  CheckIcon,
-  CircleAlertIcon,
-  CircleXIcon,
-  ClockIcon,
-  CopyIcon,
-  RotateCwIcon,
-} from 'lucide-react'
+  AlertCircleIcon,
+  CancelCircleIcon,
+  Clock01Icon,
+  Copy01Icon,
+  RefreshIcon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
 import type { PairingEnd, PairingState } from '@shared/remote/pairing'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
-import { Input } from '@renderer/components/ui/input'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { countdown } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
@@ -29,7 +27,7 @@ import { useHostContext } from '@renderer/lib/host-features'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { ROW_BUTTON, Segmented, SettingSelect } from './controls'
+import { Segmented, SetButton, SettingSelect, Spin } from './controls'
 import { closeRequest } from './pair-close'
 import { browserLinks } from './pair-links'
 import { QrCode } from './qr-code'
@@ -178,18 +176,20 @@ function PairFlow({
           <SettingsDialogFooter>
             {ended ? (
               <>
-                <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
+                <DialogClose render={<SetButton size="md" variant="ghost" />}>
                   {t('common:actions.close')}
                 </DialogClose>
-                <Button className={ROW_BUTTON} onClick={onNewCode}>
-                  <RotateCwIcon data-icon="inline-start" />
+                <SetButton
+                  size="md"
+                  variant="primary"
+                  icon={<Icon icon={RefreshIcon} size={14} />}
+                  onClick={onNewCode}
+                >
                   {t('remote.pair.newCode')}
-                </Button>
+                </SetButton>
               </>
             ) : (
-              <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
-                {t('common:actions.done')}
-              </DialogClose>
+              <DialogClose render={<SetButton size="md" />}>{t('common:actions.done')}</DialogClose>
             )}
           </SettingsDialogFooter>
         </>
@@ -225,7 +225,7 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
   const browser = browsers.find((b) => b.address === chosen) ?? browsers[0] ?? null
   const link = target === 'browser' ? (browser?.link ?? null) : appLink
   return (
-    <div className="flex min-w-0 flex-col items-center gap-4 px-6 pt-3 pb-1">
+    <div className="kettu-sd__pair">
       {!end && shown.kind !== 'failed' && browsers.length > 0 && (
         <Segmented
           label={t('remote.pair.target')}
@@ -237,27 +237,25 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
           onChange={setTarget}
         />
       )}
-      <div className="relative size-56 shrink-0 rounded-modal bg-canvas p-3 shadow-[0_0_0_var(--hairline)_var(--border-default)]">
+      <div className="kettu-sd__qr">
         {link && (
           <QrCode text={link} label={t('remote.pair.qr')} className={cn(end && 'opacity-8')} />
         )}
         {end && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-canvas-ink/60">
-            <EndIcon end={end} className="size-5" />
-            <span className="text-control font-medium">
-              {t(`remote.pair.ends.${endKey(end)}.short`)}
-            </span>
+          <div className="kettu-sd__qr-end">
+            <EndIcon end={end} size={20} />
+            <span>{t(`remote.pair.ends.${endKey(end)}.short`)}</span>
           </div>
         )}
         {!link && !end && (
-          <div className="absolute inset-0 grid place-items-center">
-            <Spinner className="size-5 text-canvas-ink/40" />
+          <div className="kettu-sd__qr-end">
+            <Spin />
           </div>
         )}
       </div>
-      <div className="flex max-w-90 flex-col items-center gap-1 text-center text-lede text-pretty text-secondary">
+      <div className="kettu-sd__pair-text">
         {shown.kind === 'failed' ? (
-          <p className="text-danger">{t('remote.pair.failed', { message: shown.message })}</p>
+          <p className="kettu-sd__error">{t('remote.pair.failed', { message: shown.message })}</p>
         ) : end ? (
           <EndText end={end} />
         ) : target === 'browser' ? (
@@ -266,8 +264,8 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
               {t('remote.pair.browserScan')} {t('remote.pair.browserHint')}
             </p>
             {browsers.length > 1 && browser && (
-              <div className="flex items-center gap-2 pt-1 text-control">
-                <span className="text-secondary">{t('remote.pair.address')}</span>
+              <div className="kettu-sd__inline">
+                <span>{t('remote.pair.address')}</span>
                 <SettingSelect
                   label={t('remote.pair.address')}
                   value={browser.address}
@@ -285,9 +283,9 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
       </div>
       <LinkBox link={link} disabled={!waiting} />
       {waiting && (
-        <div className="flex w-full items-center gap-2 pt-3 text-control leading-[normal] text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-          <Spinner className="size-3.25" />
-          <span role="status" className="flex-1">
+        <div className="kettu-sd__waiting">
+          <Spin />
+          <span role="status" className="kettu-sd__waiting-text">
             {t('remote.pair.waiting')}
           </span>
           <ExpiresIn expiresAt={waiting.expiresAt} />
@@ -300,9 +298,10 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
 // A closed code is never shown: its dialog is gone.
 const endKey = (end: PairingEnd) => (end === 'closed' ? 'expired' : end)
 
-function EndIcon({ end, className }: { end: PairingEnd; className: string }) {
-  const Icon = end === 'attempts' ? CircleAlertIcon : end === 'rejected' ? CircleXIcon : ClockIcon
-  return <Icon className={className} />
+function EndIcon({ end, size }: { end: PairingEnd; size: number }) {
+  const icon =
+    end === 'attempts' ? AlertCircleIcon : end === 'rejected' ? CancelCircleIcon : Clock01Icon
+  return <Icon icon={icon} size={size} />
 }
 
 function EndText({ end }: { end: PairingEnd }) {
@@ -310,14 +309,11 @@ function EndText({ end }: { end: PairingEnd }) {
   const key = endKey(end)
   return (
     <>
-      <p className="flex items-center gap-1.5 font-medium text-primary">
-        <EndIcon
-          end={end}
-          className={cn('size-4 shrink-0', end === 'attempts' ? 'text-danger' : 'text-tertiary')}
-        />
+      <p className="kettu-sd__end" data-tone={end === 'attempts' ? 'danger' : undefined}>
+        <EndIcon end={end} size={16} />
         {t(`remote.pair.ends.${key}.title`)}
       </p>
-      <p className="text-hint text-tertiary">{t(`remote.pair.ends.${key}.body`)}</p>
+      <p className="kettu-sd__hint">{t(`remote.pair.ends.${key}.body`)}</p>
     </>
   )
 }
@@ -332,28 +328,25 @@ function LinkBox({ link, disabled }: { link: string | null; disabled: boolean })
     return () => clearTimeout(timer)
   }, [copied])
   return (
-    <div className="flex w-full gap-2">
+    <div className="kettu-sd__inline kettu-sd__linkbox">
       <code
-        className={cn(
-          'block h-8 min-w-0 flex-1 truncate rounded-xl bg-card px-2.75 font-mono text-hint leading-8 shadow-outline',
-          disabled ? 'text-disabled' : 'text-primary',
-        )}
+        className="ui-sg-input kettu-sd__input kettu-sd__input--mono kettu-sd__link"
+        data-disabled={disabled || undefined}
         data-selectable=""
       >
         {link ?? ' '}
       </code>
-      <Button
-        className={ROW_BUTTON}
-        variant="outline"
+      <SetButton
+        size="md"
         disabled={disabled || !link}
+        icon={<Icon icon={copied ? Tick02Icon : Copy01Icon} size={14} />}
         onClick={() => {
           if (!link) return
           void navigator.clipboard.writeText(link).then(() => setCopied(true))
         }}
       >
-        {copied ? <CheckIcon data-icon="inline-start" /> : <CopyIcon data-icon="inline-start" />}
         {copied ? t('remote.pair.copied') : t('remote.pair.copy')}
-      </Button>
+      </SetButton>
     </div>
   )
 }
@@ -362,7 +355,7 @@ function ExpiresIn({ expiresAt }: { expiresAt: number }) {
   const { t } = useTranslation('settings')
   const now = useSeconds()
   return (
-    <span className="tabular">
+    <span className="k-num">
       {t('remote.pair.expiresIn', { time: countdown(expiresAt - now) })}
     </span>
   )
@@ -406,19 +399,19 @@ export function Confirm({
         {t('remote.pair.confirm.body')}
       </SettingsDialogHeader>
       <SettingsDialogBody>
-        <div className="flex items-center gap-3 rounded-xl bg-subtle p-3">
-          <DeviceTile large icon={<DeviceIcon device={device} className="size-5" />} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-label leading-[normal]">{device.name}</div>
-            <div className="mt-0.5 text-hint text-pretty text-tertiary">{line}</div>
-          </div>
+        <div className="k-inset kettu-sd__row">
+          <DeviceTile large icon={<DeviceIcon device={device} />} />
+          <span className="ui-sg-label">
+            <b>{device.name}</b>
+            <small>{line}</small>
+          </span>
         </div>
         <SettingsField
           label={t('remote.pair.confirm.name')}
           htmlFor="pair-name"
           hint={t('remote.pair.confirm.nameHint')}
         >
-          <Input
+          <input
             id="pair-name"
             value={name}
             autoFocus
@@ -431,19 +424,18 @@ export function Confirm({
         </SettingsField>
       </SettingsDialogBody>
       <SettingsDialogFooter>
-        <Button
+        <SetButton
+          size="md"
           type="button"
           variant="ghost"
-          className={ROW_BUTTON}
           disabled={answered}
           onClick={() => answer(false)}
         >
           {t('remote.pair.confirm.reject')}
-        </Button>
-        <Button type="submit" className={ROW_BUTTON} disabled={answered || !valid}>
-          {answered && <Spinner data-icon="inline-start" />}
+        </SetButton>
+        <SetButton size="md" variant="primary" type="submit" loading={answered} disabled={!valid}>
           {t('remote.pair.confirm.add')}
-        </Button>
+        </SetButton>
       </SettingsDialogFooter>
     </form>
   )

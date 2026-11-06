@@ -9,7 +9,7 @@ import {
   RotateCwIcon,
   TrashIcon,
   XIcon,
-} from 'lucide-react'
+} from './icons'
 import { useTranslation } from 'react-i18next'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import { Button } from '@renderer/components/ui/button'

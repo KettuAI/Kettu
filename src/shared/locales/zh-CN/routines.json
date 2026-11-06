@@ -17,7 +17,8 @@
       "routine": "例程",
       "schedule": "计划",
       "agent": "Agent",
-      "status": "状态"
+      "status": "状态",
+      "name": "名称"
     },
     "footnote": "例程只在 Kettu 打开时运行。Agent 距离套餐限额不到 10% 时，例程会暂停。"
   },
@@ -70,7 +71,8 @@
     "skipped": "已跳过",
     "skippedAt": "已跳过 · {{when}}",
     "nextAt": "{{when}} · {{away}}",
-    "never": "尚未运行"
+    "never": "尚未运行",
+    "nextAtRich": "{{when}} · <away>{{away}}</away>"
   },
   "signal": {
     "name": "例程，{{signal}}",
@@ -180,7 +182,11 @@
       "frequent": "{{field}}：两次运行至少间隔 5 分钟。",
       "empty": "{{field}}：至少选择一天。"
     },
-    "unvalid": "未保存。例程仍按上一个有效计划运行：{{schedule}}"
+    "unvalid": "未保存。例程仍按上一个有效计划运行：{{schedule}}",
+    "runs": "运行",
+    "runsOnce": "只运行一次",
+    "dstNote": "夏令时调整时钟时，运行会顺延一小时，但不会被跳过。",
+    "cronNote": "五个字段，按你的本地时间。"
   },
   "routine": {
     "back": "例程",

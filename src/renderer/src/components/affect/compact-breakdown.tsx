@@ -42,6 +42,8 @@ export type CompactBreakdownProps = {
   totalLabel?: string;
   /** Replaces the last row of the card (default: the largest part); null hides that row */
   footer?: ReactNode;
+  /** Kettu: the period switch's name, translated */
+  switchLabel?: string;
   className?: string;
 };
 
@@ -105,6 +107,7 @@ export function CompactBreakdown({
   format = defaultFormat,
   totalLabel = "Total",
   footer,
+  switchLabel = "Period",
   className,
 }: CompactBreakdownProps) {
   const uid = useId();
@@ -229,7 +232,7 @@ export function CompactBreakdown({
             {title}
           </h3>
           {periods && periods.length > 1 && (
-            <div ref={switchRef} className="ui-cbc__switch" role="radiogroup" aria-label="Period" onKeyDown={onSwitchKey}>
+            <div ref={switchRef} className="ui-cbc__switch" role="radiogroup" aria-label={switchLabel} onKeyDown={onSwitchKey}>
               <span ref={pillRef} className="ui-cbc__pill" aria-hidden="true" />
               {periods.map((p) => (
                 <button
