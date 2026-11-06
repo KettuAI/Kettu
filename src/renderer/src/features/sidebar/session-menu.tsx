@@ -964,7 +964,7 @@ export function DeleteSessionDialog({
             .map(([path, { files, worktree }]) => (
               <div
                 key={path}
-                className="flex gap-2.5 rounded-2xl bg-subtle px-3 py-2.5 text-control leading-normal text-secondary"
+                className="flex gap-2.5 rounded-[10px] bg-(--shell-chip) px-3 py-2.5 text-control leading-normal text-secondary"
               >
                 <Glyph
                   icon={GitBranchIcon}
