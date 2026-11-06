@@ -22,8 +22,6 @@ import {
   Tick02Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
-// The toast takes a Lucide icon.
-import { ArchiveIcon } from 'lucide-react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
@@ -158,7 +156,7 @@ function archiveNow(ids: readonly string[], title: string): void {
             if (failed.length > 0) toast(errorMessage(failed[0]))
           }),
       },
-      { icon: ArchiveIcon },
+      { icon: Archive01Icon },
     )
   })
 }
@@ -430,7 +428,7 @@ export function SessionMenuItems({
             // A session cannot be removed mid-write; Stop comes first.
             disabled={running}
             // As drawn, a disabled Delete keeps its color and fades only its icon.
-            className="data-disabled:opacity-100 data-disabled:[&>.lucide]:opacity-50"
+            className="data-disabled:opacity-100 data-disabled:[&>svg]:opacity-50"
             onClick={(event) => {
               if (event.metaKey || event.ctrlKey) void deleteUnlessAtStake([summary], onDelete)
               else onDelete()
