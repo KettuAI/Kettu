@@ -735,3 +735,92 @@
 .ks-title[data-unfocused]:hover {
   color: var(--shell-ink);
 }
+
+/* Jump to latest: the turn's nine dots in the fox orange. At rest three light as a chevron
+   pointing down; a running turn moves them as the status line does; a turn waiting for the user
+   beats the centre. */
+.ks-jump {
+  border: 0;
+  background: var(--thread-card);
+  box-shadow: var(--thread-float-shadow);
+  color: var(--thread-ink);
+}
+.ks-jump:hover {
+  background: var(--bg-app);
+}
+.ks-jump__dots {
+  overflow: visible;
+}
+.ks-jump__dots circle {
+  fill: var(--thread-fox);
+  opacity: 0.22;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 200ms ease;
+}
+.ks-jump:is([data-mark='idle'], [data-mark='ended'])
+  circle:is([data-cell='3'], [data-cell='5'], [data-cell='7']) {
+  opacity: 1;
+}
+.ks-jump[data-mark='running'] circle[data-still] {
+  opacity: 1;
+}
+.ks-jump[data-mark='waiting'] circle[data-cell='4'] {
+  opacity: 1;
+  animation: ks-jump-beat 1.4s ease-in-out infinite;
+}
+.ks-jump[data-mark='failed'] circle {
+  fill: var(--danger);
+}
+.ks-jump[data-mark='failed'] circle[data-cell='4'] {
+  opacity: 1;
+}
+.ks-jump:is(:hover, :focus-visible) circle[data-cell] {
+  opacity: 0.22;
+  animation: none !important;
+}
+.ks-jump:is(:hover, :focus-visible) circle:is([data-cell='3'], [data-cell='5'], [data-cell='7']) {
+  opacity: 1;
+}
+.ks-jump[data-mark='ended'] .ks-jump__dots {
+  animation: ks-jump-nudge 420ms cubic-bezier(0.3, 0, 0.3, 1) 600ms both;
+}
+.ks-jump[data-mark='failed'] {
+  animation: ks-jump-shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) 340ms both;
+}
+@keyframes ks-jump-beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.45);
+  }
+}
+@keyframes ks-jump-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: translateY(2.5px);
+  }
+}
+@keyframes ks-jump-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(1.5px);
+  }
+}
