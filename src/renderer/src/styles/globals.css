@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+@import 'streamdown/styles.css';
 @import '@fontsource-variable/inter/opsz.css';
 @import '@fontsource-variable/inter/opsz-italic.css';
 @import '@fontsource-variable/source-serif-4/opsz.css';
@@ -1256,7 +1257,9 @@
   .animate-breathe,
   .animate-computer-glow,
   .shimmer,
-  [data-caret] {
+  [data-caret],
+  [data-sd-animate],
+  [data-sd-animate-marker]::marker {
     animation: none !important;
   }
   /* Held, not removed: each dot keeps the frame its delay starts it on. */
@@ -1296,7 +1299,9 @@
   & .animate-attention,
   & .animate-breathe,
   & .shimmer,
-  & [data-caret] {
+  & [data-caret],
+  & [data-sd-animate],
+  & [data-sd-animate-marker]::marker {
     animation: none !important;
   }
   & [data-turn-dots] circle {
@@ -1348,7 +1353,8 @@
   line-height: 1.65;
   /* Italics are the face's own; Chinese, which has none, stays upright. */
   font-synthesis-style: none;
-  color: var(--text-primary);
+  /* affectUI's answer: the prose a step softer than the ink, which bold text keeps. */
+  color: color-mix(in srgb, var(--text-primary) 84%, var(--bg-app));
   overflow-wrap: anywhere;
   user-select: text;
 
@@ -1475,7 +1481,7 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--text-tertiary);
+    background: var(--text-disabled);
   }
   &
     [data-streamdown='list-item']
