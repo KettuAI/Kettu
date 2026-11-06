@@ -86,12 +86,17 @@
       "isOn": "{{option}} is on instead of off.",
       "next": "You can change them in the composer.",
       "held": "Your message was not sent. It waits in the queue until you resume it."
+    },
+    "computerStopped": {
+      "title": "Stopped using the computer",
+      "description": "Agents can use it again after your next message."
     }
   },
   "attention": {
     "browserOrigin": "Wants to open {{site}}",
     "deviceAccess": "Wants to use {{device}}",
     "computerApp": "Wants to use {{app}}",
+    "computerSetup": "Wants to use your computer",
     "permission": "Asks for permission",
     "turnEnd": {
       "end_turn": "Finished",

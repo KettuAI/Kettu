@@ -36,7 +36,7 @@ function useComputerStatus(): {
 }
 
 /** What the driver can do on this Linux desktop, as one line. */
-function linuxLine(status: ComputerUseStatus, t: TFunction<'settings'>): string {
+export function linuxLine(status: ComputerUseStatus, t: TFunction<'settings'>): string {
   const desktop = status.desktop ?? t('computer.desktop.unknown')
   if (status.sessionType === 'x11') return t('computer.desktop.x11', { desktop })
   if (status.sessionType === 'wayland') {

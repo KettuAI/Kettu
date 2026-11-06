@@ -120,8 +120,8 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     hint: '<tool> <json arguments>',
   },
   computer: {
-    description: "Calls one of Kettu's computer use tools and says what it answered",
-    hint: '<computer_* tool> [arguments as JSON]',
+    description: "Calls Kettu's computer use tools in turn and says what they answered",
+    hint: '<computer_* tool> [arguments as JSON] [; wait <ms> ; ...]',
   },
   approvals: {
     description: 'A command of two steps, then an edit with its diff, each asking first',

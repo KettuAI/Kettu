@@ -5,6 +5,7 @@
 
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
+import type { ComputerPermissions } from '@shared/computer-use'
 import type { LogFn } from '../storage'
 
 /** An idle driver ends after this; the next call starts it again. */
@@ -146,5 +147,30 @@ export class ComputerDriver {
   private clearIdle(): void {
     if (this.idle) clearTimeout(this.idle)
     this.idle = null
+  }
+}
+
+/**
+ * Kettu's macOS grants as a driver started for the check reports them, read-only, without a
+ * prompt: a new process, since a running one may keep an old Screen Recording answer. Null when
+ * the answer is not one this knows.
+ */
+export async function probePermissions(
+  deps: Omit<ComputerDriverDeps, 'idleMs'>,
+): Promise<ComputerPermissions | null> {
+  const driver = new ComputerDriver(deps)
+  try {
+    const result = await driver.call('check_permissions', { prompt: false })
+    const found = result.structuredContent as Record<string, unknown> | undefined
+    if (
+      result.isError ||
+      typeof found?.accessibility !== 'boolean' ||
+      typeof found.screen_recording !== 'boolean'
+    ) {
+      return null
+    }
+    return { accessibility: found.accessibility, screenRecording: found.screen_recording }
+  } finally {
+    await driver.stop()
   }
 }

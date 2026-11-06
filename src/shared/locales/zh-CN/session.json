@@ -157,10 +157,51 @@
     "where": "读取它的窗口，在后台点击和输入"
   },
   "computerBar": {
-    "using": "正在使用电脑",
-    "usingApp": "正在使用电脑 · {{app}}",
-    "stop": "停止",
-    "stopLabel": "这一轮不再使用电脑"
+    "using": "{{agent}} 正在使用你的电脑",
+    "usingApp": "{{agent}} 正在使用 <app>{{app}}</app>",
+    "looking": "正在查看 <app>{{app}}</app>",
+    "waiting": "等你允许使用 <app>{{app}}</app>",
+    "stopping": "正在收回电脑…",
+    "stop": "停止使用",
+    "stopLabel": "这一轮不再使用电脑，回合继续"
+  },
+  "computerSetup": {
+    "label": "设置 Computer use",
+    "ask": "{{agent}} 想使用你的电脑，正在等你设置 Computer use。",
+    "wants": "想使用你的电脑",
+    "waiting": "等你设置",
+    "granting": "等你授权",
+    "step": "第 {{n}} 步，共 {{count}} 步",
+    "enable": {
+      "title": "打开 Computer use",
+      "body": "{{agent}} 会在后台读取应用的窗口、点击和输入，只对你在这台电脑上发的消息生效。",
+      "action": "打开",
+      "switch": "Computer use"
+    },
+    "accessibility": {
+      "title": "允许辅助功能",
+      "body": "Kettu 靠它读取窗口、点击和输入。系统设置会打开“辅助功能”，在列表里打开 Kettu 旁边的开关，再回到这里。",
+      "pane": "辅助功能"
+    },
+    "screen-recording": {
+      "title": "允许屏幕录制",
+      "body": "Kettu 靠截图看清窗口里的内容。系统设置会打开“屏幕录制”，在列表里打开 Kettu 旁边的开关，再回到这里。",
+      "pane": "屏幕录制"
+    },
+    "open": "打开系统设置",
+    "openAgain": "再打开系统设置",
+    "inSettings": "在系统设置里等你",
+    "goesOn": "做完会自动继续。",
+    "notNow": "不用了",
+    "elsewhere": "要在{{host}}上完成设置",
+    "elsewhereBody": "开关和系统权限只能在那台电脑的 Kettu 里打开。设置好后，{{agent}} 会自动继续。",
+    "thatComputer": "运行它的那台电脑",
+    "outcome": {
+      "ready": "已设置好 Computer use",
+      "declined": "没有设置 Computer use",
+      "timeout": "没有在限定时间内设置好 Computer use"
+    },
+    "declinedNote": "不用了"
   },
   "subagent": {
     "fallbackTitle": "子 Agent",

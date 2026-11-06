@@ -21,7 +21,7 @@ import { Composer } from './composer/composer'
 import { NUMBERED } from './entries/answer-list'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
-import { ComputerBar } from './computer-bar'
+import { ComputerGlow, ComputerLabel } from './computer-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import {
@@ -60,6 +60,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const otherHost = useOtherHost(hostOfPath(summary.projectPath))
   // Its host is offline: what the thread showed stays, and nothing goes to it.
   const away = otherHost && isAway(otherHost.connection) ? otherHost : null
+  // It holds the computer: the column glows and the composer carries the label.
+  const computer = !!session?.computer && !archived && !away
 
   useEffect(() => {
     preloadRenderers()
@@ -224,10 +226,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 {actionError ?? queueError}
               </p>
             )}
-            <div className="flex flex-col">
-              {session && !archived && session.computer && (
-                <ComputerBar session={session} onError={setQueueError} />
-              )}
+            <div className="flex flex-col" {...(computer ? { 'data-computer-using': '' } : {})}>
               {/* Mounted only while something waits; its cards sit behind the composer. */}
               {session &&
                 !archived &&
@@ -235,6 +234,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 session.queue.length > 0 && (
                   <QueueStack session={session} onError={setQueueError} />
                 )}
+              {computer && session && (
+                <ComputerLabel session={session} agentName={name} onError={setQueueError} />
+              )}
               {away ? (
                 session && <HostAway host={away} inline />
               ) : summary.origin === 'subagent' ? (
@@ -260,6 +262,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           </div>
         </div>
       </div>
+      {computer && <ComputerGlow />}
       <Announcer summary={summary} name={name} />
     </div>
   )
@@ -332,7 +335,8 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
           (entry?.kind === 'tool' && !!entry.permission) ||
           (entry?.kind === 'browser_origin' && entry.decision === null) ||
           (entry?.kind === 'device_access' && entry.decision === null) ||
-          (entry?.kind === 'computer_app' && entry.decision === null)
+          (entry?.kind === 'computer_app' && entry.decision === null) ||
+          (entry?.kind === 'computer_setup' && entry.outcome === null)
         if (!waiting) continue
         // Through the card's own control, so a failure shows where the answer was given. A
         // question card's Enter goes on to its next question, and its own-answer field takes focus.

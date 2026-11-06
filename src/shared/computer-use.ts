@@ -69,6 +69,27 @@ export type ComputerAppAnswer = ComputerAppDecision | 'timeout'
 /** How long a call waits for the user to answer a first use of an app. */
 export const COMPUTER_APP_WAIT_MS = 120_000
 
+/** A step of the setup a first call waits on: the switch, or a macOS permission. */
+export type ComputerSetupStep = 'enable' | 'accessibility' | 'screen-recording'
+
+export function isComputerSetupStep(value: unknown): value is ComputerSetupStep {
+  return value === 'enable' || value === 'accessibility' || value === 'screen-recording'
+}
+
+/** How a setup card ended: all done, the user said not now, or not done in time. */
+export type ComputerSetupOutcome = 'ready' | 'declined' | 'timeout'
+
+/** How long a call waits for the user to finish the setup. */
+export const COMPUTER_SETUP_WAIT_MS = 5 * 60_000
+/** How often a waiting setup checks the switch and the permissions again. */
+export const COMPUTER_SETUP_POLL_MS = 1_500
+
+/** The macOS permissions as the driver reports Kettu's grants. */
+export interface ComputerPermissions {
+  accessibility: boolean
+  screenRecording: boolean
+}
+
 /** The part of the settings computer use reads, which main keeps and the host is sent. */
 export interface ComputerUseSettings {
   enabled: boolean

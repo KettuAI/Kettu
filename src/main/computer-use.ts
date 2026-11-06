@@ -91,3 +91,21 @@ export async function requestComputerPermission(kind: ComputerPermissionKind): P
   }
   await shell.openExternal(PRIVACY_PANES[kind])
 }
+
+/** Icons already read, by path: a session's label asks again on every app it moves to. */
+const icons = new Map<string, Promise<string | null>>()
+const ICONS_KEPT = 64
+
+/** The icon of the app at `path` as a data URL, for a session's label; null when there is none. */
+export function computerAppIcon(path: string): Promise<string | null> {
+  let icon = icons.get(path)
+  if (!icon) {
+    icon = app.getFileIcon(path, { size: 'normal' }).then(
+      (image) => (image.isEmpty() ? null : image.toDataURL()),
+      () => null,
+    )
+    icons.set(path, icon)
+    if (icons.size > ICONS_KEPT) icons.delete(icons.keys().next().value!)
+  }
+  return icon
+}

@@ -528,6 +528,10 @@ describe('computer use requests', () => {
       posix['computer.answerApp']({ sessionId: 's', entryId: 'e:1', decision: 'always' }),
     ).toEqual({ sessionId: 's', entryId: 'e:1', decision: 'always' })
     expect(posix['computer.stop']({ sessionId: 's' })).toEqual({ sessionId: 's' })
+    expect(posix['computer.declineSetup']({ sessionId: 's', entryId: 'e:2' })).toEqual({
+      sessionId: 's',
+      entryId: 'e:2',
+    })
   })
 
   it('refuses another answer or a missing session', () => {
@@ -536,5 +540,8 @@ describe('computer use requests', () => {
     )
     rejects(() => posix['computer.answerApp']({ entryId: 'e', decision: 'deny' }))
     rejects(() => posix['computer.stop']({}))
+    rejects(() => posix['computer.declineSetup']({ sessionId: 's' }))
+    rejects(() => posix['computer.declineSetup']({ entryId: 'e:2' }))
+    rejects(() => posix['computer.declineSetup']({ sessionId: 's', entryId: 7 }))
   })
 })

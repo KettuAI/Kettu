@@ -24,7 +24,13 @@ import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
-import type { ComputerApp, ComputerAppAnswer, ComputerAppDecision } from '@shared/computer-use'
+import type {
+  ComputerApp,
+  ComputerAppAnswer,
+  ComputerAppDecision,
+  ComputerSetupOutcome,
+  ComputerSetupStep,
+} from '@shared/computer-use'
 import type { BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortDevice } from '@shared/remote/device'
@@ -61,6 +67,7 @@ import {
   type BrowserOriginEntry,
   type DeviceAccessEntry,
   type ComputerAppEntry,
+  type ComputerSetupEntry,
   type ComputerUseView,
   type ThreadEntry,
   type ThreadState,
@@ -383,6 +390,8 @@ interface Live {
   apps: Map<number, string>
   /** Who answered the latest first uses of apps, by entry id: a device, or null for a window. */
   appsAnswered: Map<string, FromDevice | null>
+  /** Each setup a call waits on: its entry, by the request's id. */
+  setups: Map<number, string>
   /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
   sender: TurnSender | null
   failure: Failure | null
@@ -475,9 +484,9 @@ function originKey(owner: string, requestId: number): string {
   return `${owner}:${requestId}`
 }
 
-/** The requests that wait for the user: permissions, new sites and first uses of apps. */
+/** The requests that wait for the user: permissions, new sites, first uses of apps and setups. */
 function waitingCount(live: Live): number {
-  return live.permissions.size + live.origins.size + live.apps.size
+  return live.permissions.size + live.origins.size + live.apps.size + live.setups.size
 }
 
 /** A first use of an app that waits for the user, and the first answer a window or device gave. */
@@ -588,6 +597,11 @@ export class SessionManager {
   private readonly deviceWaits = new Map<string, (answer: DeviceAccessAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
+  /** Each setup that waits, by the computer use service's request id, with who said Not now. */
+  private readonly setupRequests = new Map<
+    number,
+    { sessionId: string; entryId: string; declinedBy: FromDevice | null }
+  >()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
@@ -1271,6 +1285,100 @@ export class SessionManager {
     return requestId
   }
 
+  /**
+   * An agent's call found computer use off or a permission missing: the setup waits in its thread
+   * and marks the session as waiting, as a permission request does.
+   */
+  computerSetupAsked(sessionId: string, requestId: number, steps: ComputerSetupStep[]): void {
+    const live = this.live.get(sessionId)
+    if (!live || this.setupRequests.has(requestId)) return
+    const entry: ComputerSetupEntry = {
+      kind: 'computer_setup',
+      id: this.nextId(live),
+      requestId,
+      steps,
+      done: [],
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.setups.set(requestId, entry.id)
+    this.setupRequests.set(requestId, { sessionId, entryId: entry.id, declinedBy: null })
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      t('attention.computerSetup'),
+    )
+  }
+
+  /** Steps of a waiting setup were done: its card moves on to the next. */
+  computerSetupDone(requestId: number, done: ComputerSetupStep[]): void {
+    const waiting = this.setupRequests.get(requestId)
+    const live = waiting && this.live.get(waiting.sessionId)
+    if (!waiting || !live || live.thread.byId[waiting.entryId]?.kind !== 'computer_setup') return
+    this.emit(live, [{ op: 'entry.update', id: waiting.entryId, changes: { done } }])
+  }
+
+  /** The setup ended: the card shows how, with the device that said Not now. */
+  computerSetupSettled(requestId: number, outcome: ComputerSetupOutcome): void {
+    const waiting = this.setupRequests.get(requestId)
+    if (!waiting) return
+    this.setupRequests.delete(requestId)
+    const live = this.live.get(waiting.sessionId)
+    if (!live) return
+    live.setups.delete(requestId)
+    const device = outcome === 'declined' ? waiting.declinedBy : null
+    const entry = live.thread.byId[waiting.entryId]
+    if (entry?.kind === 'computer_setup') {
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: waiting.entryId,
+          changes: { outcome, ...(device ? { device } : {}) },
+        },
+      ])
+    }
+    this.stopWaiting(live)
+    this.touch(live.id)
+    this.updateBadge()
+  }
+
+  /** Not now from a window or a device: the id of the setup the service is to end. */
+  declineComputerSetup(sessionId: string, entryId: string, device?: FromDevice): number {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const requestId = live && [...live.setups].find(([, id]) => id === entryId)?.[0]
+    const waiting = requestId === undefined ? undefined : this.setupRequests.get(requestId)
+    if (!waiting || requestId === undefined) throw notFound(`No setup waits in ${entryId}`)
+    waiting.declinedBy = device ?? null
+    return requestId
+  }
+
+  /** The user pressed Stop using: the thread says the turn no longer uses the computer. */
+  computerStopped(sessionId: string): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('notice.computerStopped.title'),
+          description: t('notice.computerStopped.description'),
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+  }
+
   /** A replay ended: the kept entries it never came back to go at its end. */
   private restoreKept(live: Live): void {
     const { keeper } = live
@@ -1734,6 +1842,7 @@ export class SessionManager {
       originsAnswered: new Map(),
       apps: new Map(),
       appsAnswered: new Map(),
+      setups: new Map(),
       sender: null,
       failure: null,
       unread: this.persistedUnread(record),
@@ -5372,6 +5481,15 @@ export class SessionManager {
       const entry = live.thread.byId[entryId]
       if (entry?.kind === 'computer_app' && entry.decision === null) {
         this.emit(live, [{ op: 'entry.update', id: entryId, changes: { decision: 'timeout' } }])
+      }
+    }
+    // And a setup: its call has no agent left to go on for.
+    for (const [requestId, entryId] of [...live.setups]) {
+      live.setups.delete(requestId)
+      this.setupRequests.delete(requestId)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'computer_setup' && entry.outcome === null) {
+        this.emit(live, [{ op: 'entry.update', id: entryId, changes: { outcome: 'timeout' } }])
       }
     }
     this.stopWaiting(live)

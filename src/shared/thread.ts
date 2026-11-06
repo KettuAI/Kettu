@@ -4,7 +4,8 @@
 import type { AgentId } from './agents'
 import type { BrowserOriginAnswer } from './browser'
 import type { DeviceAccessAnswer } from './device-agent'
-import type { ComputerAppAnswer } from './computer-use'
+import type { ComputerAppAnswer, ComputerSetupOutcome, ComputerSetupStep } from './computer-use'
+import { isComputerSetupStep } from './computer-use'
 import type { ContextReport } from './context'
 import type { RoutineRef } from './routines'
 
@@ -58,10 +59,14 @@ export interface SessionView {
   computer?: ComputerUseView | null
 }
 
-/** A session's hold on the computer, which the bar above its composer shows. */
+/** A session's hold on the computer, which the label on its composer shows. */
 export interface ComputerUseView {
   /** The name of the app it last read or drove; null before its first. */
   app: string | null
+  /** Where that app lies, for its icon: the bundle on macOS, the executable elsewhere. */
+  appPath?: string | null
+  /** Whether its latest call to that app only read the window or acted on it. */
+  action?: 'read' | 'act' | null
 }
 
 export interface QueuedPrompt {
@@ -228,6 +233,7 @@ export type ThreadEntry =
   | BrowserOriginEntry // Kettu's own record of a new site's request and answer
   | DeviceAccessEntry // Kettu's own record of an agent asking for a mobile device
   | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
+  | ComputerSetupEntry // Kettu's own record of the setup a first call waited on, and its end
 
 /** `after`: the agent's entry before it, to put it back after a replay; older entries lack it. */
 export type GitEntry =
@@ -319,6 +325,26 @@ export interface ComputerAppEntry {
   appName: string
   decision: ComputerAppAnswer | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * An agent's call found computer use off or a macOS permission missing, and waits while the user
+ * sets it up. `outcome` is null while it waits, then how it ended.
+ */
+export interface ComputerSetupEntry {
+  kind: 'computer_setup'
+  id: string
+  /** The host's id for the setup, which Not now names. */
+  requestId: number
+  /** The steps missing when the call came, in the order the card explains them. */
+  steps: ComputerSetupStep[]
+  /** Those done since. */
+  done: ComputerSetupStep[]
+  outcome: ComputerSetupOutcome | null
+  /** Set when a paired device said Not now; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
@@ -904,6 +930,19 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.decision === 'always' ||
           value.decision === 'deny' ||
           value.decision === 'timeout') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'computer_setup':
+      return (
+        Number.isSafeInteger(value.requestId) &&
+        Array.isArray(value.steps) &&
+        value.steps.every(isComputerSetupStep) &&
+        Array.isArray(value.done) &&
+        value.done.every(isComputerSetupStep) &&
+        (value.outcome === null ||
+          value.outcome === 'ready' ||
+          value.outcome === 'declined' ||
+          value.outcome === 'timeout') &&
         (value.after === null || typeof value.after === 'string')
       )
     default:

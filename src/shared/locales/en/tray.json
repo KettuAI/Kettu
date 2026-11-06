@@ -48,8 +48,10 @@
     "other": "Wants to use",
     "origin": "Wants to open",
     "app": "Wants to use",
+    "setup": "Wants to use",
     "question": "Asks you"
   },
+  "setupTarget": "your computer",
   "answerGroup": "Answer",
   "moreWaiting_one": "{{count}} more waiting",
   "moreWaiting_other": "{{count}} more waiting",

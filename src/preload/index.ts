@@ -243,6 +243,7 @@ const api: KettuApi = {
   computer: {
     status: () => invoke('computer:status'),
     requestPermission: (kind) => invoke('computer:request-permission', kind),
+    appIcon: (path) => invoke('computer:app-icon', path),
   },
   browser: {
     show: (id) => invoke('browser:show', id),
