@@ -19,7 +19,6 @@ import { openAgentSettings, openSettings } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
-import { NUMBERED } from './entries/answer-list'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { ComputerGlow, ComputerLabel } from './computer-bar'
@@ -296,6 +295,9 @@ function Announcer({ summary, name }: { summary: SessionSummary; name: string })
     </div>
   )
 }
+
+/** The most rows a number key picks: 1 to 9. */
+const NUMBERED = 9
 
 const isEditable = (target: EventTarget | null) =>
   target instanceof HTMLElement &&

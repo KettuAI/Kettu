@@ -812,5 +812,15 @@
       "error": "{{name}} failed",
       "cancelled": "{{name}} cancelled"
     }
+  },
+  "access": {
+    "action": {
+      "site": "open a site",
+      "device": "use a device",
+      "app": "use an app"
+    },
+    "session": "This session",
+    "project": "This project",
+    "always": "Always"
   }
 }

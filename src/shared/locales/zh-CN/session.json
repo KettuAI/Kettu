@@ -776,5 +776,15 @@
       "error": "{{name}} 失败",
       "cancelled": "{{name}} 已取消"
     }
+  },
+  "access": {
+    "action": {
+      "site": "打开网站",
+      "device": "使用设备",
+      "app": "使用应用"
+    },
+    "session": "本次会话",
+    "project": "此项目",
+    "always": "始终"
   }
 }

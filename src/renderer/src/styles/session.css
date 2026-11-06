@@ -522,3 +522,133 @@
   font-weight: 500;
   color: var(--thread-text);
 }
+.ks-answered__head--alone {
+  padding-bottom: 10px;
+}
+
+/* Computer use's setup on Approval Card: a picture of the switch, the step and its dots; only
+   this computer's window can take a step, so elsewhere the card offers Not now alone. */
+.ks-thread .ui-apc.ks-setup {
+  max-width: none;
+}
+[data-elsewhere] .ks-setup .ui-apc__approve {
+  display: none;
+}
+.ks-setup__body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.ks-setup__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ks-setup__dots {
+  display: flex;
+  gap: 6px;
+}
+.ks-setup__dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--thread-line-strong);
+  transition:
+    width 200ms ease,
+    background-color 200ms ease;
+}
+.ks-setup__dots span[data-state='current'] {
+  width: 16px;
+  background: var(--thread-ink);
+}
+.ks-setup__dots span[data-state='done'] {
+  background: var(--thread-add);
+}
+.ks-thread .ui-apc__desc {
+  overflow: visible;
+  white-space: normal;
+}
+
+/* An MCP server's form or page on Approval Card. */
+.ks-form__message {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: pre-wrap;
+  color: var(--thread-ink);
+}
+.ks-form {
+  display: grid;
+  grid-template-columns: 8.25rem minmax(0, 1fr);
+  align-items: start;
+  gap: 12px 16px;
+}
+.ks-form__label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 34px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--thread-text);
+}
+.ks-form__label > span {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--thread-muted);
+}
+.ks-form__field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 34px;
+}
+.ks-form__hint {
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-form__error {
+  font-size: 12px;
+  color: var(--danger);
+}
+.ks-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-code-block);
+  color: var(--thread-text);
+}
+.ks-link__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ks-link__text b {
+  font-weight: 600;
+  color: var(--thread-ink);
+}
+.ks-link__text span {
+  overflow: hidden;
+  font: 12px/18px var(--font-mono);
+  color: var(--thread-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-answered__values {
+  display: grid;
+  grid-template-columns: 8.25rem minmax(0, 1fr);
+  gap: 6px 16px;
+  padding: 0 16px 12px 42px;
+  font-size: 12.5px;
+}
+.ks-answered__values dt {
+  color: var(--thread-muted);
+}
+.ks-answered__values dd {
+  overflow-wrap: anywhere;
+  color: var(--thread-ink);
+}
