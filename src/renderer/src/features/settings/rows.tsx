@@ -16,7 +16,7 @@ export function PageHeader({
 }) {
   return (
     <header className="flex flex-col">
-      <h2 id={id} className="font-display text-section font-bold text-balance">
+      <h2 id={id} className="text-section font-semibold tracking-tight text-balance">
         {title}
       </h2>
       {children && <p className="mt-1.5 mb-1 text-lede text-pretty text-tertiary">{children}</p>}
@@ -24,13 +24,16 @@ export function PageHeader({
   )
 }
 
-// A run of rows between hairlines: one above the first, one under each.
-const LINE_TOP = 'shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]'
+// A hairline under each row of a card but its last.
 const LINE_UNDER = 'shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]'
 
-/** One group's rows, under a hairline, each row with its own hairline under it. */
+/** One group's rows on a card, as affectUI's settings lay them out, a hairline between rows. */
 export function RowGroup({ children }: { children: ReactNode }) {
-  return <div className={LINE_TOP}>{children}</div>
+  return (
+    <div className="rounded-card bg-card px-4 shadow-card [&>[data-setting-row]:last-child]:shadow-none">
+      {children}
+    </div>
+  )
 }
 
 /** A section's rows, each run of rows that share a group under its heading. */
@@ -90,8 +93,8 @@ export function GroupNote({ children }: { children: ReactNode }) {
 /** `first`: right under the page's description, whose 4 px below it count toward the 32 above. */
 export function GroupLabel({ group, first }: { group: GroupDef; first?: boolean }) {
   return (
-    <div className={cn('mb-1 flex min-h-7.5 items-center gap-2', first ? 'mt-7' : 'mt-8')}>
-      <h3 className="text-subheading font-semibold">{group.label}</h3>
+    <div className={cn('mb-2 flex min-h-7.5 items-center gap-2', first ? 'mt-7' : 'mt-8')}>
+      <h3 className="text-subheading font-medium">{group.label}</h3>
       {group.count !== undefined && (
         <span className="text-group text-tertiary tabular">{group.count}</span>
       )}
