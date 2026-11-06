@@ -20,7 +20,7 @@ export type ContextItem = { id: string; label: string; tokens: number };
 export type ContextPart = {
   id: string;
   label: string;
-  /** Tokens of this part – ignored when `items` are given (then it is their sum) */
+  /** Tokens of this part – when `items` are given and this is not, it is their sum */
   tokens?: number;
   /** Single things inside this part that can be removed, e.g. attached files */
   items?: ContextItem[];
@@ -53,6 +53,34 @@ export type ContextWindowProps = {
   cells?: number;
   columns?: number;
   className?: string;
+  /** Items can only be looked at, not removed */
+  readOnly?: boolean;
+  labels?: Partial<ContextLabels>;
+};
+
+/** Words the card shows – pass your own to translate them; `n` comes formatted, such as 12.4K */
+export type ContextLabels = {
+  free: (n: string) => string;
+  left: (n: string) => string;
+  over: (n: string) => string;
+  full: string;
+  of: (n: string) => string;
+  share: (percent: string) => string;
+  used: (used: string, cap: string, percent: number) => string;
+  nothing: string;
+  remove: (label: string) => string;
+};
+
+const defaultLabels: ContextLabels = {
+  free: (n) => `${n} free`,
+  left: (n) => `${n} left`,
+  over: (n) => `${n} over the limit`,
+  full: "Window is full",
+  of: (n) => `of ${n} tokens`,
+  share: (percent) => `${percent}% of the window`,
+  used: (used, cap, percent) => `${used} of ${cap} tokens used, ${percent} percent`,
+  nothing: "Nothing attached",
+  remove: (label) => `Remove ${label}`,
 };
 
 /* ---------- Helpers ---------- */
@@ -218,15 +246,19 @@ const Items = memo(function Items({
   items,
   leaving,
   onRemove,
+  readOnly,
+  labels,
 }: {
   partId: string;
   items: ContextItem[];
   leaving: Record<string, true>;
   onRemove: (partId: string, itemId: string) => void;
+  readOnly?: boolean;
+  labels: ContextLabels;
 }) {
   return (
     <ul className="ui-cwc__items">
-      {items.length === 0 && <li className="ui-cwc__empty">Nothing attached</li>}
+      {items.length === 0 && <li className="ui-cwc__empty">{labels.nothing}</li>}
       {items.map((it) => (
         <li key={it.id} className="ui-cwc__fold ui-cwc__fold--item" data-open={leaving[`${partId}/${it.id}`] ? undefined : ""}>
           <div className="ui-cwc__clip">
@@ -237,9 +269,11 @@ const Items = memo(function Items({
               <span className="ui-cwc__item-value" title={`${exact(it.tokens)} tokens`}>
                 {tokens(it.tokens)}
               </span>
-              <button type="button" className="ui-cwc__remove" aria-label={`Remove ${it.label}`} onClick={() => onRemove(partId, it.id)}>
-                <CloseIcon />
-              </button>
+              {!readOnly && (
+                <button type="button" className="ui-cwc__remove" aria-label={labels.remove(it.label)} onClick={() => onRemove(partId, it.id)}>
+                  <CloseIcon />
+                </button>
+              )}
             </div>
           </div>
         </li>
@@ -261,7 +295,10 @@ export function ContextWindow({
   cells = 216,
   columns = 36,
   className,
+  readOnly,
+  labels: ownLabels,
 }: ContextWindowProps) {
+  const labels = { ...defaultLabels, ...ownLabels };
   const uid = useId();
   // Without callbacks the card keeps its own record of what was removed and compacted
   const [removed, setRemoved] = useState<Record<string, true>>({});
@@ -292,7 +329,7 @@ export function ContextWindow({
   );
   const list = parts.map((p, i) => {
     const items = itemsOf[p.id];
-    const raw = items
+    const raw = items && p.tokens === undefined
       ? items.reduce((sum, it) => sum + count(it.tokens), 0)
       : count(p.tokens);
     return {
@@ -397,7 +434,7 @@ export function ContextWindow({
   /* ---------- What the last row says ---------- */
 
   const free = Math.max(0, cap - used);
-  let caption: ReactNode = <>{plain(free)} free</>;
+  let caption: ReactNode = labels.free(plain(free));
   let captionKey = "rest";
   let captionTone: string | undefined;
   if (busy) {
@@ -414,7 +451,7 @@ export function ContextWindow({
         <b dir="auto">{hotPart.label}</b>
         <span>
           {" "}·{" "}
-          {cap > 0 ? ((hotPart.tokens / cap) * 100).toFixed(hotPart.tokens / cap < 0.1 ? 1 : 0) : 0}% of the window
+          {labels.share(cap > 0 ? ((hotPart.tokens / cap) * 100).toFixed(hotPart.tokens / cap < 0.1 ? 1 : 0) : "0")}
         </span>
       </span>
     );
@@ -428,7 +465,7 @@ export function ContextWindow({
     captionKey = `saved-${saved.id}`;
     captionTone = "ok";
   } else if (level !== "ok") {
-    caption = level !== "full" ? `${plain(free)} left` : used > cap ? `${plain(used - cap)} over the limit` : "Window is full";
+    caption = level !== "full" ? labels.left(plain(free)) : used > cap ? labels.over(plain(used - cap)) : labels.full;
     captionKey = level;
     captionTone = level;
   }
@@ -498,14 +535,13 @@ export function ContextWindow({
             {tokens(shown["#figure"] ?? used)}
           </span>
           <span className="ui-cwc__of" aria-hidden="true">
-            <Swap id={hotPart ? hotPart.id : "total"}>{hotPart ? hotPart.label : `of ${plain(cap)} tokens`}</Swap>
+            <Swap id={hotPart ? hotPart.id : "total"}>{hotPart ? hotPart.label : labels.of(plain(cap))}</Swap>
           </span>
           <span className="ui-cwc__pill" aria-hidden="true">
             {cap > 0 ? Math.round(((shown["#used"] ?? used) / cap) * 100) : 0}%
           </span>
           <span className="ui-cwc__sr">
-            {plain(used)} of {plain(cap)} tokens used,{" "}
-            {Math.round(share * 100)} percent
+            {labels.used(plain(used), plain(cap), Math.round(share * 100))}
           </span>
         </div>
 
@@ -597,7 +633,7 @@ export function ContextWindow({
                     inert={!isOpen}
                   >
                     <div className="ui-cwc__clip">
-                      <Items partId={p.id} items={p.items} leaving={leaving} onRemove={onRemove} />
+                      <Items partId={p.id} items={p.items} leaving={leaving} onRemove={onRemove} readOnly={readOnly} labels={labels} />
                     </div>
                   </div>
                 )}
