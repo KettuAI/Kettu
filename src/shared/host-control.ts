@@ -7,6 +7,7 @@ import type { ArtifactImportResult } from './artifacts'
 import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
 import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
+import type { ComputerApp } from './computer-use'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { PortError } from './port-rpc'
@@ -64,6 +65,8 @@ export type MainToHost =
       settings: HostSettings
       // Under Node.js, the local socket the host takes its ports on; the desktop app hands them over.
       socketPath?: string
+      // The desktop app's computer use: the driver it ships and Kettu's own process and app ids.
+      computer?: { driverPath: string; selfPid: number; selfIds: string[] }
     }
   | { type: 'host:connect'; windowId: number } // the port travels in the transfer list
   // A paired device's session, which may do less than a window. In the desktop app the port
@@ -213,6 +216,8 @@ export type HostToMain =
   | { type: 'host:device-call'; callId: number; call: DeviceCall }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
+  // A session's card allowed an app always: main keeps it in the settings, which come back.
+  | { type: 'host:computer-app-allow'; app: ComputerApp }
   | { type: 'host:stopped' }
 
 export type MainToTerminalHost =

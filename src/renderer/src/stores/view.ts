@@ -119,6 +119,7 @@ export type SettingsSection =
   | 'hosts'
   | 'browser'
   | 'devices'
+  | 'computer-use'
   | 'advanced'
   | 'about'
 

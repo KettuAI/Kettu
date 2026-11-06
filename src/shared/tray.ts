@@ -39,6 +39,7 @@ export const TRAY_HOST_METHODS = [
   'sessions.snapshot',
   'permissions.respond',
   'browser.answerOrigin',
+  'computer.answerApp',
 ] as const satisfies readonly HostMethod[]
 
 export type TrayHostMethod = (typeof TRAY_HOST_METHODS)[number]

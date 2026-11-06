@@ -8,6 +8,8 @@ import type { SectionDef } from './model'
  */
 const LEFT_OUT: Partial<Record<SectionDef['id'], readonly string[] | 'all'>> = {
   browser: ['open-links-in', 'clear-data', 'allowed-sites'],
+  // It drives the apps of the computer the desktop app runs on.
+  'computer-use': 'all',
   account: 'all',
   general: ['confirm-quit', 'background', 'open-at-login'],
   appearance: ['zoom'],

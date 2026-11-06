@@ -23,6 +23,7 @@ import { parsePairingLink } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
+import { isComputerPermissionKind } from '@shared/computer-use'
 import type {
   AppInfo,
   IpcInvokeChannel,
@@ -62,6 +63,7 @@ import { isRendererUrl, rendererPage } from './renderer'
 import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
+import { computerUseStatus, requestComputerPermission } from './computer-use'
 import { framesSettled, isRevoked } from './subframes'
 import { systemNameForRun } from './system-name'
 import type { TerminalHost } from './terminal-host'
@@ -731,6 +733,13 @@ export function registerIpcHandlers({
   // The pane's bar and the thread's card both answer through main, so the page and the thread agree.
   handle('browser:answer-origin', 3, (_, id, requestId, decision) => {
     browserViews.answerOrigin(sessionId(id), originRequestId(requestId), originDecision(decision))
+  })
+  handle('computer:status', 0, () => computerUseStatus())
+  handle('computer:request-permission', 1, (_, kind) => {
+    if (!isComputerPermissionKind(kind)) {
+      throw new Error('The permission must be accessibility or screen-recording')
+    }
+    return requestComputerPermission(kind)
   })
   handle('browser:allowed-sites', 0, () => browserViews.allowedSites())
   handle('browser:remove-allowed-site', 2, (_, projectPath, origin) => {

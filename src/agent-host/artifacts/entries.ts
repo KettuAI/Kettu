@@ -16,6 +16,7 @@ type OwnEntry = Extract<
       | 'notice'
       | 'browser_origin'
       | 'device_access'
+      | 'computer_app'
   }
 >
 
@@ -137,6 +138,7 @@ function isOwn(entry: ThreadEntry): entry is OwnEntry {
     case 'artifact':
     case 'browser_origin':
     case 'device_access':
+    case 'computer_app':
     case 'session_started':
     case 'git':
     case 'turn_end':

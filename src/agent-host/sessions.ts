@@ -24,6 +24,7 @@ import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
+import type { ComputerApp, ComputerAppAnswer, ComputerAppDecision } from '@shared/computer-use'
 import type { BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortDevice } from '@shared/remote/device'
@@ -59,6 +60,8 @@ import {
   type Attachment,
   type BrowserOriginEntry,
   type DeviceAccessEntry,
+  type ComputerAppEntry,
+  type ComputerUseView,
   type ThreadEntry,
   type ThreadState,
   type TokenTotals,
@@ -376,6 +379,10 @@ interface Live {
   origins: Map<string, string>
   /** Who answered the latest new origins, by entry id: a device, or null for a window. */
   originsAnswered: Map<string, FromDevice | null>
+  /** Each first use of an app that waits for the user: its entry, by the request's id. */
+  apps: Map<number, string>
+  /** Who answered the latest first uses of apps, by entry id: a device, or null for a window. */
+  appsAnswered: Map<string, FromDevice | null>
   /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
   sender: TurnSender | null
   failure: Failure | null
@@ -466,6 +473,18 @@ const ANSWERS_KEPT = 50
  */
 function originKey(owner: string, requestId: number): string {
   return `${owner}:${requestId}`
+}
+
+/** The requests that wait for the user: permissions, new sites and first uses of apps. */
+function waitingCount(live: Live): number {
+  return live.permissions.size + live.origins.size + live.apps.size
+}
+
+/** A first use of an app that waits for the user, and the first answer a window or device gave. */
+interface AppRequest {
+  sessionId: string
+  entryId: string
+  answer: { decision: ComputerAppDecision; device: FromDevice | null } | null
 }
 
 /** A new origin that waits for the user, and the first answer a window or device gave it. */
@@ -567,6 +586,8 @@ export class SessionManager {
   private readonly originRequests = new Map<string, OriginRequest>()
   /** Each device card's answer, by its entry id, which the waiting tool call takes. */
   private readonly deviceWaits = new Map<string, (answer: DeviceAccessAnswer) => void>()
+  /** Each first use of an app that waits, by the computer use service's request id. */
+  private readonly appRequests = new Map<number, AppRequest>()
   private readonly missing = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
@@ -774,7 +795,7 @@ export class SessionManager {
     const record = live?.record ?? this.recordOf(sessionId)
     const session = live?.thread.session
     const status: SessionStatus = session?.status ?? 'closed'
-    const permissionCount = (live?.permissions.size ?? 0) + (live?.origins.size ?? 0)
+    const permissionCount = live ? waitingCount(live) : 0
     let attention: SessionAttention = 'none'
     if (permissionCount > 0) attention = 'permission'
     else if (status === 'failed' || (session?.error && status !== 'running' && !live?.errorSeen))
@@ -866,7 +887,7 @@ export class SessionManager {
 
   private updateBadge(): void {
     let count = 0
-    for (const live of this.live.values()) count += live.permissions.size + live.origins.size
+    for (const live of this.live.values()) count += waitingCount(live)
     if (count === this.badgeCount) return
     this.badgeCount = count
     this.deps.events.badge(count)
@@ -879,7 +900,7 @@ export class SessionManager {
     for (const live of this.live.values()) {
       const status = live.thread.session.status
       if (status === 'running' || status === 'awaiting_permission') running++
-      if (live.permissions.size + live.origins.size > 0) waiting++
+      if (waitingCount(live) > 0) waiting++
     }
     if (running === this.busyCounts.running && waiting === this.busyCounts.waiting) return
     this.busyCounts = { running, waiting }
@@ -1136,6 +1157,118 @@ export class SessionManager {
     if (!waiting) throw notFound(`No new site waits in ${entryId}`)
     waiting.answer = { decision, device: device ?? null }
     return { owner: waiting.owner, requestId: waiting.requestId }
+  }
+
+  /**
+   * Why the session's running turn may not use the computer, or null when it may: only a turn the
+   * user sent from one of this host's own windows may.
+   */
+  computerRefusal(sessionId: string): string | null {
+    const live = this.live.get(sessionId)
+    if (!live?.turn) return 'Computer use works only during a turn the user sent.'
+    if (live.sender === null || live.sender.device !== null) {
+      return (
+        'Computer use works only for messages sent from the Kettu desktop app on the computer ' +
+        'it uses, and this turn came from elsewhere. Ask the user to send it from there.'
+      )
+    }
+    return null
+  }
+
+  /** The session took or released the computer, or moved to another app: its bar shows it. */
+  computerUsing(sessionId: string, view: ComputerUseView | null): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    this.update(live, { computer: view })
+  }
+
+  /**
+   * An agent wants to use an app for the first time in the session, which waits for the user in
+   * its thread and marks the session as waiting, as a permission request does.
+   */
+  computerAppAsked(sessionId: string, requestId: number, app: ComputerApp): void {
+    const live = this.live.get(sessionId)
+    if (!live || this.appRequests.has(requestId)) return
+    const entry: ComputerAppEntry = {
+      kind: 'computer_app',
+      id: this.nextId(live),
+      requestId,
+      appId: app.id,
+      appName: app.name,
+      decision: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.apps.set(requestId, entry.id)
+    this.appRequests.set(requestId, { sessionId, entryId: entry.id, answer: null })
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      t('attention.computerApp', { app: app.name }),
+    )
+  }
+
+  /** The wait ended, so the card takes the answer, labelled with the device that gave it. */
+  computerAppSettled(requestId: number, decision: ComputerAppAnswer): void {
+    const waiting = this.appRequests.get(requestId)
+    if (!waiting) return
+    this.appRequests.delete(requestId)
+    const live = this.live.get(waiting.sessionId)
+    if (!live) return
+    live.apps.delete(requestId)
+    const device =
+      decision !== 'timeout' && waiting.answer?.decision === decision ? waiting.answer.device : null
+    if (decision !== 'timeout') {
+      live.appsAnswered.set(waiting.entryId, device)
+      if (live.appsAnswered.size > ANSWERS_KEPT) {
+        live.appsAnswered.delete(live.appsAnswered.keys().next().value!)
+      }
+    }
+    const entry = live.thread.byId[waiting.entryId]
+    if (entry?.kind === 'computer_app') {
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: waiting.entryId,
+          changes: { decision, ...(device ? { device } : {}) },
+        },
+      ])
+    }
+    this.stopWaiting(live)
+    this.touch(live.id)
+    this.updateBadge()
+  }
+
+  /**
+   * A window's or a device's answer to a first use of an app. The first one counts and goes to the
+   * call that asked, whose wait then settles the card; a later one hears where the first was given.
+   */
+  answerComputerApp(
+    sessionId: string,
+    entryId: string,
+    decision: ComputerAppDecision,
+    device?: FromDevice,
+  ): number {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const requestId = live && [...live.apps].find(([, id]) => id === entryId)?.[0]
+    const waiting = requestId === undefined ? undefined : this.appRequests.get(requestId)
+    const first = waiting?.answer
+    if (live && (first || live.appsAnswered.has(entryId))) {
+      throw new HostError('not_found', `The app of ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: first ? first.device : (live.appsAnswered.get(entryId) ?? null),
+      })
+    }
+    if (!waiting || requestId === undefined) throw notFound(`No app waits in ${entryId}`)
+    waiting.answer = { decision, device: device ?? null }
+    return requestId
   }
 
   /** A replay ended: the kept entries it never came back to go at its end. */
@@ -1599,6 +1732,8 @@ export class SessionManager {
       answered: new Map(),
       origins: new Map(),
       originsAnswered: new Map(),
+      apps: new Map(),
+      appsAnswered: new Map(),
       sender: null,
       failure: null,
       unread: this.persistedUnread(record),
@@ -3254,8 +3389,7 @@ export class SessionManager {
     const { status } = live.thread.session
     if (status !== 'ready' && status !== 'closed') return true
     if (live.turn || live.opening || live.attaching || live.background) return true
-    if (live.permissions.size > 0 || live.origins.size > 0 || this.contextRuns.has(live.id))
-      return true
+    if (waitingCount(live) > 0 || this.contextRuns.has(live.id)) return true
     return this.descendants(live.id, 'subagent').some((record) => {
       const child = this.live.get(record.id)
       if (!child) return false
@@ -5231,12 +5365,21 @@ export class SessionManager {
         this.emit(live, [{ op: 'entry.update', id: entryId, changes: { decision: 'timeout' } }])
       }
     }
+    // So does a first use of an app: the call that asked has no agent left to answer.
+    for (const [requestId, entryId] of [...live.apps]) {
+      live.apps.delete(requestId)
+      this.appRequests.delete(requestId)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'computer_app' && entry.decision === null) {
+        this.emit(live, [{ op: 'entry.update', id: entryId, changes: { decision: 'timeout' } }])
+      }
+    }
     this.stopWaiting(live)
   }
 
   /** Once no request or new site waits for the user, the session goes back to its turn or rests. */
   private stopWaiting(live: Live): void {
-    if (live.permissions.size > 0 || live.origins.size > 0) return
+    if (waitingCount(live) > 0) return
     if (live.thread.session.status !== 'awaiting_permission') return
     this.update(live, { status: live.turn || live.childRunning ? 'running' : 'ready' })
   }

@@ -34,6 +34,7 @@
     "dist:win": "pnpm build && electron-builder --win",
     "dist:linux": "pnpm build && electron-builder --linux",
     "postinstall": "install-electron && node tools/install/app-deps.mjs",
+    "fetch:cua-driver": "node tools/install/cua-driver.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

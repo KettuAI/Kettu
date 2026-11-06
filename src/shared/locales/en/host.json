@@ -91,6 +91,7 @@
   "attention": {
     "browserOrigin": "Wants to open {{site}}",
     "deviceAccess": "Wants to use {{device}}",
+    "computerApp": "Wants to use {{app}}",
     "permission": "Asks for permission",
     "turnEnd": {
       "end_turn": "Finished",

@@ -27,7 +27,14 @@ const SHAPE: Record<Mark, 'arrow' | 'grid' | 'center' | 'bang'> = {
 const AT = [12.5, 18, 23.5]
 
 // Kettu's own records, which may follow the entry that ended a turn.
-const AFTER_END = new Set(['git', 'artifact', 'browser_origin', 'device_access', 'session_started'])
+const AFTER_END = new Set([
+  'git',
+  'artifact',
+  'browser_origin',
+  'device_access',
+  'computer_app',
+  'session_started',
+])
 
 interface Ending {
   kind: 'ended' | 'failed' | null

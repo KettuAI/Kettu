@@ -11,6 +11,7 @@ import {
 } from '@shared/artifact-runtime/page-messages'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
+import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
 import { GITHUB_LOGIN, GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
 import type { Platform } from '@shared/platform'
@@ -1405,5 +1406,17 @@ export function createValidators(platform: Platform): Validators {
         decision: o.decision,
       }
     },
+    'computer.answerApp': (params) => {
+      const o = fields(params)
+      if (!isComputerAppDecision(o.decision)) {
+        throw invalidParams('decision must be session, always or deny')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+      }
+    },
+    'computer.stop': (params) => ({ sessionId: sessionId(fields(params)) }),
   }
 }

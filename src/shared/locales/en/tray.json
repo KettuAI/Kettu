@@ -47,6 +47,7 @@
     "switchMode": "Wants to switch modes",
     "other": "Wants to use",
     "origin": "Wants to open",
+    "app": "Wants to use",
     "question": "Asks you"
   },
   "answerGroup": "Answer",

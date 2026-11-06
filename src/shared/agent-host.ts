@@ -12,6 +12,7 @@ import type {
   BrowserOriginAnswer,
   BrowserOriginDecision,
 } from './browser'
+import type { ComputerAppDecision } from './computer-use'
 import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile } from './host-control'
@@ -357,7 +358,8 @@ export const REMOVED_WHILE_STARTING = 'removed_while_starting'
 
 /**
  * The `reason` in the `data` of the `not_found` that `permissions.respond` and
- * `browser.answerOrigin` fail with when another window or device answered first; `device` there is
+ * `browser.answerOrigin` and `computer.answerApp` fail with when another window or device answered
+ * first; `device` there is
  * the one that did, null for a host's window.
  */
 export const ALREADY_ANSWERED = 'already_answered'
@@ -869,6 +871,17 @@ export interface HostContract {
   // The mobile devices agents may always use on this host, and taking one off that list.
   'devices.allowed': { params: Record<string, never>; result: { deviceIds: string[] } }
   'devices.forget': { params: { deviceId: string }; result: void }
+  // Any window's or device's answer to a session's first use of an app, `entryId`, which goes to
+  // the call that asked; the first counts, as for `permissions.respond`.
+  'computer.answerApp': {
+    params: { sessionId: string; entryId: string; decision: ComputerAppDecision }
+    result: void
+  }
+  // The bar's Stop: the session stops using the computer for the rest of its turn.
+  'computer.stop': {
+    params: { sessionId: string }
+    result: void
+  }
 }
 
 export type HostMethod = keyof HostContract
@@ -1025,6 +1038,8 @@ export const HOST_METHODS = [
   'devices.answerAccess',
   'devices.allowed',
   'devices.forget',
+  'computer.answerApp',
+  'computer.stop',
 ] as const satisfies readonly HostMethod[]
 
 /** One that has a session in front: the host's own windows as one, or a paired device. */

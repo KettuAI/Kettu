@@ -449,6 +449,17 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       dismiss: () => done(admin('updates.dismiss')),
       onChanged: (listener) => adminEvent('updates.changed', (event) => listener(event.status)),
     },
+    // Computer use drives the apps of the computer the desktop app runs on.
+    computer: {
+      status: async () => ({
+        driver: false,
+        accessibility: null,
+        screenRecording: null,
+        sessionType: null,
+        desktop: null,
+      }),
+      requestPermission: () => unsupported('use the computer'),
+    },
     browser: {
       show: () => unsupported('show the browser'),
       hide: async () => {},

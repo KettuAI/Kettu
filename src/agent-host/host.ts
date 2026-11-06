@@ -87,6 +87,8 @@ import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
 import { ScratchFolders } from './scratch'
+import { ComputerDriver } from './computer/driver'
+import { ComputerUse } from './computer/service'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
 import {
@@ -168,6 +170,17 @@ export interface HostOptions {
   homeDir?: string
   /** Reads a session's prompt cache lifetime; Claude Code's transcripts by default. */
   cacheTtl?: CacheTtlReader
+  /** The desktop app's computer use; the daemon has none. */
+  computer?: ComputerHostOptions | null
+}
+
+/** What the desktop app gives the host for computer use. */
+export interface ComputerHostOptions {
+  /** The `cua-driver` program in the app's resources, which may be missing in a checkout. */
+  driverPath: string
+  /** Kettu's own process and app ids, which computer use never touches. */
+  selfPid: number
+  selfIds: string[]
 }
 
 /** Whether a path is a directory, without raising when it is not there. */
@@ -234,6 +247,8 @@ export class AgentHost {
   readonly artifactService: ArtifactService
   /** The artifacts' own data, which their pages and the agents read and write. */
   private readonly artifactData: ArtifactData
+  /** Agents using the desktop apps of this computer; null on a host without the driver. */
+  private readonly computer: ComputerUse | null
   /** What the user allowed the artifacts' pages, and the questions asking for it. */
   private readonly consents: ArtifactConsents
   /** The page runtime's requests in flight, from main and from devices' remote hosts. */
@@ -335,6 +350,23 @@ export class AgentHost {
     })
     this.artifactData = new ArtifactData({ store: this.artifacts })
     registerContentCapability({ store: this.artifacts, types: this.artifactTypes })
+    const computer = options.computer ?? null
+    this.computer = computer
+      ? new ComputerUse({
+          platform,
+          driver: new ComputerDriver({ path: computer.driverPath, log }),
+          self: { pids: [computer.selfPid, process.pid], ids: computer.selfIds },
+          settings: () => this.settings.computerUse,
+          turnRefusal: (sessionId) => this.sessions.computerRefusal(sessionId),
+          sessionTitle: (sessionId) => this.sessions.title(sessionId) ?? 'Untitled',
+          asked: (sessionId, requestId, app) =>
+            this.sessions.computerAppAsked(sessionId, requestId, app),
+          settled: (requestId, answer) => this.sessions.computerAppSettled(requestId, answer),
+          allowAlways: (app) => options.send({ type: 'host:computer-app-allow', app }),
+          using: (sessionId, view) => this.sessions.computerUsing(sessionId, view),
+          log,
+        })
+      : null
     this.artifactService = new ArtifactService({
       data: this.artifactData,
       store: this.artifacts,
@@ -356,6 +388,7 @@ export class AgentHost {
         allowAlways: (deviceId) => this.deviceAccess.add(deviceId),
       },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
+      ...(this.computer ? { computer: this.computer } : {}),
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
         list: (projectPath) => this.sessions.toolSessions(projectPath),
@@ -452,8 +485,12 @@ export class AgentHost {
         detached: (sessionId) => {
           this.artifactService.revoke(sessionId)
           this.artifacts.stopUsing(sessionId)
+          this.computer?.forget(sessionId)
         },
-        turnEnded: (sessionId) => this.artifacts.stopUsing(sessionId),
+        turnEnded: (sessionId) => {
+          this.artifacts.stopUsing(sessionId)
+          this.computer?.turnEnded(sessionId)
+        },
       },
       usage: this.usage,
       cacheTtl:
@@ -715,6 +752,9 @@ export class AgentHost {
       this.git?.setBackgroundFetch(next.git.backgroundFetch)
     }
     this.usage.setFromComputer(next.usage.fromComputer)
+    if (JSON.stringify(previous.computerUse) !== JSON.stringify(next.computerUse)) {
+      this.computer?.settingsChanged()
+    }
     this.env.setConfigFolders(configFolders(this.catalog, next))
     this.startModesChanged(previous, next)
     const removed = await this.agents.settingsChanged(previous, next)
@@ -1025,6 +1065,7 @@ export class AgentHost {
       ])
       await Promise.all([
         this.artifactService.stop(),
+        this.computer?.shutdown(),
         this.projects.flush(),
         this.sessions.flush(),
         this.remembered.flush(),
@@ -1484,6 +1525,20 @@ export class AgentHost {
       'browser.originSettled': ({ requestId, decision }, ctx) => {
         browserApp(ctx)
         sessions.browserOriginSettled(requestId, decision, ctx.portId, fromDevice(ctx.device))
+      },
+      'computer.answerApp': ({ sessionId, entryId, decision }, { device }) => {
+        const requestId = sessions.answerComputerApp(
+          sessionId,
+          entryId,
+          decision,
+          fromDevice(device),
+        )
+        if (!this.computer?.answer(requestId, decision)) {
+          throw new HostError('not_found', `No app waits in ${entryId}`)
+        }
+      },
+      'computer.stop': ({ sessionId }) => {
+        this.computer?.stop(sessionId)
       },
       'browser.answerOrigin': ({ sessionId, entryId, decision }, { device }) => {
         const { owner, requestId } = sessions.answerOrigin(

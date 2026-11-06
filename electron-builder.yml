@@ -13,6 +13,13 @@ extraResources:
   # The device host's helpers, which tools/install/device-helpers.mjs puts in out/helpers.
   - from: out/helpers
     to: helpers
+  # Cua Driver's program, which computer use runs, as tools/install/cua-driver.mjs fetched it for
+  # the target; a build without it has no computer use.
+  - from: resources/cua-driver
+    to: cua-driver
+    filter:
+      - cua-driver
+      - cua-driver.exe
 # The terminal host loads pty.node and starts spawn-helper from the real file system.
 # The session router runs on the user's Node.js, which cannot read inside app.asar.
 asarUnpack:

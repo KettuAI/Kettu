@@ -17,7 +17,8 @@
     "mcp": "MCP servers",
     "harnesses": "Harnesses",
     "hosts": "Hosts",
-    "devices": "Mobile devices"
+    "devices": "Mobile devices",
+    "computer-use": "Computer use"
   },
   "page": {
     "title": "Settings",
@@ -380,6 +381,54 @@
       "removeFailed": "Couldn’t remove {{origin}}: {{reason}}",
       "in": "Allowed in {{projects}}",
       "note": "Agents open these without asking. A site is added here when you choose “Always for this project” on its card."
+    }
+  },
+  "computer": {
+    "groups": {
+      "use": "Computer use",
+      "permissions": "This computer",
+      "allowedApps": "Always allowed"
+    },
+    "enabled": {
+      "name": "Let agents use this computer",
+      "description": "Agents read the windows of your apps and click and type in them, in the background, for turns you send from this computer. Each app asks you before its first use in a session.",
+      "keywords": "computer use desktop apps screen mouse keyboard accessibility automation"
+    },
+    "blocked": "Password managers, terminals, system settings, browsers and Kettu itself are never used. Web pages open in Kettu’s browser.",
+    "noDriver": "This build carries no Cua Driver, so agents cannot use the computer. In a development checkout, run pnpm fetch:cua-driver.",
+    "accessibility": {
+      "name": "Accessibility",
+      "description": "Lets Kettu read apps’ windows and click and type in them."
+    },
+    "screenRecording": {
+      "name": "Screen Recording",
+      "description": "Lets Kettu take screenshots of apps’ windows."
+    },
+    "permission": {
+      "granted": "Allowed",
+      "ask": "Allow…",
+      "open": "Open System Settings",
+      "none": "Nothing to allow",
+      "note": "macOS asks for these for Kettu. If screenshots still fail after allowing Screen Recording, quit and reopen Kettu."
+    },
+    "windows": {
+      "name": "Windows",
+      "description": "Needs no permission. Windows of apps run as administrator cannot be used, and most actions in Electron apps bring the window to the front."
+    },
+    "desktop": {
+      "name": "Desktop",
+      "unknown": "Unknown desktop",
+      "x11": "{{desktop}} on X11: apps can be read and driven, most actions in the foreground.",
+      "gnome": "{{desktop}} on Wayland: screenshots ask you first, and input needs Cua’s GNOME helper.",
+      "kde": "{{desktop}} on Wayland: apps can be read but not driven yet.",
+      "wayland": "{{desktop}} on Wayland: screenshots ask you first, and some input may not work.",
+      "none": "No graphical desktop was found for Kettu."
+    },
+    "allowedApps": {
+      "none": "No apps yet",
+      "description": "Apps you always allow from a session’s card show here.",
+      "keywords": "always allowed apps computer use",
+      "remove": "Remove"
     }
   },
   "advanced": {
@@ -822,7 +871,8 @@
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu installs and updates them for you.",
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it.",
-    "devices": "Simulators and phones agents may use without asking."
+    "devices": "Simulators and phones agents may use without asking.",
+    "computer-use": "Lets agents read and drive the desktop apps of this computer, one app and one session at a time."
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",

@@ -21,6 +21,7 @@ function settings(disabledAgents: AgentId[]): HostSettings {
     usage: { fromComputer: false },
     sessionTitles: true,
     defaultAgent: null,
+    computerUse: DEFAULT_SETTINGS.computerUse,
   }
 }
 

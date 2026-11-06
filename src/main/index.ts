@@ -325,6 +325,7 @@ async function start(): Promise<void> {
     onServicePort: (port) => browserViews.setServicePort(port),
     onOriginDecided: (sessionId, requestId, decision) =>
       browserViews.answerOrigin(sessionId, requestId, decision),
+    onComputerAppAllowed: (app) => settings.allowComputerApp(app),
     browser: (request) =>
       remoteBrowser.claimLocal(request.sessionId)
         ? browserTools!.call(

@@ -25,6 +25,7 @@ import { respondToQuestions } from './helpers'
 import {
   answeredCount,
   choose,
+  chooseOwn,
   goTo,
   isAnswered,
   keyIntent,
@@ -188,6 +189,7 @@ export function QuestionCard({
           disabled={busy}
           onChoose={(index) => setState((s) => choose(s, question, index))}
           onText={(text) => setState((s) => typeText(s, question, text))}
+          onOwn={() => setState((s) => chooseOwn(s, question))}
         />
         <CardError error={error} />
         <CardFooter>
@@ -218,6 +220,7 @@ function Choices({
   disabled,
   onChoose,
   onText,
+  onOwn,
 }: {
   question: PendingQuestion
   selected: number[]
@@ -225,6 +228,7 @@ function Choices({
   disabled: boolean
   onChoose: (index: number) => void
   onText: (text: string) => void
+  onOwn: () => void
 }) {
   const { t } = useTranslation('session')
   const options = question.options
@@ -315,6 +319,7 @@ function Choices({
               placeholder={t('question.other')}
               aria-label={t('question.other')}
               data-answer-option={own < NUMBERED ? own + 1 : undefined}
+              onFocus={onOwn}
               onChange={(event) => onText(event.target.value)}
               className="h-8 min-w-0 flex-1 bg-transparent text-row text-foreground outline-none placeholder:text-tertiary"
             />
