@@ -8,6 +8,7 @@ import {
   type RoutineOption,
   type RoutineRun,
   type RoutineView,
+  type RunStatus,
   type RunView,
   type Schedule,
 } from '@shared/routines'
@@ -543,4 +544,25 @@ export function routineProject(
   return routine.projectPath === null
     ? null
     : (projects.find((project) => project.path === routine.projectPath) ?? null)
+}
+
+/** What a run's row reads as: its mark's and its line's color. */
+export type RunTone = 'ok' | 'fail' | 'wait' | 'quiet' | 'busy'
+
+export function runTone(status: RunStatus): RunTone {
+  switch (status) {
+    case 'succeeded':
+      return 'ok'
+    case 'failed':
+    case 'timed_out':
+      return 'fail'
+    case 'waiting':
+      return 'wait'
+    case 'cancelled':
+    case 'interrupted':
+    case 'skipped':
+      return 'quiet'
+    default:
+      return 'busy'
+  }
 }
