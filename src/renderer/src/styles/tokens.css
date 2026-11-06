@@ -31,6 +31,9 @@
   --border-subtle: rgb(0 0 0 / 6%);
   /* One step past border-default: an unchecked control, a link's underline, a hovered field. */
   --border-strong: rgb(0 0 0 / 16%);
+  /* A run's steps: the rail and its dots, and the step the run stands on (affectUI's checkpoints). */
+  --step-rail: #82bcff;
+  --step-head: #2f6bff;
 
   --text-primary: #1f1f1f;
   --text-secondary: #636363;
@@ -313,6 +316,8 @@
     --border-default: rgb(255 255 255 / 12%);
     --border-subtle: rgb(255 255 255 / 8%);
     --border-strong: rgb(255 255 255 / 18%);
+    --step-rail: #4f8fdb;
+    --step-head: #5b9aff;
 
     --text-primary: #e6e6e7;
     --text-secondary: #a5a5a7;
@@ -504,6 +509,8 @@
   --border-default: rgb(255 255 255 / 12%);
   --border-subtle: rgb(255 255 255 / 8%);
   --border-strong: rgb(255 255 255 / 18%);
+  --step-rail: #4f8fdb;
+  --step-head: #5b9aff;
 
   --text-primary: #e6e6e7;
   --text-secondary: #a5a5a7;
