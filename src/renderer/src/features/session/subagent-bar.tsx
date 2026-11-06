@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ArrowLeftIcon, BotIcon, SquareIcon } from 'lucide-react'
+import { AiChat02Icon, ArrowLeft02Icon, StopIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
@@ -42,10 +43,13 @@ export function SubagentBar({
   return (
     // The composer's frame and the row under it, so the bar sits where the composer would.
     <div className="flex flex-col">
-      <div className="flex min-h-(--composer-min) items-center gap-2.5 rounded-2xl bg-subtle py-2.5 pr-2.5 pl-3 text-ui text-secondary">
-        <span className="grid size-[22px] shrink-0 place-items-center rounded-tile bg-card text-secondary shadow-card">
-          <BotIcon aria-hidden strokeWidth={1.4} className="size-[13px]" />
-        </span>
+      <div className="ks-bar">
+        <HugeiconsIcon
+          icon={AiChat02Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="ks-bar__icon size-4 shrink-0"
+        />
         <p className="min-w-0 flex-1 truncate">
           {parent ? (
             <Trans
@@ -53,7 +57,7 @@ export function SubagentBar({
               i18nKey="subagentBar.runsFor"
               values={{ agent: agentName(summary.agentId) }}
               components={{
-                parent: <span className="font-medium text-primary">{parentTitle}</span>,
+                parent: <b>{parentTitle}</b>,
               }}
             />
           ) : (
@@ -61,16 +65,27 @@ export function SubagentBar({
               t={t}
               i18nKey="subagentBar.runsForParent"
               values={{ agent: agentName(summary.agentId) }}
-              components={{ parent: <span className="font-medium text-primary" /> }}
+              components={{ parent: <b /> }}
             />
           )}
         </p>
         {canStop && (
-          <Button variant="outline" size="sm" disabled={stopping} onClick={() => void stop()}>
+          <Button
+            variant="outline"
+            className="ks-btn"
+            disabled={stopping}
+            onClick={() => void stop()}
+          >
             {stopping ? (
               <Spinner data-icon="inline-start" className="size-3.5" />
             ) : (
-              <SquareIcon data-icon="inline-start" strokeWidth={1.5} className="size-3.5" />
+              <HugeiconsIcon
+                icon={StopIcon}
+                strokeWidth={1.9}
+                aria-hidden
+                data-icon="inline-start"
+                className="size-3.5"
+              />
             )}
             {t('subagentBar.stop')}
           </Button>
@@ -78,7 +93,7 @@ export function SubagentBar({
         {parent && (
           <Button
             variant="outline"
-            size="sm"
+            className="ks-btn"
             aria-label={t('subagentBar.back', { title: parentTitle })}
             onClick={() =>
               backTo({ kind: 'session', sessionId: parent.id }, () =>
@@ -86,7 +101,12 @@ export function SubagentBar({
               )
             }
           >
-            <ArrowLeftIcon data-icon="inline-start" />
+            <HugeiconsIcon
+              icon={ArrowLeft02Icon}
+              strokeWidth={1.9}
+              aria-hidden
+              data-icon="inline-start"
+            />
             {t('subagentBar.backShort')}
           </Button>
         )}

@@ -2,18 +2,20 @@
    The thread's prose follows the text size setting a step under the other prose, as the screen
    sets its answers at 14 px. */
 
+/* The session view: the thread's column, which the composer under it keeps to. */
+.ks-session {
+  --thread-prose-size: 14px;
+  --thread-column: calc(48 * var(--thread-prose-size) + 8px);
+}
+:root[data-text-size='small'] .ks-session {
+  --thread-prose-size: 13px;
+}
+:root[data-text-size='large'] .ks-session {
+  --thread-prose-size: 15px;
+}
 .ks-thread {
-  --prose-size: 14px;
-  --text-prose: 14px;
-  --thread-column: calc(48 * var(--prose-size) + 8px);
-}
-:root[data-text-size='small'] .ks-thread {
-  --prose-size: 13px;
-  --text-prose: 13px;
-}
-:root[data-text-size='large'] .ks-thread {
-  --prose-size: 15px;
-  --text-prose: 15px;
+  --prose-size: var(--thread-prose-size, 14px);
+  --text-prose: var(--thread-prose-size, 14px);
 }
 .ks-thread__column {
   max-width: calc(var(--thread-column) + 64px);
@@ -962,4 +964,91 @@
 }
 .ks-file__dir {
   color: var(--thread-faint);
+}
+
+/* A subagent's card, on Tool Call Card's measures; it opens the subagent's session. */
+.ks-subagent {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  font-size: 13px;
+  color: var(--thread-ink);
+}
+.ks-subagent[data-waiting] {
+  box-shadow: var(--attention-ring-shadow);
+}
+.ks-subagent__head {
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  min-height: 44px;
+  padding: 0 12px 0 14px;
+  border-radius: 10px;
+  font-weight: 400;
+  text-align: left;
+}
+.ks-subagent__head:hover {
+  background: var(--thread-hover);
+}
+.ks-subagent__icon {
+  color: var(--thread-muted);
+}
+.ks-subagent__name {
+  flex: none;
+  max-width: 50%;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--thread-ink);
+  text-overflow: ellipsis;
+}
+.ks-subagent__desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--thread-muted);
+  text-overflow: ellipsis;
+}
+.ks-subagent__meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+}
+.ks-subagent__chevron {
+  color: var(--thread-faint);
+}
+.ks-subagent__head:hover .ks-subagent__chevron {
+  color: var(--thread-ink);
+}
+
+/* A bar in the composer's place: a subagent's session, or computer use in progress. */
+.ks-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: var(--composer-min);
+  padding: 10px 10px 10px 14px;
+  border-radius: 16px;
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  font-size: 13px;
+  color: var(--thread-text);
+}
+.ks-bar > p {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-bar b {
+  font-weight: 500;
+  color: var(--thread-ink);
+}
+.ks-bar__icon {
+  color: var(--thread-muted);
 }

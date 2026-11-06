@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CircleAlertIcon } from 'lucide-react'
+import { AlertCircleIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
@@ -157,7 +158,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
+    <div className="ks-session relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       <SessionHeader summary={summary} session={session} />
       <ProjectPathContext value={summary.projectPath}>
         {/* The drop zone covers the thread and leaves the composer in view. */}
@@ -168,8 +169,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       </ProjectPathContext>
       {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
       <div style={{ paddingRight: gutter }}>
-        <div className="px-7 pb-3.5">
-          <div className="mx-auto flex w-full max-w-reply flex-col gap-2">
+        <div className="px-8 pb-6">
+          <div className="mx-auto flex w-full max-w-(--thread-column) flex-col gap-2">
             {session && status === 'failed' && (
               <FailedState
                 title={t('view.stopped', { agent: name })}
@@ -180,7 +181,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             )}
             {session && status === 'auth_required' && !empty && (
               <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
-                <CircleAlertIcon />
+                <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
                 <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
                 <AlertDescription>{t('view.historyStays')}</AlertDescription>
                 <AlertAction className="flex gap-1.5">
@@ -195,7 +196,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             )}
             {agentRemoved && (
               <Alert variant="warning">
-                <CircleAlertIcon />
+                <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
                 <AlertTitle>{t('view.agentRemoved', { agent: name })}</AlertTitle>
                 <AlertDescription>{t('view.agentRemovedBody')}</AlertDescription>
                 <AlertAction>
@@ -207,7 +208,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             )}
             {agentOff && !agentRemoved && (
               <Alert variant="warning">
-                <CircleAlertIcon />
+                <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
                 <AlertTitle>{t('view.agentTurnedOff', { agent: name })}</AlertTitle>
                 <AlertDescription>{t('view.agentTurnedOffBody')}</AlertDescription>
                 <AlertAction>

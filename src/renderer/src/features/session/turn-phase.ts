@@ -56,6 +56,8 @@ export function turnPhase(state: ThreadState | null | undefined): TurnPhase {
       if (entry.status === 'pending' || entry.status === 'in_progress') running.push(entry)
       continue
     }
+    // A subagent's card after the message: the agent waits on it rather than writes.
+    if (entry.kind === 'subagent' && !tools) return WORKING
     if (QUIET.has(entry.kind)) continue
     if (tools) break
     if (entry.kind === 'thought') return entry.streaming ? { phase: 'thinking', count: 1 } : WORKING
@@ -122,7 +124,8 @@ export function writingId(state: ThreadState | null | undefined): string | null 
   if (!state) return null
   for (let i = state.order.length - 1; i >= 0; i--) {
     const entry = state.byId[state.order[i]!]
-    if (!entry || QUIET.has(entry.kind)) continue
+    // A plan or a notice may land while the message still streams; a subagent's card follows it.
+    if (!entry || entry.kind === 'plan' || entry.kind === 'notice') continue
     return entry.kind === 'agent' && entry.streaming ? entry.id : null
   }
   return null
