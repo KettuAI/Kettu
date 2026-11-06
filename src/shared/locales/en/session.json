@@ -321,8 +321,7 @@
     "label": "Plan: step {{step}} of {{total}}, {{content}}",
     "labelDone": "Plan: all {{total}} steps done",
     "title": "Plan",
-    "count": "{{step}}/{{total}}",
-    "step": "{{step}} of {{total}}"
+    "count": "{{step}}/{{total}}"
   },
   "userActions": {
     "steered": "Steered",

@@ -652,3 +652,86 @@
   overflow-wrap: anywhere;
   color: var(--thread-ink);
 }
+
+/* The session's top bar: its pull request and plan chips, and the plan's steps on hover. */
+.ks-crumb-sep {
+  display: inline-flex;
+  flex: none;
+  color: var(--shell-faint);
+}
+.ks-chip {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--shell-chip);
+  font-size: 12px;
+  color: var(--shell-muted);
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.ks-chip:hover,
+.ks-chip[data-popup-open] {
+  background: var(--shell-hover);
+  color: var(--shell-ink);
+}
+.ks-chip:focus-visible {
+  outline: 1.5px solid var(--focus);
+  outline-offset: 1px;
+}
+.ks-chip__text {
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  color: var(--shell-ink);
+}
+.ks-chip__dim {
+  color: var(--shell-faint);
+}
+.ks-plan-chip {
+  flex: 0 1 auto;
+}
+.ks-plan-ring {
+  flex: none;
+}
+.ks-plan-ring :is(path, circle) {
+  fill: none;
+  stroke: var(--shell-line-strong);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.ks-plan-ring [data-status='completed'] {
+  stroke: var(--thread-done);
+}
+.ks-plan-ring [data-status='in_progress'] {
+  stroke: var(--thread-fox);
+}
+.ks-plan-pop .ui-stc {
+  max-width: none;
+}
+.ks-plan-pop .ui-stc__card {
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+/* App Shell's buttons inherit their color, which outranks a color utility. */
+.ks-crumb {
+  color: var(--shell-muted);
+}
+.ks-title,
+.ks-crumb:hover {
+  color: var(--shell-ink);
+}
+.ks-title[data-unfocused] {
+  color: var(--shell-text);
+}
+.ks-title[data-unfocused]:hover {
+  color: var(--shell-ink);
+}

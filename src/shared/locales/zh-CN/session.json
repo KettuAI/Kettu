@@ -307,8 +307,7 @@
     "label": "计划：第 {{step}} 步，共 {{total}} 步，{{content}}",
     "labelDone": "计划：{{total}} 步都已完成",
     "title": "计划",
-    "count": "{{step}}/{{total}}",
-    "step": "第 {{step}} 步，共 {{total}} 步"
+    "count": "{{step}}/{{total}}"
   },
   "userActions": {
     "steered": "已插入当前对话",

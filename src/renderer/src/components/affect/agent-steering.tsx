@@ -69,6 +69,8 @@ export type AgentSteeringProps = {
   compose?: boolean;
   /** The run on top (title, agent, clock) – false leaves it out, e.g. where the page around it already names the run */
   head?: boolean;
+  /** The plan's name for screen readers, for a translation */
+  planLabel?: string;
   className?: string;
 };
 
@@ -204,6 +206,7 @@ export function AgentSteering({
   highlight,
   compose = true,
   head = true,
+  planLabel,
   className,
 }: AgentSteeringProps) {
   const uid = useId();
@@ -385,7 +388,7 @@ export function AgentSteering({
 
         {/* ----- The plan ----- */}
         {steps.length > 0 && (
-        <ol className="ui-stc__plan" aria-label="Plan">
+        <ol className="ui-stc__plan" aria-label={planLabel ?? "Plan"}>
           {steps.map((s) => {
             const st = s.status ?? "pending";
             return (
