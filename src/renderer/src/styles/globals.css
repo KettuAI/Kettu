@@ -8,6 +8,7 @@
 @import '@fontsource-variable/jetbrains-mono/wght.css';
 @import '@fontsource-variable/manrope/wght.css';
 @import './tokens.css';
+@import './affect.css';
 
 /* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
    its Light. Each range takes the Regular, Medium or Semibold, or the nearest weight a face has. */

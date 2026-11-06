@@ -14,7 +14,14 @@ const HOST_MESSAGE =
   "The hosts and the daemon run under Node.js; only the hosts' index.ts adapts Electron to them."
 
 export default defineConfig([
-  globalIgnores(['out', 'dist', '.worktrees', 'src/renderer/src/lib/cn-tables.ts']),
+  globalIgnores([
+    'out',
+    'dist',
+    '.worktrees',
+    'src/renderer/src/lib/cn-tables.ts',
+    // affectUI's own files, kept as the registry ships them.
+    'src/renderer/src/components/affect',
+  ]),
   {
     files: ['**/*.{ts,tsx,mts,mjs}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
