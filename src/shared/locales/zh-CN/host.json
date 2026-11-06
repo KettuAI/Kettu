@@ -86,12 +86,17 @@
       "isOn": "{{option}} 已开启，而不是关闭。",
       "next": "可以在输入框中修改。",
       "held": "你的消息没有发送，会留在队列中，点击「继续」后才会发出。"
+    },
+    "computerStopped": {
+      "title": "已停止使用电脑",
+      "description": "你发下一条消息后，Agent 才能再用。"
     }
   },
   "attention": {
     "browserOrigin": "想打开 {{site}}",
     "deviceAccess": "想使用 {{device}}",
     "computerApp": "想使用 {{app}}",
+    "computerSetup": "想使用你的电脑",
     "permission": "请求权限",
     "turnEnd": {
       "end_turn": "已完成",

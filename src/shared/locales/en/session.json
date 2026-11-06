@@ -166,10 +166,51 @@
     "where": "Reads its windows and clicks and types in them, in the background"
   },
   "computerBar": {
-    "using": "Using your computer",
-    "usingApp": "Using your computer · {{app}}",
-    "stop": "Stop",
-    "stopLabel": "Stop using the computer for this turn"
+    "using": "{{agent}} is using your computer",
+    "usingApp": "{{agent}} is using <app>{{app}}</app>",
+    "looking": "Looking at <app>{{app}}</app>",
+    "waiting": "Waiting for you to allow <app>{{app}}</app>",
+    "stopping": "Taking back the computer…",
+    "stop": "Stop using",
+    "stopLabel": "Stop using the computer for this turn; the turn goes on"
+  },
+  "computerSetup": {
+    "label": "Computer use setup",
+    "ask": "{{agent}} wants to use your computer and waits while you set computer use up.",
+    "wants": "wants to use your computer",
+    "waiting": "Waiting for you",
+    "granting": "Waiting for the grant",
+    "step": "Step {{n}} of {{count}}",
+    "enable": {
+      "title": "Turn on computer use",
+      "body": "{{agent}} reads your apps’ windows and clicks and types in them, in the background, only for messages you send from this computer.",
+      "action": "Turn on",
+      "switch": "Computer use"
+    },
+    "accessibility": {
+      "title": "Allow Accessibility",
+      "body": "Kettu reads windows and clicks and types through it. System Settings opens Accessibility: turn on the switch next to Kettu, then come back here.",
+      "pane": "Accessibility"
+    },
+    "screen-recording": {
+      "title": "Allow Screen Recording",
+      "body": "Kettu sees what is in a window through its screenshots. System Settings opens Screen Recording: turn on the switch next to Kettu, then come back here.",
+      "pane": "Screen Recording"
+    },
+    "open": "Open System Settings",
+    "openAgain": "Open System Settings again",
+    "inSettings": "Waiting in System Settings",
+    "goesOn": "Goes on by itself once it is done.",
+    "notNow": "Not now",
+    "elsewhere": "Finish setting up on {{host}}",
+    "elsewhereBody": "The switch and the permissions can only be set in Kettu on that computer. {{agent}} goes on by itself once they are.",
+    "thatComputer": "the computer it runs on",
+    "outcome": {
+      "ready": "Computer use set up",
+      "declined": "Computer use not set up",
+      "timeout": "Computer use not set up in time"
+    },
+    "declinedNote": "Not now"
   },
   "subagent": {
     "fallbackTitle": "Sub-agent",

@@ -330,6 +330,8 @@ export interface IpcInvokeContract {
   'computer:status': { args: []; result: ComputerUseStatus }
   /** Asks macOS for a permission computer use needs, or opens its pane in System Settings. */
   'computer:request-permission': { args: [kind: ComputerPermissionKind]; result: void }
+  /** The icon of an app a session uses, as a data URL; null when the system has none. */
+  'computer:app-icon': { args: [path: string]; result: string | null }
   /** The sites each project always lets agents open. */
   'browser:allowed-sites': { args: []; result: AllowedSites[] }
   'browser:remove-allowed-site': { args: [projectPath: string, origin: string]; result: void }
@@ -669,6 +671,8 @@ export interface KettuApi {
   computer: {
     status(): Promise<ComputerUseStatus>
     requestPermission(kind: ComputerPermissionKind): Promise<void>
+    /** The icon of the app at `path`, the bundle on macOS, as a data URL; null when none. */
+    appIcon(path: string): Promise<string | null>
   }
   /** The page in the side panel's browser, one per session, all in one profile. */
   browser: {

@@ -33,6 +33,7 @@ const AFTER_END = new Set([
   'browser_origin',
   'device_access',
   'computer_app',
+  'computer_setup',
   'session_started',
 ])
 

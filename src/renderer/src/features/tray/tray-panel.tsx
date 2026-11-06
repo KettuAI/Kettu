@@ -89,6 +89,7 @@ function requestTarget(
 ): { text: string; code: boolean } {
   if (request.kind === 'origin') return { text: request.origin, code: false }
   if (request.kind === 'app') return { text: request.app, code: false }
+  if (request.kind === 'setup') return { text: i18n.t('tray:setupTarget'), code: false }
   const { tool } = request
   if (request.permission.questions && tool.question !== undefined) {
     return { text: tool.question, code: false }
@@ -320,6 +321,7 @@ function waitingLine(summary: SessionSummary, detail: SessionDetail | undefined)
   const request = detail?.requests[0]
   if (!request) return ''
   if (request.kind === 'app') return request.app
+  if (request.kind === 'setup') return i18n.t('tray:setupTarget')
   return request.kind === 'origin' ? request.origin : toolLine(request.tool, summary.projectPath)
 }
 
@@ -652,11 +654,12 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
       0,
     ),
   )
-  // Questions and MCP requests are answered in the window: the panel has no room for their steps,
-  // text and fields, and a page request's Open has to open the page.
+  // Questions, MCP requests and the computer use setup are answered in the window: the panel has
+  // no room for their steps, text and fields, and a page request's Open has to open the page.
   const asks =
-    request.kind === 'tool' &&
-    (request.permission.questions !== undefined || request.permission.elicitation !== undefined)
+    request.kind === 'setup' ||
+    (request.kind === 'tool' &&
+      (request.permission.questions !== undefined || request.permission.elicitation !== undefined))
   const options: { label: string; choice: AnswerChoice | null }[] = asks
     ? [{ label: t('answerInKettu'), choice: null }]
     : request.kind === 'tool'
@@ -681,13 +684,16 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
   const [failure, setFailure] = useState<string | null>(null)
   const sending = useRef(false)
   const target = requestTarget(request, summary.projectPath)
-  const wants = asks
-    ? t('wants.question')
-    : request.kind === 'origin'
-      ? t('wants.origin')
-      : request.kind === 'app'
-        ? t('wants.app')
-        : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
+  const wants =
+    request.kind === 'setup'
+      ? t('wants.setup')
+      : asks
+        ? t('wants.question')
+        : request.kind === 'origin'
+          ? t('wants.origin')
+          : request.kind === 'app'
+            ? t('wants.app')
+            : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
 
   const choose = (index: number) => {
     const option = options[index]

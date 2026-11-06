@@ -6,10 +6,17 @@ import type {
   ComputerApp,
   ComputerAppAnswer,
   ComputerAppDecision,
+  ComputerPermissions,
+  ComputerSetupOutcome,
+  ComputerSetupStep,
   ComputerToolErrorCode,
   ComputerUseSettings,
 } from '@shared/computer-use'
-import { COMPUTER_APP_WAIT_MS } from '@shared/computer-use'
+import {
+  COMPUTER_APP_WAIT_MS,
+  COMPUTER_SETUP_POLL_MS,
+  COMPUTER_SETUP_WAIT_MS,
+} from '@shared/computer-use'
 import type { Platform } from '@shared/platform'
 import type { ComputerUseView } from '@shared/thread'
 import type { LogFn } from '../storage'
@@ -56,6 +63,19 @@ export interface ComputerUseDeps {
   allowAlways(app: ComputerApp): void
   /** The session took or released the computer, or used another app. */
   using(sessionId: string, view: ComputerUseView | null): void
+  /**
+   * macOS: Kettu's grants as a new driver process reports them, since the app's own process keeps
+   * an old Screen Recording answer until it restarts; null when it cannot tell.
+   */
+  permissions?(): Promise<ComputerPermissions | null>
+  /** Shows the setup a session's call waits on in its thread; Not now comes to `declineSetup`. */
+  setupAsked(sessionId: string, requestId: number, steps: ComputerSetupStep[]): void
+  /** Steps of a waiting setup were done since it asked. */
+  setupDone(requestId: number, done: ComputerSetupStep[]): void
+  /** The setup ended, so the card shows how. */
+  setupSettled(requestId: number, outcome: ComputerSetupOutcome): void
+  /** The user pressed Stop using: the thread says so. */
+  stopped(sessionId: string): void
   log: LogFn
 }
 
@@ -69,7 +89,27 @@ interface Waiting {
 interface Hold {
   sessionId: string
   app: string | null
+  appPath: string | null
+  action: 'read' | 'act' | null
   timer: ReturnType<typeof setTimeout> | null
+}
+
+/** The app a call touches, as the label on the composer shows it. */
+interface Using {
+  name: string
+  path: string | null
+  action: 'read' | 'act'
+}
+
+/** A setup a session's calls wait on. */
+interface Setup {
+  sessionId: string
+  requestId: number
+  steps: ComputerSetupStep[]
+  done: ComputerSetupStep[]
+  timer: ReturnType<typeof setTimeout>
+  outcome: Promise<ComputerSetupOutcome>
+  resolve: (outcome: ComputerSetupOutcome) => void
 }
 
 function failure(code: ComputerToolErrorCode, message: string): CallToolResult {
@@ -139,6 +179,14 @@ export class ComputerUse {
   /** Which process each snapshot read, for the element tokens it gave. */
   private readonly snapshots = new Map<string, number>()
   private apps: { at: number; list: Promise<DriverApp[]> } | null = null
+  /** Setups waiting for the user, by session. */
+  private readonly setups = new Map<string, Setup>()
+  /** Sessions whose turn the user did not set computer use up for, and how, not asked again. */
+  private readonly notSetUp = new Map<string, 'declined' | 'timeout'>()
+  /** The macOS permissions were seen granted, so calls stop checking them. */
+  private permissionsSeen = false
+  private poll: ReturnType<typeof setTimeout> | null = null
+  private polling = false
 
   constructor(private readonly deps: ComputerUseDeps) {}
 
@@ -165,19 +213,31 @@ export class ComputerUse {
     return true
   }
 
-  /** The user pressed Stop: the driver ends, and the turn may not use the computer again. */
+  /** Not now on a setup card, from any window or device; false when nothing waits on it. */
+  declineSetup(requestId: number): boolean {
+    const setup = [...this.setups.values()].find((s) => s.requestId === requestId)
+    if (!setup) return false
+    this.settleSetup(setup, 'declined')
+    return true
+  }
+
+  /** The user pressed Stop using: the driver ends, and the turn may not use the computer again. */
   stop(sessionId: string): void {
     if (this.hold?.sessionId !== sessionId) return
     this.stopped.add(sessionId)
     this.settleSession(sessionId)
     this.release(sessionId)
     void this.deps.driver?.stop()
+    this.deps.stopped(sessionId)
   }
 
   /** The session's turn ended: it lets go of the computer, and its next turn starts afresh. */
   turnEnded(sessionId: string): void {
+    const setup = this.setups.get(sessionId)
+    if (setup) this.settleSetup(setup, 'timeout')
     this.stopped.delete(sessionId)
     this.denied.delete(sessionId)
+    this.notSetUp.delete(sessionId)
     this.settleSession(sessionId)
     this.release(sessionId)
   }
@@ -190,6 +250,8 @@ export class ComputerUse {
 
   /** The settings changed; turned off, every hold, question and the driver end. */
   settingsChanged(): void {
+    // A setup waiting on the switch goes on at once rather than at its next check.
+    if (this.setups.size > 0) void this.check()
     if (this.deps.settings().enabled) return
     for (const requestId of [...this.waiting.keys()]) this.settle(requestId, 'timeout')
     if (this.hold) this.release(this.hold.sessionId)
@@ -198,6 +260,7 @@ export class ComputerUse {
 
   /** The host stops: so does the driver. */
   async shutdown(): Promise<void> {
+    for (const setup of [...this.setups.values()]) this.settleSetup(setup, 'timeout')
     for (const requestId of [...this.waiting.keys()]) this.settle(requestId, 'timeout')
     if (this.hold) this.release(this.hold.sessionId)
     await this.deps.driver?.stop()
@@ -212,18 +275,14 @@ export class ComputerUse {
           'computer whose apps it uses.',
       )
     }
-    if (!this.deps.settings().enabled) {
-      throw new ComputerToolError(
-        'unavailable',
-        'Computer use is off. The user can turn it on in Kettu’s Settings › Computer use.',
-      )
-    }
     const refusal = this.deps.turnRefusal(sessionId)
     if (refusal) throw new ComputerToolError('unavailable', refusal)
     if (this.stopped.has(sessionId)) throw stoppedError()
+    await this.setUp(sessionId)
+    if (this.stopped.has(sessionId)) throw stoppedError()
     this.take(sessionId)
     if (call.pid === null) return this.listApps(driver)
-    const app = await this.appOf(driver, call.pid)
+    const { app, path } = await this.appOf(driver, call.pid)
     const blocked = blockedApp(app, call.pid, this.deps.self)
     if (blocked) throw new ComputerToolError('blocked', BLOCKED[blocked])
     if (call.keys && refusedShortcut(call.keys, this.deps.platform)) {
@@ -246,14 +305,110 @@ export class ComputerUse {
     await this.approve(sessionId, app)
     // The user may have pressed Stop, or another session taken over, while the card waited.
     if (this.stopped.has(sessionId)) throw stoppedError()
-    this.take(sessionId, app.name)
+    this.take(sessionId, { name: app.name, path, action: call.acts ? 'act' : 'read' })
     const result = await driver.call(call.driverTool, call.args)
     if (call.tool === 'computer_get_window_state') this.remember(result, call.pid)
     return passed(result)
   }
 
+  /**
+   * Waits while the user sets computer use up, when the switch is off or a macOS permission is
+   * missing; fails once they say Not now or do not finish in time, for the rest of the turn.
+   */
+  private async setUp(sessionId: string): Promise<void> {
+    const before = this.notSetUp.get(sessionId)
+    if (before) throw notSetUpError(before)
+    let setup = this.setups.get(sessionId)
+    if (!setup) {
+      const steps = await this.missing()
+      if (steps.length === 0) return
+      // Another call of the session may have asked while this one checked.
+      setup = this.setups.get(sessionId) ?? this.askSetup(sessionId, steps)
+    }
+    const outcome = await setup.outcome
+    if (outcome !== 'ready') throw notSetUpError(outcome)
+  }
+
+  /** What computer use lacks on this computer, in the order a card explains it. */
+  private async missing(): Promise<ComputerSetupStep[]> {
+    const steps: ComputerSetupStep[] = []
+    if (!this.deps.settings().enabled) steps.push('enable')
+    if (this.deps.platform !== 'darwin' || this.permissionsSeen || !this.deps.permissions) {
+      return steps
+    }
+    let granted: ComputerPermissions | null = null
+    try {
+      granted = await this.deps.permissions()
+    } catch (error) {
+      this.deps.log('warn', `Computer use could not check permissions: ${String(error)}`)
+    }
+    // Unknown goes on: the driver's own error then says what is wrong.
+    if (!granted) return steps
+    if (!granted.accessibility) steps.push('accessibility')
+    if (!granted.screenRecording) steps.push('screen-recording')
+    if (granted.accessibility && granted.screenRecording) this.permissionsSeen = true
+    return steps
+  }
+
+  private askSetup(sessionId: string, steps: ComputerSetupStep[]): Setup {
+    const requestId = this.nextRequest++
+    let resolve!: (outcome: ComputerSetupOutcome) => void
+    const outcome = new Promise<ComputerSetupOutcome>((done) => (resolve = done))
+    const timer = setTimeout(() => {
+      const setup = this.setups.get(sessionId)
+      if (setup?.requestId === requestId) this.settleSetup(setup, 'timeout')
+    }, COMPUTER_SETUP_WAIT_MS)
+    timer.unref?.()
+    const setup: Setup = { sessionId, requestId, steps, done: [], timer, outcome, resolve }
+    this.setups.set(sessionId, setup)
+    this.deps.setupAsked(sessionId, requestId, steps)
+    this.schedule()
+    return setup
+  }
+
+  private settleSetup(setup: Setup, outcome: ComputerSetupOutcome): void {
+    if (this.setups.get(setup.sessionId) !== setup) return
+    this.setups.delete(setup.sessionId)
+    clearTimeout(setup.timer)
+    if (outcome !== 'ready') this.notSetUp.set(setup.sessionId, outcome)
+    this.deps.setupSettled(setup.requestId, outcome)
+    setup.resolve(outcome)
+    if (this.setups.size === 0 && this.poll) {
+      clearTimeout(this.poll)
+      this.poll = null
+    }
+  }
+
+  private schedule(): void {
+    if (this.poll || this.setups.size === 0) return
+    this.poll = setTimeout(() => {
+      this.poll = null
+      void this.check().finally(() => this.schedule())
+    }, COMPUTER_SETUP_POLL_MS)
+    this.poll.unref?.()
+  }
+
+  /** Checks again what the waiting setups lack: done steps show, and a setup lacking none ends. */
+  private async check(): Promise<void> {
+    if (this.polling || this.setups.size === 0) return
+    this.polling = true
+    try {
+      const missing = new Set(await this.missing())
+      for (const setup of [...this.setups.values()]) {
+        const done = setup.steps.filter((step) => !missing.has(step))
+        if (done.length !== setup.done.length) {
+          setup.done = done
+          this.deps.setupDone(setup.requestId, done)
+        }
+        if (missing.size === 0) this.settleSetup(setup, 'ready')
+      }
+    } finally {
+      this.polling = false
+    }
+  }
+
   /** Takes the computer for the session, or fails naming the session that has it. */
-  private take(sessionId: string, app?: string): void {
+  private take(sessionId: string, app?: Using): void {
     const hold = this.hold
     if (hold && hold.sessionId !== sessionId) {
       const title = this.deps.sessionTitle(hold.sessionId)
@@ -263,14 +418,23 @@ export class ComputerUse {
           'user.',
       )
     }
-    const next: Hold = hold ?? { sessionId, app: null, timer: null }
+    const next: Hold = hold ?? { sessionId, app: null, appPath: null, action: null, timer: null }
     if (next.timer) clearTimeout(next.timer)
     next.timer = setTimeout(() => this.release(sessionId), HOLD_IDLE_MS)
     next.timer.unref?.()
-    const changed = !hold || (app !== undefined && app !== next.app)
-    if (app !== undefined) next.app = app
+    const changed =
+      !hold ||
+      (app !== undefined &&
+        (app.name !== next.app || app.path !== next.appPath || app.action !== next.action))
+    if (app) {
+      next.app = app.name
+      next.appPath = app.path
+      next.action = app.action
+    }
     this.hold = next
-    if (changed) this.deps.using(sessionId, { app: next.app })
+    if (changed) {
+      this.deps.using(sessionId, { app: next.app, appPath: next.appPath, action: next.action })
+    }
   }
 
   private release(sessionId: string): void {
@@ -351,16 +515,19 @@ export class ComputerUse {
   }
 
   /** The app a process belongs to, as the driver reports it, never as the agent named it. */
-  private async appOf(driver: DriverLike, pid: number): Promise<ComputerApp> {
+  private async appOf(
+    driver: DriverLike,
+    pid: number,
+  ): Promise<{ app: ComputerApp; path: string | null }> {
     const found = (await this.listedApps(driver)).find((app) => app.pid === pid)
     const app = found ? appIdentity(found, this.deps.platform) : null
-    if (!app) {
+    if (!found || !app) {
       throw new ComputerToolError(
         'invalid',
         `No running app has process id ${pid}. List the apps again with computer_list_apps.`,
       )
     }
-    return app
+    return { app, path: found.launchPath }
   }
 
   private async listApps(driver: DriverLike): Promise<CallToolResult> {
@@ -399,6 +566,17 @@ function stoppedError(): ComputerToolError {
     'stopped',
     'The user stopped computer use for this turn. Do not use the computer again until they send ' +
       'another message.',
+  )
+}
+
+function notSetUpError(outcome: 'declined' | 'timeout'): ComputerToolError {
+  return new ComputerToolError(
+    'unavailable',
+    outcome === 'declined'
+      ? 'The user chose not to set up computer use for now. Do not use the computer again in ' +
+          'this turn; do the task another way, or tell the user what you needed it for.'
+      : 'The user did not finish setting up computer use in time. Do not use the computer ' +
+          'again in this turn; do the task another way, or tell the user what you needed it for.',
   )
 }
 

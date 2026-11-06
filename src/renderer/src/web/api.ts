@@ -459,6 +459,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         desktop: null,
       }),
       requestPermission: () => unsupported('use the computer'),
+      // The app's icon lies on the host, which the page cannot read; the label shows a generic one.
+      appIcon: async () => null,
     },
     browser: {
       show: () => unsupported('show the browser'),

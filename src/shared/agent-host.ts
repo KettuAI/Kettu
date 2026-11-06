@@ -877,9 +877,14 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: ComputerAppDecision }
     result: void
   }
-  // The bar's Stop: the session stops using the computer for the rest of its turn.
+  // The label's Stop using: the session stops using the computer for the rest of its turn.
   'computer.stop': {
     params: { sessionId: string }
+    result: void
+  }
+  // Not now on a setup card, `entryId`, from any window or device: the call that waits on it fails.
+  'computer.declineSetup': {
+    params: { sessionId: string; entryId: string }
     result: void
   }
 }
@@ -1040,6 +1045,7 @@ export const HOST_METHODS = [
   'devices.forget',
   'computer.answerApp',
   'computer.stop',
+  'computer.declineSetup',
 ] as const satisfies readonly HostMethod[]
 
 /** One that has a session in front: the host's own windows as one, or a paired device. */

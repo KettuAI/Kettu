@@ -63,7 +63,7 @@ import { isRendererUrl, rendererPage } from './renderer'
 import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
-import { computerUseStatus, requestComputerPermission } from './computer-use'
+import { computerAppIcon, computerUseStatus, requestComputerPermission } from './computer-use'
 import { framesSettled, isRevoked } from './subframes'
 import { systemNameForRun } from './system-name'
 import type { TerminalHost } from './terminal-host'
@@ -741,6 +741,7 @@ export function registerIpcHandlers({
     }
     return requestComputerPermission(kind)
   })
+  handle('computer:app-icon', 1, (_, path) => computerAppIcon(absolutePath(path)))
   handle('browser:allowed-sites', 0, () => browserViews.allowedSites())
   handle('browser:remove-allowed-site', 2, (_, projectPath, origin) => {
     browserViews.removeAllowedSite(projectPathArg(projectPath), browserOrigin(origin))

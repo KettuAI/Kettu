@@ -1418,5 +1418,9 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'computer.stop': (params) => ({ sessionId: sessionId(fields(params)) }),
+    'computer.declineSetup': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), entryId: string(o, 'entryId', ID_CHARS) }
+    },
   }
 }

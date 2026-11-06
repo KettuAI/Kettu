@@ -319,6 +319,25 @@ describe('isThreadEntry', () => {
       device: { id: 'phone', name: 'Phone' },
       after: null,
     },
+    {
+      kind: 'computer_setup',
+      id: 'e:13',
+      requestId: 5,
+      steps: ['enable', 'accessibility', 'screen-recording'],
+      done: ['enable'],
+      outcome: null,
+      after: 't:1',
+    },
+    {
+      kind: 'computer_setup',
+      id: 'e:14',
+      requestId: 6,
+      steps: ['enable'],
+      done: [],
+      outcome: 'declined',
+      device: { id: 'phone', name: 'Phone' },
+      after: null,
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -355,6 +374,13 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...app, appName: 7 })).toBe(false)
     expect(isThreadEntry({ ...app, decision: 'project' })).toBe(false)
     expect(isThreadEntry({ ...app, after: 1 })).toBe(false)
+    const setup = valid.find((entry) => entry.kind === 'computer_setup')!
+    expect(isThreadEntry({ ...setup, requestId: 'five' })).toBe(false)
+    expect(isThreadEntry({ ...setup, steps: ['enable', 'camera'] })).toBe(false)
+    expect(isThreadEntry({ ...setup, steps: undefined })).toBe(false)
+    expect(isThreadEntry({ ...setup, done: 'enable' })).toBe(false)
+    expect(isThreadEntry({ ...setup, outcome: 'deny' })).toBe(false)
+    expect(isThreadEntry({ ...setup, after: 1 })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'commit' })).toBe(false)
     expect(isThreadEntry({ kind: 'git', id: 'g', event: 'branch', branch: 'x', after: 1 })).toBe(
       false,

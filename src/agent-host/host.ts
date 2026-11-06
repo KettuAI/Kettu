@@ -87,7 +87,7 @@ import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
 import { ScratchFolders } from './scratch'
-import { ComputerDriver } from './computer/driver'
+import { ComputerDriver, probePermissions } from './computer/driver'
 import { ComputerUse } from './computer/service'
 import { SessionManager, type SessionTimings } from './sessions'
 import { EnvironmentService, type EnvironmentServiceDeps } from './shell-env'
@@ -364,6 +364,13 @@ export class AgentHost {
           settled: (requestId, answer) => this.sessions.computerAppSettled(requestId, answer),
           allowAlways: (app) => options.send({ type: 'host:computer-app-allow', app }),
           using: (sessionId, view) => this.sessions.computerUsing(sessionId, view),
+          permissions: () => probePermissions({ path: computer.driverPath, log }),
+          setupAsked: (sessionId, requestId, steps) =>
+            this.sessions.computerSetupAsked(sessionId, requestId, steps),
+          setupDone: (requestId, done) => this.sessions.computerSetupDone(requestId, done),
+          setupSettled: (requestId, outcome) =>
+            this.sessions.computerSetupSettled(requestId, outcome),
+          stopped: (sessionId) => this.sessions.computerStopped(sessionId),
           log,
         })
       : null
@@ -1539,6 +1546,12 @@ export class AgentHost {
       },
       'computer.stop': ({ sessionId }) => {
         this.computer?.stop(sessionId)
+      },
+      'computer.declineSetup': ({ sessionId, entryId }, { device }) => {
+        const requestId = sessions.declineComputerSetup(sessionId, entryId, fromDevice(device))
+        if (!this.computer?.declineSetup(requestId)) {
+          throw new HostError('not_found', `No setup waits in ${entryId}`)
+        }
       },
       'browser.answerOrigin': ({ sessionId, entryId, decision }, { device }) => {
         const { owner, requestId } = sessions.answerOrigin(
