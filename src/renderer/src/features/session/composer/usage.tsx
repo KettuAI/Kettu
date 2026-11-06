@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { ChevronRightIcon, TimerIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
+import { ArrowRight01Icon, Timer02Icon } from '@hugeicons/core-free-icons'
+import { Trans, useTranslation } from 'react-i18next'
 import type { AgentAccount, ContextList, PlanLimit } from '@shared/agent-host'
 import { CONTEXT_REFRESH_MS, type ContextReport } from '@shared/context'
 import {
@@ -16,20 +16,19 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
+import {
+  ContextWindow,
+  type ContextPart as ContextWindowPart,
+} from '@renderer/components/affect/context-window'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
-import {
-  breakdownView,
-  contextSegments,
-  partFill,
-  shownUsage,
-  type ContextRow,
-} from '@renderer/features/session/composer/context-bar'
+import { breakdownView, shownUsage } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { USAGE_TONE_TEXT, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
+import { usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import {
   clockTime,
   countdown,
@@ -40,12 +39,11 @@ import {
   tokens,
 } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
+import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadContext, refreshLimits, useUsageStore } from '@renderer/stores/usage'
-import { useAboveBox } from './above-box'
-import { ROW_BUTTON } from './menu-parts'
+import { Glyph } from './glyph'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -124,58 +122,9 @@ export function Ring({
   )
 }
 
-/** An arc over a track, filled to `share`: the cache popover's 40 px ring. */
-function Arc({
-  share,
-  size,
-  stroke,
-  className,
-}: {
-  share: number
-  size: number
-  stroke: number
-  /** The arc's color, as a stroke class. */
-  className?: string
-}) {
-  const r = (size - stroke) / 2
-  const c = 2 * Math.PI * r
-  return (
-    <svg
-      aria-hidden
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="shrink-0 -rotate-90"
-    >
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        strokeWidth={stroke}
-        className="stroke-border"
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={c * (1 - Math.min(1, Math.max(0, share)))}
-        className={cn(
-          'transition-[stroke-dashoffset] duration-(--duration-slow) ease-out-quint',
-          className ?? 'stroke-current',
-        )}
-      />
-    </svg>
-  )
-}
-
 /**
- * The prompt cache's time left, for a harness that says when its cache expires; amber in the last
- * minute. It opens what the cache saves and when it last wrote.
+ * The prompt cache's time left on the composer's tray, for a harness that says when its cache
+ * expires; amber in the last minute. It opens what the cache saves and when it last wrote.
  */
 export function CacheButton({
   cache,
@@ -192,7 +141,6 @@ export function CacheButton({
   const timed = knownExpiry(cache)
   const phase = useCachePhase(timed)
   const time = useCacheLeft(timed?.expiresAt ?? null, countdown)
-  const [setAnchor, aboveBox] = useAboveBox()
   if (!timed || !phase) return null
   const expired = phase === 'expired'
   const label = expired
@@ -204,28 +152,18 @@ export function CacheButton({
     <Popover>
       <PopoverTrigger
         render={
-          <Button
-            ref={setAnchor}
-            variant="quiet"
-            size="sm"
+          <button
+            type="button"
             aria-label={t('usage.cache.button', { time: label })}
-            className={cn(
-              ROW_BUTTON,
-              'text-hint tabular',
-              phase === 'ending' && !running && 'text-warning aria-expanded:text-warning',
-            )}
+            data-tone={phase === 'ending' && !running ? 'warn' : undefined}
+            className="ui-as-tray-link kettu-tray-link--meter"
           />
         }
       >
-        <TimerIcon strokeWidth={1.4} />
-        {label}
+        <Glyph icon={Timer02Icon} size={14} />
+        <span className="tabular">{label}</span>
       </PopoverTrigger>
-      <PopoverContent
-        side="top"
-        align="end"
-        sideOffset={aboveBox}
-        className="w-72.5 gap-0 px-4 py-3.5"
-      >
+      <PopoverContent side="top" align="end" sideOffset={8} className="kettu-pop w-70">
         <CachePart cache={timed} phase={phase} used={used} />
       </PopoverContent>
     </Popover>
@@ -248,30 +186,39 @@ function CachePart({
   const read = tokens(used)
   const hours = cache.ttl % HOUR === 0
   const count = hours ? cache.ttl / HOUR : Math.round(cache.ttl / MINUTE)
+  const share = Math.min(1, Math.max(0, left / cache.ttl))
   return (
-    <div className="flex flex-col text-hint">
-      <div className="flex items-center gap-3">
-        <Arc share={left / cache.ttl} size={40} stroke={4} className="stroke-warning" />
-        <div className="min-w-0">
-          <div className="text-ui font-semibold text-primary">{t('usage.cache.title')}</div>
-          <div className="text-tertiary tabular">
-            {expired
-              ? t(cache.estimate ? 'usage.cache.likelyExpired' : 'usage.cache.expired')
-              : t(cache.estimate ? 'usage.cache.leftAbout' : 'usage.cache.leftCached', {
-                  time: countdown(left),
-                  tokens: read,
-                })}
-          </div>
-        </div>
-      </div>
-      <p className="mt-3 text-secondary">
+    <div className="kettu-cache">
+      <svg className="kettu-cache__arc" viewBox="0 0 64 36" aria-hidden>
+        <path d="M6 32a26 26 0 0 1 52 0" pathLength={100} className="kettu-cache__track" />
+        <path
+          d="M6 32a26 26 0 0 1 52 0"
+          pathLength={100}
+          className="kettu-cache__fill"
+          strokeDasharray={`${share * 100} 100`}
+        />
+      </svg>
+      <b>{t('usage.cache.title')}</b>
+      <span className="kettu-cache__line tabular">
+        {expired ? (
+          t(cache.estimate ? 'usage.cache.likelyExpired' : 'usage.cache.expired')
+        ) : (
+          <Trans
+            t={t}
+            i18nKey={cache.estimate ? 'usage.cache.leftLineAbout' : 'usage.cache.leftLine'}
+            values={{ time: countdown(left), tokens: read }}
+            components={{ time: <b /> }}
+          />
+        )}
+      </span>
+      <span className="kettu-cache__note">
         {expired
           ? t(cache.estimate ? 'usage.cache.ifExpired' : 'usage.cache.costExpired', {
               tokens: read,
             })
           : t('usage.cache.explain')}
-      </p>
-      <div className="mt-2.5 flex gap-3 text-tertiary tabular">
+      </span>
+      <span className="kettu-cache__foot tabular">
         <span>{t('usage.cache.lastReply', { time: clockTime(cache.lastRequestAt) })}</span>
         <span>
           {t(
@@ -285,14 +232,20 @@ function CachePart({
             { count },
           )}
         </span>
-      </div>
+      </span>
     </div>
   )
 }
 
+/** A usage level's place among the four colors the context ring and the plan bars share. */
+const METER = { low: 'ok', medium: 'mid', high: 'high', critical: 'full' } as const
+
+const LIMIT_METER = { ok: 'mid', warn: 'high', bad: 'full' } as const
+
 /**
- * How much of the context is used, as a pie and its percentage, and a plan limit nearing its end
- * before them. It opens what fills the context, the session's tokens and the plan's limits.
+ * How much of the context is used, as a ring and its percentage, and a plan limit nearing its end
+ * before them, on the composer's tray. It opens affectUI's Context Window over what fills the
+ * context, then the session's tokens and the plan's limits.
  */
 export function ContextButton({
   sessionId,
@@ -305,6 +258,7 @@ export function ContextButton({
   context,
   limits,
   account,
+  model,
 }: {
   sessionId: string
   agentId: AgentId
@@ -320,12 +274,13 @@ export function ContextButton({
   context?: ContextReport
   limits: PlanLimit[]
   account: AgentAccount | null
+  /** The model's name, for the card's chip. */
+  model: string | null
 }) {
   const { t } = useTranslation('composer')
   const warning = warningLimit(limits)
   // An account of another kind has no plan; an unknown one shows the limits the agent reports.
   const subscribed = account ? account.kind === 'account' : limits.length > 0
-  const [setAnchor, aboveBox] = useAboveBox()
   const cached = useUsageStore((s) => s.context[sessionId])
   const read = context ?? cached
   const shown = shownUsage(usage, read?.breakdown ?? null)
@@ -339,8 +294,6 @@ export function ContextButton({
   if (!usage && !warning) return null
   const share = shown && shown.size > 0 ? shown.used / shown.size : 0
   const tone = contextTone(share)
-  // From 80% the percentage takes the level's text color.
-  const full = tone === 'high' || tone === 'critical'
   const percent = Math.round(share * 100)
   const onOpenChange = (open: boolean) => {
     if (!open) return
@@ -359,99 +312,118 @@ export function ContextButton({
     <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger
         render={
-          <Button
-            ref={setAnchor}
-            variant="quiet"
-            size="sm"
+          <button
+            type="button"
             aria-label={
               usage
                 ? t(read?.error ? 'usage.contextPercentStale' : 'usage.contextPercent', { percent })
                 : t('usage.title')
             }
             title={read?.error ? t('usage.breakdown.refreshFailed') : undefined}
-            className={cn(ROW_BUTTON, 'text-hint tabular')}
+            className="ui-as-tray-link kettu-tray-link--meter"
           />
         }
       >
         {warning && (
           <span
             key={`${warning.window}-${warning.usedPercent}`}
-            className={cn(
-              'animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-base)',
-              LIMIT_TEXT[limitLevel(warning)],
-            )}
+            className="kettu-tray-limit"
+            data-level={LIMIT_METER[limitLevel(warning)]}
           >
             {isShortWindow(warning.window) ? t(SHORT_WINDOW[warning.window]) : limitLabel(warning)}{' '}
             {warning.usedPercent !== null && `${Math.round(warning.usedPercent)}%`}
           </span>
         )}
         {usage && (
-          <span className={cn('flex items-center gap-1.5', full && USAGE_TONE_TEXT[tone])}>
-            <Ring share={share} tone={tone} />
-            {read?.error && '≈'}
-            {percent}%
-          </span>
+          <>
+            <MeterRing share={share} level={METER[tone]} />
+            <span className="tabular">
+              {read?.error && '≈'}
+              {t('usage.contextShort', { percent })}
+            </span>
+          </>
         )}
       </PopoverTrigger>
       <PopoverContent
         side="top"
         align="end"
-        sideOffset={aboveBox}
-        className="max-h-(--available-height) w-85 gap-0 overflow-y-auto px-4 py-3.5"
+        sideOffset={8}
+        className="kettu-pop max-h-(--available-height) w-90 overflow-y-auto"
       >
-        {shown && (
-          <ContextPart
-            sessionId={sessionId}
-            usage={shown}
-            share={share}
-            full={full}
-            idle={idle}
-            reports={reports}
-            live={live}
-            report={read}
-            managed={context !== undefined && direct}
-          />
-        )}
-        {subscribed && (
-          <>
-            {usage && <Rule />}
-            <PlanPart limits={limits} account={account} />
-          </>
-        )}
+        <div className="kettu-ctx">
+          {shown && (
+            <ContextPart
+              sessionId={sessionId}
+              agentId={agentId}
+              usage={shown}
+              idle={idle}
+              reports={reports}
+              live={live}
+              report={read}
+              managed={context !== undefined && direct}
+              model={model}
+            />
+          )}
+          {shown && <SessionLine usage={shown} />}
+          {subscribed && <PlanLimits limits={limits} account={account} />}
+        </div>
       </PopoverContent>
     </Popover>
   )
 }
 
-/** A line across the whole popover, through its padding. */
-function Rule() {
-  return <div className="-mx-4 my-3 hairline-x shrink-0 bg-border-soft" />
+/** The tray's ring: a pie on a disc tinted in the level's color, 14 px. */
+function MeterRing({ share, level }: { share: number; level: string }) {
+  const r = 5.5
+  const c = 2 * Math.PI * r
+  const used = Math.min(1, Math.max(0, share))
+  return (
+    <svg className="kettu-meter-ring" data-level={level} viewBox="0 0 14 14" aria-hidden>
+      <circle cx="7" cy="7" r="6.5" className="kettu-meter-ring__disc" />
+      <circle
+        cx="7"
+        cy="7"
+        r={r / 2}
+        className="kettu-meter-ring__pie"
+        strokeWidth={r}
+        strokeDasharray={`${used * (c / 2)} ${c}`}
+        transform="rotate(-90 7 7)"
+      />
+    </svg>
+  )
+}
+
+/** A list's token count as the agent wrote it, such as "1.2k", as a number. */
+function parseTokens(text: string): number {
+  const match = /([\d.,]+)\s*([kKmM])?/.exec(text)
+  if (!match) return 0
+  const n = Number(match[1]!.replace(/,/g, ''))
+  const unit = match[2]?.toLowerCase()
+  return Number.isFinite(n) ? n * (unit === 'k' ? 1e3 : unit === 'm' ? 1e6 : 1) : 0
 }
 
 function ContextPart({
   sessionId,
+  agentId,
   usage,
-  share,
-  full,
   idle,
   reports,
   live,
   report,
   managed,
+  model,
 }: {
   sessionId: string
+  agentId: AgentId
   usage: SessionUsage
-  share: number
-  full: boolean
   idle: boolean
   reports: boolean
   live: boolean
   report: ContextReport | undefined
   managed: boolean
+  model: string | null
 }) {
   const { t } = useTranslation('composer')
-  const totals = usage.tokens
-  const tone = contextTone(share)
   const key = `${usage.used}/${usage.size}`
   const view = breakdownView(report, key, { reports, idle, live })
   // Managed reports are refreshed by the host, independently of this popover's lifetime.
@@ -461,33 +433,62 @@ function ContextPart({
     if (readNow) loadContext(sessionId, key)
   }, [readNow, sessionId, key])
   const rows = view.kind === 'rows' ? view.rows : null
-  const breakdown = view.kind === 'rows' ? report?.breakdown : null
-  const lists = breakdown?.lists ?? []
+  const lists = view.kind === 'rows' ? (report?.breakdown?.lists ?? []) : []
   const busy = view.kind === 'rows' && view.dimmed
   const retry = () => loadContext(sessionId, key, true)
+  const listOf = (name: string) => lists.find((l) => l.name.toLowerCase() === name.toLowerCase())
+  const parts: ContextWindowPart[] = rows
+    ? rows
+        .filter((row) => row.part.kind !== 'free')
+        .map((row) => {
+          const list = listOf(row.name)
+          return {
+            id: row.name,
+            label: row.name,
+            tokens: row.tokens,
+            locked: true,
+            ...(row.part.kind === 'buffer'
+              ? { color: 'var(--composer-faint)', reserved: true }
+              : {}),
+            ...(list
+              ? {
+                  items: list.items.map((item, index) => ({
+                    id: String(index),
+                    label: item.detail ? `${item.name} · ${item.detail}` : item.name,
+                    tokens: parseTokens(item.tokens),
+                  })),
+                }
+              : {}),
+          }
+        })
+    : [{ id: 'used', label: t('usage.context.used'), tokens: usage.used, locked: true }]
+  const unlisted = lists.filter(
+    (l) => !rows?.some((r) => r.name.toLowerCase() === l.name.toLowerCase()),
+  )
   return (
-    <div className="flex flex-col text-hint">
-      <div className="flex items-baseline gap-3">
-        <span className="min-w-0 flex-1 text-ui font-semibold text-primary">
-          <span className={cn(full && USAGE_TONE_TEXT[tone])}>{Math.round(share * 100)}%</span>{' '}
-          <span className="font-normal text-secondary">{t('usage.context.ofUsed')}</span>
-        </span>
-        <span className="text-tertiary tabular">
-          {tokens(usage.used)} / {tokens(usage.size)}
-        </span>
-      </div>
-      <div
-        aria-busy={busy}
-        className={cn(
-          'flex flex-col transition-opacity duration-(--duration-fast)',
-          busy && 'opacity-60',
-        )}
-      >
-        <ContextBar rows={rows} used={usage.used} size={usage.size} />
-        {rows && <Sources rows={rows} lists={lists} />}
+    <>
+      <div aria-busy={busy} className="kettu-ctx__window" data-busy={busy || undefined}>
+        <ContextWindow
+          parts={parts}
+          limit={usage.size}
+          title={t('usage.context.title')}
+          model={model ?? undefined}
+          modelIcon={model ? <AgentMark agent={agentId} size={12} /> : undefined}
+          readOnly
+          labels={{
+            free: (n) => t('usage.window.free', { n }),
+            left: (n) => t('usage.window.left', { n }),
+            over: (n) => t('usage.window.over', { n }),
+            full: t('usage.window.full'),
+            of: (n) => t('usage.window.of', { n }),
+            share: (percent) => t('usage.window.share', { percent }),
+            used: (used, cap, percent) => t('usage.window.used', { used, cap, percent }),
+            nothing: t('usage.window.nothing'),
+          }}
+        />
       </div>
       {view.kind === 'rows' && view.stale && (
-        <p className="text-small text-tertiary">
+        <p className="kettu-ctx__note">
           {t(
             report?.error
               ? 'usage.breakdown.refreshFailed'
@@ -498,39 +499,38 @@ function ContextPart({
         </p>
       )}
       {view.kind === 'loading' && <BreakdownRows />}
-      {view.kind === 'error' && <BreakdownError error={view.error} onRetry={retry} />}
-      {view.kind === 'betweenTurns' && (
-        <p className="text-small text-tertiary">{t('usage.breakdown.betweenTurns')}</p>
+      {view.kind === 'error' && (
+        <div className="kettu-ctx__pad">
+          <BreakdownError error={view.error} onRetry={retry} />
+        </div>
       )}
-      {lists.length > 0 && (
-        <div className="mt-1.5 flex flex-col pt-1.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-          {lists.map((list) => (
+      {view.kind === 'betweenTurns' && (
+        <p className="kettu-ctx__note">{t('usage.breakdown.betweenTurns')}</p>
+      )}
+      {unlisted.length > 0 && (
+        <div className="kettu-ctx__pad">
+          {unlisted.map((list) => (
             <ListPart key={list.name} list={list} />
           ))}
         </div>
       )}
-      {(totals || usage.cost) && (
-        <>
-          <Rule />
-          <SessionLine usage={usage} />
-        </>
-      )}
-    </div>
+    </>
   )
 }
 
-/** The session's tokens and cost on one line, with the kinds of tokens in its tooltip. */
+/** The session's tokens and cost on one row, with the kinds of tokens in its tooltip. */
 function SessionLine({ usage }: { usage: SessionUsage }) {
   const { t } = useTranslation('composer')
   const totals = usage.tokens
+  if (!totals && !usage.cost) return null
   const parts = [
     totals && t('usage.context.tokens', { tokens: tokens(totals.total) }),
     usage.cost && `≈ ${money(usage.cost.amount, usage.cost.currency)}`,
   ].filter(Boolean)
   const line = (
-    <div className="flex gap-3 text-secondary">
-      <span className="flex-1">{t('usage.context.session')}</span>
-      <span className="text-primary tabular">{parts.join(' · ')}</span>
+    <div className="kettu-ctx__session">
+      <span>{t('usage.context.session')}</span>
+      <span className="tabular">{parts.join(' · ')}</span>
     </div>
   )
   if (!totals) return line
@@ -560,74 +560,55 @@ function Total({ label, value }: { label: string; value: number | null }) {
   )
 }
 
-/** The context stacked by source with 2 px between, its autocompact buffer hatched, then the track. */
-function ContextBar({
-  rows,
-  used,
-  size,
-}: {
-  rows: readonly ContextRow[] | null
-  used: number
-  size: number
-}) {
+/** The plan's limits under the context: the tier as a chip, then each window with its bar. */
+function PlanLimits({ limits, account }: { limits: PlanLimit[]; account: AgentAccount | null }) {
   const { t } = useTranslation('composer')
-  const segments = contextSegments(rows, used, size)
+  const now = useNow()
+  const plan = account?.label
+    ? account.tier
+      ? t('usage.limits.tier', { plan: account.label, tier: account.tier })
+      : account.label
+    : null
   return (
-    <div
-      role="img"
-      aria-label={t('usage.context.used')}
-      className="mt-2.5 mb-3 flex h-1.5 gap-0.5 overflow-hidden rounded-[3px] bg-border-soft"
-    >
-      {segments.map((segment) => (
-        <div
-          key={segment.key}
-          style={{ flexGrow: segment.tokens }}
-          className={cn('min-w-px basis-0', partFill(segment.part))}
-        />
-      ))}
-    </div>
-  )
-}
-
-/** One row per source, then the autocompact buffer and free space; a listed kind is underlined. */
-function Sources({ rows, lists }: { rows: readonly ContextRow[]; lists: readonly ContextList[] }) {
-  return (
-    <ul className="flex flex-col tabular">
-      {rows.map((row) => {
-        const source = row.part.kind === 'source'
-        const listed = lists.some((list) => list.name.toLowerCase() === row.name.toLowerCase())
+    <div className="kettu-ctx__plan">
+      <div className="kettu-ctx__plan-head">
+        <span>{t('usage.limits.title')}</span>
+        {plan && <span className="kettu-ctx__tier">{plan}</span>}
+      </div>
+      {limits.map((limit) => {
+        const used = limit.usedPercent ?? 0
         return (
-          <li
-            key={row.name}
-            className="grid h-6 grid-cols-[10px_minmax(0,1fr)_48px_42px] items-center gap-x-2.25"
-          >
-            <span
-              aria-hidden
-              className={cn(
-                'size-2 rounded-xs',
-                source ? partFill(row.part) : 'bg-border-soft',
-                !source && 'shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
-                row.part.kind === 'buffer' && partFill(row.part),
+          <div key={limit.window} className="kettu-limit" data-level={METER[usageTone(limit)]}>
+            <div className="kettu-limit__row">
+              <span className="kettu-limit__label">{limitLabel(limit)}</span>
+              {limit.resetsAt && (
+                <Tooltip>
+                  <TooltipTrigger render={<span className="kettu-limit__reset" />}>
+                    {t('usage.limits.resetsShort', { time: resetTime(limit.resetsAt, now) })}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
+                  </TooltipContent>
+                </Tooltip>
               )}
-            />
-            <span className={cn('truncate', source ? 'text-secondary' : 'text-tertiary')}>
-              <span
-                className={cn(
-                  listed &&
-                    'underline decoration-border-strong decoration-dotted underline-offset-3',
-                )}
-              >
-                {row.name}
+              <span className="kettu-limit__value tabular">
+                {limit.usedPercent === null ? '—' : `${Math.round(limit.usedPercent)}%`}
               </span>
-            </span>
-            <span className="text-right text-secondary">{tokens(row.tokens)}</span>
-            <span className={cn('text-right', source ? 'text-primary' : 'text-tertiary')}>
-              {row.share !== null && `${Math.round(row.share * 1000) / 10}%`}
-            </span>
-          </li>
+            </div>
+            <div
+              className="kettu-limit__bar"
+              role="meter"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(used)}
+              aria-label={t('usage.limits.used', { limit: limitLabel(limit) })}
+            >
+              <span style={{ width: `${Math.min(100, Math.max(0, used))}%` }} />
+            </div>
+          </div>
         )
       })}
-    </ul>
+    </div>
   )
 }
 
@@ -635,7 +616,7 @@ function Sources({ rows, lists }: { rows: readonly ContextRow[]; lists: readonly
 function BreakdownRows() {
   const { t } = useTranslation('composer')
   return (
-    <div aria-label={t('usage.breakdown.loading')} className="flex flex-col">
+    <div aria-label={t('usage.breakdown.loading')} className="kettu-ctx__pad flex flex-col">
       {[4 / 5, 3 / 5, 2 / 3].map((width) => (
         <div key={width} className="flex h-6 items-center">
           <Skeleton className="h-3" style={{ width: `${width * 100}%` }} />
@@ -661,9 +642,10 @@ function ListPart({ list }: { list: ContextList }) {
   return (
     <Collapsible>
       <CollapsibleTrigger className="group/list -mx-2 flex h-6 w-[calc(100%+1rem)] items-center gap-1.5 rounded-md px-2 text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-hover focus-visible:bg-hover focus-ring">
-        <ChevronRightIcon
-          strokeWidth={1.6}
-          className="size-2.75 shrink-0 text-tertiary transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90 motion-reduce:transition-none"
+        <Glyph
+          icon={ArrowRight01Icon}
+          size={12}
+          className="shrink-0 text-tertiary transition-transform duration-(--duration-fast) group-data-panel-open/list:rotate-90 motion-reduce:transition-none"
         />
         <span className="min-w-0 flex-1 truncate text-left">{list.name}</span>
         <span className="text-tertiary tabular">{list.items.length}</span>

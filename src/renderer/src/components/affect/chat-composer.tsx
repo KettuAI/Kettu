@@ -65,7 +65,25 @@ export type ComposerModelMenu = {
 };
 
 /** A section of your own for the plus menu */
-export type ComposerAddSection = { title?: string; rows: { id: string; label: string; description?: string; icon: ReactNode; shortcut?: string }[] };
+export type ComposerAddSection = { title?: string; rows: { id: string; label: string; description?: string; icon: ReactNode; shortcut?: string; disabled?: boolean }[] };
+
+/** Words the composer says to screen readers and in titles – pass your own to translate them */
+export type ComposerLabels = {
+  composer: string;
+  add: string;
+  addMenu: string;
+  approvalMenu: string;
+  /** Announced when a mode or model is picked */
+  selected: (label: string) => string;
+};
+
+const defaultLabels: ComposerLabels = {
+  composer: "Message composer",
+  add: "Add",
+  addMenu: "Add to the chat",
+  approvalMenu: "How should actions be approved?",
+  selected: (label) => `${label} selected.`,
+};
 
 export type ChatComposerProps = {
   placeholder?: string;
@@ -117,6 +135,17 @@ export type ChatComposerProps = {
   onAppsChange?: (connected: string[]) => void;
   /** Your own last row on the gray layer, in place of "Work in a folder" and "Connect apps" */
   foot?: ReactNode;
+  /** Your own message field in place of the text area, such as a rich editor; it sets its own height */
+  field?: ReactNode;
+  /** A press on the writing area outside your field: put the caret in it */
+  onFieldFocus?: () => void;
+  /** Your own send control in place of the built-in send and stop buttons */
+  send?: ReactNode;
+  /** Controls of your own right after the approval button */
+  start?: ReactNode;
+  /** Why the plus button can't be used right now; it is disabled while set */
+  addDisabled?: string;
+  labels?: Partial<ComposerLabels>;
 };
 
 export const defaultFolders = ["Q3 Campaign", "Brand assets", "Hiring", "Research"];
@@ -202,13 +231,29 @@ export function ChatComposer({
   connectedApps = ["gmail"],
   onAppsChange,
   foot,
+  field,
+  onFieldFocus,
+  send: ownSend,
+  start,
+  addDisabled,
+  labels: ownLabels,
 }: ChatComposerProps) {
+  const labels = { ...defaultLabels, ...ownLabels };
   const approvalModes: ComposerMode[] =
     ownModes ?? builtInModes.map(({ Icon, ...m }) => ({ ...m, icon: <Icon /> }));
   const addSections: ComposerAddSection[] =
     ownAdd ?? builtInAdd.map((section) => ({ title: section.title, rows: section.rows.map(({ Icon, ...r }) => ({ ...r, icon: <Icon /> })) }));
   const [approval, setApproval] = useState<string>(firstApproval);
   const [approvalMorph, setApprovalMorph] = useState(false);
+  // A mode set from outside, such as a key that cycles them, shows on the button with the same morph
+  const [givenApproval, setGivenApproval] = useState(firstApproval);
+  if (givenApproval !== firstApproval) {
+    setGivenApproval(firstApproval);
+    if (firstApproval !== approval) {
+      setApproval(firstApproval);
+      setApprovalMorph(true);
+    }
+  }
   const [plan, setPlan] = useState(false);
   const [message, setMessage] = useState(defaultMessage);
   const [folder, setFolder] = useState<string | null>(firstFolder ?? null);
@@ -293,7 +338,7 @@ export function ChatComposer({
     if (next !== approval) setApprovalMorph(true);
     setApproval(next);
     setMenu(null);
-    setStatus(`${approvalModes.find((m) => m.id === next)?.label} selected.`);
+    setStatus(labels.selected(approvalModes.find((m) => m.id === next)?.label ?? next));
     onApprovalChange?.(next);
     approvalButton.current?.focus();
   };
@@ -327,7 +372,7 @@ export function ChatComposer({
     if (next.id !== model?.id) setModelMorph(true);
     setModel(next);
     setMenu(null);
-    setStatus(`${next.name} selected.`);
+    setStatus(labels.selected(next.name));
     onModelChange?.(next);
     modelButton.current?.focus();
   };
@@ -416,12 +461,13 @@ export function ChatComposer({
 
   // Clicking anywhere on the writing area puts the caret in the text area
   const focusMessage = (event: PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button, textarea, input")) return;
+    if ((event.target as HTMLElement).closest("button, textarea, input, a, [contenteditable], [data-composer-own]")) return;
     event.preventDefault();
-    textarea.current?.focus();
+    if (field) onFieldFocus?.();
+    else textarea.current?.focus();
   };
 
-  const mode = approvalModes.find((m) => m.id === approval) ?? approvalModes[0];
+  const mode: ComposerMode | undefined = approvalModes.find((m) => m.id === approval) ?? approvalModes[0];
   const closeMenu = (button: RefObject<HTMLButtonElement | null>) => (refocus: boolean) => {
     setMenu(null);
     if (refocus) button.current?.focus();
@@ -439,11 +485,12 @@ export function ChatComposer({
         className="ui-ccc__body"
         data-recording={recording}
         style={{ "--ui-ccc-lines": lines } as CSSProperties}
-        aria-label="Message composer"
+        aria-label={labels.composer}
         onKeyDown={onBodyKeyDown}
       >
         <div className="ui-ccc__write" onPointerDown={focusMessage}>
-          <div className="ui-ccc__field">
+          <div className="ui-ccc__field" data-own={field ? "" : undefined}>
+            {field ?? (<>
             <textarea
               ref={textarea}
               className="ui-ccc__message"
@@ -462,6 +509,7 @@ export function ChatComposer({
               {message && heard && !/\s$/.test(message) ? " " : ""}
               <span className="ui-ccc__heard">{heard}</span>
             </div>
+            </>)}
           </div>
 
           <div className="ui-ccc__tools">
@@ -470,7 +518,9 @@ export function ChatComposer({
                 ref={addButton}
                 type="button"
                 className="ui-ccc__icon-btn"
-                aria-label="Add"
+                aria-label={labels.add}
+                title={addDisabled}
+                disabled={!!addDisabled}
                 aria-haspopup="menu"
                 aria-expanded={menu === "add"}
                 onClick={() => toggleMenu("add")}
@@ -478,6 +528,7 @@ export function ChatComposer({
               >
                 <PlusIcon />
               </button>
+              {mode && (
               <button
                 ref={approvalButton}
                 type="button"
@@ -496,6 +547,8 @@ export function ChatComposer({
                   <span className="ui-ccc__approval-text">{mode.label}</span>
                 </span>
               </button>
+              )}
+              {start}
             </div>
 
             <div className="ui-ccc__swap">
@@ -535,7 +588,7 @@ export function ChatComposer({
                     <MicIcon />
                   </button>
                 )}
-                {running && !canSend ? (
+                {ownSend ?? (running && !canSend ? (
                   <button type="button" className="ui-ccc__send" data-stop="" aria-label="Stop" title="Stop  Esc" onClick={onStop}>
                     <StopIcon />
                   </button>
@@ -550,7 +603,7 @@ export function ChatComposer({
                   >
                     <ArrowUpIcon />
                   </button>
-                )}
+                ))}
               </div>
 
               <div className="ui-ccc__group ui-ccc__group--end ui-ccc__group--voice" inert={!recording}>
@@ -622,7 +675,7 @@ export function ChatComposer({
         <PopMenu
           open={menu === "add"}
           role="menu"
-          label="Add to the chat"
+          label={labels.addMenu}
           inline
           wide
           divided={!!ownAdd}
@@ -635,6 +688,7 @@ export function ChatComposer({
               icon: row.icon,
               shortcut: row.shortcut,
               checked: row.id === "plan" && !ownAdd ? plan : undefined,
+              disabled: row.disabled,
             })),
           }))}
           anchor={addButton}
@@ -642,9 +696,10 @@ export function ChatComposer({
           onPick={pickAdd}
           onClose={closeMenu(addButton)}
         />
+        {mode && (
         <PopMenu
           open={menu === "approval"}
-          label="How should actions be approved?"
+          label={labels.approvalMenu}
           head={
             approvalHead ?? (
               <>
@@ -663,6 +718,7 @@ export function ChatComposer({
           onPick={(id) => pickApproval(id)}
           onClose={closeMenu(approvalButton)}
         />
+        )}
         {!modelSlot && model && !modelMenu && (
           <PopMenu
             open={menu === "model"}
@@ -974,13 +1030,18 @@ function PopMenu({
       Home: 0,
       End: last,
     };
-    if (event.key in moves) {
+    // A row's own key picks it, as its shortcut column shows
+    const keyed = event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey ? flat.find((row) => row.shortcut === event.key && !row.disabled) : undefined;
+    if (keyed) {
+      event.preventDefault();
+      onPick(keyed.id);
+    } else if (event.key in moves) {
       event.preventDefault();
       setActive(moves[event.key]);
       setShown(true);
     } else if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onPick(flat[active].id);
+      if (!flat[active]?.disabled) onPick(flat[active].id);
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -1064,7 +1125,7 @@ function PopMenu({
                     setActive(i);
                     setShown(true);
                   }}
-                  onClick={() => onPick(row.id)}
+                  onClick={() => !row.disabled && onPick(row.id)}
                 >
                   <span className="ui-ccc__option-logo" aria-hidden="true">
                     {row.icon}
@@ -1563,6 +1624,8 @@ const css = /* css */ `
 .ui-ccc__message::placeholder { color: var(--ui-ccc-hint); opacity: 1; }
 .ui-ccc__message:focus-visible { outline: none; }
 .ui-ccc__draft { position: absolute; inset: 0 4px; width: auto; overflow: hidden; pointer-events: none; visibility: hidden; }
+.ui-ccc__icon-btn:disabled { opacity: 0.45; cursor: default; }
+.ui-ccc__icon-btn:disabled:hover { background: none; color: var(--ui-ccc-icon); }
 .ui-ccc__heard { color: var(--ui-ccc-faint); }
 .ui-ccc__body[data-recording="true"] .ui-ccc__draft { visibility: visible; }
 .ui-ccc__body[data-recording="true"] .ui-ccc__message { color: transparent; caret-color: transparent; }

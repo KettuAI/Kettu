@@ -2,6 +2,7 @@
 "use client";
 
 import {
+  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -63,6 +64,40 @@ export type PickerToggle = {
   onLabel?: ReactNode;
   /** A background for the menu while the switch is on, such as a glow rising from its bottom edge; it fades in and out */
   effect?: ReactNode;
+  /** Whether it is on (controlled); report changes through `onToggle` */
+  on?: boolean;
+  /** A small row under the switch that hands the value back, such as to a setting it overrides */
+  reset?: { label: string; onReset: () => void };
+};
+
+/** Words the picker shows and says – pass your own to translate them */
+export type PickerLabels = {
+  model: string;
+  settings: string;
+  speed: string;
+  quality: string;
+  cost: string;
+  varies: string;
+  moreModels: string;
+  searchModels: string;
+  noModels: string;
+  noMatch: string;
+  /** The trigger with no model chosen */
+  choose: string;
+};
+
+const defaultLabels: PickerLabels = {
+  model: "Model",
+  settings: "Model settings",
+  speed: "Speed",
+  quality: "Quality",
+  cost: "Cost",
+  varies: "Varies",
+  moreModels: "More models",
+  searchModels: "Search models",
+  noModels: "No models available",
+  noMatch: "No models match",
+  choose: "Choose a model",
 };
 
 export type ModelPickerProps = {
@@ -108,6 +143,17 @@ export type ModelPickerProps = {
   keys?: boolean;
   /** What the last row says for models without first-token time or price, in place of their description */
   note?: ReactNode;
+  /** A switch was flipped; with `on` on the toggles the parent keeps their values */
+  onToggle?: (id: string, on: boolean) => void;
+  /** What the trigger names while the effort is none of `efforts`, such as a level the agent picks itself */
+  effortFallback?: string;
+  /** A quiet line at the foot of the More models card, such as where the list comes from */
+  moreNote?: ReactNode;
+  /** Something before the glyph on the trigger, such as a warning dot */
+  triggerLead?: ReactNode;
+  /** The trigger's accessible name in place of "Model: …" */
+  triggerLabel?: string;
+  labels?: Partial<PickerLabels>;
 };
 
 /* ---------- Helpers ---------- */
@@ -270,7 +316,7 @@ type OptionProps = {
 };
 
 /** One model row – memoized, so pointing at a row in a long list stays quick */
-const Option = memo(function Option({ model: m, index: i, optionId, selected, active, lit, onPoint, onPick }: OptionProps) {
+const Option = memo(function Option({ model: m, index: i, optionId, selected, active, lit, varies, onPoint, onPick }: OptionProps & { varies: string }) {
   const rated = m.speed !== undefined || m.quality !== undefined || m.cost !== undefined;
   return (
     <div
@@ -316,7 +362,7 @@ const Option = memo(function Option({ model: m, index: i, optionId, selected, ac
         </span>
       ) : (
         <span className="ui-mdpc__varies" aria-hidden="true">
-          Varies
+          {varies}
         </span>
       )}
     </div>
@@ -351,7 +397,14 @@ export function ModelPicker({
   more = [],
   keys = false,
   note,
+  onToggle,
+  effortFallback,
+  moreNote,
+  triggerLead,
+  triggerLabel,
+  labels: ownLabels,
 }: ModelPickerProps) {
+  const labels = { ...defaultLabels, ...ownLabels };
   const uid = useId();
   // More models open in a second card beside the menu, with a search field
   const [flyOpen, setFlyOpen] = useState(false);
@@ -361,9 +414,17 @@ export function ModelPicker({
   const models = baseModels;
   const anyRated = models.some((m) => m.speed !== undefined || m.quality !== undefined || m.cost !== undefined);
   const ownEffort = efforts !== EFFORTS;
-  const [toggleOn, setToggleOn] = useState<Record<string, boolean>>(() =>
+  const [ownToggleOn, setToggleOn] = useState<Record<string, boolean>>(() =>
     Object.fromEntries((toggles ?? []).map((t) => [t.id, !!t.defaultOn])),
   );
+  // A switch given `on` follows it; the others keep their own value
+  const toggleOn: Record<string, boolean> = { ...ownToggleOn };
+  for (const t of toggles ?? []) if (t.on !== undefined) toggleOn[t.id] = t.on;
+  const flip = (id: string) => {
+    const next = !toggleOn[id];
+    setToggleOn((on) => ({ ...on, [id]: next }));
+    onToggle?.(id, next);
+  };
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -621,7 +682,7 @@ export function ModelPicker({
   const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
   useLayoutEffect(() => {
     const btn = segRef.current?.querySelector<HTMLElement>(`[data-effort="${effortNow}"]`);
-    if (btn) setThumb({ x: btn.offsetLeft, w: btn.offsetWidth });
+    setThumb(btn ? { x: btn.offsetLeft, w: btn.offsetWidth } : null);
   }, [effortNow, isOpen, isThinking]);
   const onEffortKey = (e: KeyboardEvent) => {
     const i = efforts.findIndex((x) => x.id === effortNow);
@@ -633,6 +694,15 @@ export function ModelPicker({
     rootRef.current?.querySelector<HTMLElement>(`[data-effort="${next.id}"]`)?.focus();
   };
   const onRootKey = (e: KeyboardEvent) => {
+    // 1 to 4 pick the first rows, as their keys show, except while typing in the search field
+    if (keys && isOpen && /^[1-4]$/.test(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey && !(e.target instanceof HTMLInputElement)) {
+      const index = Number(e.key) - 1;
+      if (models[index]) {
+        e.preventDefault();
+        pick(index);
+      }
+      return;
+    }
     if (e.key !== "Escape" || !isOpen) return;
     e.stopPropagation();
     setOpen(false, "trigger");
@@ -715,17 +785,18 @@ export function ModelPicker({
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls={`${uid}-menu`}
-        aria-label={`Model: ${chosen?.name ?? "none"}${isThinking ? ", extended thinking" : ""}${(toggles ?? [])
+        aria-label={triggerLabel ?? `${labels.model}: ${chosen?.name ?? "none"}${isThinking ? ", extended thinking" : ""}${(toggles ?? [])
           .filter((t) => (t.flag || t.indicator) && toggleOn[t.id])
           .map((t) => `, ${t.label}`)
           .join("")}`}
         onClick={() => setOpen(!isOpen, isOpen ? undefined : "list")}
         onKeyDown={onTriggerKey}
       >
+        {triggerLead}
         {chosen && <Glyph model={chosen} />}
         <span className="ui-mdpc__name" title={chosen?.name}>
           <Swap id={chosen?.id ?? "none"} glide>
-            {chosen?.name ?? "Choose a model"}
+            {chosen?.name ?? labels.choose}
           </Swap>
         </span>
         {toggles
@@ -739,7 +810,7 @@ export function ModelPicker({
         {ownEffort && (
           <span className="ui-mdpc__detail">
             <Swap id={effortNow} glide>
-              {efforts.find((x) => x.id === effortNow)?.label}
+              {efforts.find((x) => x.id === effortNow)?.label ?? effortFallback}
             </Swap>
           </span>
         )}
@@ -765,7 +836,7 @@ export function ModelPicker({
         className="ui-mdpc__pop"
         style={shift || room ? ({ ...(shift ? { translate: `${shift}px 0` } : {}), ...(room ? { "--ui-mdpc-room": `${room}px` } : {}) } as CSSProperties) : undefined}
         role="dialog"
-        aria-label="Model settings"
+        aria-label={labels.settings}
         inert={!isOpen}
       >
         {glow && (
@@ -775,22 +846,22 @@ export function ModelPicker({
         )}
         <div className="ui-mdpc__card">
           <div className="ui-mdpc__head" aria-hidden="true" data-keys={keys ? "" : undefined}>
-            <span>{heading ?? "Model"}</span>
+            <span>{heading ?? labels.model}</span>
             {anyRated && (
               <span className="ui-mdpc__cols">
                 {STRENGTHS.map((s) => (
-                  <span key={s.key}>{s.label}</span>
+                  <span key={s.key}>{labels[s.key]}</span>
                 ))}
               </span>
             )}
           </div>
 
-          {models.length === 0 && <div className="ui-mdpc__empty">No models available</div>}
+          {models.length === 0 && <div className="ui-mdpc__empty">{labels.noModels}</div>}
           <div
             ref={listRef}
             className="ui-mdpc__list"
             role="listbox"
-            aria-label="Model"
+            aria-label={labels.model}
             tabIndex={0}
             aria-activedescendant={isOpen ? activeId : undefined}
             data-pointing={pointing ? "" : undefined}
@@ -809,6 +880,7 @@ export function ModelPicker({
                 selected={i === chosenIndex}
                 active={i === active}
                 lit={m.id === lit?.id}
+                varies={labels.varies}
                 onPoint={onPoint}
                 onPick={onPick}
               />
@@ -834,7 +906,7 @@ export function ModelPicker({
                   openFly(true);
                 }}
               >
-                <span>More models</span>
+                <span>{labels.moreModels}</span>
                 <span className="ui-mdpc__more-count">{more.length}</span>
                 <ChevronIcon />
               </button>
@@ -879,15 +951,15 @@ export function ModelPicker({
                 </div>
               )}
               {toggles.map((t) => (
+                <Fragment key={t.id}>
                 <button
-                  key={t.id}
                   type="button"
                   role="switch"
                   aria-checked={!!toggleOn[t.id]}
                   disabled={t.disabled}
                   className="ui-mdpc__toggle"
                   data-id={t.id}
-                  onClick={() => setToggleOn((on) => ({ ...on, [t.id]: !on[t.id] }))}
+                  onClick={() => flip(t.id)}
                   onPointerEnter={(e) => e.pointerType === "mouse" && setHint(`toggle:${t.id}`)}
                   onPointerLeave={() => setHint(null)}
                   onFocus={() => setHint(`toggle:${t.id}`)}
@@ -897,6 +969,12 @@ export function ModelPicker({
                   <span className="ui-mdpc__toggle-label">{toggleOn[t.id] && t.onLabel ? t.onLabel : t.label}</span>
                   <span className="ui-mdpc__switch" aria-hidden="true" />
                 </button>
+                {t.reset && (
+                  <button type="button" className="ui-mdpc__reset" disabled={t.disabled} onClick={t.reset.onReset}>
+                    {t.reset.label}
+                  </button>
+                )}
+                </Fragment>
               ))}
             </div>
           ) : (
@@ -992,16 +1070,16 @@ export function ModelPicker({
             data-side={flySide}
             style={{ top: flyTop }}
             role="dialog"
-            aria-label="More models"
+            aria-label={labels.moreModels}
             onPointerEnter={() => window.clearTimeout(flyTimer.current)}
             onPointerLeave={closeFlySoon}
           >
             <input
               ref={searchRef}
               className="ui-mdpc__search"
-              placeholder="Search models"
+              placeholder={labels.searchModels}
               role="combobox"
-              aria-label="Search models"
+              aria-label={labels.searchModels}
               aria-expanded="true"
               aria-controls={`${uid}-more`}
               aria-activedescendant={shownMore[flyActive] ? `${uid}-more-${flyActive}` : undefined}
@@ -1012,8 +1090,8 @@ export function ModelPicker({
               }}
               onKeyDown={onFlyKey}
             />
-            <div id={`${uid}-more`} className="ui-mdpc__fly-list" role="listbox" aria-label="More models">
-              {shownMore.length === 0 && <div className="ui-mdpc__empty">No models match</div>}
+            <div id={`${uid}-more`} className="ui-mdpc__fly-list" role="listbox" aria-label={labels.moreModels}>
+              {shownMore.length === 0 && <div className="ui-mdpc__empty">{labels.noMatch}</div>}
               {shownMore.map((m, i) => (
                 <div
                   key={m.id}
@@ -1033,6 +1111,7 @@ export function ModelPicker({
                 </div>
               ))}
             </div>
+            {moreNote && <div className="ui-mdpc__fly-note">{moreNote}</div>}
           </div>
         )}
       </div>
@@ -1193,6 +1272,10 @@ const css = /* css */ `
 .ui-mdpc__effort--own .ui-mdpc__segmented { flex: 1; }
 .ui-mdpc__effort--own .ui-mdpc__seg-btn { flex: 1; padding: 0 4px; }
 .ui-mdpc__toggle:disabled { opacity: 0.45; cursor: default; }
+.ui-mdpc__reset { display: block; width: 100%; height: 24px; margin-top: -2px; padding: 0 8px 0 38px; border-radius: 6px; font-size: 12px; line-height: 16px; text-align: left; color: var(--ui-mdpc-muted); }
+.ui-mdpc__reset:hover { background: var(--ui-mdpc-fill); color: var(--ui-mdpc-ink); }
+.ui-mdpc__reset:disabled { opacity: 0.45; cursor: default; }
+.ui-mdpc__fly-note { margin: 4px -4px -4px; padding: 6px 12px 8px; border-top: 0.5px solid var(--ui-mdpc-line); font-size: 12px; line-height: 16px; color: var(--ui-mdpc-muted); }
 .ui-mdpc__toggle:disabled:hover { background: none; }
 /* No ratings anywhere: no "Varies" column either */
 .ui-mdpc__list[data-unrated] .ui-mdpc__varies { display: none; }

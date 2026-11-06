@@ -1,5 +1,5 @@
 import { useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { CopyIcon, ExternalLinkIcon } from 'lucide-react'
+import { Copy01Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ChangedFile, CommitSummary, GitStatus } from '@shared/git'
 import {
@@ -22,6 +22,7 @@ import { CopyButton } from './copy-button'
 import { disclosureKeys, kidKeys } from './popover-keys'
 import { projectRelative } from './sync'
 import { loadCommit, useCommit } from './use-git-data'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 
 /**
  * A row of the popover, bleeding into its padding. The highlight is focus, which follows the
@@ -266,7 +267,7 @@ function CommitRow({
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={copyId}>
-            <CopyIcon />
+            <Glyph icon={Copy01Icon} />
             {t('timeline.copyId')}
           </ContextMenuItem>
           <ContextMenuItem
@@ -277,7 +278,7 @@ function CommitRow({
               )
             }
           >
-            <CopyIcon />
+            <Glyph icon={Copy01Icon} />
             {t('timeline.copyMessage')}
           </ContextMenuItem>
           {github && commit.pushed && (
@@ -292,7 +293,7 @@ function CommitRow({
                   />
                 }
               >
-                <ExternalLinkIcon />
+                <Glyph icon={LinkSquare02Icon} />
                 {t('timeline.openOnGitHub')}
               </ContextMenuItem>
             </>

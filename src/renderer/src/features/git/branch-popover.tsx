@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react'
 import type { TFunction } from 'i18next'
-import { FolderGit2Icon, FolderIcon, GitBranchIcon, GitCommitHorizontalIcon } from 'lucide-react'
+import {
+  Folder01Icon,
+  FolderLinksIcon,
+  GitBranchIcon,
+  GitCommitIcon,
+} from '@hugeicons/core-free-icons'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 import { useTranslation } from 'react-i18next'
 import type { GitStatus, PullRequest } from '@shared/git'
 import { useRefresh } from '@renderer/components/refresh'
@@ -70,7 +76,7 @@ function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void 
   const running = useGitStore((s) => s.running[status.projectPath] ?? null)
   const refresh = useRefresh({ busy: running?.kind === 'fetch' })
   const { head, defaultBranch, remote } = status
-  const Icon = head.detached ? GitCommitHorizontalIcon : GitBranchIcon
+  const icon = head.detached ? GitCommitIcon : GitBranchIcon
   const fromBase = defaultBranch && head.branch !== defaultBranch
   const fetched = running?.kind === 'fetch' ? t('sync.fetching') : fetchedText(status, now, t)
 
@@ -98,7 +104,7 @@ function Header({ status, onSwitch }: { status: GitStatus; onSwitch: () => void 
               />
             }
           >
-            <Icon aria-hidden className="size-3.5 shrink-0 text-tertiary" />
+            <Glyph icon={icon} className="size-3.5 shrink-0 text-tertiary" />
             <span className="min-w-0 truncate text-row leading-snug font-semibold tracking-[-0.006em] text-primary">
               {branchName(status)}
             </span>
@@ -249,10 +255,10 @@ function WorktreeFooter({ status }: { status: GitStatus }) {
   const root = hostPath(status.repo.root)
   // A linked worktree's git folder is inside the main repository's, under worktrees/.
   const linked = /[\\/]worktrees[\\/][^\\/]+[\\/]?$/.test(status.repo.gitDir)
-  const Icon = linked ? FolderGit2Icon : FolderIcon
+  const icon = linked ? FolderLinksIcon : Folder01Icon
   return (
     <div className="mt-2 flex items-center gap-1.75 pt-2.5 text-tertiary shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-      <Icon aria-hidden className="size-3.25 shrink-0" />
+      <Glyph icon={icon} className="size-3.25 shrink-0" />
       <span className="min-w-0 flex-1 truncate font-mono text-code-sm" title={root}>
         {root}
       </span>

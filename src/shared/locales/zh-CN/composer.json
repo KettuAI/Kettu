@@ -37,7 +37,19 @@
     "followsAgentOff": "跟随 Agent 设置 · 关",
     "resetDefault": "使用 Agent 的设置",
     "modelsFrom": "来自 {{source}}",
-    "optionValue": "{{name}}：{{value}}"
+    "optionValue": "{{name}}：{{value}}",
+    "permissionMode": "权限模式",
+    "selected": "已选择 {{label}}",
+    "limitUsed": "已用 {{limit}}限额的 {{percent}}%",
+    "effortHint": "强度越高，思考越久，消耗的套餐额度也越多 · {{shortcut}}",
+    "modelSettings": "模型设置",
+    "speed": "速度",
+    "quality": "质量",
+    "cost": "成本",
+    "varies": "不定",
+    "noModels": "没有可用的模型",
+    "noModelMatch": "没有匹配的模型",
+    "chooseModel": "选择模型"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",
@@ -85,7 +97,8 @@
       "resets": "重置时间：{{time}}",
       "updated": "{{ago}}更新",
       "planOf": "套餐 · {{plan}}",
-      "resetsShort": "{{time}} 重置"
+      "resetsShort": "{{time}} 重置",
+      "title": "套餐限额"
     },
     "cache": {
       "title": "提示缓存",
@@ -97,12 +110,25 @@
       "button": "Prompt cache：{{time}}",
       "leftCached": "剩余 {{time}} · 已缓存 {{tokens}} tokens",
       "leftAbout": "约剩 {{time}} · 已缓存 {{tokens}} tokens",
-      "explain": "在它过期前回复，缓存部分的费用约为原来的十分之一。过期后，下一条消息会重新写入缓存。",
+      "explain": "在它过期前回复，缓存部分的费用约为原来的十分之一。",
       "lastReply": "上次回复 {{time}}",
       "lastsMinutesShort_other": "有效 {{count}} 分钟",
       "lastsHoursShort_other": "有效 {{count}} 小时",
       "estimateLastsMinutes_other": "约有效 {{count}} 分钟",
-      "estimateLastsHours_other": "约有效 {{count}} 小时"
+      "estimateLastsHours_other": "约有效 {{count}} 小时",
+      "leftLine": "剩余 <time>{{time}}</time> · 已缓存 {{tokens}} tokens",
+      "leftLineAbout": "约剩 <time>{{time}}</time> · 已缓存 {{tokens}} tokens"
+    },
+    "contextShort": "上下文 {{percent}}%",
+    "window": {
+      "free": "剩余 {{n}}",
+      "left": "仅剩 {{n}}",
+      "over": "超出 {{n}}",
+      "full": "上下文已满",
+      "of": "共 {{n}} tokens",
+      "share": "占上下文的 {{percent}}%",
+      "used": "已用 {{used}} / {{cap}} tokens，{{percent}}%",
+      "nothing": "无内容"
     }
   },
   "attachments": {

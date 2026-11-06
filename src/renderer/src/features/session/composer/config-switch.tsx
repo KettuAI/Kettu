@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react'
-import { RotateCcwIcon } from 'lucide-react'
+import { RotateLeft01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { booleanConfigValue, type ConfigOption } from '@shared/thread'
 import { Button } from '@renderer/components/ui/button'
@@ -8,6 +8,7 @@ import { Switch } from '@renderer/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import { DESCRIBED_ROW, ItemText } from './menu-parts'
+import { Glyph } from './glyph'
 
 /** Whether the agent's own setting can stand for the option's value. */
 function inheritsSetting(option: ConfigOption): boolean {
@@ -94,7 +95,7 @@ export function ConfigSwitchRow({
             onClick={() => onSelect('default')}
             className="min-h-6.5 py-0.5 pl-8.25 text-small text-tertiary"
           >
-            <RotateCcwIcon strokeWidth={1.4} className="size-3" />
+            <Glyph icon={RotateLeft01Icon} className="size-3" />
             {t('controls.resetDefault')}
           </DropdownMenuItem>
         )}
@@ -120,7 +121,7 @@ export function ConfigSwitchRow({
               />
             }
           >
-            <RotateCcwIcon />
+            <Glyph icon={RotateLeft01Icon} />
           </TooltipTrigger>
           <TooltipContent>{t('controls.resetDefault')}</TooltipContent>
         </Tooltip>

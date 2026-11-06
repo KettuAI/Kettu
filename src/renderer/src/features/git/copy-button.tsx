@@ -1,8 +1,9 @@
 import { useState, type ComponentProps } from 'react'
-import { CheckIcon, CopyIcon } from 'lucide-react'
+import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 
 /** `text` may be a function, for text too costly to build on every render. */
 export function CopyButton({
@@ -42,14 +43,15 @@ export function CopyButton({
         }
       >
         {copied ? (
-          <CheckIcon
+          <Glyph
+            icon={Tick02Icon}
             className={cn(
               iconSize,
               'animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75',
             )}
           />
         ) : (
-          <CopyIcon className={iconSize} />
+          <Glyph icon={Copy01Icon} className={iconSize} />
         )}
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>

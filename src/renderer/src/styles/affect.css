@@ -3906,3 +3906,740 @@
 :is(.kettu-settings, .kettu-sd) .ui-sg-label small .k-mono {
   font-size: 11.5px;
 }
+
+/* composer: affectUI's Chat Composer as the session's and New session's composer, the Model
+   Picker in it, the tray's popovers, the queue behind the composer and New session's list
+   (features/session/composer, features/session/new-session.tsx, features/session/queue-stack.tsx).
+   The tray links take AppShell's variables from the window's frame, as the start screen has them. */
+.kettu-composer {
+  position: relative;
+  z-index: 1;
+}
+.kettu-composer > .ui-ccc {
+  max-width: none;
+}
+[data-computer-using] .kettu-composer .ui-ccc {
+  --ui-ccc-shadow: var(--computer-composer-ring);
+}
+/* Kettu's editor in the Chat Composer's type: a size under the thread's prose, its caret blue. */
+.kettu-prompt .cm-editor {
+  color: var(--ui-ccc-strong);
+}
+.kettu-prompt .cm-editor .cm-content {
+  font-size: calc(var(--prose-size) - 2px);
+  caret-color: var(--ui-ccc-accent);
+}
+.kettu-prompt .cm-editor .cm-placeholder {
+  color: var(--ui-ccc-hint);
+}
+.kettu-prompt[data-disabled] {
+  cursor: default;
+}
+.kettu-menu-keys {
+  flex: none;
+  font-size: 11px;
+  color: var(--ui-ccc-faint);
+}
+.kettu-option {
+  gap: 4px;
+  padding-right: 8px;
+}
+.kettu-option__chevron {
+  color: var(--ui-ccc-faint);
+}
+/* Send in the fox once there is something to send; Stop stays in the composer's ink. */
+.ui-ccc__send.kettu-send:not(:disabled, [data-stop]) {
+  background: var(--send) !important;
+  color: var(--on-fill);
+  box-shadow: var(--send-shadow);
+}
+.ui-ccc__send.kettu-send:not(:disabled, [data-stop]):hover {
+  background: var(--send-hover) !important;
+}
+.ui-ccc__send.kettu-send:not(:disabled, [data-stop]):active {
+  background: var(--send-active) !important;
+  box-shadow: none;
+}
+/* Send outside a composer, as a reply to a passage: the Chat Composer's button on its own. */
+.kettu-send:not(.ui-ccc .kettu-send) {
+  --ui-ccc-fill: var(--composer-chip-hover);
+  --ui-ccc-faint: var(--composer-faint);
+  --ui-ccc-solid: var(--composer-ink);
+  --ui-ccc-on-solid: var(--composer-card);
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ui-ccc-solid);
+  color: var(--ui-ccc-on-solid);
+  cursor: pointer;
+}
+.kettu-send:not(.ui-ccc .kettu-send):disabled {
+  background: var(--ui-ccc-fill);
+  color: var(--ui-ccc-faint);
+  cursor: default;
+}
+.kettu-send:not(.ui-ccc .kettu-send) svg {
+  width: 16px;
+  height: 16px;
+}
+.kettu-send-wrap {
+  display: inline-flex;
+  flex: none;
+  margin-left: 2px;
+}
+.kettu-send-wrap > .ui-ccc__send {
+  margin-left: 0;
+}
+
+/* The tray: the branch on the left, the prompt cache and the context on the right. */
+.kettu-tray__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.kettu-tray__group:empty {
+  display: none;
+}
+.kettu-tray__error {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--danger);
+}
+.ui-as-tray-link:is([data-popup-open], [aria-expanded='true']) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.ui-as-tray-link:is(.kettu-tray-link--meter, .kettu-tray-link--agent) {
+  gap: 6px;
+}
+.ui-as-tray-link[data-static] {
+  cursor: default;
+}
+.ui-as-tray-link[data-static]:hover {
+  background: none;
+}
+.ui-as-tray-link[data-tone='warn'] {
+  color: var(--warning);
+}
+.ui-as-tray-link > :is(.kettu-tray-link__text, .kettu-branch__name) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ui-as-tray-link > :is(.kettu-tray-link__danger, .kettu-branch__danger) {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  color: var(--danger);
+}
+.kettu-branch__dim {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Four levels by how much is used, for the context ring, the tray's limit and the plan bars. */
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit) {
+  --meter: var(--composer-meter-ok);
+  --meter-wash: var(--composer-meter-ok-wash);
+}
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='mid'] {
+  --meter: var(--composer-meter-mid);
+  --meter-wash: var(--composer-meter-mid-wash);
+}
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='high'] {
+  --meter: var(--composer-meter-high);
+  --meter-wash: var(--composer-meter-high-wash);
+}
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='full'] {
+  --meter: var(--composer-meter-full);
+  --meter-wash: var(--composer-meter-full-wash);
+}
+.kettu-meter-ring {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.kettu-meter-ring__disc {
+  fill: var(--meter-wash);
+}
+.kettu-meter-ring__pie {
+  fill: none;
+  stroke: var(--meter);
+}
+.kettu-tray-limit {
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--meter-wash);
+  color: var(--meter);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* The tray's popovers, in the composer's card. */
+.kettu-pop.kettu-pop {
+  gap: 0;
+  padding: 0;
+  border-radius: 12px;
+  background: var(--composer-card);
+  color: var(--composer-ink);
+  box-shadow: var(--composer-pop-shadow);
+  font-size: 13px;
+  line-height: 20px;
+}
+.kettu-pop.kettu-branch-pop {
+  padding: 14px;
+}
+.kettu-cache {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 12px;
+}
+.kettu-cache > b {
+  font-weight: 600;
+}
+.kettu-cache__arc {
+  width: 64px;
+  height: 36px;
+  margin-bottom: 4px;
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.kettu-cache__track {
+  stroke: var(--composer-chip);
+}
+.kettu-cache__fill {
+  stroke: var(--composer-ink);
+}
+.kettu-cache__line {
+  color: var(--composer-muted);
+}
+.kettu-cache__line b {
+  font-weight: 600;
+  color: var(--composer-ink);
+}
+.kettu-cache__note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--composer-muted);
+}
+.kettu-cache__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--composer-line);
+  font-size: 12px;
+  color: var(--composer-faint);
+}
+.kettu-ctx {
+  display: flex;
+  flex-direction: column;
+}
+.kettu-ctx__window > .ui-cwc {
+  max-width: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.kettu-ctx__window[data-busy] {
+  opacity: 0.6;
+}
+.kettu-ctx__note {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__pad {
+  padding: 0 16px 12px;
+}
+.kettu-ctx__session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 40px;
+  padding: 0 16px;
+  border-top: 0.5px solid var(--composer-line);
+  color: var(--composer-ink);
+}
+.kettu-ctx__session > :last-child {
+  color: var(--composer-text);
+}
+.kettu-ctx__plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  border-top: 0.5px solid var(--composer-line);
+}
+.kettu-ctx__plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 500;
+  color: var(--composer-strong);
+}
+.kettu-ctx__tier {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--composer-chip-hover);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--composer-text);
+}
+.kettu-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kettu-limit__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.kettu-limit__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-ink);
+}
+.kettu-limit__reset {
+  flex: none;
+  font-size: 12px;
+  color: var(--composer-muted);
+}
+.kettu-limit__value {
+  flex: none;
+  min-width: 36px;
+  text-align: right;
+  color: var(--composer-text);
+}
+.kettu-limit__bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--composer-chip-hover);
+}
+.kettu-limit__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--meter);
+}
+
+/* The Model Picker: room for the names next to the bars and keys, the agent's mark without a
+   tile, one line under the switches, and effort as one track with a sliding thumb. */
+.kettu-model-picker .ui-mdpc__pop {
+  width: min(380px, calc(100vw - 32px));
+}
+.kettu-model-picker .ui-mdpc__glyph {
+  background: none;
+  box-shadow: none;
+}
+.kettu-model-picker .ui-mdpc__glyph > svg {
+  width: 16px;
+  height: 16px;
+}
+.kettu-model-picker .ui-mdpc__trigger .ui-mdpc__glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+.kettu-model-picker .ui-mdpc__caption .ui-mdpc__swap-item {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-model-picker .ui-mdpc__fly-row {
+  min-width: 0;
+}
+.kettu-model-picker .ui-mdpc__fly-row .ui-mdpc__title-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-model-picker .ui-mdpc__effort--own .ui-mdpc__segmented {
+  gap: 0;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--ui-mdpc-fill);
+}
+.kettu-model-picker .ui-mdpc__effort--own .ui-mdpc__seg-btn {
+  height: 24px;
+  box-shadow: none;
+  background: none !important;
+}
+.kettu-model-picker .ui-mdpc__seg-btn[aria-checked='false']:hover {
+  color: var(--ui-mdpc-ink);
+}
+.kettu-model-picker .ui-mdpc__thumb {
+  top: 2px;
+  bottom: 2px;
+  border-radius: 6px;
+  background: var(--composer-thumb);
+  box-shadow: var(--composer-thumb-shadow);
+  transition:
+    transform 280ms var(--ui-mdpc-ease),
+    width 280ms var(--ui-mdpc-ease);
+}
+.kettu-model-warn {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+/* Ultracode: violet words with a light running through them, and a glow under the menu's rows. */
+.kettu-model-picker .ui-mdpc__glow > .kettu-ultra-floor {
+  --ui-gf-bg: transparent;
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+}
+[data-theme='dark'] .kettu-ultra-floor .ui-gf-layer--light {
+  opacity: 0.3;
+}
+.kettu-ultra-floor stop:nth-child(1) {
+  stop-color: var(--composer-ultra-1);
+}
+.kettu-ultra-floor stop:nth-child(2) {
+  stop-color: var(--composer-ultra-2);
+}
+.kettu-ultra-floor stop:nth-child(3) {
+  stop-color: var(--composer-ultra-3);
+}
+.ui-shm-text.kettu-ultra-text {
+  --ui-shm-text: var(--composer-ultra-text);
+  --ui-shm-text-glow: var(--composer-ultra-shine);
+}
+
+/* Queued messages tucked behind the composer: the next one in front, the next two peeking above,
+   fanned out as layers on hover and scrolled like a periscope past three. */
+.kettu-queue {
+  position: relative;
+  z-index: 0;
+  height: 48px;
+  margin: 0 14px -26px;
+  font-size: 12.5px;
+  color: var(--composer-muted);
+}
+.kettu-queue[data-open]::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: calc(var(--shown) * 28px + 40px);
+}
+.kettu-queue__card {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 8px 18px 10px;
+  border-radius: 12px 12px 0 0;
+  background: color-mix(in srgb, var(--composer-ink) var(--mix, 5%), var(--composer-panel));
+  box-shadow: inset 0 0 0 0.5px var(--composer-line);
+  outline: none;
+  transition:
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    right 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 340ms ease,
+    background-color 340ms ease,
+    box-shadow 200ms ease,
+    opacity 220ms ease;
+}
+.kettu-queue__card > * {
+  opacity: var(--c);
+  transition: opacity 160ms ease;
+}
+.kettu-queue__card[data-row] > * {
+  transition-delay: 90ms;
+}
+.kettu-queue[data-open] .kettu-queue__card {
+  box-shadow:
+    inset 0 0 0 0.5px var(--composer-line),
+    0 -6px 14px -10px var(--composer-queue-drop);
+}
+.kettu-queue[data-open]:not([data-scrolling]) .kettu-queue__card:is(:hover, :focus-visible) > * {
+  opacity: 1;
+}
+.kettu-queue[data-scrolling] .kettu-queue__card,
+.kettu-queue[data-scrolling] .kettu-queue__card > * {
+  transition: none;
+}
+.kettu-queue__n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--composer-card);
+  box-shadow: inset 0 0 0 0.5px var(--composer-line-strong);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--composer-muted);
+  font-variant-numeric: tabular-nums;
+}
+.kettu-queue__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-ink);
+}
+.kettu-queue__dim,
+.kettu-queue__from {
+  flex: none;
+  font-size: 12px;
+  color: var(--composer-faint);
+}
+.kettu-queue__paused {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--composer-text);
+}
+.kettu-queue__resume {
+  font-weight: 500;
+  color: var(--composer-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--composer-line-strong);
+  text-underline-offset: 2px;
+}
+.kettu-queue__count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(var(--front) * 100px);
+  margin-left: calc((var(--front) - 1) * 8px);
+  padding-right: calc(var(--front) * 4px);
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: calc(var(--c) * var(--count));
+}
+.kettu-queue__count svg {
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kettu-queue[data-open] .kettu-queue__count svg {
+  transform: rotate(180deg);
+}
+.kettu-queue__actions {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+.kettu-queue__actions button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--composer-muted);
+}
+.kettu-queue__actions button:hover {
+  background: var(--composer-hover-fill);
+  color: var(--composer-ink);
+}
+.kettu-queue[data-open]:not([data-scrolling])
+  .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
+  .kettu-queue__actions {
+  display: flex;
+}
+.kettu-queue[data-open]:not([data-scrolling])
+  .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
+  .kettu-queue__count {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-queue__card,
+  .kettu-queue__card > *,
+  .kettu-queue__count svg {
+    transition: none;
+  }
+}
+
+/* New session: the notes under the composer and the sessions to pick up. */
+.kettu-start__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 10px;
+}
+.kettu-start__notes:empty {
+  display: none;
+}
+.kettu-start__error {
+  margin: 0;
+  padding: 0 11px;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--danger);
+}
+.kettu-pickup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-width: 640px;
+  margin-top: 28px;
+  animation: ui-as-cmd-in 320ms ease both 120ms;
+  transition:
+    opacity 180ms ease,
+    visibility 0s linear 180ms;
+}
+.kettu-pickup[data-hidden] {
+  visibility: hidden;
+  opacity: 0;
+}
+.kettu-pickup__label {
+  margin: 0;
+  padding: 0 10px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--composer-faint);
+}
+.kettu-pickup__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--composer-ink);
+  transition: background-color 120ms ease;
+}
+.kettu-pickup__row:hover {
+  background: var(--composer-hover-fill);
+}
+.kettu-pickup__row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.kettu-pickup__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-pickup__status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--composer-muted);
+}
+.kettu-pickup__status[data-status='waiting'] {
+  color: var(--composer-waiting);
+}
+.kettu-pickup__status[data-status='failed'] {
+  color: var(--danger);
+}
+.kettu-pickup__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--composer-waiting-dot);
+  box-shadow: 0 0 0 3px var(--composer-waiting-halo);
+}
+.kettu-pickup__project {
+  flex: none;
+  width: 96px;
+  overflow: hidden;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-faint);
+}
+/* The project menu's folder marks take the line icons' 15px, so every name starts in one place. */
+.kettu-menu-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 15px;
+}
+.kettu-folder {
+  fill: none;
+}
+.kettu-folder__tab {
+  fill: var(--composer-folder-tab);
+}
+.kettu-folder__tab-edge {
+  stroke: var(--composer-folder-tab);
+}
+.kettu-folder__front {
+  fill: var(--composer-folder-front);
+  stroke: var(--composer-folder-front);
+}
+/* A provider out of credit: a tinted note over the text, inside the writing area. */
+.kettu-credit {
+  margin: -4px -6px 10px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 10px;
+  background: var(--ui-ccc-wash);
+  box-shadow: inset 0 0 0 0.5px var(--ui-ccc-line);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--ui-ccc-ink);
+}
+/* New session's menus as AppShell's: rows in the quiet gray, the chosen one in ink. */
+:is(.kettu-project-menu, .kettu-agent-menu) [role='option'] {
+  color: var(--composer-text);
+}
+:is(.kettu-project-menu, .kettu-agent-menu)
+  [role='option']:is([data-selected], [aria-selected='true']) {
+  font-weight: 500;
+  color: var(--composer-ink);
+}

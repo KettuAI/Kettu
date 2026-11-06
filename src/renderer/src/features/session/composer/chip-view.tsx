@@ -1,8 +1,15 @@
 import { useEffect, useLayoutEffect } from 'react'
-import { AppWindowIcon, FileIcon, FolderIcon, GlobeIcon, TriangleAlertIcon } from 'lucide-react'
+import {
+  Alert02Icon,
+  BrowserIcon,
+  File01Icon,
+  Folder01Icon,
+  GlobalIcon,
+} from '@hugeicons/core-free-icons'
 import { cn } from '@renderer/lib/utils'
 import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 import type { Chip } from './chips'
+import { Glyph } from './glyph'
 
 /** How a chip stands: as typed, under the pointer, chosen in the text, or naming what is gone. */
 export type ChipState = 'default' | 'selected'
@@ -46,7 +53,7 @@ export function ChipView({
 function SiteIcon({ url }: { url: string }) {
   const icon = useSiteIcon(url)
   useEffect(loadSiteIcons, [])
-  if (!icon) return <GlobeIcon strokeWidth={1.4} className="size-3.5 shrink-0 text-tertiary" />
+  if (!icon) return <Glyph icon={GlobalIcon} className="size-3.5 shrink-0 text-tertiary" />
   return (
     <img
       src={icon}
@@ -71,7 +78,7 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
       <>
         {chip.local ? (
           <span className="grid size-3.5 shrink-0 place-items-center rounded-sm bg-control-on-tint text-control-on">
-            <AppWindowIcon strokeWidth={1.6} className="size-2.25" />
+            <Glyph icon={BrowserIcon} className="size-2.25" />
           </span>
         ) : (
           <SiteIcon url={chip.url} />
@@ -84,7 +91,7 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
   return (
     <>
       {missing ? (
-        <TriangleAlertIcon strokeWidth={1.4} className="size-3.25 shrink-0 text-warning" />
+        <Glyph icon={Alert02Icon} className="size-3.25 shrink-0 text-warning" />
       ) : chip.kind === 'image' && chip.thumb ? (
         <img
           src={chip.thumb}
@@ -93,9 +100,9 @@ function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
           className="size-4 shrink-0 rounded-[3px] object-cover shadow-[inset_0_0_0_0.5px_var(--border-default)]"
         />
       ) : chip.kind === 'folder' ? (
-        <FolderIcon strokeWidth={1.4} className="size-3.25 shrink-0 text-tertiary" />
+        <Glyph icon={Folder01Icon} className="size-3.25 shrink-0 text-tertiary" />
       ) : (
-        <FileIcon strokeWidth={1.4} className="size-3.25 shrink-0 text-tertiary" />
+        <Glyph icon={File01Icon} className="size-3.25 shrink-0 text-tertiary" />
       )}
       <span className={cn('min-w-0 truncate', missing && 'line-through decoration-border-strong')}>
         {chip.label}

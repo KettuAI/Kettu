@@ -1,7 +1,14 @@
 import { useMemo, useState } from 'react'
-import { FolderIcon, LaptopIcon, SearchIcon } from 'lucide-react'
+import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox'
+import {
+  ComputerIcon,
+  Folder01Icon,
+  FolderOpenIcon,
+  Search01Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
+import { FolderMark } from '@renderer/components/affect/assistant-home'
 import { addProjectFromDialog } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -22,7 +29,8 @@ import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { formatShortcut } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
+import { FolderClosedMark } from '@renderer/features/session/composer/folder-mark'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 import { isAway, useOtherHost, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { chooseNewSessionProject } from '@renderer/stores/view'
@@ -87,7 +95,7 @@ export function ProjectMenu({
   noProject: boolean
   onError: (message: string | null) => void
   onChoose?: (projectPath: string | null) => void
-  /** As New session's composer shows it: on a tinted chip, beside the agent's. */
+  /** As New session's composer shows it: a link on its tray, beside the agent's. */
   chip?: boolean
 }) {
   const { t } = useTranslation('session')
@@ -110,6 +118,7 @@ export function ProjectMenu({
     return hosted
   }, [projects])
   const groups = useMemo(() => projectGroups(projects, hosts), [projects, hosts])
+  const Trigger = chip ? ComboboxPrimitive.Trigger : ComboboxTrigger
   const [browsing, setBrowsing] = useState<{ hostId: string; open: boolean } | null>(null)
   const hostName = (hostId: string | null) =>
     hostId === null
@@ -156,28 +165,43 @@ export function ProjectMenu({
         )
       }
     >
-      <ComboboxTrigger
+      {/* The tray's link names the project alone, without the select's chevron. */}
+      <Trigger
         render={
-          <Button
-            variant="quiet"
-            size="sm"
-            aria-label={
-              !noProject && project && projectHost
-                ? t('newSession.projectOnHost', { name: project.name, host: hostName(projectHost) })
-                : t('newSession.project')
-            }
-            title={noProject || !project ? undefined : hostPath(project.path)}
-            className={cn(
-              'min-w-13 shrink-10 px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25',
-              chip
-                ? 'h-7.5 gap-1.5 rounded-xl bg-subtle text-primary hover:bg-selected aria-expanded:bg-selected [&>[data-icon=inline-end]]:text-tertiary'
-                : 'gap-1',
-            )}
-          />
+          chip ? (
+            <button
+              type="button"
+              aria-label={
+                !noProject && project && projectHost
+                  ? t('newSession.projectOnHost', {
+                      name: project.name,
+                      host: hostName(projectHost),
+                    })
+                  : t('newSession.project')
+              }
+              title={noProject || !project ? undefined : hostPath(project.path)}
+              className="ui-as-tray-link kettu-tray-link--project"
+            />
+          ) : (
+            <Button
+              variant="quiet"
+              size="sm"
+              aria-label={
+                !noProject && project && projectHost
+                  ? t('newSession.projectOnHost', {
+                      name: project.name,
+                      host: hostName(projectHost),
+                    })
+                  : t('newSession.project')
+              }
+              title={noProject || !project ? undefined : hostPath(project.path)}
+              className="min-w-13 shrink-10 gap-1 px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
+            />
+          )
         }
       >
-        <FolderIcon className={cn(chip && 'size-3.75 text-secondary')} />
-        <span className="truncate text-foreground">
+        {chip ? <FolderMark /> : <Glyph icon={Folder01Icon} />}
+        <span className={chip ? 'kettu-tray-link__text' : 'truncate text-foreground'}>
           {noProject
             ? t('newSession.noProject')
             : (project?.name ?? t('newSession.chooseProjectShort'))}
@@ -190,8 +214,8 @@ export function ProjectMenu({
         {project?.missing && !noProject && (
           <span className="shrink-0 text-danger">{t('newSession.missing')}</span>
         )}
-      </ComboboxTrigger>
-      <ComboboxContent sideOffset={6} className="max-w-80">
+      </Trigger>
+      <ComboboxContent sideOffset={8} className="kettu-project-menu w-70 max-w-80">
         <ComboboxInput
           showTrigger={false}
           placeholder={t('newSession.searchProjects')}
@@ -199,7 +223,7 @@ export function ProjectMenu({
           spellCheck={false}
         >
           <InputGroupAddon>
-            <SearchIcon className="size-3.5" />
+            <Glyph icon={Search01Icon} size={14} />
           </InputGroupAddon>
         </ComboboxInput>
         <ComboboxList className="max-h-none overflow-y-visible">
@@ -209,6 +233,7 @@ export function ProjectMenu({
                 <ComboboxCollection>
                   {(value: string) => (
                     <ComboboxItem key={value} value={value}>
+                      <Glyph icon={Folder01Icon} className="kettu-menu-mark" />
                       {t('newSession.noProject')}
                     </ComboboxItem>
                   )}
@@ -228,6 +253,9 @@ export function ProjectMenu({
                       return (
                         p && (
                           <ComboboxItem key={path} value={path} disabled={p.missing} title={path}>
+                            <span className="kettu-menu-mark">
+                              <FolderClosedMark />
+                            </span>
                             <ProjectName name={p.name} hint={hints.get(path)} />
                             {p.missing && (
                               <span className="ml-auto text-xs text-muted-foreground">
@@ -255,6 +283,7 @@ export function ProjectMenu({
                 <ComboboxCollection>
                   {(value: string) => (
                     <ComboboxItem key={value} value={value} className="pr-2">
+                      <Glyph icon={FolderOpenIcon} className="kettu-menu-mark" />
                       {label(value)}
                       {value === OPEN_PROJECT && (
                         <span className="ml-auto pl-4 text-xs text-muted-foreground tabular">
@@ -304,13 +333,12 @@ function HostProjects({
   const host = useOtherHost(group.hostId ?? null)
   const away = isAway(host?.connection ?? null)
   const name = group.hostId === null ? t('newSession.thisComputer') : (host?.name ?? '')
-  const Icon = group.hostId === null ? LaptopIcon : null
   return (
     <ComboboxGroup items={group.items}>
       <ComboboxSeparator />
       <ComboboxLabel className="flex items-center gap-1.5">
-        {Icon ? (
-          <Icon aria-hidden className="size-3" />
+        {group.hostId === null ? (
+          <Glyph icon={ComputerIcon} size={13} />
         ) : (
           <HostIcon platform={host?.platform ?? 'linux'} className="size-3" />
         )}
@@ -330,6 +358,9 @@ function HostProjects({
                   disabled={p.missing || away}
                   title={hostPath(path)}
                 >
+                  <span className="kettu-menu-mark">
+                    <FolderClosedMark />
+                  </span>
                   <ProjectName name={p.name} hint={hints.get(path)} />
                   {p.missing && (
                     <span className="ml-auto text-xs text-muted-foreground">

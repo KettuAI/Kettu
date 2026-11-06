@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronRightIcon, SearchIcon } from 'lucide-react'
+import { ArrowRight01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
@@ -65,6 +65,7 @@ import {
 } from './start-options'
 import { readFirstOptions, refreshOnMenu, retryPrepare, setOption } from './prepared'
 import { useStartConfig } from './use-start-config'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 
 const isSelect = (o: ConfigOption | undefined): o is SelectOption =>
   !!o && o.type === 'select' && !!o.choices?.length
@@ -302,7 +303,7 @@ export function AgentMenu({
             spellCheck={false}
           >
             <InputGroupAddon>
-              <SearchIcon className="size-3.5" />
+              <Glyph icon={Search01Icon} className="size-3.5" />
             </InputGroupAddon>
           </ComboboxInput>
           {statuses.length === 0 ? (
@@ -865,7 +866,8 @@ function MoreRow({ value, count, expanded }: { value: string; count: number; exp
       <span className="min-w-0 flex-1 truncate">
         {t('newSession.agentMenu.moreModels', { number: count })}
       </span>
-      <ChevronRightIcon
+      <Glyph
+        icon={ArrowRight01Icon}
         className={cn(
           'size-3 text-icon transition-transform duration-(--duration-fast)',
           expanded && 'rotate-90',

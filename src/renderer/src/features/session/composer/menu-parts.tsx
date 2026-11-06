@@ -27,8 +27,7 @@ export function ItemText({
 }
 
 /** A described row's classes: its icons sit on the name's line, not the middle of both. */
-export const DESCRIBED_ROW =
-  'items-start py-1.5 [&>.lucide]:mt-0.5 [&>[data-slot=menu-check]]:mt-0.5'
+export const DESCRIBED_ROW = 'items-start py-1.5 [&>svg]:mt-0.5 [&>[data-slot=menu-check]]:mt-0.5'
 
 /** The 16 px column a menu's check sits in, empty on the rows not chosen. */
 export function CheckColumn({ children }: { children?: ReactNode }) {

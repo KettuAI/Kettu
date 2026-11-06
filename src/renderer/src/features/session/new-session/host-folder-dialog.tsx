@@ -2,7 +2,7 @@
 // marks Git repositories. The chosen folder becomes a project on that host; nothing is copied here.
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
-import { ArrowUpIcon, FolderIcon, GitBranchIcon } from 'lucide-react'
+import { ArrowUp02Icon, Folder01Icon, GitBranchIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { PathCompletion } from '@shared/remote/host-admin'
 import { Button } from '@renderer/components/ui/button'
@@ -23,6 +23,7 @@ import { useOtherHost } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { homeStart } from '@renderer/web/host-path'
 import { crumbs, foldersOf, listing, parentOf, type HostFolder } from './host-folders'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 
 type Read = { folder: string; completion: PathCompletion } | { folder: string; error: string }
 
@@ -146,7 +147,7 @@ function Browser({ hostId, onOpened }: { hostId: string; onOpened: (path: string
             disabled={!parent}
             onClick={() => parent && go(parent)}
           >
-            <ArrowUpIcon />
+            <Glyph icon={ArrowUp02Icon} />
           </Button>
           <nav
             ref={trail}
@@ -268,11 +269,11 @@ function FolderRow({
         selected ? 'bg-selected' : 'hover:bg-hover',
       )}
     >
-      <FolderIcon aria-hidden className="size-4 shrink-0 text-icon" />
+      <Glyph icon={Folder01Icon} className="size-4 shrink-0 text-icon" />
       <span className="min-w-0 flex-1 truncate">{entry.name}</span>
       {entry.repo && (
         <span className="inline-flex shrink-0 items-center gap-1 text-xs text-tertiary">
-          <GitBranchIcon aria-hidden className="size-3" />
+          <Glyph icon={GitBranchIcon} className="size-3" />
           {t('newSession.hostFolders.repo')}
         </span>
       )}

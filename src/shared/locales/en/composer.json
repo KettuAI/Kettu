@@ -37,7 +37,19 @@
     "followsAgentOff": "Follows the agent's setting · off",
     "resetDefault": "Use the agent's setting",
     "modelsFrom": "From {{source}}",
-    "optionValue": "{{name}}: {{value}}"
+    "optionValue": "{{name}}: {{value}}",
+    "permissionMode": "Permission mode",
+    "selected": "{{label}} selected",
+    "limitUsed": "{{percent}}% of {{limit}} limit",
+    "effortHint": "Higher thinks longer, uses more of your plan · {{shortcut}}",
+    "modelSettings": "Model settings",
+    "speed": "Speed",
+    "quality": "Quality",
+    "cost": "Cost",
+    "varies": "Varies",
+    "noModels": "No models available",
+    "noModelMatch": "No models match",
+    "chooseModel": "Choose a model"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",
@@ -85,7 +97,8 @@
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}",
       "planOf": "Plan · {{plan}}",
-      "resetsShort": "resets {{time}}"
+      "resetsShort": "resets {{time}}",
+      "title": "Plan limits"
     },
     "cache": {
       "title": "Prompt cache",
@@ -97,7 +110,7 @@
       "button": "Prompt cache: {{time}}",
       "leftCached": "{{time}} left · {{tokens}} tokens cached",
       "leftAbout": "About {{time}} left · {{tokens}} tokens cached",
-      "explain": "Reply before it runs out and the cached part costs about a tenth as much. After that, the next message writes the cache again.",
+      "explain": "Reply before it runs out and the cached part costs about a tenth as much.",
       "lastReply": "Last reply {{time}}",
       "lastsMinutesShort_one": "Lasts {{count}} min",
       "lastsMinutesShort_other": "Lasts {{count}} min",
@@ -106,7 +119,20 @@
       "estimateLastsMinutes_one": "Lasts about {{count}} min",
       "estimateLastsMinutes_other": "Lasts about {{count}} min",
       "estimateLastsHours_one": "Lasts about {{count}} hour",
-      "estimateLastsHours_other": "Lasts about {{count}} hours"
+      "estimateLastsHours_other": "Lasts about {{count}} hours",
+      "leftLine": "<time>{{time}}</time> left · {{tokens}} tokens cached",
+      "leftLineAbout": "About <time>{{time}}</time> left · {{tokens}} tokens cached"
+    },
+    "contextShort": "{{percent}}% context",
+    "window": {
+      "free": "{{n}} free",
+      "left": "{{n}} left",
+      "over": "{{n}} over the limit",
+      "full": "Context is full",
+      "of": "of {{n}} tokens",
+      "share": "{{percent}}% of the context",
+      "used": "{{used}} of {{cap}} tokens used, {{percent}} percent",
+      "nothing": "Nothing listed"
     }
   },
   "attachments": {

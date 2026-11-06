@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import {
-  ArrowLeftIcon,
-  ArrowUpFromLineIcon,
-  CheckIcon,
+  ArrowLeft02Icon,
   GitBranchIcon,
-  GlobeIcon,
-  LockIcon,
-} from 'lucide-react'
+  GlobalIcon,
+  SquareLock02Icon,
+  Tick02Icon,
+  Upload04Icon,
+} from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -73,6 +73,7 @@ import { pushNow, pushRequest, runStep, showCreatedPr } from './steps'
 import { failureOf, lastLine, pullRequestHead, pushTargetOf, suggestPullRequest } from './sync'
 import { isBranchName } from './switcher-model'
 import { loadCommit, useChanges } from './use-git-data'
+import { Glyph } from '@renderer/features/session/composer/glyph'
 
 type ReturnFocus = () => HTMLElement | true
 
@@ -523,7 +524,7 @@ function PublishBranchForm({ status, onClose }: { status: GitStatus; onClose: ()
           {busy ? (
             <Spinner data-icon="inline-start" />
           ) : (
-            <ArrowUpFromLineIcon data-icon="inline-start" />
+            <Glyph icon={Upload04Icon} data-icon="inline-start" />
           )}
           {t('dialog.publishBranch.action')}
         </Button>
@@ -699,7 +700,7 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
               size="sm"
               className="gap-1.5 rounded-xl px-2.5 text-control font-medium text-primary data-[size=sm]:h-6.5 data-[variant=quiet]:bg-subtle [&>svg:last-child]:hidden"
             >
-              <GitBranchIcon className="size-3.25" />
+              <Glyph icon={GitBranchIcon} className="size-3.25" />
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -712,7 +713,7 @@ function CreatePrForm({ status, onClose }: { status: GitStatus; onClose: () => v
               </SelectGroup>
             </SelectContent>
           </Select>
-          <ArrowLeftIcon aria-hidden className="size-3.5 shrink-0 text-tertiary" />
+          <Glyph icon={ArrowLeft02Icon} className="size-3.5 shrink-0 text-tertiary" />
           <span className="min-w-0 truncate font-mono text-command text-primary">{headBranch}</span>
           <span className="flex-1" />
           <span className="shrink-0 text-hint text-tertiary tabular">
@@ -879,7 +880,7 @@ function PublishRepoForm({ status, onClose }: { status: GitStatus; onClose: () =
                 value: 'private',
                 label: (
                   <span className="inline-flex items-center gap-1.5">
-                    <LockIcon aria-hidden className="size-3.5" />
+                    <Glyph icon={SquareLock02Icon} className="size-3.5" />
                     {t('dialog.publish.private')}
                   </span>
                 ),
@@ -888,7 +889,7 @@ function PublishRepoForm({ status, onClose }: { status: GitStatus; onClose: () =
                 value: 'public',
                 label: (
                   <span className="inline-flex items-center gap-1.5">
-                    <GlobeIcon aria-hidden className="size-3.5" />
+                    <Glyph icon={GlobalIcon} className="size-3.5" />
                     {t('dialog.publish.public')}
                   </span>
                 ),
@@ -957,7 +958,7 @@ function LogView({ projectPath }: { projectPath: string }) {
       </pre>
       <DialogFooter>
         <Button variant="outline" disabled={!log} onClick={copy}>
-          {copied && <CheckIcon data-icon="inline-start" />}
+          {copied && <Glyph icon={Tick02Icon} data-icon="inline-start" />}
           {copied ? t('common:actions.copied') : t('dialog.log.copy')}
         </Button>
         <DialogClose render={<Button />}>{t('common:actions.close')}</DialogClose>

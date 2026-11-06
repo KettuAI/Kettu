@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { RotateCwIcon, WalletIcon } from 'lucide-react'
+import { RefreshIcon, Wallet01Icon } from '@hugeicons/core-free-icons'
 import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { ConfigOption } from '@shared/thread'
@@ -9,6 +9,7 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { fadeExit } from '@renderer/lib/motion'
 import { splitName } from './levels'
 import { modelOption, type Notice } from './use-out-of-credit'
+import { Glyph } from './glyph'
 
 /** The strip at the top of the composer's box after a turn the provider refused for want of credit. */
 export function OutOfCreditStrip({
@@ -43,16 +44,16 @@ export function OutOfCreditStrip({
   return (
     <motion.div
       exit={fadeExit}
-      className="flex w-full animate-in flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-t-dialog border-b-(length:--hairline) border-default bg-subtle py-2 pr-2.5 pl-3.5 text-small fade-in animation-duration-(--duration-fast)"
+      className="kettu-credit flex w-full animate-in flex-wrap items-center gap-x-2.5 gap-y-1.5 fade-in animation-duration-(--duration-fast)"
     >
-      <WalletIcon className="size-4 shrink-0 text-warning" />
+      <Glyph icon={Wallet01Icon} className="size-4 shrink-0 text-warning" />
       <div className="min-w-0 flex-[1_1_12rem] text-primary">
         <p>{name ? t('outOfCredit.strip', { model: name }) : t('outOfCredit.stripNoModel')}</p>
         {error && <p className="text-xs text-danger">{error}</p>}
       </div>
       <div className="ml-auto flex shrink-0 gap-1.5">
         <Button size="xs" variant="outline" disabled={sending} onClick={retry}>
-          {sending ? <Spinner className="size-3" /> : <RotateCwIcon />}
+          {sending ? <Spinner className="size-3" /> : <Glyph icon={RefreshIcon} />}
           {t('common:actions.retry')}
         </Button>
         {option && (
