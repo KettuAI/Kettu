@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import {
   AlertCircleIcon,
+  Archive01Icon,
   ArrowUp02Icon,
   FileDownloadIcon,
   RefreshIcon,
@@ -314,15 +315,26 @@ export function ArchivedComposer({ sessionId }: { sessionId: string }) {
     }
   }
   return (
-    <div className="flex flex-col gap-2 px-3 py-4">
-      <p className="text-small text-tertiary">{t('view.archivedComposer')}</p>
-      <div>
-        <Button size="xs" variant="outline" disabled={restoring} onClick={() => void restore()}>
+    <div className="flex flex-col gap-2">
+      <div className="ks-bar">
+        <HugeiconsIcon
+          icon={Archive01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="ks-bar__icon size-4 shrink-0"
+        />
+        <p>{t('view.archivedComposer')}</p>
+        <Button
+          variant="outline"
+          className="ks-btn"
+          disabled={restoring}
+          onClick={() => void restore()}
+        >
           {t('view.restore')}
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="px-1 text-xs text-danger">
           {error}
         </p>
       )}
@@ -341,15 +353,12 @@ export function HostAway({ host, inline = false }: { host: OtherHost; inline?: b
   const state = connectionText(ts, host, now)
   if (inline) {
     return (
-      <div
-        role="status"
-        className="flex min-h-13 items-center gap-2 rounded-2xl bg-card px-4 py-3 text-ui text-secondary shadow-card"
-      >
+      <div role="status" className="ks-bar">
         <HugeiconsIcon
           icon={WifiDisconnected01Icon}
           strokeWidth={1.9}
           aria-hidden
-          className="size-4 shrink-0 text-icon"
+          className="ks-bar__icon size-4 shrink-0"
         />
         <span className="min-w-0 flex-1 text-pretty">
           {t('host.awayComposer', { name: host.name, state })}
