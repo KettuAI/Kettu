@@ -317,6 +317,8 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
             aria-label={t('screen.label', { name: device.name })}
             className="block size-full touch-none select-none"
             onPointerDown={(event) => {
+              // The mouse down that follows would move focus off the keyboard field.
+              event.preventDefault()
               event.currentTarget.setPointerCapture(event.pointerId)
               pointer.current = { id: event.pointerId, pinch: fingers && event.altKey }
               touch(event, 'begin')
