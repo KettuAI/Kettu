@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { ArrowDownToLineIcon } from 'lucide-react'
+import { Download01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { CodeBlock } from 'streamdown'
 import { bytes } from '@renderer/lib/format'
@@ -71,7 +72,7 @@ export function SvgBlock(props: BlockProps) {
             label={t('block.download')}
             onClick={() => downloadText(code, downloadName(file ?? picture.title), 'image/svg+xml')}
           >
-            <ArrowDownToLineIcon />
+            <HugeiconsIcon icon={Download01Icon} strokeWidth={1.9} aria-hidden />
           </BlockAction>
         </>
       }

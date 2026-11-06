@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
-import { ArrowLeftIcon } from 'lucide-react'
+import { ArrowLeft02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import {
   cancelPendingSession,
@@ -80,7 +81,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
               aria-label={t('pending.back')}
               onClick={cancelPendingSession}
             >
-              <ArrowLeftIcon />
+              <HugeiconsIcon icon={ArrowLeft02Icon} strokeWidth={1.9} aria-hidden />
             </Button>
           )}
           <span className="truncate px-1.5 text-ui font-medium">

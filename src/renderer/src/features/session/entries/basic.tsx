@@ -1,18 +1,18 @@
 import { memo, useState } from 'react'
-import { Calendar03Icon } from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  ArrowUpIcon,
-  ChevronRightIcon,
-  CircleAlertIcon,
-  CornerUpLeftIcon,
+  Alert02Icon,
+  AlertCircleIcon,
+  ArrowRight01Icon,
+  ArrowTurnBackwardIcon,
+  ArrowUp02Icon,
+  Calendar03Icon,
   GitBranchIcon,
-  GitCommitHorizontalIcon,
-  GitPullRequestArrowIcon,
-  InfoIcon,
-  LayersIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+  GitCommitIcon,
+  GitPullRequestIcon,
+  InformationCircleIcon,
+  Layers01Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { RoutineRef } from '@shared/routines'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
@@ -218,7 +218,12 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
       )}
     >
       <figcaption className="flex items-center gap-1.5 text-xs font-medium text-tertiary">
-        <CornerUpLeftIcon aria-hidden className="size-3 shrink-0" />
+        <HugeiconsIcon
+          icon={ArrowTurnBackwardIcon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-3 shrink-0"
+        />
         {sender
           ? t('sessionMessage.from', { title: sessionTitle(sender) })
           : t('sessionMessage.fromParent')}
@@ -230,7 +235,7 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
   )
 })
 
-const NOTICE_ICON = { info: InfoIcon, warning: TriangleAlertIcon, error: CircleAlertIcon }
+const NOTICE_ICON = { info: InformationCircleIcon, warning: Alert02Icon, error: AlertCircleIcon }
 
 export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: EntryProps) {
   const entry = useEntry(sessionId, entryId, 'notice')
@@ -251,7 +256,7 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
       <OutOfCreditEnd title={entry.title} description={entry.description} className={animation} />
     )
   }
-  const Icon = NOTICE_ICON[entry.severity]
+  const glyph = NOTICE_ICON[entry.severity]
   return (
     <Alert
       variant={
@@ -259,7 +264,7 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
       }
       className={animation}
     >
-      <Icon />
+      <HugeiconsIcon icon={glyph} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{entry.title}</AlertTitle>
       {entry.description && (
         <AlertDescription className="whitespace-pre-wrap" data-selectable="">
@@ -290,7 +295,7 @@ export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryI
     entry.status === 'in_progress' ? (
       <Spinner className="size-3.5 text-info" />
     ) : (
-      <LayersIcon className="size-3.5" />
+      <HugeiconsIcon icon={Layers01Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
     )
   if (!entry.summary) {
     return (
@@ -312,7 +317,12 @@ export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryI
         <MarkerIcon className="size-3.5">{icon}</MarkerIcon>
         <MarkerContent className="inline-flex items-center gap-1 group-hover/compaction:text-foreground">
           {text}
-          <ChevronRightIcon className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/compaction:rotate-90" />
+          <HugeiconsIcon
+            icon={ArrowRight01Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/compaction:rotate-90"
+          />
         </MarkerContent>
       </Marker>
       <CollapsibleContent className={PANEL}>
@@ -355,7 +365,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
         <div className={cn('flex flex-col', animation)}>
           {entry.commits.map((c) => (
             <div key={c.oid} className={line}>
-              <GitCommitHorizontalIcon className="size-3.5 shrink-0" />
+              <HugeiconsIcon
+                icon={GitCommitIcon}
+                strokeWidth={1.9}
+                aria-hidden
+                className="size-3.5 shrink-0"
+              />
               <span className="min-w-0 truncate">
                 <Trans
                   t={t}
@@ -378,7 +393,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
     case 'push':
       return (
         <div className={cn(line, animation)}>
-          <ArrowUpIcon className="size-3.5 shrink-0" />
+          <HugeiconsIcon
+            icon={ArrowUp02Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5 shrink-0"
+          />
           <span className="min-w-0 truncate">
             <Trans
               t={t}
@@ -396,7 +416,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
     case 'branch':
       return (
         <div className={cn(line, animation)}>
-          <GitBranchIcon className="size-3.5 shrink-0" />
+          <HugeiconsIcon
+            icon={GitBranchIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5 shrink-0"
+          />
           <span className="min-w-0 truncate">
             <Trans
               t={t}
@@ -411,7 +436,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
     case 'pull_request':
       return (
         <div className={cn(line, animation)}>
-          <GitPullRequestArrowIcon className="size-3.5 shrink-0" />
+          <HugeiconsIcon
+            icon={GitPullRequestIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5 shrink-0"
+          />
           <span>{t('gitEvent.openedPr')}</span>
           <PrChip url={entry.url} />
         </div>

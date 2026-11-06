@@ -1,4 +1,5 @@
-import { EyeIcon } from 'lucide-react'
+import { ViewIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { SessionViewer } from '@shared/agent-host'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -48,7 +49,7 @@ export function ViewersChip({
           />
         }
       >
-        <EyeIcon aria-hidden className="size-3 shrink-0" />
+        <HugeiconsIcon icon={ViewIcon} strokeWidth={1.9} aria-hidden className="size-3 shrink-0" />
         <span className="max-w-32 truncate">{text}</span>
       </TooltipTrigger>
       <TooltipContent>{all}</TooltipContent>

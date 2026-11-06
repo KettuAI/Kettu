@@ -10,7 +10,8 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
-import { AppWindowMacIcon, CopyIcon, ExternalLinkIcon, GlobeIcon, LinkIcon } from 'lucide-react'
+import { Copy01Icon, Globe02Icon, Link01Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { DefaultBrowser } from '@shared/ipc'
 import type { LinkDestination } from '@shared/settings'
@@ -75,7 +76,10 @@ export function BrowserIcon({
   browser: DefaultBrowser
   className?: string
 }) {
-  if (!browser.icon) return <ExternalLinkIcon className={className} />
+  if (!browser.icon)
+    return (
+      <HugeiconsIcon icon={LinkSquare02Icon} strokeWidth={1.9} aria-hidden className={className} />
+    )
   return <img src={browser.icon} alt="" draggable={false} className={cn('shrink-0', className)} />
 }
 
@@ -94,7 +98,7 @@ function SiteTile({ url }: { url: string }) {
         aria-hidden
         className={cn(tile, 'bg-[color-mix(in_srgb,var(--focus)_14%,transparent)] text-(--focus)')}
       >
-        <AppWindowMacIcon className="size-2.5" strokeWidth={1} />
+        <HugeiconsIcon icon={Globe02Icon} strokeWidth={1.9} aria-hidden className="size-2.5" />
       </span>
     )
   }
@@ -107,7 +111,7 @@ function SiteTile({ url }: { url: string }) {
   }
   return (
     <span aria-hidden className={cn(tile, 'text-tertiary')}>
-      <GlobeIcon className="size-3.5" strokeWidth={1.5} />
+      <HugeiconsIcon icon={Globe02Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
     </span>
   )
 }
@@ -286,9 +290,19 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
           </TooltipTrigger>
           <TooltipContent anchor={firstLine} align="start" sideOffset={6} className="max-w-md">
             {primary === 'session' ? (
-              <AppWindowMacIcon className="size-2.75" strokeWidth={1} />
+              <HugeiconsIcon
+                icon={Globe02Icon}
+                strokeWidth={1.9}
+                aria-hidden
+                className="size-2.75"
+              />
             ) : (
-              <ExternalLinkIcon className="size-2.75" strokeWidth={1} />
+              <HugeiconsIcon
+                icon={LinkSquare02Icon}
+                strokeWidth={1.9}
+                aria-hidden
+                className="size-2.75"
+              />
             )}
             <span className="min-w-0 [overflow-wrap:anywhere]">
               {primary === 'session'
@@ -304,17 +318,17 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
             <ContextMenuShortcut>{shortcut('browser')}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem disabled={!context.session} onClick={() => openTo('session')}>
-            <AppWindowMacIcon />
+            <HugeiconsIcon icon={Globe02Icon} strokeWidth={1.9} aria-hidden />
             {t('link.openInSession')}
             {context.session && <ContextMenuShortcut>{shortcut('session')}</ContextMenuShortcut>}
           </ContextMenuItem>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={() => copy(url)}>
-            <CopyIcon />
+            <HugeiconsIcon icon={Copy01Icon} strokeWidth={1.9} aria-hidden />
             {t('link.copy')}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => copy(markdownLink(textOf(label), url))}>
-            <LinkIcon />
+            <HugeiconsIcon icon={Link01Icon} strokeWidth={1.9} aria-hidden />
             {t('link.copyMarkdown')}
           </ContextMenuItem>
         </ContextMenuContent>

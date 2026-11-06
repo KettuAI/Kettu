@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AppWindowIcon, MonitorIcon } from 'lucide-react'
+import { ComputerIcon, DashboardSquare01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { SessionView } from '@shared/thread'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -99,7 +100,12 @@ export function ComputerLabel({
           'bg-card pr-3 text-attention shadow-[0_0_0_var(--hairline)_var(--computer-line)]',
         )}
       >
-        <AppWindowIcon aria-hidden className="size-3.75 shrink-0" />
+        <HugeiconsIcon
+          icon={DashboardSquare01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-3.75 shrink-0"
+        />
         <span className="min-w-0 truncate">
           <Trans
             t={t}
@@ -123,9 +129,19 @@ export function ComputerLabel({
       ) : icon ? (
         <img src={icon} alt="" className="size-4 shrink-0" draggable={false} />
       ) : app ? (
-        <AppWindowIcon aria-hidden className="size-3.75 shrink-0" />
+        <HugeiconsIcon
+          icon={DashboardSquare01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-3.75 shrink-0"
+        />
       ) : (
-        <MonitorIcon aria-hidden className="size-3.75 shrink-0" />
+        <HugeiconsIcon
+          icon={ComputerIcon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-3.75 shrink-0"
+        />
       )}
       <span className="min-w-0 truncate">
         {stopping ? (

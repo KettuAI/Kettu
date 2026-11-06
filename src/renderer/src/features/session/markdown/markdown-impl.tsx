@@ -16,7 +16,8 @@ import {
 } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
-import { CheckIcon } from 'lucide-react'
+import { Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { defaultComponents, Streamdown, type Components, type ExtraProps } from 'streamdown'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
@@ -209,7 +210,7 @@ function TaskCheckbox({ type, checked }: ComponentProps<'input'> & ExtraProps) {
   if (type !== 'checkbox') return null
   return (
     <span data-task-box="" role="checkbox" aria-checked={!!checked} aria-disabled>
-      {checked && <CheckIcon aria-hidden strokeWidth={1.6} />}
+      {checked && <HugeiconsIcon icon={Tick02Icon} strokeWidth={1.9} aria-hidden />}
     </span>
   )
 }

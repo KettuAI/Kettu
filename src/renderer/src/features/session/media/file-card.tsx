@@ -1,5 +1,6 @@
 import { useContext, useState, type ReactNode } from 'react'
-import { ArrowDownToLineIcon, FolderIcon } from 'lucide-react'
+import { Download01Icon, Folder01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { MediaGrant } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
@@ -136,14 +137,24 @@ export function MediaFileCard({
               }
               onClick={() => run(show.show)}
             >
-              <FolderIcon className="size-3.5" />
+              <HugeiconsIcon
+                icon={Folder01Icon}
+                strokeWidth={1.9}
+                aria-hidden
+                className="size-3.5"
+              />
             </FileCardButton>
           )}
           <FileCardButton
             label={t('media.download')}
             onClick={() => run(() => window.kettu.media.saveAs(grant.url))}
           >
-            <ArrowDownToLineIcon className="size-3.5" />
+            <HugeiconsIcon
+              icon={Download01Icon}
+              strokeWidth={1.9}
+              aria-hidden
+              className="size-3.5"
+            />
           </FileCardButton>
         </>
       }

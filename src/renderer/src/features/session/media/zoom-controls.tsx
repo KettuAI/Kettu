@@ -1,4 +1,5 @@
-import { MinusIcon, PlusIcon } from 'lucide-react'
+import { MinusSignIcon, PlusSignIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -40,7 +41,7 @@ export function ZoomControls({
         disabled={!controls || fitted}
         onClick={() => controls?.zoomBy(-1)}
       >
-        <MinusIcon className={icon} />
+        <HugeiconsIcon icon={MinusSignIcon} strokeWidth={1.9} aria-hidden className={icon} />
       </PanelButton>
       <Tooltip>
         <TooltipTrigger
@@ -67,7 +68,7 @@ export function ZoomControls({
         disabled={!controls || zoom.z >= MAX_ZOOM}
         onClick={() => controls?.zoomBy(1)}
       >
-        <PlusIcon className={icon} />
+        <HugeiconsIcon icon={PlusSignIcon} strokeWidth={1.9} aria-hidden className={icon} />
       </PanelButton>
     </>
   )

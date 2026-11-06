@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { ChevronRightIcon, WalletIcon } from 'lucide-react'
+import { ArrowRight01Icon, Wallet01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertTitle } from '@renderer/components/ui/alert'
 import {
@@ -34,13 +35,18 @@ export function OutOfCreditEnd({
       onOpenChange={setOpen}
       render={<Alert variant="warning" className={cn('py-2 text-small', className)} />}
     >
-      <WalletIcon />
+      <HugeiconsIcon icon={Wallet01Icon} strokeWidth={1.9} aria-hidden />
       <AlertTitle className="flex flex-wrap items-baseline gap-x-2">
         <span>{title}</span>
         {description && (
           <CollapsibleTrigger className="group/details inline-flex items-center gap-0.5 rounded-sm font-normal text-tertiary outline-none focus-ring hover:text-primary">
             {t('thread.outOfCredit.details')}
-            <ChevronRightIcon className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/details:rotate-90" />
+            <HugeiconsIcon
+              icon={ArrowRight01Icon}
+              strokeWidth={1.9}
+              aria-hidden
+              className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/details:rotate-90"
+            />
           </CollapsibleTrigger>
         )}
       </AlertTitle>

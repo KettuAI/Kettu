@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ComponentProps } from 'react'
-import { ArrowDownToLineIcon } from 'lucide-react'
+import { Download01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import {
   extractTableDataFromElement,
@@ -97,7 +98,7 @@ export function MarkdownTable({ node, children, className }: ComponentProps<'tab
             if (d) downloadText(tableDataToCSV(d), 'table.csv', 'text/csv')
           }}
         >
-          <ArrowDownToLineIcon />
+          <HugeiconsIcon icon={Download01Icon} strokeWidth={1.9} aria-hidden />
         </BlockAction>
       </div>
     </div>

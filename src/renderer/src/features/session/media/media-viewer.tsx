@@ -2,14 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { AnimatePresence, motion } from 'motion/react'
 import {
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CopyIcon,
-  FileDownIcon,
-  FolderIcon,
-  XIcon,
-} from 'lucide-react'
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Cancel01Icon,
+  Copy01Icon,
+  FileDownloadIcon,
+  Folder01Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { mediaKindOfName, type CarriedMedia } from '@shared/media'
 import { Dialog, DialogPortal, DialogTitle } from '@renderer/components/ui/dialog'
@@ -507,14 +508,19 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
               onClick={copy}
             >
               {copied ? (
-                <CheckIcon className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75" />
+                <HugeiconsIcon
+                  icon={Tick02Icon}
+                  strokeWidth={1.9}
+                  aria-hidden
+                  className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75"
+                />
               ) : (
-                <CopyIcon />
+                <HugeiconsIcon icon={Copy01Icon} strokeWidth={1.9} aria-hidden />
               )}
             </PanelButton>
           )}
           <PanelButton size="icon-sm" label={t('viewer.saveAs')} disabled={!ready} onClick={save}>
-            <FileDownIcon />
+            <HugeiconsIcon icon={FileDownloadIcon} strokeWidth={1.9} aria-hidden />
           </PanelButton>
           {showFile && (
             <PanelButton
@@ -526,7 +532,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
               }
               onClick={show}
             >
-              <FolderIcon />
+              <HugeiconsIcon icon={Folder01Icon} strokeWidth={1.9} aria-hidden />
             </PanelButton>
           )}
           <PanelButton
@@ -535,7 +541,7 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
             shortcut="Esc"
             onClick={closeViewer}
           >
-            <XIcon />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.9} aria-hidden />
           </PanelButton>
         </motion.div>
         <div
@@ -595,7 +601,7 @@ function StepButton({
   leaving: boolean
   onClick: () => void
 }) {
-  const Icon = side === 'start' ? ChevronLeftIcon : ChevronRightIcon
+  const glyph = side === 'start' ? ArrowLeft01Icon : ArrowRight01Icon
   return (
     <button
       type="button"
@@ -607,7 +613,7 @@ function StepButton({
         leaving && 'pointer-events-none opacity-0!',
       )}
     >
-      <Icon className="size-4" />
+      <HugeiconsIcon icon={glyph} strokeWidth={1.9} aria-hidden className="size-4" />
     </button>
   )
 }

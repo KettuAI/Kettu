@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react'
 import {
-  ArrowUpIcon,
-  CircleAlertIcon,
-  CloudOffIcon,
-  FileDownIcon,
-  RotateCwIcon,
-} from 'lucide-react'
+  AlertCircleIcon,
+  ArrowUp02Icon,
+  FileDownloadIcon,
+  RefreshIcon,
+  WifiDisconnected01Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, UserContent } from '@shared/thread'
 import { exportDiagnostics, unarchiveSession } from '@renderer/app/actions'
@@ -149,7 +150,7 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
             aria-hidden
             className="disabled:text-disabled disabled:opacity-100"
           >
-            <ArrowUpIcon />
+            <HugeiconsIcon icon={ArrowUp02Icon} strokeWidth={1.9} aria-hidden />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
@@ -252,7 +253,12 @@ export function FailedState({
       role="alert"
     >
       <div className="flex items-start gap-2">
-        <CircleAlertIcon className="mt-px size-4 shrink-0 text-danger" />
+        <HugeiconsIcon
+          icon={AlertCircleIcon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="mt-px size-4 shrink-0 text-danger"
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-ui font-medium">{title}</span>
           <span className="text-ui text-muted-foreground" data-selectable="">
@@ -270,14 +276,24 @@ export function FailedState({
       )}
       <div className="flex flex-wrap items-center gap-1.5 pl-6">
         <Button size="compact" onClick={onRetry}>
-          <RotateCwIcon data-icon="inline-start" />
+          <HugeiconsIcon
+            icon={RefreshIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            data-icon="inline-start"
+          />
           {t('common:actions.retry')}
         </Button>
         <Button variant="outline" size="compact" disabled={exporting} onClick={() => void save()}>
           {exporting ? (
             <Spinner data-icon="inline-start" className="size-3" />
           ) : (
-            <FileDownIcon data-icon="inline-start" />
+            <HugeiconsIcon
+              icon={FileDownloadIcon}
+              strokeWidth={1.9}
+              aria-hidden
+              data-icon="inline-start"
+            />
           )}
           {t('failed.exportDiagnostics')}
         </Button>
@@ -335,7 +351,12 @@ export function HostAway({ host, inline = false }: { host: OtherHost; inline?: b
         role="status"
         className="flex min-h-13 items-center gap-2 rounded-2xl bg-card px-4 py-3 text-ui text-secondary shadow-card"
       >
-        <CloudOffIcon aria-hidden className="size-4 shrink-0 text-icon" />
+        <HugeiconsIcon
+          icon={WifiDisconnected01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-4 shrink-0 text-icon"
+        />
         <span className="min-w-0 flex-1 text-pretty">
           {t('host.awayComposer', { name: host.name, state })}
         </span>
@@ -347,7 +368,12 @@ export function HostAway({ host, inline = false }: { host: OtherHost; inline?: b
       role="status"
       className="flex max-w-sm animate-in flex-col items-center gap-1.5 text-center fade-in animation-duration-(--duration-slow)"
     >
-      <CloudOffIcon aria-hidden className="mb-1 size-5 text-icon" />
+      <HugeiconsIcon
+        icon={WifiDisconnected01Icon}
+        strokeWidth={1.9}
+        aria-hidden
+        className="mb-1 size-5 text-icon"
+      />
       <span className="text-ui font-medium text-primary">
         {t('host.away', { name: host.name })}
       </span>

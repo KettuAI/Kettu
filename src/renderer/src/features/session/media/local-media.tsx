@@ -1,5 +1,11 @@
 import { useRef } from 'react'
-import { DownloadIcon, ExternalLinkIcon, FolderIcon, RotateCwIcon } from 'lucide-react'
+import {
+  Download01Icon,
+  Folder01Icon,
+  LinkSquare02Icon,
+  RefreshIcon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { mediaKindOfName, type MediaKind } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
@@ -155,7 +161,7 @@ function MediaState({
       danger={shown.kind === 'failed'}
       actions={
         <FileCardButton label={t('common:actions.retry')} onClick={onRetry}>
-          <RotateCwIcon className="size-3.5" />
+          <HugeiconsIcon icon={RefreshIcon} strokeWidth={1.9} aria-hidden className="size-3.5" />
         </FileCardButton>
       }
     />
@@ -190,7 +196,7 @@ export function PlayElsewhere({
   if (isWeb || (projectPath !== null && hostOfPath(projectPath) !== null)) {
     return (
       <Button variant="outline" size="xs" onClick={act(window.kettu.media.saveAs)}>
-        <DownloadIcon />
+        <HugeiconsIcon icon={Download01Icon} strokeWidth={1.9} aria-hidden />
         {t('media.saveAs')}
       </Button>
     )
@@ -198,11 +204,11 @@ export function PlayElsewhere({
   return (
     <>
       <Button variant="outline" size="xs" onClick={act(window.kettu.media.openExternal)}>
-        <ExternalLinkIcon />
+        <HugeiconsIcon icon={LinkSquare02Icon} strokeWidth={1.9} aria-hidden />
         {t('media.openWithDefault')}
       </Button>
       <Button variant="outline" size="xs" onClick={act(window.kettu.media.reveal)}>
-        <FolderIcon />
+        <HugeiconsIcon icon={Folder01Icon} strokeWidth={1.9} aria-hidden />
         {t('media.showIn', { name: fileManagerName() })}
       </Button>
     </>

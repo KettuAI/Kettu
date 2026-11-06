@@ -1,5 +1,6 @@
 import { Fragment, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { FileIcon, LinkIcon } from 'lucide-react'
+import { File01Icon, Link01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
 import type { Attachment, ContentRef, ThreadEntry, UserContent } from '@shared/thread'
@@ -277,9 +278,19 @@ export function RefChip({
     >
       {link &&
         (contentRef.uri.startsWith('file:') ? (
-          <FileIcon className="size-3 shrink-0" />
+          <HugeiconsIcon
+            icon={File01Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3 shrink-0"
+          />
         ) : (
-          <LinkIcon className="size-3 shrink-0" />
+          <HugeiconsIcon
+            icon={Link01Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3 shrink-0"
+          />
         ))}
       <span className="truncate">{label}</span>
     </span>

@@ -7,7 +7,8 @@ import {
   type ComponentProps,
   type ReactNode,
 } from 'react'
-import { WrapTextIcon } from 'lucide-react'
+import { TextWrapIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { CodeBlock, useIsCodeFenceIncomplete, type ExtraProps } from 'streamdown'
 import { BlockAction, BlockCopy, BlockFrame, BlockSpacer } from './block-frame'
@@ -107,7 +108,7 @@ export function CodeFrame({
             ))}
           <BlockSpacer />
           <BlockAction label={t('block.wrap')} aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
-            <WrapTextIcon />
+            <HugeiconsIcon icon={TextWrapIcon} strokeWidth={1.9} aria-hidden />
           </BlockAction>
           <BlockCopy text={code} label={t('block.copy')} />
         </>

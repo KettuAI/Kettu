@@ -1,5 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { ExternalLinkIcon, PlayIcon } from 'lucide-react'
+import { LinkSquare02Icon, PlayIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { bytes as formatBytes, clock, duration } from '@renderer/lib/format'
@@ -137,7 +138,7 @@ export function LocalVideo({
               onClick={play}
               className="absolute top-[45%] left-1/2 grid size-12 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-(--media-control) text-(color:--media-control-ink) shadow-media-control transition-transform duration-(--duration-fast) focus-ring motion-safe:hover:scale-105 motion-safe:active:scale-100"
             >
-              <PlayIcon className="size-4.5" strokeWidth={1.6} />
+              <HugeiconsIcon icon={PlayIcon} strokeWidth={1.9} aria-hidden className="size-4.5" />
             </button>
             <span className="pointer-events-none absolute inset-x-3 bottom-2.5 flex items-center gap-2.5 text-caption text-(color:--media-foreground) tabular">
               <span>{clock(time)}</span>
@@ -164,7 +165,12 @@ export function LocalVideo({
                   onClick={() => openExternal(external)}
                   className="pointer-events-auto grid place-items-center rounded-sm opacity-85 focus-ring hover:opacity-100"
                 >
-                  <ExternalLinkIcon className="size-3.25" strokeWidth={1.5} />
+                  <HugeiconsIcon
+                    icon={LinkSquare02Icon}
+                    strokeWidth={1.9}
+                    aria-hidden
+                    className="size-3.25"
+                  />
                 </button>
               )}
             </span>

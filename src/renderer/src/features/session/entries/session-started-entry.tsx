@@ -1,5 +1,6 @@
 import { memo } from 'react'
-import { BotIcon, CircleAlertIcon } from 'lucide-react'
+import { AiChat02Icon, AlertCircleIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -45,7 +46,12 @@ export const SessionStartedEntry = memo(function SessionStartedEntry({
         {child ? (
           <AgentMark agent={child.agentId} size={14} />
         ) : (
-          <BotIcon className="size-3.5 text-icon" />
+          <HugeiconsIcon
+            icon={AiChat02Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5 text-icon"
+          />
         )}
       </span>
       <span className="min-w-0 flex-1 truncate text-tertiary">
@@ -68,7 +74,12 @@ export const SessionStartedEntry = memo(function SessionStartedEntry({
           </span>
         ) : failed ? (
           <span className="inline-flex items-center gap-1 text-danger">
-            <CircleAlertIcon className="size-3.5" />
+            <HugeiconsIcon
+              icon={AlertCircleIcon}
+              strokeWidth={1.9}
+              aria-hidden
+              className="size-3.5"
+            />
             {t('status.failed')}
           </span>
         ) : running ? (
