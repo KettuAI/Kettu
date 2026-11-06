@@ -85,6 +85,7 @@ export function startDeviceHost(
           const png = await devices.screenshot(params.deviceId)
           return { png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) }
         },
+        'devices.frame': async (_, params) => ({ frame: await devices.frame(params.deviceId) }),
       },
       () => devices.setPolling(true),
       (port) => {

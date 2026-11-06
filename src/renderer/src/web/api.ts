@@ -506,11 +506,21 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       },
     },
     devices: {
-      // Over the channel frames and screenshots are base64; the page gets them as ArrayBuffers.
+      // Over the channel frames, screenshots and frame pictures are base64; the page gets them
+      // as ArrayBuffers.
       request: (async (method: string, params: unknown) => {
         const result = await link.request(method, params)
         const png = (result as { png?: unknown } | null)?.png
-        return typeof png === 'string' ? { ...(result as object), png: fromBase64(png) } : result
+        if (typeof png === 'string') return { ...(result as object), png: fromBase64(png) }
+        const frame = (result as { frame?: { images?: unknown } | null } | null)?.frame
+        if (frame && Array.isArray(frame.images)) {
+          const images = frame.images.map((image: { png?: unknown }) => ({
+            ...image,
+            png: typeof image.png === 'string' ? fromBase64(image.png) : image.png,
+          }))
+          return { ...(result as object), frame: { ...frame, images } }
+        }
+        return result
       }) as KettuApi['devices']['request'],
       onEvent: (listener) =>
         link.onDeviceEvent((event) => {

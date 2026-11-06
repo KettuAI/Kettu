@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AnnexBToAvcc, avcCodecString, avcDecoderConfig, splitNalUnits } from './annexb'
+import { framePlan } from './frame'
 import { encodeFrame, FrameReader, FramingError, MAX_FRAME_BYTES } from './framing'
 import {
   clipboardMessage,
@@ -169,5 +170,71 @@ describe('scrcpy control messages', () => {
   it('splits text without breaking a character', () => {
     expect(textChunks('你好世界', 7)).toEqual(['你好', '世界'])
     expect(textChunks('', 7)).toEqual([])
+  })
+})
+
+describe('serve-sim device chrome', () => {
+  const button = (name: string, onTop: boolean) => ({
+    name,
+    image: `${name} BTN`,
+    onTop,
+    frame: { x: 4, y: 160, width: 16, height: 34 },
+  })
+  const chrome = {
+    identifier: 'phone11',
+    frame: { width: 454, height: 908 },
+    body: { x: 9, y: 0, width: 436, height: 908 },
+    screen: { x: 26, y: 17, width: 402, height: 874 },
+    screenRadius: 62,
+    screenCornerRadii: { topLeft: 62, topRight: 62, bottomRight: 60, bottomLeft: 60 },
+    compositeImage: 'PhoneComposite',
+    buttons: [button('crown', true), button('volume', false)],
+  }
+
+  it('puts buttons behind the body and those on top after it', () => {
+    const plan = framePlan(chrome)
+    expect(plan?.radii).toEqual([62, 62, 60, 60])
+    expect(plan?.images.map((image) => image.image)).toEqual([
+      'volume BTN',
+      'PhoneComposite',
+      'crown BTN',
+    ])
+    expect(plan?.images[1]).toMatchObject({ x: 9, y: 0, width: 436, height: 908 })
+  })
+
+  it('lays out a nine-slice body around its corners', () => {
+    const slice = {
+      topLeft: 'TL',
+      top: 'Top',
+      topRight: 'TR',
+      right: 'Right',
+      bottomRight: 'BR',
+      bottom: 'Base',
+      bottomLeft: 'BL',
+      left: 'Left',
+    }
+    const plan = framePlan({
+      ...chrome,
+      compositeImage: undefined,
+      slice,
+      corner: { width: 110, height: 110 },
+      buttons: [],
+    })
+    expect(plan?.images).toHaveLength(8)
+    expect(plan?.images.find((image) => image.image === 'BR')).toEqual({
+      image: 'BR',
+      x: 335,
+      y: 798,
+      width: 110,
+      height: 110,
+    })
+    expect(plan?.images.find((image) => image.image === 'Top')?.width).toBe(216)
+  })
+
+  it('refuses a description it cannot draw', () => {
+    expect(framePlan(null)).toBeNull()
+    expect(framePlan({ ...chrome, frame: { width: Infinity, height: 908 } })).toBeNull()
+    expect(framePlan({ ...chrome, compositeImage: '../../etc/passwd' })).toBeNull()
+    expect(framePlan({ ...chrome, compositeImage: undefined })).toBeNull()
   })
 })

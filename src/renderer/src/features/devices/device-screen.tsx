@@ -7,9 +7,16 @@ import {
   type WheelEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { DeviceInfo, DeviceInput, DeviceScreen as Screen } from '@shared/device-host'
+import type {
+  DeviceFrame as Frame,
+  DeviceInfo,
+  DeviceInput,
+  DeviceOrientation,
+  DeviceScreen as Screen,
+} from '@shared/device-host'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
+import { DeviceFrame } from './device-frame'
 
 type StreamState = 'starting' | 'live' | 'stopped' | 'error'
 
@@ -34,6 +41,7 @@ const KEY_CODES = new Set([
 const FRAME_US = 16_667
 /** Without hardware decoding, as on a page opened over plain http, a picture this often. */
 const STILL_EVERY_MS = 1_000
+const NO_ROOM = { width: 0, height: 0 }
 const canDecode = typeof VideoDecoder !== 'undefined' && typeof EncodedVideoChunk !== 'undefined'
 
 function avcCodec(description: Uint8Array): string {
@@ -59,27 +67,30 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
   const [focused, setFocused] = useState(false)
   const pointer = useRef<{ id: number; pinch: boolean } | null>(null)
   const box = useRef<HTMLDivElement>(null)
-  const [frame, setFrame] = useState<{ width: number; height: number }>(() =>
+  const [picture, setPicture] = useState<{ width: number; height: number }>(() =>
     device.platform === 'ios' ? { width: 1179, height: 2556 } : { width: 1080, height: 2400 },
   )
-  const [fit, setFit] = useState<{ width: number; height: number } | null>(null)
+  const [orientation, setOrientation] = useState<DeviceOrientation>('portrait')
+  // Undefined until the host answers; a simulator's frame comes once its stream runs.
+  const [frame, setFrame] = useState<Frame | null | undefined>(undefined)
+  const [room, setRoom] = useState<{ width: number; height: number } | null>(null)
   const id = device.id
+  const ownFrame = device.platform === 'ios' && device.kind === 'simulator'
+  const ready = room !== null && (!ownFrame || frame !== undefined)
 
-  // The screen keeps its aspect ratio inside whatever room the pane gives it.
+  // The device keeps its aspect ratio inside whatever room the pane gives it.
   useEffect(() => {
     const element = box.current
     if (!element) return
     const measure = (): void => {
       const { width, height } = element.getBoundingClientRect()
-      const scale = Math.min(width / frame.width, height / frame.height)
-      if (scale > 0)
-        setFit({ width: Math.floor(frame.width * scale), height: Math.floor(frame.height * scale) })
+      if (width > 0 && height > 0) setRoom({ width, height })
     }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [frame])
+  }, [])
 
   useEffect(() => {
     let decoder: VideoDecoder | null = null
@@ -91,6 +102,20 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
     let ackSeq = 0
     let ackQueued = false
     let closed = false
+    let framed = false
+
+    const loadFrame = (): void => {
+      if (framed) return
+      framed = true
+      window.kettu.devices
+        .request('devices.frame', { deviceId: id })
+        .then((result) => {
+          if (!closed) setFrame(result.frame)
+        })
+        .catch(() => {
+          if (!closed) setFrame(null)
+        })
+    }
 
     const draw = (source: CanvasImageSource, width: number, height: number): void => {
       const element = canvas.current
@@ -98,7 +123,7 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
       if (element.width !== width || element.height !== height) {
         element.width = width
         element.height = height
-        setFrame({ width, height })
+        setPicture({ width, height })
       }
       element.getContext('2d')?.drawImage(source, 0, 0, width, height)
     }
@@ -151,6 +176,7 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
       if (event.type === 'device.screen') {
         const changed = event.screen.codec !== screen?.codec
         screen = event.screen
+        setOrientation(event.screen.orientation)
         if (changed && description) configure()
       } else if (event.type === 'device.stream') {
         setState(event.state)
@@ -206,6 +232,7 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
             const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }))
             draw(bitmap, bitmap.width, bitmap.height)
             bitmap.close()
+            loadFrame()
             if (!drewFrame) {
               drewFrame = true
               setDrawn(true)
@@ -226,7 +253,11 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
       window.kettu.devices
         .request('devices.watch', { deviceId: id })
         .then((result) => {
-          if (result.screen) screen = result.screen
+          if (result.screen) {
+            screen = result.screen
+            setOrientation(result.screen.orientation)
+          }
+          loadFrame()
         })
         .catch((reason: unknown) => {
           setState('error')
@@ -300,15 +331,27 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
     element.value = ''
   }
 
+  const status = drawn ? null : state === 'error' ? (
+    <span className="max-w-60 px-4 text-center">{error ?? t('screen.error')}</span>
+  ) : state === 'stopped' ? (
+    <span>{t('screen.stopped')}</span>
+  ) : (
+    <>
+      <Spinner />
+      <span>{t('screen.starting')}</span>
+    </>
+  )
+
   return (
     <div className={cn('relative flex min-h-0 min-w-0 flex-1 p-6', className)}>
-      <div ref={box} className="flex min-h-0 min-w-0 flex-1 items-center justify-center">
-        <div
-          style={fit ? { width: fit.width, height: fit.height } : undefined}
-          className={cn(
-            'relative shrink-0 overflow-hidden rounded-[2.25rem] bg-(--media-control-ink) shadow-[0_0_0_var(--hairline)_var(--border-default)] ring-offset-2 ring-offset-background',
-            focused && 'ring-2 ring-focus',
-          )}
+      <div ref={box} className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center">
+        <DeviceFrame
+          className={cn(!ready && 'invisible')}
+          frame={frame ?? null}
+          picture={picture}
+          orientation={orientation}
+          room={room ?? NO_ROOM}
+          focused={focused}
         >
           <canvas
             ref={canvas}
@@ -342,21 +385,17 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
               send(id, { type: 'scroll', x, y, dx: event.deltaX, dy: event.deltaY })
             }}
           />
-          {!drawn && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-hint text-secondary">
-              {state === 'error' ? (
-                <span className="max-w-60 px-4 text-center">{error ?? t('screen.error')}</span>
-              ) : state === 'stopped' ? (
-                <span>{t('screen.stopped')}</span>
-              ) : (
-                <>
-                  <Spinner />
-                  <span>{t('screen.starting')}</span>
-                </>
-              )}
+          {ready && status && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-hint text-(--media-control)">
+              {status}
             </div>
           )}
-        </div>
+        </DeviceFrame>
+        {!ready && status && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-hint text-secondary">
+            {status}
+          </div>
+        )}
       </div>
       {!canDecode && (
         <p className="absolute inset-x-0 top-2 text-center text-small text-tertiary">

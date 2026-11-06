@@ -1,6 +1,6 @@
 // A paired device's port to the device host: its `devices.*` requests go there, and the host's
-// answers and events come back. The channel carries JSON, so frames and screenshots travel as
-// base64; each device acknowledges its own frames, so a slow phone skips ahead on its own.
+// answers and events come back. The channel carries JSON, so frames, screenshots and the device
+// frame's pictures travel as base64; each device acknowledges its own frames, so a slow phone skips ahead on its own.
 
 import { DEVICE_METHODS } from '@shared/device-host'
 import type { PortChannel } from '@shared/port-channel'
@@ -49,8 +49,17 @@ export function forChannel(data: unknown): unknown {
   }
   if (message.type === 'response') {
     const result = message.result as Record<string, unknown> | null
-    const png = result && typeof result === 'object' ? base64(result.png) : null
+    if (!result || typeof result !== 'object') return data
+    const png = base64(result.png)
     if (png !== null) return { ...message, result: { ...result, png } }
+    const frame = result.frame as { images?: unknown } | null | undefined
+    if (frame && Array.isArray(frame.images)) {
+      const images = frame.images.map((image: Record<string, unknown>) => ({
+        ...image,
+        png: base64(image.png) ?? '',
+      }))
+      return { ...message, result: { ...result, frame: { ...frame, images } } }
+    }
   }
   return data
 }

@@ -177,4 +177,5 @@ export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M
   'devices.handBack': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
   'devices.stopAgent': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
   'devices.screenshot': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
+  'devices.frame': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
 }

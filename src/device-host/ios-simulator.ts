@@ -5,9 +5,16 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Env } from '../agent-host/find-command'
-import type { DeviceInput, DeviceOrientation, DeviceScreen, FrameKind } from '@shared/device-host'
+import type {
+  DeviceFrame,
+  DeviceInput,
+  DeviceOrientation,
+  DeviceScreen,
+  FrameKind,
+} from '@shared/device-host'
 import { asciiKey, DriverError, hidUsage, type DeviceDriver, type DriverEvents } from './driver'
 import { run } from './discovery'
+import { framePlan } from './frame'
 import { FRAME_TAG, FrameReader, frameJson, taggedJson } from './framing'
 import { freePort, nodeCommand, packageRoot } from './runtime'
 
@@ -15,6 +22,7 @@ const START_TIMEOUT_MS = 60_000
 const INPUT_ADMITTED = 0x83
 const SCREEN_CONFIG = 0x82
 const PASTE = 0x12
+const MAX_FRAME_IMAGE_BYTES = 4 * 1024 * 1024
 
 const KIND_BY_TAG: Record<number, FrameKind> = {
   [FRAME_TAG.description]: 'description',
@@ -49,6 +57,7 @@ export class IosSimulatorDriver implements DeviceDriver {
   private size: { width: number; height: number } | null = null
   private codec: string | null = null
   private nextPaste = 1
+  private framed: Promise<DeviceFrame | null> | null = null
 
   constructor(
     private readonly udid: string,
@@ -188,6 +197,53 @@ export class IosSimulatorDriver implements DeviceDriver {
     })
     if (!response.ok) throw new DriverError('screenshot', `Screenshot failed (${response.status})`)
     return new Uint8Array(await response.arrayBuffer())
+  }
+
+  frame(): Promise<DeviceFrame | null> {
+    // A failed read is tried again by the next client rather than kept.
+    this.framed ??= this.loadFrame().catch((error: unknown) => {
+      this.log(`Simulator frame unavailable: ${String(error)}`)
+      this.framed = null
+      return null
+    })
+    return this.framed
+  }
+
+  private async loadFrame(): Promise<DeviceFrame | null> {
+    const started = this.started
+    if (!started) return null
+    const headers = { authorization: `Bearer ${started.token}` }
+    const response = await fetch(`${started.url}/api`, { headers })
+    if (!response.ok) throw new Error(`/api answered ${response.status}`)
+    const plan = framePlan(((await response.json()) as { chrome?: unknown }).chrome)
+    if (!plan) return null
+    const pictures = new Map<string, Promise<ArrayBuffer>>()
+    const picture = (image: string): Promise<ArrayBuffer> => {
+      const query = `chrome=${encodeURIComponent(plan.chrome)}&image=${encodeURIComponent(image)}&v=2`
+      let loading = pictures.get(image)
+      if (!loading) {
+        loading = fetch(`${started.url}/grid/api/devicekit-chrome?${query}`, { headers }).then(
+          async (answer) => {
+            if (!answer.ok) throw new Error(`${image} answered ${answer.status}`)
+            const png = await answer.arrayBuffer()
+            if (png.byteLength > MAX_FRAME_IMAGE_BYTES) throw new Error(`${image} is too large`)
+            return png
+          },
+        )
+        pictures.set(image, loading)
+      }
+      return loading
+    }
+    const images = await Promise.all(
+      plan.images.map(async ({ image, ...area }) => ({ ...area, png: await picture(image) })),
+    )
+    return {
+      width: plan.width,
+      height: plan.height,
+      screen: plan.screen,
+      radii: plan.radii,
+      images,
+    }
   }
 
   /** serve-sim takes points in the framebuffer's own orientation, which stays portrait. */

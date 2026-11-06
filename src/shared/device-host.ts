@@ -95,6 +95,27 @@ export type DeviceInput =
 
 export type FrameKind = 'description' | 'key' | 'delta' | 'seed'
 
+/** A rectangle in a device frame's own points. */
+export interface DeviceFrameRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/**
+ * The device's own frame, as Xcode draws its simulator, in portrait: pictures placed back to
+ * front in the frame's points, with the screen over them. Clients turn it with the screen.
+ */
+export interface DeviceFrame {
+  width: number
+  height: number
+  screen: DeviceFrameRect
+  /** The screen's corner radii in points: top left, top right, bottom right, bottom left. */
+  radii: [number, number, number, number]
+  images: Array<DeviceFrameRect & { png: ArrayBuffer }>
+}
+
 export interface DeviceContract {
   'devices.environment': { params: Record<string, never>; result: DeviceEnvironment }
   'devices.list': { params: { sessionId?: string }; result: DeviceInfo[] }
@@ -116,6 +137,8 @@ export interface DeviceContract {
   /** Cancels the agent's current call and gives the user control. */
   'devices.stopAgent': { params: { deviceId: DeviceId }; result: void }
   'devices.screenshot': { params: { deviceId: DeviceId }; result: { png: ArrayBuffer } }
+  /** The frame to draw the screen in, or null where the client draws a plain one. */
+  'devices.frame': { params: { deviceId: DeviceId }; result: { frame: DeviceFrame | null } }
 }
 
 export type DeviceMethod = keyof DeviceContract
@@ -134,6 +157,7 @@ export const DEVICE_METHODS = [
   'devices.handBack',
   'devices.stopAgent',
   'devices.screenshot',
+  'devices.frame',
 ] as const satisfies readonly DeviceMethod[]
 
 export type DeviceEvent =

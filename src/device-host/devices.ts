@@ -7,6 +7,7 @@ import type { Env } from '../agent-host/find-command'
 import type {
   DeviceEnvironment,
   DeviceEvent,
+  DeviceFrame,
   DeviceId,
   DeviceInfo,
   DeviceInput,
@@ -301,6 +302,14 @@ export class DeviceManager {
         live.idle = setTimeout(() => void this.stopLive(found.id), IDLE_CAPTURE_MS)
       }
     }
+  }
+
+  /** The frame of a device that is streaming, or null when it is not or has none of its own. */
+  async frame(id: DeviceId): Promise<DeviceFrame | null> {
+    const live = this.live.get(id)
+    if (!live) return null
+    await live.starting
+    return (await live.driver.frame?.()) ?? null
   }
 
   operator(id: DeviceId): DeviceOperator | null {

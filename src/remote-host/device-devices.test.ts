@@ -12,7 +12,7 @@ describe('paired device routing to the device host', () => {
     expect(isDeviceMethod('terminals.list')).toBe(false)
   })
 
-  it('carries frames and screenshots as base64', () => {
+  it('carries frames, screenshots and frame pictures as base64', () => {
     const frame = forChannel({
       type: 'event',
       event: {
@@ -32,5 +32,19 @@ describe('paired device routing to the device host', () => {
       result: { png: string }
     }
     expect(shot.result.png).toBe('/w==')
+    const framed = forChannel({
+      type: 'response',
+      id: 5,
+      result: {
+        frame: {
+          width: 1,
+          height: 1,
+          screen: { x: 0, y: 0, width: 1, height: 1 },
+          radii: [0, 0, 0, 0],
+          images: [{ x: 0, y: 0, width: 1, height: 1, png: Uint8Array.of(1, 2, 3).buffer }],
+        },
+      },
+    }) as { result: { frame: { images: Array<{ png: string; width: number }> } } }
+    expect(framed.result.frame.images[0]).toMatchObject({ png: 'AQID', width: 1 })
   })
 })
