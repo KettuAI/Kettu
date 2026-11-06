@@ -28,6 +28,7 @@ import { backTo } from '@renderer/app/history'
 import {
   Dropdown,
   FilterButton,
+  FolderClosedMark,
   Icon,
   SearchField,
   SectionHead,
@@ -82,7 +83,7 @@ import {
   type ArtifactSort,
   type Group,
 } from './model'
-import { FolderMark, KindSketch } from './sketch'
+import { KindSketch } from './sketch'
 import './artifacts.css'
 
 interface SessionInfo {
@@ -470,7 +471,7 @@ function GroupView({
   return (
     <section aria-label={label} className="k-arts__group">
       <h3 className="k-arts__project">
-        {of.kind === 'project' && <FolderMark />}
+        {of.kind === 'project' && <FolderClosedMark />}
         {of.kind === 'project' ? (
           <Tooltip>
             <TooltipTrigger render={<span className="truncate" />} delay={700}>
@@ -760,7 +761,7 @@ function ImportMenu({
     { label: t('page.importInto'), heading: true },
     ...projects.map((project) => ({
       label: project.name,
-      logo: <FolderMark />,
+      logo: <FolderClosedMark />,
       onSelect: () => void importArtifact(project.path, kind),
     })),
     {

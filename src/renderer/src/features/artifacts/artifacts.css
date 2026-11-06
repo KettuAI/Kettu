@@ -188,21 +188,10 @@
   font-weight: 400;
   color: var(--faint);
 }
-.k-folder {
+.k-arts__project .ui-as-tray-link__folder {
   flex: none;
   width: 16px;
   height: 16px;
-}
-.k-folder__tab {
-  fill: var(--pages-folder-tab);
-}
-.k-folder__tab-edge {
-  fill: none;
-  stroke: var(--pages-folder-tab);
-}
-.k-folder__front {
-  fill: var(--pages-folder-front);
-  stroke: var(--pages-folder-front);
 }
 .k-arts__session {
   margin-top: 12px;
@@ -240,7 +229,7 @@ button.k-arts__session-row:hover {
 .k-arts__menu .ui-as-menu {
   width: 232px;
 }
-.k-arts__menu .k-folder {
+.k-arts__menu .ui-as-tray-link__folder {
   width: 15px;
   height: 15px;
 }
