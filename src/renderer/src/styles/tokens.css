@@ -51,8 +51,6 @@
   --thread-done: #22a06b;
   --thread-card-shadow:
     0 0 0 0.5px rgb(0 0 0 / 6%), 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
-  --thread-pop-shadow:
-    0 0 0 0.5px rgb(0 0 0 / 10%), 0 16px 36px -12px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
   --thread-float-shadow: 0 0 0 0.5px rgb(0 0 0 / 10%), 0 6px 16px -6px rgb(0 0 0 / 20%);
   --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 30%);
 
@@ -505,9 +503,6 @@
     --thread-del: #f87171;
     --thread-done: #3fbf86;
     --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
-    --thread-pop-shadow:
-      0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 60%),
-      0 1px 2px rgb(0 0 0 / 40%);
     --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
     --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 
@@ -837,9 +832,6 @@
   --thread-del: #f87171;
   --thread-done: #3fbf86;
   --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
-  --thread-pop-shadow:
-    0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 60%),
-    0 1px 2px rgb(0 0 0 / 40%);
   --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
   --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 

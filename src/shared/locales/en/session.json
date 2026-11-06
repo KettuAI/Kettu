@@ -76,18 +76,6 @@
     "showFullDiff": "Show full diff"
   },
   "permission": {
-    "ask": {
-      "read": "{{agent}} wants to read this file.",
-      "edit": "{{agent}} wants to make this change.",
-      "delete": "{{agent}} wants to delete this file.",
-      "move": "{{agent}} wants to move this file.",
-      "search": "{{agent}} wants to search the project.",
-      "execute": "{{agent}} wants to run this command.",
-      "fetch": "{{agent}} wants to fetch this page.",
-      "switchMode": "{{agent}} wants to switch modes.",
-      "other": "{{agent}} wants to use this tool."
-    },
-    "answerGroup": "Answer",
     "outsideScope": "Outside this routine's permissions: {{level}}.",
     "answer": {
       "allowOnce": "Allowed once",
@@ -99,11 +87,8 @@
       "withdrawn": "No longer needed",
       "onDevice": "{{answer}} · {{device}}"
     },
-    "label": "Permission request",
     "answeredOn": "Already answered on {{device}}.",
     "answeredInWindow": "Already answered in another window.",
-    "needsYou": "Needs you",
-    "runCommand": "Run a command",
     "card": {
       "title": "<b>{{agent}}</b> wants to <b>{{action}}</b>",
       "action": {
@@ -137,9 +122,6 @@
     }
   },
   "browserOrigin": {
-    "label": "New site",
-    "ask": "{{agent}} wants to open this site in the browser.",
-    "answerGroup": "Answer",
     "decision": {
       "session": "Allow for this session",
       "project": "Always allow {{site}} in this project",
@@ -151,15 +133,9 @@
       "deny": "Denied",
       "timeout": "Not answered in time"
     },
-    "open": "Open",
-    "newSite": "New site",
-    "wants": "{{agent}} wants to open <site>{{site}}</site>",
     "where": "In this session’s browser · with your sign-ins"
   },
   "deviceAccess": {
-    "label": "Mobile device",
-    "ask": "{{agent}} wants to use this device.",
-    "answerGroup": "Answer",
     "decision": {
       "session": "Allow for this session",
       "always": "Always allow this device",
@@ -171,15 +147,9 @@
       "deny": "Denied",
       "timeout": "Not answered in time"
     },
-    "use": "Use",
-    "status": "Device",
-    "wants": "{{agent}} wants to use <device>{{device}}</device>",
     "where": "Tap, type and take screenshots, which go to the agent’s model provider"
   },
   "computerApp": {
-    "label": "App use",
-    "ask": "{{agent}} wants to use this app on your computer.",
-    "answerGroup": "Answer",
     "decision": {
       "session": "Allow for this session",
       "always": "Always allow {{app}}",
@@ -191,9 +161,6 @@
       "deny": "Denied",
       "timeout": "Not answered in time"
     },
-    "use": "Use",
-    "newApp": "New app",
-    "wants": "{{agent}} wants to use <app>{{app}}</app>",
     "where": "Reads its windows and clicks and types in them, in the background"
   },
   "computerBar": {
@@ -246,11 +213,7 @@
   "subagent": {
     "fallbackTitle": "Sub-agent",
     "tools_one": "{{count}} tool",
-    "tools_other": "{{count}} tools",
-    "earlier_one": "{{count}} earlier step",
-    "earlier_other": "{{count}} earlier steps",
-    "stop": "Stop",
-    "openLog": "Open full log"
+    "tools_other": "{{count}} tools"
   },
   "subagentBar": {
     "runsFor": "{{agent}} runs this sub-agent for <parent/>",
@@ -312,10 +275,6 @@
     "openShort": "Open",
     "stop": "Stop",
     "deletedLine": "Deleted artifact <title/>"
-  },
-  "plan": {
-    "inProgress": "In progress",
-    "todo": "To do"
   },
   "planChip": {
     "label": "Plan: step {{step}} of {{total}}, {{content}}",
@@ -618,8 +577,6 @@
     "openInTerminal": "Open in terminal",
     "showEarlier_one": "Show {{count}} earlier line",
     "showEarlier_other": "Show {{count}} earlier lines",
-    "openDiff": "Open diff",
-    "copyNew": "Copy the new text",
     "copy": "Copy",
     "wrap": "Wrap lines",
     "showMore_one": "Show {{count}} more line",
@@ -687,16 +644,12 @@
     "awayComposer": "{{name}} is not connected: {{state}}. You can send messages again once it is back."
   },
   "question": {
-    "label": "Question",
-    "ask": "{{agent}} asks you a question.",
     "asksYou": "Waiting for you",
     "answeredOther": "Something else",
     "other": "Something else…",
     "otherPlaceholder": "Write your own answer",
     "steps": "Questions",
     "step": "Question {{number}}",
-    "stepAnswered": "Question {{number}}, answered",
-    "selectMany": "Select all that apply",
     "skip": "Skip",
     "skipAll": "Skip all",
     "next": "Next",
@@ -736,7 +689,6 @@
   "planCard": {
     "label": "Plan",
     "version": "Plan {{version}}",
-    "ask": "{{agent}} wrote a plan and waits for your decision.",
     "show": "Show",
     "plan": "Plan",
     "changes": "Changes",
@@ -748,8 +700,6 @@
     "buildIn": "Start building in",
     "implementAsk": "Implement this plan?",
     "keepPlanning": "Keep planning, and tell {{agent}} what to change…",
-    "staysPlanning": "Stays in Plan mode; {{agent}} gets your note",
-    "leavesTo": "Leaves Plan mode and switches to {{mode}}",
     "sendNote": "Send note",
     "keepPlanningButton": "Keep planning",
     "startBuilding": "Start building",
@@ -769,9 +719,6 @@
   },
   "elicitation": {
     "inAgent": "MCP server in {{agent}}",
-    "label": "Request from {{server}}",
-    "ask": "{{server}} asks you to fill in a form.",
-    "askOpen": "{{server}} asks you to open {{site}}.",
     "optional": "Optional",
     "required": "Required",
     "tooShort_one": "At least {{count}} character",
