@@ -82,7 +82,18 @@
     "recentlyDeleted": "Recently deleted",
     "backToArtifacts": "Back to Artifacts",
     "deletedDescription": "Deleted artifacts stay here for 30 days, then they and every version of them are removed for good.",
-    "nothingDeleted": "Nothing in Recently deleted"
+    "nothingDeleted": "Nothing in Recently deleted",
+    "description": "Documents, slide decks, pages and canvases the agents made, in every project.",
+    "filterLabel": "Filter",
+    "noMatchQuery": "Nothing matches “{{query}}”.",
+    "noMatchFilters": "No artifact matches these filters.",
+    "importShort": "Import",
+    "askNotes": {
+      "document": "A write-up, spec or notes, exports to Word and Markdown.",
+      "slides": "A deck to present, exports to PowerPoint and PDF.",
+      "web": "A web page you can open in a browser and share.",
+      "canvas": "Screens and flows side by side, to comment on."
+    }
   },
   "card": {
     "canvas_one": "Canvas · {{count}} page",
@@ -113,7 +124,8 @@
     "deleteAsk": "Delete…",
     "restore": "Restore",
     "erase": "Delete permanently…",
-    "exportNoFolders": "This browser cannot save a folder of several files"
+    "exportNoFolders": "This browser cannot save a folder of several files",
+    "exportTo": "Export"
   },
   "dialog": {
     "renameTitle": "Rename artifact",

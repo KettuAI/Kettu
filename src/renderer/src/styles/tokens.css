@@ -337,6 +337,9 @@
   --series-4: #f59e0b;
   --series-5: #ec4899;
   --series-6: #64748b;
+  /* A project's folder: its tab and its front. */
+  --pages-folder-tab: #00a1ff;
+  --pages-folder-front: #3cc7ff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -565,6 +568,8 @@
     --series-4: #f59e0b;
     --series-5: #ec4899;
     --series-6: #64748b;
+    --pages-folder-tab: #00a1ff;
+    --pages-folder-front: #3cc7ff;
   }
 }
 
@@ -792,6 +797,8 @@
   --series-4: #f59e0b;
   --series-5: #ec4899;
   --series-6: #64748b;
+  --pages-folder-tab: #00a1ff;
+  --pages-folder-front: #3cc7ff;
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
