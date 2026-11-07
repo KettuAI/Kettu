@@ -128,6 +128,7 @@ export function AccessCard({
           <SegmentedControl
             aria-label={t('permission.card.howLong')}
             variant="tray"
+            size="lg"
             value={scope}
             onChange={onChange}
             disabled={answering !== null}
