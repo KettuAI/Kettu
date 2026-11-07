@@ -1355,11 +1355,13 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding-bottom: 52px;
+  /* The driving pill's room mirrors the hardware keys' and stays when the pill hides, so the
+     device keeps its size each time an agent acts. */
+  padding-block: 52px;
 }
 .kp-stage > .kp-drive {
   position: absolute;
-  top: 8px;
+  top: 0;
   left: 50%;
   z-index: 3;
   translate: -50% 0;
