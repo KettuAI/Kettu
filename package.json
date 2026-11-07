@@ -97,7 +97,6 @@
     "globals": "^17.13.0",
     "i18next": "26.5.4",
     "katex": "0.16.47",
-    "lucide-react": "^1.60.0",
     "material-icon-theme": "5.39.0",
     "motion": "^14.4.0",
     "pptxgenjs": "4.0.1",

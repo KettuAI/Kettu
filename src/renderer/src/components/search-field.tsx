@@ -1,5 +1,6 @@
 import type { RefObject } from 'react'
-import { SearchIcon, XIcon } from 'lucide-react'
+import { Cancel01Icon, Search01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { formatShortcut } from '@renderer/lib/platform'
@@ -28,7 +29,7 @@ export function SearchField({
   return (
     <InputGroup className={cn('h-control', className)}>
       <InputGroupAddon>
-        <SearchIcon className="size-3.5" />
+        <HugeiconsIcon icon={Search01Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
       </InputGroupAddon>
       <InputGroupInput
         ref={inputRef}
@@ -55,7 +56,7 @@ export function SearchField({
             }}
             className="flex size-5 items-center justify-center rounded-md hover:bg-hover hover:text-primary"
           >
-            <XIcon className="size-3" />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.9} aria-hidden className="size-3" />
           </button>
         ) : (
           <Kbd className="h-4.5 min-w-4.5 text-tertiary shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]">

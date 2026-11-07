@@ -2,7 +2,6 @@
 
 import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { LucideProvider } from 'lucide-react'
 import type { ViewerConfig, ViewerView } from '@shared/artifact-types'
 import { followColorMode, readConfig, readView, startI18n } from './boot'
 
@@ -12,11 +11,5 @@ export function mount(render: (config: ViewerConfig, view: ViewerView) => ReactN
   if (!root || !config) return
   startI18n(config)
   followColorMode()
-  createRoot(root).render(
-    <StrictMode>
-      <LucideProvider strokeWidth={1.35} nonScalingStroke>
-        {render(config, readView())}
-      </LucideProvider>
-    </StrictMode>,
-  )
+  createRoot(root).render(<StrictMode>{render(config, readView())}</StrictMode>)
 }

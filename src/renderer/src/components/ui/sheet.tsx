@@ -5,7 +5,8 @@ import { Dialog as SheetPrimitive } from '@base-ui/react/dialog'
 import { cn } from 'cn'
 
 import { Button } from '@renderer/components/ui/button'
-import { XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useOverlayRoot } from '@renderer/stores/overlays'
 
 function Sheet({ open, defaultOpen, onOpenChange, ...props }: SheetPrimitive.Root.Props) {
@@ -76,7 +77,7 @@ function SheetContent({
             data-slot="sheet-close"
             render={<Button variant="ghost" className="absolute top-3 right-3" size="icon-sm" />}
           >
-            <XIcon />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.9} aria-hidden />
             <span className="sr-only">Close</span>
           </SheetPrimitive.Close>
         )}

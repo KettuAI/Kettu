@@ -1,10 +1,10 @@
 import { memo, useEffect, useId, useRef, useState } from 'react'
-import { ShapesIcon } from 'lucide-react'
 import {
   Delete02Icon,
   ImageNotFound01Icon,
   LinkSquare02Icon,
   MoreHorizontalIcon,
+  ShapesIcon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
@@ -20,7 +20,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { ArtifactMenuItems } from '@renderer/features/artifacts/artifact-menu'
-import { KIND_LOOK } from '@renderer/features/artifacts/kinds'
+import { KIND_ICON } from '@renderer/features/artifacts/kinds'
 import { artifactKind } from '@renderer/features/artifacts/model'
 import { ShareButton } from '@renderer/features/artifacts/share-popover'
 import { useThumbnail, type Thumbnail } from '@renderer/features/artifacts/thumbnails'
@@ -342,7 +342,7 @@ function LargeCard({
   const { t } = useTranslation(['session', 'artifacts'])
   const { entry, summary, standing, writing } = view
   const erased = standing === 'erased'
-  const KindIcon = summary ? KIND_LOOK[artifactKind(summary)].icon : ShapesIcon
+  const kindIcon = summary ? KIND_ICON[artifactKind(summary)] : ShapesIcon
   const [stopping, setStopping] = useState(false)
   const [stopError, setStopError] = useState<string | null>(null)
   const stop = () => {
@@ -392,7 +392,12 @@ function LargeCard({
       </button>
       <div className="px-3.5 pt-3 pb-3.5">
         <div className="flex min-w-0 items-center gap-2">
-          <KindIcon className="size-3.75 shrink-0 text-tertiary" />
+          <HugeiconsIcon
+            icon={kindIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.75 shrink-0 text-tertiary"
+          />
           <span className="min-w-0 flex-1 truncate text-row font-semibold text-primary">
             {entry.title}
           </span>

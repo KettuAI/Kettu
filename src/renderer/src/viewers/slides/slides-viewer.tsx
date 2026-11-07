@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon, PresentationIcon } from 'lucide-react'
+import { ArrowLeft01Icon, ArrowRight01Icon, Presentation01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { parseDeck, slideSize, type Deck } from '@shared/artifact-slides'
 import type { ViewerConfig, ViewerView } from '@shared/artifact-types'
@@ -186,7 +187,7 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
         disabled={at === 0}
         onClick={() => setIndex(at - 1)}
       >
-        <ChevronLeftIcon />
+        <HugeiconsIcon icon={ArrowLeft01Icon} strokeWidth={1.9} aria-hidden />
       </Button>
       <span className="min-w-14 text-center text-ui text-secondary tabular-nums">
         {t('slides.counter', { number: at + 1, count })}
@@ -198,7 +199,7 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
         disabled={at === count - 1}
         onClick={() => setIndex(at + 1)}
       >
-        <ChevronRightIcon />
+        <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={1.9} aria-hidden />
       </Button>
     </div>
   )
@@ -224,7 +225,7 @@ export function SlidesViewer({ config, view }: { config: ViewerConfig; view: Vie
       <div className="fixed inset-x-0 bottom-4 z-10 mx-auto flex w-max items-center gap-2 rounded-xl bg-popover py-1 pr-1 pl-1 shadow-menu">
         {nav}
         <Button variant="ghost" size="compact" onClick={() => setPresenting(true)}>
-          <PresentationIcon />
+          <HugeiconsIcon icon={Presentation01Icon} strokeWidth={1.9} aria-hidden />
           {t('slides.present')}
         </Button>
       </div>

@@ -29,7 +29,7 @@ export function Glyph({
   )
 }
 
-/** A menu item's glyph in the menus' icon color, which they give only to Lucide's icons. */
+/** A menu item's glyph at the menus' icon size, in their icon color. */
 export function MenuGlyph({ icon }: { icon: IconSvgElement }) {
   return <Glyph icon={icon} size={15} className="text-icon" />
 }

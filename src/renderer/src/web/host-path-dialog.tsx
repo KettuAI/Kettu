@@ -3,7 +3,8 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Autocomplete } from '@base-ui/react/autocomplete'
-import { ChevronRightIcon } from 'lucide-react'
+import { ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { PathCompletion } from '@shared/remote/host-admin'
 import { Button } from '@renderer/components/ui/button'
@@ -213,7 +214,14 @@ function PathForm({ asked }: { asked: AskedPath }) {
                     className="size-4"
                   />
                   <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                  {entry.kind === 'folder' && <ChevronRightIcon className="size-3.5 text-icon" />}
+                  {entry.kind === 'folder' && (
+                    <HugeiconsIcon
+                      icon={ArrowRight01Icon}
+                      strokeWidth={1.9}
+                      aria-hidden
+                      className="size-3.5 text-icon"
+                    />
+                  )}
                 </Autocomplete.Item>
               )}
             </Autocomplete.List>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { CircleAlertIcon, CircleXIcon, ShieldAlertIcon } from 'lucide-react'
+import { AlertCircleIcon, CancelCircleIcon, Shield01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { parseBrowserPairingLink, type PairingPayload } from '@shared/remote/pairing'
 import { BrandIcon } from '@renderer/components/brand'
@@ -104,7 +105,7 @@ export function PairingView({
 
         {notice === 'removed' && !progress && (
           <Alert variant="warning">
-            <CircleAlertIcon />
+            <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
             <AlertDescription>{t('pair.removed')}</AlertDescription>
           </Alert>
         )}
@@ -131,7 +132,7 @@ export function PairingView({
           <form className="flex flex-col gap-3" onSubmit={onSubmit}>
             {progress?.state === 'failed' && (
               <Alert variant="error">
-                <CircleXIcon />
+                <HugeiconsIcon icon={CancelCircleIcon} strokeWidth={1.9} aria-hidden />
                 <AlertDescription>{t(`pair.failed.${progress.reason}`)}</AlertDescription>
               </Alert>
             )}
@@ -167,7 +168,7 @@ export function InsecureNote({ className }: { className?: string }) {
   if (window.isSecureContext) return null
   return (
     <Alert variant="warning" className={className}>
-      <ShieldAlertIcon />
+      <HugeiconsIcon icon={Shield01Icon} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{t('insecure.title')}</AlertTitle>
       <AlertDescription>{t('insecure.body')}</AlertDescription>
     </Alert>

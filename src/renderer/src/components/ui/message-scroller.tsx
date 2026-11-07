@@ -8,7 +8,8 @@ import {
 import { cn } from 'cn'
 
 import { Button } from '@renderer/components/ui/button'
-import { ArrowDownIcon } from 'lucide-react'
+import { ArrowDown02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 
 function MessageScrollerProvider(
@@ -112,7 +113,7 @@ function MessageScrollerButton({
     >
       {children ?? (
         <>
-          <ArrowDownIcon />
+          <HugeiconsIcon icon={ArrowDown02Icon} strokeWidth={1.9} aria-hidden />
           <span className="sr-only">
             {direction === 'end' ? t('messageScroller.toEnd') : t('messageScroller.toStart')}
           </span>
