@@ -333,7 +333,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                 {shownError}
               </p>
             )}
-            <span className="kettu-tray__group">
+            <span className="kettu-tray__group kettu-tray__group--end">
               <CacheButton cache={timed} running={running} used={session.usage?.used ?? 0} />
               <ContextButton
                 sessionId={sessionId}

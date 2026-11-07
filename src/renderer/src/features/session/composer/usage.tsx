@@ -278,7 +278,9 @@ export function ContextButton({
   model: string | null
 }) {
   const { t } = useTranslation('composer')
-  const warning = warningLimit(limits)
+  // The tray names a limit only from 70% on; below that it stays in the popover.
+  const nearest = warningLimit(limits)
+  const warning = nearest && limitLevel(nearest) !== 'ok' ? nearest : null
   // An account of another kind has no plan; an unknown one shows the limits the agent reports.
   const subscribed = account ? account.kind === 'account' : limits.length > 0
   const cached = useUsageStore((s) => s.context[sessionId])

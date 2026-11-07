@@ -3968,6 +3968,10 @@
 .kettu-tray__group:empty {
   display: none;
 }
+/* Keeps the right end when there is no branch before it. */
+.kettu-tray__group--end {
+  margin-left: auto;
+}
 .kettu-tray__error {
   flex: 1 1 0;
   min-width: 0;
