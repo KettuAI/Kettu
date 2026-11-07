@@ -4386,6 +4386,7 @@
   height: 24px;
   box-shadow: none;
   background: none !important;
+  white-space: nowrap;
 }
 .kettu-model-picker .ui-mdpc__seg-btn[aria-checked='false']:hover {
   color: var(--ui-mdpc-ink);
