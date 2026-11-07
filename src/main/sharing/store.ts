@@ -21,8 +21,8 @@ const MAX_PUBLISHED = 10_000
 const MAX_TOKEN_CHARS = 16_384
 const SUBDOMAIN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 const WORKER = /^ob-[a-z2-7]{16}$/
-/** A page's id at Kettu's sharing service: 20 lowercase base32 characters. */
-export const KETTU_PAGE = /^[a-z2-7]{20}$/
+/** A page's id at Kettu's sharing service: 10 lowercase base32 characters, or 20 for older pages. */
+export const KETTU_PAGE = /^(?:[a-z2-7]{10}|[a-z2-7]{20})$/
 /** A Kettu account's id as the account service gives it. */
 export const KETTU_ACCOUNT = /^[A-Za-z0-9-]{1,64}$/
 const MAX_URL_CHARS = 2_048

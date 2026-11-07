@@ -62,6 +62,11 @@ const NOTICE_KEY = 'sharing.firstPublishSeen'
 
 type Failure = Extract<SharingResult, { failed: string }>
 
+/** An address as people read it: without `https://` and the trailing slash. */
+function shortAddress(url: string): string {
+  return url.replace(/^https?:\/\//, '').replace(/\/$/, '')
+}
+
 const ACCESS_ICONS = { private: SquareLock02Icon, code: Key01Icon, public: Globe02Icon } as const
 
 /** Who can open a Kettu page: the three levels, with a line on what the chosen one means. */
@@ -151,6 +156,9 @@ export function ShareButton({
   const target: SharingTarget = account ? chosen : 'kettu'
   const [access, setAccess] = useState<ShareAccess>(DEFAULT_SHARE_ACCESS)
   const [codeCopied, setCodeCopied] = useState(false)
+  // The address field shows the address without its scheme, and the whole URL while focused.
+  const [urlFocused, setUrlFocused] = useState(false)
+  const urlField = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -161,6 +169,11 @@ export function ShareButton({
   const retry = useRef<(() => void) | null>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const signedIn = kettu !== null
+
+  // Selected once the whole URL is in the field, so a copy by hand takes all of it.
+  useEffect(() => {
+    if (urlFocused) urlField.current?.select()
+  }, [urlFocused])
 
   // The addresses and the storage as the service has them now, each time the panel opens.
   useEffect(() => {
@@ -268,11 +281,13 @@ export function ShareButton({
         </h2>
         <div className="k-share__url">
           <input
+            ref={urlField}
             readOnly
             dir="ltr"
-            value={published.url}
+            value={urlFocused ? published.url : shortAddress(published.url)}
             aria-label={t('share.url')}
-            onFocus={(event) => event.currentTarget.select()}
+            onFocus={() => setUrlFocused(true)}
+            onBlur={() => setUrlFocused(false)}
             className="ui-sg-input k-av-input"
           />
           <Button
