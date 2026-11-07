@@ -317,12 +317,31 @@
       "network": "Kettu couldn’t reach the account service. Check your connection or proxy, then try again.",
       "service": "The account service couldn’t finish the sign-in. Try again.",
       "disabled": "This Kettu account is disabled. Contact hello@kettu.sh for help.",
+      "device-limit": "This account’s devices are full. Sign one out on the website, then sign in again.",
       "local": "Kettu couldn’t open the sign-in page in your browser."
     },
     "plainText": "This system has no keyring, so the sign-in is stored without the system’s encryption.",
+    "plan": {
+      "name": "Plan",
+      "description": "It sets how many devices can be signed in at once and how much cloud storage the account has.",
+      "keywords": "plan free pro tier limit"
+    },
+    "devices": {
+      "name": "Devices",
+      "description": "Apps and daemons signed in to this account. Sign one out on the website to sign in somewhere else.",
+      "keywords": "devices clients computers signed in limit",
+      "used": "{{used}} of {{limit}}",
+      "manage": "Manage devices"
+    },
+    "storage": {
+      "name": "Cloud storage",
+      "description": "What the account keeps on Kettu, such as published artifacts.",
+      "keywords": "storage space quota cloud artifacts published",
+      "used": "{{used}} of {{limit}}"
+    },
     "subscription": {
       "name": "Subscription",
-      "description": "Kettu’s cloud services will need one. Nothing else does.",
+      "description": "Managed on the website.",
       "keywords": "subscription plan billing",
       "none": "Not subscribed",
       "trialing": "Trial",
@@ -331,7 +350,7 @@
       "paused": "Paused",
       "canceled": "Ended"
     },
-    "note": "Sessions, agents and remote access on your own network all work without an account. It only matters for the official relay and the web client."
+    "note": "Sessions, agents and remote access on your own network all work without an account. Signing in adds Kettu’s cloud services: the relay, publishing artifacts to Kettu and sending problem reports."
   },
   "browser": {
     "clearData": {

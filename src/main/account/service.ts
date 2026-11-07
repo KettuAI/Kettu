@@ -2,6 +2,7 @@
 // OAuth 2.0 endpoints of public native clients (RFC 6749, 7009, 8252, 8628) and the account.
 
 import { createHash, randomBytes } from 'node:crypto'
+import type { AccountPlan, AccountUsage } from '@shared/account'
 import { REPORT_ID, type ReportSubmitFailure } from '@shared/report'
 
 export const ACCOUNT_URL = 'https://www.kettu.sh'
@@ -82,6 +83,9 @@ export interface TokenSet {
 export interface Me {
   account: { id: string; email: string; name: string | null; avatarUrl: string | null }
   subscription: string
+  /** Null from a service that does not report them. */
+  plan: AccountPlan | null
+  usage: AccountUsage | null
 }
 
 export interface DeviceCode {
@@ -130,10 +134,31 @@ export class AccountNetworkError extends Error {
 
 const isText = (value: unknown): value is string => typeof value === 'string' && value.length > 0
 
+const isCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
+}
+
+function planOf(value: unknown): AccountPlan | null {
+  const plan = record(value)
+  if (!plan || !isText(plan.id) || !isText(plan.name)) return null
+  if (!isCount(plan.maxDevices) || !isCount(plan.storageBytes)) return null
+  return {
+    id: plan.id,
+    name: plan.name,
+    maxDevices: plan.maxDevices,
+    storageBytes: plan.storageBytes,
+  }
+}
+
+function usageOf(value: unknown): AccountUsage | null {
+  const usage = record(value)
+  if (!usage || !isCount(usage.devices) || !isCount(usage.storageBytes)) return null
+  return { devices: usage.devices, storageBytes: usage.storageBytes }
 }
 
 function parseJson(text: string): Record<string, unknown> | null {
@@ -238,6 +263,8 @@ export class AccountApi {
         avatarUrl: avatarUrl || null,
       },
       subscription: subscription.status,
+      plan: planOf(body?.plan),
+      usage: usageOf(body?.usage),
     }
   }
 

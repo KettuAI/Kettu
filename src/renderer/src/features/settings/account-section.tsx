@@ -3,8 +3,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUpRight01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { AccountStatus } from '@shared/account'
+import type { AccountPlan, AccountStatus, AccountUsage } from '@shared/account'
 import { Icon } from '@renderer/components/affect/app-shell'
+import { currentLocale } from '@renderer/lib/i18n'
+import { limitLevel } from '@renderer/lib/plan-limit'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   cancelSignIn,
@@ -13,7 +15,7 @@ import {
   signOut,
   useAccountStore,
 } from '@renderer/stores/account'
-import { LinkButton, Masked, Pill, SetButton, Skel, Spin } from './controls'
+import { LinkButton, Masked, Meter, Pill, SetButton, Skel, Spin } from './controls'
 import { subscriptionLabel } from './subscription-label'
 
 type SignedIn = Extract<AccountStatus, { state: 'signed-in' }>
@@ -108,6 +110,11 @@ function SignedOutRow({
     <RowFrame tile={ACCOUNT_TILE} name={t('account.name')} line={line}>
       {reason && <Pill tone="warning">{t('account.signedOut')}</Pill>}
       {!reason && failure && <Pill tone="warning">{t('account.notSignedIn')}</Pill>}
+      {status.devicesUrl && (
+        <LinkButton href={status.devicesUrl} icon={<Icon icon={ArrowUpRight01Icon} size={14} />}>
+          {t('account.devices.manage')}
+        </LinkButton>
+      )}
       <SetButton variant="primary" data-account-action="" onClick={onSignIn}>
         {t('account.signIn')}
       </SetButton>
@@ -171,6 +178,76 @@ export function SubscriptionState({ status }: { status: string }) {
   const { t } = useTranslation('settings')
   const label = subscriptionLabel(status)
   return <Pill>{label ? t(label) : status}</Pill>
+}
+
+/** The plan's name, as the service names it in the app's language. */
+export function PlanName({ plan }: { plan: AccountPlan }) {
+  return <Pill>{plan.name}</Pill>
+}
+
+// 1024-based, so a plan's 1 GiB reads 1 GB, as it is sold.
+const STORAGE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const
+
+function storageSize(n: number): string {
+  let value = n
+  let unit = 0
+  while (value >= 1024 && unit < STORAGE_UNITS.length - 1) {
+    value /= 1024
+    unit++
+  }
+  const number = new Intl.NumberFormat(currentLocale(), {
+    maximumFractionDigits: unit === 0 ? 0 : 1,
+  })
+  return `${number.format(value)} ${STORAGE_UNITS[unit]}`
+}
+
+function UsageMeter({
+  used,
+  limit,
+  text,
+  label,
+}: {
+  used: number
+  limit: number
+  text: string
+  label: string
+}) {
+  const share = limit > 0 ? (used / limit) * 100 : used > 0 ? 100 : 0
+  const level = limitLevel({
+    usedPercent: share,
+    state: used >= limit && limit > 0 ? 'reached' : 'ok',
+  })
+  return <Meter value={share} level={level} text={text} label={label} />
+}
+
+/** The signed-in clients against the plan's limit; more than it after a downgrade. */
+export function DeviceUsage({ plan, usage }: { plan: AccountPlan; usage: AccountUsage }) {
+  const { t } = useTranslation('settings')
+  const text = t('account.devices.used', { used: usage.devices, limit: plan.maxDevices })
+  return (
+    <UsageMeter
+      used={usage.devices}
+      limit={plan.maxDevices}
+      text={text}
+      label={t('account.devices.name')}
+    />
+  )
+}
+
+export function StorageUsage({ plan, usage }: { plan: AccountPlan; usage: AccountUsage }) {
+  const { t } = useTranslation('settings')
+  const text = t('account.storage.used', {
+    used: storageSize(usage.storageBytes),
+    limit: storageSize(plan.storageBytes),
+  })
+  return (
+    <UsageMeter
+      used={usage.storageBytes}
+      limit={plan.storageBytes}
+      text={text}
+      label={t('account.storage.name')}
+    />
+  )
 }
 
 /** Under the account: what works without one. */

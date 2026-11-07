@@ -2,7 +2,13 @@
 // and PKCE (RFC 8252), refreshing tokens when needed, and signing out. Main alone holds the tokens:
 // the access token only in memory, the refresh token as `store.ts` keeps it.
 
-import type { AccountStatus, SignedOutReason, SignInFailure } from '@shared/account'
+import type {
+  AccountPlan,
+  AccountStatus,
+  AccountUsage,
+  SignedOutReason,
+  SignInFailure,
+} from '@shared/account'
 import type { Locale } from '@shared/locale'
 import type { ReportSubmitFailure } from '@shared/report'
 import type { Logger } from '../log'
@@ -86,9 +92,13 @@ export function signedOutReason(reason: string | null): SignedOutReason {
   }
 }
 
+/** The service's answer when the account's plan allows no more signed-in clients. */
+const DEVICE_LIMIT = 'device_limit'
+
 function failureOf(error: unknown): SignInFailure {
   if (error instanceof AccountNetworkError) return 'network'
   if (error instanceof AccountServiceError) {
+    if (error.code === DEVICE_LIMIT) return 'device-limit'
     return error.code === 'account_disabled' || error.reason === 'account_disabled'
       ? 'disabled'
       : 'service'
@@ -105,6 +115,11 @@ export class Account {
     failure: null,
   }
   private avatar: { url: string; picture: string | null } | null = null
+  /** From the last read of the account; not written down, since it changes on the service. */
+  private limits: { plan: AccountPlan | null; usage: AccountUsage | null } = {
+    plan: null,
+    usage: null,
+  }
   /** Changes whenever the stored sign-in is replaced or forgotten, so late answers are dropped. */
   private generation = 0
   private readonly now: () => number
@@ -132,7 +147,15 @@ export class Account {
   status(): AccountStatus {
     if (this.signingIn) return { state: 'signing-in' }
     const stored = this.stored
-    if (!stored) return { state: 'signed-out', ...this.signedOut }
+    if (!stored) {
+      return {
+        state: 'signed-out',
+        ...this.signedOut,
+        ...(this.signedOut.failure === 'device-limit'
+          ? { devicesUrl: this.page('/account/devices/') }
+          : {}),
+      }
+    }
     const avatar = this.avatar?.url === stored.profile.avatarUrl ? this.avatar.picture : null
     return {
       state: 'signed-in',
@@ -143,6 +166,7 @@ export class Account {
         avatar,
       },
       subscription: stored.subscription,
+      ...this.limits,
       manageUrl: this.page('/account/'),
       plainText: stored.plainText,
     }
@@ -335,6 +359,14 @@ export class Account {
         this.options.bringToFront()
         return
       case 'error':
+        // The website hands this back when the user leaves its full-devices step.
+        if (result.error === DEVICE_LIMIT) {
+          loopback.answer({ location: this.page('/signin/app/?cancelled=1') })
+          this.signingIn = null
+          this.fail('device-limit')
+          this.options.bringToFront()
+          return
+        }
         this.options.log.warn(`The sign-in came back with ${result.error}`)
         loopback.answer({ status: 400, text: this.options.failureText() })
         this.signingIn = null
@@ -388,6 +420,7 @@ export class Account {
     await writeAccount(this.options.file, stored)
     this.generation++
     this.stored = stored
+    this.limits = { plan: me.plan, usage: me.usage }
     this.access = { token: tokens.accessToken, expiresAt: tokens.accessExpiresAt }
   }
 
@@ -396,6 +429,9 @@ export class Account {
     const stored = this.stored
     if (!stored) return
     const { profile, subscription } = stored
+    const limits = { plan: me.plan, usage: me.usage }
+    const limitsChanged = JSON.stringify(limits) !== JSON.stringify(this.limits)
+    this.limits = limits
     if (
       profile.id === me.account.id &&
       profile.email === me.account.email &&
@@ -403,6 +439,7 @@ export class Account {
       profile.avatarUrl === me.account.avatarUrl &&
       subscription === me.subscription
     ) {
+      if (limitsChanged) this.emit()
       return
     }
     const next = { ...stored, profile: me.account, subscription: me.subscription }
@@ -521,6 +558,7 @@ export class Account {
     this.stored = null
     this.access = null
     this.avatar = null
+    this.limits = { plan: null, usage: null }
     this.signedOut = { reason, failure: null }
     this.emit()
     await removeAccount(this.options.file).catch((error: unknown) =>

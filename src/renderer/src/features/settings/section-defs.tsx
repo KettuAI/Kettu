@@ -99,7 +99,14 @@ import {
 } from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
-import { AccountNote, AccountRow, SubscriptionState } from './account-section'
+import {
+  AccountNote,
+  AccountRow,
+  DeviceUsage,
+  PlanName,
+  StorageUsage,
+  SubscriptionState,
+} from './account-section'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import {
   AllowedSiteRow,
@@ -460,6 +467,41 @@ export function useAccountSection(): SectionDef {
       render: () => <AccountRow />,
     },
   ]
+  const plan = signedIn?.plan
+  const usage = signedIn?.usage
+  if (plan) {
+    rows.push({
+      id: 'plan',
+      name: t('account.plan.name'),
+      english: en('account.plan.name'),
+      description: t('account.plan.description'),
+      keywords: t('account.plan.keywords'),
+      group: card,
+      render: () => <PlanName plan={plan} />,
+    })
+  }
+  if (plan && usage) {
+    rows.push(
+      {
+        id: 'devices',
+        name: t('account.devices.name'),
+        english: en('account.devices.name'),
+        description: t('account.devices.description'),
+        keywords: t('account.devices.keywords'),
+        group: card,
+        render: () => <DeviceUsage plan={plan} usage={usage} />,
+      },
+      {
+        id: 'storage',
+        name: t('account.storage.name'),
+        english: en('account.storage.name'),
+        description: t('account.storage.description'),
+        keywords: t('account.storage.keywords'),
+        group: card,
+        render: () => <StorageUsage plan={plan} usage={usage} />,
+      },
+    )
+  }
   if (signedIn && signedIn.subscription !== 'none') {
     rows.push({
       id: 'subscription',

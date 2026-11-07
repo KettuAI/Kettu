@@ -114,6 +114,11 @@ export async function login(deps: AccountCommandDeps): Promise<number> {
         case 'expired_token':
           deps.error('The code expired before the sign-in was confirmed. Run kettu login again.')
           return 1
+        case 'device_limit':
+          deps.error(
+            `This account's devices are full. Sign one out at ${api.base}/account/devices/, then run kettu login again.`,
+          )
+          return 1
         default:
           deps.error(`The account service refused the sign-in: ${error.message}`)
           return 1
