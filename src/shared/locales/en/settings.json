@@ -885,7 +885,7 @@
     "about": "Kettu’s version and updates.",
     "archived": "Off the sidebar but kept. Restore one to put it back in its project.",
     "artifacts": "Pages ask before they read project files or ask your agent. Pages that only keep their own data don’t ask.",
-    "sharing": "Publish artifacts to links anyone can open, through your own Cloudflare account.",
+    "sharing": "Publish artifacts to links anyone can open, on Kettu or through your own Cloudflare account.",
     "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer.",
     "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer.",
     "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
@@ -925,8 +925,23 @@
   },
   "sharing": {
     "groups": {
-      "account": "Cloudflare",
-      "published": "Published"
+      "kettu": "Kettu",
+      "published": "Published",
+      "account": "Your own Cloudflare account"
+    },
+    "kettu": {
+      "name": "Kettu account",
+      "description": "Artifacts publish to Kettu with the Kettu account this computer is signed in to.",
+      "description_web": "Artifacts publish to Kettu with the Kettu account {{host}} is signed in to.",
+      "keywords": "share publish link kettu account cloud storage",
+      "signedOut": "Sign in to a Kettu account to publish artifacts to Kettu.",
+      "signedOut_web": "Sign in to a Kettu account on {{host}} to publish artifacts to Kettu.",
+      "signIn": "Sign in",
+      "signedIn": "Signed in",
+      "storage": "Cloud storage",
+      "storageUsed": "{{used}} of {{limit}} used",
+      "storageChecking": "Checking…",
+      "storageFull": "Full"
     },
     "account": {
       "name": "Cloudflare account",
@@ -963,7 +978,15 @@
       "otherAccount": "Published with another Cloudflare account. Connect that account to change it.",
       "empty": "Nothing is published yet.",
       "copyLink": "Copy link",
-      "copied": "Link copied"
+      "copied": "Link copied",
+      "where": {
+        "kettu": "Kettu",
+        "cloudflare": "Cloudflare"
+      },
+      "otherKettu": "Published with {{email}}. Sign in with that account to change it.",
+      "otherKettuUnnamed": "Published with another Kettu account. Sign in with that account to change it.",
+      "signedOut": "Sign in to Kettu with the account that published it to change it.",
+      "otherAccountBadge": "Another account"
     },
     "none": {
       "title": "Sharing needs the desktop app",

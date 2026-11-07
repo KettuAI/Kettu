@@ -50,6 +50,7 @@ import { notifyAttention } from './notifications'
 import { RoutinesAwake } from './power-save'
 import { sessionProxy } from './proxy'
 import { Sharing } from './sharing'
+import { KettuUnauthorized } from './sharing/kettu'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { loadStoredDevices } from './remote-devices'
@@ -390,6 +391,8 @@ async function start(): Promise<void> {
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
   }
   const hostName = (): string => settings.get().remote.name ?? hostname()
+  // Set once the sharing service exists, which publishes with the account.
+  let sharingKettuChanged: (() => void) | null = null
   let relayUrl = RELAY_URL
   try {
     relayUrl = relayUrlFrom(process.env[RELAY_URL_ENV])
@@ -419,6 +422,7 @@ async function start(): Promise<void> {
     failureText: () => t('account.browserFailed'),
     changed: (status) => {
       broadcast('account:changed', status)
+      sharingKettuChanged?.()
       accountChanged()
     },
     log: createLogger('account'),
@@ -553,6 +557,12 @@ async function start(): Promise<void> {
       content: (id, version) => agentHost.artifactContent(id, version),
       ids: () => agentHost.artifactIds(),
     },
+    kettu: {
+      base: accountBase,
+      account: () => account.signedIn(),
+      withToken: (call) =>
+        account.withAccessToken(call, (error) => error instanceof KettuUnauthorized),
+    },
     viewerFiles: (type, languages) => artifacts.viewers.forPage(type, languages),
     locale: currentLocale,
     cipher: {
@@ -570,6 +580,7 @@ async function start(): Promise<void> {
     },
   })
   reconcileSharing = () => void sharing.reconcile()
+  sharingKettuChanged = () => sharing.kettuChanged()
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,
