@@ -146,45 +146,49 @@ export function ModelMenu({
     .join(' · ')
 
   return (
-    <ModelPicker
-      className="kettu-model-picker"
-      side="top"
-      align="end"
-      heading={agentName}
-      models={models}
-      more={more}
-      keys
-      value={checked}
-      onChange={pickModel}
-      efforts={efforts}
-      effort={levels?.shown ?? effortValue ?? ''}
-      onEffortChange={pickEffort}
-      effortLabel={effort?.name ?? t('controls.effort')}
-      effortHint={t('controls.effortHint', { shortcut: formatShortcut('Alt+E') })}
-      toggles={toggles}
-      onToggle={(id, on) => {
-        const option = switches.find((o) => o.id === id)
-        if (option) flips.pick(option, on)
-      }}
-      note={note || undefined}
-      moreNote={source ? t('controls.modelsFrom', { source }) : undefined}
-      open={open}
-      onOpenChange={onOpenChange}
-      triggerLead={outOfCredit ? <span aria-hidden className="kettu-model-warn" /> : undefined}
-      triggerLabel={outOfCredit ? t('controls.modelOutOfCredit') : undefined}
-      labels={{
-        model: t('controls.model'),
-        settings: t('controls.modelSettings'),
-        speed: t('controls.speed'),
-        quality: t('controls.quality'),
-        cost: t('controls.cost'),
-        varies: t('controls.varies'),
-        moreModels: t('controls.moreModels'),
-        searchModels: t('controls.searchModels'),
-        noModels: t('controls.noModels'),
-        noMatch: t('controls.noModelMatch'),
-        choose: model ? t('controls.chooseModel') : t('controls.options'),
-      }}
-    />
+    // The composer focuses its field on a press anywhere else in it, which would close the menu
+    // before a model row's click lands.
+    <div data-composer-own className="contents">
+      <ModelPicker
+        className="kettu-model-picker"
+        side="top"
+        align="end"
+        heading={agentName}
+        models={models}
+        more={more}
+        keys
+        value={checked}
+        onChange={pickModel}
+        efforts={efforts}
+        effort={levels?.shown ?? effortValue ?? ''}
+        onEffortChange={pickEffort}
+        effortLabel={effort?.name ?? t('controls.effort')}
+        effortHint={t('controls.effortHint', { shortcut: formatShortcut('Alt+E') })}
+        toggles={toggles}
+        onToggle={(id, on) => {
+          const option = switches.find((o) => o.id === id)
+          if (option) flips.pick(option, on)
+        }}
+        note={note || undefined}
+        moreNote={source ? t('controls.modelsFrom', { source }) : undefined}
+        open={open}
+        onOpenChange={onOpenChange}
+        triggerLead={outOfCredit ? <span aria-hidden className="kettu-model-warn" /> : undefined}
+        triggerLabel={outOfCredit ? t('controls.modelOutOfCredit') : undefined}
+        labels={{
+          model: t('controls.model'),
+          settings: t('controls.modelSettings'),
+          speed: t('controls.speed'),
+          quality: t('controls.quality'),
+          cost: t('controls.cost'),
+          varies: t('controls.varies'),
+          moreModels: t('controls.moreModels'),
+          searchModels: t('controls.searchModels'),
+          noModels: t('controls.noModels'),
+          noMatch: t('controls.noModelMatch'),
+          choose: model ? t('controls.chooseModel') : t('controls.options'),
+        }}
+      />
+    </div>
   )
 }
