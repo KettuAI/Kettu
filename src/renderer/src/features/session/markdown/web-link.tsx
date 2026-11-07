@@ -96,7 +96,10 @@ function SiteTile({ url }: { url: string }) {
     return (
       <span
         aria-hidden
-        className={cn(tile, 'bg-[color-mix(in_srgb,var(--focus)_14%,transparent)] text-(--focus)')}
+        className={cn(
+          tile,
+          'bg-[color-mix(in_srgb,var(--thread-fox)_14%,transparent)] text-(--thread-fox)',
+        )}
       >
         <HugeiconsIcon icon={Globe02Icon} strokeWidth={1.9} aria-hidden className="size-2.5" />
       </span>
