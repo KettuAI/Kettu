@@ -262,7 +262,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
-  padding: 8px 10px 8px 14px;
+  padding: 6px 10px 6px 14px;
 }
 .ks-permission .ui-prc__buttons {
   flex-wrap: wrap;

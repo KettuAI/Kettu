@@ -340,6 +340,7 @@ export function PermissionEntry({
                 <SegmentedControl
                   aria-label={t('permission.card.howLong')}
                   variant="tray"
+                  size="lg"
                   value={shown}
                   onChange={onChange}
                   disabled={busy}
