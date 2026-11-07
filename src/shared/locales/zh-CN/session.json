@@ -97,6 +97,8 @@
       "destructive": "破坏性",
       "once": "仅这一次",
       "always": "始终",
+      "allowOnce": "允许一次",
+      "allowAlways": "始终允许",
       "deny": "拒绝",
       "howLong": "有效期",
       "touches": "涉及的内容",

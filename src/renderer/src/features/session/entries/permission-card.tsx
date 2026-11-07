@@ -209,6 +209,23 @@ export function PermissionEntry({
     return plainName(option.name)
   }
 
+  // The Allow button's words. An agent may spell out everything an always answer allows, which
+  // reads under the choice instead, so the button keeps one line.
+  const allowWords = (s: PermissionScope): string => {
+    const option = answers.allows[s]
+    if (!option) return ''
+    const alike = answers.scopes.filter((x) => answers.allows[x]?.kind === option.kind).length
+    if (alike === 1 && option.kind === 'allow_once') return t('permission.card.allowOnce')
+    if (alike === 1 && option.kind === 'allow_always') return t('permission.card.allowAlways')
+    return plainName(option.name)
+  }
+  const allowNote = (s: PermissionScope): string | null => {
+    const option = answers.allows[s]
+    if (!option) return null
+    const name = plainName(option.name)
+    return name === allowWords(s) || name === scopeWords(s) ? null : name
+  }
+
   const labels: Partial<PermissionLabels> = {
     title: (name, what) => (
       <Trans
@@ -220,7 +237,7 @@ export function PermissionEntry({
     ),
     risk: (risk) => t(`permission.card.${risk}`),
     scope: (s) => scopeWords(s),
-    allow: (s) => plainName(answers.allows[s]?.name ?? ''),
+    allow: (s) => allowWords(s),
     deny: answers.deny ? t('permission.card.deny') : '',
     howLong: t('permission.card.howLong'),
     more: (count) => t('permission.card.more', { count }),
@@ -316,16 +333,22 @@ export function PermissionEntry({
           scopes={answers.scopes.length > 0 ? answers.scopes : ['once']}
           scope={scope}
           onScopeChange={setScope}
-          renderScopes={({ scopes, scope: shown, onChange }) => (
-            <SegmentedControl
-              aria-label={t('permission.card.howLong')}
-              variant="tray"
-              value={shown}
-              onChange={onChange}
-              disabled={busy}
-              options={scopes.map((s) => ({ value: s, label: scopeWords(s) }))}
-            />
-          )}
+          renderScopes={({ scopes, scope: shown, onChange }) => {
+            const note = allowNote(shown)
+            return (
+              <>
+                <SegmentedControl
+                  aria-label={t('permission.card.howLong')}
+                  variant="tray"
+                  value={shown}
+                  onChange={onChange}
+                  disabled={busy}
+                  options={scopes.map((s) => ({ value: s, label: scopeWords(s) }))}
+                />
+                {note && <p className="ks-permission__allows">{note}</p>}
+              </>
+            )
+          }}
           decision={decision}
           onDecisionChange={(next) => {
             if (!next) return

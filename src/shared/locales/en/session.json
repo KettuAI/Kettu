@@ -106,6 +106,8 @@
       "destructive": "Destructive",
       "once": "Just once",
       "always": "Always",
+      "allowOnce": "Allow once",
+      "allowAlways": "Always allow",
       "deny": "Deny",
       "howLong": "How long",
       "touches": "What it touches",
