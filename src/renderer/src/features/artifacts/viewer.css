@@ -260,6 +260,15 @@
 .k-av-zoom .ui-as-popover {
   min-width: 220px;
 }
+/* The pane's menu is end-aligned at the window's right edge, so Export opens on its left. */
+.k-av-more [data-align='end'] .ui-as-menu__subpanel {
+  right: calc(100% + 4px);
+  left: auto;
+}
+.k-av-more [data-align='end'] .ui-as-menu__subpanel::before {
+  right: -8px;
+  left: auto;
+}
 
 /* ---------- The area ---------- */
 
