@@ -272,6 +272,16 @@
 .ks-permission .ui-prc__more-body {
   padding: 10px 14px 0;
 }
+/* What an always answer allows, when the agent spells it out: its own line under the answer. */
+.ks-permission__allows {
+  flex-basis: 100%;
+  order: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--thread-muted);
+  overflow-wrap: anywhere;
+}
 .ks-permission__command {
   min-width: 0;
   padding: 8px 12px;
@@ -418,6 +428,11 @@
 /* A plan on Approval Card: its text, the mode it builds in and a note for keeping on planning. */
 .ks-thread .ui-apc.ks-plan {
   max-width: none;
+}
+/* The plan clamps itself, so the card's own scroller would hide the mode and the note under it. */
+.ks-plan .ui-apc__preview {
+  max-height: none;
+  overflow: visible;
 }
 .ks-plan__preview {
   display: flex;

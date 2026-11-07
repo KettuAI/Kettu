@@ -264,6 +264,26 @@ function Swap({ id, children, glide = false }: { id: string; children: ReactNode
   );
 }
 
+/** Kettu: where the menu can show – the window, narrowed by any ancestor that clips, such as a pane of a split view. */
+function shownBounds(el: Element | null): { left: number; right: number } {
+  let left = 0;
+  let right = document.documentElement.clientWidth;
+  for (let e = el?.parentElement; e; e = e.parentElement) {
+    if (getComputedStyle(e).overflowX === "visible") continue;
+    const box = e.getBoundingClientRect();
+    left = Math.max(left, box.left);
+    right = Math.min(right, box.right);
+  }
+  return { left, right };
+}
+
+/** Kettu: right of the menu when the card fits there, else the side with more room. */
+function flySideFor(menuLeft: number, menuRight: number, start: number, end: number, width: number): "right" | "left" {
+  const right = end - 12 - (menuRight + 6);
+  const left = menuLeft - 6 - (start + 12);
+  return right >= width || right >= left ? "right" : "left";
+}
+
 /* ---------- Icons ---------- */
 
 const line = {
@@ -505,7 +525,7 @@ export function ModelPicker({
       const trigger = triggerRef.current?.getBoundingClientRect();
       const width = popRef.current?.offsetWidth ?? 0;
       if (!trigger || !width) return;
-      const room = document.documentElement.clientWidth;
+      const { left: start, right: room } = shownBounds(rootRef.current);
       const left = align === "end" ? trigger.right - width : trigger.left;
       const margin = 12;
       // The asked-for side unless the menu doesn't fit there and the other side has more room; measured at its full
@@ -523,14 +543,14 @@ export function ModelPicker({
       setPlacedSide(placed);
       setRoom(height > avail ? Math.max(200, avail) : null);
       const next =
-        left < margin
-          ? margin - left
+        left < start + margin
+          ? start + margin - left
           : left + width > room - margin
             ? Math.min(0, room - margin - (left + width))
             : 0;
       setShift(next);
       // The more models card (260px) goes right of the menu when it fits, else left; the row's chevron points there
-      setFlySide(left + next + width + 6 + 260 <= room - margin ? "right" : "left");
+      setFlySide(flySideFor(left + next, left + next + width, start, room, 260));
     };
     measure();
     window.addEventListener("resize", measure);
@@ -567,7 +587,8 @@ export function ModelPicker({
   const searchRef = useRef<HTMLInputElement>(null);
   const flyTimer = useRef(0);
   const [flyTop, setFlyTop] = useState(0);
-  const openFly = (focus: boolean) => {
+  const [flyNudge, setFlyNudge] = useState(0);
+  const openFly =(focus: boolean) => {
     window.clearTimeout(flyTimer.current);
     if (!flyOpen) setFlyActive(0);
     setFlyOpen(true);
@@ -599,7 +620,16 @@ export function ModelPicker({
     const fly = flyRef.current;
     if (!pop || !row || !fly) return;
     const box = pop.getBoundingClientRect();
-    setFlySide(box.right + 6 + fly.offsetWidth <= document.documentElement.clientWidth - 12 ? "right" : "left");
+    const { left: start, right: end } = shownBounds(rootRef.current);
+    const width = fly.offsetWidth;
+    const placed = flySideFor(box.left, box.right, start, end, width);
+    setFlySide(placed);
+    // Kettu: with too little room on either side the card slides over the menu's edge to stay whole
+    setFlyNudge(
+      placed === "right"
+        ? Math.min(0, end - 12 - (box.right + 6 + width))
+        : Math.max(0, start + 12 - (box.left - 6 - width)),
+    );
     setFlyTop(Math.max(0, Math.min(row.offsetTop - 4, pop.offsetHeight - fly.offsetHeight)));
   }, [flyOpen, query]);
   const onFlyKey = (e: KeyboardEvent) => {
@@ -967,7 +997,16 @@ export function ModelPicker({
                   <span className="ui-mdpc__switch" aria-hidden="true" />
                 </button>
                 {t.reset && (
-                  <button type="button" className="ui-mdpc__reset" disabled={t.disabled} onClick={t.reset.onReset}>
+                  <button
+                    type="button"
+                    className="ui-mdpc__reset"
+                    disabled={t.disabled}
+                    onClick={(e) => {
+                      // The row goes once reset, so focus stays in the menu on its switch.
+                      (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
+                      t.reset?.onReset();
+                    }}
+                  >
                     {t.reset.label}
                   </button>
                 )}
@@ -1065,7 +1104,7 @@ export function ModelPicker({
             ref={flyRef}
             className="ui-mdpc__fly"
             data-side={flySide}
-            style={{ top: flyTop }}
+            style={{ top: flyTop, translate: flyNudge ? `${flyNudge}px 0` : undefined }}
             role="dialog"
             aria-label={labels.moreModels}
             onPointerEnter={() => window.clearTimeout(flyTimer.current)}
@@ -1164,7 +1203,8 @@ const css = /* css */ `
 .ui-mdpc__trigger:hover, .ui-mdpc[data-open] .ui-mdpc__trigger { background: var(--ui-mdpc-wash); color: var(--ui-mdpc-ink); }
 .ui-mdpc__trigger .ui-mdpc__glyph { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .ui-mdpc__trigger .ui-mdpc__glyph > svg { width: 10px; height: 10px; }
-.ui-mdpc__name { display: grid; min-width: 0; }
+/* Kettu: the track may shrink below the gliding width, so a long name ends in an ellipsis rather than running under the effort in a narrow composer. */
+.ui-mdpc__name { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .ui-mdpc__chevron { margin-left: -2px; color: var(--ui-mdpc-icon); transition: transform 300ms var(--ui-mdpc-ease); }
 .ui-mdpc[data-open] .ui-mdpc__chevron { transform: rotate(180deg); }
 .ui-mdpc__flag { display: grid; grid-template-columns: 0fr; margin-left: -6px; opacity: 0; color: var(--ui-mdpc-accent); transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 220ms ease; }

@@ -297,7 +297,7 @@ export function SessionMoreMenu({
           <TooltipContent>{t('row.more')}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent
-          align="end"
+          align="start"
           className="w-68"
           finalFocus={menu?.finalFocus}
           onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
