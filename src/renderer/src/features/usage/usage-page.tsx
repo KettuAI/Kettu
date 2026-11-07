@@ -1056,6 +1056,7 @@ function Breakdown({
       label: t(`breakdown.others.${grouping}`, { count: folded.rest.count }),
       value: folded.rest.value ?? 0,
       color: ranked(RANKED.length),
+      last: true,
     })
   }
   return (

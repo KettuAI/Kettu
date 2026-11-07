@@ -21,6 +21,8 @@ export type BreakdownItem = {
   color?: string;
   /** Kettu: the label's tooltip in place of the label, such as a project's path */
   title?: string;
+  /** Kettu: ranks after every other part, such as the rest folded into one */
+  last?: boolean;
 };
 
 export type BreakdownPeriod = { id: string; label: string };
@@ -118,7 +120,7 @@ export function CompactBreakdown({
   const [active, setActive] = useState<string | null>(null);
 
   // Every part ever shown keeps its place in the bar and its color, so the bar only glides – never reshuffles
-  const known = useRef<{ key: string; label: string; color: string; title?: string }[]>([]);
+  const known = useRef<{ key: string; label: string; color: string; title?: string; last?: boolean }[]>([]);
   // Parts with the same label or id keep their own row: the second one becomes "label#1"
   const counts = new Map<string, number>();
   const keyed = items.map((item) => {
@@ -132,9 +134,10 @@ export function CompactBreakdown({
     if (seen) {
       seen.label = item.label;
       seen.title = item.title;
+      seen.last = item.last;
       if (item.color) seen.color = item.color;
     } else {
-      known.current.push({ key, label: item.label, title: item.title, color: item.color ?? PALETTE[known.current.length] ?? "var(--ui-cbc-c5)" });
+      known.current.push({ key, label: item.label, title: item.title, last: item.last, color: item.color ?? PALETTE[known.current.length] ?? "var(--ui-cbc-c5)" });
     }
   }
 
@@ -152,7 +155,7 @@ export function CompactBreakdown({
   const rows = known.current
     .map((k) => ({ ...k, value: now.get(k.key) ?? 0, leaving: !now.has(k.key) }))
     .filter((r) => !r.leaving || (shown[r.key] ?? 0) > 0.5)
-    .sort((a, b) => Number(a.leaving) - Number(b.leaving) || b.value - a.value);
+    .sort((a, b) => Number(a.leaving) - Number(b.leaving) || Number(!!a.last) - Number(!!b.last) || b.value - a.value);
   const order = rows.map((r) => r.key).join("|");
   // "Largest" only names a part that has a value – not the first of all zeros
   const top = rows.find((r) => !r.leaving && r.value > 0);
