@@ -320,6 +320,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       activity: (id) => admin('remote.activity', { id }),
       reset: () => done(admin('remote.reset')),
       retryDirect: () => done(admin('remote.retryDirect')),
+      retryRelay: () => done(admin('remote.retryRelay')),
       onChanged: (listener) => adminEvent('remote.changed', (event) => listener(event.status)),
       onPairing: (listener) => adminEvent('remote.pairing', (event) => listener(event.event)),
     },

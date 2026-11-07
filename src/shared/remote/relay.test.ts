@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { parseKnownHost } from './hosts'
+import { parseWelcome } from './protocol'
 import vectors from './relay-vectors.json'
 import {
   acceptSocketPath,
@@ -109,5 +111,49 @@ describe('the relay protocol', () => {
     expect(relayList(main, [{ id: 'x', url: 'https://example.com' }])).toEqual([
       { id: 'main', url: main },
     ])
+  })
+})
+
+describe('the relay in welcomes and stored hosts', () => {
+  const relay = { id: vectors.key.id, urls: ['https://relay.kettu.sh'] }
+  const welcome = {
+    type: 'welcome',
+    protocol: 3,
+    host: { name: 'Studio', platform: 'darwin', version: '0.0.26' },
+    features: [],
+    role: 'owner',
+    device: { id: '0123456789abcdef0123456789abcdef', name: 'Laptop' },
+    terminal: false,
+    addresses: [],
+  }
+
+  it("reads a welcome's relay, and one from a host without it", () => {
+    expect(parseWelcome({ ...welcome, relay })?.relay).toEqual(relay)
+    expect(parseWelcome(welcome)?.relay).toBeUndefined()
+    expect(
+      parseWelcome({ ...welcome, relay: { id: 'NOT-AN-ID', urls: [] } })?.relay,
+    ).toBeUndefined()
+    expect(
+      parseWelcome({ ...welcome, relay: { ...relay, urls: ['https://relay.kettu.sh/x', 7] } })
+        ?.relay,
+    ).toEqual({ ...relay, urls: [] })
+  })
+
+  it('keeps a host paired before the relay, and one that has it', () => {
+    const host = {
+      id: '0123456789abcdef0123456789abcdef',
+      publicKey: 'AAAA',
+      name: 'Studio',
+      platform: 'darwin',
+      version: '0.0.24',
+      addresses: [{ host: '192.168.1.8', port: 47821 }],
+      deviceName: 'Laptop',
+      addedAt: 1,
+      lastOnlineAt: null,
+      removed: false,
+    }
+    expect(parseKnownHost(host)).toEqual(host)
+    expect(parseKnownHost({ ...host, relay })).toEqual({ ...host, relay })
+    expect(parseKnownHost({ ...host, relay: { id: 'x' } })).toBeNull()
   })
 })

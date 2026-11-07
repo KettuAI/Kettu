@@ -318,6 +318,8 @@ export interface IpcInvokeContract {
   'remote:reset': { args: []; result: void }
   // Listens for direct connections again on the same port, as after the port was in use.
   'remote:retry-direct': { args: []; result: void }
+  // Tries every relay now, as after a conflict with another copy of Kettu or an error.
+  'remote:retry-relay': { args: []; result: void }
   'hosts:status': { args: []; result: HostsStatus }
   // Pairs with the host of a pasted link, its progress as `hosts:pairing` under the id.
   'hosts:pair': { args: [link: string]; result: HostPairStart }
@@ -576,6 +578,8 @@ export interface KettuApi {
     reset(): Promise<void>
     /** Tries the direct connections' port again. */
     retryDirect(): Promise<void>
+    /** Tries every relay again. */
+    retryRelay(): Promise<void>
     onChanged(listener: (status: RemoteStatus) => void): () => void
     onPairing(listener: (event: RemotePairingEvent) => void): () => void
   }

@@ -552,8 +552,12 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
       return sshSetup(socket, command.request)
 
     case 'login':
-    case 'logout':
-      return account(command.kind, data)
+    case 'logout': {
+      const code = await account(command.kind, data)
+      // A running daemon signs in to the relay, or out of it, with the new sign-in at once.
+      await callControl(socket, 'account.reload', undefined, 5000).catch(() => null)
+      return code
+    }
 
     case 'direct':
     case 'direct-port':

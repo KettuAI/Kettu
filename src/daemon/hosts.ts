@@ -14,6 +14,7 @@ import type {
   MainToTerminalHost,
   MainToDeviceHost,
   DeviceHostToMain,
+  RelayInit,
   RemoteHostStatus,
   RemoteHostToMain,
   TerminalHostToMain,
@@ -25,7 +26,8 @@ import { isDirectStatus, isPort } from '@shared/remote/address'
 import { deviceId, type NewDevice } from '@shared/remote/device'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
-import type { RemoteStatus } from '@shared/remote/status'
+import { parseRelayStatuses } from '@shared/remote/relay-host'
+import type { RelayReport, RemoteStatus } from '@shared/remote/status'
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { DirectSettings, SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
@@ -72,10 +74,8 @@ function isStringList(value: unknown): value is string[] {
 
 function isRemoteStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
-  const { publicKey, plainTextKey, devices, online, refused, direct, sshPort } = value as Record<
-    string,
-    unknown
-  >
+  const { publicKey, plainTextKey, devices, online, refused, direct, sshPort, relays } =
+    value as Record<string, unknown>
   const isText = (item: unknown): boolean => typeof item === 'string' && item.length <= MAX_STRING
   return (
     typeof publicKey === 'string' &&
@@ -95,7 +95,8 @@ function isRemoteStatus(value: unknown): value is RemoteHostStatus {
     online.every(isText) &&
     Number.isSafeInteger(refused) &&
     isDirectStatus(direct) &&
-    (sshPort === undefined || sshPort === null || isPort(sshPort))
+    (sshPort === undefined || sshPort === null || isPort(sshPort)) &&
+    parseRelayStatuses(relays) !== null
   )
 }
 
@@ -110,6 +111,14 @@ export interface HostsOptions {
   privateKey: string
   /** Replaces the host's identity with a new key, as resetting remote access does; its private key. */
   newIdentity(): Promise<string>
+  /** The Ed25519 seed the host signs in to the relay with, in base64; null without one. */
+  relayKey: string | null
+  /** Replaces the relay key, as resetting remote access does; its seed. */
+  newRelayKey(): Promise<string>
+  /** The main relay's origin. */
+  relayUrl: string
+  /** Whether the daemon is signed in to a Kettu account now. */
+  signedIn(): boolean
   /** The system's name for this computer, which devices show unless the owner names it. */
   hostName: string
   env: NodeJS.ProcessEnv
@@ -136,6 +145,11 @@ export class Hosts {
   private agentProcesses: ProcessId[] = []
   private remoteStatus: RemoteHostStatus | null = null
   private privateKey: string
+  private relayKey: string | null
+  /** The account's access token, as the remote host was last given it. */
+  private token: string | null = null
+  /** Use the Kettu relay, as the remote host was last told. */
+  private sentRelay: boolean | null = null
   private resetting: Promise<void> | null = null
   private sshPort: number | null
   /** The direct settings the remote host was last given, as JSON. */
@@ -158,6 +172,7 @@ export class Hosts {
   constructor(private readonly options: HostsOptions) {
     this.settings = options.settings
     this.privateKey = options.privateKey
+    this.relayKey = options.relayKey
     this.sshPort = options.sshPort
     const bundle = (name: string): string => path.join(options.bundleDir, name)
     this.agent = new ForkedHost<MainToHost, HostToMain>({
@@ -261,6 +276,7 @@ export class Hosts {
         // The agent host's socket outlives its restarts, so a device's session finds it again.
         agentHostSocket: this.agent.socketPath ?? undefined,
         sshPort: this.sshPort,
+        relay: this.initRelay(),
       }),
       shutdownMessage: { type: 'remote-host:shutdown', reason: 'stopping' },
       readyType: 'remote-host:ready',
@@ -329,7 +345,29 @@ export class Hosts {
       plainTextKey: true,
       service: true,
       direct: status?.direct ?? { state: 'off' },
+      relay: this.relayReport(),
     }
+  }
+
+  /** The Kettu relay as Settings and `kettu status` show it. */
+  relayReport(): RelayReport {
+    if (!this.settings().remote.relay) return { state: 'off' }
+    if (!this.options.signedIn()) return { state: 'signed_out' }
+    return { state: 'on', relays: this.remoteStatus?.relays ?? [] }
+  }
+
+  /** A fresh access token, or null once signed out, which closes every relay socket. */
+  setToken(token: string | null): void {
+    if (token === this.token) return
+    this.token = token
+    this.remote.post({ type: 'remote-host:token', token })
+    // Without a sign-in, direct connections are the devices' only way, and held on.
+    this.directChanged()
+  }
+
+  /** Tries every relay now, after a conflict or an error. */
+  retryRelay(): void {
+    this.remote.post({ type: 'remote-host:relay-retry' })
   }
 
   /** Calls `listener` whenever the remote host reports, or goes; returns how to stop. */
@@ -367,6 +405,7 @@ export class Hosts {
       throw new ControlError('unavailable', 'The remote host did not reset')
     }
     this.privateKey = await this.options.newIdentity()
+    this.relayKey = await this.options.newRelayKey()
     log.info('Reset remote access to a new identity')
     await this.remote.renew()
   }
@@ -442,6 +481,13 @@ export class Hosts {
     if (changed.has('remote')) {
       this.directChanged()
       this.terminalChanged()
+      const relay = settings.remote.relay
+      if (
+        relay !== this.sentRelay &&
+        this.remote.post({ type: 'remote-host:relay', enabled: relay })
+      ) {
+        this.sentRelay = relay
+      }
       const name = this.hostName()
       if (name !== this.sentHostName && this.remote.post({ type: 'remote-host:host-name', name })) {
         this.sentHostName = name
@@ -563,9 +609,15 @@ export class Hosts {
     return this.remoteStatus?.direct ?? null
   }
 
+  /** The direct connections as the remote host applies them, held on while the relay is not used. */
+  private direct(): DirectSettings {
+    const { direct, relay } = this.settings().remote
+    return relay && this.options.signedIn() ? direct : { ...direct, enabled: true }
+  }
+
   /** Passes the direct connections' settings on when they changed; each start reads them anew. */
   directChanged(): void {
-    const { direct } = this.settings().remote
+    const direct = this.direct()
     const sent = JSON.stringify(direct)
     if (sent === this.sentDirect) return
     if (this.remote.post({ type: 'remote-host:direct', direct })) this.sentDirect = sent
@@ -573,7 +625,7 @@ export class Hosts {
 
   /** Passes the same settings on again, so a port that could not be opened is tried again. */
   retryDirect(): void {
-    const { direct } = this.settings().remote
+    const direct = this.direct()
     if (this.remote.post({ type: 'remote-host:direct', direct })) {
       this.sentDirect = JSON.stringify(direct)
     }
@@ -697,9 +749,19 @@ export class Hosts {
   }
 
   private initDirect(): DirectSettings {
-    const { direct } = this.settings().remote
+    const direct = this.direct()
     this.sentDirect = JSON.stringify(direct)
     return direct
+  }
+
+  private initRelay(): RelayInit {
+    this.sentRelay = this.settings().remote.relay
+    return {
+      url: this.options.relayUrl,
+      enabled: this.sentRelay,
+      token: this.token,
+      ...(this.relayKey ? { key: this.relayKey } : {}),
+    }
   }
 
   /** The remote host went, and every code with it. */

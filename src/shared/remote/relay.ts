@@ -17,6 +17,15 @@ export const RELAY_URL = 'https://relay.kettu.sh'
 /** Points a development run at another relay. */
 export const RELAY_URL_ENV = 'KETTU_RELAY_URL'
 
+/** The main relay: the project's, or the origin `KETTU_RELAY_URL` names; throws for one that is none. */
+export function relayUrlFrom(value: string | undefined): string {
+  const raw = value?.trim()
+  if (!raw) return RELAY_URL
+  const origin = relayOrigin(raw)
+  if (!origin) throw new Error(`${RELAY_URL_ENV} must be an http or https origin`)
+  return origin
+}
+
 /** The first line of the text a host signs. */
 export const SIGN_IN_CONTEXT = 'kettu-relay/1'
 
@@ -331,6 +340,23 @@ export function isJoined(text: unknown): boolean {
 /** A one-time token or nonce for the relay to hand out: 32 random bytes in base64url. */
 export function newRelayToken(): string {
   return toBase64Url(crypto.getRandomValues(new Uint8Array(32)))
+}
+
+/** Where a host is on the relay: its id and its relays' origins in order. */
+export interface HostRelay {
+  id: string
+  urls: string[]
+}
+
+/** A host's relay as a welcome or a stored host carries it, or null when it is not one. */
+export function parseHostRelay(value: unknown): HostRelay | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { id, urls } = value as Record<string, unknown>
+  if (typeof id !== 'string' || !RELAY_HOST_ID.test(id) || !Array.isArray(urls)) return null
+  const kept = urls
+    .slice(0, MAX_REGIONS)
+    .filter((url): url is string => typeof url === 'string' && relayOrigin(url) === url)
+  return { id, urls: kept }
 }
 
 export const isRelayHostId = (value: unknown): value is string =>

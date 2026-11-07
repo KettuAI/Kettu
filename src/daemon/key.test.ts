@@ -2,7 +2,15 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/pr
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { keyIsPrivate, loadHostKey, newHostKey, prepareDataFolder } from './key'
+import { importRelayKey, relayHostId } from '@shared/remote/relay'
+import {
+  keyIsPrivate,
+  loadHostKey,
+  loadRelayHostKey,
+  newHostKey,
+  newRelayHostKey,
+  prepareDataFolder,
+} from './key'
 
 // Unix modes mean nothing on Windows, which the daemon does not run on.
 const describeUnix = describe.skipIf(process.platform === 'win32')
@@ -88,5 +96,24 @@ describeUnix('newHostKey', () => {
     expect(renewed.plainText).toBe(true)
     expect(await mode(keyFile())).toBe(0o600)
     expect((await loadHostKey(dir, () => {})).privateKey).toBe(renewed.privateKey)
+  })
+})
+
+describeUnix('loadRelayHostKey', () => {
+  it('keeps an Ed25519 key beside the identity, which a reset replaces', async () => {
+    const first = await loadRelayHostKey(dir)
+    const file = path.join(dir, 'remote', 'relay-key.json')
+    expect(await mode(file)).toBe(0o600)
+    const id = await relayHostId(
+      (await importRelayKey(Buffer.from(first.privateKey, 'base64'))).publicKey,
+    )
+    expect((await loadRelayHostKey(dir)).privateKey).toBe(first.privateKey)
+    const reset = await newRelayHostKey(dir)
+    expect(reset.privateKey).not.toBe(first.privateKey)
+    const next = await relayHostId(
+      (await importRelayKey(Buffer.from(reset.privateKey, 'base64'))).publicKey,
+    )
+    expect(next).not.toBe(id)
+    expect((await loadHostKey(dir, () => {})).privateKey).not.toBe(first.privateKey)
   })
 })

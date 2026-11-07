@@ -689,6 +689,7 @@ export function registerIpcHandlers({
   handle('remote:activity', 1, (_, id) => remoteHost.activity(deviceIdArg(id)))
   handle('remote:reset', 0, () => remoteHost.reset())
   handle('remote:retry-direct', 0, () => remoteHost.retryDirect())
+  handle('remote:retry-relay', 0, () => remoteHost.retryRelay())
 
   handle('hosts:status', 0, () => hostsStatus())
   // Each pairing belongs to the page that pasted its link or typed the SSH address, which alone

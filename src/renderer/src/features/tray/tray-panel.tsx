@@ -14,7 +14,7 @@ import type { AgentId } from '@shared/thread'
 import type { SessionSummary } from '@shared/agent-host'
 import type { BrowserOriginDecision } from '@shared/browser'
 import type { ComputerAppDecision } from '@shared/computer-use'
-import type { RemoteStatus } from '@shared/remote/status'
+import { relaySummary, type RemoteStatus } from '@shared/remote/status'
 import type { TrayTarget } from '@shared/tray'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
@@ -605,11 +605,20 @@ function Limits() {
 
 function remoteLine(remote: RemoteStatus | null): { text: string; dot: string } {
   switch (remote?.state ?? 'off') {
-    case 'on':
+    case 'on': {
+      const relay = relaySummary(remote!.relay)
+      if (relay === 'failed' || relay === 'conflict') {
+        const key = relay === 'failed' ? 'tray:remote.relayFailed' : 'tray:remote.relayConflict'
+        return { text: i18n.t(key), dot: 'bg-warning' }
+      }
+      if (relay === 'connecting' && remote!.direct.state !== 'listening') {
+        return { text: i18n.t('tray:remote.relayConnecting'), dot: 'bg-warning' }
+      }
       return {
         text: i18n.t('tray:remote.devices', { count: remote!.online.length }),
         dot: 'bg-success',
       }
+    }
     case 'starting':
       return { text: i18n.t('tray:remote.starting'), dot: 'bg-warning' }
     case 'failed':

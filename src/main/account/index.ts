@@ -33,6 +33,8 @@ export const SIGN_IN_TIMEOUT_MS = 10 * 60_000
 export interface AccountOptions {
   file: string
   api: AccountApi
+  /** The OAuth client this sign-in belongs to, the desktop app's unless the daemon runs it. */
+  client?: string
   cipher: IdentityCipher
   clientInfo: () => Promise<ClientInfo>
   locale: () => Locale
@@ -95,12 +97,14 @@ export class Account {
   /** Changes whenever the stored sign-in is replaced or forgotten, so late answers are dropped. */
   private generation = 0
   private readonly now: () => number
+  private readonly client: string
 
   private constructor(
     private readonly options: AccountOptions,
     private stored: StoredAccount | null,
   ) {
     this.now = options.now ?? Date.now
+    this.client = options.client ?? DESKTOP_CLIENT
   }
 
   /** Reads the stored sign-in, without the network or decrypting its token. */
@@ -211,7 +215,7 @@ export class Account {
     const stored = this.stored
     if (!stored) return this.status()
     try {
-      await this.options.api.revoke(DESKTOP_CLIENT, await openToken(stored, this.options.cipher))
+      await this.options.api.revoke(this.client, await openToken(stored, this.options.cipher))
     } catch (error) {
       this.options.log.warn(
         `Signed out here, but could not sign out at the account service: ${(error as Error).message}`,
@@ -219,6 +223,38 @@ export class Account {
     }
     if (this.stored === stored) await this.forget(null)
     return this.status()
+  }
+
+  /**
+   * An access token to send to Kettu's services and when to stop using it, refreshed when needed;
+   * null while signed out, or when none can be had now, as without the network. A sign-in the
+   * service ended signs out here, which `changed` reports.
+   */
+  async currentToken(): Promise<{ token: string; expiresAt: number } | null> {
+    if (!this.stored || this.signingIn) return null
+    try {
+      const token = await this.accessToken(null)
+      const access = this.access
+      return access?.token === token ? { token, expiresAt: access.expiresAt } : null
+    } catch (error) {
+      await this.failed(error)
+      return null
+    }
+  }
+
+  /** Reads the stored sign-in again, as after `kettu login` or `kettu logout` wrote it. */
+  async reload(): Promise<void> {
+    if (this.signingIn) return
+    const stored = await readAccount(this.options.file, (message) =>
+      this.options.log.warn(message),
+    ).catch(() => null)
+    const same =
+      stored?.profile.id === this.stored?.profile.id && stored?.token === this.stored?.token
+    if (same) return
+    this.generation++
+    this.stored = stored
+    this.access = null
+    this.emit()
   }
 
   stop(): void {
@@ -358,9 +394,9 @@ export class Account {
     } catch (error) {
       throw new TokenUnreadable((error as Error).message)
     }
-    const tokens = await this.options.api.refresh(DESKTOP_CLIENT, token)
+    const tokens = await this.options.api.refresh(this.client, token)
     if (generation !== this.generation || !this.stored) {
-      void this.options.api.revoke(DESKTOP_CLIENT, tokens.refreshToken).catch(() => undefined)
+      void this.options.api.revoke(this.client, tokens.refreshToken).catch(() => undefined)
       throw new SignedOut()
     }
     const next = { ...this.stored, ...(await sealToken(tokens.refreshToken, this.options.cipher)) }

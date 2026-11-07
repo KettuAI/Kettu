@@ -117,6 +117,7 @@ export interface AdminRemote {
   activity(id: string): Promise<DeviceActivity[]>
   reset(): Promise<void>
   retryDirect(): void
+  retryRelay(): void
 }
 
 /** Publishing artifacts, whose methods check their own arguments. */
@@ -396,6 +397,9 @@ export class HostAdmin {
         return null
       case 'remote.retryDirect':
         remote.retryDirect()
+        return null
+      case 'remote.retryRelay':
+        remote.retryRelay()
         return null
       case 'host.info':
         return this.deps.info()
