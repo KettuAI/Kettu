@@ -487,7 +487,12 @@ export function AppShell({
   // Escape closes the drawer – unless the setup guide is open, then it closes the guide first
   useEffect(() => {
     if (!drawer || guide !== "closed") return;
-    const key = (e: KeyboardEvent) => e.key === "Escape" && setDrawer(false);
+    // Handled, so what waits behind the drawer for an Escape of its own does not take it too
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      setDrawer(false);
+    };
     document.addEventListener("keydown", key);
     return () => document.removeEventListener("keydown", key);
   }, [drawer, guide]);
