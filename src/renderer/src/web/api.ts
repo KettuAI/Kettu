@@ -6,6 +6,7 @@
 import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
 import type { ArtifactContent } from '@shared/artifacts'
+import { DEBUG_OFF } from '@shared/debug'
 import type { AppCommand, KettuApi } from '@shared/ipc'
 import { safeName } from '@shared/file-name'
 import { matchLocale } from '@shared/locale'
@@ -381,6 +382,12 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         askPath('shell', settings.current().terminal.shellPath ?? null, async (path) =>
           settings.takeHost(await admin('settings.setShellPath', { path })),
         ),
+    },
+    // A browser opens no debugging ports of its own; the host's are on the host.
+    debug: {
+      get: async () => DEBUG_OFF,
+      restart: () => unsupported('restart in debug mode'),
+      onChanged: () => () => {},
     },
     report: webReports(admin),
     diagnostics: {

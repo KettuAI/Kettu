@@ -2,10 +2,24 @@
 // the host's key and the settings, starts the hosts and stops them in order. It alone writes the
 // settings, so a change from the CLI comes through the control socket and applies at once.
 
-import { logEnvironment, logLevel, setLogLevel } from '@shared/log/process-log'
 import { bundleForDevice } from '@shared/log/report-bundle'
 import { chmod, rm } from 'node:fs/promises'
 import os from 'node:os'
+import path from 'node:path'
+import { DEBUG_PORTS_FILE } from '@shared/debug'
+import {
+  DebugPortsFile,
+  INSPECT_ENV,
+  openInspector,
+  removePortsFile,
+} from '@shared/log/debug-inspector'
+import {
+  logEnvironment,
+  logFolder,
+  setLogLevel,
+  setVerboseRecords,
+  verboseRecords,
+} from '@shared/log/process-log'
 import { matchLocale } from '@shared/locale'
 import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
 import type { HostAdmin } from '../main/host-admin'
@@ -28,6 +42,7 @@ import {
 } from './control'
 import { isUnavailable, type HostTimings } from './forked-host'
 import { Hosts } from './hosts'
+import { takeDebugRun } from './debug'
 import { keyIsPrivate, loadHostKey, newHostKey, prepareDataFolder } from './key'
 import { keyPath } from './paths'
 import { clearReports, daemonReport, reportsFolder } from './problem-report'
@@ -49,6 +64,8 @@ export interface DaemonOptions {
   version: string
   bundleDir: string
   env: NodeJS.ProcessEnv
+  /** `kettu run --debug`; a marker `kettu restart --debug` left asks for the same. */
+  debug: boolean
   timings?: HostTimings
 }
 
@@ -92,11 +109,38 @@ async function claimControlSocket(
   }
 }
 
+function debugFile(): string | null {
+  const folder = logFolder()
+  return folder ? path.join(folder, DEBUG_PORTS_FILE) : null
+}
+
+/**
+ * A debug run logs at the debug level and opens the daemon's inspector on 127.0.0.1, then each
+ * host's as it starts; a normal run removes the list a debug run left.
+ */
+async function startDebugMode(debug: boolean): Promise<DebugPortsFile | null> {
+  const file = debugFile()
+  if (!debug) {
+    if (file) await removePortsFile(file)
+    return null
+  }
+  setLogLevel('debug')
+  const ports = new DebugPortsFile(file, { cdp: false })
+  log.warn('Debug mode: inspectors without authentication are open on 127.0.0.1 for this run')
+  try {
+    ports.setInspector('daemon', openInspector())
+  } catch (error) {
+    log.error('Could not open the inspector', error)
+  }
+  return ports
+}
+
 export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon> {
   const startedAt = Date.now()
   await prepareDataFolder(options.dataPath)
   let stopping = false
   let hosts: Hosts | null = null
+  let debugPorts: DebugPortsFile | null = null
 
   const starting = (): Hosts => {
     if (!hosts) throw new ControlError('unavailable', 'The daemon is starting')
@@ -235,9 +279,19 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     throw error
   }
 
+  // Taken once the socket is this run's, so a second `kettu run` leaves the service's marker be.
+  const marked = await takeDebugRun(options.dataPath).catch((error: unknown) => {
+    log.warn(`Could not read the debug marker: ${(error as Error).message}`)
+    return false
+  })
+  debugPorts = await startDebugMode(options.debug || marked)
   // The marker stays with the daemon, so a `kettu run` in a shell an agent or terminal starts is
   // not taken for the service.
-  const hostEnv = { ...options.env, ...logEnvironment() }
+  const hostEnv: NodeJS.ProcessEnv = {
+    ...options.env,
+    ...logEnvironment(),
+    ...(options.debug || marked ? { [INSPECT_ENV]: '1' } : {}),
+  }
   delete hostEnv[SERVICE_ENV]
   let admin: HostAdmin | null = null
   const running = new Hosts({
@@ -250,6 +304,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
     hostName: os.hostname(),
     env: hostEnv,
+    inspector: (name, url) => debugPorts?.setInspector(name, url),
     timings: options.timings,
     sshPort,
     sshPortChanged: (port) => {
@@ -291,11 +346,14 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       settings.update({ diagnostics: { verboseUntil: null } })
       return
     }
-    const level = until === null ? 'info' : 'debug'
-    if (level !== logLevel())
-      log.info(level === 'debug' ? 'Detailed records on' : 'Detailed records off')
+    const verbose = until !== null
+    // A debug run logs at the debug level whether or not detailed records are on.
+    const level = verbose || debugPorts ? 'debug' : 'info'
+    if (verbose !== verboseRecords())
+      log.info(verbose ? 'Detailed records on' : 'Detailed records off')
     setLogLevel(level)
-    running.setLogLevel(level)
+    setVerboseRecords(verbose)
+    running.setLogLevel(level, verbose)
     if (until !== null) {
       verboseTimer = setTimeout(applyVerbose, Math.min(until - now, MAX_TIMER_MS))
       verboseTimer.unref()
@@ -325,6 +383,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       hosts: hosts?.status() ?? { agent: idle, terminal: idle, remote: idle },
       connectedDevices: hosts?.connectedDevices() ?? null,
       direct: hosts?.directStatus() ?? null,
+      debug: debugPorts ? { inspectors: debugPorts.status().inspectors, file: debugFile() } : null,
     }
   }
 

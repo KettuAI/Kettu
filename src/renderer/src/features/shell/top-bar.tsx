@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BackForward } from '@renderer/features/shell/back-forward'
+import { DebugMarker } from '@renderer/features/shell/debug-mode'
 import { HistoryDialog } from '@renderer/features/shell/history-dialog'
 import { TITLE_BUTTON } from '@renderer/features/shell/title-button'
 import { useNotices } from '@renderer/features/sidebar/notices'
@@ -51,13 +52,15 @@ export function TitleBand() {
 
 /**
  * The sidebar toggle, Back and Forward, in the window's top left corner after the traffic lights,
- * where they stay whether the sidebar shows or not; with them the history dialog.
+ * where they stay whether the sidebar shows or not; with them the history dialog, and debug mode's
+ * mark in a debug run.
  */
 export function CornerControls() {
   return (
     <>
       <SidebarToggle />
       <BackForward />
+      <DebugMarker />
       <HistoryDialog />
     </>
   )

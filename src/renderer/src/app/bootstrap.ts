@@ -46,6 +46,7 @@ import { initThemes } from '@renderer/stores/themes'
 import { keepWatched, receiveBatch, rewatchAll } from '@renderer/stores/threads'
 import { forgetViewers, receiveViewers } from '@renderer/stores/viewers'
 import { initUpdates } from '@renderer/stores/updates'
+import { initDebug } from '@renderer/stores/debug'
 import {
   loadToday,
   loadUsageStatus,
@@ -253,6 +254,7 @@ export function bootstrap(): Promise<unknown> {
   })
   // What the desktop app's main does for its windows; the web client has none of it.
   if (!isWeb) {
+    initDebug().catch((error: unknown) => console.error('Could not read debug mode', error))
     initHosts()
     void loadHosts()
     initHostSessions({

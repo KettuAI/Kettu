@@ -468,6 +468,24 @@
       "delete": "删除记录",
       "deleted": "已删除详细记录"
     },
+    "debugMode": {
+      "name": "调试模式",
+      "description": "只在一次运行里打开这台电脑上的调试端口，方便开发者查看 Kettu 运行时的情况。",
+      "descriptionOn": "下次重启前一直开着。这些端口也写在日志文件夹的 debug-ports.json 里。",
+      "keywords": "调试 开发者工具 devtools inspector cdp 端口",
+      "restart": "以调试模式重启…",
+      "restartNormally": "正常重启",
+      "cdp": "DevTools Protocol",
+      "pipe": "经管道",
+      "cdpFailed": "没有打开，端口可能被占用",
+      "waiting": "正在等待端口…",
+      "copy": "复制 {{name}}",
+      "confirm": {
+        "title": "以调试模式重启？",
+        "body": "在下次重启之前，Kettu 会在这台电脑上打开调试端口。这些端口没有任何认证：这台电脑上的任何程序，包括会话里的 Agent，都能操控 Kettu、替你回答授权请求，也能连上内置浏览器里登录着的网站。",
+        "action": "以调试模式重启"
+      }
+    },
     "dataFolder": {
       "name": "数据文件夹",
       "description": "设置和会话索引。",

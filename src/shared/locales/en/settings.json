@@ -470,6 +470,24 @@
       "delete": "Delete records",
       "deleted": "Detailed records deleted"
     },
+    "debugMode": {
+      "name": "Debug mode",
+      "description": "Opens debugging ports on this computer for one run, so a developer can look into Kettu while it works.",
+      "descriptionOn": "On until Kettu restarts. The ports are also listed in debug-ports.json in the logs folder.",
+      "keywords": "debug developer tools devtools inspector cdp port",
+      "restart": "Restart in debug mode…",
+      "restartNormally": "Restart normally",
+      "cdp": "DevTools Protocol",
+      "pipe": "Over a pipe",
+      "cdpFailed": "Not open; the port may be taken",
+      "waiting": "Waiting for the port…",
+      "copy": "Copy {{name}}",
+      "confirm": {
+        "title": "Restart in debug mode?",
+        "body": "Until Kettu restarts again, it opens debugging ports on this computer. They have no password: any program here, the agents in your sessions included, can control Kettu, answer permission requests for you and reach the sites you are signed in to in the built-in browser.",
+        "action": "Restart in debug mode"
+      }
+    },
     "dataFolder": {
       "name": "Data folder",
       "description": "Settings and the session index.",

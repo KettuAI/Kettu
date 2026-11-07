@@ -4,7 +4,7 @@
 
 import type { AgentId } from '@shared/thread'
 import type { TrafficRecord } from '@shared/agent-host'
-import { logsDebug, sideLog, writeLog, type SideLog } from '@shared/log/process-log'
+import { sideLog, verboseRecords, writeLog, type SideLog } from '@shared/log/process-log'
 import { Ring, TextRing } from './ring'
 
 export const TRAFFIC_MESSAGES = 2_000
@@ -128,7 +128,7 @@ export class Diagnostics {
     }
     const buffers = this.buffers(agentId)
     buffers.traffic.push(record, stored.length)
-    if (logsDebug()) {
+    if (verboseRecords()) {
       buffers.trafficFile.write('traffic', record.method ?? 'message', {
         direction,
         size,

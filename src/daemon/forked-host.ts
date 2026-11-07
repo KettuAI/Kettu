@@ -5,6 +5,7 @@
 
 import { fork, type ChildProcess } from 'node:child_process'
 import { rm } from 'node:fs/promises'
+import { isInspectorMessage } from '@shared/log/debug-inspector'
 import { privateSocketPath, type SocketPath } from '@shared/socket-port'
 import type { Logger } from '../main/log'
 import {
@@ -45,6 +46,8 @@ export interface ForkedHostConfig<ToChild, FromChild extends { type: string }> {
   onReady?(): void
   /** Called once a process is gone; `clean` is false for a crash or a kill. */
   onExit?(clean: boolean): void
+  /** Where the process's inspector listens in a debug run, or null once it is gone. */
+  inspector?(url: string | null): void
   timings?: HostTimings
   policy?: RestartPolicyOptions
 }
@@ -247,6 +250,10 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
   private receive(child: ChildProcess, message: unknown): void {
     if (child !== this.child) return
     if (typeof message !== 'object' || message === null) return
+    if (isInspectorMessage(message)) {
+      this.config.inspector?.(message.url)
+      return
+    }
     const typed = message as FromChild
     if (typeof typed.type !== 'string') return
     if (typed.type === this.config.readyType) {
@@ -281,6 +288,7 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
     this.readyTimer = null
     this.child = null
     this.exited = null
+    this.config.inspector?.(null)
     const clean = this.cleanStop
     try {
       this.config.onExit?.(clean)

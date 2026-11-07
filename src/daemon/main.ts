@@ -25,6 +25,7 @@ import {
   type DaemonStatus,
 } from './control'
 import { AlreadyRunning, SERVICE_ENV, startDaemon } from './daemon'
+import { markDebugRun, unmarkDebugRun } from './debug'
 import { changePort, directReport } from './direct'
 import { NO_SYSTEM_ENCRYPTION, prepareDataFolder, privateFolder } from './key'
 import { followLogs, parseTime, readLogs, type LogFilter } from './logs'
@@ -36,6 +37,7 @@ import { terminalQuestions } from './questions'
 import { devicesReport, runningReport, stoppedReport, terminalReport } from './report'
 import {
   installService,
+  restartService,
   serviceCommand,
   ServiceError,
   serviceFile,
@@ -508,6 +510,7 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
         version,
         bundleDir: __dirname,
         env: process.env,
+        debug: command.debug,
       })
       await new Promise<void>((resolve) => {
         const stop = (): void => void daemon.stop().then(resolve)
@@ -601,6 +604,44 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
         process.stderr.write(`kettu: ${installed.warning}\n`)
         return 1
       }
+      return 0
+    }
+
+    case 'restart': {
+      const running = await statusOf(socket)
+      if (running && !running.service) {
+        throw new Failure(
+          `A Kettu daemon runs in the foreground on this data folder (pid ${running.pid}); ` +
+            `stop it and start it again with kettu run${command.debug ? ' --debug' : ''}`,
+        )
+      }
+      if (command.debug) await markDebugRun(data)
+      let restarted: boolean
+      try {
+        restarted = await restartService(service)
+      } catch (error) {
+        if (command.debug) await unmarkDebugRun(data)
+        throw error
+      }
+      if (!restarted) {
+        if (command.debug) await unmarkDebugRun(data)
+        throw new Failure(
+          `No service is installed; run kettu service install, or kettu run${command.debug ? ' --debug' : ''} in the foreground`,
+        )
+      }
+      // A debug run says so once its own inspector is open, a moment after the socket listens.
+      const started = await until(async () => {
+        const status = await statusOf(socket)
+        const up = status && !status.stopping && status.pid !== running?.pid
+        return up && (!command.debug || status.debug) ? status : null
+      }, START_WAIT_MS)
+      if (!started) throw new Failure('Restarted the service, but the daemon did not start')
+      out(
+        started.debug
+          ? `The daemon runs in debug mode until its next restart (pid ${started.pid}); ` +
+              'kettu status lists its inspectors.\n'
+          : `The daemon is running again (pid ${started.pid}).\n`,
+      )
       return 0
     }
 

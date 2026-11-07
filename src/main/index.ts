@@ -32,6 +32,7 @@ import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { SiteIcons } from './browser/site-icons'
+import { asksForDebug, isDebugRun, lockData, startDebugMode } from './debug-mode'
 import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
@@ -116,7 +117,7 @@ if (devUserData) {
   app.setPath('userData', devUserData)
   log.info(`Development run: data in ${devUserData}`)
 }
-openAppLog(devUserData)
+openAppLog(devUserData, isDebugRun())
 
 // Before the app is ready, and only once.
 protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
@@ -135,8 +136,11 @@ async function start(): Promise<void> {
     readThemeSources(themeSourcesFile),
   ])
   let ready = false
-  app.on('second-instance', () => {
-    if (ready) showMainWindow()
+  app.on('second-instance', (_event, _argv, _cwd, data) => {
+    if (!ready) return
+    // One Kettu per data folder, so debugging this one takes a restart, which the window asks.
+    if (asksForDebug(data) && !isDebugRun()) sendCommand({ kind: 'confirm-debug-restart' })
+    else showMainWindow()
   })
 
   await app.whenReady()
@@ -240,6 +244,7 @@ async function start(): Promise<void> {
       sendCommand({ kind: 'open-settings', section: 'about' })
       checkForUpdates()
     },
+    openDebugMode: () => sendCommand({ kind: 'open-settings', section: 'advanced' }),
     setRemoteEnabled: (enabled) => void settings.update({ remote: { enabled } }),
     reducedMotion,
     ...(trayPanel
@@ -637,7 +642,7 @@ async function start(): Promise<void> {
     applyVerbose(
       until,
       () => settings.update({ diagnostics: { verboseUntil: null } }),
-      (debug) => agentHost.setLogLevel(debug ? 'debug' : 'info'),
+      (level, verbose) => agentHost.setLogLevel(level, verbose),
     )
   applyDiagnostics(settings.get().diagnostics.verboseUntil)
   settings.onChange((next, changed) => {
@@ -719,6 +724,7 @@ async function start(): Promise<void> {
     // F12 toggles DevTools in development; reload shortcuts are disabled in production. Without
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })
+    if (isDebugRun() && app.isPackaged) watchDevToolsKeys(window)
     watchConsole(window.webContents, 'renderer')
     quitFlow.watchWindow(window)
     watchSubframes(window.webContents, {
@@ -760,9 +766,25 @@ async function start(): Promise<void> {
   })
 }
 
-if (!app.requestSingleInstanceLock()) {
+/**
+ * A debug run's developer tools keys where there is no menu to carry them: F12 and Ctrl+Shift+I,
+ * as in Chrome. macOS has the View menu's item.
+ */
+function watchDevToolsKeys(window: Electron.BrowserWindow): void {
+  if (process.platform === 'darwin') return
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const inspect = input.control && input.shift && !input.alt && input.key.toLowerCase() === 'i'
+    if (input.key !== 'F12' && !inspect) return
+    event.preventDefault()
+    window.webContents.toggleDevTools()
+  })
+}
+
+if (!app.requestSingleInstanceLock(lockData())) {
   app.quit()
 } else {
+  startDebugMode(logsFolder())
   start().catch((error: unknown) => {
     log.error('Startup failed', error)
     app.exit(1)

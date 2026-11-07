@@ -15,6 +15,7 @@ import {
 } from 'electron'
 import type { BusyCounts } from '@shared/host-control'
 import type { RemoteStatus } from '@shared/remote/status'
+import { isDebugRun } from './debug-mode'
 import { t } from './i18n'
 import { createLogger } from './log'
 
@@ -167,6 +168,8 @@ export interface TrayDeps {
   /** Brings the window forward on New session. */
   newSession(): void
   checkForUpdates(): void
+  /** Settings › Advanced, where a debug run lists its ports. */
+  openDebugMode(): void
   setRemoteEnabled(enabled: boolean): void
   /** Whether motion is reduced, by the setting or the system; the running dot then holds still. */
   reducedMotion(): boolean
@@ -283,6 +286,9 @@ export class KettuTray {
         click: () => this.deps.setRemoteEnabled(remote === null),
       },
       { type: 'separator' },
+      ...(isDebugRun()
+        ? [{ label: t('tray.debugMode'), click: () => this.deps.openDebugMode() }]
+        : []),
       { label: t('tray.checkForUpdates'), click: () => this.deps.checkForUpdates() },
       {
         label: t('tray.quit', { name: app.name }),

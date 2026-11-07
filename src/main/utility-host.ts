@@ -7,7 +7,9 @@ import {
   type WebContents,
 } from 'electron'
 import type { HostResetEvent } from '@shared/ipc'
+import { isInspectorMessage } from '@shared/log/debug-inspector'
 import { logEnvironment } from '@shared/log/process-log'
+import { hostInspectEnv, hostInspector } from './debug-mode'
 import { createLogger, type Logger } from './log'
 import { RestartPolicy } from './restart-policy'
 
@@ -192,7 +194,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
       child = utilityProcess.fork(this.config.modulePath, [], {
         serviceName: this.config.serviceName,
         stdio: 'pipe',
-        env: { ...process.env, ...logEnvironment() },
+        env: { ...process.env, ...logEnvironment(), ...hostInspectEnv() },
       })
     } catch (error) {
       this.record('crash', 'fork failed')
@@ -220,6 +222,10 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
   private receive(child: UtilityProcess, message: unknown): void {
     if (child !== this.child) return
     if (typeof message !== 'object' || message === null) return
+    if (isInspectorMessage(message)) {
+      hostInspector(this.config.label, message.url)
+      return
+    }
     const typed = message as FromChild
     if (typeof typed.type !== 'string') return
     if (typed.type === this.config.readyType) {
@@ -257,6 +263,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
     this.readyTimer = null
     this.child = null
     this.exited = null
+    hostInspector(this.config.label, null)
     const clean = this.cleanStop
     try {
       this.config.onExit?.(clean)

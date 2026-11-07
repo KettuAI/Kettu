@@ -115,7 +115,8 @@ export type MainToHost =
       format: ArtifactExportFormat
     }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
-  | { type: 'host:log-level'; level: 'debug' | 'info' }
+  /** `verbose`: detailed records, which the debug level alone does not write. */
+  | { type: 'host:log-level'; level: 'debug' | 'info'; verbose: boolean }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
   | { type: 'host:permission-answer'; sessionId: string; requestId: string; optionId: string }
   // The answer to a host:browser-call, its result or the error that refused it.

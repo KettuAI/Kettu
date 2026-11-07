@@ -11,7 +11,10 @@ import { LOG_LEVELS } from './logs'
 export type Command =
   | { kind: 'help' }
   | { kind: 'version' }
-  | { kind: 'run' }
+  /** `debug`: this run opens the daemon's and its hosts' inspectors on 127.0.0.1. */
+  | { kind: 'run'; debug: boolean }
+  /** Restarts the service; `debug` makes the next run a debug run. */
+  | { kind: 'restart'; debug: boolean }
   | { kind: 'status' }
   | { kind: 'devices' }
   | { kind: 'devices-remove'; id: string }
@@ -58,6 +61,7 @@ Runs Kettu's hosts on this computer, for Kettu's clients to connect to.
 
 Commands:
   run                          Run the daemon in the foreground
+  restart                      Restart the service, which kettu service install set up
   status                       Say whether the daemon is running, with its details
   devices                      List the devices paired with this computer
   devices remove <id>          Remove a paired device and close its sessions
@@ -81,6 +85,9 @@ Commands:
   ssh-setup [<request>]        Run by Kettu's desktop app when it adds this computer over SSH
 
 Options:
+  --debug                      With run or restart: open the daemon's and its hosts' Node.js
+                               inspectors on 127.0.0.1 for that run only. They have no password,
+                               so any program on this computer can run code in the daemon
   -y, --yes                    Change the port without asking
   -m, --message <text>         kettu report: what happened; asked for when left out
   --range <range>              kettu report: the time the logs cover: hour (the default),
@@ -111,6 +118,7 @@ const OPTIONS = {
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean' },
   yes: { type: 'boolean', short: 'y' },
+  debug: { type: 'boolean' },
   message: { type: 'string', short: 'm' },
   range: { type: 'string' },
   with: { type: 'string' },
@@ -188,6 +196,9 @@ export function parseCommand(argv: readonly string[]): Command {
       return { kind: 'usage', message: `${quote(raw)} is only for kettu ${commandName(kind)}` }
     }
   }
+  const debug = given.has('debug')
+  if (command.kind === 'run' || command.kind === 'restart') return { ...command, debug }
+  if (debug) return { kind: 'usage', message: "'--debug' is only for kettu run and kettu restart" }
   if (command.kind === 'report') return reportCommand(given)
   if (command.kind === 'logs') return logsCommand(given)
   return command
@@ -254,7 +265,9 @@ function parseWords(words: string[], yes: boolean): Command {
     case 'help':
       return extra(0) ?? { kind: 'help' }
     case 'run':
-      return extra(0) ?? { kind: 'run' }
+      return extra(0) ?? { kind: 'run', debug: false }
+    case 'restart':
+      return extra(0) ?? { kind: 'restart', debug: false }
     case 'status':
       return extra(0) ?? { kind: 'status' }
     case 'update':

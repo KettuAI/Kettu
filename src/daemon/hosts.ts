@@ -120,6 +120,8 @@ export interface HostsOptions {
   sshPort: number | null
   /** The remote host listens for SSH on another port, to keep for the next run. */
   sshPortChanged?(port: number): void
+  /** A host's inspector in a debug run, by its name, or null once the host is gone. */
+  inspector?(name: string, url: string | null): void
 }
 
 type AnyHost = ForkedHost<unknown, { type: string }>
@@ -151,7 +153,7 @@ export class Hosts {
   private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
   private nextReport = 1
   /** The agent host's log level since detailed records last changed; a restart takes it again. */
-  private logLevel: 'debug' | 'info' | null = null
+  private logLevel: { level: 'debug' | 'info'; verbose: boolean } | null = null
 
   constructor(private readonly options: HostsOptions) {
     this.settings = options.settings
@@ -163,6 +165,7 @@ export class Hosts {
       modulePath: bundle('agent-host.cjs'),
       socketName: 'agent-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('agent-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'host:init',
@@ -182,7 +185,7 @@ export class Hosts {
       readyType: 'host:ready',
       stoppedType: 'host:stopped',
       onReady: () => {
-        if (this.logLevel) this.agent.post({ type: 'host:log-level', level: this.logLevel })
+        if (this.logLevel) this.agent.post({ type: 'host:log-level', ...this.logLevel })
       },
       onMessage: (message) => this.receive(message),
       onExit: (clean) => this.agentExited(clean),
@@ -192,6 +195,7 @@ export class Hosts {
       modulePath: bundle('terminal-host.cjs'),
       socketName: 'terminal-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('terminal-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'terminal-host:init',
@@ -213,6 +217,7 @@ export class Hosts {
       modulePath: bundle('device-host.cjs'),
       socketName: 'device-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('device-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'device-host:init',
@@ -239,6 +244,7 @@ export class Hosts {
       modulePath: bundle('remote-host.cjs'),
       socketName: null,
       env: options.env,
+      inspector: (url) => options.inspector?.('remote-host', url),
       timings: options.timings,
       initMessage: () => ({
         type: 'remote-host:init',
@@ -376,10 +382,10 @@ export class Hosts {
     return answer.events.slice(0, MAX_ACTIVITY)
   }
 
-  /** Detailed records on or off in the agent host, which a restart keeps. */
-  setLogLevel(level: 'debug' | 'info'): void {
-    this.logLevel = level
-    this.agent.post({ type: 'host:log-level', level })
+  /** The agent host's log level and detailed records, which a restart keeps. */
+  setLogLevel(level: 'debug' | 'info', verbose: boolean): void {
+    this.logLevel = { level, verbose }
+    this.agent.post({ type: 'host:log-level', level, verbose })
   }
 
   /** Whether the agent host runs, to build a report with its sessions and agents. */

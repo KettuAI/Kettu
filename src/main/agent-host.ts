@@ -353,9 +353,9 @@ export class AgentHost {
     this.host.post({ type: 'host:power', state })
   }
 
-  /** Detailed records on or off; a host started later takes the level from its environment. */
-  setLogLevel(level: 'debug' | 'info'): void {
-    this.host.post({ type: 'host:log-level', level })
+  /** The log level and detailed records; a host started later takes both from its environment. */
+  setLogLevel(level: 'debug' | 'info', verbose: boolean): void {
+    this.host.post({ type: 'host:log-level', level, verbose })
   }
 
   /** The sessions that are working, or none if the host does not answer within `timeoutMs`. */
