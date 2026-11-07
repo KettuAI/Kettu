@@ -289,8 +289,12 @@ function createScope(hostId: string): OtherScope {
     refresh: () => admin('sharing.refresh'),
     connect: (token, accountId) => admin('sharing.connect', { token, accountId }),
     remove: () => admin('sharing.remove'),
-    publish: (id, version, target) => admin('sharing.publish', { id, version, target }),
+    publish: (id, version, target, access) =>
+      admin('sharing.publish', { id, version, target, access }),
     update: (id, version) => admin('sharing.update', { id, version }),
+    setAccess: (id, access) => admin('sharing.setAccess', { id, access }),
+    newCode: (id) => admin('sharing.newCode', { id }),
+    openLink: (id) => admin('sharing.openLink', { id }),
     unpublish: (id) => admin('sharing.unpublish', { id }),
     onChanged: (listener) => listen('sharing.changed', (event) => listener(event.status)),
   }

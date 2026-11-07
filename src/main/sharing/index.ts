@@ -17,10 +17,13 @@ import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-co
 import {
   CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_TOKEN,
+  SHARE_ACCESS,
   SHARING_TARGETS,
   type CloudflareAccountChoice,
+  type ShareAccess,
   type SharingConnectResult,
   type SharingFailure,
+  type SharingOpenResult,
   type SharingResult,
   type SharingStatus,
   type SharingTarget,
@@ -30,7 +33,7 @@ import { AccountNetworkError } from '../account/service'
 import { isInside } from '../artifacts/protocol'
 import { createLogger } from '../log'
 import { accountSubdomain, Cloudflare, findAccounts, type Fetch } from './cloudflare'
-import { KettuShare } from './kettu'
+import { KettuShare, type KettuAccess as PageAccess } from './kettu'
 import { pageHeaders, withMeta } from './page'
 import { SharingError, type PageFile, type SharingProvider } from './provider'
 import {
@@ -93,7 +96,9 @@ export interface SharingDeps {
   locale?(): Locale
 }
 
-function failed(failure: SharingFailure, message: string | null = null): SharingResult {
+type Failed = { failed: SharingFailure; message: string | null }
+
+function failed(failure: SharingFailure, message: string | null = null): Failed {
   return { failed: failure, message }
 }
 
@@ -108,6 +113,14 @@ function target(id: unknown, version: unknown): { id: string; version: number } 
 
 function isTarget(value: unknown): value is SharingTarget {
   return SHARING_TARGETS.includes(value as SharingTarget)
+}
+
+function isAccess(value: unknown): value is ShareAccess {
+  return SHARE_ACCESS.includes(value as ShareAccess)
+}
+
+function isArtifactId(value: unknown): value is string {
+  return typeof value === 'string' && ARTIFACT_ID.test(value)
 }
 
 /** The Kettu account's storage as the service last said, for the account it answered for. */
@@ -126,6 +139,8 @@ export class Sharing {
   private storage: Storage | null = null
   /** The Kettu account the status was last made for, to notice another one signing in. */
   private kettuSeen: string | null = null
+  /** Kettu pages, by ref, that take no access code for now after too many wrong ones. */
+  private readonly locked = new Set<string>()
 
   private constructor(
     private readonly deps: SharingDeps,
@@ -166,6 +181,9 @@ export class Sharing {
           target: page.target,
           otherAccount,
           accountEmail: otherAccount ? page.accountEmail : null,
+          access: page.access,
+          code: page.code,
+          codeLocked: page.target === 'kettu' && this.locked.has(page.ref),
         }
       }),
     }
@@ -252,13 +270,20 @@ export class Sharing {
   }
 
   /**
-   * Publishes a version at a new URL of the target, Kettu unless another is named; publishing an
-   * already published artifact updates it where it lives.
+   * Publishes a version at a new URL of the target, Kettu unless another is named, at the level
+   * asked for where the target has levels; publishing an already published artifact updates it
+   * where it lives, at its own level.
    */
-  async publish(rawId: unknown, rawVersion: unknown, rawTarget: unknown): Promise<SharingResult> {
+  async publish(
+    rawId: unknown,
+    rawVersion: unknown,
+    rawTarget: unknown,
+    rawAccess: unknown,
+  ): Promise<SharingResult> {
     const wanted = target(rawId, rawVersion)
     if (!wanted) return failed('failed', 'Not an artifact id and version.')
     if (!isTarget(rawTarget)) return failed('failed', 'Not a place to publish to.')
+    if (!isAccess(rawAccess)) return failed('failed', 'Not a level a page can have.')
     const page = this.store.page(wanted.id)
     if (page) return this.deploy(page, wanted.version)
     const owner = this.owner(rawTarget)
@@ -266,7 +291,7 @@ export class Sharing {
     try {
       const content = await this.readFiles(wanted.id, wanted.version)
       const published = await this.at(rawTarget, owner.id, (provider) =>
-        provider.publish(content.files, pageHeaders()),
+        provider.publish(content.files, pageHeaders(), rawAccess),
       )
       this.store.put({
         id: wanted.id,
@@ -277,6 +302,9 @@ export class Sharing {
         publishedAt: this.now(),
         accountId: owner.id,
         accountEmail: owner.email,
+        // What the target says, which a service from before levels gives as public.
+        access: published.access,
+        code: published.code,
       })
       return await this.changedAt(rawTarget)
     } catch (error) {
@@ -293,11 +321,38 @@ export class Sharing {
     return this.deploy(page, wanted.version)
   }
 
+  /** Changes who can open a Kettu page, at once and at the same address. */
+  async setAccess(rawId: unknown, rawAccess: unknown): Promise<SharingResult> {
+    if (!isAccess(rawAccess)) return failed('failed', 'Not a level a page can have.')
+    return this.changeAccess(rawId, { access: rawAccess })
+  }
+
+  /** Draws a Kettu page a new access code; whoever used the old one must enter the new one. */
+  async newCode(rawId: unknown): Promise<SharingResult> {
+    return this.changeAccess(rawId, { newCode: true })
+  }
+
+  /**
+   * An address that opens the page in a browser: for the publisher's own Kettu page that is not
+   * public, a one-time one that needs neither its code nor a sign-in; else the page's own.
+   */
+  async openLink(rawId: unknown): Promise<SharingOpenResult> {
+    if (!isArtifactId(rawId)) return failed('failed', 'Not an artifact id.')
+    const page = this.store.page(rawId)
+    if (!page) return failed('not_found', 'This artifact is not published.')
+    if (page.target !== 'kettu' || page.access === 'public') return { url: page.url }
+    try {
+      return {
+        url: await this.atKettu(page.accountId, (share) => share.openLink(page.ref, page.url)),
+      }
+    } catch (error) {
+      return this.failure(error)
+    }
+  }
+
   /** Takes the page down where it lives, so the URL stops working; one already gone is done. */
   async unpublish(rawId: unknown): Promise<SharingResult> {
-    if (typeof rawId !== 'string' || !ARTIFACT_ID.test(rawId)) {
-      return failed('failed', 'Not an artifact id.')
-    }
+    if (!isArtifactId(rawId)) return failed('failed', 'Not an artifact id.')
     const page = this.store.page(rawId)
     if (!page) return { status: this.status() }
     try {
@@ -326,6 +381,35 @@ export class Sharing {
 
   flush(): Promise<void> {
     return this.store.flush()
+  }
+
+  private async changeAccess(
+    rawId: unknown,
+    change: { access?: ShareAccess; newCode?: true },
+  ): Promise<SharingResult> {
+    if (!isArtifactId(rawId)) return failed('failed', 'Not an artifact id.')
+    const page = this.store.page(rawId)
+    if (!page) return failed('not_found', 'This artifact is not published.')
+    if (page.target !== 'kettu') return failed('failed', 'Pages on Cloudflare are always public.')
+    try {
+      const given = await this.atKettu(page.accountId, (share) => share.setAccess(page.ref, change))
+      // Unpublished while the change was on its way: the entry stays gone.
+      const current = this.store.page(page.id)
+      if (current) this.store.put({ ...current, access: given.access, code: given.code })
+      this.takeLocked(page.ref, given)
+      return this.report()
+    } catch (error) {
+      return this.failure(error)
+    }
+  }
+
+  /** Whether the page's lock changed. */
+  private takeLocked(ref: string, given: PageAccess): boolean {
+    const locked = given.access === 'code' && given.codeLocked
+    if (locked === this.locked.has(ref)) return false
+    if (locked) this.locked.add(ref)
+    else this.locked.delete(ref)
+    return true
   }
 
   private async deploy(page: PublishedPage, version: number): Promise<SharingResult> {
@@ -413,21 +497,24 @@ export class Sharing {
     this.storage = { accountId: owner.id, used: listed.used, limit: listed.limit }
     let changed =
       before?.accountId !== owner.id || before.used !== listed.used || before.limit !== listed.limit
-    const urls = new Map(listed.pages.map((page) => [page.id, page.url]))
+    const listedPages = new Map(listed.pages.map((page) => [page.id, page]))
     const mine = this.store
       .published()
       .filter((page) => page.target === 'kettu' && page.accountId === owner.id)
     for (const page of mine) {
-      const url = urls.get(page.ref)
-      if (url === undefined) {
+      const entry = listedPages.get(page.ref)
+      if (entry === undefined) {
         // A page published while the list was on its way is not in it yet.
         if (page.publishedAt >= started) continue
         this.store.forget(page.id)
         changed = true
-      } else if (url !== page.url) {
-        this.store.put({ ...page, url })
+        continue
+      }
+      if (entry.url !== page.url || entry.access !== page.access || entry.code !== page.code) {
+        this.store.put({ ...page, url: entry.url, access: entry.access, code: entry.code })
         changed = true
       }
+      if (this.takeLocked(page.ref, entry)) changed = true
     }
     return changed
   }
@@ -448,18 +535,8 @@ export class Sharing {
     accountId: string,
     call: (provider: SharingProvider) => Promise<T>,
   ): Promise<T> {
-    const owner = this.owner(target)
-    if (!owner) {
-      throw target === 'kettu'
-        ? new SharingError('signed_out', 'Not signed in to a Kettu account.')
-        : new SharingError('no_account', 'No Cloudflare account is connected.')
-    }
-    if (owner.id !== accountId) {
-      throw new SharingError('other_account', 'The page was published with another account.')
-    }
-    if (target === 'kettu') {
-      return this.deps.kettu.withToken((token) => call(this.kettuShare(token)))
-    }
+    if (target === 'kettu') return this.atKettu(accountId, call)
+    this.checkOwner(target, accountId)
     const account = this.store.account()!
     return call(
       new Cloudflare({
@@ -470,6 +547,25 @@ export class Sharing {
         ...(this.deps.random ? { random: this.deps.random } : {}),
       }),
     )
+  }
+
+  /** Runs `call` with Kettu's sharing service for the account a page belongs to. */
+  private async atKettu<T>(accountId: string, call: (share: KettuShare) => Promise<T>): Promise<T> {
+    this.checkOwner('kettu', accountId)
+    return this.deps.kettu.withToken((token) => call(this.kettuShare(token)))
+  }
+
+  /** Refuses a page whose account is not the one the target publishes with now. */
+  private checkOwner(target: SharingTarget, accountId: string): void {
+    const owner = this.owner(target)
+    if (!owner) {
+      throw target === 'kettu'
+        ? new SharingError('signed_out', 'Not signed in to a Kettu account.')
+        : new SharingError('no_account', 'No Cloudflare account is connected.')
+    }
+    if (owner.id !== accountId) {
+      throw new SharingError('other_account', 'The page was published with another account.')
+    }
   }
 
   private kettuShare(token: string): KettuShare {
@@ -583,7 +679,7 @@ export class Sharing {
     return { status }
   }
 
-  private failure(error: unknown): SharingResult {
+  private failure(error: unknown): Failed {
     if (error instanceof SharingError) {
       return failed(error.failure, error.detail ?? error.message)
     }

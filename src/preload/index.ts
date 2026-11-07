@@ -185,8 +185,12 @@ const api: KettuApi = {
     refresh: () => invoke('sharing:refresh'),
     connect: (token, accountId) => invoke('sharing:connect', token, accountId),
     remove: () => invoke('sharing:remove'),
-    publish: (id, version, target) => invoke('sharing:publish', id, version, target),
+    publish: (id, version, target, access) =>
+      invoke('sharing:publish', id, version, target, access),
     update: (id, version) => invoke('sharing:update', id, version),
+    setAccess: (id, access) => invoke('sharing:set-access', id, access),
+    newCode: (id) => invoke('sharing:new-code', id),
+    openLink: (id) => invoke('sharing:open-link', id),
     unpublish: (id) => invoke('sharing:unpublish', id),
     onChanged: onSharingChanged,
   },

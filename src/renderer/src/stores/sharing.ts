@@ -2,7 +2,9 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { KettuApi } from '@shared/ipc'
 import type {
   PublishedArtifact,
+  ShareAccess,
   SharingConnectResult,
+  SharingOpenResult,
   SharingResult,
   SharingStatus,
   SharingTarget,
@@ -21,8 +23,16 @@ export interface Sharing {
   remove(): Promise<SharingResult>
   /** Reads the Kettu account's pages and storage again, as a view that shows them opens. */
   refresh(): Promise<SharingResult>
-  publish(id: string, version: number, target: SharingTarget): Promise<SharingResult>
+  publish(
+    id: string,
+    version: number,
+    target: SharingTarget,
+    access: ShareAccess,
+  ): Promise<SharingResult>
   update(id: string, version: number): Promise<SharingResult>
+  setAccess(id: string, access: ShareAccess): Promise<SharingResult>
+  newCode(id: string): Promise<SharingResult>
+  openLink(id: string): Promise<SharingOpenResult>
   unpublish(id: string): Promise<SharingResult>
 }
 
@@ -57,8 +67,19 @@ export function createSharing(api: () => KettuApi['sharing']): Sharing {
     },
     remove: () => call(async () => ({ status: await api().remove() })),
     refresh: () => call(async () => ({ status: await api().refresh() })),
-    publish: (id, version, target) => call(() => api().publish(id, version, target)),
+    publish: (id, version, target, access) =>
+      call(() => api().publish(id, version, target, access)),
     update: (id, version) => call(() => api().update(id, version)),
+    setAccess: (id, access) => call(() => api().setAccess(id, access)),
+    newCode: (id) => call(() => api().newCode(id)),
+    openLink: async (id) => {
+      try {
+        return await api().openLink(id)
+      } catch (error) {
+        console.error('A sharing request failed', error)
+        return { failed: 'failed', message: errorMessage(error) }
+      }
+    },
     unpublish: (id) => call(() => api().unpublish(id)),
   }
 }
@@ -83,6 +104,9 @@ export const removeSharing = localSharing.remove
 export const refreshSharing = localSharing.refresh
 export const publishArtifact = localSharing.publish
 export const updateSharedArtifact = localSharing.update
+export const setSharedAccess = localSharing.setAccess
+export const newSharedCode = localSharing.newCode
+export const sharedPageLink = localSharing.openLink
 export const unpublishArtifact = localSharing.unpublish
 
 /** The page an artifact is published at, from any component that may change. */

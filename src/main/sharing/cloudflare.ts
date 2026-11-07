@@ -288,7 +288,13 @@ export class Cloudflare implements SharingProvider {
       await this.unpublish(worker).catch(() => {})
       throw error
     }
-    return { url: `https://${worker}.${this.deps.subdomain}.workers.dev/`, ref: worker }
+    // A Worker has no levels: whoever has its address opens it.
+    return {
+      url: `https://${worker}.${this.deps.subdomain}.workers.dev/`,
+      ref: worker,
+      access: 'public',
+      code: null,
+    }
   }
 
   update(ref: string, files: readonly PageFile[], headers: Record<string, string>): Promise<void> {

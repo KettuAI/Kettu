@@ -213,8 +213,20 @@
   "share": {
     "open": "Share",
     "loading": "Checking sharing…",
-    "unpublished": "Publish this artifact to a link anyone can open.",
+    "unpublished": "Publish this artifact to a link, and choose who can open it.",
     "publishTo": "Publish to",
+    "who": "Who can open",
+    "access": {
+      "private": "Private",
+      "code": "Access code",
+      "public": "Public"
+    },
+    "accessHint": {
+      "private": "Only you can open it, signed in to your Kettu account.",
+      "code": "Anyone with the link and its access code can open it.",
+      "public": "Anyone with the link can open it."
+    },
+    "cloudflarePublic": "Pages on Cloudflare are public: anyone with the link can open them.",
     "targets": {
       "kettu": "Kettu",
       "cloudflare": "Cloudflare"
@@ -227,7 +239,7 @@
     "needKettu": "Publishing to Kettu needs a Kettu account.",
     "needKettu_web": "Publishing to Kettu needs a Kettu account signed in on {{host}}.",
     "signIn": "Sign in",
-    "disclosure": "Anyone with the link can see this page, which loads its scripts and fonts from public CDNs.",
+    "disclosure": "The page loads its scripts and fonts from public CDNs.",
     "publish": "Publish",
     "publishing": "Publishing…",
     "openSettings": "Open Settings › Sharing",
@@ -236,6 +248,13 @@
     "copy": "Copy the link",
     "copyButton": "Copy",
     "copied": "Copied",
+    "copyBoth": "Copy the link and access code",
+    "copyWithCode": "{{url}}\nAccess code: {{code}}",
+    "codeLabel": "Access code",
+    "copyCode": "Copy the access code",
+    "newCode": "New code",
+    "newCodeHint": "Draw a new access code. The old one stops working, even for people who entered it.",
+    "codeLocked": "Too many wrong codes were entered, so the page takes none for now. A new code lets people in again.",
     "published": "Version {{version}}, published {{ago}}",
     "update": "Update to version {{version}}",
     "openLink": "Open",

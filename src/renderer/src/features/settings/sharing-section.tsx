@@ -482,7 +482,10 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
     else toast(t('sharing.published.unpublished'))
   }
   const copy = (): void => {
-    void navigator.clipboard.writeText(page.url).then(() => toast(t('sharing.published.copied')))
+    const text = page.code
+      ? t('artifacts:share.copyWithCode', { url: page.url, code: page.code })
+      : page.url
+    void navigator.clipboard.writeText(text).then(() => toast(t('sharing.published.copied')))
   }
   const button = (
     <SetButton
@@ -506,6 +509,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
           <>
             <span className="k-name">{title ?? page.url}</span>
             <Pill>{t(`sharing.published.where.${page.target}`)}</Pill>
+            {page.target === 'kettu' && <Pill>{t(`artifacts:share.access.${page.access}`)}</Pill>}
             {page.otherAccount && owned && (
               <Pill tone="warning">{t('sharing.published.otherAccountBadge')}</Pill>
             )}

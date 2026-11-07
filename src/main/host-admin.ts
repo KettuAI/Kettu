@@ -25,7 +25,12 @@ import type { PairingState } from '@shared/remote/pairing'
 import { parseReportRequest, type ReportRequest, type ReportSubmitResult } from '@shared/report'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { SettingsFile, SettingsPatch } from '@shared/settings'
-import type { SharingConnectResult, SharingResult, SharingStatus } from '@shared/sharing'
+import type {
+  SharingConnectResult,
+  SharingOpenResult,
+  SharingResult,
+  SharingStatus,
+} from '@shared/sharing'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult } from '@shared/themes'
 import { isHarnessId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
@@ -126,8 +131,11 @@ export interface AdminSharing {
   refresh(): Promise<SharingStatus>
   connect(token: unknown, accountId: unknown): Promise<SharingConnectResult>
   remove(): SharingStatus
-  publish(id: unknown, version: unknown, target: unknown): Promise<SharingResult>
+  publish(id: unknown, version: unknown, target: unknown, access: unknown): Promise<SharingResult>
   update(id: unknown, version: unknown): Promise<SharingResult>
+  setAccess(id: unknown, access: unknown): Promise<SharingResult>
+  newCode(id: unknown): Promise<SharingResult>
+  openLink(id: unknown): Promise<SharingOpenResult>
   unpublish(id: unknown): Promise<SharingResult>
 }
 
@@ -425,13 +433,21 @@ export class HostAdmin {
       case 'sharing.remove':
         return this.sharing().remove()
       case 'sharing.publish': {
-        const { id, version, target } = fields(params)
-        return this.sharing().publish(id, version, target)
+        const { id, version, target, access } = fields(params)
+        return this.sharing().publish(id, version, target, access)
       }
       case 'sharing.update': {
         const { id, version } = fields(params)
         return this.sharing().update(id, version)
       }
+      case 'sharing.setAccess': {
+        const { id, access } = fields(params)
+        return this.sharing().setAccess(id, access)
+      }
+      case 'sharing.newCode':
+        return this.sharing().newCode(fields(params).id)
+      case 'sharing.openLink':
+        return this.sharing().openLink(fields(params).id)
       case 'sharing.unpublish':
         return this.sharing().unpublish(fields(params).id)
       case 'updates.status':
