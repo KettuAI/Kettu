@@ -15,11 +15,12 @@ import { parseReportRequest } from '@shared/report'
 import { harnessOf, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { artifactFileType } from '@shared/artifact-files'
-import { type ArtifactImportResult, NO_SESSION } from '@shared/artifacts'
+import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
 import type {
   AgentProcess,
+  ArtifactBrief,
   ArtifactContentResult,
   ArtifactExportResult,
   ArtifactListResult,
@@ -124,6 +125,14 @@ function browserApp(ctx: RequestContext): void {
   if (!ctx.device?.browser) {
     throw new HostError('forbidden', 'Only a paired desktop app answers browser calls')
   }
+}
+
+function brief(
+  artifact: Pick<ArtifactSummary, 'id' | 'version' | 'createdAt' | 'updatedAt'>,
+  deleted: boolean,
+): ArtifactBrief {
+  const { id, version, createdAt, updatedAt } = artifact
+  return { id, version, createdAt, updatedAt, deleted }
 }
 
 /** What a message or answer from a paired device's port keeps of it; none from a window. */
@@ -344,7 +353,10 @@ export class AgentHost {
       threads: this.threads,
       contentDir,
       log,
-      changed: () => this.hub.broadcast({ type: 'artifacts.changed' }),
+      changed: () => {
+        this.hub.broadcast({ type: 'artifacts.changed' })
+        this.options.send({ type: 'host:artifacts-changed' })
+      },
       version: (portIds, id, version) =>
         this.hub.send(portIds, { type: 'artifacts.version', id, version }),
       activity: (portIds, activity) =>
@@ -937,7 +949,7 @@ export class AgentHost {
     return connection.answerQuestion(dir, question.prompt, question.onText, question.signal)
   }
 
-  /** `host:artifact-list-request`: every artifact's id, for main to unpublish the ones gone. */
+  /** `host:artifact-list-request`: every artifact, for main to publish them and unpublish the gone. */
   async artifactList(requestId: number): Promise<void> {
     let result: ArtifactListResult
     try {
@@ -945,7 +957,10 @@ export class AgentHost {
         this.artifacts.list({ deleted: false }),
         this.artifacts.list({ deleted: true }),
       ])
-      result = { kind: 'listed', ids: [...kept, ...deleted].map((artifact) => artifact.id) }
+      result = {
+        kind: 'listed',
+        artifacts: [...kept.map((a) => brief(a, false)), ...deleted.map((a) => brief(a, true))],
+      }
     } catch (error) {
       this.diagnostics.log('warn', `Could not list the artifacts: ${(error as Error).message}`)
       result = { kind: 'failed' }

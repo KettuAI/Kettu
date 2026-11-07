@@ -319,6 +319,8 @@ export interface IpcInvokeContract {
     result: SharingConnectResult
   }
   'sharing:remove': { args: []; result: SharingStatus }
+  // The switch for publishing to Kettu on its own; answering the one-time notice turns it on or off.
+  'sharing:set-auto': { args: [enabled: boolean]; result: SharingResult }
   // Main reads the version's HTML from the host, so the page never comes from the renderer.
   'sharing:publish': {
     args: [id: string, version: number, target: SharingTarget, access: ShareAccess]
@@ -600,6 +602,8 @@ export interface KettuApi {
     /** An address that opens the page for its publisher, without its code or a sign-in. */
     openLink(id: string): Promise<SharingOpenResult>
     unpublish(id: string): Promise<SharingResult>
+    /** Turns publishing to Kettu on its own on or off, which also answers its one-time notice. */
+    setAuto(enabled: boolean): Promise<SharingResult>
     onChanged(listener: (status: SharingStatus) => void): () => void
   }
   /** Remote access: devices paired with this computer, and pairing more. */

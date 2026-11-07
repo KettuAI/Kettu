@@ -16,8 +16,9 @@ import { createLogger } from '../log'
 
 const log = createLogger('sharing')
 
-const VERSION = 2
+const VERSION = 3
 const MAX_PUBLISHED = 10_000
+const MAX_DECLINED = 10_000
 const MAX_TOKEN_CHARS = 16_384
 const SUBDOMAIN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 const WORKER = /^ob-[a-z2-7]{16}$/
@@ -77,10 +78,26 @@ export interface PublishedPage {
   code: string | null
 }
 
+/** Publishing to Kettu on its own, as the file keeps it. */
+export interface AutoState {
+  /** The switch in Settings › Sharing. */
+  enabled: boolean
+  /** The one-time notice before the first upload was answered. */
+  confirmed: boolean
+  /** Artifacts made at or after this are published on their own; null while signed out. */
+  since: number | null
+  /** The Kettu account `since` is for. */
+  accountId: string | null
+  /** Artifacts the user unpublished: they stay unpublished until published by hand. */
+  declined: string[]
+}
+
 export interface SharingFile {
-  version: 2
+  version: 3
   account: StoredAccount | null
   published: PublishedPage[]
+  /** Null in a file from before automatic publishing, which main then starts. */
+  auto: AutoState | null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,8 +114,28 @@ function parseAccount(raw: unknown): StoredAccount | null {
   return { accountId, subdomain, token, plainText }
 }
 
+function parseAuto(raw: unknown): AutoState | null | undefined {
+  if (raw === null) return null
+  if (!isRecord(raw)) return undefined
+  const { enabled, confirmed, since, accountId, declined } = raw
+  if (typeof enabled !== 'boolean' || typeof confirmed !== 'boolean') return undefined
+  if (since !== null && (!Number.isFinite(since) || (since as number) < 0)) return undefined
+  if (accountId !== null && (typeof accountId !== 'string' || !KETTU_ACCOUNT.test(accountId))) {
+    return undefined
+  }
+  if (!Array.isArray(declined) || declined.length > MAX_DECLINED) return undefined
+  if (!declined.every((id) => typeof id === 'string' && ARTIFACT_ID.test(id))) return undefined
+  return {
+    enabled,
+    confirmed,
+    since: since as number | null,
+    accountId: accountId as string | null,
+    declined: [...new Set(declined as string[])],
+  }
+}
+
 /** A page of the file at `version`: those of version 1 were all published to Cloudflare. */
-function parsePage(raw: unknown, version: 1 | 2): PublishedPage | null {
+function parsePage(raw: unknown, version: 1 | 2 | 3): PublishedPage | null {
   if (!isRecord(raw)) return null
   const { id, url: rawUrl, publishedAt, accountId } = raw
   const target = version === 1 ? 'cloudflare' : raw.target
@@ -146,9 +183,11 @@ function parsePage(raw: unknown, version: 1 | 2): PublishedPage | null {
   }
 }
 
-/** The file as main keeps it, from version 1 or 2; null for anything else. */
+/** The file as main keeps it, from version 1, 2 or 3; null for anything else. */
 export function parseSharingFile(raw: unknown): SharingFile | null {
-  if (!isRecord(raw) || (raw.version !== 1 && raw.version !== VERSION)) return null
+  if (!isRecord(raw) || (raw.version !== 1 && raw.version !== 2 && raw.version !== VERSION)) {
+    return null
+  }
   const fileVersion = raw.version
   const account = raw.account === null ? null : parseAccount(raw.account)
   if (raw.account !== null && account === null) return null
@@ -162,7 +201,10 @@ export function parseSharingFile(raw: unknown): SharingFile | null {
     ids.add(page.id)
     published.push(page)
   }
-  return { version: VERSION, account, published }
+  // Files from before automatic publishing have no state for it.
+  const auto = fileVersion === VERSION ? parseAuto(raw.auto) : null
+  if (auto === undefined) return null
+  return { version: VERSION, account, published, auto }
 }
 
 /**
@@ -178,7 +220,7 @@ export class SharingStore {
 
   static async load(userDataPath: string, cipher: TokenCipher): Promise<SharingStore> {
     const path = join(userDataPath, 'published-artifacts.json')
-    const empty: SharingFile = { version: VERSION, account: null, published: [] }
+    const empty: SharingFile = { version: VERSION, account: null, published: [], auto: null }
     const read = await readJsonFile(path)
     let state = empty
     if (read.kind === 'ok') state = parseSharingFile(read.value) ?? empty
@@ -229,6 +271,15 @@ export class SharingStore {
 
   published(): readonly PublishedPage[] {
     return this.state.published
+  }
+
+  auto(): AutoState | null {
+    return this.state.auto
+  }
+
+  setAuto(auto: AutoState): void {
+    this.state = { ...this.state, auto }
+    this.save()
   }
 
   page(id: string): PublishedPage | undefined {

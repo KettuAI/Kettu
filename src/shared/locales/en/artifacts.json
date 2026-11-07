@@ -287,7 +287,15 @@
       "failed": "Something went wrong. Try again."
     },
     "button": "Share",
-    "buttonShared": "Shared"
+    "buttonShared": "Shared",
+    "autoFollows": "Follows the latest version automatically.",
+    "autoSkipped": "Not published automatically.",
+    "autoNotice": {
+      "title": "Publish new artifacts to your Kettu account?",
+      "body": "Kettu publishes each new artifact privately to your Kettu account, so only you can open it when signed in. It uses your cloud storage. Pages on Kettu follow their artifact’s latest version, including pages you open to an access code or to everyone. You can change this in Settings › Sharing.",
+      "continue": "Continue",
+      "turnOff": "Turn off"
+    }
   },
   "tools": {
     "label": "Tools",

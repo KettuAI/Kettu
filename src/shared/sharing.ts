@@ -92,11 +92,28 @@ export interface CloudflareAccountChoice {
   subdomain: string | null
 }
 
+/** Why an artifact was not published to Kettu on its own: the account has no room, or it is too big. */
+export type AutoBlock = 'storage_full' | 'page_too_large'
+
+/**
+ * Publishing to Kettu on its own: new artifacts go up as private and every page on Kettu follows
+ * the artifact's latest version, while the switch is on.
+ */
+export interface AutoPublish {
+  /** The switch in Settings › Sharing. */
+  enabled: boolean
+  /** Something waits for the one-time notice before it is uploaded. */
+  notice: boolean
+  /** The artifacts left out, each with its reason. */
+  blocked: { id: string; reason: AutoBlock }[]
+}
+
 /** What `sharing:status` and `sharing:changed` carry; the token never leaves main. */
 export interface SharingStatus {
   kettu: KettuSharing
   cloudflare: CloudflareAccount | null
   published: PublishedArtifact[]
+  auto: AutoPublish
 }
 
 /**

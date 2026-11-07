@@ -90,6 +90,7 @@ import {
 } from './remote-section'
 import { deviceLine } from './remote-text'
 import {
+  AutoPublishSwitch,
   KettuSharingAccount,
   KettuStorage,
   NoSharing,
@@ -1435,6 +1436,7 @@ export function useSharingSection(): SectionDef {
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
   const kettu = useSharingStore((s) => s.status?.kettu.account ?? null)
   const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
+  const blocked = useSharingStore(useShallow((s) => s.status?.auto.blocked ?? []))
   // Another host's artifacts are not listed here, so its pages go by their addresses.
   const titles = usePublishedTitles(hostId === null && pages.length > 0)
   const shares = useHostHas('sharing')
@@ -1476,6 +1478,21 @@ export function useSharingSection(): SectionDef {
       render: () => <KettuSharingAccount />,
     },
   ]
+  const full = blocked.filter((entry) => entry.reason === 'storage_full').length
+  const large = blocked.length - full
+  rows.push({
+    id: 'auto',
+    name: t('sharing.auto.name'),
+    english: en('sharing.auto.name'),
+    description: [
+      t('sharing.auto.description'),
+      ...(full > 0 ? [t('sharing.auto.blockedFull', { count: full })] : []),
+      ...(large > 0 ? [t('sharing.auto.blockedLarge', { count: large })] : []),
+    ].join(' '),
+    keywords: t('sharing.auto.keywords'),
+    group: kettuGroup,
+    render: () => <AutoPublishSwitch />,
+  })
   if (kettu) {
     rows.push({
       id: 'kettu-storage',

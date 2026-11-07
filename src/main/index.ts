@@ -332,6 +332,7 @@ async function start(): Promise<void> {
   const deviceHost = new DeviceHost({ allowDevices: () => true })
   // Set once the sharing service exists; the host reports ready only after that, at each start.
   let reconcileSharing: (() => void) | null = null
+  let sharingArtifactsChanged: (() => void) | null = null
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     onAttention: (message) => {
@@ -343,6 +344,7 @@ async function start(): Promise<void> {
     onBadge: (count) => setBadgeCount(count),
     onBusy: (counts) => tray.setBusy(counts),
     onProjects: (paths) => terminalHost.setProjects(paths),
+    onArtifactsChanged: () => sharingArtifactsChanged?.(),
     onSessionsEnded: (sessionIds) => {
       terminalHost.endSessions(sessionIds)
       deviceHost.endSessions(sessionIds)
@@ -555,7 +557,7 @@ async function start(): Promise<void> {
     contentDir: join(userDataPath, 'artifacts', 'content'),
     host: {
       content: (id, version) => agentHost.artifactContent(id, version),
-      ids: () => agentHost.artifactIds(),
+      artifacts: () => agentHost.artifacts(),
     },
     kettu: {
       base: accountBase,
@@ -581,6 +583,7 @@ async function start(): Promise<void> {
   })
   reconcileSharing = () => void sharing.reconcile()
   sharingKettuChanged = () => sharing.kettuChanged()
+  sharingArtifactsChanged = () => sharing.artifactsChanged()
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,

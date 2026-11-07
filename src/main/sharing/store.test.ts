@@ -56,8 +56,9 @@ const version1 = {
 describe('parseSharingFile', () => {
   it('reads the pages of version 1 as Cloudflare pages', () => {
     expect(parseSharingFile(version1)).toEqual({
-      version: 2,
+      version: 3,
       account: version1.account,
+      auto: null,
       published: [
         {
           id: ARTIFACT,
@@ -119,10 +120,36 @@ describe('parseSharingFile', () => {
   it('keeps a Kettu page with its account', () => {
     const page = kettuPage()
     expect(parseSharingFile({ version: 2, account: null, published: [page] })).toEqual({
-      version: 2,
+      version: 3,
       account: null,
       published: [page],
+      auto: null,
     })
+  })
+
+  it('keeps the state of automatic publishing of a version 3 file', () => {
+    const auto = {
+      enabled: true,
+      confirmed: false,
+      since: 1_000,
+      accountId: KETTU,
+      declined: [ARTIFACT],
+    }
+    expect(parseSharingFile({ version: 3, account: null, published: [], auto })?.auto).toEqual(auto)
+  })
+
+  it('refuses automatic publishing state that does not fit', () => {
+    const good = { enabled: true, confirmed: true, since: null, accountId: null, declined: [] }
+    const wrong = [
+      { ...good, enabled: 'yes' },
+      { ...good, since: -1 },
+      { ...good, accountId: 'not an account!' },
+      { ...good, declined: ['nope'] },
+      { ...good, declined: 'none' },
+    ]
+    for (const auto of wrong) {
+      expect(parseSharingFile({ version: 3, account: null, published: [], auto })).toBeNull()
+    }
   })
 
   it('refuses a page whose ref or account does not fit its target', () => {
@@ -228,7 +255,7 @@ describe('SharingStore', () => {
     await rm(dir, { recursive: true, force: true })
   })
 
-  it('writes a file of version 1 back as version 2', async () => {
+  it('writes a file of version 1 back as version 3', async () => {
     const path = join(dir, 'published-artifacts.json')
     await writeFile(path, JSON.stringify(version1))
     const store = await SharingStore.load(dir, cipher)
@@ -239,7 +266,7 @@ describe('SharingStore', () => {
       version: number
       published: PublishedPage[]
     }
-    expect(written.version).toBe(2)
+    expect(written.version).toBe(3)
     expect(written.published.map((page) => [page.id, page.target, page.accountId])).toEqual([
       [ARTIFACT, 'cloudflare', CLOUDFLARE],
       [OTHER_ARTIFACT, 'kettu', KETTU],

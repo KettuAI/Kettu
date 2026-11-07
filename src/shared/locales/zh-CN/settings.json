@@ -941,6 +941,13 @@
       "published": "已发布",
       "account": "自己的 Cloudflare 账号"
     },
+    "auto": {
+      "name": "默认私有发布",
+      "description": "新建的 artifact 会以私有方式发布到 Kettu，发布到 Kettu 的每个页面都会跟着 artifact 的最新版本更新。私有页面只有你登录自己的 Kettu 账号才能打开。",
+      "keywords": "分享 发布 自动 私有 默认 同步 最新版本 kettu",
+      "blockedFull_other": "有 {{count}} 个 artifact 没有发布：云端存储已满。",
+      "blockedLarge_other": "有 {{count}} 个 artifact 没有发布：太大了。"
+    },
     "kettu": {
       "name": "Kettu 账号",
       "description": "用这台电脑登录的 Kettu 账号把 artifact 发布到 Kettu。",

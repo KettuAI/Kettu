@@ -690,6 +690,7 @@ export function registerIpcHandlers({
   handle('sharing:new-code', 1, (_, id) => sharing.newCode(id))
   handle('sharing:open-link', 1, (_, id) => sharing.openLink(id))
   handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
+  handle('sharing:set-auto', 1, (_, enabled) => sharing.setAuto(enabled))
 
   handle('remote:status', 0, () => remoteStatus())
   // Each code belongs to the page that opened it, which alone hears it and answers it.

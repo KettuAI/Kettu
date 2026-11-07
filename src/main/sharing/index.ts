@@ -13,12 +13,18 @@ import {
 } from '@shared/artifact-types'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { Locale } from '@shared/locale'
-import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-control'
+import type {
+  ArtifactBrief,
+  ArtifactContentFile,
+  ArtifactContentResult,
+} from '@shared/host-control'
 import {
   CLOUDFLARE_ACCOUNT_ID,
   CLOUDFLARE_TOKEN,
   SHARE_ACCESS,
   SHARING_TARGETS,
+  type AutoBlock,
+  type AutoPublish,
   type CloudflareAccountChoice,
   type ShareAccess,
   type SharingConnectResult,
@@ -32,6 +38,7 @@ import { NotSignedIn } from '../account'
 import { AccountNetworkError } from '../account/service'
 import { isInside } from '../artifacts/protocol'
 import { createLogger } from '../log'
+import { planAuto, type AutoStep } from './auto'
 import { accountSubdomain, Cloudflare, findAccounts, type Fetch } from './cloudflare'
 import { KettuShare, type KettuAccess as PageAccess } from './kettu'
 import { pageHeaders, withMeta } from './page'
@@ -40,6 +47,7 @@ import {
   pagesToForget,
   pagesToUnpublish,
   SharingStore,
+  type AutoState,
   type PublishedPage,
   type TokenCipher,
 } from './store'
@@ -49,7 +57,8 @@ const log = createLogger('sharing')
 /** What main needs from the agent host: the version's files and every artifact it has. */
 export interface SharingHost {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
-  ids(): Promise<Set<string> | null>
+  /** Every artifact, Recently deleted included; null when the host cannot say. */
+  artifacts(): Promise<ArtifactBrief[] | null>
 }
 
 export interface ViewerFile {
@@ -123,6 +132,19 @@ function isArtifactId(value: unknown): value is string {
   return typeof value === 'string' && ARTIFACT_ID.test(value)
 }
 
+/** How long changes are gathered before the artifacts are looked at again. */
+const AUTO_SETTLE_MS = 1_000
+/** When to try again after the service refused for too many publishes, or could not be reached. */
+const AUTO_LIMITED_RETRY_MS = 5 * 60_000
+const AUTO_OFFLINE_RETRY_MS = 60_000
+
+/** An artifact version left out of automatic publishing, until it changes or there is room. */
+interface Skipped {
+  version: number
+  /** Shown to the user; null for a reason that is not. */
+  reason: AutoBlock | null
+}
+
 /** The Kettu account's storage as the service last said, for the account it answered for. */
 interface Storage {
   accountId: string
@@ -141,12 +163,20 @@ export class Sharing {
   private kettuSeen: string | null = null
   /** Kettu pages, by ref, that take no access code for now after too many wrong ones. */
   private readonly locked = new Set<string>()
+  private autoTimer: NodeJS.Timeout | null = null
+  private autoDue = 0
+  private autoRunning = false
+  private autoAgain = false
+  /** Something waits for the one-time notice before it is uploaded. */
+  private autoHeld = false
+  private readonly skipped = new Map<string, Skipped>()
 
   private constructor(
     private readonly deps: SharingDeps,
     private readonly store: SharingStore,
   ) {
     this.kettuSeen = deps.kettu.account()?.id ?? null
+    this.autoState()
   }
 
   static async load(deps: SharingDeps): Promise<Sharing> {
@@ -170,6 +200,7 @@ export class Sharing {
             plainText: cloudflare.plainText,
           }
         : null,
+      auto: this.autoStatus(),
       published: this.store.published().map((page) => {
         const owner = page.target === 'kettu' ? kettu?.id : cloudflare?.accountId
         const otherAccount = page.accountId !== owner
@@ -198,8 +229,10 @@ export class Sharing {
     if (id === this.kettuSeen) return
     this.kettuSeen = id
     this.storage = null
+    this.skipped.clear()
+    this.followAccount(id)
     this.deps.changed?.(this.status())
-    if (id !== null) void this.refresh()
+    if (id !== null) void this.refresh().then(() => this.scheduleAuto())
   }
 
   /**
@@ -306,6 +339,7 @@ export class Sharing {
         access: published.access,
         code: published.code,
       })
+      this.undecline(wanted.id)
       return await this.changedAt(rawTarget)
     } catch (error) {
       return this.failure(error)
@@ -358,10 +392,40 @@ export class Sharing {
     try {
       await this.at(page.target, page.accountId, (provider) => provider.unpublish(page.ref))
       this.store.forget(page.id)
-      return await this.changedAt(page.target)
+      this.decline(page.id)
+      const result = await this.changedAt(page.target)
+      // The room it freed may let an artifact that was too much before go up.
+      this.scheduleAuto()
+      return result
     } catch (error) {
       return this.failure(error)
     }
+  }
+
+  /** The switch for publishing to Kettu on its own, and the answer to the one-time notice. */
+  setAuto(raw: unknown): SharingResult {
+    if (typeof raw !== 'boolean') return failed('failed', 'Not a switch position.')
+    const auto = this.autoState()
+    const owner = this.deps.kettu.account()
+    // Switching on starts from now: what was made while it was off is not published.
+    const restart = raw && !auto.enabled
+    this.store.setAuto({
+      ...auto,
+      enabled: raw,
+      confirmed: true,
+      ...(restart ? { since: owner ? this.now() : null, accountId: owner?.id ?? null } : {}),
+    })
+    this.skipped.clear()
+    this.autoHeld = false
+    const status = this.status()
+    this.deps.changed?.(status)
+    if (raw) this.scheduleAuto(0)
+    return { status }
+  }
+
+  /** The host made, changed, deleted or restored an artifact. */
+  artifactsChanged(): void {
+    this.scheduleAuto()
   }
 
   /**
@@ -381,6 +445,166 @@ export class Sharing {
 
   flush(): Promise<void> {
     return this.store.flush()
+  }
+
+  /** The state of automatic publishing; a file from before it starts with it on and unanswered. */
+  private autoState(): AutoState {
+    const existing = this.store.auto()
+    if (existing) return existing
+    const owner = this.deps.kettu.account()
+    const started: AutoState = {
+      enabled: true,
+      confirmed: false,
+      since: owner ? this.now() : null,
+      accountId: owner?.id ?? null,
+      declined: [],
+    }
+    this.store.setAuto(started)
+    return started
+  }
+
+  private autoStatus(): AutoPublish {
+    const auto = this.autoState()
+    const blocked: AutoPublish['blocked'] = []
+    for (const [id, entry] of this.skipped) {
+      if (entry.reason !== null) blocked.push({ id, reason: entry.reason })
+    }
+    return {
+      enabled: auto.enabled,
+      notice: auto.enabled && !auto.confirmed && this.autoHeld,
+      blocked,
+    }
+  }
+
+  /**
+   * A Kettu account signed in or out. Signing out stops what is published on its own, and signing in
+   * starts from now, so what was made in between is not published; the account that was signed in
+   * before keeps its cutoff, as when the app starts and restores it.
+   */
+  private followAccount(id: string | null): void {
+    const auto = this.autoState()
+    if (id === null) {
+      if (auto.since !== null) this.store.setAuto({ ...auto, since: null })
+      return
+    }
+    if (auto.since === null || auto.accountId !== id) {
+      this.store.setAuto({ ...auto, since: this.now(), accountId: id })
+    }
+  }
+
+  /** The user took the page down: it is not published on its own again. */
+  private decline(id: string): void {
+    const auto = this.autoState()
+    if (auto.declined.includes(id)) return
+    this.store.setAuto({ ...auto, declined: [...auto.declined, id] })
+  }
+
+  /** The user published it by hand, so it is no longer left out. */
+  private undecline(id: string): void {
+    const auto = this.autoState()
+    if (!auto.declined.includes(id)) return
+    this.store.setAuto({ ...auto, declined: auto.declined.filter((entry) => entry !== id) })
+  }
+
+  /** Looks at the artifacts once the changes have settled, or sooner than a pending look if asked. */
+  private scheduleAuto(delay: number = AUTO_SETTLE_MS): void {
+    const due = this.now() + delay
+    if (this.autoTimer && this.autoDue <= due) return
+    if (this.autoTimer) clearTimeout(this.autoTimer)
+    this.autoDue = due
+    this.autoTimer = setTimeout(() => {
+      this.autoTimer = null
+      void this.runAuto()
+    }, delay)
+    this.autoTimer.unref()
+  }
+
+  private async runAuto(): Promise<void> {
+    if (this.autoRunning) {
+      this.autoAgain = true
+      return
+    }
+    this.autoRunning = true
+    try {
+      do {
+        this.autoAgain = false
+        await this.autoRound()
+      } while (this.autoAgain)
+    } catch (error) {
+      log.warn(`Could not publish artifacts on its own: ${(error as Error).message}`)
+    } finally {
+      this.autoRunning = false
+    }
+  }
+
+  private isSkipped(step: AutoStep): boolean {
+    const entry = this.skipped.get(step.id)
+    return entry !== undefined && entry.version >= step.version
+  }
+
+  /** One look at the artifacts: publishes the new ones and brings every page on Kettu up to date. */
+  private async autoRound(): Promise<void> {
+    const auto = this.autoState()
+    const owner = this.deps.kettu.account()
+    if (!auto.enabled || !owner) return
+    const artifacts = await this.deps.host.artifacts()
+    if (!artifacts) return
+    const plan = planAuto({
+      artifacts,
+      pages: this.store.published(),
+      auto,
+      accountId: owner.id,
+      now: this.now(),
+    })
+    const steps = plan.steps.filter((step) => !this.isSkipped(step))
+    const held = steps.length > 0 && !auto.confirmed
+    const before = this.autoStatusKey()
+    this.autoHeld = held
+    let retry = plan.wait
+    if (!held) {
+      for (const step of steps) {
+        const current = this.autoState()
+        if (!current.enabled || this.deps.kettu.account()?.id !== owner.id) break
+        const result =
+          step.kind === 'publish'
+            ? await this.publish(step.id, step.version, 'kettu', 'private')
+            : await this.update(step.id, step.version)
+        if (!('failed' in result)) {
+          this.skipped.delete(step.id)
+          continue
+        }
+        const again = this.autoFailed(step, result.failed)
+        if (again !== null) {
+          retry = retry === null ? again : Math.min(retry, again)
+        }
+        if (again !== null || result.failed === 'signed_out' || result.failed === 'other_account') {
+          break
+        }
+      }
+    }
+    if (this.autoStatusKey() !== before) this.deps.changed?.(this.status())
+    if (retry !== null) this.scheduleAuto(Math.max(retry, AUTO_SETTLE_MS))
+  }
+
+  private autoStatusKey(): string {
+    return JSON.stringify([
+      this.autoHeld,
+      [...this.skipped].map(([id, entry]) => [id, entry.reason]),
+    ])
+  }
+
+  /**
+   * Notes why a step failed. Returns after how long to try again when trying again may work; null
+   * when it will not until the artifact changes or the account has room.
+   */
+  private autoFailed(step: AutoStep, failure: SharingFailure): number | null {
+    if (failure === 'rate_limited') return AUTO_LIMITED_RETRY_MS
+    if (failure === 'network' || failure === 'unavailable') return AUTO_OFFLINE_RETRY_MS
+    if (failure === 'signed_out' || failure === 'other_account') return null
+    const reason: AutoBlock | null =
+      failure === 'storage_full' || failure === 'page_too_large' ? failure : null
+    this.skipped.set(step.id, { version: step.version, reason })
+    return null
   }
 
   private async changeAccess(
@@ -440,8 +664,10 @@ export class Sharing {
   }
 
   private async doReconcile(): Promise<void> {
-    const ids = await this.deps.host.ids()
-    if (!ids) return
+    const artifacts = await this.deps.host.artifacts()
+    if (!artifacts) return
+    const ids = new Set(artifacts.map((artifact) => artifact.id))
+    this.forgetDeclined(ids)
     let changed = false
     for (const target of SHARING_TARGETS) {
       const owner = this.owner(target)
@@ -481,6 +707,14 @@ export class Sharing {
       }
     }
     if (changed) this.deps.changed?.(this.status())
+    this.scheduleAuto(0)
+  }
+
+  /** Drops the artifacts the host no longer has from the ones left out. */
+  private forgetDeclined(ids: ReadonlySet<string>): void {
+    const auto = this.autoState()
+    const declined = auto.declined.filter((id) => ids.has(id))
+    if (declined.length !== auto.declined.length) this.store.setAuto({ ...auto, declined })
   }
 
   /**
@@ -495,6 +729,13 @@ export class Sharing {
     if (this.owner('kettu')?.id !== owner.id) return false
     const before = this.storage
     this.storage = { accountId: owner.id, used: listed.used, limit: listed.limit }
+    // More room than before lets what was refused for lack of it try again.
+    if (before?.accountId === owner.id && listed.limit - listed.used > before.limit - before.used) {
+      for (const [id, entry] of this.skipped) {
+        if (entry.reason === 'storage_full') this.skipped.delete(id)
+      }
+      this.scheduleAuto()
+    }
     let changed =
       before?.accountId !== owner.id || before.used !== listed.used || before.limit !== listed.limit
     const listedPages = new Map(listed.pages.map((page) => [page.id, page]))

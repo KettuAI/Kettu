@@ -44,7 +44,16 @@ import { cn } from '@renderer/lib/utils'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { canChange } from '@renderer/stores/sharing'
-import { CONFIRM, ControlError, Masked, Pill, SetButton, SetInput, Skel } from './controls'
+import {
+  CONFIRM,
+  ControlError,
+  Masked,
+  Pill,
+  SetButton,
+  SetInput,
+  SettingSwitch,
+  Skel,
+} from './controls'
 import { BlockLine, ItemLine, Notice, RowText, Thing } from './rows'
 
 type Failure = Extract<SharingResult, { failed: string }>
@@ -123,6 +132,30 @@ export function KettuSharingAccount() {
         </span>
       )}
     </div>
+  )
+}
+
+/** The switch for publishing to Kettu on its own, on the host the page shows. */
+export function AutoPublishSwitch() {
+  const { sharing } = useHostScope()
+  const { t } = useTranslation('settings')
+  const enabled = sharing.useSharingStore((s) => s.status?.auto.enabled)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={t('sharing.auto.name')}
+        checked={enabled === true}
+        disabled={enabled === undefined}
+        onChange={(next) => {
+          setError(null)
+          void sharing.setAuto(next).then((result) => {
+            if ('failed' in result) setError(result.message ?? result.failed)
+          })
+        }}
+      />
+    </>
   )
 }
 
