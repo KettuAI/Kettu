@@ -116,7 +116,7 @@ export async function login(deps: AccountCommandDeps): Promise<number> {
           return 1
         case 'device_limit':
           deps.error(
-            `The account already has as many devices signed in as its plan allows. Sign one out at ${api.base}/account/devices/, then run kettu login again.`,
+            `This account's devices are full. Sign one out at ${api.base}/account/devices/, then run kettu login again.`,
           )
           return 1
         default:

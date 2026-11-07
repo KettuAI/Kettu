@@ -217,7 +217,7 @@ function UsageMeter({
     usedPercent: share,
     state: used >= limit && limit > 0 ? 'reached' : 'ok',
   })
-  return <Meter value={share} level={level} text={text} label={label} long />
+  return <Meter value={share} level={level} text={text} label={label} />
 }
 
 /** The signed-in clients against the plan's limit; more than it after a downgrade. */

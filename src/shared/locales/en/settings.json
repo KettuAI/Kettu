@@ -317,7 +317,7 @@
       "network": "Kettu couldn’t reach the account service. Check your connection or proxy, then try again.",
       "service": "The account service couldn’t finish the sign-in. Try again.",
       "disabled": "This Kettu account is disabled. Contact hello@kettu.sh for help.",
-      "device-limit": "This account already has as many devices signed in as its plan allows. Sign one out on the website, then sign in again.",
+      "device-limit": "This account’s devices are full. Sign one out on the website, then sign in again.",
       "local": "Kettu couldn’t open the sign-in page in your browser."
     },
     "plainText": "This system has no keyring, so the sign-in is stored without the system’s encryption.",
