@@ -280,6 +280,7 @@ function createScope(hostId: string): OtherScope {
     activity: (id) => admin('remote.activity', { id }),
     reset: () => done(admin('remote.reset')),
     retryDirect: () => done(admin('remote.retryDirect')),
+    retryRelay: () => done(admin('remote.retryRelay')),
     onChanged: (listener) => listen('remote.changed', (event) => listener(event.status)),
     onPairing: (listener) => listen('remote.pairing', (event) => listener(event.event)),
   }

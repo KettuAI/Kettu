@@ -40,6 +40,8 @@ import {
 } from './controls'
 import { PairDialog } from './remote-pairing'
 import { DeviceIcon, DeviceTile } from './remote-parts'
+import { RelaySignIn, RetryRelay } from './remote-relay'
+import { useRelayLine } from './relay-text'
 import { daysToRemoval, daysUnseen, focusDirectPort, kindLabel, lastSeen } from './remote-text'
 import { GroupNote, ItemLine, ItemRow } from './rows'
 import { useApply } from './use-apply'
@@ -131,6 +133,7 @@ function RemoteStatusLine({ on }: { on: boolean }) {
 /** The status line while remote access is on: whether it runs, and the devices online. */
 export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
   const { t } = useTranslation('settings')
+  const relay = useRelayLine(status)
   if (!status || status.state === 'starting' || status.state === 'off') {
     return (
       <StatusLine>
@@ -160,6 +163,22 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
       </StatusLine>
     )
   }
+  if (relay.problem) {
+    return (
+      <StatusLine hint={relay.problem.hint} actions={<RetryRelay />} failed>
+        <Icon icon={AlertCircleIcon} size={14} />
+        {relay.problem.text}
+      </StatusLine>
+    )
+  }
+  if (relay.connecting && direct.state !== 'listening') {
+    return (
+      <StatusLine>
+        <Spin />
+        {t('remote.relay.connecting')}
+      </StatusLine>
+    )
+  }
   const online = status.online.length
   const devices =
     status.devices.length === 0
@@ -168,9 +187,13 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
         ? t('remote.status.online', { count: online })
         : t('remote.status.noneOnline')
   const parts = [t('remote.status.on')]
+  if (relay.part) parts.push(relay.part)
   if (direct.state === 'listening') parts.push(t('remote.status.listening', { port: direct.port }))
   return (
-    <StatusLine>
+    <StatusLine
+      hint={relay.signInHint ?? undefined}
+      actions={relay.signInHint ? <RelaySignIn /> : undefined}
+    >
       <span aria-hidden className="k-dot" data-tone="ok" />
       {[...parts, devices].join(' · ')}
     </StatusLine>

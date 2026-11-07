@@ -23,6 +23,7 @@ import {
   type ReportRequest,
 } from '@shared/report'
 import type { DirectAddress } from '@shared/remote/protocol'
+import type { RelayReport } from '@shared/remote/status'
 import { connectPort, listenPorts } from '@shared/socket-port'
 import { publicKeyBytes } from '../remote-host/devices'
 import type { HostState } from './forked-host'
@@ -70,6 +71,8 @@ export interface DaemonStatus {
   direct: DirectStatus | null
   /** This run's inspectors and their file in a debug run; null or absent, from older daemons, else. */
   debug?: { inspectors: DebugStatus['inspectors']; file: string | null } | null
+  /** The Kettu relay, as Settings shows it; absent from older daemons. */
+  relay?: RelayReport
 }
 
 /** Direct connections: what the settings ask for and what the remote host makes of them. */
@@ -125,6 +128,8 @@ export interface ControlCalls {
   'report.build': { params: { request: ReportRequest }; result: ReportBuildResult }
   /** Turns the detailed records on for 24 hours, or off; when they end, or null. */
   'verbose.set': { params: { on: boolean }; result: { until: number | null } }
+  /** Reads the account file again, as after `kettu login` or `kettu logout` changed it. */
+  'account.reload': { params: undefined; result: null }
 }
 
 export interface TerminalReport {
@@ -257,6 +262,7 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   'direct.add': address,
   'direct.remove': address,
   'terminal.get': none,
+  'account.reload': none,
   'terminal.set': (raw) => {
     const { allowed } = record(raw)
     if (typeof allowed !== 'boolean') {

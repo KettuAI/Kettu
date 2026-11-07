@@ -8,8 +8,11 @@ import type { Transport } from './transport'
 /** How often drained() looks at what the socket holds, since no event says it has sent it. */
 const DRAIN_POLL_MS = 20
 
-/** The transport over `socket` once it opens; rejects when it closes or fails before. */
-export function webSocketTransport(socket: WebSocket): Promise<Transport> {
+/**
+ * The transport over `socket` once it opens; rejects when it closes or fails before. On a relay's
+ * socket, `relayed`, text is the relay's own, as its `pong`, and passed over rather than an end.
+ */
+export function webSocketTransport(socket: WebSocket, relayed = false): Promise<Transport> {
   socket.binaryType = 'arraybuffer'
   let open = true
   let closed = false
@@ -30,6 +33,7 @@ export function webSocketTransport(socket: WebSocket): Promise<Transport> {
   socket.addEventListener('message', (event) => {
     if (!open) return
     const data: unknown = event.data
+    if (relayed && typeof data === 'string') return
     // The channel carries binary messages only, none longer than a Noise message.
     if (!(data instanceof ArrayBuffer) || data.byteLength > MAX_NOISE_MESSAGE) return end()
     waiting.push(new Uint8Array(data))

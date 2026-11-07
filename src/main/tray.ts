@@ -14,7 +14,7 @@ import {
   type MenuItemConstructorOptions,
 } from 'electron'
 import type { BusyCounts } from '@shared/host-control'
-import type { RemoteStatus } from '@shared/remote/status'
+import { relaySummary, type RemoteStatus } from '@shared/remote/status'
 import { isDebugRun } from './debug-mode'
 import { t } from './i18n'
 import { createLogger } from './log'
@@ -113,6 +113,25 @@ export function remoteLine(status: Pick<RemoteStatus, 'state' | 'online'>): stri
   }
 }
 
+/** The relay's line under remote access's, or null while it is off or remote access is. */
+export function relayLine(status: Pick<RemoteStatus, 'state' | 'relay'>): string | null {
+  if (status.state !== 'on') return null
+  switch (relaySummary(status.relay)) {
+    case 'connected':
+      return t('tray.relayConnected')
+    case 'connecting':
+      return t('tray.relayConnecting')
+    case 'failed':
+      return t('tray.relayFailed')
+    case 'conflict':
+      return t('tray.relayConflict')
+    case 'signed_out':
+      return t('tray.relaySignedOut')
+    default:
+      return null
+  }
+}
+
 function callPortal(method: 'ReadOne' | 'Read'): Promise<string | null> {
   const args = [
     'call',
@@ -185,7 +204,7 @@ export interface TrayDeps {
 export class KettuTray {
   private tray: Tray | null = null
   private counts: BusyCounts = { running: 0, waiting: 0 }
-  private remote: Pick<RemoteStatus, 'state' | 'online'> = { state: 'off', online: [] }
+  private remote: Pick<RemoteStatus, 'state' | 'online' | 'relay'> = { state: 'off', online: [] }
   private connected = false
   private white = false
   private breath = 0
@@ -232,8 +251,10 @@ export class KettuTray {
     this.showState()
   }
 
-  setRemote(remote: Pick<RemoteStatus, 'state' | 'online'>): void {
-    if (remoteLine(remote) === remoteLine(this.remote)) return
+  setRemote(remote: Pick<RemoteStatus, 'state' | 'online' | 'relay'>): void {
+    const same =
+      remoteLine(remote) === remoteLine(this.remote) && relayLine(remote) === relayLine(this.remote)
+    if (same) return
     this.remote = remote
     this.updateMenu()
   }
@@ -257,13 +278,18 @@ export class KettuTray {
 
   private menu(): Menu {
     const remote = remoteLine(this.remote)
-    // Where no panel shows what goes on, the menu's first lines do.
+    const relay = relayLine(this.remote)
+    // Where no panel shows what goes on, the menu's first lines do; the relay's line shows in
+    // every menu, since the panel names only the devices.
     const status: MenuItemConstructorOptions[] =
       process.platform === 'darwin'
-        ? []
+        ? relay
+          ? [{ label: relay, enabled: false }, { type: 'separator' }]
+          : []
         : [
             { label: stateLine(this.counts), enabled: false },
             ...(remote ? [{ label: remote, enabled: false }] : []),
+            ...(relay ? [{ label: relay, enabled: false }] : []),
             { type: 'separator' },
           ]
     // The panel's and the window's own keys, which only macOS has; a tray menu's accelerators

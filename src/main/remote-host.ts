@@ -30,6 +30,7 @@ import {
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import type { DirectAddress } from '@shared/remote/protocol'
+import { parseRelayStatuses } from '@shared/remote/relay-host'
 import type { DirectSettings } from '@shared/settings'
 import remoteHostPath from '../remote-host/index?modulePath'
 import { createLogger } from './log'
@@ -55,6 +56,16 @@ export interface RemoteHostDeps {
   identity(): Promise<RemoteIdentity>
   /** Replaces the identity with a new one, after the remote host removed every device. */
   newIdentity(): Promise<unknown>
+  /** The key the host signs in to the relay with, made on first use; rejects like the identity. */
+  relayKey(): Promise<RemoteIdentity>
+  /** Replaces the relay key, as resetting remote access does. */
+  newRelayKey(): Promise<unknown>
+  /** The main relay's origin. */
+  relayUrl: string
+  /** Use the Kettu relay, as the setting is now. */
+  relay(): boolean
+  /** A pairing is about to start: resolves once the relay's token was handed on, or none can be. */
+  relayTokenReady?(): Promise<void>
   /** The key this computer connects to other hosts with, made on first use; rejects like it. */
   deviceKey(): Promise<RemoteIdentity>
   /** The system as this computer's hello names it, such as "macOS 26.1". */
@@ -100,11 +111,12 @@ export type RemoteHostState = 'off' | 'starting' | 'on' | 'failed'
 
 function isStatus(value: unknown): value is RemoteHostStatus {
   if (typeof value !== 'object' || value === null) return false
-  const { publicKey, plainTextKey, devices, online, refused, direct } = value as Record<
+  const { publicKey, plainTextKey, devices, online, refused, direct, relays } = value as Record<
     string,
     unknown
   >
   return (
+    parseRelayStatuses(relays) !== null &&
     typeof publicKey === 'string' &&
     typeof plainTextKey === 'boolean' &&
     Array.isArray(devices) &&
@@ -134,6 +146,11 @@ export class RemoteHost {
   private direct: string | null = null
   /** Whether devices may use the terminal, as the running process was last told. */
   private terminal: boolean | null = null
+  /** Use the Kettu relay, as the running process was last told. */
+  private relayOn: boolean | null = null
+  /** The account's access token, which the process signs in to the relay and other hosts with. */
+  private token: string | null = null
+  private relayIdentity: RemoteIdentity | null = null
   private quitting = false
   private failed = false
   /** The setting: whether this computer serves devices. */
@@ -180,6 +197,11 @@ export class RemoteHost {
   /** This computer's public key as a host, once it has served devices in this run. */
   get publicKey(): string | null {
     return this.ownKey
+  }
+
+  /** Whether this computer is pairing with a host now. */
+  get pairingHosts(): boolean {
+    return this.hostPairings.size > 0
   }
 
   /** The known hosts, or null while the remote host has not reported them yet. */
@@ -240,6 +262,28 @@ export class RemoteHost {
     const allowed = this.deps.terminal()
     if (allowed === this.terminal) return
     if (this.host?.post({ type: 'remote-host:terminal', allowed })) this.terminal = allowed
+  }
+
+  /** Tells the process when Use the Kettu relay changed; each start reads it. */
+  relayChanged(): void {
+    const enabled = this.deps.relay()
+    if (enabled === this.relayOn) return
+    if (this.host?.post({ type: 'remote-host:relay', enabled })) this.relayOn = enabled
+  }
+
+  /**
+   * A fresh access token of the account this computer is signed in to, or null once it is not;
+   * the process signs in to the relay and reaches other hosts through it with it.
+   */
+  setToken(token: string | null): void {
+    if (token === this.token) return
+    this.token = token
+    this.host?.post({ type: 'remote-host:token', token })
+  }
+
+  /** Tries every relay now, after a conflict or an error. */
+  retryRelay(): void {
+    this.toServer({ type: 'remote-host:relay-retry' })
   }
 
   /** Passes the same settings on again, so a port that could not be opened is tried again. */
@@ -307,6 +351,7 @@ export class RemoteHost {
     if (!(await this.loadDevice())) return null
     const pairId = this.nextPair++
     this.hostPairings.set(pairId, listener)
+    await this.deps.relayTokenReady?.()
     await this.reconcile()
     if (!this.hostPairings.has(pairId)) return pairId
     if (!this.host?.post({ type: 'remote-host:pair-host', pairId, link, model })) {
@@ -414,6 +459,8 @@ export class RemoteHost {
       if (!answer) throw new Error('The remote host did not reset')
       await this.stopServing()
       await this.deps.newIdentity()
+      await this.deps.newRelayKey()
+      this.relayIdentity = null
       await this.apply()
     })
     this.changes = run.catch(() => {})
@@ -537,7 +584,18 @@ export class RemoteHost {
       this.identity = null
       this.failed = true
     }
+    if (this.identity) await this.loadRelayKey()
     return this.identity
+  }
+
+  /** The relay key; without it the host serves devices directly alone. */
+  private async loadRelayKey(): Promise<void> {
+    try {
+      this.relayIdentity = await this.deps.relayKey()
+    } catch (error) {
+      log.error('The relay cannot be used without its key', error)
+      this.relayIdentity = null
+    }
   }
 
   private async begin(): Promise<void> {
@@ -584,6 +642,7 @@ export class RemoteHost {
       direct: this.initDirect(),
       webRoot: WEB_ROOT,
       terminal: this.initTerminal(),
+      relay: this.initRelay(identity !== null),
       ...(this.device
         ? { device: { privateKey: this.device.privateKey, platform: this.platform } }
         : {}),
@@ -601,16 +660,32 @@ export class RemoteHost {
     return this.terminal
   }
 
+  private initRelay(
+    serving: boolean,
+  ): NonNullable<Extract<MainToRemoteHost, { type: 'remote-host:init' }>['relay']> {
+    this.relayOn = this.deps.relay()
+    const key = serving ? this.relayIdentity?.privateKey : undefined
+    return {
+      url: this.deps.relayUrl,
+      enabled: this.relayOn,
+      token: this.token,
+      ...(key ? { key } : {}),
+    }
+  }
+
   private async startServing(): Promise<void> {
     const identity = await this.loadIdentity()
     if (!identity || !this.host || !this.enabled) return this.deps.changed?.()
     const { privateKey, plainText } = identity
+    const relayKey = this.relayIdentity?.privateKey
     this.serving = this.host.post({
       type: 'remote-host:serve',
       privateKey,
       plainTextKey: plainText,
       direct: this.initDirect(),
+      ...(relayKey ? { relayKey } : {}),
     })
+    this.relayChanged()
     this.deps.changed?.()
   }
 

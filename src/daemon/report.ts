@@ -1,7 +1,47 @@
 // What `kettu status`, `kettu devices` and `kettu terminal` print.
 
+import type { RelayStatus } from '@shared/remote/relay-host'
+import type { RelayReport } from '@shared/remote/status'
 import type { DaemonStatus, DeviceSummary, HostStatus } from './control'
 import { directLine } from './direct'
+
+/** Why a relay did not sign the host in, as Settings says it. */
+const RELAY_ERRORS: Record<string, string> = {
+  unauthorized: 'it refused the key or the sign-in',
+  forbidden: 'it refused the account',
+  too_many: 'too many connections',
+  unreachable: 'it cannot be reached',
+  no_answer: 'it stopped answering',
+  replaced: 'another copy of Kettu signed in as this computer',
+}
+
+function relayLine({ connection }: RelayStatus): string {
+  switch (connection.state) {
+    case 'connecting':
+      return 'connecting'
+    case 'connected':
+      return 'connected'
+    case 'conflict':
+      return (
+        'stopped: another copy of Kettu signs in as this computer; ' +
+        'Retry in Settings › Remote access, or restart the daemon'
+      )
+    case 'retrying':
+    case 'refused':
+      return `retrying, ${RELAY_ERRORS[connection.error] ?? `closed (${connection.error})`}`
+  }
+}
+
+/** The rows `kettu status` shows for the relay: one per region while it is used. */
+function relayRows(relay: RelayReport | undefined): [string, string][] {
+  if (!relay) return []
+  if (relay.state === 'off') return [['Kettu relay', 'off, devices connect directly']]
+  if (relay.state === 'signed_out') {
+    return [['Kettu relay', 'not signed in; kettu login reaches this computer from anywhere']]
+  }
+  if (relay.relays.length === 0) return [['Kettu relay', 'starting']]
+  return relay.relays.map((entry) => [`Relay ${entry.id}`, relayLine(entry)])
+}
 
 function host(status: HostStatus): string {
   const restarted =
@@ -54,6 +94,7 @@ ${rows([
   ['Remote host', host(status.hosts.remote)],
   ['Connected devices', devices],
   ['Direct connections', directLine(status.direct)],
+  ...relayRows(status.relay),
   ['Account', account],
 ])}
 ${status.debug ? debugReport(status.debug) : ''}`

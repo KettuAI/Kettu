@@ -1,18 +1,24 @@
-// `remote/identity.json`: the X25519 key pair devices know this computer by, and
-// `remote/device-key.json`: the pair this computer connects to other hosts with as a device,
-// separate so that resetting remote access leaves those hosts connected. Main makes each the
-// first time it is needed, keeps the private key encrypted by the system, and hands it to the
+// `remote/identity.json`: the X25519 key pair devices know this computer by;
+// `remote/relay-key.json`: the Ed25519 key it signs in to the Kettu relay with, whose hash is its
+// id there; and `remote/device-key.json`: the pair this computer connects to other hosts with as a
+// device, separate so that resetting remote access leaves those hosts connected. Main makes each
+// the first time it is needed, keeps the private key encrypted by the system, and hands it to the
 // remote host alone.
 
 import { join } from 'node:path'
 import { generateKeyPair } from '@shared/remote/noise'
+import { newRelaySeed } from '@shared/remote/relay'
 import { quarantineFile, readJsonFile, writeFileAtomic } from './json-file'
 import { createLogger } from './log'
 
 const log = createLogger('remote-identity')
 
 const IDENTITY_FILE = 'identity.json'
+const RELAY_KEY_FILE = 'relay-key.json'
 const DEVICE_KEY_FILE = 'device-key.json'
+
+/** X25519 for the channel, Ed25519 for the relay; both kept as their 32 private bytes. */
+type KeyKind = 'x25519' | 'ed25519'
 
 const VERSION = 1
 const KEY_BYTES = 32
@@ -30,7 +36,7 @@ export interface IdentityCipher {
 }
 
 export interface RemoteIdentity {
-  /** The 32 bytes of the private key, in base64. */
+  /** The 32 bytes of the private key, in base64: an X25519 key, or an Ed25519 seed. */
   privateKey: string
   /** The key is kept in a file only the user can read, without the system's encryption. */
   plainText: boolean
@@ -61,7 +67,8 @@ function parseFile(raw: unknown): IdentityFile | null {
   return { version, privateKey, encrypted, plainText }
 }
 
-async function newKey(): Promise<string> {
+async function newKey(kind: KeyKind = 'x25519'): Promise<string> {
+  if (kind === 'ed25519') return Buffer.from(await newRelaySeed()).toString('base64')
   const pair = await generateKeyPair(true)
   // PKCS #8 ends with the 32 raw bytes of the key.
   const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey))
@@ -87,10 +94,11 @@ async function loadKey(
   name: string,
   cipher: IdentityCipher,
   lost: string,
+  kind: KeyKind = 'x25519',
 ): Promise<RemoteIdentity> {
   const path = join(userDataPath, 'remote', name)
   const read = await readJsonFile(path)
-  if (read.kind === 'missing') return keep(path, await newKey(), cipher)
+  if (read.kind === 'missing') return keep(path, await newKey(kind), cipher)
   if (read.kind === 'ok') {
     const version = (read.value as { version?: unknown } | null)?.version
     if (typeof version === 'number' && version > VERSION) {
@@ -102,7 +110,7 @@ async function loadKey(
     const reason = read.kind === 'unreadable' ? `: ${read.reason}` : ''
     log.warn(`remote/${name} is invalid${reason}; ${lost}`)
     log.warn(`Moved the invalid file to ${await quarantineFile(path)}`)
-    return keep(path, await newKey(), cipher)
+    return keep(path, await newKey(kind), cipher)
   }
   if (!file.encrypted) return { privateKey: file.privateKey, plainText: true }
   const { result, shouldReEncrypt } = await cipher.decrypt(Buffer.from(file.privateKey, 'base64'))
@@ -121,6 +129,24 @@ export function loadIdentity(
   cipher: IdentityCipher,
 ): Promise<RemoteIdentity> {
   return loadKey(userDataPath, IDENTITY_FILE, cipher, 'devices have to pair again')
+}
+
+/**
+ * The key the host signs in to the relay with, made and kept on first use the same way. One that
+ * is lost or replaced gives the host another id there, which its devices learn on their next
+ * direct connection or from a new code.
+ */
+export function loadRelayKey(
+  userDataPath: string,
+  cipher: IdentityCipher,
+): Promise<RemoteIdentity> {
+  return loadKey(
+    userDataPath,
+    RELAY_KEY_FILE,
+    cipher,
+    'devices reach this computer through the relay again once they learn its new id',
+    'ed25519',
+  )
 }
 
 /**
@@ -145,4 +171,12 @@ export async function newIdentity(
   cipher: IdentityCipher,
 ): Promise<RemoteIdentity> {
   return keep(join(userDataPath, 'remote', IDENTITY_FILE), await newKey(), cipher)
+}
+
+/** Replaces the relay key too, as resetting remote access does, so the host's id changes. */
+export async function newRelayKey(
+  userDataPath: string,
+  cipher: IdentityCipher,
+): Promise<RemoteIdentity> {
+  return keep(join(userDataPath, 'remote', RELAY_KEY_FILE), await newKey('ed25519'), cipher)
 }

@@ -25,14 +25,23 @@ export function routeText(
   host: Pick<HostStatus, 'connection' | 'ssh'>,
 ): string {
   if (host.ssh) return t('hosts.via.sshAt', { target: host.ssh.target })
-  return host.connection.state === 'online'
-    ? t('hosts.via.directAt', { address: addressText(host.connection.address) })
-    : t('hosts.via.direct')
+  const { connection } = host
+  if (connection.state !== 'online') return t('hosts.via.direct')
+  return 'relay' in connection
+    ? t('hosts.via.relay')
+    : t('hosts.via.directAt', { address: addressText(connection.address) })
 }
 
 /** The route alone, as the sidebar names it beside a host online. */
-export function routeName(t: TFunction<'settings'>, host: Pick<HostStatus, 'ssh'>): string {
-  return host.ssh ? t('hosts.via.ssh') : t('hosts.via.direct')
+export function routeName(
+  t: TFunction<'settings'>,
+  host: Pick<HostStatus, 'ssh' | 'connection'>,
+): string {
+  if (host.ssh) return t('hosts.via.ssh')
+  const { connection } = host
+  return connection.state === 'online' && 'relay' in connection
+    ? t('hosts.via.relay')
+    : t('hosts.via.direct')
 }
 
 /** The line under a host's name: its system, Kettu's version and how it is reached. */
@@ -57,6 +66,10 @@ export function connectionText(
     case 'connecting':
       return t('hosts.state.connecting')
     case 'offline':
+      // Every relay saying the host is not signed in is as offline as no answer at all.
+      if (connection.relay && connection.relay !== 'host_offline') {
+        return t(`hosts.state.relay.${connection.relay}`)
+      }
       return host.lastOnlineAt === null
         ? t('hosts.state.offline')
         : t('hosts.state.offlineSince', { ago: mediumAgo(host.lastOnlineAt, now) })

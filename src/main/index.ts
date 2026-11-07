@@ -14,6 +14,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { BROWSER_PARTITION } from '@shared/browser'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
+import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { RemoteStatus } from '@shared/remote/status'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
@@ -54,13 +55,21 @@ import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { loadStoredDevices } from './remote-devices'
 import { RemoteHost } from './remote-host'
-import { loadDeviceKey, loadIdentity, newIdentity, type IdentityCipher } from './remote-identity'
+import {
+  loadDeviceKey,
+  loadIdentity,
+  loadRelayKey,
+  newIdentity,
+  newRelayKey,
+  type IdentityCipher,
+} from './remote-identity'
+import { RelayToken } from './relay-token'
 import { readJsonFile } from './json-file'
 import { computerModelForRun } from './system-model'
 import { systemReleaseForRun } from './system-name'
 import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
-import { hostSettings, reachesHost, terminalSettings } from './settings-schema'
+import { effectiveDirect, hostSettings, reachesHost, terminalSettings } from './settings-schema'
 import { hasPendingFrame, isRevoked, watchSubframes } from './subframes'
 import { DeviceHost } from './device-host'
 import { TerminalHost } from './terminal-host'
@@ -384,6 +393,12 @@ async function start(): Promise<void> {
   const hostName = (): string => settings.get().remote.name ?? hostname()
   // Set once the sharing service exists, which publishes with the account.
   let sharingKettuChanged: (() => void) | null = null
+  let relayUrl = RELAY_URL
+  try {
+    relayUrl = relayUrlFrom(process.env[RELAY_URL_ENV])
+  } catch (error) {
+    log.error(`Using the relay at ${RELAY_URL} instead`, error)
+  }
   const account = await Account.load({
     file: accountFile(userDataPath),
     api: new AccountApi(accountBase, accountFetch),
@@ -408,9 +423,26 @@ async function start(): Promise<void> {
     changed: (status) => {
       broadcast('account:changed', status)
       sharingKettuChanged?.()
+      accountChanged()
     },
     log: createLogger('account'),
   })
+  const signedIn = (): boolean => account.status().state === 'signed-in'
+  const relayToken = new RelayToken({
+    current: () => account.currentToken(),
+    signedIn,
+    needed: () =>
+      settings.get().remote.enabled ||
+      remoteHost.pairingHosts ||
+      (remoteHost.hosts?.length ?? 0) > 0,
+    send: (token) => remoteHost.setToken(token),
+  })
+  /** The sign-in changed: the relay's token, and the direct connections it holds on without one. */
+  function accountChanged(): void {
+    relayToken.update()
+    remoteHost.directChanged()
+    remoteChanged()
+  }
   const remoteStatus = (): RemoteStatus => {
     const status = remoteHost.status
     return {
@@ -421,6 +453,11 @@ async function start(): Promise<void> {
       online: status?.online ?? [],
       plainTextKey: status?.plainTextKey ?? false,
       direct: status?.direct ?? { state: 'off' },
+      relay: !settings.get().remote.relay
+        ? { state: 'off' }
+        : !signedIn()
+          ? { state: 'signed_out' }
+          : { state: 'on', relays: status?.relays ?? [] },
     }
   }
   const remoteChanged = (): void => {
@@ -453,6 +490,7 @@ async function start(): Promise<void> {
   const hostsChanged = (): void => {
     hostSessions.connections(remoteHost.hosts)
     broadcast('hosts:changed', hostsStatus())
+    relayToken.update()
   }
   const readComputerModel = async (): Promise<string> => {
     const model = await computerModelForRun()
@@ -468,6 +506,11 @@ async function start(): Promise<void> {
     appVersion: app.getVersion(),
     identity: () => loadIdentity(userDataPath, identityCipher),
     newIdentity: () => newIdentity(userDataPath, identityCipher),
+    relayKey: () => loadRelayKey(userDataPath, identityCipher),
+    newRelayKey: () => newRelayKey(userDataPath, identityCipher),
+    relayUrl,
+    relay: () => settings.get().remote.relay,
+    relayTokenReady: () => relayToken.ready(),
     deviceKey: () => loadDeviceKey(userDataPath, identityCipher),
     devicePlatform: systemReleaseForRun,
     hostsKnown: async () => {
@@ -477,7 +520,7 @@ async function start(): Promise<void> {
     },
     hostName,
     devices: () => loadStoredDevices(userDataPath, (level, message) => remoteLog[level](message)),
-    direct: () => settings.get().remote.direct,
+    direct: () => effectiveDirect(settings.get(), signedIn()),
     terminal: () => settings.get().remote.terminal,
     openPort: (device) => agentHost.connectDevice(device),
     openTerminalPort: (device) => terminalHost.connectDevice(device),
@@ -552,6 +595,7 @@ async function start(): Promise<void> {
     busyTerminals: (timeoutMs) => terminalHost.busy(timeoutMs),
     shutDown: async () => {
       account.stop()
+      relayToken.stop()
       // Devices hear that Kettu is stopping before their sessions' agent host goes.
       await Promise.all([
         remoteHost.stop().then(() => agentHost.stop()),
@@ -681,6 +725,8 @@ async function start(): Promise<void> {
     if (changed.has('remote')) {
       remoteHost.directChanged()
       remoteHost.terminalChanged()
+      remoteHost.relayChanged()
+      relayToken.update()
       void remoteHost.setEnabled(next.remote.enabled)
       remoteHost.setHostName(hostName())
       remoteChanged()
@@ -772,6 +818,7 @@ async function start(): Promise<void> {
   })
 
   agentHost.start()
+  relayToken.update()
   void remoteHost.setEnabled(settings.get().remote.enabled)
   const window = createMainWindow(start)
   window.once('show', () => updater.start())

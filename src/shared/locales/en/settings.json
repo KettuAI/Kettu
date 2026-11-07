@@ -886,8 +886,8 @@
     "archived": "Off the sidebar but kept. Restore one to put it back in its project.",
     "artifacts": "Pages ask before they read project files or ask your agent. Pages that only keep their own data don’t ask.",
     "sharing": "Publish artifacts to links anyone can open, on Kettu or through your own Cloudflare account.",
-    "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer, on your own network.",
-    "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer, on your own network.",
+    "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer.",
+    "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer.",
     "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
     "browserWeb": "Links in agents’ replies open in a new tab.",
     "mcp": "Agents reach tools through these MCP servers: Kettu’s own, and the ones each agent keeps.",
@@ -1004,7 +1004,8 @@
       "direct": "Direct",
       "directAt": "Direct · {{address}}",
       "ssh": "SSH",
-      "sshAt": "SSH · {{target}}"
+      "sshAt": "SSH · {{target}}",
+      "relay": "Kettu relay"
     },
     "failed": {
       "not_connected": "{{name}} is not connected. Try again once it is online.",
@@ -1017,7 +1018,12 @@
       "offlineSince": "Offline · {{ago}}",
       "removed": "Removed",
       "update_client": "Update Kettu here",
-      "update_host": "Update Kettu on it"
+      "update_host": "Update Kettu on it",
+      "relay": {
+        "unreachable": "Offline · cannot reach the Kettu relay",
+        "wrong_account": "Offline · sign in with the host owner’s account",
+        "signed_out": "Offline · sign in to reach it from anywhere"
+      }
     },
     "note": "To reach this computer from a phone or another computer, add the device in <link>Remote access</link>.",
     "plainTextKey": "The key this computer connects to other hosts with is kept in a file only you can read, because the system has no keyring.",
@@ -1037,6 +1043,8 @@
       "void": "This pairing code no longer works: it expired, was used, or the host made a new one. Click Add device on the host for a new code and paste that.",
       "rejected": "The host did not add this computer.",
       "unreachable": "Could not reach the host within 15 seconds. Check that both computers are on the same network or VPN and that remote access is on there; for an address you added for the host, check that the port forwarding still works.",
+      "wrong_account": "The Kettu relay joins only computers signed in to the host’s account. Sign in here with the account the host is signed in to, then try again.",
+      "signed_out": "This code reaches its host through the Kettu relay, which needs a Kettu account. Sign in here in Settings › Account, then try again.",
       "self": "This is this computer’s own pairing code. To connect another device to this computer, scan or paste it on that device.",
       "update_client": "Kettu on this computer is too old for this host. Update it and try again.",
       "update_host": "Kettu on the host is too old for this computer. Update it there and try again.",
@@ -1172,7 +1180,8 @@
       "plainTextKey_web": "{{host}}’s key is kept in a file only its user can read, because the system has no keyring.",
       "serviceKey": "This computer’s key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
       "serviceKey_web": "{{host}}’s key is kept in a file only its user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
-      "offLine": "Off"
+      "offLine": "Off",
+      "relay": "reachable from anywhere"
     },
     "hostName": {
       "name": "This computer’s name",
@@ -1201,7 +1210,8 @@
     "direct": {
       "group": "Direct connections",
       "name": "Direct connections",
-      "description": "Always on with remote access. Plain TCP, so a tunnel that only forwards HTTPS can’t carry them.",
+      "description": "Always on while devices have no relay to use. Plain TCP, so a tunnel that only forwards HTTPS can’t carry them.",
+      "descriptionFree": "On the same network, a VPN or a port you forward. Plain TCP, so a tunnel that only forwards HTTPS can’t carry them.",
       "keywords": "direct connection port address lan network vpn tailscale frp forward forwarding",
       "port": {
         "name": "Port",
@@ -1388,7 +1398,39 @@
     },
     "groups": {
       "permissions": "Permissions",
-      "danger": "Danger zone"
+      "danger": "Danger zone",
+      "advanced": "Advanced"
+    },
+    "relay": {
+      "name": "Use the Kettu relay",
+      "description": "While this computer is signed in to your Kettu account, your devices signed in to the same account reach it from anywhere. Off, they connect directly.",
+      "description_web": "While {{host}} is signed in to your Kettu account, your devices signed in to the same account reach it from anywhere. Off, they connect directly.",
+      "keywords": "relay cloud anywhere internet region account kettu",
+      "regions": "Relays",
+      "regionsDescription": "Signed in to each at once; a device uses whichever joins first.",
+      "regionsNone": "Shown once signed in to the relay.",
+      "regionMain": "Main relay",
+      "region": "Region {{id}}",
+      "state": {
+        "connected": "Connected",
+        "connecting": "Connecting",
+        "conflict": "Identity in use",
+        "refused": "Refused",
+        "busy": "Too many connections",
+        "unreachable": "Cannot reach"
+      },
+      "connecting": "Connecting to the Kettu relay…",
+      "failed": "Cannot reach the Kettu relay",
+      "conflict": "Another copy of Kettu uses this identity",
+      "conflictHint": "Another copy of Kettu signs in to the relay as this computer, as one started from a copied data folder. Quit it, then retry.",
+      "conflictHint_web": "Another copy of Kettu signs in to the relay as {{host}}, as one started from a copied data folder. Quit it, then retry.",
+      "errorHint": {
+        "unreachable": "Devices on your own network can still connect directly. Kettu keeps trying.",
+        "refused": "The relay refused the sign-in. Kettu tries again in a moment; signing out and in again also helps.",
+        "busy": "Too many connections for now. Kettu tries again in a moment."
+      },
+      "signInHint": "Sign in to your Kettu account to reach this computer from anywhere. Direct connections still work.",
+      "signInHint_web": "Sign in to a Kettu account on {{host}} to reach it from anywhere. Direct connections still work."
     }
   },
   "usage": {
