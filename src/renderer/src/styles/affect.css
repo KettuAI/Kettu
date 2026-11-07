@@ -3896,6 +3896,40 @@
   font-size: 11px;
   color: var(--ui-ccc-faint);
 }
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option {
+  gap: calc(var(--spacing) * 2);
+  padding-block: calc(var(--spacing) * 1.25);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option-name {
+  font-size: var(--text-menu);
+  line-height: var(--text-menu--line-height);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option-desc {
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  line-height: var(--text-meta--line-height);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-checked] {
+  background: var(--ui-ccc-wash);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-checked] .ui-ccc__option-name {
+  font-weight: 500;
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-checked] .ui-ccc__option-key,
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option:not([data-checked]) .ui-ccc__option-check {
+  display: none;
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-tone='alert'] {
+  margin-block-start: calc(var(--spacing) * 2);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-tone='alert']::before {
+  position: absolute;
+  inset: calc(var(--spacing) * -1) 0 auto;
+  height: var(--hairline);
+  background: var(--ui-ccc-line);
+  content: '';
+  pointer-events: none;
+}
 .kettu-option {
   gap: 4px;
   padding-right: 8px;
