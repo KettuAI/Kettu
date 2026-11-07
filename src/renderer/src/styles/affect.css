@@ -85,6 +85,11 @@
 .kettu-frame.ui-as-app > .ui-as-side > .ui-as-side__head {
   flex: none;
 }
+/* Short enough that the search sits 12px under the corner's buttons (their bottom at 49px), as
+   far as the list starts under it; App Shell's 50px left it floating halfway. */
+.kettu-frame.ui-as-app:not(.kettu-band) > .ui-as-side > .ui-as-side__head[data-chrome='mac'] {
+  height: 33px;
+}
 /* A narrow window's sidebar is a drawer: the sheets keep the gap on their left too, the drawer
    takes the sidebar's color, and the corner controls stay over it. */
 @container ui-as (max-width: 900px) {
