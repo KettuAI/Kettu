@@ -87,12 +87,17 @@ export function SidebarToggle({ className }: { className?: string }) {
   const shown = useNarrowWindow() ? drawer : !collapsed
   const { summary } = useNotices()
   const button = useRef<HTMLButtonElement>(null)
-  // Move focus out of the sidebar before collapsing makes it inert.
+  // Move focus out of the sidebar before collapsing makes it inert; a closing drawer, whose own
+  // button App Shell would return it to is not drawn, gives it back to this one.
   useLayoutEffect(
     () =>
       useViewStore.subscribe((state, previous) => {
-        if (!state.sidebarCollapsed || previous.sidebarCollapsed) return
-        if (document.activeElement?.closest('.ui-as-side')) button.current?.focus()
+        const at = document.activeElement
+        if (state.sidebarCollapsed && !previous.sidebarCollapsed) {
+          if (at?.closest('.ui-as-side')) button.current?.focus()
+        } else if (!state.sidebarDrawer && previous.sidebarDrawer) {
+          if (!at || at === document.body || at.closest('.ui-as-side')) button.current?.focus()
+        }
       }),
     [],
   )
