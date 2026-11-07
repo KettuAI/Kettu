@@ -2299,6 +2299,17 @@
 :is(.kettu-settings, .kettu-sd) .k-num {
   font-variant-numeric: tabular-nums;
 }
+:is(.kettu-settings, .kettu-sd) .k-storage {
+  gap: 10px;
+}
+:is(.kettu-settings, .kettu-sd) .k-storage__text {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-storage__bar {
+  width: 120px;
+}
 :is(.kettu-settings, .kettu-sd) .k-mono {
   font-family: var(--code-face);
   font-size: 12.5px;

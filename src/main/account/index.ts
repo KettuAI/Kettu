@@ -54,6 +54,14 @@ class SignedOut extends Error {}
 /** The refresh token could not be decrypted, as in a data folder copied from another computer. */
 class TokenUnreadable extends Error {}
 
+/** A call that needs the Kettu account found the client signed out, or the service ended it. */
+export class NotSignedIn extends Error {
+  constructor() {
+    super('Not signed in to a Kettu account')
+    this.name = 'NotSignedIn'
+  }
+}
+
 /** Why the service signed this client out, from the `reason` of its `invalid_grant`. */
 export function signedOutReason(reason: string | null): SignedOutReason {
   switch (reason) {
@@ -130,6 +138,49 @@ export class Account {
       subscription: stored.subscription,
       manageUrl: this.page('/account/'),
       plainText: stored.plainText,
+    }
+  }
+
+  /** The signed-in account's id and email, for what it publishes; null when signed out. */
+  signedIn(): { id: string; email: string } | null {
+    const profile = this.stored?.profile
+    return profile ? { id: profile.id, email: profile.email } : null
+  }
+
+  /**
+   * Runs `call` with an access token of the signed-in account, for another of the account's
+   * services: when `refused` says the service did not take the token, it is refreshed and `call`
+   * runs once more. Throws `NotSignedIn` when signed out or once the service ended the sign-in.
+   */
+  async withAccessToken<T>(
+    call: (token: string) => Promise<T>,
+    refused: (error: unknown) => boolean,
+  ): Promise<T> {
+    if (!this.stored) throw new NotSignedIn()
+    const token = await this.serviceToken(null)
+    try {
+      return await call(token)
+    } catch (error) {
+      if (!refused(error)) throw error
+    }
+    const fresh = await this.serviceToken(token)
+    try {
+      return await call(fresh)
+    } catch (error) {
+      // Refused right after a refresh: reading the account tells whether the sign-in is gone.
+      if (refused(error)) void this.check()
+      throw error
+    }
+  }
+
+  /** An access token for `withAccessToken`, signing out here when the service ended the sign-in. */
+  private async serviceToken(refused: string | null): Promise<string> {
+    try {
+      return await this.accessToken(refused)
+    } catch (error) {
+      if (error instanceof AccountNetworkError) throw error
+      await this.failed(error)
+      throw this.stored ? error : new NotSignedIn()
     }
   }
 

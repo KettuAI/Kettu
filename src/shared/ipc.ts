@@ -20,7 +20,7 @@ import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
 import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
-import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
+import type { SharingConnectResult, SharingResult, SharingStatus, SharingTarget } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { DevicesApi } from './device-host'
 import type { PreparedReport, ReportFileView, ReportRequest } from './report'
@@ -295,6 +295,7 @@ export interface IpcInvokeContract {
   'account:cancel-sign-in': { args: []; result: AccountStatus }
   'account:sign-out': { args: []; result: AccountStatus }
   'sharing:status': { args: []; result: SharingStatus }
+  'sharing:refresh': { args: []; result: SharingStatus }
   // `accountId`: the account the user chose, or null to use the one the token reaches.
   'sharing:connect': {
     args: [token: string, accountId: string | null]
@@ -302,7 +303,10 @@ export interface IpcInvokeContract {
   }
   'sharing:remove': { args: []; result: SharingStatus }
   // Main reads the version's HTML from the host, so the page never comes from the renderer.
-  'sharing:publish': { args: [id: string, version: number]; result: SharingResult }
+  'sharing:publish': {
+    args: [id: string, version: number, target: SharingTarget]
+    result: SharingResult
+  }
   'sharing:update': { args: [id: string, version: number]; result: SharingResult }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
   'remote:status': { args: []; result: RemoteStatus }
@@ -544,6 +548,8 @@ export interface KettuApi {
   /** Publishing artifacts online; main holds the account's token and makes every request. */
   sharing: {
     status(): Promise<SharingStatus>
+    /** Reads the Kettu account's pages and storage from the service again. */
+    refresh(): Promise<SharingStatus>
     /**
      * Checks the token with Cloudflare and connects the account it reaches; with an account ID, the
      * one chosen.
@@ -551,7 +557,8 @@ export interface KettuApi {
     connect(token: string, accountId: string | null): Promise<SharingConnectResult>
     /** Forgets the account and its token; published pages stay as they are. */
     remove(): Promise<SharingStatus>
-    publish(id: string, version: number): Promise<SharingResult>
+    /** Publishes to the target; an artifact already published is updated where it lives. */
+    publish(id: string, version: number, target: SharingTarget): Promise<SharingResult>
     /** Puts the version on the artifact's page, at the same URL. */
     update(id: string, version: number): Promise<SharingResult>
     unpublish(id: string): Promise<SharingResult>

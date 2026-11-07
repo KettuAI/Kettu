@@ -180,9 +180,10 @@ const api: KettuApi = {
   },
   sharing: {
     status: () => invoke('sharing:status'),
+    refresh: () => invoke('sharing:refresh'),
     connect: (token, accountId) => invoke('sharing:connect', token, accountId),
     remove: () => invoke('sharing:remove'),
-    publish: (id, version) => invoke('sharing:publish', id, version),
+    publish: (id, version, target) => invoke('sharing:publish', id, version, target),
     update: (id, version) => invoke('sharing:update', id, version),
     unpublish: (id) => invoke('sharing:unpublish', id),
     onChanged: onSharingChanged,

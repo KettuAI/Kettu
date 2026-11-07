@@ -1,20 +1,39 @@
 // `published-artifacts.json`: the Cloudflare account main publishes with, its token encrypted, and
-// the pages it has published. Main owns the file; the renderer sees neither the token nor a path.
+// the pages it has published, each with the target and account it lives in. Main owns the file;
+// the renderer sees neither the token nor a path.
 
 import { join } from 'node:path'
 import { ARTIFACT_ID } from '@shared/artifacts'
-import { CLOUDFLARE_ACCOUNT_ID } from '@shared/sharing'
+import { CLOUDFLARE_ACCOUNT_ID, type SharingTarget } from '@shared/sharing'
 import { JsonFileWriter, quarantineFile, readJsonFile } from '../json-file'
 import { createLogger } from '../log'
 
 const log = createLogger('sharing')
 
-const VERSION = 1
+const VERSION = 2
 const MAX_PUBLISHED = 10_000
 const MAX_TOKEN_CHARS = 16_384
 const SUBDOMAIN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/
 const WORKER = /^ob-[a-z2-7]{16}$/
+/** A page's id at Kettu's sharing service: 20 lowercase base32 characters. */
+export const KETTU_PAGE = /^[a-z2-7]{20}$/
+/** A Kettu account's id as the account service gives it. */
+export const KETTU_ACCOUNT = /^[A-Za-z0-9-]{1,64}$/
 const MAX_URL_CHARS = 2_048
+const MAX_EMAIL_CHARS = 320
+
+/**
+ * A page's address as a target gave it: https, or http on a loopback name, which only a
+ * development copy of the service gives.
+ */
+export function pageUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.length > MAX_URL_CHARS) return null
+  const url = URL.parse(raw)
+  if (!url || url.username || url.password) return null
+  if (url.protocol === 'https:') return url.href
+  const local = url.hostname === 'localhost' || url.hostname.endsWith('.localhost')
+  return url.protocol === 'http:' && local ? url.href : null
+}
 
 /** Encrypts and decrypts the token; the asynchronous half of Electron's safeStorage in main. */
 export interface TokenCipher {
@@ -31,18 +50,25 @@ export interface StoredAccount {
   plainText: boolean
 }
 
-/** One published artifact: the Worker that serves it and the version it shows. */
+/**
+ * One published artifact: where it lives, what the target knows it by (Kettu's page id or the
+ * Cloudflare Worker's name), the version it shows and the account it was published with.
+ */
 export interface PublishedPage {
   id: string
-  worker: string
+  target: SharingTarget
+  ref: string
   url: string
   version: number
   publishedAt: number
+  /** The Kettu account's id, or the Cloudflare account's. */
   accountId: string
+  /** The Kettu account's email when it was published, to name it once another one signs in. */
+  accountEmail: string | null
 }
 
-interface SharingFile {
-  version: 1
+export interface SharingFile {
+  version: 2
   account: StoredAccount | null
   published: PublishedPage[]
 }
@@ -61,36 +87,57 @@ function parseAccount(raw: unknown): StoredAccount | null {
   return { accountId, subdomain, token, plainText }
 }
 
-function parsePage(raw: unknown): PublishedPage | null {
+/** A page of the file at `version`: those of version 1 were all published to Cloudflare. */
+function parsePage(raw: unknown, version: 1 | 2): PublishedPage | null {
   if (!isRecord(raw)) return null
-  const { id, worker, url, version, publishedAt, accountId } = raw
+  const { id, url: rawUrl, publishedAt, accountId } = raw
+  const target = version === 1 ? 'cloudflare' : raw.target
+  const ref = version === 1 ? raw.worker : raw.ref
+  const accountEmail = version === 1 ? null : raw.accountEmail
   if (typeof id !== 'string' || !ARTIFACT_ID.test(id)) return null
-  if (typeof worker !== 'string' || !WORKER.test(worker)) return null
-  if (typeof url !== 'string' || url.length > MAX_URL_CHARS || !url.startsWith('https://')) {
+  const url = pageUrl(rawUrl)
+  if (url === null) return null
+  if (!Number.isSafeInteger(raw.version) || (raw.version as number) < 1) return null
+  if (!Number.isSafeInteger(publishedAt) || (publishedAt as number) < 0) return null
+  if (typeof accountId !== 'string' || typeof ref !== 'string') return null
+  if (target === 'cloudflare') {
+    // Cloudflare's addresses are always https.
+    if (!WORKER.test(ref) || !CLOUDFLARE_ACCOUNT_ID.test(accountId)) return null
+    if (!url.startsWith('https://') || accountEmail !== null) return null
+  } else if (target === 'kettu') {
+    if (!KETTU_PAGE.test(ref) || !KETTU_ACCOUNT.test(accountId)) return null
+    if (
+      accountEmail !== null &&
+      (typeof accountEmail !== 'string' || accountEmail.length > MAX_EMAIL_CHARS)
+    ) {
+      return null
+    }
+  } else {
     return null
   }
-  if (!Number.isSafeInteger(version) || (version as number) < 1) return null
-  if (!Number.isSafeInteger(publishedAt) || (publishedAt as number) < 0) return null
-  if (typeof accountId !== 'string' || !CLOUDFLARE_ACCOUNT_ID.test(accountId)) return null
   return {
     id,
-    worker,
+    target,
+    ref,
     url,
-    version: version as number,
+    version: raw.version as number,
     publishedAt: publishedAt as number,
     accountId,
+    accountEmail: accountEmail as string | null,
   }
 }
 
-function parseFile(raw: unknown): SharingFile | null {
-  if (!isRecord(raw) || raw.version !== VERSION) return null
+/** The file as main keeps it, from version 1 or 2; null for anything else. */
+export function parseSharingFile(raw: unknown): SharingFile | null {
+  if (!isRecord(raw) || (raw.version !== 1 && raw.version !== VERSION)) return null
+  const fileVersion = raw.version
   const account = raw.account === null ? null : parseAccount(raw.account)
   if (raw.account !== null && account === null) return null
   if (!Array.isArray(raw.published) || raw.published.length > MAX_PUBLISHED) return null
   const published: PublishedPage[] = []
   const ids = new Set<string>()
   for (const value of raw.published) {
-    const page = parsePage(value)
+    const page = parsePage(value, fileVersion)
     // One page per artifact: a duplicate would let one overwrite the other's entry.
     if (!page || ids.has(page.id)) return null
     ids.add(page.id)
@@ -115,7 +162,7 @@ export class SharingStore {
     const empty: SharingFile = { version: VERSION, account: null, published: [] }
     const read = await readJsonFile(path)
     let state = empty
-    if (read.kind === 'ok') state = parseFile(read.value) ?? empty
+    if (read.kind === 'ok') state = parseSharingFile(read.value) ?? empty
     if (read.kind === 'unreadable' || (read.kind === 'ok' && state === empty)) {
       log.warn(
         `published-artifacts.json is invalid${read.kind === 'unreadable' ? `: ${read.reason}` : ''}`,
@@ -192,20 +239,26 @@ export class SharingStore {
   }
 }
 
-/** The pages whose artifact the host no longer has, for main to take down at launch. */
+/** The pages of a target and account whose artifact the host no longer has, to take down. */
 export function pagesToUnpublish(
   pages: readonly PublishedPage[],
   artifactIds: ReadonlySet<string>,
+  target: SharingTarget,
   accountId: string,
 ): PublishedPage[] {
-  return pages.filter((page) => page.accountId === accountId && !artifactIds.has(page.id))
+  return pages.filter(
+    (page) => page.target === target && page.accountId === accountId && !artifactIds.has(page.id),
+  )
 }
 
-/** The pages whose Worker Cloudflare no longer has, which main forgets without a request. */
+/** The pages of a target and account the target no longer has, which main forgets. */
 export function pagesToForget(
   pages: readonly PublishedPage[],
-  workers: ReadonlySet<string>,
+  refs: ReadonlySet<string>,
+  target: SharingTarget,
   accountId: string,
 ): PublishedPage[] {
-  return pages.filter((page) => page.accountId === accountId && !workers.has(page.worker))
+  return pages.filter(
+    (page) => page.target === target && page.accountId === accountId && !refs.has(page.ref),
+  )
 }

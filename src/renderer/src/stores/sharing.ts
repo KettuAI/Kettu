@@ -5,11 +5,12 @@ import type {
   SharingConnectResult,
   SharingResult,
   SharingStatus,
+  SharingTarget,
 } from '@shared/sharing'
 import { errorMessage } from '@renderer/lib/host'
 
 export interface SharingStore {
-  /** What main has: the account and every published page; null until the first read. */
+  /** What main has: the accounts and every published page; null until the first read. */
   status: SharingStatus | null
 }
 
@@ -18,7 +19,9 @@ export interface Sharing {
   useSharingStore: UseBoundStore<StoreApi<SharingStore>>
   connect(token: string, accountId: string | null): Promise<SharingConnectResult>
   remove(): Promise<SharingResult>
-  publish(id: string, version: number): Promise<SharingResult>
+  /** Reads the Kettu account's pages and storage again, as a view that shows them opens. */
+  refresh(): Promise<SharingResult>
+  publish(id: string, version: number, target: SharingTarget): Promise<SharingResult>
   update(id: string, version: number): Promise<SharingResult>
   unpublish(id: string): Promise<SharingResult>
 }
@@ -53,7 +56,8 @@ export function createSharing(api: () => KettuApi['sharing']): Sharing {
       }
     },
     remove: () => call(async () => ({ status: await api().remove() })),
-    publish: (id, version) => call(() => api().publish(id, version)),
+    refresh: () => call(async () => ({ status: await api().refresh() })),
+    publish: (id, version, target) => call(() => api().publish(id, version, target)),
     update: (id, version) => call(() => api().update(id, version)),
     unpublish: (id) => call(() => api().unpublish(id)),
   }
@@ -76,6 +80,7 @@ export async function initSharing(): Promise<void> {
 
 export const connectSharing = localSharing.connect
 export const removeSharing = localSharing.remove
+export const refreshSharing = localSharing.refresh
 export const publishArtifact = localSharing.publish
 export const updateSharedArtifact = localSharing.update
 export const unpublishArtifact = localSharing.unpublish
@@ -88,4 +93,10 @@ export function publishedPage(id: string): PublishedArtifact | null {
 /** Whether a published page exists for the artifact right now, for the menus. */
 export function isPublished(id: string): boolean {
   return publishedPage(id) !== null
+}
+
+/** Whether the host's account for the page's target is the one it was published with. */
+export function canChange(page: PublishedArtifact, status: SharingStatus): boolean {
+  const owner = page.target === 'kettu' ? status.kettu.account : status.cloudflare
+  return owner !== null && !page.otherAccount
 }
