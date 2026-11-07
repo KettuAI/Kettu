@@ -87,11 +87,10 @@
   /* Links are ink with a gray underline (thread-link), which darkens on hover. */
   --link: #10161e;
   --link-hover: #10161e;
-  /* The fox: what is on, chosen or being typed, and a running turn's dots. The focus ring draws it
-     at half strength. */
-  --focus: #f2581b;
+  /* The focus ring, in affectUI's blue; it draws at half strength. */
+  --focus: #0060e2;
   /* A focused field's halo: a little fainter than the focus ring on the light page. */
-  --focus-halo-strength: 42%;
+  --focus-halo-strength: 35%;
   --selection: rgb(242 88 27 / 18%);
   /* An edit in place, such as renaming a session. */
   --edit-ring: #f2581b;
@@ -178,11 +177,11 @@
   --primary-highlight: rgb(255 255 255 / 16%);
   --primary-foreground: #ffffff;
 
-  /* On, checked and chosen controls in the fox orange: a switch, a check box, a radio, an option
+  /* On, checked and chosen controls in affectUI's blue: a switch, a check box, a radio, an option
      tile. Each reaches 3:1 on the page; the tint, which follows it, fills a chosen tile. */
-  --control-on: #f2581b;
+  --control-on: #0060e2;
   --control-on-tint: color-mix(in srgb, var(--control-on) 7%, transparent);
-  --switch-on: #f2581b;
+  --switch-on: #3c85e9;
   /* The send button once there is something to send: the same fox in both themes, since the
      lighter dark-theme fox leaves its white arrow under 3:1. */
   --send: #f2581b;
@@ -530,7 +529,7 @@
     --warning: #d9b463;
     --link: #e8ecf1;
     --link-hover: #e8ecf1;
-    --focus: #ff6a2b;
+    --focus: #5b9aff;
     --focus-halo-strength: 50%;
     --selection: rgb(255 106 43 / 24%);
     --edit-ring: #ff6a2b;
@@ -582,9 +581,9 @@
     --primary-highlight: rgb(255 255 255 / 90%);
     --primary-foreground: #121213;
 
-    --control-on: #ff6a2b;
+    --control-on: #5b9aff;
     --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
-    --switch-on: #ff6a2b;
+    --switch-on: #4d8dff;
     --send: #f2581b;
     --switch-thumb: #ffffff;
     --track: #3a424d;
@@ -857,7 +856,7 @@
   --warning: #d9b463;
   --link: #e8ecf1;
   --link-hover: #e8ecf1;
-  --focus: #ff6a2b;
+  --focus: #5b9aff;
   --focus-halo-strength: 50%;
   --selection: rgb(255 106 43 / 24%);
   --edit-ring: #ff6a2b;
@@ -908,9 +907,9 @@
   --primary-highlight: rgb(255 255 255 / 90%);
   --primary-foreground: #121213;
 
-  --control-on: #ff6a2b;
+  --control-on: #5b9aff;
   --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
-  --switch-on: #ff6a2b;
+  --switch-on: #4d8dff;
   --send: #f2581b;
   --switch-thumb: #ffffff;
   --track: #3a424d;
