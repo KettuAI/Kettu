@@ -232,6 +232,7 @@ const api: KettuApi = {
     view: (id, path) => invoke('report:view', id, path),
     save: (id) => invoke('report:save', id),
     discard: (id) => invoke('report:discard', id),
+    submit: (id) => invoke('report:submit', id),
     recording: () => invoke('report:recording'),
     record: (on) => invoke('report:record', on),
     onRecording: onRecordingChanged,

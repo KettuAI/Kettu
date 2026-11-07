@@ -1,19 +1,29 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft01Icon, FileViewIcon } from '@hugeicons/core-free-icons'
+import {
+  ArrowLeft01Icon,
+  Copy01Icon,
+  FileViewIcon,
+  GithubIcon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { ReportPrepareResult } from '@shared/ipc'
 import type { HostAdminResult } from '@shared/remote/host-admin'
 import {
   REPORT_EXTRAS,
+  reportIssueUrl,
+  reportSubmitResult,
   type PreparedReport,
   type ReportExtra,
   type ReportFileView,
   type ReportRange,
   type ReportRequest,
+  type ReportSubmitFailure,
+  type ReportSubmitResult,
 } from '@shared/report'
 import { SegmentedControl } from '@renderer/components/segmented-control'
-import { Button } from '@renderer/components/ui/button'
+import { Button, buttonVariants } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -23,10 +33,23 @@ import { recordAction } from '@renderer/lib/action-log'
 import { errorMessage } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
+import { signIn, useAccountStore } from '@renderer/stores/account'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { closeReport, useReportStore, type ReportDialog as Opened } from '@renderer/stores/report'
 
 const SENSITIVE: ReadonlySet<ReportExtra> = new Set(['messages', 'verbose', 'dumps'])
+
+/** What the dialog says when a report was not submitted. */
+const NOT_SUBMITTED = {
+  too_large: 'notSubmitted.tooLarge',
+  rate_limited: 'notSubmitted.rateLimited',
+  unauthorized: 'notSubmitted.unauthorized',
+  signed_out: 'notSubmitted.signedOut',
+  network: 'notSubmitted.network',
+  failed: 'notSubmitted.failed',
+} as const satisfies Record<ReportSubmitFailure, string>
+
+type Prepared = { key: string; report: PreparedReport; ref: string | null }
 
 /** Report a problem: what happened, the range, the extras, a look at the files, then save. */
 export function ReportDialog() {
@@ -40,17 +63,29 @@ export function ReportDialog() {
   )
 }
 
-/** A bundle for another host comes over its channel; this computer's main keeps it the same. */
+/**
+ * A bundle for another host comes over its channel, and this computer's main keeps it the same;
+ * `ref` is the bundle as that host keeps it, to submit with its sign-in.
+ */
 async function prepare(
   hostId: string | null,
   request: ReportRequest,
-): Promise<ReportPrepareResult> {
-  if (hostId === null) return window.kettu.report.prepare(request)
+): Promise<{ result: ReportPrepareResult; ref: string | null }> {
+  if (hostId === null) return { result: await window.kettu.report.prepare(request), ref: null }
   const answer = (await window.kettu.hosts.request(hostId, 'host.report', {
     request,
   })) as HostAdminResult<'host.report'>
-  if (!answer.ok) return { ok: false, reason: answer.reason }
-  return window.kettu.report.adopt(answer.zip)
+  if (!answer.ok) return { result: { ok: false, reason: answer.reason }, ref: null }
+  return { result: await window.kettu.report.adopt(answer.zip), ref: answer.ref }
+}
+
+/** Submits what was reviewed, with the sign-in of the host that built it. */
+async function submit(hostId: string | null, prepared: Prepared): Promise<ReportSubmitResult> {
+  if (hostId === null) return window.kettu.report.submit(prepared.report.id)
+  if (prepared.ref === null) return { ok: false, reason: 'failed' }
+  return reportSubmitResult(
+    await window.kettu.hosts.request(hostId, 'host.submitReport', { ref: prepared.ref }),
+  )
 }
 
 function ReportForm({ dialog }: { dialog: Opened }) {
@@ -59,10 +94,16 @@ function ReportForm({ dialog }: { dialog: Opened }) {
   const [description, setDescription] = useState('')
   const [range, setRange] = useState<ReportRange>(dialog.range)
   const [extras, setExtras] = useState<ReadonlySet<ReportExtra>>(() => new Set(dialog.extras))
-  const [prepared, setPrepared] = useState<{ key: string; report: PreparedReport } | null>(null)
+  const [prepared, setPrepared] = useState<Prepared | null>(null)
   const [viewing, setViewing] = useState(false)
-  const [busy, setBusy] = useState<'view' | 'save' | null>(null)
+  const [busy, setBusy] = useState<'view' | 'save' | 'submit' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [submitted, setSubmitted] = useState<Extract<ReportSubmitResult, { ok: true }> | null>(null)
+  // This computer's sign-in is known here; another host answers for its own.
+  const local = dialog.hostId === null && !isWeb
+  const signedIn = useAccountStore((s) => s.status?.state === 'signed-in')
+  const signingIn = useAccountStore((s) => s.status?.state === 'signing-in')
+  const mustSignIn = local && !signedIn
   const latest = useRef<PreparedReport | null>(null)
   useEffect(() => {
     latest.current = prepared?.report ?? null
@@ -88,28 +129,37 @@ function ReportForm({ dialog }: { dialog: Opened }) {
   const key = JSON.stringify(request)
   const ready = description.trim() !== ''
 
-  const bundle = async (): Promise<PreparedReport | null> => {
-    if (prepared?.key === key) return prepared.report
+  const bundle = async (): Promise<Prepared | null> => {
+    if (prepared?.key === key) return prepared
     if (prepared) void window.kettu.report.discard(prepared.report.id)
     setPrepared(null)
-    const result = await prepare(dialog.hostId, request)
+    const { result, ref } = await prepare(dialog.hostId, request)
     if (!result.ok) {
       setError(t(result.reason === 'too_large' ? 'tooLarge' : 'failed'))
       return null
     }
-    setPrepared({ key, report: result.report })
-    return result.report
+    const next = { key, report: result.report, ref }
+    setPrepared(next)
+    return next
   }
 
-  const run = async (what: 'view' | 'save'): Promise<void> => {
+  const run = async (what: 'view' | 'save' | 'submit'): Promise<void> => {
     if (!ready || busy) return
     setBusy(what)
     setError(null)
     try {
-      const report = await bundle()
-      if (!report) return
+      const made = await bundle()
+      if (!made) return
+      const report = made.report
       if (what === 'view') {
         setViewing(true)
+        return
+      }
+      if (what === 'submit') {
+        recordAction('report.submit', { files: report.files.length })
+        const result = await submit(dialog.hostId, made)
+        if (result.ok) setSubmitted(result)
+        else setError(t(NOT_SUBMITTED[result.reason]))
         return
       }
       recordAction('report.save', { files: report.files.length })
@@ -133,6 +183,7 @@ function ReportForm({ dialog }: { dialog: Opened }) {
     }
   }
 
+  if (submitted) return <Submitted report={submitted} />
   if (viewing && prepared) {
     return <Contents report={prepared.report} onBack={() => setViewing(false)} />
   }
@@ -211,6 +262,21 @@ function ReportForm({ dialog }: { dialog: Opened }) {
             {error}
           </p>
         )}
+        {mustSignIn && (
+          <p className="flex items-center gap-1.5 text-hint text-tertiary">
+            {t('signInToSubmit')}
+            <Button
+              type="button"
+              variant="link"
+              size="xs"
+              className="px-0"
+              disabled={signingIn}
+              onClick={() => void signIn()}
+            >
+              {t('signIn')}
+            </Button>
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-2 px-5.5 py-4.5 *:data-[slot=button]:h-7.5">
         <Button
@@ -228,7 +294,14 @@ function ReportForm({ dialog }: { dialog: Opened }) {
           {t('viewContents')}
         </Button>
         <span className="flex-1" />
-        <Button type="button" variant="outline" size="compact" disabled>
+        <Button
+          type="button"
+          variant="outline"
+          size="compact"
+          disabled={!ready || busy !== null || mustSignIn}
+          onClick={() => void run('submit')}
+        >
+          {busy === 'submit' && <Spinner data-icon="inline-start" />}
           {t('submit')}
         </Button>
         <Button type="submit" size="compact" disabled={!ready || busy !== null}>
@@ -237,6 +310,56 @@ function ReportForm({ dialog }: { dialog: Opened }) {
         </Button>
       </div>
     </form>
+  )
+}
+
+/** The id the report was given, to copy, and the way to an issue that names it. */
+function Submitted({ report }: { report: Extract<ReportSubmitResult, { ok: true }> }) {
+  const { t } = useTranslation(['report', 'common'])
+  const [copied, setCopied] = useState(false)
+  const copy = (): void => {
+    void navigator.clipboard.writeText(report.id).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div className="flex flex-col">
+      <DialogHeader className="px-5.5 pt-5">
+        <DialogTitle>{t('submitted.title')}</DialogTitle>
+      </DialogHeader>
+      <div className="flex flex-col gap-3 px-5.5 pt-3">
+        <p className="text-control text-secondary">{t('submitted.body')}</p>
+        <div className="flex items-center gap-2 rounded-lg bg-muted py-1.5 pr-1.5 pl-3">
+          <span data-selectable="" className="flex-1 font-mono text-code text-primary">
+            {report.id}
+          </span>
+          <Button type="button" variant="ghost" size="sm" onClick={copy}>
+            <HugeiconsIcon
+              icon={copied ? Tick02Icon : Copy01Icon}
+              strokeWidth={1.9}
+              data-icon="inline-start"
+            />
+            {copied ? t('submitted.copied') : t('submitted.copy')}
+          </Button>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 px-5.5 py-4.5 *:h-7.5">
+        <span className="flex-1" />
+        <a
+          href={reportIssueUrl(report)}
+          target="_blank"
+          rel="noreferrer"
+          className={buttonVariants({ variant: 'outline', size: 'compact' })}
+        >
+          <HugeiconsIcon icon={GithubIcon} strokeWidth={1.9} data-icon="inline-start" />
+          {t('submitted.openIssue')}
+        </a>
+        <Button type="button" size="compact" onClick={() => closeReport()}>
+          {t('common:actions.done')}
+        </Button>
+      </div>
+    </div>
   )
 }
 

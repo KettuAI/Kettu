@@ -7,7 +7,14 @@ import { access, copyFile, mkdtemp, realpath, rm, writeFile } from 'node:fs/prom
 import os from 'node:os'
 import path from 'node:path'
 import { addressText } from '@shared/remote/address'
-import { parseReportRequest, type ReportBuildResult, type ReportRequest } from '@shared/report'
+import {
+  parseReportRequest,
+  reportIssueUrl,
+  type ReportBuildResult,
+  type ReportRequest,
+  type ReportSubmitFailure,
+} from '@shared/report'
+import type { ProxySettings } from '@shared/settings'
 import { version } from '../../package.json'
 import { AccountApi, accountBaseUrl, clientInfo } from '../main/account/service'
 import { accountFile, readAccount } from '../main/account/store'
@@ -30,7 +37,8 @@ import { changePort, directReport } from './direct'
 import { NO_SYSTEM_ENCRYPTION, prepareDataFolder, privateFolder } from './key'
 import { followLogs, parseTime, readLogs, type LogFilter } from './logs'
 import { pairDevice, sshTarget } from './pair'
-import { daemonPart, logsOnlyReport, reportsFolder } from './problem-report'
+import { daemonPart, logsOnlyReport, reportsFolder, submitBundle } from './problem-report'
+import { DaemonSignIn } from './sign-in'
 import { proxiedFetch } from './proxy'
 import { controlSocketPath, DATA_ENV, dataPath, logFolderPath } from './paths'
 import { terminalQuestions } from './questions'
@@ -266,10 +274,23 @@ function stamp(date: Date): string {
   )
 }
 
+/** What `kettu report` says when a report was saved but not submitted. */
+const NOT_SUBMITTED: Record<ReportSubmitFailure, string> = {
+  too_large:
+    'The report is too large to submit; attach the saved file to an issue, or choose a shorter range or fewer extras',
+  rate_limited:
+    'Too many reports were submitted today; attach the saved file to an issue, or submit it tomorrow',
+  unauthorized: 'The sign-in has ended; run kettu login, then kettu report again',
+  signed_out: 'Not signed in; run kettu login, then kettu report again',
+  network: 'Could not reach Kettu; check the connection and run kettu report --submit again',
+  failed: 'The report could not be submitted',
+}
+
 /**
  * `kettu report`: the running daemon builds the bundle with its agents and sessions; without one,
  * it is the logs and settings alone. Either way the zip moves to where the owner said, and its
- * files are listed to look through before it is shared.
+ * files are listed to look through before it is shared, then it is submitted with the daemon's
+ * sign-in when the owner asks.
  */
 async function report(
   socket: string,
@@ -277,55 +298,50 @@ async function report(
   logs: string,
   command: Extract<Command, { kind: 'report' }>,
 ): Promise<number> {
-  let description = command.description
-  if (description === null) {
-    if (process.stdin.isTTY !== true) {
-      throw new Failure('Say what happened with --message', 2)
-    }
-    const questions = terminalQuestions(process.stdin, process.stdout)
-    try {
-      description = (await questions.ask('What happened? '))?.trim() || null
-    } finally {
-      questions.close()
-    }
-    if (description === null) throw new Failure('Say what happened to save a report', 2)
-  }
-  let request: ReportRequest
-  try {
-    request = parseReportRequest({
-      description,
-      range: { kind: command.range },
-      extras: command.extras,
-      context: null,
-    })
-  } catch (error) {
-    throw new Failure((error as Error).message, 2)
-  }
-  const output = path.resolve(command.output ?? `kettu-report-${stamp(new Date())}.zip`)
-  let built: ReportBuildResult
-  let from: string
+  const questions =
+    process.stdin.isTTY === true ? terminalQuestions(process.stdin, process.stdout) : null
+  let built: ReportBuildResult | null = null
   let scratch: string | null = null
   try {
-    // A bundle with recent messages or crash dumps takes a while to pack.
-    built = await callControl(socket, 'report.build', { request }, 180_000)
-    from = reportsFolder(data)
-  } catch (error) {
-    if (error instanceof ControlError) throw new Failure(error.message)
-    if (!(error instanceof NotRunning)) throw error
-    process.stderr.write(
-      'kettu: the daemon is not running, so the report holds the logs and settings alone\n',
-    )
-    scratch = await mkdtemp(path.join(os.tmpdir(), 'kettu-report-'))
-    from = scratch
-    built = await logsOnlyReport(
-      request,
-      daemonPart(version, null),
-      await readSettings(data),
-      logs,
-      scratch,
-    )
-  }
-  try {
+    let description = command.description
+    if (description === null) {
+      if (!questions) throw new Failure('Say what happened with --message', 2)
+      description = (await questions.ask('What happened? '))?.trim() || null
+      if (description === null) throw new Failure('Say what happened to save a report', 2)
+    }
+    let request: ReportRequest
+    try {
+      request = parseReportRequest({
+        description,
+        range: { kind: command.range },
+        extras: command.extras,
+        context: null,
+      })
+    } catch (error) {
+      throw new Failure((error as Error).message, 2)
+    }
+    const output = path.resolve(command.output ?? `kettu-report-${stamp(new Date())}.zip`)
+    let from: string
+    try {
+      // A bundle with recent messages or crash dumps takes a while to pack.
+      built = await callControl(socket, 'report.build', { request }, 180_000)
+      from = reportsFolder(data)
+    } catch (error) {
+      if (error instanceof ControlError) throw new Failure(error.message)
+      if (!(error instanceof NotRunning)) throw error
+      process.stderr.write(
+        'kettu: the daemon is not running, so the report holds the logs and settings alone\n',
+      )
+      scratch = await mkdtemp(path.join(os.tmpdir(), 'kettu-report-'))
+      from = scratch
+      built = await logsOnlyReport(
+        request,
+        daemonPart(version, null),
+        await readSettings(data),
+        logs,
+        scratch,
+      )
+    }
     if (!built.ok) {
       throw new Failure(
         built.reason === 'too_large'
@@ -353,11 +369,51 @@ async function report(
           .join('') +
         'Look through it before you share it: anyone can download a file attached to a public issue.\n',
     )
+
+    const signIn = daemonSignIn(data, (await readSettings(data)).proxy)
+    let submit = command.submit
+    if (!submit && questions) {
+      if (!(await signIn.signedIn())) {
+        out('To submit reports to Kettu and get an id for an issue, sign in with kettu login.\n')
+        return 0
+      }
+      const answer = await questions.ask(
+        'Submit it to Kettu too, for an id to put in an issue? [y/N] ',
+      )
+      submit = /^y(es)?$/i.test(answer?.trim() ?? '')
+    }
+    if (!submit) return 0
+    const submitted = await submitBundle(built.file, request.description, version, signIn)
+    if (!submitted.ok) throw new Failure(NOT_SUBMITTED[submitted.reason])
+    out(
+      `Submitted as ${submitted.id}. To tell us what happened, open an issue with it:\n` +
+        `  ${reportIssueUrl(submitted)}\n`,
+    )
     return 0
   } finally {
-    if (built.ok) await rm(built.file, { force: true }).catch(() => {})
+    questions?.close()
+    if (built?.ok) await rm(built.file, { force: true }).catch(() => {})
     if (scratch) await rm(scratch, { recursive: true, force: true }).catch(() => {})
   }
+}
+
+/** The sign-in `kettu login` keeps, for the CLI's own requests. */
+function daemonSignIn(data: string, proxy: ProxySettings): DaemonSignIn {
+  let base: string
+  try {
+    base = accountBaseUrl(process.env)
+  } catch (error) {
+    throw new Failure((error as Error).message)
+  }
+  return new DaemonSignIn(
+    new AccountApi(
+      base,
+      proxiedFetch(() => proxy, process.env),
+    ),
+    accountFile(data),
+    NO_SYSTEM_ENCRYPTION,
+    (message) => void process.stderr.write(`kettu: ${message}\n`),
+  )
 }
 
 /** `kettu logs`: the records of the log folder, which need no running daemon. */

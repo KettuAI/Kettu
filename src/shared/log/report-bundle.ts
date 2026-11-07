@@ -275,25 +275,76 @@ export async function writeReport(parts: ReportParts, dir: string): Promise<Repo
   }
 }
 
+/** A built bundle waiting to be viewed, saved or submitted. */
+export interface ShelvedReport {
+  file: string
+  files: ReportFileInfo[]
+  size: number
+  /** What it was built from; null for one another host built. */
+  request: ReportRequest | null
+  at: number
+}
+
+const SHELVED = 5
+const SHELVED_MS = 60 * 60 * 1000
+
 /**
- * A built bundle as the owner's device receives it, read into base64 and dropped here. Only a file
- * in `dir` is read, where the builder writes.
+ * The bundles a host or window built lately, by id: at most five, for an hour, each file removed
+ * when it goes. Only files in `dir`, where the builder writes, are taken.
+ */
+export class ReportShelf {
+  private readonly kept = new Map<string, ShelvedReport>()
+
+  constructor(
+    readonly dir: string,
+    private readonly dropped: (id: string) => void = () => {},
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  /** Keeps a built bundle; null when its file is not in the folder. */
+  put(entry: Omit<ShelvedReport, 'at'>): string | null {
+    if (path.dirname(path.resolve(entry.file)) !== path.resolve(this.dir)) return null
+    const now = this.now()
+    for (const [id, kept] of this.kept) {
+      if (now - kept.at > SHELVED_MS) this.drop(id)
+    }
+    while (this.kept.size >= SHELVED) this.drop(this.kept.keys().next().value!)
+    const id = randomUUID()
+    this.kept.set(id, { ...entry, at: now })
+    return id
+  }
+
+  get(id: unknown): ShelvedReport | null {
+    return (typeof id === 'string' && this.kept.get(id)) || null
+  }
+
+  drop(id: unknown): void {
+    const kept = this.get(id)
+    if (!kept) return
+    this.kept.delete(id as string)
+    this.dropped(id as string)
+    void fs.rm(kept.file, { force: true }).catch(() => {})
+  }
+}
+
+/**
+ * A built bundle as the owner's device receives it, read into base64 and kept on the shelf, so the
+ * device can have the host submit what it reviewed.
  */
 export async function bundleForDevice(
   built: ReportBuildResult,
-  dir: string,
+  request: ReportRequest,
+  shelf: ReportShelf,
 ): Promise<DeviceReport> {
   if (!built.ok) return { ok: false, reason: built.reason }
-  try {
-    if (path.dirname(path.resolve(built.file)) !== path.resolve(dir)) {
-      return { ok: false, reason: 'failed' }
-    }
-    if (built.size > REMOTE_REPORT_MAX_BYTES) return { ok: false, reason: 'too_large' }
-    const bytes = await fs.readFile(built.file)
-    return { ok: true, zip: bytes.toString('base64'), files: built.files, size: built.size }
-  } catch {
-    return { ok: false, reason: 'failed' }
-  } finally {
+  const fail = async (reason: 'too_large' | 'failed'): Promise<DeviceReport> => {
     await fs.rm(built.file, { force: true }).catch(() => {})
+    return { ok: false, reason }
   }
+  if (built.size > REMOTE_REPORT_MAX_BYTES) return fail('too_large')
+  const bytes = await fs.readFile(built.file).catch(() => null)
+  if (!bytes) return fail('failed')
+  const ref = shelf.put({ file: built.file, files: built.files, size: built.size, request })
+  if (ref === null) return fail('failed')
+  return { ok: true, zip: bytes.toString('base64'), files: built.files, size: built.size, ref }
 }

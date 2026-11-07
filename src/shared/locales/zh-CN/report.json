@@ -29,6 +29,23 @@
   "binary": "这个文件原样带上，这里显示不了。",
   "submit": "提交给 Kettu",
   "save": "存到本地",
+  "signInToSubmit": "登录后就能把报告提交给 Kettu，拿到一个写进 issue 的编号。",
+  "signIn": "登录",
+  "notSubmitted": {
+    "tooLarge": "报告太大了，提交不了。换个短一点的时间范围或少带几项，或者存到本地附进 issue。",
+    "rateLimited": "今天提交的报告太多了。先存到本地附进 issue，或者明天再提交。",
+    "unauthorized": "登录已失效，重新登录后再提交。",
+    "signedOut": "这台主机没有登录 Kettu 账号。先为它登录，或者存到本地。",
+    "network": "连不上 Kettu。检查一下网络，再提交一次。",
+    "failed": "报告没能提交。存到本地附进 issue 吧。"
+  },
+  "submitted": {
+    "title": "报告已提交",
+    "body": "把这个编号写进 issue，就能据此找到这份报告。",
+    "copy": "复制",
+    "copied": "已复制",
+    "openIssue": "在 GitHub 上提 issue"
+  },
   "saved": "报告已保存",
   "showFile": "显示",
   "tooLarge": "报告太大了，换个短一点的时间范围或少带几项。",
