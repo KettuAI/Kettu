@@ -184,7 +184,7 @@ export const SessionRow = memo(function SessionRow({
         event.stopPropagation()
         setExpanded(!expanded)
       }}
-      className="-mr-1 -ml-4 grid size-3.5 shrink-0 place-items-center rounded-sm text-(--faint) hover:text-(--ink)"
+      className="-mr-1.5 -ml-4 grid size-3.5 shrink-0 place-items-center rounded-sm text-(--faint) hover:text-(--ink)"
     >
       <Glyph icon={expanded ? ArrowDown01Icon : ArrowRight01Icon} size={12} />
     </span>
