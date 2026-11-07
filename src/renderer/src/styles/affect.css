@@ -346,6 +346,14 @@
   max-height: none;
   overflow: visible;
 }
+/* A short window scrolls the card instead of letting the popover flip below the window: it stays
+   between the corner controls (61 px from the top) and its row (54 px from the bottom, gap
+   included). Help's card sits beside it, outside the scrolling card. */
+.kettu-account .ui-pmc__card {
+  max-height: calc(100dvh - 115px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .kettu-account .ui-pmc__avatar > .kettu-account__avatar {
   display: grid;
   place-items: center;
