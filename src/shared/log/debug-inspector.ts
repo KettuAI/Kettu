@@ -3,7 +3,8 @@
 
 import inspector from 'node:inspector'
 import { rmSync } from 'node:fs'
-import { rm, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { dirname } from 'node:path'
 import { DEBUG_HOST, type DebugStatus } from '../debug'
 import { writeLog } from './process-log'
 
@@ -109,6 +110,8 @@ export class DebugPortsFile {
       inspectors: Object.fromEntries(this.inspectors),
     }
     this.writing = this.writing
+      // The log folder is made with the first record written, which may come after this.
+      .then(() => mkdir(dirname(file), { recursive: true }))
       .then(() => writeFile(file, `${JSON.stringify(contents, null, 2)}\n`, { mode: 0o600 }))
       .catch((error: unknown) => {
         writeLog('warn', 'debug', `Could not write the ports file: ${(error as Error).message}`)

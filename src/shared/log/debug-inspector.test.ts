@@ -1,8 +1,10 @@
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises'
 import inspector from 'node:inspector'
 import { connect } from 'node:net'
 import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { INSPECT_ENV, openInspector, startHostInspector } from './debug-inspector'
+import { DebugPortsFile, INSPECT_ENV, openInspector, startHostInspector } from './debug-inspector'
 
 /** Whether something accepts a TCP connection at `host`:`port`. */
 function reachable(host: string, port: number): Promise<boolean> {
@@ -70,5 +72,26 @@ describe('startHostInspector', () => {
     const url = inspector.url()
     expect(url && new URL(url).hostname).toBe('127.0.0.1')
     expect(port.postMessage).toHaveBeenCalledWith({ type: 'debug:inspector', url })
+  })
+})
+
+describe('DebugPortsFile', () => {
+  it('lists the ports for its owner alone, in a log folder not made yet', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'kettu-ports-'))
+    try {
+      const file = path.join(root, 'logs', 'debug-ports.json')
+      const ports = new DebugPortsFile(file, { cdp: true })
+      ports.setInspector('main', 'ws://127.0.0.1:9229/x')
+      ports.setCdp(9241)
+      await vi.waitFor(async () => {
+        expect(JSON.parse(await readFile(file, 'utf8'))).toEqual({
+          cdp: 9241,
+          inspectors: { main: 'ws://127.0.0.1:9229/x' },
+        })
+      })
+      if (process.platform !== 'win32') expect((await stat(file)).mode & 0o777).toBe(0o600)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })
