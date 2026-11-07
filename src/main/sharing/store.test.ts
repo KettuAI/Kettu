@@ -32,6 +32,8 @@ function kettuPage(overrides: Partial<PublishedPage> = {}): PublishedPage {
     publishedAt: 1_000,
     accountId: KETTU,
     accountEmail: 'ada@example.com',
+    access: 'private',
+    code: null,
     ...overrides,
   }
 }
@@ -66,9 +68,45 @@ describe('parseSharingFile', () => {
           publishedAt: 500,
           accountId: CLOUDFLARE,
           accountEmail: null,
+          access: 'public',
+          code: null,
         },
       ],
     })
+  })
+
+  it('reads a Kettu page from before levels as public', () => {
+    const before: Partial<PublishedPage> = kettuPage()
+    delete before.access
+    delete before.code
+    expect(parseSharingFile({ version: 2, account: null, published: [before] })?.published).toEqual(
+      [kettuPage({ access: 'public', code: null })],
+    )
+  })
+
+  it('keeps a Kettu page’s level and access code', () => {
+    const page = kettuPage({ access: 'code', code: 'k7m2' })
+    expect(parseSharingFile({ version: 2, account: null, published: [page] })?.published).toEqual([
+      page,
+    ])
+  })
+
+  it('refuses a level or code that does not fit', () => {
+    const wrong: Partial<PublishedPage>[] = [
+      { access: 'friends' as PublishedPage['access'] },
+      { access: 'code', code: null },
+      { access: 'code', code: 'K7M2' },
+      { access: 'code', code: 'k7m0' },
+      { access: 'code', code: 'k7m22' },
+      { access: 'private', code: 'k7m2' },
+      { access: 'public', code: 'k7m2' },
+    ]
+    for (const overrides of wrong) {
+      expect(
+        parseSharingFile({ version: 2, account: null, published: [kettuPage(overrides)] }),
+        JSON.stringify(overrides),
+      ).toBeNull()
+    }
   })
 
   it('keeps a Kettu page with its account', () => {
@@ -99,7 +137,7 @@ describe('parseSharingFile', () => {
     }
   })
 
-  it('refuses a Cloudflare page with an email or a plain http address', () => {
+  it('refuses a Cloudflare page with an email, a plain http address or a level', () => {
     const cloudflare: PublishedPage = {
       ...kettuPage(),
       target: 'cloudflare',
@@ -107,11 +145,13 @@ describe('parseSharingFile', () => {
       url: 'https://ob-abcdefghijklmnop.ada.workers.dev/',
       accountId: CLOUDFLARE,
       accountEmail: null,
+      access: 'public',
     }
     expect(parseSharingFile({ version: 2, account: null, published: [cloudflare] })).not.toBeNull()
     for (const overrides of [
       { accountEmail: 'ada@example.com' },
       { url: 'http://ob-abcdefghijklmnop.localhost/' },
+      { access: 'private' as const },
     ]) {
       expect(
         parseSharingFile({
@@ -153,6 +193,7 @@ describe('pagesToUnpublish and pagesToForget', () => {
       ref: 'ob-abcdefghijklmnop',
       accountId: CLOUDFLARE,
       accountEmail: null,
+      access: 'public' as const,
     },
   ]
 

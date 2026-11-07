@@ -20,7 +20,14 @@ import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
 import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
-import type { SharingConnectResult, SharingResult, SharingStatus, SharingTarget } from './sharing'
+import type {
+  ShareAccess,
+  SharingConnectResult,
+  SharingOpenResult,
+  SharingResult,
+  SharingStatus,
+  SharingTarget,
+} from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { DevicesApi } from './device-host'
 import type { PreparedReport, ReportFileView, ReportRequest, ReportSubmitResult } from './report'
@@ -314,10 +321,13 @@ export interface IpcInvokeContract {
   'sharing:remove': { args: []; result: SharingStatus }
   // Main reads the version's HTML from the host, so the page never comes from the renderer.
   'sharing:publish': {
-    args: [id: string, version: number, target: SharingTarget]
+    args: [id: string, version: number, target: SharingTarget, access: ShareAccess]
     result: SharingResult
   }
   'sharing:update': { args: [id: string, version: number]; result: SharingResult }
+  'sharing:set-access': { args: [id: string, access: ShareAccess]; result: SharingResult }
+  'sharing:new-code': { args: [id: string]; result: SharingResult }
+  'sharing:open-link': { args: [id: string]; result: SharingOpenResult }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
   'remote:status': { args: []; result: RemoteStatus }
   // A pairing code for this page, voiding any other; null while remote access is not on. Its
@@ -571,10 +581,24 @@ export interface KettuApi {
     connect(token: string, accountId: string | null): Promise<SharingConnectResult>
     /** Forgets the account and its token; published pages stay as they are. */
     remove(): Promise<SharingStatus>
-    /** Publishes to the target; an artifact already published is updated where it lives. */
-    publish(id: string, version: number, target: SharingTarget): Promise<SharingResult>
+    /**
+     * Publishes to the target, at the level a Kettu page takes; an artifact already published is
+     * updated where it lives.
+     */
+    publish(
+      id: string,
+      version: number,
+      target: SharingTarget,
+      access: ShareAccess,
+    ): Promise<SharingResult>
     /** Puts the version on the artifact's page, at the same URL. */
     update(id: string, version: number): Promise<SharingResult>
+    /** Changes who can open a Kettu page, at the same URL. */
+    setAccess(id: string, access: ShareAccess): Promise<SharingResult>
+    /** Draws a Kettu page a new access code. */
+    newCode(id: string): Promise<SharingResult>
+    /** An address that opens the page for its publisher, without its code or a sign-in. */
+    openLink(id: string): Promise<SharingOpenResult>
     unpublish(id: string): Promise<SharingResult>
     onChanged(listener: (status: SharingStatus) => void): () => void
   }

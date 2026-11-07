@@ -2,7 +2,7 @@
 // published through the sharing API with that account's access token. The service gives every
 // address; nothing here builds one.
 
-import type { SharingFailure } from '@shared/sharing'
+import { ACCESS_CODE, SHARE_ACCESS, type ShareAccess, type SharingFailure } from '@shared/sharing'
 import { SharingError, type PageFile, type Published, type SharingProvider } from './provider'
 import { KETTU_PAGE, pageUrl } from './store'
 
@@ -11,8 +11,15 @@ const MAX_MESSAGE = 500
 
 export type Fetch = (url: string, init: RequestInit) => Promise<Response>
 
+/** Who can open a page as the service says, and whether it takes no code for now. */
+export interface KettuAccess {
+  access: ShareAccess
+  code: string | null
+  codeLocked: boolean
+}
+
 /** A page as the service lists it. */
-export interface KettuPage {
+export interface KettuPage extends KettuAccess {
   id: string
   url: string
   bytes: number
@@ -52,6 +59,23 @@ function record(value: unknown): Record<string, unknown> | null {
 const isSize = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 
+/**
+ * The level a page answer names; a service from before levels names none, and its pages are
+ * public. A code comes only with the `code` level.
+ */
+function accessOf(body: Record<string, unknown> | null): KettuAccess {
+  const raw = body?.access
+  if (raw !== undefined && !SHARE_ACCESS.includes(raw as ShareAccess)) {
+    throw unexpected('the page’s level')
+  }
+  const access = (raw ?? 'public') as ShareAccess
+  const code = access === 'code' ? body?.code : null
+  if (code !== null && (typeof code !== 'string' || !ACCESS_CODE.test(code))) {
+    throw unexpected('the page’s access code')
+  }
+  return { access, code: code as string | null, codeLocked: body?.codeLocked === true }
+}
+
 export interface KettuShareDeps {
   /** The sharing API's base, the account service's own: `<base>/api/v1/shares`. */
   base: string
@@ -62,14 +86,45 @@ export interface KettuShareDeps {
 export class KettuShare implements SharingProvider {
   constructor(private readonly deps: KettuShareDeps) {}
 
-  async publish(files: readonly PageFile[]): Promise<Published> {
-    const body = await this.request('', { method: 'POST', body: form(files) })
+  async publish(
+    files: readonly PageFile[],
+    _headers: Record<string, string>,
+    access: ShareAccess,
+  ): Promise<Published> {
+    const body = await this.request(`?access=${access}`, { method: 'POST', body: form(files) })
     const id = body?.id
     const url = pageUrl(body?.url)
     if (typeof id !== 'string' || !KETTU_PAGE.test(id) || url === null) {
       throw unexpected('the page it published')
     }
-    return { url, ref: id }
+    const { access: given, code } = accessOf(body)
+    return { url, ref: id, access: given, code }
+  }
+
+  /** Changes who can open the page, or draws it a new access code; what the service says now. */
+  async setAccess(
+    ref: string,
+    change: { access?: ShareAccess; newCode?: true },
+  ): Promise<KettuAccess> {
+    const body = await this.request(`/${page(ref)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(change),
+      json: true,
+    })
+    return accessOf(body)
+  }
+
+  /**
+   * A one-time address that opens the page for its publisher without its code or a sign-in, on
+   * the page's own host only.
+   */
+  async openLink(ref: string, pageAddress: string): Promise<string> {
+    const body = await this.request(`/${page(ref)}/open`, { method: 'POST' })
+    const url = pageUrl(body?.url)
+    if (url === null || new URL(url).origin !== new URL(pageAddress).origin) {
+      throw unexpected('the address that opens the page')
+    }
+    return url
   }
 
   async update(ref: string, files: readonly PageFile[]): Promise<void> {
@@ -105,18 +160,31 @@ export class KettuShare implements SharingProvider {
       if (!entry || typeof entry.id !== 'string' || !KETTU_PAGE.test(entry.id) || url === null) {
         throw unexpected('its pages')
       }
-      pages.push({ id: entry.id, url, bytes: isSize(entry.bytes) ? entry.bytes : 0 })
+      pages.push({
+        id: entry.id,
+        url,
+        bytes: isSize(entry.bytes) ? entry.bytes : 0,
+        ...accessOf(entry),
+      })
     }
     return { pages, used: usage.bytes, limit: usage.limit }
   }
 
   /** The answer's JSON, null for an empty one; any error as a `SharingError`. */
-  private async request(path: string, init: RequestInit): Promise<Record<string, unknown> | null> {
+  private async request(
+    path: string,
+    { json = false, ...init }: RequestInit & { json?: boolean },
+  ): Promise<Record<string, unknown> | null> {
     let response: Response
+    const headers: Record<string, string> = {
+      accept: 'application/json',
+      authorization: `Bearer ${this.deps.token}`,
+    }
+    if (json) headers['content-type'] = 'application/json'
     try {
       response = await this.deps.fetch(`${this.deps.base}/api/v1/shares${path}`, {
         ...init,
-        headers: { accept: 'application/json', authorization: `Bearer ${this.deps.token}` },
+        headers,
         redirect: 'error',
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })

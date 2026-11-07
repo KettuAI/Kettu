@@ -1011,6 +1011,10 @@
 .k-share__title svg {
   color: var(--tone-green);
 }
+/* Green says anyone can open it; a page someone must be let into keeps the ink. */
+.k-share__title:not([data-access='public']) svg {
+  color: var(--muted);
+}
 .k-share__url {
   display: flex;
   align-items: center;
@@ -1080,6 +1084,33 @@
   color: var(--faint);
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.k-share__code {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 4px 0 10px;
+  border-radius: 8px;
+  background: var(--chip);
+}
+.k-share__code-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.k-share__code-value {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--strong);
+}
+.k-share__code .ui-as-icon-btn {
+  margin-left: auto;
+}
+.k-share__warn {
+  color: var(--warning);
 }
 .k-share__foot {
   display: flex;

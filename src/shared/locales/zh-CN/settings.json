@@ -897,7 +897,7 @@
     "about": "Kettu 的版本和更新。",
     "archived": "从侧边栏移走但仍保留。恢复后会回到原来的项目里。",
     "artifacts": "页面要读取项目文件或向你的 Agent 提问时会先问你。只保存自己数据的页面不会问。",
-    "sharing": "把 artifact 发布为任何人都能打开的链接，发布到 Kettu 或你自己的 Cloudflare 账号。",
+    "sharing": "把 artifact 发布为链接，发布到 Kettu 或你自己的 Cloudflare 账号；发布到 Kettu 的可以选择谁能打开。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",

@@ -6,7 +6,14 @@ import type { ThumbnailPage } from '../artifacts'
 import type { HostToMain } from '../host-control'
 import type { AppInfo, RemotePairingEvent } from '../ipc'
 import type { AgentColor, SettingsFile, SettingsPatch } from '../settings'
-import type { SharingConnectResult, SharingResult, SharingStatus, SharingTarget } from '../sharing'
+import type {
+  ShareAccess,
+  SharingConnectResult,
+  SharingOpenResult,
+  SharingResult,
+  SharingStatus,
+  SharingTarget,
+} from '../sharing'
 import type { ReportFileInfo, ReportRequest, ReportSubmitResult } from '../report'
 import type { AgentId, HarnessId } from '../thread'
 import type {
@@ -201,10 +208,13 @@ export interface HostAdminContract {
   }
   'sharing.remove': { params: undefined; result: SharingStatus }
   'sharing.publish': {
-    params: { id: string; version: number; target: SharingTarget }
+    params: { id: string; version: number; target: SharingTarget; access: ShareAccess }
     result: SharingResult
   }
   'sharing.update': { params: { id: string; version: number }; result: SharingResult }
+  'sharing.setAccess': { params: { id: string; access: ShareAccess }; result: SharingResult }
+  'sharing.newCode': { params: { id: string }; result: SharingResult }
+  'sharing.openLink': { params: { id: string }; result: SharingOpenResult }
   'sharing.unpublish': { params: { id: string }; result: SharingResult }
   'updates.status': { params: undefined; result: UpdateStatus }
   'updates.check': { params: undefined; result: UpdateStatus }
@@ -282,6 +292,9 @@ const METHODS: Record<HostAdminMethod, true> = {
   'sharing.publish': true,
   'sharing.update': true,
   'sharing.unpublish': true,
+  'sharing.setAccess': true,
+  'sharing.newCode': true,
+  'sharing.openLink': true,
   'updates.status': true,
   'updates.check': true,
   'updates.download': true,

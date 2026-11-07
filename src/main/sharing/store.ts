@@ -4,7 +4,13 @@
 
 import { join } from 'node:path'
 import { ARTIFACT_ID } from '@shared/artifacts'
-import { CLOUDFLARE_ACCOUNT_ID, type SharingTarget } from '@shared/sharing'
+import {
+  ACCESS_CODE,
+  CLOUDFLARE_ACCOUNT_ID,
+  SHARE_ACCESS,
+  type ShareAccess,
+  type SharingTarget,
+} from '@shared/sharing'
 import { JsonFileWriter, quarantineFile, readJsonFile } from '../json-file'
 import { createLogger } from '../log'
 
@@ -65,6 +71,10 @@ export interface PublishedPage {
   accountId: string
   /** The Kettu account's email when it was published, to name it once another one signs in. */
   accountEmail: string | null
+  /** As the service last said, kept to show it offline; public on Cloudflare. */
+  access: ShareAccess
+  /** The access code while the level is `code`. */
+  code: string | null
 }
 
 export interface SharingFile {
@@ -115,6 +125,13 @@ function parsePage(raw: unknown, version: 1 | 2): PublishedPage | null {
   } else {
     return null
   }
+  // Entries from before levels have none, and were public.
+  const access = raw.access === undefined ? 'public' : raw.access
+  const code = raw.code === undefined ? null : raw.code
+  if (!SHARE_ACCESS.includes(access as ShareAccess)) return null
+  if (code !== null && (typeof code !== 'string' || !ACCESS_CODE.test(code))) return null
+  if ((access === 'code') !== (code !== null)) return null
+  if (target === 'cloudflare' && access !== 'public') return null
   return {
     id,
     target,
@@ -124,6 +141,8 @@ function parsePage(raw: unknown, version: 1 | 2): PublishedPage | null {
     publishedAt: publishedAt as number,
     accountId,
     accountEmail: accountEmail as string | null,
+    access: access as ShareAccess,
+    code: code as string | null,
   }
 }
 

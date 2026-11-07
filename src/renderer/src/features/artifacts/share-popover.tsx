@@ -1,18 +1,27 @@
 // The viewer's Share button and popover: publish the version on screen to Kettu or the connected
-// Cloudflare account, copy the URL, update it or take it down. Main holds the accounts and makes
-// every request.
+// Cloudflare account, choose who can open a Kettu page, copy the URL, update it or take it down.
+// Main holds the accounts and makes every request.
 
 import { useEffect, useRef, useState } from 'react'
 import {
   CloudIcon,
   Copy01Icon,
   Globe02Icon,
+  Key01Icon,
   LinkSquare02Icon,
+  SquareLock02Icon,
   Share08Icon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { CLOUDFLARE_FREE_WORKERS, type SharingResult, type SharingTarget } from '@shared/sharing'
+import {
+  CLOUDFLARE_FREE_WORKERS,
+  DEFAULT_SHARE_ACCESS,
+  SHARE_ACCESS,
+  type ShareAccess,
+  type SharingResult,
+  type SharingTarget,
+} from '@shared/sharing'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
@@ -36,8 +45,11 @@ import { useNow } from '@renderer/lib/use-now'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import {
   canChange,
+  newSharedCode,
   publishArtifact,
   refreshSharing,
+  setSharedAccess,
+  sharedPageLink,
   unpublishArtifact,
   updateSharedArtifact,
   useSharingStore,
@@ -49,6 +61,40 @@ import './viewer.css'
 const NOTICE_KEY = 'sharing.firstPublishSeen'
 
 type Failure = Extract<SharingResult, { failed: string }>
+
+const ACCESS_ICONS = { private: SquareLock02Icon, code: Key01Icon, public: Globe02Icon } as const
+
+/** Who can open a Kettu page: the three levels, with a line on what the chosen one means. */
+function AccessChoice({
+  value,
+  disabled = false,
+  onChange,
+}: {
+  value: ShareAccess
+  disabled?: boolean
+  onChange(next: ShareAccess): void
+}) {
+  const { t } = useTranslation('artifacts')
+  return (
+    <div className="k-share__choose">
+      <span>{t('share.who')}</span>
+      <SegmentedControl<ShareAccess>
+        aria-label={t('share.who')}
+        variant="tray"
+        size="sm"
+        fullWidth
+        value={value}
+        disabled={disabled}
+        onChange={onChange}
+        options={SHARE_ACCESS.map((access) => ({
+          value: access,
+          label: t(`share.access.${access}`),
+        }))}
+      />
+      <p className="k-share__meta">{t(`share.accessHint.${value}`)}</p>
+    </div>
+  )
+}
 
 /** The used and total storage, as "1.2 MB of 2 GB cloud storage used". */
 function StorageLine() {
@@ -103,6 +149,8 @@ export function ShareButton({
   const [chosen, setChosen] = useState<SharingTarget>('kettu')
   // Without a Cloudflare account there is no choice: pages go to Kettu.
   const target: SharingTarget = account ? chosen : 'kettu'
+  const [access, setAccess] = useState<ShareAccess>(DEFAULT_SHARE_ACCESS)
+  const [codeCopied, setCodeCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -134,14 +182,39 @@ export function ShareButton({
       writeJson(NOTICE_KEY, true)
       setNoticeSeen(true)
     }
-    run(() => publishArtifact(id, shown, target))
+    // Cloudflare has no levels: whoever has a Worker's address opens it.
+    run(() => publishArtifact(id, shown, target, target === 'kettu' ? access : 'public'))
   }
 
   const copy = (): void => {
     if (!published) return
-    void navigator.clipboard.writeText(published.url).then(() => {
+    // The link, and the access code with it while the page has one.
+    const text = published.code
+      ? t('share.copyWithCode', { url: published.url, code: published.code })
+      : published.url
+    void navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const copyCode = (): void => {
+    if (!published?.code) return
+    void navigator.clipboard.writeText(published.code).then(() => {
+      setCodeCopied(true)
+      setTimeout(() => setCodeCopied(false), 2000)
+    })
+  }
+
+  // The publisher's own page that is not public opens through a one-time address, so neither its
+  // code nor a sign-in in the browser is needed; anything else opens the page's own address. The
+  // web client opens the plain address, as a window opened after a request may be blocked there.
+  const openPage = (event: React.MouseEvent<HTMLAnchorElement>): void => {
+    if (isWeb || !published || published.access === 'public' || !canManage) return
+    event.preventDefault()
+    const fallback = published.url
+    void sharedPageLink(id).then((result) => {
+      window.open('url' in result ? result.url : fallback, '_blank', 'noreferrer')
     })
   }
 
@@ -189,8 +262,8 @@ export function ShareButton({
   } else if (published) {
     body = (
       <>
-        <h2 className="k-share__title">
-          <Icon icon={Globe02Icon} size={15} />
+        <h2 className="k-share__title" data-access={published.access}>
+          <Icon icon={ACCESS_ICONS[published.access]} size={15} />
           {t('share.publishedTitle')}
         </h2>
         <div className="k-share__url">
@@ -205,13 +278,69 @@ export function ShareButton({
           <Button
             variant="secondary"
             size="sm"
-            aria-label={copied ? t('share.copied') : t('share.copy')}
+            aria-label={
+              copied ? t('share.copied') : published.code ? t('share.copyBoth') : t('share.copy')
+            }
             icon={<Icon icon={copied ? Tick02Icon : Copy01Icon} size={14} />}
             onClick={copy}
           >
             {t('share.copyButton')}
           </Button>
         </div>
+        {published.target === 'kettu' && canManage && (
+          <AccessChoice
+            value={published.access}
+            disabled={busy}
+            onChange={(next) => run(() => setSharedAccess(id, next))}
+          />
+        )}
+        {published.target === 'kettu' && !canManage && (
+          <p className="k-share__meta">{t(`share.accessHint.${published.access}`)}</p>
+        )}
+        {published.code && (
+          <div className="k-share__code">
+            <span className="k-share__code-label">{t('share.codeLabel')}</span>
+            <span className="k-share__code-value" dir="ltr">
+              {published.code}
+            </span>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={codeCopied ? t('share.copied') : t('share.copyCode')}
+                    onClick={copyCode}
+                    className="ui-as-icon-btn"
+                  />
+                }
+              >
+                <Icon icon={codeCopied ? Tick02Icon : Copy01Icon} size={14} />
+              </TooltipTrigger>
+              <TooltipContent>{t('share.copyCode')}</TooltipContent>
+            </Tooltip>
+            {canManage && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="k-share__code-new"
+                      disabled={busy}
+                      onClick={() => run(() => newSharedCode(id))}
+                    />
+                  }
+                >
+                  {t('share.newCode')}
+                </TooltipTrigger>
+                <TooltipContent>{t('share.newCodeHint')}</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        )}
+        {published.codeLocked && canManage && (
+          <p className="k-share__meta k-share__warn">{t('share.codeLocked')}</p>
+        )}
         <p className="k-share__meta">
           {`${t('share.published', {
             version: published.version,
@@ -255,7 +384,13 @@ export function ShareButton({
           </Button>
         )}
         <div className="k-share__foot">
-          <a href={published.url} target="_blank" rel="noreferrer" className="k-av-link">
+          <a
+            href={published.url}
+            target="_blank"
+            rel="noreferrer"
+            className="k-av-link"
+            onClick={openPage}
+          >
             <Icon icon={LinkSquare02Icon} size={14} />
             {t('share.openLink')}
           </a>
@@ -293,11 +428,24 @@ export function ShareButton({
           </div>
         )}
         {target === 'cloudflare' && account && (
-          <div className="k-share__target">
-            <Icon icon={CloudIcon} size={15} />
-            {t('share.targets.cloudflare')}
-            <span dir="ltr">{`${account.subdomain}.workers.dev`}</span>
-          </div>
+          <>
+            <div className="k-share__target">
+              <Icon icon={CloudIcon} size={15} />
+              {t('share.targets.cloudflare')}
+              <span dir="ltr">{`${account.subdomain}.workers.dev`}</span>
+            </div>
+            <p className="k-share__meta">{t('share.cloudflarePublic')}</p>
+          </>
+        )}
+        {target === 'kettu' && signedIn && (
+          <AccessChoice
+            value={access}
+            disabled={busy}
+            onChange={(next) => {
+              setAccess(next)
+              setFailure(null)
+            }}
+          />
         )}
         {target === 'kettu' && signedIn && <StorageLine />}
         {target === 'kettu' && !signedIn && (

@@ -682,8 +682,13 @@ export function registerIpcHandlers({
   handle('sharing:refresh', 0, () => sharing.refresh())
   handle('sharing:connect', 2, (_, token, accountId) => sharing.connect(token, accountId))
   handle('sharing:remove', 0, () => sharing.remove())
-  handle('sharing:publish', 3, (_, id, version, target) => sharing.publish(id, version, target))
+  handle('sharing:publish', 4, (_, id, version, target, access) =>
+    sharing.publish(id, version, target, access),
+  )
   handle('sharing:update', 2, (_, id, version) => sharing.update(id, version))
+  handle('sharing:set-access', 2, (_, id, access) => sharing.setAccess(id, access))
+  handle('sharing:new-code', 1, (_, id) => sharing.newCode(id))
+  handle('sharing:open-link', 1, (_, id) => sharing.openLink(id))
   handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
 
   handle('remote:status', 0, () => remoteStatus())

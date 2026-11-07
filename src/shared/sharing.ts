@@ -6,6 +6,20 @@ export type SharingTarget = 'kettu' | 'cloudflare'
 
 export const SHARING_TARGETS: readonly SharingTarget[] = ['kettu', 'cloudflare']
 
+/**
+ * Who can open a page published to Kettu: only its publisher signed in to their Kettu account,
+ * whoever enters its access code, or anyone with the link. Pages on Cloudflare are always public.
+ */
+export type ShareAccess = 'private' | 'code' | 'public'
+
+export const SHARE_ACCESS: readonly ShareAccess[] = ['private', 'code', 'public']
+
+/** What a new page published to Kettu is, unless the user picks another level. */
+export const DEFAULT_SHARE_ACCESS: ShareAccess = 'private'
+
+/** A page's access code as the service draws it: four characters without 0, o, 1, l or i. */
+export const ACCESS_CODE = /^[2-9a-hjkmnp-z]{4}$/
+
 /** Cloudflare's account IDs: 32 hex characters. */
 export const CLOUDFLARE_ACCOUNT_ID = /^[0-9a-f]{32}$/
 
@@ -48,6 +62,12 @@ export interface PublishedArtifact {
   otherAccount: boolean
   /** The email of the Kettu account a page of another account was published with. */
   accountEmail: string | null
+  /** As the service last said, never only what was asked for; public on Cloudflare. */
+  access: ShareAccess
+  /** The page's access code while its level is `code`. */
+  code: string | null
+  /** The service takes no access code for the page for now, after too many wrong ones. */
+  codeLocked: boolean
 }
 
 /** A Kettu account's cloud storage, in bytes, as the service last said. */
@@ -111,6 +131,9 @@ export type SharingFailure =
 
 export type SharingResult =
   { status: SharingStatus } | { failed: SharingFailure; message: string | null }
+
+/** A one-time address that opens the publisher's own page, or why there is none. */
+export type SharingOpenResult = { url: string } | { failed: SharingFailure; message: string | null }
 
 /** What a connect answers: the account kept, a failure, or the accounts the token reaches. */
 export type SharingConnectResult = SharingResult | { accounts: CloudflareAccountChoice[] }
