@@ -208,7 +208,7 @@ async function main() {
   write(join(assets, 'lockup-horizontal.svg'), lockupSvg('horizontal', 100, INK))
   write(join(assets, 'lockup-horizontal-dark.svg'), lockupSvg('horizontal', 100, PAPER))
   writeFileSync(join(root, 'src/renderer/src/assets/kettu-icon.svg'), foxSvg('tile'))
-  // The greeting's flat fox, one for each ground.
+  // The launch cover's flat fox, one for each ground.
   for (const ground of FLAT_GROUNDS) {
     writeFileSync(
       join(root, `src/renderer/src/assets/kettu-fox-flat-on-${ground}.svg`),
