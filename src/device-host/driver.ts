@@ -1,7 +1,13 @@
 // What every kind of device looks like to the host: a stream of encoded frames, the screen they
 // show, and input to send back.
 
-import type { DeviceFrame, DeviceInput, DeviceScreen, FrameKind } from '@shared/device-host'
+import type {
+  DeviceFrame,
+  DeviceInput,
+  DeviceOrientation,
+  DeviceScreen,
+  FrameKind,
+} from '@shared/device-host'
 
 export interface DriverEvents {
   frame(kind: FrameKind, data: Uint8Array): void
@@ -20,6 +26,8 @@ export interface DeviceDriver {
   screenshot(): Promise<Uint8Array>
   /** The device's own frame, where the driver knows one. */
   frame?(): Promise<DeviceFrame | null>
+  /** Turns the device so its stream reports the turn; true once it has. */
+  orient?(orientation: DeviceOrientation): Promise<boolean>
 }
 
 export class DriverError extends Error {

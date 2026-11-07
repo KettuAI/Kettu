@@ -12,6 +12,7 @@ import type {
   DeviceInfo,
   DeviceInput,
   DeviceOperator,
+  DeviceOrientation,
   DeviceProblem,
   DeviceScreen,
 } from '@shared/device-host'
@@ -302,6 +303,17 @@ export class DeviceManager {
         live.idle = setTimeout(() => void this.stopLive(found.id), IDLE_CAPTURE_MS)
       }
     }
+  }
+
+  /**
+   * Turns a streaming device through its own driver, so the stream and the panes see the turn;
+   * false when the device is not streaming or its driver cannot.
+   */
+  async orient(id: DeviceId, orientation: DeviceOrientation): Promise<boolean> {
+    const live = this.live.get(id)
+    if (!live?.driver.orient) return false
+    await live.starting
+    return live.driver.orient(orientation)
   }
 
   /** The frame of a device that is streaming, or null when it is not or has none of its own. */
