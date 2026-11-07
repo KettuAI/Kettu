@@ -201,5 +201,11 @@
     "lines": "第 {{lines}} 行",
     "clickToOpen": "点击打开",
     "backspaceRemoves": "{{key}} 移除"
+  },
+  "place": {
+    "thisComputer": "本机",
+    "thisComputer_mac": "这台 Mac",
+    "unknownHost": "另一台主机",
+    "noProject": "无项目"
   }
 }

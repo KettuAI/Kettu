@@ -3950,18 +3950,58 @@
   margin-left: 0;
 }
 
-/* The tray: the branch on the left, the prompt cache and the context on the right. */
+/* The tray: the host, the project and the branch on the left, the prompt cache and the context on
+   the right. */
 .kettu-tray__group {
   display: flex;
   align-items: center;
   gap: 2px;
   min-width: 0;
 }
+.kettu-tray {
+  container: kettu-tray / inline-size;
+}
+/* Short of room, the host and then the project keep only their marks, and the branch shortens. */
+.kettu-tray-link--host {
+  flex: none;
+}
+.kettu-tray-link--project {
+  flex-shrink: 2;
+}
+@container kettu-tray (inline-size < 520px) {
+  .kettu-tray-link--host {
+    padding-right: 7px;
+  }
+  /* Still read out, and in the tooltip. */
+  .kettu-tray-link--host > .kettu-tray-link__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@container kettu-tray (inline-size < 420px) {
+  .kettu-tray-link--project {
+    flex: none;
+    padding-right: 7px;
+  }
+  .kettu-tray-link--project > .kettu-tray-link__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
 .kettu-tray__group:empty {
   display: none;
 }
-/* Keeps the right end when there is no branch before it. */
+/* Keeps the right end, whole, when there is no branch before it. */
 .kettu-tray__group--end {
+  flex: none;
   margin-left: auto;
 }
 .kettu-tray__error {

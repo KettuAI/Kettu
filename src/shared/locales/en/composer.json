@@ -207,5 +207,11 @@
     "lines": "lines {{lines}}",
     "clickToOpen": "Click to open",
     "backspaceRemoves": "{{key}} removes it"
+  },
+  "place": {
+    "thisComputer": "This computer",
+    "thisComputer_mac": "This Mac",
+    "unknownHost": "Another host",
+    "noProject": "No project"
   }
 }

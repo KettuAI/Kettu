@@ -33,6 +33,7 @@ import { OutOfCreditStrip } from './out-of-credit-strip'
 import { useAddMenu } from './add-menu'
 import { PromptBox } from './prompt-box'
 import { RunningButton, SendButton } from './send-button'
+import { SessionPlace } from './session-place'
 import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
 import type { Select } from './use-pick'
@@ -40,8 +41,8 @@ import { usePromptBox } from './use-prompt-box'
 
 /**
  * The session's composer on affectUI's Chat Composer: the white card with **+**, the permission
- * mode, the model menu and Send over the text, and the gray tray with the branch, the prompt
- * cache and the context under it.
+ * mode, the model menu and Send over the text, and the gray tray under it: the host, the project
+ * and the branch, then the prompt cache and the context.
  */
 export function Composer({ session, agentName }: { session: SessionView; agentName: string }) {
   const { t } = useTranslation('composer')
@@ -326,6 +327,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
           <div className="ui-as-composer__tray kettu-tray">
             <TrayStyles />
             <span className="kettu-tray__group">
+              <SessionPlace sessionId={sessionId} projectPath={session.projectPath} />
               <BranchTrayLink projectPath={session.projectPath} />
             </span>
             {shownError && (
