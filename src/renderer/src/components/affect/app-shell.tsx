@@ -3064,7 +3064,8 @@ a.ui-as-side__item { text-decoration: none; cursor: pointer; }
 .ui-as-side__ws { display: flex; min-width: 0; margin-bottom: 8px; }
 .ui-as-user > :is(img, .ui-as-user__initials) { flex: none; }
 .ui-as-user img { width: 21px; height: 21px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06); }
-.ui-as-user svg { margin-left: auto; color: var(--faint); }
+/* Kettu: only the row's own trailing chevron, not the signed-out avatar's glyph */
+.ui-as-user > svg { margin-left: auto; color: var(--faint); }
 .ui-as-user:hover { background: var(--hover); }
 
 /* ---------- Main ---------- */
