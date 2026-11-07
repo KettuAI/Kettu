@@ -1,15 +1,17 @@
 // Problem reports on the daemon: its own part of the bundle, which its agent host builds, or which
 // the daemon builds from the log files alone while that host is down or the daemon is not running.
 
-import { rm, readdir } from 'node:fs/promises'
+import { readFile, rm, readdir } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { flushLog, logFolder, redactLogText } from '@shared/log/process-log'
 import { writeReport } from '@shared/log/report-bundle'
-import type { ReportBuildResult, ReportRequest } from '@shared/report'
+import type { ReportBuildResult, ReportRequest, ReportSubmitResult } from '@shared/report'
 import type { SettingsFile } from '@shared/settings'
 import type { HostName, HostStatus } from './control'
+import { nodeSystemNameForRun } from '../main/system-name'
 import type { Hosts } from './hosts'
+import type { DaemonSignIn } from './sign-in'
 
 /** Where bundles wait for the CLI or a device to take them. */
 export function reportsFolder(dataPath: string): string {
@@ -89,4 +91,21 @@ export async function clearReports(dataPath: string): Promise<void> {
   const dir = reportsFolder(dataPath)
   const names = await readdir(dir).catch(() => [] as string[])
   await Promise.all(names.map((name) => rm(path.join(dir, name), { force: true }).catch(() => {})))
+}
+
+/** Submits a built bundle, as it was reviewed, with the daemon's sign-in. */
+export async function submitBundle(
+  file: string,
+  description: string,
+  version: string,
+  signIn: Pick<DaemonSignIn, 'submitReport'>,
+): Promise<ReportSubmitResult> {
+  const [bytes, system] = await Promise.all([readFile(file), nodeSystemNameForRun()])
+  const result = await signIn.submitReport({
+    bundle: new Uint8Array(bytes),
+    description,
+    version,
+    platform: system,
+  })
+  return result.ok ? { ...result, version, system } : result
 }

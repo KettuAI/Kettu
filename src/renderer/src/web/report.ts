@@ -2,7 +2,7 @@
 // keeps it to show and to hand the browser as a download.
 
 import type { KettuApi, ReportPrepareResult } from '@shared/ipc'
-import type { ReportFileInfo, ReportFileView } from '@shared/report'
+import { reportSubmitResult, type ReportFileInfo, type ReportFileView } from '@shared/report'
 import { downloadFile } from './media'
 import type { AdminCall } from './themes'
 
@@ -12,6 +12,8 @@ interface Kept {
   bytes: Uint8Array<ArrayBuffer>
   files: ReportFileInfo[]
   zip: import('jszip') | null
+  /** The bundle as the host keeps it, which the host submits. */
+  ref: string
 }
 
 export function webReports(admin: AdminCall): KettuApi['report'] {
@@ -33,6 +35,7 @@ export function webReports(admin: AdminCall): KettuApi['report'] {
         bytes: Uint8Array.from(atob(answer.zip), (char) => char.charCodeAt(0)),
         files: answer.files,
         zip: null,
+        ref: answer.ref,
       })
       return { ok: true, report: { id, files: answer.files, size: answer.size } }
     },
@@ -58,6 +61,11 @@ export function webReports(admin: AdminCall): KettuApi['report'] {
       return name
     },
     discard: async (id) => void kept.delete(id),
+    submit: async (id) => {
+      const entry = kept.get(id)
+      if (!entry) return { ok: false, reason: 'failed' }
+      return reportSubmitResult(await admin('host.submitReport', { ref: entry.ref }))
+    },
     // Recording steps and the notice of an unexpected quit belong to the desktop app.
     recording: async () => null,
     record: async () => null,

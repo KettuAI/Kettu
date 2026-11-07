@@ -2,6 +2,7 @@
 // OAuth 2.0 endpoints of public native clients (RFC 6749, 7009, 8252, 8628) and the account.
 
 import { createHash, randomBytes } from 'node:crypto'
+import { REPORT_ID, type ReportSubmitFailure } from '@shared/report'
 
 export const ACCOUNT_URL = 'https://www.kettu.sh'
 /** Points a development run at another copy of the service and its pages. */
@@ -12,6 +13,8 @@ export const DAEMON_CLIENT = 'kettu-daemon'
 
 const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
 const TIMEOUT_MS = 15_000
+/** A report's bundle on a slow connection. */
+const UPLOAD_TIMEOUT_MS = 5 * 60_000
 // An access token is treated as expired this long before the service says, for clock drift.
 const EXPIRY_MARGIN_MS = 60_000
 const MAX_NAME = 100
@@ -90,6 +93,15 @@ export interface DeviceCode {
   expiresIn: number
   /** Seconds to wait between polls. */
   interval: number
+}
+
+/** A problem report as it is submitted: the bundle the user reviewed, and what it is about. */
+export interface ReportUpload {
+  bundle: Uint8Array<ArrayBuffer>
+  description: string
+  version: string
+  /** The system and its version, then the architecture. */
+  platform: string
 }
 
 /** An answer the service gave, by its stable code. */
@@ -229,6 +241,23 @@ export class AccountApi {
     }
   }
 
+  /** Submits a problem report; the id it was given, such as KR-7F3K2Q. */
+  async submitReport(accessToken: string, upload: ReportUpload): Promise<string> {
+    const form = new FormData()
+    form.set('bundle', new Blob([upload.bundle], { type: 'application/zip' }), 'report.zip')
+    form.set('description', upload.description)
+    form.set('version', upload.version)
+    form.set('platform', upload.platform)
+    const body = await this.request(
+      '/api/v1/reports',
+      { method: 'POST', headers: { authorization: `Bearer ${accessToken}` }, body: form },
+      UPLOAD_TIMEOUT_MS,
+    )
+    const id = body?.id
+    if (typeof id !== 'string' || !REPORT_ID.test(id)) throw this.unexpected('/api/v1/reports')
+    return id
+  }
+
   private async token(fields: Record<string, string>): Promise<TokenSet> {
     const body = await this.form('/api/oauth/token', fields)
     const { access_token, refresh_token, expires_in } = body
@@ -249,14 +278,18 @@ export class AccountApi {
   }
 
   /** The answer's JSON, null for an empty one; any error the service gives as `AccountServiceError`. */
-  private async request(path: string, init: RequestInit): Promise<Record<string, unknown> | null> {
+  private async request(
+    path: string,
+    init: RequestInit,
+    timeoutMs = TIMEOUT_MS,
+  ): Promise<Record<string, unknown> | null> {
     let response: Response
     try {
       response = await this.fetch(`${this.base}${path}`, {
         ...init,
         headers: { accept: 'application/json', ...init.headers },
         redirect: 'error',
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       })
     } catch (error) {
       throw new AccountNetworkError(`Could not reach ${this.base}: ${(error as Error).message}`)
@@ -287,5 +320,24 @@ export class AccountApi {
 
   private unexpected(path: string): AccountServiceError {
     return new AccountServiceError('server_error', `${path} gave an answer Kettu cannot read`, 200)
+  }
+}
+
+/** Why a report was not submitted, as the dialog and `kettu report` say it. */
+export function submitFailure(error: unknown): ReportSubmitFailure {
+  if (error instanceof AccountNetworkError) return 'network'
+  if (!(error instanceof AccountServiceError)) return 'failed'
+  switch (error.code) {
+    case 'report_too_large':
+      return 'too_large'
+    case 'rate_limited':
+      return 'rate_limited'
+    case 'unauthorized':
+    case 'invalid_token':
+    case 'invalid_grant':
+    case 'account_disabled':
+      return 'unauthorized'
+    default:
+      return 'failed'
   }
 }

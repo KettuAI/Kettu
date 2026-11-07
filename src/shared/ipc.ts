@@ -23,7 +23,7 @@ import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { DevicesApi } from './device-host'
-import type { PreparedReport, ReportFileView, ReportRequest } from './report'
+import type { PreparedReport, ReportFileView, ReportRequest, ReportSubmitResult } from './report'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
 import type { TrayTarget } from './tray'
@@ -231,6 +231,7 @@ export interface IpcInvokeContract {
   'report:view': { args: [id: string, path: string]; result: ReportFileView }
   'report:save': { args: [id: string]; result: string | null }
   'report:discard': { args: [id: string]; result: void }
+  'report:submit': { args: [id: string]; result: ReportSubmitResult }
   'report:recording': { args: []; result: ReportRecording | null }
   'report:record': { args: [on: boolean]; result: ReportRecording | null }
   // When the last run ended unexpectedly, until the notice of it is dismissed.
@@ -673,6 +674,8 @@ export interface KettuApi {
     /** Asks where to save the zip; resolves to the path, or null if cancelled. */
     save(id: string): Promise<string | null>
     discard(id: string): Promise<void>
+    /** Submits a bundle as the user reviewed it, with the sign-in of the host that built it. */
+    submit(id: string): Promise<ReportSubmitResult>
     recording(): Promise<ReportRecording | null>
     /** Starts or stops recording steps to reproduce; stopping opens the dialog. */
     record(on: boolean): Promise<ReportRecording | null>

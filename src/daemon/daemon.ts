@@ -2,7 +2,7 @@
 // the host's key and the settings, starts the hosts and stops them in order. It alone writes the
 // settings, so a change from the CLI comes through the control socket and applies at once.
 
-import { bundleForDevice } from '@shared/log/report-bundle'
+import { bundleForDevice, ReportShelf } from '@shared/log/report-bundle'
 import { chmod, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -60,7 +60,8 @@ import {
 } from './key'
 import { proxiedFetch } from './proxy'
 import { keyPath } from './paths'
-import { clearReports, daemonReport, reportsFolder } from './problem-report'
+import { clearReports, daemonReport, reportsFolder, submitBundle } from './problem-report'
+import { DaemonSignIn } from './sign-in'
 import { readSshPort, writeSshPort } from './ssh-port'
 
 const log = createLogger('daemon')
@@ -362,6 +363,21 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   }
   delete hostEnv[SERVICE_ENV]
   let admin: HostAdmin | null = null
+  const reportShelf = new ReportShelf(reportsFolder(options.dataPath))
+  let signIn: DaemonSignIn | null = null
+  try {
+    signIn = new DaemonSignIn(
+      new AccountApi(
+        accountBaseUrl(options.env),
+        proxiedFetch(() => settings.get().proxy, options.env),
+      ),
+      accountFile(options.dataPath),
+      NO_SYSTEM_ENCRYPTION,
+      (message) => log.warn(message),
+    )
+  } catch (error) {
+    log.warn(`Problem reports cannot be submitted: ${(error as Error).message}`)
+  }
   const running = new Hosts({
     bundleDir: options.bundleDir,
     dataPath: options.dataPath,
@@ -412,8 +428,14 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
           { version: options.version, dataPath: options.dataPath, settings: settings.get() },
           request,
         ),
-        reportsFolder(options.dataPath),
+        request,
+        reportShelf,
       ),
+    submitReport: async (ref) => {
+      const shelved = reportShelf.get(ref)
+      if (!shelved?.request || !signIn) return { ok: false, reason: 'failed' }
+      return submitBundle(shelved.file, shelved.request.description, options.version, signIn)
+    },
   })
   let verboseTimer: NodeJS.Timeout | null = null
   /** Applies the detailed records setting to the daemon and its agent host, until it ends. */

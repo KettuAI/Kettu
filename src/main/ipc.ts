@@ -543,6 +543,10 @@ export function registerIpcHandlers({
   handle('report:view', 2, (_, id, path) => reports.view(id, path))
   handle('report:save', 1, ({ window }, id) => reports.save(window, id))
   handle('report:discard', 1, (_, id) => reports.discard(id))
+  handle('report:submit', 1, async (_, id) => {
+    actionLog.info('report.submit')
+    return reports.submit(id)
+  })
   handle('report:recording', 0, () => reports.recordingState())
   handle('report:record', 1, (_, on) => {
     if (typeof on !== 'boolean') throw new Error('"report:record" takes a boolean')

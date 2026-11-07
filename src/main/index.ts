@@ -643,6 +643,11 @@ async function start(): Promise<void> {
       verboseUntil: () => settings.get().diagnostics.verboseUntil,
       onRecording: (recording) => broadcast('report:recording-changed', recording),
       onRecorded: (span) => sendCommand({ kind: 'report-problem', span }),
+      submit: (upload) => account.submitReport(upload),
+      about: async () => {
+        const info = await appInfo()
+        return { version: info.version, system: info.system }
+      },
     },
     reportsFolder,
   )
@@ -670,6 +675,7 @@ async function start(): Promise<void> {
     png: (id, version, page, size) => artifacts.png(id, version, page, size),
     printPdf: (id, version) => artifacts.printPdf(id, version),
     report: (request) => reports.forDevice(request),
+    submitReport: (ref) => reports.submit(ref),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
   })
 

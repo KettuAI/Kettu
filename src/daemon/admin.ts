@@ -48,6 +48,8 @@ export interface DaemonAdminOptions {
   home?: string
   /** A problem report's bundle for the owner's device. */
   report?: HostAdminDeps['report']
+  /** Submits a bundle `report` gave, with the daemon's sign-in. */
+  submitReport?: HostAdminDeps['submitReport']
 }
 
 /** A server has no trash, so a folder Kettu made moves into one of the daemon's own. */
@@ -75,6 +77,7 @@ export async function startDaemonAdmin({
   env,
   home = os.homedir(),
   report,
+  submitReport,
 }: DaemonAdminOptions): Promise<HostAdmin> {
   const themesDir = path.join(dataPath, 'themes')
   const sourcesFile = path.join(dataPath, 'theme-sources.json')
@@ -151,6 +154,7 @@ export async function startDaemonAdmin({
     png: null,
     remoteAlwaysOn: true,
     report,
+    submitReport,
     send: (event, deviceId) => hosts.adminEvent(event, deviceId),
   })
   settings.onChange((next, changed) => {
