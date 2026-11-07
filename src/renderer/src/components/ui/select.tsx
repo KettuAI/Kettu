@@ -155,7 +155,7 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
           icon={Tick02Icon}
           strokeWidth={1.9}
           aria-hidden
-          className="pointer-events-none size-3"
+          className="pointer-events-none size-3.5"
         />
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>

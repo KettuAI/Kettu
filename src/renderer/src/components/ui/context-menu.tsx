@@ -148,7 +148,7 @@ function ContextMenuSubTrigger({
         icon={ArrowRight01Icon}
         strokeWidth={1.9}
         aria-hidden
-        className="ml-auto size-3"
+        className="ml-auto size-3.5"
       />
     </ContextMenuPrimitive.SubmenuTrigger>
   )

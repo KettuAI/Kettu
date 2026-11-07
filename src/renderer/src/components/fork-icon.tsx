@@ -1,7 +1,6 @@
-/**
- * Fork's icon: Lucide's Split (ISC) turned to branch off to the right, at the icons' 1.9 stroke.
- * Hugeicons has no such glyph, so it keeps the one Kettu has always shown.
- */
+// Lucide's Split, https://lucide.dev/icons/split (ISC License, Copyright (c) Lucide Contributors).
+
+/** Fork's icon: Split turned to branch off to the right, at 1.9; Hugeicons has none like it. */
 export function ForkIcon({ size = 16, className }: { size?: number; className?: string }) {
   return (
     <svg
