@@ -10,7 +10,7 @@ const variants = cva(
         default:
           'bg-(image:--primary-gradient) text-primary-foreground shadow-primary hover:bg-(image:--primary-gradient-hover)',
         outline:
-          'bg-card text-foreground shadow-outline hover:shadow-outline-hover aria-expanded:bg-accent',
+          'bg-card text-foreground shadow-outline hover:bg-subtle hover:shadow-outline-hover aria-expanded:bg-accent',
         secondary:
           'bg-secondary text-secondary-foreground hover:bg-hover aria-expanded:bg-secondary aria-expanded:text-secondary-foreground',
         ghost:

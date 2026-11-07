@@ -170,8 +170,8 @@
      top edge and its label, which a theme may set; the built-in one is solid ink. */
   --primary-from: #323137;
   --primary-to: #201e25;
-  --primary-hover-from: #3c3b42;
-  --primary-hover-to: #29272f;
+  --primary-hover-from: #47464d;
+  --primary-hover-to: #34323a;
   /* The built-in primary button draws no edge; a theme may give it one. */
   --primary-ring: #0d0d0d;
   --primary-highlight: rgb(255 255 255 / 16%);
@@ -573,8 +573,8 @@
     /* Inverted: a near-white button with dark text. */
     --primary-from: #f4f4f5;
     --primary-to: #e4e4e7;
-    --primary-hover-from: #ffffff;
-    --primary-hover-to: #ececef;
+    --primary-hover-from: #e6e6e9;
+    --primary-hover-to: #d4d4d8;
     --primary-ring: rgb(0 0 0 / 60%);
     --primary-highlight: rgb(255 255 255 / 90%);
     --primary-foreground: #121213;
@@ -898,8 +898,8 @@
   /* Inverted: a near-white button with dark text. */
   --primary-from: #f4f4f5;
   --primary-to: #e4e4e7;
-  --primary-hover-from: #ffffff;
-  --primary-hover-to: #ececef;
+  --primary-hover-from: #e6e6e9;
+  --primary-hover-to: #d4d4d8;
   --primary-ring: rgb(0 0 0 / 60%);
   --primary-highlight: rgb(255 255 255 / 90%);
   --primary-foreground: #121213;
