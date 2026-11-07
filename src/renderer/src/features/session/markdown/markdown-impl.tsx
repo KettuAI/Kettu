@@ -1,5 +1,6 @@
 import 'streamdown/styles.css'
 import {
+  createContext,
   isValidElement,
   lazy,
   memo,
@@ -18,7 +19,14 @@ import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
 import { Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { defaultComponents, Streamdown, type Components, type ExtraProps } from 'streamdown'
+import {
+  Block,
+  defaultComponents,
+  Streamdown,
+  type BlockProps,
+  type Components,
+  type ExtraProps,
+} from 'streamdown'
 import { githubIssueUrl } from '@shared/git'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
@@ -317,6 +325,26 @@ const REVEAL = {
   maxBacklogMs: 200,
 } as const
 
+/** Whether the chunk still shows the text it mounted with, which was there before it. */
+const MountedTextContext = createContext(false)
+
+/**
+ * Streamdown's block. Streamdown reveals every word of a block it first renders with the reveal
+ * on; here text that was already there, a chunk's when it mounts or a block's when the reveal
+ * starts on it, counts as shown, so entering a session mid-reply reveals only what comes after.
+ */
+function RevealBlock(props: BlockProps) {
+  const mountedText = useContext(MountedTextContext)
+  const plugin = props.animatePlugin ?? null
+  const [born] = useState(plugin)
+  const [seeded, setSeeded] = useState<typeof plugin>(null)
+  if (plugin && plugin !== seeded && (plugin !== born || mountedText)) {
+    plugin.setPrevContentLength(Number.MAX_SAFE_INTEGER)
+    setSeeded(plugin)
+  }
+  return <Block {...props} />
+}
+
 /** `reveal`: the chunk the stream is writing, whose new words rise in; settled ones stay plain. */
 const Chunk = memo(function Chunk({
   markdown,
@@ -330,27 +358,31 @@ const Chunk = memo(function Chunk({
   const source = useMemo(() => spacedImages(markdown), [markdown])
   const themes = useCodeThemes()
   const plugins = useMemo(() => pluginsFor(themes), [themes])
+  const [mountedWith] = useState(markdown)
   return (
     <LiveContext value={live}>
       {/* The last-block rules in globals.css name the chunks by this class. */}
-      <Streamdown
-        className="markdown-chunk"
-        mode="streaming"
-        parseIncompleteMarkdown={live}
-        isAnimating={live}
-        animated={reveal ? REVEAL : false}
-        skipHtml
-        plugins={plugins}
-        remarkPlugins={remarkPlugins}
-        components={components}
-        linkSafety={linkSafety}
-        controls={controls}
-        codeBlockMaxHeight={0}
-        tableMaxHeight={0}
-        lineNumbers={false}
-      >
-        {source}
-      </Streamdown>
+      <MountedTextContext value={markdown === mountedWith}>
+        <Streamdown
+          className="markdown-chunk"
+          mode="streaming"
+          parseIncompleteMarkdown={live}
+          isAnimating={live}
+          animated={reveal ? REVEAL : false}
+          BlockComponent={RevealBlock}
+          skipHtml
+          plugins={plugins}
+          remarkPlugins={remarkPlugins}
+          components={components}
+          linkSafety={linkSafety}
+          controls={controls}
+          codeBlockMaxHeight={0}
+          tableMaxHeight={0}
+          lineNumbers={false}
+        >
+          {source}
+        </Streamdown>
+      </MountedTextContext>
     </LiveContext>
   )
 })
