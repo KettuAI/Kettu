@@ -132,7 +132,7 @@ function Chip({ sessionId, items, tone }: { sessionId: string; items: PlanItem[]
         align="start"
         alignOffset={0}
         sideOffset={8}
-        className="ks-plan-pop w-[380px] max-w-[calc(100vw-32px)] overflow-hidden p-0"
+        className="ks-plan-pop w-max max-w-[min(380px,calc(100vw-32px))] min-w-56 overflow-hidden p-0"
       >
         <AgentSteering
           title={label}

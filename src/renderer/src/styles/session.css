@@ -740,8 +740,20 @@
 .ks-plan-ring [data-status='in_progress'] {
   stroke: var(--thread-fox);
 }
+/* The card's inline-size containment would size the popover to nothing; drop it so the popover
+   hugs its steps. The time column exists only while some step shows a time, at a fixed width so a
+   ticking clock never resizes the popover. */
 .ks-plan-pop .ui-stc {
+  width: auto;
   max-width: none;
+  container-type: normal;
+}
+.ks-plan-pop .ui-stc__plan:not(:has(.ui-stc__step-time:not(:empty))) .ui-stc__step-time {
+  display: none;
+}
+.ks-plan-pop .ui-stc__step-time {
+  min-width: 6ch;
+  text-align: end;
 }
 .ks-plan-pop .ui-stc__card {
   border-radius: 0;
