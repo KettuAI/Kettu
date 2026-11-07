@@ -48,12 +48,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { isEditable } from '@renderer/features/artifacts/keys'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { ProjectMenu } from '@renderer/features/session/new-session/project-menu'
+import { useCornered } from '@renderer/features/shell/corner'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { canStart, startValues } from '@renderer/features/session/new-session/start-options'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { basename } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
-import { hasBand } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
 import { useAgentsStore, agentName } from '@renderer/stores/agents'
@@ -609,13 +609,13 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
 /** The page: its bar with Back, then the body under it. */
 function RoutineShell({ bar, children }: { bar: ReactNode; children: ReactNode }) {
   const { t } = useTranslation('routines')
-  // On macOS with the sidebar collapsed, the corner's controls sit where Back would.
-  const cornered = useViewStore((st) => st.sidebarCollapsed) && !hasBand
+  // The corner's controls sit where Back would.
+  const cornered = useCornered()
   return (
     <div className="k-scroll">
       <SettingsStyles />
       <div className="k-routine">
-        <header className="k-routine__bar app-region-drag">
+        <header className="k-routine__bar app-region-drag" data-cornered={cornered || undefined}>
           {cornered && <CornerControlsSpace />}
           <button type="button" className="k-back" onClick={leaveRoutine}>
             <Icon icon={ArrowLeft01Icon} size={15} />
