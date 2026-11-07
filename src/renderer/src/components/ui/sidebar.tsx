@@ -19,7 +19,8 @@ import {
 } from '@renderer/components/ui/sheet'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { PanelLeftIcon } from 'lucide-react'
+import { SidebarLeftIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 
 const SIDEBAR_WIDTH = '16rem'
@@ -244,7 +245,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       }}
       {...props}
     >
-      <PanelLeftIcon />
+      <HugeiconsIcon icon={SidebarLeftIcon} strokeWidth={1.9} aria-hidden />
       <span className="sr-only">{t('sidebar.toggle')}</span>
     </Button>
   )

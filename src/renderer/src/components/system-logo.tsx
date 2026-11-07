@@ -2,7 +2,7 @@ import { cn } from '@renderer/lib/utils'
 
 export type SystemLogoName = 'apple' | 'windows' | 'linux' | 'android'
 
-// Padded so a logo sits as large as a Lucide icon.
+// Padded so a logo sits as large as a line icon.
 const PADDED = '-2.4 -2.4 28.8 28.8'
 
 // Simple Icons, https://simpleicons.org (CC0-1.0); Windows is from v12.0.0, the last release to have it.

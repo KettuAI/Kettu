@@ -2,7 +2,8 @@ import * as React from 'react'
 import { cn } from 'cn'
 import { DayPicker, getDefaultClassNames, type DayButton, type Locale } from 'react-day-picker'
 
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { ArrowDown01Icon, ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 
 import { Button, buttonVariants } from '@renderer/components/ui/button'
 
@@ -115,17 +116,24 @@ function Calendar({
         Root: ({ className, rootRef, ...props }) => {
           return <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />
         },
-        Chevron: ({ className, orientation, ...props }) => {
-          if (orientation === 'left') {
-            return <ChevronLeftIcon className={cn('cn-rtl-flip size-4', className)} {...props} />
-          }
-
-          if (orientation === 'right') {
-            return <ChevronRightIcon className={cn('cn-rtl-flip size-4', className)} {...props} />
-          }
-
-          return <ChevronDownIcon className={cn('size-4', className)} {...props} />
-        },
+        Chevron: ({ className, orientation }) => (
+          <HugeiconsIcon
+            icon={
+              orientation === 'left'
+                ? ArrowLeft01Icon
+                : orientation === 'right'
+                  ? ArrowRight01Icon
+                  : ArrowDown01Icon
+            }
+            strokeWidth={1.9}
+            aria-hidden
+            className={cn(
+              'size-4',
+              (orientation === 'left' || orientation === 'right') && 'cn-rtl-flip',
+              className,
+            )}
+          />
+        ),
         DayButton: ({ ...props }) => <CalendarDayButton locale={locale} {...props} />,
         WeekNumber: ({ children, ...props }) => {
           return (

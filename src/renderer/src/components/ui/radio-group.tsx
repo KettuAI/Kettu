@@ -1,6 +1,5 @@
 import { Radio as RadioPrimitive } from '@base-ui/react/radio'
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group'
-import { LucideProvider } from 'lucide-react'
 import { cn } from 'cn'
 
 function RadioGroup({ className, ...props }: RadioGroupPrimitive.Props) {
@@ -34,7 +33,7 @@ function RadioGroupItem({ className, ...props }: RadioPrimitive.Root.Props) {
 
 /**
  * An option tile: a choice drawn as a card, its radio's dot beside what the choice is. Chosen, it
- * takes a fox line and tint. Icons inside draw at the tiles' finer stroke.
+ * takes a fox line and tint.
  */
 function RadioGroupTile({ className, children, ...props }: RadioPrimitive.Root.Props) {
   return (
@@ -54,9 +53,7 @@ function RadioGroupTile({ className, children, ...props }: RadioPrimitive.Root.P
           'group-data-checked/radio-group-tile:bg-control-on group-data-checked/radio-group-tile:shadow-none',
         )}
       />
-      <LucideProvider strokeWidth={1.2} nonScalingStroke>
-        <div className="min-w-0 flex-1">{children}</div>
-      </LucideProvider>
+      <div className="min-w-0 flex-1">{children}</div>
     </RadioPrimitive.Root>
   )
 }
