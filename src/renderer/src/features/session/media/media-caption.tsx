@@ -1,5 +1,6 @@
 import { useContext, useState, type ReactNode } from 'react'
-import { FileDownIcon, FolderIcon, Maximize2Icon } from 'lucide-react'
+import { ArrowExpand01Icon, FileDownloadIcon, Folder01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { MediaGrant } from '@shared/media'
 import { Button } from '@renderer/components/ui/button'
@@ -52,7 +53,7 @@ export function MediaCaption({
       <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/media:opacity-100 group-hover/media:opacity-100">
         {onOpenLarger && (
           <CaptionButton label={t('media.openLarger')} onClick={onOpenLarger}>
-            <Maximize2Icon />
+            <HugeiconsIcon icon={ArrowExpand01Icon} strokeWidth={1.9} aria-hidden />
           </CaptionButton>
         )}
         {media.kind === 'file' ? (
@@ -62,7 +63,7 @@ export function MediaCaption({
             label={t('media.saveAs')}
             onClick={() => run(() => saveCarried(media.mimeType, media.data, name))}
           >
-            <FileDownIcon />
+            <HugeiconsIcon icon={FileDownloadIcon} strokeWidth={1.9} aria-hidden />
           </CaptionButton>
         )}
       </span>
@@ -91,7 +92,7 @@ function ShowFileButton({
       }
       onClick={() => run(action.show)}
     >
-      <FolderIcon />
+      <HugeiconsIcon icon={Folder01Icon} strokeWidth={1.9} aria-hidden />
     </CaptionButton>
   )
 }

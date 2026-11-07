@@ -21,7 +21,9 @@ export type FeedbackKind = "up" | "down";
 
 export type MessageActionsProps = {
   /** Buttons of your own after the built-in ones, in the same look with their own tooltip */
-  extraActions?: { key: string; tip: string; label: string; icon: ReactNode; onClick?: () => void }[];
+  extraActions?: { key: string; tip: string; label: string; icon: ReactNode; onClick?: () => void; disabled?: boolean }[];
+  /** Copy's words, for a translation */
+  labels?: { copy?: string; copied?: string; copyMessage?: string };
   /** Quiet text at the end of the bar, e.g. when the message was sent */
   after?: ReactNode;
   /** The message text – copied to the clipboard by Copy and used to time Read aloud */
@@ -175,6 +177,7 @@ export function MessageActions({
   className,
   extraActions = [],
   after,
+  labels,
 }: MessageActionsProps) {
   const uid = useId();
   const actions = cleanActions(actionsProp);
@@ -225,7 +228,7 @@ export function MessageActions({
     }
     onCopy?.(text);
     setCopied(Date.now());
-    announce("Copied");
+    announce(labels?.copied ?? "Copied");
   };
 
   /* ----- Regenerate ----- */
@@ -318,6 +321,7 @@ export function MessageActions({
     expanded?: boolean;
     controls?: string;
     refEl?: Ref<HTMLButtonElement>;
+    disabled?: boolean;
   }) => (
     <span className="ui-mac__item" key={o.key} data-flash={o.flash ? "" : undefined}>
       <button
@@ -328,7 +332,8 @@ export function MessageActions({
         aria-pressed={o.pressed}
         aria-expanded={o.expanded}
         aria-controls={o.controls}
-        onClick={o.onClick}
+        aria-disabled={o.disabled || undefined}
+        onClick={o.disabled ? undefined : o.onClick}
         {...o.extra}
       >
         {o.children}
@@ -343,8 +348,8 @@ export function MessageActions({
     if (key === "copy")
       return button({
         key: "copy",
-        tip: copied ? "Copied" : "Copy",
-        labelText: copied ? "Copied" : "Copy message",
+        tip: copied ? (labels?.copied ?? "Copied") : (labels?.copy ?? "Copy"),
+        labelText: copied ? (labels?.copied ?? "Copied") : (labels?.copyMessage ?? "Copy message"),
         onClick: copy,
         flash: Boolean(copied),
         extra: { "data-done": copied ? "" : undefined },
@@ -487,6 +492,7 @@ export function MessageActions({
             key: a.key,
             tip: a.tip,
             labelText: a.label,
+            disabled: a.disabled,
             onClick: () => a.onClick?.(),
             children: <span className="ui-mac__icon">{a.icon}</span>,
           }),
@@ -609,6 +615,7 @@ const css = /* css */ `
 }
 .ui-mac *, .ui-mac *::before, .ui-mac *::after { box-sizing: border-box; }
 :where(.ui-mac) button { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ui-mac__btn[aria-disabled] { opacity: 0.45; cursor: default; }
 .ui-mac button:focus-visible, .ui-mac input:focus-visible { outline: 2px solid var(--ui-mac-focus); outline-offset: 1px; }
 .ui-mac svg { display: block; flex: none; }
 .ui-mac__sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

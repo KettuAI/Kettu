@@ -1,18 +1,18 @@
 import { useState, type ReactNode } from 'react'
 import {
-  ArrowUpIcon,
-  CircleAlertIcon,
-  CloudOffIcon,
-  FileDownIcon,
-  RotateCwIcon,
-} from 'lucide-react'
+  AlertCircleIcon,
+  Archive01Icon,
+  ArrowUp02Icon,
+  FileDownloadIcon,
+  RefreshIcon,
+  WifiDisconnected01Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, UserContent } from '@shared/thread'
 import { exportDiagnostics, unarchiveSession } from '@renderer/app/actions'
-import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
-import { Message } from '@renderer/components/ui/message'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { connectionText } from '@renderer/features/settings/host-text'
@@ -56,7 +56,7 @@ export function ThreadSkeleton({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'mx-auto flex w-full max-w-thread animate-in flex-col px-7 pt-7 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
+        'ks-thread__column mx-auto flex w-full animate-in flex-col px-8 pt-8 fade-in fill-mode-backwards delay-200 animation-duration-(--duration-slow)',
         className,
       )}
       aria-hidden
@@ -149,7 +149,7 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
             aria-hidden
             className="disabled:text-disabled disabled:opacity-100"
           >
-            <ArrowUpIcon />
+            <HugeiconsIcon icon={ArrowUp02Icon} strokeWidth={1.9} aria-hidden />
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>
@@ -178,23 +178,19 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
   const attachments = contentAttachments(content)
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
-    <ColumnScroller>
-      <div className="mx-auto flex w-full max-w-thread flex-col px-7 pt-7">
+    <ColumnScroller className="ks-thread">
+      <div className="ks-thread__column mx-auto flex w-full flex-col px-8 pt-8">
         {/* As the thread shows a user entry, so nothing moves when the session takes over. */}
-        <div className="flex flex-col items-end gap-0.5">
+        <div className="ks-user">
           {attachments.length > 0 && (
             <div className="flex w-full justify-end pb-1">
               <SentAttachments sessionId={null} entryId={null} attachments={attachments} />
             </div>
           )}
           {rest.length > 0 && (
-            <Message align="end">
-              <Bubble variant="muted">
-                <BubbleContent>
-                  <UserContentView content={rest} />
-                </BubbleContent>
-              </Bubble>
-            </Message>
+            <div className="ks-user__bubble">
+              <UserContentView content={rest} />
+            </div>
           )}
         </div>
         <div role="status" className="flex flex-col gap-0.5 pt-2.5">
@@ -252,7 +248,12 @@ export function FailedState({
       role="alert"
     >
       <div className="flex items-start gap-2">
-        <CircleAlertIcon className="mt-px size-4 shrink-0 text-danger" />
+        <HugeiconsIcon
+          icon={AlertCircleIcon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="mt-px size-4 shrink-0 text-danger"
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="text-ui font-medium">{title}</span>
           <span className="text-ui text-muted-foreground" data-selectable="">
@@ -270,14 +271,24 @@ export function FailedState({
       )}
       <div className="flex flex-wrap items-center gap-1.5 pl-6">
         <Button size="compact" onClick={onRetry}>
-          <RotateCwIcon data-icon="inline-start" />
+          <HugeiconsIcon
+            icon={RefreshIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            data-icon="inline-start"
+          />
           {t('common:actions.retry')}
         </Button>
         <Button variant="outline" size="compact" disabled={exporting} onClick={() => void save()}>
           {exporting ? (
             <Spinner data-icon="inline-start" className="size-3" />
           ) : (
-            <FileDownIcon data-icon="inline-start" />
+            <HugeiconsIcon
+              icon={FileDownloadIcon}
+              strokeWidth={1.9}
+              aria-hidden
+              data-icon="inline-start"
+            />
           )}
           {t('failed.exportDiagnostics')}
         </Button>
@@ -304,15 +315,26 @@ export function ArchivedComposer({ sessionId }: { sessionId: string }) {
     }
   }
   return (
-    <div className="flex flex-col gap-2 px-3 py-4">
-      <p className="text-small text-tertiary">{t('view.archivedComposer')}</p>
-      <div>
-        <Button size="xs" variant="outline" disabled={restoring} onClick={() => void restore()}>
+    <div className="flex flex-col gap-2">
+      <div className="ks-bar">
+        <HugeiconsIcon
+          icon={Archive01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="ks-bar__icon size-4 shrink-0"
+        />
+        <p>{t('view.archivedComposer')}</p>
+        <Button
+          variant="outline"
+          className="ks-btn"
+          disabled={restoring}
+          onClick={() => void restore()}
+        >
           {t('view.restore')}
         </Button>
       </div>
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="px-1 text-xs text-danger">
           {error}
         </p>
       )}
@@ -331,11 +353,13 @@ export function HostAway({ host, inline = false }: { host: OtherHost; inline?: b
   const state = connectionText(ts, host, now)
   if (inline) {
     return (
-      <div
-        role="status"
-        className="flex min-h-13 items-center gap-2 rounded-2xl bg-card px-4 py-3 text-ui text-secondary shadow-card"
-      >
-        <CloudOffIcon aria-hidden className="size-4 shrink-0 text-icon" />
+      <div role="status" className="ks-bar">
+        <HugeiconsIcon
+          icon={WifiDisconnected01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="ks-bar__icon size-4 shrink-0"
+        />
         <span className="min-w-0 flex-1 text-pretty">
           {t('host.awayComposer', { name: host.name, state })}
         </span>
@@ -347,7 +371,12 @@ export function HostAway({ host, inline = false }: { host: OtherHost; inline?: b
       role="status"
       className="flex max-w-sm animate-in flex-col items-center gap-1.5 text-center fade-in animation-duration-(--duration-slow)"
     >
-      <CloudOffIcon aria-hidden className="mb-1 size-5 text-icon" />
+      <HugeiconsIcon
+        icon={WifiDisconnected01Icon}
+        strokeWidth={1.9}
+        aria-hidden
+        className="mb-1 size-5 text-icon"
+      />
       <span className="text-ui font-medium text-primary">
         {t('host.away', { name: host.name })}
       </span>

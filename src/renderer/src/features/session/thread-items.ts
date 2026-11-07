@@ -2,9 +2,9 @@ import type { ThreadEntry, ThreadState } from '@shared/thread'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
-// groupable lookup, t other tool, w tool waiting for permission, p compaction, n plan, which the
-// thread leaves out for the top bar, e turn end, o anything else, which a new
-// site's request and an agent's question are: of their own, never folded into a run.
+// groupable lookup, t other tool, w tool waiting for permission, r tool whose request was answered,
+// p compaction, n plan, which the thread leaves out for the top bar, e turn end, o anything else,
+// which a new site's request and an agent's question are: of their own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -40,6 +40,10 @@ function charOf(entry: ThreadEntry | undefined): string {
     return 'o'
   }
   if (entry.permission) return 'w'
+  // An answered request keeps its folded card, so it stands on its own as the request did; a
+  // routine's own answer is the routine's, and folds as work.
+  const result = entry.permissionResult
+  if (result && (typeof result !== 'object' || result.by !== 'routine')) return 'r'
   if (
     entry.status === 'completed' &&
     (entry.toolKind === 'read' || entry.toolKind === 'search' || entry.toolKind === 'fetch')
@@ -51,11 +55,11 @@ function charOf(entry: ThreadEntry | undefined): string {
 
 /** Work, as opposed to what an agent says: what a reply's answer comes after. */
 const isWork = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'p'
+  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'r' || char === 'p'
 
 /**
  * Tool calls, compactions and thoughts fold into a run; a request for permission ends it, since
- * it waits for the user below the work before it.
+ * it waits for the user below the work before it, and keeps standing apart once answered.
  */
 const foldsIntoRun = (char: string | undefined): boolean =>
   char === 'h' || char === 'g' || char === 't' || char === 'p'
@@ -147,7 +151,8 @@ export function buildItems(order: string[], signature: string, live = false): It
 }
 
 /** A tool call's character in the signature. */
-const isTool = (char: string | undefined): boolean => char === 'g' || char === 't' || char === 'w'
+const isTool = (char: string | undefined): boolean =>
+  char === 'g' || char === 't' || char === 'w' || char === 'r'
 
 /** The turns starting at each user message: [start, end) indexes into the signature. */
 function turnsOf(signature: string): [number, number][] {
@@ -182,6 +187,7 @@ export function estimateOf(item: Item): Estimate {
     case 'g':
     case 't':
     case 'w':
+    case 'r':
       return 24
     // A compaction on its own.
     case 'p':

@@ -1,44 +1,27 @@
-import { memo, useMemo, useState } from 'react'
-import { ChevronRightIcon, TelescopeIcon } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import type { ThreadEntry } from '@shared/thread'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@renderer/components/ui/collapsible'
+import { memo, useMemo } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { ToolCallGroup } from '@renderer/components/affect/tool-call-card'
 import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
-import { useShallow } from 'zustand/react/shallow'
 import { useEntryAnimation } from '../use-thread'
-import { CutLabel } from './cut-label'
-import { groupLabel, PANEL, toolStep } from './helpers'
-import { stepPictures } from './row-pictures'
-import { ThumbRow } from './row-thumbs'
-import { ToolCard } from './tool-card'
+import { groupLabel, toolStep } from './helpers'
+import { RowThumbs } from './row-thumbs'
+import { StepCard } from './tool-call'
+import { runPictures, stepFacts, useToolCallLabels } from './tool-call-model'
 
-/** A run of completed lookups as one row ("Read a.ts and 2 more"), opening to a row for each. */
-/** A group's dot on its run's rail: running while any step runs, failed when one failed. */
-function groupStatus(entries: (ThreadEntry | undefined)[]): string {
-  const tools = entries.filter((entry) => entry?.kind === 'tool')
-  if (tools.some((entry) => entry.status === 'pending' || entry.status === 'in_progress'))
-    return 'in_progress'
-  return tools.some((entry) => entry.status === 'failed') ? 'failed' : 'completed'
-}
-
+/** A run of completed lookups as one line ("Read a.ts and 2 more"), opening to a card for each. */
 export const ToolGroup = memo(function ToolGroup({
   sessionId,
   entryIds,
   projectPath,
-  agentName,
 }: {
   sessionId: string
   entryIds: string[]
   projectPath: string
   agentName: string
 }) {
-  useTranslation('session')
-  const [open, setOpen] = useState(false)
+  const labels = useToolCallLabels()
   const animation = useEntryAnimation(sessionId, entryIds[0]!)
   const entries = useThreadsStore(
     useShallow((s) => {
@@ -46,58 +29,35 @@ export const ToolGroup = memo(function ToolGroup({
       return entryIds.map((id) => byId?.[id])
     }),
   )
-  const label = groupLabel(
-    entries.flatMap((entry) => (entry?.kind === 'tool' ? [toolStep(entry)] : [])),
-  )
-  const pictures = useMemo(() => stepPictures(entries), [entries])
-  const status = groupStatus(entries)
+  const tools = entries.flatMap((entry) => (entry?.kind === 'tool' ? [entry] : []))
+  const pictures = useMemo(() => runPictures(entries), [entries])
+  const label = groupLabel(tools.map(toolStep))
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      data-step-status={status}
+    <ToolCallGroup
       className={cn('min-w-0', animation)}
+      label={label}
+      runningLabel={label}
+      chevron="before"
+      labels={labels}
+      time={false}
+      trail={
+        pictures.length > 0 ? <RowThumbs sessionId={sessionId} pictures={pictures} /> : undefined
+      }
     >
-      <ThumbRow
-        sessionId={sessionId}
-        pictures={pictures}
-        open={open}
-        className="group/tool -mx-1.5 h-6.5 w-[calc(100%+0.75rem)] rounded-md"
-      >
-        <CollapsibleTrigger className="flex min-w-0 grow items-center gap-2 rounded-md px-1.5 text-left text-small text-muted-foreground outline-none focus-ring">
-          <span className="relative flex size-3.5 shrink-0 items-center justify-center text-icon">
-            <TelescopeIcon className="size-3.5 transition-opacity duration-(--duration-fast) group-hover/tool:opacity-0" />
-            <ChevronRightIcon
-              aria-hidden
-              className={cn(
-                'absolute size-3.5 opacity-0 transition-[opacity,rotate] duration-(--duration-fast) group-hover/tool:opacity-100',
-                open && 'rotate-90',
-              )}
-            />
-          </span>
-          <CutLabel
-            key={entryIds.length}
-            className="min-w-0 flex-1 truncate animate-in fade-in animation-duration-(--duration-base)"
-            full={label}
-          >
-            {label}
-          </CutLabel>
-        </CollapsibleTrigger>
-      </ThumbRow>
-      <CollapsibleContent className={PANEL}>
-        <div data-steps="" className="mt-0.5 ml-1.5 flex flex-col gap-0.5 pl-3.5">
-          {entryIds.map((id) => (
-            <div key={id} data-step="">
-              <ToolCard
-                sessionId={sessionId}
-                entryId={id}
-                projectPath={projectPath}
-                agentName={agentName}
-              />
-            </div>
-          ))}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+      {tools.map((entry) => {
+        const { glyph, ...facts } = stepFacts(sessionId, entry)!
+        return (
+          <StepCard
+            key={entry.id}
+            {...facts}
+            icon={<Icon icon={glyph} size={14} />}
+            sessionId={sessionId}
+            entry={entry}
+            projectPath={projectPath}
+            labels={labels}
+          />
+        )
+      })}
+    </ToolCallGroup>
   )
 })

@@ -1,29 +1,29 @@
 import { memo, useState } from 'react'
 import {
-  ArrowUpIcon,
-  CalendarClockIcon,
-  ChevronRightIcon,
-  CircleAlertIcon,
-  CornerUpLeftIcon,
+  Alert02Icon,
+  AlertCircleIcon,
+  ArrowRight01Icon,
+  ArrowTurnBackwardIcon,
+  ArrowUp02Icon,
+  Calendar03Icon,
   GitBranchIcon,
-  GitCommitHorizontalIcon,
-  GitPullRequestArrowIcon,
-  InfoIcon,
-  LayersIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+  GitCommitIcon,
+  GitPullRequestIcon,
+  InformationCircleIcon,
+  Layers01Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { RoutineRef } from '@shared/routines'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
-import { Bubble, BubbleContent } from '@renderer/components/ui/bubble'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
 import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marker'
-import { Message } from '@renderer/components/ui/message'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { AIAnswer, type AnswerSource } from '@renderer/components/affect/ai-answer'
 import { PrChip } from '@renderer/features/git/pr-chip'
 import { dayTime } from '@renderer/features/routines/model'
 import { PANEL, stopReasonText } from './helpers'
@@ -37,6 +37,8 @@ import { Markdown } from '../markdown'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
+import { TurnDots } from '../turn-dots'
+import { writingId } from '../turn-phase'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
 import { OutOfCreditEnd } from './out-of-credit'
@@ -65,7 +67,7 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
   )
   const rest = entry.content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
-    <div className={cn('group/actions flex flex-col items-end gap-1', animation)}>
+    <div className={cn('ks-user', animation)}>
       {attachments.length > 0 && (
         <div className="flex w-full justify-end pb-1">
           <SentAttachments sessionId={sessionId} entryId={entryId} attachments={attachments} />
@@ -73,23 +75,17 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
       )}
       {/* A message of attachments alone has no bubble. */}
       {rest.length > 0 && (
-        <Message align="end">
-          <Bubble variant="muted">
-            <BubbleContent>
-              <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
-            </BubbleContent>
-          </Bubble>
-        </Message>
+        <div className="ks-user__bubble">
+          <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
+        </div>
       )}
       {/* A prompt another session's agent sent says whose it is, under the bubble. */}
       {entry.from && (
-        <span className="pr-0.5 text-xs text-tertiary">
-          {t('userEntry.from', { title: entry.from.title })}
-        </span>
+        <span className="ks-user__note">{t('userEntry.from', { title: entry.from.title })}</span>
       )}
       {/* A message from a paired device names it; the host's own windows send unmarked ones. */}
       {entry.device && (
-        <span className="max-w-[85%] truncate pr-0.5 text-xs text-tertiary">
+        <span className="ks-user__note">
           {t('userEntry.device', { device: entry.device.name })}
         </span>
       )}
@@ -112,25 +108,45 @@ function RoutineSent({ routine }: { routine: RoutineRef }) {
         ? t('routine.catchUp', { name, when })
         : t('routine.due', { name, when })
   return (
-    <span className="flex max-w-[85%] items-center gap-1 text-xs text-tertiary">
-      <CalendarClockIcon aria-hidden className="size-3 shrink-0" />
+    <span className="ks-user__note flex items-center gap-1">
+      <HugeiconsIcon
+        icon={Calendar03Icon}
+        aria-hidden
+        strokeWidth={1.9}
+        className="size-3 shrink-0"
+      />
       <span className="truncate">{text}</span>
     </span>
   )
 }
 
-/** An agent message. */
+const NO_SOURCES: AnswerSource[] = []
+
+/**
+ * An agent message, on affectUI's AI Answer: while it streams, the turn's dots and "Writing" hang
+ * under its last line and fold away once it is written.
+ */
 export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: EntryProps) {
+  const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'agent')
   const animation = useEntryAnimation(sessionId, entryId)
+  const writing = useThreadsStore((s) => writingId(s.replicas[sessionId]?.state) === entryId)
   if (!entry) return null
   return (
-    <div className={cn('min-w-0', animation)} data-selectable="" data-agent-message="">
-      <SessionIdContext value={sessionId}>
-        <EntryIdContext value={entryId}>
-          <Markdown markdown={entry.markdown} streaming={entry.streaming} />
-        </EntryIdContext>
-      </SessionIdContext>
+    <div className={cn('ks-answer min-w-0', animation)} data-selectable="" data-agent-message="">
+      <AIAnswer
+        sources={NO_SOURCES}
+        answer=""
+        streaming={writing}
+        mark={<TurnDots phase="writing" />}
+        labels={{ writing: t('thread.phase.writing', { count: 1 }) }}
+      >
+        <SessionIdContext value={sessionId}>
+          <EntryIdContext value={entryId}>
+            <Markdown markdown={entry.markdown} streaming={entry.streaming} />
+          </EntryIdContext>
+        </SessionIdContext>
+      </AIAnswer>
       {entry.attachments.length > 0 && (
         <div className="mt-2 flex flex-wrap items-start gap-1.5">
           {entry.attachments.map((ref, i) =>
@@ -202,7 +218,12 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
       )}
     >
       <figcaption className="flex items-center gap-1.5 text-xs font-medium text-tertiary">
-        <CornerUpLeftIcon aria-hidden className="size-3 shrink-0" />
+        <HugeiconsIcon
+          icon={ArrowTurnBackwardIcon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-3 shrink-0"
+        />
         {sender
           ? t('sessionMessage.from', { title: sessionTitle(sender) })
           : t('sessionMessage.fromParent')}
@@ -214,7 +235,7 @@ export const SessionMessageEntry = memo(function SessionMessageEntry({
   )
 })
 
-const NOTICE_ICON = { info: InfoIcon, warning: TriangleAlertIcon, error: CircleAlertIcon }
+const NOTICE_ICON = { info: InformationCircleIcon, warning: Alert02Icon, error: AlertCircleIcon }
 
 export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: EntryProps) {
   const entry = useEntry(sessionId, entryId, 'notice')
@@ -235,15 +256,15 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
       <OutOfCreditEnd title={entry.title} description={entry.description} className={animation} />
     )
   }
-  const Icon = NOTICE_ICON[entry.severity]
+  const glyph = NOTICE_ICON[entry.severity]
   return (
     <Alert
       variant={
         entry.severity === 'error' ? 'error' : entry.severity === 'warning' ? 'warning' : 'default'
       }
-      className={animation}
+      className={cn('ks-notice', animation)}
     >
-      <Icon />
+      <HugeiconsIcon icon={glyph} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{entry.title}</AlertTitle>
       {entry.description && (
         <AlertDescription className="whitespace-pre-wrap" data-selectable="">
@@ -274,7 +295,7 @@ export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryI
     entry.status === 'in_progress' ? (
       <Spinner className="size-3.5 text-info" />
     ) : (
-      <LayersIcon className="size-3.5" />
+      <HugeiconsIcon icon={Layers01Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
     )
   if (!entry.summary) {
     return (
@@ -296,7 +317,12 @@ export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryI
         <MarkerIcon className="size-3.5">{icon}</MarkerIcon>
         <MarkerContent className="inline-flex items-center gap-1 group-hover/compaction:text-foreground">
           {text}
-          <ChevronRightIcon className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/compaction:rotate-90" />
+          <HugeiconsIcon
+            icon={ArrowRight01Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/compaction:rotate-90"
+          />
         </MarkerContent>
       </Marker>
       <CollapsibleContent className={PANEL}>
@@ -339,7 +365,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
         <div className={cn('flex flex-col', animation)}>
           {entry.commits.map((c) => (
             <div key={c.oid} className={line}>
-              <GitCommitHorizontalIcon className="size-3.5 shrink-0" />
+              <HugeiconsIcon
+                icon={GitCommitIcon}
+                strokeWidth={1.9}
+                aria-hidden
+                className="size-3.5 shrink-0"
+              />
               <span className="min-w-0 truncate">
                 <Trans
                   t={t}
@@ -362,7 +393,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
     case 'push':
       return (
         <div className={cn(line, animation)}>
-          <ArrowUpIcon className="size-3.5 shrink-0" />
+          <HugeiconsIcon
+            icon={ArrowUp02Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5 shrink-0"
+          />
           <span className="min-w-0 truncate">
             <Trans
               t={t}
@@ -380,7 +416,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
     case 'branch':
       return (
         <div className={cn(line, animation)}>
-          <GitBranchIcon className="size-3.5 shrink-0" />
+          <HugeiconsIcon
+            icon={GitBranchIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5 shrink-0"
+          />
           <span className="min-w-0 truncate">
             <Trans
               t={t}
@@ -395,7 +436,12 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
     case 'pull_request':
       return (
         <div className={cn(line, animation)}>
-          <GitPullRequestArrowIcon className="size-3.5 shrink-0" />
+          <HugeiconsIcon
+            icon={GitPullRequestIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.5 shrink-0"
+          />
           <span>{t('gitEvent.openedPr')}</span>
           <PrChip url={entry.url} />
         </div>

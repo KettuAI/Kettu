@@ -1,5 +1,11 @@
 import type { ReactNode } from 'react'
-import { CheckIcon, CircleDashedIcon, ExternalLinkIcon, XIcon } from 'lucide-react'
+import {
+  Cancel01Icon,
+  DashedLineCircleIcon,
+  LinkSquare02Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import type { TFunction } from 'i18next'
 import { Trans, useTranslation } from 'react-i18next'
 import type { CheckRun, GitStatus, PullRequest, PullRequestState } from '@shared/git'
@@ -215,7 +221,7 @@ function PullRequestDetails({ pr, onOpen }: { pr: PullRequest; onOpen: () => voi
           onClick={onOpen}
           className={buttonVariants({ variant: 'outline', size: 'sm', className: 'text-hint' })}
         >
-          <ExternalLinkIcon />
+          <HugeiconsIcon icon={LinkSquare02Icon} strokeWidth={1.9} />
           {t('pr.openOnGitHub')}
         </a>
         <span className="flex-1" />
@@ -257,27 +263,34 @@ function CheckRunIcon({ run }: { run: CheckRun }) {
   const { t } = useTranslation('git')
   if (run.outcome === 'passed') {
     return (
-      <CheckIcon
+      <HugeiconsIcon
+        icon={Tick02Icon}
+        size={12}
+        strokeWidth={2}
         role="img"
         aria-label={t('prPart.run.passed')}
-        strokeWidth={2}
         className="size-3 text-success"
       />
     )
   }
   if (run.outcome === 'failed') {
     return (
-      <XIcon
+      <HugeiconsIcon
+        icon={Cancel01Icon}
+        size={12}
+        strokeWidth={2}
         role="img"
         aria-label={t('prPart.run.failed')}
-        strokeWidth={2}
         className="size-3 text-danger"
       />
     )
   }
   if (run.startedAt === null) {
     return (
-      <CircleDashedIcon
+      <HugeiconsIcon
+        icon={DashedLineCircleIcon}
+        size={12}
+        strokeWidth={1.9}
         role="img"
         aria-label={t('prPart.queued')}
         className="size-3 text-tertiary"

@@ -1,7 +1,15 @@
-import { memo, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
-import { CheckIcon, MonitorIcon, ScanEyeIcon, type LucideIcon } from 'lucide-react'
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  CheckmarkCircle02Icon,
+  ComputerIcon,
+  MinusSignCircleIcon,
+  ViewIcon,
+} from '@hugeicons/core-free-icons'
+import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { ComputerSetupStep, ComputerUseStatus } from '@shared/computer-use'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { ApprovalCard } from '@renderer/components/affect/approval-card'
 import { BrandIcon } from '@renderer/components/brand'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -14,17 +22,6 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { linuxLine } from '../../settings/computer-section'
 import { useEntry, useEntryAnimation } from '../use-thread'
-import {
-  AgentWho,
-  CardError,
-  CardFooter,
-  ConfirmButton,
-  FooterButton,
-  WaitingCard,
-  WaitingHeader,
-  WaitingStatus,
-} from './answer-list'
-import { isConfirmKey } from './card-style'
 
 /** A switch as the pictures draw it, on or off. */
 function MiniSwitch({ on }: { on: boolean }) {
@@ -72,9 +69,9 @@ function PictureRow({
   )
 }
 
-const PANE_ICON: Record<Exclude<ComputerSetupStep, 'enable'>, LucideIcon> = {
-  accessibility: MonitorIcon,
-  'screen-recording': ScanEyeIcon,
+const PANE_ICON: Record<Exclude<ComputerSetupStep, 'enable'>, IconSvgElement> = {
+  accessibility: ComputerIcon,
+  'screen-recording': ViewIcon,
 }
 
 /** Where the step's switch is: Kettu's own, or Kettu's row in the system's privacy list. */
@@ -94,7 +91,7 @@ function Picture({ step, waiting }: { step: ComputerSetupStep; waiting: boolean 
     return (
       <div aria-hidden className={frame}>
         <PictureRow
-          icon={<MonitorIcon className="size-3 shrink-0" />}
+          icon={<Icon icon={ComputerIcon} size={12} />}
           label={t('computerSetup.enable.switch')}
           on
           marked
@@ -107,12 +104,12 @@ function Picture({ step, waiting }: { step: ComputerSetupStep; waiting: boolean 
       </div>
     )
   }
-  const Icon = PANE_ICON[step]
+  const glyph = PANE_ICON[step]
   const blank = <span className="size-3 shrink-0 rounded-sm bg-track" />
   return (
     <div aria-hidden className={frame}>
       <span className="flex items-center gap-1 px-0.5 text-key font-medium text-tertiary">
-        <Icon className="size-3 shrink-0" />
+        <Icon icon={glyph} size={12} />
         <span className="truncate">{t(`computerSetup.${step}.pane`)}</span>
       </span>
       <PictureRow icon={<BrandIcon size={12} />} label="Kettu" on marked />
@@ -180,31 +177,26 @@ export const ComputerSetupEntry = memo(function ComputerSetupEntry({
   if (!waiting || !step) {
     const ready = entry.outcome === 'ready'
     return (
-      <div
-        data-entry-id={entryId}
-        className={cn(
-          'flex h-6.5 min-w-0 items-center gap-2 text-small text-muted-foreground',
-          animation,
-        )}
-      >
-        {ready ? (
-          <CheckIcon aria-hidden className="size-3.5 shrink-0 text-success" />
-        ) : (
-          <MonitorIcon aria-hidden className="size-3.5 shrink-0 text-icon" />
-        )}
-        <span className="min-w-0 truncate font-medium text-secondary">
-          {t(`computerSetup.outcome.${entry.outcome ?? 'timeout'}`)}
-        </span>
-        {entry.outcome === 'declined' && (
-          <span className="shrink-0 text-xs text-tertiary">
-            {entry.device
-              ? t('permission.answer.onDevice', {
-                  answer: t('computerSetup.declinedNote'),
-                  device: entry.device.name,
-                })
-              : t('computerSetup.declinedNote')}
-          </span>
-        )}
+      <div data-entry-id={entryId} className={cn('min-w-0', animation)}>
+        <div className="ks-answered" data-kind={ready ? 'done' : 'other'}>
+          <div className="ks-answered__head ks-answered__head--alone">
+            <Icon icon={ready ? CheckmarkCircle02Icon : MinusSignCircleIcon} size={16} />
+            <span className="ks-answered__title">
+              {t(`computerSetup.outcome.${entry.outcome ?? 'timeout'}`)}
+            </span>
+            {entry.outcome === 'declined' && (
+              <span className="ks-answered__device">
+                ·{' '}
+                {entry.device
+                  ? t('permission.answer.onDevice', {
+                      answer: t('computerSetup.declinedNote'),
+                      device: entry.device.name,
+                    })
+                  : t('computerSetup.declinedNote')}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
     )
   }
@@ -243,101 +235,71 @@ export const ComputerSetupEntry = memo(function ComputerSetupEntry({
     }
   }
 
-  const onKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!isConfirmKey(event) || !here) return
-    event.preventDefault()
-    event.stopPropagation()
-    void doStep()
-  }
-
   const where = hostId !== null ? (other?.name ?? null) : served
   return (
-    <WaitingCard
+    <div
       ref={card}
-      entryId={entryId}
-      label={t('computerSetup.label')}
-      description={t('computerSetup.ask', { agent: agentName })}
-      className={animation}
-      onKeyDownCapture={onKeyDownCapture}
+      data-entry-id={entryId}
+      data-elsewhere={here ? undefined : ''}
+      className={cn('min-w-0', animation)}
     >
-      <WaitingHeader>
-        <AgentWho sessionId={sessionId} name={agentName} sub={t('computerSetup.wants')} />
-        <WaitingStatus>
-          {granting ? t('computerSetup.granting') : t('computerSetup.waiting')}
-        </WaitingStatus>
-      </WaitingHeader>
-      {here ? (
-        <div className="flex items-center gap-4 px-5 pt-3.5">
-          <Picture step={step} waiting={granting} />
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-key font-medium text-tertiary">
-              {t('computerSetup.step', { n: index + 1, count: entry.steps.length })}
-            </span>
-            <span className="text-row font-semibold text-foreground">
-              {t(`computerSetup.${step}.title`)}
-            </span>
-            <span className="text-hint leading-normal text-tertiary">
-              {t(`computerSetup.${step}.body`, { agent: agentName })}
-              {note && ` ${note}`}
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="flex min-w-0 flex-col gap-0.5 px-5 pt-3">
-          <span className="text-row font-semibold text-foreground">
-            {t('computerSetup.elsewhere', { host: where ?? t('computerSetup.thatComputer') })}
-          </span>
-          <span className="text-hint leading-normal text-tertiary">
-            {t('computerSetup.elsewhereBody', { agent: agentName })}
-          </span>
-        </div>
-      )}
-      <CardError error={error} />
-      <CardFooter
-        note={
-          entry.steps.length > 1 && (
-            <span className="flex items-center gap-1.5" aria-hidden>
-              {entry.steps.map((s, i) => (
-                <span
-                  key={s}
-                  className={cn(
-                    'h-1.5 rounded-full transition-[width,background-color] duration-(--duration-base)',
-                    i === index
-                      ? 'w-4 bg-control-on'
-                      : entry.done.includes(s)
-                        ? 'w-1.5 bg-success'
-                        : 'w-1.5 bg-track',
-                  )}
-                />
-              ))}
-            </span>
-          )
+      <ApprovalCard
+        className="ks-setup"
+        title={
+          here
+            ? t(`computerSetup.${step}.title`)
+            : t('computerSetup.elsewhere', { host: where ?? t('computerSetup.thatComputer') })
         }
-      >
-        <FooterButton disabled={busy !== null} onClick={() => void decline()}>
-          {busy === 'decline' && <Spinner className="size-3.5" />}
-          {t('computerSetup.notNow')}
-        </FooterButton>
-        {here &&
-          (granting ? (
-            <FooterButton
-              variant="outline"
-              data-answer-enter=""
-              disabled={busy !== null}
-              onClick={() => void doStep()}
-            >
-              {t('computerSetup.openAgain')}
-            </FooterButton>
-          ) : (
-            <ConfirmButton
-              busy={busy === 'step'}
-              disabled={busy !== null}
-              onClick={() => void doStep()}
-            >
-              {step === 'enable' ? t('computerSetup.enable.action') : t('computerSetup.open')}
-            </ConfirmButton>
-          ))}
-      </CardFooter>
-    </WaitingCard>
+        description={
+          here
+            ? `${t(`computerSetup.${step}.body`, { agent: agentName })}${note ? ` ${note}` : ''}`
+            : t('computerSetup.elsewhereBody', { agent: agentName })
+        }
+        icon={<Icon icon={ComputerIcon} size={15} />}
+        label={granting ? t('computerSetup.granting') : t('computerSetup.waiting')}
+        approveLabel={
+          granting
+            ? t('computerSetup.openAgain')
+            : step === 'enable'
+              ? t('computerSetup.enable.action')
+              : t('computerSetup.open')
+        }
+        denyLabel={t('computerSetup.notNow')}
+        allowAlways={false}
+        shortcuts
+        status="pending"
+        onApprove={() => doStep()}
+        onDeny={() => void decline()}
+        preview={
+          here ? (
+            <div className="ks-setup__body">
+              <Picture step={step} waiting={granting} />
+              <div className="ks-setup__steps">
+                <span className="ks-plan__label">
+                  {t('computerSetup.step', { n: index + 1, count: entry.steps.length })}
+                </span>
+                {entry.steps.length > 1 && (
+                  <span className="ks-setup__dots" aria-hidden>
+                    {entry.steps.map((s, i) => (
+                      <span
+                        key={s}
+                        data-state={
+                          i === index ? 'current' : entry.done.includes(s) ? 'done' : undefined
+                        }
+                      />
+                    ))}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : undefined
+        }
+      />
+      {error && (
+        <p role="alert" className="ks-card-error">
+          {error}
+        </p>
+      )}
+    </div>
   )
 })

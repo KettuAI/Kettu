@@ -16,7 +16,6 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { useMessageScroller } from '@renderer/components/ui/message-scroller'
 import { Spinner } from '@renderer/components/ui/spinner'
-import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
 import { loadThrough, useThreadsStore } from '@renderer/stores/threads'
 import type { ThreadJumps } from '../thread'
@@ -232,16 +231,14 @@ export const MessageOutline = memo(function MessageOutline({
         delay={150}
         closeDelay={300}
         aria-label={t('thread.outline.label', { count: rows.length })}
-        className="absolute top-1/2 left-1 z-10 flex -translate-y-1/2 flex-col items-start gap-1 focus-ring rounded-md px-2 py-2"
+        className="ks-outline absolute top-1/2 left-3.5 z-10 -translate-y-1/2 focus-ring rounded-md"
       >
         {Array.from({ length: dashes }, (_, i) => (
           <span
             key={i}
             aria-hidden
-            className={cn(
-              'h-0.5 rounded-full bg-current',
-              i === readingDash ? 'w-4.5 text-secondary' : 'w-3 text-disabled',
-            )}
+            data-current={i === readingDash || undefined}
+            className="ks-outline__dash"
           />
         ))}
       </DropdownMenuTrigger>
@@ -278,18 +275,13 @@ function OutlineItem({
   onJump: () => void
 }) {
   return (
-    <DropdownMenuItem closeOnClick={false} onClick={onJump} data-reading={reading || undefined}>
-      <span aria-hidden className="flex w-4.5 shrink-0">
-        <span
-          className={cn(
-            'h-0.5 rounded-full bg-current',
-            reading ? 'w-4.5 text-secondary' : 'w-3 text-disabled',
-          )}
-        />
-      </span>
-      <span className={cn('min-w-0 flex-1 truncate', reading ? 'text-primary' : 'text-secondary')}>
-        {label}
-      </span>
+    <DropdownMenuItem
+      closeOnClick={false}
+      onClick={onJump}
+      data-reading={reading || undefined}
+      className="ks-outline__item"
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       {waiting && <Spinner className="size-3.5 shrink-0 text-muted-foreground" />}
     </DropdownMenuItem>
   )

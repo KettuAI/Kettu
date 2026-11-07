@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { cn } from '@renderer/lib/utils'
@@ -29,46 +29,23 @@ function useRowThumbs(pictures: readonly RowPicture[]) {
 }
 
 /**
- * A fold row's frame: its trigger, then thumbnails of the pictures its steps carry or name, at the
- * row's end and outside the trigger, since a button cannot hold buttons. A click on a thumbnail
- * opens the viewer and leaves the row as it is. While the row is open its details show the
- * pictures, so the thumbnails give way, and the row keeps its height. `className` is the row's
- * frame without them, `filled` what it adds once it has some.
+ * Thumbnails of the pictures a folded row's steps carry or name, at the row's end and outside its
+ * toggle, since a button cannot hold buttons. A click on one opens the viewer and leaves the row as
+ * it is; an open row shows the pictures in its details instead (styles/session.css).
  */
-export function ThumbRow({
+export function RowThumbs({
   sessionId,
   pictures,
-  open,
-  className,
-  filled,
-  children,
 }: {
   sessionId: string
   pictures: readonly RowPicture[]
-  open: boolean
-  className?: string
-  filled?: string
-  children: ReactNode
 }) {
   const { shown, more, markGone } = useRowThumbs(pictures)
-  const has = shown.length > 0
-  return (
-    <div
-      className={cn(
-        'flex rounded-tile transition-colors duration-(--duration-fast) hover:bg-hover',
-        className,
-        has && cn('min-h-9', filled),
-      )}
-    >
-      {children}
-      {has && !open && (
-        <RowThumbs sessionId={sessionId} shown={shown} more={more} onGone={markGone} />
-      )}
-    </div>
-  )
+  if (shown.length === 0) return null
+  return <ThumbList sessionId={sessionId} shown={shown} more={more} onGone={markGone} />
 }
 
-function RowThumbs({
+function ThumbList({
   sessionId,
   shown,
   more,
@@ -81,7 +58,7 @@ function RowThumbs({
 }) {
   const { t } = useTranslation('session')
   return (
-    <span className="mr-1.5 flex shrink-0 items-center gap-1">
+    <span className="ks-thumbs flex shrink-0 items-center gap-1">
       {shown.map((picture) =>
         picture.kind === 'ref' ? (
           <CarriedImage

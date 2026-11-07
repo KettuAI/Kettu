@@ -25,7 +25,53 @@ import {
  * The styles are injected below, so no extra files are needed.
  */
 
-export type ToolCallStatus = "running" | "success" | "error";
+export type ToolCallStatus = "running" | "success" | "error" | "cancelled";
+
+/** Every word the card and the group show, for a translation */
+export type ToolCallLabels = {
+  failed: string;
+  cancelled: string;
+  arguments: string;
+  result: string;
+  waiting: string;
+  empty: string;
+  errorFallback: string;
+  retry: string;
+  showAll: string;
+  showLess: string;
+  copied: string;
+  copy: (what: string) => string;
+  announce: (name: string, status: ToolCallStatus, error?: string) => string;
+  used: (count: number) => string;
+  usingTools: string;
+  failedCount: (count: number) => string;
+};
+
+const LABELS: ToolCallLabels = {
+  failed: "Failed",
+  cancelled: "Cancelled",
+  arguments: "Arguments",
+  result: "Result",
+  waiting: "Waiting for result…",
+  empty: "No arguments or result.",
+  errorFallback: "The tool call failed.",
+  retry: "Retry",
+  showAll: "Show all",
+  showLess: "Show less",
+  copied: "Copied",
+  copy: (what) => `Copy ${what.toLowerCase()}`,
+  announce: (name, status, error) =>
+    status === "running"
+      ? `${name} running`
+      : status === "success"
+        ? `${name} finished`
+        : status === "cancelled"
+          ? `${name} cancelled`
+          : `${name} failed${error ? `: ${error}` : ""}`,
+  used: (count) => `Used ${count.toLocaleString("en-US")} ${count === 1 ? "tool" : "tools"}`,
+  usingTools: "Using tools…",
+  failedCount: (count) => `${count} failed`,
+};
 
 export type ToolCallCardProps = {
   /** Tool name as the agent calls it, shown in mono – e.g. "search_web" */
@@ -58,6 +104,13 @@ export type ToolCallCardProps = {
   maxCodeHeight?: number;
   /** Where the chevron sits: at the end of the header, or in front, pointing right while folded */
   chevron?: "after" | "before";
+  /** Your own content for the open card, in place of the error, arguments and result; false leaves the card without a body */
+  children?: ReactNode;
+  /** Beside the header at its end, outside the toggle, e.g. thumbnails that are buttons themselves */
+  trail?: ReactNode;
+  /** false shows no time, e.g. when it is not known when the call started */
+  time?: boolean;
+  labels?: Partial<ToolCallLabels>;
   className?: string;
 };
 
@@ -75,6 +128,11 @@ export type ToolCallGroupProps = {
   onOpenChange?: (open: boolean) => void;
   /** Where the chevron sits: at the end of the line, or in front, pointing right while folded */
   chevron?: "after" | "before";
+  /** Beside the line at its end, outside the toggle */
+  trail?: ReactNode;
+  /** false shows no time, e.g. when it is not known when the calls started */
+  time?: boolean;
+  labels?: Partial<ToolCallLabels>;
   className?: string;
 };
 
@@ -97,9 +155,15 @@ export function ToolCallCard({
   onRetry,
   maxCodeHeight = 220,
   chevron = "after",
+  children,
+  trail,
+  time = true,
+  labels,
   className,
 }: ToolCallCardProps) {
   const id = useId();
+  const L = { ...LABELS, ...labels };
+  const bodyless = children === false;
   const [openState, setOpenState] = useState(defaultOpen);
   const open = openProp ?? openState;
   const setOpen = (next: boolean) => {
@@ -124,10 +188,9 @@ export function ToolCallCard({
   }
 
   const measured = useStopwatch(status === "running", startedAt, false);
-  const ms = status === "running" ? (measured ?? 0) : (duration ?? measured);
+  const ms = !time ? null : status === "running" ? (measured ?? 0) : (duration ?? measured);
 
-  const announce =
-    status === "running" ? `${name} running` : status === "success" ? `${name} finished` : `${name} failed${error ? `: ${error}` : ""}`;
+  const announce = L.announce(name, status, error);
 
   return (
     <div
@@ -143,13 +206,17 @@ export function ToolCallCard({
         {announce}
       </span>
 
+      <div className="ui-tcc__top">
       <button
         type="button"
         className="ui-tcc__head"
-        aria-expanded={open}
-        aria-controls={`${id}-body`}
+        aria-expanded={bodyless ? undefined : open}
+        aria-controls={bodyless ? undefined : `${id}-body`}
         data-chevron={chevron}
+        data-bodyless={bodyless || undefined}
+        tabIndex={bodyless ? -1 : undefined}
         onClick={() => {
+          if (bodyless) return;
           setAutoOpened(false);
           setOpen(!open);
         }}
@@ -177,48 +244,55 @@ export function ToolCallCard({
             </svg>
           )}
           {status === "error" && <ErrorIcon />}
+          {status === "cancelled" && <CancelIcon />}
           <span className="ui-tcc__time">
-            {status === "error" ? "Failed" : ms != null ? formatMs(ms, status === "running") : null}
+            {status === "error" ? L.failed : status === "cancelled" ? L.cancelled : ms != null ? formatMs(ms, status === "running") : null}
           </span>
         </span>
         {chevron === "after" && <Chevron />}
       </button>
+      {trail != null && <span className="ui-tcc__trail">{trail}</span>}
+      </div>
 
+      {!bodyless && (
       <div className="ui-tcc__body" id={`${id}-body`} inert={!open}>
         <div className="ui-tcc__clip">
           <div className="ui-tcc__sections">
+            {children !== undefined ? children : (<>
             {status === "error" && (
               <div className="ui-tcc__error">
                 <ErrorIcon />
-                <p className="ui-tcc__error-text" dir="auto">{error ?? "The tool call failed."}</p>
+                <p className="ui-tcc__error-text" dir="auto">{error ?? L.errorFallback}</p>
                 {onRetry && (
                   <button type="button" className="ui-tcc__retry" onClick={onRetry}>
                     <svg viewBox="0 0 16 16" aria-hidden="true">
                       <path d="M2.75 8a5.25 5.25 0 1 0 1.6-3.77" />
                       <path d="M2.5 2.5v2.75h2.75" />
                     </svg>
-                    Retry
+                    {L.retry}
                   </button>
                 )}
               </div>
             )}
-            {args !== undefined && <CodeSection label="Arguments" value={args} cap={maxCodeHeight} />}
+            {args !== undefined && <CodeSection label={L.arguments} value={args} cap={maxCodeHeight} labels={L} />}
             {result !== undefined ? (
-              <CodeSection label="Result" value={result} cap={maxCodeHeight} />
+              <CodeSection label={L.result} value={result} cap={maxCodeHeight} labels={L} />
             ) : status === "running" ? (
               <div className="ui-tcc__section">
                 <div className="ui-tcc__section-head">
-                  <span className="ui-tcc__label">Result</span>
+                  <span className="ui-tcc__label">{L.result}</span>
                 </div>
-                <p className="ui-tcc__pending">Waiting for result…</p>
+                <p className="ui-tcc__pending">{L.waiting}</p>
               </div>
             ) : null}
             {args === undefined && result === undefined && status === "success" && (
-              <p className="ui-tcc__pending">No arguments or result.</p>
+              <p className="ui-tcc__pending">{L.empty}</p>
             )}
+            </>)}
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -228,15 +302,20 @@ export function ToolCallCard({
 export function ToolCallGroup({
   children,
   label,
-  runningLabel = "Using tools…",
+  runningLabel: runningLabelProp,
   duration,
   defaultOpen = false,
   open: openProp,
   onOpenChange,
   chevron = "after",
+  trail,
+  time = true,
+  labels,
   className,
 }: ToolCallGroupProps) {
   const id = useId();
+  const L = { ...LABELS, ...labels };
+  const runningLabel = runningLabelProp ?? L.usingTools;
   const [openState, setOpenState] = useState(defaultOpen);
   const open = openProp ?? openState;
 
@@ -255,9 +334,9 @@ export function ToolCallGroup({
   );
   const measured = useStopwatch(running, since, true);
   const sum = calls.length && calls.every((c) => c.duration != null) ? calls.reduce((t, c) => t + (c.duration ?? 0), 0) : null;
-  const ms = running ? measured : (duration ?? sum ?? measured);
+  const ms = !time ? null : running ? measured : (duration ?? sum ?? measured);
 
-  const count = `Used ${calls.length.toLocaleString("en-US")} ${calls.length === 1 ? "tool" : "tools"}`;
+  const count = L.used(calls.length);
   const title = running ? runningLabel : (label ?? count);
   const icons = calls.slice(-3);
 
@@ -271,9 +350,10 @@ export function ToolCallGroup({
         {css}
       </style>
       <span className="ui-tcc-sr" role="status" aria-live="polite">
-        {running ? runningLabel : `${count}${failed ? `, ${failed} failed` : ""}`}
+        {running ? runningLabel : `${label ?? count}${failed ? `, ${L.failedCount(failed)}` : ""}`}
       </span>
 
+      <div className="ui-tcc-group__top">
       <button
         type="button"
         className="ui-tcc-group__head"
@@ -297,11 +377,13 @@ export function ToolCallGroup({
           <span className={running ? "ui-tcc-group__label ui-tcc__shine" : "ui-tcc-group__label"} data-text={title}>
             {title}
           </span>
-          {!running && failed > 0 && <span className="ui-tcc-group__failed">· {failed} failed</span>}
+          {!running && failed > 0 && <span className="ui-tcc-group__failed">· {L.failedCount(failed)}</span>}
           {ms != null && <span className="ui-tcc-group__time">· {formatMs(ms, running)}</span>}
         </span>
         {chevron === "after" && <Chevron />}
       </button>
+      {trail != null && <span className="ui-tcc__trail">{trail}</span>}
+      </div>
 
       <div className="ui-tcc__body" id={`${id}-list`} inert={!open}>
         <div className="ui-tcc__clip">
@@ -316,7 +398,7 @@ export function ToolCallGroup({
 
 const OPEN_MAX = 640;
 
-function CodeSection({ label, value, cap }: { label: string; value: unknown; cap: number }) {
+function CodeSection({ label, value, cap, labels }: { label: string; value: unknown; cap: number; labels: ToolCallLabels }) {
   const { text, json } = toText(value);
   const pre = useRef<HTMLPreElement>(null);
   const [full, setFull] = useState(false);
@@ -340,7 +422,7 @@ function CodeSection({ label, value, cap }: { label: string; value: unknown; cap
     <div className="ui-tcc__section">
       <div className="ui-tcc__section-head">
         <span className="ui-tcc__label">{label}</span>
-        <CopyButton text={text} label={label.toLowerCase()} />
+        <CopyButton text={text} label={labels.copy(label)} copiedLabel={labels.copied} />
       </div>
       <pre
         ref={pre}
@@ -354,14 +436,14 @@ function CodeSection({ label, value, cap }: { label: string; value: unknown; cap
       </pre>
       {capped && (
         <button type="button" className="ui-tcc__more" aria-expanded={full} onClick={() => setFull(!full)}>
-          {full ? "Show less" : "Show all"}
+          {full ? labels.showLess : labels.showAll}
         </button>
       )}
     </div>
   );
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
+function CopyButton({ text, label, copiedLabel }: { text: string; label: string; copiedLabel: string }) {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -374,8 +456,8 @@ function CopyButton({ text, label }: { text: string; label: string }) {
       type="button"
       className="ui-tcc__copy"
       data-copied={copied || undefined}
-      aria-label={copied ? "Copied" : `Copy ${label}`}
-      title={copied ? "Copied" : `Copy ${label}`}
+      aria-label={copied ? copiedLabel : label}
+      title={copied ? copiedLabel : label}
       onClick={() => copyText(text).then((ok) => ok && setCopied(true))}
     >
       <svg className="ui-tcc__copy-icon" viewBox="0 0 16 16" aria-hidden="true">
@@ -403,6 +485,15 @@ function ErrorIcon() {
     <svg className="ui-tcc__err" viewBox="0 0 16 16" aria-hidden="true">
       <circle cx="8" cy="8" r="7" />
       <path d="M8 4.9v3.5M8 10.9v.1" />
+    </svg>
+  );
+}
+
+function CancelIcon() {
+  return (
+    <svg className="ui-tcc__cancel" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M5.6 8h4.8" />
     </svg>
   );
 }
@@ -586,6 +677,17 @@ const css = /* css */ `
   white-space: nowrap;
 }
 
+/* The header and anything beside it at its end, outside the toggle */
+.ui-tcc__top { display: flex; align-items: center; min-width: 0; }
+.ui-tcc__top > .ui-tcc__head { flex: 1; min-width: 0; }
+/* The head's pull to the left moves to the row, so the row's fit-content width counts it */
+.ui-tcc-group__top { display: flex; align-items: center; justify-self: start; max-width: calc(100% + 6px); min-width: 0; margin-left: -6px; }
+.ui-tcc-group__top > .ui-tcc-group__head { min-width: 0; margin-left: 0; }
+.ui-tcc__trail { display: flex; flex: none; align-items: center; gap: 4px; padding: 0 10px 0 2px; }
+.ui-tcc__head[data-bodyless] { cursor: default; }
+.ui-tcc__head[data-bodyless] .ui-tcc__chevron { visibility: hidden; }
+@media (hover: hover) { .ui-tcc__head[data-bodyless]:hover { background: none; } }
+
 /* Header row: icon, name + summary, status, chevron – everything truncates before it overflows */
 .ui-tcc__head {
   all: unset;
@@ -682,6 +784,7 @@ const css = /* css */ `
 .ui-tcc__ok circle { fill: var(--ui-tcc-accent); }
 .ui-tcc__ok path { stroke: #fff; stroke-width: 1.5; stroke-dasharray: 1; stroke-dashoffset: 1; animation: ui-tcc-draw 360ms var(--ui-tcc-ease) 160ms forwards; }
 .ui-tcc__err circle { fill: var(--ui-tcc-red); }
+.ui-tcc__cancel circle, .ui-tcc__cancel path { stroke: var(--ui-tcc-muted); stroke-width: 1.4; }
 .ui-tcc__err path { stroke: #fff; stroke-width: 1.6; stroke-linecap: round; }
 
 .ui-tcc__chevron {
@@ -695,12 +798,12 @@ const css = /* css */ `
   stroke-linejoin: round;
   transition: transform 360ms var(--ui-tcc-ease), stroke 160ms ease;
 }
-.ui-tcc[data-open] > .ui-tcc__head .ui-tcc__chevron,
-.ui-tcc-group[data-open] > .ui-tcc-group__head .ui-tcc__chevron { transform: rotate(180deg); }
+.ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head .ui-tcc__chevron,
+.ui-tcc-group[data-open] > .ui-tcc-group__top > .ui-tcc-group__head .ui-tcc__chevron { transform: rotate(180deg); }
 /* A leading chevron is bigger, points right while folded and turns down once open */
 :is(.ui-tcc__head, .ui-tcc-group__head)[data-chevron="before"] .ui-tcc__chevron { width: 16px; height: 16px; stroke-width: 1.1; transform: rotate(-90deg); }
-.ui-tcc[data-open] > .ui-tcc__head[data-chevron="before"] .ui-tcc__chevron,
-.ui-tcc-group[data-open] > .ui-tcc-group__head[data-chevron="before"] .ui-tcc__chevron { transform: none; }
+.ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head[data-chevron="before"] .ui-tcc__chevron,
+.ui-tcc-group[data-open] > .ui-tcc-group__top > .ui-tcc-group__head[data-chevron="before"] .ui-tcc__chevron { transform: none; }
 
 /* Body: grows from 0fr to 1fr, so the height animates without measuring */
 .ui-tcc__body {

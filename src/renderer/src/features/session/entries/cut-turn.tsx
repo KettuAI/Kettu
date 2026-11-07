@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { CircleAlertIcon } from 'lucide-react'
+import { AlertCircleIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
@@ -45,8 +46,8 @@ export function CutTurnEnd({
     })
   }
   return (
-    <Alert variant="error" className={cn('py-2 text-small', className)}>
-      <CircleAlertIcon />
+    <Alert variant="error" className={cn('ks-notice py-2', className)}>
+      <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
       <AlertTitle>{title}</AlertTitle>
       {error && <AlertDescription className="text-small">{error}</AlertDescription>}
       {resumable && (

@@ -82,7 +82,7 @@ export type ExperimentCardProps = {
   onPicksChange?: (ids: string[]) => void;
   /** A last row to type an answer of your own into: picked like an answer (its `id`, default "other") once the
    * field is clicked, and let go again when it is left empty */
-  other?: { id?: string; placeholder: string; value?: string; onChange?: (text: string) => void };
+  other?: { id?: string; placeholder: string; value?: string; onChange?: (text: string) => void; secret?: boolean };
   /** Your own mark in the head, in place of the chart */
   mark?: ReactNode;
   /** Your own chip at the end of the head, in place of who is ahead – null leaves it out */
@@ -95,7 +95,17 @@ export type ExperimentCardProps = {
   closeOnOutside?: boolean;
   /** Name of the switch above the rows, for screen readers – defaults to "Metric" */
   switchLabel?: string;
+  /** The last row's words for a question, for a translation */
+  labels?: Partial<ExperimentLabels>;
   className?: string;
+};
+
+export type ExperimentLabels = {
+  pickOne: string;
+  pickAny: string;
+  picked: (count: number) => string;
+  ownAnswer: string;
+  typing: string;
 };
 
 /* ---------- Helpers ---------- */
@@ -201,6 +211,7 @@ export function ExperimentCard({
   actionReady = false,
   closeOnOutside = true,
   switchLabel = "Metric",
+  labels,
   className,
 }: ExperimentCardProps) {
   const choice = kind === "choice";
@@ -371,23 +382,23 @@ export function ExperimentCard({
   // Your own answer counts once it has words
   const own = otherOn && otherText.trim() !== "";
   const ready = choice ? chosen > 0 || own || actionReady : Boolean(picked);
-  let caption: ReactNode = hint ?? (picked ? null : choice ? (multiple ? "Pick any that apply" : "Pick one") : "Pick a winner");
+  let caption: ReactNode = hint ?? (picked ? null : choice ? (multiple ? (labels?.pickAny ?? "Pick any that apply") : (labels?.pickOne ?? "Pick one")) : "Pick a winner");
   let captionKey = "rest";
   if (choice) {
     // A step that only reviews keeps its hint; elsewhere the last row counts the picks
     if (actionReady) {
       // keep the hint
     } else if (multiple && chosen + (own ? 1 : 0) > 0) {
-      caption = `${chosen + (own ? 1 : 0)} picked`;
+      caption = labels?.picked?.(chosen + (own ? 1 : 0)) ?? `${chosen + (own ? 1 : 0)} picked`;
       captionKey = `picks-${chosen}-${own}`;
     } else if (!multiple && picked) {
       caption = <b>{picked.name}</b>;
       captionKey = `picked-${picked.id}`;
     } else if (own) {
-      caption = "Your own answer";
+      caption = labels?.ownAnswer ?? "Your own answer";
       captionKey = "own";
     } else if (otherOn) {
-      caption = "Type your answer";
+      caption = labels?.typing ?? "Type your answer";
       captionKey = "typing";
     }
   } else if (about) {
@@ -588,6 +599,8 @@ export function ExperimentCard({
                     </span>
                     <input
                       className="ui-xcc__input"
+                      type={other.secret ? "password" : "text"}
+                      autoComplete="off"
                       value={otherText}
                       placeholder={other.placeholder}
                       aria-label={other.placeholder}

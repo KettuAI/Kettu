@@ -1,5 +1,6 @@
 import { useContext, useMemo, useState } from 'react'
-import { ArrowDownToLineIcon } from 'lucide-react'
+import { Download01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { ContentRef } from '@shared/thread'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
@@ -56,7 +57,12 @@ export function CarriedMedia({
               saveCarried(mimeType, data, name).catch((e: unknown) => setError(errorMessage(e)))
             }}
           >
-            <ArrowDownToLineIcon className="size-3.5" />
+            <HugeiconsIcon
+              icon={Download01Icon}
+              strokeWidth={1.9}
+              aria-hidden
+              className="size-3.5"
+            />
           </FileCardButton>
         }
       />

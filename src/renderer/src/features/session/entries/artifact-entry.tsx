@@ -1,5 +1,12 @@
 import { memo, useEffect, useId, useRef, useState } from 'react'
-import { EllipsisIcon, ExternalLinkIcon, ImageOffIcon, ShapesIcon, TrashIcon } from 'lucide-react'
+import { ShapesIcon } from 'lucide-react'
+import {
+  Delete02Icon,
+  ImageNotFound01Icon,
+  LinkSquare02Icon,
+  MoreHorizontalIcon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { ArtifactSummary, VersionSummary } from '@shared/artifacts'
 import type { ArtifactEntry as Entry } from '@shared/thread'
@@ -68,7 +75,12 @@ function DeletedLine({ entry, className }: { entry: Entry; className: string | u
   const { t } = useTranslation('session')
   return (
     <div className={cn('flex min-h-6 items-center gap-2 text-small text-tertiary', className)}>
-      <TrashIcon className="size-3.5 shrink-0 text-icon" />
+      <HugeiconsIcon
+        icon={Delete02Icon}
+        strokeWidth={1.9}
+        aria-hidden
+        className="size-3.5 shrink-0 text-icon"
+      />
       <span className="min-w-0 truncate">
         <Trans
           t={t}
@@ -367,7 +379,12 @@ function LargeCard({
               aria-hidden
               className="absolute top-2.5 right-2.5 flex h-6 items-center gap-1.25 rounded-lg bg-(--media-overlay) px-2 text-caption text-(color:--media-foreground) opacity-0 transition-opacity duration-(--duration-fast) group-hover/preview:opacity-100 group-focus-visible/preview:opacity-100"
             >
-              <ExternalLinkIcon className="size-2.75" strokeWidth={1.5} />
+              <HugeiconsIcon
+                icon={LinkSquare02Icon}
+                strokeWidth={1.9}
+                aria-hidden
+                className="size-2.75"
+              />
               {t('artifactEntry.openShort')}
             </span>
           )
@@ -428,7 +445,12 @@ function LargeCard({
                     />
                   }
                 >
-                  <EllipsisIcon className="size-3.5" />
+                  <HugeiconsIcon
+                    icon={MoreHorizontalIcon}
+                    strokeWidth={1.9}
+                    aria-hidden
+                    className="size-3.5"
+                  />
                 </TooltipTrigger>
                 <TooltipContent>{t('artifacts:viewer.more')}</TooltipContent>
               </Tooltip>
@@ -487,7 +509,12 @@ function Preview({ thumbnail }: { thumbnail: Thumbnail }) {
   if (thumbnail.state === 'failed') {
     return (
       <span className="absolute inset-0 flex items-center justify-center text-icon">
-        <ImageOffIcon className="size-3.5" />
+        <HugeiconsIcon
+          icon={ImageNotFound01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-3.5"
+        />
       </span>
     )
   }

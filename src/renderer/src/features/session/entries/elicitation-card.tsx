@@ -1,18 +1,21 @@
 import { useRef, useState, type KeyboardEvent, type Ref } from 'react'
-import { CalendarIcon, ChevronDownIcon, ExternalLinkIcon, GlobeIcon, PlugIcon } from 'lucide-react'
+import {
+  ArrowDown01Icon,
+  Calendar03Icon,
+  Globe02Icon,
+  LinkSquare02Icon,
+  Plug01Icon,
+} from '@hugeicons/core-free-icons'
 import type { TFunction } from 'i18next'
 import { getDomain } from 'tldts'
 import { useTranslation } from 'react-i18next'
 import type { FormField, FormValues, PendingElicitation, ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { ApprovalCard } from '@renderer/components/affect/approval-card'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Calendar } from '@renderer/components/ui/calendar'
 import { Checkbox } from '@renderer/components/ui/checkbox'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@renderer/components/ui/collapsible'
 import { Input } from '@renderer/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Switch } from '@renderer/components/ui/switch'
@@ -20,45 +23,18 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { SettingSelect } from '@renderer/features/settings/controls'
 import { openLinkIn } from '../open-link'
-import {
-  CardError,
-  CardFooter,
-  ConfirmButton,
-  FooterButton,
-  WaitingCard,
-  WaitingHeader,
-  WaitingStatus,
-} from './answer-list'
-import { isConfirmKey } from './card-style'
-import { PANEL, respondToPermission, respondWithValues } from './helpers'
+import { respondToPermission, respondWithValues } from './helpers'
 import { useAnswering } from './use-answering'
 
 /** Up to this many choices sit side by side as segments; more go in a list. */
 const SEGMENTED_MAX = 5
 
-/** The server's tile: a plug on a quiet square, as an MCP server shows in Settings. */
-function ServerTile() {
-  return (
-    <span
-      aria-hidden
-      className="flex size-4.5 shrink-0 items-center justify-center rounded-md bg-subtle text-secondary shadow-sunk"
-    >
-      <PlugIcon strokeWidth={1.9} className="size-3" />
-    </span>
-  )
-}
-
-function ServerWho({ server, agentName }: { server: string; agentName: string }) {
-  const { t } = useTranslation('session')
-  return (
-    <span className="flex min-w-0 flex-1 items-center gap-2 text-ui font-medium text-secondary">
-      <ServerTile />
-      <span className="shrink-0">{server}</span>
-      <span className="min-w-0 truncate font-normal text-tertiary">
-        · {t('elicitation.inAgent', { agent: agentName })}
-      </span>
-    </span>
-  )
+/** A form's own Esc leaves the field, so it never declines the request on its card. */
+function keepEscape(event: KeyboardEvent<HTMLDivElement>) {
+  const target = event.target as HTMLElement
+  if (event.key !== 'Escape' || !target.closest('input, textarea, [role="combobox"]')) return
+  event.stopPropagation()
+  target.blur()
 }
 
 /** The address a link goes to, http and https only; null for anything else. */
@@ -176,7 +152,7 @@ function DateField({
             ? date.toLocaleDateString(i18n.language, { dateStyle: 'medium' })
             : t('elicitation.pickDate')}
         </span>
-        <CalendarIcon aria-hidden className="size-3.75 shrink-0 text-tertiary" />
+        <Icon icon={Calendar03Icon} size={15} />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-auto p-0">
         <Calendar
@@ -383,90 +359,79 @@ function FormCard({
     if (sent && focused) emitAppEvent({ kind: 'focus-composer' })
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!isConfirmKey(event)) return
-    event.preventDefault()
-    event.stopPropagation()
-    void submit()
+  const declineIt = () => {
+    if (!decline || busy) return
+    void send(decline.id, () => respondToPermission(sessionId, permission.requestId, decline.id))
   }
 
   return (
-    <WaitingCard
-      ref={ref}
-      entryId={entry.id}
-      label={t('elicitation.label', { server: request.server })}
-      description={t('elicitation.ask', { server: request.server })}
-      className={className}
-      onKeyDownCapture={onKeyDown}
-    >
-      <WaitingHeader>
-        <ServerWho server={request.server} agentName={agentName} />
-        <WaitingStatus>{t('question.asksYou')}</WaitingStatus>
-      </WaitingHeader>
-      <div ref={body} className="flex min-w-0 flex-col">
-        {request.message && (
-          <p
-            data-selectable=""
-            className="px-5 pt-2.5 text-heading font-semibold whitespace-pre-wrap text-foreground"
-          >
-            {request.message}
-          </p>
-        )}
-        <div className="grid grid-cols-[8.25rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3.5 px-5 pt-4">
-          {request.fields.map((field, i) => {
-            const shown = tried ? errors[i] : null
-            return (
-              <div key={field.key} className="contents">
-                <span className="flex min-h-8.5 flex-col justify-center text-control font-medium text-secondary">
-                  {field.title}
-                  {!field.required && field.type !== 'boolean' && (
-                    <span className="text-small font-normal text-tertiary">
-                      {t('elicitation.optional')}
-                    </span>
-                  )}
-                </span>
-                <div className="flex min-h-8.5 min-w-0 flex-col justify-center gap-1">
-                  <FieldControl
-                    field={field}
-                    value={draft[field.key]}
-                    disabled={busy}
-                    invalid={!!shown}
-                    onChange={(value) => setDraft((d) => ({ ...d, [field.key]: value }))}
-                  />
-                  {field.description && (
-                    <span className="text-hint text-tertiary">{field.description}</span>
-                  )}
-                  {shown && <span className="text-hint text-danger">{shown}</span>}
-                </div>
+    <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
+      <div ref={body} className="min-w-0" onKeyDownCapture={keepEscape}>
+        <ApprovalCard
+          className="ks-plan"
+          title={request.server}
+          description={t('elicitation.inAgent', { agent: agentName })}
+          icon={<Icon icon={Plug01Icon} size={15} />}
+          label={t('question.asksYou')}
+          approveLabel={t('elicitation.submit')}
+          denyLabel={t('elicitation.decline')}
+          allowAlways={false}
+          shortcuts
+          status="pending"
+          onApprove={async () => {
+            await submit()
+            // A form that is not ready, or an answer that did not go, keeps the card waiting.
+            if (!ready) throw new Error('not ready')
+          }}
+          onDeny={declineIt}
+          preview={
+            <div className="ks-plan__preview">
+              {request.message && (
+                <p data-selectable="" className="ks-form__message">
+                  {request.message}
+                </p>
+              )}
+              <div className="ks-form">
+                {request.fields.map((field, i) => {
+                  const shown = tried ? errors[i] : null
+                  return (
+                    <div key={field.key} className="contents">
+                      <span className="ks-form__label">
+                        {field.title}
+                        {!field.required && field.type !== 'boolean' && (
+                          <span>{t('elicitation.optional')}</span>
+                        )}
+                      </span>
+                      <div className="ks-form__field">
+                        <FieldControl
+                          field={field}
+                          value={draft[field.key]}
+                          disabled={busy}
+                          invalid={!!shown}
+                          onChange={(value) => setDraft((d) => ({ ...d, [field.key]: value }))}
+                        />
+                        {field.description && (
+                          <span className="ks-form__hint">{field.description}</span>
+                        )}
+                        {shown && <span className="ks-form__error">{shown}</span>}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
-        <CardError error={error} />
-        <CardFooter note={t('elicitation.sentTo', { server: request.server })}>
-          {decline && (
-            <FooterButton
-              disabled={busy}
-              onClick={() =>
-                void send(decline.id, () =>
-                  respondToPermission(sessionId, permission.requestId, decline.id),
-                )
-              }
-            >
-              {answering === decline.id && <Spinner className="size-3.5" />}
-              {t('elicitation.decline')}
-            </FooterButton>
-          )}
-          <ConfirmButton
-            busy={answering === 'submit'}
-            disabled={busy || (tried && !ready)}
-            onClick={() => void submit()}
-          >
-            {t('elicitation.submit')}
-          </ConfirmButton>
-        </CardFooter>
+              <span className="ks-plan__label">
+                {t('elicitation.sentTo', { server: request.server })}
+              </span>
+            </div>
+          }
+        />
       </div>
-    </WaitingCard>
+      {error && (
+        <p role="alert" className="ks-card-error">
+          {error}
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -502,66 +467,53 @@ function LinkCard({
     if (sent) openLinkIn(request.url, 'browser', null)
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (!isConfirmKey(event)) return
-    event.preventDefault()
-    event.stopPropagation()
-    void open()
-  }
-
   return (
-    <WaitingCard
-      ref={ref}
-      entryId={entry.id}
-      label={t('elicitation.label', { server: request.server })}
-      description={t('elicitation.askOpen', { server: request.server, site })}
-      className={className}
-      onKeyDownCapture={onKeyDown}
-    >
-      <WaitingHeader>
-        <ServerWho server={request.server} agentName={agentName} />
-        <WaitingStatus>{t('question.asksYou')}</WaitingStatus>
-      </WaitingHeader>
-      {request.message && (
-        <p data-selectable="" className="px-5 pt-2.5 text-row whitespace-pre-wrap text-secondary">
-          {request.message}
+    <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
+      <ApprovalCard
+        className="ks-plan"
+        title={request.server}
+        description={t('elicitation.inAgent', { agent: agentName })}
+        icon={<Icon icon={Plug01Icon} size={15} />}
+        label={t('question.asksYou')}
+        approveLabel={t('elicitation.open', { site })}
+        denyLabel={t('elicitation.decline')}
+        allowAlways={false}
+        shortcuts
+        status="pending"
+        onApprove={async () => {
+          await open()
+          if (!usable || !accept) throw new Error('not usable')
+        }}
+        onDeny={() => {
+          if (!decline || busy) return
+          void send(decline.id, () =>
+            respondToPermission(sessionId, permission.requestId, decline.id),
+          )
+        }}
+        preview={
+          <div className="ks-plan__preview">
+            {request.message && (
+              <p data-selectable="" className="ks-form__message">
+                {request.message}
+              </p>
+            )}
+            <div className="ks-link">
+              <Icon icon={Globe02Icon} size={16} />
+              <span className="ks-link__text">
+                <b>{site}</b>
+                <span data-selectable="">{request.url}</span>
+              </span>
+            </div>
+            <span className="ks-plan__label">{t('elicitation.opensInBrowser')}</span>
+          </div>
+        }
+      />
+      {error && (
+        <p role="alert" className="ks-card-error">
+          {error}
         </p>
       )}
-      <div className="mx-5 mt-3.5 flex min-w-0 items-center gap-3 rounded-card bg-code-block px-3.5 py-3 shadow-sunk">
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-card text-secondary shadow-outline">
-          <GlobeIcon aria-hidden className="size-4" />
-        </span>
-        <span className="flex min-w-0 flex-col">
-          <span className="text-row font-semibold text-foreground">{site}</span>
-          <span data-selectable="" className="truncate font-mono text-meta text-tertiary">
-            {request.url}
-          </span>
-        </span>
-      </div>
-      <CardError error={error} />
-      <CardFooter note={t('elicitation.opensInBrowser')}>
-        {decline && (
-          <FooterButton
-            disabled={busy}
-            onClick={() =>
-              void send(decline.id, () =>
-                respondToPermission(sessionId, permission.requestId, decline.id),
-              )
-            }
-          >
-            {answering === decline.id && <Spinner className="size-3.5" />}
-            {t('elicitation.decline')}
-          </FooterButton>
-        )}
-        <ConfirmButton
-          busy={answering === accept?.id}
-          disabled={busy || !accept || !usable}
-          onClick={() => void open()}
-        >
-          {t('elicitation.open', { site })}
-        </ConfirmButton>
-      </CardFooter>
-    </WaitingCard>
+    </div>
   )
 }
 
@@ -593,55 +545,46 @@ export function ElicitationSettled({ entry }: { entry: ToolEntry }) {
           ? t('elicitation.declined')
           : t('status.pending')
   return (
-    <Collapsible
-      open={open}
-      onOpenChange={setOpen}
-      render={<div data-entry-id={entry.id} className="min-w-0 rounded-card bg-card shadow-card" />}
-    >
-      <div className="flex min-h-12 min-w-0 items-center gap-2.5 py-2 pr-2.5 pl-4">
-        <ServerTile />
-        <span className="shrink-0 text-ui font-medium text-foreground">{asked.server}</span>
-        <span className="min-w-0 truncate text-control text-tertiary">· {state}</span>
-        {finishing && <Spinner aria-hidden className="size-3.5 shrink-0 text-info" />}
-        <span className="ml-auto flex shrink-0 items-center gap-1">
+    <div data-entry-id={entry.id} className="min-w-0">
+      <div className="ks-answered" data-kind={accepted ? 'done' : 'other'}>
+        <div className="ks-answered__head ks-answered__head--alone">
+          <Icon icon={Plug01Icon} size={16} />
+          <span className="ks-answered__title">{asked.server}</span>
+          <span className="ks-answered__device">· {state}</span>
+          {finishing && <Spinner aria-hidden className="size-3.5 shrink-0" />}
           {finishing && (
             <button
               type="button"
+              className="ks-answered__toggle"
               onClick={() => openLinkIn(url, 'browser', null)}
-              className="flex h-7 cursor-default items-center gap-1.5 rounded-lg px-2.5 text-control text-secondary outline-none hover:bg-hover focus-ring"
             >
-              <ExternalLinkIcon aria-hidden className="size-3.5" />
+              <Icon icon={LinkSquare02Icon} size={14} />
               {t('elicitation.openAgain')}
             </button>
           )}
           {fields.length > 0 && (
-            <CollapsibleTrigger className="flex h-7 cursor-default items-center gap-1 rounded-lg px-2.5 text-control text-secondary outline-none hover:bg-hover focus-ring">
+            <button
+              type="button"
+              className="ks-answered__toggle"
+              aria-expanded={open}
+              onClick={() => setOpen((o) => !o)}
+            >
               {open ? t('elicitation.hideValues') : t('elicitation.showValues')}
-              <ChevronDownIcon
-                aria-hidden
-                className={cn(
-                  'size-3.5 transition-[rotate] duration-(--duration-fast) motion-reduce:transition-none',
-                  open && 'rotate-180',
-                )}
-              />
-            </CollapsibleTrigger>
+              <Icon icon={ArrowDown01Icon} size={14} />
+            </button>
           )}
-        </span>
-      </div>
-      {fields.length > 0 && (
-        <CollapsibleContent className={PANEL} keepMounted={false}>
-          <dl className="grid grid-cols-[8.25rem_minmax(0,1fr)] gap-x-4 gap-y-1.5 px-4 pb-3.5 pl-11 text-control">
+        </div>
+        {open && fields.length > 0 && (
+          <dl className="ks-answered__values">
             {fields.map((field, i) => (
               <div key={i} className="contents">
-                <dt className="text-tertiary">{field.title}</dt>
-                <dd data-selectable="" className="wrap-anywhere text-foreground">
-                  {field.value}
-                </dd>
+                <dt>{field.title}</dt>
+                <dd data-selectable="">{field.value}</dd>
               </div>
             ))}
           </dl>
-        </CollapsibleContent>
-      )}
-    </Collapsible>
+        )}
+      </div>
+    </div>
   )
 }

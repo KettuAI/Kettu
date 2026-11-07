@@ -61,15 +61,6 @@ export interface ThreadJumps {
   hold(on: boolean): void
 }
 
-/** The tool calls of a thread, whose rows sit close together. */
-function stepIds(order: string[], signature: string): Set<string> {
-  const ids = new Set<string>()
-  order.forEach((id, i) => {
-    if ('gtw'.includes(signature[i] ?? '-')) ids.add(id)
-  })
-  return ids
-}
-
 // Each estimate as a class of its own, so Tailwind generates it; it replaces the item's default.
 const INTRINSIC_SIZE: Record<Estimate, string> = {
   16: '[contain-intrinsic-size:auto_16px]',
@@ -79,9 +70,6 @@ const INTRINSIC_SIZE: Record<Estimate, string> = {
   28: '[contain-intrinsic-size:auto_28px]',
   69: '[contain-intrinsic-size:auto_69px]',
 }
-
-const isStep = (item: Item, steps: Set<string>): boolean =>
-  item.type === 'group' || item.type === 'run' || (item.type === 'entry' && steps.has(item.id))
 
 /**
  * Brings a message you send into view, even while you read further up; the thread then follows
@@ -117,25 +105,18 @@ function OlderLoading({ sessionId }: { sessionId: string }) {
 const isSent = (item: Item): boolean =>
   item.type === 'entry' && (item.char === 'u' || item.char === 's')
 
-const isText = (item: Item): boolean => item.type === 'entry' && item.char === 'a'
-
 /**
- * 32 px between turns; within one, 4 px between steps, 8 px between a step and the text beside it,
- * 8 px above the reply's actions, 4 px under a message you sent, whose own row of actions comes
- * first, and 16 px between anything else. The running turn's status starts there too, where the
- * reply will, and 8 px under the reply's latest entry, the gap of the row that takes its place.
+ * The thread's rhythm, as affectUI's chat screen sets it: 22 px between a message you sent and
+ * what comes after it, and between turns; 14 px between the parts of a reply, its text, tool calls
+ * and cards; 6 px above a reply's actions. The running turn's status sets its own room, so it can
+ * take none while the reply's own label carries the turn.
  */
-function spacing(item: Item, previous: Item, steps: Set<string>): string {
-  if (item.type === 'status') return item.afterSent ? 'pt-1' : 'pt-2'
-  if (item.type === 'entry' && item.turnStart) return 'pt-8'
-  if (item.type === 'reply') return 'pt-2'
-  if (isSent(previous)) return 'pt-1'
-  if (isStep(item, steps) && isStep(previous, steps)) return 'pt-1'
-  // A step's row is 28 px tall around one line of text, so it needs less room than a paragraph.
-  if ((isStep(item, steps) && isText(previous)) || (isText(item) && isStep(previous, steps))) {
-    return 'pt-2'
-  }
-  return 'pt-4'
+function spacing(item: Item, previous: Item): string {
+  if (item.type === 'status') return ''
+  if (item.type === 'entry' && item.turnStart) return 'pt-[22px]'
+  if (item.type === 'reply') return 'pt-1.5'
+  if (isSent(previous) || (item.type === 'entry' && item.char === 's')) return 'pt-[22px]'
+  return 'pt-3.5'
 }
 
 export const Thread = memo(function Thread({
@@ -159,7 +140,6 @@ export const Thread = memo(function Thread({
   )
   const items = useMemo(() => buildItems(order, signature, working), [order, signature, working])
   const statusLast = useMemo(() => items.at(-1)?.type === 'status', [items])
-  const steps = useMemo(() => stepIds(order, signature), [order, signature])
   const replies = useMemo(() => replyKeys(items), [items])
   // Another session's footer may share a key, so a switch made from the keyboard starts clear.
   useEffect(() => () => hoverReply(null), [sessionId])
@@ -202,7 +182,7 @@ export const Thread = memo(function Thread({
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
       <ScrollOnSend sent={sent} />
-      <MessageScroller className="min-h-0 flex-1 scroll-fade-top-overlay">
+      <MessageScroller className="ks-thread min-h-0 flex-1 scroll-fade-top-overlay">
         <MessageScrollerViewport
           ref={viewport}
           onScroll={nearStart}
@@ -211,7 +191,7 @@ export const Thread = memo(function Thread({
         >
           <MessageScrollerContent
             ref={content}
-            className="mx-auto w-full max-w-thread gap-0 px-7 pt-7 pb-5"
+            className="ks-thread__column mx-auto w-full gap-0 px-8 pt-8 pb-4"
             onPointerLeave={() => hoverReply(null)}
           >
             {shownFrom === 0 && !hasOlder && <SubSessionStart sessionId={sessionId} />}
@@ -227,7 +207,7 @@ export const Thread = memo(function Thread({
                     // lines and tool rows reach 6 px past the column and their focus ring 4 px more.
                     '[overflow-clip-margin:10px]',
                     INTRINSIC_SIZE[estimateOf(item)],
-                    index > 0 && spacing(item, items[index - 1]!, steps),
+                    index > 0 && spacing(item, items[index - 1]!),
                     // The growing tail would flip between skipped and rendered on every chunk,
                     // recalculating its whole subtree each time. With the status last, the entry
                     // before it grows the same way.
@@ -236,7 +216,7 @@ export const Thread = memo(function Thread({
                   )}
                 >
                   {item.type === 'status' ? (
-                    <TurnStatus sessionId={sessionId} />
+                    <TurnStatus sessionId={sessionId} afterSent={item.afterSent} />
                   ) : item.type === 'reply' ? (
                     <ReplyFooter
                       replyKey={item.key}

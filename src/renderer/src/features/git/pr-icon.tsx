@@ -1,14 +1,15 @@
 import {
-  CircleCheckIcon,
-  CircleXIcon,
+  CancelCircleIcon,
+  CheckmarkCircle02Icon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
-  UserRoundCheckIcon,
-  UserRoundIcon,
-  UserRoundXIcon,
-} from 'lucide-react'
+  UserCheck01Icon,
+  UserIcon,
+  UserRemove01Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { PullRequest, PullRequestState } from '@shared/git'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -18,6 +19,7 @@ import { cn } from '@renderer/lib/utils'
 export type IconSize = 12 | 13 | 14 | 16
 
 const ICON_SIZE = { 12: 'size-3', 13: 'size-3.25', 14: 'size-3.5', 16: 'size-4' } as const
+const STROKE = 1.9
 
 const STATE = {
   open: { Icon: GitPullRequestIcon, color: 'text-success', label: 'pr.icon.open' },
@@ -39,7 +41,10 @@ export function PrIcon({
   const { t } = useTranslation('git')
   if (!state) {
     return (
-      <GitPullRequestIcon
+      <HugeiconsIcon
+        icon={GitPullRequestIcon}
+        size={size}
+        strokeWidth={STROKE}
         role="img"
         aria-label={t('pr.icon.none')}
         className={cn('shrink-0 text-icon', ICON_SIZE[size], className)}
@@ -48,7 +53,10 @@ export function PrIcon({
   }
   const { Icon, color, label } = STATE[state]
   return (
-    <Icon
+    <HugeiconsIcon
+      icon={Icon}
+      size={size}
+      strokeWidth={STROKE}
       role="img"
       aria-label={t(label)}
       className={cn('shrink-0', ICON_SIZE[size], color, className)}
@@ -57,9 +65,9 @@ export function PrIcon({
 }
 
 const REVIEW = {
-  approved: { Icon: UserRoundCheckIcon, color: 'text-success' },
-  changes_requested: { Icon: UserRoundXIcon, color: 'text-danger' },
-  review_required: { Icon: UserRoundIcon, color: 'text-icon' },
+  approved: { Icon: UserCheck01Icon, color: 'text-success' },
+  changes_requested: { Icon: UserRemove01Icon, color: 'text-danger' },
+  review_required: { Icon: UserIcon, color: 'text-icon' },
 } as const
 
 /** A review decision's icon in its color, beside the words that name it. */
@@ -71,12 +79,20 @@ export function ReviewIcon({
   size?: IconSize
 }) {
   const { Icon, color } = REVIEW[review]
-  return <Icon aria-hidden className={cn('shrink-0', ICON_SIZE[size], color)} />
+  return (
+    <HugeiconsIcon
+      icon={Icon}
+      size={size}
+      strokeWidth={STROKE}
+      aria-hidden
+      className={cn('shrink-0', ICON_SIZE[size], color)}
+    />
+  )
 }
 
 const CHECKS = {
-  passing: { Icon: CircleCheckIcon, color: 'text-success', label: 'pr.checks.passing' },
-  failing: { Icon: CircleXIcon, color: 'text-danger', label: 'pr.checks.failing' },
+  passing: { Icon: CheckmarkCircle02Icon, color: 'text-success', label: 'pr.checks.passing' },
+  failing: { Icon: CancelCircleIcon, color: 'text-danger', label: 'pr.checks.failing' },
 } as const
 
 /** The checks' worst state; checks still running turn, as running work does. */
@@ -100,6 +116,13 @@ export function ChecksIcon({
   }
   const { Icon, color, label } = CHECKS[state]
   return (
-    <Icon role="img" aria-label={t(label)} className={cn('shrink-0', ICON_SIZE[size], color)} />
+    <HugeiconsIcon
+      icon={Icon}
+      size={size}
+      strokeWidth={STROKE}
+      role="img"
+      aria-label={t(label)}
+      className={cn('shrink-0', ICON_SIZE[size], color)}
+    />
   )
 }
