@@ -429,6 +429,11 @@
 .ks-thread .ui-apc.ks-plan {
   max-width: none;
 }
+/* The plan clamps itself, so the card's own scroller would hide the mode and the note under it. */
+.ks-plan .ui-apc__preview {
+  max-height: none;
+  overflow: visible;
+}
 .ks-plan__preview {
   display: flex;
   flex-direction: column;
