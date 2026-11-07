@@ -10,6 +10,7 @@ import {
   pairingLink,
   type PairingDevice,
   type PairingEnd,
+  type PairingRelay,
   type PairingState,
 } from '@shared/remote/pairing'
 import type { DirectAddress } from '@shared/remote/protocol'
@@ -42,6 +43,8 @@ export interface PairingOptions {
   hostKey: Uint8Array
   /** Where devices may connect directly, for the code to carry. */
   addresses(): DirectAddress[]
+  /** The host's relay id and relays while it uses the relay, for the code to carry. */
+  relay?(): PairingRelay | null
   /** Tells the asker of `codeId` how its code is doing. */
   send(codeId: number, pairing: PairingState): void
   now?: () => number
@@ -145,11 +148,13 @@ export class PairingCodes {
   }
 
   private wait(code: Code): void {
+    const relay = this.options.relay?.() ?? null
     const link = pairingLink({
       version: PAIRING_VERSION,
       hostKey: this.options.hostKey,
       secret: code.secret,
       addresses: this.options.addresses(),
+      ...(relay ? { relay } : {}),
     })
     if (code.timer) clearTimeout(code.timer)
     code.timer = setTimeout(() => {

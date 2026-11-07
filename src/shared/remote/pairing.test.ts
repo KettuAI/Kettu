@@ -7,12 +7,13 @@ import {
   pairingLink,
   parseBrowserPairingLink,
   parsePairingLink,
+  DIRECT_PAIRING_VERSION,
   PAIRING_VERSION,
   type PairingPayload,
 } from './pairing'
 
 const payload: PairingPayload = {
-  version: PAIRING_VERSION,
+  version: DIRECT_PAIRING_VERSION,
   hostKey: Uint8Array.from({ length: 32 }, (_, i) => i),
   secret: Uint8Array.from({ length: 32 }, (_, i) => 255 - i),
   addresses: [
@@ -55,12 +56,66 @@ describe('pairing codes', () => {
         .replace(/\+/g, '-')
         .replace(/\//g, '_')
         .replace(/=+$/, '')
-    expect(decodePairing(encode(Uint8Array.of(2, ...bytes.subarray(1))))).toBeNull()
+    expect(decodePairing(encode(Uint8Array.of(3, ...bytes.subarray(1))))).toBeNull()
     expect(decodePairing(encode(bytes.subarray(0, 64)))).toBeNull()
     expect(decodePairing(encode(bytes.subarray(0, bytes.length - 1)))).toBeNull()
     expect(decodePairing('not base64!')).toBeNull()
     expect(parsePairingLink(`https://example.com/pair#${text}`)).toBeNull()
     expect(parsePairingLink('https://kettu.sh/pair')).toBeNull()
+  })
+
+  it('make a code without the relay as version 1, which devices that know only it read', () => {
+    const text = encodePairing({ ...payload, version: PAIRING_VERSION })
+    expect(atob(text.slice(0, 2) + '==').charCodeAt(0)).toBe(1)
+    expect(decodePairing(text)).toEqual(payload)
+  })
+
+  it('carry the relay id and the relays from version 2, before the addresses', () => {
+    const relayed: PairingPayload = {
+      ...payload,
+      version: PAIRING_VERSION,
+      relay: {
+        id: 'aeiscmkbkfqxdamrugy4dupb6e',
+        urls: ['https://relay.kettu.sh', 'https://hk.relay.kettu.sh'],
+      },
+    }
+    const text = encodePairing(relayed)
+    expect(decodePairing(text)).toEqual(relayed)
+    expect(decodePairing(encodePairing({ ...relayed, addresses: [] }))).toEqual({
+      ...relayed,
+      addresses: [],
+    })
+    // The version, the key, the secret, the id, the count and both origins.
+    const bare = encodePairing({ ...relayed, addresses: [] })
+    expect(bare.length).toBe(Math.ceil(((65 + 16 + 1 + 23 + 26) * 4) / 3))
+  })
+
+  it('refuse a relay part that is cut short or names no origin', () => {
+    const relayed = encodePairing({
+      ...payload,
+      version: PAIRING_VERSION,
+      addresses: [],
+      relay: { id: 'aeiscmkbkfqxdamrugy4dupb6e', urls: ['https://relay.kettu.sh'] },
+    })
+    const bytes = Uint8Array.from(atob(relayed.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
+      c.charCodeAt(0),
+    )
+    const encode = (b: Uint8Array) =>
+      btoa(String.fromCharCode(...b))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '')
+    expect(decodePairing(encode(bytes.subarray(0, bytes.length - 3)))).toBeNull()
+    const path = Uint8Array.from(bytes)
+    path.set(new TextEncoder().encode('https://relay.kettu.s/'), 65 + 16 + 2)
+    expect(decodePairing(encode(path))).toBeNull()
+    expect(() =>
+      encodePairing({
+        ...payload,
+        relay: { id: 'aeiscmkbkfqxdamrugy4dupb6e', urls: ['https://relay.kettu.sh/v1'] },
+      }),
+    ).toThrow()
+    expect(() => encodePairing({ ...payload, relay: { id: 'NOT-AN-ID', urls: [] } })).toThrow()
   })
 
   it('refuses to carry a host that is not one', () => {
