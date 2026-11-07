@@ -46,6 +46,8 @@
   /* The fox orange of the running turn: its dots, the answer's caret, the step at work. */
   --thread-fox: var(--send);
   --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 18%, transparent);
+  /* The timeline under a run's line: its rail and the dots of finished steps. */
+  --thread-rail: color-mix(in srgb, var(--control-on) 50%, var(--bg-app));
   --thread-add: var(--ansi-green);
   --thread-del: #dc2626;
   --thread-done: #22a06b;
@@ -506,6 +508,7 @@
     --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
     --thread-fox: var(--send);
     --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 24%, transparent);
+    --thread-rail: color-mix(in srgb, var(--control-on) 70%, var(--bg-app));
     --thread-add: var(--ansi-green);
     --thread-del: #f87171;
     --thread-done: #3fbf86;
@@ -839,6 +842,7 @@
   --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
   --thread-fox: var(--send);
   --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 24%, transparent);
+  --thread-rail: color-mix(in srgb, var(--control-on) 70%, var(--bg-app));
   --thread-add: var(--ansi-green);
   --thread-del: #f87171;
   --thread-done: #3fbf86;

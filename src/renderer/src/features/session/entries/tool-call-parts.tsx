@@ -91,11 +91,12 @@ export function ToolSummary({
   const line = target.split('\n')[0]!
   return (
     <span title={target}>
-      {line}
+      <span className="ks-tool-target">{line}</span>
       {stats && (stats.insertions > 0 || stats.deletions > 0) && (
         <span className="ks-tool-stats tabular">
           {' '}
-          +{stats.insertions} −{stats.deletions}
+          <span className="ks-tool-add">+{stats.insertions}</span>{' '}
+          <span className="ks-tool-del">−{stats.deletions}</span>
         </span>
       )}
       {note && <span className="ks-tool-note"> · {note}</span>}

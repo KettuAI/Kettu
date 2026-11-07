@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ThreadEntry } from '@shared/thread'
 import { ToolCallCard, type ToolCallLabels } from '@renderer/components/affect/tool-call-card'
+import { isFresh } from '@renderer/stores/threads'
 import { Markdown } from '../markdown'
 import { thoughtTitle, toolLabel } from './helpers'
 import { entryPictures } from './row-pictures'
@@ -41,7 +42,18 @@ export function StepCard({
   icon: ReactNode
 }) {
   const { t } = useTranslation('session')
-  const facts = { status, startedAt, duration, time, icon, labels, chevron: 'before' as const }
+  // A step that arrived while shown draws its part of a run's timeline in (session.css).
+  const [fresh] = useState(() => isFresh(sessionId, entry.id))
+  const facts = {
+    status,
+    startedAt,
+    duration,
+    time,
+    icon,
+    labels,
+    chevron: 'after' as const,
+    className: fresh ? 'ks-step-new' : undefined,
+  }
   if (entry.kind === 'tool') {
     const label = toolLabel(entry, projectPath, entry.status === 'completed')
     const pictures = entryPictures(entry)

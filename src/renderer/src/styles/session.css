@@ -208,19 +208,271 @@
   }
 }
 
-/* Tool calls on affectUI's Tool Call Card and Group. A long run summary shortens instead of
-   pushing the failed count, time and chevron to the far edge; the thumbnails at a folded row's
-   end give way once it opens, whose details show the pictures. */
-.ks-thread .ui-tcc-group__label {
-  max-width: 36em;
-}
+/* Tool calls on affectUI's Tool Call Card and Group, laid out as a timeline like its Agent
+   Checkpoints without branches: a run's line over a rail with a dot per step, and each step a
+   30 px row with no card. A long run summary shortens instead of pushing the failed count, time and
+   chevron to the far edge; the thumbnails at a folded row's end give way once it opens, whose
+   details show the pictures. */
 .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__trail,
 .ui-tcc-group[data-open] > .ui-tcc-group__top > .ui-tcc__trail {
   display: none;
 }
-.ks-tool-stats,
 .ks-tool-note {
   color: var(--thread-muted);
+}
+.ks-tool-add {
+  color: var(--thread-add);
+}
+.ks-tool-del {
+  color: var(--thread-del);
+}
+.ks-tool-target {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* The run's line: its stacked tiles stay, its words a step lighter than a reply. */
+.ks-thread .ui-tcc-group {
+  /* The rail runs under the run's chevron, and a step's tile starts under the run's first tile. */
+  --ks-rail-x: 8px;
+  --ks-gutter: 26px;
+}
+.ks-thread .ui-tcc-group__head {
+  color: var(--ui-tcc-text);
+  font-size: 13px;
+}
+.ks-thread .ui-tcc-group__head:hover {
+  color: var(--ui-tcc-ink);
+}
+.ks-thread .ui-tcc-group__label {
+  max-width: 36em;
+}
+/* Room left of the rail, so the fold's clip leaves the running dot's pulse whole. */
+.ks-thread .ui-tcc-group > .ui-tcc__body > .ui-tcc__clip {
+  margin-left: -8px;
+  padding-left: 8px;
+}
+.ks-thread .ui-tcc-group__list {
+  gap: 0;
+  padding: 2px 0 0;
+}
+
+/* A step: a row with no card. On its own it starts at the column's edge, its hover well a little
+   further out; on a run's rail it starts under the run's tiles. */
+.ks-thread .ui-tcc {
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.ks-thread .ui-tcc > .ui-tcc__top {
+  margin-left: -6px;
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top {
+  margin-left: calc(var(--ks-gutter) - 6px);
+}
+.ks-thread .ui-tcc__head,
+.ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head {
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 6px;
+  border-radius: 7px;
+}
+.ks-thread .ui-tcc__head:hover,
+.ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head:not([data-bodyless]) {
+  background: var(--ui-tcc-wash);
+}
+.ks-thread .ui-tcc__head[data-bodyless]:hover {
+  background: none;
+}
+.ks-thread .ui-tcc .ui-tcc__icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--ui-tcc-card);
+  box-shadow: var(--ui-tcc-shadow);
+}
+.ks-thread .ui-tcc .ui-tcc__icon > svg {
+  width: 12px;
+  height: 12px;
+}
+.ks-thread .ui-tcc__name {
+  color: var(--ui-tcc-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+}
+.ks-thread .ui-tcc__summary {
+  color: var(--ui-tcc-muted);
+}
+
+/* The state is the dot's: no check mark, and on the rail no spinner either. A failed step's
+   time is replaced by its badge. */
+.ks-thread .ui-tcc__status {
+  gap: 8px;
+  color: var(--ui-tcc-muted);
+}
+.ks-thread .ui-tcc__status > :is(.ui-tcc__ok, .ui-tcc__err, .ui-tcc__cancel),
+.ks-thread .ui-tcc-group__list > .ui-tcc .ui-tcc__spinner {
+  display: none;
+}
+.ks-thread .ui-tcc[data-status='error'] .ui-tcc__time {
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ui-tcc-red) 10%, transparent);
+  color: var(--ui-tcc-red);
+  font-size: 11px;
+  line-height: 18px;
+}
+.ks-thread .ui-tcc[data-status='running'] :is(.ui-tcc__name, .ui-tcc__summary) {
+  background: linear-gradient(
+      90deg,
+      var(--ui-tcc-ink) 0 40%,
+      var(--ui-tcc-faint) 50%,
+      var(--ui-tcc-ink) 60% 100%
+    )
+    0 0 / 250% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: ks-step-shine 1.4s linear infinite;
+}
+.ks-thread .ui-tcc[data-status='running'] .ui-tcc__summary * {
+  color: transparent;
+}
+
+/* The chevron at a row's end shows on hover, on focus and while the row is open. */
+.ks-thread .ui-tcc__head .ui-tcc__chevron {
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) ease,
+    transform 360ms var(--ui-tcc-ease),
+    stroke 160ms ease;
+}
+.ks-thread .ui-tcc__head:is(:hover, :focus-visible) .ui-tcc__chevron,
+.ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head .ui-tcc__chevron {
+  opacity: 1;
+}
+
+/* An open step's details, aligned with the tiles; on a run the rail passes beside them. */
+.ks-thread .ui-tcc__sections {
+  gap: 10px;
+  padding: 4px 0 10px;
+  border-top: 0;
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc .ui-tcc__sections {
+  padding-left: var(--ks-gutter);
+}
+
+/* The rail: a line from each dot to the next, and the dots ringed in the sheet's color so the
+   line breaks around them. A failed step's dot is red, a cancelled one gray, and a running one
+   larger in the accent with a soft pulse. */
+.ks-thread .ui-tcc-group__list > .ui-tcc:not(:last-child)::before,
+.ks-thread .ui-tcc-group__list > .ui-tcc::after,
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc:not(:last-child)::before {
+  z-index: 1;
+  top: 15px;
+  bottom: -15px;
+  left: calc(var(--ks-rail-x) - 0.75px);
+  width: 1.5px;
+  border-radius: 1px;
+  background: var(--thread-rail);
+  transform-origin: top;
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc::after {
+  z-index: 2;
+  top: 11px;
+  left: calc(var(--ks-rail-x) - 4px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--thread-rail);
+  box-shadow: 0 0 0 2px var(--bg-app);
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='error']::after {
+  background: var(--ui-tcc-red);
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='cancelled']::after {
+  background: var(--ui-tcc-faint);
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running']::after,
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before {
+  top: 10px;
+  left: calc(var(--ks-rail-x) - 5px);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--control-on);
+}
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before {
+  z-index: 1;
+  animation: ks-step-pulse 1.6s var(--ease-out-quint) infinite;
+}
+
+/* A step that arrives while shown: the rail draws down to it, its dot pops and its row rises. */
+.ks-thread .ui-tcc-group__list > .ui-tcc:has(+ .ks-step-new)::before {
+  animation: ks-step-draw var(--duration-slow) var(--ease-out-quint) both;
+}
+.ks-thread .ui-tcc-group__list > .ks-step-new::after {
+  animation: ks-step-pop var(--duration-slow) var(--ease-out-quint) both;
+}
+.ks-thread .ui-tcc-group__list > .ks-step-new > .ui-tcc__top {
+  animation: ks-step-rise var(--duration-slow) var(--ease-out-quint) both;
+}
+@keyframes ks-step-draw {
+  from {
+    transform: scaleY(0);
+  }
+}
+@keyframes ks-step-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+@keyframes ks-step-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+/* Grows to 18 px across, clear of the row's hover well. */
+@keyframes ks-step-pulse {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+@keyframes ks-step-shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-thread .ui-tcc-group__list > .ui-tcc::before,
+  .ks-thread .ui-tcc-group__list > .ui-tcc::after,
+  .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top,
+  .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::before {
+    animation: none;
+  }
+  .ks-thread .ui-tcc[data-status='running'] :is(.ui-tcc__name, .ui-tcc__summary) {
+    background: none;
+    color: var(--ui-tcc-ink);
+    animation: none;
+  }
+  .ks-thread .ui-tcc[data-status='running'] .ui-tcc__summary * {
+    color: inherit;
+  }
 }
 
 /* Marks stand on their own in a card's head, with no tile around them, as the screen sets them. */
