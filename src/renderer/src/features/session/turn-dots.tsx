@@ -15,7 +15,7 @@ export function TurnDots({ phase, className }: { phase: RunningPhase; className?
       viewBox="0 0 12 12"
       aria-hidden
       className={cn(
-        'size-3 shrink-0 animate-in fill-current text-(--focus) animation-duration-(--duration-base) fade-in',
+        'size-3 shrink-0 animate-in fill-current text-(--thread-fox) animation-duration-(--duration-base) fade-in',
         className,
       )}
     >
