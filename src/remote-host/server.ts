@@ -69,6 +69,7 @@ import {
   type StreamCancel,
   type StreamRef,
 } from '@shared/remote/streams'
+import type { HostRelay } from '@shared/remote/relay'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
@@ -133,6 +134,8 @@ export interface RemoteServerOptions {
   openAgentPort(device: PortDevice): Promise<PortChannel | null>
   /** Whether devices may use the terminal from the start; they may not when absent. */
   terminal?: boolean
+  /** The host's id on the Kettu relay and its relays while it uses the relay, for welcomes. */
+  relay?(): HostRelay | null
   /** A port to the terminal host for a device's terminals, or null while it cannot have one. */
   openTerminalPort?(device: PortDevice): Promise<PortChannel | null>
   /** A port to the device host for a device's mobile devices, or null while it cannot have one. */
@@ -185,6 +188,12 @@ export class RemoteServer {
   accept(transport: Transport): void {
     if (this.stopped) return transport.close()
     this.connections.add(new DeviceConnection(transport, this))
+  }
+
+  /** The welcome's relay, while the host uses it. */
+  relay(): { relay?: HostRelay } {
+    const relay = this.options.relay?.() ?? null
+    return relay ? { relay } : {}
   }
 
   /** Connections refused, at their first message or by the direct listener's limits. */
@@ -981,6 +990,7 @@ class DeviceSession {
       device: { id: this.device.id, name: this.device.name },
       terminal: this.server.terminal,
       addresses: this.server.addresses,
+      ...this.server.relay(),
       ...(this.token ? { resume: this.token } : {}),
       ...(resumed ? { resumed } : {}),
     }

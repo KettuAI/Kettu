@@ -75,8 +75,10 @@ export interface SettingsFile {
   remote: {
     enabled: boolean // paired devices may connect to this computer; keeps Kettu in the background
     name: string | null // the name devices show for this computer; null for the system's
-    direct: DirectSettings // on while remote access is, since devices have no other way yet
+    // Held on while remote access is and the relay is off, when devices have no other way.
+    direct: DirectSettings
     terminal: boolean // devices may use this computer's terminals, which run any command
+    relay: boolean // Use the Kettu relay, while this computer is signed in to a Kettu account
   }
   // Agents using this computer's desktop apps; a paired device can neither see nor change it.
   computerUse: ComputerUseSettings
@@ -199,6 +201,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     name: null,
     direct: { enabled: false, port: null, addresses: [] },
     terminal: false,
+    relay: true,
   },
   computerUse: { enabled: false, allowedApps: [] },
 }
@@ -249,6 +252,7 @@ export interface SettingsPatch {
     // `port` from 1024: below it a port may need privileges; the list is replaced whole.
     direct?: { enabled?: boolean; port?: number; addresses?: DirectAddress[] }
     terminal?: boolean
+    relay?: boolean
   }
 }
 

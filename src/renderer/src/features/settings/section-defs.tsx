@@ -70,12 +70,13 @@ import { ArchivedRow } from './archived-section'
 import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { GroupNote } from './rows'
-import { SettingSwitch } from './controls'
 import { HostPage } from './host-page'
 import { hostLine, webHostLine } from './host-text'
 import { AddHostButton, HostRow, HostsLoading, HostsNote, SelfRow } from './hosts-section'
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
+import { DirectSwitch, RelayRegions, RelaySwitch } from './remote-relay'
+import { relayInUse } from './relay-text'
 import {
   AddDeviceButton,
   DeviceRow,
@@ -1248,6 +1249,7 @@ export function useRemoteSection(): SectionDef {
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const en = english()
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
+  const relayOn = useSettingsStore((s) => s.settings.remote.relay)
   const status = useRemoteStore((s) => s.status)
   const resettable = useHostHas('remoteReset')
   const state = group('status', t('remote.switch'), {
@@ -1311,6 +1313,7 @@ export function useRemoteSection(): SectionDef {
   if (!enabled)
     return { ...base, rows: devices.length > 0 ? [switchRow, ...deviceRows] : [switchRow] }
   const direct = group('direct', t('remote.direct.group'))
+  const advanced = group('advanced', t('remote.groups.advanced'))
   const rows: RowDef[] = [
     switchRow,
     {
@@ -1326,12 +1329,12 @@ export function useRemoteSection(): SectionDef {
       id: 'direct',
       name: t('remote.direct.name'),
       english: en('remote.direct.name'),
-      description: t('remote.direct.description'),
+      description: t(
+        relayInUse(status) ? 'remote.direct.descriptionFree' : 'remote.direct.description',
+      ),
       keywords: t('remote.direct.keywords'),
       group: direct,
-      render: () => (
-        <SettingSwitch label={t('remote.direct.name')} checked disabled onChange={() => {}} />
-      ),
+      render: () => <DirectSwitch label={t('remote.direct.name')} />,
     },
     {
       id: 'direct-port',
@@ -1371,6 +1374,29 @@ export function useRemoteSection(): SectionDef {
       group: group('permissions', t('remote.groups.permissions')),
       render: () => <TerminalSwitch label={t('remote.terminal.name')} />,
     },
+    {
+      id: 'relay',
+      name: t('remote.relay.name'),
+      english: en('remote.relay.name'),
+      description: t('remote.relay.description', onHost),
+      keywords: t('remote.relay.keywords'),
+      group: advanced,
+      render: () => <RelaySwitch label={t('remote.relay.name')} />,
+    },
+    ...(relayOn
+      ? [
+          {
+            id: 'relay-regions',
+            name: t('remote.relay.regions'),
+            english: en('remote.relay.regions'),
+            description: t('remote.relay.regionsDescription'),
+            keywords: t('remote.relay.keywords'),
+            group: advanced,
+            layout: 'block',
+            render: () => <RelayRegions />,
+          } satisfies RowDef,
+        ]
+      : []),
   ]
   if (resettable !== false) {
     rows.push({

@@ -13,6 +13,7 @@ import {
   type AddedAgent,
   type HostSettings,
   type ProxySettings,
+  type DirectSettings,
   type SettingsFile,
   type SettingsPatch,
   type TerminalSettings,
@@ -273,7 +274,7 @@ function checkRemote(value: unknown, problems: string[]): void {
     return
   }
   for (const [key, fieldValue] of Object.entries(value)) {
-    if (key === 'enabled' || key === 'name' || key === 'terminal') {
+    if (key === 'enabled' || key === 'name' || key === 'terminal' || key === 'relay') {
       const problem = (key === 'name' ? isHostName : isBoolean)(fieldValue, `remote.${key}`)
       if (problem) problems.push(problem)
     } else if (key === 'direct') {
@@ -398,13 +399,21 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
 }
 
 /**
- * Devices reach the computer only while Kettu runs, and with no relay yet only directly, so remote
- * access keeps it in the background and direct connections on.
+ * Devices reach the computer only while Kettu runs, so remote access keeps it in the background.
+ * Without the relay they reach it only directly, so direct connections stay on then; with it they
+ * keep the owner's choice, and the hosts hold them on while this computer is not signed in.
  */
 function holdForRemote(settings: SettingsFile): void {
   if (!settings.remote.enabled) return
   settings.general.background = true
-  settings.remote.direct.enabled = true
+  if (!settings.remote.relay) settings.remote.direct.enabled = true
+}
+
+/** The direct connections as the remote host applies them: on as well while the relay is not in use. */
+export function effectiveDirect(settings: SettingsFile, signedIn: boolean): DirectSettings {
+  const { enabled, relay, direct } = settings.remote
+  const held = enabled && !(relay && signedIn)
+  return held && !direct.enabled ? { ...direct, enabled: true } : direct
 }
 
 /**
@@ -446,10 +455,11 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
-    const { enabled, name, direct, terminal } = patch.remote
+    const { enabled, name, direct, terminal, relay } = patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
     if (name !== undefined) next.remote.name = name
     if (terminal !== undefined) next.remote.terminal = terminal
+    if (relay !== undefined) next.remote.relay = relay
     if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
     if (direct?.port !== undefined) next.remote.direct.port = direct.port
     if (direct?.addresses) {
@@ -461,12 +471,13 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
 }
 
 /**
- * Gives direct connections their port the first time they are on, from `pick`, and keeps it
- * after; unchanged settings come back as they are.
+ * Gives direct connections their port the first time they or remote access are on, since a host
+ * not signed in holds them on, from `pick`, and keeps it after; unchanged settings come back as
+ * they are.
  */
 export function withDirectPort(current: SettingsFile, pick: () => number): SettingsFile {
-  const { direct } = current.remote
-  if (!direct.enabled || direct.port !== null) return current
+  const { direct, enabled } = current.remote
+  if (!(direct.enabled || enabled) || direct.port !== null) return current
   const next = structuredClone(current)
   next.remote.direct.port = pick()
   return next
@@ -762,6 +773,7 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
   read(raw.terminal, 'remote.terminal', isBoolean, () => {
     remote.terminal = raw.terminal as boolean
   })
+  read(raw.relay, 'remote.relay', isBoolean, () => (remote.relay = raw.relay as boolean))
   const direct = raw.direct
   if (direct === undefined) return remote
   if (!isRecord(direct)) {

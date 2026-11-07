@@ -190,6 +190,7 @@ export interface HostAdminContract {
   'remote.activity': { params: { id: string }; result: DeviceActivity[] }
   'remote.reset': { params: undefined; result: null }
   'remote.retryDirect': { params: undefined; result: null }
+  'remote.retryRelay': { params: undefined; result: null }
   'host.info': { params: undefined; result: HostInfo }
   'host.restart': { params: { process: 'agent' | 'terminal' }; result: null }
   'sharing.status': { params: undefined; result: SharingStatus }
@@ -271,6 +272,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'remote.activity': true,
   'remote.reset': true,
   'remote.retryDirect': true,
+  'remote.retryRelay': true,
   'host.info': true,
   'host.restart': true,
   'sharing.status': true,

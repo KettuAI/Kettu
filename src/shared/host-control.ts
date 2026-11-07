@@ -18,6 +18,7 @@ import type { HostPairingState, HostStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
+import type { RelayStatus } from './remote/relay-host'
 import type { DirectSettings, HostSettings, SettingsFile, TerminalSettings } from './settings'
 import type { AgentId } from './thread'
 
@@ -331,6 +332,8 @@ export type MainToRemoteHost =
        * run listened; null for any free one. Absent in the desktop app, which takes none.
        */
       sshPort?: number | null
+      /** The Kettu relay, for serving devices through it and reaching other hosts. */
+      relay?: RelayInit
     }
   // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
   // none comes while the agent host is not running. It answers remote-host:open-terminal-port the
@@ -350,7 +353,21 @@ export type MainToRemoteHost =
   | { type: 'remote-host:direct'; direct: DirectSettings }
   // Remote access turned on while the host runs for other hosts, with what `remote-host:init`
   // would have carried.
-  | { type: 'remote-host:serve'; privateKey: string; plainTextKey: boolean; direct: DirectSettings }
+  | {
+      type: 'remote-host:serve'
+      privateKey: string
+      plainTextKey: boolean
+      direct: DirectSettings
+      /** The Ed25519 seed to sign in to the relay with, in base64. Never logged. */
+      relayKey?: string
+    }
+  // Use the Kettu relay turned on or off.
+  | { type: 'remote-host:relay'; enabled: boolean }
+  // A fresh access token of the account this computer is signed in to, or null once signed out,
+  // which closes every relay socket. Never logged.
+  | { type: 'remote-host:token'; token: string | null }
+  // Retry on the relay: tries every relay now, a conflict included.
+  | { type: 'remote-host:relay-retry' }
   // Remote access turned off: devices hear `remote_off` and nothing listens, while the
   // connections to other hosts go on. Answered by remote-host:stop-serving once the device files
   // are written for the last time, which main then reads and changes itself.
@@ -405,6 +422,21 @@ export type MainToRemoteHost =
   // Tells every device why, then stops.
   | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
 
+/** What the remote host starts the relay with. */
+export interface RelayInit {
+  /** The main relay's origin, which lists the regions. */
+  url: string
+  /** Use the Kettu relay, as the setting is. */
+  enabled: boolean
+  /**
+   * The 32-byte Ed25519 seed the host signs in with, in base64; absent while remote access is
+   * off. Never logged.
+   */
+  key?: string
+  /** The account's access token; null while this computer is not signed in. Never logged. */
+  token: string | null
+}
+
 /** What the remote host reports to main, for Settings. */
 export interface RemoteHostStatus {
   /** The host's X25519 public key, in base64, for pairing codes. */
@@ -424,6 +456,8 @@ export interface RemoteHostStatus {
    * in the desktop app.
    */
   sshPort?: number | null
+  /** Each relay the host signs in to and how it is doing; none while it signs in to none. */
+  relays: RelayStatus[]
 }
 
 /** Direct connections, as the remote host runs them. */

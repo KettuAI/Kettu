@@ -22,8 +22,14 @@ import {
 } from '@shared/log/process-log'
 import { matchLocale } from '@shared/locale'
 import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
+import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { HostAdmin } from '../main/host-admin'
+import { Account } from '../main/account'
+import { accountBaseUrl, AccountApi, clientInfo, DAEMON_CLIENT } from '../main/account/service'
+import { accountFile } from '../main/account/store'
 import { createLogger } from '../main/log'
+import { RelayToken } from '../main/relay-token'
+import { nodeSystemReleaseForRun } from '../main/system-name'
 import type { RemoteIdentity } from '../main/remote-identity'
 import { SettingsStore } from '../main/settings'
 import { SettingsError } from '../main/settings-schema'
@@ -42,13 +48,13 @@ import {
 } from './control'
 import { isUnavailable, type HostTimings } from './forked-host'
 import { Hosts } from './hosts'
-import { AccountApi, accountBaseUrl } from '../main/account/service'
-import { accountFile } from '../main/account/store'
 import { takeDebugRun } from './debug'
 import {
   keyIsPrivate,
   loadHostKey,
+  loadRelayHostKey,
   newHostKey,
+  newRelayHostKey,
   NO_SYSTEM_ENCRYPTION,
   prepareDataFolder,
 } from './key'
@@ -253,6 +259,10 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       changeSettings({ diagnostics: { verboseUntil: on ? Date.now() + VERBOSE_MS : null } })
       return { until: settings.get().diagnostics.verboseUntil }
     },
+    'account.reload': async () => {
+      await account?.reload()
+      return null
+    },
     'ssh.setup': async ({ device }) => {
       const running = starting()
       // Throws while nothing listens, before the device is added.
@@ -272,22 +282,71 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
 
   let settings: SettingsStore
   let identity: RemoteIdentity
+  let relayKey: RemoteIdentity | null = null
   let sshPort: number | null
   try {
     await chmod(options.controlSocket, 0o600)
     identity = await loadHostKey(options.dataPath, (message) => log.warn(message))
     settings = await SettingsStore.load(options.dataPath)
     sshPort = await readSshPort(options.dataPath)
-    // Without the relay devices reach the daemon only directly, as the app without it; turning
-    // them on the first time picks their port.
-    if (!settings.get().remote.direct.enabled) {
-      settings.update({ remote: { direct: { enabled: true } } })
-    }
+    // The daemon always serves devices; the first run picks the direct connections' port, which
+    // hold on while the relay is not in use.
+    if (!settings.get().remote.enabled) settings.update({ remote: { enabled: true } })
     await clearReports(options.dataPath)
   } catch (error) {
     await release(server, options.controlSocket)
     throw error
   }
+  try {
+    relayKey = await loadRelayHostKey(options.dataPath)
+  } catch (error) {
+    log.error(`The relay cannot be used without its key: ${(error as Error).message}`)
+  }
+  let relayUrl = RELAY_URL
+  try {
+    relayUrl = relayUrlFrom(options.env[RELAY_URL_ENV])
+  } catch (error) {
+    log.error(`Using the relay at ${RELAY_URL} instead: ${(error as Error).message}`)
+  }
+  let accountBase: string | null = null
+  try {
+    accountBase = accountBaseUrl(options.env)
+  } catch (error) {
+    log.error(`The account cannot be used: ${(error as Error).message}`)
+  }
+  // `kettu login` writes the sign-in; the daemon refreshes its tokens for the relay from it.
+  let account: Account | null = null
+  let relayToken: RelayToken | null = null
+  if (accountBase) {
+    account = await Account.load({
+      file: accountFile(options.dataPath),
+      api: new AccountApi(
+        accountBase,
+        proxiedFetch(() => settings.get().proxy, options.env),
+      ),
+      client: DAEMON_CLIENT,
+      cipher: NO_SYSTEM_ENCRYPTION,
+      clientInfo: async () =>
+        clientInfo({
+          kind: 'daemon',
+          name: settings.get().remote.name ?? os.hostname(),
+          os: await nodeSystemReleaseForRun(),
+          arch: process.arch,
+          version: options.version,
+        }),
+      locale: () => 'en',
+      openBrowser: () => Promise.reject(new Error('The daemon signs in with kettu login')),
+      bringToFront: () => {},
+      avatar: async () => null,
+      failureText: () => '',
+      changed: () => {
+        relayToken?.update()
+        hosts?.settingsChanged(new Set(['remote']))
+      },
+      log: createLogger('account'),
+    })
+  }
+  const signedIn = (): boolean => account?.status().state === 'signed-in'
 
   // Taken once the socket is this run's, so a second `kettu run` leaves the service's marker be.
   const marked = await takeDebugRun(options.dataPath).catch((error: unknown) => {
@@ -327,6 +386,10 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     settings: () => settings.get(),
     privateKey: identity.privateKey,
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
+    relayKey: relayKey?.privateKey ?? null,
+    newRelayKey: async () => (await newRelayHostKey(options.dataPath)).privateKey,
+    relayUrl,
+    signedIn,
     hostName: os.hostname(),
     env: hostEnv,
     inspector: (name, url) => debugPorts?.setInspector(name, url),
@@ -343,6 +406,15 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         : { error: { code: 'unavailable', message: 'The daemon is starting' } },
   })
   hosts = running
+  if (account) {
+    const signed = account
+    relayToken = new RelayToken({
+      current: () => signed.currentToken(),
+      signedIn,
+      needed: () => true,
+      send: (token) => running.setToken(token),
+    })
+  }
   admin = await startDaemonAdmin({
     dataPath: options.dataPath,
     version: options.version,
@@ -395,6 +467,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     if (changed.has('diagnostics')) applyVerbose()
   })
   running.start()
+  relayToken?.update()
   log.info(
     `Kettu daemon ${options.version} running (pid ${process.pid}), data in ${options.dataPath}`,
   )
@@ -415,6 +488,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       connectedDevices: hosts?.connectedDevices() ?? null,
       direct: hosts?.directStatus() ?? null,
       debug: debugPorts ? { inspectors: debugPorts.status().inspectors, file: debugFile() } : null,
+      ...(hosts ? { relay: hosts.relayReport() } : {}),
     }
   }
 
@@ -443,6 +517,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       stopped ??= (async () => {
         stopping = true
         log.info('Stopping')
+        relayToken?.stop()
+        account?.stop()
         await running.stop()
         await settings.flush()
         // Held until now, so a daemon that starts meanwhile cannot run hosts beside these.

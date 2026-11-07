@@ -6,6 +6,7 @@
 import type { Platform } from '../platform'
 import { parseDirectAddress } from './address'
 import { DEVICE_ID, isDeviceModel, normalizeDeviceName } from './device'
+import { parseHostRelay, type HostRelay } from './relay'
 
 /**
  * The newest protocol version this side speaks; one number covers every change on the channel.
@@ -96,6 +97,11 @@ export interface Welcome {
   terminal: boolean
   /** Where the device may also connect directly, the owner's own first; none while it is off. */
   addresses: DirectAddress[]
+  /**
+   * The host's id on the Kettu relay and the relays it signs in to, while it uses the relay;
+   * devices paired before the relay learn it here. Older hosts send none.
+   */
+  relay?: HostRelay
   /**
    * From version 2, the token the device's next hello names to resume this session: it works once,
    * while the session lasts, which is up to RESUME_MS after its connection drops.
@@ -304,7 +310,7 @@ export function parseAddresses(value: unknown): DirectAddress[] {
  */
 export function parseWelcome(value: unknown): Welcome | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, host, features, device, terminal, addresses, resume, resumed } =
+  const { type, protocol, host, features, device, terminal, addresses, relay, resume, resumed } =
     value as Record<string, unknown>
   if (type !== 'welcome' || !isVersion(protocol)) return null
   if (protocol < MIN_PROTOCOL_VERSION || protocol > PROTOCOL_VERSION) return null
@@ -327,6 +333,8 @@ export function parseWelcome(value: unknown): Welcome | null {
     terminal: terminal === true,
     addresses: parseAddresses(addresses),
   }
+  const onRelay = parseHostRelay(relay)
+  if (onRelay) welcome.relay = onRelay
   if (protocol < RESUME_VERSION) return welcome
   if (typeof resume === 'string' && TOKEN.test(resume)) welcome.resume = resume
   const request = (resumed as { request?: unknown } | null | undefined)?.request

@@ -5,6 +5,7 @@ import type { Platform } from '../platform'
 import { parseDirectAddress } from './address'
 import { DEVICE_ID, isDeviceName } from './device'
 import type { DirectAddress } from './protocol'
+import { parseHostRelay, relayOrigin, type HostRelay } from './relay'
 
 /** How long pairing waits for a finished handshake before the host counts as unreachable. */
 export const PAIR_HOST_TIMEOUT_MS = 15_000
@@ -48,6 +49,11 @@ export interface KnownHost {
   removed: boolean
   /** Added over SSH: reached through it alone, never at `addresses`. */
   ssh?: SshRoute
+  /**
+   * The host's id on the Kettu relay and its relays, from the pairing code or a welcome; absent
+   * for a host that never said, which is reached directly alone.
+   */
+  relay?: HostRelay
 }
 
 /** Why main could not change a host: renaming needs it online, and the rest need it listed. */
@@ -60,17 +66,31 @@ export type HostConnection =
   /** Trying the addresses, until the first try since the host was last online settles. */
   | { state: 'connecting' }
   /**
-   * Welcomed, through the address whose handshake finished first; `terminal` while its owner
-   * allows devices the terminal.
+   * Welcomed, through the address whose handshake finished first, or through the relay at
+   * `relay`; `terminal` while its owner allows devices the terminal.
    */
   | { state: 'online'; address: DirectAddress; terminal?: true }
-  /** Not reached; tried again with backoff. */
-  | { state: 'offline' }
+  | { state: 'online'; relay: string; terminal?: true }
+  /** Not reached; tried again with backoff. `relay` says what the relay answered, if anything. */
+  | { state: 'offline'; relay?: RelayProblem }
   | { state: 'stopped'; reason: HostStop }
 
 export interface HostStatus extends KnownHost {
   connection: HostConnection
 }
+
+/**
+ * Why the relay did not reach a host that has one: every relay said it is not signed in, none
+ * answered, this computer is signed in to another account than the host's, or to none.
+ */
+export type RelayProblem = 'host_offline' | 'unreachable' | 'wrong_account' | 'signed_out'
+
+const RELAY_PROBLEMS: readonly string[] = [
+  'host_offline',
+  'unreachable',
+  'wrong_account',
+  'signed_out',
+]
 
 /** Settings › Hosts as main puts it together. */
 export interface HostsStatus {
@@ -115,6 +135,10 @@ export type HostPairingFailure =
   | 'rejected'
   /** No handshake finished within 15 seconds. */
   | 'unreachable'
+  /** The relay joins only devices signed in to the host's account, which this computer is not. */
+  | 'wrong_account'
+  /** The code reaches its host only through the relay, which needs a Kettu sign-in. */
+  | 'signed_out'
   | 'update_client'
   | 'update_host'
   | SshAddFailure
@@ -190,6 +214,8 @@ export function parseKnownHost(value: unknown): KnownHost | null {
   if (addresses.some((address) => address === null)) return null
   const ssh = v.ssh === undefined ? undefined : parseSshRoute(v.ssh)
   if (ssh === null) return null
+  const relay = v.relay === undefined ? undefined : parseHostRelay(v.relay)
+  if (relay === null) return null
   return {
     id: v.id,
     publicKey: v.publicKey,
@@ -202,6 +228,7 @@ export function parseKnownHost(value: unknown): KnownHost | null {
     lastOnlineAt: v.lastOnlineAt,
     removed: v.removed === true,
     ...(ssh ? { ssh } : {}),
+    ...(relay ? { relay } : {}),
   }
 }
 
@@ -209,12 +236,20 @@ const STOPS: readonly string[] = ['removed', 'update_client', 'update_host']
 
 function parseConnection(value: unknown): HostConnection | null {
   if (typeof value !== 'object' || value === null) return null
-  const { state, address, reason, terminal } = value as Record<string, unknown>
-  if (state === 'connecting' || state === 'offline') return { state }
+  const { state, address, relay, reason, terminal } = value as Record<string, unknown>
+  if (state === 'connecting') return { state }
+  if (state === 'offline') {
+    return RELAY_PROBLEMS.includes(relay as string)
+      ? { state, relay: relay as RelayProblem }
+      : { state }
+  }
   if (state === 'online') {
+    const extra = terminal === true ? { terminal: true as const } : {}
+    if (typeof relay === 'string') {
+      return relayOrigin(relay) === relay ? { state, relay, ...extra } : null
+    }
     const parsed = parseDirectAddress(address)
-    if (!parsed) return null
-    return terminal === true ? { state, address: parsed, terminal } : { state, address: parsed }
+    return parsed ? { state, address: parsed, ...extra } : null
   }
   if (state === 'stopped' && STOPS.includes(reason as string)) {
     return { state, reason: reason as HostStop }
@@ -233,6 +268,8 @@ const FAILURES: readonly string[] = [
   'void',
   'rejected',
   'unreachable',
+  'wrong_account',
+  'signed_out',
   'update_client',
   'update_host',
   'ssh_missing',

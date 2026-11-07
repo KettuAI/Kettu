@@ -7,7 +7,9 @@ import { chmod, mkdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import {
   loadIdentity,
+  loadRelayKey,
   newIdentity,
+  newRelayKey,
   type IdentityCipher,
   type RemoteIdentity,
 } from '../main/remote-identity'
@@ -56,6 +58,16 @@ export async function loadHostKey(
 /** A new identity in place of the old, as resetting remote access makes, kept as the first. */
 export function newHostKey(data: string): Promise<RemoteIdentity> {
   return newIdentity(data, NO_SYSTEM_ENCRYPTION)
+}
+
+/** The key the host signs in to the relay with, kept beside the identity the same way. */
+export function loadRelayHostKey(data: string): Promise<RemoteIdentity> {
+  return loadRelayKey(data, NO_SYSTEM_ENCRYPTION)
+}
+
+/** A new relay key, as resetting remote access makes. */
+export function newRelayHostKey(data: string): Promise<RemoteIdentity> {
+  return newRelayKey(data, NO_SYSTEM_ENCRYPTION)
 }
 
 /** Whether only the user can read the key file, for `kettu status`; null when it is missing. */

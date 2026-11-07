@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type AddedAgent, type SettingsFile } from '@shared/settings'
 import {
+  effectiveDirect,
   mergeSettings,
   parseSettingsFile,
   validateSettingsPatch,
@@ -135,5 +136,28 @@ describe('computer use settings', () => {
     expect(once.computerUse.allowedApps).toEqual([app])
     expect(withAllowedComputerApp(once, app)).toBe(once)
     expect(() => withAllowedComputerApp(once, { id: 7 })).toThrow()
+  })
+})
+
+describe('remote access and the relay', () => {
+  const on = (): SettingsFile =>
+    mergeSettings(structuredClone(DEFAULT_SETTINGS), { remote: { enabled: true } })
+
+  it('uses the relay by default, keeping direct connections as the owner set them', () => {
+    const settings = on()
+    expect(settings.remote.relay).toBe(true)
+    expect(settings.remote.direct.enabled).toBe(false)
+    expect(settings.general.background).toBe(true)
+    expect(parseSettingsFile({ version: 1 }).settings.remote.relay).toBe(true)
+  })
+
+  it('holds direct connections on without the relay, stored or while not signed in', () => {
+    const settings = on()
+    expect(effectiveDirect(settings, true).enabled).toBe(false)
+    expect(effectiveDirect(settings, false).enabled).toBe(true)
+    const off = mergeSettings(settings, { remote: { relay: false } })
+    expect(off.remote.direct.enabled).toBe(true)
+    expect(effectiveDirect(off, true).enabled).toBe(true)
+    expect(() => validateSettingsPatch({ remote: { relay: 'yes' } })).toThrow()
   })
 })
