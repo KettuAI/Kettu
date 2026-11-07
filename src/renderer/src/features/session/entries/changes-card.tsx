@@ -1,6 +1,8 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
+import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/ui/button'
 import {
   Collapsible,
@@ -16,9 +18,24 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import { turnChanges } from '../turn-work'
 import { DiffBlock } from './diff-block'
 import { PANEL } from './helpers'
-import { useDiffStats } from './use-diff-stats'
+import { cachedStats, useDiffStats } from './use-diff-stats'
 
 type Change = ReturnType<typeof turnChanges>[number]
+
+/** Files listed before the rest are folded away. */
+const SHOWN = 3
+
+/** The files with the most changed lines first, the turn's order among equals. */
+function byChangedLines(changes: Change[]): Change[] {
+  const lines = (change: Change): number => {
+    const stats = cachedStats(change.diffs)
+    return stats ? stats.insertions + stats.deletions : 0
+  }
+  return changes
+    .map((change) => ({ change, lines: lines(change) }))
+    .sort((a, b) => b.lines - a.lines)
+    .map(({ change }) => change)
+}
 
 /** A path inside `root`, relative to it, or null for one outside. */
 function within(path: string, root: string): string | null {
@@ -49,8 +66,12 @@ export const ChangesCard = memo(function ChangesCard({
   const changes = useMemo(() => turnChanges(entries), [entries])
   const all = useMemo(() => changes.flatMap((change) => change.diffs), [changes])
   const totals = useDiffStats(all)
+  const counted = totals !== null
+  const ordered = useMemo(() => (counted ? byChangedLines(changes) : changes), [changes, counted])
+  const [allShown, setAllShown] = useState(false)
   const root = useGitStore((s) => s.status[projectPath]?.repo?.root ?? null)
   if (changes.length === 0) return null
+  const hidden = ordered.length - SHOWN
 
   const review = (path: string): (() => void) | null => {
     const file = within(path, projectPath)
@@ -59,7 +80,7 @@ export const ChangesCard = memo(function ChangesCard({
     return () =>
       openDiff(projectPath, { path: tracked, oldPath: null, ref: null, projectFile: file })
   }
-  const first = changes.map((change) => review(change.path)).find((open) => open !== null)
+  const first = ordered.map((change) => review(change.path)).find((open) => open !== null)
   const committable =
     root === null
       ? []
@@ -89,9 +110,20 @@ export const ChangesCard = memo(function ChangesCard({
           </span>
         )}
       </div>
-      {changes.map((change) => (
+      {(allShown ? ordered : ordered.slice(0, SHOWN)).map((change) => (
         <ChangeRow key={change.path} change={change} projectPath={projectPath} />
       ))}
+      {hidden > 0 && (
+        <button
+          type="button"
+          className="ks-file ks-changes__more focus-ring"
+          aria-expanded={allShown}
+          onClick={() => setAllShown(!allShown)}
+        >
+          <Icon icon={ArrowDown01Icon} size={16} />
+          {allShown ? t('changes.fewer') : t('changes.more', { count: hidden })}
+        </button>
+      )}
     </section>
   )
 })
