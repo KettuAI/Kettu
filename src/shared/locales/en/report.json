@@ -29,6 +29,23 @@
   "binary": "This file goes in as it is and cannot be shown here.",
   "submit": "Submit to Kettu",
   "save": "Save locally",
+  "signInToSubmit": "Sign in to submit reports to Kettu and get an id for an issue.",
+  "signIn": "Sign in",
+  "notSubmitted": {
+    "tooLarge": "The report is too large to submit. Choose a shorter range or fewer extras, or save it and attach it to an issue.",
+    "rateLimited": "Too many reports were submitted today. Save this one and attach it to an issue, or submit it tomorrow.",
+    "unauthorized": "Your sign-in has ended. Sign in again, then submit.",
+    "signedOut": "This host is not signed in to a Kettu account. Sign it in, or save the report.",
+    "network": "Could not reach Kettu. Check the connection and submit again.",
+    "failed": "The report could not be submitted. Save it and attach it to an issue instead."
+  },
+  "submitted": {
+    "title": "Report submitted",
+    "body": "Put this id in an issue, so the report can be found from it.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "openIssue": "Open an issue on GitHub"
+  },
   "saved": "Report saved",
   "showFile": "Show",
   "tooLarge": "The report is too large. Choose a shorter range or fewer extras.",

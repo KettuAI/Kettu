@@ -210,3 +210,54 @@ export function reportBuildResult(value: unknown): ReportBuildResult {
   }
   return { ok: true, file: answer.file, files: answer.files, size: answer.size }
 }
+
+/** The id the service gives a submitted report, to put in an issue. */
+export const REPORT_ID = /^KR-[0-9A-HJKMNP-TV-Z]{6}$/
+
+export const REPORT_SUBMIT_FAILURES = [
+  'too_large',
+  'rate_limited',
+  'unauthorized',
+  'signed_out',
+  'network',
+  'failed',
+] as const
+export type ReportSubmitFailure = (typeof REPORT_SUBMIT_FAILURES)[number]
+
+/** A submitted report's id, with the version and system of the host that sent it, or why not. */
+export type ReportSubmitResult =
+  | { ok: true; id: string; version: string; system: string }
+  | { ok: false; reason: ReportSubmitFailure }
+
+/** An answer as it came over a process boundary or a device's channel, or a failure in its place. */
+export function reportSubmitResult(value: unknown): ReportSubmitResult {
+  if (typeof value !== 'object' || value === null) return { ok: false, reason: 'failed' }
+  const answer = value as Record<string, unknown>
+  if (answer.ok === false) {
+    const reason = REPORT_SUBMIT_FAILURES.find((known) => known === answer.reason)
+    return { ok: false, reason: reason ?? 'failed' }
+  }
+  const text = (field: unknown): field is string =>
+    typeof field === 'string' && field.length > 0 && field.length <= 200
+  if (
+    answer.ok !== true ||
+    typeof answer.id !== 'string' ||
+    !REPORT_ID.test(answer.id) ||
+    !text(answer.version) ||
+    !text(answer.system)
+  ) {
+    return { ok: false, reason: 'failed' }
+  }
+  return { ok: true, id: answer.id, version: answer.version, system: answer.system }
+}
+
+/** The code repository's bug report form, with the version, system and report id filled in. */
+export function reportIssueUrl(report: { id: string; version: string; system: string }): string {
+  const query = new URLSearchParams({
+    template: 'bug.yml',
+    version: report.version,
+    os: report.system,
+    logs: `Problem report ${report.id}`,
+  })
+  return `https://github.com/KettuAI/Kettu/issues/new?${query}`
+}
