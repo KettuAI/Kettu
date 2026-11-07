@@ -1,7 +1,7 @@
 import { useEffect, type KeyboardEvent } from 'react'
 import {
   Add01Icon,
-  ArrowRight01Icon,
+  Analytics01Icon,
   Book02Icon,
   ComputerIcon,
   HelpCircleIcon,
@@ -22,7 +22,6 @@ import { RELEASES_URL, releaseUrl } from '@shared/updates'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ProfileMenu, type ProfileMenuItem } from '@renderer/components/affect/profile-menu'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
 import { limitReaders } from '@renderer/features/sidebar/plan-usage'
@@ -44,7 +43,8 @@ import {
   THIS_COMPUTER,
   useViewStore,
 } from '@renderer/stores/view'
-import { chosenHost, planCards, systemName, type Identity, type PlanCard } from './model'
+import { chosenHost, planCards, shownCards, systemName, type Identity } from './model'
+import { PlanLimitCard } from './plan-limit-card'
 import { useThisComputerName } from './use-account'
 
 const DOCS_URL = 'https://github.com/KettuAI/Kettu#readme'
@@ -66,8 +66,8 @@ function openPage(url: string): void {
 
 /**
  * The account menu on affectUI's Profile Menu, opened from the account row: who you are, the hosts
- * this window controls (Mod+1 to Mod+9 while open), color mode, Settings, Help on a second card,
- * signing in or out, and the plan limits as the card's last row.
+ * this window controls (Mod+1 to Mod+9 while open), the plan limits, then color mode, Settings,
+ * Help on a second card, and signing in or out.
  */
 export function AccountMenu({ identity, close }: { identity: Identity; close: () => void }) {
   const { t } = useTranslation('sidebar')
@@ -76,6 +76,7 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
   const status = useAccountStore((s) => s.status)
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
   const hostItems = useHostItems(hosts, close)
+  const planItems = usePlanItems(close, hostItems.length > 0)
   const help = useHelpItems(close)
   useEffect(readLimits, [])
 
@@ -135,11 +136,12 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
 
   const items: ProfileMenuItem[] = [
     ...hostItems,
+    ...planItems,
     {
       id: 'mode',
       label: t('account.theme'),
       control: <ColorMode />,
-      divider: hostItems.length > 0,
+      divider: hostItems.length > 0 || planItems.length > 0,
     },
     {
       id: 'settings',
@@ -174,7 +176,6 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
         email={email}
         avatar={<Avatar identity={identity} hidden={hidden} />}
         items={items}
-        footer={<PlanLimits close={close} />}
         labels={{ menu: t('account.menuLabel') }}
       />
     </div>
@@ -351,82 +352,43 @@ function ColorMode() {
   )
 }
 
-/** Every account's plan windows as bars, the card's last row; its head opens Usage. */
-function PlanLimits({ close }: { close: () => void }) {
+/**
+ * A card per account with every plan window as a ring, two to a row; past four, a row that opens
+ * the Usage page, which lists them all.
+ */
+function usePlanItems(close: () => void, divided: boolean): ProfileMenuItem[] {
   const { t } = useTranslation('sidebar')
-  const cards = planCards(useAgentsWithLimits(), useNow())
-  if (cards.length === 0) return null
-  return (
-    <div className="kettu-plans">
-      <button
-        type="button"
-        className="kettu-plans__head"
-        onClick={() => {
-          close()
-          openUsage()
-        }}
-      >
-        <span>{t('account.limits')}</span>
-        <span className="kettu-plans__link">
-          {t('account.usage')}
-          <Icon icon={ArrowRight01Icon} size={14} />
-        </span>
-      </button>
-      {cards.map((card) => (
-        <PlanRow key={card.key} card={card} />
-      ))}
-    </div>
-  )
-}
-
-/** A bar's color by how much is used, in the context ring's four levels. */
-const barLevel = (percent: number) =>
-  percent < 50 ? 'ok' : percent < 75 ? 'mid' : percent < 90 ? 'high' : 'full'
-
-const WINDOW_KEY = { five_hour: 'fiveHour', seven_day: 'sevenDay', monthly: 'monthly' } as const
-
-function PlanRow({ card }: { card: PlanCard }) {
-  const { t } = useTranslation('sidebar')
-  const windows = card.windows.map((w) => ({
-    ...w,
-    label: t(`account.window.${WINDOW_KEY[w.window]}`),
-  }))
-  const name = windows
-    .map((w) =>
-      w.percent === null
-        ? w.label
-        : t('account.limitUsed', { window: w.label, percent: w.percent }),
-    )
-    .join(', ')
-  return (
-    <div
-      className="kettu-plan"
-      aria-label={`${card.name}${card.tier ? ` ${card.tier}` : ''}: ${name}`}
-    >
-      <span className="kettu-plan__who">
-        <AgentMark agent={card.agentId} size={16} />
-        <b>{card.name}</b>
-        {card.tier && <span className="kettu-plan__tier">{card.tier}</span>}
-      </span>
-      <span className="kettu-plan__windows">
-        {windows.map((w) => (
-          <span
-            key={w.window}
-            className="kettu-plan-window"
-            data-level={w.percent === null ? undefined : barLevel(w.percent)}
-          >
-            <span className="kettu-plan-window__label">{w.label}</span>
-            <span className="kettu-plan-window__bar">
-              <span style={{ width: `${w.percent ?? 0}%` }} />
-            </span>
-            <span className="kettu-plan-window__value">
-              {w.percent === null ? '–' : `${w.percent}%`}
-            </span>
-          </span>
-        ))}
-      </span>
-    </div>
-  )
+  const { shown, more } = shownCards(planCards(useAgentsWithLimits(), useNow()))
+  if (shown.length === 0) return []
+  const open = () => {
+    close()
+    openUsage()
+  }
+  return [
+    { id: 'limits', label: t('account.limits'), heading: true, divider: divided },
+    {
+      id: 'limit-cards',
+      label: t('account.limits'),
+      control: (
+        <div className="grid grid-cols-2 gap-1.5 pb-1">
+          {shown.map((card) => (
+            <PlanLimitCard key={card.key} card={card} onOpen={open} />
+          ))}
+        </div>
+      ),
+    },
+    ...(more > 0
+      ? [
+          {
+            id: 'all-limits',
+            label: t('account.allLimits'),
+            icon: <MenuIcon icon={Analytics01Icon} />,
+            shortcut: `+${more}`,
+            onSelect: open,
+          },
+        ]
+      : []),
+  ]
 }
 
 function useAgentsWithLimits(): AgentStatus[] {

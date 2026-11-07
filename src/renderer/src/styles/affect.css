@@ -347,7 +347,7 @@
   color: var(--muted);
 }
 /* The account menu on Profile Menu (features/account/account-menu.tsx), as wide as the sidebar and
-   at least 260 px, with the plan limits as its last row. */
+   at least 260 px. */
 .kettu-account .ui-pmc.kettu-account__card {
   width: 100%;
   max-width: none;
@@ -390,121 +390,15 @@
 .kettu-account .ui-pmc__side .ui-pmc__heading {
   padding: 6px 8px 4px;
 }
-.kettu-plans {
-  display: grid;
-  gap: 10px;
+/* A plan card in the account menu, a tile as on the Usage page; Profile Menu clears its buttons'
+   padding and background, so the card sets its own. */
+.kettu-account .kettu-plan-card {
+  padding: 8px 8px 9px;
+  background: var(--bg-subtle);
+  cursor: default;
 }
-.kettu-plans__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: calc(100% + 16px);
-  height: 24px;
-  margin: -4px -8px;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 16px;
-  transition: background-color 140ms ease;
-}
-.kettu-plans__head > span:first-child {
-  font-weight: 500;
-  color: var(--ui-pmc-text);
-}
-.kettu-plans__head:hover {
-  background: var(--ui-pmc-wash);
-}
-.kettu-plans__head:focus-visible {
-  outline: 2px solid var(--ui-pmc-focus);
-  outline-offset: 1px;
-}
-.kettu-plans__link {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  color: var(--ui-pmc-muted);
-}
-.kettu-plans__head:hover .kettu-plans__link {
-  color: var(--ui-pmc-ink);
-}
-.kettu-plan {
-  display: grid;
-  gap: 6px;
-}
-/* The menu rows' 16 px mark and 10 px gap, so names start on the labels' line. */
-.kettu-plan__who {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-.kettu-plan__who b {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 500;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--ui-pmc-ink);
-}
-.kettu-plan__tier {
-  flex: none;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 5px;
-  background: var(--ui-pmc-hover);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 18px;
-  color: var(--ui-pmc-text);
-}
-.kettu-plan__windows {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding-left: 26px;
-}
-.kettu-plan-window {
-  --kettu-level: var(--usage-green);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 16px;
-}
-.kettu-plan-window[data-level='mid'] {
-  --kettu-level: var(--usage-blue);
-}
-.kettu-plan-window[data-level='high'] {
-  --kettu-level: var(--usage-orange);
-}
-.kettu-plan-window[data-level='full'] {
-  --kettu-level: var(--usage-red);
-}
-.kettu-plan-window__label {
-  flex: none;
-  color: var(--ui-pmc-muted);
-}
-.kettu-plan-window__bar {
-  flex: 1;
-  min-width: 0;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--ui-pmc-track);
-}
-.kettu-plan-window__bar > span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--kettu-level);
-}
-.kettu-plan-window__value {
-  flex: none;
-  min-width: 28px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: var(--ui-pmc-text);
+.kettu-account .kettu-plan-card:is(:hover, :focus-visible) {
+  background: var(--bg-selected);
 }
 .ui-as-user-action__dot.kettu-remote-dot {
   top: auto;
