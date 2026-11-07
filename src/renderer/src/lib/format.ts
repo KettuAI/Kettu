@@ -204,6 +204,25 @@ export function bytes(n: number): string {
   return `${number} ${unit}`
 }
 
+/**
+ * Cloud storage, as "12.3 MB" or "2 GB": in units of 1024, as storage limits are set, so a limit
+ * of 2 GiB reads 2 GB rather than 2.1.
+ */
+export function storageBytes(n: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let value = n
+  let unit = 0
+  // By the value as shown, so 2047.96 MB reads 2 GB rather than 2,048 MB.
+  while (unit < units.length - 1 && Math.round(value * 10) / 10 >= 1024) {
+    value /= 1024
+    unit++
+  }
+  const number = new Intl.NumberFormat(currentLocale(), {
+    maximumFractionDigits: unit === 0 ? 0 : 1,
+  }).format(value)
+  return `${number} ${units[unit]}`
+}
+
 export function money(amount: number, currency: string): string {
   return new Intl.NumberFormat(currentLocale(), { style: 'currency', currency }).format(amount)
 }

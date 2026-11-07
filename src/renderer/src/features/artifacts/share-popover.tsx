@@ -1,7 +1,8 @@
-// The viewer's Share button and popover: publish the version on screen, copy the URL, update it or
-// take it down. Main holds the account and makes every request.
+// The viewer's Share button and popover: publish the version on screen to Kettu or the connected
+// Cloudflare account, copy the URL, update it or take it down. Main holds the accounts and makes
+// every request.
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   CloudIcon,
   Copy01Icon,
@@ -11,9 +12,10 @@ import {
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { CLOUDFLARE_FREE_WORKERS, type SharingResult } from '@shared/sharing'
+import { CLOUDFLARE_FREE_WORKERS, type SharingResult, type SharingTarget } from '@shared/sharing'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,11 +28,16 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { longAgo } from '@renderer/lib/format'
+import { longAgo, storageBytes } from '@renderer/lib/format'
+import { useHostContext } from '@renderer/lib/host-features'
+import { isWeb } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useNow } from '@renderer/lib/use-now'
+import { signIn, useAccountStore } from '@renderer/stores/account'
 import {
+  canChange,
   publishArtifact,
+  refreshSharing,
   unpublishArtifact,
   updateSharedArtifact,
   useSharingStore,
@@ -42,6 +49,30 @@ import './viewer.css'
 const NOTICE_KEY = 'sharing.firstPublishSeen'
 
 type Failure = Extract<SharingResult, { failed: string }>
+
+/** The used and total storage, as "1.2 MB of 2 GB cloud storage used". */
+function StorageLine() {
+  const { t } = useTranslation('artifacts')
+  const storage = useSharingStore((s) => s.status?.kettu.storage ?? null)
+  if (!storage) return null
+  return (
+    <p className="k-share__meta">
+      {t('share.storage', { used: storageBytes(storage.used), limit: storageBytes(storage.limit) })}
+    </p>
+  )
+}
+
+/** Signing in to Kettu, which only the desktop app does for its own host. */
+function SignInButton() {
+  const { t } = useTranslation('artifacts')
+  const signingIn = useAccountStore((s) => s.status?.state === 'signing-in')
+  if (isWeb) return null
+  return (
+    <Button variant="secondary" size="sm" loading={signingIn} onClick={() => void signIn()}>
+      {t('share.signIn')}
+    </Button>
+  )
+}
 
 export function ShareButton({
   id,
@@ -61,13 +92,17 @@ export function ShareButton({
   iconOnly?: boolean
 }) {
   const { t } = useTranslation('artifacts')
-  const account = useSharingStore((s) => s.status?.cloudflare ?? null)
-  const loaded = useSharingStore((s) => s.status !== null)
-  const published = useSharingStore(
-    (s) => s.status?.published.find((page) => page.id === id) ?? null,
-  )
+  const onHost = useHostContext()
+  const status = useSharingStore((s) => s.status)
+  const account = status?.cloudflare ?? null
+  const kettu = status?.kettu.account ?? null
+  const loaded = status !== null
+  const published = status?.published.find((page) => page.id === id) ?? null
   const now = useNow()
   const [open, setOpen] = useState(false)
+  const [chosen, setChosen] = useState<SharingTarget>('kettu')
+  // Without a Cloudflare account there is no choice: pages go to Kettu.
+  const target: SharingTarget = account ? chosen : 'kettu'
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const [confirming, setConfirming] = useState(false)
@@ -77,6 +112,12 @@ export function ShareButton({
   const [noticeSeen, setNoticeSeen] = useState(() => readJson<boolean>(NOTICE_KEY, false) === true)
   const retry = useRef<(() => void) | null>(null)
   const trigger = useRef<HTMLButtonElement>(null)
+  const signedIn = kettu !== null
+
+  // The addresses and the storage as the service has them now, each time the panel opens.
+  useEffect(() => {
+    if (open && signedIn) void refreshSharing()
+  }, [open, signedIn])
 
   const run = (action: () => Promise<SharingResult>): void => {
     retry.current = () => run(action)
@@ -93,7 +134,7 @@ export function ShareButton({
       writeJson(NOTICE_KEY, true)
       setNoticeSeen(true)
     }
-    run(() => publishArtifact(id, shown))
+    run(() => publishArtifact(id, shown, target))
   }
 
   const copy = (): void => {
@@ -127,7 +168,7 @@ export function ShareButton({
     })
   }
 
-  const canManage = account !== null && published !== null && !published.otherAccount
+  const canManage = status !== null && published !== null && canChange(published, status)
   const reason = failure
     ? t(`share.failures.${failure.failed}`, { count: CLOUDFLARE_FREE_WORKERS })
     : null
@@ -172,12 +213,26 @@ export function ShareButton({
           </Button>
         </div>
         <p className="k-share__meta">
-          {t('share.published', {
+          {`${t('share.published', {
             version: published.version,
             ago: longAgo(published.publishedAt, now),
-          })}
+          })} · ${t(`share.where.${published.target}`)}`}
         </p>
-        {!account && (
+        {published.target === 'kettu' && canManage && <StorageLine />}
+        {published.target === 'kettu' && !kettu && (
+          <div className="k-share__note">
+            <p>{t('share.signedOutPublished')}</p>
+            <SignInButton />
+          </div>
+        )}
+        {published.target === 'kettu' && kettu && published.otherAccount && (
+          <p className="k-share__meta">
+            {published.accountEmail
+              ? t('share.otherKettu', { email: published.accountEmail })
+              : t('share.otherKettuUnnamed')}
+          </p>
+        )}
+        {published.target === 'cloudflare' && !account && (
           <div className="k-share__note">
             <p>{t('share.noAccountPublished')}</p>
             <Button variant="secondary" size="sm" onClick={toSettings}>
@@ -185,7 +240,7 @@ export function ShareButton({
             </Button>
           </div>
         )}
-        {published.otherAccount && account && (
+        {published.target === 'cloudflare' && published.otherAccount && account && (
           <p className="k-share__meta">{t('share.otherAccount')}</p>
         )}
         {canManage && head > published.version && (
@@ -212,28 +267,51 @@ export function ShareButton({
         </div>
       </>
     )
-  } else if (!account) {
-    body = (
-      <>
-        <p className="k-share__lead">{t('share.needAccount')}</p>
-        <Button variant="secondary" size="sm" onClick={toSettings}>
-          {t('share.openSettings')}
-        </Button>
-      </>
-    )
   } else {
+    const ready = target === 'cloudflare' || signedIn
     body = (
       <>
         <p className="k-share__lead">{t('share.unpublished')}</p>
-        <div className="k-share__target">
-          <Icon icon={CloudIcon} size={15} />
-          {t('share.target')}
-          <span dir="ltr">{`${account.subdomain}.workers.dev`}</span>
-        </div>
-        {!noticeSeen && <p className="k-share__meta">{t('share.disclosure')}</p>}
-        <Button loading={busy} className="k-share__wide" onClick={publish}>
-          {busy ? t('share.publishing') : t('share.publish')}
-        </Button>
+        {account && (
+          <div className="k-share__choose">
+            <span>{t('share.publishTo')}</span>
+            <SegmentedControl<SharingTarget>
+              aria-label={t('share.publishTo')}
+              variant="tray"
+              size="sm"
+              fullWidth
+              value={target}
+              onChange={(next) => {
+                setChosen(next)
+                setFailure(null)
+              }}
+              options={[
+                { value: 'kettu', label: t('share.targets.kettu') },
+                { value: 'cloudflare', label: t('share.targets.cloudflare') },
+              ]}
+            />
+          </div>
+        )}
+        {target === 'cloudflare' && account && (
+          <div className="k-share__target">
+            <Icon icon={CloudIcon} size={15} />
+            {t('share.targets.cloudflare')}
+            <span dir="ltr">{`${account.subdomain}.workers.dev`}</span>
+          </div>
+        )}
+        {target === 'kettu' && signedIn && <StorageLine />}
+        {target === 'kettu' && !signedIn && (
+          <div className="k-share__note">
+            <p>{t('share.needKettu', onHost)}</p>
+            <SignInButton />
+          </div>
+        )}
+        {ready && !noticeSeen && <p className="k-share__meta">{t('share.disclosure')}</p>}
+        {ready && (
+          <Button loading={busy} className="k-share__wide" onClick={publish}>
+            {busy ? t('share.publishing') : t('share.publish')}
+          </Button>
+        )}
       </>
     )
   }
@@ -287,11 +365,12 @@ export function ShareButton({
                   {t('share.tryAgain')}
                 </Button>
               )}
-              {failure?.failed === 'invalid_token' && (
+              {(failure?.failed === 'invalid_token' || failure?.failed === 'storage_full') && (
                 <Button variant="secondary" size="sm" onClick={toSettings}>
                   {t('share.openSettings')}
                 </Button>
               )}
+              {failure?.failed === 'signed_out' && <SignInButton />}
             </div>
           )}
         </Popover>

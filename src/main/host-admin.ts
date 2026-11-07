@@ -122,9 +122,10 @@ export interface AdminRemote {
 /** Publishing artifacts, whose methods check their own arguments. */
 export interface AdminSharing {
   status(): SharingStatus
+  refresh(): Promise<SharingStatus>
   connect(token: unknown, accountId: unknown): Promise<SharingConnectResult>
   remove(): SharingStatus
-  publish(id: unknown, version: unknown): Promise<SharingResult>
+  publish(id: unknown, version: unknown, target: unknown): Promise<SharingResult>
   update(id: unknown, version: unknown): Promise<SharingResult>
   unpublish(id: unknown): Promise<SharingResult>
 }
@@ -411,6 +412,8 @@ export class HostAdmin {
       }
       case 'sharing.status':
         return this.sharing().status()
+      case 'sharing.refresh':
+        return this.sharing().refresh()
       case 'sharing.connect': {
         const { token, accountId } = fields(params)
         return this.sharing().connect(token, accountId)
@@ -418,8 +421,8 @@ export class HostAdmin {
       case 'sharing.remove':
         return this.sharing().remove()
       case 'sharing.publish': {
-        const { id, version } = fields(params)
-        return this.sharing().publish(id, version)
+        const { id, version, target } = fields(params)
+        return this.sharing().publish(id, version, target)
       }
       case 'sharing.update': {
         const { id, version } = fields(params)

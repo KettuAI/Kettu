@@ -1,7 +1,8 @@
-// Settings › Sharing: the Cloudflare account main publishes with, and the pages it has published.
+// Settings › Sharing: the Kettu account and its storage, the pages main has published and where
+// each lives, and the user's own Cloudflare account.
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { CloudIcon, LockIcon, Share08Icon, ShapesIcon } from '@hugeicons/core-free-icons'
+import { CloudIcon, LockIcon, Share08Icon, ShapesIcon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   CLOUDFLARE_DASHBOARD_URL,
@@ -31,14 +32,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@renderer/components/ui/select'
+import { Progress } from '@renderer/components/ui/progress'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { mediumAgo } from '@renderer/lib/format'
+import { mediumAgo, storageBytes } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
-import { hostPlatform } from '@renderer/lib/platform'
+import { hostPlatform, isWeb } from '@renderer/lib/platform'
+import { limitLevel, LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { signIn, useAccountStore } from '@renderer/stores/account'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { canChange } from '@renderer/stores/sharing'
 import { CONFIRM, ControlError, Masked, Pill, SetButton, SetInput, Skel } from './controls'
 import { BlockLine, ItemLine, Notice, RowText, Thing } from './rows'
 
@@ -72,6 +77,85 @@ export function SharingPending() {
         </Thing>
       </div>
     </div>
+  )
+}
+
+/**
+ * The Kettu account the host publishes to Kettu with, or Sign in; its pages and storage are read
+ * again each time it shows.
+ */
+export function KettuSharingAccount() {
+  const { sharing, hostId } = useHostScope()
+  const { t } = useTranslation('settings')
+  const onHost = useHostContext()
+  const account = sharing.useSharingStore((s) => s.status?.kettu.account ?? null)
+  const signingIn = useAccountStore((s) => s.status?.state === 'signing-in')
+  const signedIn = account !== null
+  useEffect(() => {
+    if (signedIn) void sharing.refresh()
+  }, [sharing, signedIn])
+  // Only the desktop app signs in, and only for itself.
+  const maySignIn = hostId === null && !isWeb
+  return (
+    <div className="ui-sg-row">
+      <Thing
+        mark={<Icon icon={UserIcon} size={20} />}
+        name={
+          <>
+            {account ? (
+              <Masked>{account.email}</Masked>
+            ) : (
+              <span className="k-name">{t('sharing.kettu.name')}</span>
+            )}
+            {account && <Pill tone="success">{t('sharing.kettu.signedIn')}</Pill>}
+          </>
+        }
+      >
+        <ItemLine>
+          {account ? t('sharing.kettu.description', onHost) : t('sharing.kettu.signedOut', onHost)}
+        </ItemLine>
+      </Thing>
+      {!account && maySignIn && (
+        <span className="ui-sg-control">
+          <SetButton variant="primary" loading={signingIn} onClick={() => void signIn()}>
+            {t('sharing.kettu.signIn')}
+          </SetButton>
+        </span>
+      )}
+    </div>
+  )
+}
+
+/** The Kettu account's cloud storage against its limit, as the service last said. */
+export function KettuStorage() {
+  const { sharing } = useHostScope()
+  const { t } = useTranslation('settings')
+  const storage = sharing.useSharingStore((s) => s.status?.kettu.storage ?? null)
+  if (!storage) {
+    return (
+      <span className="ui-sg-control">
+        <span className="k-muted">{t('sharing.kettu.storageChecking')}</span>
+      </span>
+    )
+  }
+  const share = storage.limit > 0 ? Math.min(1, storage.used / storage.limit) : 1
+  const level = limitLevel({ usedPercent: share * 100, state: share >= 1 ? 'reached' : 'ok' })
+  return (
+    <span className="ui-sg-control k-storage">
+      {share >= 1 && <Pill tone="warning">{t('sharing.kettu.storageFull')}</Pill>}
+      <span className={cn('k-storage__text', LIMIT_TEXT[level])}>
+        {t('sharing.kettu.storageUsed', {
+          used: storageBytes(storage.used),
+          limit: storageBytes(storage.limit),
+        })}
+      </span>
+      <Progress
+        value={share * 100}
+        tone={`limit-${level}`}
+        aria-label={t('sharing.kettu.storage')}
+        className="k-storage__bar"
+      />
+    </span>
   )
 }
 
@@ -367,10 +451,24 @@ function FailureBox({ failure }: { failure: Failure }) {
   )
 }
 
-/** One published page: its artifact, its URL, the version it shows, and Unpublish. */
+/**
+ * One published page: its artifact, its URL, where it lives, the version it shows, and Unpublish.
+ */
 export function PublishedRow({ page, title }: { page: PublishedArtifact; title?: string }) {
   const { sharing } = useHostScope()
   const { t } = useTranslation(['settings', 'artifacts', 'common'])
+  const status = sharing.useSharingStore((s) => s.status)
+  const changeable = status !== null && canChange(page, status)
+  // Signed in or connected, but with another account than the page's.
+  const owned = (page.target === 'kettu' ? status?.kettu.account : status?.cloudflare) != null
+  const why =
+    page.target === 'cloudflare'
+      ? t('sharing.published.otherAccount')
+      : !owned
+        ? t('sharing.published.signedOut')
+        : page.accountEmail
+          ? t('sharing.published.otherKettu', { email: page.accountEmail })
+          : t('sharing.published.otherKettuUnnamed')
   const now = useNow()
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -390,7 +488,7 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
     <SetButton
       variant="ghost"
       loading={busy}
-      disabled={page.otherAccount}
+      disabled={!changeable}
       onClick={() => setAsking(true)}
     >
       {t('sharing.published.unpublish')}
@@ -404,7 +502,15 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
     <div className="ui-sg-row">
       <Thing
         mark={<Icon icon={ShapesIcon} size={20} />}
-        name={<span className="k-name">{title ?? page.url}</span>}
+        name={
+          <>
+            <span className="k-name">{title ?? page.url}</span>
+            <Pill>{t(`sharing.published.where.${page.target}`)}</Pill>
+            {page.otherAccount && owned && (
+              <Pill tone="warning">{t('sharing.published.otherAccountBadge')}</Pill>
+            )}
+          </>
+        }
       >
         <ItemLine>
           <a href={page.url} target="_blank" rel="noreferrer" dir="ltr" className="k-link k-mono">
@@ -424,11 +530,11 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
         <SetButton variant="ghost" onClick={copy}>
           {t('sharing.published.copyLink')}
         </SetButton>
-        {page.otherAccount ? (
+        {!changeable ? (
           <Tooltip>
             {/* A disabled button gets no pointer events, so a wrapper holds the tooltip. */}
             <TooltipTrigger render={<span className="flex" />}>{button}</TooltipTrigger>
-            <TooltipContent>{t('sharing.published.otherAccount')}</TooltipContent>
+            <TooltipContent>{why}</TooltipContent>
           </Tooltip>
         ) : (
           button

@@ -285,9 +285,10 @@ function createScope(hostId: string): OtherScope {
   }
   const sharingApi: KettuApi['sharing'] = {
     status: () => admin('sharing.status'),
+    refresh: () => admin('sharing.refresh'),
     connect: (token, accountId) => admin('sharing.connect', { token, accountId }),
     remove: () => admin('sharing.remove'),
-    publish: (id, version) => admin('sharing.publish', { id, version }),
+    publish: (id, version, target) => admin('sharing.publish', { id, version, target }),
     update: (id, version) => admin('sharing.update', { id, version }),
     unpublish: (id) => admin('sharing.unpublish', { id }),
     onChanged: (listener) => listen('sharing.changed', (event) => listener(event.status)),

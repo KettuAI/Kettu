@@ -645,9 +645,10 @@ export function registerIpcHandlers({
   handle('account:sign-out', 0, () => account.signOut())
 
   handle('sharing:status', 0, () => sharing.status())
+  handle('sharing:refresh', 0, () => sharing.refresh())
   handle('sharing:connect', 2, (_, token, accountId) => sharing.connect(token, accountId))
   handle('sharing:remove', 0, () => sharing.remove())
-  handle('sharing:publish', 2, (_, id, version) => sharing.publish(id, version))
+  handle('sharing:publish', 3, (_, id, version, target) => sharing.publish(id, version, target))
   handle('sharing:update', 2, (_, id, version) => sharing.update(id, version))
   handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
 

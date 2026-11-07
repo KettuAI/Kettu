@@ -69,7 +69,7 @@ import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from
 import { ArchivedRow } from './archived-section'
 import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
-import { Group, GroupNote } from './rows'
+import { GroupNote } from './rows'
 import { SettingSwitch } from './controls'
 import { HostPage } from './host-page'
 import { hostLine, webHostLine } from './host-text'
@@ -88,7 +88,14 @@ import {
   TerminalSwitch,
 } from './remote-section'
 import { deviceLine } from './remote-text'
-import { NoSharing, PublishedRow, SharingAccount, SharingPending } from './sharing-section'
+import {
+  KettuSharingAccount,
+  KettuStorage,
+  NoSharing,
+  PublishedRow,
+  SharingAccount,
+  SharingPending,
+} from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
 import { AccountNote, AccountRow, SubscriptionState } from './account-section'
@@ -1358,6 +1365,7 @@ export function useSharingSection(): SectionDef {
   const { useSharingStore } = sharing
   const en = english()
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
+  const kettu = useSharingStore((s) => s.status?.kettu.account ?? null)
   const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
   // Another host's artifacts are not listed here, so its pages go by their addresses.
   const titles = usePublishedTitles(hostId === null && pages.length > 0)
@@ -1386,18 +1394,30 @@ export function useSharingSection(): SectionDef {
       footer: shares === false ? <NoSharing /> : <SharingPending />,
     }
   }
+  const kettuGroup = group('kettu', t('sharing.groups.kettu'))
   const rows: RowDef[] = [
     {
-      id: 'cloudflare',
-      name: t('sharing.account.name'),
-      english: en('sharing.account.name'),
-      description: account ? `${account.subdomain}.workers.dev` : t('sharing.account.description'),
-      keywords: t('sharing.account.keywords'),
-      group: group('cloudflare', t('sharing.groups.account')),
+      id: 'kettu',
+      name: t('sharing.kettu.name'),
+      english: en('sharing.kettu.name'),
+      // Not the email, which search results would show past Hide account.
+      description: kettu ? undefined : t('sharing.kettu.signedOut'),
+      keywords: t('sharing.kettu.keywords'),
+      group: kettuGroup,
       layout: 'custom',
-      render: () => <SharingAccount />,
+      render: () => <KettuSharingAccount />,
     },
   ]
+  if (kettu) {
+    rows.push({
+      id: 'kettu-storage',
+      name: t('sharing.kettu.storage'),
+      english: en('sharing.kettu.storage'),
+      keywords: t('sharing.kettu.keywords'),
+      group: kettuGroup,
+      render: () => <KettuStorage />,
+    })
+  }
   if (pages.length > 0) {
     const published = group('published', t('sharing.groups.published'), { count: pages.length })
     rows.push(
@@ -1420,15 +1440,29 @@ export function useSharingSection(): SectionDef {
       }),
     )
   }
-  return {
-    ...base,
-    rows,
-    footer: pages.length === 0 && (
-      <Group label={t('sharing.groups.published')}>
-        <p className="ui-ss-empty">{t('sharing.published.empty')}</p>
-      </Group>
-    ),
+  const cloudflare: RowDef = {
+    id: 'cloudflare',
+    name: t('sharing.account.name'),
+    english: en('sharing.account.name'),
+    description: account ? `${account.subdomain}.workers.dev` : t('sharing.account.description'),
+    keywords: t('sharing.account.keywords'),
+    group: group('cloudflare', t('sharing.groups.account')),
+    layout: 'custom',
+    render: () => <SharingAccount />,
   }
+  if (pages.length === 0) {
+    // Between the Kettu account and Cloudflare, where the pages would be.
+    rows.push({
+      id: 'published-empty',
+      name: t('sharing.groups.published'),
+      keywords: t('sharing.published.keywords'),
+      group: group('published', t('sharing.groups.published'), { plain: true }),
+      layout: 'custom',
+      render: () => <p className="ui-ss-empty">{t('sharing.published.empty')}</p>,
+    })
+  }
+  rows.push(cloudflare)
+  return { ...base, rows }
 }
 
 /** What the user allowed the artifacts' pages on the host, read again whenever it changes. */

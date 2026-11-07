@@ -49,6 +49,7 @@ import { notifyAttention } from './notifications'
 import { RoutinesAwake } from './power-save'
 import { sessionProxy } from './proxy'
 import { Sharing } from './sharing'
+import { KettuUnauthorized } from './sharing/kettu'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { loadStoredDevices } from './remote-devices'
@@ -381,6 +382,8 @@ async function start(): Promise<void> {
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
   }
   const hostName = (): string => settings.get().remote.name ?? hostname()
+  // Set once the sharing service exists, which publishes with the account.
+  let sharingKettuChanged: (() => void) | null = null
   const account = await Account.load({
     file: accountFile(userDataPath),
     api: new AccountApi(accountBase, accountFetch),
@@ -402,7 +405,10 @@ async function start(): Promise<void> {
     },
     avatar: (url) => accountAvatars.load(url),
     failureText: () => t('account.browserFailed'),
-    changed: (status) => broadcast('account:changed', status),
+    changed: (status) => {
+      broadcast('account:changed', status)
+      sharingKettuChanged?.()
+    },
     log: createLogger('account'),
   })
   const remoteStatus = (): RemoteStatus => {
@@ -508,6 +514,12 @@ async function start(): Promise<void> {
       content: (id, version) => agentHost.artifactContent(id, version),
       ids: () => agentHost.artifactIds(),
     },
+    kettu: {
+      base: accountBase,
+      account: () => account.signedIn(),
+      withToken: (call) =>
+        account.withAccessToken(call, (error) => error instanceof KettuUnauthorized),
+    },
     viewerFiles: (type, languages) => artifacts.viewers.forPage(type, languages),
     locale: currentLocale,
     cipher: {
@@ -525,6 +537,7 @@ async function start(): Promise<void> {
     },
   })
   reconcileSharing = () => void sharing.reconcile()
+  sharingKettuChanged = () => sharing.kettuChanged()
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,
