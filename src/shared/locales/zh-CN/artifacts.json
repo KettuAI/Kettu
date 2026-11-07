@@ -504,7 +504,7 @@
       "text": "文字",
       "doneBy": "{{agent}} 已处理",
       "by": "{{who}}",
-      "you": "你"
+      "agent": "Agent"
     },
     "selection": {
       "handOff": "交给 Agent",

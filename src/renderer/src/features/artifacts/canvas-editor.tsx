@@ -39,6 +39,7 @@ import {
   between,
   fitBox,
   livePages,
+  NAME_MIN_WIDTH,
   reveal,
   stepZoom,
   zoomAt,
@@ -161,6 +162,20 @@ function union(boxes: Box[]): Box | null {
   const right = Math.max(...boxes.map((b) => b.x + b.width))
   const bottom = Math.max(...boxes.map((b) => b.y + b.height))
   return { x: left, y: top, width: right - left, height: bottom - top }
+}
+
+/** A label's action button and the gap after it, in screen pixels. */
+const LABEL_ACT = 24
+
+/** Hides a page's name row where the page is too narrow on screen for its name and actions. */
+function fitLabels(layer: HTMLElement | undefined, z: number): void {
+  if (!layer) return
+  for (const label of layer.querySelectorAll<HTMLElement>('.k-ce-label')) {
+    const acts = label.querySelector('.k-ce-label__acts')?.childElementCount ?? 0
+    const needs = NAME_MIN_WIDTH + (acts > 0 ? 6 + acts * LABEL_ACT : 0)
+    const visibility = Number(label.dataset.width) * z < needs ? 'hidden' : ''
+    if (label.style.visibility !== visibility) label.style.visibility = visibility
+  }
 }
 
 /** One note, drawn on the canvas at its own place. */
@@ -316,7 +331,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   onFollowDone: () => void
   /** The page in the middle of the view, for the others' faces. */
   onViewPage?: (page: string | null) => void
-  sessionName: (sessionId: string | null) => string
+  /** The name of the session that drew a note. */
+  sessionName: (sessionId: string) => string
   reloads: number
 }) {
   const { t } = useTranslation('artifacts')
@@ -362,8 +378,6 @@ export const CanvasEditor = memo(function CanvasEditor({
   // Mirrors of the drag under way for what renders: a pan's cursor, the selection's bar.
   const [panning, setPanning] = useState(false)
   const [dragging, setDragging] = useState(false)
-  // The page under the pointer, or under its label, whose label shows its actions.
-  const [hovered, setHovered] = useState<string | null>(null)
   const pageNumber = useRef(0)
 
   const mode = editor ? editing.mode : null
@@ -403,6 +417,7 @@ export const CanvasEditor = memo(function CanvasEditor({
       el.style.transform = `translate(${x}px, ${y}px) scale(${z})`
       el.style.setProperty('--unscale', String(1 / z))
     }
+    fitLabels(layers.current[1], z)
     controls.publish({ zoom: z, fitted: atFit.current })
     syncLive()
   }, [controls, syncLive])
@@ -945,11 +960,6 @@ export const CanvasEditor = memo(function CanvasEditor({
     const { sx, sy } = screenPoint(event)
     const at = toCanvas(sx, sy)
     if (!held) {
-      const label = 26 / camera.current.z
-      setHovered(
-        pages.find((p) => contains({ ...p, y: p.y - label, height: p.height + label }, at.x, at.y))
-          ?.id ?? null,
-      )
       // Outlining what is under the pointer inside a page, as the editor's modes do.
       if (mode && layout) {
         const page = pages.find((p) => contains(p, at.x, at.y))
@@ -1207,6 +1217,9 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (a.doing === 'draw' && p) drawing.set(p.id, a)
   }
 
+  // Pages added or resized since the camera last moved.
+  useLayoutEffect(() => fitLabels(layers.current[1], camera.current.z))
+
   const firstLayer = useCallback((el: HTMLDivElement | null) => {
     if (el) layers.current[0] = el
   }, [])
@@ -1317,13 +1330,6 @@ export const CanvasEditor = memo(function CanvasEditor({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerLeave={(event) => {
-            // Moving onto a label's actions is no leaving.
-            if (!(
-              event.relatedTarget instanceof Element && event.relatedTarget.closest('.k-ce-label')
-            ))
-              setHovered(null)
-          }}
           onPointerCancel={() => {
             drag.current = null
             setPanning(false)
@@ -1342,11 +1348,12 @@ export const CanvasEditor = memo(function CanvasEditor({
             <div
               key={p.id}
               className="k-ce-label"
+              data-width={p.width}
               data-selected={shownSelection.includes(p.id) ? '' : undefined}
               style={{ left: p.x, top: `calc(${p.y}px - 26px * var(--unscale))`, width: p.width }}
             >
               <span className="k-ce-label__name">{name(p)}</span>
-              {actions && (hovered === p.id || shownSelection.includes(p.id)) && (
+              {actions && (
                 <span className="k-ce-label__acts">
                   <LabelAct
                     label={t('board.page.tweak')}

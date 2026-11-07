@@ -114,10 +114,9 @@
   color: var(--text-tertiary);
   white-space: nowrap;
 }
-/* The name keeps its width up to the page's; actions that do not fit run past the page's edge. */
 .k-ce-label__name {
-  flex: 1 0 auto;
-  max-width: 100%;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }

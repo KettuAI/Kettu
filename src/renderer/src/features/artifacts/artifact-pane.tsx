@@ -30,7 +30,7 @@ import { useComments } from './use-comments'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { CanvasEditor } from './canvas-editor'
 import { PresenceFaces } from './presence-faces'
-import { usePresentAgents } from './use-present-agents'
+import { noteAuthor, usePresentAgents } from './use-present-agents'
 import { useCanvasDoc } from './use-canvas-doc'
 import { ArtifactSurface, CanvasBarControls } from './viewer-parts'
 import { PreviewOnly } from './preview-only'
@@ -170,9 +170,7 @@ export default function ArtifactPane({
         agents={latest ? agents : []}
         following={null}
         onFollowDone={() => {}}
-        sessionName={(session) =>
-          agents.find((a) => a.sessionId === session)?.name ?? t('board.note.you')
-        }
+        sessionName={(session) => noteAuthor(agents, session, t('board.note.agent'))}
         reloads={artifact.reloads}
       />
     )

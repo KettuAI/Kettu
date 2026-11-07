@@ -27,7 +27,7 @@ import { CanvasEditor, type DocPageActions } from './canvas-editor'
 import { docLayout } from './canvas-model'
 import { handOff } from './handoff'
 import { PresenceFaces } from './presence-faces'
-import { usePresentAgents } from './use-present-agents'
+import { noteAuthor, usePresentAgents } from './use-present-agents'
 import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
 import { ArtifactMoreButton } from './artifact-menu'
 import { ShareButton } from './share-popover'
@@ -342,9 +342,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
             following={followingNow}
             onFollowDone={() => setFollowing(null)}
             onViewPage={(page) => void host('artifacts.view', { id, page }).catch(() => {})}
-            sessionName={(session) =>
-              agents.find((a) => a.sessionId === session)?.name ?? t('board.note.you')
-            }
+            sessionName={(session) => noteAuthor(agents, session, t('board.note.agent'))}
             reloads={artifact.reloads}
           />
         ) : (

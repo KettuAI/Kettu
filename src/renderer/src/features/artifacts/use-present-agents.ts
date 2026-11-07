@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import type { CanvasAgent } from './canvas-editor'
 import type { Presence } from './use-artifact'
 
@@ -33,4 +33,19 @@ export function usePresentAgents(presence: Presence | null, deleted: boolean): C
         })),
     [sessions, summaries, t],
   )
+}
+
+/**
+ * The name a note an agent drew shows: its session's title, whether or not the session is still
+ * here; `fallback` when this window does not know the session.
+ */
+export function noteAuthor(
+  agents: readonly CanvasAgent[],
+  session: string,
+  fallback: string,
+): string {
+  const here = agents.find((a) => a.sessionId === session)
+  if (here) return here.name
+  const summary = useSessionsStore.getState().byId[session]
+  return summary ? sessionTitle(summary) : fallback
 }

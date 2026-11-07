@@ -513,7 +513,7 @@
       "text": "Text",
       "doneBy": "Handled by {{agent}}",
       "by": "{{who}}",
-      "you": "You"
+      "agent": "An agent"
     },
     "selection": {
       "handOff": "Hand to the agent",
