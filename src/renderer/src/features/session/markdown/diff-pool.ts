@@ -1,6 +1,8 @@
 import { registerCustomTheme } from '@pierre/diffs'
 import { getOrCreateWorkerPoolSingleton } from '@pierre/diffs/worker'
-import DiffsWorker from '@pierre/diffs/worker/worker.js?worker'
+// The self-contained build: worker.js's own chunks import it back, which the dev server serves
+// under another URL, so each worker ran a second, uninitialized copy that failed every request.
+import DiffsWorker from '@pierre/diffs/worker/worker-portable.js?worker'
 import { THEME_MODES } from '@shared/themes'
 import { useThemesStore } from '@renderer/stores/themes'
 import { codeThemes, KETTU_CODE_THEMES, kettuCodeTheme } from './code-themes'
