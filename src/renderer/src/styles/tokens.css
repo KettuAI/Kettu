@@ -318,37 +318,38 @@
      marks. */
   --terminal-screen: #fafafa;
   --terminal-selection-tint: rgb(242 88 27 / 22%);
-  --pane-fox: #f2581b;
+  --pane-fox: var(--send);
   /* An icon at rest in a pane's head and the session's pane buttons, as affectUI's shell draws it. */
   --pane-muted: rgb(0 0 0 / 45%);
   --pane-live: #22a06b;
-  --pane-modified: #b25b0c;
-  --pane-added: #16a34a;
+  --pane-modified: var(--ansi-yellow);
+  --pane-added: var(--ansi-green);
   --pane-phone: #0d0d0f;
   --pane-phone-edge: #2a2a2e;
 
   /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
   --shell-tray: #f4f4f4;
-  --shell-card: #ffffff;
+  /* A card a shade from the page toward the surface: white in light, #1b1b1e in dark. */
+  --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
   --shell-line-soft: rgb(0 0 0 / 4%);
   --shell-strong: #000000;
   --shell-ink: rgb(0 0 0 / 88%);
   --shell-text: rgb(0 0 0 / 61%);
   --shell-muted: rgb(0 0 0 / 45%);
   --shell-faint: rgb(0 0 0 / 27%);
-  --shell-chip: rgb(0 0 0 / 4%);
+  --shell-chip: var(--bg-hover);
   --shell-chip-hover: rgb(0 0 0 / 6%);
   --shell-hover: rgb(0 0 0 / 3%);
   --shell-accent: #0060e2;
   --shell-button: rgb(0 0 0 / 88%);
   --shell-button-hover: rgb(0 0 0 / 78%);
   --shell-accent-soft: rgb(0 96 226 / 8%);
-  --shell-shadow: 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --shell-shadow: var(--elevation-card);
   --shell-card-shadow:
     0 0 0 0.5px rgb(0 0 0 / 6%), 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
   --shell-card-shadow-hover:
     0 0 0 0.5px rgb(0 0 0 / 10%), 0 2px 6px -1px rgb(0 0 0 / 8%), 0 1px 2px 0 rgb(0 0 0 / 5%);
-  --shell-frame: rgb(0 0 0 / 2%);
+  --shell-frame: color-mix(in srgb, var(--bg-hover) 50%, transparent);
   --shell-line-strong: rgb(0 0 0 / 10%);
   --shell-edge-active: rgb(0 0 0 / 14%);
   --shell-subtle: #fafafa;
@@ -412,9 +413,9 @@
   --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
   /* An artifact kind's sketch: its accent, and white on it. */
   --sketch-accent: #2f6bff;
-  --sketch-on-accent: #ffffff;
-  --sketch-on-accent-soft: rgb(255 255 255 / 55%);
-  --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+  --sketch-on-accent: var(--on-fill);
+  --sketch-on-accent-soft: color-mix(in srgb, var(--on-fill) 55%, transparent);
+  --sketch-on-accent-bar: color-mix(in srgb, var(--on-fill) 60%, transparent);
   /* Usage's lines and parts per agent, in the agents' order. */
   --series-1: #2f6bff;
   --series-2: #8b5cf6;
@@ -430,13 +431,13 @@
   --composer-text: rgb(0 0 0 / 61%);
   --composer-muted: rgb(0 0 0 / 45%);
   --composer-faint: rgb(0 0 0 / 27%);
-  --composer-line: rgb(0 0 0 / 6%);
+  --composer-line: var(--border-subtle);
   --composer-line-strong: rgb(0 0 0 / 10%);
-  --composer-chip: rgb(0 0 0 / 4%);
+  --composer-chip: var(--bg-hover);
   --composer-chip-hover: rgb(0 0 0 / 6%);
   --composer-hover-fill: rgb(0 0 0 / 3%);
-  --composer-card: #ffffff;
-  --composer-panel: #ffffff;
+  --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --composer-panel: var(--bg-app);
   --composer-pop-shadow:
     0 0 0 0.5px rgb(0 0 0 / 10%), 0 16px 36px -12px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
   --composer-queue-drop: rgb(0 0 0 / 28%);
@@ -674,34 +675,34 @@
     /* panes */
     --terminal-screen: #1c1c1f;
     --terminal-selection-tint: rgb(242 88 27 / 22%);
-    --pane-fox: #f2581b;
+    --pane-fox: var(--send);
     --pane-muted: rgb(255 255 255 / 45%);
     --pane-live: #22a06b;
-    --pane-modified: #f2a65a;
-    --pane-added: #4ade80;
+    --pane-modified: var(--ansi-yellow);
+    --pane-added: var(--ansi-green);
     --pane-phone: #0d0d0f;
     --pane-phone-edge: #2a2a2e;
 
     /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
     --shell-tray: #1d1d20;
-    --shell-card: #1b1b1e;
+    --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
     --shell-line-soft: rgb(255 255 255 / 5%);
     --shell-strong: #ffffff;
     --shell-ink: rgb(255 255 255 / 90%);
     --shell-text: rgb(255 255 255 / 62%);
     --shell-muted: rgb(255 255 255 / 45%);
     --shell-faint: rgb(255 255 255 / 28%);
-    --shell-chip: rgb(255 255 255 / 6%);
+    --shell-chip: var(--bg-hover);
     --shell-chip-hover: rgb(255 255 255 / 9%);
     --shell-hover: rgb(255 255 255 / 5%);
     --shell-accent: #5b9aff;
     --shell-button: #f4f4f5;
     --shell-button-hover: #ffffff;
     --shell-accent-soft: rgb(91 154 255 / 16%);
-    --shell-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    --shell-shadow: var(--elevation-card);
     --shell-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
     --shell-card-shadow-hover: 0 0 0 0.5px rgb(255 255 255 / 16%), 0 2px 6px rgb(0 0 0 / 40%);
-    --shell-frame: rgb(255 255 255 / 3%);
+    --shell-frame: color-mix(in srgb, var(--bg-hover) 50%, transparent);
     --shell-line-strong: rgb(255 255 255 / 14%);
     --shell-edge-active: rgb(255 255 255 / 18%);
     --shell-subtle: #18181b;
@@ -755,9 +756,9 @@
     --tray-edge: rgb(255 255 255 / 10%);
     --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
     --sketch-accent: #2f6bff;
-    --sketch-on-accent: #ffffff;
-    --sketch-on-accent-soft: rgb(255 255 255 / 55%);
-    --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+    --sketch-on-accent: var(--on-fill);
+    --sketch-on-accent-soft: color-mix(in srgb, var(--on-fill) 55%, transparent);
+    --sketch-on-accent-bar: color-mix(in srgb, var(--on-fill) 60%, transparent);
     --series-1: #2f6bff;
     --series-2: #8b5cf6;
     --series-3: #14b8a6;
@@ -771,13 +772,13 @@
     --composer-text: rgb(255 255 255 / 62%);
     --composer-muted: rgb(255 255 255 / 45%);
     --composer-faint: rgb(255 255 255 / 28%);
-    --composer-line: rgb(255 255 255 / 8%);
+    --composer-line: var(--border-subtle);
     --composer-line-strong: rgb(255 255 255 / 14%);
-    --composer-chip: rgb(255 255 255 / 6%);
+    --composer-chip: var(--bg-hover);
     --composer-chip-hover: rgb(255 255 255 / 9%);
     --composer-hover-fill: rgb(255 255 255 / 5%);
-    --composer-card: #1b1b1e;
-    --composer-panel: #141416;
+    --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+    --composer-panel: var(--bg-app);
     --composer-pop-shadow:
       0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
       0 1px 2px rgb(0 0 0 / 5%);
@@ -1000,34 +1001,34 @@
   /* panes */
   --terminal-screen: #1c1c1f;
   --terminal-selection-tint: rgb(242 88 27 / 22%);
-  --pane-fox: #f2581b;
+  --pane-fox: var(--send);
   --pane-muted: rgb(255 255 255 / 45%);
   --pane-live: #22a06b;
-  --pane-modified: #f2a65a;
-  --pane-added: #4ade80;
+  --pane-modified: var(--ansi-yellow);
+  --pane-added: var(--ansi-green);
   --pane-phone: #0d0d0f;
   --pane-phone-edge: #2a2a2e;
 
   /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
   --shell-tray: #1d1d20;
-  --shell-card: #1b1b1e;
+  --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
   --shell-line-soft: rgb(255 255 255 / 5%);
   --shell-strong: #ffffff;
   --shell-ink: rgb(255 255 255 / 90%);
   --shell-text: rgb(255 255 255 / 62%);
   --shell-muted: rgb(255 255 255 / 45%);
   --shell-faint: rgb(255 255 255 / 28%);
-  --shell-chip: rgb(255 255 255 / 6%);
+  --shell-chip: var(--bg-hover);
   --shell-chip-hover: rgb(255 255 255 / 9%);
   --shell-hover: rgb(255 255 255 / 5%);
   --shell-accent: #5b9aff;
   --shell-button: #f4f4f5;
   --shell-button-hover: #ffffff;
   --shell-accent-soft: rgb(91 154 255 / 16%);
-  --shell-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --shell-shadow: var(--elevation-card);
   --shell-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
   --shell-card-shadow-hover: 0 0 0 0.5px rgb(255 255 255 / 16%), 0 2px 6px rgb(0 0 0 / 40%);
-  --shell-frame: rgb(255 255 255 / 3%);
+  --shell-frame: color-mix(in srgb, var(--bg-hover) 50%, transparent);
   --shell-line-strong: rgb(255 255 255 / 14%);
   --shell-edge-active: rgb(255 255 255 / 18%);
   --shell-subtle: #18181b;
@@ -1081,9 +1082,9 @@
   --tray-edge: rgb(255 255 255 / 10%);
   --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
   --sketch-accent: #2f6bff;
-  --sketch-on-accent: #ffffff;
-  --sketch-on-accent-soft: rgb(255 255 255 / 55%);
-  --sketch-on-accent-bar: rgb(255 255 255 / 60%);
+  --sketch-on-accent: var(--on-fill);
+  --sketch-on-accent-soft: color-mix(in srgb, var(--on-fill) 55%, transparent);
+  --sketch-on-accent-bar: color-mix(in srgb, var(--on-fill) 60%, transparent);
   --series-1: #2f6bff;
   --series-2: #8b5cf6;
   --series-3: #14b8a6;
@@ -1097,13 +1098,13 @@
   --composer-text: rgb(255 255 255 / 62%);
   --composer-muted: rgb(255 255 255 / 45%);
   --composer-faint: rgb(255 255 255 / 28%);
-  --composer-line: rgb(255 255 255 / 8%);
+  --composer-line: var(--border-subtle);
   --composer-line-strong: rgb(255 255 255 / 14%);
-  --composer-chip: rgb(255 255 255 / 6%);
+  --composer-chip: var(--bg-hover);
   --composer-chip-hover: rgb(255 255 255 / 9%);
   --composer-hover-fill: rgb(255 255 255 / 5%);
-  --composer-card: #1b1b1e;
-  --composer-panel: #141416;
+  --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --composer-panel: var(--bg-app);
   --composer-pop-shadow:
     0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
     0 1px 2px rgb(0 0 0 / 5%);
@@ -1112,6 +1113,109 @@
   --composer-waiting: #ff8a5c;
   --composer-ultra-text: #a78bfa;
   --composer-ultra-shine: #faf5ff;
+}
+
+/* themes: an installed theme sets only the tokens a theme file may hold (THEME_TOKENS in
+   shared/themes.ts). While one shows, <html> carries data-installed-theme (lib/theme-style.ts), and
+   the areas' tokens that the built-in theme draws in values of their own take the theme's instead:
+   the steps of ink become its text colors, the hairlines its borders, the fills its surfaces and
+   the blue accent its on color. Tokens defined from the theme's above follow it already. Shadows'
+   drops, a phone's bezel, the terminal drawn in Settings and Ultracode's violet keep their values. */
+:root[data-installed-theme],
+[data-installed-theme] [data-theme] {
+  --terminal-screen: var(--bg-code-block);
+  --terminal-selection-tint: var(--selection);
+  --pane-muted: var(--icon-default);
+  --pane-live: var(--success);
+
+  --shell-tray: var(--bg-subtle);
+  --shell-line-soft: color-mix(in srgb, var(--border-subtle) 66%, transparent);
+  --shell-strong: var(--text-primary);
+  --shell-ink: var(--text-primary);
+  --shell-text: var(--text-secondary);
+  --shell-muted: var(--text-tertiary);
+  --shell-faint: var(--text-disabled);
+  --shell-chip-hover: var(--bg-selected);
+  --shell-hover: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  --shell-accent: var(--control-on);
+  --shell-button: var(--primary-from);
+  --shell-button-hover: var(--primary-hover-from);
+  --shell-accent-soft: var(--control-on-tint);
+  --shell-card-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --shell-card-shadow-hover: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --shell-line-strong: var(--border-default);
+  --shell-edge-active: var(--border-strong);
+  /* A shade under the card, toward the desk. */
+  --shell-subtle: color-mix(in srgb, var(--bg-surface), var(--bg-sidebar));
+  --shell-disabled: var(--text-disabled);
+  --shell-on-ink: var(--primary-foreground);
+  --shell-ink-hover: var(--primary-hover-from);
+  --shell-select: var(--bg-selected);
+  --shell-toggle-off: var(--track);
+  --shell-switch-on: var(--switch-on);
+  --shell-logo-bg: var(--bg-raised);
+  --shell-scrim: var(--scrim);
+  --shell-danger: var(--danger);
+  --shell-danger-hover: color-mix(in srgb, var(--danger) 88%, var(--text-primary));
+
+  --settings-scrim: var(--scrim);
+  --settings-warn-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --settings-warn-ink: var(--warning);
+
+  --tone-amber: var(--warning);
+  --tone-amber-dot: var(--warning);
+  --tone-amber-halo: color-mix(in srgb, var(--warning) 18%, transparent);
+  --tone-amber-fill: color-mix(in srgb, var(--warning) 8%, transparent);
+  --tone-amber-edge: color-mix(in srgb, var(--warning) 35%, transparent);
+  --tone-red: var(--danger);
+  --tone-red-fill: color-mix(in srgb, var(--danger) 7%, transparent);
+  --tone-red-edge: color-mix(in srgb, var(--danger) 30%, transparent);
+  --tone-green: var(--success);
+  --tone-editing: var(--success);
+  --tone-editing-halo: color-mix(in srgb, var(--success) 20%, transparent);
+  --plan-warn-text: var(--warning);
+  --plan-bad-text: var(--danger);
+  --plan-bad-chip: color-mix(in srgb, var(--danger) 12%, transparent);
+  --plan-bad-chip-text: var(--danger);
+  /* Amounts by hour and by day deepen in the theme's heat color, as its heatmap does. */
+  --tod-bar: var(--heat-2);
+  --tod-peak: var(--heat-hue);
+  --activity-1: var(--heat-1);
+  --activity-2: var(--heat-2);
+  --activity-3: var(--heat-3);
+  --activity-4: var(--heat-4);
+  --tray-edge: var(--border-subtle);
+  --sketch-accent: var(--context-1);
+  --series-1: var(--context-1);
+  --series-2: var(--context-2);
+  --series-3: var(--context-3);
+  --series-4: var(--context-4);
+  --series-5: var(--context-5);
+  --series-6: var(--context-6);
+
+  --composer-strong: var(--text-primary);
+  --composer-ink: var(--text-primary);
+  --composer-text: var(--text-secondary);
+  --composer-muted: var(--text-tertiary);
+  --composer-faint: var(--text-disabled);
+  --composer-line-strong: var(--border-default);
+  --composer-chip-hover: var(--bg-selected);
+  --composer-hover-fill: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  --composer-pop-shadow: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --composer-thumb: var(--bg-raised);
+  --composer-thumb-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-thumb);
+  /* The meters' four levels are the context ring's. */
+  --composer-meter-ok: var(--usage-green);
+  --composer-meter-ok-wash: color-mix(in srgb, var(--usage-green) var(--ring-tint), transparent);
+  --composer-meter-mid: var(--usage-blue);
+  --composer-meter-mid-wash: color-mix(in srgb, var(--usage-blue) var(--ring-tint), transparent);
+  --composer-meter-high: var(--usage-orange);
+  --composer-meter-high-wash: color-mix(in srgb, var(--usage-orange) var(--ring-tint), transparent);
+  --composer-meter-full: var(--usage-red);
+  --composer-meter-full-wash: color-mix(in srgb, var(--usage-red) var(--ring-tint), transparent);
+  --composer-waiting: var(--attention);
+  --composer-waiting-dot: var(--attention-dot);
+  --composer-waiting-halo: var(--attention-halo);
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
