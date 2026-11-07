@@ -163,7 +163,6 @@
       "days": "{{count}}d"
     },
     "windowUsed": "{{window}}: {{percent}}% used.",
-    "windowStale": "{{window}}: reset, not read again yet.",
     "showMore_one": "Show {{count}} more",
     "showMore_other": "Show {{count}} more",
     "showFewer": "Show fewer",

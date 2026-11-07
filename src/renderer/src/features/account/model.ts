@@ -48,9 +48,9 @@ const RING_OF: Readonly<Record<string, RingWindow>> = {
 
 export interface CardWindow {
   window: RingWindow
-  /** The whole percentage used; null once its reset has passed and it is not read again. */
-  percent: number | null
-  level: LimitLevel | null
+  /** The whole percentage used; 0 once its reset has passed, since the window starts again. */
+  percent: number
+  level: LimitLevel
 }
 
 /** One account's card in the account menu, an OpenCode provider's included. */
@@ -77,8 +77,8 @@ function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
     const stale = limit.resetsAt !== null && limit.resetsAt <= now
     byRing.set(ring, {
       window: ring,
-      percent: stale ? null : Math.round(limit.usedPercent),
-      level: stale ? null : limitLevel(limit),
+      percent: stale ? 0 : Math.round(limit.usedPercent),
+      level: stale ? 'ok' : limitLevel(limit),
     })
   }
   return RING_WINDOWS.flatMap((ring) => byRing.get(ring) ?? [])

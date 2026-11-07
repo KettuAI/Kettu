@@ -270,7 +270,6 @@
     "limits": "Plan limits",
     "allLimits": "All plan limits",
     "limitUsed": "{{window}}: {{percent}}% used",
-    "limitStale": "{{window}}: not read since it reset",
     "theme": "Theme",
     "themes": {
       "system": "System",

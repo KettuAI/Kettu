@@ -3,9 +3,9 @@ import { cn } from '@renderer/lib/utils'
 
 export interface PlanRing {
   id: string
-  /** The whole percentage used; null once its reset has passed and it is not read again. */
-  percent: number | null
-  level: LimitLevel | null
+  /** The whole percentage used. */
+  percent: number
+  level: LimitLevel
 }
 
 /**
@@ -38,9 +38,9 @@ export function PlanRings({
         const fromOuter = rings.length - 1 - i
         const r = center - stroke / 2 - fromOuter * (stroke + gap)
         const length = 2 * Math.PI * r
-        const share = ring.percent === null ? 0 : Math.min(100, ring.percent) / 100
+        const share = Math.min(100, ring.percent) / 100
         return (
-          <g key={ring.id} className={ring.level ? LIMIT_STROKE[ring.level] : 'text-tertiary'}>
+          <g key={ring.id} className={LIMIT_STROKE[ring.level]}>
             <circle
               cx={center}
               cy={center}

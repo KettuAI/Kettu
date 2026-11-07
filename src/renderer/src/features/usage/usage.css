@@ -298,9 +298,6 @@
 .k-u-plan__line b[data-level='bad'] {
   color: var(--plan-bad-text);
 }
-.k-u-plan__line b[data-level='stale'] {
-  color: var(--faint);
-}
 /* The reset time shows on the line once the card is wide enough, else on hover */
 .k-u-plan__line small {
   display: none;

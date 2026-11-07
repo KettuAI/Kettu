@@ -158,7 +158,6 @@
       "days": "{{count}} 天"
     },
     "windowUsed": "{{window}}：已用 {{percent}}%。",
-    "windowStale": "{{window}}：已重置，还没重新读取。",
     "showMore_other": "再显示 {{count}} 个",
     "showFewer": "收起",
     "near_other": "· {{count}} 个接近上限"
