@@ -20,6 +20,8 @@ import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-side
 import { useSidebarNav } from '@renderer/features/sidebar/sidebar-nav'
 import { ArchiveConfirmDialog } from '@renderer/features/sidebar/archive-confirm'
 import { SearchDialog } from '@renderer/features/search/search-dialog'
+import { ReportDialog } from '@renderer/features/report/report-dialog'
+import { useReportNotices } from '@renderer/features/report/report-notices'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
@@ -45,6 +47,7 @@ export function App() {
   useKeyboardShortcuts()
   useAppCommands()
   useActionLog()
+  useReportNotices()
 
   return (
     <TooltipProvider delay={500}>
@@ -76,6 +79,7 @@ export function App() {
         <ShortcutsDialog />
         <SearchDialog />
         <ArchiveConfirmDialog />
+        <ReportDialog />
         {pathPicker && (
           <Suspense fallback={null}>
             <HostPathDialog />

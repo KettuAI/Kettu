@@ -1,0 +1,42 @@
+{
+  "title": "报告问题",
+  "titleOnHost": "报告 {{name}} 的问题",
+  "what": "发生了什么？",
+  "whatPlaceholder": "写一句就行，什么语言都可以。",
+  "context": "出错的信息也会一起带上。",
+  "range": "日志范围",
+  "ranges": {
+    "span": "录下的这段",
+    "hour": "最近 1 小时",
+    "today": "今天",
+    "twoDays": "最近 2 天"
+  },
+  "extras": {
+    "label": "还要带上",
+    "titles": "会话标题和项目路径",
+    "messages": "最近和 Agent 来往的消息",
+    "verbose": "详细记录",
+    "dumps": "崩溃转储",
+    "screenshot": "当前窗口的截图"
+  },
+  "always": "一定带上：版本、系统、PATH 和 SHELL、去掉个人信息的设置、各 Agent 的状态、各 host 最近的事件，以及这段时间的日志和操作记录。密钥都会遮掉。",
+  "sensitive": "消息、详细记录和崩溃转储里可能有提示词、代码和密钥。",
+  "viewContents": "查看内容",
+  "back": "返回",
+  "files_one": "{{count}} 个文件",
+  "files_other": "{{count}} 个文件",
+  "truncated": "只显示前 2 MB，整个文件都会带上。",
+  "binary": "这个文件原样带上，这里显示不了。",
+  "submit": "提交给 Kettu",
+  "save": "存到本地",
+  "saved": "报告已保存",
+  "showFile": "显示",
+  "tooLarge": "报告太大了，换个短一点的时间范围或少带几项。",
+  "failed": "报告没能打包好。",
+  "reportProblem": "报告问题",
+  "recording": {
+    "label": "正在记录",
+    "stop": "结束并报告"
+  },
+  "crashNotice": "Kettu 上次意外退出"
+}

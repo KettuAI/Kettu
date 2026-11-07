@@ -9,7 +9,9 @@ import path from 'node:path'
 import { cp, mkdir, rename, rm, stat } from 'node:fs/promises'
 import type { AgentOptions, DiagnosticsBundle, HostEvent, McpStatus } from '@shared/agent-host'
 import { OWNER } from '@shared/artifact-comments'
-import { writeLog } from '@shared/log/process-log'
+import { flushLog, logFolder, redactLogText, writeLog } from '@shared/log/process-log'
+import { writeReport } from '@shared/log/report-bundle'
+import { parseReportRequest } from '@shared/report'
 import { harnessOf, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { artifactFileType } from '@shared/artifact-files'
@@ -22,7 +24,9 @@ import type {
   ArtifactExportResult,
   ArtifactListResult,
   HostToMain,
+  MainToHost,
   NodeRuntime,
+  ReportBuildResult,
 } from '@shared/host-control'
 import type { ArtifactExportFormat } from '@shared/artifact-types'
 import type { Platform } from '@shared/platform'
@@ -802,6 +806,40 @@ export class AgentHost {
     this.options.send({ type: 'host:busy', requestId, sessions: this.sessions.busy() })
   }
 
+  /**
+   * `host:report-request`: a problem report's bundle, written into the data folder's `reports`,
+   * which the parent removes once the user saved or dropped it.
+   */
+  async report(message: Extract<MainToHost, { type: 'host:report-request' }>): Promise<void> {
+    let result: ReportBuildResult
+    try {
+      const request = parseReportRequest(message.request)
+      await flushLog()
+      result = await writeReport(
+        {
+          request,
+          now: Date.now(),
+          parent:
+            typeof message.parent === 'object' && message.parent !== null ? message.parent : {},
+          settings: message.settings ?? null,
+          host: await this.collectDiagnostics(),
+          logDir: logFolder(),
+          crashDir: typeof message.crashDir === 'string' ? message.crashDir : null,
+          screenshot:
+            typeof message.screenshot === 'string'
+              ? new Uint8Array(Buffer.from(message.screenshot, 'base64'))
+              : null,
+          redact: redactLogText,
+        },
+        path.join(this.options.userDataPath, 'reports'),
+      )
+    } catch (error) {
+      result = { ok: false, reason: 'failed', message: (error as Error).message }
+    }
+    if (!result.ok) this.diagnostics.log('warn', `No problem report: ${result.message}`)
+    this.options.send({ type: 'host:report', requestId: message.requestId, result })
+  }
+
   /** Allow once from a request's notification; a request already answered elsewhere is left. */
   answerPermission(sessionId: string, requestId: string, optionId: string): void {
     try {
@@ -1321,7 +1359,6 @@ export class AgentHost {
               : { optionId: optionId!, ...(note === undefined ? {} : { note }) },
           fromDevice(device),
         ),
-      'diagnostics.collect': () => this.collectDiagnostics(),
       'git.status': async ({ projectPath }, { portId }) => {
         const git = this.requireGit()
         const canonical = await this.gitProject(projectPath)

@@ -466,9 +466,3 @@ function descendantIds(sessionId: string): string[] {
   walk(sessionId)
   return ids
 }
-
-/** Collects the diagnostics bundle and asks main where to save it; null when cancelled. */
-export async function exportDiagnostics(): Promise<string | null> {
-  const bundle = await host('diagnostics.collect', undefined)
-  return window.kettu.diagnostics.save(bundle)
-}

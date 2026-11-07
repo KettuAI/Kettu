@@ -37,7 +37,9 @@ import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
 import { locale as currentLocale, setLocale, t } from './i18n'
-import { appInfo, registerIpcHandlers, registerTrayIpc } from './ipc'
+import { mainDiagnostics } from './diagnostics'
+import { appInfo, launchToInteractive, registerIpcHandlers, registerTrayIpc } from './ipc'
+import { Reports } from './report'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
@@ -66,7 +68,16 @@ import { KettuTray } from './tray'
 import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
-import { applyVerbose, markRunning, openAppLog, watchConsole, watchProcesses } from './app-log'
+import {
+  applyVerbose,
+  logsFolder,
+  markRunning,
+  openAppLog,
+  watchConsole,
+  watchProcesses,
+} from './app-log'
+import { redactLogText } from '@shared/log/process-log'
+import { writeReport } from '@shared/log/report-bundle'
 import {
   applyTheme,
   applyWindowTheme,
@@ -549,6 +560,41 @@ async function start(): Promise<void> {
     (message) => log.warn(message),
   )
   await agentFolders.moveCreatedAgents(join(userDataPath, 'agent-config'))
+  const reportsFolder = join(userDataPath, 'reports')
+  const reports = new Reports(
+    {
+      build: async (params) => {
+        if (agentHost.state === 'ready') return agentHost.report(params)
+        // The agent host is what the report is often about; main reads the logs itself then.
+        return writeReport(
+          {
+            request: params.request,
+            now: Date.now(),
+            parent: params.parent,
+            settings: params.settings,
+            host: null,
+            logDir: logsFolder(),
+            crashDir: params.crashDir,
+            screenshot: params.screenshot
+              ? new Uint8Array(Buffer.from(params.screenshot, 'base64'))
+              : null,
+            redact: redactLogText,
+          },
+          reportsFolder,
+        )
+      },
+      parent: () =>
+        mainDiagnostics({ agentHost, terminalHost, launchToInteractiveMs: launchToInteractive() }),
+      settings: () => settings.get(),
+      setVerbose: (until) => void settings.update({ diagnostics: { verboseUntil: until } }),
+      verboseUntil: () => settings.get().diagnostics.verboseUntil,
+      onRecording: (recording) => broadcast('report:recording-changed', recording),
+      onRecorded: (span) => sendCommand({ kind: 'report-problem', span }),
+    },
+    reportsFolder,
+  )
+  void reports.clearFolder()
+
   hostAdmin = new HostAdmin({
     settings,
     agentFolders,
@@ -570,6 +616,7 @@ async function start(): Promise<void> {
     thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
     png: (id, version, page, size) => artifacts.png(id, version, page, size),
     printPdf: (id, version) => artifacts.printPdf(id, version),
+    report: (request) => reports.forDevice(request),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
   })
 
@@ -582,6 +629,7 @@ async function start(): Promise<void> {
     zoom: (step: ZoomStep) => {
       settings.update({ appearance: { zoom: stepZoom(settings.get().appearance.zoom, step) } })
     },
+    reportProblem: () => sendCommand({ kind: 'report-problem' }),
   }
   const applyDiagnostics = (until: number | null): void =>
     applyVerbose(
@@ -658,6 +706,7 @@ async function start(): Promise<void> {
     computerModel: readComputerModel,
     updater,
     quit: quitFlow,
+    reports,
   })
   ipcReady = true
   installMenu(menuDeps)

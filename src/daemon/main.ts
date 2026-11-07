@@ -2,10 +2,12 @@
 
 import { logProcessFailures, openProcessLog } from '@shared/log/process-log'
 import { execFile, spawn } from 'node:child_process'
-import { access, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { access, copyFile, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { addressText } from '@shared/remote/address'
+import { parseReportRequest, type ReportBuildResult, type ReportRequest } from '@shared/report'
 import { version } from '../../package.json'
 import { AccountApi, accountBaseUrl, clientInfo } from '../main/account/service'
 import { accountFile, readAccount } from '../main/account/store'
@@ -25,7 +27,9 @@ import {
 import { AlreadyRunning, SERVICE_ENV, startDaemon } from './daemon'
 import { changePort, directReport } from './direct'
 import { NO_SYSTEM_ENCRYPTION, prepareDataFolder, privateFolder } from './key'
+import { followLogs, parseTime, readLogs, type LogFilter } from './logs'
 import { pairDevice, sshTarget } from './pair'
+import { daemonPart, logsOnlyReport, reportsFolder } from './problem-report'
 import { proxiedFetch } from './proxy'
 import { controlSocketPath, DATA_ENV, dataPath, logFolderPath } from './paths'
 import { terminalQuestions } from './questions'
@@ -240,6 +244,169 @@ async function sshSetup(socket: string, request: string | null): Promise<number>
   }
 }
 
+/** The settings as the daemon last wrote them, read and never written. */
+async function readSettings(data: string) {
+  const read = await readJsonFile(path.join(data, 'settings.json'))
+  return parseSettingsFile(read.kind === 'ok' ? read.value : { version: 1 }).settings
+}
+
+function sizeText(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function stamp(date: Date): string {
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return (
+    `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-` +
+    `${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+  )
+}
+
+/**
+ * `kettu report`: the running daemon builds the bundle with its agents and sessions; without one,
+ * it is the logs and settings alone. Either way the zip moves to where the owner said, and its
+ * files are listed to look through before it is shared.
+ */
+async function report(
+  socket: string,
+  data: string,
+  logs: string,
+  command: Extract<Command, { kind: 'report' }>,
+): Promise<number> {
+  let description = command.description
+  if (description === null) {
+    if (process.stdin.isTTY !== true) {
+      throw new Failure('Say what happened with --message', 2)
+    }
+    const questions = terminalQuestions(process.stdin, process.stdout)
+    try {
+      description = (await questions.ask('What happened? '))?.trim() || null
+    } finally {
+      questions.close()
+    }
+    if (description === null) throw new Failure('Say what happened to save a report', 2)
+  }
+  let request: ReportRequest
+  try {
+    request = parseReportRequest({
+      description,
+      range: { kind: command.range },
+      extras: command.extras,
+      context: null,
+    })
+  } catch (error) {
+    throw new Failure((error as Error).message, 2)
+  }
+  const output = path.resolve(command.output ?? `kettu-report-${stamp(new Date())}.zip`)
+  let built: ReportBuildResult
+  let from: string
+  let scratch: string | null = null
+  try {
+    // A bundle with recent messages or crash dumps takes a while to pack.
+    built = await callControl(socket, 'report.build', { request }, 180_000)
+    from = reportsFolder(data)
+  } catch (error) {
+    if (error instanceof ControlError) throw new Failure(error.message)
+    if (!(error instanceof NotRunning)) throw error
+    process.stderr.write(
+      'kettu: the daemon is not running, so the report holds the logs and settings alone\n',
+    )
+    scratch = await mkdtemp(path.join(os.tmpdir(), 'kettu-report-'))
+    from = scratch
+    built = await logsOnlyReport(
+      request,
+      daemonPart(version, null),
+      await readSettings(data),
+      logs,
+      scratch,
+    )
+  }
+  try {
+    if (!built.ok) {
+      throw new Failure(
+        built.reason === 'too_large'
+          ? 'The report is too large; choose a shorter range or fewer extras'
+          : `No report: ${built.message}`,
+      )
+    }
+    // Only a bundle where the daemon writes them is moved.
+    if (path.dirname(path.resolve(built.file)) !== path.resolve(from)) {
+      throw new Failure('The daemon put the report somewhere else')
+    }
+    try {
+      await copyFile(built.file, output, constants.COPYFILE_EXCL)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+        throw new Failure(`${output} already exists; name another file with --output`)
+      }
+      throw error
+    }
+    const width = Math.max(...built.files.map((file) => file.path.length))
+    out(
+      `Saved the report to ${output} (${sizeText(built.size)}). It holds:\n` +
+        built.files
+          .map((file) => `  ${file.path.padEnd(width)}  ${sizeText(file.size)}\n`)
+          .join('') +
+        'Look through it before you share it: anyone can download a file attached to a public issue.\n',
+    )
+    return 0
+  } finally {
+    if (built.ok) await rm(built.file, { force: true }).catch(() => {})
+    if (scratch) await rm(scratch, { recursive: true, force: true }).catch(() => {})
+  }
+}
+
+/** `kettu logs`: the records of the log folder, which need no running daemon. */
+async function logs(dir: string, command: Extract<Command, { kind: 'logs' }>): Promise<number> {
+  const now = Date.now()
+  const time = (value: string | null, option: string): number | null => {
+    if (value === null) return null
+    const at = parseTime(value, now)
+    if (at === null) {
+      throw new Failure(`${option} takes a time, or a span ago such as 30m, 2h or 1d`, 2)
+    }
+    return at
+  }
+  const filter: LogFilter = {
+    process: command.process,
+    level: command.level,
+    op: command.op,
+    since: time(command.since, '--since'),
+    until: time(command.until, '--until'),
+  }
+  for (const line of await readLogs(dir, filter)) out(line)
+  if (!command.follow) return 0
+  const stop = new AbortController()
+  const abort = (): void => stop.abort()
+  process.once('SIGINT', abort)
+  try {
+    await followLogs(dir, filter, out, stop.signal)
+  } finally {
+    process.off('SIGINT', abort)
+  }
+  return 0
+}
+
+/** `kettu verbose on` or `off`, through the running daemon, which writes the settings. */
+async function verbose(socket: string, on: boolean): Promise<number> {
+  try {
+    const { until } = await callControl(socket, 'verbose.set', { on })
+    out(
+      until === null
+        ? 'Detailed records are off.\n'
+        : `Detailed records are on until ${new Date(until).toLocaleString()}. They hold the full\n` +
+            'messages with agents: prompts, code and tool output. kettu verbose off turns them off.\n',
+    )
+    return 0
+  } catch (error) {
+    if (error instanceof NotRunning) throw new Failure(error.message, NOT_RUNNING)
+    if (error instanceof ControlError) throw new Failure(error.message)
+    throw error
+  }
+}
+
 /** `kettu login` or `kettu logout`, which need no running daemon. */
 async function account(kind: 'login' | 'logout', data: string): Promise<number> {
   let base: string
@@ -249,8 +416,7 @@ async function account(kind: 'login' | 'logout', data: string): Promise<number> 
     throw new Failure((error as Error).message)
   }
   // Read, never written: the running daemon alone writes its settings.
-  const read = await readJsonFile(path.join(data, 'settings.json'))
-  const settings = parseSettingsFile(read.kind === 'ok' ? read.value : { version: 1 }).settings
+  const settings = await readSettings(data)
   const file = accountFile(data)
   await prepareDataFolder(data)
   await privateFolder(path.dirname(file))
@@ -312,6 +478,12 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
   if (!socket) {
     throw new Failure(`The data folder's path is too long for a socket; set a shorter ${DATA_ENV}`)
   }
+  const logDir = logFolderPath({
+    platform: process.platform,
+    home: os.homedir(),
+    env: process.env,
+    cwd: process.cwd(),
+  })
   const service: ServiceDeps = {
     platform: process.platform,
     home: os.homedir(),
@@ -323,12 +495,7 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
   switch (command.kind) {
     case 'run': {
       openProcessLog({
-        dir: logFolderPath({
-          platform: process.platform,
-          home: os.homedir(),
-          env: process.env,
-          cwd: process.cwd(),
-        }),
+        dir: logDir,
         name: 'daemon',
         // A service's output goes to the journal or launchd's file; the log file has it already.
         echo: process.stdout.isTTY === true,
@@ -394,6 +561,15 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
     case 'terminal':
     case 'terminal-set':
       return terminal(socket, command)
+
+    case 'report':
+      return report(socket, data, logDir, command)
+
+    case 'logs':
+      return logs(logDir, command)
+
+    case 'verbose':
+      return verbose(socket, command.on)
 
     case 'service-install': {
       const running = await statusOf(socket)

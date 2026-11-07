@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { Alert02Icon, FileDownloadIcon, RefreshIcon } from '@hugeicons/core-free-icons'
+import { Alert02Icon, RefreshIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { exportDiagnostics } from '@renderer/app/actions'
+import { RecordingPill } from '@renderer/features/report/report-status'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
@@ -10,12 +10,13 @@ import { fadeExit } from '@renderer/lib/motion'
 import { hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { useConnectionStore } from '@renderer/stores/connection'
+import { openReport } from '@renderer/stores/report'
 import { Glyph } from './glyph'
 
 /**
- * The agent host's state while it is away: a small status pill centred over the top bar, or on
- * Windows and Linux in the band above it. It floats instead of pushing the window down, so the
- * macOS traffic lights never sit on it.
+ * The agent host's state while it is away, and a recording of steps to reproduce: small status
+ * pills centred over the top bar, or on Windows and Linux in the band above it. They float instead
+ * of pushing the window down, so the macOS traffic lights never sit on them.
  */
 export function HostBanner() {
   const { t } = useTranslation('shell')
@@ -34,15 +35,11 @@ export function HostBanner() {
       setBusy(false)
     }
   }
-  const save = () => {
-    setError(null)
-    exportDiagnostics().catch((e: unknown) => setError(errorMessage(e)))
-  }
 
   return (
     <div
       className={cn(
-        'pointer-events-none absolute inset-x-0 z-50 flex justify-center',
+        'pointer-events-none absolute inset-x-0 z-50 flex justify-center gap-2',
         hasBand
           ? 'top-[calc((var(--title-bar)-26px)/2)]'
           : 'top-[calc(var(--sheet-gap)+(var(--top-bar)-26px)/2)]',
@@ -85,15 +82,20 @@ export function HostBanner() {
                   )}
                   {t('hostBanner.restart')}
                 </Button>
-                <Button variant="quiet" size="xs" className="rounded-full" onClick={save}>
-                  <Glyph icon={FileDownloadIcon} size={14} data-icon="inline-start" />
-                  {t('hostBanner.exportDiagnostics')}
+                <Button
+                  variant="quiet"
+                  size="xs"
+                  className="rounded-full"
+                  onClick={() => void openReport()}
+                >
+                  {t('hostBanner.reportProblem')}
                 </Button>
               </>
             )}
           </motion.div>
         )}
       </AnimatePresence>
+      <RecordingPill />
     </div>
   )
 }

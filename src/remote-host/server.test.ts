@@ -825,6 +825,44 @@ describe("an owner's calls beyond its sessions", () => {
   })
 })
 
+describe('a problem report of the host', () => {
+  const request = { description: 'It froze', range: { kind: 'hour' }, extras: [], context: null }
+
+  it("is built by the host's parent for the owner's device, never by the agent host", async () => {
+    const asked: string[] = []
+    const t = await setup({
+      admin: async (deviceId, method) => {
+        asked.push(`${deviceId} ${method}`)
+        return { result: { ok: true, zip: 'UEsFBg==', files: [], size: 4 } }
+      },
+    })
+    const device = await t.connect()
+    await device.first
+    expect(await call(device)('host.report', { request })).toMatchObject({ ok: true })
+    expect(asked).toEqual([`${t.phone.id} host.report`])
+    expect(t.forwarded).toEqual([])
+  })
+
+  it('is refused to a device while the host takes no owner calls', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    await expect(call(device)('host.report', { request })).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+    expect(t.forwarded).toEqual([])
+  })
+
+  it("cannot be read from the agent host's diagnostics, which it no longer answers", async () => {
+    const t = await setup({ admin: async () => ({ result: null }) })
+    const device = await t.connect()
+    await device.first
+    await expect(call(device)('diagnostics.collect')).rejects.toMatchObject({
+      code: 'unknown_method',
+    })
+  })
+})
+
 describe("the host's events", () => {
   it('reach every owner device that is welcomed, or the one they are for', async () => {
     const t = await setup({ admin: async () => ({ result: null }) })

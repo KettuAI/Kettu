@@ -30,6 +30,7 @@ import type { HostLink, LinkError, LinkState } from './link'
 import { downloadFile, mediaRequest, saveMedia, type SaveProgress } from './media'
 import { browserNotifications, notifyAttention, notifyTest } from './notifications'
 import type { WebSettings } from './settings'
+import { webReports } from './report'
 import { pickThemeFile, webThemes, type AdminCall } from './themes'
 
 function unsupported(what: string): Promise<never> {
@@ -381,15 +382,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
           settings.takeHost(await admin('settings.setShellPath', { path })),
         ),
     },
+    report: webReports(admin),
     diagnostics: {
-      save: async (bundle) => {
-        const name = `kettu-diagnostics-${new Date().toISOString().slice(0, 10)}.json`
-        downloadFile(
-          new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }),
-          name,
-        )
-        return name
-      },
       clearVerbose: () => unsupported("delete the host's detailed records"),
       // The host logs what a browser's requests do; the page itself keeps no log.
       recordActions: () => undefined,
