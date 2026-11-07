@@ -225,11 +225,25 @@ describe('Publishing on its own', () => {
     vi.useRealTimers()
   })
 
-  /** Lets the timer fire and the work it starts, which reads real files, finish. */
-  async function lookAgain(sharing: Sharing, ticks = 50): Promise<void> {
+  /**
+   * Waits out the work a timer started, which reads and writes real files: some turns at least, so
+   * work that should do nothing has had its chance, then until `done` holds, however slow the disk.
+   */
+  async function settle(done: () => boolean = () => true): Promise<void> {
+    for (let i = 0; i < 50 || (!done() && i < 10_000); i++) {
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+  }
+
+  /**
+   * Lets the timer fire and the work it starts finish, then the store's writes, so the folder is
+   * not removed under them.
+   */
+  async function lookAgain(sharing: Sharing, done?: () => boolean): Promise<void> {
     sharing.artifactsChanged()
     vi.advanceTimersByTime(60_000)
-    for (let i = 0; i < ticks; i++) await new Promise((resolve) => setImmediate(resolve))
+    await settle(done)
+    await sharing.flush()
   }
 
   it('holds a new artifact for the one-time notice, then publishes it as private', async () => {
@@ -245,7 +259,8 @@ describe('Publishing on its own', () => {
 
     sharing.setAuto(true)
     vi.advanceTimersByTime(1)
-    for (let i = 0; i < 50; i++) await new Promise((resolve) => setImmediate(resolve))
+    await settle(() => sharing.status().published.length > 0)
+    await sharing.flush()
     expect(calls[0]).toMatchObject({
       method: 'POST',
       url: 'https://account.example/api/v1/shares?access=private',
@@ -304,7 +319,7 @@ describe('Publishing on its own', () => {
     sharing.setAuto(true)
     await sharing.publish(ARTIFACT, 1, 'kettu', 'public')
     artifacts[0] = created({ version: 2, createdAt: 0, updatedAt: 0 })
-    await lookAgain(sharing)
+    await lookAgain(sharing, () => sharing.status().published[0]?.version === 2)
     expect(calls[2]).toMatchObject({
       method: 'PUT',
       url: `https://account.example/api/v1/shares/${PAGE}`,
