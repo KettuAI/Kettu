@@ -636,7 +636,6 @@
     "answeredOne": "已回答",
     "skipped": "已跳过",
     "secret": "已隐藏",
-    "count_other": "{{count}} 个问题",
     "secretHint": "输入时隐藏，也不留在对话里",
     "hint": {
       "one": "选一项",
@@ -648,11 +647,6 @@
     "ownAnswer": "你自己的回答",
     "typing": "写下你的回答",
     "separator": "、",
-    "sendStep": "发送",
-    "send": "发送回答",
-    "back": "返回",
-    "review": "把这些回答发给 {{agent}}？",
-    "reviewHint": "点一个回答可以修改它",
     "of": "{{agent}} · 第 {{number}} 个问题，共 {{count}} 个",
     "otherTell": "还有别的？告诉 {{agent}}"
   },

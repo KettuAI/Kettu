@@ -27,7 +27,6 @@ import {
 import { useAnswering } from './use-answering'
 
 const OWN = 'other'
-const SEND = 'send'
 
 /** An option's name as plain words; a card's rows set no code. */
 const plainName = (name: string): string =>
@@ -75,8 +74,8 @@ function hintOf(
 
 /**
  * An agent's questions on affectUI's Experiment Card as a question: its switch steps through the
- * questions and, for more than one, a last Send step that reviews every answer before it goes.
- * Each answer is one choice, several or the user's own words; nothing goes until it is sent.
+ * questions and only the last one submits. Each answer is one choice, several or the user's own
+ * words; nothing goes until it is submitted.
  */
 export function QuestionCard({
   ref,
@@ -97,7 +96,6 @@ export function QuestionCard({
   const questions = permission.questions!
   const count = questions.length
   const [state, setState] = useState(() => startQuestions(count))
-  const [review, setReview] = useState(false)
   // The question whose own answer row is picked while it is still empty.
   const [ownOpen, setOwnOpen] = useState<number | null>(null)
   const { answering, error, away, send } = useAnswering(sessionId)
@@ -114,79 +112,15 @@ export function QuestionCard({
     if (sent && focused) emitAppEvent({ kind: 'focus-composer' })
   }
 
-  const next = () => {
-    if (state.step >= count - 1) setReview(true)
-    else setState((s) => goTo(s, s.step + 1))
-  }
-
-  const answerOf = (i: number): string | null => {
-    const draft = state.drafts[i]!
-    if (!isAnswered(draft)) return null
-    const asked = questions[i]!
-    if (asked.secret) return t('question.secret')
-    const words = draft.choices.map((c) => asked.options[c]?.label ?? '')
-    if (draft.text.trim()) words.push(draft.text.trim())
-    return words.filter(Boolean).join(t('question.separator'))
-  }
-
   const steps: ExperimentMetric[] = questions.map((asked, i) => ({
     id: String(i),
     label: asked.header || t('question.step', { number: i + 1 }),
   }))
-  if (count > 1) steps.push({ id: SEND, label: t('question.sendStep') })
   const switching = {
     metrics: steps,
-    metric: review ? SEND : String(state.step),
-    onMetricChange: (id: string) => {
-      if (id === SEND) {
-        setReview(true)
-        return
-      }
-      setReview(false)
-      setState((s) => goTo(s, Number(id)))
-    },
+    metric: String(state.step),
+    onMetricChange: (id: string) => setState((s) => goTo(s, Number(id))),
     switchLabel: t('question.steps'),
-  }
-
-  if (review) {
-    const answered = questions.flatMap((_, i) => (answerOf(i) !== null ? [String(i)] : []))
-    return (
-      <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
-        <div ref={root} className="min-w-0">
-          <ExperimentCard
-            key={SEND}
-            {...shared}
-            {...switching}
-            title={t('question.review', { agent: agentName })}
-            note={`${agentName} · ${t('question.count', { count })}`}
-            variants={questions.map((asked, i) => ({
-              id: String(i),
-              key: String(i + 1),
-              name: answerOf(i) ?? t('question.skipped'),
-              description: asked.header || asked.question,
-            }))}
-            multiple
-            picks={answered}
-            onPicksChange={(picked) => {
-              const changed = questions.findIndex(
-                (_, i) => answered.includes(String(i)) !== picked.includes(String(i)),
-              )
-              if (changed < 0) return
-              setReview(false)
-              setState((s) => goTo(s, changed))
-            }}
-            hint={t('question.reviewHint')}
-            actionReady
-            secondary={{ label: t('question.back'), onClick: () => setReview(false) }}
-            action={{
-              label: answered.length > 0 ? t('question.send') : t('question.skipAll'),
-              onClick: () => void submit(state),
-            }}
-          />
-        </div>
-        <CardError error={error} />
-      </div>
-    )
   }
 
   const question = questions[state.step]!
@@ -194,6 +128,8 @@ export function QuestionCard({
   const own = ownOpen === state.step || draft.text.trim() !== ''
   const takesText = question.allowsText || question.options.length === 0
   const cleared = withDraft(state, { choices: [], text: '' })
+  const last = state.step === count - 1
+  const given = state.drafts.filter(isAnswered).length
 
   return (
     <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
@@ -265,20 +201,25 @@ export function QuestionCard({
               : undefined
           }
           hint={hintOf(t, question)}
-          secondary={{
-            label: t('question.skip'),
-            onClick: () => {
-              setOwnOpen(null)
-              if (count === 1) void submit(cleared)
-              else {
-                setState(cleared)
-                next()
-              }
-            },
-          }}
+          // On the last question an unanswered Skip would only repeat the main button.
+          secondary={
+            last && count > 1 && !isAnswered(draft)
+              ? undefined
+              : {
+                  label: t('question.skip'),
+                  onClick: () => {
+                    setOwnOpen(null)
+                    if (last) void submit(cleared)
+                    else setState(goTo(cleared, state.step + 1))
+                  },
+                }
+          }
+          actionReady={last && count > 1}
           action={{
-            label: count === 1 ? t('question.submit') : t('question.next'),
-            onClick: () => (count === 1 ? void submit(state) : next()),
+            label: !last
+              ? t('question.next')
+              : t(given > 0 || count === 1 ? 'question.submit' : 'question.skipAll'),
+            onClick: () => (last ? void submit(state) : setState((s) => goTo(s, s.step + 1))),
           }}
         />
       </div>
