@@ -674,15 +674,30 @@ describe('devices not seen for 90 days', () => {
   })
 
   it('are looked for every hour', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    const hour = 60 * 60 * 1000
+    let now = Date.now()
+    const t = await setup({ now: () => now })
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     try {
-      const t = await setup()
       t.server.startSweeping()
-      await vi.advanceTimersByTimeAsync(90 * DAY + 60 * 60 * 1000)
+      // Age the device without replaying 90 days of hourly callbacks.
+      now += 90 * DAY - hour
+      await vi.advanceTimersByTimeAsync(hour)
+      expect(t.devices.list()).toHaveLength(1)
+      now += hour
+      await vi.advanceTimersByTimeAsync(hour - 1)
+      expect(t.devices.list()).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1)
       expect(t.devices.list()).toEqual([])
-      await t.server.stop('stopping')
+      await expect
+        .poll(() => t.activity.list(t.phone.id))
+        .toEqual([{ kind: 'removed', by: 'unseen', at: now }])
     } finally {
-      vi.useRealTimers()
+      try {
+        await t.server.stop('stopping')
+      } finally {
+        vi.useRealTimers()
+      }
     }
   })
 })
