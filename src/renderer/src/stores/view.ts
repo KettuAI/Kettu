@@ -30,6 +30,7 @@ import {
   type Place,
 } from '@renderer/features/split/layout'
 import type { RoutineExampleId } from '@renderer/features/routines/examples'
+import { NARROW_WINDOW } from '@renderer/features/shell/narrow'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 
@@ -145,6 +146,8 @@ interface ViewStore {
   /** Back and Forward through what the main area showed, nearest last. Not persisted. */
   history: { back: Step[]; forward: Step[] }
   sidebarCollapsed: boolean
+  /** The sidebar as a drawer over a narrow window, apart from its collapsed state. Not persisted. */
+  sidebarDrawer: boolean
   /** Groups the user collapsed, by path, `NO_PROJECT_GROUP` or `PINNED_GROUP`; open by default. */
   collapsedProjects: Record<string, true>
   /** The one host the sidebar lists, by id or `THIS_COMPUTER`; null lists every host. */
@@ -207,6 +210,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   searchOpen: false,
   history: { back: [], forward: [] },
   sidebarCollapsed: saved.sidebarCollapsed ?? false,
+  sidebarDrawer: false,
   collapsedProjects: saved.collapsedProjects ?? {},
   hostFilter: typeof saved.hostFilter === 'string' ? saved.hostFilter : null,
   expandedParents: saved.expandedParents ?? {},
@@ -730,7 +734,10 @@ export function setShowFinishedSubagents(shown: boolean): void {
 }
 
 export function toggleSidebar(): void {
-  useViewStore.setState((s) => ({ sidebarCollapsed: !s.sidebarCollapsed }))
+  // A narrow window's sidebar is a drawer, which leaves the wide window's collapsed state alone.
+  if (window.matchMedia(NARROW_WINDOW).matches)
+    useViewStore.setState((s) => ({ sidebarDrawer: !s.sidebarDrawer }))
+  else useViewStore.setState((s) => ({ sidebarCollapsed: !s.sidebarCollapsed }))
 }
 
 /** Shows the shortcuts dialog, or closes it. */

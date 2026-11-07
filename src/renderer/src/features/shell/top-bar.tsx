@@ -82,6 +82,9 @@ export function NoDrag({ children, className }: { children: ReactNode; className
 export function SidebarToggle({ className }: { className?: string }) {
   const { t } = useTranslation('shell')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  const drawer = useViewStore((s) => s.sidebarDrawer)
+  // A narrow window's sidebar is a drawer, shown only while it is open.
+  const shown = useNarrowWindow() ? drawer : !collapsed
   const { summary } = useNotices()
   const button = useRef<HTMLButtonElement>(null)
   // Move focus out of the sidebar before collapsing makes it inert.
@@ -93,9 +96,9 @@ export function SidebarToggle({ className }: { className?: string }) {
       }),
     [],
   )
-  // Collapsed, the sidebar's notices are out of sight, so the toggle marks and names them.
-  const notices = collapsed ? summary : null
-  const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
+  // Hidden, the sidebar's notices are out of sight, so the toggle marks and names them.
+  const notices = shown ? null : summary
+  const label = shown ? t('topBar.hideSidebar') : t('topBar.showSidebar')
   return (
     <Tooltip>
       <TooltipTrigger
@@ -105,7 +108,7 @@ export function SidebarToggle({ className }: { className?: string }) {
             type="button"
             data-sidebar-toggle=""
             aria-label={label}
-            aria-expanded={!collapsed}
+            aria-expanded={shown}
             aria-description={notices?.name}
             onClick={toggleSidebar}
             className={cn(TITLE_BUTTON, className)}

@@ -99,11 +99,21 @@ const SIDEBAR_WIDTH = 'sidebar-width'
 function Workbench() {
   const { t } = useTranslation('sidebar')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  const drawer = useViewStore((s) => s.sidebarDrawer)
   const nav = useSidebarNav()
   const account = useAccountShell()
   const [initial] = useState(() => readJson(SIDEBAR_WIDTH, 0) || undefined)
   const save = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(save.current), [])
+  // Opening a place from the drawer puts the drawer away, as App Shell's own nav does.
+  useEffect(
+    () =>
+      useViewStore.subscribe((state, previous) => {
+        if (state.sidebarDrawer && state.main !== previous.main)
+          useViewStore.setState({ sidebarDrawer: false })
+      }),
+    [],
+  )
   return (
     <div className="relative h-full">
       <TitleBand />
@@ -121,6 +131,8 @@ function Workbench() {
         onSearch={() => showSearch(true)}
         collapsed={collapsed}
         onCollapsedChange={(next) => useViewStore.setState({ sidebarCollapsed: next })}
+        drawer={drawer}
+        onDrawerChange={(open) => useViewStore.setState({ sidebarDrawer: open })}
         sidebarWidth={{ default: 272, min: 200, max: 400, initial }}
         onSidebarWidthChange={(width) => {
           clearTimeout(save.current)

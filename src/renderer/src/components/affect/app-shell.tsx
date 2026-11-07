@@ -233,6 +233,9 @@ export type AppShellProps = {
   /** Collapsed state, controlled; with onCollapsedChange the shell asks instead of folding on its own. On a narrow screen a change opens or closes the drawer */
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  /** The narrow screen's drawer, controlled; the shell still opens and closes it through onDrawerChange */
+  drawer?: boolean;
+  onDrawerChange?: (open: boolean) => void;
   /** Called with the sidebar's width after a drag or a key, e.g. to keep it */
   onSidebarWidthChange?: (width: number) => void;
   /** Called by the search field and ⌘K in place of opening the built-in search */
@@ -297,6 +300,8 @@ export function AppShell({
   footCards,
   collapsed: collapsedProp,
   onCollapsedChange,
+  drawer: drawerProp,
+  onDrawerChange,
   onSidebarWidthChange,
   onSearch,
   corner,
@@ -343,7 +348,18 @@ export function AppShell({
   const sideRef = useRef<HTMLElement>(null);
   const [narrow, setNarrow] = useState(false);
   const narrowNow = useRef(false);
-  const [drawer, setDrawer] = useState(false);
+  const [drawerOwn, setDrawerOwn] = useState(false);
+  const drawer = drawerProp ?? drawerOwn;
+  // Through refs, so the effects that close it keep reading the latest
+  const drawerNow = useRef(drawer);
+  drawerNow.current = drawer;
+  const drawerChange = useRef(onDrawerChange);
+  drawerChange.current = onDrawerChange;
+  const setDrawer = (next: boolean | ((d: boolean) => boolean)) => {
+    const value = typeof next === "function" ? next(drawerNow.current) : next;
+    if (drawerChange.current) drawerChange.current(value);
+    else setDrawerOwn(value);
+  };
   useLayoutEffect(() => {
     const el = root.current;
     if (!el) return;
