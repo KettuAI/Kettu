@@ -170,6 +170,14 @@ export function startDeviceHost(
         if (action.type === 'install' && request.projectPath && !action.path.startsWith('/')) {
           action.path = `${request.projectPath}/${action.path}`
         }
+        // A turn made through XCTest is invisible to the stream, which would keep drawing the
+        // device upright; a device that streams is turned through its driver instead.
+        if (
+          action.type === 'rotate' &&
+          (await devices.orient(request.deviceId, action.orientation))
+        ) {
+          return { result: { text: `Rotated to ${action.orientation.replace(/_/g, '-')}` } }
+        }
         return { result: await agent.run(request.sessionId, target, action, controller.signal) }
       } finally {
         running.delete(request.deviceId)

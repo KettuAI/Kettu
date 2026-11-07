@@ -23,6 +23,8 @@ const INPUT_ADMITTED = 0x83
 const SCREEN_CONFIG = 0x82
 const PASTE = 0x12
 const MAX_FRAME_IMAGE_BYTES = 4 * 1024 * 1024
+const ORIENT_WAIT_MS = 5_000
+const ORIENT_POLL_MS = 100
 
 const KIND_BY_TAG: Record<number, FrameKind> = {
   [FRAME_TAG.description]: 'description',
@@ -282,6 +284,17 @@ export class IosSimulatorDriver implements DeviceDriver {
       default:
         return { x, y }
     }
+  }
+
+  async orient(orientation: DeviceOrientation): Promise<boolean> {
+    if (!this.admitted) return false
+    this.post(taggedJson(FRAME_TAG.orientation, { orientation }))
+    // serve-sim sends a screen configuration once the device has turned.
+    for (let waited = 0; this.orientation !== orientation && waited < ORIENT_WAIT_MS;) {
+      await new Promise((resolve) => setTimeout(resolve, ORIENT_POLL_MS))
+      waited += ORIENT_POLL_MS
+    }
+    return this.orientation === orientation
   }
 
   private rotate(): void {
