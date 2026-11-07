@@ -89,26 +89,27 @@ const theme = EditorView.theme({
     whiteSpace: 'nowrap',
     color: 'var(--text-placeholder)',
   },
-  // The command chip as marks: the padding sits inline, so the caret still moves through it.
+  // The command chip as marks: the padding sits inline, so the caret still moves through it, and
+  // the chip is a file chip's size without growing its line.
   '.cm-chip-command': {
-    background: 'var(--bg-subtle)',
-    boxShadow: 'inset 0 0 0 var(--hairline) var(--border-subtle)',
+    position: 'relative',
+    top: '-1px',
+    background: 'var(--control-on-tint)',
+    color: 'var(--control-on)',
     borderRadius: 'var(--radius)',
     padding:
-      'calc(var(--spacing) * 0.75) calc(var(--spacing) * 1.5) calc(var(--spacing) * 0.75) calc(var(--spacing) * 1.25)',
+      'calc(var(--spacing) * 0.875) calc(var(--spacing) * 1.5) calc(var(--spacing) * 0.875) calc(var(--spacing) * 1.25)',
     margin: '0 calc(var(--spacing) * 0.25)',
-    fontFamily: 'var(--font-mono)',
-    fontVariantLigatures: 'none',
-    fontSize: 'var(--text-hint)',
+    fontSize: 'var(--text-ui)',
+    fontWeight: 'var(--font-weight-medium)',
   },
-  '.cm-chip-slash': { color: 'var(--control-on)' },
+  // A color rather than opacity, which would fade the chip's fill behind the slash too.
+  '.cm-chip-slash': { color: 'color-mix(in srgb, var(--control-on) 55%, transparent)' },
   // A selected chip shows its own fill, not the text selection behind its label.
   '.cm-chip::selection': { backgroundColor: 'transparent' },
   '.cm-chip ::selection': { backgroundColor: 'transparent' },
   // A line with chips opens up, so chips on two lines do not touch.
-  // Two rules: the theme splits a selector list at its commas.
   '.cm-line:has(.cm-chip)': { lineHeight: 'calc(var(--spacing) * 7.5)' },
-  '.cm-line:has(.cm-chip-command)': { lineHeight: 'calc(var(--spacing) * 7.5)' },
   '.cm-md-mark': { color: 'var(--text-tertiary)' },
   '.cm-md-strong': { color: 'var(--foreground)', fontWeight: 'var(--font-weight-semibold)' },
   '.cm-md-em': { fontStyle: 'italic' },

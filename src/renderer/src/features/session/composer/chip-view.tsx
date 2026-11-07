@@ -16,8 +16,8 @@ export type ChipState = 'default' | 'selected'
 
 /**
  * A chip as the composer and the thread draw it: 22 px high with 5 px corners and an icon that
- * says what it is. Only the command carries color, in its slash. `surface` is for a chip on a
- * grey bubble, which it sets off in the card's white.
+ * says what it is. Only the command carries color, the control blue, and has no icon. `surface`
+ * is for a chip on a grey bubble, which it sets off in the card's white.
  */
 export function ChipView({
   chip,
@@ -34,14 +34,16 @@ export function ChipView({
       data-chip={chip.kind}
       className={cn(
         'relative -top-px mx-px inline-flex h-5.5 max-w-65 items-center gap-1.25 rounded-lg pr-1.5 pl-1.25 align-middle text-ui leading-none whitespace-nowrap text-primary transition-[background-color,box-shadow] duration-(--duration-fast)',
-        missing
-          ? 'text-tertiary outline-1 -outline-offset-1 outline-border-strong outline-dashed'
-          : state === 'selected'
-            ? 'bg-control-on-tint shadow-[inset_0_0_0_1.5px_var(--control-on)]'
-            : cn(
-                surface ? 'bg-surface' : 'bg-subtle',
-                'shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:bg-selected hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
-              ),
+        chip.kind === 'command'
+          ? 'bg-control-on-tint font-medium text-control-on'
+          : missing
+            ? 'text-tertiary outline-1 -outline-offset-1 outline-border-strong outline-dashed'
+            : state === 'selected'
+              ? 'bg-control-on-tint shadow-[inset_0_0_0_1.5px_var(--control-on)]'
+              : cn(
+                  surface ? 'bg-surface' : 'bg-subtle',
+                  'shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] hover:bg-selected hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]',
+                ),
       )}
     >
       <ChipBody chip={chip} missing={missing} />
@@ -67,8 +69,8 @@ function SiteIcon({ url }: { url: string }) {
 function ChipBody({ chip, missing }: { chip: Chip; missing: boolean }) {
   if (chip.kind === 'command') {
     return (
-      <span className="font-mono text-hint">
-        <span className="text-control-on">/</span>
+      <span>
+        <span className="text-control-on/55">/</span>
         {chip.name}
       </span>
     )
