@@ -146,17 +146,25 @@ function OlderLoading({ sessionId }: { sessionId: string }) {
 const isSent = (item: Item): boolean =>
   item.type === 'entry' && (item.char === 'u' || item.char === 's')
 
+const isText = (item: Item): boolean => item.type === 'entry' && item.char === 'a'
+
+/** A folded line of work: a run, a group of lookups or an answered request. */
+const isRow = (item: Item): boolean =>
+  item.type === 'run' || item.type === 'group' || (item.type === 'entry' && item.char === 'r')
+
 /**
  * The thread's rhythm, as affectUI's chat screen sets it: 22 px between a message you sent and
  * what comes after it, and between turns; 14 px between the parts of a reply, its text, tool calls
- * and cards; 6 px above a reply's actions. The running turn's status sets its own room, so it can
- * take none while the reply's own label carries the turn.
+ * and cards, but 6 px between a row of work and the text beside it, since the row's own height
+ * already pads its one line; 6 px above a reply's actions. The running turn's status sets its own
+ * room, so it can take none while the reply's own label carries the turn.
  */
 function spacing(item: Item, previous: Item): string {
   if (item.type === 'status') return ''
   if (item.type === 'entry' && item.turnStart) return 'pt-[22px]'
   if (item.type === 'reply') return 'pt-1.5'
   if (isSent(previous) || (item.type === 'entry' && item.char === 's')) return 'pt-[22px]'
+  if ((isRow(item) && isText(previous)) || (isText(item) && isRow(previous))) return 'pt-1.5'
   return 'pt-3.5'
 }
 
