@@ -72,6 +72,14 @@
   border-radius: 0;
   background: none;
 }
+/* As DESK in features/shell/sheet.ts: drawn first, so the sheets' own regions over it win. */
+.kettu-frame.ui-as-app > .ui-as-main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
 /* A narrow window's sidebar is a drawer: the sheets keep the gap on their left too, the drawer
    takes the sidebar's color, and the corner controls stay over it. */
 @container ui-as (max-width: 900px) {
