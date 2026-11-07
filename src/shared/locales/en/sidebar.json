@@ -128,8 +128,7 @@
     "splitRight": "To the right",
     "splitBelow": "Below",
     "noRoom": {
-      "columns": "Three columns at most",
-      "panes": "Three panes in a column at most",
+      "panes": "Nine panes at most",
       "room": "No room in the window"
     },
     "inSplitView": "In split view",

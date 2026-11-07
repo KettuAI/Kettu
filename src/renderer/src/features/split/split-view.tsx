@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ResizableHandle,
@@ -7,24 +7,16 @@ import {
 } from '@renderer/components/ui/resizable'
 import { SHEET_PANEL } from '@renderer/features/shell/sheet'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import {
-  setColumnShares,
-  setPaneShares,
-  setVisiblePanes,
-  useViewStore,
-} from '@renderer/stores/view'
+import { setSplitShares, setVisiblePanes, useViewStore } from '@renderer/stores/view'
 import {
   allPanes,
-  MIN_COLUMN_WIDTH,
-  MIN_PANE_HEIGHT,
-  NOTHING_SHOWN,
-  findPane,
+  cornerPane,
   isSplit,
+  shownMinLength,
   visibleLayout,
-  visibleSizes,
-  type FoldedBefore,
   type Layout,
   type Pane,
+  type ShownNode,
 } from './layout'
 import { Pane as PaneFrame } from './pane'
 import { PaneContent } from './pane-content'
@@ -32,8 +24,8 @@ import { DropHint } from './session-drag'
 import { registerSplitBox } from './session-drag-model'
 
 /**
- * The main area while sessions show: the split's columns and panes, folded to the room it has,
- * with the drop hint over the room a dragged session will take.
+ * The main area while sessions show: the split's tree of panes, folded to the room it has, with
+ * the drop hint over the room a dragged session will take.
  */
 // The panes the split has drawn: one it has not, as a drop adds it, fades in.
 const drawn = new Set<string>(allPanes(useViewStore.getState().layout).map((pane) => pane.id))
@@ -61,11 +53,12 @@ export function SplitView() {
     return () => observer.disconnect()
   }, [])
 
-  // What showed last is the run kept while it still holds the focus.
-  const previous = useMemo(() => shownBefore(layout, visiblePanes), [layout, visiblePanes])
-  const folded = size ? visibleLayout(layout, size, previous) : null
-  const sizes = folded ? visibleSizes(layout, folded) : null
-  const shown = folded?.panes.join(',') ?? ''
+  // What showed last is kept, while it still fits around the focus.
+  const visible = useMemo(
+    () => (size ? visibleLayout(layout, size, visiblePanes) : null),
+    [layout, size, visiblePanes],
+  )
+  const shown = visible?.panes.join(',') ?? ''
 
   useEffect(() => {
     setVisiblePanes(shown ? shown.split(',') : [])
@@ -73,29 +66,14 @@ export function SplitView() {
 
   return (
     <div ref={box} data-split-root="" className="relative h-full min-h-0 w-full">
-      {folded && sizes && (
+      {visible && (
         <>
-          <ResizablePanelGroup
-            // Rebuilt when its columns change: a default layout is read once.
-            key={`columns:${folded.columns.map((column) => column.id).join(',')}`}
-            orientation="horizontal"
-            defaultLayout={sizes.columns}
-            onLayoutChanged={setColumnShares}
-            className="h-full min-h-0"
-            style={SHEET_PANEL}
-          >
-            {folded.columns.map((column, index) => (
-              <Column
-                key={column.id}
-                layout={layout}
-                columnId={column.id}
-                panes={column.panes}
-                sizes={sizes.panes}
-                first={index === 0}
-                split={isSplit(layout)}
-              />
-            ))}
-          </ResizablePanelGroup>
+          <Part
+            node={visible.root}
+            layout={layout}
+            split={isSplit(layout)}
+            corner={cornerPane(visible.root)}
+          />
           <DropHint />
         </>
       )}
@@ -103,67 +81,55 @@ export function SplitView() {
   )
 }
 
-function Column({
+/** A shown part of the split: a pane, or a group of parts with the desk between two to resize. */
+function Part({
+  node,
   layout,
-  columnId,
-  panes,
-  sizes,
-  first,
   split,
+  corner,
 }: {
+  node: ShownNode
   layout: Layout
-  columnId: string
-  panes: string[]
-  sizes: Record<string, number>
-  /** The first column in view, whose top pane leaves room for the traffic lights. */
-  first: boolean
   split: boolean
+  /** The pane at the top left, which leaves room for the traffic lights. */
+  corner: string
 }) {
-  const found = panes.flatMap((paneId) => {
-    const pane = findPane(layout, paneId)
-    return pane ? [pane] : []
-  })
+  if (node.kind === 'pane') {
+    return (
+      <Frame layout={layout} pane={node.pane} split={split} cornered={node.pane.id === corner} />
+    )
+  }
+  const row = node.direction === 'row'
   return (
-    <>
-      {!first && <ResizableHandle withHandle className="w-(--sheet-gap)" />}
-      <ResizablePanel
-        id={columnId}
-        minSize={`${MIN_COLUMN_WIDTH}px`}
-        style={SHEET_PANEL}
-        className="min-w-0"
-      >
-        {found.length === 1 ? (
-          <Frame layout={layout} pane={found[0]!} split={split} cornered={first} />
-        ) : (
-          // The panes of a column, with the desk between two of them to resize them.
-          <ResizablePanelGroup
-            key={`column:${columnId}:${panes.join(',')}`}
-            orientation="vertical"
-            defaultLayout={defaultsOf(panes, sizes)}
-            onLayoutChanged={(next) => setPaneShares(columnId, next)}
-            className="h-full min-h-0"
+    <ResizablePanelGroup
+      // Rebuilt when its parts change: a default layout is read once.
+      key={`split:${node.id}:${node.children.map((child) => child.slot).join(',')}`}
+      orientation={row ? 'horizontal' : 'vertical'}
+      defaultLayout={Object.fromEntries(node.children.map((child) => [child.slot, child.size]))}
+      onLayoutChanged={(sizes) => setSplitShares(node.id, sizes)}
+      className="h-full min-h-0"
+      style={SHEET_PANEL}
+    >
+      {node.children.map((child, index) => (
+        <Fragment key={child.slot}>
+          {index > 0 && (
+            <ResizableHandle
+              withHandle
+              // The handle's own height for a stacked split is set under the same variant.
+              className={row ? 'w-(--sheet-gap)' : 'aria-[orientation=horizontal]:h-(--sheet-gap)'}
+            />
+          )}
+          <ResizablePanel
+            id={child.slot}
+            minSize={`${shownMinLength(child, node.direction)}px`}
             style={SHEET_PANEL}
+            className="min-w-0"
           >
-            {found.map((pane, index) => (
-              <PanePanel key={pane.id} last={index === found.length - 1}>
-                <Frame layout={layout} pane={pane} split={split} cornered={first && index === 0} />
-              </PanePanel>
-            ))}
-          </ResizablePanelGroup>
-        )}
-      </ResizablePanel>
-    </>
-  )
-}
-
-function PanePanel({ last, children }: { last: boolean; children: ReactNode }) {
-  return (
-    <>
-      <ResizablePanel minSize={`${MIN_PANE_HEIGHT}px`} className="min-w-0" style={SHEET_PANEL}>
-        {children}
-      </ResizablePanel>
-      {!last && <ResizableHandle withHandle className="h-(--sheet-gap)" />}
-    </>
+            <Part node={child} layout={layout} split={split} corner={corner} />
+          </ResizablePanel>
+        </Fragment>
+      ))}
+    </ResizablePanelGroup>
   )
 }
 
@@ -204,25 +170,4 @@ function usePaneName(pane: Pane): string {
   )
   if (pane.view.kind === 'new') return t('newSession.title')
   return summary ? sessionTitle(summary) : t('newSession.title')
-}
-
-function defaultsOf(panes: string[], sizes: Record<string, number>): Record<string, number> {
-  const out: Record<string, number> = {}
-  for (const paneId of panes) out[paneId] = sizes[paneId] ?? 100 / panes.length
-  return out
-}
-
-/** The run shown last, from the panes in view, so the room that comes back shows them again. */
-function shownBefore(layout: Layout, visiblePanes: string[]): FoldedBefore {
-  const before: FoldedBefore = { columns: [], panes: {} }
-  if (visiblePanes.length === 0) return NOTHING_SHOWN
-  for (const column of layout.columns) {
-    const panes = column.panes
-      .map((pane) => pane.id)
-      .filter((paneId) => visiblePanes.includes(paneId))
-    if (panes.length === 0) continue
-    before.columns.push(column.id)
-    before.panes[column.id] = panes
-  }
-  return before.columns.length === 0 ? NOTHING_SHOWN : before
 }
