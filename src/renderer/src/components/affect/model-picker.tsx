@@ -1173,7 +1173,8 @@ const css = /* css */ `
 .ui-mdpc__trigger:hover, .ui-mdpc[data-open] .ui-mdpc__trigger { background: var(--ui-mdpc-wash); color: var(--ui-mdpc-ink); }
 .ui-mdpc__trigger .ui-mdpc__glyph { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .ui-mdpc__trigger .ui-mdpc__glyph > svg { width: 10px; height: 10px; }
-.ui-mdpc__name { display: grid; min-width: 0; }
+/* Kettu: the track may shrink below the gliding width, so a long name ends in an ellipsis rather than running under the effort in a narrow composer. */
+.ui-mdpc__name { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 .ui-mdpc__chevron { margin-left: -2px; color: var(--ui-mdpc-icon); transition: transform 300ms var(--ui-mdpc-ease); }
 .ui-mdpc[data-open] .ui-mdpc__chevron { transform: rotate(180deg); }
 .ui-mdpc__flag { display: grid; grid-template-columns: 0fr; margin-left: -6px; opacity: 0; color: var(--ui-mdpc-accent); transition: grid-template-columns 360ms var(--ui-mdpc-ease), margin 360ms var(--ui-mdpc-ease), opacity 220ms ease; }
