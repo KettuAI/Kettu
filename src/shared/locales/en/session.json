@@ -666,8 +666,6 @@
     "answeredOne": "Answered",
     "skipped": "Skipped",
     "secret": "Hidden",
-    "count_one": "{{count}} question",
-    "count_other": "{{count}} questions",
     "secretHint": "Hidden as you type, and not kept in the conversation",
     "hint": {
       "one": "Pick one",
@@ -680,11 +678,6 @@
     "ownAnswer": "Your own answer",
     "typing": "Type your answer",
     "separator": ", ",
-    "sendStep": "Send",
-    "send": "Send answers",
-    "back": "Back",
-    "review": "Send these answers to {{agent}}?",
-    "reviewHint": "Click an answer to change it",
     "of": "{{agent}} · question {{number}} of {{count}}",
     "otherTell": "Something else? Tell {{agent}}"
   },
