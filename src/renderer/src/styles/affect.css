@@ -977,10 +977,59 @@
 }
 
 /* ---------- panes: Terminal ---------- */
+/* The terminal lies on the pane's sheet with no box of its own: a hairline from edge to edge
+   under the head, tabs marked by a line on it, and the screen out to the sheet's edges. */
+.kp-pane[data-pane='terminal'] {
+  padding-top: 6px;
+}
+.kp-pane[data-pane='terminal'] > .kp-head {
+  position: relative;
+  height: 34px;
+}
+/* Out past the pane's padding, which is 10px 10px 10px 12px. */
+.kp-pane[data-pane='terminal'] > .kp-head::after {
+  content: '';
+  position: absolute;
+  inset: auto -10px 0 -12px;
+  height: var(--hairline);
+  background: var(--border-subtle);
+  pointer-events: none;
+}
+.kp-pane[data-pane='terminal'] .kp-head__main {
+  height: 100%;
+}
+.kp-pane[data-pane='terminal'] .kp-head__tabs {
+  align-self: stretch;
+  align-items: stretch;
+}
+.kp-pane[data-pane='terminal'] .kp-tab {
+  height: auto;
+}
+.kp-pane[data-pane='terminal'] .kp-tab:is(:hover, [data-selected]) {
+  background: none;
+}
+.kp-pane[data-pane='terminal'] .kp-tab[data-selected] {
+  font-weight: 500;
+}
+.kp-pane[data-pane='terminal'] .kp-tab[data-selected]::after {
+  content: '';
+  position: absolute;
+  inset: auto 8px 0;
+  z-index: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-primary);
+}
+.kp-pane[data-pane='terminal'] .kp-tab__x {
+  top: calc(50% - 8px);
+}
+.kp-pane[data-pane='terminal'] > .kp-body {
+  margin: 0 -10px -10px -12px;
+  padding: 0;
+}
 .kp-tview {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   height: 100%;
   min-width: 0;
   min-height: 0;
@@ -991,11 +1040,9 @@
   align-items: center;
   gap: 8px;
   min-height: 32px;
-  padding: 0 4px 0 10px;
-  border-radius: 9px;
-  background: var(--bg-hover);
+  padding: 8px 10px 0 16px;
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   container-type: inline-size;
 }
 .kp-towner__text {
@@ -1008,7 +1055,7 @@
 .kp-towner__dir {
   margin-left: 8px;
   font-size: 11.5px;
-  color: var(--text-disabled);
+  color: var(--text-tertiary);
 }
 @container (inline-size < 320px) {
   .kp-towner__url {
@@ -1026,22 +1073,17 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border-radius: 10px;
   background: var(--terminal-background);
-  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
   transition: opacity 140ms ease;
 }
 .kp-tview[data-split]:not([data-focused]) .kp-tbox {
   opacity: 0.72;
 }
-.kp-tview[data-split][data-focused] .kp-tbox {
-  box-shadow: inset 0 0 0 1px var(--border-default);
-}
 .kp-tscreen {
   position: relative;
   flex: 1;
   min-height: 0;
-  padding: 12px 14px;
+  padding: 12px 16px;
 }
 .kp-tscreen__xterm {
   width: 100%;
@@ -1053,7 +1095,7 @@
   align-items: center;
   gap: 8px;
   height: 34px;
-  padding: 0 6px 0 14px;
+  padding: 0 6px 0 16px;
   border-top: var(--hairline) solid var(--border-subtle);
   font-size: 12px;
   color: var(--text-tertiary);
@@ -1067,7 +1109,7 @@
   align-items: flex-start;
   gap: 7px;
   margin: 0;
-  padding: 8px 12px 9px;
+  padding: 9px 16px;
   border-top: var(--hairline) solid var(--border-subtle);
   font-size: 12px;
   line-height: 17px;
@@ -1111,8 +1153,10 @@
   color: var(--text-disabled);
 }
 .kp-split-handle {
-  width: 8px;
-  background: transparent;
+  background: var(--border-subtle);
+}
+.kp-split-handle:is([data-separator='hover'], [data-separator='active']) {
+  background: var(--border-strong);
 }
 @keyframes kp-rise {
   from {

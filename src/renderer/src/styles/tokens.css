@@ -312,10 +312,8 @@
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 
-  /* panes: the side panel's terminal, browser, devices and files. The terminal's screen and its
-     prompt colors above, the fox that marks an agent at work there, the running and changed
-     marks. */
-  --terminal-screen: #fafafa;
+  /* panes: the side panel's terminal, browser, devices and files. The terminal's prompt colors
+     above, the fox that marks an agent at work there, the running and changed marks. */
   --terminal-selection-tint: rgb(242 88 27 / 22%);
   --pane-fox: var(--send);
   /* An icon at rest in a pane's head and the session's pane buttons, as affectUI's shell draws it. */
@@ -672,7 +670,6 @@
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
 
     /* panes */
-    --terminal-screen: #1c1c1f;
     --terminal-selection-tint: rgb(242 88 27 / 22%);
     --pane-fox: var(--send);
     --pane-muted: rgb(255 255 255 / 45%);
@@ -998,7 +995,6 @@
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
 
   /* panes */
-  --terminal-screen: #1c1c1f;
   --terminal-selection-tint: rgb(242 88 27 / 22%);
   --pane-fox: var(--send);
   --pane-muted: rgb(255 255 255 / 45%);
@@ -1137,7 +1133,6 @@
     0 0 0 0.5px var(--border-default),
     0 6px 16px -6px light-dark(rgb(0 0 0 / 20%), rgb(0 0 0 / 60%));
 
-  --terminal-screen: var(--bg-code-block);
   --terminal-selection-tint: var(--selection);
   --pane-muted: var(--icon-default);
   --pane-live: var(--success);
@@ -1349,10 +1344,11 @@
   /* The tile after the themes in Settings › Appearance, which offers more: faint diagonal lines. */
   --tile-hatch: repeating-linear-gradient(135deg, transparent 0 6px, var(--bg-hover) 6px 7px);
 
-  /* panes: the terminal's screen, output in the primary ink with the fox's selection. */
-  --terminal-background: var(--terminal-screen);
+  /* panes: the terminal's screen, on the pane's sheet, in the primary ink with the fox's cursor
+     and selection. */
+  --terminal-background: var(--bg-app);
   --terminal-foreground: var(--text-primary);
-  --terminal-cursor: var(--text-primary);
+  --terminal-cursor: var(--pane-fox);
   --terminal-selection: var(--terminal-selection-tint);
   /* The glow of a page or a device an agent drives, and its tap. */
   --pane-drive-glow:

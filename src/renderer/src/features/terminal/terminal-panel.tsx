@@ -141,13 +141,6 @@ export function TerminalPanel({
               </span>
             )}
             <PanelButton
-              label={t('panel.newTerminal')}
-              shortcut={formatShortcut('Ctrl+Shift+`')}
-              onClick={newTerminal}
-            >
-              <PaneIcon icon={PlusSignIcon} />
-            </PanelButton>
-            <PanelButton
               label={split ? t('panel.unsplit') : t('panel.split')}
               pressed={split}
               disabled={creating || (!split && !active)}
@@ -190,6 +183,13 @@ export function TerminalPanel({
             )}
           </div>
         </DragDropProvider>
+        <PanelButton
+          label={t('panel.newTerminal')}
+          shortcut={formatShortcut('Ctrl+Shift+`')}
+          onClick={newTerminal}
+        >
+          <PaneIcon icon={PlusSignIcon} />
+        </PanelButton>
       </PaneHead>
       <div className="kp-body">
         {active ? (
