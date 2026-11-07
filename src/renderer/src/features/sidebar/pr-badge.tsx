@@ -9,7 +9,7 @@ import { prStateText } from '@renderer/features/git/pr-text'
 import { shortAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { loadReference, useGitStore } from '@renderer/stores/git'
+import { loadReference, useGitStore, watchReference } from '@renderer/stores/git'
 import { sessionPullRequests } from './session-prs'
 
 // The most that the list shows; the rest are counted under it.
@@ -57,6 +57,15 @@ export function PrBadge({
   const prs = sessionPullRequests(summary)
   const label = useBadgeLabel(prs)
   const self = useRef<HTMLSpanElement>(null)
+  // The host keeps the ones that can still change current while the row is shown.
+  const openUrls = prs
+    .filter((pr) => pr.state === null || pr.state === 'open' || pr.state === 'draft')
+    .map((pr) => pr.url)
+    .join('\n')
+  useEffect(() => {
+    const releases = openUrls === '' ? [] : openUrls.split('\n').map(watchReference)
+    return () => releases.forEach((release) => release())
+  }, [openUrls])
   // Beside the sidebar, as the row's own card is, so it hides none of the rows.
   const row = () => self.current?.closest('[data-sidebar-row]') ?? self.current
   if (prs.length === 0) return null

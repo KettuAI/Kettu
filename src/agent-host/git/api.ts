@@ -91,6 +91,13 @@ export interface GitServiceApi {
   issue(url: string): Promise<IssueLookup>
   /** What is known of a session row's pull request without asking gh; asks in the background. */
   knownPullRequest(url: string): { state: PullRequestState; failing: boolean } | null
+  /**
+   * Replaces the pull request and issue URLs a subscriber shows. The open ones are read again
+   * while watched, and a change is announced to onReferenceChanged.
+   */
+  watchReferences(subscriberId: string, urls: readonly string[]): void
+  /** The subscribers that watch a reference URL. */
+  referenceWatchers(url: string): string[]
   /** The avatar URL of a chip's author, null when GitHub's avatar host has none; `login` matches GITHUB_LOGIN. */
   avatarUrl(login: string): Promise<string | null>
   /** The current branch's pull request, from the last `gh pr view`. */
@@ -116,8 +123,8 @@ export interface GitServiceApi {
   onChanged(listener: (status: GitStatus) => void): () => void
   onPullRequest(listener: (projectPath: string, pr: PullRequest | null) => void): () => void
   onBranchPullRequests(listener: (projectPath: string) => void): () => void
-  /** A pull request knownPullRequest did not know has been read. */
-  onPullRequestLoaded(listener: (url: string) => void): () => void
+  /** A pull request or issue read changed what is known of it, or was read for the first time. */
+  onReferenceChanged(listener: (url: string, found: IssueLookup) => void): () => void
   onSessionEvents(listener: (sessionId: string, events: GitEventDraft[]) => void): () => void
   onTools(listener: (tools: GitTools) => void): () => void
   dispose(): Promise<void>

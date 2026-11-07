@@ -594,4 +594,25 @@ describe('computer use requests', () => {
     rejects(() => posix['git.issue']({ url: 'https://github.com/a/b/issues/0' }))
     rejects(() => posix['git.issue']({ url: `${url}\n` }))
   })
+
+  it('watches only github.com pull request and issue addresses, a bounded number', () => {
+    const pull = 'https://github.com/KettuAI/Kettu/pull/546'
+    const issue = 'https://github.com/KettuAI/Kettu/issues/546'
+    expect(posix['git.watchReferences']({ urls: [pull, issue] })).toEqual({ urls: [pull, issue] })
+    expect(posix['git.watchReferences']({ urls: [] })).toEqual({ urls: [] })
+    rejects(() => posix['git.watchReferences']({}))
+    rejects(() => posix['git.watchReferences']({ urls: pull }))
+    rejects(() => posix['git.watchReferences']({ urls: [pull, 7] }))
+    rejects(() => posix['git.watchReferences']({ urls: ['https://github.com/a/b/commit/1'] }))
+    rejects(() => posix['git.watchReferences']({ urls: ['http://github.com/a/b/pull/1'] }))
+    rejects(() => posix['git.watchReferences']({ urls: ['https://github.example.com/a/b/pull/1'] }))
+    rejects(() =>
+      posix['git.watchReferences']({ urls: ['https://github.com/a/b/pull/1?x=--repo'] }),
+    )
+    rejects(() => posix['git.watchReferences']({ urls: [`${pull}\n`] }))
+    rejects(() => posix['git.watchReferences']({ urls: Array.from({ length: 101 }, () => pull) }))
+    expect(
+      posix['git.watchReferences']({ urls: Array.from({ length: 100 }, () => pull) }).urls,
+    ).toHaveLength(100)
+  })
 })

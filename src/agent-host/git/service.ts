@@ -44,6 +44,7 @@ import {
   push,
   switchBranch,
 } from './operations'
+import { createReferenceWatcher, REFERENCE_REFRESH_MS } from './references'
 import { createRepoCache, emptyStatus, readStatus, type RepoCache } from './status'
 import { watchGitDir, type GitDirWatch, type WatchFn } from './watch'
 
@@ -151,6 +152,12 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+type KnownPullRequest = { state: PullRequestState; failing: boolean }
+
+function isLivePullRequest(pr: PullRequest): boolean {
+  return pr.state === 'open' || pr.state === 'draft'
+}
+
 export function createGitService(
   deps: GitServiceDeps,
   options: GitServiceOptions = {},
@@ -174,6 +181,26 @@ export function createGitService(
   // Kept for the run: an avatar URL changes only when its user uploads a new picture.
   const avatarUrls = new Map<string, string | null>()
   const avatarUrlLoads = new Map<string, Promise<string | null>>()
+  const references = createReferenceWatcher({
+    now,
+    cached(url) {
+      if (GITHUB_PULL_REQUEST_URL.test(url)) {
+        const entry = pullRequestCache.get(url)
+        return entry && { at: entry.at, live: isLivePullRequest(entry.value) }
+      }
+      const entry = issueCache.get(url)
+      if (!entry) return undefined
+      const found = entry.value
+      return {
+        at: entry.at,
+        live:
+          found.kind === 'pull'
+            ? isLivePullRequest(found.pullRequest)
+            : found.issue.state === 'open',
+      }
+    },
+    read: (url) => (GITHUB_PULL_REQUEST_URL.test(url) ? api.pullRequest(url) : api.issue(url)),
+  })
   let disposed = false
   let backgroundFetch: ReturnType<typeof setInterval> | null = null
   let backgroundFetching = false
@@ -183,7 +210,7 @@ export function createGitService(
   const changed = createEmitter<[GitStatus]>(reportListenerError)
   const pullRequestChanged = createEmitter<[string, PullRequest | null]>(reportListenerError)
   const branchPullRequestsChanged = createEmitter<[string]>(reportListenerError)
-  const pullRequestLoaded = createEmitter<[string]>(reportListenerError)
+  const referenceChanged = createEmitter<[string, IssueLookup]>(reportListenerError)
   const sessionEvents = createEmitter<[string, GitEventDraft[]]>(reportListenerError)
   const toolsChanged = createEmitter<[GitTools]>(reportListenerError)
 
@@ -514,11 +541,11 @@ export function createGitService(
     }
     const outcome = await viewPullRequestByUrl(exec, url, homedir())
     if (!outcome.ok) throw new Error(outcome.message)
+    const previous = pullRequestCache.get(url)?.value
     pullRequestCache.set(url, { at: now(), value: outcome.value })
-    while (pullRequestCache.size > PULL_REQUEST_CACHE_SIZE) {
-      const oldest = pullRequestCache.keys().next().value
-      if (oldest === undefined) break
-      pullRequestCache.delete(oldest)
+    trimCache(pullRequestCache)
+    if (!previous || !sameJson(previous, outcome.value)) {
+      referenceChanged.emit(url, { kind: 'pull', pullRequest: outcome.value })
     }
     return outcome.value
   }
@@ -533,47 +560,62 @@ export function createGitService(
       'pullRequestUrl' in outcome.value
         ? { kind: 'pull', pullRequest: await api.pullRequest(outcome.value.pullRequestUrl) }
         : { kind: 'issue', issue: outcome.value }
+    const previous = issueCache.get(url)?.value
     issueCache.set(url, { at: now(), value })
-    while (issueCache.size > PULL_REQUEST_CACHE_SIZE) {
-      const oldest = issueCache.keys().next().value
-      if (oldest === undefined) break
-      issueCache.delete(oldest)
-    }
+    trimCache(issueCache)
+    if (!previous || !sameJson(previous, value)) referenceChanged.emit(url, value)
     return value
   }
 
-  function knownPullRequest(url: string): { state: PullRequestState; failing: boolean } | null {
-    const of = (pr: PullRequest): { state: PullRequestState; failing: boolean } => ({
+  function trimCache(cache: Map<string, unknown>): void {
+    while (cache.size > PULL_REQUEST_CACHE_SIZE) {
+      const oldest = cache.keys().next().value
+      if (oldest === undefined) break
+      cache.delete(oldest)
+    }
+  }
+
+  function knownPullRequest(url: string): KnownPullRequest | null {
+    const of = (pr: PullRequest): KnownPullRequest => ({
       state: pr.state,
-      failing: (pr.state === 'open' || pr.state === 'draft') && pr.checks.state === 'failing',
+      failing: isLivePullRequest(pr) && pr.checks.state === 'failing',
     })
+    // The newest answer wins; on a tie, the branch's own, then the cache, then the list.
+    const answers: { at: number; known: KnownPullRequest }[] = []
     for (const state of projects.values()) {
       const current = state.pullRequest?.value
-      if (current?.url === url) return of(current)
+      if (current?.url === url) answers.push({ at: state.lastPollAt, known: of(current) })
     }
     const cached = pullRequestCache.get(url)
-    if (cached) return of(cached.value)
+    if (cached) answers.push({ at: cached.at, known: of(cached.value) })
     for (const state of projects.values()) {
       for (const pr of state.branchPullRequests.values()) {
-        if (pr.url === url) return { state: pr.state, failing: pr.failing }
+        if (pr.url === url) {
+          answers.push({ at: state.lastPollAt, known: { state: pr.state, failing: pr.failing } })
+        }
       }
     }
+    const newest = answers.reduce<(typeof answers)[number] | null>(
+      (best, answer) => (!best || answer.at > best.at ? answer : best),
+      null,
+    )
+    const stale =
+      newest !== null &&
+      (newest.known.state === 'open' || newest.known.state === 'draft') &&
+      now() - newest.at >= REFERENCE_REFRESH_MS
+    if (newest !== null && !stale) return newest.known
     const missed = unreadablePullRequests.get(url)
     if (
-      disposed ||
-      pullRequestLoads.has(url) ||
-      (missed !== undefined && now() - missed < UNREADABLE_RETRY_MS)
+      !disposed &&
+      !pullRequestLoads.has(url) &&
+      (missed === undefined || now() - missed >= UNREADABLE_RETRY_MS)
     ) {
-      return null
+      api.pullRequest(url).then(
+        () => unreadablePullRequests.delete(url),
+        () => unreadablePullRequests.set(url, now()),
+      )
     }
-    api.pullRequest(url).then(
-      () => {
-        unreadablePullRequests.delete(url)
-        pullRequestLoaded.emit(url)
-      },
-      () => unreadablePullRequests.set(url, now()),
-    )
-    return null
+    return newest?.known ?? null
   }
 
   async function loadAvatarUrl(login: string): Promise<string | null> {
@@ -854,7 +896,18 @@ export function createGitService(
       if (state.retainers.size === 0) stopLive(state)
     },
 
+    watchReferences(subscriberId, urls) {
+      if (disposed) return
+      references.watch(
+        subscriberId,
+        urls.filter((url) => GITHUB_PULL_REQUEST_URL.test(url) || GITHUB_ISSUE_URL.test(url)),
+      )
+    },
+
+    referenceWatchers: references.watchers,
+
     releaseAll(subscriberId) {
+      references.release(subscriberId)
       for (const state of projects.values()) {
         if (state.retainers.delete(subscriberId) && state.retainers.size === 0) stopLive(state)
       }
@@ -1159,12 +1212,13 @@ export function createGitService(
     onChanged: changed.on,
     onPullRequest: pullRequestChanged.on,
     onBranchPullRequests: branchPullRequestsChanged.on,
-    onPullRequestLoaded: pullRequestLoaded.on,
+    onReferenceChanged: referenceChanged.on,
     onSessionEvents: sessionEvents.on,
     onTools: toolsChanged.on,
 
     async dispose() {
       disposed = true
+      references.stop()
       if (backgroundFetch !== null) clearInterval(backgroundFetch)
       backgroundFetch = null
       for (const state of projects.values()) {
