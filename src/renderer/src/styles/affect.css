@@ -4180,10 +4180,20 @@
 .kettu-ctx__window .ui-cwc__item {
   margin-right: 0;
 }
+/* Denser rows than affectUI's 32px and items than its 28px; a touch screen keeps its own. */
+@media (pointer: fine) {
+  .kettu-ctx__window :is(.ui-cwc__row, .ui-cwc__main) {
+    min-height: 28px;
+    height: 28px;
+  }
+  .kettu-ctx__window .ui-cwc__item {
+    height: 24px;
+  }
+}
 /* Nine rows at most: an open list scrolls inside them instead of growing the card. The inline
    padding keeps the rows' own -8px margins inside the scroller. */
 .kettu-ctx__window .ui-cwc__parts {
-  max-height: calc(9 * 32px);
+  max-height: calc(9 * 28px);
   margin-inline: -8px;
   padding-inline: 8px;
   overflow-y: auto;
