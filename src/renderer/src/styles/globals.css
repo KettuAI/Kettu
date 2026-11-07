@@ -413,9 +413,14 @@
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
   --zoom: 1;
   --traffic-lights: calc(52px / var(--zoom));
-  /* A top bar in the window's top left corner starts clear of the traffic lights, from the edge
-     of its sheet. */
-  --corner-inset: calc(36px - var(--sheet-gap) + var(--traffic-lights));
+  /* The space between the traffic lights and the corner's controls. */
+  --corner-gap: 16px;
+  /* A top bar in the window's top left corner starts where the corner's controls do, from the
+     edge of its sheet. */
+  --corner-inset: calc(20px + var(--corner-gap) - var(--sheet-gap) + var(--traffic-lights));
+  /* What such a bar keeps clear for the controls: the sidebar toggle, 8 px, Back and Forward 2 px
+     apart, 28 px each, then 16 px before its own content. */
+  --corner-controls: calc(3 * 28px + 8px + 2px + 16px);
   --scroll-fade-size: 28px;
   /* Windows only, where the app draws its scrollbars: a 4 px thumb in a 10 px gutter. */
   --scrollbar-size: 10px;

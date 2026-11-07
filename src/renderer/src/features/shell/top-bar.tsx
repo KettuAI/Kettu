@@ -98,8 +98,7 @@ export function CornerDragHole() {
 export function CornerControlsSpace({ className }: { className?: string; divided?: boolean }) {
   return (
     <div aria-hidden className={cn('flex shrink-0 items-center', className)}>
-      {/* The three 28 px buttons with their 2 px gaps, then the 8 px before the head's content. */}
-      <span className="h-7 w-24 shrink-0" />
+      <span className="h-7 w-(--corner-controls) shrink-0" />
     </div>
   )
 }

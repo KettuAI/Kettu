@@ -139,9 +139,14 @@
   display: none;
 }
 /* The corner sits on the frame, not the screen, and leaves the traffic lights their room when the
-   window draws its own. */
+   window draws its own. Its controls keep clear of the lights, and the sidebar toggle stands apart
+   from Back and Forward, which go together. */
 .kettu-frame .ui-as-corner {
   position: absolute;
+  gap: var(--corner-gap);
+}
+.ui-as-corner__tools > [data-sidebar-toggle] {
+  margin-right: 6px;
 }
 .ui-as-corner[data-lights='window'] .ui-as-lights {
   width: var(--traffic-lights);
