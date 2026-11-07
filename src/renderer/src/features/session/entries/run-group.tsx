@@ -20,6 +20,7 @@ import { RowThumbs } from './row-thumbs'
 import { StepCard } from './tool-call'
 import { runPictures, stepFacts, useToolCallLabels } from './tool-call-model'
 import { cachedStats, useDiffStats } from './use-diff-stats'
+import { useOpenedOnce } from './use-opened'
 
 interface RunGroupProps {
   sessionId: string
@@ -68,7 +69,8 @@ export const RunGroup = memo(function RunGroup({
   )
   useDiffStats(diffs)
   const pictures = useMemo(() => runPictures(entries), [entries])
-  const cards = shown.map((entry) => {
+  const [opened, onOpenChange] = useOpenedOnce()
+  const card = (entry: ThreadEntry) => {
     const facts = stepFacts(sessionId, entry)
     if (!facts) return null
     const { glyph, ...rest } = facts
@@ -83,9 +85,9 @@ export const RunGroup = memo(function RunGroup({
         labels={labels}
       />
     )
-  })
+  }
 
-  if (cards.length === 1) return <div className={cn('min-w-0', animation)}>{cards[0]}</div>
+  if (shown.length === 1) return <div className={cn('min-w-0', animation)}>{card(shown[0]!)}</div>
 
   const steps: RunStep[] = []
   for (const entry of shown) {
@@ -147,8 +149,9 @@ export const RunGroup = memo(function RunGroup({
       trail={
         pictures.length > 0 ? <RowThumbs sessionId={sessionId} pictures={pictures} /> : undefined
       }
+      onOpenChange={onOpenChange}
     >
-      {cards}
+      {opened && shown.map(card)}
     </ToolCallGroup>
   )
 }, sameRun)
