@@ -25,7 +25,7 @@ export const MODE_GLYPH: Record<ModeLook, IconSvgElement> = {
 const LOOKS: Record<string, ModeLook> = {
   default: 'asks',
   'read-only': 'asks',
-  'workspace-write': 'asks',
+  'workspace-write': 'edits',
   acceptEdits: 'edits',
   plan: 'plan',
   auto: 'auto',

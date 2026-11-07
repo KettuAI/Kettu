@@ -320,19 +320,19 @@
     "mode": {
       "read-only": {
         "name": "只读",
-        "description": "修改文件和访问网络都要先授权"
+        "description": "修改文件、访问网络前需授权"
       },
       "workspace-write": {
         "name": "工作区访问",
-        "description": "可以修改工作区的文件；写工作区以外或访问网络前先问"
+        "description": "可改工作区；改外部文件、联网需授权"
       },
       "agent": {
         "name": "自动审查",
-        "description": "只在操作可能不安全时才问"
+        "description": "仅在操作可能不安全时询问"
       },
       "agent-full-access": {
         "name": "完全访问",
-        "description": "不受限制地访问网络和电脑上的任何文件"
+        "description": "访问所有文件和网络，无需授权"
       }
     },
     "collaboration": {
