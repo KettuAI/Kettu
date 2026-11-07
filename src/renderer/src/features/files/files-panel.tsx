@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ArrowRight01Icon,
   CodeIcon,
-  File01Icon,
   Folder01Icon,
-  FolderOpenIcon,
   Search01Icon,
   SidebarLeftIcon,
 } from '@hugeicons/core-free-icons'
@@ -50,6 +48,7 @@ import { useFileChanges, type FileChanges, type ProjectChange } from './changes'
 import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
 import { FileTabs } from './file-tabs'
+import { FileTypeIcon } from './file-type-icon'
 import { UnsavedPrompt } from './unsaved-prompt'
 import {
   filterPaths,
@@ -182,6 +181,17 @@ export default function FilesPanel({
           </>
         }
       >
+        {!bare && (
+          <PanelButton
+            label={treeShown ? t('panel.hideTree') : t('panel.showTree')}
+            pressed={treeShown}
+            onClick={() =>
+              tree.current?.isCollapsed() ? tree.current.expand() : tree.current?.collapse()
+            }
+          >
+            <PaneIcon icon={SidebarLeftIcon} />
+          </PanelButton>
+        )}
         {searching ? (
           <label className="kp-find">
             <PaneIcon icon={Search01Icon} size={14} />
@@ -255,26 +265,19 @@ export default function FilesPanel({
             <ResizableHandle className="kp-resizer kp-files-handle" />
             <ResizablePanel id="files-preview" minSize="200px" className="min-w-0">
               <section className="kp-doc" aria-label={t('tabs.label')}>
-                <div className="kp-doc__tabs">
-                  <PanelButton
-                    label={treeShown ? t('panel.hideTree') : t('panel.showTree')}
-                    pressed={treeShown}
-                    onClick={() =>
-                      tree.current?.isCollapsed() ? tree.current.expand() : tree.current?.collapse()
-                    }
-                  >
-                    <PaneIcon icon={SidebarLeftIcon} />
-                  </PanelButton>
-                  <FileTabs
-                    projectPath={projectPath}
-                    files={tabs?.files ?? []}
-                    active={shownTab}
-                    onSelect={(path) => {
-                      if (path !== shownTab) closeDiff(projectPath)
-                      activateTab(projectPath, path)
-                    }}
-                  />
-                </div>
+                {!!tabs?.files.length && (
+                  <div className="kp-doc__tabs">
+                    <FileTabs
+                      projectPath={projectPath}
+                      files={tabs.files}
+                      active={shownTab}
+                      onSelect={(path) => {
+                        if (path !== shownTab) closeDiff(projectPath)
+                        activateTab(projectPath, path)
+                      }}
+                    />
+                  </div>
+                )}
                 {diff ? (
                   <DiffPreview projectPath={projectPath} diff={diff} />
                 ) : (
@@ -388,7 +391,7 @@ function ChangeRow({
       onClick={onOpen}
       onDoubleClick={change.file.status === 'deleted' ? undefined : onKeep}
     >
-      <PaneIcon icon={File01Icon} size={14} className="text-disabled" />
+      <FileTypeIcon path={change.path} className="size-4" />
       <span className="kp-node__name">
         <span>{nameOf(change.path)}</span>
         {folder && <small>{folder}</small>}
@@ -556,11 +559,7 @@ function Tree({
             }
             onDoubleClick={row.folder ? undefined : () => openFile(projectPath, row.path)}
           >
-            <PaneIcon
-              icon={row.folder ? (isOpen ? FolderOpenIcon : Folder01Icon) : File01Icon}
-              size={14}
-              className="text-disabled"
-            />
+            <FileTypeIcon path={row.path} folder={row.folder} open={isOpen} className="size-4" />
             <span className="kp-node__name">
               <span>{nameOf(row.path)}</span>
             </span>
@@ -630,7 +629,7 @@ function FileRow({
       onClick={() => openFile(projectPath, path, null, PREVIEW)}
       onDoubleClick={() => openFile(projectPath, path)}
     >
-      <PaneIcon icon={File01Icon} size={14} className="text-disabled" />
+      <FileTypeIcon path={path} className="size-4" />
       <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
         <span className="max-w-full shrink-0 truncate text-primary">
           {[...path.slice(nameStart)].map((char, i) =>
@@ -705,7 +704,7 @@ function SearchResults({ projectPath, query }: { projectPath: string; query: str
           if (row.kind === 'file') {
             return (
               <div key={`f:${row.path}`} title={row.path} className="kp-node__group">
-                <PaneIcon icon={File01Icon} size={14} className="text-disabled" />
+                <FileTypeIcon path={row.path} className="size-4" />
                 <span className="truncate">{row.path}</span>
               </div>
             )

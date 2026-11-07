@@ -1,10 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
-import {
-  File01Icon,
-  FileNotFoundIcon,
-  FloppyDiskIcon,
-  SourceCodeIcon,
-} from '@hugeicons/core-free-icons'
+import { File01Icon, FileNotFoundIcon, FloppyDiskIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
 import type { MediaGrant } from '@shared/media'
@@ -40,7 +35,7 @@ import {
   type OpenFile,
 } from '@renderer/stores/files'
 import { ChangeBadge } from './change-badge'
-import { DiffFileToggle, PathCopy } from './file-header'
+import { DiffFileToggle, PathCopy, PreviewEditToggle } from './file-header'
 import { nameOf } from './paths'
 
 const CodeEditor = lazy(() => import('./code-editor'))
@@ -121,26 +116,20 @@ export function FilePreview({
             <DiffFileToggle value="file" onChange={(next) => next === 'diff' && onShowDiff()} />
           )}
           {markdown && (
-            <PanelButton
-              label={rendered(file, source) ? t('preview.showSource') : t('preview.showRendered')}
-              pressed={!rendered(file, source)}
-              onClick={() =>
-                rendered(file, source)
+            <PreviewEditToggle
+              value={rendered(file, source) ? 'preview' : 'edit'}
+              onChange={(next) =>
+                next === 'edit'
                   ? useFilesStore.setState({ markdownSource: true })
                   : showMarkdownRendered(projectPath, file.path)
               }
-            >
-              <PaneIcon icon={SourceCodeIcon} />
-            </PanelButton>
+            />
           )}
           {isSvgFile(file.path) && file.content && (
-            <PanelButton
-              label={svgSource ? t('preview.showRendered') : t('preview.showSource')}
-              pressed={svgSource}
-              onClick={() => showSvgSource(!svgSource)}
-            >
-              <PaneIcon icon={SourceCodeIcon} />
-            </PanelButton>
+            <PreviewEditToggle
+              value={svgSource ? 'edit' : 'preview'}
+              onChange={(next) => showSvgSource(next === 'edit')}
+            />
           )}
         </span>
       </div>

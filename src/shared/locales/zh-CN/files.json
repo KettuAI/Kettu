@@ -38,8 +38,9 @@
   "preview": {
     "emptyTitle": "打开的文件会显示在这里",
     "emptyDescription": "在文件树中选择文件，或点击对话中的文件路径。",
-    "showSource": "查看源码",
-    "showRendered": "查看预览",
+    "view": "文件显示方式",
+    "preview": "预览",
+    "edit": "编辑",
     "copyPath": "复制路径",
     "openFailed": "无法打开此文件",
     "binaryTitle": "二进制文件",

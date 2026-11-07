@@ -1,14 +1,13 @@
 import { memo, useMemo } from 'react'
-import { File01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/ui/button'
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@renderer/components/ui/collapsible'
+import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { relativePath } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import { openDiff } from '@renderer/stores/files'
@@ -114,7 +113,7 @@ function ChangeRow({ change, projectPath }: { change: Change; projectPath: strin
   return (
     <Collapsible>
       <CollapsibleTrigger className="ks-file focus-ring" title={shown}>
-        <Icon icon={File01Icon} size={14} />
+        <FileTypeIcon path={change.path} className="size-4" />
         <span className="ks-file__name">
           <span className="ks-file__dir">{shown.slice(0, cut)}</span>
           {shown.slice(cut)}

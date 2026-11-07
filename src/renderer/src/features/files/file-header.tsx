@@ -31,6 +31,30 @@ export function DiffFileToggle({
   )
 }
 
+/** Between a Markdown or SVG file drawn as it shows and its text in the editor. */
+export function PreviewEditToggle({
+  value,
+  onChange,
+}: {
+  value: 'preview' | 'edit'
+  onChange: (value: 'preview' | 'edit') => void
+}) {
+  const { t } = useTranslation('files')
+  return (
+    <SegmentedControl
+      aria-label={t('preview.view')}
+      variant="tray"
+      size="md"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: 'preview', label: t('preview.preview') },
+        { value: 'edit', label: t('preview.edit') },
+      ]}
+    />
+  )
+}
+
 /** A file's path in a bar, which copies itself when clicked; a long one keeps its end in view. */
 export function PathCopy({ path, shown = path }: { path: string; shown?: string }) {
   const { t } = useTranslation(['files', 'common'])

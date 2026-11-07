@@ -39,8 +39,9 @@
   "preview": {
     "emptyTitle": "Open files appear here",
     "emptyDescription": "Pick a file in the tree, or click a file path in the conversation.",
-    "showSource": "Show source",
-    "showRendered": "Show preview",
+    "view": "Show the file as",
+    "preview": "Preview",
+    "edit": "Edit",
     "copyPath": "Copy path",
     "openFailed": "Couldn't open this file",
     "binaryTitle": "Binary file",

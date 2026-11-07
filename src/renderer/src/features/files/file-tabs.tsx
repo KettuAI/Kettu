@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { tabSensors } from '@renderer/components/tab-sensors'
 import { PaneTabClose } from '@renderer/features/shell/panel-button'
 import { closeFile, keepTab, moveTab, type OpenFile } from '@renderer/stores/files'
+import { FileTypeIcon } from './file-type-icon'
 import { folderOf, nameOf } from './paths'
 
 /**
@@ -103,6 +104,7 @@ function FileTab({
         onAuxClick={(event) => event.button === 1 && closeFile(projectPath, file.path)}
         className="kp-tab__btn"
       >
+        <FileTypeIcon path={file.path} className="size-3.5 shrink-0" />
         <span className="kp-tab__name">
           {name}
           {folder && <span className="kp-tab__note"> {folder}</span>}
