@@ -52,10 +52,10 @@ describe('mapContextUsage', () => {
 
   it('names memory files from the session folder, then the home folder', () => {
     expect(
-      names(['/work/app/CLAUDE.md', '/work/app/design/AGENTS.md', '/home/me/.claude/CLAUDE.md']),
+      names(['/work/app/CLAUDE.md', '/work/app/docs/AGENTS.md', '/home/me/.claude/CLAUDE.md']),
     ).toEqual([
       { name: 'CLAUDE.md', detail: null, tokens: '300' },
-      { name: 'design/AGENTS.md', detail: null, tokens: '300' },
+      { name: 'docs/AGENTS.md', detail: null, tokens: '300' },
       { name: '~/.claude/CLAUDE.md', detail: null, tokens: '300' },
     ])
   })
