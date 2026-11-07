@@ -14,7 +14,7 @@ import type {
 } from '@shared/device-host'
 import { asciiKey, DriverError, hidUsage, type DeviceDriver, type DriverEvents } from './driver'
 import { run } from './discovery'
-import { framePlan } from './frame'
+import { framePlan, type FramePlan } from './frame'
 import { FRAME_TAG, FrameReader, frameJson, taggedJson } from './framing'
 import { freePort, nodeCommand, packageRoot } from './runtime'
 
@@ -58,6 +58,8 @@ export class IosSimulatorDriver implements DeviceDriver {
   private codec: string | null = null
   private nextPaste = 1
   private framed: Promise<DeviceFrame | null> | null = null
+  /** The frame's pressable buttons, which `frameButton` inputs name. */
+  private frameButtons: FramePlan['hid'] = new Map()
 
   constructor(
     private readonly udid: string,
@@ -185,6 +187,14 @@ export class IosSimulatorDriver implements DeviceDriver {
         else if (input.button === 'recents')
           this.post(taggedJson(FRAME_TAG.button, { button: 'app_switcher' }))
         break
+      case 'frameButton': {
+        const hid = this.frameButtons.get(input.name)
+        if (hid) {
+          const press = { button: input.name, ...hid, phase: input.phase }
+          this.post(taggedJson(FRAME_TAG.button, press))
+        }
+        break
+      }
     }
   }
 
@@ -235,8 +245,20 @@ export class IosSimulatorDriver implements DeviceDriver {
       return loading
     }
     const images = await Promise.all(
-      plan.images.map(async ({ image, ...area }) => ({ ...area, png: await picture(image) })),
+      plan.images.map(async ({ image, button, ...area }) => ({
+        ...area,
+        png: await picture(image),
+        ...(button && {
+          button: {
+            name: button.name,
+            hover: button.hover,
+            // Without its pressed picture the button still presses; clients brighten it.
+            down: button.down ? await picture(button.down).catch(() => null) : null,
+          },
+        }),
+      })),
     )
+    this.frameButtons = plan.hid
     return {
       width: plan.width,
       height: plan.height,

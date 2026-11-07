@@ -14,6 +14,8 @@ const MAX_ID = 256
 const MAX_SEQ = Number.MAX_SAFE_INTEGER
 const DEVICE_ID = /^(ios-sim|ios|android|avd):[\w.:\-@]+$/
 const KEY_CODE = /^[A-Za-z0-9]{1,32}$/
+/** The names serve-sim gives the buttons on a frame, such as `volume-up`. */
+const FRAME_BUTTON = /^[\w .+-]{1,96}$/
 const BUTTONS: readonly DeviceButton[] = [
   'home',
   'lock',
@@ -126,6 +128,15 @@ export function input(raw: unknown): DeviceInput {
         throw new ValidationError('"button" is not a device button')
       }
       return { type, button: params.button as DeviceButton }
+    }
+    case 'frameButton': {
+      const params = object(raw, ['type', 'name', 'phase'])
+      if (params.phase !== 'down' && params.phase !== 'up') {
+        throw new ValidationError('"phase" must be down or up')
+      }
+      const name = string(params, 'name', 96)
+      if (!FRAME_BUTTON.test(name)) throw new ValidationError('"name" is not a frame button')
+      return { type, name, phase: params.phase }
     }
     default:
       throw new ValidationError('"input.type" is not an input')

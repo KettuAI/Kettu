@@ -67,6 +67,9 @@
     "lock": "Lock",
     "volumeDown": "Volume down",
     "volumeUp": "Volume up",
-    "rotate": "Rotate"
+    "rotate": "Rotate",
+    "side": "Side button",
+    "action": "Action button",
+    "other": "Hardware button"
   }
 }

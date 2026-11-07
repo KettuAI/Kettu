@@ -12,7 +12,16 @@ export interface FramePlan {
   height: number
   screen: DeviceFrameRect
   radii: [number, number, number, number]
-  images: Array<DeviceFrameRect & { image: string }>
+  images: Array<DeviceFrameRect & { image: string; button?: FrameButtonPlan }>
+  /** Each pressable button's HID page and usage, by name; clients only name the button. */
+  hid: Map<string, { page: number; usage: number }>
+}
+
+export interface FrameButtonPlan {
+  name: string
+  /** The picture's name while held. */
+  down: string | null
+  hover: { x: number; y: number }
 }
 
 const MAX_POINTS = 10_000
@@ -49,6 +58,17 @@ function name(value: unknown): string | null {
   return typeof value === 'string' && NAME.test(value) ? value : null
 }
 
+function hidCode(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffff
+    ? value
+    : null
+}
+
+/** A rollover travel, as a part of the button's own size. */
+function travel(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= 1 ? value : 0
+}
+
 /** The frame serve-sim describes, or null when it describes none or one this host cannot draw. */
 export function framePlan(value: unknown): FramePlan | null {
   const chrome = record(value)
@@ -72,13 +92,27 @@ export function framePlan(value: unknown): FramePlan | null {
       ]
     : [radius, radius, radius, radius]
 
+  const hid: FramePlan['hid'] = new Map()
   const buttons = (Array.isArray(chrome.buttons) ? chrome.buttons : []).flatMap((value) => {
     const button = record(value)
     const image = name(button?.image)
     const frame = rect(button?.frame)
-    return button && image && frame
-      ? [{ picture: { ...frame, image }, onTop: button.onTop === true }]
-      : []
+    if (!button || !image || !frame) return []
+    const picture: FramePlan['images'][number] = { ...frame, image }
+    // Only a button with a HID code can be pressed; Xcode draws the others still too.
+    const buttonName = name(button.name)
+    const page = hidCode(button.usagePage)
+    const usage = hidCode(button.usage)
+    if (buttonName && page !== null && usage !== null && !hid.has(buttonName)) {
+      hid.set(buttonName, { page, usage })
+      const hover = record(button.hover)
+      picture.button = {
+        name: buttonName,
+        down: name(button.imageDown),
+        hover: { x: travel(hover?.x), y: travel(hover?.y) },
+      }
+    }
+    return [{ picture, onTop: button.onTop === true }]
   })
 
   // Buttons behind the body show only where they stick out past its edge.
@@ -118,5 +152,5 @@ export function framePlan(value: unknown): FramePlan | null {
   }
   for (const button of buttons) if (button.onTop) images.push(button.picture)
   if (images.length > MAX_IMAGES) return null
-  return { chrome: id, width, height, screen, radii, images }
+  return { chrome: id, width, height, screen, radii, images, hid }
 }

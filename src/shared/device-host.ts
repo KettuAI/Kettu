@@ -92,6 +92,8 @@ export type DeviceInput =
   /** Text the device's keyboard cannot take a key at a time, such as Chinese, or pasted text. */
   | { type: 'text'; text: string }
   | { type: 'button'; button: DeviceButton }
+  /** A button drawn on the device's frame, by its name there, held from down to up. */
+  | { type: 'frameButton'; name: string; phase: 'down' | 'up' }
 
 export type FrameKind = 'description' | 'key' | 'delta' | 'seed'
 
@@ -103,9 +105,21 @@ export interface DeviceFrameRect {
   height: number
 }
 
+/** A hardware button on the frame that the pointer presses, as on Xcode's Simulator. */
+export interface DeviceFrameButton {
+  /** The name a `frameButton` input gives. */
+  name: string
+  /** The picture while the button is held, or null to brighten the usual one. */
+  down: ArrayBuffer | null
+  /** How far the button slides out under the pointer, in parts of its own width and height. */
+  hover: { x: number; y: number }
+}
+
 /**
  * The device's own frame, as Xcode draws its simulator, in portrait: pictures placed back to
  * front in the frame's points, with the screen over them. Clients turn it with the screen.
+ * A picture with `button` is a button a client may let the pointer press; one that ignores it
+ * draws the button still.
  */
 export interface DeviceFrame {
   width: number
@@ -113,7 +127,7 @@ export interface DeviceFrame {
   screen: DeviceFrameRect
   /** The screen's corner radii in points: top left, top right, bottom right, bottom left. */
   radii: [number, number, number, number]
-  images: Array<DeviceFrameRect & { png: ArrayBuffer }>
+  images: Array<DeviceFrameRect & { png: ArrayBuffer; button?: DeviceFrameButton }>
 }
 
 export interface DeviceContract {

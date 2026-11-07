@@ -24,6 +24,12 @@ describe('device host request validators', () => {
         input: { type: 'text', text: '你好\nworld' },
       }).input,
     ).toEqual({ type: 'text', text: '你好\nworld' })
+    expect(
+      validators['devices.input']({
+        deviceId: 'ios-sim:x',
+        input: { type: 'frameButton', name: 'volume-up', phase: 'down' },
+      }).input,
+    ).toEqual({ type: 'frameButton', name: 'volume-up', phase: 'down' })
   })
 
   it('refuses what is not a device, an input or in range', () => {
@@ -42,6 +48,21 @@ describe('device host request validators', () => {
         { deviceId: 'ios-sim:x', input: { type: 'key', phase: 'down', code: 'a;b' } },
       ],
       ['devices.input', { deviceId: 'ios-sim:x', input: { type: 'shell', command: 'ls' } }],
+      [
+        'devices.input',
+        { deviceId: 'ios-sim:x', input: { type: 'frameButton', name: '../x', phase: 'down' } },
+      ],
+      [
+        'devices.input',
+        { deviceId: 'ios-sim:x', input: { type: 'frameButton', name: 'power', phase: 'hold' } },
+      ],
+      [
+        'devices.input',
+        {
+          deviceId: 'ios-sim:x',
+          input: { type: 'frameButton', name: 'power', phase: 'up', usage: 48 },
+        },
+      ],
       ['devices.ack', { deviceId: 'ios-sim:x', seq: -1 }],
       ['devices.close', { deviceId: 'ios-sim:x', sessionId: 's1', shutdown: 'yes' }],
     ]
