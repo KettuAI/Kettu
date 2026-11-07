@@ -24,12 +24,13 @@ import { useRefresh } from '@renderer/components/refresh'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { exportDiagnostics } from '@renderer/app/actions'
 import { Notice } from '@renderer/features/routines/kit'
+import { useCornered } from '@renderer/features/shell/corner'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { basename, bytes, count, longAgo, percent, tokens, usd } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
-import { hasBand, isMac } from '@renderer/lib/platform'
+import { isMac } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
 import { agentName } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -42,7 +43,6 @@ import {
   useUsageStore,
   type UsagePage as PageData,
 } from '@renderer/stores/usage'
-import { useViewStore } from '@renderer/stores/view'
 import { Activity } from './activity'
 import {
   addDays,
@@ -179,7 +179,7 @@ function Head({
   bare?: boolean
 }) {
   const { t } = useTranslation('usage')
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && !hasBand
+  const cornered = useCornered()
   const range = useUsageStore((s) => s.filters.range)
   const clockDay = useClock(dayOf)
   const today = page?.today ?? clockDay
@@ -201,7 +201,7 @@ function Head({
     [today, firstDay, t],
   )
   return (
-    <header className="k-u__head app-region-drag">
+    <header className="k-u__head app-region-drag" data-cornered={cornered || undefined}>
       <span className="k-u__lead">
         {cornered && <CornerControlsSpace />}
         <span aria-hidden className="k-u__title">

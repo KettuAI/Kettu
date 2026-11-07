@@ -10,6 +10,7 @@ import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
+import { useCornered } from './corner'
 import { useNarrowWindow } from './narrow'
 
 /**
@@ -26,10 +27,8 @@ export function TopBar({
   /** Whether it may take the window's top left corner; with the sidebar shown, none does. */
   cornered?: boolean
 }) {
-  const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  // A narrow window's sidebar is a drawer, so the main area always starts at the corner.
-  const narrow = useNarrowWindow()
-  const cornered = (given ?? true) && (collapsed || narrow) && !hasBand
+  const corner = useCornered()
+  const cornered = (given ?? true) && corner
   return (
     <header
       className={cn(

@@ -406,6 +406,9 @@
   padding: 0 12px 0 14px;
   background: var(--panel);
 }
+.k-routine__bar[data-cornered] {
+  padding-left: var(--corner-inset);
+}
 .k-routine__bar > * {
   -webkit-app-region: no-drag;
 }
