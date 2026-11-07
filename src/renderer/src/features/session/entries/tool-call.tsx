@@ -19,6 +19,15 @@ const COMPACTION_KEY = {
 } as const
 
 /**
+ * Stands in for a step's card while its group is folded. The group's line reads the icon, status
+ * and times off its children's props, so it needs them even when nothing is drawn.
+ */
+export function StepStub(props: Omit<StepFacts, 'glyph'> & { icon: ReactNode }): null {
+  void props
+  return null
+}
+
+/**
  * A step of the thread's work on affectUI's Tool Call Card: a tool call, a thought or a
  * compaction. Its facts come as props of their own (tool-call-model.ts), which a group reads.
  * `note` follows a tool call's target; a call a routine allowed says so by default. Its content
