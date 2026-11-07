@@ -398,6 +398,48 @@ describe('a turn', () => {
     expect(s.sdk.last.inputs[0]!.message.content).toEqual([{ type: 'text', text: 'Hi' }])
   })
 
+  it('ends a reply when its text block ends, while the turn goes on', async () => {
+    s.sdk.script = (query) => query.running()
+    const running = s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    await settle()
+    const query = s.sdk.last
+    const text = (value: string, index: number): SdkMessage =>
+      stream(query, {
+        type: 'content_block_delta',
+        index,
+        delta: { type: 'text_delta', text: value },
+      })
+    query.emit(
+      stream(query, { type: 'message_start', message: { id: 'msg_1' } }),
+      stream(query, {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'text', text: '' },
+      }),
+      text('Done.', 0),
+      stream(query, { type: 'content_block_stop', index: 0 }),
+    )
+    await settle()
+    expect(target.entries()).toMatchObject([
+      { kind: 'agent', id: 'm:msg_1', markdown: 'Done.', streaming: false },
+    ])
+    // A later text block of the same message carries on the reply.
+    query.emit(
+      stream(query, {
+        type: 'content_block_start',
+        index: 1,
+        content_block: { type: 'text', text: '' },
+      }),
+      text(' More.', 1),
+    )
+    await settle()
+    expect(target.entries()).toMatchObject([
+      { kind: 'agent', id: 'm:msg_1', markdown: 'Done. More.', streaming: true },
+    ])
+    query.finish()
+    await running
+  })
+
   it('reads context summaries from the running query without sending another prompt', async () => {
     s.sdk.script = (query) => query.running()
     const running = s.connection.prompt(sessionId, [{ type: 'text', text: 'Keep working' }])

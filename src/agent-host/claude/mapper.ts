@@ -272,9 +272,28 @@ export class ClaudeMapper {
         }
         return []
       }
+      case 'content_block_stop': {
+        const messageId = this.lanes.get(lane)
+        if (!messageId) return []
+        return [{ sessionId, map: (ctx) => this.written(ctx, messageId) }]
+      }
       default:
         return []
     }
+  }
+
+  /**
+   * Ends the message's reply once a block of it ends: blocks stream one at a time, so its text is
+   * whole even when the turn goes on with nothing that shows in the thread.
+   */
+  private written(ctx: MapperContext, messageId: string): MapperOutput {
+    const out = output()
+    const id = messageEntryId(ctx, 'agent', messageId)!
+    const entry = ctx.thread.byId[id]
+    if (entry?.kind === 'agent' && entry.streaming) {
+      out.patches.push({ op: 'entry.update', id, changes: { streaming: false } })
+    }
+    return out
   }
 
   /** The main thread's request to its model: its context so far, and a renewed cache. */
@@ -321,6 +340,10 @@ export class ClaudeMapper {
     const existing = ctx.thread.byId[id]
     if (existing?.kind === kind) {
       out.patches.push({ op: 'entry.appendText', id, text: toLf(value) })
+      // A later text block of a message carries on its reply.
+      if (existing.kind === 'agent' && !existing.streaming && !ctx.replaying) {
+        out.patches.push({ op: 'entry.update', id, changes: { streaming: true } })
+      }
       return out
     }
     const streaming = !ctx.replaying
