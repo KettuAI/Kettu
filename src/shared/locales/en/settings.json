@@ -350,7 +350,7 @@
       "paused": "Paused",
       "canceled": "Ended"
     },
-    "note": "Sessions, agents and remote access on your own network all work without an account. It only matters for the official relay and the web client."
+    "note": "Sessions, agents and remote access on your own network all work without an account. Signing in adds Kettu’s cloud services: the relay, publishing artifacts to Kettu and sending problem reports."
   },
   "browser": {
     "clearData": {

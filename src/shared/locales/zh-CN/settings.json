@@ -349,7 +349,7 @@
       "paused": "已暂停",
       "canceled": "已结束"
     },
-    "note": "会话、Agent 以及在你自己网络上的远程访问都无需账号，账号只用于官方中继和网页客户端。"
+    "note": "会话、Agent 以及在你自己网络上的远程访问都无需账号。登录后可以用 Kettu 的云服务：中继、把 artifact 发布到 Kettu、提交问题报告。"
   },
   "browser": {
     "clearData": {
