@@ -350,7 +350,13 @@
       "paused": "Paused",
       "canceled": "Ended"
     },
-    "note": "Sessions, agents and remote access on your own network all work without an account. Signing in adds Kettu’s cloud services: the relay, publishing artifacts to Kettu and sending problem reports."
+    "note": "Sessions, agents and remote access on your own network all work without an account. Signing in adds Kettu’s cloud services: the relay, publishing artifacts to Kettu and sending problem reports.",
+    "clear": {
+      "button": "Sign out and clear…",
+      "title": "Sign out and clear this browser?",
+      "body": "The computers this browser is connected to remove it first. Then it signs out and deletes everything Kettu keeps here: its key, its computers, drafts and settings. Using Kettu here again means pairing again. Choose this on a computer that is not yours.",
+      "confirm": "Sign out and clear"
+    }
   },
   "browser": {
     "clearData": {
@@ -1175,6 +1181,14 @@
         "title": "Forget “{{name}}” in this browser?",
         "body": "This page disconnects and goes back to pairing. Nothing changes on {{name}}, which lists this browser among its devices until it is removed there.",
         "confirm": "Forget"
+      },
+      "others": {
+        "name": "Other computers",
+        "description": "The other computers this browser is paired with for this account. Open one to use it here in place of {{name}}.",
+        "keywords": "computers hosts switch open other add pair",
+        "open": "Open",
+        "add": "Add a computer…",
+        "addDescription": "Pair this browser with another computer signed in to this account."
       }
     },
     "chip": {
@@ -1305,6 +1319,7 @@
       },
       "browserScan": "Scan this code with the device’s camera to open Kettu in its browser.",
       "browserHint": "Or open the link in a browser on a device on the same network or VPN.",
+      "browserHintHosted": "Or open the link in a browser on any network, signed in to the Kettu account this computer uses.",
       "address": "Address",
       "copy": "Copy",
       "copied": "Copied",

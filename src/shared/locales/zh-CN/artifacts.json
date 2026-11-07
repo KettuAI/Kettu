@@ -175,7 +175,11 @@
     "history": "历史",
     "versionChip": "版本 {{version}}，历史",
     "present": "演示",
-    "sideLabel": "历史与评论"
+    "sideLabel": "历史与评论",
+    "previewOnly": {
+      "title": "实时页面在电脑上打开",
+      "body": "在浏览器里，artifact 显示它的预览图。实时页面在电脑上的 Kettu 里打开，或在电脑自己的网络里打开它提供的网页版。"
+    }
   },
   "canvas": {
     "role": "画布",

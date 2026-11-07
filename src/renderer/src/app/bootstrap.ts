@@ -12,7 +12,7 @@ import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
 import { errorMessage, forgetSessionHost, host, sessionHost } from '@renderer/lib/host'
 import { whenHostHas } from '@renderer/lib/host-features'
-import { isWeb, platform } from '@renderer/lib/platform'
+import { isHosted, isWeb, platform } from '@renderer/lib/platform'
 import { initAccount } from '@renderer/stores/account'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
 import { initDevices } from '@renderer/stores/devices'
@@ -278,6 +278,7 @@ export function bootstrap(): Promise<unknown> {
     void initAccount()
     followWindowTitle()
   }
+  if (isHosted) void initAccount()
   initTerminals()
   // The terminal command exiting is the only signal a sign-in finished. Read the account again,
   // including when the last attempt had marked it required.

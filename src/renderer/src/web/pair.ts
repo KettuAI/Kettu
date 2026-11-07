@@ -1,6 +1,6 @@
-// Pairing this browser with the host that served it, with the code from a link: the IKpsk1
-// handshake with the code's secret, then the owner's answer on the host. A pairing the owner
-// accepts leaves its connection open, for the link to take as its first.
+// Pairing this browser with a host, the one that served it or through the relay, with the code from
+// a link: the IKpsk1 handshake with the code's secret, then the owner's answer on the host. A
+// pairing the owner accepts leaves its connection open, for the link to take as its first.
 
 import { HandshakeDropped } from '@shared/remote/device-channel'
 import type { KeyPair } from '@shared/remote/noise'
@@ -8,7 +8,16 @@ import type { PairingPayload } from '@shared/remote/pairing'
 import type { Hello, Welcome } from '@shared/remote/protocol'
 import { awaitWelcome, hello, openChannel, type Dial, type Later, type Opened } from './link'
 
-export type PairFailure = 'void' | 'rejected' | 'unreachable' | 'update_client' | 'update_host'
+export type PairFailure =
+  | 'void'
+  | 'rejected'
+  | 'unreachable'
+  | 'update_client'
+  | 'update_host'
+  /** The hosted client's: the code has no relay, the host's account is another, or it is away. */
+  | 'relay_off'
+  | 'wrong_account'
+  | 'host_offline'
 
 export type PairProgress =
   | { state: 'connecting' }
@@ -28,6 +37,8 @@ export interface PairOptions {
   key: KeyPair
   client: Hello['client']
   device: NonNullable<Hello['device']>
+  /** Why a failed dial failed, when the dial can say; else it counts as unreachable. */
+  dialFailure?(error: unknown): PairFailure | null
 }
 
 /** Pairs, telling `progress` how it goes; resolves with the welcomed connection, or null. */
@@ -48,7 +59,10 @@ export async function pair(
     // The host drops a handshake whose code it does not hold: expired, used, or another host's.
     progress({
       state: 'failed',
-      reason: error instanceof HandshakeDropped ? 'void' : 'unreachable',
+      reason:
+        error instanceof HandshakeDropped
+          ? 'void'
+          : (options.dialFailure?.(error) ?? 'unreachable'),
     })
     return null
   }

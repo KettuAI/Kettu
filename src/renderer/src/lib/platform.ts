@@ -8,6 +8,9 @@ export const isWindows = platform === 'win32'
 /** The web client in a browser: no main process, no window of its own to frame. */
 export const isWeb = window.kettu.client === 'web'
 
+/** The hosted web client, which signs in to a Kettu account and reaches its hosts through the relay. */
+export const isHosted = isWeb && window.kettu.hosted === true
+
 /**
  * The window's frame: macOS's traffic lights over the content, the band beside the window controls
  * on Windows and Linux, or none in a browser.

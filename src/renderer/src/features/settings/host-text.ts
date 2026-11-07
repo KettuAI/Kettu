@@ -97,7 +97,9 @@ export function webHostLine(t: TFunction<'settings'>, host: WebHost): string {
   return [
     host.platform && platformName(host.platform),
     host.version && t('hosts.version', { version: host.version }),
-    t('hosts.via.directAt', { address: addressText(host.address) }),
+    host.address
+      ? t('hosts.via.directAt', { address: addressText(host.address) })
+      : t('hosts.via.relay'),
   ]
     .filter((part): part is string => !!part)
     .join(' · ')

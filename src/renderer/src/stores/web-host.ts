@@ -13,8 +13,8 @@ export interface WebHost {
   /** As the last welcome said; null before the first one. */
   platform: Platform | null
   version: string | null
-  /** The page's own address, which this browser reaches the host at. */
-  address: DirectAddress
+  /** The page's own address, which this browser reaches the host at; null through the relay. */
+  address: DirectAddress | null
   connection: HostConnection
   /** When the connection last opened or ended; null before either. */
   lastOnlineAt: number | null
@@ -28,6 +28,16 @@ export interface WebHostActions {
   rename(name: string): void
   /** Clears what this browser keeps for the host and goes back to pairing. */
   forget(): Promise<void>
+  /** The hosted client's: shows another host of the account in place of this one. */
+  open?(id: string): void
+  /** The hosted client's: goes to pairing for another host, and back unless one is added. */
+  add?(): void
+}
+
+/** Another host the hosted client paired with for the signed-in account. */
+export interface OtherWebHost {
+  id: string
+  name: string
 }
 
 interface WebHostStore {
@@ -35,10 +45,13 @@ interface WebHostStore {
   /** The host's facts and what it offers beyond its sessions, read at each connection. */
   info: HostInfo | null
   actions: WebHostActions | null
+  /** The hosted client's other hosts of the account; empty in the served page. */
+  others: OtherWebHost[]
 }
 
 export const useWebHostStore = create<WebHostStore>()(() => ({
   host: null,
   info: null,
   actions: null,
+  others: [],
 }))

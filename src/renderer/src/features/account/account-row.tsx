@@ -3,7 +3,7 @@ import { Settings01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon, type AppShellProps } from '@renderer/components/affect/app-shell'
 import { routeName } from '@renderer/features/settings/host-text'
-import { formatShortcut, isWeb } from '@renderer/lib/platform'
+import { formatShortcut, isHosted, isWeb } from '@renderer/lib/platform'
 import { useAccountStore } from '@renderer/stores/account'
 import { otherHosts, useHostsStore, useOtherHost } from '@renderer/stores/hosts'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -47,19 +47,21 @@ export function useAccountShell(): Pick<
     if (settingsOpen) setSettingsDot(false)
   }, [settingsOpen])
 
-  // The web client signs in to no account, so it names the host it shows.
-  const name = isWeb
+  // The served web client signs in to no account, so it names the host it shows; the hosted one
+  // names the account over the host.
+  const plain = isWeb && !isHosted
+  const name = plain
     ? self
     : !identity.name
       ? t('account.signedOut')
       : hidden
         ? MASK
         : identity.name
-  const person = isWeb || !identity.name || hidden
+  const person = plain || !identity.name || hidden
   return {
     user: {
       name,
-      meta: isWeb ? undefined : line,
+      meta: plain ? undefined : isHosted ? self : line,
       avatar: !person && identity.avatar ? identity.avatar : undefined,
       mark: person ? (
         <span className="ui-as-user__initials">

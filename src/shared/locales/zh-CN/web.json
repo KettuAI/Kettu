@@ -2,8 +2,10 @@
   "pair": {
     "title": "在这个浏览器里用 Kettu",
     "intro": "在电脑上的 Kettu 里，或在已经添加到它的设备上，打开 设置 › 远程访问 › 添加设备，选“浏览器”，用这台设备的相机扫它的二维码，或者把它的链接粘贴到这里。",
+    "introHosted": "在电脑上的 Kettu 里打开 设置 › 远程访问 › 添加设备，用这台设备的相机扫它的二维码，或者把它的链接粘贴到这里。电脑要登录同一个 Kettu 账号，并打开 Kettu 中继。",
     "linkLabel": "配对链接",
     "linkPlaceholder": "http://…/pair#…",
+    "linkPlaceholderHosted": "https://kettu.sh/pair#…",
     "notLink": "这不是 Kettu 的配对链接。从“添加设备”里复制链接。",
     "submit": "配对",
     "connecting": "正在连接电脑…",
@@ -11,13 +13,17 @@
     "waitingHint": "那里的 Kettu 在问要不要添加“{{name}}”，在那里点添加。",
     "added": "已添加，正在打开 Kettu…",
     "again": "重试",
+    "back": "返回",
     "failed": {
       "void": "这个码已经不能用了：过期了、被关掉了，或者给别的设备用过了。重新打开“添加设备”拿一个新的。",
       "rejected": "电脑的主人没有添加这个浏览器。",
       "unreachable": "连不上电脑。看看它是否开着、Kettu 是否在运行并打开了远程访问、这台设备是否在同一个网络或 VPN 里。",
       "update_client": "这个页面比电脑上的 Kettu 旧，刷新一下页面。",
       "update_host": "电脑上的 Kettu 太旧了，更新电脑上的 Kettu。",
-      "failed": "配对没有完成，再试一次。"
+      "failed": "配对没有完成，再试一次。",
+      "relay_off": "这个码只能在电脑自己的网络里用：电脑没有用 Kettu 中继。在它的 设置 › 远程访问 里打开“使用 Kettu 中继”，或者在同一个网络里打开“添加设备”给的浏览器链接。",
+      "wrong_account": "电脑登录的是另一个 Kettu 账号。在这里用电脑登录的那个账号登录。",
+      "host_offline": "电脑现在不在 Kettu 中继上。看看它是否开着、Kettu 是否在运行并打开了远程访问、是否登录了你的 Kettu 账号。"
     },
     "removed": "这个浏览器已经从电脑上移除了，要在这里用就重新配对。"
   },
@@ -69,5 +75,39 @@
   },
   "media": {
     "saving": "正在保存 {{name}}…{{percent}}%"
+  },
+  "hosted": {
+    "signIn": {
+      "title": "登录后使用 Kettu",
+      "intro": "用电脑上登录的那个 Kettu 账号登录，就能在任何网络上连回它。",
+      "button": "登录",
+      "pairing": "登录后接着添加这个浏览器。",
+      "own": "在电脑自己的网络里，也可以打开“添加设备”给的浏览器链接，不用账号。",
+      "reasons": {
+        "account-page": "这个浏览器已在账号页面上被退出登录。",
+        "admin": "Kettu 支持团队结束了这个浏览器上的登录。",
+        "disabled": "你的 Kettu 账号已被停用。如需帮助，请联系 hello@kettu.sh。",
+        "reused": "登录凭据被使用了两次，为保护你的账号，这个浏览器已退出登录。",
+        "expired": "登录已过期，请重新登录。",
+        "invalid": "登录已失效，比如账号已被删除。"
+      },
+      "failures": {
+        "network": "Kettu 连不上账号服务。请检查网络后重试。",
+        "service": "账号服务没能完成登录，请重试。",
+        "disabled": "这个 Kettu 账号已被停用。如需帮助，请联系 hello@kettu.sh。",
+        "device-limit": "这个账号的设备已满。先登出一台，再重新登录。",
+        "timeout": "登录没有完成，请重试。",
+        "local": "登录没有完成，请重试。"
+      },
+      "devices": "管理设备"
+    },
+    "account": "已登录 {{email}}",
+    "switchAccount": "换一个账号",
+    "problem": {
+      "host_offline": "{{name}} 现在不在 Kettu 中继上：可能关机或睡眠了、Kettu 没在运行，或者退出了登录、没用中继。",
+      "wrong_account": "{{name}} 登录的 Kettu 账号和这个浏览器的不一样。",
+      "unreachable": "连不上 Kettu 中继。检查这台设备的网络。",
+      "retry": "重试"
+    }
   }
 }

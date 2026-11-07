@@ -1,6 +1,7 @@
 // The web client's entry. It loads the channel's primitives, then shows the pairing page or the
-// app over a connection to the host that served this page. The renderer's modules read
-// `window.kettu` as they load, so it is set before any of them is imported.
+// app over a connection to the host that served this page; the hosted build goes its own way,
+// through the relay. The renderer's modules read `window.kettu` as they load, so it is set before
+// any of them is imported.
 
 import './web.css'
 
@@ -13,12 +14,10 @@ import {
   type PairingPayload,
 } from '@shared/remote/pairing'
 import { loadPlatformPrimitives } from '@shared/remote/primitives'
-import { BACKGROUND_PACE_MS, parseHostRenamed } from '@shared/remote/protocol'
-import { devicePlatform, pageAddress, webApi } from './api'
+import { devicePlatform, pageAddress } from './api'
 import { browserDevice, deviceName } from './device-name'
-import { channelUrl, dialWebSocket, hello, HostLink } from './link'
-import { startMediaWorker } from './media'
-import mediaWorker from './media-worker.ts?worker&url'
+import { launchApp } from './launch'
+import { channelUrl, dialWebSocket } from './link'
 import type { Paired, PairProgress } from './pair'
 import type { PairingNotice } from './pairing-page'
 import { WebSettings } from './settings'
@@ -38,12 +37,12 @@ function storage(kind: 'localStorage' | 'sessionStorage'): Storage | null {
 const settings = new WebSettings(storage('localStorage'))
 const browser = browserDevice(navigator.userAgent)
 const client = { kind: 'web', version: __KETTU_VERSION__, platform: browser.system || 'Web' }
-const dial = dialWebSocket(channelUrl(location))
 const root = document.getElementById('root')!
 
 window.kettu = {
   platform: devicePlatform(navigator),
   client: 'web',
+  ...(__KETTU_HOSTED__ ? { hosted: true } : {}),
   systemLocale: matchLocale(navigator.languages),
   settings: {
     get: async () => settings.get(),
@@ -51,6 +50,8 @@ window.kettu = {
     onChanged: (listener) => settings.onChanged(listener),
   },
 } as KettuApi
+
+const dial = dialWebSocket(channelUrl(location))
 
 async function showPairing(
   device: WebDevice | null,
@@ -97,93 +98,46 @@ async function showPairing(
 
 async function showApp(device: WebDevice, paired: Paired | null): Promise<void> {
   let host = device.host!
-  const link = new HostLink({
-    dial,
-    hostKey: host.hostKey,
-    key: device.key,
-    hello: hello(client),
-    ...(paired ? { adopt: paired } : {}),
-    visible: () => document.visibilityState === 'visible',
-  })
-  settings.attach(link)
-  Object.assign(
-    window.kettu,
-    webApi(link, settings, {
-      address: pageAddress(location),
+  await launchApp(
+    {
+      dial,
+      key: device.key,
+      hostKey: host.hostKey,
       known: { name: host.name, deviceName: host.deviceName },
-      forget: async () => {
+      paired,
+      client,
+      settings,
+      address: pageAddress(location),
+      storage: storage('localStorage'),
+      forget: async (link) => {
         link.stop()
         await saveDevice({ key: device.key, host: null })
         location.replace('/')
       },
-      storage: storage('localStorage'),
-    }),
+      removed: () => {
+        void saveDevice({ key: device.key, host: null }).finally(() => {
+          storage('sessionStorage')?.setItem(NOTICE_KEY, 'removed')
+          location.replace('/')
+        })
+      },
+      // The names the next start shows until the host's welcome says them again.
+      remember: ({ name, deviceName }) => {
+        if (name === host.name && deviceName === host.deviceName) return
+        host = { ...host, name, deviceName }
+        void saveDevice({ ...device, host })
+      },
+    },
+    root,
   )
-  startMediaWorker(link, mediaWorker)
-  // A page in the back takes patches a batch a second, which the host merges meanwhile.
-  const pace = (): void =>
-    link.setPace(document.visibilityState === 'visible' ? 0 : BACKGROUND_PACE_MS)
-  pace()
-  document.addEventListener('visibilitychange', () => {
-    pace()
-    if (document.visibilityState === 'visible') link.wake()
-  })
-  window.addEventListener('online', () => link.wake())
-
-  // The names the next start shows until the host's welcome says them again.
-  const remember = (name: string, deviceName: string): void => {
-    if (name === host.name && deviceName === host.deviceName) return
-    host = { ...host, name, deviceName }
-    void saveDevice({ ...device, host })
-  }
-  let version: string | null = null
-  link.onState((state) => {
-    if (state.kind === 'connected') {
-      const now = state.welcome.host.version
-      if (version !== null && now !== version) void offerReload()
-      version ??= now
-      remember(state.welcome.host.name, state.welcome.device.name)
-    } else if (state.kind === 'stopped' && state.reason === 'removed') {
-      void saveDevice({ key: device.key, host: null }).finally(() => {
-        storage('sessionStorage')?.setItem(NOTICE_KEY, 'removed')
-        location.replace('/')
-      })
-    }
-  })
-  link.onMessage((message) => {
-    if (message.type === 'renamed' && typeof message.name === 'string') {
-      remember(host.name, message.name)
-    }
-    const name = parseHostRenamed(message)
-    if (name) remember(name, host.deviceName)
-  })
-  link.start()
-
-  const [{ bootstrap }, { renderApp }, { setRuntimeRelay }, { attachRuntimePort }] =
-    await Promise.all([
-      import('@renderer/app/bootstrap'),
-      import('@renderer/app/render'),
-      import('@renderer/features/artifacts/frame-link'),
-      import('./runtime-relay'),
-    ])
-  setRuntimeRelay((url, port) => attachRuntimePort(link, url, port))
-  await bootstrap()
-  renderApp(root)
-}
-
-async function offerReload(): Promise<void> {
-  const [{ toast }, { i18n }] = await Promise.all([
-    import('@renderer/components/ui/toast'),
-    import('@renderer/lib/i18n'),
-  ])
-  toast(i18n.t('web:connection.updated'), {
-    label: i18n.t('web:connection.reload'),
-    onClick: () => location.reload(),
-  })
 }
 
 async function start(): Promise<void> {
   await loadPlatformPrimitives()
+  // A constant of the build, so the served page carries none of the hosted code.
+  if (__KETTU_HOSTED__) {
+    const { startHosted } = await import('./hosted/start')
+    return startHosted({ settings, browser, client, root })
+  }
   const payload =
     location.pathname === BROWSER_PAIRING_PATH ? parseBrowserPairingLink(location.href) : null
   const device = await loadDevice().catch((error: unknown) => {

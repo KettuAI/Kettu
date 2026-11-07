@@ -3,6 +3,7 @@ import {
   browserPairingLink,
   decodePairing,
   encodePairing,
+  hostedPairingLink,
   MAX_PAIRING_ADDRESSES,
   pairingLink,
   parseBrowserPairingLink,
@@ -145,6 +146,18 @@ describe('browser pairing links', () => {
     const code = encodePairing(payload)
     expect(parseBrowserPairingLink(`http://localhost:47821/pair#${code}`)).toEqual(payload)
     expect(parseBrowserPairingLink(`https://mac.tail1.ts.net/pair#${code}`)).toEqual(payload)
+  })
+
+  it('open the hosted web client only for a code with the relay', () => {
+    expect(hostedPairingLink(payload)).toBeNull()
+    const relayed: PairingPayload = {
+      ...payload,
+      version: PAIRING_VERSION,
+      relay: { id: 'aeiscmkbkfqxdamrugy4dupb6e', urls: ['https://relay.kettu.sh'] },
+    }
+    const link = hostedPairingLink(relayed)!
+    expect(link.startsWith('https://app.kettu.sh/pair#')).toBe(true)
+    expect(parseBrowserPairingLink(link)).toEqual(relayed)
   })
 
   it('refuse other pages, schemes and broken codes', () => {

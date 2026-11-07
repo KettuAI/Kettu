@@ -2,8 +2,10 @@
   "pair": {
     "title": "Use Kettu in this browser",
     "intro": "In Kettu on the computer, or on a device already added to it, open Settings › Remote access › Add device, choose Browser and scan its QR code with this device's camera, or paste its link here.",
+    "introHosted": "On the computer, open Kettu’s Settings › Remote access › Add device and scan its QR code with this device’s camera, or paste its link here. The computer must be signed in to the same Kettu account with the Kettu relay on.",
     "linkLabel": "Pairing link",
     "linkPlaceholder": "http://…/pair#…",
+    "linkPlaceholderHosted": "https://kettu.sh/pair#…",
     "notLink": "This is not a Kettu pairing link. Copy the link from Add device.",
     "submit": "Pair",
     "connecting": "Connecting to the computer…",
@@ -11,13 +13,17 @@
     "waitingHint": "Kettu asks there whether to add “{{name}}”. Choose Add.",
     "added": "Added. Opening Kettu…",
     "again": "Try again",
+    "back": "Back",
     "failed": {
       "void": "This code no longer works: it expired, was closed or was used for another device. Open Add device again for a new one.",
       "rejected": "The computer’s owner did not add this browser.",
       "unreachable": "Could not reach the computer. Check that it is on, Kettu is running with remote access on, and this device is on the same network or VPN.",
       "update_client": "This page is older than Kettu on the computer. Reload the page.",
       "update_host": "Kettu on the computer is too old for this page. Update Kettu on the computer.",
-      "failed": "Pairing did not finish. Try again."
+      "failed": "Pairing did not finish. Try again.",
+      "relay_off": "This code is for the computer’s own network: it is not using the Kettu relay. Turn on Use the Kettu relay in its Settings › Remote access, or open the browser link from Add device on the same network.",
+      "wrong_account": "The computer is signed in to another Kettu account. Sign in here with the account the computer uses.",
+      "host_offline": "The computer is not on the Kettu relay now. Check that it is on, Kettu is running with remote access on, and it is signed in to your Kettu account."
     },
     "removed": "This browser was removed from the computer. Pair it again to use it here."
   },
@@ -69,5 +75,39 @@
   },
   "media": {
     "saving": "Saving {{name}}… {{percent}}%"
+  },
+  "hosted": {
+    "signIn": {
+      "title": "Sign in to use Kettu",
+      "intro": "Sign in with the Kettu account your computer is signed in to, and reach it from any network.",
+      "button": "Sign in",
+      "pairing": "After you sign in, adding this browser goes on.",
+      "own": "On the computer’s own network you can also open the browser link from Add device, without an account.",
+      "reasons": {
+        "account-page": "This browser was signed out from your account page.",
+        "admin": "Kettu’s support team ended this browser’s sign-in.",
+        "disabled": "Your Kettu account is disabled. Contact hello@kettu.sh for help.",
+        "reused": "A sign-in token was used twice, so this browser was signed out to protect your account.",
+        "expired": "The sign-in expired. Sign in again to go on.",
+        "invalid": "The sign-in is no longer valid, for example because the account was deleted."
+      },
+      "failures": {
+        "network": "Kettu couldn’t reach the account service. Check your connection, then try again.",
+        "service": "The account service couldn’t finish the sign-in. Try again.",
+        "disabled": "This Kettu account is disabled. Contact hello@kettu.sh for help.",
+        "device-limit": "This account’s devices are full. Sign one out, then sign in again.",
+        "timeout": "The sign-in wasn’t finished. Try again.",
+        "local": "The sign-in didn’t finish. Try again."
+      },
+      "devices": "Manage devices"
+    },
+    "account": "Signed in as {{email}}",
+    "switchAccount": "Use another account",
+    "problem": {
+      "host_offline": "{{name}} is not on the Kettu relay now: it may be off or asleep, Kettu may not be running, or it is signed out or not using the relay.",
+      "wrong_account": "{{name}} is signed in to another Kettu account than this browser.",
+      "unreachable": "Kettu can’t reach its relay. Check this device’s connection.",
+      "retry": "Try again"
+    }
   }
 }

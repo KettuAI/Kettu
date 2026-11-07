@@ -28,6 +28,7 @@ import { closeFrame, exportFiles, openFrame } from './frames'
 import { folderOf, homeStart } from './host-path'
 import { askHostPath, type HostPathPurpose } from './host-path-request'
 import type { HostLink, LinkError, LinkState } from './link'
+import { relayUrl } from './hosted/config'
 import { downloadFile, mediaRequest, saveMedia, type SaveProgress } from './media'
 import { browserNotifications, notifyAttention, notifyTest } from './notifications'
 import type { WebSettings } from './settings'
@@ -87,8 +88,8 @@ function portState(link: HostLink): PortConnectionState {
 
 /** What the web client knows of the host it connects to beyond the link. */
 export interface WebHostContext {
-  /** The page's own address, which this browser reaches the host at. */
-  address: DirectAddress
+  /** The page's own address, which this browser reaches the host at; null through the relay. */
+  address: DirectAddress | null
   /** The names this browser kept from the last welcome, shown until the next one. */
   known: { name: string; deviceName: string }
   /** Clears what this browser keeps for the host and goes back to pairing. */
@@ -119,7 +120,9 @@ export function webHost(previous: WebHost, state: LinkState, now: number): WebHo
         name: host.name,
         platform: host.platform,
         version: host.version,
-        connection: { state: 'online', address: previous.address },
+        connection: previous.address
+          ? { state: 'online', address: previous.address }
+          : { state: 'online', relay: relayUrl },
         lastOnlineAt: now,
         device: { id: device.id, name: device.name },
       }

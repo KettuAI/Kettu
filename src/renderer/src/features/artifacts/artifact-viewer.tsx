@@ -34,6 +34,7 @@ import { KIND_ICON } from './kinds'
 import { artifactKind } from './model'
 import { Waiting } from './page-frame'
 import { Presenter } from './present'
+import { PreviewOnly } from './preview-only'
 import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
 import { useComments } from './use-comments'
 import { useVersions } from './use-versions'
@@ -200,7 +201,9 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   }
 
   let body: React.ReactNode
-  if (states.error) {
+  if (states.error === 'previewOnly') {
+    body = <PreviewOnly summary={summary ?? null} />
+  } else if (states.error) {
     body = (
       <ViewerEmpty
         icon={AlertCircleIcon}

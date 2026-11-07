@@ -200,6 +200,15 @@ export function parsePairingLink(link: string): PairingPayload | null {
 /** The path of the web client's pairing page on a host, the code in its fragment. */
 export const BROWSER_PAIRING_PATH = '/pair'
 
+/** The hosted web client, which reaches hosts through the Kettu relay from any network. */
+export const HOSTED_WEB_URL = 'https://app.kettu.sh'
+
+/** The link a browser opens a code with on any network: the hosted web client, for a relay code. */
+export function hostedPairingLink(payload: PairingPayload): string | null {
+  if (!payload.relay) return null
+  return `${HOSTED_WEB_URL}${BROWSER_PAIRING_PATH}#${encodePairing(payload)}`
+}
+
 /**
  * The link a browser opens a code with: the web client the host serves at one of its addresses.
  * Null for an address a browser cannot open, such as an IPv6 one with a zone.

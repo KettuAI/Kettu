@@ -10,7 +10,7 @@ import {
 import { useConnectionStore } from '@renderer/stores/connection'
 import { layoutCanvas, parseCanvas, type CanvasLayout } from './canvas'
 
-export type ViewerError = 'notFound' | 'unavailable' | 'failed'
+export type ViewerError = 'notFound' | 'unavailable' | 'failed' | 'previewOnly'
 
 /** The version on screen, its pages found as the format reads them. */
 export interface ShownVersion {
@@ -32,6 +32,12 @@ export interface Presence {
  * screen (the latest when `version` is null) read and laid out, its record from the lists, and who
  * else shows or changes it.
  */
+const OPEN_ERRORS = {
+  not_found: 'notFound',
+  unavailable: 'unavailable',
+  preview_only: 'previewOnly',
+} as const satisfies Record<string, ViewerError>
+
 export function useArtifact(id: string, version: number | null) {
   const [attempt, setAttempt] = useState(0)
   const [url, setUrl] = useState<string | null>(null)
@@ -59,7 +65,7 @@ export function useArtifact(id: string, version: number | null) {
     window.kettu.artifacts.open(id).then(
       (result) => {
         if ('failed' in result) {
-          if (live) setOpenError(result.failed === 'not_found' ? 'notFound' : 'unavailable')
+          if (live) setOpenError(OPEN_ERRORS[result.failed])
           return
         }
         opened = result.url
