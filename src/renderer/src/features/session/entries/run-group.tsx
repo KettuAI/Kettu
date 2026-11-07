@@ -17,7 +17,7 @@ import {
   type SummaryPart,
 } from './helpers'
 import { RowThumbs } from './row-thumbs'
-import { StepCard } from './tool-call'
+import { StepCard, StepStub } from './tool-call'
 import { runPictures, stepFacts, useToolCallLabels } from './tool-call-model'
 import { cachedStats, useDiffStats } from './use-diff-stats'
 import { useOpenedOnce } from './use-opened'
@@ -70,15 +70,17 @@ export const RunGroup = memo(function RunGroup({
   useDiffStats(diffs)
   const pictures = useMemo(() => runPictures(entries), [entries])
   const [opened, onOpenChange] = useOpenedOnce()
-  const card = (entry: ThreadEntry) => {
+  const card = (entry: ThreadEntry, folded: boolean) => {
     const facts = stepFacts(sessionId, entry)
     if (!facts) return null
     const { glyph, ...rest } = facts
+    const icon = <Icon icon={glyph} size={14} />
+    if (folded) return <StepStub key={entry.id} {...rest} icon={icon} />
     return (
       <StepCard
         key={entry.id}
         {...rest}
-        icon={<Icon icon={glyph} size={14} />}
+        icon={icon}
         sessionId={sessionId}
         entry={entry}
         projectPath={projectPath}
@@ -87,7 +89,9 @@ export const RunGroup = memo(function RunGroup({
     )
   }
 
-  if (shown.length === 1) return <div className={cn('min-w-0', animation)}>{card(shown[0]!)}</div>
+  if (shown.length === 1) {
+    return <div className={cn('min-w-0', animation)}>{card(shown[0]!, false)}</div>
+  }
 
   const steps: RunStep[] = []
   for (const entry of shown) {
@@ -151,7 +155,7 @@ export const RunGroup = memo(function RunGroup({
       }
       onOpenChange={onOpenChange}
     >
-      {opened && shown.map(card)}
+      {shown.map((entry) => card(entry, !opened))}
     </ToolCallGroup>
   )
 }, sameRun)

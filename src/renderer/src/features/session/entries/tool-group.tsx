@@ -7,7 +7,7 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import { useEntryAnimation } from '../use-thread'
 import { groupLabel, toolStep } from './helpers'
 import { RowThumbs } from './row-thumbs'
-import { StepCard } from './tool-call'
+import { StepCard, StepStub } from './tool-call'
 import { runPictures, stepFacts, useToolCallLabels } from './tool-call-model'
 import { useOpenedOnce } from './use-opened'
 
@@ -47,21 +47,22 @@ export const ToolGroup = memo(function ToolGroup({
       }
       onOpenChange={onOpenChange}
     >
-      {opened &&
-        tools.map((entry) => {
-          const { glyph, ...facts } = stepFacts(sessionId, entry)!
-          return (
-            <StepCard
-              key={entry.id}
-              {...facts}
-              icon={<Icon icon={glyph} size={14} />}
-              sessionId={sessionId}
-              entry={entry}
-              projectPath={projectPath}
-              labels={labels}
-            />
-          )
-        })}
+      {tools.map((entry) => {
+        const { glyph, ...facts } = stepFacts(sessionId, entry)!
+        const icon = <Icon icon={glyph} size={14} />
+        if (!opened) return <StepStub key={entry.id} {...facts} icon={icon} />
+        return (
+          <StepCard
+            key={entry.id}
+            {...facts}
+            icon={icon}
+            sessionId={sessionId}
+            entry={entry}
+            projectPath={projectPath}
+            labels={labels}
+          />
+        )
+      })}
     </ToolCallGroup>
   )
 })
