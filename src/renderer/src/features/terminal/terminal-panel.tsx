@@ -60,6 +60,7 @@ import { TerminalView } from './terminal-view'
 // The two sides of a split panel; alone, the left one fills it.
 const LEFT = 'terminal-left'
 const RIGHT = 'terminal-right'
+const SLOW_START_MS = 400
 
 /**
  * The side panel's Terminal pane: a session's terminals, or New session's, with their tabs in its
@@ -82,6 +83,8 @@ export function TerminalPanel({
   const side = useTerminalsStore((s) => s.focusedSide[panel] ?? 'left')
   const error = useTerminalsStore((s) => s.error)
   const [creating, setCreating] = useState(false)
+  // Only a start that takes a while shows its Starting tab, so a quick one shows its tab at once.
+  const [slowStart, setSlowStart] = useState(false)
   const [closing, setClosing] = useState<TerminalState | null>(null)
   const right = list.find((t) => t.id === rightId) ?? null
   const active =
@@ -96,8 +99,11 @@ export function TerminalPanel({
 
   const starting = async (start: () => Promise<unknown>) => {
     setCreating(true)
+    const slow = window.setTimeout(() => setSlowStart(true), SLOW_START_MS)
     await start()
+    window.clearTimeout(slow)
     setCreating(false)
+    setSlowStart(false)
   }
   const newTerminal = () => void starting(() => createTerminal(projectPath, panel))
 
@@ -173,7 +179,7 @@ export function TerminalPanel({
                 onClose={() => close(terminal)}
               />
             ))}
-            {creating && (
+            {slowStart && (
               <span className="kp-tab">
                 <span className="kp-tab__btn">
                   <PaneSpinner className="kp-tab__icon" />
@@ -391,6 +397,7 @@ export function TerminalTab({
         data-selected={selected || undefined}
         data-dragging={isDragging || undefined}
         data-editing={editing || undefined}
+        data-owned={owner ? '' : undefined}
       >
         {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
         <button
@@ -406,14 +413,12 @@ export function TerminalTab({
           className="kp-tab__btn"
           style={editing ? { visibility: 'hidden' } : undefined}
         >
-          {owner ? (
+          {owner && (
             <AgentMark
               agent={owner.agentId}
               size={13}
               className="kp-tab__icon kp-tab__icon--mark"
             />
-          ) : (
-            <PaneIcon icon={ComputerTerminal01Icon} size={14} className="kp-tab__icon" />
           )}
           <span className="kp-tab__name">{name}</span>
           {exited && (

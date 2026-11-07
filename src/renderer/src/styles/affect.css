@@ -978,50 +978,49 @@
 
 /* ---------- panes: Terminal ---------- */
 /* The terminal lies on the pane's sheet with no box of its own: a hairline from edge to edge
-   under the head, tabs marked by a line on it, and the screen out to the sheet's edges. */
-.kp-pane[data-pane='terminal'] {
-  padding-top: 6px;
-}
+   under the head and the screen out to the sheet's edges. Its tabs are names in a row, the chosen
+   one on a gray pill, each with its close button. */
 .kp-pane[data-pane='terminal'] > .kp-head {
   position: relative;
-  height: 34px;
+  margin-bottom: 8px;
 }
 /* Out past the pane's padding, which is 10px 10px 10px 12px. */
 .kp-pane[data-pane='terminal'] > .kp-head::after {
   content: '';
   position: absolute;
-  inset: auto -10px 0 -12px;
+  inset: auto -10px -8px -12px;
   height: var(--hairline);
   background: var(--border-subtle);
   pointer-events: none;
 }
-.kp-pane[data-pane='terminal'] .kp-head__main {
-  height: 100%;
-}
-.kp-pane[data-pane='terminal'] .kp-head__tabs {
-  align-self: stretch;
-  align-items: stretch;
-}
 .kp-pane[data-pane='terminal'] .kp-tab {
-  height: auto;
-}
-.kp-pane[data-pane='terminal'] .kp-tab:is(:hover, [data-selected]) {
-  background: none;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-secondary);
 }
 .kp-pane[data-pane='terminal'] .kp-tab[data-selected] {
-  font-weight: 500;
+  background: var(--bg-selected);
+  color: var(--text-primary);
 }
-.kp-pane[data-pane='terminal'] .kp-tab[data-selected]::after {
-  content: '';
-  position: absolute;
-  inset: auto 8px 0;
-  z-index: 1;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--text-primary);
+.kp-pane[data-pane='terminal'] .kp-tab .kp-tab__btn {
+  padding: 0 6px 0 10px;
 }
 .kp-pane[data-pane='terminal'] .kp-tab__x {
-  top: calc(50% - 8px);
+  position: static;
+  margin-right: 5px;
+  opacity: 1;
+}
+.kp-pane[data-pane='terminal'] .kp-tab[data-selected] .kp-tab__x {
+  color: var(--text-tertiary);
+}
+.kp-pane[data-pane='terminal']
+  .kp-tab:not([data-selected]):is(:hover, :focus-within)
+  :is(.kp-tab__name, .kp-tab__dot) {
+  opacity: 1;
+  mask-image: none;
+}
+.kp-pane[data-pane='terminal'] .kp-tab:not([data-owned]) .kp-tab__rename {
+  padding-left: 10px;
 }
 .kp-pane[data-pane='terminal'] > .kp-body {
   margin: 0 -10px -10px -12px;
