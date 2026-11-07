@@ -1,4 +1,13 @@
-import { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  memo,
+  startTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   MessageScroller,
@@ -21,6 +30,7 @@ import { MessageOutline } from './outline/message-outline'
 import { hoverReply } from './reply-hover'
 import { ReplyToSelection } from './reply-selection'
 import { SubSessionStart } from './subagent/sub-session-start'
+import { playEntrance } from './thread-entrance'
 import { TurnStatus } from './turn-status'
 import {
   buildItems,
@@ -213,6 +223,20 @@ export const Thread = memo(function Thread({
   }, [sessionId, held, hasOlder, shownFrom, showFrom])
   // Also after each prepend, and for a page too short to scroll.
   useEffect(nearStart, [nearStart, items.length])
+  // From the first paint of its items, so the thread never shows before it enters.
+  const entrance = useRef<(() => void) | null>(null)
+  useLayoutEffect(() => {
+    if (entrance.current || items.length === 0 || !viewport.current || !content.current) return
+    entrance.current = playEntrance(viewport.current, content.current)
+  }, [items.length])
+  // Cleared too, so StrictMode's remount plays it again.
+  useEffect(
+    () => () => {
+      entrance.current?.()
+      entrance.current = null
+    },
+    [],
+  )
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={40}>
