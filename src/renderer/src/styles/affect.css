@@ -2509,6 +2509,12 @@
   border-radius: inherit;
   background: var(--k-level, var(--usage-green));
 }
+:is(.kettu-settings, .kettu-sd) .k-meter__bar > .bg-limit-warn {
+  --k-level: var(--limit-warn);
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar > .bg-limit-bad {
+  --k-level: var(--limit-bad);
+}
 
 /* An item's own page: the way back, then its mark, title and state */
 :is(.kettu-settings, .kettu-sd) .k-back {
