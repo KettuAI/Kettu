@@ -263,17 +263,30 @@ const MENU_OPENS_TERMINAL = '[role=menu] [data-accelerator="Ctrl+`"]:not([data-d
  * unprevented. Focus can be on the body by then, after the button it went back to was disabled.
  */
 export function layerOpen(): boolean {
-  return !!document.querySelector('[role=dialog], [role=alertdialog], [role=menu]')
+  return shown('[role=dialog], [role=alertdialog], [role=menu]')
 }
 
 /** A dialog other than the Settings modal, which keeps Back, Close and the shortcuts list. */
 export function dialogOpen(): boolean {
-  return !!document.querySelector('[role=dialog]:not([data-settings-dialog]), [role=alertdialog]')
+  return shown('[role=dialog]:not([data-settings-dialog]), [role=alertdialog]')
 }
 
 /** A dialog or menu other than the Settings modal. */
 export function popupOpen(): boolean {
-  return dialogOpen() || !!document.querySelector('[role=menu]')
+  return dialogOpen() || shown('[role=menu]')
+}
+
+/**
+ * Whether one of these shows over the window. The composer keeps its menus and model picker
+ * mounted while closed, inert and hidden, and a permission card is a dialog of the thread's own.
+ */
+function shown(selector: string): boolean {
+  return [...document.querySelectorAll<HTMLElement>(selector)].some(
+    (el) =>
+      !el.matches('.ui-prc__card') &&
+      !el.closest('[inert]') &&
+      el.checkVisibility({ visibilityProperty: true }),
+  )
 }
 
 /** Previous or next session in sidebar order, across Pinned, the projects and No project. */
