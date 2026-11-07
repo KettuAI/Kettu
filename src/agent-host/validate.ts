@@ -1365,6 +1365,14 @@ export function createValidators(platform: Platform): Validators {
         text: text as string | null,
       }
     },
+    'artifacts.view': (params) => {
+      const o = fields(params)
+      const page = o.page
+      if (page !== null && (typeof page !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(page))) {
+        throw invalidParams('page must be a canvas page id or null')
+      }
+      return { id: artifactId(o), page: page as string | null }
+    },
     'artifacts.setParams': (params) => {
       const o = fields(params)
       const values = o.values

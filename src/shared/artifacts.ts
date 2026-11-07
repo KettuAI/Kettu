@@ -75,6 +75,18 @@ export interface ArtifactSummary {
 export interface ArtifactSession {
   sessionId: string
   editing: boolean // its running turn changed it; false while it only reads
+  /** What it did last, which its pointer shows: read, write a file, add a page or move one. */
+  doing?: ArtifactDoing
+  /** Where it did it: a file, the start tag of the element it changed in that file, a canvas page. */
+  focus?: ArtifactFocus
+}
+
+export type ArtifactDoing = 'read' | 'write' | 'draw' | 'move'
+
+export interface ArtifactFocus {
+  path: string | null
+  offset: number | null
+  page: string | null
 }
 
 export interface VersionSummary {

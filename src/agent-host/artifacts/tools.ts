@@ -21,7 +21,15 @@ import {
   VERSION_BYTES,
   VERSION_FILES,
 } from '@shared/artifact-files'
-import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer, NO_SESSION } from '@shared/artifacts'
+import { eachStartTag } from '@shared/artifact-source'
+import {
+  ARTIFACT_ID,
+  ARTIFACT_TITLE_CHARS,
+  longer,
+  NO_SESSION,
+  type ArtifactDoing,
+  type ArtifactFocus,
+} from '@shared/artifacts'
 import {
   CANVAS_FILE,
   CANVAS_LIMITS,
@@ -755,6 +763,18 @@ function args(value: unknown, allowed: readonly string[]): Args {
   return o as Args
 }
 
+/** Where a writer's pointer goes: a page it adds or moves first, else what the files change. */
+function pointer(
+  focus: ArtifactFocus | null,
+  ops: readonly CanvasOp[] | null,
+): { focus?: ArtifactFocus; doing?: ArtifactDoing } {
+  const canvas = ops && ops.length > 0 ? canvasFocus(ops) : null
+  if (canvas?.page && (canvas.doing === 'draw' || !focus)) {
+    return { focus: { path: null, offset: null, page: canvas.page }, doing: canvas.doing }
+  }
+  return focus ? { focus, doing: 'write' } : {}
+}
+
 /** An agent's canvas operations, with the notes it adds marked as its own. */
 function canvasOps(o: Args, sessionId: string): CanvasOp[] {
   let ops: CanvasOp[]
@@ -980,6 +1000,45 @@ interface Draft {
   files: number
   /** The version holds a canvas document. */
   canvas: boolean
+  /** Where the write changes something, for the writer's pointer; null for the document alone. */
+  focus: ArtifactFocus | null
+}
+
+/**
+ * Where a write's pointer rests: on the element its first edit changed, as the start tag before
+ * the edit's place, or on the first file it writes.
+ */
+function focusOf(
+  changed: ReadonlyMap<string, Buffer | null>,
+  texts: ReadonlyMap<string, string>,
+  firstEdit: { path: string; at: number } | null,
+): ArtifactFocus | null {
+  if (firstEdit) {
+    const text = texts.get(firstEdit.path)
+    let offset: number | null = null
+    if (text !== undefined && isHtmlPath(firstEdit.path)) {
+      eachStartTag(text, (tag) => {
+        if (tag.start > firstEdit.at) return false
+        offset = tag.start
+      })
+    }
+    return { path: firstEdit.path, offset, page: null }
+  }
+  for (const [path, data] of changed) {
+    if (data && path !== CANVAS_FILE) return { path, offset: null, page: null }
+  }
+  return null
+}
+
+/** What canvas operations do, for the writer's pointer: add a page, move one, or change notes. */
+function canvasFocus(ops: readonly CanvasOp[]): { doing: ArtifactDoing; page: string | null } {
+  for (const op of ops) {
+    if (op.op === 'add' && op.object.type === 'page') return { doing: 'draw', page: op.object.id }
+    if (op.op === 'set' && ['x', 'y', 'width', 'height', 'section'].includes(op.key)) {
+      return { doing: 'move', page: op.id }
+    }
+  }
+  return { doing: 'write', page: null }
 }
 
 /** Lowercase, without accents, for matching titles. */
@@ -1231,6 +1290,7 @@ export class ArtifactTools {
       changed.set(spec.path, bytes)
     }
     const texts = new Map<string, string>()
+    let firstEdit: { path: string; at: number } | null = null
     for (const [i, edit] of list.entries()) {
       let text = texts.get(edit.path)
       if (text === undefined) {
@@ -1250,6 +1310,9 @@ export class ArtifactTools {
         const decoded = utf8(bytes)
         if (decoded === null) throw invalid(`Edit ${i + 1}: ${edit.path} is not UTF-8 text.`)
         text = decoded
+      }
+      if (!firstEdit && edit.path !== CANVAS_FILE) {
+        firstEdit = { path: edit.path, at: Math.max(0, text.indexOf(edit.oldText)) }
       }
       texts.set(edit.path, applyEdit(text, edit, i, changed.has(edit.path) || texts.has(edit.path)))
     }
@@ -1314,6 +1377,7 @@ export class ArtifactTools {
             : (base?.version.pages ?? 0),
       files: sizes.size,
       canvas: doc !== null,
+      focus: focusOf(changed, texts, firstEdit),
     }
   }
 
@@ -1430,11 +1494,17 @@ export class ArtifactTools {
     const found = await this.deps.store.read(artifactId, {
       project: caller.project,
       ...(version === undefined ? {} : { version }),
-      ...(reader ? { reader } : {}),
+      ...(reader ? { reader, focus: { path: asked, offset: null, page: null } } : {}),
     })
     const { artifact } = found
     const n = found.version.version
-    const path = asked ?? (found.type ? CONTENT_ENTRIES[found.type.name] : ARTIFACT_ENTRY)
+    // A canvas's entry is its document.
+    const entry =
+      !found.files.some((file) => file.path === ARTIFACT_ENTRY) &&
+      found.files.some((file) => file.path === CANVAS_FILE)
+        ? CANVAS_FILE
+        : ARTIFACT_ENTRY
+    const path = asked ?? (found.type ? CONTENT_ENTRIES[found.type.name] : entry)
     const stored = found.files.find((file) => file.path === path)
     if (!stored) {
       throw new ToolError(
@@ -1459,12 +1529,17 @@ export class ArtifactTools {
         : nextOffset === null
           ? `${path} follows${offset > 0 ? ` from character ${offset}` : ''}`
           : `${path} follows from character ${offset} to ${end} of ${decoded.length}; read on from next_offset`
+    const canvas = entry === CANVAS_FILE
     const kind = found.type
       ? `a ${found.type.name} in format ${found.type.format}`
-      : pagesText(found.version.pages)
+      : pagesText(found.version.pages, canvas)
+    // Page ids, which a canvas document only ever holds as letters, digits, - and _.
+    const viewed = canvas ? this.deps.store.viewedPages(artifactId) : []
+    const looking =
+      viewed.length > 0 ? ` The user is looking at the canvas page ${viewed.join(', ')} now.` : ''
     return result(
       `${artifactId}, "${artifact.title}", version ${n} of ${artifact.head}, ` +
-        `${kind}${filesText(found.files.length)}. ${about}.`,
+        `${kind}${filesText(found.files.length)}. ${about}.${looking}`,
       {
         id: artifactId,
         title: artifact.title,
@@ -1565,6 +1640,7 @@ export class ArtifactTools {
           list,
           html: o.html !== undefined,
           canvas,
+          ops,
         }),
       )
     })
@@ -1581,6 +1657,7 @@ export class ArtifactTools {
       list: readonly Edit[]
       html: boolean
       canvas: { data: Buffer; pages: number } | null
+      ops: readonly CanvasOp[] | null
     },
   ): Promise<CallToolResult> {
     const { store } = this.deps
@@ -1622,7 +1699,7 @@ export class ArtifactTools {
         ...(declared ? { declaration: declared } : {}),
         type: base.type,
         ...(canvas ? { unchecked: [CANVAS_FILE] } : {}),
-        ...(editor ? { editor } : {}),
+        ...(editor ? { editor, ...pointer(draft.focus, input.ops) } : {}),
       })
       return result(
         `Updated ${artifactId} to version ${version}, ${pagesText(draft.pages, draft.canvas)}` +

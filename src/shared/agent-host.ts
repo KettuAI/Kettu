@@ -840,6 +840,8 @@ export interface HostContract {
     params: { id: string; threadIds: string[]; sessionId: string }
     result: void
   }
+  // The canvas page this client shows the artifact at, for the others' faces and agents' reads.
+  'artifacts.view': { params: { id: string; page: string | null }; result: void }
   // New values for the parameters a page declares, written into its file as the user's version;
   // `conflict` when the file changed since `baseVersion`.
   'artifacts.setParams': {
@@ -1078,6 +1080,7 @@ export const HOST_METHODS = [
   'artifacts.resolve',
   'artifacts.markSent',
   'artifacts.editElement',
+  'artifacts.view',
   'artifacts.setParams',
   'artifacts.canvas',
   'artifacts.canvasOps',
@@ -1123,7 +1126,14 @@ export type HostEvent =
   | { type: 'usage.status'; status: UsageStatus }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
-  | { type: 'artifacts.activity'; id: string; viewers: number; sessions: ArtifactSession[] }
+  // `clients` are the other clients showing it, as `session.viewers` names them for the receiver.
+  | {
+      type: 'artifacts.activity'
+      id: string
+      viewers: number
+      clients: Array<SessionViewer & { page: string | null }>
+      sessions: ArtifactSession[]
+    }
   // To the ports watching the artifact: its comments changed, so they read them again.
   | { type: 'artifacts.comments'; id: string }
   // To the ports watching a canvas: operations in the order they applied, or its document again.

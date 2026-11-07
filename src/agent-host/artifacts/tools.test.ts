@@ -599,3 +599,41 @@ describe('canvases', () => {
     ])
   })
 })
+
+describe('presence', () => {
+  it("names what an agent's turn read and changed, down to the element", async () => {
+    const turn = { session: 's1', current: () => true }
+    const sessions: unknown[] = []
+    store = new ArtifactStore({
+      threads: threadsAt(dir),
+      contentDir: path.join(dir, 'content'),
+      log: () => {},
+      changed: () => {},
+      version: () => {},
+      activity: (_ports, activity) => sessions.push(activity.sessions),
+    })
+    tools = new ArtifactTools({
+      store,
+      sessionTitle: () => 'Session',
+      runningTurn: () => turn as never,
+    })
+    const id = await create({ html: '<main><h1>Title</h1><p class="lead">Old</p></main>' })
+    await store.watch(id, 'window')
+    await call('read_artifact', { id })
+    await call('update_artifact', {
+      id,
+      base_version: 1,
+      edits: [{ old_text: 'Old', new_text: 'New' }],
+    })
+    const last = sessions.at(-1) as Array<{
+      doing: string
+      focus: { path: string; offset: number }
+    }>
+    expect(last[0]!.doing).toBe('write')
+    expect(last[0]!.focus).toEqual({
+      path: 'index.html',
+      offset: '<main><h1>Title</h1>'.length,
+      page: null,
+    })
+  })
+})

@@ -10,6 +10,8 @@ import { ARTIFACT_ENTRY, DISK_FILE_BYTES, isHtmlPath } from '@shared/artifact-fi
 import { findAnchor, startTagAt } from '@shared/artifact-source'
 import {
   ARTIFACT_KEEP_DELETED_MS,
+  type ArtifactDoing,
+  type ArtifactFocus,
   type ArtifactSession,
   type ArtifactState,
   type VersionSummary,
@@ -61,6 +63,8 @@ export interface ArtifactActivity {
   id: string
   viewers: number
   sessions: ArtifactSession[]
+  /** The canvas page each port shows, where it said. */
+  pages: ReadonlyMap<string, string | null>
 }
 
 export interface ArtifactStoreDeps {
@@ -106,10 +110,15 @@ export interface SessionTurn {
 /** The turn of a session that reads an artifact, which then counts as reading it. */
 export interface Reading {
   reader?: SessionTurn
+  /** The file it read, for its pointer. */
+  focus?: ArtifactFocus
 }
 
 export interface Editing {
   editor?: SessionTurn
+  /** What it changed, for its pointer. */
+  focus?: ArtifactFocus
+  doing?: ArtifactDoing
 }
 
 /** A version as the store reads it: the artifact, the version and its files. */
@@ -137,8 +146,13 @@ export class ArtifactStore {
   /** The watches of each artifact, counted per port, since one window can show it twice. */
   private readonly watches = new Map<string, Map<string, number>>()
   /** The sessions using each artifact, in the order they started, and whether each edits it. */
-  private readonly users = new Map<string, Map<string, boolean>>()
+  private readonly users = new Map<
+    string,
+    Map<string, { editing: boolean; last: { doing: ArtifactDoing; focus: ArtifactFocus } | null }>
+  >()
   private timer: ReturnType<typeof setInterval> | null = null
+  /** The canvas page each port shows each artifact at. */
+  private readonly views = new Map<string, Map<string, string | null>>()
   /** The canvas documents clients are working on, with their changes not yet in a version. */
   readonly canvases: LiveCanvases
 
@@ -243,9 +257,9 @@ export class ArtifactStore {
     id: string,
     reach: Reach & { version?: number } & Reading = {},
   ): Promise<FoundVersion> {
-    const { reader, ...rest } = reach
+    const { reader, focus, ...rest } = reach
     const found = await this.get(id, rest)
-    this.used(id, reader, false)
+    this.used(id, reader, false, focus ? { doing: 'read', focus } : undefined)
     return found
   }
 
@@ -357,13 +371,13 @@ export class ArtifactStore {
     } & Reach &
       Editing,
   ): Promise<{ version: number }> {
-    const { project, editor, ...rest } = input
+    const { project, editor, focus, doing, ...rest } = input
     const { version } = await this.call('write', {
       ...rest,
       project: project ?? null,
       at: this.now(),
     })
-    this.used(input.id, editor, true)
+    this.used(input.id, editor, true, focus ? { doing: doing ?? 'write', focus } : undefined)
     this.versioned(input.id, version)
     return { version }
   }
@@ -636,7 +650,13 @@ export class ArtifactStore {
   /** The sessions using the artifact, in the order they started. */
   private using(id: string): ArtifactSession[] {
     const sessions = this.users.get(id)
-    return sessions ? [...sessions].map(([sessionId, editing]) => ({ sessionId, editing })) : []
+    return sessions
+      ? [...sessions].map(([sessionId, use]) => ({
+          sessionId,
+          editing: use.editing,
+          ...(use.last ? { doing: use.last.doing, focus: use.last.focus } : {}),
+        }))
+      : []
   }
 
   private editing(id: string): string[] {
@@ -649,7 +669,12 @@ export class ArtifactStore {
    * Counts the session's use once the call has done its work: it joins as reading, or as editing
    * where it stands. Called before a change is announced, so lists include the editor.
    */
-  private used(id: string, turn: SessionTurn | undefined, editing: boolean): void {
+  private used(
+    id: string,
+    turn: SessionTurn | undefined,
+    editing: boolean,
+    last?: { doing: ArtifactDoing; focus: ArtifactFocus },
+  ): void {
     if (!turn?.current()) return
     let sessions = this.users.get(id)
     if (!sessions) {
@@ -658,8 +683,9 @@ export class ArtifactStore {
     }
     const was = sessions.get(turn.session)
     // A session that read and then wrote is editing; one that only read stays reading.
-    if (was === true || was === editing) return
-    sessions.set(turn.session, editing)
+    const now = { editing: (was?.editing ?? false) || editing, last: last ?? was?.last ?? null }
+    if (was && was.editing === now.editing && was.last === now.last) return
+    sessions.set(turn.session, now)
     this.sendActivity(id)
   }
 
@@ -667,9 +693,9 @@ export class ArtifactStore {
   stopUsing(sessionId: string): void {
     let edited = false
     for (const [id, sessions] of [...this.users]) {
-      const editing = sessions.get(sessionId)
-      if (editing === undefined) continue
-      edited ||= editing
+      const use = sessions.get(sessionId)
+      if (use === undefined) continue
+      edited ||= use.editing
       sessions.delete(sessionId)
       if (sessions.size === 0) this.users.delete(id)
       this.sendActivity(id)
@@ -683,7 +709,32 @@ export class ArtifactStore {
     if (!ports) return
     let viewers = 0
     for (const count of ports.values()) viewers += count
-    this.deps.activity(ports.keys(), { id, viewers, sessions: this.using(id) })
+    this.deps.activity(ports.keys(), {
+      id,
+      viewers,
+      sessions: this.using(id),
+      pages: this.views.get(id) ?? new Map(),
+    })
+  }
+
+  /** The canvas page a port shows the artifact at. */
+  view(id: string, portId: string, page: string | null): void {
+    if (!this.watches.get(id)?.has(portId)) return
+    let pages = this.views.get(id)
+    if (!pages) {
+      pages = new Map()
+      this.views.set(id, pages)
+    }
+    if (pages.get(portId) === page) return
+    pages.set(portId, page)
+    this.sendActivity(id)
+  }
+
+  /** The canvas pages the user shows the artifact at, for an agent that reads it. */
+  viewedPages(id: string): string[] {
+    return [
+      ...new Set([...(this.views.get(id)?.values() ?? [])].filter((p): p is string => p !== null)),
+    ]
   }
 
   /** Counts a viewer of the artifact, which brings the port its new versions. */
@@ -719,7 +770,10 @@ export class ArtifactStore {
     const count = ports?.get(portId)
     if (!ports || !count) return false
     if (count > 1) ports.set(portId, count - 1)
-    else ports.delete(portId)
+    else {
+      ports.delete(portId)
+      this.views.get(id)?.delete(portId)
+    }
     if (ports.size === 0) this.unwatched(id)
     return true
   }
@@ -727,6 +781,7 @@ export class ArtifactStore {
   portClosed(portId: string): void {
     for (const [id, ports] of [...this.watches]) {
       if (!ports.delete(portId)) continue
+      this.views.get(id)?.delete(portId)
       if (ports.size === 0) this.unwatched(id)
       else this.sendActivity(id)
     }
@@ -734,6 +789,7 @@ export class ArtifactStore {
 
   private unwatched(id: string): void {
     this.watches.delete(id)
+    this.views.delete(id)
     this.canvases.closed(id)
     this.deps.unwatched?.(id)
   }
