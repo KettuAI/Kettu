@@ -276,8 +276,11 @@
   ) {
   color: revert-layer;
 }
+/* The row's right padding grows at once to fit its tools, so the mark must be gone in that frame;
+   fading out would show it jumping left. It still fades back in when the row is left. */
 .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-end {
   opacity: 0;
+  transition: none;
 }
 .ui-as-chat-row:has([data-subagent-badge]:hover) .kettu-row-end {
   opacity: 1;
