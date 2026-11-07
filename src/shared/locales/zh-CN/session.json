@@ -287,7 +287,9 @@
     "label": "改动",
     "files_other": "{{count}} 个文件有改动",
     "review": "查看",
-    "commit": "提交并创建 PR"
+    "commit": "提交并创建 PR",
+    "more_other": "再显示 {{count}} 个文件",
+    "fewer": "收起"
   },
   "queue": {
     "label": "排队中的消息：{{count}} 条",
