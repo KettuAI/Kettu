@@ -38,8 +38,8 @@ const QUIET = new Set(['plan', 'notice', 'git', 'artifact', 'subagent'])
 const LOOKBACK = 64
 
 /**
- * The phase, from the turn's latest entries: a thought that streams, the agent's latest message,
- * or the latest of the tool calls at the end that still runs. Finished tool calls at the end are
+ * The phase, from the turn's latest entries: a thought or a message of the agent that streams, or
+ * the latest of the tool calls at the end that still runs. Finished tool calls at the end are
  * work between steps.
  */
 export function turnPhase(state: ThreadState | null | undefined): TurnPhase {
@@ -61,7 +61,7 @@ export function turnPhase(state: ThreadState | null | undefined): TurnPhase {
     if (QUIET.has(entry.kind)) continue
     if (tools) break
     if (entry.kind === 'thought') return entry.streaming ? { phase: 'thinking', count: 1 } : WORKING
-    if (entry.kind === 'agent') return { phase: 'writing', count: 1 }
+    if (entry.kind === 'agent') return entry.streaming ? { phase: 'writing', count: 1 } : WORKING
     if (entry.kind === 'compaction' && entry.status === 'in_progress') {
       return { phase: 'compacting', count: 1 }
     }
