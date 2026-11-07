@@ -30,6 +30,7 @@ export type DaemonHosts = Pick<
   | 'activity'
   | 'resetRemote'
   | 'retryDirect'
+  | 'retryRelay'
   | 'restart'
   | 'adminEvent'
   | 'settingsChanged'
@@ -130,6 +131,7 @@ export async function startDaemonAdmin({
         }
       },
       retryDirect: () => hosts.retryDirect(),
+      retryRelay: () => hosts.retryRelay(),
     },
     remoteStatus: () => hosts.remoteAccess(),
     info: async () => ({

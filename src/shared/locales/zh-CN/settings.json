@@ -880,8 +880,8 @@
     "archived": "从侧边栏移走但仍保留。恢复后会回到原来的项目里。",
     "artifacts": "页面要读取项目文件或向你的 Agent 提问时会先问你。只保存自己数据的页面不会问。",
     "sharing": "把 artifact 发布为任何人都能打开的链接，发布到 Kettu 或你自己的 Cloudflare 账号。",
-    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话，只走你自己的网络。",
-    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话，只走你自己的网络。",
+    "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话。",
+    "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
     "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
     "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
@@ -998,7 +998,8 @@
       "direct": "直连",
       "directAt": "直连 · {{address}}",
       "ssh": "SSH",
-      "sshAt": "SSH · {{target}}"
+      "sshAt": "SSH · {{target}}",
+      "relay": "Kettu 中继"
     },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",
@@ -1011,7 +1012,12 @@
       "offlineSince": "离线 · {{ago}}",
       "removed": "已被移除",
       "update_client": "要更新这台电脑的 Kettu",
-      "update_host": "要更新它上面的 Kettu"
+      "update_host": "要更新它上面的 Kettu",
+      "relay": {
+        "unreachable": "离线 · 连不上 Kettu 中继",
+        "wrong_account": "离线 · 要用主机主人的账号登录",
+        "signed_out": "离线 · 登录后在哪都连得上"
+      }
     },
     "note": "要从手机或其他电脑访问这台电脑，请在<link>远程访问</link>中添加设备。",
     "plainTextKey": "这台电脑连别的主机用的密钥存在只有当前用户能读的文件里，因为系统没有钥匙串。",
@@ -1031,6 +1037,8 @@
       "void": "这个配对码已经失效：过期了、用过了，或者主机换了新码。在主机上点添加设备，换一个新码再粘贴。",
       "rejected": "主机那边没有添加这台电脑。",
       "unreachable": "15 秒内没连上主机。确认两台电脑在同一网络或同一个 VPN 里、主机开着远程访问；用的是你给主机加的地址时，确认端口转发还在。",
+      "wrong_account": "Kettu 中继只把登录着主机账号的电脑接到主机上。在这里登录主机所用的账号后再试。",
+      "signed_out": "这个配对码要经 Kettu 中继连主机，需要 Kettu 账号。先在设置 › 账号里登录，再试一次。",
       "self": "这是本机自己的配对码。要让别的设备连这台电脑，在那台设备上扫码或粘贴。",
       "update_client": "这台电脑的 Kettu 太旧，连不了这台主机。更新 Kettu 后再试。",
       "update_host": "那台主机上的 Kettu 太旧，这台电脑连不了。在主机上更新 Kettu 后再试。",
@@ -1165,7 +1173,8 @@
       "plainTextKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为系统没有钥匙串。",
       "serviceKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
       "serviceKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
-      "offLine": "已关闭"
+      "offLine": "已关闭",
+      "relay": "在哪都连得上"
     },
     "hostName": {
       "name": "这台电脑的名字",
@@ -1191,7 +1200,8 @@
     "direct": {
       "group": "直连",
       "name": "直连",
-      "description": "随远程访问一直开启。走的是普通 TCP，只转发 HTTPS 的隧道传不了。",
+      "description": "设备用不了中继时一直开启。走的是普通 TCP，只转发 HTTPS 的隧道传不了。",
+      "descriptionFree": "在同一网络、VPN 或你转发的端口上连接。走的是普通 TCP，只转发 HTTPS 的隧道传不了。",
       "keywords": "直连 端口 地址 局域网 网络 VPN tailscale frp 转发 direct port address",
       "port": {
         "name": "端口",
@@ -1375,7 +1385,39 @@
     },
     "groups": {
       "permissions": "权限",
-      "danger": "危险区"
+      "danger": "危险区",
+      "advanced": "高级"
+    },
+    "relay": {
+      "name": "使用 Kettu 中继",
+      "description": "这台电脑登录着 Kettu 账号时，登录同一个账号的设备在哪都连得上它。关掉后设备只能直连。",
+      "description_web": "{{host}} 登录着 Kettu 账号时，登录同一个账号的设备在哪都连得上它。关掉后设备只能直连。",
+      "keywords": "中继 云 远程 任何地方 区域 账号 relay",
+      "regions": "中继区域",
+      "regionsDescription": "同时登录每一个，设备用最先接上的那个。",
+      "regionsNone": "登录中继后显示。",
+      "regionMain": "主中继",
+      "region": "区域 {{id}}",
+      "state": {
+        "connected": "已连接",
+        "connecting": "正在连接",
+        "conflict": "身份被占用",
+        "refused": "被拒绝",
+        "busy": "连接太多",
+        "unreachable": "连不上"
+      },
+      "connecting": "正在连接 Kettu 中继…",
+      "failed": "连不上 Kettu 中继",
+      "conflict": "另一份 Kettu 在用这个身份",
+      "conflictHint": "另一份 Kettu 正以这台电脑的身份登录中继，比如用复制来的数据文件夹启动的那份。退出它之后再重试。",
+      "conflictHint_web": "另一份 Kettu 正以 {{host}} 的身份登录中继，比如用复制来的数据文件夹启动的那份。退出它之后再重试。",
+      "errorHint": {
+        "unreachable": "自己网络里的设备仍可直连。Kettu 会继续重试。",
+        "refused": "中继拒绝了登录。Kettu 稍后会再试；退出账号再登录也行。",
+        "busy": "现在连接太多。Kettu 稍后会再试。"
+      },
+      "signInHint": "登录 Kettu 账号后，在哪都连得上这台电脑。直连照样能用。",
+      "signInHint_web": "在 {{host}} 上登录 Kettu 账号后，在哪都连得上它。直连照样能用。"
     }
   },
   "usage": {

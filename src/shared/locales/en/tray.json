@@ -64,7 +64,10 @@
     "starting": "Remote · starting",
     "failed": "Remote · could not start",
     "devices_one": "Remote · {{count}} device",
-    "devices_other": "Remote · {{count}} devices"
+    "devices_other": "Remote · {{count}} devices",
+    "relayConnecting": "Remote · connecting to the relay",
+    "relayFailed": "Remote · cannot reach the relay",
+    "relayConflict": "Remote · identity in use elsewhere"
   },
   "hostDown": "Kettu's background process is not running",
   "limitLabel": "{{agent}} · {{plan}}",

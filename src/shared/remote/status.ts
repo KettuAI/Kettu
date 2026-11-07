@@ -3,6 +3,7 @@
 
 import type { DirectStatus } from '../host-control'
 import type { PairedDevice } from './device'
+import type { RelayStatus } from './relay-host'
 
 /** A device not seen for this long is removed. */
 export const UNSEEN_DAYS = 90
@@ -39,4 +40,27 @@ export interface RemoteStatus {
   service?: true
   /** Direct connections, as the remote host last reported them; `off` while it is not running. */
   direct: DirectStatus
+  /** The Kettu relay; absent from older daemons. */
+  relay?: RelayReport
+}
+
+/**
+ * The Kettu relay as Settings shows it: `off` while Use the Kettu relay is, `signed_out` while
+ * this computer is signed in to no Kettu account, and otherwise each relay's state, none while
+ * remote access is off.
+ */
+export type RelayReport =
+  { state: 'off' } | { state: 'signed_out' } | { state: 'on'; relays: RelayStatus[] }
+
+/** The relay as one state: connected once any relay is, else how the others are doing. */
+export type RelaySummary = 'off' | 'signed_out' | 'connected' | 'connecting' | 'conflict' | 'failed'
+
+export function relaySummary(relay: RelayReport | undefined): RelaySummary | null {
+  if (!relay) return null
+  if (relay.state !== 'on') return relay.state
+  const states = relay.relays.map(({ connection }) => connection.state)
+  if (states.includes('connected')) return 'connected'
+  if (states.includes('conflict')) return 'conflict'
+  if (states.some((state) => state === 'retrying' || state === 'refused')) return 'failed'
+  return 'connecting'
 }

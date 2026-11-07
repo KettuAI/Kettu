@@ -19,7 +19,10 @@ import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admi
 import { importKeyPair } from '@shared/remote/noise'
 import { parseSshTarget } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
+import { importRelayKey, relayHostId } from '@shared/remote/relay'
+import { RelayHost } from '@shared/remote/relay-host'
 import type { Transport } from '@shared/remote/transport'
+import { webSocketTransport } from '@shared/remote/websocket-transport'
 import type { DirectSettings } from '@shared/settings'
 import type { LogFn } from '../agent-host/storage'
 import { ActivityLog } from './activity'
@@ -34,6 +37,17 @@ import { clearUploads } from './uploads'
 
 /** How long an owner's call may wait for the parent, which may reach the network for it. */
 const ADMIN_TIMEOUT_MS = 60_000
+
+/** How long reading a relay's region list may take. */
+const RELAY_INFO_TIMEOUT_MS = 15_000
+
+async function fetchRelayInfo(url: string): Promise<unknown> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(RELAY_INFO_TIMEOUT_MS) })
+  if (!response.ok) throw new Error(`it answered ${response.status}`)
+  return response.json()
+}
+
+const openSocket = (url: string): WebSocket => new WebSocket(url)
 
 export interface RemoteHostDeps {
   /** A port to the agent host for a device's session, or null while the agent host is down. */
@@ -60,6 +74,8 @@ export interface StartedRemoteHost {
 interface Serving {
   server: RemoteServer
   direct: DirectListener
+  /** The relay, with the host's key; null without one. */
+  relay: RelayHost | null
   /** Under the daemon, the channels through SSH. */
   loopback: LoopbackListener | null
   /** Sends the first status and every change after it. */
@@ -70,6 +86,7 @@ interface ServeOptions {
   privateKey: string
   plainTextKey: boolean
   direct?: DirectSettings
+  relayKey?: string
 }
 
 type Init = Extract<MainToRemoteHost, { type: 'remote-host:init' }>
@@ -88,6 +105,10 @@ export function startRemoteHost(
   let hostName = ''
   // Whether devices may use the terminal; each server starts with it and hears when it changes.
   let terminal = false
+  // The relay: its main origin, Use the Kettu relay, and the account's access token now.
+  let relayUrl: string | null = null
+  let relayEnabled = false
+  let relayToken: string | null = null
   const adminCalls = new Map<number, (answer: AdminAnswer) => void>()
   let nextAdminCall = 1
 
@@ -120,9 +141,19 @@ export function startRemoteHost(
       clearUploads(uploads),
     ])
     const publicKey = Buffer.from(staticKey.publicKey).toString('base64')
+    const relayKey = options.relayKey
+      ? await importRelayKey(Buffer.from(options.relayKey, 'base64'))
+      : null
+    const relayId = relayKey ? await relayHostId(relayKey.publicKey) : null
+    // The host's relay while it uses it, for welcomes and pairing codes.
+    const onRelay = (): { id: string; urls: string[] } | null =>
+      relay && relayId && relayEnabled
+        ? { id: relayId, urls: relay.relays.map((r) => r.url) }
+        : null
     const pairing = new PairingCodes({
       hostKey: staticKey.publicKey,
       addresses: () => server.addresses,
+      relay: onRelay,
       send: (codeId, state) => send({ type: 'remote-host:pairing', codeId, pairing: state }),
     })
     const status = (): RemoteHostStatus => ({
@@ -133,6 +164,7 @@ export function startRemoteHost(
       refused: server.refused,
       direct: direct.status,
       ...(loopback ? { sshPort: loopback.port } : {}),
+      relays: relay && relayEnabled && relayToken ? relay.status : [],
     })
     let ready = false
     const changed = (): void => {
@@ -152,7 +184,26 @@ export function startRemoteHost(
       admin,
       changed,
       log,
+      relay: onRelay,
     })
+    const relay =
+      relayKey && relayId && relayUrl
+        ? new RelayHost({
+            main: relayUrl,
+            id: relayId,
+            key: relayKey,
+            openSocket,
+            fetchInfo: fetchRelayInfo,
+            // Each device the relay joins is a connection like a direct one.
+            accepted: (socket) =>
+              void webSocketTransport(socket, true).then(
+                (transport) => server.accept(transport),
+                () => {},
+              ),
+            changed,
+            log,
+          })
+        : null
     const direct = new DirectListener({ server, changed, log, webRoot: init!.webRoot ?? null })
     // Ready once direct connections listen or have failed, so the first status says which.
     await direct.apply(options.direct)
@@ -160,11 +211,15 @@ export function startRemoteHost(
     const loopback =
       sshPort === undefined ? null : await LoopbackListener.start(server, sshPort, log)
     server.startSweeping()
+    if (relay) {
+      relay.start()
+      relay.setToken(relayEnabled ? relayToken : null)
+    }
     const report = (): void => {
       ready = true
       changed()
     }
-    return { server, direct, loopback, report }
+    return { server, direct, relay, loopback, report }
   }
 
   async function stopServing(
@@ -172,6 +227,7 @@ export function startRemoteHost(
     reason: 'remote_off' | 'stopping',
   ): Promise<null> {
     if (!current) return null
+    current.relay?.stop()
     current.direct.stop()
     current.loopback?.stop()
     await current.server.stop(reason)
@@ -191,6 +247,7 @@ export function startRemoteHost(
       client: { kind: 'desktop', version: appVersion, platform: device.platform },
       name: () => hostName,
       openMainPort: deps.openMainPort,
+      ...(relayUrl ? { relay: { main: relayUrl, token: () => relayToken, openSocket } } : {}),
       changed: () => {
         if (ready) send({ type: 'remote-host:hosts', hosts: started.list() })
       },
@@ -209,6 +266,11 @@ export function startRemoteHost(
     init = message
     hostName = message.hostName
     terminal = message.terminal === true
+    if (message.relay && typeof message.relay.url === 'string') {
+      relayUrl = message.relay.url
+      relayEnabled = message.relay.enabled === true
+      relayToken = typeof message.relay.token === 'string' ? message.relay.token : null
+    }
     // Without its own key the app still serves devices, and the other way round.
     let reportHosts: (() => void) | null = null
     if (message.device) {
@@ -221,7 +283,8 @@ export function startRemoteHost(
       }
     }
     const { privateKey, plainTextKey, direct } = message
-    const started = privateKey ? serve({ privateKey, plainTextKey, direct }) : null
+    const relayKey = typeof message.relay?.key === 'string' ? message.relay.key : undefined
+    const started = privateKey ? serve({ privateKey, plainTextKey, direct, relayKey }) : null
     if (started) serving = started
     const current = await started
     send({ type: 'remote-host:ready' })
@@ -275,10 +338,16 @@ export function startRemoteHost(
       case 'remote-host:serve': {
         const { privateKey, plainTextKey, direct } = message
         if (typeof privateKey !== 'string') break
+        const relayKey = typeof message.relayKey === 'string' ? message.relayKey : undefined
         withRunning(() => {
           serving = serving.then(async (current) => {
             if (current) return current
-            const started = await serve({ privateKey, plainTextKey: plainTextKey === true, direct })
+            const started = await serve({
+              privateKey,
+              plainTextKey: plainTextKey === true,
+              direct,
+              relayKey,
+            })
             started.report()
             return started
           })
@@ -312,6 +381,24 @@ export function startRemoteHost(
         break
       case 'remote-host:direct':
         withServing(({ direct }) => direct.apply(message.direct))
+        break
+      case 'remote-host:relay':
+        relayEnabled = message.enabled === true
+        withServing(({ relay, server: s }) => {
+          relay?.setToken(relayEnabled ? relayToken : null)
+          s.options.changed()
+        })
+        break
+      case 'remote-host:token': {
+        const had = relayToken
+        relayToken = typeof message.token === 'string' ? message.token : null
+        withServing(({ relay }) => relay?.setToken(relayEnabled ? relayToken : null))
+        // Hosts not reached for want of a sign-in are tried now.
+        if (!had && relayToken) withRunning(() => client?.resume())
+        break
+      }
+      case 'remote-host:relay-retry':
+        withServing(({ relay }) => relay?.retry())
         break
       case 'remote-host:terminal': {
         const allowed = message.allowed === true

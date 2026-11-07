@@ -23,6 +23,7 @@ import {
 import {
   PAIR_HOST_TIMEOUT_MS,
   type HostConnection,
+  type RelayProblem,
   type HostPairingFailure,
   type HostPairingState,
   type HostStatus,
@@ -32,6 +33,9 @@ import {
 } from '@shared/remote/hosts'
 import type { KeyPair } from '@shared/remote/noise'
 import type { PairingPayload } from '@shared/remote/pairing'
+import { trustedRelay, type HostRelay } from '@shared/remote/relay'
+import { dialRelay } from '@shared/remote/relay-device'
+import { webSocketTransport } from '@shared/remote/websocket-transport'
 import {
   BROWSER_FEATURE,
   MIN_PROTOCOL_VERSION,
@@ -51,7 +55,7 @@ import { BYTES_FEATURE } from '@shared/remote/streams'
 import type { LogFn } from '../agent-host/storage'
 import { compareVersions } from '../agent-host/versions'
 import { ClientForwards } from './client-forwards'
-import { dial, type Connect } from './dial'
+import { dial, RelayMissed, type Connect, type RelayRoute, type Via } from './dial'
 import { publicKeyBytes } from './devices'
 import { connectTransport } from './direct'
 import type { HostStore } from './hosts'
@@ -97,6 +101,15 @@ export function retryDelay(failures: number): number {
   return Math.round(base * (0.8 + Math.random() * 0.4))
 }
 
+/** The Kettu relay, as this computer reaches hosts through it. */
+export interface RelayClient {
+  /** The main relay's origin, tried for every host on the relay. */
+  main: string
+  /** This computer's access token now; null while it is signed in to no Kettu account. */
+  token(): string | null
+  openSocket(url: string): WebSocket
+}
+
 export interface HostClientOptions {
   /** The desktop app's own key as a device, separate from its key as a host. */
   key: KeyPair
@@ -113,6 +126,8 @@ export interface HostClientOptions {
   pairing(pairId: number, state: HostPairingState): void
   log: LogFn
   connect?: Connect
+  /** The relay; absent, hosts are reached directly alone. */
+  relay?: RelayClient
   /** How long a try has to finish a handshake. */
   timeoutMs?: number
   /** The same through SSH. */
@@ -155,7 +170,7 @@ class HostSession {
 
   constructor(
     readonly channel: DeviceChannel,
-    readonly address: DirectAddress,
+    readonly via: Via,
     private readonly log: LogFn,
     private readonly timings: KeepaliveTimings = DEVICE_KEEPALIVE,
   ) {}
@@ -316,6 +331,8 @@ class HostLink {
   private readonly forwards: ClientForwards
   /** The streams this side opens, uploads and forwards alike, are odd and each above the last. */
   private streams = 1
+  /** The relay that joined last, tried first next time. */
+  private lastRelay: string | null = null
 
   constructor(
     private readonly client: HostClient,
@@ -436,9 +453,11 @@ class HostLink {
     const hello = { ...this.client.hello(), ...(resume ? { resume } : {}) }
     const route = host.ssh ?? null
     const forward = route ? new SshForward(this.client.ssh, route.target) : null
+    const relay = route ? null : this.client.relayRoute(host.relay, this.lastRelay)
     const result = await dial({
       addresses: route ? [{ host: SSH_LOOPBACK, port: route.port }] : host.addresses,
       connect: forward?.connect ?? this.client.connect,
+      relay: typeof relay === 'function' ? relay : null,
       start: (transport) => startDeviceChannel({ transport, hostKey, key: options.key, hello }),
       timeoutMs: route ? this.client.sshTimeoutMs : this.client.timeoutMs,
       signal: trying.signal,
@@ -451,9 +470,11 @@ class HostLink {
     if (result.kind === 'aborted') return
     if (result.kind !== 'open') {
       if (route && this.mayAskPort(forward!.problem())) return void this.askPort(route)
-      return this.failed()
+      const problem = result.kind === 'unreachable' ? result.relay : undefined
+      return this.failed(problem ?? (typeof relay === 'string' ? relay : undefined))
     }
-    const session = new HostSession(result.channel, result.address, options.log, options.keepalive)
+    if ('relay' in result.via) this.lastRelay = result.via.relay
+    const session = new HostSession(result.channel, result.via, options.log, options.keepalive)
     this.session = session
     session.start(this.handlersFor(session, resume !== null), WELCOME_TIMEOUT_MS)
   }
@@ -490,7 +511,7 @@ class HostLink {
         if (mine()) this.welcomed(session, welcome, askedResume)
       },
       addresses: (addresses) => {
-        if (mine()) this.addresses(addresses, session.address)
+        if (mine()) this.addresses(addresses, session.via)
       },
       renamed: (name) => {
         if (!mine()) return
@@ -529,12 +550,14 @@ class HostLink {
       platform: welcome.host.platform,
       version: welcome.host.version,
       deviceName: welcome.device.name,
-      addresses: ssh ? [] : merged(session.address, welcome.addresses, this.host?.addresses ?? []),
+      addresses: ssh ? [] : merged(session.via, welcome.addresses, this.host?.addresses ?? []),
+      // A host that no longer uses the relay says none, and is reached directly alone.
+      relay: welcome.relay,
       lastOnlineAt: (now ?? Date.now)(),
       removed: false,
     })
     this.failures = 0
-    this.set(online(session.address, welcome.terminal))
+    this.set(online(session.via, welcome.terminal))
     // The host read main's requests up to the one it names; the rest go again.
     this.requests.attach(session.wire(), resumed ? welcome.resumed!.request : 0)
     if (!resumed) void this.openPort(session, ++this.sessions)
@@ -571,7 +594,7 @@ class HostLink {
     const { type, allowed } = value as { type?: unknown; allowed?: unknown }
     // The owner allowed devices the terminal, or stopped allowing it.
     if (type === 'terminal' && this.connection.state === 'online') {
-      return this.set(online(this.connection.address, allowed === true))
+      return this.set(online(viaOf(this.connection), allowed === true))
     }
     if (OWN.has(type) || this.forwards.message(value)) return
     this.requests.received(value as Record<string, unknown>)
@@ -582,7 +605,7 @@ class HostLink {
     else if (this.queued.length < MAX_QUEUED) this.queued.push(message)
   }
 
-  private addresses(addresses: DirectAddress[], answered: DirectAddress): void {
+  private addresses(addresses: DirectAddress[], answered: Via): void {
     const host = this.host
     if (!host || host.ssh) return
     this.client.options.hosts.update(this.id, {
@@ -651,12 +674,12 @@ class HostLink {
     if (Date.now() >= this.keptUntil) this.lose()
   }
 
-  private failed(): void {
+  private failed(relay?: RelayProblem): void {
     this.failures++
     this.expireKept()
     // A host that needs an update keeps saying so, and waits the longest, between its tries.
     if (this.stoppedFor('update_host')) return this.schedule(MAX_RETRY_MS)
-    this.set({ state: 'offline' })
+    this.set(relay ? { state: 'offline', relay } : { state: 'offline' })
     this.schedule(this.client.retryDelay(this.failures))
   }
 
@@ -675,17 +698,21 @@ class HostLink {
   }
 }
 
-function online(address: DirectAddress, terminal: boolean): HostConnection {
-  return terminal ? { state: 'online', address, terminal } : { state: 'online', address }
+function online(via: Via, terminal: boolean): HostConnection {
+  return terminal ? { state: 'online', ...via, terminal } : { state: 'online', ...via }
 }
 
-/** The answering address first, then the host's own list, or what was kept while it sends none. */
-function merged(
-  answered: DirectAddress,
-  told: DirectAddress[],
-  kept: DirectAddress[],
-): DirectAddress[] {
-  return [answered, ...(told.length > 0 ? told : kept)]
+function viaOf(connection: Extract<HostConnection, { state: 'online' }>): Via {
+  return 'relay' in connection ? { relay: connection.relay } : { address: connection.address }
+}
+
+/**
+ * The answering address first, then the host's own list, or what was kept while it sends none;
+ * a session through the relay answered at no address.
+ */
+function merged(answered: Via, told: DirectAddress[], kept: DirectAddress[]): DirectAddress[] {
+  const rest = told.length > 0 ? told : kept
+  return 'address' in answered ? [answered.address, ...rest] : rest
 }
 
 /** Pairing with the host of a pasted link, until it is added or the pairing ends. */
@@ -702,9 +729,11 @@ class Pairing {
   async run(payload: PairingPayload, model: string): Promise<void> {
     const { options } = this.client
     this.say({ state: 'connecting' })
+    const relay = this.client.relayRoute(payload.relay, null)
     const result = await dial({
       addresses: payload.addresses,
       connect: this.client.connect,
+      relay: typeof relay === 'function' ? relay : null,
       start: (transport) =>
         startDeviceChannel({
           transport,
@@ -722,10 +751,14 @@ class Pairing {
       return
     }
     if (result.kind === 'dropped') return this.fail('void')
-    if (result.kind === 'unreachable') return this.fail('unreachable')
+    if (result.kind === 'unreachable') {
+      const problem = result.relay ?? (typeof relay === 'string' ? relay : null)
+      if (problem === 'wrong_account' || problem === 'signed_out') return this.fail(problem)
+      return this.fail('unreachable')
+    }
     this.say({ state: 'confirm' })
     const publicKey = Buffer.from(payload.hostKey).toString('base64')
-    const session = new HostSession(result.channel, result.address, options.log, options.keepalive)
+    const session = new HostSession(result.channel, result.via, options.log, options.keepalive)
     this.session = session
     session.start(
       {
@@ -767,8 +800,9 @@ class Pairing {
       name: welcome.host.name,
       platform: welcome.host.platform,
       version: welcome.host.version,
-      addresses: merged(session.address, welcome.addresses, payload.addresses),
+      addresses: merged(session.via, welcome.addresses, payload.addresses),
       deviceName: welcome.device.name,
+      ...((welcome.relay ?? payload.relay) ? { relay: welcome.relay ?? payload.relay } : {}),
     })
     if (!host) {
       this.client.options.log('warn', 'A host that welcomed this computer could not be kept')
@@ -882,7 +916,7 @@ class SshAdding {
       const problem = forward.problem()
       return this.fail(problem ? SSH_FAILURES[problem] : 'ssh_failed', forward.detail())
     }
-    const session = new HostSession(result.channel, result.address, options.log, options.keepalive)
+    const session = new HostSession(result.channel, result.via, options.log, options.keepalive)
     this.session = session
     session.start(
       {
@@ -1002,6 +1036,45 @@ export class HostClient {
     this.ssh = options.ssh ?? SYSTEM_SSH
     this.installScript = options.installScript ?? ((version) => installRun(version))
     this.retryDelay = options.retryDelay ?? retryDelay
+  }
+
+  /**
+   * How to reach a host through the relay: a route over its relays, the one that joined last
+   * first; why there is none, as while this computer is signed in to no account; or null for a
+   * host not on the relay.
+   */
+  relayRoute(relay: HostRelay | undefined, last: string | null): RelayRoute | RelayProblem | null {
+    const client = this.options.relay
+    if (!relay || !client) return null
+    const token = client.token()
+    if (!token) return 'signed_out'
+    // The account's token goes only to the project's relays, whatever a code or a host names.
+    const relays = [...new Set([...relay.urls, client.main])].filter((url) =>
+      trustedRelay(url, client.main),
+    )
+    if (last && relays.includes(last)) relays.sort((a, b) => (a === last ? -1 : b === last ? 1 : 0))
+    return async (signal) => {
+      const result = await dialRelay({
+        relays,
+        id: relay.id,
+        token,
+        openSocket: client.openSocket,
+        timeoutMs: this.timeoutMs,
+        signal,
+      })
+      switch (result.kind) {
+        case 'joined':
+          return { transport: await webSocketTransport(result.socket, true), relay: result.relay }
+        case 'offline':
+          throw new RelayMissed('host_offline')
+        case 'forbidden':
+          throw new RelayMissed('wrong_account')
+        case 'aborted':
+          throw new Error('Dialing is over')
+        default:
+          throw new RelayMissed('unreachable')
+      }
+    }
   }
 
   /** Starts a connection to each known host. */

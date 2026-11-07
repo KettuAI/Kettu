@@ -154,6 +154,7 @@ const api: KettuApi = {
     activity: (id) => invoke('remote:activity', id),
     reset: () => invoke('remote:reset'),
     retryDirect: () => invoke('remote:retry-direct'),
+    retryRelay: () => invoke('remote:retry-relay'),
     onChanged: onRemoteChanged,
     onPairing: onRemotePairing,
   },

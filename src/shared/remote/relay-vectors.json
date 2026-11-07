@@ -1,0 +1,77 @@
+{
+  "key": {
+    "comment": "The Ed25519 key of RFC 8032 section 7.1, test 1; all bytes in base64url",
+    "seed": "nWGxne_9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A",
+    "publicKey": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+    "id": "eh7ddx5bksrgcytl7bkai36se4"
+  },
+  "signIn": {
+    "origin": "https://relay.kettu.sh",
+    "nonce": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "text": "kettu-relay/1\nhttps://relay.kettu.sh\neh7ddx5bksrgcytl7bkai36se4\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "signature": "Kh4t7ZzoJYxdfqY_Fonne3vGKXKi2SHEuuXdPsY7qgb7abNa3kjL5XZYqYr16Xx_VyGQlite2JSol2DSfHl9Ag"
+  },
+  "paths": {
+    "info": "/v1",
+    "host": "/v1/hosts/eh7ddx5bksrgcytl7bkai36se4",
+    "connect": "/v1/hosts/eh7ddx5bksrgcytl7bkai36se4/connect",
+    "accept": "/v1/hosts/eh7ddx5bksrgcytl7bkai36se4/accept/BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+  },
+  "closes": {
+    "1009": "too_big",
+    "4400": "malformed",
+    "4401": "unauthorized",
+    "4403": "forbidden",
+    "4404": "offline",
+    "4408": "timeout",
+    "4409": "replaced",
+    "4429": "too_many"
+  },
+  "hostMessages": {
+    "valid": [
+      "{\"type\":\"sign-in\",\"publicKey\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"signature\":\"Kh4t7ZzoJYxdfqY_Fonne3vGKXKi2SHEuuXdPsY7qgb7abNa3kjL5XZYqYr16Xx_VyGQlite2JSol2DSfHl9Ag\",\"token\":\"access-token\"}",
+      "{\"type\":\"token\",\"token\":\"another-access-token\"}"
+    ],
+    "invalid": [
+      "{\"type\":\"sign-in\",\"publicKey\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"signature\":\"Kh4t7Zzo\",\"token\":\"access-token\"}",
+      "{\"type\":\"sign-in\",\"publicKey\":\"short\",\"signature\":\"Kh4t7ZzoJYxdfqY_Fonne3vGKXKi2SHEuuXdPsY7qgb7abNa3kjL5XZYqYr16Xx_VyGQlite2JSol2DSfHl9Ag\",\"token\":\"access-token\"}",
+      "{\"type\":\"sign-in\",\"publicKey\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"signature\":\"Kh4t7ZzoJYxdfqY_Fonne3vGKXKi2SHEuuXdPsY7qgb7abNa3kjL5XZYqYr16Xx_VyGQlite2JSol2DSfHl9Ag\"}",
+      "{\"type\":\"token\",\"token\":\"\"}",
+      "{\"type\":\"ready\"}",
+      "[\"sign-in\"]",
+      "not json"
+    ]
+  },
+  "relayMessages": {
+    "valid": [
+      "{\"type\":\"challenge\",\"nonce\":\"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc\"}",
+      "{\"type\":\"ready\"}",
+      "{\"type\":\"incoming\",\"token\":\"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc\"}",
+      "{\"type\":\"replaced\"}"
+    ],
+    "invalid": [
+      "{\"type\":\"challenge\",\"nonce\":\"short\"}",
+      "{\"type\":\"incoming\",\"token\":\"not/base64url/at/all/!!\"}",
+      "{\"type\":\"joined\"}",
+      "pong"
+    ]
+  },
+  "deviceMessages": {
+    "valid": ["{\"type\":\"connect\",\"token\":\"access-token\"}"],
+    "invalid": ["{\"type\":\"connect\"}", "{\"type\":\"connect\",\"token\":7}", "ping"]
+  },
+  "info": {
+    "answer": {
+      "relay": "kettu",
+      "protocol": 1,
+      "regions": [
+        { "id": "hk", "url": "https://hk.relay.kettu.sh" },
+        { "id": "us", "url": "https://relay.kettu.sh/" }
+      ]
+    },
+    "list": [
+      { "id": "us", "url": "https://relay.kettu.sh" },
+      { "id": "hk", "url": "https://hk.relay.kettu.sh" }
+    ]
+  }
+}

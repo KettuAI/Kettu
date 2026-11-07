@@ -61,7 +61,10 @@
     "off": "远程 · 已关闭",
     "starting": "远程 · 正在打开",
     "failed": "远程 · 没能打开",
-    "devices_other": "远程 · {{count}} 台设备"
+    "devices_other": "远程 · {{count}} 台设备",
+    "relayConnecting": "远程 · 正在连接中继",
+    "relayFailed": "远程 · 连不上中继",
+    "relayConflict": "远程 · 身份在别处被占用"
   },
   "hostDown": "Kettu 的后台进程没有运行",
   "limitLabel": "{{agent}} · {{plan}}",
