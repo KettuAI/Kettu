@@ -84,6 +84,13 @@ describe('parseSharingFile', () => {
     )
   })
 
+  it('keeps a Kettu page with a short id, as the service gives new pages', () => {
+    const page = kettuPage({ ref: 'k7m2x4qdnb', url: 'https://k7m2x4qdnb.pages.example/' })
+    expect(parseSharingFile({ version: 2, account: null, published: [page] })?.published).toEqual([
+      page,
+    ])
+  })
+
   it('keeps a Kettu page’s level and access code', () => {
     const page = kettuPage({ access: 'code', code: 'k7m2' })
     expect(parseSharingFile({ version: 2, account: null, published: [page] })?.published).toEqual([
@@ -122,6 +129,9 @@ describe('parseSharingFile', () => {
     const wrong: Partial<PublishedPage>[] = [
       { ref: 'ob-abcdefghijklmnop' },
       { ref: 'ABCDEFGHIJKLMNOPQRST' },
+      { ref: 'abcdefghi' },
+      { ref: 'abcdefghijklmno' },
+      { ref: 'k7m2x9qdn1' },
       { accountId: '' },
       { accountId: 'a/b' },
       { target: 'cloudflare' },

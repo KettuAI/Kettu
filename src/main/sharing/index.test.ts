@@ -104,6 +104,16 @@ describe('Sharing levels', () => {
     expect(page).toMatchObject({ access: 'code', code: 'k7m2', codeLocked: false })
   })
 
+  it('takes the short id the service gives a new page', async () => {
+    const short = 'k7m2x4qdnb'
+    const url = `https://${short}.pages.example/`
+    const { sharing } = await sharingWith([
+      { status: 201, body: { id: short, url, access: 'private', code: null } },
+      listing([{ id: short, url, bytes: 1, access: 'private', code: null }]),
+    ])
+    expect(status(await sharing.publish(ARTIFACT, 1, 'kettu', 'private'))).toMatchObject({ url })
+  })
+
   it('shows a page as public when the service names no level', async () => {
     const { sharing } = await sharingWith([
       { status: 201, body: { id: PAGE, url: PAGE_URL } },
