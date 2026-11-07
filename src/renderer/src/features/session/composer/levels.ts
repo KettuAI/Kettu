@@ -41,6 +41,15 @@ const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\
 const mentions = (text: string, name: string): boolean =>
   new RegExp(`\\b${escapeRegExp(name.toLowerCase())}\\b`).test(text)
 
+/** Drops the option's own name when every level repeats it, as Pi's "Thinking: low" does. */
+function withoutHeading<T extends { name: string }>(heading: string, levels: T[]): T[] {
+  if (!heading) return levels
+  const prefix = new RegExp(`^${escapeRegExp(heading)}\\s*:\\s*`, 'i')
+  const strip = (name: string) => name.replace(prefix, '')
+  if (!levels.every((l) => strip(l.name) !== l.name && strip(l.name) !== '')) return levels
+  return levels.map((l) => ({ ...l, name: strip(l.name) }))
+}
+
 /** The level the Default choice stands for, by its name or description, if the agent names one. */
 function defaultStandsFor(
   fallback: { name: string; description?: string } | undefined,
@@ -75,7 +84,10 @@ function providerDefault(model: string | undefined, levels: { value: string }[])
  * documents, else the middle level, a guess for a provider that documents none.
  */
 export function levelsOf(effort: SelectOption, value: string | undefined, model?: string) {
-  const levels = effort.choices.filter((c) => !isDefaultChoice(c))
+  const levels = withoutHeading(
+    effort.name,
+    effort.choices.filter((c) => !isDefaultChoice(c)),
+  )
   const fallback = effort.choices.find(isDefaultChoice)
   const isLevel = levels.some((l) => l.value === value)
   const standsFor = isLevel
