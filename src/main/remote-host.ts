@@ -64,6 +64,8 @@ export interface RemoteHostDeps {
   relayUrl: string
   /** Use the Kettu relay, as the setting is now. */
   relay(): boolean
+  /** A pairing is about to start: resolves once the relay's token was handed on, or none can be. */
+  relayTokenReady?(): Promise<void>
   /** The key this computer connects to other hosts with, made on first use; rejects like it. */
   deviceKey(): Promise<RemoteIdentity>
   /** The system as this computer's hello names it, such as "macOS 26.1". */
@@ -195,6 +197,11 @@ export class RemoteHost {
   /** This computer's public key as a host, once it has served devices in this run. */
   get publicKey(): string | null {
     return this.ownKey
+  }
+
+  /** Whether this computer is pairing with a host now. */
+  get pairingHosts(): boolean {
+    return this.hostPairings.size > 0
   }
 
   /** The known hosts, or null while the remote host has not reported them yet. */
@@ -344,6 +351,7 @@ export class RemoteHost {
     if (!(await this.loadDevice())) return null
     const pairId = this.nextPair++
     this.hostPairings.set(pairId, listener)
+    await this.deps.relayTokenReady?.()
     await this.reconcile()
     if (!this.hostPairings.has(pairId)) return pairId
     if (!this.host?.post({ type: 'remote-host:pair-host', pairId, link, model })) {

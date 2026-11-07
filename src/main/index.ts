@@ -427,7 +427,10 @@ async function start(): Promise<void> {
   const relayToken = new RelayToken({
     current: () => account.currentToken(),
     signedIn,
-    needed: () => settings.get().remote.enabled || (remoteHost.hosts?.length ?? 0) > 0,
+    needed: () =>
+      settings.get().remote.enabled ||
+      remoteHost.pairingHosts ||
+      (remoteHost.hosts?.length ?? 0) > 0,
     send: (token) => remoteHost.setToken(token),
   })
   /** The sign-in changed: the relay's token, and the direct connections it holds on without one. */
@@ -503,6 +506,7 @@ async function start(): Promise<void> {
     newRelayKey: () => newRelayKey(userDataPath, identityCipher),
     relayUrl,
     relay: () => settings.get().remote.relay,
+    relayTokenReady: () => relayToken.ready(),
     deviceKey: () => loadDeviceKey(userDataPath, identityCipher),
     devicePlatform: systemReleaseForRun,
     hostsKnown: async () => {

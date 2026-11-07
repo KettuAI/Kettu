@@ -37,6 +37,12 @@ export class RelayToken {
     if (!this.timer && !this.reading) void this.read()
   }
 
+  /** Like `update`, resolving once the token was handed on, or none can be had now. */
+  ready(): Promise<void> {
+    this.update()
+    return this.reading ?? Promise.resolve()
+  }
+
   stop(): void {
     this.stopped = true
     this.clear()
