@@ -82,20 +82,28 @@ export function NoDrag({ children, className }: { children: ReactNode; className
 export function SidebarToggle({ className }: { className?: string }) {
   const { t } = useTranslation('shell')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  const drawer = useViewStore((s) => s.sidebarDrawer)
+  // A narrow window's sidebar is a drawer, shown only while it is open.
+  const shown = useNarrowWindow() ? drawer : !collapsed
   const { summary } = useNotices()
   const button = useRef<HTMLButtonElement>(null)
-  // Move focus out of the sidebar before collapsing makes it inert.
+  // Move focus out of the sidebar before collapsing makes it inert; a closing drawer, whose own
+  // button App Shell would return it to is not drawn, gives it back to this one.
   useLayoutEffect(
     () =>
       useViewStore.subscribe((state, previous) => {
-        if (!state.sidebarCollapsed || previous.sidebarCollapsed) return
-        if (document.activeElement?.closest('.ui-as-side')) button.current?.focus()
+        const at = document.activeElement
+        if (state.sidebarCollapsed && !previous.sidebarCollapsed) {
+          if (at?.closest('.ui-as-side')) button.current?.focus()
+        } else if (!state.sidebarDrawer && previous.sidebarDrawer) {
+          if (!at || at === document.body || at.closest('.ui-as-side')) button.current?.focus()
+        }
       }),
     [],
   )
-  // Collapsed, the sidebar's notices are out of sight, so the toggle marks and names them.
-  const notices = collapsed ? summary : null
-  const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
+  // Hidden, the sidebar's notices are out of sight, so the toggle marks and names them.
+  const notices = shown ? null : summary
+  const label = shown ? t('topBar.hideSidebar') : t('topBar.showSidebar')
   return (
     <Tooltip>
       <TooltipTrigger
@@ -105,7 +113,7 @@ export function SidebarToggle({ className }: { className?: string }) {
             type="button"
             data-sidebar-toggle=""
             aria-label={label}
-            aria-expanded={!collapsed}
+            aria-expanded={shown}
             aria-description={notices?.name}
             onClick={toggleSidebar}
             className={cn(TITLE_BUTTON, className)}

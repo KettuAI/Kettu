@@ -72,6 +72,19 @@
   border-radius: 0;
   background: none;
 }
+/* As DESK in features/shell/sheet.ts: drawn first, so the sheets' own regions over it win. */
+.kettu-frame.ui-as-app > .ui-as-main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+/* The sidebar's head keeps the corner controls' room however long the list grows; the list
+   scrolls instead of squeezing it. */
+.kettu-frame.ui-as-app > .ui-as-side > .ui-as-side__head {
+  flex: none;
+}
 /* A narrow window's sidebar is a drawer: the sheets keep the gap on their left too, the drawer
    takes the sidebar's color, and the corner controls stay over it. */
 @container ui-as (max-width: 900px) {
@@ -236,6 +249,17 @@
   background: var(--hover);
   color: var(--ink);
 }
+/* App Shell mutes every icon in a sidebar row; Kettu's marks there (the turn's dots, an error, a
+   pull request, a caret) keep their own colors. */
+.ui-as-side__item
+  :is(
+    [data-turn-dots],
+    svg[role='img'],
+    svg[class*='text-'],
+    :is([role='img'], [role='button']) > svg
+  ) {
+  color: revert-layer;
+}
 .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-end {
   opacity: 0;
 }
@@ -321,6 +345,14 @@
 .kettu-account .ui-pmc__items {
   max-height: none;
   overflow: visible;
+}
+/* A short window scrolls the card instead of letting the popover flip below the window: it stays
+   between the corner controls (61 px from the top) and its row (54 px from the bottom, gap
+   included). Help's card sits beside it, outside the scrolling card. */
+.kettu-account .ui-pmc__card {
+  max-height: calc(100dvh - 115px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .kettu-account .ui-pmc__avatar > .kettu-account__avatar {
   display: grid;
