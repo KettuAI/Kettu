@@ -6,10 +6,11 @@ import { useOverlayStore } from '@renderer/stores/overlays'
 import { useViewStore } from '@renderer/stores/view'
 import {
   allPanes,
-  closePane,
-  columnOf,
+  dropBase,
   dropPlace,
+  edgeShare,
   findPane,
+  paneWithSession,
   type Box,
   type Layout,
   type PaneView,
@@ -63,39 +64,36 @@ const rectOf = (element: Element): Box => {
   return { left, top, right, bottom }
 }
 
-/** The layout the drop counts against: the dragged pane out of it, as its move leaves it. */
-function baseLayout(layout: Layout, data: SessionDragData): Layout {
-  const from = data.paneId
-    ? findPane(layout, data.paneId)
-    : allPanes(layout).find(
-        (pane) => pane.view.kind === 'session' && pane.view.sessionId === data.sessionId,
-      )
-  return from && allPanes(layout).length > 1 ? closePane(layout, from.id) : layout
+/** The pane the dragged session shows in: the pane whose title it is, or its row's session's. */
+function fromPane(layout: Layout, data: SessionDragData): string | null {
+  if (data.paneId) return findPane(layout, data.paneId) ? data.paneId : null
+  return paneWithSession(layout, data.sessionId)?.id ?? null
 }
 
-/** The room the hint covers: half the column beside the pane, half the pane, or the pane. */
-function hintBox(layout: Layout, place: Place): Box | null {
-  const pane = findPane(layout, place.paneId)
-  const column = columnOf(layout, place.paneId)
-  const own = paneElements.get(place.paneId)
-  if (!pane || !column || !own) return null
-  const box = rectOf(own)
-  if (place.side === 'center') return box
-  if (place.side === 'top' || place.side === 'bottom') {
-    const middle = (box.top + box.bottom) / 2
-    return place.side === 'top' ? { ...box, bottom: middle } : { ...box, top: middle }
+/**
+ * The room the hint covers: half the pane on that side, or the pane; at the split's edge, the
+ * strip of its whole side that the new pane takes.
+ */
+function hintBox(base: Layout, place: Place, area: Box): Box | null {
+  if (place.paneId === null) {
+    const share = edgeShare(base, place.side)
+    const width = (area.right - area.left) * share
+    const height = (area.bottom - area.top) * share
+    if (place.side === 'left') return { ...area, right: area.left + width }
+    if (place.side === 'right') return { ...area, left: area.right - width }
+    if (place.side === 'top') return { ...area, bottom: area.top + height }
+    return { ...area, top: area.bottom - height }
   }
-  // A new column takes half of the pane's column, at the column's full height.
-  const siblings = column.panes.flatMap((sibling) => {
-    const element = paneElements.get(sibling.id)
-    return element ? [rectOf(element)] : []
-  })
-  const top = Math.min(...siblings.map((rect) => rect.top))
-  const bottom = Math.max(...siblings.map((rect) => rect.bottom))
-  const middle = (box.left + box.right) / 2
-  return place.side === 'left'
-    ? { ...box, top, bottom, right: middle }
-    : { ...box, top, bottom, left: middle }
+  const own = paneElements.get(place.paneId)
+  if (!own) return null
+  const box = rectOf(own)
+  const middleX = (box.left + box.right) / 2
+  const middleY = (box.top + box.bottom) / 2
+  if (place.side === 'left') return { ...box, right: middleX }
+  if (place.side === 'right') return { ...box, left: middleX }
+  if (place.side === 'top') return { ...box, bottom: middleY }
+  if (place.side === 'bottom') return { ...box, top: middleY }
+  return box
 }
 
 /** The place under the pointer, and the room the hint covers; null outside or over its own pane. */
@@ -105,23 +103,16 @@ export function placeUnderPointer(
 ): { place: Place; box: Box } | null {
   const { layout, visiblePanes } = useViewStore.getState()
   if (!splitElement) return null
-  const base = baseLayout(layout, data)
+  const from = fromPane(layout, data)
   const shown = visiblePanes.length ? visiblePanes : allPanes(layout).map((pane) => pane.id)
   const measured = shown.flatMap((paneId) => {
     const element = paneElements.get(paneId)
-    return element && findPane(base, paneId) ? [{ paneId, ...rectOf(element) }] : []
+    return element && findPane(layout, paneId) ? [{ paneId, ...rectOf(element) }] : []
   })
-  const size = splitElement.getBoundingClientRect()
-  const place = dropPlace(point, measured, base, size)
+  const area = rectOf(splitElement)
+  const place = dropPlace(point, measured, layout, from, area)
   if (!place) return null
-  // Over its own pane nothing shows, whether the drag started from it or from its row.
-  const from = data.paneId
-    ? data.paneId
-    : allPanes(layout).find(
-        (pane) => pane.view.kind === 'session' && pane.view.sessionId === data.sessionId,
-      )?.id
-  if (place.paneId === from) return null
-  const box = hintBox(layout, place)
+  const box = hintBox(dropBase(layout, from), place, area)
   return box ? { place, box } : null
 }
 

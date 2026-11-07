@@ -734,7 +734,7 @@ export function MultiSessionMenuItems({
 
 /**
  * **Open in split view** with its sides, each disabled, saying why, when the split cannot take
- * that side: a third column, a fourth pane, or no room in the window.
+ * that side: a tenth pane, or no room in the window.
  */
 function OpenInSplit({ summary }: { summary: SessionSummary }) {
   const { t } = useTranslation('sidebar')

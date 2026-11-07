@@ -125,8 +125,7 @@
     "splitRight": "放在右侧",
     "splitBelow": "放在下方",
     "noRoom": {
-      "columns": "最多三列",
-      "panes": "每列最多三个窗格",
+      "panes": "最多 9 个窗格",
       "room": "窗口空间不足"
     },
     "inSplitView": "在分屏中",

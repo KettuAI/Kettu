@@ -20,8 +20,7 @@ import {
   paneOrder,
   paneWithSession,
   readLayout,
-  resizeColumns,
-  resizePanes,
+  resizeSplit,
   saveLayout,
   setPaneView as setPaneViewInLayout,
   showView as showViewInLayout,
@@ -366,8 +365,8 @@ export function openSession(sessionId: string, projectPath: string): void {
 }
 
 /**
- * Shows the pane at that place in the split, counted column by column and top to bottom; false
- * past the last pane, which the key leaves alone.
+ * Shows the pane at that place in the split, counted in tree order; false past the last pane,
+ * which the key leaves alone.
  */
 export function focusPaneAt(index: number): boolean {
   const paneId = paneOrder(useViewStore.getState().layout)[index]
@@ -409,14 +408,9 @@ export function setVisiblePanes(paneIds: string[]): void {
   })
 }
 
-/** Keeps the shares a resize of the split's columns left, in the split's own shares. */
-export function setColumnShares(sizes: Record<string, number>): void {
-  useViewStore.setState((s) => ({ layout: resizeColumns(s.layout, sizes) }))
-}
-
-/** Keeps the shares a resize of a column's panes left. */
-export function setPaneShares(columnId: string, sizes: Record<string, number>): void {
-  useViewStore.setState((s) => ({ layout: resizePanes(s.layout, columnId, sizes) }))
+/** Keeps the shares a resize of one of the split's groups left, in that split's own shares. */
+export function setSplitShares(splitId: string, sizes: Record<string, number>): void {
+  useViewStore.setState((s) => ({ layout: resizeSplit(s.layout, splitId, sizes) }))
 }
 
 /** A view dropped at a place in the split. */

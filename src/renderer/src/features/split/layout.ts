@@ -1,5 +1,6 @@
-// The split view's layout: columns left to right of panes top to bottom, each pane and column
-// holding a share of the room above it, and the pane in focus. Every rule here is pure.
+// The split view's layout: a tree of splits that lay their children side by side or one above
+// the other, down to the panes, each node holding a share of its split, and the pane in focus.
+// Every rule here is pure.
 
 import { isAgentId, type AgentId } from '@shared/thread'
 
@@ -15,44 +16,51 @@ export type PaneView =
     }
 
 export interface Pane {
+  kind: 'pane'
   id: string
   view: PaneView
-  /** Of its column's height. */
+  /** Of its split's length along the split's direction. */
   share: number
 }
 
-export interface Column {
+/** `row` lays its children side by side, `column` one above the other. */
+export type Direction = 'row' | 'column'
+
+export interface Split {
+  kind: 'split'
   id: string
-  panes: Pane[]
-  /** Of the split's width. */
+  direction: Direction
+  /** Two or more, none of them a split of the same direction. */
+  children: Node[]
   share: number
 }
+
+export type Node = Pane | Split
 
 export interface Layout {
-  columns: Column[]
+  root: Node
   /** The id of the pane in focus. */
   focus: string
 }
 
-export const MAX_COLUMNS = 3
-export const MAX_PANES = 3
-export const MIN_COLUMN_WIDTH = 360
+export const MAX_PANES = 9
+export const MIN_PANE_WIDTH = 360
 export const MIN_PANE_HEIGHT = 240
 /** The desk between two panes, which holds their resize handle. */
 export const PANE_GAP = 8
-export const MAX_SHOWN_PANES = MAX_COLUMNS * MAX_PANES
+/** The band along the split's edges where a drop takes the split's whole side. */
+export const EDGE_BAND = 24
 
 export type DropSide = 'left' | 'right' | 'top' | 'bottom' | 'center'
+export type EdgeSide = Exclude<DropSide, 'center'>
 
-export interface Place {
-  paneId: string
-  side: DropSide
-}
+/** Where a drop goes: a side of a pane, or with no pane a whole side of the split. */
+export type Place = { paneId: string; side: DropSide } | { paneId: null; side: EdgeSide }
 
-/** The pointer's place against one pane, and the box it was measured in. */
 export type Box = { left: number; top: number; right: number; bottom: number }
+export type Size = { width: number; height: number }
 
-export type SplitReason = 'columns' | 'panes' | 'room'
+export type SplitReason = 'panes' | 'room'
 
 export interface SideRoom {
   ok: boolean
@@ -70,40 +78,41 @@ export const newSessionView = (): PaneView => ({
 
 let sequence = 0
 
-function newId(kind: 'pane' | 'column'): string {
+function newId(kind: 'pane' | 'split'): string {
   sequence += 1
   return `${kind}-${Date.now().toString(36)}-${sequence.toString(36)}`
 }
 
 export function createPane(view: PaneView = newSessionView()): Pane {
-  return { id: newId('pane'), view, share: 1 }
+  return { kind: 'pane', id: newId('pane'), view, share: 1 }
 }
 
 /** A layout of one pane: the main area as it is without a split. */
 export function createLayout(view: PaneView = newSessionView()): Layout {
   const pane = createPane(view)
-  return { columns: [{ id: newId('column'), panes: [pane], share: 1 }], focus: pane.id }
+  return { root: pane, focus: pane.id }
 }
 
+function panesOf(node: Node): Pane[] {
+  return node.kind === 'pane' ? [node] : node.children.flatMap(panesOf)
+}
+
+/** The panes in tree order: left to right in a row, top to bottom in a column, depth first. */
 export function allPanes(layout: Layout): Pane[] {
-  return layout.columns.flatMap((column) => column.panes)
+  return panesOf(layout.root)
 }
 
-/** The panes column by column and top to bottom: the order Mod+1 to Mod+9 pick. */
+/** The panes' ids in the order Mod+1 to Mod+9 pick. */
 export function paneOrder(layout: Layout): string[] {
   return allPanes(layout).map((pane) => pane.id)
 }
 
 export function isSplit(layout: Layout): boolean {
-  return allPanes(layout).length > 1
+  return layout.root.kind === 'split'
 }
 
 export function findPane(layout: Layout, paneId: string): Pane | undefined {
   return allPanes(layout).find((pane) => pane.id === paneId)
-}
-
-export function columnOf(layout: Layout, paneId: string): Column | undefined {
-  return layout.columns.find((column) => column.panes.some((pane) => pane.id === paneId))
 }
 
 export function focusedPane(layout: Layout): Pane {
@@ -120,14 +129,18 @@ export function newSessionPane(layout: Layout): Pane | undefined {
   return allPanes(layout).find((pane) => pane.view.kind === 'new')
 }
 
+function mapNode(node: Node, map: (pane: Pane) => Pane): Node {
+  if (node.kind === 'pane') return map(node)
+  return { ...node, children: node.children.map((child) => mapNode(child, map)) }
+}
+
+/** The layout with every pane passed through `map`, the tree kept as it is. */
+export function mapPanes(layout: Layout, map: (pane: Pane) => Pane): Layout {
+  return { ...layout, root: mapNode(layout.root, map) }
+}
+
 export function setPaneView(layout: Layout, paneId: string, view: PaneView): Layout {
-  return {
-    ...layout,
-    columns: layout.columns.map((column) => ({
-      ...column,
-      panes: column.panes.map((pane) => (pane.id === paneId ? { ...pane, view } : pane)),
-    })),
-  }
+  return mapPanes(layout, (pane) => (pane.id === paneId ? { ...pane, view } : pane))
 }
 
 export function focusPane(layout: Layout, paneId: string): Layout {
@@ -159,122 +172,271 @@ export function closeSessionPane(layout: Layout, sessionId: string, fallback: Pa
   return closePane(layout, pane.id)
 }
 
-/** The place under the pointer: a third across, a quarter down the middle third, else the pane. */
+/** Shares of one split that no longer add up to one are stretched in proportion. */
+function normalizeShares<T extends { share: number }>(items: T[]): T[] {
+  const total = items.reduce((sum, item) => sum + item.share, 0)
+  if (total <= 0) return items.map((item) => ({ ...item, share: 1 / items.length }))
+  return items.map((item) => ({ ...item, share: item.share / total }))
+}
+
+/**
+ * The node in its canonical form: a split of one child gives way to it, a child split of the same
+ * direction gives its children to its parent, and every split's shares add up to one.
+ */
+function normalizeNode(node: Node): Node {
+  if (node.kind === 'pane') return node
+  const children = normalizeShares(node.children).flatMap((child): Node[] => {
+    const next = normalizeNode(child)
+    if (next.kind === 'split' && next.direction === node.direction) {
+      return next.children.map((grandchild) => ({
+        ...grandchild,
+        share: grandchild.share * next.share,
+      }))
+    }
+    return [next]
+  })
+  if (children.length === 1) return { ...children[0]!, share: node.share }
+  return { ...node, children: normalizeShares(children) }
+}
+
+/** The layout in its canonical form, the root holding the whole room. */
+export function normalizeLayout(layout: Layout): Layout {
+  return { ...layout, root: { ...normalizeNode(layout.root), share: 1 } }
+}
+
+/** The tree with only the panes `keep` holds, splits left empty dropped; null with none left. */
+function filterNode(node: Node, keep: (pane: Pane) => boolean): Node | null {
+  if (node.kind === 'pane') return keep(node) ? node : null
+  const children = node.children.flatMap((child) => {
+    const kept = filterNode(child, keep)
+    return kept ? [kept] : []
+  })
+  return children.length === 0 ? null : { ...node, children }
+}
+
+/** The smallest room a node takes, with the desk between its parts. */
+function minSize(node: Node): Size {
+  if (node.kind === 'pane') return { width: MIN_PANE_WIDTH, height: MIN_PANE_HEIGHT }
+  const sizes = node.children.map(minSize)
+  const gaps = PANE_GAP * (sizes.length - 1)
+  const widths = sizes.map((size) => size.width)
+  const heights = sizes.map((size) => size.height)
+  return node.direction === 'row'
+    ? { width: sum(widths) + gaps, height: Math.max(...heights) }
+    : { width: Math.max(...widths), height: sum(heights) + gaps }
+}
+
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0)
+
+// Half a pixel, so a box measured at fractional pixels still takes what it just fits.
+const fits = (node: Node, size: Size) => {
+  const min = minSize(node)
+  return min.width <= size.width + 0.5 && min.height <= size.height + 0.5
+}
+
+function minLength(node: Node, direction: Direction): number {
+  const min = minSize(node)
+  return direction === 'row' ? min.width : min.height
+}
+
+const directionOf = (side: EdgeSide): Direction =>
+  side === 'left' || side === 'right' ? 'row' : 'column'
+
+const leads = (side: EdgeSide) => side === 'left' || side === 'top'
+
+/** The pane split in two along the side's direction, the new pane on that side taking half. */
+function besidePane(node: Node, paneId: string, side: EdgeSide, added: Pane): Node {
+  const direction = directionOf(side)
+  if (node.kind === 'pane') {
+    if (node.id !== paneId) return node
+    const halves: Node[] = [
+      { ...added, share: 0.5 },
+      { ...node, share: 0.5 },
+    ]
+    return {
+      kind: 'split',
+      id: newId('split'),
+      direction,
+      share: node.share,
+      children: leads(side) ? halves : halves.reverse(),
+    }
+  }
+  const at = node.children.findIndex((child) => child.kind === 'pane' && child.id === paneId)
+  if (at >= 0 && node.direction === direction) {
+    const target = node.children[at]!
+    const half = target.share / 2
+    const children = [...node.children]
+    children[at] = { ...target, share: half }
+    children.splice(leads(side) ? at : at + 1, 0, { ...added, share: half })
+    return { ...node, children }
+  }
+  return {
+    ...node,
+    children: node.children.map((child) => besidePane(child, paneId, side, added)),
+  }
+}
+
+/** The share of the split's length a pane dropped on one of its edges takes. */
+export function edgeShare(layout: Layout, side: EdgeSide): number {
+  const { root } = layout
+  return root.kind === 'split' && root.direction === directionOf(side)
+    ? 1 / (root.children.length + 1)
+    : 1 / 2
+}
+
+/** A pane across the whole side of the split, sharing that side equally with what is there. */
+function atEdge(root: Node, side: EdgeSide, added: Pane, share: number): Node {
+  const direction = directionOf(side)
+  const parts: Node[] =
+    root.kind === 'split' && root.direction === direction
+      ? root.children.map((child) => ({ ...child, share: child.share * (1 - share) }))
+      : [{ ...root, share: 1 - share }]
+  const pane = { ...added, share }
+  return {
+    kind: 'split',
+    id: root.kind === 'split' && root.direction === direction ? root.id : newId('split'),
+    direction,
+    share: 1,
+    children: leads(side) ? [pane, ...parts] : [...parts, pane],
+  }
+}
+
+function placed(layout: Layout, place: Place, view: PaneView): Layout | null {
+  if (place.side === 'center') return null
+  const pane = createPane(view)
+  const root =
+    place.paneId === null
+      ? atEdge(layout.root, place.side, pane, edgeShare(layout, place.side))
+      : besidePane(layout.root, place.paneId, place.side, pane)
+  return normalizeLayout({ root, focus: pane.id })
+}
+
+/** Whether the split can take a new pane at that place, and why not. */
+export function canPlace(layout: Layout, place: Place, size: Size): SideRoom {
+  if (place.side === 'center') return ROOM
+  if (place.paneId !== null && !findPane(layout, place.paneId)) return { ok: false, reason: 'room' }
+  if (allPanes(layout).length >= MAX_PANES) return { ok: false, reason: 'panes' }
+  const next = placed(layout, place, newSessionView())
+  return next && fits(next.root, size) ? ROOM : { ok: false, reason: 'room' }
+}
+
+/** Whether the split can take a new pane on that side of the pane, and why not. */
+export function canSplit(layout: Layout, paneId: string, side: DropSide, size: Size): SideRoom {
+  return canPlace(layout, { paneId, side }, size)
+}
+
+/**
+ * Whether the pane runs along the split's whole side: across its whole height for the left and
+ * right edges, its whole width for the top and bottom, as no split of the other direction holds it.
+ */
+function spansSide(layout: Layout, paneId: string, side: EdgeSide): boolean {
+  const across = directionOf(side) === 'row' ? 'column' : 'row'
+  const walk = (node: Node): boolean | null => {
+    if (node.kind === 'pane') return node.id === paneId ? true : null
+    for (const child of node.children) {
+      const found = walk(child)
+      if (found !== null) return found && node.direction !== across
+    }
+    return null
+  }
+  return walk(layout.root) ?? false
+}
+
+function edgeUnder(pointer: { x: number; y: number }, area: Box): EdgeSide | null {
+  if (pointer.x < area.left + EDGE_BAND) return 'left'
+  if (pointer.x >= area.right - EDGE_BAND) return 'right'
+  if (pointer.y < area.top + EDGE_BAND) return 'top'
+  if (pointer.y >= area.bottom - EDGE_BAND) return 'bottom'
+  return null
+}
+
+/** The layout a drop counts against: the pane that already shows the dragged view taken out. */
+export function dropBase(layout: Layout, from: string | null): Layout {
+  return from && isSplit(layout) && findPane(layout, from) ? closePane(layout, from) : layout
+}
+
+/**
+ * The place under the pointer: the split's edge band for a pane across its whole side, unless the
+ * pane under it spans that side already; else a third across or a quarter down the middle third
+ * of the pane for its side, else the pane. Null outside the panes and over the pane the dragged
+ * view shows in, `from`, where the drop would change nothing.
+ */
 export function dropPlace(
   pointer: { x: number; y: number },
   boxes: readonly (Box & { paneId: string })[],
   layout: Layout,
-  size: { width: number; height: number },
+  from: string | null,
+  area: Box,
 ): Place | null {
   const box = boxes.find(
     (b) => pointer.x >= b.left && pointer.x < b.right && pointer.y >= b.top && pointer.y < b.bottom,
   )
   if (!box) return null
+  const size = { width: area.right - area.left, height: area.bottom - area.top }
+  const own = box.paneId === from
+  const base = dropBase(layout, from)
+  const edge = edgeUnder(pointer, area)
+  if (edge) {
+    // The pane's own edge already does what the band would; over the dragged pane it is no move.
+    const spans = own ? spansSide(layout, box.paneId, edge) : spansSide(base, box.paneId, edge)
+    if (!spans && canPlace(base, { paneId: null, side: edge }, size).ok) {
+      return { paneId: null, side: edge }
+    }
+  }
+  if (own || !findPane(base, box.paneId)) return null
   const third = (box.right - box.left) / 3
   const quarter = (box.bottom - box.top) / 4
-  const centre = (side: DropSide): Place => ({ paneId: box.paneId, side })
-  if (pointer.x < box.left + third && canSplit(layout, box.paneId, 'left', size).ok) {
-    return centre('left')
-  }
-  if (pointer.x >= box.right - third && canSplit(layout, box.paneId, 'right', size).ok) {
-    return centre('right')
-  }
-  if (pointer.y < box.top + quarter && canSplit(layout, box.paneId, 'top', size).ok) {
-    return centre('top')
-  }
-  if (pointer.y >= box.bottom - quarter && canSplit(layout, box.paneId, 'bottom', size).ok) {
-    return centre('bottom')
-  }
-  return centre('center')
-}
-
-export function columnsFit(width: number, count: number): boolean {
-  return count * MIN_COLUMN_WIDTH + (count - 1) * PANE_GAP <= width
-}
-
-export function panesFit(height: number, count: number): boolean {
-  return count * MIN_PANE_HEIGHT + (count - 1) * PANE_GAP <= height
-}
-
-/** Whether the split can take a new column or pane on that side of the pane, and why not. */
-export function canSplit(
-  layout: Layout,
-  paneId: string,
-  side: DropSide,
-  size: { width: number; height: number },
-): SideRoom {
-  const column = columnOf(layout, paneId)
-  if (!column) return { ok: false, reason: 'room' }
-  if (side === 'left' || side === 'right') {
-    if (layout.columns.length >= MAX_COLUMNS) return { ok: false, reason: 'columns' }
-    if (!columnsFit(size.width, layout.columns.length + 1)) return { ok: false, reason: 'room' }
-    return ROOM
-  }
-  if (side === 'top' || side === 'bottom') {
-    if (column.panes.length >= MAX_PANES) return { ok: false, reason: 'panes' }
-    if (!panesFit(size.height, column.panes.length + 1)) return { ok: false, reason: 'room' }
-    return ROOM
-  }
-  return ROOM
+  const at = (side: DropSide): Place | null =>
+    canPlace(base, { paneId: box.paneId, side }, size).ok ? { paneId: box.paneId, side } : null
+  return (
+    (pointer.x < box.left + third ? at('left') : null) ??
+    (pointer.x >= box.right - third ? at('right') : null) ??
+    (pointer.y < box.top + quarter ? at('top') : null) ??
+    (pointer.y >= box.bottom - quarter ? at('bottom') : null) ?? {
+      paneId: box.paneId,
+      side: 'center',
+    }
+  )
 }
 
 /**
- * A view dropped at a place: beside or above the pane as a split, else in its place, where a view
- * the pane showed leaves the split. A pane dropped over itself changes nothing.
+ * A view dropped at a place: beside or above the pane, or across a side of the split, as a split,
+ * else in the pane's place, where a view the pane showed leaves the split. A pane dropped over
+ * itself changes nothing.
  */
-export function dropView(
-  layout: Layout,
-  view: PaneView,
-  place: Place,
-  size: { width: number; height: number },
-): Layout | null {
+export function dropView(layout: Layout, view: PaneView, place: Place, size: Size): Layout | null {
+  const from = view.kind === 'session' ? paneWithSession(layout, view.sessionId) : undefined
+  if (place.paneId === null) {
+    if (from && !isSplit(layout)) return null
+    const base = dropBase(layout, from?.id ?? null)
+    return canPlace(base, place, size).ok ? placed(base, place, view) : null
+  }
   const target = findPane(layout, place.paneId)
   if (!target) return null
-  const from = view.kind === 'session' ? paneWithSession(layout, view.sessionId) : undefined
   if (from?.id === target.id) return null
   if (place.side === 'center') {
     // Two panes trade places; a view from outside the split takes this pane's place.
     const swapped = from ? setPaneView(layout, from.id, target.view) : layout
     return { ...setPaneView(swapped, target.id, view), focus: target.id }
   }
-  // A view the split holds leaves its pane first, so the room and the limits count without it.
-  const base = from ? removePane(layout, from.id) : layout
+  // A view the split holds leaves its pane first, so the room and the limit count without it.
+  const base = dropBase(layout, from?.id ?? null)
   return splitAt(base, target.id, place.side, view, size)
 }
 
 /**
- * Puts a view in a new column beside the pane, or a new pane above or below it, which takes half
- * the room of the one it splits. Null when the split has no room for that side.
+ * Puts a view beside or above the pane in a new pane, which takes half of the pane's room. Null
+ * when the split has no room for that side.
  */
 export function splitAt(
   layout: Layout,
   paneId: string,
   side: DropSide,
   view: PaneView,
-  size: { width: number; height: number },
+  size: Size,
 ): Layout | null {
-  if (!canSplit(layout, paneId, side, size).ok) return null
-  const column = columnOf(layout, paneId)!
-  const pane = createPane(view)
-  if (side === 'left' || side === 'right') {
-    const at = layout.columns.indexOf(column)
-    const half = column.share / 2
-    const columns = [...layout.columns]
-    columns[at] = { ...column, share: half }
-    columns.splice(side === 'left' ? at : at + 1, 0, {
-      id: newId('column'),
-      panes: [{ ...pane, share: 1 }],
-      share: half,
-    })
-    return { columns, focus: pane.id }
-  }
-  const at = column.panes.findIndex((p) => p.id === paneId)
-  const panes = [...column.panes]
-  const half = panes[at]!.share / 2
-  panes[at] = { ...panes[at]!, share: half }
-  panes.splice(side === 'top' ? at : at + 1, 0, { ...pane, share: half })
-  const columns = layout.columns.map((c) => (c.id === column.id ? { ...c, panes } : c))
-  return { columns, focus: pane.id }
+  const place: Place = { paneId, side }
+  return canPlace(layout, place, size).ok ? placed(layout, place, view) : null
 }
 
 /** Adds a session the split does not hold beside or below the pane in focus, from the menu. */
@@ -282,214 +444,293 @@ export function openBeside(
   layout: Layout,
   view: PaneView,
   side: 'right' | 'bottom',
-  size: { width: number; height: number },
+  size: Size,
 ): Layout | null {
   return splitAt(layout, focusedPane(layout).id, side, view, size)
 }
 
-/** Removes a pane, then the column it leaves empty, sharing their room out in proportion. */
+/**
+ * Removes a pane, sharing its room out in proportion among its split's others; a split left with
+ * one part gives way to it. The focus goes to the pane before, else the one after.
+ */
 export function closePane(layout: Layout, paneId: string): Layout {
   if (!isSplit(layout)) return layout
-  return removePane(layout, paneId)
-}
-
-function removePane(layout: Layout, paneId: string): Layout {
   const order = paneOrder(layout)
   const at = order.indexOf(paneId)
-  const before = order[at - 1] ?? order[at + 1]
-  const columns = layout.columns
-    .map((column) => {
-      if (!column.panes.some((pane) => pane.id === paneId)) return column
-      const panes = column.panes.filter((pane) => pane.id !== paneId)
-      return panes.length === 0 ? null : { ...column, panes: normalizeShares(panes) }
-    })
-    .filter((column): column is Column => column !== null)
-  const next = { columns: normalizeShares(columns), focus: layout.focus }
-  if (layout.focus === paneId && before) next.focus = before
-  if (!findPane(next, next.focus)) next.focus = allPanes(next)[0]!.id
-  return next
+  if (at < 0) return layout
+  const root = filterNode(layout.root, (pane) => pane.id !== paneId)!
+  const focus = layout.focus === paneId ? (order[at - 1] ?? order[at + 1]!) : layout.focus
+  return normalizeLayout({ root, focus })
 }
 
-/** Shares of one axis that no longer add up to one are stretched in proportion. */
-function normalizeShares<T extends { share: number }>(items: T[]): T[] {
-  const total = items.reduce((sum, item) => sum + item.share, 0)
-  if (total <= 0) return items.map((item) => ({ ...item, share: 1 / items.length }))
-  return items.map((item) => ({ ...item, share: item.share / total }))
-}
-
-/** Every share of the layout added up again after it changed: one axis per call. */
-export function normalizeLayout(layout: Layout): Layout {
-  const columns = normalizeShares(
-    layout.columns.map((column) => ({ ...column, panes: normalizeShares(column.panes) })),
-  )
-  return { columns, focus: layout.focus }
-}
-
-export function focusedColumn(layout: Layout): Column {
-  return columnOf(layout, focusedPane(layout).id) ?? layout.columns[0]!
-}
+/** A node as the split shows it: a shown part of the tree, sized among its shown siblings. */
+export type ShownNode =
+  | {
+      kind: 'pane'
+      /** The id of the node in its split's children, which its panel is named and resized by. */
+      slot: string
+      /** Percent of its split's shown length. */
+      size: number
+      pane: Pane
+    }
+  | {
+      kind: 'split'
+      slot: string
+      size: number
+      id: string
+      direction: Direction
+      children: ShownNode[]
+    }
 
 export interface VisibleLayout {
-  columns: { id: string; panes: string[] }[]
-  /** The panes in view, in the order they show. */
+  root: ShownNode
+  /** The panes in view, in tree order. */
   panes: string[]
 }
 
-/** What the split showed before, so it stays as the room moves. */
-export interface FoldedBefore {
-  columns: string[]
-  panes: Record<string, string[]>
+/** The shown tree: a split with one shown part gives way to it in its slot. */
+function shownNode(node: Node, keep: ReadonlySet<string>): ShownNode | null {
+  if (node.kind === 'pane') {
+    return keep.has(node.id) ? { kind: 'pane', slot: node.id, size: node.share, pane: node } : null
+  }
+  const children = node.children.flatMap((child) => {
+    const shown = shownNode(child, keep)
+    return shown ? [shown] : []
+  })
+  if (children.length === 0) return null
+  if (children.length === 1) return { ...children[0]!, slot: node.id, size: node.share }
+  const total = sum(children.map((child) => child.size))
+  return {
+    kind: 'split',
+    slot: node.id,
+    size: node.share,
+    id: node.id,
+    direction: node.direction,
+    children: children.map((child) => ({
+      ...child,
+      size: total > 0 ? (child.size / total) * 100 : 100 / children.length,
+    })),
+  }
 }
 
-export const NOTHING_SHOWN: FoldedBefore = { columns: [], panes: {} }
+/** The smallest length a shown node takes along a direction, for the panel that holds it. */
+export function shownMinLength(node: ShownNode, direction: Direction): number {
+  return minLength(asNode(node), direction)
+}
+
+function asNode(node: ShownNode): Node {
+  if (node.kind === 'pane') return node.pane
+  return {
+    kind: 'split',
+    id: node.id,
+    direction: node.direction,
+    share: node.size,
+    children: node.children.map(asNode),
+  }
+}
+
+/** Each pane's centre, from the shares, in a box of that size. */
+function centres(node: Node, box: Box, out: Map<string, { x: number; y: number }>): void {
+  if (node.kind === 'pane') {
+    out.set(node.id, { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 })
+    return
+  }
+  const row = node.direction === 'row'
+  let at = row ? box.left : box.top
+  const length = row ? box.right - box.left : box.bottom - box.top
+  for (const child of node.children) {
+    const end = at + child.share * length
+    centres(child, row ? { ...box, left: at, right: end } : { ...box, top: at, bottom: end }, out)
+    at = end
+  }
+}
 
 /**
- * What the split shows in its present box: as many columns as fit, as a run that holds the column
- * in focus and stays the run shown before while that still holds it, else shifts as little as it
- * can; and in each column, the panes that fit the same way.
+ * What the split shows in its present box. All of it when it fits; else, among the sets of panes
+ * that hold the pane in focus and fit, the one with the most panes, then the most of those shown
+ * before, then the nearest to the pane in focus. Nine panes make at most 256 such sets.
  */
 export function visibleLayout(
   layout: Layout,
-  size: { width: number; height: number },
-  before: FoldedBefore = NOTHING_SHOWN,
+  size: Size,
+  before: readonly string[] = [],
 ): VisibleLayout {
-  const fitColumns = Math.max(
-    1,
-    Math.min(
-      layout.columns.length,
-      Math.floor((size.width + PANE_GAP) / (MIN_COLUMN_WIDTH + PANE_GAP)),
-    ),
-  )
-  const focusColumn = layout.columns.indexOf(focusedColumn(layout))
-  const prevStart = before.columns[0]
-    ? layout.columns.findIndex((column) => column.id === before.columns[0])
-    : -1
-  const run = choose(runsOf(layout.columns.length, fitColumns), focusColumn, prevStart)
-  const columns = layout.columns.slice(run.start, run.start + run.length).map((column) => {
-    const focus = layout.columns[focusColumn]?.id === column.id
-    const fitPanes = Math.max(
-      1,
-      Math.min(
-        column.panes.length,
-        Math.floor((size.height + PANE_GAP) / (MIN_PANE_HEIGHT + PANE_GAP)),
-      ),
-    )
-    const prevPane = before.panes[column.id]?.[0]
-    const prevPaneStart = prevPane ? column.panes.findIndex((p) => p.id === prevPane) : -1
-    const focusIndex = column.panes.findIndex((pane) => pane.id === layout.focus)
-    const panes = choose(
-      runsOf(column.panes.length, fitPanes),
-      focus ? focusIndex : -1,
-      prevPaneStart,
-    )
-    return {
-      id: column.id,
-      panes: column.panes.slice(panes.start, panes.start + panes.length).map((pane) => pane.id),
-    }
-  })
-  return { columns, panes: columns.flatMap((column) => column.panes) }
-}
-
-type Run = { start: number; length: number }
-
-function runsOf(count: number, length: number): Run[] {
-  const size = Math.min(count, Math.max(1, length))
-  return Array.from({ length: count - size + 1 }, (_, start) => ({ start, length: size }))
-}
-
-const within = (run: Run, at: number) => at >= run.start && at < run.start + run.length
-
-/** The run shown before while it still holds `at`, else the one holding it, else the first. */
-function choose(runs: Run[], at: number, previousStart: number): Run {
-  if (at < 0) return runs.find((run) => run.start === previousStart) ?? runs[0]!
-  return (
-    runs.find((run) => run.start === previousStart && within(run, at)) ??
-    runs
-      .filter((run) => within(run, at))
-      .sort((a, b) => Math.abs(a.start - previousStart) - Math.abs(b.start - previousStart))[0] ??
-    runs[0]!
-  )
-}
-
-/** The visible panes' and columns' shares of their group, as a resizable panel takes them. */
-export function visibleSizes(
-  layout: Layout,
-  visible: VisibleLayout,
-): { columns: Record<string, number>; panes: Record<string, number> } {
-  const columns: Record<string, number> = {}
-  const panes: Record<string, number> = {}
-  for (const shown of visible.columns) {
-    const column = layout.columns.find((c) => c.id === shown.id)!
-    columns[shown.id] = column.share
-    const part: Record<string, number> = {}
-    for (const paneId of shown.panes)
-      part[paneId] = column.panes.find((p) => p.id === paneId)!.share
-    scale(part)
-    Object.assign(panes, part)
+  const order = paneOrder(layout)
+  const all = shownNode(layout.root, new Set(order))!
+  if (order.length === 1 || fits(layout.root, size)) {
+    return { root: { ...all, size: 100 }, panes: order }
   }
-  scale(columns)
-  return { columns, panes }
+  const focus = focusedPane(layout).id
+  const others = order.filter((id) => id !== focus)
+  const shownBefore = new Set(before)
+  const at = new Map<string, { x: number; y: number }>()
+  centres(layout.root, { left: 0, top: 0, right: size.width, bottom: size.height }, at)
+  const centre = at.get(focus)!
+  const distance = (id: string) => {
+    const point = at.get(id)!
+    return Math.hypot(point.x - centre.x, point.y - centre.y)
+  }
+  let best: { keep: Set<string>; count: number; kept: number; distance: number } | null = null
+  for (let mask = 0; mask < 1 << others.length; mask++) {
+    const picked = others.filter((_, index) => mask & (1 << index))
+    const count = picked.length + 1
+    if (best && count < best.count) continue
+    const kept =
+      picked.filter((id) => shownBefore.has(id)).length + (shownBefore.has(focus) ? 1 : 0)
+    const far = sum(picked.map(distance))
+    if (
+      best &&
+      count === best.count &&
+      (kept < best.kept || (kept === best.kept && far >= best.distance))
+    ) {
+      continue
+    }
+    const keep = new Set([focus, ...picked])
+    const tree = filterNode(layout.root, (pane) => keep.has(pane.id))!
+    if (!fits(tree, size)) continue
+    best = { keep, count, kept, distance: far }
+  }
+  const keep = best?.keep ?? new Set([focus])
+  const root = shownNode(layout.root, keep)!
+  return { root: { ...root, size: 100 }, panes: order.filter((id) => keep.has(id)) }
 }
 
-function scale(shares: Record<string, number>): void {
-  const total = Object.values(shares).reduce((sum, share) => sum + share, 0)
-  if (total <= 0) return
-  for (const key of Object.keys(shares)) shares[key] = (shares[key]! / total) * 100
+/** The pane at the shown split's top left, which leaves room for the traffic lights. */
+export function cornerPane(node: ShownNode): string {
+  return node.kind === 'pane' ? node.pane.id : cornerPane(node.children[0]!)
 }
 
-export interface SavedPane {
-  id: string
-  share: number
-  view: PaneView
+/**
+ * A split's shares after a resize, from the percentages of its shown parts: what the resize left
+ * them, scaled back to the shown parts' own shares so a folded part keeps its place.
+ */
+export function resizeSplit(
+  layout: Layout,
+  splitId: string,
+  sizes: Record<string, number>,
+): Layout {
+  const resize = (node: Node): Node => {
+    if (node.kind === 'pane') return node
+    if (node.id !== splitId) return { ...node, children: node.children.map(resize) }
+    const shown = node.children.filter((child) => sizes[child.id] !== undefined)
+    const total = sum(shown.map((child) => child.share))
+    const given = sum(shown.map((child) => sizes[child.id] ?? 0))
+    if (given <= 0) return node
+    return {
+      ...node,
+      children: node.children.map((child) =>
+        sizes[child.id] === undefined
+          ? child
+          : { ...child, share: (total * sizes[child.id]!) / given },
+      ),
+    }
+  }
+  return { ...layout, root: resize(layout.root) }
 }
+
+/**
+ * The layout with the panes `keep` leaves out, closed as a close does: shares kept in proportion,
+ * the saved pane in focus or else the first. Null when no pane is left.
+ */
+export function pruneLayout(layout: Layout, keep: (pane: Pane) => boolean): Layout | null {
+  const root = filterNode(layout.root, keep)
+  if (!root) return null
+  const next = normalizeLayout({ root, focus: layout.focus })
+  return findPane(next, next.focus) ? next : { ...next, focus: allPanes(next)[0]!.id }
+}
+
+export type SavedNode =
+  | { kind: 'pane'; id: string; share: number; view: PaneView }
+  | { kind: 'split'; id: string; share: number; direction: Direction; children: SavedNode[] }
 
 export interface SavedLayout {
-  columns: { id: string; share: number; panes: SavedPane[] }[]
+  root: SavedNode
   focus: string
 }
 
 /** The layout for storage: a New session pane is kept as New session with its defaults. */
 export function saveLayout(layout: Layout): SavedLayout {
-  return {
-    columns: layout.columns.map((column) => ({
-      id: column.id,
-      share: column.share,
-      panes: column.panes.map((pane) => ({
-        id: pane.id,
-        share: pane.share,
-        view: pane.view.kind === 'new' ? newSessionView() : pane.view,
-      })),
-    })),
-    focus: layout.focus,
-  }
+  const save = (node: Node): SavedNode =>
+    node.kind === 'pane'
+      ? {
+          kind: 'pane',
+          id: node.id,
+          share: node.share,
+          view: node.view.kind === 'new' ? newSessionView() : node.view,
+        }
+      : {
+          kind: 'split',
+          id: node.id,
+          share: node.share,
+          direction: node.direction,
+          children: node.children.map(save),
+        }
+  return { root: save(layout.root), focus: layout.focus }
 }
 
-/** A stored layout, as far as it is one; null for anything that is not. */
+/**
+ * A stored layout, as far as it is one; null for anything that is not. A layout saved as columns
+ * of panes, before splits nested, reads as a row of columns.
+ */
 export function readLayout(saved: unknown): Layout | null {
   if (!saved || typeof saved !== 'object') return null
-  const value = saved as Partial<SavedLayout>
-  if (!Array.isArray(value.columns) || value.columns.length === 0) return null
-  const columns: Column[] = []
-  for (const column of value.columns) {
-    if (!column || typeof column !== 'object') return null
-    const { id, share, panes } = column
-    if (typeof id !== 'string' || typeof share !== 'number' || !Array.isArray(panes)) return null
-    if (panes.length === 0) return null
-    const kept: Pane[] = []
-    for (const pane of panes) {
-      const view = readView(pane?.view)
-      if (!pane || typeof pane.id !== 'string' || typeof pane.share !== 'number' || !view) {
-        return null
-      }
-      kept.push({ id: pane.id, share: pane.share, view })
-    }
-    columns.push({ id, share, panes: kept })
-  }
+  const value = saved as Record<string, unknown>
+  const root = 'root' in value ? readNode(value.root, 0) : readColumns(value.columns)
+  if (!root) return null
+  const panes = panesOf(root)
+  if (panes.length > MAX_PANES) return null
+  const ids = idsOf(root)
+  if (new Set(ids).size !== ids.length) return null
   const layout = normalizeLayout({
-    columns,
-    focus: typeof value.focus === 'string' ? value.focus : columns[0]!.panes[0]!.id,
+    root,
+    focus: typeof value.focus === 'string' ? value.focus : panes[0]!.id,
   })
-  return findPane(layout, layout.focus) ? layout : focusPane(layout, columns[0]!.panes[0]!.id)
+  return findPane(layout, layout.focus) ? layout : focusPane(layout, allPanes(layout)[0]!.id)
+}
+
+function idsOf(node: Node): string[] {
+  return node.kind === 'pane' ? [node.id] : [node.id, ...node.children.flatMap(idsOf)]
+}
+
+function readNode(saved: unknown, depth: number): Node | null {
+  if (!saved || typeof saved !== 'object' || depth > MAX_PANES) return null
+  const value = saved as Record<string, unknown>
+  const { id, share } = value
+  if (typeof id !== 'string' || typeof share !== 'number' || !(share > 0)) return null
+  if (value.kind === 'pane') {
+    const view = readView(value.view)
+    return view ? { kind: 'pane', id, share, view } : null
+  }
+  if (value.kind !== 'split') return null
+  if (value.direction !== 'row' && value.direction !== 'column') return null
+  if (!Array.isArray(value.children) || value.children.length === 0) return null
+  const children: Node[] = []
+  for (const child of value.children) {
+    const node = readNode(child, depth + 1)
+    if (!node) return null
+    children.push(node)
+  }
+  return { kind: 'split', id, share, direction: value.direction, children }
+}
+
+/** A split saved as columns left to right of panes top to bottom. */
+function readColumns(saved: unknown): Node | null {
+  if (!Array.isArray(saved) || saved.length === 0) return null
+  const columns: Node[] = []
+  for (const column of saved) {
+    if (!column || typeof column !== 'object') return null
+    const { id, share, panes } = column as Record<string, unknown>
+    if (typeof id !== 'string' || typeof share !== 'number' || !(share > 0)) return null
+    if (!Array.isArray(panes) || panes.length === 0) return null
+    const children: Node[] = []
+    for (const pane of panes) {
+      const node = readNode({ ...(pane as object), kind: 'pane' }, 1)
+      if (!node) return null
+      children.push(node)
+    }
+    columns.push({ kind: 'split', id, share, direction: 'column', children })
+  }
+  return { kind: 'split', id: newId('split'), share: 1, direction: 'row', children: columns }
 }
 
 function readView(view: unknown): PaneView | null {
@@ -509,64 +750,4 @@ function readView(view: unknown): PaneView | null {
     }
   }
   return null
-}
-
-/**
- * Columns' shares after a resize, as percentages of the shown ones: what the resize left them,
- * scaled back to the whole split so a folded column keeps its place.
- */
-export function resizeColumns(layout: Layout, sizes: Record<string, number>): Layout {
-  const shown = layout.columns.filter((column) => sizes[column.id] !== undefined)
-  const total = shown.reduce((sum, column) => sum + column.share, 0)
-  const sum = shown.reduce((acc, column) => acc + (sizes[column.id] ?? 0), 0)
-  if (sum <= 0) return layout
-  return {
-    ...layout,
-    columns: layout.columns.map((column) =>
-      sizes[column.id] === undefined
-        ? column
-        : { ...column, share: (total * sizes[column.id]!) / sum },
-    ),
-  }
-}
-
-/** A column's panes' shares after a resize, as percentages of the shown ones. */
-export function resizePanes(
-  layout: Layout,
-  columnId: string,
-  sizes: Record<string, number>,
-): Layout {
-  return {
-    ...layout,
-    columns: layout.columns.map((column) => {
-      if (column.id !== columnId) return column
-      const shown = column.panes.filter((pane) => sizes[pane.id] !== undefined)
-      const sum = shown.reduce((acc, pane) => acc + (sizes[pane.id] ?? 0), 0)
-      if (sum <= 0) return column
-      const total = shown.reduce((acc, pane) => acc + pane.share, 0)
-      return {
-        ...column,
-        panes: column.panes.map((pane) =>
-          sizes[pane.id] === undefined ? pane : { ...pane, share: (total * sizes[pane.id]!) / sum },
-        ),
-      }
-    }),
-  }
-}
-
-/**
- * The layout with the panes `keep` leaves out, their columns closing as a close does: shares kept
- * in proportion, the saved pane in focus or else the first. Null when no pane is left.
- */
-export function pruneLayout(layout: Layout, keep: (pane: Pane) => boolean): Layout | null {
-  const columns = layout.columns
-    .map((column) => {
-      const panes = column.panes.filter(keep)
-      return panes.length === 0 ? null : { ...column, panes: normalizeShares(panes) }
-    })
-    .filter((column): column is Column => column !== null)
-  if (columns.length === 0) return null
-  const order = allPanes({ columns, focus: layout.focus })
-  const focus = order.some((pane) => pane.id === layout.focus) ? layout.focus : order[0]!.id
-  return normalizeLayout({ columns, focus })
 }

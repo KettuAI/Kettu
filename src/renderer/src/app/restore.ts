@@ -1,5 +1,11 @@
 import type { SessionSummary } from '@shared/agent-host'
-import { pruneLayout, readLayout, type Layout } from '@renderer/features/split/layout'
+import {
+  allPanes,
+  mapPanes,
+  pruneLayout,
+  readLayout,
+  type Layout,
+} from '@renderer/features/split/layout'
 import type { MainView } from '@renderer/stores/view'
 
 /** What replaces the launch view, unless something was opened first. */
@@ -49,25 +55,13 @@ export function savedLayout(saved: unknown, byId: Record<string, SessionSummary>
     (pane) => pane.view.kind === 'new' || !!byId[pane.view.sessionId],
   )
   if (!pruned) return null
-  const withPaths: Layout = {
-    ...pruned,
-    columns: pruned.columns.map((column) => ({
-      ...column,
-      panes: column.panes.map((pane) =>
-        pane.view.kind === 'session'
-          ? {
-              ...pane,
-              view: { ...pane.view, projectPath: byId[pane.view.sessionId]!.projectPath },
-            }
-          : pane,
-      ),
-    })),
-  }
-  const sessions = withPaths.columns.some((column) =>
-    column.panes.some((pane) => pane.view.kind === 'session'),
+  const withPaths = mapPanes(pruned, (pane) =>
+    pane.view.kind === 'session'
+      ? { ...pane, view: { ...pane.view, projectPath: byId[pane.view.sessionId]!.projectPath } }
+      : pane,
   )
   // A save of New session alone comes back as New session alone.
-  return sessions
-    ? withPaths
-    : { ...withPaths, columns: [withPaths.columns[0]!], focus: withPaths.columns[0]!.panes[0]!.id }
+  if (allPanes(withPaths).some((pane) => pane.view.kind === 'session')) return withPaths
+  const first = allPanes(withPaths)[0]!
+  return { root: { ...first, share: 1 }, focus: first.id }
 }

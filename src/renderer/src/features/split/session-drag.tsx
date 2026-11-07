@@ -47,7 +47,8 @@ export function SplitDragProvider({ children }: { children: React.ReactNode }) {
     if (data?.sessionId) dragStarted(data, pointerOf(event))
   }
   const move = (event: DragMoveEvent) => {
-    dragMoved(pointerOf(event))
+    // The operation's position is still the one before this move; the move's own is `to`.
+    dragMoved(event.to ?? pointerOf(event))
   }
   const end = (event: DragEndEvent) => {
     const drop = dragEnded(event.canceled)
