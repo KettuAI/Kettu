@@ -285,6 +285,35 @@ describe('the host files', () => {
     })
   })
 
+  it('keeps the agents that had a session before its current one', () => {
+    const switched: SessionRecord = {
+      ...session,
+      agentId: 'codex',
+      earlier: [
+        { agentId: 'claude-code', acpSessionId: 'acp-0', configDir: '/cfg', endedAt: 'e7' },
+        { agentId: 'codex', acpSessionId: '', endedAt: 'e12' },
+      ],
+      carry: { entryId: 'e20', fromTurn: 3, summarize: true, values: { model: 'gpt-5.5' } },
+    }
+    expect(parseSessionsFile({ sessions: [switched] })).toEqual({
+      version: 1,
+      sessions: [switched],
+    })
+    // A record that does not read drops itself, not the session; none left drops the list.
+    const bad = { agentId: 'other', acpSessionId: 'x', endedAt: 'e1' }
+    expect(
+      parseSessionsFile({ sessions: [{ ...switched, earlier: [bad, ...switched.earlier!] }] }),
+    ).toEqual({ version: 1, sessions: [switched] })
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, earlier: [{ ...bad, agentId: 'codex', endedAt: '' }] }],
+      }),
+    ).toEqual({ version: 1, sessions: [session] })
+    expect(
+      parseSessionsFile({ sessions: [{ ...session, carry: { entryId: 'e1', fromTurn: 0 } }] }),
+    ).toEqual({ version: 1, sessions: [session] })
+  })
+
   it('round-trips the routines file', async () => {
     const routine = {
       id: 'r-0123456789ab',

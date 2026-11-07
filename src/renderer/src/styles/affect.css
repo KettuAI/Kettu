@@ -4633,8 +4633,10 @@
   place-items: center;
   width: 15px;
 }
-/* A provider out of credit: a tinted note over the text, inside the writing area. */
-.kettu-credit {
+/* A provider out of credit, or another agent about to take over: a tinted note over the text,
+   inside the writing area. */
+.kettu-credit,
+.kettu-switch {
   margin: -4px -6px 10px;
   padding: 8px 8px 8px 12px;
   border-radius: 10px;
@@ -4643,6 +4645,10 @@
   font-size: 12.5px;
   line-height: 18px;
   color: var(--ui-ccc-ink);
+}
+/* The composer body's unlayered button reset beats the button's own padding utilities. */
+.kettu-switch [data-slot='button'] {
+  padding-inline: calc(var(--spacing) * 2);
 }
 /* New session's menus as AppShell's: rows in the quiet gray, the chosen one in ink. */
 :is(.kettu-project-menu, .kettu-agent-menu) [role='option'] {

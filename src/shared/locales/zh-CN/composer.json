@@ -8,7 +8,8 @@
       "ask": "回复 {{agent}}…",
       "denied": "告诉 {{agent}} 改用什么做法",
       "running": "排队一条消息 · {{keys}} 插入这一轮 · Esc 停止",
-      "runningQueue": "排队一条消息 · Esc 停止"
+      "runningQueue": "排队一条消息 · Esc 停止",
+      "pickAgent": "选一个 Agent 接着做…"
     },
     "stop": "停止",
     "send": "发送",
@@ -47,6 +48,14 @@
     "noModels": "没有可用的模型",
     "noModelMatch": "没有匹配的模型",
     "chooseModel": "选择模型"
+  },
+  "switchAgent": {
+    "menu": "换 Agent…",
+    "betweenTurns": "在两轮之间才能换",
+    "strip": "从下一条消息起由 {{agent}} 接手，前面的对话会带过去。",
+    "summarize": "先总结再接着做",
+    "summarizeHint": "{{agent}} 先读完前面的对话写一份总结再接着做，用的是它自己的额度。",
+    "undo": "撤销"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} 余额不足",

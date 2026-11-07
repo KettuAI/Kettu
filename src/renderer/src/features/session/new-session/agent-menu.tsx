@@ -84,10 +84,16 @@ export function AgentMenu({
   folderless = false,
   hostId = null,
   modelOnly = false,
+  defaultOpen = false,
+  onClose,
 }: {
   agentId: AgentId | null
   onChoose: (agentId: AgentId, model: string | null) => void
   modelOnly?: boolean
+  /** Opens as it mounts, for a menu another control opened in its place. */
+  defaultOpen?: boolean
+  /** It closed, chosen or not. */
+  onClose?: () => void
   /**
    * The option values of the menu's own agent, when the caller keeps them itself, as a routine
    * does; without them the menu shows and sets New session's picks.
@@ -203,6 +209,7 @@ export function AgentMenu({
     if (!next) {
       setQuery('')
       setSize(null)
+      onClose?.()
       return
     }
     setShown(
@@ -229,6 +236,13 @@ export function AgentMenu({
   }
 
   const close = () => onOpenChange(false)
+
+  const openedAtMount = useRef(false)
+  useEffect(() => {
+    if (!defaultOpen || openedAtMount.current) return
+    openedAtMount.current = true
+    onOpenChange(true)
+  })
 
   // A caller that keeps the values itself hears of the changes to its own agent; another agent's
   // changes are only a look at it until one of its models is chosen.

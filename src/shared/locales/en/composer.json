@@ -8,7 +8,8 @@
       "ask": "Reply to {{agent}}…",
       "denied": "Tell {{agent}} what to do differently",
       "running": "Queue a message · {{keys}} sends it into this turn · Esc stops",
-      "runningQueue": "Queue a message · Esc stops"
+      "runningQueue": "Queue a message · Esc stops",
+      "pickAgent": "Pick an agent to carry on with…"
     },
     "stop": "Stop",
     "send": "Send",
@@ -47,6 +48,14 @@
     "noModels": "No models available",
     "noModelMatch": "No models match",
     "chooseModel": "Choose a model"
+  },
+  "switchAgent": {
+    "menu": "Switch agent…",
+    "betweenTurns": "Switch between turns",
+    "strip": "From your next message, {{agent}} takes over with the earlier conversation.",
+    "summarize": "Summarize first",
+    "summarizeHint": "{{agent}} reads the earlier conversation and sums it up before it carries on, on its own usage.",
+    "undo": "Undo"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",

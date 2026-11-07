@@ -141,6 +141,41 @@ describe('createValidators', () => {
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
   })
 
+  it('checks a switch to another agent', () => {
+    const switchAgent = posix['sessions.switchAgent']
+    const content = [{ type: 'text', text: 'go on' }]
+    expect(switchAgent({ sessionId: 's', agentId: 'codex', content, extra: 1 })).toEqual({
+      sessionId: 's',
+      agentId: 'codex',
+      content,
+    })
+    expect(
+      switchAgent({
+        sessionId: 's',
+        agentId: 'codex',
+        content,
+        options: { model: 'gpt-5.5', fast: true },
+        summarize: true,
+      }),
+    ).toEqual({
+      sessionId: 's',
+      agentId: 'codex',
+      content,
+      options: { model: 'gpt-5.5', fast: true },
+      summarize: true,
+    })
+    expect(switchAgent({ sessionId: 's', agentId: 'codex', content, summarize: false })).toEqual({
+      sessionId: 's',
+      agentId: 'codex',
+      content,
+    })
+    rejects(() => switchAgent({ sessionId: 's', agentId: 'other', content }))
+    rejects(() => switchAgent({ sessionId: 's', agentId: 'codex' }))
+    rejects(() => switchAgent({ sessionId: 's', agentId: 'codex', content, summarize: 'yes' }))
+    rejects(() => switchAgent({ sessionId: 's', agentId: 'codex', content, options: { a: {} } }))
+    rejects(() => switchAgent({ agentId: 'codex', content }))
+  })
+
   it('checks the file requests', () => {
     expect(posix['files.list']({ projectPath: '/p', extra: 1 })).toEqual({ projectPath: '/p' })
     rejects(() => posix['files.list']({ projectPath: 'p' }))

@@ -21,6 +21,7 @@ import {
   type AuthMethodInfo,
   type ConnectionHooks,
   type ForkPoint,
+  type HistoryMessage,
   type ListedSession,
   type McpServer,
   type OpenedSession,
@@ -120,6 +121,7 @@ export interface CodexLaunch {
 
 const RESOURCE_NOT_FOUND = -32002
 const INVALID_REQUEST = -32600
+const METHOD_NOT_FOUND = -32601
 
 // Updates for a thread nobody registered yet wait here, as ACP's do.
 const PENDING_THREADS = 32
@@ -203,6 +205,15 @@ function fileLink(name: string | null, uri: string): string {
 }
 
 /** Kettu's prompt blocks as Codex's input, in the forms codex-acp sent them. */
+/** Earlier messages as the Responses API items `thread/inject_items` appends to the history. */
+export function historyItems(messages: readonly HistoryMessage[]): JsonValue[] {
+  return messages.map((message) => ({
+    type: 'message',
+    role: message.role,
+    content: [{ type: message.role === 'user' ? 'input_text' : 'output_text', text: message.text }],
+  }))
+}
+
 export function userInputs(prompt: readonly PromptBlock[]): UserInput[] {
   return prompt.map((block): UserInput => {
     switch (block.type) {
@@ -1279,6 +1290,21 @@ export class CodexConnection implements AgentConnection {
       this.unregister(sessionId)
     }
     return messages
+  }
+
+  /** `thread/inject_items`, as Responses API messages; false on a Codex that lacks it. */
+  async injectHistory(sessionId: string, messages: readonly HistoryMessage[]): Promise<boolean> {
+    const record = this.thread(sessionId)
+    try {
+      await this.rpc.request('thread/inject_items', {
+        threadId: record.id,
+        items: historyItems(messages),
+      })
+      return true
+    } catch (error) {
+      if (error instanceof RpcError && error.code === METHOD_NOT_FOUND) return false
+      throw this.toError(error)
+    }
   }
 
   /** `turn/steer` into the running turn; with no turn, or another one now, the message stays. */

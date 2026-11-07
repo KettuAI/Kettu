@@ -483,6 +483,14 @@
     "inTerminal": "Sign in in terminal",
     "signedIn": "I've signed in, retry"
   },
+  "takeover": {
+    "title": "{{agent}} took over",
+    "carried_one": "{{agent}} took over · with the earlier turn",
+    "carried_other": "{{agent}} took over · with {{count}} earlier turns",
+    "omitted_one": "What it was given. 1 earlier turn was left out; it can read it with the history tool.",
+    "omitted_other": "What it was given. {{count}} earlier turns were left out; it can read them with the history tool.",
+    "whole": "What it was given."
+  },
   "view": {
     "couldntOpen": "Couldn't open this session",
     "hostSilent": "The agent host did not answer.",
@@ -492,11 +500,9 @@
     "historyStays": "Your history stays here; the session picks up where it was.",
     "signIn": "Sign in…",
     "agentRemoved": "{{agent}} was removed",
-    "agentRemovedBody": "Its history stays here, but this session can't continue. Add the agent again, or continue in a new session with another agent.",
-    "agentRemovedComposer": "This session can’t continue because its agent was removed.",
+    "agentRemovedBody": "Its history stays here. Pick another agent in the composer to carry on in this session, or add the agent again.",
     "agentTurnedOff": "{{agent}} is turned off",
-    "agentTurnedOffBody": "Its history stays here. Turn the agent on in Settings to continue this session.",
-    "agentTurnedOffComposer": "This session can’t continue while its agent is turned off.",
+    "agentTurnedOffBody": "Its history stays here. Turn the agent on in Settings, or pick another agent in the composer to carry on.",
     "openAgent": "Open agent",
     "archivedComposer": "This session is archived and no longer takes messages.",
     "restore": "Restore",

@@ -643,6 +643,42 @@ describe('steering', () => {
   })
 })
 
+describe('history from an earlier agent', () => {
+  it('appends it to the thread as Responses API messages', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project')
+    server.on('thread/inject_items', () => ({}))
+    const injected = await connection.injectHistory('thread-1', [
+      { role: 'user', text: 'Turn 1, the user' },
+      { role: 'assistant', text: 'Turn 1, Claude Code' },
+    ])
+    expect(injected).toBe(true)
+    expect(server.sent('thread/inject_items')).toEqual([
+      {
+        threadId: 'thread-1',
+        items: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: 'Turn 1, the user' }],
+          },
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Turn 1, Claude Code' }],
+          },
+        ],
+      },
+    ])
+  })
+
+  it('answers false on a Codex without it, so the history goes with the prompt', async () => {
+    const { connection } = await connect()
+    await connection.newSession('/project')
+    expect(await connection.injectHistory('thread-1', [{ role: 'user', text: 'x' }])).toBe(false)
+  })
+})
+
 describe('approvals', () => {
   it('asks with the decisions the request lists, and sends the one picked', async () => {
     const { server, connection } = await connect()

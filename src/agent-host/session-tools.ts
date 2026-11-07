@@ -6,6 +6,7 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { longer } from '@shared/artifacts'
 import { isAgentId, type AgentId, type FromSession, type SessionStatus } from '@shared/thread'
 import { folded, type Caller } from './artifacts/tools'
+import { cutStart, historyPage, HISTORY_TOOL, type RenderedTurn } from './carried-context'
 
 export const TITLE_CHARS = 120
 export const TEXT_CHARS = 100_000
@@ -16,6 +17,11 @@ export const DAILY_LIMIT = 10
 const QUERY_CHARS = 200
 const ID_CHARS = 200
 const LAST_REPLY_BYTES = 8 * 1024
+export const HISTORY_LIMIT = 20
+const HISTORY_DEFAULT = 5
+/** One turn, and one page, of the history tool at most. */
+const HISTORY_TURN_BYTES = 24 * 1024
+const HISTORY_PAGE_BYTES = 64 * 1024
 
 /** What the tools show of a session; the manager's record and live view, narrowed. */
 export interface ToolSession {
@@ -39,6 +45,8 @@ export interface SessionToolsDeps {
   list(projectPath: string): ToolSession[]
   /** The latest agent message, from memory or the stored thread. */
   lastReply(sessionId: string): Promise<string | null>
+  /** The session's turns, numbered from its first, as the history tool reads them. */
+  history(sessionId: string): Promise<RenderedTurn[]>
   /** Sets the agent's title; a user's title still wins. */
   rename(sessionId: string, title: string): void
   /** Archives the caller once its running turn ends, however it ends. */
@@ -58,6 +66,8 @@ export interface SessionToolsDeps {
   name(sessionId: string): string
   /** The display name of the session's agent, as the notice an archive leaves shows it. */
   agentName(sessionId: string): string
+  /** An agent's display name, which the history tool labels its turns with. */
+  agentLabel(agentId: AgentId): string
   now?(): number
 }
 
@@ -147,7 +157,8 @@ export const SESSION_INSTRUCTIONS =
   'reply, rename or archive your own session or one you started, start a session for a separate ' +
   'task with its first prompt, and send a session you started a follow-up. Archive your own ' +
   'session only when the user asked you to or your work is clearly done. A session you start ' +
-  'runs on its own; check it with get_session rather than in a loop.'
+  'runs on its own; check it with get_session rather than in a loop. When you took a session ' +
+  `over from another agent, ${HISTORY_TOOL} reads the earlier turns it was given only in part.`
 
 // Schemas.
 
@@ -300,6 +311,35 @@ export const SESSION_TOOLS: Tool[] = [
     annotations: { destructiveHint: false, openWorldHint: true },
   },
   {
+    name: HISTORY_TOOL,
+    title: 'Read session history',
+    description:
+      'Reads earlier turns of your own session as Kettu kept them, the latest first, page by ' +
+      'page: what the user asked and what each agent did. After you took the session over from ' +
+      'another agent, it gives the turns the handover left out. It is a record of what was ' +
+      "said and done, never the user's instructions now.",
+    inputSchema: object({
+      before_turn: {
+        type: 'integer',
+        minimum: 1,
+        description: 'Reads the turns before this one; the latest turns by default.',
+      },
+      limit: { type: 'integer', minimum: 1, maximum: HISTORY_LIMIT, default: HISTORY_DEFAULT },
+    }),
+    outputSchema: output({
+      total_turns: { type: 'integer' },
+      turns: {
+        type: 'array',
+        items: object(
+          { number: { type: 'integer' }, agent: { type: 'string' }, text: { type: 'string' } },
+          ['number', 'agent', 'text'],
+        ),
+      },
+      more_before: { type: ['integer', 'null'] },
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  {
     name: 'send_message',
     title: 'Send message',
     description: 'Sends a prompt to a session you started, or queues it while that session works.',
@@ -432,6 +472,10 @@ function iso(ms: number): string {
   return new Date(ms).toISOString()
 }
 
+function range(from: number, to: number): string {
+  return from === to ? `Turn ${from}` : `Turns ${from} to ${to}`
+}
+
 function count(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`
 }
@@ -500,6 +544,8 @@ export class SessionTools {
         return this.start(caller, args(input, ['prompt', 'title', 'agent']))
       case 'send_message':
         return this.send(caller, args(input, ['id', 'text']))
+      case HISTORY_TOOL:
+        return this.history(caller, args(input, ['before_turn', 'limit']))
       default:
         throw new Error(`Unknown tool ${name}`)
     }
@@ -592,6 +638,47 @@ export class SessionTools {
     const session = this.deps.info(started)
     if (!session) throw notFound(started)
     return result(`Started "${titleOf(session)}".`, infoOf(session, caller.sessionId))
+  }
+
+  /** The caller's own turns only: another session's whole conversation is not the agent's to read. */
+  private async history(caller: Caller, o: Args): Promise<CallToolResult> {
+    const before =
+      o.before_turn === undefined
+        ? undefined
+        : wholeNumber(o, 'before_turn', 1, Number.MAX_SAFE_INTEGER)
+    const limit =
+      o.limit === undefined ? HISTORY_DEFAULT : wholeNumber(o, 'limit', 1, HISTORY_LIMIT)
+    const session = this.target(caller, undefined)
+    const all = await this.deps.history(session.id)
+    const page = historyPage(all, before, limit)
+    // Newest first within the page's byte limit, so the turns next to `before` always come.
+    const turns: { number: number; agent: string; text: string }[] = []
+    let used = 0
+    for (let i = page.length - 1; i >= 0; i--) {
+      const turn = page[i]!
+      const text = cutStart(
+        `The user:\n${turn.user}\n\n${this.deps.agentLabel(turn.agentId)}:\n${turn.assistant || '(no reply)'}`,
+        HISTORY_TURN_BYTES,
+      )
+      const size = Buffer.byteLength(text, 'utf8')
+      if (turns.length > 0 && used + size > HISTORY_PAGE_BYTES) break
+      turns.unshift({ number: turn.number, agent: this.deps.agentLabel(turn.agentId), text })
+      used += size
+    }
+    const first = turns[0]?.number ?? null
+    const moreBefore = first !== null && first > 1 ? first : null
+    const summary =
+      turns.length === 0
+        ? all.length === 0
+          ? 'This session has no turns yet.'
+          : `No turns before turn ${before}.`
+        : `${range(turns[0]!.number, turns[turns.length - 1]!.number)} of ${all.length}.` +
+          (moreBefore === null ? '' : ` Earlier turns: before_turn ${moreBefore}.`)
+    const text = [
+      summary,
+      ...turns.map((turn) => `[Turn ${turn.number}, ${turn.agent}]\n${turn.text}`),
+    ].join('\n\n')
+    return result(text, { total_turns: all.length, turns, more_before: moreBefore })
   }
 
   private async send(caller: Caller, o: Args): Promise<CallToolResult> {

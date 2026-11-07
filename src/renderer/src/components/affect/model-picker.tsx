@@ -67,6 +67,17 @@ export type PickerToggle = {
   on?: boolean;
 };
 
+/** A row under the switches that does something else, such as opening another menu; the picker closes first. */
+export type PickerAction = {
+  id: string;
+  label: string;
+  icon?: ReactNode;
+  /** The caption while it is pointed at, such as why it is unavailable. */
+  hint?: string;
+  disabled?: boolean;
+  onSelect: () => void;
+};
+
 /** Words the picker shows and says – pass your own to translate them */
 export type PickerLabels = {
   model: string;
@@ -134,6 +145,8 @@ export type ModelPickerProps = {
   effortHint?: string;
   /** Your own switches in place of Extended thinking and Web search */
   toggles?: PickerToggle[];
+  /** Rows after the switches that act rather than choose. */
+  actions?: PickerAction[];
   /** Models behind a "More models" row, with a search field */
   more?: PickerModel[];
   /** Number keys 1–4 on the first rows */
@@ -409,6 +422,7 @@ export function ModelPicker({
   effortLabel = "Effort",
   effortHint,
   toggles,
+  actions,
   more = [],
   keys = false,
   note,
@@ -746,7 +760,12 @@ export function ModelPicker({
   let captionKey: string;
   let spoken: string;
   const pointedToggle = toggles?.find((t) => hint === `toggle:${t.id}`);
-  if (pointedToggle) {
+  const pointedAction = actions?.find((a) => hint === `action:${a.id}` && a.hint);
+  if (pointedAction) {
+    caption = pointedAction.hint;
+    captionKey = hint as string;
+    spoken = pointedAction.hint as string;
+  } else if (pointedToggle) {
     caption = pointedToggle.hint ?? pointedToggle.label;
     captionKey = hint as string;
     spoken = caption as string;
@@ -992,6 +1011,27 @@ export function ModelPicker({
                   <span className="ui-mdpc__toggle-icon">{t.icon ?? <ThinkIcon />}</span>
                   <span className="ui-mdpc__toggle-label">{toggleOn[t.id] && t.onLabel ? t.onLabel : t.label}</span>
                   <span className="ui-mdpc__switch" aria-hidden="true" />
+                </button>
+              ))}
+              {actions?.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  aria-disabled={a.disabled || undefined}
+                  className="ui-mdpc__toggle ui-mdpc__action"
+                  onClick={() => {
+                    if (a.disabled) return;
+                    setOpen(false);
+                    a.onSelect();
+                  }}
+                  onPointerEnter={(e) => e.pointerType === "mouse" && setHint(`action:${a.id}`)}
+                  onPointerLeave={() => setHint(null)}
+                  onFocus={() => setHint(`action:${a.id}`)}
+                  onBlur={() => setHint(null)}
+                >
+                  <span className="ui-mdpc__toggle-icon">{a.icon}</span>
+                  <span className="ui-mdpc__toggle-label">{a.label}</span>
+                  <ChevronIcon />
                 </button>
               ))}
             </div>
@@ -1291,6 +1331,9 @@ const css = /* css */ `
 .ui-mdpc__effort--own .ui-mdpc__segmented { flex: 1; }
 .ui-mdpc__effort--own .ui-mdpc__seg-btn { flex: 1; padding: 0 4px; }
 .ui-mdpc__toggle:disabled { opacity: 0.45; cursor: default; }
+.ui-mdpc__action[aria-disabled] { opacity: 0.45; cursor: default; }
+.ui-mdpc__action[aria-disabled]:hover { background: none; }
+.ui-mdpc__action .ui-mdpc__chevron, .ui-mdpc[data-open] .ui-mdpc__action .ui-mdpc__chevron { flex: none; transform: rotate(-90deg); }
 .ui-mdpc__fly-note { margin: 4px -4px -4px; padding: 6px 12px 8px; border-top: 0.5px solid var(--ui-mdpc-line); font-size: 12px; line-height: 16px; color: var(--ui-mdpc-muted); }
 .ui-mdpc__toggle:disabled:hover { background: none; }
 /* No ratings anywhere: no "Varies" column either */

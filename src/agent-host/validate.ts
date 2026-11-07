@@ -928,6 +928,20 @@ export function createValidators(platform: Platform): Validators {
       const entryId = optionalString(o, 'entryId', ACP_ID_CHARS)
       return { sessionId: sessionId(o), ...(entryId === undefined ? {} : { entryId }) }
     },
+    'sessions.switchAgent': (params) => {
+      const o = fields(params)
+      if (o.summarize !== undefined && typeof o.summarize !== 'boolean') {
+        throw invalidParams('summarize must be a boolean')
+      }
+      const options = o.options === undefined ? undefined : configValues(o.options)
+      return {
+        sessionId: sessionId(o),
+        agentId: agentId(o),
+        content: promptContent(o.content),
+        ...(options !== undefined ? { options } : {}),
+        ...(o.summarize === true ? { summarize: true } : {}),
+      }
+    },
     'sessions.context': session,
     'sessions.queue': (params) => {
       const o = fields(params)

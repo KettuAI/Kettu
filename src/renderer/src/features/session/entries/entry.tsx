@@ -17,6 +17,7 @@ import { ComputerAppEntry } from './computer-app-entry'
 import { ComputerSetupEntry } from './computer-setup-entry'
 import { SessionStartedEntry } from './session-started-entry'
 import { SubagentCard } from './subagent-card'
+import { TakeoverEntry } from './takeover-entry'
 import { ToolCard } from './tool-card'
 
 /** One thread entry, by its kind. */
@@ -58,6 +59,8 @@ export const Entry = memo(function Entry({
       return <TurnEndEntry {...props} />
     case 'git':
       return <GitEventEntry {...props} />
+    case 'takeover':
+      return <TakeoverEntry {...props} />
     case 'artifact':
       return <ArtifactEntry {...props} />
     case 'browser_origin':
