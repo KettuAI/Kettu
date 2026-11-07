@@ -495,6 +495,8 @@
   flex: none;
   align-items: center;
   gap: 8px;
+  /* Stays at the bar's end when a narrow page hides the state before it. */
+  margin-left: auto;
 }
 .k-routine__body {
   width: 100%;

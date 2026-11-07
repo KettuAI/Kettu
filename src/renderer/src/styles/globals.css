@@ -145,9 +145,11 @@
   --color-destructive-tint: var(--destructive-tint);
   --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
+  /* The palette itself, not --accent and --muted: App Shell's frame redefines both for its own
+     parts (a blue and a text gray), and every utility inside the frame would read those. */
+  --color-accent: var(--bg-hover);
   --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
+  --color-muted: var(--bg-subtle);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);

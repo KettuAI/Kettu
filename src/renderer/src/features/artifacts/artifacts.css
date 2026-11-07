@@ -28,6 +28,15 @@
 .k-arts .ui-as-section-head .ui-as-toolbar__right {
   flex-wrap: wrap;
 }
+/* The frame's own wrap starts at a 900px window; beside the sidebar the page is narrower sooner,
+   so the tools move under the kinds before a kind's label breaks. */
+.k-arts .ui-as-section-head .ui-as-toolbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.k-arts .ui-as-tabs__tab {
+  white-space: nowrap;
+}
 .k-arts__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -232,6 +241,15 @@ button.k-arts__session-row:hover {
 .k-arts__menu .ui-as-tray-link__folder {
   width: 15px;
   height: 15px;
+}
+/* Import sits at the page's right end, so its projects open on the left of the menu. */
+.k-arts__menu .ui-as-menu__subpanel {
+  right: calc(100% + 4px);
+  left: auto;
+}
+.k-arts__menu .ui-as-menu__subpanel::before {
+  right: -8px;
+  left: auto;
 }
 .k-arts__empty {
   display: flex;
