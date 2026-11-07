@@ -316,12 +316,31 @@
       "network": "Kettu 连不上账号服务。请检查网络或代理后重试。",
       "service": "账号服务没能完成登录，请重试。",
       "disabled": "这个 Kettu 账号已被停用。如需帮助，请联系 hello@kettu.sh。",
+      "device-limit": "这个账号登录的设备已达到档位的上限。请先在官网登出一台，再重新登录。",
       "local": "Kettu 没能在浏览器中打开登录页面。"
     },
     "plainText": "此系统没有钥匙串，登录信息会以不加密的方式保存。",
+    "plan": {
+      "name": "档位",
+      "description": "档位决定能同时登录几台设备、账号有多少云端存储。",
+      "keywords": "档位 套餐 免费 专业版 上限"
+    },
+    "devices": {
+      "name": "设备",
+      "description": "登录着这个账号的应用和 daemon。在官网登出一台，就能在别处登录。",
+      "keywords": "设备 客户端 电脑 登录 上限",
+      "used": "{{used}} / {{limit}}",
+      "manage": "管理设备"
+    },
+    "storage": {
+      "name": "云端存储",
+      "description": "账号放在 Kettu 上的东西，比如发布的 artifact。",
+      "keywords": "存储 空间 容量 云端 artifact 发布",
+      "used": "{{used}} / {{limit}}"
+    },
     "subscription": {
       "name": "订阅",
-      "description": "Kettu 的云服务将需要订阅，其他功能都不需要。",
+      "description": "在官网管理。",
       "keywords": "订阅 套餐 付费",
       "none": "未订阅",
       "trialing": "试用中",
