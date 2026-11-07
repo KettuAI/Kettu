@@ -35,8 +35,9 @@ export interface CardTime {
 }
 
 /**
- * One artifact: its preview, then its title and a line of the agent's mark, its kind and when it
- * was last seen, with its menu over the preview's corner.
+ * One artifact: its title and a line of the agent's mark, its kind and when it was last seen, with
+ * its menu beside the title; under them a panel where its preview lies as a page over a glow in the
+ * kind's colors.
  */
 export const ArtifactCard = memo(function ArtifactCard({
   artifact,
@@ -96,34 +97,39 @@ export const ArtifactCard = memo(function ArtifactCard({
           more.current?.click()
         }
       }}
-      className="ui-as-template k-art__open"
+      className="k-art__open"
     >
-      <span className="ui-as-template__preview">
-        <Preview thumbnail={thumbnail} kind={kind} title={artifact.title} />
-        {artifact.editing.length > 0 && (
-          <span className="k-art__editing">
-            <i />
-            {t('card.editing')}
+      <span className="k-art__head">
+        <b className="k-art__name">{artifact.title}</b>
+        <span className="ui-as-meta k-art__meta">
+          {agent && <AgentMark agent={agent} size={12} className="shrink-0" />}
+          <span>
+            {meta}
+            {time && (
+              <>
+                {' · '}
+                <Ago time={time} />
+              </>
+            )}
           </span>
-        )}
-      </span>
-      <b className="ui-as-template__name">{artifact.title}</b>
-      <span className="ui-as-meta k-art__meta">
-        {agent && <AgentMark agent={agent} size={12} className="shrink-0" />}
-        <span>
-          {meta}
-          {time && (
-            <>
-              {' · '}
-              <Ago time={time} />
-            </>
+          {shared && (
+            <span className="k-art__shared" role="img" aria-label={t('card.shared')}>
+              <Icon icon={Globe02Icon} size={12} />
+            </span>
           )}
         </span>
-        {shared && (
-          <span className="k-art__shared" role="img" aria-label={t('card.shared')}>
-            <Icon icon={Globe02Icon} size={12} />
-          </span>
-        )}
+      </span>
+      <span className="k-art__panel">
+        <Glow />
+        <span className="k-art__page">
+          <Preview thumbnail={thumbnail} kind={kind} title={artifact.title} />
+          {artifact.editing.length > 0 && (
+            <span className="k-art__editing">
+              <i />
+              {t('card.editing')}
+            </span>
+          )}
+        </span>
       </span>
     </button>
   )
@@ -132,6 +138,7 @@ export const ArtifactCard = memo(function ArtifactCard({
     <div
       ref={card}
       className="k-art"
+      data-kind={kind}
       data-held={contextOpen || undefined}
       data-gone={artifact.deletedAt !== null || undefined}
     >
@@ -148,7 +155,7 @@ export const ArtifactCard = memo(function ArtifactCard({
           <ArtifactMenuItems target={target} {...actions} />
         </ContextMenuContent>
       </ContextMenu>
-      {/* Over the preview's corner, so the caption keeps its width; the card's Tab stop is its own. */}
+      {/* Beside the title, outside the card's button; the card's Tab stop is its own. */}
       <span className="k-art__more">
         <Dropdown
           align="end"
@@ -208,6 +215,17 @@ function Preview({
   )
 }
 
+/** Three soft blobs in the kind's colors behind the page; still until the card is pointed at. */
+function Glow() {
+  return (
+    <span aria-hidden className="k-art__glow">
+      <i />
+      <i />
+      <i />
+    </span>
+  )
+}
+
 /** The caption's time, apart so only it follows the clock. */
 function Ago({ time }: { time: CardTime }) {
   return <>{shortAgo(time.at, useNow())}</>
@@ -228,12 +246,16 @@ function VersionTime({ artifact }: { artifact: ArtifactSummary }) {
 export function CardSkeleton() {
   return (
     <div aria-hidden className="k-art">
-      <span className="ui-as-template">
-        <span className="ui-as-template__preview">
-          <span className="k-th k-th--loading" />
+      <span className="k-art__open">
+        <span className="k-art__head">
+          <span className="k-bone" style={{ width: '62%', margin: '5px 0 6px' }} />
+          <span className="k-bone" style={{ width: '40%', marginBottom: 5 }} />
         </span>
-        <span className="k-bone" style={{ width: '62%', marginTop: 12 }} />
-        <span className="k-bone" style={{ width: '40%', marginTop: 8 }} />
+        <span className="k-art__panel">
+          <span className="k-art__page">
+            <span className="k-th k-th--loading" />
+          </span>
+        </span>
       </span>
     </div>
   )

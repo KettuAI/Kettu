@@ -43,31 +43,67 @@
   gap: 20px 14px;
   margin-top: 16px;
 }
+/* A card in affectUI's Writing Assistant shape: the title on top, then an inset panel whose corners
+   run parallel to the card's, where the preview lies as a page over a glow in the kind's colors. */
 .k-art {
   position: relative;
   min-width: 0;
 }
-.k-art .ui-as-template {
+.k-art[data-kind='web'] {
+  --k-glow-1: var(--kind-web-glow);
+  --k-glow-2: var(--kind-document-glow);
+}
+.k-art[data-kind='canvas'] {
+  --k-glow-1: var(--kind-canvas-glow);
+  --k-glow-2: var(--kind-document-glow);
+}
+.k-art[data-kind='document'] {
+  --k-glow-1: var(--kind-document-glow);
+  --k-glow-2: var(--kind-web-glow);
+}
+.k-art[data-kind='slides'] {
+  --k-glow-1: var(--kind-slides-glow);
+  --k-glow-2: var(--kind-canvas-glow);
+}
+.k-art__open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   width: 100%;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--bg-surface);
+  box-shadow: var(--artifact-card-shadow);
+  text-align: left;
   outline: none;
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease;
 }
-.k-art .ui-as-template__preview {
-  position: relative;
-  height: auto;
-  aspect-ratio: 16 / 10;
+.k-art:is(:hover, [data-held]) .k-art__open {
+  border-color: var(--line-strong);
+  box-shadow: var(--artifact-card-shadow-hover);
 }
-.k-art .ui-as-template:focus-visible .ui-as-template__preview,
-.k-art[data-held] .ui-as-template__preview {
+.k-art__open:focus-visible {
+  border-color: var(--line-strong);
   box-shadow:
-    inset 0 0 0 0.5px var(--line-strong),
+    var(--artifact-card-shadow),
     0 0 0 2px var(--accent-soft);
 }
-.k-art[data-held] .ui-as-template__preview {
-  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+/* Room on the right for the More button, which sits over the card rather than inside its button. */
+.k-art__head {
+  display: grid;
+  min-width: 0;
+  padding: 7px 38px 9px 9px;
 }
-.k-art[data-gone] .k-th {
-  opacity: 0.72;
-  filter: grayscale(0.85);
+.k-art__name {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .k-art__meta {
   display: flex;
@@ -86,12 +122,135 @@
   flex: none;
   color: var(--faint);
 }
+/* The card's 20px corner less its 6px rim. */
+.k-art__panel {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 1px var(--line);
+  isolation: isolate;
+}
+.k-art__glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+/* Still at rest, so a page of cards costs nothing; it drifts and brightens while pointed at. */
+.k-art__glow i {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(20px);
+  opacity: var(--artifact-glow);
+  animation: k-art-drift-a 6s ease-in-out infinite alternate paused;
+  transition: opacity 320ms ease;
+}
+.k-art__glow i:nth-child(1) {
+  top: 40%;
+  left: -18%;
+  width: 66%;
+  height: 50%;
+  background: var(--k-glow-1);
+}
+.k-art__glow i:nth-child(2) {
+  top: 30%;
+  right: -16%;
+  width: 62%;
+  height: 52%;
+  background: var(--k-glow-2);
+  animation-name: k-art-drift-b;
+  animation-duration: 7s;
+}
+.k-art__glow i:nth-child(3) {
+  bottom: -14%;
+  left: 18%;
+  width: 70%;
+  height: 50%;
+  background: var(--k-glow-1);
+  animation-name: k-art-drift-c;
+  animation-duration: 5.5s;
+}
+.k-art:hover .k-art__glow i {
+  opacity: var(--artifact-glow-hover);
+  animation-play-state: running;
+}
+.k-art[data-gone] .k-art__glow {
+  display: none;
+}
+@keyframes k-art-drift-a {
+  50% {
+    transform: translate(55%, -22%) scale(1.25);
+  }
+  100% {
+    transform: translate(20%, 14%) scale(0.85);
+  }
+}
+@keyframes k-art-drift-b {
+  50% {
+    transform: translate(-55%, 24%) scale(0.85);
+  }
+  100% {
+    transform: translate(-22%, -16%) scale(1.25);
+  }
+}
+@keyframes k-art-drift-c {
+  50% {
+    transform: translate(-45%, -26%) scale(1.2);
+  }
+  100% {
+    transform: translate(30%, -10%) scale(0.88);
+  }
+}
+.k-art__page {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  transition:
+    transform 420ms var(--ease),
+    box-shadow 420ms var(--ease);
+}
+.k-art__page .k-th {
+  border-radius: inherit;
+  box-shadow: none;
+}
+.k-art:hover .k-art__page {
+  transform: translateY(-3px);
+  box-shadow: var(--artifact-page-lift);
+}
+.k-art[data-gone] .k-th {
+  opacity: 0.72;
+  filter: grayscale(0.85);
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-art .k-art__glow i {
+    animation: none;
+  }
+  .k-art:hover .k-art__page {
+    transform: none;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .k-art .k-art__glow i {
+    animation: none;
+  }
+  & .k-art:hover .k-art__page {
+    transform: none;
+  }
+}
 .k-art__more {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 11px;
+  right: 11px;
   opacity: 0;
-  transition: opacity 120ms ease;
+  transition: opacity 220ms ease;
 }
 .k-art:is(:hover, :focus-within) .k-art__more,
 .k-art__more:has([aria-expanded='true']) {
@@ -102,12 +261,21 @@
   place-items: center;
   width: 26px;
   height: 26px;
-  border-radius: 7px;
-  background: var(--card);
-  box-shadow: var(--card-shadow);
+  border-radius: 50%;
+  background: var(--chip);
   color: var(--muted);
+  transform: scale(0.8);
+  transition:
+    transform 320ms var(--ease),
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.k-art:is(:hover, :focus-within) .k-art__more-btn,
+.k-art__more-btn[aria-expanded='true'] {
+  transform: none;
 }
 .k-art__more-btn:hover {
+  background: var(--chip-hover);
   color: var(--ink);
 }
 .k-art__more .ui-as-menu {
