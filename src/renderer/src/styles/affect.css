@@ -80,6 +80,11 @@
   pointer-events: none;
   -webkit-app-region: drag;
 }
+/* The sidebar's head keeps the corner controls' room however long the list grows; the list
+   scrolls instead of squeezing it. */
+.kettu-frame.ui-as-app > .ui-as-side > .ui-as-side__head {
+  flex: none;
+}
 /* A narrow window's sidebar is a drawer: the sheets keep the gap on their left too, the drawer
    takes the sidebar's color, and the corner controls stay over it. */
 @container ui-as (max-width: 900px) {
