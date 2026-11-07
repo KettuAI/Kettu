@@ -236,6 +236,17 @@
   background: var(--hover);
   color: var(--ink);
 }
+/* App Shell mutes every icon in a sidebar row; Kettu's marks there (the turn's dots, an error, a
+   pull request, a caret) keep their own colors. */
+.ui-as-side__item
+  :is(
+    [data-turn-dots],
+    svg[role='img'],
+    svg[class*='text-'],
+    :is([role='img'], [role='button']) > svg
+  ) {
+  color: revert-layer;
+}
 .ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-end {
   opacity: 0;
 }
