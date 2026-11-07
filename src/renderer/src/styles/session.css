@@ -272,6 +272,7 @@
   margin-left: -6px;
 }
 .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top {
+  position: relative;
   margin-left: calc(var(--ks-gutter) - 6px);
 }
 .ks-thread .ui-tcc__head,
@@ -412,8 +413,11 @@
   border-radius: 50%;
   background: var(--control-on);
 }
+/* The pulse hangs off the head, which the rise animation turns into its containing block, so it
+   is always placed from the head, back across the head's margin onto the dot. */
 .ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before {
   z-index: 1;
+  left: calc(var(--ks-rail-x) - 5px - (var(--ks-gutter) - 6px));
   animation: ks-step-pulse 1.6s var(--ease-out-quint) infinite;
 }
 
