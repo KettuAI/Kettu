@@ -62,6 +62,7 @@ export interface ArtifactSummary {
   sessionId: string // the session it shows under: its latest version's, else its creator
   version: number // the latest
   pages: number // two or more is a canvas
+  canvas: boolean // the latest version is a canvas document, whatever its page count
   files: number // of the latest version
   size: number // of the latest version, in bytes
   createdAt: number // when the artifact was made
@@ -107,7 +108,7 @@ export interface ArtifactFileInfo {
 export interface ArtifactContent {
   title: string
   version: number
-  /** The entry page's text; empty for an artifact made from a type, whose viewer is its page. */
+  /** The entry page's text; empty for an artifact made from a type, whose viewer is its page, and for a canvas document without one. */
   html: string
   files: ArtifactFileInfo[]
   type?: ArtifactTypeInfo | null

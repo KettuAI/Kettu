@@ -3,7 +3,6 @@ import type { CanvasState } from '@shared/artifact-canvas'
 import {
   applyCanvasOps,
   type CanvasDoc,
-  type CanvasNote,
   type CanvasObject,
   type CanvasOp,
 } from '@shared/canvas-doc'
@@ -239,47 +238,6 @@ export function useCanvasDoc(id: string, enabled: boolean) {
 }
 
 export type CanvasDocState = ReturnType<typeof useCanvasDoc>
-
-/** A note's box on its canvas, for selection, snapping and hit tests. */
-export function noteBox(note: CanvasNote): { x: number; y: number; width: number; height: number } {
-  switch (note.kind) {
-    case 'text':
-      return {
-        x: note.x,
-        y: note.y,
-        width: Math.max(40, note.text.length * note.size * 0.55),
-        height: note.size * 1.4,
-      }
-    case 'sticky':
-      return { x: note.x, y: note.y, width: note.width, height: Math.max(110, note.width * 0.62) }
-    case 'pen': {
-      let left = Infinity
-      let top = Infinity
-      let right = -Infinity
-      let bottom = -Infinity
-      for (let i = 0; i < note.points.length; i += 3) {
-        left = Math.min(left, note.points[i]!)
-        top = Math.min(top, note.points[i + 1]!)
-        right = Math.max(right, note.points[i]!)
-        bottom = Math.max(bottom, note.points[i + 1]!)
-      }
-      const pad = note.width
-      return {
-        x: left - pad,
-        y: top - pad,
-        width: right - left + 2 * pad,
-        height: bottom - top + 2 * pad,
-      }
-    }
-    default:
-      return {
-        x: Math.min(note.x1, note.x2),
-        y: Math.min(note.y1, note.y2),
-        width: Math.abs(note.x2 - note.x1),
-        height: Math.abs(note.y2 - note.y1),
-      }
-  }
-}
 
 /** An earlier version's document, shown as it is: nothing changes it. */
 export function staticCanvas(doc: CanvasDoc): CanvasDocState {

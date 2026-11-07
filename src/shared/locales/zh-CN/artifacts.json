@@ -549,5 +549,11 @@
     "handedOff": "已交给 Agent",
     "handOffFailed": "没能交给 Agent。{{error}}",
     "legacySplit": "在画布上编辑"
+  },
+  "overview": {
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fit": "适合窗口",
+    "empty": "这张画布还没有页面。"
   }
 }

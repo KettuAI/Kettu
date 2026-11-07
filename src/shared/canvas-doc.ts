@@ -570,6 +570,71 @@ export function sectionBox(doc: Pick<CanvasDoc, 'pages'>, section: string): Box 
   }
 }
 
+/** A note's box on its canvas, for selection, snapping and hit tests. */
+export function noteBox(note: CanvasNote): { x: number; y: number; width: number; height: number } {
+  switch (note.kind) {
+    case 'text':
+      return {
+        x: note.x,
+        y: note.y,
+        width: Math.max(40, note.text.length * note.size * 0.55),
+        height: note.size * 1.4,
+      }
+    case 'sticky':
+      return { x: note.x, y: note.y, width: note.width, height: Math.max(110, note.width * 0.62) }
+    case 'pen': {
+      let left = Infinity
+      let top = Infinity
+      let right = -Infinity
+      let bottom = -Infinity
+      for (let i = 0; i < note.points.length; i += 3) {
+        left = Math.min(left, note.points[i]!)
+        top = Math.min(top, note.points[i + 1]!)
+        right = Math.max(right, note.points[i]!)
+        bottom = Math.max(bottom, note.points[i + 1]!)
+      }
+      const pad = note.width
+      return {
+        x: left - pad,
+        y: top - pad,
+        width: right - left + 2 * pad,
+        height: bottom - top + 2 * pad,
+      }
+    }
+    default:
+      return {
+        x: Math.min(note.x1, note.x2),
+        y: Math.min(note.y1, note.y2),
+        width: Math.abs(note.x2 - note.x1),
+        height: Math.abs(note.y2 - note.y1),
+      }
+  }
+}
+
+/** Where a line or arrow joined to pages runs: from the edge of one to the edge of the other. */
+export function joinedEnds(
+  note: Extract<CanvasNote, { kind: 'line' | 'arrow' | 'rect' | 'ellipse' }>,
+  pages: readonly CanvasPage[],
+): { x1: number; y1: number; x2: number; y2: number } {
+  const from = note.from ? pages.find((p) => p.id === note.from) : undefined
+  const to = note.to ? pages.find((p) => p.id === note.to) : undefined
+  let { x1, y1, x2, y2 } = note
+  const centre = (p: CanvasPage) => ({ x: p.x + p.width / 2, y: p.y + p.height / 2 })
+  const edge = (p: CanvasPage, toward: { x: number; y: number }) => {
+    const c = centre(p)
+    const dx = toward.x - c.x
+    const dy = toward.y - c.y
+    const scale = Math.min(
+      dx === 0 ? Infinity : p.width / 2 / Math.abs(dx),
+      dy === 0 ? Infinity : p.height / 2 / Math.abs(dy),
+    )
+    return Number.isFinite(scale) ? { x: c.x + dx * scale, y: c.y + dy * scale } : c
+  }
+  if (from) ({ x: x1, y: y1 } = edge(from, to ? centre(to) : { x: x2, y: y2 }))
+  if (to) ({ x: x2, y: y2 } = edge(to, from ? centre(from) : { x: x1, y: y1 }))
+  return { x1, y1, x2, y2 }
+}
+
 /** Gives each page written without a place one after the pages already placed. */
 function placePages(doc: {
   canvases: CanvasSheet[]

@@ -1217,10 +1217,11 @@
 }
 
 /* Who is here: affectUI's faces in the bar, the user's other devices first. */
-.k-av-faces {
+/* No size container, which would keep the faces from giving the row their width. */
+.ui-agc.k-av-faces {
+  container-type: normal;
   display: inline-flex;
   align-items: center;
-  width: auto;
   margin-right: 6px;
 }
 .k-av-faces__you {

@@ -6,6 +6,7 @@
 import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
 import type { ArtifactContent } from '@shared/artifacts'
+import { CANVAS_FILE } from '@shared/canvas-doc'
 import { DEBUG_OFF } from '@shared/debug'
 import type { AppCommand, KettuApi } from '@shared/ipc'
 import { safeName } from '@shared/file-name'
@@ -277,7 +278,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       openExternal: () => unsupported('open an artifact outside the app'),
       export: async (id, version) => {
         const read = (await link.request('artifacts.read', { id, version })) as ArtifactContent
-        if (read.files.length > 1) return exportFiles(link, id, read)
+        if (read.files.length > 1 || read.files.some((f) => f.path === CANVAS_FILE)) {
+          return exportFiles(link, id, read)
+        }
         downloadFile(new Blob([read.html], { type: 'text/html' }), `${read.title || id}.html`)
         return true
       },

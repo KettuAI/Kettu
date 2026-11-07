@@ -288,7 +288,12 @@ export interface IpcInvokeContract {
   'artifact:export': { args: [id: string, version: number]; result: boolean }
   // A page's image as a base64 PNG, for a message to an agent; null when it cannot render.
   'artifact:page-image': {
-    args: [id: string, version: number, page: ArtifactPngPage['page'], size: { width: number; height: number }]
+    args: [
+      id: string,
+      version: number,
+      page: ArtifactPngPage['page'],
+      size: { width: number; height: number },
+    ]
     result: string | null
   }
   // `name` is the file's default name; false when the user cancelled the save dialog.

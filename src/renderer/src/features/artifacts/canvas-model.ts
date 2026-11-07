@@ -2,6 +2,7 @@
 // and the notes, with the bounds the camera fits.
 
 import {
+  noteBox,
   sectionBox,
   type Box,
   type CanvasDoc,
@@ -10,7 +11,6 @@ import {
   type CanvasSection,
 } from '@shared/canvas-doc'
 import { THUMBNAIL_PAGES, type ThumbnailPage } from '@shared/artifacts'
-import { noteBox } from './use-canvas-doc'
 
 export interface PlacedSection extends CanvasSection {
   box: Box
@@ -128,28 +128,4 @@ export function overlaps(a: Box, b: Box): boolean {
 
 export function contains(box: Box, x: number, y: number): boolean {
   return x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height
-}
-
-/** Where a line or arrow joined to pages runs: from the edge of one to the edge of the other. */
-export function joinedEnds(
-  note: Extract<CanvasNote, { kind: 'line' | 'arrow' | 'rect' | 'ellipse' }>,
-  pages: readonly CanvasPage[],
-): { x1: number; y1: number; x2: number; y2: number } {
-  const from = note.from ? pages.find((p) => p.id === note.from) : undefined
-  const to = note.to ? pages.find((p) => p.id === note.to) : undefined
-  let { x1, y1, x2, y2 } = note
-  const centre = (p: CanvasPage) => ({ x: p.x + p.width / 2, y: p.y + p.height / 2 })
-  const edge = (p: CanvasPage, toward: { x: number; y: number }) => {
-    const c = centre(p)
-    const dx = toward.x - c.x
-    const dy = toward.y - c.y
-    const scale = Math.min(
-      dx === 0 ? Infinity : p.width / 2 / Math.abs(dx),
-      dy === 0 ? Infinity : p.height / 2 / Math.abs(dy),
-    )
-    return Number.isFinite(scale) ? { x: c.x + dx * scale, y: c.y + dy * scale } : c
-  }
-  if (from) ({ x: x1, y: y1 } = edge(from, to ? centre(to) : { x: x2, y: y2 }))
-  if (to) ({ x: x2, y: y2 } = edge(to, from ? centre(from) : { x: x1, y: y1 }))
-  return { x1, y1, x2, y2 }
 }

@@ -12,13 +12,15 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
 import { animate, type AnimationPlaybackControls } from 'motion/react'
-import { getStroke } from 'perfect-freehand'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import type { AgentId } from '@shared/agents'
 import type { ArtifactDoing, ArtifactFocus } from '@shared/artifacts'
+import { strokePath } from '@shared/canvas-stroke'
 import {
   canvasId,
+  joinedEnds,
+  noteBox,
   PAGE_MAX,
   PAGE_MIN,
   type Box,
@@ -46,10 +48,10 @@ import {
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { CanvasFrame, FocusedPage } from './canvas-view'
 import { CanvasLayers, CanvasProps, CanvasToolbar } from './canvas-editor-panels'
-import { contains, docLayout, joinedEnds, overlaps, snap, type DocLayout } from './canvas-model'
+import { contains, docLayout, overlaps, snap, type DocLayout } from './canvas-model'
 import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
 import { isModeKey } from './keys'
-import { noteBox, type CanvasDocState } from './use-canvas-doc'
+import type { CanvasDocState } from './use-canvas-doc'
 import { pageUrl } from './use-artifact'
 import { NOTE_COLOR_VAR, type PenStyle, type ShapeKind, type Tool } from './canvas-tools'
 import './canvas-editor.css'
@@ -159,23 +161,6 @@ function union(boxes: Box[]): Box | null {
   const right = Math.max(...boxes.map((b) => b.x + b.width))
   const bottom = Math.max(...boxes.map((b) => b.y + b.height))
   return { x: left, y: top, width: right - left, height: bottom - top }
-}
-
-/** A pen stroke's outline as an SVG path, through perfect-freehand. */
-function strokePath(points: readonly number[], width: number, marker: boolean): string {
-  const input: number[][] = []
-  for (let i = 0; i < points.length; i += 3)
-    input.push([points[i]!, points[i + 1]!, points[i + 2]!])
-  const outline = getStroke(input, {
-    size: width * (marker ? 4 : 2),
-    thinning: marker ? 0 : 0.55,
-    smoothing: 0.6,
-    streamline: 0.45,
-    simulatePressure: input.every((p) => p[2] === 0.5),
-  })
-  if (outline.length < 2) return ''
-  const [first, ...rest] = outline
-  return `M${first![0]},${first![1]} ` + rest.map(([x, y]) => `L${x},${y}`).join(' ') + ' Z'
 }
 
 /** One note, drawn on the canvas at its own place. */
@@ -377,6 +362,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   // Mirrors of the drag under way for what renders: a pan's cursor, the selection's bar.
   const [panning, setPanning] = useState(false)
   const [dragging, setDragging] = useState(false)
+  // The page under the pointer, or under its label, whose label shows its actions.
+  const [hovered, setHovered] = useState<string | null>(null)
   const pageNumber = useRef(0)
 
   const mode = editor ? editing.mode : null
@@ -958,6 +945,11 @@ export const CanvasEditor = memo(function CanvasEditor({
     const { sx, sy } = screenPoint(event)
     const at = toCanvas(sx, sy)
     if (!held) {
+      const label = 26 / camera.current.z
+      setHovered(
+        pages.find((p) => contains({ ...p, y: p.y - label, height: p.height + label }, at.x, at.y))
+          ?.id ?? null,
+      )
       // Outlining what is under the pointer inside a page, as the editor's modes do.
       if (mode && layout) {
         const page = pages.find((p) => contains(p, at.x, at.y))
@@ -1325,6 +1317,13 @@ export const CanvasEditor = memo(function CanvasEditor({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          onPointerLeave={(event) => {
+            // Moving onto a label's actions is no leaving.
+            if (!(
+              event.relatedTarget instanceof Element && event.relatedTarget.closest('.k-ce-label')
+            ))
+              setHovered(null)
+          }}
           onPointerCancel={() => {
             drag.current = null
             setPanning(false)
@@ -1347,7 +1346,7 @@ export const CanvasEditor = memo(function CanvasEditor({
               style={{ left: p.x, top: `calc(${p.y}px - 26px * var(--unscale))`, width: p.width }}
             >
               <span className="k-ce-label__name">{name(p)}</span>
-              {actions && (
+              {actions && (hovered === p.id || shownSelection.includes(p.id)) && (
                 <span className="k-ce-label__acts">
                   <LabelAct
                     label={t('board.page.tweak')}
@@ -1470,7 +1469,7 @@ export const CanvasEditor = memo(function CanvasEditor({
               onHandOff={() => actions.handOff(shownSelection)}
             />
           )}
-          <div className="ui-agc">
+          <div className="ui-agc k-ce-agents">
             {agents.map((agent) => {
               const at = pointerAt(agent)
               if (!at) return null
@@ -1737,9 +1736,10 @@ function HandOffBar({ box, count, onHandOff }: { box: Box; count: number; onHand
     <div
       className="k-ce-selbar k-ce-float"
       style={{
+        // Under the selection, clear of its size, since page labels take the room above it.
         left: box.x + box.width / 2,
-        top: box.y,
-        transform: 'scale(var(--unscale)) translate(-50%, calc(-100% - 34px))',
+        top: box.y + box.height,
+        transform: 'scale(var(--unscale)) translate(-50%, 40px)',
         transformOrigin: '0 0',
         pointerEvents: 'auto',
       }}

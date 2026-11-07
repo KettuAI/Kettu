@@ -454,7 +454,8 @@ export const TOOLS: Tool[] = [
         id: ID,
         base_version: {
           ...VERSION,
-          description: 'The version your change starts from; needed with html, files or edits.',
+          description:
+            'The version your change starts from; needed with html, files, edits, capabilities or canvas.',
         },
         html: HTML,
         files: filesSchema(true),

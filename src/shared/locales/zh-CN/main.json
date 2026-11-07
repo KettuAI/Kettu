@@ -116,5 +116,11 @@
   },
   "account": {
     "browserFailed": "Kettu 没能完成登录。请回到 Kettu 查看原因并重试。"
+  },
+  "canvasOverview": {
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fit": "适合窗口",
+    "empty": "这张画布还没有页面。"
   }
 }

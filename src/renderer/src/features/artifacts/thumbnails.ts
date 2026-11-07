@@ -4,8 +4,10 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { fitThumbnail, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '@shared/artifacts'
 import type { ArtifactSummary } from '@shared/artifacts'
+import { CANVAS_FILE, parseCanvasDoc } from '@shared/canvas-doc'
 import { host } from '@renderer/lib/host'
 import { parseCanvas, thumbnailLayout } from './canvas'
+import { docThumbnailLayout } from './canvas-model'
 
 /** A canvas's pages in its thumbnail, as shares of its width and height, for their outlines. */
 export interface PageBox {
@@ -21,7 +23,7 @@ export type Thumbnail =
   | { state: 'failed' }
 
 /** What a thumbnail is made from: the version, and whether it is a canvas. */
-export type ThumbnailOf = Pick<ArtifactSummary, 'id' | 'version' | 'pages'>
+export type ThumbnailOf = Pick<ArtifactSummary, 'id' | 'version' | 'pages' | 'canvas'>
 
 /** About two hundred cards' worth of images; older ones are asked for again. */
 const KEPT = 200
@@ -46,12 +48,22 @@ function settle(key: string, thumbnail: Thumbnail): void {
 
 async function render(artifact: ThumbnailOf): Promise<Thumbnail> {
   let layout = null
-  if (artifact.pages >= 2) {
-    const { html, version } = await host('artifacts.read', {
+  // The summary describes the latest version, so the files say which kind this version is.
+  if (artifact.canvas || artifact.pages >= 2) {
+    const { html, version, files } = await host('artifacts.read', {
       id: artifact.id,
       version: artifact.version,
     })
-    if (version === artifact.version) layout = thumbnailLayout(parseCanvas(html))
+    if (version === artifact.version && files.some((f) => f.path === CANVAS_FILE)) {
+      const { bytes } = await host('artifacts.file', {
+        id: artifact.id,
+        version,
+        path: CANVAS_FILE,
+      })
+      layout = docThumbnailLayout(parseCanvasDoc(new TextDecoder().decode(bytes)))
+      // A canvas with no page yet has nothing to show.
+      if (!layout) return { state: 'failed' }
+    } else if (version === artifact.version) layout = thumbnailLayout(parseCanvas(html))
   }
   const src = await window.kettu.artifacts.thumbnail(artifact.id, artifact.version, layout)
   if (!src) return { state: 'failed' }

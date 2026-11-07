@@ -3,8 +3,11 @@
 
 import { ARTIFACT_CSP } from '../artifacts/policy'
 
-/** `frame-ancestors` works only as a header, so the `<meta>` policy leaves it out. */
-export const PUBLISHED_CSP = `${ARTIFACT_CSP}; frame-ancestors 'none'`
+/**
+ * `frame-ancestors` works only as a header, so the `<meta>` policy leaves it out. A canvas's
+ * overview frames its pages, which share its origin, so the page's own origin may frame it.
+ */
+export const PUBLISHED_CSP = `${ARTIFACT_CSP}; frame-ancestors 'self'`
 
 export function pageHeaders(): Record<string, string> {
   return {

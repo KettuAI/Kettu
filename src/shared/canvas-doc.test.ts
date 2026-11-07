@@ -176,11 +176,7 @@ describe('old canvases', () => {
   it('splits into a file per page with the head and the body scripts, laid out as shown', () => {
     expect(isLegacyCanvas(old)).toBe(true)
     const split = splitLegacyCanvas(old, new Set(['index.html', 'account.html']))!
-    expect([...split.files.keys()]).toEqual([
-      'sign-in.html',
-      'account-2.html',
-      'page-3.html',
-    ])
+    expect([...split.files.keys()]).toEqual(['sign-in.html', 'account-2.html', 'page-3.html'])
     const account = split.files.get('account-2.html')!
     expect(account).toContain('<title>Old</title>')
     expect(account).toContain('<body class="b">')
@@ -201,5 +197,26 @@ describe('old canvases', () => {
     expect(isLegacyCanvas('<html><body><section data-page="Only">x</section></body></html>')).toBe(
       false,
     )
+  })
+})
+
+describe('the overview page', () => {
+  it('keeps every text of the document inside its data and text nodes', async () => {
+    const { canvasOverview } = await import('./canvas-overview')
+    const evil = '</script><script>alert(1)</script>'
+    const html = canvasOverview(
+      parseCanvasDoc(
+        doc({
+          canvases: [{ id: 'c', name: evil }],
+          sections: [{ id: 's', canvas: 'c', title: evil }],
+          pages: [{ id: 'p', canvas: 'c', section: 's', name: evil, file: 'p.html' }],
+          notes: [{ id: 'n', canvas: 'c', kind: 'sticky', x: 0, y: 0, width: 200, text: evil }],
+        }),
+      ),
+      evil,
+      { zoomIn: evil, zoomOut: evil, fit: evil, empty: evil, lang: '"><script>' },
+    )
+    expect(html.match(/<script/g)).toHaveLength(2)
+    expect(html.match(/<\/script>/g)).toHaveLength(2)
   })
 })

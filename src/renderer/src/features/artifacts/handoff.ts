@@ -2,7 +2,7 @@
 // with the pages and the notes on them, and each page rendered with its notes drawn over it.
 
 import { snippet } from '@shared/artifact-runtime/page-messages'
-import type { CanvasNote, CanvasPage } from '@shared/canvas-doc'
+import { joinedEnds, noteBox, type CanvasNote, type CanvasPage } from '@shared/canvas-doc'
 import type { UserContent } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import {
@@ -15,8 +15,7 @@ import { host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { openNewSession } from '@renderer/stores/view'
 import { block, boundary } from './anchors'
-import { contains, joinedEnds, overlaps, type DocLayout } from './canvas-model'
-import { noteBox } from './use-canvas-doc'
+import { contains, overlaps, type DocLayout } from './canvas-model'
 
 /** The widest a page's image goes into a message; a larger page is scaled down. */
 const IMAGE_WIDTH = 1600

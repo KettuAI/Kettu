@@ -265,7 +265,9 @@ type Row = Record<string, SQLOutputValue>
 const LISTING = `
   SELECT a.id, a.title, a.project, COALESCE(v.author, a.session_id) AS shown_under, a.head,
     v.pages, v.size, a.created_at, a.updated_at, a.deleted_at,
-    (SELECT COUNT(*) FROM artifact_files f WHERE f.artifact_id = a.id AND f.n = a.head) AS files
+    (SELECT COUNT(*) FROM artifact_files f WHERE f.artifact_id = a.id AND f.n = a.head) AS files,
+    EXISTS (SELECT 1 FROM artifact_files f
+      WHERE f.artifact_id = a.id AND f.n = a.head AND f.path = '${CANVAS_FILE}') AS canvas
   FROM artifacts a JOIN artifact_versions v ON v.artifact_id = a.id AND v.n = a.head`
 
 const optionalText = (value: SQLOutputValue | undefined): string | null =>
@@ -307,6 +309,7 @@ function listing(row: Row): ArtifactListing {
     sessionId: String(row.shown_under),
     version: Number(row.head),
     pages: Number(row.pages),
+    canvas: Number(row.canvas) === 1,
     files: Number(row.files),
     size: Number(row.size),
     createdAt: Number(row.created_at),

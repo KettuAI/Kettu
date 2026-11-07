@@ -40,11 +40,13 @@
 .k-ce-section[data-selected] {
   box-shadow: inset 0 0 0 calc(1.5px * var(--unscale)) var(--control-on);
 }
+/* Above the box, so the labels of the pages in its head never cover it at any zoom. */
 .k-ce-section__title {
   position: absolute;
-  top: calc(14px * var(--unscale));
-  left: calc(16px * var(--unscale));
-  max-width: calc(100% - 32px * var(--unscale));
+  bottom: 100%;
+  left: calc(4px * var(--unscale));
+  padding-bottom: calc(8px * var(--unscale));
+  max-width: calc(100% - 8px * var(--unscale));
   overflow: hidden;
   font-size: calc(13px * var(--unscale));
   font-weight: 600;
@@ -112,9 +114,10 @@
   color: var(--text-tertiary);
   white-space: nowrap;
 }
+/* The name keeps its width up to the page's; actions that do not fit run past the page's edge. */
 .k-ce-label__name {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 auto;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -123,6 +126,7 @@
 }
 .k-ce-label__acts {
   display: flex;
+  flex: none;
   gap: calc(2px * var(--unscale));
   pointer-events: auto;
 }
@@ -191,6 +195,10 @@
   box-shadow:
     0 0 0 calc(1.5px * var(--unscale)) var(--agent-ink),
     var(--elevation-page-drop);
+}
+/* No size container: in the zoomed layer it would have no width, and the flags size by it. */
+.ui-agc.k-ce-agents {
+  container-type: normal;
 }
 .k-ce-pointer {
   position: absolute;
@@ -405,7 +413,7 @@
 }
 .k-ce-grid2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 8px;
 }
 .k-ce-field {
@@ -426,6 +434,7 @@
 .k-ce-field input,
 .k-ce-field select {
   flex: 1;
+  width: 100%;
   min-width: 0;
   border: 0;
   outline: none;

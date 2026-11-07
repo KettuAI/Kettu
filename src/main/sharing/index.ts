@@ -36,6 +36,7 @@ import {
 } from '@shared/sharing'
 import { NotSignedIn } from '../account'
 import { AccountNetworkError } from '../account/service'
+import { overviewOf } from '../artifacts/overview'
 import { isInside } from '../artifacts/protocol'
 import { createLogger } from '../log'
 import { planAuto, type AutoStep } from './auto'
@@ -851,6 +852,13 @@ export class Sharing {
       } catch (error) {
         throw new SharingError('failed', `Could not read the artifact: ${(error as Error).message}`)
       }
+    }
+    try {
+      const overview = await overviewOf(found.files, found.title)
+      if (overview)
+        files.push({ path: ARTIFACT_ENTRY, bytes: Buffer.from(withMeta(overview), 'utf8') })
+    } catch (error) {
+      throw new SharingError('failed', `Could not read the canvas: ${(error as Error).message}`)
     }
     return { files, version: found.version }
   }

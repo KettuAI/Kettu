@@ -637,6 +637,29 @@ describe("the thread database's artifacts", () => {
     db.close()
   })
 
+  it('lists whether the latest version is a canvas document', () => {
+    const { db } = withContent()
+    create(db, { 'index.html': '<p>one</p>' })
+    const listed = () => db.listArtifacts({ project: null, deleted: false })[0]!.canvas
+    expect(listed()).toBe(false)
+    db.writeArtifact({
+      id: ID,
+      project: '/p',
+      baseVersion: 1,
+      changes: [
+        { path: 'index.html', data: null },
+        { path: 'canvas.json', data: bytes('{}') },
+        { path: 'a.html', data: bytes('a') },
+      ],
+      pages: 1,
+      author: null,
+      note: null,
+      at: 2,
+    })
+    expect(listed()).toBe(true)
+    db.close()
+  })
+
   it('restores from an older base only when the files it brings back did not change since', () => {
     const { db } = withContent()
     create(db, { 'canvas.json': '{}', 'pages/a.html': 'a', 'pages/b.html': 'b' })

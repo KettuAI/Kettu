@@ -122,5 +122,11 @@
   },
   "account": {
     "browserFailed": "Kettu couldn’t finish signing in. Go back to Kettu to see why and try again."
+  },
+  "canvasOverview": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit",
+    "empty": "This canvas has no pages yet."
   }
 }

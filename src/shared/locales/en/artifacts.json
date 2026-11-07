@@ -558,5 +558,11 @@
     "handedOff": "Handed to the agent",
     "handOffFailed": "Could not hand it to the agent. {{error}}",
     "legacySplit": "Edit on the canvas"
+  },
+  "overview": {
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit",
+    "empty": "This canvas has no pages yet."
   }
 }
