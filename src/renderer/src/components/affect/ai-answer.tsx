@@ -748,8 +748,12 @@ const css = /* css */ `
   -webkit-font-smoothing: antialiased;
 }
 .ui-ansc *, .ui-ansc *::before, .ui-ansc *::after { box-sizing: border-box; }
+/* Kettu: the element resets sit in the base layer, under Tailwind's utilities, since a reply's
+   Markdown styles its own buttons. */
+@layer base {
 :where(.ui-ansc) button { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; }
 :where(.ui-ansc) svg { display: block; flex: none; }
+}
 .ui-ansc button:focus-visible, .ui-ansc a:focus-visible { outline: 2px solid var(--ui-ansc-focus); outline-offset: 1px; }
 
 /* No surface by default: the content sits right in its thread, panel or sheet.
