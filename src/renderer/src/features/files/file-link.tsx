@@ -5,8 +5,8 @@ import type { FileRef } from './file-refs'
 import { nameOf } from './paths'
 
 /**
- * A file reference in a reply, as a chip: a document icon and the file's name, with the path in
- * its tooltip. It opens the file in the Files pane at its line.
+ * A file reference in a reply, drawn like the thread's links: the file's icon and name over one
+ * line, with the path in its tooltip. It opens the file in the Files pane at its line.
  */
 export function FileLink({ file }: { file: FileRef & { projectPath: string } }) {
   const { t } = useTranslation('files')
@@ -19,9 +19,16 @@ export function FileLink({ file }: { file: FileRef & { projectPath: string } }) 
       aria-label={t('link.open', { target })}
       onClick={() => openFile(file.projectPath, file.path, file.line)}
     >
-      <FileTypeIcon path={file.path} className="size-3.5" />
-      <span>{nameOf(file.path)}</span>
-      {file.line && <span className="-ml-[3px]">:{file.line}</span>}
+      {/* A button lays out as an inline block, so the line is drawn by an inline span inside it,
+          at the same depth as a link's. */}
+      <span className="thread-link">
+        <FileTypeIcon
+          path={file.path}
+          className="relative -top-[1.5px] mr-1.5 inline-block size-4 align-middle"
+        />
+        {nameOf(file.path)}
+        {file.line && <span className="text-tertiary">:{file.line}</span>}
+      </span>
     </button>
   )
 }

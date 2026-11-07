@@ -1294,45 +1294,16 @@
     color: var(--text-tertiary);
   }
 
-  /* A file reference is a chip, not a link: a document icon and its name on a subtle ground in a
-     thin ring, the path in its tooltip. It opens the file in the Files pane. */
+  /* A file reference is drawn like a link: its icon and name over the link's line, the path in
+     its tooltip. It opens the file in the Files pane. */
   & [data-file-ref] {
-    position: relative;
-    top: -1px;
-    display: inline-flex;
-    vertical-align: middle;
-    align-items: center;
-    gap: 5px;
-    margin-inline: 1px;
-    /* The line counts the chip as 18 px, so it never makes a line taller. */
-    margin-block: -2px;
-    border-radius: var(--radius-lg);
-    background: var(--bg-subtle);
-    box-shadow: inset 0 0 0 1px var(--border-subtle);
-    padding: 0 6px 0 5px;
-    height: 22px;
-    color: var(--text-primary);
-    font-family: var(--font-sans);
-    font-size: 0.9em;
-    font-weight: var(--font-weight-normal);
-    line-height: 1;
     white-space: nowrap;
     cursor: pointer;
     outline: none;
-    transition: background-color var(--duration-fast);
-    &:hover {
-      background: var(--bg-selected);
-    }
     &:focus-visible {
+      border-radius: var(--radius-sm);
       outline: 1.5px solid var(--focus-ring-color);
       outline-offset: 2px;
-    }
-    & svg {
-      color: var(--text-tertiary);
-    }
-    /* The line it points at, after the name. */
-    & > span + span {
-      color: var(--text-tertiary);
     }
   }
 
@@ -1556,11 +1527,6 @@
   letter-spacing: normal;
   /* A theme's code face for the interface has no italic bundled. */
   font-synthesis-style: auto;
-
-  /* This text is already Inter's small step, so a chip stays at its own size. */
-  & [data-file-ref] {
-    font-size: 1em;
-  }
 }
 
 /* The frame for code, shell output, SVG and diagrams in a reply, with a
