@@ -1,11 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
-import {
-  Add01Icon,
-  ArrowRight01Icon,
-  Folder01Icon,
-  FolderOpenIcon,
-  MoreHorizontalIcon,
-} from '@hugeicons/core-free-icons'
+import { Add01Icon, ArrowRight01Icon, MoreHorizontalIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
@@ -275,15 +269,7 @@ function ProjectGroup({
         (project?.missing || away) && 'text-(--faint)!',
       )}
     >
-      {project ? (
-        open ? (
-          <FolderMark />
-        ) : (
-          <FolderClosedMark />
-        )
-      ) : (
-        <Glyph icon={open ? FolderOpenIcon : Folder01Icon} />
-      )}
+      {open ? <FolderMark /> : <FolderClosedMark />}
       <span className="ui-as-side__text">{name}</span>
       {project?.missing && (
         <span className="shrink-0 text-[12px] text-(--faint)">{t('project.missing')}</span>
