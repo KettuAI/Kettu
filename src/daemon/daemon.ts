@@ -2,7 +2,8 @@
 // the host's key and the settings, starts the hosts and stops them in order. It alone writes the
 // settings, so a change from the CLI comes through the control socket and applies at once.
 
-import { logEnvironment } from '@shared/log/process-log'
+import { logEnvironment, logLevel, setLogLevel } from '@shared/log/process-log'
+import { bundleForDevice } from '@shared/log/report-bundle'
 import { chmod, rm } from 'node:fs/promises'
 import os from 'node:os'
 import { matchLocale } from '@shared/locale'
@@ -29,12 +30,18 @@ import { isUnavailable, type HostTimings } from './forked-host'
 import { Hosts } from './hosts'
 import { keyIsPrivate, loadHostKey, newHostKey, prepareDataFolder } from './key'
 import { keyPath } from './paths'
+import { clearReports, daemonReport, reportsFolder } from './problem-report'
 import { readSshPort, writeSshPort } from './ssh-port'
 
 const log = createLogger('daemon')
 
 /** Set in the service's environment, so the daemon can say it runs as one. */
 export const SERVICE_ENV = 'KETTU_DAEMON_SERVICE'
+
+/** How long `kettu verbose on` keeps the detailed records on, as the app's switch. */
+const VERBOSE_MS = 24 * 60 * 60 * 1000
+/** setTimeout holds at most about 24.8 days. */
+const MAX_TIMER_MS = 2 ** 31 - 1
 
 export interface DaemonOptions {
   dataPath: string
@@ -181,6 +188,17 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       changeSettings({ remote: { terminal: allowed } })
       return terminalReport()
     },
+    'report.build': async ({ request }) =>
+      daemonReport(
+        starting(),
+        { version: options.version, dataPath: options.dataPath, settings: settings.get() },
+        request,
+      ),
+    'verbose.set': async ({ on }) => {
+      starting()
+      changeSettings({ diagnostics: { verboseUntil: on ? Date.now() + VERBOSE_MS : null } })
+      return { until: settings.get().diagnostics.verboseUntil }
+    },
     'ssh.setup': async ({ device }) => {
       const running = starting()
       // Throws while nothing listens, before the device is added.
@@ -211,6 +229,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     if (!settings.get().remote.direct.enabled) {
       settings.update({ remote: { direct: { enabled: true } } })
     }
+    await clearReports(options.dataPath)
   } catch (error) {
     await release(server, options.controlSocket)
     throw error
@@ -250,6 +269,41 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     settings,
     hosts: running,
     env: options.env,
+    report: async (request) =>
+      bundleForDevice(
+        await daemonReport(
+          running,
+          { version: options.version, dataPath: options.dataPath, settings: settings.get() },
+          request,
+        ),
+        reportsFolder(options.dataPath),
+      ),
+  })
+  let verboseTimer: NodeJS.Timeout | null = null
+  /** Applies the detailed records setting to the daemon and its agent host, until it ends. */
+  const applyVerbose = (): void => {
+    if (verboseTimer) clearTimeout(verboseTimer)
+    verboseTimer = null
+    const until = settings.get().diagnostics.verboseUntil
+    const now = Date.now()
+    if (until !== null && until <= now) {
+      // The change comes back here, with the setting off.
+      settings.update({ diagnostics: { verboseUntil: null } })
+      return
+    }
+    const level = until === null ? 'info' : 'debug'
+    if (level !== logLevel())
+      log.info(level === 'debug' ? 'Detailed records on' : 'Detailed records off')
+    setLogLevel(level)
+    running.setLogLevel(level)
+    if (until !== null) {
+      verboseTimer = setTimeout(applyVerbose, Math.min(until - now, MAX_TIMER_MS))
+      verboseTimer.unref()
+    }
+  }
+  applyVerbose()
+  settings.onChange((_, changed) => {
+    if (changed.has('diagnostics')) applyVerbose()
   })
   running.start()
   log.info(

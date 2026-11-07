@@ -40,13 +40,16 @@
     "window": "窗口",
     "minimize": "最小化",
     "zoom": "缩放",
-    "bringAllToFront": "前置全部窗口"
+    "bringAllToFront": "前置全部窗口",
+    "help": "帮助",
+    "reportProblem": "报告问题…"
   },
   "dialogs": {
     "openProject": "打开项目",
     "chooseAgentProgram": "选择 Agent 程序",
     "chooseShell": "选择 Shell",
-    "exportDiagnostics": "导出诊断信息",
+    "saveReport": "保存问题报告",
+    "saveReportWarning": "报告请自己留着：贴进公开的 GitHub issue 的文件谁都能下载。",
     "programs": "程序",
     "addFiles": "添加文件或照片",
     "addFolder": "添加文件夹",

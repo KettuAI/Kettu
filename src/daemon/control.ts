@@ -15,6 +15,12 @@ import {
 } from '@shared/remote/device'
 import type { Platform } from '@shared/platform'
 import type { PairingState } from '@shared/remote/pairing'
+import {
+  parseReportRequest,
+  ReportRequestError,
+  type ReportBuildResult,
+  type ReportRequest,
+} from '@shared/report'
 import type { DirectAddress } from '@shared/remote/protocol'
 import { connectPort, listenPorts } from '@shared/socket-port'
 import { publicKeyBytes } from '../remote-host/devices'
@@ -112,6 +118,10 @@ export interface ControlCalls {
    * came over the login, as a device of the owner's.
    */
   'ssh.setup': { params: { device: NewDevice | null }; result: SshSetup }
+  /** A problem report's bundle, written into the data folder for the CLI to move. */
+  'report.build': { params: { request: ReportRequest }; result: ReportBuildResult }
+  /** Turns the detailed records on for 24 hours, or off; when they end, or null. */
+  'verbose.set': { params: { on: boolean }; result: { until: number | null } }
 }
 
 export interface TerminalReport {
@@ -254,6 +264,21 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   'ssh.setup': (raw) => {
     const { device } = record(raw)
     return { device: device === undefined || device === null ? null : newDevice(device) }
+  },
+  'report.build': (raw) => {
+    try {
+      return { request: parseReportRequest(record(raw).request) }
+    } catch (error) {
+      if (error instanceof ReportRequestError) {
+        throw new ControlError('invalid_params', error.message)
+      }
+      throw error
+    }
+  },
+  'verbose.set': (raw) => {
+    const { on } = record(raw)
+    if (typeof on !== 'boolean') throw new ControlError('invalid_params', 'on must be a boolean')
+    return { on }
   },
 }
 

@@ -22,7 +22,6 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useRefresh } from '@renderer/components/refresh'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { exportDiagnostics } from '@renderer/app/actions'
 import { Notice } from '@renderer/features/routines/kit'
 import { useCornered } from '@renderer/features/shell/corner'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
@@ -33,6 +32,7 @@ import { currentLocale } from '@renderer/lib/i18n'
 import { isMac } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
 import { agentName } from '@renderer/stores/agents'
+import { openReport } from '@renderer/stores/report'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   loadUsagePage,
@@ -460,37 +460,26 @@ function ReadFailed({ error, kept }: { error: string; kept: boolean }) {
 /** The database cannot be read, even after its worker was started again. */
 function Unavailable() {
   const { t } = useTranslation('usage')
-  const [saving, setSaving] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  const save = async () => {
-    setSaving(true)
-    setNote(null)
-    try {
-      const path = await exportDiagnostics()
-      if (path) setNote(t('error.savedTo', { path }))
-    } catch (e) {
-      setNote(errorMessage(e))
-    } finally {
-      setSaving(false)
-    }
-  }
   return (
     <Notice
       tone="red"
       mark={<Icon icon={Alert02Icon} size={16} />}
       title={t('error.title')}
       action={
-        <Button size="sm" variant="secondary" disabled={saving} onClick={() => void save()}>
-          {t('error.export')}
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() =>
+            void openReport({
+              context: { sessionId: null, agentId: null, error: t('error.unavailable') },
+            })
+          }
+        >
+          {t('error.report')}
         </Button>
       }
     >
       {t('error.unavailable')}
-      {note && (
-        <span data-selectable="" style={{ display: 'block', marginTop: 4 }}>
-          {note}
-        </span>
-      )}
     </Notice>
   )
 }

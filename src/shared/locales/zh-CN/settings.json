@@ -442,13 +442,18 @@
       "invalid": "请输入 URL，例如 http://proxy.example.com:8080",
       "environmentNote": "在填入 URL 之前，仍使用环境变量中的代理。"
     },
-    "diagnostics": {
-      "name": "诊断信息",
-      "description": "一个包含最近消息、日志和路径的文件，用于报告问题。分享前先检查一遍。",
-      "keywords": "日志 问题 反馈 报告 logs bug report",
-      "export": "导出诊断信息",
-      "saved": "已保存到 {{path}}",
-      "exportShort": "导出…"
+    "report": {
+      "name": "报告问题",
+      "description": "把日志和设置打包成 zip，保存前可以逐个文件查看。",
+      "keywords": "问题 反馈 报告 诊断 日志 bug report diagnostics",
+      "open": "报告问题…"
+    },
+    "record": {
+      "name": "录制复现步骤",
+      "description": "重现问题时打开详细记录，最长 30 分钟，结束后只报告这段时间。",
+      "keywords": "复现 录制 详细记录 调试 reproduce verbose",
+      "start": "开始录制",
+      "recording": "录制中…"
     },
     "logs": {
       "name": "日志",

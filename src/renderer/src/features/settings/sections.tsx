@@ -39,11 +39,12 @@ import { forgetSite } from '@renderer/features/session/link-open'
 import { errorMessage } from '@renderer/lib/host'
 import { systemLocale } from '@renderer/lib/i18n'
 import { basename } from '@renderer/lib/format'
-import { fileManagerName, formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
+import { formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
+import { openReport, useReportStore } from '@renderer/stores/report'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
 import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
@@ -53,7 +54,6 @@ import {
   CopyAction,
   DangerButton,
   Masked,
-  PathText,
   Pill,
   RevealButton,
   Segmented,
@@ -775,47 +775,33 @@ export function Proxy({ label }: { label: ReactNode }) {
   )
 }
 
-export function Diagnostics({ label }: { label: ReactNode }) {
+/** Opens the report dialog for the host the sections show. */
+export function ReportProblem() {
   const { t } = useTranslation('settings')
-  const { request } = useHostScope()
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<{ path: string } | { error: string } | null>(null)
-  const run = async () => {
-    setBusy(true)
-    setNote(null)
-    try {
-      // Saved on this computer, wherever the host it describes is.
-      const path = await window.kettu.diagnostics.save(
-        await request('diagnostics.collect', undefined),
-      )
-      if (path) setNote({ path })
-    } catch (e) {
-      setNote({ error: errorMessage(e) })
-    } finally {
-      setBusy(false)
-    }
-  }
+  const { hostId } = useHostScope()
   return (
-    <div className="k-line">
-      <div className="k-grow">
-        {label}
-        {note &&
-          ('error' in note ? (
-            <p role="alert" className="k-error" data-wrap="">
-              {note.error}
-            </p>
-          ) : (
-            <SavedTo path={note.path} />
-          ))}
-      </div>
+    <SetButton onClick={() => void openReport({ hostId })}>{t('advanced.report.open')}</SetButton>
+  )
+}
+
+/** Starts recording steps to reproduce; the top bar shows it until it stops. */
+export function RecordSteps() {
+  const { t } = useTranslation('settings')
+  const recording = useReportStore((s) => s.recording)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <>
+      <ControlError error={error} />
       <SetButton
-        loading={busy}
-        aria-label={t('advanced.diagnostics.export')}
-        onClick={() => void run()}
+        disabled={recording !== null}
+        onClick={() => {
+          setError(null)
+          window.kettu.report.record(true).catch((e: unknown) => setError(errorMessage(e)))
+        }}
       >
-        {t('advanced.diagnostics.exportShort')}
+        {t(recording ? 'advanced.record.recording' : 'advanced.record.start')}
       </SetButton>
-    </div>
+    </>
   )
 }
 
@@ -893,36 +879,6 @@ export function DetailedRecords({ label }: { label: string }) {
         }}
       />
     </>
-  )
-}
-
-/** Where the diagnostics file went, and the way to it. */
-function SavedTo({ path }: { path: string }) {
-  const { t } = useTranslation('settings')
-  const [error, setError] = useState<string | null>(null)
-  const [before, after] = t('advanced.diagnostics.saved', { path: SLOT }).split(SLOT)
-  return (
-    <div role="status" className="k-saved">
-      <span className="flex max-w-full min-w-0 items-center whitespace-pre">
-        {before}
-        <PathText path={path} />
-        {after}
-      </span>
-      {/* A browser saves the file among its downloads, which it shows itself. */}
-      {!isWeb && (
-        <button
-          type="button"
-          className="k-link"
-          onClick={() => {
-            setError(null)
-            window.kettu.shell.showItem(path).catch((e: unknown) => setError(errorMessage(e)))
-          }}
-        >
-          {t('agents.showIn', { name: fileManagerName() })}
-        </button>
-      )}
-      <ControlError error={error} />
-    </div>
   )
 }
 

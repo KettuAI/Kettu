@@ -23,6 +23,7 @@ let verboseRun = false
 let verboseUntil: number | null = null
 let verboseTimer: NodeJS.Timeout | null = null
 let lastExit: number | null = null
+let noticeClosed = false
 // Set once Kettu quits on purpose, so the next run does not report an unexpected end.
 let quitCleanly = false
 
@@ -75,6 +76,16 @@ export async function markRunning(): Promise<void> {
 /** When the last run ended unexpectedly, as far as this run knows; null after a clean quit. */
 export function lastUnexpectedExit(): number | null {
   return lastExit
+}
+
+/** When the last run ended unexpectedly, while the notice of it is not closed yet. */
+export function unexpectedExitNotice(): number | null {
+  return noticeClosed ? null : lastExit
+}
+
+/** The user closed the notice of the unexpected end, which then does not show again. */
+export function dismissUnexpectedExit(): void {
+  noticeClosed = true
 }
 
 export function watchProcesses(): void {

@@ -16,6 +16,7 @@ export function LaunchState() {
           title={t('launch.loadFailed')}
           message={error}
           onRetry={() => void loadHostState()}
+          report={{ hostId: null }}
         />
       </div>
     </div>

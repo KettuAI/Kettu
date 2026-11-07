@@ -10,6 +10,7 @@ export interface MenuDeps {
   /** Whether a session's page holds the keyboard focus, which the renderer cannot see. */
   browserFocused(): boolean
   zoom(step: ZoomStep): void
+  reportProblem(): void
 }
 
 /** Sends a command to the current window only; without one there is nothing to act on. */
@@ -175,6 +176,12 @@ export function installMenu(deps: MenuDeps): void {
         { type: 'separator' },
         { role: 'front', label: t('menu.bringAllToFront') },
       ],
+    },
+    {
+      // The role puts macOS's search field for the menus at the top.
+      role: 'help',
+      label: t('menu.help'),
+      submenu: [{ label: t('menu.reportProblem'), click: () => deps.reportProblem() }],
     },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

@@ -443,13 +443,18 @@
       "invalid": "Enter a URL such as http://proxy.example.com:8080",
       "environmentNote": "The environment’s proxy stays in use until a URL is in."
     },
-    "diagnostics": {
-      "name": "Diagnostics",
-      "description": "A file with recent messages, logs and paths for a bug report. Look through it before sharing.",
-      "keywords": "logs bug report",
-      "export": "Export diagnostics",
-      "saved": "Saved to {{path}}",
-      "exportShort": "Export…"
+    "report": {
+      "name": "Report a problem",
+      "description": "Puts together the logs and settings in a zip, which you look through before saving it.",
+      "keywords": "bug report diagnostics logs feedback",
+      "open": "Report a problem…"
+    },
+    "record": {
+      "name": "Record steps to reproduce",
+      "description": "Turns on detailed records while you repeat the problem, for up to 30 minutes, then opens a report of just that time.",
+      "keywords": "reproduce verbose debug record",
+      "start": "Start recording",
+      "recording": "Recording…"
     },
     "logs": {
       "name": "Logs",

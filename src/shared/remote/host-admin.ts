@@ -7,6 +7,7 @@ import type { HostToMain } from '../host-control'
 import type { AppInfo, RemotePairingEvent } from '../ipc'
 import type { AgentColor, SettingsFile, SettingsPatch } from '../settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from '../sharing'
+import type { ReportFileInfo, ReportRequest } from '../report'
 import type { AgentId, HarnessId } from '../thread'
 import type {
   CatalogInstallResult,
@@ -114,6 +115,11 @@ export function splitSettingsPatch(patch: SettingsPatch): {
     client: Object.keys(client).length > 0 ? (client as SettingsPatch) : null,
   }
 }
+
+/** A bundle built for an owner's device, or why there is none. */
+export type DeviceReport =
+  | { ok: true; zip: string; files: ReportFileInfo[]; size: number }
+  | { ok: false; reason: 'too_large' | 'failed' }
 
 /** The host's own facts, and what it can do beyond its sessions. */
 export interface HostInfo extends AppInfo {
@@ -232,6 +238,8 @@ export interface HostAdminContract {
   }
   /** A typed version printed by its viewer, as a PDF in base64, which only a desktop app prints. */
   'artifacts.printPdf': { params: { id: string; version: number }; result: string }
+  /** A problem report's bundle, which the host builds with its own logs: the zip in base64. */
+  'host.report': { params: { request: ReportRequest }; result: DeviceReport }
 }
 
 export type HostAdminMethod = keyof HostAdminContract
@@ -280,6 +288,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'artifacts.thumbnail': true,
   'artifacts.png': true,
   'artifacts.printPdf': true,
+  'host.report': true,
 }
 
 export function isHostAdminMethod(method: string): method is HostAdminMethod {

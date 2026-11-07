@@ -97,6 +97,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:busy-request':
         withHost((h) => h.busy(message.requestId))
         break
+      case 'host:report-request':
+        if (Number.isSafeInteger(message.requestId)) withHost((h) => void h.report(message))
+        break
       case 'host:grant':
         if (Array.isArray(message.grants)) {
           withHost((h) => h.grant(message.requestId, message.grants.filter(isGrant)))

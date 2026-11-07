@@ -88,6 +88,36 @@ export function lastingToast(title: string, action: { label: string; onClick: ()
   }
 }
 
+/**
+ * A warning that stays until it is closed or its action is chosen, such as the notice of an
+ * unexpected quit; `onClose` runs either way, once.
+ */
+export function noticeToast(
+  title: string,
+  action: { label: string; onClick: () => void },
+  onClose: () => void,
+) {
+  const mark = (
+    <HugeiconsIcon
+      icon={Alert02Icon}
+      strokeWidth={1.9}
+      aria-hidden
+      className="size-3.75 text-warning"
+    />
+  )
+  const id = affectToast(title, {
+    icon: mark,
+    duration: Infinity,
+    action: actionOf(action),
+    onDismiss: (closed) => {
+      onDismiss(closed)
+      onClose()
+    },
+  })
+  open.add(id)
+  changed()
+}
+
 /** The toasts' layer, mounted once at the app's root. */
 export function Toaster() {
   const { t } = useTranslation('common')
