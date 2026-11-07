@@ -29,6 +29,7 @@ import type {
   IpcInvokeChannel,
   IpcInvokeResult,
   IpcSendContract,
+  PageRect,
   ReportPrepareResult,
   UnsavedFile,
 } from '@shared/ipc'
@@ -252,6 +253,24 @@ function browserBounds(value: unknown): BrowserBounds {
   }
 }
 
+/** A rectangle of the caller's page: four finite numbers from 0, at least a pixel in size. */
+function pageRect(value: unknown): PageRect {
+  if (typeof value !== 'object' || value === null) throw new Error('A rectangle must be an object')
+  const { x, y, width, height } = value as Record<string, unknown>
+  const numbers = [x, y, width, height]
+  if (
+    numbers.some(
+      (number) =>
+        typeof number !== 'number' || !Number.isFinite(number) || number < 0 || number > BOUNDS_MAX,
+    ) ||
+    (width as number) < 1 ||
+    (height as number) < 1
+  ) {
+    throw new Error('A rectangle takes four numbers from 0 to 100000, and a size of at least 1')
+  }
+  return { x: x as number, y: y as number, width: width as number, height: height as number }
+}
+
 const SHOW_ITEM_MAX_CHARS = 4_096
 
 /** An origin Settings lists: scheme, host and port, as it was stored. */
@@ -414,6 +433,21 @@ export function registerIpcHandlers({
 }: IpcDeps): void {
   handle('app:get-info', 0, () => appInfo())
   handle('app:default-browser', 0, () => defaultBrowser(app))
+  handle('app:capture-rect', 1, async ({ window, event }, value) => {
+    const rect = pageRect(value)
+    if (!window) return null
+    // The page lays out in CSS pixels, which the zoom factor scales into the window's.
+    const zoom = event.sender.getZoomFactor()
+    const [width, height] = window.getContentSize()
+    const x = Math.floor(rect.x * zoom)
+    const y = Math.floor(rect.y * zoom)
+    const right = Math.min(width, Math.ceil((rect.x + rect.width) * zoom))
+    const bottom = Math.min(height, Math.ceil((rect.y + rect.height) * zoom))
+    if (right <= x || bottom <= y) return null
+    const image = await event.sender.capturePage({ x, y, width: right - x, height: bottom - y })
+    if (image.isEmpty()) return null
+    return new Uint8Array(image.toPNG({ scaleFactor: Math.max(1, ...image.getScaleFactors()) }))
+  })
 
   handle('app:respond-quit', 2, (_, id, answer) => {
     if (!Number.isSafeInteger(id) || (typeof answer !== 'boolean' && answer !== 'background')) {

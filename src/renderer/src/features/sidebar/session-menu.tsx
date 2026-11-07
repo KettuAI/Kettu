@@ -105,6 +105,8 @@ import {
   type SessionMenuPlace,
 } from './session-menu-model'
 import { confirmArchive } from './archive-confirm-model'
+import { dissolveRows } from './row-dust'
+import { markReturning } from './row-exit'
 import { sessionPullRequests } from './session-prs'
 
 /** An accelerator as the menu shows it: macOS's symbols, or the key names elsewhere. */
@@ -152,10 +154,12 @@ function archiveNow(ids: readonly string[], title: string): void {
       archived,
       {
         label: i18n.t('sidebar:row.undo'),
-        onClick: () =>
+        onClick: () => {
+          markReturning(done)
           void settle(done, unarchiveSession).then(({ errors: failed }) => {
             if (failed.length > 0) toast(errorMessage(failed[0]))
-          }),
+          })
+        },
       },
       { icon: Archive01Icon },
     )
@@ -915,6 +919,19 @@ function useAtStake(paths: readonly string[], open: boolean): Map<string, AtStak
   return open && read?.key === key ? read.stake : null
 }
 
+/** Deletes one by one: their rows in sight turn to dust, and one whose delete fails comes back. */
+async function deleteAll(ids: readonly string[]): Promise<void> {
+  const dust = await dissolveRows(ids)
+  for (const [i, id] of ids.entries()) {
+    try {
+      await deleteSession(id)
+    } catch (error) {
+      dust.restore(ids.slice(i))
+      throw error
+    }
+  }
+}
+
 /** The Delete item's second key or a Mod-click: deletes at once when nothing is at stake. */
 async function deleteUnlessAtStake(
   summaries: readonly SessionSummary[],
@@ -927,7 +944,7 @@ async function deleteUnlessAtStake(
   if (!canDeleteAtOnce(files, withChildren)) return confirm()
   clearSelection()
   try {
-    for (const summary of summaries) await deleteSession(summary.id)
+    await deleteAll(summaries.map((summary) => summary.id))
   } catch (error) {
     toast(errorMessage(error))
   }
@@ -968,9 +985,11 @@ export function DeleteSessionDialog({
   // Archive keeps what it archives; a sub-session goes with its parent.
   const canArchive = targets.length > 0 && targets.every((s) => s.parentId === null)
   const remove = async () => {
+    // Closed first: the rows turn to dust once nothing covers them.
+    onOpenChange(false)
     clearSelection()
     try {
-      for (const target of targets) await deleteSession(target.id)
+      await deleteAll(targets.map((target) => target.id))
       onDeleted?.()
     } catch (error) {
       toast(errorMessage(error))

@@ -1,5 +1,6 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import { Add01Icon, ArrowRight01Icon, MoreHorizontalIcon } from '@hugeicons/core-free-icons'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
@@ -345,9 +346,11 @@ function ProjectGroup({
       {open && tree.length > 0 && (
         <ul className="ui-as-chat-folder__chats">
           <RenameScope value={key}>
-            {limited.rows.map((node) => (
-              <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} indent />
-            ))}
+            <AnimatePresence initial={false}>
+              {limited.rows.map((node) => (
+                <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} indent />
+              ))}
+            </AnimatePresence>
           </RenameScope>
           {(limited.hidden > 0 || allShown) && tree.length > ROWS_SHOWN && (
             <li className="flex">
@@ -432,14 +435,16 @@ function PinnedGroup({
       {open && (
         <ul className="flex flex-col">
           <RenameScope value={PINNED_GROUP}>
-            {tree.map((node) => (
-              <SessionRow
-                key={node.summary.id}
-                node={node}
-                tabStopId={tabStopId}
-                showHost={!!hosts}
-              />
-            ))}
+            <AnimatePresence initial={false}>
+              {tree.map((node) => (
+                <SessionRow
+                  key={node.summary.id}
+                  node={node}
+                  tabStopId={tabStopId}
+                  showHost={!!hosts}
+                />
+              ))}
+            </AnimatePresence>
           </RenameScope>
           <GroupRenameHints scope={PINNED_GROUP} />
         </ul>

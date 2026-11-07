@@ -3,6 +3,7 @@
 
 import { useMemo } from 'react'
 import { Alert02Icon, ComputerIcon, LaptopIcon } from '@hugeicons/core-free-icons'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
@@ -65,9 +66,11 @@ export function NeedsYouGroup({
       </div>
       <ul className="flex flex-col">
         <RenameScope value={NEEDS_YOU_GROUP}>
-          {tree.map((node) => (
-            <SessionRow key={node.summary.id} node={node} tabStopId={null} showHost />
-          ))}
+          <AnimatePresence initial={false}>
+            {tree.map((node) => (
+              <SessionRow key={node.summary.id} node={node} tabStopId={null} showHost />
+            ))}
+          </AnimatePresence>
         </RenameScope>
         <GroupRenameHints scope={NEEDS_YOU_GROUP} />
       </ul>

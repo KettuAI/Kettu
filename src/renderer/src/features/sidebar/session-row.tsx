@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
@@ -6,6 +6,7 @@ import {
   PinIcon,
   PinOffIcon,
 } from '@hugeicons/core-free-icons'
+import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { pinSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -44,6 +45,7 @@ import { allPanes, paneWithSession } from '@renderer/features/split/layout'
 import { openSession, useViewStore } from '@renderer/stores/view'
 import { RenameHints } from './rename-hints'
 import { useRenameHints } from './rename-scope'
+import { isReturning, rowVariants } from './row-exit'
 import { rowStatus } from './row-status'
 import { cacheGone, useGoneLabel, useSessionCache } from './session-cache'
 import { SessionCard } from './session-card'
@@ -136,6 +138,7 @@ export const SessionRow = memo(function SessionRow({
     }))
 
   const [deleting, setDeleting] = useState(false)
+  const variants = useMemo(() => rowVariants(summary.id), [summary.id])
   const [moreOpen, setMoreOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [cardOpen, setCardOpen] = useState(false)
@@ -290,7 +293,13 @@ export const SessionRow = memo(function SessionRow({
 
   const pinned = !!summary.pinnedAt
   return (
-    <li className="flex flex-col">
+    <motion.li
+      className="flex flex-col"
+      variants={variants}
+      initial={isReturning(summary.id) ? 'hidden' : false}
+      animate="shown"
+      exit="exit"
+    >
       <div
         ref={row}
         className="ui-as-chat-row"
@@ -397,15 +406,17 @@ export const SessionRow = memo(function SessionRow({
       </div>
       {expanded && (
         <ul className="flex flex-col">
-          {children.map((child, i) => (
-            <SessionRow
-              key={child.summary.id}
-              node={child}
-              tabStopId={tabStopId}
-              indent={indent}
-              branch={i === children.length - 1 ? 'last' : 'middle'}
-            />
-          ))}
+          <AnimatePresence initial={false}>
+            {children.map((child, i) => (
+              <SessionRow
+                key={child.summary.id}
+                node={child}
+                tabStopId={tabStopId}
+                indent={indent}
+                branch={i === children.length - 1 ? 'last' : 'middle'}
+              />
+            ))}
+          </AnimatePresence>
         </ul>
       )}
       <DeleteSessionDialog
@@ -415,7 +426,7 @@ export const SessionRow = memo(function SessionRow({
         open={deleting}
         onOpenChange={setDeleting}
       />
-    </li>
+    </motion.li>
   )
 })
 

@@ -249,6 +249,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       getInfo: () => hostInfo(),
       // Links open in this browser itself, which the page cannot name.
       defaultBrowser: async () => ({ name: null, icon: null }),
+      // A page cannot read its own pixels.
+      captureRect: async () => null,
       respondQuit: async () => {},
       onConfirmQuit: never,
       setUnsaved: () => {},

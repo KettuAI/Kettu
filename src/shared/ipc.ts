@@ -168,10 +168,19 @@ export interface ForwardedKey {
   altKey: boolean
 }
 
+/** A rectangle of the page in CSS pixels, as `getBoundingClientRect` gives it. */
+export interface PageRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /** Request/response contract of every `ipcRenderer.invoke` channel, keyed by channel name. */
 export interface IpcInvokeContract {
   'app:get-info': { args: []; result: AppInfo }
   'app:default-browser': { args: []; result: DefaultBrowser }
+  'app:capture-rect': { args: [rect: PageRect]; result: Uint8Array | null }
   // true stops the work and goes on, false stays, 'background' closes the windows and keeps it running.
   'app:respond-quit': { args: [id: number, answer: boolean | 'background']; result: void }
   'settings:get': { args: []; result: SettingsFile }
@@ -484,6 +493,8 @@ export interface KettuApi {
     getInfo(): Promise<AppInfo>
     /** The browser links open in outside Kettu, read once per run. */
     defaultBrowser(): Promise<DefaultBrowser>
+    /** That part of this window as it is on screen, as PNG bytes; null where it cannot be read. */
+    captureRect(rect: PageRect): Promise<Uint8Array | null>
     respondQuit(id: number, answer: boolean | 'background'): Promise<void>
     onConfirmQuit(listener: (request: QuitRequest) => void): () => void
     setUnsaved(files: UnsavedFile[]): void
