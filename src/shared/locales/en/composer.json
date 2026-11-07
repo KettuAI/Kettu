@@ -98,7 +98,6 @@
     },
     "limits": {
       "plan": "Plan",
-      "tier": "{{plan}} ({{tier}})",
       "used": "{{limit}} used",
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}",

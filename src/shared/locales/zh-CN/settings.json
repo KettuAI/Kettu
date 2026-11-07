@@ -562,7 +562,6 @@
       "list_web": "{{host}} 上的"
     },
     "plan": "套餐",
-    "planTier": "{{plan}} ({{tier}})",
     "loginMethod": "登录方式",
     "email": "邮箱",
     "notReported": "未提供",

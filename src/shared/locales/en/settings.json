@@ -565,7 +565,6 @@
       "list_web": "On {{host}}"
     },
     "plan": "Plan",
-    "planTier": "{{plan}} ({{tier}})",
     "loginMethod": "Login method",
     "email": "Email",
     "notReported": "Not reported",

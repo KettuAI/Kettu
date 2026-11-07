@@ -26,6 +26,7 @@ import { Progress } from '@renderer/components/ui/progress'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
+import { joinPlanTier } from '@renderer/features/account/model'
 import { breakdownView, shownUsage } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
@@ -592,11 +593,7 @@ function Total({ label, value }: { label: string; value: number | null }) {
 function PlanLimits({ limits, account }: { limits: PlanLimit[]; account: AgentAccount | null }) {
   const { t } = useTranslation('composer')
   const now = useNow()
-  const plan = account?.label
-    ? account.tier
-      ? t('usage.limits.tier', { plan: account.label, tier: account.tier })
-      : account.label
-    : null
+  const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
   return (
     <div className="kettu-ctx__plan">
       <div className="kettu-ctx__plan-head">
@@ -705,11 +702,7 @@ export function PlanPart({
 }) {
   const { t } = useTranslation('composer')
   const now = useNow()
-  const plan = account?.label
-    ? account.tier
-      ? t('usage.limits.tier', { plan: account.label, tier: account.tier })
-      : account.label
-    : null
+  const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
   return (
     <div className="flex flex-col text-hint">
       <div className="text-small font-medium text-tertiary">
