@@ -233,6 +233,15 @@ button.k-arts__session-row:hover {
   width: 15px;
   height: 15px;
 }
+/* Import sits at the page's right end, so its projects open on the left of the menu. */
+.k-arts__menu .ui-as-menu__subpanel {
+  right: calc(100% + 4px);
+  left: auto;
+}
+.k-arts__menu .ui-as-menu__subpanel::before {
+  right: -8px;
+  left: auto;
+}
 .k-arts__empty {
   display: flex;
   flex-direction: column;
