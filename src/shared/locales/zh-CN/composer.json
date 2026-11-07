@@ -33,7 +33,6 @@
     "followsAgent": "跟随 Agent 设置",
     "followsAgentOn": "跟随 Agent 设置 · 开",
     "followsAgentOff": "跟随 Agent 设置 · 关",
-    "resetDefault": "使用 Agent 的设置",
     "modelsFrom": "来自 {{source}}",
     "optionValue": "{{name}}：{{value}}",
     "permissionMode": "权限模式",

@@ -24,9 +24,6 @@ import { useSelectPick, useSwitchPicks, type Select } from './use-pick'
 const isFast = (o: ConfigOption) => /fast/i.test(o.id)
 const isUltracode = (o: ConfigOption) => /ultracode/i.test(o.id)
 
-/** Whether the switch has a value of its own over the agent's setting, which it can hand back. */
-const overrides = (o: ConfigOption) => 'defaultValue' in o && o.value !== 'default'
-
 // The gradient's stops take their colors from the tokens (see .kettu-ultra-floor in affect.css).
 const ULTRA_STOPS: [string, string, string] = ['currentColor', 'currentColor', 'currentColor']
 
@@ -123,9 +120,6 @@ export function ModelMenu({
             ),
             effect: <GradientFloor className="kettu-ultra-floor" colors={ULTRA_STOPS} speed={4} />,
           }
-        : {}),
-      ...(overrides(o)
-        ? { reset: { label: t('controls.resetDefault'), onReset: () => flips.pick(o, 'default') } }
         : {}),
     }
   })
