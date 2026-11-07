@@ -27,7 +27,12 @@ import { ArtifactEditor, useEditorState } from './editor'
 import { Waiting } from './page-frame'
 import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
 import { useComments } from './use-comments'
-import { ArtifactSurface, CanvasBarControls, Presence } from './viewer-parts'
+import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
+import { CanvasEditor } from './canvas-editor'
+import { PresenceFaces } from './presence-faces'
+import { usePresentAgents } from './use-present-agents'
+import { useCanvasDoc } from './use-canvas-doc'
+import { ArtifactSurface, CanvasBarControls } from './viewer-parts'
 import { PreviewOnly } from './preview-only'
 
 /**
@@ -60,6 +65,8 @@ export default function ArtifactPane({
   const editing = useEditorState(editor)
   const latest = !!shown && !!summary && shown.version === summary.version && !states.inTrash
   const { threads } = useComments(editing.mode === 'comment' ? id : null)
+  const liveCanvas = useCanvasDoc(id, latest && !!shown?.doc)
+  const agents = usePresentAgents(artifact.presence, summary?.deletedAt != null)
 
   useEffect(() => {
     if (states.inTrash) editor?.setMode(null)
@@ -147,6 +154,28 @@ export default function ArtifactPane({
         </button>
       </PaneEmpty>
     )
+  } else if (url && shown && shown.doc) {
+    body = (
+      <CanvasEditor
+        artifactId={id}
+        url={url}
+        version={shown.version}
+        title={title}
+        canvas={liveCanvas}
+        files={shown.paths}
+        readOnly
+        controls={controls}
+        editor={latest ? (editor ?? undefined) : undefined}
+        actions={null}
+        agents={latest ? agents : []}
+        following={null}
+        onFollowDone={() => {}}
+        sessionName={(session) =>
+          agents.find((a) => a.sessionId === session)?.name ?? t('board.note.you')
+        }
+        reloads={artifact.reloads}
+      />
+    )
   } else if (url && shown) {
     body = (
       <ArtifactSurface
@@ -174,11 +203,15 @@ export default function ArtifactPane({
         tools={
           showing && (
             <>
-              <Presence
-                id={id}
+              <AgentCursorStyles />
+              <PresenceFaces
+                agents={agents.slice(0, 3)}
                 presence={artifact.presence}
-                deleted={summary?.deletedAt != null}
-                size="pane"
+                pageName={(page) =>
+                  page ? (liveCanvas.doc?.pages.find((p) => p.id === page)?.name ?? null) : null
+                }
+                following={null}
+                onFollow={() => {}}
               />
               {shown?.canvas && (
                 <CanvasBarControls

@@ -694,7 +694,7 @@ export const CanvasView = memo(function CanvasView({
 })
 
 /** One page on the canvas, at its own size, shown once it has loaded. */
-function CanvasFrame({
+export function CanvasFrame({
   src,
   title,
   width,
@@ -746,7 +746,7 @@ function CanvasFrame({
 }
 
 /** A focused page alone in the area, live and interactive, fitted and never above 100%. */
-function FocusedPage({
+export function FocusedPage({
   src,
   page,
   name,

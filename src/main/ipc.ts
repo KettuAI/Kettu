@@ -659,6 +659,10 @@ export function registerIpcHandlers({
   )
   handle('artifact:open-external', 2, (_, id, version) => artifacts.openExternal(id, version))
   handle('artifact:export', 2, ({ window }, id, version) => artifacts.export(window, id, version))
+  handle('artifact:page-image', 4, async (_, id, version, page, size) => {
+    const image = await artifacts.png(id, version, page, size)
+    return image ? image.toString('base64') : null
+  })
   handle('artifact:png', 5, ({ window }, id, version, page, size, name) =>
     artifacts.savePng(window, id, version, page, size, name),
   )

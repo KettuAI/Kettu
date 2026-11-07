@@ -399,5 +399,164 @@
     "allow": "Allow",
     "deny": "Don’t allow",
     "failed": "Your answer could not be saved: {{error}}"
+  },
+  "board": {
+    "tools": {
+      "move": "Move",
+      "hand": "Hand",
+      "page": "Page",
+      "section": "Section",
+      "text": "Text",
+      "sticky": "Sticky note",
+      "pen": "Pen",
+      "marker": "Highlighter",
+      "shape": "Shapes",
+      "rect": "Rectangle",
+      "ellipse": "Ellipse",
+      "line": "Line",
+      "arrow": "Arrow",
+      "comment": "Comment",
+      "toolbar": "Canvas tools",
+      "penStyle": "Pen style",
+      "thickness": "Thickness",
+      "colors": {
+        "ink": "Ink",
+        "red": "Red",
+        "orange": "Orange",
+        "yellow": "Yellow",
+        "green": "Green",
+        "blue": "Blue",
+        "violet": "Violet"
+      }
+    },
+    "canvases": {
+      "menu": "Canvases",
+      "pages": "{{count}} pages",
+      "pages_one": "{{count}} page",
+      "new": "New canvas",
+      "rename": "Rename",
+      "duplicate": "Duplicate canvas",
+      "delete": "Delete canvas",
+      "newName": "Canvas {{number}}",
+      "lastOne": "A canvas artifact keeps at least one canvas"
+    },
+    "layers": {
+      "title": "Layers",
+      "close": "Close layers",
+      "open": "Layers",
+      "notes": {
+        "text": "Text",
+        "sticky": "Sticky note",
+        "pen": "Drawing",
+        "rect": "Rectangle",
+        "ellipse": "Ellipse",
+        "line": "Line",
+        "arrow": "Arrow"
+      }
+    },
+    "props": {
+      "title": "Title",
+      "page": "Page",
+      "name": "Name",
+      "size": "Size",
+      "width": "W",
+      "height": "H",
+      "x": "X",
+      "y": "Y",
+      "presets": {
+        "desktop": "Desktop",
+        "laptop": "Laptop",
+        "tablet": "Tablet",
+        "phone": "Phone",
+        "custom": "Custom"
+      },
+      "params": "Tweaks",
+      "paramsHint": "Parameters the page declares",
+      "saving": "Saving…",
+      "saved": "Saved as v{{version}}, history can restore the one before",
+      "section": "Section",
+      "note": "Note",
+      "color": "Color",
+      "strokeWidth": "Thickness",
+      "fontSize": "Size",
+      "done": "Handled",
+      "selected": "{{count}} selected",
+      "arrange": "Arrange",
+      "alignLeft": "Align left",
+      "alignCenter": "Align centers",
+      "alignRight": "Align right",
+      "alignTop": "Align tops",
+      "alignMiddle": "Align middles",
+      "alignBottom": "Align bottoms",
+      "distributeH": "Distribute horizontally",
+      "distributeV": "Distribute vertically",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "lock": "Lock",
+      "unlock": "Unlock",
+      "bringFront": "Bring to front",
+      "sendBack": "Send to back",
+      "paramsFailed": "The tweak was not saved. {{error}}"
+    },
+    "page": {
+      "blank": "New page",
+      "blankHint": "Empty until an agent draws it",
+      "drawing": "{{agent}} is drawing this page",
+      "newName": "Page {{number}}",
+      "ask": "Hand to the agent",
+      "tweak": "Tweaks"
+    },
+    "section": {
+      "newName": "Section {{number}}"
+    },
+    "note": {
+      "text": "Text",
+      "doneBy": "Handled by {{agent}}",
+      "by": "{{who}}",
+      "you": "You"
+    },
+    "selection": {
+      "handOff": "Hand to the agent",
+      "count": "{{count}} selected"
+    },
+    "agent": {
+      "reading": "Reading {{page}}",
+      "readingArtifact": "Reading it",
+      "writing": "Writing {{page}}",
+      "writingArtifact": "Writing it",
+      "drawing": "Drawing {{page}}",
+      "moving": "Moving {{page}}",
+      "away": "Left",
+      "follow": "Follow {{agent}}",
+      "stopFollow": "Stop following {{agent}}",
+      "following": "Following {{agent}}: the view goes where it works, the others fade back",
+      "openSession": "Open session",
+      "stop": "Stop following"
+    },
+    "device": {
+      "you": "You",
+      "looking": "Looking at {{page}}",
+      "here": "In the artifact",
+      "host": "This computer"
+    },
+    "visitors": {
+      "count": "{{count}} visitors",
+      "count_one": "{{count}} visitor",
+      "hint": "Looking at the shared link, read-only: they cannot see you, comment or change it"
+    },
+    "empty": {
+      "title": "This canvas has no pages yet",
+      "body": "Drag out a blank page with the page tool, or ask an agent to draw one. Lay pages out and mark them up here, then hand them to the agent.",
+      "pageTool": "Page tool",
+      "ask": "Ask an agent for a page"
+    },
+    "legacy": "An older canvas: the first change you make on it splits it into a file per page, as a new version.",
+    "zoom": "Zoom",
+    "undo": "Undo",
+    "redo": "Redo",
+    "handOffPrompt": "Change what the notes on these pages ask for; leave the rest as it is.",
+    "handedOff": "Handed to the agent",
+    "handOffFailed": "Could not hand it to the agent. {{error}}",
+    "legacySplit": "Edit on the canvas"
   }
 }

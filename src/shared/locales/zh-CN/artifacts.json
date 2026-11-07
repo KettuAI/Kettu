@@ -390,5 +390,164 @@
     "allow": "允许",
     "deny": "不允许",
     "failed": "没能保存你的选择：{{error}}"
+  },
+  "board": {
+    "tools": {
+      "move": "移动",
+      "hand": "抓手",
+      "page": "页面",
+      "section": "分区",
+      "text": "文字",
+      "sticky": "便签",
+      "pen": "画笔",
+      "marker": "荧光笔",
+      "shape": "形状",
+      "rect": "矩形",
+      "ellipse": "椭圆",
+      "line": "线",
+      "arrow": "箭头",
+      "comment": "评论",
+      "toolbar": "画布工具",
+      "penStyle": "画笔样式",
+      "thickness": "粗细",
+      "colors": {
+        "ink": "墨色",
+        "red": "红",
+        "orange": "橙",
+        "yellow": "黄",
+        "green": "绿",
+        "blue": "蓝",
+        "violet": "紫"
+      }
+    },
+    "canvases": {
+      "menu": "画布",
+      "pages": "{{count}} 页",
+      "pages_one": "{{count}} 页",
+      "new": "新建画布",
+      "rename": "改名",
+      "duplicate": "复制这张画布",
+      "delete": "删除画布",
+      "newName": "画布 {{number}}",
+      "lastOne": "画布 artifact 至少保留一张画布"
+    },
+    "layers": {
+      "title": "图层",
+      "close": "关闭图层",
+      "open": "图层",
+      "notes": {
+        "text": "文字",
+        "sticky": "便签",
+        "pen": "笔迹",
+        "rect": "矩形",
+        "ellipse": "椭圆",
+        "line": "线",
+        "arrow": "箭头"
+      }
+    },
+    "props": {
+      "title": "标题",
+      "page": "页面",
+      "name": "名字",
+      "size": "尺寸",
+      "width": "W",
+      "height": "H",
+      "x": "X",
+      "y": "Y",
+      "presets": {
+        "desktop": "桌面",
+        "laptop": "笔记本",
+        "tablet": "平板",
+        "phone": "手机",
+        "custom": "自定义"
+      },
+      "params": "调节",
+      "paramsHint": "页面声明的参数",
+      "saving": "正在保存…",
+      "saved": "已保存为 v{{version}}，历史里能恢复之前的",
+      "section": "分区",
+      "note": "标注",
+      "color": "颜色",
+      "strokeWidth": "粗细",
+      "fontSize": "字号",
+      "done": "已处理",
+      "selected": "已选 {{count}} 项",
+      "arrange": "排列",
+      "alignLeft": "左对齐",
+      "alignCenter": "水平居中",
+      "alignRight": "右对齐",
+      "alignTop": "顶对齐",
+      "alignMiddle": "垂直居中",
+      "alignBottom": "底对齐",
+      "distributeH": "水平等距",
+      "distributeV": "垂直等距",
+      "duplicate": "复制",
+      "delete": "删除",
+      "lock": "锁定",
+      "unlock": "解锁",
+      "bringFront": "移到最前",
+      "sendBack": "移到最后",
+      "paramsFailed": "调节没有保存。{{error}}"
+    },
+    "page": {
+      "blank": "新页面",
+      "blankHint": "Agent 画好之前是空的",
+      "drawing": "{{agent}} 正在画这一页",
+      "newName": "页面 {{number}}",
+      "ask": "交给 Agent",
+      "tweak": "调节"
+    },
+    "section": {
+      "newName": "分区 {{number}}"
+    },
+    "note": {
+      "text": "文字",
+      "doneBy": "{{agent}} 已处理",
+      "by": "{{who}}",
+      "you": "你"
+    },
+    "selection": {
+      "handOff": "交给 Agent",
+      "count": "已选 {{count}} 项"
+    },
+    "agent": {
+      "reading": "在看「{{page}}」",
+      "readingArtifact": "在看",
+      "writing": "正在改「{{page}}」",
+      "writingArtifact": "正在改",
+      "drawing": "正在画「{{page}}」",
+      "moving": "正在挪「{{page}}」",
+      "away": "离开了",
+      "follow": "跟随 {{agent}}",
+      "stopFollow": "停止跟随 {{agent}}",
+      "following": "正在跟随 {{agent}}：镜头跟着它走，别的指针淡下去",
+      "openSession": "打开会话",
+      "stop": "停止跟随"
+    },
+    "device": {
+      "you": "你",
+      "looking": "在看「{{page}}」",
+      "here": "在这个 artifact 里",
+      "host": "这台电脑"
+    },
+    "visitors": {
+      "count": "{{count}} 位访客",
+      "count_one": "{{count}} 位访客",
+      "hint": "在看分享链接，只读：看不到你们，也不能评论或改"
+    },
+    "empty": {
+      "title": "这张画布还没有页面",
+      "body": "用页面工具拉一个空白页面，或者让 Agent 来画。页面画好后在这里排版、标注，再交给 Agent 改。",
+      "pageTool": "页面工具",
+      "ask": "让 Agent 画一页"
+    },
+    "legacy": "这是旧格式的画布：你在上面第一次改动时，会拆成每页一个文件，写成新版本。",
+    "zoom": "缩放",
+    "undo": "撤销",
+    "redo": "重做",
+    "handOffPrompt": "照这些页面上的标注改，别的地方不动。",
+    "handedOff": "已交给 Agent",
+    "handOffFailed": "没能交给 Agent。{{error}}",
+    "legacySplit": "在画布上编辑"
   }
 }

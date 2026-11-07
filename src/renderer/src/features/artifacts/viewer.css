@@ -1215,3 +1215,17 @@
     animation: none;
   }
 }
+
+/* Who is here: affectUI's faces in the bar, the user's other devices first. */
+.k-av-faces {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+  margin-right: 6px;
+}
+.k-av-faces__you {
+  background: var(--control-on);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-foreground);
+}

@@ -295,6 +295,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         downloadFile(new Blob([bytes], { type: 'image/png' }), `${safeName(name, 'page')}.png`)
         return true
       },
+      pageImage: async (id, version, page, size) => {
+        const url = await admin('artifacts.png', { id, version, page, size })
+        return url ? url.slice(url.indexOf(',') + 1) : null
+      },
     },
     // Only the desktop app signs in to a Kettu account so far.
     account: {

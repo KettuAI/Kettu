@@ -137,12 +137,7 @@ export function pageAt(
 }
 
 /** Pages within one and a half views of the visible area, nearest first, at most `max`. */
-export function livePages(
-  pages: readonly PlacedPage[],
-  camera: Camera,
-  view: Size,
-  max = 48,
-): number[] {
+export function livePages(pages: readonly Box[], camera: Camera, view: Size, max = 48): number[] {
   const area = visible(camera, view)
   const reach = { x: area.width * 1.5, y: area.height * 1.5 }
   const cx = area.x + area.width / 2

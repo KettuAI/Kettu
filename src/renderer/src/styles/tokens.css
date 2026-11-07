@@ -471,6 +471,23 @@
   --composer-ultra-1: #e879f9;
   --composer-ultra-2: #8b5cf6;
   --composer-ultra-3: #3b82f6;
+
+  /* The artifact canvas: the colors its notes take, a sticky's paper and ink, the snapping guides
+     and the one ink every agent's pointer and outline share. */
+  --note-ink: #1f1f1f;
+  --note-red: #e5484d;
+  --note-orange: #f2581b;
+  --note-yellow: #e9a800;
+  --note-green: #30a46c;
+  --note-blue: #0090ff;
+  --note-violet: #7653c9;
+  --sticky-paper: #fff0b3;
+  --sticky-ink: #4d3b00;
+  --canvas-guide: #f2581b;
+  --canvas-guide-label: #c2410c;
+  --agent-ink: #171717;
+  --agent-flag: #141416;
+  --agent-flag-ink: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -805,6 +822,22 @@
     --composer-waiting: #ff8a5c;
     --composer-ultra-text: #a78bfa;
     --composer-ultra-shine: #faf5ff;
+
+    /* The artifact canvas, as in the light theme. */
+    --note-ink: #ededed;
+    --note-red: #ff6369;
+    --note-orange: #ff7a3d;
+    --note-yellow: #f5c542;
+    --note-green: #4cc38a;
+    --note-blue: #52a9ff;
+    --note-violet: #a88beb;
+    --sticky-paper: #5a4812;
+    --sticky-ink: #fdeeb5;
+    --canvas-guide: #ff7a3d;
+    --canvas-guide-label: #c2410c;
+    --agent-ink: #e4e4e7;
+    --agent-flag: #f4f4f5;
+    --agent-flag-ink: #141416;
   }
 }
 
@@ -1138,6 +1171,22 @@
   --composer-waiting: #ff8a5c;
   --composer-ultra-text: #a78bfa;
   --composer-ultra-shine: #faf5ff;
+
+  /* The artifact canvas, as in the light theme. */
+  --note-ink: #ededed;
+  --note-red: #ff6369;
+  --note-orange: #ff7a3d;
+  --note-yellow: #f5c542;
+  --note-green: #4cc38a;
+  --note-blue: #52a9ff;
+  --note-violet: #a88beb;
+  --sticky-paper: #5a4812;
+  --sticky-ink: #fdeeb5;
+  --canvas-guide: #ff7a3d;
+  --canvas-guide-label: #c2410c;
+  --agent-ink: #e4e4e7;
+  --agent-flag: #f4f4f5;
+  --agent-flag-ink: #141416;
 }
 
 /* themes: an installed theme sets only the tokens a theme file may hold (THEME_TOKENS in

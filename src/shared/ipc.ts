@@ -162,7 +162,7 @@ export interface ArtifactSelectedEvent {
 
 /** One page of a canvas, by the protocol's numbers, at its own size, for `artifact:png`. */
 export interface ArtifactPngPage {
-  page: { group: number; index: number } | null
+  page: { group: number; index: number; file?: string } | null
   width: number
   height: number
 }
@@ -286,6 +286,11 @@ export interface IpcInvokeContract {
   }
   'artifact:open-external': { args: [id: string, version: number]; result: void }
   'artifact:export': { args: [id: string, version: number]; result: boolean }
+  // A page's image as a base64 PNG, for a message to an agent; null when it cannot render.
+  'artifact:page-image': {
+    args: [id: string, version: number, page: ArtifactPngPage['page'], size: { width: number; height: number }]
+    result: string | null
+  }
   // `name` is the file's default name; false when the user cancelled the save dialog.
   'artifact:png': {
     args: [
@@ -562,6 +567,13 @@ export interface KettuApi {
       size: { width: number; height: number },
       name: string,
     ): Promise<boolean>
+    /** Renders a page as `png` does and hands its image back, base64, for a message to an agent. */
+    pageImage(
+      id: string,
+      version: number,
+      page: ArtifactPngPage['page'],
+      size: { width: number; height: number },
+    ): Promise<string | null>
   }
   /** The Kettu account; main holds its tokens and makes every request. */
   account: {

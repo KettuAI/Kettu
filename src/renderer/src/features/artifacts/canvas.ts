@@ -88,6 +88,9 @@ export function parseCanvas(html: string): CanvasRow[] {
 export interface PlacedPage extends CanvasPage {
   x: number
   y: number
+  /** A canvas document's page: its own file and id. */
+  file?: string
+  id?: string
 }
 
 /** A group's title over the first line of its row, which may wrap. */

@@ -24,6 +24,10 @@ import type { ArtifactStore, FoundVersion } from './store'
 /** How long a canvas stays quiet before the user's operations become a version. */
 export const CANVAS_QUIET_MS = 30_000
 
+/** The file of a page the user drew, until an agent writes it. */
+const BLANK_PAGE =
+  '<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width">\n</head>\n<body></body>\n</html>\n'
+
 interface Live {
   /** The version `base` was read from. */
   version: number
@@ -213,11 +217,18 @@ export class LiveCanvases {
     if (live.timer) clearTimeout(live.timer)
     live.timer = null
     try {
+      // A page the user drew has no file yet: it starts as an empty page, for an agent to fill.
+      const found = await this.store.get(id)
+      const has = new Set(found.files.map((f) => f.path))
+      const blank = [...new Set(live.doc.pages.map((p) => p.file))].filter((file) => !has.has(file))
       const { version } = await this.store.write({
         id,
         baseVersion: live.version,
-        changes: [{ path: CANVAS_FILE, data: Buffer.from(stringifyCanvasDoc(live.doc), 'utf8') }],
-        unchecked: [CANVAS_FILE],
+        changes: [
+          { path: CANVAS_FILE, data: Buffer.from(stringifyCanvasDoc(live.doc), 'utf8') },
+          ...blank.map((path) => ({ path, data: Buffer.from(BLANK_PAGE, 'utf8') })),
+        ],
+        unchecked: [CANVAS_FILE, ...blank],
         pages: live.doc.pages.length,
         author: null,
         note: null,

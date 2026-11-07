@@ -142,6 +142,7 @@ const api: KettuApi = {
     import: (project, kind) => invoke('artifact:import', project, kind),
     onSelected: onArtifactSelected,
     png: (id, version, page, size, name) => invoke('artifact:png', id, version, page, size, name),
+    pageImage: (id, version, page, size) => invoke('artifact:page-image', id, version, page, size),
     onBlocked: onArtifactBlocked,
     onStopped: onArtifactStopped,
   },
