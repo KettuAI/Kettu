@@ -6,6 +6,7 @@
 import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
 import type { ArtifactContent } from '@shared/artifacts'
+import { DEBUG_OFF } from '@shared/debug'
 import type { AppCommand, KettuApi } from '@shared/ipc'
 import { safeName } from '@shared/file-name'
 import { matchLocale } from '@shared/locale'
@@ -30,6 +31,7 @@ import type { HostLink, LinkError, LinkState } from './link'
 import { downloadFile, mediaRequest, saveMedia, type SaveProgress } from './media'
 import { browserNotifications, notifyAttention, notifyTest } from './notifications'
 import type { WebSettings } from './settings'
+import { webReports } from './report'
 import { pickThemeFile, webThemes, type AdminCall } from './themes'
 
 function unsupported(what: string): Promise<never> {
@@ -300,9 +302,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     },
     sharing: {
       status: () => admin('sharing.status'),
+      refresh: () => admin('sharing.refresh'),
       connect: (token, accountId) => admin('sharing.connect', { token, accountId }),
       remove: () => admin('sharing.remove'),
-      publish: (id, version) => admin('sharing.publish', { id, version }),
+      publish: (id, version, target) => admin('sharing.publish', { id, version, target }),
       update: (id, version) => admin('sharing.update', { id, version }),
       unpublish: (id) => admin('sharing.unpublish', { id }),
       onChanged: (listener) => adminEvent('sharing.changed', (event) => listener(event.status)),
@@ -381,15 +384,14 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
           settings.takeHost(await admin('settings.setShellPath', { path })),
         ),
     },
+    // A browser opens no debugging ports of its own; the host's are on the host.
+    debug: {
+      get: async () => DEBUG_OFF,
+      restart: () => unsupported('restart in debug mode'),
+      onChanged: () => () => {},
+    },
+    report: webReports(admin),
     diagnostics: {
-      save: async (bundle) => {
-        const name = `kettu-diagnostics-${new Date().toISOString().slice(0, 10)}.json`
-        downloadFile(
-          new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' }),
-          name,
-        )
-        return name
-      },
       clearVerbose: () => unsupported("delete the host's detailed records"),
       // The host logs what a browser's requests do; the page itself keeps no log.
       recordActions: () => undefined,

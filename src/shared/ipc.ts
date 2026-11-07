@@ -1,10 +1,11 @@
 import type { AccountStatus } from './account'
-import type { AgentsApi, DiagnosticsBundle, HostMethod } from './agent-host'
+import type { AgentsApi, HostMethod } from './agent-host'
 import type { ArtifactImportKind, ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
+import type { DebugStatus } from './debug'
 import type { ComputerPermissionKind, ComputerUseStatus } from './computer-use'
 import type { EditorApp, EditorList } from './editors'
 import type { BusySession, BusyTerminal } from './host-control'
@@ -19,9 +20,10 @@ import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
 import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
-import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
+import type { SharingConnectResult, SharingResult, SharingStatus, SharingTarget } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { DevicesApi } from './device-host'
+import type { PreparedReport, ReportFileView, ReportRequest, ReportSubmitResult } from './report'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
 import type { TrayTarget } from './tray'
@@ -37,6 +39,16 @@ export interface AppInfo {
   logsPath?: string
   isPackaged: boolean
 }
+
+/** Steps to reproduce being recorded, in Unix milliseconds. */
+export interface ReportRecording {
+  startedAt: number
+  endsAt: number
+}
+
+/** A bundle prepared, or why not: too large for the range and extras chosen, or failed. */
+export type ReportPrepareResult =
+  { ok: true; report: PreparedReport } | { ok: false; reason: 'too_large' | 'failed' }
 
 /** Something the user did in a window, for the log: ids, counts and switches, never text. */
 export interface ActionReport {
@@ -81,7 +93,8 @@ export interface UnsavedFile {
  */
 export interface QuitRequest {
   id: number
-  reason: 'quit' | 'update' | 'close'
+  /** `restart`: the user asked for one, as to turn debug mode on or off. */
+  reason: 'quit' | 'update' | 'restart' | 'close'
   sessions: BusySession[]
   terminals: BusyTerminal[]
   unsaved: UnsavedFile[]
@@ -100,6 +113,8 @@ export type AppCommand =
   | { kind: 'open-project' }
   | { kind: 'new-session' }
   | { kind: 'open-settings'; section?: string }
+  /** Kettu was started again to debug, while this run is a normal one. */
+  | { kind: 'confirm-debug-restart' }
   | { kind: 'toggle-sidebar' }
   | { kind: 'open-session'; sessionId: string }
   | { kind: 'open-routines' }
@@ -108,6 +123,8 @@ export type AppCommand =
   | { kind: 'show-history' }
   /** Cmd+W: the page closes the part used last, else the shown session, else the window. */
   | { kind: 'close'; browser?: true }
+  /** Report a problem, from the Help menu or the end of a recording, with its span then. */
+  | { kind: 'report-problem'; span?: { from: number; to: number } }
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:
@@ -202,8 +219,24 @@ export interface IpcInvokeContract {
     args: [pastedPath: string]
     result: GrantedAttachment[] | null
   }
-  'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'diagnostics:clear-verbose': { args: []; result: void }
+  'debug:get': { args: []; result: DebugStatus }
+  // true restarts in debug mode, false normally; through the quit flow, which may ask first.
+  'debug:restart': { args: [debug: boolean]; result: void }
+  // A problem report: the window's screenshot first, then this computer's bundle or one another
+  // host sent, its files to view, and saving or dropping it.
+  'report:capture': { args: []; result: void }
+  'report:prepare': { args: [request: ReportRequest]; result: ReportPrepareResult }
+  'report:adopt': { args: [zip: string]; result: ReportPrepareResult }
+  'report:view': { args: [id: string, path: string]; result: ReportFileView }
+  'report:save': { args: [id: string]; result: string | null }
+  'report:discard': { args: [id: string]; result: void }
+  'report:submit': { args: [id: string]; result: ReportSubmitResult }
+  'report:recording': { args: []; result: ReportRecording | null }
+  'report:record': { args: [on: boolean]; result: ReportRecording | null }
+  // When the last run ended unexpectedly, until the notice of it is dismissed.
+  'report:crash-notice': { args: []; result: number | null }
+  'report:dismiss-crash-notice': { args: []; result: void }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
   'editors:list': { args: []; result: EditorList }
@@ -263,6 +296,7 @@ export interface IpcInvokeContract {
   'account:cancel-sign-in': { args: []; result: AccountStatus }
   'account:sign-out': { args: []; result: AccountStatus }
   'sharing:status': { args: []; result: SharingStatus }
+  'sharing:refresh': { args: []; result: SharingStatus }
   // `accountId`: the account the user chose, or null to use the one the token reaches.
   'sharing:connect': {
     args: [token: string, accountId: string | null]
@@ -270,7 +304,10 @@ export interface IpcInvokeContract {
   }
   'sharing:remove': { args: []; result: SharingStatus }
   // Main reads the version's HTML from the host, so the page never comes from the renderer.
-  'sharing:publish': { args: [id: string, version: number]; result: SharingResult }
+  'sharing:publish': {
+    args: [id: string, version: number, target: SharingTarget]
+    result: SharingResult
+  }
   'sharing:update': { args: [id: string, version: number]; result: SharingResult }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
   'remote:status': { args: []; result: RemoteStatus }
@@ -353,7 +390,9 @@ export interface IpcEventContract {
   'themes:changed': ThemesState
   'update:changed': UpdateStatus
   'app:confirm-quit': QuitRequest
+  'debug:changed': DebugStatus
   'app:command': AppCommand
+  'report:recording-changed': ReportRecording | null
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
@@ -510,6 +549,8 @@ export interface KettuApi {
   /** Publishing artifacts online; main holds the account's token and makes every request. */
   sharing: {
     status(): Promise<SharingStatus>
+    /** Reads the Kettu account's pages and storage from the service again. */
+    refresh(): Promise<SharingStatus>
     /**
      * Checks the token with Cloudflare and connects the account it reaches; with an account ID, the
      * one chosen.
@@ -517,7 +558,8 @@ export interface KettuApi {
     connect(token: string, accountId: string | null): Promise<SharingConnectResult>
     /** Forgets the account and its token; published pages stay as they are. */
     remove(): Promise<SharingStatus>
-    publish(id: string, version: number): Promise<SharingResult>
+    /** Publishes to the target; an artifact already published is updated where it lives. */
+    publish(id: string, version: number, target: SharingTarget): Promise<SharingResult>
     /** Puts the version on the artifact's page, at the same URL. */
     update(id: string, version: number): Promise<SharingResult>
     unpublish(id: string): Promise<SharingResult>
@@ -619,9 +661,32 @@ export interface KettuApi {
     chooseAgentFolder(): Promise<string | null>
     chooseShell(): Promise<string | null>
   }
+  /** Debug mode: this run's ports, and restarting into it or out of it. */
+  debug: {
+    get(): Promise<DebugStatus>
+    restart(debug: boolean): Promise<void>
+    onChanged(listener: (status: DebugStatus) => void): () => void
+  }
+  report: {
+    /** Takes the window's screenshot, before the dialog covers it. */
+    capture(): Promise<void>
+    prepare(request: ReportRequest): Promise<ReportPrepareResult>
+    /** A bundle another host built, in base64, kept here like this computer's. */
+    adopt(zip: string): Promise<ReportPrepareResult>
+    view(id: string, path: string): Promise<ReportFileView>
+    /** Asks where to save the zip; resolves to the path, or null if cancelled. */
+    save(id: string): Promise<string | null>
+    discard(id: string): Promise<void>
+    /** Submits a bundle as the user reviewed it, with the sign-in of the host that built it. */
+    submit(id: string): Promise<ReportSubmitResult>
+    recording(): Promise<ReportRecording | null>
+    /** Starts or stops recording steps to reproduce; stopping opens the dialog. */
+    record(on: boolean): Promise<ReportRecording | null>
+    onRecording(listener: (recording: ReportRecording | null) => void): () => void
+    crashNotice(): Promise<number | null>
+    dismissCrashNotice(): Promise<void>
+  }
   diagnostics: {
-    /** Asks where to save and writes the bundle; resolves to the path, or null if cancelled. */
-    save(bundle: DiagnosticsBundle): Promise<string | null>
     /** Deletes the detailed records; refused while they are on. */
     clearVerbose(): Promise<void>
     /** Adds what the user did to the log, in batches. */

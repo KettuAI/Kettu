@@ -3,6 +3,7 @@
 // ports, framed as their sockets frame it.
 
 import type { Server } from 'node:net'
+import type { DebugStatus } from '@shared/debug'
 import type { DirectStatus } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { isPort, MIN_OWN_PORT, parseDirectAddress } from '@shared/remote/address'
@@ -15,6 +16,12 @@ import {
 } from '@shared/remote/device'
 import type { Platform } from '@shared/platform'
 import type { PairingState } from '@shared/remote/pairing'
+import {
+  parseReportRequest,
+  ReportRequestError,
+  type ReportBuildResult,
+  type ReportRequest,
+} from '@shared/report'
 import type { DirectAddress } from '@shared/remote/protocol'
 import { connectPort, listenPorts } from '@shared/socket-port'
 import { publicKeyBytes } from '../remote-host/devices'
@@ -61,6 +68,8 @@ export interface DaemonStatus {
   connectedDevices: number | null
   /** Direct connections as the remote host runs them, or null while remote access is not running. */
   direct: DirectStatus | null
+  /** This run's inspectors and their file in a debug run; null or absent, from older daemons, else. */
+  debug?: { inspectors: DebugStatus['inspectors']; file: string | null } | null
 }
 
 /** Direct connections: what the settings ask for and what the remote host makes of them. */
@@ -112,6 +121,10 @@ export interface ControlCalls {
    * came over the login, as a device of the owner's.
    */
   'ssh.setup': { params: { device: NewDevice | null }; result: SshSetup }
+  /** A problem report's bundle, written into the data folder for the CLI to move. */
+  'report.build': { params: { request: ReportRequest }; result: ReportBuildResult }
+  /** Turns the detailed records on for 24 hours, or off; when they end, or null. */
+  'verbose.set': { params: { on: boolean }; result: { until: number | null } }
 }
 
 export interface TerminalReport {
@@ -254,6 +267,21 @@ const validators: { [M in ControlMethod]: (raw: unknown) => Params<M> } = {
   'ssh.setup': (raw) => {
     const { device } = record(raw)
     return { device: device === undefined || device === null ? null : newDevice(device) }
+  },
+  'report.build': (raw) => {
+    try {
+      return { request: parseReportRequest(record(raw).request) }
+    } catch (error) {
+      if (error instanceof ReportRequestError) {
+        throw new ControlError('invalid_params', error.message)
+      }
+      throw error
+    }
+  },
+  'verbose.set': (raw) => {
+    const { on } = record(raw)
+    if (typeof on !== 'boolean') throw new ControlError('invalid_params', 'on must be a boolean')
+    return { on }
   },
 }
 

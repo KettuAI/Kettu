@@ -185,6 +185,9 @@ importers:
       i18next:
         specifier: 26.5.4
         version: 26.5.4(typescript@6.0.3)
+      jszip:
+        specifier: 3.10.2
+        version: 3.10.2
       katex:
         specifier: 0.16.47
         version: 0.16.47

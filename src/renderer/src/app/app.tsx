@@ -12,6 +12,7 @@ import { LaunchCover } from '@renderer/features/shell/launch-cover'
 import { SplitDragProvider } from '@renderer/features/split/session-drag'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
+import { DebugRestartDialog } from '@renderer/features/shell/debug-mode'
 import { CornerControls, CornerDragHole, TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
@@ -20,6 +21,8 @@ import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-side
 import { useSidebarNav } from '@renderer/features/sidebar/sidebar-nav'
 import { ArchiveConfirmDialog } from '@renderer/features/sidebar/archive-confirm'
 import { SearchDialog } from '@renderer/features/search/search-dialog'
+import { ReportDialog } from '@renderer/features/report/report-dialog'
+import { useReportNotices } from '@renderer/features/report/report-notices'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
@@ -45,6 +48,7 @@ export function App() {
   useKeyboardShortcuts()
   useAppCommands()
   useActionLog()
+  useReportNotices()
 
   return (
     <TooltipProvider delay={500}>
@@ -70,12 +74,14 @@ export function App() {
         <LaunchCover />
         <QuitConfirm />
         <UpdateDialog />
+        <DebugRestartDialog />
         <ArtifactDialogs />
         <ArtifactConsentDialog />
         <MediaViewer />
         <ShortcutsDialog />
         <SearchDialog />
         <ArchiveConfirmDialog />
+        <ReportDialog />
         {pathPicker && (
           <Suspense fallback={null}>
             <HostPathDialog />

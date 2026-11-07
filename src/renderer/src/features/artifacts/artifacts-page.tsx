@@ -6,7 +6,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent,
-  type ReactNode,
+  type ReactElement,
 } from 'react'
 import {
   Alert02Icon,
@@ -22,7 +22,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { NO_SESSION, type ArtifactImportKind, type ArtifactSummary } from '@shared/artifacts'
+import { NO_SESSION, type ArtifactSummary } from '@shared/artifacts'
 import type { AgentId } from '@shared/thread'
 import { backTo } from '@renderer/app/history'
 import {
@@ -33,10 +33,21 @@ import {
   SearchField,
   SectionHead,
   Tabs,
-  type MenuItem,
 } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { Notice } from '@renderer/features/routines/kit'
 import { basename, longAgo } from '@renderer/lib/format'
@@ -692,18 +703,11 @@ function NoArtifacts() {
         {!isWeb && (
           <ImportMenu
             align="start"
-            trigger={(open, toggle) => (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Icon icon={Upload04Icon} size={14} />}
-                aria-expanded={open}
-                aria-haspopup="menu"
-                onClick={toggle}
-              >
+            trigger={
+              <Button size="sm" variant="secondary" icon={<Icon icon={Upload04Icon} size={14} />}>
                 {t('page.importEllipsis')}
               </Button>
-            )}
+            }
           />
         )}
       </div>
@@ -753,50 +757,58 @@ function ImportMenu({
   trigger,
 }: {
   align?: 'start' | 'end'
-  trigger?: (open: boolean, toggle: () => void) => ReactNode
+  trigger?: ReactElement
 }) {
   const { t } = useTranslation('artifacts')
   const projects = useProjectsStore((s) => s.projects)
-  const into = (kind: ArtifactImportKind): MenuItem[] => [
-    { label: t('page.importInto'), heading: true },
-    ...projects.map((project) => ({
-      label: project.name,
-      logo: <FolderClosedMark />,
-      onSelect: () => void importArtifact(project.path, kind),
-    })),
-    {
-      label: t('page.noProject'),
-      divider: projects.length > 0,
-      onSelect: () => void importArtifact(null, kind),
-    },
-  ]
   return (
-    <Dropdown
-      align={align}
-      className="k-arts__menu"
-      items={[
-        { label: t('page.importWhat'), heading: true },
-        { label: t('page.importKind.file'), icon: File01Icon, submenu: into('file') },
-        { label: t('page.importKind.folder'), icon: Folder01Icon, submenu: into('folder') },
-      ]}
-      trigger={({ open, toggle }) =>
-        trigger ? (
-          trigger(open, toggle)
-        ) : (
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Icon icon={Upload04Icon} size={14} />}
-            aria-label={t('page.import')}
-            aria-expanded={open}
-            aria-haspopup="menu"
-            onClick={toggle}
-          >
-            {t('page.importShort')}
-          </Button>
-        )
-      }
-    />
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          trigger ?? (
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Icon icon={Upload04Icon} size={14} />}
+              aria-label={t('page.import')}
+            >
+              {t('page.importShort')}
+            </Button>
+          )
+        }
+      />
+      <DropdownMenuContent align={align}>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('page.importWhat')}</DropdownMenuLabel>
+          {(['file', 'folder'] as const).map((kind) => (
+            <DropdownMenuSub key={kind}>
+              <DropdownMenuSubTrigger>
+                <Icon icon={kind === 'file' ? File01Icon : Folder01Icon} size={15} />
+                {t(`page.importKind.${kind}`)}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-58 max-w-(--available-width)">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t('page.importInto')}</DropdownMenuLabel>
+                  {projects.map((project) => (
+                    <DropdownMenuItem
+                      key={project.path}
+                      onClick={() => void importArtifact(project.path, kind)}
+                    >
+                      <FolderClosedMark />
+                      <span className="truncate">{project.name}</span>
+                    </DropdownMenuItem>
+                  ))}
+                  {projects.length > 0 && <DropdownMenuSeparator />}
+                  <DropdownMenuItem onClick={() => void importArtifact(null, kind)}>
+                    {t('page.noProject')}
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          ))}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

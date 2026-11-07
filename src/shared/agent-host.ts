@@ -660,7 +660,6 @@ export interface HostContract {
     }
     result: void
   }
-  'diagnostics.collect': { params: void; result: DiagnosticsBundle }
   'git.status': { params: { projectPath: string }; result: GitStatus }
   'git.unwatch': { params: { projectPath: string }; result: void }
   'git.fetch': { params: { projectPath: string }; result: GitOperation }
@@ -1002,7 +1001,6 @@ export const HOST_METHODS = [
   'routines.runs',
   'routines.markSeen',
   'permissions.respond',
-  'diagnostics.collect',
   'git.status',
   'git.unwatch',
   'git.fetch',

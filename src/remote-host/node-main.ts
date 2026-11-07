@@ -3,6 +3,7 @@
 // session as a connection to the agent host's socket, and its terminals as one to the terminal
 // host's, which the process that started it names once the terminal host runs.
 
+import { startHostInspector } from '@shared/log/debug-inspector'
 import { startHostLog } from '@shared/log/process-log'
 import type { MainToRemoteHost, RemoteHostToMain } from '@shared/host-control'
 import type { PortDevice } from '@shared/remote/device'
@@ -11,6 +12,7 @@ import { startRemoteHost } from './start'
 import { listenTransports } from './stream-transport'
 
 startHostLog('remote-host')
+startHostInspector()
 
 function send(message: RemoteHostToMain): void {
   if (process.connected) process.send!(message)

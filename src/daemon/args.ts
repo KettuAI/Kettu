@@ -1,14 +1,20 @@
 // The `kettu` command line: one command, `--help` and `--version`, anything else a usage error.
 
 import { parseArgs } from 'node:util'
+import type { LogLevel } from '@shared/log/process-log'
 import { parseAddress, parsePort } from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
+import type { ReportExtra, ReportRangeName } from '@shared/report'
 import { ADDRESS_PROBLEM, PORT_PROBLEM } from './control'
+import { LOG_LEVELS } from './logs'
 
 export type Command =
   | { kind: 'help' }
   | { kind: 'version' }
-  | { kind: 'run' }
+  /** `debug`: this run opens the daemon's and its hosts' inspectors on 127.0.0.1. */
+  | { kind: 'run'; debug: boolean }
+  /** Restarts the service; `debug` makes the next run a debug run. */
+  | { kind: 'restart'; debug: boolean }
   | { kind: 'status' }
   | { kind: 'devices' }
   | { kind: 'devices-remove'; id: string }
@@ -27,6 +33,29 @@ export type Command =
   | { kind: 'logout' }
   /** `request`: the JSON the desktop app sends, or null for none. */
   | { kind: 'ssh-setup'; request: string | null }
+  /**
+   * `description`: null to ask for it; `output`: null for a file in the current folder; `submit`:
+   * submit it too without asking.
+   */
+  | {
+      kind: 'report'
+      description: string | null
+      range: ReportRangeName
+      extras: ReportExtra[]
+      output: string | null
+      submit: boolean
+    }
+  /** The times as given, a span ago or a date, read against the clock when the logs are. */
+  | {
+      kind: 'logs'
+      process: string | null
+      level: LogLevel | null
+      op: string | null
+      since: string | null
+      until: string | null
+      follow: boolean
+    }
+  | { kind: 'verbose'; on: boolean }
   /** What was wrong with the command line, in a short sentence. */
   | { kind: 'usage'; message: string }
 
@@ -36,6 +65,7 @@ Runs Kettu's hosts on this computer, for Kettu's clients to connect to.
 
 Commands:
   run                          Run the daemon in the foreground
+  restart                      Restart the service, which kettu service install set up
   status                       Say whether the daemon is running, with its details
   devices                      List the devices paired with this computer
   devices remove <id>          Remove a paired device and close its sessions
@@ -52,10 +82,32 @@ Commands:
   update                       Update to the latest release, and the service with it
   login                        Sign in to a Kettu account, confirmed in a browser on any device
   logout                       Sign out of the Kettu account
+  report                       Save a problem report: the logs and settings, in a zip, and
+                               submit it to Kettu when signed in, for an id to put in an issue
+  logs                         Show the logs, filtered by the options below
+  verbose on                   Turn on detailed records for 24 hours; they hold prompts and code
+  verbose off                  Turn detailed records off
   ssh-setup [<request>]        Run by Kettu's desktop app when it adds this computer over SSH
 
 Options:
+  --debug                      With run or restart: open the daemon's and its hosts' Node.js
+                               inspectors on 127.0.0.1 for that run only. They have no password,
+                               so any program on this computer can run code in the daemon
   -y, --yes                    Change the port without asking
+  -m, --message <text>         kettu report: what happened; asked for when left out
+  --range <range>              kettu report: the time the logs cover: hour (the default),
+                               today or 2d
+  --with <items>               kettu report: also add any of titles, messages, verbose and
+                               dumps, comma-separated; messages, verbose and dumps may hold
+                               prompts, code and keys
+  -o, --output <file>          kettu report: where to save the zip
+  --submit                     kettu report: submit it to Kettu too, without asking
+  --process <name>             kettu logs: one process's records, such as daemon or agent-host
+  --level <level>              kettu logs: this level and above: debug, info, warn or error
+  --op <id>                    kettu logs: one action's records
+  --since <time>               kettu logs: from a time, or a span ago such as 30m, 2h or 1d
+  --until <time>               kettu logs: up to a time, or a span ago
+  -f, --follow                 kettu logs: keep showing new records
   -h, --help                   Show this help
   --version                    Show the version
 
@@ -64,16 +116,52 @@ Environment:
   KETTU_ACCOUNT_URL            The account service to sign in to instead of https://www.kettu.sh
 
 Write an IPv6 address in brackets, as [fd00::1]:4567.
-kettu status and the direct and terminal commands exit with 3 when the daemon is not running.
+kettu status and the direct, terminal and verbose commands exit with 3 when the daemon is not
+running. kettu report without a running daemon saves the logs and settings alone.
 `
 
 const OPTIONS = {
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean' },
   yes: { type: 'boolean', short: 'y' },
+  debug: { type: 'boolean' },
+  message: { type: 'string', short: 'm' },
+  range: { type: 'string' },
+  with: { type: 'string' },
+  output: { type: 'string', short: 'o' },
+  submit: { type: 'boolean' },
+  process: { type: 'string' },
+  level: { type: 'string' },
+  op: { type: 'string' },
+  since: { type: 'string' },
+  until: { type: 'string' },
+  follow: { type: 'boolean', short: 'f' },
 } as const
 
+type OptionName = keyof typeof OPTIONS
+
+/** The command each option is for; help and version go with any. */
+const OPTION_COMMAND: Partial<Record<OptionName, Command['kind']>> = {
+  yes: 'direct-port',
+  message: 'report',
+  range: 'report',
+  with: 'report',
+  output: 'report',
+  submit: 'report',
+  process: 'logs',
+  level: 'logs',
+  op: 'logs',
+  since: 'logs',
+  until: 'logs',
+  follow: 'logs',
+}
+
+const RANGES: Record<string, ReportRangeName> = { hour: 'hour', today: 'today', '2d': 'twoDays' }
+const CLI_EXTRAS: readonly ReportExtra[] = ['titles', 'messages', 'verbose', 'dumps']
+
 const quote = (value: string): string => `'${value}'`
+
+type Given = Map<OptionName, { raw: string; value: string | undefined }>
 
 export function parseCommand(argv: readonly string[]): Command {
   const { tokens } = parseArgs({
@@ -83,9 +171,7 @@ export function parseCommand(argv: readonly string[]): Command {
     strict: false,
     tokens: true,
   })
-  let help = false
-  let version = false
-  let yes: string | null = null
+  const given: Given = new Map()
   const words: string[] = []
   for (const token of tokens) {
     if (token.kind === 'positional') {
@@ -94,22 +180,95 @@ export function parseCommand(argv: readonly string[]): Command {
       if (!Object.hasOwn(OPTIONS, token.name)) {
         return { kind: 'usage', message: `Unknown option ${quote(token.rawName)}` }
       }
-      if (token.value !== undefined) {
+      const name = token.name as OptionName
+      if (OPTIONS[name].type === 'boolean' && token.value !== undefined) {
         return { kind: 'usage', message: `${quote(token.rawName)} takes no value` }
       }
-      if (token.name === 'help') help = true
-      else if (token.name === 'version') version = true
-      else yes = token.rawName
+      if (OPTIONS[name].type === 'string' && token.value === undefined) {
+        return { kind: 'usage', message: `${quote(token.rawName)} takes a value` }
+      }
+      if (given.has(name)) {
+        return { kind: 'usage', message: `${quote(token.rawName)} is given twice` }
+      }
+      given.set(name, { raw: token.rawName, value: token.value })
     }
   }
-  if (help) return { kind: 'help' }
-  if (version) return { kind: 'version' }
+  if (given.has('help')) return { kind: 'help' }
+  if (given.has('version')) return { kind: 'version' }
 
-  const command = parseWords(words, yes !== null)
-  if (yes !== null && command.kind !== 'direct-port' && command.kind !== 'usage') {
-    return { kind: 'usage', message: `${quote(yes)} is only for kettu direct port` }
+  const command = parseWords(words, given.has('yes'))
+  if (command.kind === 'usage') return command
+  for (const [name, { raw }] of given) {
+    const kind = OPTION_COMMAND[name]
+    if (kind && kind !== command.kind) {
+      return { kind: 'usage', message: `${quote(raw)} is only for kettu ${commandName(kind)}` }
+    }
   }
+  const debug = given.has('debug')
+  if (command.kind === 'run' || command.kind === 'restart') return { ...command, debug }
+  if (debug) return { kind: 'usage', message: "'--debug' is only for kettu run and kettu restart" }
+  if (command.kind === 'report') return reportCommand(given)
+  if (command.kind === 'logs') return logsCommand(given)
   return command
+}
+
+function commandName(kind: Command['kind']): string {
+  return kind === 'direct-port' ? 'direct port' : kind
+}
+
+function reportCommand(given: Given): Command {
+  const value = (name: OptionName): string | null => given.get(name)?.value ?? null
+  const range = value('range') ?? 'hour'
+  if (!Object.hasOwn(RANGES, range)) {
+    return { kind: 'usage', message: `The range is hour, today or 2d, not ${quote(range)}` }
+  }
+  const extras: ReportExtra[] = []
+  for (const item of (value('with') ?? '').split(',').map((part) => part.trim())) {
+    if (item === '') continue
+    if (!CLI_EXTRAS.includes(item as ReportExtra)) {
+      return {
+        kind: 'usage',
+        message: `--with takes titles, messages, verbose and dumps, not ${quote(item)}`,
+      }
+    }
+    if (!extras.includes(item as ReportExtra)) extras.push(item as ReportExtra)
+  }
+  const description = value('message')
+  if (description !== null && description.trim() === '') {
+    return { kind: 'usage', message: 'Say what happened in --message' }
+  }
+  return {
+    kind: 'report',
+    description,
+    range: RANGES[range]!,
+    extras,
+    output: value('output'),
+    submit: given.has('submit'),
+  }
+}
+
+function logsCommand(given: Given): Command {
+  const value = (name: OptionName): string | null => given.get(name)?.value ?? null
+  const level = value('level')
+  if (level !== null && !LOG_LEVELS.includes(level as LogLevel)) {
+    return {
+      kind: 'usage',
+      message: `The level is debug, info, warn or error, not ${quote(level)}`,
+    }
+  }
+  const follow = given.has('follow')
+  if (follow && given.has('until')) {
+    return { kind: 'usage', message: "'--until' does not go with '--follow'" }
+  }
+  return {
+    kind: 'logs',
+    process: value('process'),
+    level: level as LogLevel | null,
+    op: value('op'),
+    since: value('since'),
+    until: value('until'),
+    follow,
+  }
 }
 
 function parseWords(words: string[], yes: boolean): Command {
@@ -121,7 +280,9 @@ function parseWords(words: string[], yes: boolean): Command {
     case 'help':
       return extra(0) ?? { kind: 'help' }
     case 'run':
-      return extra(0) ?? { kind: 'run' }
+      return extra(0) ?? { kind: 'run', debug: false }
+    case 'restart':
+      return extra(0) ?? { kind: 'restart', debug: false }
     case 'status':
       return extra(0) ?? { kind: 'status' }
     case 'update':
@@ -134,6 +295,39 @@ function parseWords(words: string[], yes: boolean): Command {
       return extra(0) ?? { kind: 'pair' }
     case 'ssh-setup':
       return extra(1) ?? { kind: 'ssh-setup', request: rest[0] ?? null }
+    // Their options are read once the command is known.
+    case 'report':
+      return (
+        extra(0) ?? {
+          kind: 'report',
+          description: null,
+          range: 'hour',
+          extras: [],
+          output: null,
+          submit: false,
+        }
+      )
+    case 'logs':
+      return (
+        extra(0) ?? {
+          kind: 'logs',
+          process: null,
+          level: null,
+          op: null,
+          since: null,
+          until: null,
+          follow: false,
+        }
+      )
+    case 'verbose':
+      if (rest[0] !== 'on' && rest[0] !== 'off') {
+        return {
+          kind: 'usage',
+          message:
+            rest[0] === undefined ? 'Name on or off' : `Unknown verbose command ${quote(rest[0])}`,
+        }
+      }
+      return extra(1) ?? { kind: 'verbose', on: rest[0] === 'on' }
     case 'devices':
       if (rest.length === 0) return { kind: 'devices' }
       if (rest[0] !== 'remove') {

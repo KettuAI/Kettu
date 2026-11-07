@@ -1,6 +1,7 @@
 // Entry of the agent host under Node.js, started with `child_process.fork`: control messages over
 // its IPC, and each port as a connection to the local socket that `host:init` names.
 
+import { startHostInspector } from '@shared/log/debug-inspector'
 import { startHostLog } from '@shared/log/process-log'
 import type { HostToMain, MainToHost } from '@shared/host-control'
 import { identifyPort } from '@shared/remote/device'
@@ -8,6 +9,7 @@ import { listenPorts } from '@shared/socket-port'
 import { startAgentHost } from './start'
 
 startHostLog('agent-host')
+startHostInspector()
 
 function send(message: HostToMain): void {
   if (process.connected) process.send!(message)

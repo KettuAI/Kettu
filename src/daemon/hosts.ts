@@ -26,6 +26,7 @@ import { deviceId, type NewDevice } from '@shared/remote/device'
 import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import type { RemoteStatus } from '@shared/remote/status'
+import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { DirectSettings, SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from '../main/log'
@@ -39,6 +40,7 @@ import { ControlError, type DeviceSummary, type HostName, type HostStatus } from
 import { ForkedHost, type HostTimings } from './forked-host'
 
 type Attention = Extract<HostToMain, { type: 'host:attention' }>
+type ReportParams = Omit<Extract<MainToHost, { type: 'host:report-request' }>, 'type' | 'requestId'>
 
 const log = createLogger('daemon')
 // What each host logs carries its own name, as in the app's log.
@@ -57,6 +59,8 @@ const DIRECT_WAIT_MS = 2_000
 /** How long a request to the remote host may take before it is answered with nothing, as in main. */
 const REQUEST_TIMEOUT_MS = 10_000
 const MAX_ACTIVITY = 500
+/** How long the agent host may take to build a problem report, as in main. */
+const REPORT_TIMEOUT_MS = 120_000
 
 function isStringList(value: unknown): value is string[] {
   return (
@@ -116,6 +120,8 @@ export interface HostsOptions {
   sshPort: number | null
   /** The remote host listens for SSH on another port, to keep for the next run. */
   sshPortChanged?(port: number): void
+  /** A host's inspector in a debug run, by its name, or null once the host is gone. */
+  inspector?(name: string, url: string | null): void
 }
 
 type AnyHost = ForkedHost<unknown, { type: string }>
@@ -144,6 +150,10 @@ export class Hosts {
   private readonly attentionListeners = new Set<(message: Attention) => void>()
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
   private nextCode = 1
+  private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
+  private nextReport = 1
+  /** The agent host's log level since detailed records last changed; a restart takes it again. */
+  private logLevel: { level: 'debug' | 'info'; verbose: boolean } | null = null
 
   constructor(private readonly options: HostsOptions) {
     this.settings = options.settings
@@ -155,6 +165,7 @@ export class Hosts {
       modulePath: bundle('agent-host.cjs'),
       socketName: 'agent-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('agent-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'host:init',
@@ -173,6 +184,9 @@ export class Hosts {
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
       stoppedType: 'host:stopped',
+      onReady: () => {
+        if (this.logLevel) this.agent.post({ type: 'host:log-level', ...this.logLevel })
+      },
       onMessage: (message) => this.receive(message),
       onExit: (clean) => this.agentExited(clean),
     })
@@ -181,6 +195,7 @@ export class Hosts {
       modulePath: bundle('terminal-host.cjs'),
       socketName: 'terminal-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('terminal-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'terminal-host:init',
@@ -202,6 +217,7 @@ export class Hosts {
       modulePath: bundle('device-host.cjs'),
       socketName: 'device-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('device-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'device-host:init',
@@ -228,6 +244,7 @@ export class Hosts {
       modulePath: bundle('remote-host.cjs'),
       socketName: null,
       env: options.env,
+      inspector: (url) => options.inspector?.('remote-host', url),
       timings: options.timings,
       initMessage: () => ({
         type: 'remote-host:init',
@@ -363,6 +380,43 @@ export class Hosts {
     }))
     if (answer?.type !== 'remote-host:activity' || !Array.isArray(answer.events)) return []
     return answer.events.slice(0, MAX_ACTIVITY)
+  }
+
+  /** The agent host's log level and detailed records, which a restart keeps. */
+  setLogLevel(level: 'debug' | 'info', verbose: boolean): void {
+    this.logLevel = { level, verbose }
+    this.agent.post({ type: 'host:log-level', level, verbose })
+  }
+
+  /** Whether the agent host runs, to build a report with its sessions and agents. */
+  agentReady(): boolean {
+    return this.agent.state === 'ready'
+  }
+
+  /** A problem report's bundle, which the agent host writes into the data folder. */
+  report(params: ReportParams): Promise<ReportBuildResult> {
+    const down: ReportBuildResult = {
+      ok: false,
+      reason: 'failed',
+      message: 'The agent host is down',
+    }
+    if (this.agent.state !== 'ready') return Promise.resolve(down)
+    const requestId = this.nextReport++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => answer(late), REPORT_TIMEOUT_MS)
+      const late: ReportBuildResult = {
+        ok: false,
+        reason: 'failed',
+        message: 'The agent host did not answer in time',
+      }
+      const answer = (result: ReportBuildResult): void => {
+        clearTimeout(timer)
+        this.reportRequests.delete(requestId)
+        resolve(result)
+      }
+      this.reportRequests.set(requestId, answer)
+      if (!this.agent.post({ type: 'host:report-request', requestId, ...params })) answer(down)
+    })
   }
 
   /** Starts the agent or terminal host again once it failed; false in any other state. */
@@ -771,6 +825,9 @@ export class Hosts {
       case 'host:attention':
         for (const listener of this.attentionListeners) listener(message)
         break
+      case 'host:report':
+        this.reportRequests.get(message.requestId)?.(reportBuildResult(message.result))
+        break
       // The app's badge, tray, power saving, media and artifacts; the answers to requests only
       // main sends.
       case 'host:badge':
@@ -792,6 +849,9 @@ export class Hosts {
   }
 
   private agentExited(clean: boolean): void {
+    for (const answer of [...this.reportRequests.values()]) {
+      answer({ ok: false, reason: 'failed', message: 'The agent host exited' })
+    }
     const roots = this.agentProcesses
     this.agentProcesses = []
     // After a clean stop the host has stopped every agent itself.

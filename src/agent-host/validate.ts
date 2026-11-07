@@ -1040,7 +1040,6 @@ export function createValidators(platform: Platform): Validators {
         ? { ...base, answers: questionAnswers(o.answers) }
         : { ...base, values: formValues(o.values) }
     },
-    'diagnostics.collect': none,
     'git.status': project,
     'git.unwatch': project,
     'git.fetch': project,

@@ -252,3 +252,15 @@ export async function uninstallService(deps: ServiceDeps): Promise<boolean> {
   await must(deps, 'systemctl', ['--user', 'daemon-reload'])
   return true
 }
+
+/** Stops the service's daemon and starts it again; false when no service is installed. */
+export async function restartService(deps: ServiceDeps): Promise<boolean> {
+  if (!(await exists(serviceFile(deps)))) return false
+  if (deps.platform === 'darwin') {
+    // -k stops the running daemon first; launchd waits for it as it does at logout.
+    await must(deps, 'launchctl', ['kickstart', '-k', `gui/${deps.uid}/${LAUNCH_AGENT_LABEL}`])
+  } else {
+    await must(deps, 'systemctl', ['--user', 'restart', SYSTEMD_UNIT])
+  }
+  return true
+}

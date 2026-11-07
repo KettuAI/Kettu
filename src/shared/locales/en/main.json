@@ -40,13 +40,16 @@
     "window": "Window",
     "minimize": "Minimize",
     "zoom": "Zoom",
-    "bringAllToFront": "Bring All to Front"
+    "bringAllToFront": "Bring All to Front",
+    "help": "Help",
+    "reportProblem": "Report a Problem…"
   },
   "dialogs": {
     "openProject": "Open Project",
     "chooseAgentProgram": "Choose Agent Program",
     "chooseShell": "Choose Shell",
-    "exportDiagnostics": "Export Diagnostics",
+    "saveReport": "Save Problem Report",
+    "saveReportWarning": "Keep the report to yourself: anyone can download a file attached to a public GitHub issue.",
     "programs": "Programs",
     "addFiles": "Add Files or Photos",
     "addFolder": "Add Folder",
@@ -57,6 +60,7 @@
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",
+    "titleRestart": "Restart {{name}}?",
     "titleUpdate": "Restart to update?",
     "quit": "Quit",
     "restart": "Restart",
@@ -105,7 +109,8 @@
     "newSession": "New session",
     "quit": "Quit {{name}}",
     "remoteAccess": "Remote access",
-    "checkForUpdates": "Check for updates…"
+    "checkForUpdates": "Check for updates…",
+    "debugMode": "Debug mode is on"
   },
   "agents": {
     "folderTaken": "This folder already belongs to {{agent}}. Choose another one, or let Kettu make a new one."

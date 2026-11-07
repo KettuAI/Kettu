@@ -1,4 +1,10 @@
-// Artifacts shared online: the account main publishes with and the pages it published.
+// Artifacts shared online: where main publishes, the accounts it publishes with and the pages it
+// published.
+
+/** Where a page is published: Kettu's own sharing service, or the user's Cloudflare account. */
+export type SharingTarget = 'kettu' | 'cloudflare'
+
+export const SHARING_TARGETS: readonly SharingTarget[] = ['kettu', 'cloudflare']
 
 /** Cloudflare's account IDs: 32 hex characters. */
 export const CLOUDFLARE_ACCOUNT_ID = /^[0-9a-f]{32}$/
@@ -29,12 +35,33 @@ export interface CloudflareAccount {
 
 export interface PublishedArtifact {
   id: string
+  /** Always the address the target gave; Kettu's may change when the service moves its domain. */
   url: string
   /** The version the page shows. */
   version: number
   publishedAt: number
-  /** Published with another account than the one connected, which cannot change it. */
+  target: SharingTarget
+  /**
+   * Published with another account than the one signed in or connected, which cannot change it; a
+   * Kettu page while the host is signed out counts too.
+   */
   otherAccount: boolean
+  /** The email of the Kettu account a page of another account was published with. */
+  accountEmail: string | null
+}
+
+/** A Kettu account's cloud storage, in bytes, as the service last said. */
+export interface SharingStorage {
+  used: number
+  limit: number
+}
+
+/** Publishing to Kettu: the Kettu account the host is signed in to, and its storage. */
+export interface KettuSharing {
+  /** Null when the host is signed out. */
+  account: { email: string } | null
+  /** Null until the service answered for the account signed in. */
+  storage: SharingStorage | null
 }
 
 /** An account a token can publish to, for the user to choose from. */
@@ -47,6 +74,7 @@ export interface CloudflareAccountChoice {
 
 /** What `sharing:status` and `sharing:changed` carry; the token never leaves main. */
 export interface SharingStatus {
+  kettu: KettuSharing
   cloudflare: CloudflareAccount | null
   published: PublishedArtifact[]
 }
@@ -54,11 +82,15 @@ export interface SharingStatus {
 /**
  * Why a sharing call failed. `invalid_token`: Cloudflare refused the token, or it reaches no account
  * it can publish to. `no_subdomain`: the account has no `workers.dev` subdomain. `worker_limit`: the
- * account has as many Workers as its plan allows. `network`: Cloudflare could not be reached.
- * `no_account`: no account is connected. `other_account`: the page was published with another
- * account. `encryption`: the system cannot encrypt the token. `not_found`: the host does not have
- * the artifact or version. `unavailable`: the host did not answer. `failed`: anything else, with
- * Cloudflare's own words.
+ * account has as many Workers as its plan allows. `network`: the target could not be reached.
+ * `no_account`: no Cloudflare account is connected. `signed_out`: the host is not signed in to a
+ * Kettu account, or the service no longer takes its sign-in. `other_account`: the page was
+ * published with another account. `storage_full`: the Kettu account's cloud storage has no room
+ * for the page. `page_too_large`: the page is larger than Kettu publishes. `taken_down`: Kettu took
+ * the page down. `rate_limited`: too many publishes in a short time. `encryption`: the system
+ * cannot encrypt the token. `not_found`: the host does not have the artifact or version, or the
+ * target no longer has the page. `unavailable`: the host did not answer. `failed`: anything else,
+ * with the target's own words.
  */
 export type SharingFailure =
   | 'invalid_token'
@@ -66,7 +98,12 @@ export type SharingFailure =
   | 'worker_limit'
   | 'network'
   | 'no_account'
+  | 'signed_out'
   | 'other_account'
+  | 'storage_full'
+  | 'page_too_large'
+  | 'taken_down'
+  | 'rate_limited'
   | 'encryption'
   | 'not_found'
   | 'unavailable'

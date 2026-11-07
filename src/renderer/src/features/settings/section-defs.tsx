@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AiBrain01Icon,
   Analytics01Icon,
@@ -40,6 +40,7 @@ import {
   usableAgents,
 } from '@renderer/stores/agents'
 import { useAccountStore } from '@renderer/stores/account'
+import { useDebugStore } from '@renderer/stores/debug'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -66,8 +67,9 @@ import {
 } from './harness-section'
 import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
+import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
-import { Group, GroupNote } from './rows'
+import { GroupNote } from './rows'
 import { SettingSwitch } from './controls'
 import { HostPage } from './host-page'
 import { hostLine, webHostLine } from './host-text'
@@ -86,7 +88,14 @@ import {
   TerminalSwitch,
 } from './remote-section'
 import { deviceLine } from './remote-text'
-import { NoSharing, PublishedRow, SharingAccount, SharingPending } from './sharing-section'
+import {
+  KettuSharingAccount,
+  KettuStorage,
+  NoSharing,
+  PublishedRow,
+  SharingAccount,
+  SharingPending,
+} from './sharing-section'
 import { useLoginItemStatus } from './use-login-item'
 import { environmentText } from './environment-text'
 import {
@@ -110,7 +119,6 @@ import {
   LogsFolderActions,
   DataFolderText,
   DefaultAgent,
-  Diagnostics,
   FontSize,
   GeneralSwitch,
   GhTool,
@@ -122,9 +130,11 @@ import {
   OpenLinksIn,
   OutlineSummaries,
   Proxy,
+  RecordSteps,
   ReduceMotion,
   RememberedSitesList,
   RemoveAll,
+  ReportProblem,
   SendKey,
   ShellPicker,
   WebNotificationsNote,
@@ -872,6 +882,7 @@ export function useAdvancedSection(): SectionDef {
   const onHost = useHostContext()
   const { hostId } = useHostScope()
   const en = english()
+  const debugOn = useDebugStore((s) => s.status.on)
   const data = group('data', t('advanced.groups.data'))
   return {
     id: 'advanced',
@@ -890,14 +901,13 @@ export function useAdvancedSection(): SectionDef {
         render: (text) => <Proxy label={text} />,
       },
       {
-        id: 'diagnostics',
-        name: t('advanced.diagnostics.name'),
-        english: en('advanced.diagnostics.name'),
-        description: t('advanced.diagnostics.description'),
-        keywords: t('advanced.diagnostics.keywords'),
+        id: 'report',
+        name: t('advanced.report.name'),
+        english: en('advanced.report.name'),
+        description: t('advanced.report.description'),
+        keywords: t('advanced.report.keywords'),
         group: data,
-        layout: 'block',
-        render: (text) => <Diagnostics label={text} />,
+        render: () => <ReportProblem />,
       },
       // The log files and their switch are this computer's; a host elsewhere keeps its own.
       ...(isWeb || hostId !== null
@@ -913,6 +923,15 @@ export function useAdvancedSection(): SectionDef {
               render: () => <LogsFolderActions />,
             },
             {
+              id: 'record-steps',
+              name: t('advanced.record.name'),
+              english: en('advanced.record.name'),
+              description: t('advanced.record.description'),
+              keywords: t('advanced.record.keywords'),
+              group: data,
+              render: () => <RecordSteps />,
+            },
+            {
               id: 'detailed-records',
               name: t('advanced.detailedRecords.name'),
               english: en('advanced.detailedRecords.name'),
@@ -920,6 +939,18 @@ export function useAdvancedSection(): SectionDef {
               keywords: t('advanced.detailedRecords.keywords'),
               group: data,
               render: () => <DetailedRecords label={t('advanced.detailedRecords.name')} />,
+            },
+            {
+              id: 'debug-mode',
+              name: t('advanced.debugMode.name'),
+              english: en('advanced.debugMode.name'),
+              description: debugOn
+                ? t('advanced.debugMode.descriptionOn')
+                : t('advanced.debugMode.description'),
+              keywords: t('advanced.debugMode.keywords'),
+              group: data,
+              layout: 'block' as const,
+              render: (text: ReactNode) => <DebugModeRow text={text} />,
             },
           ]),
       {
@@ -1376,6 +1407,7 @@ export function useSharingSection(): SectionDef {
   const { useSharingStore } = sharing
   const en = english()
   const account = useSharingStore((s) => s.status?.cloudflare ?? null)
+  const kettu = useSharingStore((s) => s.status?.kettu.account ?? null)
   const pages = useSharingStore(useShallow((s) => s.status?.published ?? []))
   // Another host's artifacts are not listed here, so its pages go by their addresses.
   const titles = usePublishedTitles(hostId === null && pages.length > 0)
@@ -1404,18 +1436,30 @@ export function useSharingSection(): SectionDef {
       footer: shares === false ? <NoSharing /> : <SharingPending />,
     }
   }
+  const kettuGroup = group('kettu', t('sharing.groups.kettu'))
   const rows: RowDef[] = [
     {
-      id: 'cloudflare',
-      name: t('sharing.account.name'),
-      english: en('sharing.account.name'),
-      description: account ? `${account.subdomain}.workers.dev` : t('sharing.account.description'),
-      keywords: t('sharing.account.keywords'),
-      group: group('cloudflare', t('sharing.groups.account')),
+      id: 'kettu',
+      name: t('sharing.kettu.name'),
+      english: en('sharing.kettu.name'),
+      // Not the email, which search results would show past Hide account.
+      description: kettu ? undefined : t('sharing.kettu.signedOut'),
+      keywords: t('sharing.kettu.keywords'),
+      group: kettuGroup,
       layout: 'custom',
-      render: () => <SharingAccount />,
+      render: () => <KettuSharingAccount />,
     },
   ]
+  if (kettu) {
+    rows.push({
+      id: 'kettu-storage',
+      name: t('sharing.kettu.storage'),
+      english: en('sharing.kettu.storage'),
+      keywords: t('sharing.kettu.keywords'),
+      group: kettuGroup,
+      render: () => <KettuStorage />,
+    })
+  }
   if (pages.length > 0) {
     const published = group('published', t('sharing.groups.published'), { count: pages.length })
     rows.push(
@@ -1438,15 +1482,29 @@ export function useSharingSection(): SectionDef {
       }),
     )
   }
-  return {
-    ...base,
-    rows,
-    footer: pages.length === 0 && (
-      <Group label={t('sharing.groups.published')}>
-        <p className="ui-ss-empty">{t('sharing.published.empty')}</p>
-      </Group>
-    ),
+  const cloudflare: RowDef = {
+    id: 'cloudflare',
+    name: t('sharing.account.name'),
+    english: en('sharing.account.name'),
+    description: account ? `${account.subdomain}.workers.dev` : t('sharing.account.description'),
+    keywords: t('sharing.account.keywords'),
+    group: group('cloudflare', t('sharing.groups.account')),
+    layout: 'custom',
+    render: () => <SharingAccount />,
   }
+  if (pages.length === 0) {
+    // Between the Kettu account and Cloudflare, where the pages would be.
+    rows.push({
+      id: 'published-empty',
+      name: t('sharing.groups.published'),
+      keywords: t('sharing.published.keywords'),
+      group: group('published', t('sharing.groups.published'), { plain: true }),
+      layout: 'custom',
+      render: () => <p className="ui-ss-empty">{t('sharing.published.empty')}</p>,
+    })
+  }
+  rows.push(cloudflare)
+  return { ...base, rows }
 }
 
 /** What the user allowed the artifacts' pages on the host, read again whenever it changes. */

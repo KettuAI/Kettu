@@ -2,6 +2,7 @@
 // over its IPC, and each port as a connection to the local socket that `terminal-host:init` names,
 // a paired device's starting with the `terminal-host:connect` that names it.
 
+import { startHostInspector } from '@shared/log/debug-inspector'
 import { startHostLog } from '@shared/log/process-log'
 import type { MainToTerminalHost, TerminalHostToMain } from '@shared/host-control'
 import { identifyPort } from '@shared/remote/device'
@@ -9,6 +10,7 @@ import { listenPorts } from '@shared/socket-port'
 import { startTerminalHost } from './start'
 
 startHostLog('terminal-host')
+startHostInspector()
 
 // A port from the socket comes from no window, which main writes as -1.
 const NO_WINDOW = -1

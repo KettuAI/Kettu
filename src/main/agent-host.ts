@@ -38,6 +38,7 @@ import type {
 import { isComputerApp, type ComputerApp } from '@shared/computer-use'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { PortDevice } from '@shared/remote/device'
+import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { HostSettings } from '@shared/settings'
 import agentHostPath from '../agent-host/index?modulePath'
 // The host's own bundle is built without electron-vite's worker plugin, so main builds this one.
@@ -100,6 +101,8 @@ const IMPORT_TIMEOUT_MS = 10_000
 const LIST_TIMEOUT_MS = 10_000
 /** How long an export may take the host, which converts a whole version. */
 const EXPORT_TIMEOUT_MS = 120_000
+// Reading two days of logs and packing them can take a while on a busy computer.
+const REPORT_TIMEOUT_MS = 120_000
 const MAX_FORMAT = 1_000
 const MAX_ARTIFACTS = 1_000_000
 
@@ -249,6 +252,8 @@ export class AgentHost {
   private agentProcesses: ProcessId[] = []
   private readonly busyRequests = new Map<number, (sessions: BusySession[]) => void>()
   private nextBusyId = 1
+  private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
+  private nextReportId = 1
   private readonly grants = new GrantRequests(
     GRANT_TIMEOUT_MS,
     () => new Error(t('attachments.hostDown')),
@@ -348,9 +353,9 @@ export class AgentHost {
     this.host.post({ type: 'host:power', state })
   }
 
-  /** Detailed records on or off; a host started later takes the level from its environment. */
-  setLogLevel(level: 'debug' | 'info'): void {
-    this.host.post({ type: 'host:log-level', level })
+  /** The log level and detailed records; a host started later takes both from its environment. */
+  setLogLevel(level: 'debug' | 'info', verbose: boolean): void {
+    this.host.post({ type: 'host:log-level', level, verbose })
   }
 
   /** The sessions that are working, or none if the host does not answer within `timeoutMs`. */
@@ -370,6 +375,34 @@ export class AgentHost {
       if (!this.host.post({ type: 'host:busy-request', requestId })) {
         this.busyRequests.get(requestId)?.([])
         this.busyRequests.delete(requestId)
+      }
+    })
+  }
+
+  /** A problem report's bundle, which the host writes into its data folder. */
+  report(
+    params: Omit<Extract<MainToHost, { type: 'host:report-request' }>, 'type' | 'requestId'>,
+  ): Promise<ReportBuildResult> {
+    const down: ReportBuildResult = {
+      ok: false,
+      reason: 'failed',
+      message: 'The agent host is down',
+    }
+    if (this.host.state !== 'ready') return Promise.resolve(down)
+    const requestId = this.nextReportId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.reportRequests.delete(requestId)
+        log.warn(`No report within ${REPORT_TIMEOUT_MS} ms`)
+        resolve({ ok: false, reason: 'failed', message: 'The agent host did not answer in time' })
+      }, REPORT_TIMEOUT_MS)
+      this.reportRequests.set(requestId, (result) => {
+        clearTimeout(timer)
+        resolve(result)
+      })
+      if (!this.host.post({ type: 'host:report-request', requestId, ...params })) {
+        this.reportRequests.get(requestId)?.(down)
+        this.reportRequests.delete(requestId)
       }
     })
   }
@@ -604,6 +637,13 @@ export class AgentHost {
       case 'host:granted':
         this.grants.answered(message.requestId)
         break
+      case 'host:report': {
+        const resolve = this.reportRequests.get(message.requestId)
+        if (!resolve) break
+        this.reportRequests.delete(message.requestId)
+        resolve(reportBuildResult(message.result))
+        break
+      }
       case 'host:artifact-content': {
         const resolve = this.contentRequests.get(message.requestId)
         if (!resolve) break

@@ -274,17 +274,25 @@ function Swap({ id, children, glide = false }: { id: string; children: ReactNode
   );
 }
 
-/** Kettu: where the menu can show – the window, narrowed by any ancestor that clips, such as a pane of a split view. */
-function shownBounds(el: Element | null): { left: number; right: number } {
+/** Kettu: where the menu can show – the window, narrowed by any ancestor that clips, such as a pane of a split view or a screen's scroller. */
+function shownBounds(el: Element | null): { left: number; right: number; top: number; bottom: number } {
   let left = 0;
   let right = document.documentElement.clientWidth;
+  let top = 0;
+  let bottom = document.documentElement.clientHeight;
   for (let e = el?.parentElement; e; e = e.parentElement) {
-    if (getComputedStyle(e).overflowX === "visible") continue;
+    const style = getComputedStyle(e);
     const box = e.getBoundingClientRect();
-    left = Math.max(left, box.left);
-    right = Math.min(right, box.right);
+    if (style.overflowX !== "visible") {
+      left = Math.max(left, box.left);
+      right = Math.min(right, box.right);
+    }
+    if (style.overflowY !== "visible") {
+      top = Math.max(top, box.top);
+      bottom = Math.min(bottom, box.bottom);
+    }
   }
-  return { left, right };
+  return { left, right, top, bottom };
 }
 
 /** Kettu: right of the menu when the card fits there, else the side with more room. */
@@ -536,7 +544,7 @@ export function ModelPicker({
       const trigger = triggerRef.current?.getBoundingClientRect();
       const width = popRef.current?.offsetWidth ?? 0;
       if (!trigger || !width) return;
-      const { left: start, right: room } = shownBounds(rootRef.current);
+      const { left: start, right: room, top: ceiling, bottom: floor } = shownBounds(rootRef.current);
       const left = align === "end" ? trigger.right - width : trigger.left;
       const margin = 12;
       // The asked-for side unless the menu doesn't fit there and the other side has more room; measured at its full
@@ -546,8 +554,8 @@ export function ModelPicker({
       pop?.style.removeProperty("--ui-mdpc-room");
       const height = pop?.offsetHeight ?? 0;
       if (limit) pop?.style.setProperty("--ui-mdpc-room", limit);
-      const above = trigger.top - 6 - margin;
-      const below = document.documentElement.clientHeight - trigger.bottom - 6 - margin;
+      const above = trigger.top - ceiling - 6 - margin;
+      const below = floor - trigger.bottom - 6 - margin;
       const fits = (side === "top" ? above : below) >= height;
       const placed = fits ? side : side === "top" ? (below > above ? "bottom" : "top") : above > below ? "top" : "bottom";
       const avail = placed === "top" ? above : below;

@@ -1,0 +1,59 @@
+{
+  "title": "Report a problem",
+  "titleOnHost": "Report a problem with {{name}}",
+  "what": "What happened?",
+  "whatPlaceholder": "A sentence is enough, in any language.",
+  "context": "The error you came from goes in too.",
+  "range": "Logs from",
+  "ranges": {
+    "span": "The recording",
+    "hour": "Last hour",
+    "today": "Today",
+    "twoDays": "Last 2 days"
+  },
+  "extras": {
+    "label": "Also include",
+    "titles": "Session titles and project paths",
+    "messages": "Recent messages with agents",
+    "verbose": "Detailed records",
+    "dumps": "Crash dumps",
+    "screenshot": "A screenshot of this window"
+  },
+  "always": "Always in: versions, system, PATH and SHELL, settings without personal details, agents' states, the hosts' recent events, and the logs and actions of the range. Keys are masked.",
+  "sensitive": "Messages, detailed records and crash dumps may hold prompts, code and keys.",
+  "viewContents": "View contents",
+  "back": "Back",
+  "files_one": "{{count}} file",
+  "files_other": "{{count}} files",
+  "truncated": "Showing the first 2 MB; the whole file goes in.",
+  "binary": "This file goes in as it is and cannot be shown here.",
+  "submit": "Submit to Kettu",
+  "save": "Save locally",
+  "signInToSubmit": "Sign in to submit reports to Kettu and get an id for an issue.",
+  "signIn": "Sign in",
+  "notSubmitted": {
+    "tooLarge": "The report is too large to submit. Choose a shorter range or fewer extras, or save it and attach it to an issue.",
+    "rateLimited": "Too many reports were submitted today. Save this one and attach it to an issue, or submit it tomorrow.",
+    "unauthorized": "Your sign-in has ended. Sign in again, then submit.",
+    "signedOut": "This host is not signed in to a Kettu account. Sign it in, or save the report.",
+    "network": "Could not reach Kettu. Check the connection and submit again.",
+    "failed": "The report could not be submitted. Save it and attach it to an issue instead."
+  },
+  "submitted": {
+    "title": "Report submitted",
+    "body": "Put this id in an issue, so the report can be found from it.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "openIssue": "Open an issue on GitHub"
+  },
+  "saved": "Report saved",
+  "showFile": "Show",
+  "tooLarge": "The report is too large. Choose a shorter range or fewer extras.",
+  "failed": "Could not put the report together.",
+  "reportProblem": "Report a problem",
+  "recording": {
+    "label": "Recording steps",
+    "stop": "Stop and report"
+  },
+  "crashNotice": "Kettu quit unexpectedly last time"
+}

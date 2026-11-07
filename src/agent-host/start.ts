@@ -4,7 +4,7 @@
 
 import { Worker } from 'node:worker_threads'
 import type { HostEvent } from '@shared/agent-host'
-import { setLogLevel, writeLog } from '@shared/log/process-log'
+import { setLogLevel, setVerboseRecords, writeLog } from '@shared/log/process-log'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
@@ -97,6 +97,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:busy-request':
         withHost((h) => h.busy(message.requestId))
         break
+      case 'host:report-request':
+        if (Number.isSafeInteger(message.requestId)) withHost((h) => void h.report(message))
+        break
       case 'host:grant':
         if (Array.isArray(message.grants)) {
           withHost((h) => h.grant(message.requestId, message.grants.filter(isGrant)))
@@ -161,6 +164,7 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         break
       case 'host:log-level':
         if (message.level === 'debug' || message.level === 'info') setLogLevel(message.level)
+        if (typeof message.verbose === 'boolean') setVerboseRecords(message.verbose)
         break
       case 'host:permission-answer':
         if (

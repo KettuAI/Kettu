@@ -52,6 +52,8 @@ export class QuitFlow {
   private closing: BrowserWindow | null = null
   /** The user chose to keep the work running: the windows close and the app stays. */
   private background = false
+  /** How a restart starts the next run, asked for once it goes ahead. */
+  private relaunch: (() => Electron.RelaunchOptions) | null = null
 
   constructor(private readonly deps: QuitDeps) {
     app.on('before-quit', (event) => {
@@ -68,6 +70,13 @@ export class QuitFlow {
   /** Whether the app stays without windows, as the setting or the user's answer to a quit says. */
   get staysInBackground(): boolean {
     return this.background || this.deps.settings().general.background
+  }
+
+  /** Quits and starts Kettu again with `relaunch`'s arguments, asking first as quitting does. */
+  restart(relaunch: () => Electron.RelaunchOptions): void {
+    if (this.phase !== 'idle') return
+    this.relaunch = relaunch
+    this.request('restart')
   }
 
   request(reason: QuitReason): void {
@@ -213,6 +222,7 @@ export class QuitFlow {
       setTimeout(() => app.quit(), INSTALL_FALLBACK_MS).unref()
       await this.deps.installUpdate()
     } else {
+      if (reason === 'restart') app.relaunch(this.relaunch?.())
       app.quit()
     }
   }
@@ -271,15 +281,18 @@ export class QuitFlow {
     const window = currentWindow()
     const buttons = [t('quit.cancel'), confirmLabel(reason, unsaved.length > 0, keepRunning)]
     if (keepRunning) buttons.push(t('quit.keepRunning'))
+    const restarts = reason === 'update' || reason === 'restart'
     const options: Electron.MessageBoxOptions = {
       type: 'warning',
       message:
         reason === 'update'
           ? t('quit.titleUpdate')
-          : reason === 'close'
-            ? t('quit.titleClose')
-            : t('quit.titleQuit', { name: app.name }),
-      detail: describeWork(sessions, terminals, reason === 'update', unsaved, reason, keepRunning),
+          : reason === 'restart'
+            ? t('quit.titleRestart', { name: app.name })
+            : reason === 'close'
+              ? t('quit.titleClose')
+              : t('quit.titleQuit', { name: app.name }),
+      detail: describeWork(sessions, terminals, restarts, unsaved, reason, keepRunning),
       buttons,
       cancelId: 0,
       // Stopping can lose work, so keeping it running is the default where it is offered.
@@ -300,7 +313,9 @@ function confirmLabel(
 ): string {
   if (keepRunning) return t('quit.stopAndQuit')
   if (reason === 'close') return t('quit.closeWithoutSaving')
-  if (reason === 'update') return unsaved ? t('quit.restartWithoutSaving') : t('quit.restart')
+  if (reason === 'update' || reason === 'restart') {
+    return unsaved ? t('quit.restartWithoutSaving') : t('quit.restart')
+  }
   return unsaved ? t('quit.quitWithoutSaving') : t('quit.quit')
 }
 
@@ -335,7 +350,7 @@ export function describeWork(
     lines.push(
       reason === 'close'
         ? t('quit.losesOnClose')
-        : reason === 'update'
+        : reason === 'update' || reason === 'restart'
           ? t('quit.losesOnRestart')
           : t('quit.losesOnQuit'),
     )

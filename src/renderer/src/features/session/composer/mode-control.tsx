@@ -28,10 +28,10 @@ export function useModeControl(option: SelectOption | undefined, onSelect: Selec
   return {
     approval: value,
     approvalModes,
-    approvalWidth: 380,
+    approvalWidth: 336,
     approvalHead: (
       <>
-        <span>{t('controls.permissionMode')}</span>
+        <span className="kettu-mode-title">{t('controls.permissionMode')}</span>
         {option.choices.length > 1 && (
           <span className="kettu-menu-keys">
             {formatShortcut('Shift')} {formatShortcut('Tab')} {t('controls.cyclesModes')}

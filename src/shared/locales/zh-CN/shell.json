@@ -11,7 +11,7 @@
     "reconnecting": "正在重连主机…",
     "stopped": "Agent 后台进程已停止，且无法重启。",
     "restart": "重启",
-    "exportDiagnostics": "导出诊断信息"
+    "reportProblem": "报告问题"
   },
   "launch": {
     "loadFailed": "无法加载你的项目",
@@ -84,5 +84,9 @@
       "settings": "设置 › {{section}}",
       "settingsItem": "设置 › {{section}} › {{item}}"
     }
+  },
+  "debugMode": {
+    "label": "调试模式",
+    "tooltip": "调试模式已打开 · 查看端口"
   }
 }

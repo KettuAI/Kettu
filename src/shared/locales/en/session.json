@@ -330,8 +330,7 @@
     "loading": "Loading the conversation…"
   },
   "failed": {
-    "savedTo": "Saved to {{path}}",
-    "exportDiagnostics": "Export diagnostics"
+    "reportProblem": "Report a problem"
   },
   "pending": {
     "back": "Back",

@@ -109,6 +109,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               title={t('view.couldntOpen')}
               message={replicaError ?? t('view.hostSilent')}
               onRetry={() => void reloadSession(sessionId)}
+              report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
             />
           </div>
         </ColumnScroller>
@@ -177,6 +178,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
                 detail={session.error?.detail}
                 onRetry={retry}
+                report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
               />
             )}
             {session && status === 'auth_required' && !empty && (

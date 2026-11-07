@@ -153,6 +153,12 @@
 .ui-as-corner__tools > [data-sidebar-toggle] {
   margin-right: 6px;
 }
+/* Debug mode's mark keeps the fox orange that marks what waits on the user, hovered too. */
+.ui-as-corner__tools > [data-debug-marker],
+.ui-as-corner__tools > [data-debug-marker]:hover {
+  margin-left: 6px;
+  color: var(--attention);
+}
 .ui-as-corner[data-lights='window'] .ui-as-lights {
   width: var(--traffic-lights);
   height: 12px;
@@ -2293,6 +2299,17 @@
 :is(.kettu-settings, .kettu-sd) .k-num {
   font-variant-numeric: tabular-nums;
 }
+:is(.kettu-settings, .kettu-sd) .k-storage {
+  gap: 10px;
+}
+:is(.kettu-settings, .kettu-sd) .k-storage__text {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-storage__bar {
+  width: 120px;
+}
 :is(.kettu-settings, .kettu-sd) .k-mono {
   font-family: var(--code-face);
   font-size: 12.5px;
@@ -3409,6 +3426,23 @@
 :is(.kettu-settings, .kettu-sd) .k-list__name.k-grow-0 {
   flex: 0 1 auto;
 }
+/* Debug mode's ports: the names in a column, so the addresses line up, and a long address cut
+   short inside its row, which a grid item would otherwise widen to fit. */
+:is(.kettu-settings, .kettu-sd) .k-debug-ports .k-list__row {
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-debug-ports .k-list__name {
+  flex: none;
+  min-width: 144px;
+}
+:is(.kettu-settings, .kettu-sd) .k-debug-ports .k-mono {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .kettu-sd .kettu-sd__picklist {
   max-height: 384px;
   min-height: 0;
@@ -3901,6 +3935,40 @@
   flex: none;
   font-size: 11px;
   color: var(--ui-ccc-faint);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option {
+  gap: calc(var(--spacing) * 2);
+  padding-block: calc(var(--spacing) * 1.25);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option-name {
+  font-size: var(--text-menu);
+  line-height: var(--text-menu--line-height);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option-desc {
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  line-height: var(--text-meta--line-height);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-checked] {
+  background: var(--ui-ccc-wash);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-checked] .ui-ccc__option-name {
+  font-weight: 500;
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-checked] .ui-ccc__option-key,
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option:not([data-checked]) .ui-ccc__option-check {
+  display: none;
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-tone='alert'] {
+  margin-block-start: calc(var(--spacing) * 2);
+}
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-tone='alert']::before {
+  position: absolute;
+  inset: calc(var(--spacing) * -1) 0 auto;
+  height: var(--hairline);
+  background: var(--ui-ccc-line);
+  content: '';
+  pointer-events: none;
 }
 .kettu-option {
   gap: 4px;

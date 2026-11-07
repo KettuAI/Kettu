@@ -17,8 +17,11 @@ import type { HostAdminEvent, HostAdminMethod } from './remote/host-admin'
 import type { HostPairingState, HostStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
-import type { DirectSettings, HostSettings, TerminalSettings } from './settings'
+import type { ReportBuildResult, ReportRequest } from './report'
+import type { DirectSettings, HostSettings, SettingsFile, TerminalSettings } from './settings'
 import type { AgentId } from './thread'
+
+export type { ReportBuildResult }
 
 export interface BusySession {
   sessionId: string
@@ -74,6 +77,17 @@ export type MainToHost =
   | { type: 'host:connect'; device: PortDevice }
   | { type: 'host:settings'; settings: HostSettings }
   | { type: 'host:busy-request'; requestId: number }
+  // A problem report's bundle, answered by host:report. The parent adds its own part; the host
+  // reads the logs, its agents and sessions, and writes the zip under its data folder.
+  | {
+      type: 'host:report-request'
+      requestId: number
+      request: ReportRequest
+      parent: Record<string, unknown>
+      settings: SettingsFile | null
+      crashDir: string | null
+      screenshot: string | null // PNG in base64, as a forked host's messages are JSON
+    }
   | { type: 'host:grant'; requestId: number; grants: AttachmentGrant[] } // answered by host:granted
   // `artifact.content`: the files of a version, the latest when `version` is null.
   | { type: 'host:artifact-content-request'; requestId: number; id: string; version: number | null }
@@ -101,7 +115,8 @@ export type MainToHost =
       format: ArtifactExportFormat
     }
   | { type: 'host:power'; state: 'suspend' | 'resume' }
-  | { type: 'host:log-level'; level: 'debug' | 'info' }
+  /** `verbose`: detailed records, which the debug level alone does not write. */
+  | { type: 'host:log-level'; level: 'debug' | 'info'; verbose: boolean }
   // Allow once, from a request's notification: answered as one of the host's own windows would.
   | { type: 'host:permission-answer'; sessionId: string; requestId: string; optionId: string }
   // The answer to a host:browser-call, its result or the error that refused it.
@@ -187,6 +202,7 @@ export type HostToMain =
   // Whether any routine run is starting or running, for keeping the computer from idle sleep.
   | { type: 'host:routines-working'; working: boolean }
   | { type: 'host:busy'; requestId: number; sessions: BusySession[] }
+  | { type: 'host:report'; requestId: number; result: ReportBuildResult }
   | { type: 'host:granted'; requestId: number }
   | { type: 'host:artifact-content'; requestId: number; result: ArtifactContentResult }
   | { type: 'host:artifact-list'; requestId: number; result: ArtifactListResult }

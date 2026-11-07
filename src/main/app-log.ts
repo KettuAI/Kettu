@@ -8,6 +8,7 @@ import {
   logProcessFailures,
   openProcessLog,
   setLogLevel,
+  setVerboseRecords,
   VERBOSE_PREFIX,
   writeLog,
 } from '@shared/log/process-log'
@@ -20,9 +21,12 @@ const DUMP_AGE_MS = 14 * 24 * 60 * 60 * 1000
 const RUNNING_MARKER = 'running'
 
 let verboseRun = false
+// A debug run logs at the debug level, without the detailed records.
+let debugRun = false
 let verboseUntil: number | null = null
 let verboseTimer: NodeJS.Timeout | null = null
 let lastExit: number | null = null
+let noticeClosed = false
 // Set once Kettu quits on purpose, so the next run does not report an unexpected end.
 let quitCleanly = false
 
@@ -30,14 +34,16 @@ let quitCleanly = false
  * Opens main's log before anything else runs. A development run logs beside its own data, as the
  * installed app's folder would otherwise be shared.
  */
-export function openAppLog(devUserData: string | null): void {
+export function openAppLog(devUserData: string | null, debug: boolean): void {
   if (devUserData) app.setAppLogsPath(join(devUserData, 'logs'))
   else app.setAppLogsPath()
   verboseRun = app.commandLine.hasSwitch('verbose')
+  debugRun = debug
   openProcessLog({
     dir: app.getPath('logs'),
     name: 'main',
-    level: verboseRun ? 'debug' : 'info',
+    level: verboseRun || debugRun ? 'debug' : 'info',
+    verbose: verboseRun,
     echo: !app.isPackaged,
     prune: true,
   })
@@ -48,6 +54,7 @@ export function openAppLog(devUserData: string | null): void {
     electron: process.versions.electron,
     packaged: app.isPackaged,
     verbose: verboseRun,
+    debug: debugRun,
   })
 }
 
@@ -75,6 +82,16 @@ export async function markRunning(): Promise<void> {
 /** When the last run ended unexpectedly, as far as this run knows; null after a clean quit. */
 export function lastUnexpectedExit(): number | null {
   return lastExit
+}
+
+/** When the last run ended unexpectedly, while the notice of it is not closed yet. */
+export function unexpectedExitNotice(): number | null {
+  return noticeClosed ? null : lastExit
+}
+
+/** The user closed the notice of the unexpected end, which then does not show again. */
+export function dismissUnexpectedExit(): void {
+  noticeClosed = true
 }
 
 export function watchProcesses(): void {
@@ -149,12 +166,12 @@ async function pruneDumps(): Promise<void> {
 
 /**
  * Applies the detailed records setting: on until `until`, or for the whole run with `--verbose`.
- * `expire` turns the setting off when its time is up.
+ * `expire` turns the setting off when its time is up. A debug run keeps the debug level either way.
  */
 export function applyVerbose(
   until: number | null,
   expire: () => void,
-  onChange: (debug: boolean) => void,
+  onChange: (level: 'debug' | 'info', verbose: boolean) => void,
 ): void {
   if (verboseTimer) clearTimeout(verboseTimer)
   verboseTimer = null
@@ -164,17 +181,19 @@ export function applyVerbose(
     expire()
     return
   }
-  const debug = verboseRun || active
+  const verbose = verboseRun || active
+  const level = verbose || debugRun ? 'debug' : 'info'
   const changed = (verboseUntil !== null && verboseUntil > now) !== active
   verboseUntil = active ? until : null
-  setLogLevel(debug ? 'debug' : 'info')
+  setLogLevel(level)
+  setVerboseRecords(verbose)
   if (active) {
     // setTimeout holds at most about 24.8 days; the setting allows one.
     verboseTimer = setTimeout(expire, until - now)
     verboseTimer.unref()
   }
   if (changed) log.info(active ? 'Detailed records on' : 'Detailed records off')
-  onChange(debug)
+  onChange(level, verbose)
 }
 
 /** Deletes the detailed records; only while they are off, so no file is open. */

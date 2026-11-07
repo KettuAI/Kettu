@@ -8,7 +8,7 @@ import path from 'node:path'
 import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { BUILTIN_THEME_ID } from '@shared/themes'
 import { AgentFolders } from '../main/agent-folders'
-import { AdminError, HostAdmin } from '../main/host-admin'
+import { AdminError, HostAdmin, type HostAdminDeps } from '../main/host-admin'
 import type { SettingsStore } from '../main/settings'
 import { nodeSystemNameForRun } from '../main/system-name'
 import { ThemeCatalog } from '../main/theme-catalog'
@@ -45,6 +45,10 @@ export interface DaemonAdminOptions {
   env: NodeJS.ProcessEnv
   /** The home folder Kettu keeps its agent folders under; the system's unless a test picks one. */
   home?: string
+  /** A problem report's bundle for the owner's device. */
+  report?: HostAdminDeps['report']
+  /** Submits a bundle `report` gave, with the daemon's sign-in. */
+  submitReport?: HostAdminDeps['submitReport']
 }
 
 /** A server has no trash, so a folder Kettu made moves into one of the daemon's own. */
@@ -71,6 +75,8 @@ export async function startDaemonAdmin({
   hosts,
   env,
   home = os.homedir(),
+  report,
+  submitReport,
 }: DaemonAdminOptions): Promise<HostAdmin> {
   const themesDir = path.join(dataPath, 'themes')
   const sourcesFile = path.join(dataPath, 'theme-sources.json')
@@ -145,6 +151,8 @@ export async function startDaemonAdmin({
     thumbnail: null,
     png: null,
     remoteAlwaysOn: true,
+    report,
+    submitReport,
     send: (event, deviceId) => hosts.adminEvent(event, deviceId),
   })
   settings.onChange((next, changed) => {

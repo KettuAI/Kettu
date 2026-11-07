@@ -56,7 +56,16 @@ ${rows([
   ['Direct connections', directLine(status.direct)],
   ['Account', account],
 ])}
-`
+${status.debug ? debugReport(status.debug) : ''}`
+}
+
+/** A debug run's inspectors, which anything on this computer can connect to without a password. */
+function debugReport(debug: NonNullable<DaemonStatus['debug']>): string {
+  const inspectors = debug.inspectors.map(({ name, url }): [string, string] => [name, url])
+  return `
+Debug mode is on until the next restart. Its inspectors listen on 127.0.0.1 without a password:
+${rows(inspectors.length > 0 ? inspectors : [['Inspectors', 'none open yet']])}
+${debug.file ? `They are also listed in ${debug.file}.\n` : ''}`
 }
 
 export function stoppedReport(version: string, dataPath: string, account: string): string {

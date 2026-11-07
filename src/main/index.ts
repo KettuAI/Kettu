@@ -32,12 +32,15 @@ import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { SiteIcons } from './browser/site-icons'
+import { asksForDebug, isDebugRun, lockData, startDebugMode } from './debug-mode'
 import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
 import { locale as currentLocale, setLocale, t } from './i18n'
-import { appInfo, registerIpcHandlers, registerTrayIpc } from './ipc'
+import { mainDiagnostics } from './diagnostics'
+import { appInfo, launchToInteractive, registerIpcHandlers, registerTrayIpc } from './ipc'
+import { Reports } from './report'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
@@ -46,6 +49,7 @@ import { notifyAttention } from './notifications'
 import { RoutinesAwake } from './power-save'
 import { sessionProxy } from './proxy'
 import { Sharing } from './sharing'
+import { KettuUnauthorized } from './sharing/kettu'
 import { restrictPermissions } from './permissions'
 import { QuitFlow } from './quit'
 import { loadStoredDevices } from './remote-devices'
@@ -66,7 +70,16 @@ import { KettuTray } from './tray'
 import { openTrayTarget, TrayPanel } from './tray-panel'
 import { Updater } from './updater'
 import { devUserDataPath } from './user-data'
-import { applyVerbose, markRunning, openAppLog, watchConsole, watchProcesses } from './app-log'
+import {
+  applyVerbose,
+  logsFolder,
+  markRunning,
+  openAppLog,
+  watchConsole,
+  watchProcesses,
+} from './app-log'
+import { redactLogText } from '@shared/log/process-log'
+import { writeReport } from '@shared/log/report-bundle'
 import {
   applyTheme,
   applyWindowTheme,
@@ -105,7 +118,7 @@ if (devUserData) {
   app.setPath('userData', devUserData)
   log.info(`Development run: data in ${devUserData}`)
 }
-openAppLog(devUserData)
+openAppLog(devUserData, isDebugRun())
 
 // Before the app is ready, and only once.
 protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
@@ -124,8 +137,11 @@ async function start(): Promise<void> {
     readThemeSources(themeSourcesFile),
   ])
   let ready = false
-  app.on('second-instance', () => {
-    if (ready) showMainWindow()
+  app.on('second-instance', (_event, _argv, _cwd, data) => {
+    if (!ready) return
+    // One Kettu per data folder, so debugging this one takes a restart, which the window asks.
+    if (asksForDebug(data) && !isDebugRun()) sendCommand({ kind: 'confirm-debug-restart' })
+    else showMainWindow()
   })
 
   await app.whenReady()
@@ -179,7 +195,15 @@ async function start(): Promise<void> {
     await accountProxy
     return accountSession.fetch(url, init) as unknown as Promise<Response>
   }
-  const accountAvatars = new Avatars(accountFetch, accountAvatarRequestUrl)
+  let accountBase = ACCOUNT_URL
+  try {
+    accountBase = accountBaseUrl(process.env)
+  } catch (error) {
+    log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
+  }
+  const accountAvatars = new Avatars(accountFetch, (url) =>
+    accountAvatarRequestUrl(url, accountBase),
+  )
   // Made once sharing and the updater are, before remote access starts and a device can ask.
   let hostAdmin: HostAdmin | null = null
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
@@ -221,6 +245,7 @@ async function start(): Promise<void> {
       sendCommand({ kind: 'open-settings', section: 'about' })
       checkForUpdates()
     },
+    openDebugMode: () => sendCommand({ kind: 'open-settings', section: 'advanced' }),
     setRemoteEnabled: (enabled) => void settings.update({ remote: { enabled } }),
     reducedMotion,
     ...(trayPanel
@@ -357,12 +382,8 @@ async function start(): Promise<void> {
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
   }
   const hostName = (): string => settings.get().remote.name ?? hostname()
-  let accountBase = ACCOUNT_URL
-  try {
-    accountBase = accountBaseUrl(process.env)
-  } catch (error) {
-    log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
-  }
+  // Set once the sharing service exists, which publishes with the account.
+  let sharingKettuChanged: (() => void) | null = null
   const account = await Account.load({
     file: accountFile(userDataPath),
     api: new AccountApi(accountBase, accountFetch),
@@ -384,7 +405,10 @@ async function start(): Promise<void> {
     },
     avatar: (url) => accountAvatars.load(url),
     failureText: () => t('account.browserFailed'),
-    changed: (status) => broadcast('account:changed', status),
+    changed: (status) => {
+      broadcast('account:changed', status)
+      sharingKettuChanged?.()
+    },
     log: createLogger('account'),
   })
   const remoteStatus = (): RemoteStatus => {
@@ -490,6 +514,12 @@ async function start(): Promise<void> {
       content: (id, version) => agentHost.artifactContent(id, version),
       ids: () => agentHost.artifactIds(),
     },
+    kettu: {
+      base: accountBase,
+      account: () => account.signedIn(),
+      withToken: (call) =>
+        account.withAccessToken(call, (error) => error instanceof KettuUnauthorized),
+    },
     viewerFiles: (type, languages) => artifacts.viewers.forPage(type, languages),
     locale: currentLocale,
     cipher: {
@@ -507,6 +537,7 @@ async function start(): Promise<void> {
     },
   })
   reconcileSharing = () => void sharing.reconcile()
+  sharingKettuChanged = () => sharing.kettuChanged()
   let quit: QuitFlow | null = null
   const updater = new Updater({
     appState,
@@ -549,6 +580,46 @@ async function start(): Promise<void> {
     (message) => log.warn(message),
   )
   await agentFolders.moveCreatedAgents(join(userDataPath, 'agent-config'))
+  const reportsFolder = join(userDataPath, 'reports')
+  const reports = new Reports(
+    {
+      build: async (params) => {
+        if (agentHost.state === 'ready') return agentHost.report(params)
+        // The agent host is what the report is often about; main reads the logs itself then.
+        return writeReport(
+          {
+            request: params.request,
+            now: Date.now(),
+            parent: params.parent,
+            settings: params.settings,
+            host: null,
+            logDir: logsFolder(),
+            crashDir: params.crashDir,
+            screenshot: params.screenshot
+              ? new Uint8Array(Buffer.from(params.screenshot, 'base64'))
+              : null,
+            redact: redactLogText,
+          },
+          reportsFolder,
+        )
+      },
+      parent: () =>
+        mainDiagnostics({ agentHost, terminalHost, launchToInteractiveMs: launchToInteractive() }),
+      settings: () => settings.get(),
+      setVerbose: (until) => void settings.update({ diagnostics: { verboseUntil: until } }),
+      verboseUntil: () => settings.get().diagnostics.verboseUntil,
+      onRecording: (recording) => broadcast('report:recording-changed', recording),
+      onRecorded: (span) => sendCommand({ kind: 'report-problem', span }),
+      submit: (upload) => account.submitReport(upload),
+      about: async () => {
+        const info = await appInfo()
+        return { version: info.version, system: info.system }
+      },
+    },
+    reportsFolder,
+  )
+  void reports.clearFolder()
+
   hostAdmin = new HostAdmin({
     settings,
     agentFolders,
@@ -570,6 +641,8 @@ async function start(): Promise<void> {
     thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
     png: (id, version, page, size) => artifacts.png(id, version, page, size),
     printPdf: (id, version) => artifacts.printPdf(id, version),
+    report: (request) => reports.forDevice(request),
+    submitReport: (ref) => reports.submit(ref),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
   })
 
@@ -582,12 +655,13 @@ async function start(): Promise<void> {
     zoom: (step: ZoomStep) => {
       settings.update({ appearance: { zoom: stepZoom(settings.get().appearance.zoom, step) } })
     },
+    reportProblem: () => sendCommand({ kind: 'report-problem' }),
   }
   const applyDiagnostics = (until: number | null): void =>
     applyVerbose(
       until,
       () => settings.update({ diagnostics: { verboseUntil: null } }),
-      (debug) => agentHost.setLogLevel(debug ? 'debug' : 'info'),
+      (level, verbose) => agentHost.setLogLevel(level, verbose),
     )
   applyDiagnostics(settings.get().diagnostics.verboseUntil)
   settings.onChange((next, changed) => {
@@ -658,6 +732,7 @@ async function start(): Promise<void> {
     computerModel: readComputerModel,
     updater,
     quit: quitFlow,
+    reports,
   })
   ipcReady = true
   installMenu(menuDeps)
@@ -668,6 +743,7 @@ async function start(): Promise<void> {
     // F12 toggles DevTools in development; reload shortcuts are disabled in production. Without
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })
+    if (isDebugRun() && app.isPackaged) watchDevToolsKeys(window)
     watchConsole(window.webContents, 'renderer')
     quitFlow.watchWindow(window)
     watchSubframes(window.webContents, {
@@ -709,9 +785,25 @@ async function start(): Promise<void> {
   })
 }
 
-if (!app.requestSingleInstanceLock()) {
+/**
+ * A debug run's developer tools keys where there is no menu to carry them: F12 and Ctrl+Shift+I,
+ * as in Chrome. macOS has the View menu's item.
+ */
+function watchDevToolsKeys(window: Electron.BrowserWindow): void {
+  if (process.platform === 'darwin') return
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const inspect = input.control && input.shift && !input.alt && input.key.toLowerCase() === 'i'
+    if (input.key !== 'F12' && !inspect) return
+    event.preventDefault()
+    window.webContents.toggleDevTools()
+  })
+}
+
+if (!app.requestSingleInstanceLock(lockData())) {
   app.quit()
 } else {
+  startDebugMode(logsFolder())
   start().catch((error: unknown) => {
     log.error('Startup failed', error)
     app.exit(1)

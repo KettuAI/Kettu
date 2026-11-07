@@ -1,6 +1,7 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import type { AppCommand } from '@shared/ipc'
 import type { ZoomStep } from '@shared/settings'
+import { isDebugRun } from './debug-mode'
 import { sendCommand, sendEvent } from './events'
 import { t } from './i18n'
 import { currentWindow } from './window'
@@ -10,6 +11,7 @@ export interface MenuDeps {
   /** Whether a session's page holds the keyboard focus, which the renderer cannot see. */
   browserFocused(): boolean
   zoom(step: ZoomStep): void
+  reportProblem(): void
 }
 
 /** Sends a command to the current window only; without one there is nothing to act on. */
@@ -30,14 +32,17 @@ export function installMenu(deps: MenuDeps): void {
     return
   }
   const name = app.name
-  const development: MenuItemConstructorOptions[] = app.isPackaged
-    ? []
-    : [
+  // An installed build opens developer tools only in a debug run, and reloads in none.
+  const development: MenuItemConstructorOptions[] = !app.isPackaged
+    ? [
         { type: 'separator' },
         { role: 'reload', label: t('menu.reload') },
         { role: 'forceReload', label: t('menu.forceReload') },
         { role: 'toggleDevTools', label: t('menu.toggleDevTools') },
       ]
+    : isDebugRun()
+      ? [{ type: 'separator' }, { role: 'toggleDevTools', label: t('menu.toggleDevTools') }]
+      : []
   const template: MenuItemConstructorOptions[] = [
     {
       label: name,
@@ -175,6 +180,12 @@ export function installMenu(deps: MenuDeps): void {
         { type: 'separator' },
         { role: 'front', label: t('menu.bringAllToFront') },
       ],
+    },
+    {
+      // The role puts macOS's search field for the menus at the top.
+      role: 'help',
+      label: t('menu.help'),
+      submenu: [{ label: t('menu.reportProblem'), click: () => deps.reportProblem() }],
     },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))

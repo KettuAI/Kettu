@@ -1,0 +1,59 @@
+{
+  "title": "报告问题",
+  "titleOnHost": "报告 {{name}} 的问题",
+  "what": "发生了什么？",
+  "whatPlaceholder": "写一句就行，什么语言都可以。",
+  "context": "出错的信息也会一起带上。",
+  "range": "日志范围",
+  "ranges": {
+    "span": "录下的这段",
+    "hour": "最近 1 小时",
+    "today": "今天",
+    "twoDays": "最近 2 天"
+  },
+  "extras": {
+    "label": "还要带上",
+    "titles": "会话标题和项目路径",
+    "messages": "最近和 Agent 来往的消息",
+    "verbose": "详细记录",
+    "dumps": "崩溃转储",
+    "screenshot": "当前窗口的截图"
+  },
+  "always": "一定带上：版本、系统、PATH 和 SHELL、去掉个人信息的设置、各 Agent 的状态、各 host 最近的事件，以及这段时间的日志和操作记录。密钥都会遮掉。",
+  "sensitive": "消息、详细记录和崩溃转储里可能有提示词、代码和密钥。",
+  "viewContents": "查看内容",
+  "back": "返回",
+  "files_one": "{{count}} 个文件",
+  "files_other": "{{count}} 个文件",
+  "truncated": "只显示前 2 MB，整个文件都会带上。",
+  "binary": "这个文件原样带上，这里显示不了。",
+  "submit": "提交给 Kettu",
+  "save": "存到本地",
+  "signInToSubmit": "登录后就能把报告提交给 Kettu，拿到一个写进 issue 的编号。",
+  "signIn": "登录",
+  "notSubmitted": {
+    "tooLarge": "报告太大了，提交不了。换个短一点的时间范围或少带几项，或者存到本地附进 issue。",
+    "rateLimited": "今天提交的报告太多了。先存到本地附进 issue，或者明天再提交。",
+    "unauthorized": "登录已失效，重新登录后再提交。",
+    "signedOut": "这台主机没有登录 Kettu 账号。先为它登录，或者存到本地。",
+    "network": "连不上 Kettu。检查一下网络，再提交一次。",
+    "failed": "报告没能提交。存到本地附进 issue 吧。"
+  },
+  "submitted": {
+    "title": "报告已提交",
+    "body": "把这个编号写进 issue，就能据此找到这份报告。",
+    "copy": "复制",
+    "copied": "已复制",
+    "openIssue": "在 GitHub 上提 issue"
+  },
+  "saved": "报告已保存",
+  "showFile": "显示",
+  "tooLarge": "报告太大了，换个短一点的时间范围或少带几项。",
+  "failed": "报告没能打包好。",
+  "reportProblem": "报告问题",
+  "recording": {
+    "label": "正在记录",
+    "stop": "结束并报告"
+  },
+  "crashNotice": "Kettu 上次意外退出"
+}

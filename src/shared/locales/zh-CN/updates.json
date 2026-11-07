@@ -67,6 +67,7 @@
   "quit": {
     "titleUpdate": "重启以完成更新？",
     "titleQuit": "退出 Kettu？",
+    "titleRestart": "重启 Kettu？",
     "stopsUpdate": "重启会停止以下正在运行的任务：",
     "stopsQuit": "退出会停止以下正在运行的任务：",
     "terminal": "终端",

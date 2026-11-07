@@ -31,6 +31,10 @@ asarUnpack:
 # The postinstall step (tools/install/app-deps.mjs) already readied node-pty for Electron: its
 # prebuilt binaries on Windows, a build from source on macOS and Linux.
 npmRebuild: false
+# Without this, --inspect and SIGUSR1 would open a Node.js inspector in main that nothing shows;
+# debug mode (--debug) opens its inspectors from code instead, which the fuse leaves working.
+electronFuses:
+  enableNodeCliInspectArguments: false
 publish:
   provider: github
   owner: KettuAI

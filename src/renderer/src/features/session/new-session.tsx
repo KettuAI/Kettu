@@ -124,9 +124,10 @@ export function NewSessionView({
   return (
     <div className="relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       {/* The screen's own bar names nothing and draws no line: the heading below says where you
-          are. A sub-session still leads with its parent. It lies over the screen, so the start
-          centers in the whole main area as in App Shell. */}
-      <TopBar className="absolute inset-x-0 top-0 z-10 shadow-none" cornered={cornered}>
+          are. A sub-session still leads with its parent. The scroller below pads its end by the
+          bar's height, so the start centers in the whole main area as in App Shell while menus
+          opened in it stay clear of the bar. */}
+      <TopBar className="shadow-none" cornered={cornered}>
         {parent && (
           <NoDrag className="min-w-0 gap-0.5">
             <ParentLink parent={parent} />
@@ -137,7 +138,7 @@ export function NewSessionView({
         )}
         <span className="flex-1" />
       </TopBar>
-      <ColumnScroller className="flex flex-col">
+      <ColumnScroller className="flex flex-col pb-(--top-bar)">
         <section className="ui-as-start" data-phase="start">
           <StartStyles />
           <WelcomeHeading />

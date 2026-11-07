@@ -479,6 +479,10 @@
   --diffs-header-font-family: var(--font-sans);
 }
 
+/* A debug run's mark follows Forward, 8 px after it. */
+:root[data-debug] {
+  --corner-controls: calc(4 * 28px + 8px + 2px + 8px + 16px);
+}
 :root[data-font-ui='system'] {
   --ui-face: var(--face-system);
 }

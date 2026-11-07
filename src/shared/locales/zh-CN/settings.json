@@ -461,13 +461,18 @@
       "invalid": "请输入 URL，例如 http://proxy.example.com:8080",
       "environmentNote": "在填入 URL 之前，仍使用环境变量中的代理。"
     },
-    "diagnostics": {
-      "name": "诊断信息",
-      "description": "一个包含最近消息、日志和路径的文件，用于报告问题。分享前先检查一遍。",
-      "keywords": "日志 问题 反馈 报告 logs bug report",
-      "export": "导出诊断信息",
-      "saved": "已保存到 {{path}}",
-      "exportShort": "导出…"
+    "report": {
+      "name": "报告问题",
+      "description": "把日志和设置打包成 zip，保存前可以逐个文件查看。",
+      "keywords": "问题 反馈 报告 诊断 日志 bug report diagnostics",
+      "open": "报告问题…"
+    },
+    "record": {
+      "name": "录制复现步骤",
+      "description": "重现问题时打开详细记录，最长 30 分钟，结束后只报告这段时间。",
+      "keywords": "复现 录制 详细记录 调试 reproduce verbose",
+      "start": "开始录制",
+      "recording": "录制中…"
     },
     "logs": {
       "name": "日志",
@@ -481,6 +486,24 @@
       "left_other": "还剩 {{count}} 小时",
       "delete": "删除记录",
       "deleted": "已删除详细记录"
+    },
+    "debugMode": {
+      "name": "调试模式",
+      "description": "只在一次运行里打开这台电脑上的调试端口，方便开发者查看 Kettu 运行时的情况。",
+      "descriptionOn": "下次重启前一直开着。这些端口也写在日志文件夹的 debug-ports.json 里。",
+      "keywords": "调试 开发者工具 devtools inspector cdp 端口",
+      "restart": "以调试模式重启…",
+      "restartNormally": "正常重启",
+      "cdp": "DevTools Protocol",
+      "pipe": "经管道",
+      "cdpFailed": "没有打开，端口可能被占用",
+      "waiting": "正在等待端口…",
+      "copy": "复制 {{name}}",
+      "confirm": {
+        "title": "以调试模式重启？",
+        "body": "在下次重启之前，Kettu 会在这台电脑上打开调试端口。这些端口没有任何认证：这台电脑上的任何程序，包括会话里的 Agent，都能操控 Kettu、替你回答授权请求，也能连上内置浏览器里登录着的网站。",
+        "action": "以调试模式重启"
+      }
     },
     "dataFolder": {
       "name": "数据文件夹",
@@ -875,7 +898,7 @@
     "about": "Kettu 的版本和更新。",
     "archived": "从侧边栏移走但仍保留。恢复后会回到原来的项目里。",
     "artifacts": "页面要读取项目文件或向你的 Agent 提问时会先问你。只保存自己数据的页面不会问。",
-    "sharing": "通过你自己的 Cloudflare 账号，把 artifact 发布为任何人都能打开的链接。",
+    "sharing": "把 artifact 发布为任何人都能打开的链接，发布到 Kettu 或你自己的 Cloudflare 账号。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话，只走你自己的网络。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话，只走你自己的网络。",
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
@@ -915,8 +938,23 @@
   },
   "sharing": {
     "groups": {
-      "account": "Cloudflare",
-      "published": "已发布"
+      "kettu": "Kettu",
+      "published": "已发布",
+      "account": "自己的 Cloudflare 账号"
+    },
+    "kettu": {
+      "name": "Kettu 账号",
+      "description": "用这台电脑登录的 Kettu 账号把 artifact 发布到 Kettu。",
+      "description_web": "用 {{host}} 登录的 Kettu 账号把 artifact 发布到 Kettu。",
+      "keywords": "分享 发布 链接 kettu 账号 云端存储",
+      "signedOut": "登录 Kettu 账号后即可把 artifact 发布到 Kettu。",
+      "signedOut_web": "在 {{host}} 上登录 Kettu 账号后即可把 artifact 发布到 Kettu。",
+      "signIn": "登录",
+      "signedIn": "已登录",
+      "storage": "云端存储",
+      "storageUsed": "已用 {{used}}，共 {{limit}}",
+      "storageChecking": "正在检查…",
+      "storageFull": "已满"
     },
     "account": {
       "name": "Cloudflare 账号",
@@ -953,7 +991,15 @@
       "otherAccount": "此页面是用另一个 Cloudflare 账号发布的。连接该账号后才能修改。",
       "empty": "还没有发布任何 artifact。",
       "copyLink": "复制链接",
-      "copied": "链接已复制"
+      "copied": "链接已复制",
+      "where": {
+        "kettu": "Kettu",
+        "cloudflare": "Cloudflare"
+      },
+      "otherKettu": "用 {{email}} 发布。用该账号登录后才能修改。",
+      "otherKettuUnnamed": "用另一个 Kettu 账号发布。用该账号登录后才能修改。",
+      "signedOut": "用发布它的 Kettu 账号登录后才能修改。",
+      "otherAccountBadge": "其他账号"
     },
     "none": {
       "title": "分享要用桌面应用",
