@@ -1,8 +1,9 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { sharedPageVisitors, useSharingStore } from '@renderer/stores/sharing'
 import type { CanvasAgent } from './canvas-editor'
 import type { Presence } from './use-artifact'
 
@@ -48,4 +49,35 @@ export function noteAuthor(
   if (here) return here.name
   const summary = useSessionsStore.getState().byId[session]
   return summary ? sessionTitle(summary) : fallback
+}
+
+/** How often the viewer asks again how many people look at its published page. */
+const VISITORS_EVERY_MS = 30_000
+
+/**
+ * How many people look at the artifact's page on Kettu now, asked while it is shown; null when it
+ * is not published there or nobody can say.
+ */
+export function useVisitors(id: string): number | null {
+  const onKettu = useSharingStore(
+    (s) =>
+      s.status?.published.some((p) => p.id === id && p.target === 'kettu' && !p.otherAccount) ??
+      false,
+  )
+  const [counted, setCounted] = useState<{ id: string; count: number | null } | null>(null)
+  useEffect(() => {
+    if (!onKettu) return
+    let live = true
+    const ask = () =>
+      void sharedPageVisitors(id).then((count) => {
+        if (live) setCounted({ id, count })
+      })
+    ask()
+    const timer = setInterval(ask, VISITORS_EVERY_MS)
+    return () => {
+      live = false
+      clearInterval(timer)
+    }
+  }, [id, onKettu])
+  return onKettu && counted?.id === id ? counted.count : null
 }

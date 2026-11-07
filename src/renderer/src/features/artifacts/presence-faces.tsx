@@ -20,18 +20,21 @@ export function PresenceFaces({
   pageName,
   following,
   onFollow,
+  visitors,
 }: {
   agents: readonly CanvasAgent[]
   presence: Presence | null
   pageName: (id: string | null) => string | null
   following: string | null
   onFollow: (sessionId: string | null) => void
+  /** People looking at the page published to Kettu, last of all as one face. */
+  visitors: number | null
 }) {
   const { t } = useTranslation('artifacts')
   const clients = presence?.clients ?? []
   const shown = agents.slice(0, MAX_FACES)
   const more = agents.length - shown.length
-  if (agents.length === 0 && clients.length === 0) return null
+  if (agents.length === 0 && clients.length === 0 && !visitors) return null
   const doing = (agent: CanvasAgent) => {
     const page = pageName(agent.focus?.page ?? null) ?? null
     switch (agent.doing) {
@@ -88,6 +91,19 @@ export function PresenceFaces({
         />
       ))}
       {more > 0 && <span className="ui-agc__face ui-agc__face-more">{`+${more}`}</span>}
+      {visitors ? (
+        <Tooltip>
+          <TooltipTrigger render={<span className="ui-agc__face ui-agc__face-more" />}>
+            {visitors}
+          </TooltipTrigger>
+          <TooltipContent>
+            <span className="flex flex-col items-start">
+              <span>{t('board.visitors.count', { count: visitors })}</span>
+              <span className="opacity-60">{t('board.visitors.hint')}</span>
+            </span>
+          </TooltipContent>
+        </Tooltip>
+      ) : null}
     </span>
   )
 }

@@ -30,7 +30,7 @@ import { useComments } from './use-comments'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { CanvasEditor } from './canvas-editor'
 import { PresenceFaces } from './presence-faces'
-import { noteAuthor, usePresentAgents } from './use-present-agents'
+import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
 import { useCanvasDoc } from './use-canvas-doc'
 import { ArtifactSurface, CanvasBarControls } from './viewer-parts'
 import { PreviewOnly } from './preview-only'
@@ -67,6 +67,7 @@ export default function ArtifactPane({
   const { threads } = useComments(editing.mode === 'comment' ? id : null)
   const liveCanvas = useCanvasDoc(id, latest && !!shown?.doc)
   const agents = usePresentAgents(artifact.presence, summary?.deletedAt != null)
+  const visitors = useVisitors(id)
 
   useEffect(() => {
     if (states.inTrash) editor?.setMode(null)
@@ -210,6 +211,7 @@ export default function ArtifactPane({
                 }
                 following={null}
                 onFollow={() => {}}
+                visitors={visitors}
               />
               {shown?.canvas && (
                 <CanvasBarControls

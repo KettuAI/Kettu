@@ -185,6 +185,26 @@ describe('Sharing levels', () => {
     expect(await sharing.openLink(ARTIFACT)).toMatchObject({ failed: 'failed' })
   })
 
+  it('counts who looks at a page on Kettu, and says nothing it cannot know', async () => {
+    const { sharing, calls } = await sharingWith([
+      { status: 201, body: { id: PAGE, url: PAGE_URL, access: 'public', code: null } },
+      listing([{ id: PAGE, url: PAGE_URL, bytes: 1, access: 'public', code: null }]),
+      { body: { visitors: { [PAGE]: 4 } } },
+      { body: { visitors: { [PAGE]: -1 } } },
+      { status: 503, body: { error: 'visitors_unavailable' } },
+    ])
+    expect(await sharing.visitors(42)).toBeNull()
+    expect(await sharing.visitors(ARTIFACT)).toBeNull()
+    await sharing.publish(ARTIFACT, 1, 'kettu', 'public')
+    expect(await sharing.visitors(ARTIFACT)).toBe(4)
+    expect(calls[2]).toMatchObject({
+      method: 'GET',
+      url: `https://account.example/api/v1/shares/visitors?ids=${PAGE}`,
+    })
+    expect(await sharing.visitors(ARTIFACT)).toBeNull()
+    expect(await sharing.visitors(ARTIFACT)).toBeNull()
+  })
+
   it('opens a public page at its own address without asking the service', async () => {
     const { sharing, calls } = await sharingWith([
       { status: 201, body: { id: PAGE, url: PAGE_URL, access: 'public', code: null } },

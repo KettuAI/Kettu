@@ -192,6 +192,7 @@ const api: KettuApi = {
     setAccess: (id, access) => invoke('sharing:set-access', id, access),
     newCode: (id) => invoke('sharing:new-code', id),
     openLink: (id) => invoke('sharing:open-link', id),
+    visitors: (id) => invoke('sharing:visitors', id),
     unpublish: (id) => invoke('sharing:unpublish', id),
     setAuto: (enabled) => invoke('sharing:set-auto', enabled),
     onChanged: onSharingChanged,

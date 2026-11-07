@@ -323,6 +323,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       setAccess: (id, access) => admin('sharing.setAccess', { id, access }),
       newCode: (id) => admin('sharing.newCode', { id }),
       openLink: (id) => admin('sharing.openLink', { id }),
+      visitors: (id) => admin('sharing.visitors', { id }),
       unpublish: (id) => admin('sharing.unpublish', { id }),
       setAuto: (enabled) => admin('sharing.setAuto', { enabled }),
       onChanged: (listener) => adminEvent('sharing.changed', (event) => listener(event.status)),

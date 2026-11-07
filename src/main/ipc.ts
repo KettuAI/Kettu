@@ -693,6 +693,7 @@ export function registerIpcHandlers({
   handle('sharing:set-access', 2, (_, id, access) => sharing.setAccess(id, access))
   handle('sharing:new-code', 1, (_, id) => sharing.newCode(id))
   handle('sharing:open-link', 1, (_, id) => sharing.openLink(id))
+  handle('sharing:visitors', 1, (_, id) => sharing.visitors(id))
   handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
   handle('sharing:set-auto', 1, (_, enabled) => sharing.setAuto(enabled))
 

@@ -136,6 +136,7 @@ export interface AdminSharing {
   setAccess(id: unknown, access: unknown): Promise<SharingResult>
   newCode(id: unknown): Promise<SharingResult>
   openLink(id: unknown): Promise<SharingOpenResult>
+  visitors(id: unknown): Promise<number | null>
   unpublish(id: unknown): Promise<SharingResult>
   setAuto(enabled: unknown): SharingResult
 }
@@ -449,6 +450,8 @@ export class HostAdmin {
         return this.sharing().newCode(fields(params).id)
       case 'sharing.openLink':
         return this.sharing().openLink(fields(params).id)
+      case 'sharing.visitors':
+        return this.sharing().visitors(fields(params).id)
       case 'sharing.unpublish':
         return this.sharing().unpublish(fields(params).id)
       case 'sharing.setAuto':

@@ -342,6 +342,7 @@ export interface IpcInvokeContract {
   'sharing:set-access': { args: [id: string, access: ShareAccess]; result: SharingResult }
   'sharing:new-code': { args: [id: string]; result: SharingResult }
   'sharing:open-link': { args: [id: string]; result: SharingOpenResult }
+  'sharing:visitors': { args: [id: string]; result: number | null }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
   'remote:status': { args: []; result: RemoteStatus }
   // A pairing code for this page, voiding any other; null while remote access is not on. Its
@@ -627,6 +628,8 @@ export interface KettuApi {
     newCode(id: string): Promise<SharingResult>
     /** An address that opens the page for its publisher, without its code or a sign-in. */
     openLink(id: string): Promise<SharingOpenResult>
+    /** How many people look at the artifact's page on Kettu now; null when nobody can say. */
+    visitors(id: string): Promise<number | null>
     unpublish(id: string): Promise<SharingResult>
     /** Turns publishing to Kettu on its own on or off, which also answers its one-time notice. */
     setAuto(enabled: boolean): Promise<SharingResult>

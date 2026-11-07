@@ -215,6 +215,8 @@ export interface HostAdminContract {
   'sharing.setAccess': { params: { id: string; access: ShareAccess }; result: SharingResult }
   'sharing.newCode': { params: { id: string }; result: SharingResult }
   'sharing.openLink': { params: { id: string }; result: SharingOpenResult }
+  /** How many people look at the artifact's page on Kettu now; null when nobody can say. */
+  'sharing.visitors': { params: { id: string }; result: number | null }
   'sharing.unpublish': { params: { id: string }; result: SharingResult }
   'sharing.setAuto': { params: { enabled: boolean }; result: SharingResult }
   'updates.status': { params: undefined; result: UpdateStatus }
@@ -297,6 +299,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'sharing.setAccess': true,
   'sharing.newCode': true,
   'sharing.openLink': true,
+  'sharing.visitors': true,
   'updates.status': true,
   'updates.check': true,
   'updates.download': true,

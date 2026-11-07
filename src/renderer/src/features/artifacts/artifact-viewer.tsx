@@ -27,7 +27,7 @@ import { CanvasEditor, type DocPageActions } from './canvas-editor'
 import { docLayout } from './canvas-model'
 import { handOff } from './handoff'
 import { PresenceFaces } from './presence-faces'
-import { noteAuthor, usePresentAgents } from './use-present-agents'
+import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
 import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
 import { ArtifactMoreButton } from './artifact-menu'
 import { ShareButton } from './share-popover'
@@ -124,6 +124,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   )
   const [following, setFollowing] = useState<string | null>(null)
   const agents = usePresentAgents(artifact.presence, summary?.deletedAt != null)
+  const visitors = useVisitors(id)
   const followingNow = following && agents.some((a) => a.sessionId === following) ? following : null
   const pageTitle = useCallback(
     (page: string | null) =>
@@ -541,6 +542,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
               pageName={pageTitle}
               following={followingNow}
               onFollow={setFollowing}
+              visitors={visitors}
             />
             {pageName && <CanvasBarControls controls={controls} pageName={pageName} />}
             {/* A type's viewer presents its content itself, as a deck does. */}

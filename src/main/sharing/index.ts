@@ -171,6 +171,8 @@ export class Sharing {
   /** Something waits for the one-time notice before it is uploaded. */
   private autoHeld = false
   private readonly skipped = new Map<string, Skipped>()
+  /** Why counting visitors last failed, so a poll that keeps failing logs it once. */
+  private visitorsFailed: string | null = null
 
   private constructor(
     private readonly deps: SharingDeps,
@@ -382,6 +384,26 @@ export class Sharing {
       }
     } catch (error) {
       return this.failure(error)
+    }
+  }
+
+  /**
+   * How many people look at the artifact's page on Kettu now; null when it has none there or the
+   * service cannot say, which the log notes once until it can again.
+   */
+  async visitors(rawId: unknown): Promise<number | null> {
+    if (!isArtifactId(rawId)) return null
+    const page = this.store.page(rawId)
+    if (!page || page.target !== 'kettu') return null
+    try {
+      const counts = await this.atKettu(page.accountId, (share) => share.visitors([page.ref]))
+      this.visitorsFailed = null
+      return counts.get(page.ref) ?? null
+    } catch (error) {
+      const message = (error as Error).message
+      if (this.visitorsFailed !== message) log.warn(`Could not count a page's visitors: ${message}`)
+      this.visitorsFailed = message
+      return null
     }
   }
 

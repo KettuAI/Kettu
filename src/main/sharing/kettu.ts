@@ -146,6 +146,19 @@ export class KettuShare implements SharingProvider {
     return new Set(pages.map((entry) => entry.id).filter((id) => wanted.has(id)))
   }
 
+  /** How many people look at each page now, by its ref; another account's pages answer none. */
+  async visitors(refs: readonly string[]): Promise<Map<string, number>> {
+    const body = await this.request(`/visitors?ids=${refs.map(page).join(',')}`, { method: 'GET' })
+    const counts = record(body?.visitors)
+    if (!counts) throw unexpected('its visitors')
+    const found = new Map<string, number>()
+    for (const ref of refs) {
+      const count = counts[ref]
+      if (typeof count === 'number' && Number.isInteger(count) && count >= 0) found.set(ref, count)
+    }
+    return found
+  }
+
   /** Every page of the account, with the address the service gives it now, and the storage. */
   async list(): Promise<KettuPages> {
     const body = await this.request('', { method: 'GET' })
