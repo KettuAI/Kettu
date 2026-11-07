@@ -8,11 +8,10 @@ import {
   GitCommitIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { GitStatus, PullRequest } from '@shared/git'
+import type { GitStatus } from '@shared/git'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { NoDrag } from '@renderer/features/shell/top-bar'
 import { host } from '@renderer/lib/host'
 import { formatShortcut } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -22,8 +21,6 @@ import { BranchPopover } from './branch-popover'
 import { BranchSwitcher } from './branch-switcher'
 import { useDialogReturn } from './dialog-focus'
 import { branchName, followPointer, popoverKeys } from './popover-keys'
-import { PrIcon } from './pr-icon'
-import { prStateText } from './pr-text'
 
 /** Middle truncation keeps both ends of a branch name, where the meaning usually is. */
 function middleTruncate(text: string, max: number): string {
@@ -31,20 +28,6 @@ function middleTruncate(text: string, max: number): string {
   const keep = max - 1
   const head = Math.ceil(keep / 2)
   return `${text.slice(0, head)}…${text.slice(text.length - (keep - head))}`
-}
-
-/**
- * The session's pull request beside its title. The branch itself shows once, on the composer's
- * tray (BranchTrayLink).
- */
-export function SessionGitChips({ projectPath }: { projectPath: string }) {
-  const pr = useGitStore((s) => (s.status[projectPath]?.repo ? s.currentPr[projectPath] : null))
-  if (!pr) return null
-  return (
-    <NoDrag className="shrink-0">
-      <PrChip pr={pr} />
-    </NoDrag>
-  )
 }
 
 /**
@@ -250,37 +233,3 @@ const OPERATION_KEY = {
   'cherry-pick': 'status.operation.cherryPick',
   revert: 'status.operation.revert',
 } as const
-
-const CHECKS_KEY = {
-  passing: 'pr.checks.passing',
-  failing: 'pr.checks.failing',
-  pending: 'pr.checks.pending',
-} as const
-
-/** The branch's pull request as a ringed chip; it opens the pull request. */
-function PrChip({ pr }: { pr: PullRequest }) {
-  const { t } = useTranslation('git')
-  const live = pr.state === 'open' || pr.state === 'draft'
-  const state =
-    live && pr.checks.state !== 'none' ? t(CHECKS_KEY[pr.checks.state]) : prStateText(pr.state)
-  const label = t('status.pullRequestState', { number: pr.number, state })
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <a
-            href={pr.url}
-            target="_blank"
-            rel="noreferrer"
-            tabIndex={-1}
-            aria-label={label}
-            className="app-region-no-drag inline-flex h-6.5 shrink-0 items-center gap-1.5 rounded-lg px-2 text-hint whitespace-nowrap text-secondary shadow-[inset_0_0_0_var(--hairline)_var(--border-default)] outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-primary focus-ring"
-          />
-        }
-      >
-        <PrIcon state={pr.state} size={13} />#{pr.number}
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  )
-}
