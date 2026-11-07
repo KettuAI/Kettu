@@ -26,7 +26,7 @@ import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
 import { limitReaders } from '@renderer/features/sidebar/plan-usage'
 import { errorMessage } from '@renderer/lib/host'
-import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
+import { formatShortcut, isHosted, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useNow } from '@renderer/lib/use-now'
 import { cancelSignIn, signIn, signOut, useAccountStore } from '@renderer/stores/account'
@@ -98,7 +98,7 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
 
   const manageUrl = status?.state === 'signed-in' ? status.manageUrl : null
   const account: ProfileMenuItem[] =
-    isWeb || !status
+    (isWeb && !isHosted) || !status
       ? []
       : status.state === 'signed-in'
         ? [
@@ -115,7 +115,7 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
               : []),
             {
               id: 'sign-out',
-              label: t('account.signOut'),
+              label: t(isHosted ? 'account.signOutHosted' : 'account.signOut'),
               icon: <MenuIcon icon={Logout01Icon} />,
               divider: !manageUrl,
               onSelect: then(() => void signOut()),

@@ -180,7 +180,11 @@
     "history": "History",
     "versionChip": "Version {{version}}, history",
     "present": "Present",
-    "sideLabel": "History and comments"
+    "sideLabel": "History and comments",
+    "previewOnly": {
+      "title": "Live pages open on your computer",
+      "body": "In the browser, an artifact shows its preview. Its live page opens in Kettu on the computer, or in the web client the computer serves on its own network."
+    }
   },
   "canvas": {
     "role": "Canvas",

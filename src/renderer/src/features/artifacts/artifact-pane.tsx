@@ -28,6 +28,7 @@ import { Waiting } from './page-frame'
 import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
 import { useComments } from './use-comments'
 import { ArtifactSurface, CanvasBarControls, Presence } from './viewer-parts'
+import { PreviewOnly } from './preview-only'
 
 /**
  * An artifact beside the thread, opened from a tool call's row, so the page reloads in view while
@@ -108,7 +109,9 @@ export default function ArtifactPane({
   )
 
   let body: React.ReactNode
-  if (states.error) {
+  if (states.error === 'previewOnly') {
+    body = <PreviewOnly summary={summary ?? null} />
+  } else if (states.error) {
     body = (
       <PaneEmpty
         icon={<Icon icon={AlertCircleIcon} size={20} />}

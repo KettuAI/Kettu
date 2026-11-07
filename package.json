@@ -19,6 +19,8 @@
   "scripts": {
     "dev": "vite build -c vite.viewers.config.mts && electron-vite dev",
     "dev:web": "vite -c vite.web.config.mts",
+    "dev:web:hosted": "vite -c vite.web.config.mts --mode hosted",
+    "build:web:hosted": "vite build -c vite.web.config.mts --mode hosted",
     "fetch:device-helpers": "node tools/install/device-helpers.mjs",
     "preview": "electron-vite preview",
     "build": "pnpm typecheck && electron-vite build && vite build -c vite.daemon.config.mts && vite build -c vite.web.config.mts && vite build -c vite.viewers.config.mts",

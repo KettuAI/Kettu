@@ -18,8 +18,11 @@ import {
   AccountNetworkError,
   AccountServiceError,
   DESKTOP_CLIENT,
+  DEVICE_LIMIT,
   newPkce,
   newState,
+  signedOutReason,
+  signInFailure,
   submitFailure,
   type AccountApi,
   type ClientInfo,
@@ -71,39 +74,6 @@ export class NotSignedIn extends Error {
     super('Not signed in to a Kettu account')
     this.name = 'NotSignedIn'
   }
-}
-
-/** Why the service signed this client out, from the `reason` of its `invalid_grant`. */
-export function signedOutReason(reason: string | null): SignedOutReason {
-  switch (reason) {
-    case 'signed_out_from_account_page':
-      return 'account-page'
-    case 'signed_out_by_admin':
-      return 'admin'
-    case 'account_disabled':
-      return 'disabled'
-    case 'refresh_token_reused':
-    case 'authorization_code_reused':
-      return 'reused'
-    case 'expired':
-      return 'expired'
-    default:
-      return 'invalid'
-  }
-}
-
-/** The service's answer when the account's plan allows no more signed-in clients. */
-const DEVICE_LIMIT = 'device_limit'
-
-function failureOf(error: unknown): SignInFailure {
-  if (error instanceof AccountNetworkError) return 'network'
-  if (error instanceof AccountServiceError) {
-    if (error.code === DEVICE_LIMIT) return 'device-limit'
-    return error.code === 'account_disabled' || error.reason === 'account_disabled'
-      ? 'disabled'
-      : 'service'
-  }
-  return 'local'
 }
 
 export class Account {
@@ -394,7 +364,7 @@ export class Account {
       this.options.log.error('Could not finish signing in', error)
       loopback.answer({ status: 502, text: this.options.failureText() })
       this.signingIn = null
-      this.fail(failureOf(error))
+      this.fail(signInFailure(error))
       this.options.bringToFront()
       return
     }

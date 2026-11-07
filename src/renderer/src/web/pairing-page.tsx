@@ -13,6 +13,14 @@ import type { PairProgress } from './pair'
 
 export type PairingNotice = 'removed' | null
 
+/** What the hosted client adds to the page: who is signed in, and a way back to the app. */
+export interface HostedPairing {
+  email: string
+  onSwitchAccount(): void
+  /** Back to the host shown before, when there is one. */
+  onBack: (() => void) | null
+}
+
 /**
  * The page an unpaired browser shows: how to get a code from the computer, a field for its link,
  * and the pairing as it goes. A code in the page's own address starts at once.
@@ -21,11 +29,13 @@ export function PairingPage({
   initial,
   notice,
   deviceName,
+  hosted,
   onPair,
 }: {
   initial: PairingPayload | null
   notice: PairingNotice
   deviceName: string
+  hosted?: HostedPairing
   onPair(payload: PairingPayload, progress: (state: PairProgress) => void): Promise<boolean>
 }) {
   const [link, setLink] = useState('')
@@ -58,6 +68,7 @@ export function PairingPage({
     <PairingView
       notice={notice}
       deviceName={deviceName}
+      hosted={hosted}
       progress={progress}
       added={added}
       link={link}
@@ -75,6 +86,7 @@ export function PairingPage({
 export function PairingView({
   notice,
   deviceName,
+  hosted,
   progress,
   added,
   link,
@@ -84,6 +96,7 @@ export function PairingView({
 }: {
   notice: PairingNotice
   deviceName: string
+  hosted?: HostedPairing
   progress: PairProgress | null
   added: boolean
   link: string
@@ -100,7 +113,7 @@ export function PairingView({
         <div className="flex flex-col items-start gap-4">
           <BrandIcon size={48} />
           <h1 className="text-xl font-semibold">{t('pair.title')}</h1>
-          <p className="text-sm text-secondary">{t('pair.intro')}</p>
+          <p className="text-sm text-secondary">{t(hosted ? 'pair.introHosted' : 'pair.intro')}</p>
         </div>
 
         {notice === 'removed' && !progress && (
@@ -142,7 +155,7 @@ export function PairingView({
                 id="pairing-link"
                 value={link}
                 onChange={(event) => onLink(event.target.value)}
-                placeholder={t('pair.linkPlaceholder')}
+                placeholder={t(hosted ? 'pair.linkPlaceholderHosted' : 'pair.linkPlaceholder')}
                 autoComplete="off"
                 autoCapitalize="off"
                 spellCheck={false}
@@ -150,10 +163,31 @@ export function PairingView({
               />
               {invalid && <FieldError>{t('pair.notLink')}</FieldError>}
             </Field>
-            <Button type="submit" disabled={link.trim() === ''} className="self-start">
-              {progress?.state === 'failed' ? t('pair.again') : t('pair.submit')}
-            </Button>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={link.trim() === ''}>
+                {progress?.state === 'failed' ? t('pair.again') : t('pair.submit')}
+              </Button>
+              {hosted?.onBack && (
+                <Button type="button" variant="ghost" onClick={hosted.onBack}>
+                  {t('pair.back')}
+                </Button>
+              )}
+            </div>
           </form>
+        )}
+
+        {hosted && (
+          <p className="flex flex-wrap items-center gap-x-2 text-xs text-secondary">
+            <span>{t('hosted.account', { email: hosted.email })}</span>
+            <Button
+              variant="link"
+              size="xs"
+              className="h-auto p-0"
+              onClick={hosted.onSwitchAccount}
+            >
+              {t('hosted.switchAccount')}
+            </Button>
+          </p>
         )}
 
         <InsecureNote />

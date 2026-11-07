@@ -281,6 +281,7 @@
     "whatsNew": "What’s new",
     "docs": "Docs and help",
     "signOut": "Sign out of remote access",
+    "signOutHosted": "Sign out",
     "signIn": "Sign in to Kettu…",
     "cancelSignIn": "Cancel signing in",
     "connecting": "Connecting to {{name}}…",

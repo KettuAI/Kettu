@@ -142,6 +142,13 @@ jobs:
       - name: Package the daemon
         if: runner.os != 'Windows'
         run: node tools/daemon/package.mjs --out daemon-package
+      # The hosted web client is the same on every runner, so one of them builds it.
+      - name: Package the hosted web client
+        if: matrix.target == '--linux --x64'
+        run: |
+          pnpm build:web:hosted
+          tar -czf kettu-web.tar.gz -C out/web-hosted .
+          sha256sum kettu-web.tar.gz > kettu-web-sha256sums.txt
       # The Icon Composer app icon compiles only with Xcode 26's actool or later, which the macOS 15
       # image has but does not select.
       - name: Select Xcode 26 or later
@@ -239,6 +246,14 @@ jobs:
           name: release-daemon-${{ matrix.os }}
           path: daemon-package/kettu-daemon-*
           if-no-files-found: error
+      - if: matrix.target == '--linux --x64'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-web
+          path: |
+            kettu-web.tar.gz
+            kettu-web-sha256sums.txt
+          if-no-files-found: error
 
   test:
     name: Test
@@ -283,6 +298,8 @@ jobs:
             echo "The checksums list $packages daemon packages, expected 3" >&2
             exit 1
           fi
+          # The hosted web client, with its checksum.
+          cp artifacts/release-web/kettu-web.tar.gz artifacts/release-web/kettu-web-sha256sums.txt release/
           # A signed macOS build lists its zip next to its dmg and ships the zip's blockmap.
           mac_files=1
           if [ "$MAC_SIGNED" = true ]; then

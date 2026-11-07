@@ -135,9 +135,11 @@ export type AppCommand =
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:
- * `not_found` when the host does not know it, `unavailable` when the host cannot answer now.
+ * `not_found` when the host does not know it, `unavailable` when the host cannot answer now,
+ * `preview_only` in a client that cannot frame it, as the hosted web client, which shows its preview.
  */
-export type ArtifactOpenResult = { url: string } | { failed: 'not_found' | 'unavailable' }
+export type ArtifactOpenResult =
+  { url: string } | { failed: 'not_found' | 'unavailable' | 'preview_only' }
 
 /** A frame of an artifact tried to leave its origin for an http(s) address, which never loads. */
 export interface ArtifactBlockedEvent {
@@ -497,6 +499,8 @@ export interface KettuApi {
   platform: Platform
   /** The desktop app's window, or the web client in a browser, which has no main process. */
   client: 'desktop' | 'web'
+  /** The hosted web client, signed in to a Kettu account and reaching its hosts through the relay. */
+  hosted?: true
   /** The system of the host whose paths the page shows: this computer's, or the one connected. */
   hostPlatform(): Platform
   /** The interface language the system's preferred languages pick, for Language › System. */
@@ -569,6 +573,11 @@ export interface KettuApi {
     cancelSignIn(): Promise<AccountStatus>
     /** Signs out at the service and forgets the sign-in here. */
     signOut(): Promise<AccountStatus>
+    /**
+     * The hosted web client's other way out, for a shared computer: asks the hosts to remove this
+     * browser, signs out, and clears all the browser keeps; the page then starts over.
+     */
+    signOutAndClear?(): Promise<void>
     onChanged(listener: (status: AccountStatus) => void): () => void
   }
   /** Publishing artifacts online; main holds the account's token and makes every request. */

@@ -1,4 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from 'react'
+import { Add01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { normalizeDeviceName } from '@shared/remote/device'
 import {
@@ -11,17 +12,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { useWebHostStore, type WebHost } from '@renderer/stores/web-host'
-import { CONFIRM, ControlError, DangerButton, SetInput, Spin } from './controls'
+import { CONFIRM, ControlError, DangerButton, SetButton, SetInput, Spin } from './controls'
 import { webHostLine } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { ItemLine, Thing } from './rows'
 
-// The parts of Settings > Hosts in the web client: the host that served the page, this browser's
-// name on it, and forgetting it here.
+// The parts of Settings > Hosts in the web client: the host it connects to, this browser's name on
+// it, forgetting it here, and in the hosted client the account's other hosts.
 
 /** How long a rename waits for the host's answer before the field shows the old name again. */
 const RENAME_MS = 5000
@@ -44,6 +46,41 @@ export function WebHostRow({ host }: { host: WebHost }) {
         <HostState host={host} />
       </span>
     </div>
+  )
+}
+
+/** The hosted client's other hosts of the account, each to open here, and adding one. */
+export function OtherWebHosts() {
+  const { t } = useTranslation('settings')
+  const others = useWebHostStore((s) => s.others)
+  const actions = useWebHostStore((s) => s.actions)
+  return (
+    <>
+      {others.map((other) => (
+        <div key={other.id} className="ui-sg-row">
+          <Thing
+            mark={<DeviceTile icon={<HostIcon platform="" />} />}
+            name={<span className="k-name">{other.name}</span>}
+          />
+          <span className="ui-sg-control">
+            <SetButton onClick={() => actions?.open?.(other.id)}>
+              {t('hosts.web.others.open')}
+            </SetButton>
+          </span>
+        </div>
+      ))}
+      <div className="ui-sg-row">
+        <Thing
+          mark={<DeviceTile icon={<Icon icon={Add01Icon} size={16} />} />}
+          name={t('hosts.web.others.add')}
+        >
+          <ItemLine>{t('hosts.web.others.addDescription')}</ItemLine>
+        </Thing>
+        <span className="ui-sg-control">
+          <SetButton onClick={() => actions?.add?.()}>{t('hosts.web.others.add')}</SetButton>
+        </span>
+      </div>
+    </>
   )
 }
 

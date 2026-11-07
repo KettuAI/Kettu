@@ -2917,6 +2917,12 @@ li[data-row-exit='dust'] > * {
 :is(.kettu-settings, .kettu-sd) .k-account {
   min-height: 68px;
 }
+/* The hosted web client adds a third button, which wraps on a narrow page instead of overflowing. */
+:is(.kettu-settings, .kettu-sd) .k-account > .ui-sg-control {
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 :is(.kettu-settings, .kettu-sd) .k-about {
   display: flex;
   align-items: center;

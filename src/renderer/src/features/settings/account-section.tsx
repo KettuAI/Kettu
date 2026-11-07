@@ -1,10 +1,23 @@
-// Settings › Account: the Kettu account this computer signs in to through the system browser.
+// Settings › Account: the Kettu account this computer signs in to through the system browser, or
+// the hosted web client in this browser.
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUpRight01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AccountPlan, AccountStatus, AccountUsage } from '@shared/account'
 import { Icon } from '@renderer/components/affect/app-shell'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@renderer/components/ui/alert-dialog'
+import { Spinner } from '@renderer/components/ui/spinner'
+import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { limitLevel } from '@renderer/lib/plan-limit'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -15,7 +28,18 @@ import {
   signOut,
   useAccountStore,
 } from '@renderer/stores/account'
-import { LinkButton, Masked, Meter, Pill, SetButton, Skel, Spin } from './controls'
+import {
+  CONFIRM,
+  ControlError,
+  DangerButton,
+  LinkButton,
+  Masked,
+  Meter,
+  Pill,
+  SetButton,
+  Skel,
+  Spin,
+} from './controls'
 import { subscriptionLabel } from './subscription-label'
 
 type SignedIn = Extract<AccountStatus, { state: 'signed-in' }>
@@ -169,7 +193,48 @@ function SignedInRow({ status, onSignOut }: { status: SignedIn; onSignOut: () =>
       >
         {t('account.signOut')}
       </SetButton>
+      {window.kettu.account.signOutAndClear && <SignOutAndClear />}
     </RowFrame>
+  )
+}
+
+/** The hosted web client's way out on a shared computer, after a confirm saying what goes. */
+function SignOutAndClear() {
+  const { t } = useTranslation(['settings', 'common'])
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const run = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await window.kettu.account.signOutAndClear?.()
+    } catch (e) {
+      setError(errorMessage(e))
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <ControlError error={open ? null : error} />
+      <DangerButton onClick={() => setOpen(true)}>{t('account.clear.button')}</DangerButton>
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogContent className={CONFIRM}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('account.clear.title')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('account.clear.body')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {error && <p className="text-xs text-danger">{error}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" disabled={busy} onClick={() => void run()}>
+              {busy && <Spinner data-icon="inline-start" />}
+              {t('account.clear.confirm')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 

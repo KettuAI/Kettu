@@ -264,6 +264,7 @@
     "whatsNew": "更新内容",
     "docs": "文档与帮助",
     "signOut": "退出远程访问",
+    "signOutHosted": "退出登录",
     "signIn": "登录 Kettu…",
     "cancelSignIn": "取消登录",
     "connecting": "正在连接 {{name}}…",

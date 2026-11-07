@@ -30,7 +30,7 @@ import { basename, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
-import { formatShortcut, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
+import { formatShortcut, isHosted, isMac, isWeb, isWindows, platform } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import {
   agentName,
@@ -146,7 +146,7 @@ import {
 import { useAllowedSites } from './allowed-sites'
 import { ThemeTiles } from './theme-section'
 import { ClearRecord, FromComputer, LogRow, SidebarEnd, SyncLogs } from './usage-section'
-import { BrowserNameField, ForgetHost, WebHostRow } from './web-host-section'
+import { BrowserNameField, ForgetHost, OtherWebHosts, WebHostRow } from './web-host-section'
 
 // The sections of the Settings page as data, so search and the match counts read the same rows
 // the page draws.
@@ -1164,6 +1164,20 @@ function useWebHostsSection(): SectionDef {
         group: group('forget', t('hosts.web.forget.name', { name }), { unlabeled: true }),
         render: () => <ForgetHost />,
       },
+      ...(isHosted
+        ? [
+            {
+              id: 'others',
+              name: t('hosts.web.others.name'),
+              english: en('hosts.web.others.name'),
+              description: t('hosts.web.others.description', { name }),
+              keywords: t('hosts.web.others.keywords'),
+              group: group('others', t('hosts.web.others.name')),
+              layout: 'custom' as const,
+              render: () => <OtherWebHosts />,
+            },
+          ]
+        : []),
     ],
   }
 }

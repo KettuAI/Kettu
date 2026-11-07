@@ -29,6 +29,7 @@ import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { Segmented, SetButton, SettingSelect, Spin } from './controls'
 import { closeRequest } from './pair-close'
+import { HOSTED_WEB_URL } from '@shared/remote/pairing'
 import { browserLinks } from './pair-links'
 import { QrCode } from './qr-code'
 import { DeviceIcon, DeviceTile } from './remote-parts'
@@ -261,7 +262,12 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
         ) : target === 'browser' ? (
           <>
             <p>
-              {t('remote.pair.browserScan')} {t('remote.pair.browserHint')}
+              {t('remote.pair.browserScan')}{' '}
+              {t(
+                browser?.link.startsWith(HOSTED_WEB_URL)
+                  ? 'remote.pair.browserHintHosted'
+                  : 'remote.pair.browserHint',
+              )}
             </p>
             {browsers.length > 1 && browser && (
               <div className="kettu-sd__inline">
