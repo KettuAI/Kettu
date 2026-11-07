@@ -103,7 +103,7 @@ function HistoryButton({ direction }: { direction: Direction }) {
             />
           }
         >
-          <Icon icon={glyph} size={16} />
+          <Icon icon={glyph} size={18} />
         </TooltipTrigger>
         {/* The keys follow the name as plain text, a space after it, outside its truncation. */}
         <TooltipContent
