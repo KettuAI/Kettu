@@ -91,6 +91,9 @@ export interface PullRequest {
   createdAt: number
   mergedAt: number | null
   closedAt: number | null
+  additions: number
+  deletions: number
+  changedFiles: number
 }
 
 export interface PullRequestAuthor {
@@ -178,6 +181,75 @@ export interface GitTools {
 }
 
 export const GITHUB_PULL_REQUEST_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)$/
+
+export const GITHUB_ISSUE_URL = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)$/
+
+/** `completed` and `not_planned` are the two ways GitHub closes an issue. */
+export type IssueState = 'open' | 'completed' | 'not_planned'
+
+export interface IssueLabel {
+  name: string
+  color: string // six hex digits, as GitHub keeps them
+}
+
+export interface Issue {
+  url: string
+  owner: string
+  repo: string
+  number: number
+  title: string
+  state: IssueState
+  author: PullRequestAuthor | null
+  labels: IssueLabel[] // the first few
+  labelCount: number
+  comments: number
+  createdAt: number
+  closedAt: number | null
+  closedBy: { url: string; number: number; state: PullRequestState } | null
+}
+
+/** What an issue URL turned out to be: GitHub also serves a pull request under `/issues/`. */
+export type IssueLookup =
+  { kind: 'issue'; issue: Issue } | { kind: 'pull'; pullRequest: PullRequest }
+
+/** A pull request or an issue a reply names, by its canonical URL. */
+export interface GitHubReference {
+  kind: 'pull' | 'issue'
+  owner: string
+  repo: string
+  number: number
+  url: string
+}
+
+/** The reference a github.com pull request or issue URL names; null for anything else. */
+export function githubReferenceOf(url: string): GitHubReference | null {
+  const pull = GITHUB_PULL_REQUEST_URL.exec(url)
+  const match = pull ?? GITHUB_ISSUE_URL.exec(url)
+  if (!match || !isRepositoryName(match[2]!) || !GITHUB_LOGIN.test(match[1]!)) return null
+  const number = Number(match[3])
+  if (!Number.isSafeInteger(number) || number < 1) return null
+  return { kind: pull ? 'pull' : 'issue', owner: match[1]!, repo: match[2]!, number, url }
+}
+
+/**
+ * The pull request or issue a github.com link points into, such as its files tab or one of its
+ * comments, by its canonical URL; null for any other link.
+ */
+export function githubReferenceFromLink(href: string): GitHubReference | null {
+  const url = URL.parse(href)
+  if (!url || url.protocol !== 'https:' || url.port !== '') return null
+  if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') return null
+  if (url.username || url.password) return null
+  const [owner, repo, kind, number] = url.pathname.split('/').slice(1)
+  if (!owner || !repo || !number || (kind !== 'pull' && kind !== 'issues')) return null
+  if (!/^\d+$/.test(number)) return null
+  return githubReferenceOf(`https://github.com/${owner}/${repo}/${kind}/${Number(number)}`)
+}
+
+/** A canonical URL for `owner/repo#number`; GitHub redirects `/issues/<n>` to a pull request. */
+export function githubIssueUrl(owner: string, repo: string, number: number): string {
+  return `https://github.com/${owner}/${repo}/issues/${number}`
+}
 
 /** A GitHub user's login, an enterprise one with its `_shortcode`, or a bot's `<slug>[bot]`. */
 export const GITHUB_LOGIN = /^[A-Za-z0-9][\w-]{0,99}(?:\[bot\])?$/

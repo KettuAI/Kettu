@@ -20,7 +20,6 @@ import {
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
-import { PrIcon } from '@renderer/features/git/pr-icon'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -56,6 +55,7 @@ import {
   SessionTitleField,
 } from './session-menu'
 import { runSessionMenuAccelerator } from './session-menu-model'
+import { PrBadge } from './pr-badge'
 import { SubagentBadge } from './subagent-badge'
 import { useRenaming } from './use-renaming'
 
@@ -258,7 +258,7 @@ export const SessionRow = memo(function SessionRow({
           onEnter={() => setCardOpen(false)}
         />
       )}
-      {summary.pr && <PrIcon state={summary.pr.state} className="size-[13px]! shrink-0" />}
+      <PrBadge summary={summary} onEnter={() => setCardOpen(false)} />
       {hasChildren && !expanded && (
         <span
           aria-label={t('row.subSessions', { count: children.length })}

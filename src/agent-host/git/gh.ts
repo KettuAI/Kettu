@@ -1,13 +1,15 @@
 // Runs the read-only GitHub CLI commands. Nothing here ever writes to GitHub.
 
-import type { GitTools, PullRequest } from '@shared/git'
+import type { GitTools, Issue, PullRequest } from '@shared/git'
 import type { BranchPullRequest } from './api'
 import { describeFailure, GH_TIMEOUT_MS, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './exec'
 import {
   AUTH_STATUS_ARGS,
+  issueArgs,
   LIST_ARGS,
   mapAvatarUrl,
   mapBranchPullRequests,
+  mapIssue,
   mapPullRequest,
   userArgs,
   viewArgs,
@@ -79,6 +81,20 @@ export async function viewPullRequestByUrl(
   const result = await exec('gh', viewArgs(url), { cwd, timeoutMs: GH_TIMEOUT_MS })
   if (result.failure !== null || result.code !== 0) return failure(result)
   return mapped(result, mapPullRequest)
+}
+
+/**
+ * The issue at `url`, which the caller has matched against GITHUB_ISSUE_URL, or the `/pull/` URL
+ * when GitHub says it is a pull request.
+ */
+export async function viewIssueByUrl(
+  exec: Exec,
+  url: string,
+  cwd: string,
+): Promise<GhOutcome<Issue | { pullRequestUrl: string }>> {
+  const result = await exec('gh', issueArgs(url), { cwd, timeoutMs: GH_TIMEOUT_MS })
+  if (result.failure !== null || result.code !== 0) return failure(result)
+  return mapped(result, (json) => mapIssue(json, url))
 }
 
 /** The avatar URL of the user `login`, which the caller has matched against GITHUB_LOGIN. */

@@ -699,6 +699,7 @@ export class AgentHost {
       ),
       git.onTools((tools) => this.broadcast({ type: 'git.tools', tools })),
       git.onBranchPullRequests((projectPath) => this.sessions.pullRequestsChanged(projectPath)),
+      git.onPullRequestLoaded((url) => this.sessions.pullRequestLoaded(url)),
       git.onSessionEvents((sessionId, events) => this.sessions.gitEvents(sessionId, events)),
     ]
   }
@@ -1371,6 +1372,7 @@ export class AgentHost {
       'git.discardChanges': ({ projectPath, paths }) =>
         this.gitProjectCall(projectPath, (g, p) => g.discardChanges(p, paths)),
       'git.pullRequest': ({ url }) => this.gitCall((g) => g.pullRequest(url)),
+      'git.issue': ({ url }) => this.gitCall((g) => g.issue(url)),
       'git.avatarUrl': ({ login }) => this.gitCall((g) => g.avatarUrl(login)),
       'git.currentPullRequest': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),

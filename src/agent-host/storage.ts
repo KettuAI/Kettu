@@ -3,6 +3,7 @@
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
+import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
 import {
   isAgentId,
   isUserContent,
@@ -238,6 +239,9 @@ export interface ProjectsFile {
   projects: ProjectRecord[]
 }
 
+/** How many opened pull requests a session keeps; the oldest go first. */
+export const MAX_SESSION_PULL_REQUESTS = 20
+
 export interface SessionRecord {
   id: string
   agentId: AgentId
@@ -262,6 +266,7 @@ export interface SessionRecord {
   archivedAt?: number // when the user archived it; off the sidebar while set
   startedBy?: string // the session whose agent started it through start_session
   configDir?: string // the configuration folder picked for its agent when it was created
+  pullRequests?: string[] // the pull requests it opened, oldest first, by their github.com URL
 }
 
 export interface SessionsFile {
@@ -566,6 +571,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isTime(item.archivedAt) ? { archivedAt: item.archivedAt } : {}),
       ...(isString(item.startedBy) ? { startedBy: item.startedBy } : {}),
       ...(isString(item.configDir) && item.configDir !== '' ? { configDir: item.configDir } : {}),
+      ...pullRequestsOf(item.pullRequests),
     })
   }
   return {
@@ -744,6 +750,17 @@ export function projectsFile(userDataPath: string, log: LogFn): JsonFile<Project
     empty: () => ({ version: 1, projects: [] }),
     log,
   })
+}
+
+/** A session's opened pull requests; an address that is not one is dropped, as are repeats. */
+function pullRequestsOf(value: unknown): { pullRequests?: string[] } {
+  if (!Array.isArray(value)) return {}
+  const urls = [
+    ...new Set(
+      value.filter((url): url is string => isString(url) && GITHUB_PULL_REQUEST_URL.test(url)),
+    ),
+  ].slice(-MAX_SESSION_PULL_REQUESTS)
+  return urls.length > 0 ? { pullRequests: urls } : {}
 }
 
 export function sessionsFile(userDataPath: string, log: LogFn): JsonFile<SessionsFile> {

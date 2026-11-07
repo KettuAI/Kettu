@@ -66,6 +66,23 @@
     "failed": "无法加载这个 Pull Request。",
     "retry": "重试"
   },
+  "ref": {
+    "issue": "Issue",
+    "issueIcon": "Issue {{state}}",
+    "issueState": {
+      "open": "打开",
+      "completed": "已完成",
+      "notPlanned": "不计划"
+    },
+    "closedBy": "关闭它的是",
+    "files_one": "{{count}} 个文件",
+    "files_other": "{{count}} 个文件",
+    "comments_one": "{{count}} 条评论",
+    "comments_other": "{{count}} 条评论",
+    "installGh": "安装 <cli>GitHub CLI</cli> 后即可查看它的状态和作者。",
+    "signInGh": "登录 GitHub CLI 后即可查看它的状态和作者：",
+    "unreadable": "Kettu 读不到它。它可能是 GitHub CLI 没登录的账号下的私有内容，或者已被删除。"
+  },
   "popover": {
     "notPublished": "未发布",
     "detached": "HEAD 已分离",

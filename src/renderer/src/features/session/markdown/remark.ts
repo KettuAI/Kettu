@@ -1,6 +1,7 @@
 import remarkBreaks from 'remark-breaks'
 import remarkMath from 'remark-math'
 import { defaultRemarkPlugins, type StreamdownProps } from 'streamdown'
+import { githubRefs } from './github-refs'
 import { localImages } from './local-images'
 import { localLinks } from './local-links'
 
@@ -14,4 +15,5 @@ export const remarkPlugins: NonNullable<StreamdownProps['remarkPlugins']> = [
   remarkBreaks,
   localLinks,
   localImages,
+  githubRefs,
 ]

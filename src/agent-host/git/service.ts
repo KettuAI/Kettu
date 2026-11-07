@@ -3,13 +3,16 @@
 import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import {
+  GITHUB_ISSUE_URL,
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
   type ChangedFile,
   type GitOperation,
   type GitStatus,
   type GitTools,
+  type IssueLookup,
   type PullRequest,
+  type PullRequestState,
   type PushTarget,
 } from '@shared/git'
 import type { ToolKind } from '@shared/thread'
@@ -26,6 +29,7 @@ import {
   probeTools,
   viewAvatarUrl,
   viewCurrentPullRequest,
+  viewIssueByUrl,
   viewPullRequestByUrl,
 } from './gh'
 import { nextPollDelayMs } from './github'
@@ -55,6 +59,7 @@ const PULL_REQUEST_MIN_INTERVAL_MS = 60_000
 const PULL_REQUEST_CACHE_MS = 60_000
 const PULL_REQUEST_CACHE_SIZE = 200
 const AVATAR_URL_CACHE_SIZE = 200
+const UNREADABLE_RETRY_MS = 10 * 60_000
 const BACKGROUND_FETCH_INTERVAL_MS = 5 * 60_000
 // A tool call that never ended, such as one of a crashed agent, stops blocking attribution.
 const STALE_CALL_MS = 30 * 60_000
@@ -162,6 +167,10 @@ export function createGitService(
   const pending = new Set<Promise<unknown>>()
   const pullRequestCache = new Map<string, { at: number; value: PullRequest }>()
   const pullRequestLoads = new Map<string, Promise<PullRequest>>()
+  const issueCache = new Map<string, { at: number; value: IssueLookup }>()
+  const issueLoads = new Map<string, Promise<IssueLookup>>()
+  // Session rows' pull requests gh could not read, so a row does not ask again on every render.
+  const unreadablePullRequests = new Map<string, number>()
   // Kept for the run: an avatar URL changes only when its user uploads a new picture.
   const avatarUrls = new Map<string, string | null>()
   const avatarUrlLoads = new Map<string, Promise<string | null>>()
@@ -174,6 +183,7 @@ export function createGitService(
   const changed = createEmitter<[GitStatus]>(reportListenerError)
   const pullRequestChanged = createEmitter<[string, PullRequest | null]>(reportListenerError)
   const branchPullRequestsChanged = createEmitter<[string]>(reportListenerError)
+  const pullRequestLoaded = createEmitter<[string]>(reportListenerError)
   const sessionEvents = createEmitter<[string, GitEventDraft[]]>(reportListenerError)
   const toolsChanged = createEmitter<[GitTools]>(reportListenerError)
 
@@ -511,6 +521,59 @@ export function createGitService(
       pullRequestCache.delete(oldest)
     }
     return outcome.value
+  }
+
+  async function loadIssue(url: string): Promise<IssueLookup> {
+    const tools = await getTools()
+    if (tools.gh.state === 'not-installed') throw new Error(t('git.ghMissing'))
+    if (tools.gh.state === 'signed-out') throw new Error(t('git.ghSignedOut'))
+    const outcome = await viewIssueByUrl(exec, url, homedir())
+    if (!outcome.ok) throw new Error(outcome.message)
+    const value: IssueLookup =
+      'pullRequestUrl' in outcome.value
+        ? { kind: 'pull', pullRequest: await api.pullRequest(outcome.value.pullRequestUrl) }
+        : { kind: 'issue', issue: outcome.value }
+    issueCache.set(url, { at: now(), value })
+    while (issueCache.size > PULL_REQUEST_CACHE_SIZE) {
+      const oldest = issueCache.keys().next().value
+      if (oldest === undefined) break
+      issueCache.delete(oldest)
+    }
+    return value
+  }
+
+  function knownPullRequest(url: string): { state: PullRequestState; failing: boolean } | null {
+    const of = (pr: PullRequest): { state: PullRequestState; failing: boolean } => ({
+      state: pr.state,
+      failing: (pr.state === 'open' || pr.state === 'draft') && pr.checks.state === 'failing',
+    })
+    for (const state of projects.values()) {
+      const current = state.pullRequest?.value
+      if (current?.url === url) return of(current)
+    }
+    const cached = pullRequestCache.get(url)
+    if (cached) return of(cached.value)
+    for (const state of projects.values()) {
+      for (const pr of state.branchPullRequests.values()) {
+        if (pr.url === url) return { state: pr.state, failing: pr.failing }
+      }
+    }
+    const missed = unreadablePullRequests.get(url)
+    if (
+      disposed ||
+      pullRequestLoads.has(url) ||
+      (missed !== undefined && now() - missed < UNREADABLE_RETRY_MS)
+    ) {
+      return null
+    }
+    api.pullRequest(url).then(
+      () => {
+        unreadablePullRequests.delete(url)
+        pullRequestLoaded.emit(url)
+      },
+      () => unreadablePullRequests.set(url, now()),
+    )
+    return null
   }
 
   async function loadAvatarUrl(login: string): Promise<string | null> {
@@ -958,6 +1021,21 @@ export function createGitService(
       return load
     },
 
+    async issue(url) {
+      if (disposed) throw new Error('The git service is disposed')
+      if (!GITHUB_ISSUE_URL.test(url)) throw new Error('Not a GitHub issue URL')
+      const cached = issueCache.get(url)
+      if (cached && now() - cached.at < PULL_REQUEST_CACHE_MS) return cached.value
+      let load = issueLoads.get(url)
+      if (!load) {
+        load = track(loadIssue(url)).finally(() => issueLoads.delete(url))
+        issueLoads.set(url, load)
+      }
+      return load
+    },
+
+    knownPullRequest,
+
     async avatarUrl(login) {
       if (disposed) throw new Error('The git service is disposed')
       if (!GITHUB_LOGIN.test(login)) throw new Error('Not a GitHub login')
@@ -1081,6 +1159,7 @@ export function createGitService(
     onChanged: changed.on,
     onPullRequest: pullRequestChanged.on,
     onBranchPullRequests: branchPullRequestsChanged.on,
+    onPullRequestLoaded: pullRequestLoaded.on,
     onSessionEvents: sessionEvents.on,
     onTools: toolsChanged.on,
 

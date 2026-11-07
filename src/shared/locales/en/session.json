@@ -552,6 +552,7 @@
     "userinfo": "The text before “@” in this link is not where it goes.",
     "copy": "Copy link",
     "copyMarkdown": "Copy as Markdown",
+    "copyReference": "Copy reference",
     "firstVisit": "First visit",
     "firstVisitNote": "You haven’t opened this site from Kettu before. Its icon shows once the session browser opens it.",
     "defaultBrowser": "Default browser",

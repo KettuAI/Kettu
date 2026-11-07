@@ -1,8 +1,13 @@
 // What the GitHub CLI is asked for, and how its JSON maps to Kettu's pull request model.
 
 import {
+  GITHUB_ISSUE_URL,
+  GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
+  isRepositoryName,
   type CheckRun,
+  type Issue,
+  type IssueLabel,
   type PullRequest,
   type PullRequestAuthor,
   type PullRequestState,
@@ -10,7 +15,7 @@ import {
 import type { BranchPullRequest } from './api'
 
 const PULL_REQUEST_FIELDS =
-  'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt,author,createdAt,mergedAt,closedAt'
+  'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeStateStatus,statusCheckRollup,updatedAt,author,createdAt,mergedAt,closedAt,additions,deletions,changedFiles'
 
 /** Arguments of `gh pr view` for the current branch, or for one pull request URL. */
 export function viewArgs(url?: string): string[] {
@@ -25,7 +30,7 @@ export const LIST_ARGS = [
   '--limit',
   '50',
   '--json',
-  'number,title,state,isDraft,url,headRefName',
+  'number,title,state,isDraft,url,headRefName,statusCheckRollup',
 ]
 
 export const AUTH_STATUS_ARGS = ['auth', 'status', '--hostname', 'github.com']
@@ -206,6 +211,118 @@ export function mapPullRequest(raw: unknown): PullRequest {
     createdAt: timeOf(raw.createdAt) ?? 0,
     mergedAt: timeOf(raw.mergedAt),
     closedAt: timeOf(raw.closedAt),
+    additions: count(raw.additions),
+    deletions: count(raw.deletions),
+    changedFiles: count(raw.changedFiles),
+  }
+}
+
+function count(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0
+}
+
+const ISSUE_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    issueOrPullRequest(number: $number) {
+      __typename
+      ... on Issue {
+        url number title state stateReason createdAt closedAt
+        author { __typename login ... on User { name } }
+        labels(first: 3) { totalCount nodes { name color } }
+        comments { totalCount }
+        closedByPullRequestsReferences(first: 1, includeClosedPrs: true) {
+          nodes { url number state isDraft }
+        }
+      }
+      ... on PullRequest { url }
+    }
+  }
+}`
+
+/** Arguments of `gh api graphql` for the issue at `url`, which matches GITHUB_ISSUE_URL. */
+export function issueArgs(url: string): string[] {
+  const parts = GITHUB_ISSUE_URL.exec(url)
+  if (!parts) throw new Error('Not a GitHub issue URL')
+  // -f keeps owner and repo strings even when they look like numbers; -F makes the number an Int.
+  return [
+    'api',
+    'graphql',
+    '--hostname',
+    'github.com',
+    '-f',
+    `query=${ISSUE_QUERY}`,
+    '-f',
+    `owner=${parts[1]}`,
+    '-f',
+    `repo=${parts[2]}`,
+    '-F',
+    `number=${parts[3]}`,
+  ]
+}
+
+function graphAuthor(value: unknown): PullRequestAuthor | null {
+  if (!isObject(value)) return null
+  const bot = value.__typename === 'Bot'
+  const login = bot ? `${text(value.login)}[bot]` : text(value.login)
+  if (!text(value.login) || !GITHUB_LOGIN.test(login)) return null
+  return { login, name: text(value.name) || null, bot }
+}
+
+function labelsOf(value: unknown): { labels: IssueLabel[]; labelCount: number } {
+  if (!isObject(value)) return { labels: [], labelCount: 0 }
+  const labels: IssueLabel[] = []
+  for (const node of Array.isArray(value.nodes) ? value.nodes : []) {
+    if (!isObject(node) || !text(node.name)) continue
+    const color = text(node.color)
+    labels.push({ name: text(node.name), color: /^[0-9a-f]{6}$/i.test(color) ? color : '' })
+  }
+  return { labels, labelCount: Math.max(count(value.totalCount), labels.length) }
+}
+
+function closedByOf(value: unknown): Issue['closedBy'] {
+  const nodes = isObject(value) && Array.isArray(value.nodes) ? value.nodes : []
+  const node: unknown = nodes[0]
+  if (!isObject(node) || !GITHUB_PULL_REQUEST_URL.test(text(node.url))) return null
+  if (typeof node.number !== 'number') return null
+  return { url: text(node.url), number: node.number, state: pullRequestState(node) }
+}
+
+/**
+ * Maps the answer to ISSUE_QUERY for `url`. A pull request under `/issues/` comes back as its
+ * `/pull/` URL, which the caller reads as a pull request; anything else throws.
+ */
+export function mapIssue(raw: unknown, url: string): Issue | { pullRequestUrl: string } {
+  const parts = GITHUB_ISSUE_URL.exec(url)
+  if (!parts || !isRepositoryName(parts[2]!)) throw new Error('Not a GitHub issue URL')
+  const data = isObject(raw) && isObject(raw.data) ? raw.data : null
+  const repository = data && isObject(data.repository) ? data.repository : null
+  const item =
+    repository && isObject(repository.issueOrPullRequest) ? repository.issueOrPullRequest : null
+  if (!item) throw new Error('GitHub has no issue at this address, or it cannot be read')
+  if (item.__typename === 'PullRequest') {
+    const pull = `https://github.com/${parts[1]}/${parts[2]}/pull/${parts[3]}`
+    return { pullRequestUrl: pull }
+  }
+  if (item.__typename !== 'Issue') throw new Error('Unexpected gh output: not an issue')
+  const closed = text(item.state).toUpperCase() === 'CLOSED'
+  const reason = text(item.stateReason).toUpperCase()
+  return {
+    url,
+    owner: parts[1]!,
+    repo: parts[2]!,
+    number: Number(parts[3]),
+    title: text(item.title),
+    state: !closed
+      ? 'open'
+      : reason === 'NOT_PLANNED' || reason === 'DUPLICATE'
+        ? 'not_planned'
+        : 'completed',
+    author: graphAuthor(item.author),
+    ...labelsOf(item.labels),
+    comments: isObject(item.comments) ? count(item.comments.totalCount) : 0,
+    createdAt: timeOf(item.createdAt) ?? 0,
+    closedAt: closed ? timeOf(item.closedAt) : null,
+    closedBy: closed ? closedByOf(item.closedByPullRequestsReferences) : null,
   }
 }
 
@@ -228,7 +345,11 @@ export function mapBranchPullRequests(raw: unknown): Map<string, BranchPullReque
     const url = text(item.url)
     const number = typeof item.number === 'number' ? item.number : NaN
     if (!branch || !url || Number.isNaN(number)) continue
-    const entry = { number, state: pullRequestState(item), url }
+    const state = pullRequestState(item)
+    const failing =
+      (state === 'open' || state === 'draft') &&
+      summarizeChecks(item.statusCheckRollup).state === 'failing'
+    const entry = { number, state, url, failing }
     const existing = byBranch.get(branch)
     const live = (state: PullRequestState): boolean => state === 'open' || state === 'draft'
     if (!existing || (!live(existing.state) && live(entry.state))) byBranch.set(branch, entry)

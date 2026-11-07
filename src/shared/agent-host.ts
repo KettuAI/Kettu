@@ -25,6 +25,7 @@ import type {
   GitOperation,
   GitStatus,
   GitTools,
+  IssueLookup,
   LogCommit,
   PullRequest,
   PullRequestState,
@@ -370,6 +371,16 @@ export interface ReturnedMessage {
   content: UserContent[]
 }
 
+/** One of a session's pull requests for its sidebar row; `state` null until gh has answered. */
+export interface SessionPullRequest {
+  url: string
+  owner: string
+  repo: string
+  number: number
+  state: PullRequestState | null
+  failing: boolean // an open one has a failing check
+}
+
 export interface SessionSummary {
   id: string
   agentId: AgentId
@@ -388,6 +399,7 @@ export interface SessionSummary {
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
   pr: { number: number; state: PullRequestState; url: string } | null
+  prs?: SessionPullRequest[] // opened in it, then its branch's; absent from older hosts
   cache: PromptCache | null // the main thread's prompt cache as its last turn or request left it
   model: string | null // the model option then, for an estimate of the cache's lifetime
   pinnedAt: number | null // when the user pinned it; a top-level session only
@@ -681,6 +693,8 @@ export interface HostContract {
   // Puts the files back as HEAD has them; an untracked or added file is removed.
   'git.discardChanges': { params: { projectPath: string; paths: string[] }; result: GitOperation }
   'git.pullRequest': { params: { url: string }; result: PullRequest }
+  // A github.com issue URL, which may turn out to be a pull request.
+  'git.issue': { params: { url: string }; result: IssueLookup }
   // A chip's author; null when GitHub's avatar host has no picture for the login.
   'git.avatarUrl': { params: { login: string }; result: string | null }
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
@@ -993,6 +1007,7 @@ export const HOST_METHODS = [
   'git.commitChanges',
   'git.discardChanges',
   'git.pullRequest',
+  'git.issue',
   'git.avatarUrl',
   'git.currentPullRequest',
   'git.tools',

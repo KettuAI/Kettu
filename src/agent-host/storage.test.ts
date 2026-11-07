@@ -254,6 +254,37 @@ describe('the host files', () => {
     expect(parseSessionsFile({ sessions: {} })).toBe('sessions is not a list')
   })
 
+  it("keeps a session's opened pull requests and drops addresses that are not one", () => {
+    const pullRequests = [
+      'https://github.com/KettuAI/Kettu/pull/1',
+      'https://github.com/KettuAI/website/pull/54',
+    ]
+    expect(parseSessionsFile({ sessions: [{ ...session, pullRequests }] })).toEqual({
+      version: 1,
+      sessions: [{ ...session, pullRequests }],
+    })
+    expect(
+      parseSessionsFile({
+        sessions: [
+          {
+            ...session,
+            pullRequests: [
+              pullRequests[0],
+              'https://github.com/KettuAI/Kettu/issues/2',
+              'file:///etc/passwd',
+              7,
+              pullRequests[0],
+            ],
+          },
+        ],
+      }),
+    ).toEqual({ version: 1, sessions: [{ ...session, pullRequests: [pullRequests[0]] }] })
+    expect(parseSessionsFile({ sessions: [{ ...session, pullRequests: 'x' }] })).toEqual({
+      version: 1,
+      sessions: [session],
+    })
+  })
+
   it('round-trips the routines file', async () => {
     const routine = {
       id: 'r-0123456789ab',

@@ -66,6 +66,23 @@
     "failed": "Couldn't load the pull request.",
     "retry": "Retry"
   },
+  "ref": {
+    "issue": "Issue",
+    "issueIcon": "Issue {{state}}",
+    "issueState": {
+      "open": "Open",
+      "completed": "Completed",
+      "notPlanned": "Not planned"
+    },
+    "closedBy": "Closed by",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "comments_one": "{{count}} comment",
+    "comments_other": "{{count}} comments",
+    "installGh": "Install the <cli>GitHub CLI</cli> to see its state and author.",
+    "signInGh": "Sign in to the GitHub CLI to see its state and author:",
+    "unreadable": "Kettu can't read this one. It may be private to an account the GitHub CLI isn't signed in to, or deleted."
+  },
   "popover": {
     "notPublished": "not published",
     "detached": "Detached HEAD",
