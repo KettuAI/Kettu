@@ -12,7 +12,7 @@ import { LaunchCover } from '@renderer/features/shell/launch-cover'
 import { SplitDragProvider } from '@renderer/features/split/session-drag'
 import { MainArea } from '@renderer/features/shell/main-area'
 import { ShortcutsDialog } from '@renderer/features/shell/shortcuts-dialog'
-import { CornerControls, TitleBand } from '@renderer/features/shell/top-bar'
+import { CornerControls, CornerDragHole, TitleBand } from '@renderer/features/shell/top-bar'
 import { QuitConfirm } from '@renderer/features/updates/quit-confirm'
 import { UpdateDialog } from '@renderer/features/updates/update-dialog'
 import { useAccountShell } from '@renderer/features/account/account-row'
@@ -149,6 +149,7 @@ function Workbench() {
       >
         <MainFrame />
       </AppShell>
+      <CornerDragHole />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { SidebarLeftIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -61,6 +61,36 @@ export function CornerControls() {
       <BackForward />
       <HistoryDialog />
     </>
+  )
+}
+
+/**
+ * Keeps the corner controls clickable over a page head's drag region. Electron applies drag and
+ * no-drag regions in document order, so a head that reaches the corner later in the document
+ * would swallow clicks on the controls; this no-drag box comes after the whole frame.
+ */
+export function CornerDragHole() {
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  useLayoutEffect(() => {
+    const tools = document.querySelector('.ui-as-corner__tools')
+    if (!tools) return
+    const update = (): void => setRect(tools.getBoundingClientRect())
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(tools)
+    window.addEventListener('resize', update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+  if (!rect || rect.width === 0) return null
+  return (
+    <div
+      aria-hidden
+      className="app-region-no-drag pointer-events-none fixed"
+      style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+    />
   )
 }
 
