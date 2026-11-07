@@ -164,8 +164,18 @@ export type ArtifactExportResult =
   | { kind: 'not_found' }
   | { kind: 'failed'; message: string }
 
+/** What main needs to know of an artifact to publish it: its latest version and when it was made. */
+export interface ArtifactBrief {
+  id: string
+  version: number
+  createdAt: number
+  updatedAt: number
+  /** In Recently deleted. */
+  deleted: boolean
+}
+
 /** The host's answer to `host:artifact-list-request`. */
-export type ArtifactListResult = { kind: 'listed'; ids: string[] } | { kind: 'failed' }
+export type ArtifactListResult = { kind: 'listed'; artifacts: ArtifactBrief[] } | { kind: 'failed' }
 
 /** An agent process the host runs; its start time tells it apart from a later one with its pid. */
 export interface AgentProcess {
@@ -178,6 +188,8 @@ export type HostToMain =
   | { type: 'host:ready' }
   | { type: 'host:agent-processes'; processes: AgentProcess[] }
   | { type: 'host:projects'; paths: string[] }
+  /** An artifact was made, changed, deleted or restored. */
+  | { type: 'host:artifacts-changed' }
   /** Sessions archived or deleted, whose terminals end. */
   | { type: 'host:sessions-ended'; sessionIds: string[] }
   | { type: 'host:auth-commands'; commands: string[] } // terminal sign-in commands it built

@@ -34,6 +34,7 @@ export interface Sharing {
   newCode(id: string): Promise<SharingResult>
   openLink(id: string): Promise<SharingOpenResult>
   unpublish(id: string): Promise<SharingResult>
+  setAuto(enabled: boolean): Promise<SharingResult>
 }
 
 function failure(error: unknown): SharingResult {
@@ -81,6 +82,7 @@ export function createSharing(api: () => KettuApi['sharing']): Sharing {
       }
     },
     unpublish: (id) => call(() => api().unpublish(id)),
+    setAuto: (enabled) => call(() => api().setAuto(enabled)),
   }
 }
 
@@ -108,6 +110,7 @@ export const setSharedAccess = localSharing.setAccess
 export const newSharedCode = localSharing.newCode
 export const sharedPageLink = localSharing.openLink
 export const unpublishArtifact = localSharing.unpublish
+export const setAutoPublish = localSharing.setAuto
 
 /** The page an artifact is published at, from any component that may change. */
 export function publishedPage(id: string): PublishedArtifact | null {

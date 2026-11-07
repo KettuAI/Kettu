@@ -216,6 +216,7 @@ export interface HostAdminContract {
   'sharing.newCode': { params: { id: string }; result: SharingResult }
   'sharing.openLink': { params: { id: string }; result: SharingOpenResult }
   'sharing.unpublish': { params: { id: string }; result: SharingResult }
+  'sharing.setAuto': { params: { enabled: boolean }; result: SharingResult }
   'updates.status': { params: undefined; result: UpdateStatus }
   'updates.check': { params: undefined; result: UpdateStatus }
   'updates.download': { params: undefined; result: null }
@@ -292,6 +293,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'sharing.publish': true,
   'sharing.update': true,
   'sharing.unpublish': true,
+  'sharing.setAuto': true,
   'sharing.setAccess': true,
   'sharing.newCode': true,
   'sharing.openLink': true,

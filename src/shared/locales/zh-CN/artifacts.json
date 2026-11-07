@@ -282,7 +282,15 @@
       "failed": "出了点问题，请重试。"
     },
     "button": "分享",
-    "buttonShared": "已分享"
+    "buttonShared": "已分享",
+    "autoFollows": "自动跟着最新版本更新。",
+    "autoSkipped": "没有自动发布。",
+    "autoNotice": {
+      "title": "把新建的 artifact 发布到你的 Kettu 账号？",
+      "body": "Kettu 会把每个新建的 artifact 以私有方式发布到你的 Kettu 账号，只有你登录后能打开，并占用云端存储。发布到 Kettu 的页面会跟着 artifact 的最新版本更新，包括你改成访问码或公开的页面。你可以随时在设置 › 分享里改。",
+      "continue": "继续",
+      "turnOff": "关闭"
+    }
   },
   "tools": {
     "label": "工具",

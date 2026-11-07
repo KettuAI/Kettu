@@ -1,7 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ArtifactBrief } from '@shared/host-control'
 import type { SharingOpenResult, SharingResult } from '@shared/sharing'
 import { Sharing } from './index'
 
@@ -34,7 +35,12 @@ const listing = (pages: unknown[]) => ({ body: { pages, usage: { bytes: 1, limit
 
 let dir: string
 
-async function sharingWith(answers: Answer[]) {
+const OLD: ArtifactBrief = { id: ARTIFACT, version: 1, createdAt: 0, updatedAt: 0, deleted: false }
+
+async function sharingWith(
+  answers: Answer[],
+  options: { artifacts?: ArtifactBrief[]; now?: () => number } = {},
+) {
   const content = join(dir, 'content')
   await mkdir(content, { recursive: true })
   const file = join(content, 'index.html')
@@ -44,15 +50,15 @@ async function sharingWith(answers: Answer[]) {
     userDataPath: dir,
     contentDir: content,
     host: {
-      content: async () => ({
+      content: async (_id, version) => ({
         kind: 'found',
-        version: 1,
+        version: version ?? 1,
         title: 'Hi',
         key: 'k',
         strict: false,
         files: [{ path: 'index.html', file, size: 11 }],
       }),
-      ids: async () => new Set([ARTIFACT]),
+      artifacts: async () => options.artifacts ?? [OLD],
     },
     kettu: {
       base: 'https://account.example',
@@ -63,6 +69,7 @@ async function sharingWith(answers: Answer[]) {
     encryptionAvailable: async () => true,
     plainText: () => false,
     fetch: net.fetch,
+    ...(options.now ? { now: options.now } : {}),
   })
   return { sharing, calls: net.calls }
 }
@@ -186,5 +193,122 @@ describe('Sharing levels', () => {
     await sharing.publish(ARTIFACT, 1, 'kettu', 'public')
     expect(await sharing.openLink(ARTIFACT)).toEqual({ url: PAGE_URL })
     expect(calls).toHaveLength(2)
+  })
+})
+
+describe('Publishing on its own', () => {
+  const START = 1_000_000
+  let clock = START
+  const now = (): number => clock
+  const later = (): void => {
+    clock = START + 20_000
+  }
+  const created = (overrides: Partial<ArtifactBrief> = {}): ArtifactBrief => ({
+    id: ARTIFACT,
+    version: 1,
+    createdAt: START + 1_000,
+    updatedAt: START + 1_000,
+    deleted: false,
+    ...overrides,
+  })
+  const made = [
+    { status: 201, body: { id: PAGE, url: PAGE_URL, access: 'private', code: null } },
+    listing([{ id: PAGE, url: PAGE_URL, bytes: 1, access: 'private', code: null }]),
+  ]
+
+  beforeEach(() => {
+    clock = START
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** Lets the timer fire and the work it starts, which reads real files, finish. */
+  async function lookAgain(sharing: Sharing, ticks = 50): Promise<void> {
+    sharing.artifactsChanged()
+    vi.advanceTimersByTime(60_000)
+    for (let i = 0; i < ticks; i++) await new Promise((resolve) => setImmediate(resolve))
+  }
+
+  it('holds a new artifact for the one-time notice, then publishes it as private', async () => {
+    const artifacts = [created()]
+    const { sharing, calls } = await sharingWith([...made], {
+      artifacts,
+      now,
+    })
+    later()
+    await lookAgain(sharing)
+    expect(calls).toEqual([])
+    expect(sharing.status().auto).toMatchObject({ enabled: true, notice: true })
+
+    sharing.setAuto(true)
+    vi.advanceTimersByTime(1)
+    for (let i = 0; i < 50; i++) await new Promise((resolve) => setImmediate(resolve))
+    expect(calls[0]).toMatchObject({
+      method: 'POST',
+      url: 'https://account.example/api/v1/shares?access=private',
+    })
+    expect(sharing.status().published[0]).toMatchObject({ id: ARTIFACT, access: 'private' })
+    expect(sharing.status().auto.notice).toBe(false)
+  })
+
+  it('publishes nothing with the switch off, and an artifact from before it was on', async () => {
+    const off = await sharingWith([...made], {
+      artifacts: [created()],
+      now,
+    })
+    later()
+    off.sharing.setAuto(false)
+    await lookAgain(off.sharing)
+    expect(off.calls).toEqual([])
+    expect(off.sharing.status().auto).toMatchObject({ enabled: false, notice: false })
+
+    const before = await sharingWith([...made], {
+      artifacts: [created({ createdAt: START - 1_000, updatedAt: START - 1_000 })],
+      now,
+    })
+    later()
+    before.sharing.setAuto(true)
+    await lookAgain(before.sharing)
+    expect(before.calls).toEqual([])
+  })
+
+  it('does not publish an artifact again once the user took its page down', async () => {
+    const { sharing, calls } = await sharingWith([...made, { status: 204 }, listing([])], {
+      artifacts: [created()],
+      now,
+    })
+    sharing.setAuto(true)
+    await sharing.publish(ARTIFACT, 1, 'kettu', 'private')
+    await sharing.unpublish(ARTIFACT)
+    const seen = calls.length
+    later()
+    await lookAgain(sharing)
+    expect(calls).toHaveLength(seen)
+    expect(sharing.status().published).toEqual([])
+  })
+
+  it('brings a page on Kettu to the latest version whatever its level', async () => {
+    const artifacts = [created({ createdAt: 0, updatedAt: 0 })]
+    const { sharing, calls } = await sharingWith(
+      [
+        { status: 201, body: { id: PAGE, url: PAGE_URL, access: 'public', code: null } },
+        listing([{ id: PAGE, url: PAGE_URL, bytes: 1, access: 'public', code: null }]),
+        { status: 200 },
+        listing([{ id: PAGE, url: PAGE_URL, bytes: 2, access: 'public', code: null }]),
+      ],
+      { artifacts, now },
+    )
+    sharing.setAuto(true)
+    await sharing.publish(ARTIFACT, 1, 'kettu', 'public')
+    artifacts[0] = created({ version: 2, createdAt: 0, updatedAt: 0 })
+    await lookAgain(sharing)
+    expect(calls[2]).toMatchObject({
+      method: 'PUT',
+      url: `https://account.example/api/v1/shares/${PAGE}`,
+    })
+    expect(sharing.status().published[0]).toMatchObject({ version: 2, access: 'public' })
   })
 })

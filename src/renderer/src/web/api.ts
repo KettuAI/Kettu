@@ -314,6 +314,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       newCode: (id) => admin('sharing.newCode', { id }),
       openLink: (id) => admin('sharing.openLink', { id }),
       unpublish: (id) => admin('sharing.unpublish', { id }),
+      setAuto: (enabled) => admin('sharing.setAuto', { enabled }),
       onChanged: (listener) => adminEvent('sharing.changed', (event) => listener(event.status)),
     },
     remote: {

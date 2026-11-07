@@ -28,6 +28,7 @@ import {
   isArtifactTypeName,
 } from '@shared/artifact-types'
 import type {
+  ArtifactBrief,
   ArtifactContentResult,
   ArtifactExportResult,
   BusyCounts,
@@ -60,6 +61,8 @@ export interface AgentHostDeps {
   onBadge(count: number): void
   onBusy(counts: BusyCounts): void
   onProjects(paths: string[]): void
+  /** An artifact was made, changed, deleted or restored. */
+  onArtifactsChanged?(): void
   onSessionsEnded(sessionIds: string[]): void
   onAuthCommands(commands: string[]): void
   /** A file the host granted, for the media scheme to serve. */
@@ -205,13 +208,28 @@ function isExportResult(value: unknown): value is ArtifactExportResult {
 
 const FAILED_EXPORT: ArtifactExportResult = { kind: 'failed', message: 'The agent host is down' }
 
-/** The listed ids, or null for a failed or malformed answer. */
-function listedIds(value: unknown): Set<string> | null {
+function isBrief(value: unknown): value is ArtifactBrief {
+  if (typeof value !== 'object' || value === null) return false
+  const { id, version, createdAt, updatedAt, deleted } = value as Record<string, unknown>
+  return (
+    typeof id === 'string' &&
+    ARTIFACT_ID.test(id) &&
+    Number.isSafeInteger(version) &&
+    (version as number) >= 1 &&
+    Number.isFinite(createdAt) &&
+    Number.isFinite(updatedAt) &&
+    typeof deleted === 'boolean'
+  )
+}
+
+/** The listed artifacts, or null for a failed or malformed answer. */
+function listedArtifacts(value: unknown): ArtifactBrief[] | null {
   if (typeof value !== 'object' || value === null) return null
-  const { kind, ids } = value as Record<string, unknown>
-  if (kind !== 'listed' || !Array.isArray(ids) || ids.length > MAX_ARTIFACTS) return null
-  if (!ids.every((id) => typeof id === 'string' && ARTIFACT_ID.test(id))) return null
-  return new Set(ids as string[])
+  const { kind, artifacts } = value as Record<string, unknown>
+  if (kind !== 'listed' || !Array.isArray(artifacts) || artifacts.length > MAX_ARTIFACTS) {
+    return null
+  }
+  return artifacts.every(isBrief) ? (artifacts as ArtifactBrief[]) : null
 }
 
 function isImportAnswer(value: unknown): value is ImportAnswer {
@@ -264,7 +282,7 @@ export class AgentHost {
   private nextImportId = 1
   private readonly exportRequests = new Map<number, (result: ArtifactExportResult) => void>()
   private nextExportId = 1
-  private readonly listRequests = new Map<number, (ids: Set<string> | null) => void>()
+  private readonly listRequests = new Map<number, (list: ArtifactBrief[] | null) => void>()
   private nextListId = 1
   private readonly runtimeRequests = new Map<number, (answer: RuntimeAnswer) => void>()
   private nextRuntimeId = 1
@@ -441,7 +459,7 @@ export class AgentHost {
   }
 
   /** Every artifact the host has, Recently deleted included; null when it cannot say. */
-  artifactIds(): Promise<Set<string> | null> {
+  artifacts(): Promise<ArtifactBrief[] | null> {
     if (this.host.state !== 'ready') return Promise.resolve(null)
     const requestId = this.nextListId++
     return new Promise((resolve) => {
@@ -604,6 +622,9 @@ export class AgentHost {
       case 'host:projects':
         if (isStringList(message.paths)) this.deps.onProjects(message.paths)
         break
+      case 'host:artifacts-changed':
+        this.deps.onArtifactsChanged?.()
+        break
       case 'host:sessions-ended':
         if (isStringList(message.sessionIds)) this.deps.onSessionsEnded(message.sessionIds)
         break
@@ -655,7 +676,7 @@ export class AgentHost {
         const resolve = this.listRequests.get(message.requestId)
         if (!resolve) break
         this.listRequests.delete(message.requestId)
-        resolve(listedIds(message.result))
+        resolve(listedArtifacts(message.result))
         break
       }
       case 'host:artifact-export': {

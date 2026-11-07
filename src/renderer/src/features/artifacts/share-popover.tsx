@@ -149,6 +149,8 @@ export function ShareButton({
   const kettu = status?.kettu.account ?? null
   const loaded = status !== null
   const published = status?.published.find((page) => page.id === id) ?? null
+  const autoOn = status?.auto.enabled === true
+  const skipped = status?.auto.blocked.find((entry) => entry.id === id)?.reason ?? null
   const now = useNow()
   const [open, setOpen] = useState(false)
   const [chosen, setChosen] = useState<SharingTarget>('kettu')
@@ -387,7 +389,10 @@ export function ShareButton({
         {published.target === 'cloudflare' && published.otherAccount && account && (
           <p className="k-share__meta">{t('share.otherAccount')}</p>
         )}
-        {canManage && head > published.version && (
+        {published.target === 'kettu' && canManage && autoOn && (
+          <p className="k-share__meta">{t('share.autoFollows')}</p>
+        )}
+        {canManage && head > published.version && !(autoOn && published.target === 'kettu') && (
           <Button
             variant="secondary"
             size="sm"
@@ -463,6 +468,11 @@ export function ShareButton({
           />
         )}
         {target === 'kettu' && signedIn && <StorageLine />}
+        {target === 'kettu' && signedIn && skipped && (
+          <p className="k-share__meta k-share__warn">
+            {`${t('share.autoSkipped')} ${t(`share.failures.${skipped}`)}`}
+          </p>
+        )}
         {target === 'kettu' && !signedIn && (
           <div className="k-share__note">
             <p>{t('share.needKettu', onHost)}</p>

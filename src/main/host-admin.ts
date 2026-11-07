@@ -137,6 +137,7 @@ export interface AdminSharing {
   newCode(id: unknown): Promise<SharingResult>
   openLink(id: unknown): Promise<SharingOpenResult>
   unpublish(id: unknown): Promise<SharingResult>
+  setAuto(enabled: unknown): SharingResult
 }
 
 /** The themes folder, as main's and the daemon's theme stores keep it. */
@@ -450,6 +451,8 @@ export class HostAdmin {
         return this.sharing().openLink(fields(params).id)
       case 'sharing.unpublish':
         return this.sharing().unpublish(fields(params).id)
+      case 'sharing.setAuto':
+        return this.sharing().setAuto(fields(params).enabled)
       case 'updates.status':
         return this.updates().getStatus()
       case 'updates.check':

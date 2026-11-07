@@ -947,6 +947,15 @@
       "published": "Published",
       "account": "Your own Cloudflare account"
     },
+    "auto": {
+      "name": "Publish privately by default",
+      "description": "New artifacts are published to Kettu as private, and every page on Kettu follows its artifact’s latest version. Only you can open a private page, signed in to your Kettu account.",
+      "keywords": "share publish automatic automatically private default sync latest version kettu",
+      "blockedFull_one": "{{count}} artifact was not published: your cloud storage is full.",
+      "blockedFull_other": "{{count}} artifacts were not published: your cloud storage is full.",
+      "blockedLarge_one": "{{count}} artifact was not published: it is too large.",
+      "blockedLarge_other": "{{count}} artifacts were not published: they are too large."
+    },
     "kettu": {
       "name": "Kettu account",
       "description": "Artifacts publish to Kettu with the Kettu account this computer is signed in to.",

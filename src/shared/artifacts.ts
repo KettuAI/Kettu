@@ -64,6 +64,7 @@ export interface ArtifactSummary {
   pages: number // two or more is a canvas
   files: number // of the latest version
   size: number // of the latest version, in bytes
+  createdAt: number // when the artifact was made
   updatedAt: number // when the latest version was made
   deletedAt: number | null
   editing: string[] // the sessions whose running turn changed it
