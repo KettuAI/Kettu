@@ -67,6 +67,9 @@
     "lock": "锁屏",
     "volumeDown": "音量减",
     "volumeUp": "音量加",
-    "rotate": "旋转"
+    "rotate": "旋转",
+    "side": "侧边按钮",
+    "action": "操作按钮",
+    "other": "硬件按钮"
   }
 }

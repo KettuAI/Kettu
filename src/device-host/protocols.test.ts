@@ -180,6 +180,13 @@ describe('serve-sim device chrome', () => {
     onTop,
     frame: { x: 4, y: 160, width: 16, height: 34 },
   })
+  const pressable = {
+    ...button('volume-up', false),
+    imageDown: 'Vol BTN Dn',
+    hover: { x: -0.3125, y: 0 },
+    usagePage: 12,
+    usage: 233,
+  }
   const chrome = {
     identifier: 'phone11',
     frame: { width: 454, height: 908 },
@@ -200,6 +207,44 @@ describe('serve-sim device chrome', () => {
       'crown BTN',
     ])
     expect(plan?.images[1]).toMatchObject({ x: 9, y: 0, width: 436, height: 908 })
+  })
+
+  it('makes buttons with a HID code pressable, sliding out as Xcode does', () => {
+    const plan = framePlan({ ...chrome, buttons: [pressable, button('crown', true)] })
+    expect(plan?.images[0]).toEqual({
+      x: 4,
+      y: 160,
+      width: 16,
+      height: 34,
+      image: 'volume-up BTN',
+      button: { name: 'volume-up', down: 'Vol BTN Dn', hover: { x: -0.3125, y: 0 } },
+    })
+    expect(plan?.images.at(-1)).not.toHaveProperty('button')
+    expect(plan?.hid.get('volume-up')).toEqual({ page: 12, usage: 233 })
+    expect(plan?.hid.has('crown')).toBe(false)
+  })
+
+  it('keeps a button static when its press data is unusable', () => {
+    const odd = [
+      { ...pressable, usage: 70_000 },
+      { ...pressable, usagePage: -1 },
+      { ...pressable, usage: 1.5 },
+      { ...pressable, name: '../x' },
+    ]
+    for (const entry of odd) {
+      const plan = framePlan({ ...chrome, buttons: [entry] })
+      expect(plan?.images[0], JSON.stringify(entry)).not.toHaveProperty('button')
+      expect(plan?.hid.size).toBe(0)
+    }
+    const plan = framePlan({
+      ...chrome,
+      buttons: [{ ...pressable, imageDown: '../../etc/passwd', hover: { x: Infinity, y: 9 } }],
+    })
+    expect(plan?.images[0]?.button).toEqual({
+      name: 'volume-up',
+      down: null,
+      hover: { x: 0, y: 0 },
+    })
   })
 
   it('lays out a nine-slice body around its corners', () => {

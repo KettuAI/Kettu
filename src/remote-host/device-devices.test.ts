@@ -41,10 +41,41 @@ describe('paired device routing to the device host', () => {
           height: 1,
           screen: { x: 0, y: 0, width: 1, height: 1 },
           radii: [0, 0, 0, 0],
-          images: [{ x: 0, y: 0, width: 1, height: 1, png: Uint8Array.of(1, 2, 3).buffer }],
+          images: [
+            { x: 0, y: 0, width: 1, height: 1, png: Uint8Array.of(1, 2, 3).buffer },
+            {
+              x: 0,
+              y: 0,
+              width: 1,
+              height: 1,
+              png: Uint8Array.of(1).buffer,
+              button: { name: 'power', down: Uint8Array.of(2).buffer, hover: { x: 0.3, y: 0 } },
+            },
+            {
+              x: 0,
+              y: 0,
+              width: 1,
+              height: 1,
+              png: Uint8Array.of(1).buffer,
+              button: { name: 'action', down: null, hover: { x: -0.3, y: 0 } },
+            },
+          ],
         },
       },
-    }) as { result: { frame: { images: Array<{ png: string; width: number }> } } }
+    }) as {
+      result: {
+        frame: {
+          images: Array<{ png: string; width: number; button?: { down: string | null } }>
+        }
+      }
+    }
     expect(framed.result.frame.images[0]).toMatchObject({ png: 'AQID', width: 1 })
+    expect(framed.result.frame.images[0]).not.toHaveProperty('button')
+    expect(framed.result.frame.images[1]?.button).toEqual({
+      name: 'power',
+      down: 'Ag==',
+      hover: { x: 0.3, y: 0 },
+    })
+    expect(framed.result.frame.images[2]?.button?.down).toBeNull()
   })
 })

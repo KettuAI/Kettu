@@ -54,10 +54,14 @@ export function forChannel(data: unknown): unknown {
     if (png !== null) return { ...message, result: { ...result, png } }
     const frame = result.frame as { images?: unknown } | null | undefined
     if (frame && Array.isArray(frame.images)) {
-      const images = frame.images.map((image: Record<string, unknown>) => ({
-        ...image,
-        png: base64(image.png) ?? '',
-      }))
+      const images = frame.images.map((image: Record<string, unknown>) => {
+        const button = image.button as Record<string, unknown> | null | undefined
+        return {
+          ...image,
+          png: base64(image.png) ?? '',
+          ...(button && { button: { ...button, down: base64(button.down) } }),
+        }
+      })
       return { ...message, result: { ...result, frame: { ...frame, images } } }
     }
   }

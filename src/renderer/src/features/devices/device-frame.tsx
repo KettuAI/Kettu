@@ -1,5 +1,18 @@
-import { useMemo, type ReactNode } from 'react'
-import type { DeviceFrame as Frame, DeviceOrientation } from '@shared/device-host'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent,
+  type ReactNode,
+} from 'react'
+import { useTranslation } from 'react-i18next'
+import type {
+  DeviceFrame as Frame,
+  DeviceFrameButton,
+  DeviceOrientation,
+} from '@shared/device-host'
 import { cn } from '@renderer/lib/utils'
 
 type Size = { width: number; height: number }
@@ -83,6 +96,7 @@ export function DeviceFrame({
   room,
   focused,
   glow = false,
+  onButton,
   className,
   children,
 }: {
@@ -94,6 +108,8 @@ export function DeviceFrame({
   focused: boolean
   /** An agent drives the device: the fox glows along the screen's edge. */
   glow?: boolean
+  /** A button on the frame went down or up. */
+  onButton?: (name: string, phase: 'down' | 'up') => void
   className?: string
   children: ReactNode
 }) {
@@ -104,7 +120,12 @@ export function DeviceFrame({
     : { width: layout.width, height: layout.height }
   const scale = Math.max(0, Math.min(room.width / shown.width, room.height / shown.height))
   const images = useMemo(
-    () => frame?.images.map((image) => ({ ...image, src: dataUrl(image.png) })) ?? [],
+    () =>
+      frame?.images.map((image) => ({
+        ...image,
+        src: dataUrl(image.png),
+        downSrc: image.button?.down ? dataUrl(image.button.down) : null,
+      })) ?? [],
     [frame],
   )
   const px = (value: number): number => value * scale
@@ -135,17 +156,28 @@ export function DeviceFrame({
             style={{ borderRadius: px(layout.body) }}
           />
         )}
-        {images.map((image, index) => (
-          <img
-            key={index}
-            alt=""
-            aria-hidden
-            draggable={false}
-            src={image.src}
-            className="pointer-events-none absolute select-none"
-            style={place(image)}
-          />
-        ))}
+        {images.map((image, index) =>
+          image.button && onButton ? (
+            <FrameButton
+              key={index}
+              button={image.button}
+              src={image.src}
+              downSrc={image.downSrc}
+              style={place(image)}
+              onButton={onButton}
+            />
+          ) : (
+            <img
+              key={index}
+              alt=""
+              aria-hidden
+              draggable={false}
+              src={image.src}
+              className="pointer-events-none absolute select-none"
+              style={place(image)}
+            />
+          ),
+        )}
         <div
           className={cn(
             'absolute overflow-hidden bg-(--pane-phone)',
@@ -160,6 +192,103 @@ export function DeviceFrame({
           {glow && <span aria-hidden className="kp-screen-glow" />}
         </div>
       </div>
+    </div>
+  )
+}
+
+function labelKey(name: string) {
+  switch (name) {
+    case 'volume-up':
+      return 'buttons.volumeUp'
+    case 'volume-down':
+      return 'buttons.volumeDown'
+    case 'power':
+    case 'side-button':
+      return 'buttons.side'
+    case 'action':
+      return 'buttons.action'
+    default:
+      return 'buttons.other'
+  }
+}
+
+/**
+ * A hardware button on the frame, as Xcode's Simulator has it: it slides out by its rollover
+ * travel under the pointer, shows its pressed picture while held, and is held on the device
+ * from pointer down to up, so a long press works.
+ */
+function FrameButton({
+  button,
+  src,
+  downSrc,
+  style,
+  onButton,
+}: {
+  button: DeviceFrameButton
+  src: string
+  downSrc: string | null
+  style: CSSProperties
+  onButton: (name: string, phase: 'down' | 'up') => void
+}) {
+  const { t } = useTranslation('devices')
+  const [hovered, setHovered] = useState(false)
+  const [pressed, setPressed] = useState(false)
+  const held = useRef(false)
+  const latest = useRef(onButton)
+  useEffect(() => {
+    latest.current = onButton
+  })
+
+  // A button held when the frame goes away must not stay down on the device.
+  useEffect(
+    () => () => {
+      if (held.current) latest.current(button.name, 'up')
+    },
+    [button.name],
+  )
+
+  const release = (): void => {
+    if (!held.current) return
+    held.current = false
+    setPressed(false)
+    onButton(button.name, 'up')
+  }
+
+  const out = hovered || pressed
+  return (
+    <div
+      role="button"
+      aria-label={t(labelKey(button.name))}
+      aria-pressed={pressed}
+      className="absolute touch-none transition-[translate] duration-(--duration-fast) ease-(--ease-standard) select-none motion-reduce:transition-none"
+      style={{
+        ...style,
+        translate: out ? `${button.hover.x * 100}% ${button.hover.y * 100}%` : undefined,
+      }}
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onPointerDown={(event: PointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        held.current = true
+        setPressed(true)
+        onButton(button.name, 'down')
+      }}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onLostPointerCapture={release}
+    >
+      <img
+        alt=""
+        aria-hidden
+        draggable={false}
+        src={pressed && downSrc ? downSrc : src}
+        className={cn(
+          'pointer-events-none absolute inset-0 size-full select-none',
+          pressed && !downSrc && 'brightness-125',
+        )}
+      />
     </div>
   )
 }

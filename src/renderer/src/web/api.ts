@@ -527,10 +527,19 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         if (typeof png === 'string') return { ...(result as object), png: fromBase64(png) }
         const frame = (result as { frame?: { images?: unknown } | null } | null)?.frame
         if (frame && Array.isArray(frame.images)) {
-          const images = frame.images.map((image: { png?: unknown }) => ({
-            ...image,
-            png: typeof image.png === 'string' ? fromBase64(image.png) : image.png,
-          }))
+          const images = frame.images.map(
+            (image: { png?: unknown; button?: { down?: unknown } }) => ({
+              ...image,
+              png: typeof image.png === 'string' ? fromBase64(image.png) : image.png,
+              ...(image.button && {
+                button: {
+                  ...image.button,
+                  down:
+                    typeof image.button.down === 'string' ? fromBase64(image.button.down) : null,
+                },
+              }),
+            }),
+          )
           return { ...(result as object), frame: { ...frame, images } }
         }
         return result

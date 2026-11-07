@@ -366,6 +366,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
           room={room ?? NO_ROOM}
           focused={focused}
           glow={driven}
+          onButton={(name, phase) => send(id, { type: 'frameButton', name, phase })}
         >
           <canvas
             ref={canvas}
