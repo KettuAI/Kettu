@@ -22,7 +22,7 @@ import {
   type HostThemes,
 } from '@shared/remote/host-admin'
 import type { PairingState } from '@shared/remote/pairing'
-import { parseReportRequest, type ReportRequest } from '@shared/report'
+import { parseReportRequest, type ReportRequest, type ReportSubmitResult } from '@shared/report'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { SettingsFile, SettingsPatch } from '@shared/settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from '@shared/sharing'
@@ -174,6 +174,8 @@ export interface HostAdminDeps {
   printPdf?: ((id: unknown, version: unknown) => Promise<Buffer>) | null
   /** A problem report's bundle for an owner's device, built with the host's own logs. */
   report?: (request: ReportRequest) => Promise<DeviceReport>
+  /** Submits a bundle `report` gave, with the host's own sign-in. */
+  submitReport?: (ref: string) => Promise<ReportSubmitResult>
   /** Remote access is always on, as under the daemon, so a device may not turn it off. */
   remoteAlwaysOn?: boolean
   /** Tells every owner's device, or only `deviceId`. */
@@ -506,6 +508,14 @@ export class HostAdmin {
           throw invalid((error as Error).message)
         }
         return this.deps.report(request)
+      }
+      case 'host.submitReport': {
+        if (!this.deps.submitReport) {
+          throw new AdminError('unavailable', 'This host submits no reports')
+        }
+        const { ref } = fields(params)
+        if (typeof ref !== 'string' || ref.length > 100) throw invalid("ref must be a bundle's id")
+        return this.deps.submitReport(ref)
       }
     }
   }

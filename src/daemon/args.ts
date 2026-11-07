@@ -33,13 +33,17 @@ export type Command =
   | { kind: 'logout' }
   /** `request`: the JSON the desktop app sends, or null for none. */
   | { kind: 'ssh-setup'; request: string | null }
-  /** `description`: null to ask for it; `output`: null for a file in the current folder. */
+  /**
+   * `description`: null to ask for it; `output`: null for a file in the current folder; `submit`:
+   * submit it too without asking.
+   */
   | {
       kind: 'report'
       description: string | null
       range: ReportRangeName
       extras: ReportExtra[]
       output: string | null
+      submit: boolean
     }
   /** The times as given, a span ago or a date, read against the clock when the logs are. */
   | {
@@ -78,7 +82,8 @@ Commands:
   update                       Update to the latest release, and the service with it
   login                        Sign in to a Kettu account, confirmed in a browser on any device
   logout                       Sign out of the Kettu account
-  report                       Save a problem report: the logs and settings, in a zip
+  report                       Save a problem report: the logs and settings, in a zip, and
+                               submit it to Kettu when signed in, for an id to put in an issue
   logs                         Show the logs, filtered by the options below
   verbose on                   Turn on detailed records for 24 hours; they hold prompts and code
   verbose off                  Turn detailed records off
@@ -96,6 +101,7 @@ Options:
                                dumps, comma-separated; messages, verbose and dumps may hold
                                prompts, code and keys
   -o, --output <file>          kettu report: where to save the zip
+  --submit                     kettu report: submit it to Kettu too, without asking
   --process <name>             kettu logs: one process's records, such as daemon or agent-host
   --level <level>              kettu logs: this level and above: debug, info, warn or error
   --op <id>                    kettu logs: one action's records
@@ -123,6 +129,7 @@ const OPTIONS = {
   range: { type: 'string' },
   with: { type: 'string' },
   output: { type: 'string', short: 'o' },
+  submit: { type: 'boolean' },
   process: { type: 'string' },
   level: { type: 'string' },
   op: { type: 'string' },
@@ -140,6 +147,7 @@ const OPTION_COMMAND: Partial<Record<OptionName, Command['kind']>> = {
   range: 'report',
   with: 'report',
   output: 'report',
+  submit: 'report',
   process: 'logs',
   level: 'logs',
   op: 'logs',
@@ -229,7 +237,14 @@ function reportCommand(given: Given): Command {
   if (description !== null && description.trim() === '') {
     return { kind: 'usage', message: 'Say what happened in --message' }
   }
-  return { kind: 'report', description, range: RANGES[range]!, extras, output: value('output') }
+  return {
+    kind: 'report',
+    description,
+    range: RANGES[range]!,
+    extras,
+    output: value('output'),
+    submit: given.has('submit'),
+  }
 }
 
 function logsCommand(given: Given): Command {
@@ -283,7 +298,14 @@ function parseWords(words: string[], yes: boolean): Command {
     // Their options are read once the command is known.
     case 'report':
       return (
-        extra(0) ?? { kind: 'report', description: null, range: 'hour', extras: [], output: null }
+        extra(0) ?? {
+          kind: 'report',
+          description: null,
+          range: 'hour',
+          extras: [],
+          output: null,
+          submit: false,
+        }
       )
     case 'logs':
       return (

@@ -4,6 +4,7 @@
 
 import type { AccountStatus, SignedOutReason, SignInFailure } from '@shared/account'
 import type { Locale } from '@shared/locale'
+import type { ReportSubmitFailure } from '@shared/report'
 import type { Logger } from '../log'
 import type { IdentityCipher } from '../remote-identity'
 import { listenLoopback, type Loopback } from './loopback'
@@ -13,9 +14,11 @@ import {
   DESKTOP_CLIENT,
   newPkce,
   newState,
+  submitFailure,
   type AccountApi,
   type ClientInfo,
   type Me,
+  type ReportUpload,
   type TokenSet,
 } from './service'
 import {
@@ -321,6 +324,33 @@ export class Account {
     await writeAccount(this.options.file, next).catch((error: unknown) =>
       this.options.log.error(`Could not write ${this.options.file}`, error),
     )
+  }
+
+  /** Submits a problem report with this sign-in: its id, or why not. */
+  async submitReport(
+    upload: ReportUpload,
+  ): Promise<{ ok: true; id: string } | { ok: false; reason: ReportSubmitFailure }> {
+    if (!this.stored) return { ok: false, reason: 'signed_out' }
+    const submit = (token: string): Promise<string> => this.options.api.submitReport(token, upload)
+    try {
+      const token = await this.accessToken(null)
+      try {
+        return { ok: true, id: await submit(token) }
+      } catch (error) {
+        // Reports name a token the service does not take `unauthorized`; a fresh one may do.
+        if (!(error instanceof AccountServiceError) || error.code !== 'unauthorized') throw error
+        return { ok: true, id: await submit(await this.accessToken(token)) }
+      }
+    } catch (error) {
+      if (error instanceof SignedOut) return { ok: false, reason: 'signed_out' }
+      const ended =
+        error instanceof TokenUnreadable ||
+        (error instanceof AccountServiceError &&
+          (error.code === 'invalid_grant' || error.code === 'account_disabled'))
+      if (ended) await this.failed(error)
+      else this.options.log.warn(`Could not submit a problem report: ${(error as Error).message}`)
+      return { ok: false, reason: submitFailure(error) }
+    }
   }
 
   /** Runs `call` with an access token, refreshing it once more if the service refused it. */
