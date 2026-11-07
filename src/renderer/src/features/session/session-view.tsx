@@ -305,10 +305,13 @@ const isEditable = (target: EventTarget | null) =>
   (target.isContentEditable || target.closest('input, textarea, select, [role="textbox"], .xterm'))
 
 // A waiting permission card is a dialog of the thread's own, not one over it.
+// The composer keeps its menus mounted, hidden and inert, while they are closed.
 const overlayOpen = () =>
-  !!document.querySelector(
-    '[role="menu"], [role="dialog"]:not(.ui-prc__card), [role="alertdialog"], [role="listbox"]',
-  )
+  [
+    ...document.querySelectorAll<HTMLElement>(
+      '[role="menu"], [role="dialog"]:not(.ui-prc__card), [role="alertdialog"], [role="listbox"]',
+    ),
+  ].some((el) => !el.closest('[inert]') && el.checkVisibility({ visibilityProperty: true }))
 
 // What answers Enter itself, so it never also answers a request.
 const handlesEnter = (target: EventTarget | null) =>
