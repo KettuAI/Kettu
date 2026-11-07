@@ -16,6 +16,7 @@ import {
 } from '@shared/artifacts'
 import type { ArtifactTypeInfo } from '@shared/artifact-types'
 import type { CanvasEvent } from '@shared/artifact-canvas'
+import { withParamValues, type ParamValue } from '@shared/artifact-params'
 import { HostError } from '../errors'
 import type { LogFn } from '../storage'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
@@ -591,6 +592,40 @@ export class ArtifactStore {
       baseVersion: input.baseVersion,
       changes: [{ path: input.path, data }],
       pages: input.path === ARTIFACT_ENTRY ? countPages(edited) : found.version.pages,
+      author: null,
+      note: null,
+    })
+  }
+
+  /** New values for a page's declared parameters, written into the page as the user's version. */
+  async setParams(input: {
+    id: string
+    baseVersion: number
+    path: string
+    values: Record<string, ParamValue>
+  }): Promise<{ version: number }> {
+    const found = await this.get(input.id)
+    if (found.artifact.deletedAt !== null) {
+      throw new ArtifactError('deleted', `${input.id} is in Recently deleted`, {
+        version: found.artifact.head,
+        deleted: true,
+      })
+    }
+    const file = found.files.find((f) => f.path === input.path)
+    if (!file || !isHtmlPath(file.path)) {
+      throw new HostError('not_found', `${input.id} has no HTML file ${input.path}`)
+    }
+    let edited: string
+    try {
+      edited = withParamValues((await this.bytes(found, file)).toString('utf8'), input.values)
+    } catch (error) {
+      throw new HostError('invalid_params', (error as Error).message)
+    }
+    return this.write({
+      id: input.id,
+      baseVersion: input.baseVersion,
+      changes: [{ path: input.path, data: Buffer.from(edited, 'utf8') }],
+      pages: found.version.pages,
       author: null,
       note: null,
     })

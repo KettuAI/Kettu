@@ -6,6 +6,7 @@ import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary 
 import type { CommentAnchor, CommentThread } from './artifact-comments'
 import type { CanvasEvent, CanvasState } from './artifact-canvas'
 import type { CanvasOp } from './canvas-doc'
+import type { ParamValue } from './artifact-params'
 import type { PreviewStyle } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat, ArtifactTypeInfo } from './artifact-types'
 import type {
@@ -839,6 +840,12 @@ export interface HostContract {
     params: { id: string; threadIds: string[]; sessionId: string }
     result: void
   }
+  // New values for the parameters a page declares, written into its file as the user's version;
+  // `conflict` when the file changed since `baseVersion`.
+  'artifacts.setParams': {
+    params: { id: string; baseVersion: number; path: string; values: Record<string, ParamValue> }
+    result: { version: number }
+  }
   // The live canvas document a client works on: the latest version's, with the operations clients
   // sent since that are not yet in a version.
   'artifacts.canvas': { params: { id: string }; result: CanvasState }
@@ -1071,6 +1078,7 @@ export const HOST_METHODS = [
   'artifacts.resolve',
   'artifacts.markSent',
   'artifacts.editElement',
+  'artifacts.setParams',
   'artifacts.canvas',
   'artifacts.canvasOps',
   'artifacts.runtime',

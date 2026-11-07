@@ -113,6 +113,7 @@ export const THUMBNAIL_PAGES = 500
 export interface ThumbnailPage {
   group: number // the body's `data-page-group` child it is in, from 1, or 0 outside any
   index: number // its place among the pages there, from 1
+  file?: string // a canvas document's page: its own HTML file
   x: number
   y: number
   width: number

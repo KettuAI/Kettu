@@ -5,6 +5,13 @@
 // desktop, or the port the web client hands it. Bundled on its own, it reaches nothing of Kettu's.
 
 import type { RuntimeError } from '../artifact-capabilities'
+import {
+  PARAMS_ATTRIBUTE,
+  paramCss,
+  parseParams,
+  validParamValue,
+  type PageParam,
+} from '../artifact-params'
 import { capabilityNamespace, type CapabilityTransport } from './capabilities'
 import {
   RUNTIME_PATH,
@@ -478,8 +485,61 @@ export function start(config: RuntimeConfig): void {
       case 'preview-reset':
         resetPreview()
         return
+      case 'select-locate': {
+        if (typeof message.channel === 'string' && message.channel !== '') channel = message.channel
+        if (!Number.isSafeInteger(message.src)) return
+        const element = sourceElement(message.src)
+        const rect = element?.getBoundingClientRect()
+        const located = {
+          src: message.src,
+          box: rect
+            ? {
+                x: rect.left + scrollX,
+                y: rect.top + scrollY,
+                width: rect.width,
+                height: rect.height,
+              }
+            : null,
+        }
+        const answer: Message = {
+          v: RUNTIME_VERSION,
+          id: nextId(),
+          kind: 'select',
+          channel,
+          selection: null,
+          located,
+        }
+        if (config.transport === 'port') viaPort(answer)
+        else void request(answer).catch(() => {})
+        return
+      }
+      case 'params':
+        if (typeof message.values !== 'object' || message.values === null) return
+        for (const [name, value] of Object.entries(message.values)) setParam(name, value)
+        return
     }
   }
+
+  // The parameters the page declares, on its root from the start, as the canvas set them last.
+  const params = new Map<string, PageParam>()
+  function setParam(name: string, value: unknown): void {
+    const param = params.get(name)
+    if (!param || !validParamValue(param, value)) return
+    const { variable, attribute } = paramCss(param, value as string | number | boolean)
+    const root = document.documentElement
+    root.style.setProperty(`--${name}`, variable)
+    root.setAttribute(`data-${name}`, attribute)
+  }
+  function readParams(): void {
+    const script = document.querySelector(`script[${PARAMS_ATTRIBUTE}]`)
+    if (!script) return
+    for (const param of parseParams(script.textContent ?? '')) {
+      params.set(param.name, param)
+      setParam(param.name, param.value)
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', readParams)
+  else readParams()
 
   window.addEventListener('message', (event) => {
     // Only the client that holds the frame drives it; the page's own messages are ignored.
@@ -489,6 +549,7 @@ export function start(config: RuntimeConfig): void {
     if (typeof data.kind !== 'string') return
     if (
       data.kind !== 'transport' &&
+      data.kind !== 'params' &&
       !data.kind.startsWith('select') &&
       !data.kind.startsWith('preview')
     ) {

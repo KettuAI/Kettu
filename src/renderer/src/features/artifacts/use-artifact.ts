@@ -202,8 +202,9 @@ export function useListsRead(): boolean {
 export function pageUrl(
   url: string,
   version: number,
-  page?: { group: number; index: number },
+  page?: { group: number; index: number; file?: string | null },
 ): string {
+  if (page?.file) return `${url.slice(0, -1)}${versionUrlPath(version, page.file)}`
   const entry = `${url.slice(0, -1)}${versionUrlPath(version)}`
   return page ? `${entry}?page=${page.group}.${page.index}` : entry
 }

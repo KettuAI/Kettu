@@ -7,10 +7,20 @@ import { markSources, sourceMark } from './artifact-source'
 import { RUNTIME_VERSION, type RuntimeConfig } from './artifact-runtime/page-messages'
 import { VIEWER_PREFIX } from './artifact-types'
 
-/** One page of a canvas alone: its group, 0 outside any, and its place in it, both from 1. */
+/**
+ * One page of a canvas alone: in an old canvas, its group, 0 outside any, and its place in it,
+ * both from 1; in a canvas document, the HTML file that is the page, which `file` names.
+ */
 export interface CanvasPage {
   group: number
   index: number
+  file?: string
+}
+
+/** The address of a page on its artifact's origin, from its root: its own file, or the entry's. */
+export function canvasPagePath(version: number, page: CanvasPage | null): string {
+  if (page?.file) return versionUrlPath(version, page.file)
+  return `${versionUrlPath(version)}${page ? `?page=${page.group}.${page.index}` : ''}`
 }
 
 /** A file of an artifact a request asks for. */

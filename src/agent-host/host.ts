@@ -1559,6 +1559,8 @@ export class AgentHost {
         artifacts.markSent(id, threadIds, sessionId),
       'artifacts.editElement': ({ id, baseVersion, path, offset, style, text }) =>
         artifacts.editElement({ id, baseVersion, path, offset, change: { style, text } }),
+      'artifacts.setParams': ({ id, baseVersion, path, values }) =>
+        artifacts.setParams({ id, baseVersion, path, values }),
       'artifacts.canvas': ({ id }) => artifacts.canvases.state(id),
       'artifacts.canvasOps': ({ id, ops, client, clientSeq }) =>
         artifacts.canvases.apply(id, ops, client, clientSeq),

@@ -11,6 +11,7 @@ import {
 } from '@shared/artifact-runtime/page-messages'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { CanvasError, parseCanvasOps, type CanvasOp } from '@shared/canvas-doc'
+import { PARAMS_MAX, type ParamValue } from '@shared/artifact-params'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
@@ -1362,6 +1363,34 @@ export function createValidators(platform: Platform): Validators {
         offset: offset(o, 'offset'),
         style,
         text: text as string | null,
+      }
+    },
+    'artifacts.setParams': (params) => {
+      const o = fields(params)
+      const values = o.values
+      if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+        throw invalidParams('values must be an object of parameter names and values')
+      }
+      const entries = Object.entries(values as Record<string, unknown>)
+      if (entries.length === 0 || entries.length > PARAMS_MAX) {
+        throw invalidParams(`values must set 1 to ${PARAMS_MAX} parameters`)
+      }
+      for (const [name, value] of entries) {
+        if (!/^[a-z][a-z0-9-]{0,31}$/.test(name))
+          throw invalidParams(`${name} is not a parameter name`)
+        if (
+          typeof value !== 'boolean' &&
+          !(typeof value === 'number' && Number.isFinite(value)) &&
+          !(typeof value === 'string' && value.length <= 200)
+        ) {
+          throw invalidParams(`${name} must be a string, a number or true or false`)
+        }
+      }
+      return {
+        id: artifactId(o),
+        baseVersion: version(o, 'baseVersion'),
+        path: htmlPath(o, 'path'),
+        values: values as Record<string, ParamValue>,
       }
     },
     'artifacts.canvas': artifact,

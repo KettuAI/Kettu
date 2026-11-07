@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import {
   RUNTIME_VERSION,
+  type PageBox,
   type PageSelection,
   type Pin,
   type PreviewStyle,
 } from '@shared/artifact-runtime/page-messages'
 import { FrameLink } from './frame-link'
+
+/** How long a page has to say where an element lies. */
+const LOCATE_WAIT_MS = 2000
 
 export type EditorMode = 'select' | 'comment' | null
 
@@ -36,6 +40,10 @@ export interface EditorFrame {
   /** Starts driving the frame, until `release`; it may open again after. */
   open(): void
   release(): void
+  /** Where the element whose start tag lies at `src` is in the page, or null; null after a while. */
+  locate(src: number): Promise<PageBox | null>
+  /** Sets the page's declared parameters, shown at once and kept until it reloads. */
+  params(values: Record<string, string | number | boolean>): void
 }
 
 function accent(): string {
@@ -75,11 +83,35 @@ export class ArtifactEditor {
   /** A frame for an iframe that shows `page`, driven once it opens. */
   frame(page: number | null): EditorFrame {
     let lastPick: { x: number; y: number } | null = null
+    const locating = new Map<number, (box: PageBox | null) => void>()
     const frame: EditorFrame = {
-      link: new FrameLink(this.origin, (selection) => {
+      link: new FrameLink(this.origin, (selection, located) => {
+        if (located) {
+          locating.get(located.src)?.(located.box)
+          locating.delete(located.src)
+          return
+        }
         this.picked(frame, selection, lastPick)
         lastPick = null
       }),
+      locate: (src) =>
+        new Promise((resolve) => {
+          locating.get(src)?.(null)
+          locating.set(src, resolve)
+          setTimeout(() => {
+            if (locating.get(src) === resolve) {
+              locating.delete(src)
+              resolve(null)
+            }
+          }, LOCATE_WAIT_MS)
+          frame.link.post({
+            v: RUNTIME_VERSION,
+            kind: 'select-locate',
+            src,
+            channel: frame.link.channel,
+          })
+        }),
+      params: (values) => frame.link.post({ v: RUNTIME_VERSION, kind: 'params', values }),
       page,
       point: (x, y) => {
         this.pointing = { frame, x, y }
