@@ -362,6 +362,7 @@ export class AgentHost {
       activity: (portIds, activity) =>
         this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
       comments: (portIds, id) => this.hub.send(portIds, { type: 'artifacts.comments', id }),
+      canvas: (portIds, event) => this.hub.send(portIds, { type: 'artifacts.canvas', ...event }),
       unwatched: (id) => this.consents.unwatched(id),
     })
     this.artifactData = new ArtifactData({ store: this.artifacts })
@@ -1558,6 +1559,9 @@ export class AgentHost {
         artifacts.markSent(id, threadIds, sessionId),
       'artifacts.editElement': ({ id, baseVersion, path, offset, style, text }) =>
         artifacts.editElement({ id, baseVersion, path, offset, change: { style, text } }),
+      'artifacts.canvas': ({ id }) => artifacts.canvases.state(id),
+      'artifacts.canvasOps': ({ id, ops, client, clientSeq }) =>
+        artifacts.canvases.apply(id, ops, client, clientSeq),
       'artifacts.runtime': ({ artifactId, message, stream }, { portId, device }) => {
         // A window's frames reach the runtime through main; only a device's remote host relays.
         if (!device) {

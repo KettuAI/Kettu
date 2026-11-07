@@ -15,12 +15,14 @@ import {
   type VersionSummary,
 } from '@shared/artifacts'
 import type { ArtifactTypeInfo } from '@shared/artifact-types'
+import type { CanvasEvent } from '@shared/artifact-canvas'
 import { HostError } from '../errors'
 import type { LogFn } from '../storage'
 import { ThreadStoreError, type ThreadStore } from '../threads/store'
 import { contentPath, versionKey } from './content'
 import { editElement, EditError, type ElementChange } from './element-edit'
 import { newArtifactId, ulid } from './ids'
+import { LiveCanvases } from './live-canvas'
 import { countPages } from './pages'
 import type {
   ArtifactCallName,
@@ -73,6 +75,10 @@ export interface ArtifactStoreDeps {
   comments?(portIds: Iterable<string>, id: string): void
   /** The last port watching the artifact stopped. */
   unwatched?(id: string): void
+  /** A canvas being worked on changed, for the ports watching the artifact. */
+  canvas?(portIds: Iterable<string>, event: CanvasEvent): void
+  /** How long a canvas stays quiet before the user's changes on it become a version. */
+  canvasQuietMs?: number
   now?: () => number
   purgeEveryMs?: number
 }
@@ -132,8 +138,17 @@ export class ArtifactStore {
   /** The sessions using each artifact, in the order they started, and whether each edits it. */
   private readonly users = new Map<string, Map<string, boolean>>()
   private timer: ReturnType<typeof setInterval> | null = null
+  /** The canvas documents clients are working on, with their changes not yet in a version. */
+  readonly canvases: LiveCanvases
 
-  constructor(private readonly deps: ArtifactStoreDeps) {}
+  constructor(private readonly deps: ArtifactStoreDeps) {
+    this.canvases = new LiveCanvases(this, {
+      log: deps.log,
+      ports: (id) => this.watchers(id),
+      send: (ports, event) => deps.canvas?.(ports, event),
+      ...(deps.canvasQuietMs !== undefined ? { quietMs: deps.canvasQuietMs } : {}),
+    })
+  }
 
   private now(): number {
     return (this.deps.now ?? Date.now)()
@@ -337,6 +352,7 @@ export class ArtifactStore {
       note: string | null
       declaration?: Declaration
       type?: ArtifactTypeInfo | null
+      unchecked?: string[]
     } & Reach &
       Editing,
   ): Promise<{ version: number }> {
@@ -378,6 +394,7 @@ export class ArtifactStore {
     this.deps.changed()
     const ports = this.watches.get(id)
     if (ports) this.deps.version(ports.keys(), id, version)
+    this.canvases.versioned(id)
   }
 
   /** Changes the title, which is not versioned. */
@@ -546,12 +563,7 @@ export class ArtifactStore {
         deleted: true,
       })
     }
-    if (found.artifact.head !== input.baseVersion) {
-      throw new ArtifactError('conflict', 'Not the latest version', {
-        version: found.artifact.head,
-        deleted: false,
-      })
-    }
+    // The latest version's file: the write lands there unless the file changed since the base.
     const file = found.files.find((f) => f.path === input.path)
     if (!file || !isHtmlPath(file.path)) {
       throw new HostError('not_found', `${input.id} has no HTML file ${input.path}`)
@@ -687,6 +699,7 @@ export class ArtifactStore {
 
   private unwatched(id: string): void {
     this.watches.delete(id)
+    this.canvases.closed(id)
     this.deps.unwatched?.(id)
   }
 }

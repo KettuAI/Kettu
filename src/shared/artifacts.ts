@@ -150,4 +150,6 @@ export function fitThumbnail(pages: readonly ThumbnailPage[]): {
 export interface ArtifactState {
   version: number
   deleted: boolean
+  /** For a write refused because someone changed what it writes: those files, since its base. */
+  changed?: string[]
 }

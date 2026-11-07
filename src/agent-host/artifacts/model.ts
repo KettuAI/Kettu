@@ -101,6 +101,8 @@ export interface ArtifactCalls {
       declaration?: Declaration
       /** The new version's type and format: a typed artifact's must name its type, a plain one none. */
       type?: ArtifactTypeInfo | null
+      /** Paths written from the latest version's state, such as merged canvas operations, which no base check refuses. */
+      unchecked?: string[]
     }
     result: { version: number }
   }

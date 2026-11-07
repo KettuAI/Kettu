@@ -571,6 +571,114 @@ describe("the thread database's artifacts", () => {
     db.close()
   })
 
+  it('lands a write from an older version on the latest when no file it writes changed since', () => {
+    const { db } = withContent()
+    create(db, { 'canvas.json': '{}', 'pages/a.html': 'a', 'pages/b.html': 'b' })
+    const write = (base: number, path: string, text: string, at: number) =>
+      db.writeArtifact({
+        id: ID,
+        project: '/p',
+        baseVersion: base,
+        changes: [{ path, data: bytes(text) }],
+        pages: 2,
+        author: 's1',
+        note: null,
+        at,
+      })
+    // Two sessions read version 1; each changes its own page.
+    expect(write(1, 'pages/a.html', 'a2', 2).version).toBe(2)
+    expect(write(1, 'pages/b.html', 'b2', 3).version).toBe(3)
+    expect(pathsOf(db)).toMatchObject({
+      'pages/a.html': contentHash(bytes('a2')),
+      'pages/b.html': contentHash(bytes('b2')),
+    })
+    // A third, also from version 1, writes a page the first changed: refused, naming the file.
+    let refused: unknown
+    try {
+      write(1, 'pages/a.html', 'a3', 4)
+    } catch (error) {
+      refused = error
+    }
+    expect(refused).toBeInstanceOf(ThreadDbError)
+    expect((refused as ThreadDbError).data).toEqual({
+      version: 3,
+      deleted: false,
+      changed: ['pages/a.html'],
+    })
+    expect(() => write(4, 'pages/a.html', 'x', 5)).toThrow(ThreadDbError)
+    expect(db.getArtifact({ id: ID, version: null, project: null }).artifact.head).toBe(3)
+    db.close()
+  })
+
+  it('keeps the latest page count when a write leaves the entry alone', () => {
+    const { db } = withContent()
+    create(db, { 'canvas.json': '{}', 'pages/a.html': 'a' })
+    db.writeArtifact({
+      id: ID,
+      project: '/p',
+      baseVersion: 1,
+      changes: [{ path: 'canvas.json', data: bytes('{ }') }],
+      pages: 5,
+      author: null,
+      note: null,
+      at: 2,
+    })
+    db.writeArtifact({
+      id: ID,
+      project: '/p',
+      baseVersion: 1,
+      changes: [{ path: 'pages/a.html', data: bytes('a2') }],
+      pages: 1,
+      author: 's1',
+      note: null,
+      at: 3,
+    })
+    expect(db.getArtifact({ id: ID, version: null, project: null }).version.pages).toBe(5)
+    db.close()
+  })
+
+  it('restores from an older base only when the files it brings back did not change since', () => {
+    const { db } = withContent()
+    create(db, { 'canvas.json': '{}', 'pages/a.html': 'a', 'pages/b.html': 'b' })
+    const write = (base: number, path: string, text: string) =>
+      db.writeArtifact({
+        id: ID,
+        project: '/p',
+        baseVersion: base,
+        changes: [{ path, data: bytes(text) }],
+        pages: 2,
+        author: 's1',
+        note: null,
+        at: 2,
+      })
+    write(1, 'pages/a.html', 'a2') // version 2
+    write(2, 'pages/b.html', 'b2') // version 3
+    // Restoring version 2 brings back b; from base 2 that file changed since: refused.
+    expect(() =>
+      db.restoreArtifact({
+        id: ID,
+        project: '/p',
+        version: 2,
+        baseVersion: 2,
+        author: null,
+        note: null,
+        at: 4,
+      }),
+    ).toThrow(ThreadDbError)
+    expect(
+      db.restoreArtifact({
+        id: ID,
+        project: '/p',
+        version: 2,
+        baseVersion: 3,
+        author: null,
+        note: null,
+        at: 4,
+      }).version,
+    ).toBe(4)
+    db.close()
+  })
+
   it('refuses a version without its entry page, and records nothing of it', () => {
     const { db } = withContent()
     create(db, { 'index.html': 'a' })

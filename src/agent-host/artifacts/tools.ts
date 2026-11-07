@@ -23,6 +23,17 @@ import {
 } from '@shared/artifact-files'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer, NO_SESSION } from '@shared/artifacts'
 import {
+  CANVAS_FILE,
+  CANVAS_LIMITS,
+  CanvasError,
+  missingPageFiles,
+  parseCanvasDoc,
+  parseCanvasOps,
+  stringifyCanvasDoc,
+  type CanvasDoc,
+  type CanvasOp,
+} from '@shared/canvas-doc'
+import {
   COMMENT_CHARS,
   OWNER,
   THREAD_ID,
@@ -40,6 +51,7 @@ import type { FileChange } from './model'
 import type { Declaration } from './runtime/calls'
 import { countPages } from './pages'
 import { readSource, SourceError } from './sources'
+import { HostError } from '../errors'
 import { ArtifactError, type ArtifactStore, type FoundVersion, type SessionTurn } from './store'
 import { ArtifactTypes, ContentError } from './types/registry'
 
@@ -80,13 +92,32 @@ export const GUIDE = {
     'names. read_artifact lists the files of a version and returns the text of one at a time; ' +
     'images and other binary files are listed, not returned.',
   canvas:
-    'For several pages on one canvas, such as design options or slides, put each page in ' +
-    `${ARTIFACT_ENTRY} in its own element with a data-page attribute that names it and a ` +
-    'data-page-size attribute that gives its size in CSS pixels, such as ' +
-    '`<section data-page="Sign in · A" data-page-size="390x844">`, as children of `<body>` or of a ' +
-    '`<div data-page-group="Group name">` child of `<body>`; each group becomes a row. Write the ' +
-    'page elements in the markup, not from a script. Styles, scripts and images can be files of ' +
-    'the artifact the pages share.',
+    'A canvas holds several pages side by side, such as design options, the screens of a flow or ' +
+    'slides. Make it with files: one HTML file per page, which loads what the pages share by ' +
+    `relative paths, and ${CANVAS_FILE}, which lays them out, such as ` +
+    '`{"canvases": [{"id": "main", "name": "Settings"}], "sections": [{"id": "settings", "title": ' +
+    '"Settings"}], "pages": [{"id": "account", "name": "Account", "file": "account.html", "section": ' +
+    '"settings", "width": 1440, "height": 900}]}`. An id is 1 to 64 letters, digits, - or _. width ' +
+    "and height are the page's viewport in CSS pixels, 64 to 8000, 1280 by 800 if left out; x and y " +
+    'place it and may be left out, so Kettu puts it after the other pages of its section. A section ' +
+    'is a titled area around its pages; canvases are tabs of the artifact and may be left out when ' +
+    'there is one. Plan the sections and the page names first, then write one page per file: never ' +
+    'put several pages in one file, and keep shared styles in shared files. Once the canvas exists, ' +
+    `change its layout with canvas operations in update_artifact rather than by rewriting ${CANVAS_FILE}: ` +
+    '`{"op": "add", "object": {"type": "page", "id": "privacy", "name": "Privacy", "file": ' +
+    '"privacy.html", "section": "settings"}}` (also type section, canvas or note), `{"op": "set", ' +
+    '"id": "account", "key": "x", "value": 0}`, `{"op": "remove", "id": "privacy"}` or `{"op": ' +
+    '"order", "id": "account", "index": 0}`. They merge with what the user does on the canvas ' +
+    `meanwhile, while a ${CANVAS_FILE} written as a file is refused when the user changed the ` +
+    "layout since your base version. Write a page's file in the call that adds the page. The user " +
+    'may draw notes on the canvas: text, stickies, pen strokes, shapes and arrows between pages; ' +
+    `read ${CANVAS_FILE} to see them, and once you have done what a sticky asks, set its done to ` +
+    'true. A page may declare parameters the user can tweak on the canvas, in a ' +
+    '`<script type="application/json" data-kettu-params>` in its head such as `{"accent": {"type": ' +
+    '"color", "label": "Accent", "value": "#0060e2"}}`; a type is color, text, number (with min, max ' +
+    'and step), boolean or choice (with options), and a name is lowercase letters, digits and -. ' +
+    "Kettu sets each one as a CSS variable such as `--accent` on the page's root and as an " +
+    'attribute such as `data-accent` on `<html>`, so style the page with them.',
   runtime:
     'A page asks Kettu for more than a static page can do with `await kettu.use(name)`, which ' +
     'resolves to an object of functions, or to null when the artifact does not declare the ' +
@@ -266,7 +297,7 @@ const TIME: Schema = { type: 'string', format: 'date-time' }
 const PAGES: Schema = {
   type: 'integer',
   minimum: 0,
-  description: 'The pages it marks with data-page; two or more make it a canvas.',
+  description: `The pages its ${CANVAS_FILE} lays out, or an older canvas marks with data-page.`,
 }
 
 interface ObjectSchema {
@@ -402,12 +433,14 @@ export const TOOLS: Tool[] = [
     title: 'Update artifact',
     description:
       'Changes an artifact in this project as a new version from base_version, the version you ' +
-      'read; a stale base_version is refused, and you read it again. Give html to replace ' +
+      'read; it is refused only when a file it writes changed since, and then you read that file ' +
+      'again. Give html to replace ' +
       `${ARTIFACT_ENTRY}, files to add, replace or remove files, and edits to replace parts of ` +
       'text files, and capabilities to change what the version declares; files you do not name ' +
       'stay as they are, and when any part fails nothing changes. Each edit replaces old_text, ' +
       'which must occur exactly once in its file as the files and edits before it left it. Or ' +
-      'give a title alone to rename it, which makes no version.',
+      'give a title alone to rename it, which makes no version. For a canvas, canvas changes its ' +
+      'layout with operations (read_artifact_guide topic canvas).',
     inputSchema: object(
       {
         id: ID,
@@ -435,6 +468,15 @@ export const TOOLS: Tool[] = [
           description: `Up to ${EDITS} text replacements, applied in order after files.`,
         },
         capabilities: CAPABILITIES,
+        canvas: {
+          type: 'array',
+          minItems: 1,
+          maxItems: CANVAS_LIMITS.ops,
+          items: { type: 'object' },
+          description:
+            `Operations on a canvas's ${CANVAS_FILE}, applied in order after files: add, set, ` +
+            'remove or order (read_artifact_guide topic canvas).',
+        },
         title: TITLE,
         note: NOTE,
       },
@@ -713,6 +755,22 @@ function args(value: unknown, allowed: readonly string[]): Args {
   return o as Args
 }
 
+/** An agent's canvas operations, with the notes it adds marked as its own. */
+function canvasOps(o: Args, sessionId: string): CanvasOp[] {
+  let ops: CanvasOp[]
+  try {
+    ops = parseCanvasOps(o.canvas)
+  } catch (error) {
+    if (error instanceof CanvasError) throw invalid(`canvas: ${error.message}.`)
+    throw error
+  }
+  return ops.map((op) =>
+    op.op === 'add' && op.object.type === 'note'
+      ? { ...op, object: { ...op.object, by: sessionId } }
+      : op,
+  )
+}
+
 function invalid(message: string): ToolError {
   return new ToolError('invalid', message)
 }
@@ -920,6 +978,8 @@ interface Draft {
   changes: FileChange[]
   pages: number
   files: number
+  /** The version holds a canvas document. */
+  canvas: boolean
 }
 
 /** Lowercase, without accents, for matching titles. */
@@ -931,8 +991,10 @@ function iso(ms: number): string {
   return new Date(ms).toISOString()
 }
 
-function pagesText(pages: number): string {
-  return pages >= 2 ? `a canvas of ${pages} pages` : 'a single page'
+function pagesText(pages: number, canvas = false): string {
+  return canvas || pages >= 2
+    ? `a canvas of ${pages} page${pages === 1 ? '' : 's'}`
+    : 'a single page'
 }
 
 function filesText(files: number): string {
@@ -986,6 +1048,10 @@ export class ArtifactTools {
     } catch (error) {
       if (error instanceof ToolError) return failure(error)
       if (error instanceof ArtifactError) return failure(await this.refusal(caller, error, input))
+      // A canvas the live document refused, such as an operation that would break it.
+      if (error instanceof HostError && error.code === 'invalid_params') {
+        return failure(invalid(error.message))
+      }
       throw error
     }
   }
@@ -1006,6 +1072,7 @@ export class ArtifactTools {
             'files',
             'edits',
             'capabilities',
+            'canvas',
             'title',
             'note',
           ]),
@@ -1098,9 +1165,14 @@ export class ArtifactTools {
         )
       case 'conflict': {
         const head = error.state?.version
+        const changed = error.state?.changed ?? []
         return new ToolError(
           'conflict',
-          `${artifact} is at version ${head}. Read it again and apply your change to version ${head}.`,
+          changed.length > 0
+            ? `${artifact} is at version ${head}, and ${changed.join(', ')} changed since your ` +
+                `base version. Read ${changed.length === 1 ? 'it' : 'them'} again and apply your ` +
+                `change to version ${head}.`
+            : `${artifact} is at version ${head}. Read it again and apply your change to version ${head}.`,
         )
       }
       case 'not_found': {
@@ -1137,6 +1209,7 @@ export class ArtifactTools {
     specs: readonly FileSpec[],
     list: readonly Edit[],
     type: ArtifactTypeInfo | null = null,
+    canvas: Buffer | null = null,
   ): Promise<Draft> {
     const sizes = new Map(base?.files.map((file) => [file.path, file.size]) ?? [])
     const changed = new Map<string, Buffer | null>()
@@ -1188,13 +1261,18 @@ export class ArtifactTools {
       sizes.set(path, bytes.length)
       changed.set(path, bytes)
     }
-    if (!type && !sizes.has(ARTIFACT_ENTRY)) {
+    if (canvas) {
+      sizes.set(CANVAS_FILE, canvas.length)
+      changed.set(CANVAS_FILE, canvas)
+    }
+    if (!type && !sizes.has(ARTIFACT_ENTRY) && !sizes.has(CANVAS_FILE)) {
       throw invalid(
         base
-          ? `An artifact needs ${ARTIFACT_ENTRY}, the page Kettu opens, so it cannot be removed.`
-          : `An artifact needs ${ARTIFACT_ENTRY}, the page Kettu opens: give it in html or files.`,
+          ? `An artifact needs ${ARTIFACT_ENTRY}, the page Kettu opens, or a canvas's ${CANVAS_FILE}, so it cannot be removed.`
+          : `An artifact needs ${ARTIFACT_ENTRY}, the page Kettu opens, or a canvas's ${CANVAS_FILE}: give it in html or files.`,
       )
     }
+    const doc = sizes.has(CANVAS_FILE) && !type ? await this.canvasDoc(base, sizes, changed) : null
     if (sizes.size > VERSION_FILES) {
       throw new ToolError(
         'too_large',
@@ -1227,9 +1305,51 @@ export class ArtifactTools {
     return {
       changes: [...changed].map(([path, data]) => ({ path, data })),
       // A typed artifact is one page, its viewer, whatever its content.
-      pages: type ? 1 : entry ? countPages(entry.toString('utf8')) : (base?.version.pages ?? 0),
+      pages: type
+        ? 1
+        : doc
+          ? doc.pages.length
+          : entry
+            ? countPages(entry.toString('utf8'))
+            : (base?.version.pages ?? 0),
       files: sizes.size,
+      canvas: doc !== null,
     }
+  }
+
+  /**
+   * The canvas document the version would hold, checked: well formed, and every page's file among
+   * the version's files. One written in this draft is stored as Kettu writes it, with each page
+   * placed.
+   */
+  private async canvasDoc(
+    base: FoundVersion | null,
+    sizes: ReadonlyMap<string, number>,
+    changed: Map<string, Buffer | null>,
+  ): Promise<CanvasDoc> {
+    const stored = base?.files.find((file) => file.path === CANVAS_FILE)
+    const bytes = changed.has(CANVAS_FILE)
+      ? changed.get(CANVAS_FILE)!
+      : await this.deps.store.bytes(base!, stored!)
+    let doc: CanvasDoc
+    try {
+      const text = utf8(bytes)
+      if (text === null) throw invalid(`${CANVAS_FILE} is not UTF-8 text.`)
+      doc = parseCanvasDoc(text)
+    } catch (error) {
+      if (error instanceof CanvasError) throw invalid(`${CANVAS_FILE}: ${error.message}.`)
+      throw error
+    }
+    const missing = missingPageFiles(doc, (path) => sizes.has(path))
+    if (missing.length > 0) {
+      throw invalid(
+        `${CANVAS_FILE} lays out ${missing.join(', ')}, which the version would not have. Write ` +
+          'each page file in the same call, or remove its page.',
+      )
+    }
+    if (changed.has(CANVAS_FILE))
+      changed.set(CANVAS_FILE, Buffer.from(stringifyCanvasDoc(doc), 'utf8'))
+    return doc
   }
 
   /** Refuses a typed version whose content does not fit its format, saying what to fix. */
@@ -1277,7 +1397,9 @@ export class ArtifactTools {
     const declared = declaration(o)
     const input = { title: title(o), note: note(o), ...(declared ? { declaration: declared } : {}) }
     if (o.html === undefined && o.files === undefined) {
-      throw invalid(`Give html, or files with ${ARTIFACT_ENTRY} among them.`)
+      throw invalid(
+        `Give html, or files with ${ARTIFACT_ENTRY} or a canvas's ${CANVAS_FILE} among them.`,
+      )
     }
     const specs = fileSpecs(o, false)
     return this.limited(caller, async () => {
@@ -1292,7 +1414,7 @@ export class ArtifactTools {
         ...(editor ? { editor } : {}),
       })
       return result(
-        `Created ${id} version ${version}, ${pagesText(draft.pages)}${filesText(draft.files)}.`,
+        `Created ${id} version ${version}, ${pagesText(draft.pages, draft.canvas)}${filesText(draft.files)}.`,
         { id, version, pages: draft.pages },
       )
     })
@@ -1368,13 +1490,15 @@ export class ArtifactTools {
 
   private async update(caller: Caller, o: Args): Promise<CallToolResult> {
     const artifactId = id(o)
-    const changes = ['html', 'files', 'edits', 'capabilities'].filter((key) => o[key] !== undefined)
+    const changes = ['html', 'files', 'edits', 'capabilities', 'canvas'].filter(
+      (key) => o[key] !== undefined,
+    )
     const { store } = this.deps
     if (o.title !== undefined) {
       if (changes.length > 0) {
         throw invalid(
-          'Give a title alone to rename; html, files, edits and capabilities make a new version, ' +
-            'which a rename does not.',
+          'Give a title alone to rename; html, files, edits, capabilities and canvas make a new ' +
+            'version, which a rename does not.',
         )
       }
       // A rename makes no version, so base_version and a note have nothing to apply to.
@@ -1398,28 +1522,75 @@ export class ArtifactTools {
     }
     if (changes.length === 0) {
       throw invalid(
-        'Give html, files, edits or capabilities for a new version, or a title alone to rename.',
+        'Give html, files, edits, capabilities or canvas for a new version, or a title alone to rename.',
       )
     }
     if (o.base_version === undefined) {
-      throw invalid('base_version is needed with html, files, edits or capabilities.')
+      throw invalid('base_version is needed with html, files, edits, capabilities or canvas.')
     }
     const declared = declaration(o)
     const baseVersion = wholeNumber(o, 'base_version', 1)
     const versionNote = note(o)
     const specs = fileSpecs(o, true)
     const list = o.edits === undefined ? [] : edits(o)
+    const ops = o.canvas === undefined ? null : canvasOps(o, caller.sessionId)
+    if (
+      ops &&
+      (specs.some((spec) => spec.path === CANVAS_FILE) || list.some((e) => e.path === CANVAS_FILE))
+    ) {
+      throw invalid(
+        `Change ${CANVAS_FILE} either with canvas operations or as a file, not both in one call.`,
+      )
+    }
     return this.limited(caller, async () => {
-      // The version first, so a stale one is refused before any file is read.
-      const base = await store.get(artifactId, { project: caller.project })
-      if (base.artifact.head !== baseVersion) {
-        throw new ArtifactError('conflict', 'Not the latest version', {
-          version: base.artifact.head,
-          deleted: false,
-        })
+      const reached = await store.get(artifactId, { project: caller.project })
+      if (
+        ops &&
+        (reached.type ||
+          (!reached.files.some((f) => f.path === CANVAS_FILE) && reached.version.pages < 2))
+      ) {
+        throw invalid(
+          `${artifactId} is not a canvas, so it takes no canvas operations; read_artifact_guide ` +
+            'topic canvas explains making one.',
+        )
       }
+      // Canvas operations merge with the user's on the latest document; the user's pending ones
+      // become their own version first.
+      return store.canvases.agentWrite(artifactId, ops ?? [], (canvas) =>
+        this.updateFiles(caller, artifactId, {
+          baseVersion,
+          declared,
+          versionNote,
+          specs,
+          list,
+          html: o.html !== undefined,
+          canvas,
+        }),
+      )
+    })
+  }
+
+  private async updateFiles(
+    caller: Caller,
+    artifactId: string,
+    input: {
+      baseVersion: number
+      declared: Declaration | undefined
+      versionNote: string | null
+      specs: readonly FileSpec[]
+      list: readonly Edit[]
+      html: boolean
+      canvas: { data: Buffer; pages: number } | null
+    },
+  ): Promise<CallToolResult> {
+    const { store } = this.deps
+    const { baseVersion, declared, versionNote, specs, list, canvas } = input
+    {
+      // The latest version: a write lands on it when no file it writes changed since its base,
+      // which the store checks.
+      const base = await store.get(artifactId, { project: caller.project })
       // A typed version keeps its format; Kettu moves it to a new one when it is opened.
-      if (base.type && o.html !== undefined) {
+      if (base.type && input.html) {
         throw invalid(
           `${artifactId} is a ${base.type.name}, which has no ${ARTIFACT_ENTRY}: change ` +
             `${CONTENT_ENTRIES[base.type.name]} with files or edits.`,
@@ -1437,6 +1608,7 @@ export class ArtifactTools {
             )
           : list,
         typed,
+        canvas?.data ?? null,
       )
       const editor = this.turn(caller)
       const { version } = await store.write({
@@ -1449,14 +1621,15 @@ export class ArtifactTools {
         project: caller.project,
         ...(declared ? { declaration: declared } : {}),
         type: base.type,
+        ...(canvas ? { unchecked: [CANVAS_FILE] } : {}),
         ...(editor ? { editor } : {}),
       })
       return result(
-        `Updated ${artifactId} to version ${version}, ${pagesText(draft.pages)}` +
+        `Updated ${artifactId} to version ${version}, ${pagesText(draft.pages, draft.canvas)}` +
           `${filesText(draft.files)}.`,
         { id: artifactId, version, pages: draft.pages },
       )
-    })
+    }
   }
 
   private guide(o: Args): CallToolResult {
