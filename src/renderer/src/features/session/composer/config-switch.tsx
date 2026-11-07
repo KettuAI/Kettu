@@ -1,14 +1,10 @@
 import { useId, type ReactNode } from 'react'
-import { RotateLeft01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { booleanConfigValue, type ConfigOption } from '@shared/thread'
-import { Button } from '@renderer/components/ui/button'
 import { DropdownMenuItem } from '@renderer/components/ui/dropdown-menu'
 import { Switch } from '@renderer/components/ui/switch'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import { DESCRIBED_ROW, ItemText } from './menu-parts'
-import { Glyph } from '@renderer/features/shell/glyph'
 
 /** Whether the agent's own setting can stand for the option's value. */
 function inheritsSetting(option: ConfigOption): boolean {
@@ -38,7 +34,7 @@ function SettingText({ option }: { option: ConfigOption }) {
 
 /**
  * A boolean option as a row: a menu item that keeps the menu open, or a list row. The switch shows
- * the value in effect; an inherited one says so, and its reset returns the override to the agent.
+ * the value in effect; an inherited one says so.
  */
 export function ConfigSwitchRow({
   option,
@@ -51,8 +47,7 @@ export function ConfigSwitchRow({
   icon?: ReactNode
   disabled?: boolean
   menu?: boolean
-  /** The value to set, `'default'` to follow the agent again. */
-  onSelect: (value: string | boolean) => void
+  onSelect: (value: boolean) => void
 }) {
   const { t } = useTranslation('composer')
   const id = useId()
@@ -65,41 +60,27 @@ export function ConfigSwitchRow({
   ) : (
     option.description
   )
-  const canReset = inheritsSetting(option) && !follows
 
   if (menu) {
     return (
-      <>
-        <DropdownMenuItem
-          closeOnClick={false}
-          role="menuitemcheckbox"
-          aria-checked={checked}
-          disabled={disabled}
-          onClick={() => onSelect(toggledValue(option))}
-          className={cn(said && DESCRIBED_ROW)}
-        >
-          {icon}
-          <ItemText name={option.name} description={said} />
-          <Switch
-            size="sm"
-            checked={checked}
-            tabIndex={-1}
-            aria-hidden
-            className="pointer-events-none ml-3"
-          />
-        </DropdownMenuItem>
-        {canReset && (
-          <DropdownMenuItem
-            closeOnClick={false}
-            disabled={disabled}
-            onClick={() => onSelect('default')}
-            className="min-h-6.5 py-0.5 pl-8.25 text-small text-tertiary"
-          >
-            <Glyph icon={RotateLeft01Icon} className="size-3" />
-            {t('controls.resetDefault')}
-          </DropdownMenuItem>
-        )}
-      </>
+      <DropdownMenuItem
+        closeOnClick={false}
+        role="menuitemcheckbox"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => onSelect(toggledValue(option))}
+        className={cn(said && DESCRIBED_ROW)}
+      >
+        {icon}
+        <ItemText name={option.name} description={said} />
+        <Switch
+          size="sm"
+          checked={checked}
+          tabIndex={-1}
+          aria-hidden
+          className="pointer-events-none ml-3"
+        />
+      </DropdownMenuItem>
     )
   }
 
@@ -109,23 +90,6 @@ export function ConfigSwitchRow({
         <span>{option.name}</span>
         {said && <span className="text-xs text-muted-foreground">{said}</span>}
       </label>
-      {canReset && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="quiet"
-                size="icon-xs"
-                aria-label={t('controls.resetDefault')}
-                onClick={() => onSelect('default')}
-              />
-            }
-          >
-            <Glyph icon={RotateLeft01Icon} />
-          </TooltipTrigger>
-          <TooltipContent>{t('controls.resetDefault')}</TooltipContent>
-        </Tooltip>
-      )}
       <Switch
         id={id}
         size="sm"

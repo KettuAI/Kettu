@@ -34,7 +34,7 @@ export function useSelectPick(
 
 /**
  * The switches' values in effect, each flip shown at once until the agent's own value lands or
- * `SETTLE_MS` passes; a reset to the agent's setting shows once the agent reports it.
+ * `SETTLE_MS` passes.
  */
 export function useSwitchPicks(onSelect: Select) {
   const [pending, setPending] = useState<Record<string, boolean>>({})
@@ -49,11 +49,9 @@ export function useSwitchPicks(onSelect: Select) {
       delete rest[id]
       return rest
     })
-  const pick = (option: ConfigOption, value: boolean | 'default') => {
-    if (value !== 'default') setPending((p) => ({ ...p, [option.id]: value }))
-    else settle(option.id, valueOf(option))
+  const pick = (option: ConfigOption, value: boolean) => {
+    setPending((p) => ({ ...p, [option.id]: value }))
     void onSelect(option.id, value).then((ok) => {
-      if (value === 'default') return
       if (ok) setTimeout(() => settle(option.id, value), SETTLE_MS)
       else settle(option.id, value)
     })

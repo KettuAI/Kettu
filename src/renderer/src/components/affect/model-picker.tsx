@@ -2,7 +2,6 @@
 "use client";
 
 import {
-  Fragment,
   memo,
   useCallback,
   useEffect,
@@ -66,8 +65,6 @@ export type PickerToggle = {
   effect?: ReactNode;
   /** Whether it is on (controlled); report changes through `onToggle` */
   on?: boolean;
-  /** A small row under the switch that hands the value back, such as to a setting it overrides */
-  reset?: { label: string; onReset: () => void };
 };
 
 /** Words the picker shows and says – pass your own to translate them */
@@ -978,8 +975,8 @@ export function ModelPicker({
                 </div>
               )}
               {toggles.map((t) => (
-                <Fragment key={t.id}>
                 <button
+                  key={t.id}
                   type="button"
                   role="switch"
                   aria-checked={!!toggleOn[t.id]}
@@ -996,21 +993,6 @@ export function ModelPicker({
                   <span className="ui-mdpc__toggle-label">{toggleOn[t.id] && t.onLabel ? t.onLabel : t.label}</span>
                   <span className="ui-mdpc__switch" aria-hidden="true" />
                 </button>
-                {t.reset && (
-                  <button
-                    type="button"
-                    className="ui-mdpc__reset"
-                    disabled={t.disabled}
-                    onClick={(e) => {
-                      // The row goes once reset, so focus stays in the menu on its switch.
-                      (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
-                      t.reset?.onReset();
-                    }}
-                  >
-                    {t.reset.label}
-                  </button>
-                )}
-                </Fragment>
               ))}
             </div>
           ) : (
@@ -1309,9 +1291,6 @@ const css = /* css */ `
 .ui-mdpc__effort--own .ui-mdpc__segmented { flex: 1; }
 .ui-mdpc__effort--own .ui-mdpc__seg-btn { flex: 1; padding: 0 4px; }
 .ui-mdpc__toggle:disabled { opacity: 0.45; cursor: default; }
-.ui-mdpc__reset { display: block; width: 100%; height: 24px; margin-top: -2px; padding: 0 8px 0 38px; border-radius: 6px; font-size: 12px; line-height: 16px; text-align: left; color: var(--ui-mdpc-muted); }
-.ui-mdpc__reset:hover { background: var(--ui-mdpc-fill); color: var(--ui-mdpc-ink); }
-.ui-mdpc__reset:disabled { opacity: 0.45; cursor: default; }
 .ui-mdpc__fly-note { margin: 4px -4px -4px; padding: 6px 12px 8px; border-top: 0.5px solid var(--ui-mdpc-line); font-size: 12px; line-height: 16px; color: var(--ui-mdpc-muted); }
 .ui-mdpc__toggle:disabled:hover { background: none; }
 /* No ratings anywhere: no "Varies" column either */
