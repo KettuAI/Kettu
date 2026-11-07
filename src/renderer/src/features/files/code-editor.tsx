@@ -2,7 +2,7 @@
 
 import { use, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { indentWithTab } from '@codemirror/commands'
-import { LanguageDescription } from '@codemirror/language'
+import { LanguageDescription, LanguageSupport, LRLanguage } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
 import { search } from '@codemirror/search'
 import {
@@ -17,6 +17,7 @@ import {
   type Extension,
 } from '@codemirror/state'
 import { Decoration, GutterMarker, gutterLineClass, keymap, ViewPlugin } from '@codemirror/view'
+import { styleTags, tags } from '@lezer/highlight'
 import { basicSetup, EditorView } from 'codemirror'
 import type { FileContent } from '@shared/files'
 import { useCodeThemes } from '@renderer/features/session/markdown/code-themes'
@@ -28,6 +29,35 @@ import { lineBreakOf, lineChange } from './editor-text'
 import { nameOf } from './paths'
 
 type TextContent = Extract<FileContent, { kind: 'text' }>
+
+/**
+ * YAML colored as code blocks color it. Its parser marks keys as property definitions and plain
+ * values as content, which code themes leave in the plain ink, while Shiki's grammar, which code
+ * blocks use, makes them tags and strings.
+ */
+function yamlAsCodeBlocks(support: LanguageSupport): LanguageSupport {
+  if (!(support.language instanceof LRLanguage)) return support
+  const language = support.language.configure({
+    props: [
+      styleTags({
+        'Key/Literal Key/QuotedLiteral': tags.tagName,
+        'Literal BlockLiteralContent': tags.string,
+      }),
+    ],
+  })
+  return new LanguageSupport(language, support.support)
+}
+
+const LANGUAGES = languages.map((description) =>
+  description.name === 'YAML'
+    ? LanguageDescription.of({
+        name: description.name,
+        alias: description.alias,
+        extensions: description.extensions,
+        load: () => description.load().then(yamlAsCodeBlocks),
+      })
+    : description,
+)
 
 // The search panel's rules match CodeMirror's own `.cm-panel.cm-search` so they win over it.
 const chrome = EditorView.theme({
@@ -231,7 +261,7 @@ function createBuffer(
     EditorState.lineSeparator.of(lineBreakOf(content.text)),
     theme.of(colors),
     language.of([]),
-    loadLanguage(LanguageDescription.matchFilename(languages, nameOf(path))),
+    loadLanguage(LanguageDescription.matchFilename(LANGUAGES, nameOf(path))),
     readOnly.of(EditorState.readOnly.of(!content.editable)),
     marked,
     chrome,
