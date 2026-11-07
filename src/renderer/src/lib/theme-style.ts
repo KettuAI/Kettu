@@ -47,7 +47,11 @@ export function themeFontAttributes(theme: Theme | null): [string, string | null
 
 let element: HTMLStyleElement | null = null
 
-/** Writes the theme into its style element in <head> and <html>; the built-in theme clears both. */
+/**
+ * Writes the theme into its style element in <head> and <html>; the built-in theme clears both.
+ * `data-installed-theme` tells tokens.css and affect.css to draw what the built-in theme keeps in
+ * its own values from the theme's tokens instead.
+ */
 export function applyThemeStyle(theme: Theme | null): void {
   if (!element) {
     element = document.createElement('style')
@@ -55,6 +59,7 @@ export function applyThemeStyle(theme: Theme | null): void {
   }
   element.textContent = themeCss(theme)
   const root = document.documentElement
+  root.toggleAttribute('data-installed-theme', theme !== null)
   for (const [name, face] of themeFontAttributes(theme)) {
     if (face) root.setAttribute(name, face)
     else root.removeAttribute(name)

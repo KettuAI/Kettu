@@ -1,5 +1,11 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { BotIcon, CheckIcon, ChevronRightIcon, CircleAlertIcon } from 'lucide-react'
+import {
+  AiChat02Icon,
+  AlertCircleIcon,
+  ArrowRight01Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { Button } from '@renderer/components/ui/button'
@@ -101,29 +107,27 @@ function SubagentBlock({
   const block = (
     <div
       ref={attachRoot}
-      className={cn(
-        'relative overflow-hidden rounded-xl bg-card text-ui text-card-foreground shadow-card',
-        waiting && 'shadow-attention',
-        className,
-      )}
+      data-waiting={waiting || undefined}
+      className={cn('ks-subagent', className)}
     >
       <Button
         ref={header}
         variant="ghost"
         disabled={!child}
         onClick={() => child && openSession(child.id, child.projectPath)}
-        className="group/header flex h-[38px] w-full items-center justify-start gap-[9px] rounded-xl pr-2 pl-2.5 text-left font-normal focus-visible:ring-inset"
+        className="ks-subagent__head focus-visible:ring-inset"
       >
-        <BotTile />
-        <span className="max-w-1/2 min-w-0 shrink-0 truncate font-medium text-primary">
+        <HugeiconsIcon
+          icon={AiChat02Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="ks-subagent__icon size-4 shrink-0"
+        />
+        <span className="ks-subagent__name">
           {child ? sessionTitle(child) : t('subagent.fallbackTitle')}
         </span>
-        <span className="min-w-0 flex-1 truncate text-tertiary">{child?.description}</span>
-        {meta && (
-          <span className="shrink-0 text-caption whitespace-nowrap text-tertiary tabular-nums">
-            {meta}
-          </span>
-        )}
+        <span className="ks-subagent__desc">{child?.description}</span>
+        {meta && <span className="ks-subagent__meta tabular-nums">{meta}</span>}
         <span className="grid w-4 shrink-0 place-items-center">
           {waiting ? (
             <span
@@ -132,7 +136,9 @@ function SubagentBlock({
               className="size-2 rounded-full bg-attention-dot shadow-[0_0_0_3px_var(--attention-halo)]"
             />
           ) : failed ? (
-            <CircleAlertIcon
+            <HugeiconsIcon
+              icon={AlertCircleIcon}
+              strokeWidth={1.9}
               role="img"
               aria-label={t('status.failed')}
               className="size-3.5 text-danger"
@@ -140,17 +146,21 @@ function SubagentBlock({
           ) : running ? (
             <RingSpinner aria-label={t('status.running')} className="size-3" />
           ) : child && !cancelled ? (
-            <CheckIcon
+            <HugeiconsIcon
+              icon={Tick02Icon}
+              strokeWidth={1.9}
               role="img"
               aria-label={t('status.done')}
-              strokeWidth={1.9}
               className="size-3 text-success"
             />
           ) : null}
         </span>
-        <span className="grid size-6 shrink-0 place-items-center rounded-tile text-tertiary transition-colors duration-(--duration-fast) group-hover/header:text-secondary">
-          <ChevronRightIcon aria-hidden strokeWidth={1.6} className="size-3" />
-        </span>
+        <HugeiconsIcon
+          icon={ArrowRight01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="ks-subagent__chevron size-4 shrink-0"
+        />
       </Button>
       {highlight > 0 && (
         <span
@@ -178,14 +188,6 @@ function SubagentBlock({
         />
       </ContextMenuContent>
     </ContextMenu>
-  )
-}
-
-function BotTile() {
-  return (
-    <span className="grid size-[22px] shrink-0 place-items-center rounded-tile bg-subtle text-secondary">
-      <BotIcon aria-hidden strokeWidth={1.4} className="size-[13px]" />
-    </span>
   )
 }
 

@@ -1,0 +1,1076 @@
+/* session: the thread and the session header, on affectUI's AI Chat screen (features/session).
+   The thread's prose follows the text size setting a step under the other prose, as the screen
+   sets its answers at 14 px. */
+
+/* The session view: the thread's column, which the composer under it keeps to. */
+.ks-session {
+  --thread-prose-size: 14px;
+  --thread-column: calc(48 * var(--thread-prose-size) + 8px);
+}
+:root[data-text-size='small'] .ks-session {
+  --thread-prose-size: 13px;
+}
+:root[data-text-size='large'] .ks-session {
+  --thread-prose-size: 15px;
+}
+.ks-thread {
+  --prose-size: var(--thread-prose-size, 14px);
+  --text-prose: var(--thread-prose-size, 14px);
+}
+.ks-thread__column {
+  max-width: calc(var(--thread-column) + 64px);
+}
+
+/* A message you sent: the gray bubble at the right, and under it on hover its time and Copy, the
+   copy glyph flush with the bubble's edge. */
+.ks-user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.ks-user__bubble {
+  max-width: 80%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: var(--thread-chip);
+  font-size: var(--prose-size);
+  line-height: 1.55;
+  color: var(--thread-ink);
+}
+.ks-user__note {
+  max-width: 80%;
+  overflow: hidden;
+  padding-right: 2px;
+  font-size: 12px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-user__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: -4px -6px 0 0;
+  font-size: 12px;
+  color: var(--thread-faint);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+/* Message Actions is a size container, so it takes no width from its one button on its own. */
+.ks-user__meta .ui-mac {
+  flex: none;
+  width: 28px;
+}
+.ks-user:hover .ks-user__meta,
+.ks-user__meta:focus-within {
+  opacity: 1;
+}
+
+/* An agent's message on AI Answer: the thread's type, its label (nine dots, "Writing") under the
+   text only while it writes, and no row of its own under it, since Stop sits in the composer and
+   the reply's actions follow. The label hangs on the card's bottom edge, outside the body that
+   clips while it glides to a new height, so a new line pushes it down instead of hiding it. */
+.ks-answer .ui-ansc {
+  max-width: none;
+  font-family: inherit;
+  font-size: var(--prose-size);
+  --ui-ansc-ink: var(--thread-ink);
+  --ui-ansc-strong: var(--thread-ink);
+  --ui-ansc-text: var(--thread-muted);
+}
+.ks-answer .ui-ansc__card {
+  position: relative;
+  padding-bottom: 30px;
+  transition: padding-bottom 300ms cubic-bezier(0.22, 1, 0.36, 1) 120ms;
+}
+.ks-answer .ui-ansc__label {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 20px;
+  margin: 0;
+  font-size: 12.5px;
+  transition: opacity 150ms ease;
+}
+.ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) .ui-ansc__card {
+  padding-bottom: 0;
+}
+.ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) .ui-ansc__label {
+  opacity: 0;
+}
+.ks-answer .ui-ansc__answer {
+  font-size: inherit;
+  line-height: inherit;
+}
+.ks-answer :is(.ui-ansc__foot, .ui-ansc__reasons) {
+  display: none;
+}
+.ks-answer .markdown {
+  color: var(--thread-ink);
+}
+/* The fox's caret after the last word while the message streams. */
+.ks-answer
+  .ui-ansc[data-phase='writing']
+  .markdown-chunk:last-child
+  > :is(p, h1, h2, h3, h4, h5, h6):last-child::after,
+.ks-answer
+  .ui-ansc[data-phase='writing']
+  .markdown-chunk:last-child
+  > :is(ul, ol):last-child
+  > li:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 1.5px;
+  background: var(--thread-fox);
+  vertical-align: 0.1em;
+  animation: ks-caret 1s ease-in-out infinite;
+}
+@keyframes ks-caret {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* A reply's copy, fork and time show while the pointer is on its turn, as under a message you
+   sent; they keep their room, so nothing moves. */
+.ks-reply-foot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-left: -6px;
+  font-size: 12px;
+  color: var(--thread-faint);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+.ks-reply-foot[data-shown],
+.ks-reply-foot:focus-within {
+  opacity: 1;
+}
+.ks-reply-foot .ui-mac {
+  flex: 1;
+}
+.ks-reply-foot .ui-mac__after {
+  color: var(--thread-faint);
+}
+
+/* The running turn's status: the nine dots or the attention dot, the clock, tokens and phase. */
+.ks-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 20px;
+  min-width: 0;
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+  animation: ks-fade-in 180ms ease both;
+}
+.ks-status[data-after-sent] {
+  margin-top: 22px;
+}
+.ks-status i {
+  font-style: normal;
+  color: var(--thread-faint);
+}
+.ks-status__attn {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 2px;
+  border-radius: 50%;
+  background: var(--thread-fox);
+  box-shadow: 0 0 0 3px var(--thread-fox-halo);
+}
+@keyframes ks-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Tool calls on affectUI's Tool Call Card and Group. A long run summary shortens instead of
+   pushing the failed count, time and chevron to the far edge; the thumbnails at a folded row's
+   end give way once it opens, whose details show the pictures. */
+.ks-thread .ui-tcc-group__label {
+  max-width: 36em;
+}
+.ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__trail,
+.ui-tcc-group[data-open] > .ui-tcc-group__top > .ui-tcc__trail {
+  display: none;
+}
+.ks-tool-stats,
+.ks-tool-note {
+  color: var(--thread-muted);
+}
+
+/* Marks stand on their own in a card's head, with no tile around them, as the screen sets them. */
+.ks-thread :is(.ui-prc__avatar, .ui-apc__icon) {
+  width: 16px;
+  height: 16px;
+  overflow: visible;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+/* A request for permission on Permission Request, across the column as the screen sets it: the
+   target in mono, what it touches two to a row, how long at the left of the answer and the
+   buttons at the right, which wrap under it when the agent offers more answers. */
+.ks-thread .ui-prc.ks-permission {
+  max-width: none;
+  --ui-prc-text: var(--thread-prose);
+  --ui-prc-muted: var(--thread-quiet);
+  --ui-prc-icon: var(--thread-quiet);
+}
+.ks-permission .ui-prc__head {
+  padding: 12px 12px 0 14px;
+}
+.ks-permission .ui-prc__sub {
+  margin-top: 2px;
+  font: 12px/18px var(--font-mono);
+  color: var(--ui-prc-ink);
+}
+.ks-permission .ui-prc__why {
+  margin: 6px 14px 0 52px !important;
+}
+.ks-permission .ui-prc__preview {
+  margin-top: 10px;
+  padding: 8px 8px 6px;
+}
+.ks-permission .ui-prc__list {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  column-gap: 8px;
+}
+.ks-permission .ui-prc__item {
+  min-height: 26px;
+}
+.ks-permission .ui-prc__item-label {
+  flex: 0 1 auto;
+  font: 12px/18px var(--font-mono);
+}
+.ks-permission .ui-prc__answer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 10px 8px 14px;
+}
+.ks-permission .ui-prc__buttons {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+.ks-permission .ui-prc__more-body {
+  padding: 10px 14px 0;
+}
+/* What an always answer allows, when the agent spells it out: its own line under the answer. */
+.ks-permission__allows {
+  flex-basis: 100%;
+  order: 1;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--thread-muted);
+  overflow-wrap: anywhere;
+}
+.ks-permission__command {
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-code-block);
+  font: 12px/18px var(--font-mono);
+  color: var(--thread-ink);
+}
+.ks-permission__command pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ks-permission__command pre > span {
+  color: var(--thread-faint);
+}
+.ks-permission__cwd {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-permission__note {
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-card-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--danger);
+}
+.ks-add {
+  color: var(--thread-add);
+}
+.ks-del {
+  color: var(--thread-del);
+}
+
+/* An agent's questions on Experiment Card as a question, across the column. */
+.ks-thread .ui-xcc.ks-question {
+  max-width: none;
+}
+
+/* An ask once answered, in the folded permission card's look: what it came to, then each
+   question in gray over its answer. */
+.ks-answered {
+  min-width: 0;
+  border-radius: 10px;
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  font-size: 13px;
+  line-height: 20px;
+}
+.ks-answered__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 10px 0 16px;
+  color: var(--thread-muted);
+}
+.ks-answered[data-kind='done'] .ks-answered__head {
+  color: var(--thread-add);
+}
+.ks-answered__title {
+  flex: none;
+  font-weight: 500;
+  color: var(--thread-ink);
+}
+.ks-answered__device {
+  margin-left: -4px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-answered__list {
+  display: grid;
+  gap: 8px;
+  padding: 2px 16px 12px 42px;
+}
+.ks-answered__list li {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.ks-answered__question {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--thread-muted);
+}
+.ks-answered__answer {
+  color: var(--thread-ink);
+  overflow-wrap: anywhere;
+}
+.ks-answered__answer--quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--thread-muted);
+}
+.ks-answered__toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 8px 0 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--thread-text);
+  transition: background-color 140ms ease;
+}
+.ks-answered__toggle:hover {
+  background: var(--thread-hover);
+}
+.ks-answered__toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.ks-answered__toggle svg {
+  transition: transform 160ms ease;
+}
+.ks-answered__quote {
+  margin: 2px 16px 12px 42px;
+  padding-left: 10px;
+  border-left: 2px solid var(--thread-line-strong);
+  font-size: 12.5px;
+  color: var(--thread-text);
+}
+.ks-answered__plan {
+  padding: 8px 12px 12px;
+}
+.ks-answered__end {
+  height: 10px;
+}
+
+/* A plan on Approval Card: its text, the mode it builds in and a note for keeping on planning. */
+.ks-thread .ui-apc.ks-plan {
+  max-width: none;
+}
+/* The plan clamps itself, so the card's own scroller would hide the mode and the note under it. */
+.ks-plan .ui-apc__preview {
+  max-height: none;
+  overflow: visible;
+}
+.ks-plan__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--thread-ink);
+}
+.ks-plan__label {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--thread-muted);
+}
+.ks-plan__body {
+  position: relative;
+  min-width: 0;
+  padding-right: 28px;
+}
+.ks-plan__copy {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--thread-faint);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.ks-plan__copy:hover {
+  background: var(--thread-hover);
+  color: var(--thread-text);
+}
+.ks-plan__changes ul {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+}
+.ks-plan__changes li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+.ks-plan__changes li[data-kind='same'] {
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-plan__changes li[data-kind='added'] {
+  background: var(--success-tint);
+}
+.ks-plan__changes li[data-kind='removed'] {
+  background: var(--danger-tint);
+  color: var(--thread-text);
+  text-decoration: line-through;
+}
+.ks-plan__changes li > span:first-child {
+  flex: none;
+  width: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-decoration: none;
+}
+.ks-plan__changes li[data-kind='added'] > span:first-child {
+  color: var(--thread-add);
+}
+.ks-plan__changes li[data-kind='removed'] > span:first-child {
+  color: var(--thread-del);
+}
+.ks-plan__note {
+  height: 34px;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--thread-line-strong);
+  font-size: 13px;
+  color: var(--thread-ink);
+  outline: none;
+  transition: box-shadow 140ms ease;
+}
+.ks-plan__note::placeholder {
+  color: var(--thread-muted);
+}
+.ks-plan__note:focus {
+  box-shadow: inset 0 0 0 1px var(--thread-muted);
+}
+.ks-plan__moved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+}
+.ks-plan__moved b {
+  font-weight: 500;
+  color: var(--thread-text);
+}
+.ks-answered__head--alone {
+  padding-bottom: 10px;
+}
+
+/* Computer use's setup on Approval Card: a picture of the switch, the step and its dots; only
+   this computer's window can take a step, so elsewhere the card offers Not now alone. */
+.ks-thread .ui-apc.ks-setup {
+  max-width: none;
+}
+[data-elsewhere] .ks-setup .ui-apc__approve {
+  display: none;
+}
+.ks-setup__body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.ks-setup__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ks-setup__dots {
+  display: flex;
+  gap: 6px;
+}
+.ks-setup__dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--thread-line-strong);
+  transition:
+    width 200ms ease,
+    background-color 200ms ease;
+}
+.ks-setup__dots span[data-state='current'] {
+  width: 16px;
+  background: var(--thread-ink);
+}
+.ks-setup__dots span[data-state='done'] {
+  background: var(--thread-add);
+}
+.ks-thread .ui-apc__desc {
+  overflow: visible;
+  white-space: normal;
+}
+
+/* An MCP server's form or page on Approval Card. */
+.ks-form__message {
+  font-size: 14px;
+  font-weight: 500;
+  white-space: pre-wrap;
+  color: var(--thread-ink);
+}
+.ks-form {
+  display: grid;
+  grid-template-columns: 8.25rem minmax(0, 1fr);
+  align-items: start;
+  gap: 12px 16px;
+}
+.ks-form__label {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 34px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--thread-text);
+}
+.ks-form__label > span {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--thread-muted);
+}
+.ks-form__field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 34px;
+}
+.ks-form__hint {
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-form__error {
+  font-size: 12px;
+  color: var(--danger);
+}
+.ks-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-code-block);
+  color: var(--thread-text);
+}
+.ks-link__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.ks-link__text b {
+  font-weight: 600;
+  color: var(--thread-ink);
+}
+.ks-link__text span {
+  overflow: hidden;
+  font: 12px/18px var(--font-mono);
+  color: var(--thread-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-answered__values {
+  display: grid;
+  grid-template-columns: 8.25rem minmax(0, 1fr);
+  gap: 6px 16px;
+  padding: 0 16px 12px 42px;
+  font-size: 12.5px;
+}
+.ks-answered__values dt {
+  color: var(--thread-muted);
+}
+.ks-answered__values dd {
+  overflow-wrap: anywhere;
+  color: var(--thread-ink);
+}
+
+/* The session's top bar: its pull request and plan chips, and the plan's steps on hover. */
+.ks-crumb-sep {
+  display: inline-flex;
+  flex: none;
+  color: var(--shell-faint);
+}
+.ks-chip {
+  display: inline-flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--shell-chip);
+  font-size: 12px;
+  color: var(--shell-muted);
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.ks-chip:hover,
+.ks-chip[data-popup-open] {
+  background: var(--shell-hover);
+  color: var(--shell-ink);
+}
+.ks-chip:focus-visible {
+  outline: 1.5px solid var(--focus);
+  outline-offset: 1px;
+}
+.ks-chip__text {
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  color: var(--shell-ink);
+}
+.ks-chip__dim {
+  color: var(--shell-faint);
+}
+.ks-plan-chip {
+  flex: 0 1 auto;
+}
+.ks-plan-ring {
+  flex: none;
+}
+.ks-plan-ring :is(path, circle) {
+  fill: none;
+  stroke: var(--shell-line-strong);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.ks-plan-ring [data-status='completed'] {
+  stroke: var(--thread-done);
+}
+.ks-plan-ring [data-status='in_progress'] {
+  stroke: var(--thread-fox);
+}
+.ks-plan-pop .ui-stc {
+  max-width: none;
+}
+.ks-plan-pop .ui-stc__card {
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+/* App Shell's buttons inherit their color, which outranks a color utility. */
+.ks-crumb {
+  color: var(--shell-muted);
+}
+.ks-title,
+.ks-crumb:hover {
+  color: var(--shell-ink);
+}
+.ks-title[data-unfocused] {
+  color: var(--shell-text);
+}
+.ks-title[data-unfocused]:hover {
+  color: var(--shell-ink);
+}
+
+/* Jump to latest: the turn's nine dots in the fox orange. At rest three light as a chevron
+   pointing down; a running turn moves them as the status line does; a turn waiting for the user
+   beats the centre. */
+.ks-jump {
+  border: 0;
+  background: var(--thread-card);
+  box-shadow: var(--thread-float-shadow);
+  color: var(--thread-ink);
+}
+.ks-jump:hover {
+  background: var(--bg-app);
+}
+.ks-jump__dots {
+  overflow: visible;
+}
+.ks-jump__dots circle {
+  fill: var(--thread-fox);
+  opacity: 0.22;
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: opacity 200ms ease;
+}
+.ks-jump:is([data-mark='idle'], [data-mark='ended'])
+  circle:is([data-cell='3'], [data-cell='5'], [data-cell='7']) {
+  opacity: 1;
+}
+.ks-jump[data-mark='running'] circle[data-still] {
+  opacity: 1;
+}
+.ks-jump[data-mark='waiting'] circle[data-cell='4'] {
+  opacity: 1;
+  animation: ks-jump-beat 1.4s ease-in-out infinite;
+}
+.ks-jump[data-mark='failed'] circle {
+  fill: var(--danger);
+}
+.ks-jump[data-mark='failed'] circle[data-cell='4'] {
+  opacity: 1;
+}
+.ks-jump:is(:hover, :focus-visible) circle[data-cell] {
+  opacity: 0.22;
+  animation: none !important;
+}
+.ks-jump:is(:hover, :focus-visible) circle:is([data-cell='3'], [data-cell='5'], [data-cell='7']) {
+  opacity: 1;
+}
+.ks-jump[data-mark='ended'] .ks-jump__dots {
+  animation: ks-jump-nudge 420ms cubic-bezier(0.3, 0, 0.3, 1) 600ms both;
+}
+.ks-jump[data-mark='failed'] {
+  animation: ks-jump-shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) 340ms both;
+}
+@keyframes ks-jump-beat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.45);
+  }
+}
+@keyframes ks-jump-nudge {
+  0%,
+  100% {
+    transform: none;
+  }
+  45% {
+    transform: translateY(2.5px);
+  }
+}
+@keyframes ks-jump-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(1.5px);
+  }
+}
+
+/* The message outline: a dash per message at the thread's left, the list on hover. */
+.ks-outline {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 6px 4px;
+}
+.ks-outline__dash {
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--thread-line-strong);
+}
+.ks-outline__dash[data-current] {
+  width: 16px;
+  background: var(--thread-muted);
+}
+.ks-outline__item {
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+}
+.ks-outline__item[data-highlighted],
+.ks-outline__item[data-reading] {
+  color: var(--thread-ink);
+}
+.ks-outline__item[data-reading] {
+  font-weight: 500;
+}
+
+/* Reply to a selected passage: an ink pill above it. */
+.ks-reply-pop {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+.ks-reply-pill {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--thread-ink);
+  box-shadow: var(--thread-pill-shadow);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bg-app);
+}
+.ks-reply-pill:hover {
+  background: var(--thread-ink);
+  color: var(--bg-app);
+}
+
+/* A turn's changes: the count and the repository's actions, then a row per file. */
+.ks-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--thread-card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--thread-line-strong),
+    var(--thread-card-shadow);
+}
+.ks-changes__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  padding: 2px 4px 6px;
+  font-size: 13px;
+  color: var(--thread-ink);
+}
+.ks-changes__head b {
+  font-weight: 500;
+}
+.ks-changes__counts {
+  display: inline-flex;
+  gap: 4px;
+}
+.ks-changes__actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.ks-btn {
+  height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--thread-card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--thread-line-strong),
+    var(--thread-card-shadow);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--thread-ink);
+}
+.ks-btn:hover {
+  background: var(--thread-hover);
+  color: var(--thread-ink);
+}
+.ks-btn--solid,
+.ks-btn--solid:hover {
+  background: var(--thread-ink);
+  box-shadow: none;
+  color: var(--bg-app);
+}
+.ks-btn--solid:hover {
+  opacity: 0.88;
+}
+.ks-file {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0 6px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+  text-align: left;
+}
+.ks-file:hover,
+.ks-file[data-panel-open] {
+  background: var(--thread-hover);
+}
+.ks-file__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--thread-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-file__dir {
+  color: var(--thread-faint);
+}
+
+/* A subagent's card, on Tool Call Card's measures; it opens the subagent's session. */
+.ks-subagent {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  font-size: 13px;
+  color: var(--thread-ink);
+}
+.ks-subagent[data-waiting] {
+  box-shadow: var(--attention-ring-shadow);
+}
+.ks-subagent__head {
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  height: auto;
+  min-height: 44px;
+  padding: 0 12px 0 14px;
+  border-radius: 10px;
+  font-weight: 400;
+  text-align: left;
+}
+.ks-subagent__head:hover {
+  background: var(--thread-hover);
+}
+.ks-subagent__icon {
+  color: var(--thread-muted);
+}
+.ks-subagent__name {
+  flex: none;
+  max-width: 50%;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--thread-ink);
+  text-overflow: ellipsis;
+}
+.ks-subagent__desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--thread-muted);
+  text-overflow: ellipsis;
+}
+.ks-subagent__meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+}
+.ks-subagent__chevron {
+  color: var(--thread-faint);
+}
+.ks-subagent__head:hover .ks-subagent__chevron {
+  color: var(--thread-ink);
+}
+
+/* A bar in the composer's place: a subagent's session, or computer use in progress. */
+.ks-bar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: var(--composer-min);
+  padding: 10px 10px 10px 14px;
+  border-radius: 16px;
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  font-size: 13px;
+  color: var(--thread-text);
+}
+.ks-bar > p {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-bar b {
+  font-weight: 500;
+  color: var(--thread-ink);
+}
+.ks-bar__icon {
+  color: var(--thread-muted);
+}
+
+/* Notices in the thread, on Tool Call Card's corners and type. */
+.ks-thread .ks-notice {
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 20px;
+}

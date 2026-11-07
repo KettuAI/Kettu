@@ -16,7 +16,8 @@ import {
 } from 'react'
 import { cjk } from '@streamdown/cjk'
 import { createCodePlugin } from '@streamdown/code'
-import { CheckIcon } from 'lucide-react'
+import { Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { defaultComponents, Streamdown, type Components, type ExtraProps } from 'streamdown'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
@@ -209,7 +210,7 @@ function TaskCheckbox({ type, checked }: ComponentProps<'input'> & ExtraProps) {
   if (type !== 'checkbox') return null
   return (
     <span data-task-box="" role="checkbox" aria-checked={!!checked} aria-disabled>
-      {checked && <CheckIcon aria-hidden strokeWidth={1.6} />}
+      {checked && <HugeiconsIcon icon={Tick02Icon} strokeWidth={1.9} aria-hidden />}
     </span>
   )
 }
@@ -282,14 +283,36 @@ function MarkdownImpl({
       <NamedMediaContext value={named}>
         {chunks.map((chunk, i) => (
           // By position: when the tail settles, the chunk in its place keeps its rendered blocks.
-          <Chunk key={i} markdown={chunk} live={live} />
+          <Chunk key={i} markdown={chunk} live={live} reveal={live && i === chunks.length - 1} />
         ))}
       </NamedMediaContext>
     </div>
   )
 }
 
-const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: boolean }) {
+/**
+ * affectUI's answer: streamed words rise out of a soft blur. A short stagger and backlog keep the
+ * words up with an agent's pace; Streamdown's 40 ms per word falls behind any real stream.
+ */
+const REVEAL = {
+  animation: 'blurIn',
+  duration: 420,
+  easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+  sep: 'word',
+  stagger: 10,
+  maxBacklogMs: 200,
+} as const
+
+/** `reveal`: the chunk the stream is writing, whose new words rise in; settled ones stay plain. */
+const Chunk = memo(function Chunk({
+  markdown,
+  live,
+  reveal,
+}: {
+  markdown: string
+  live: boolean
+  reveal: boolean
+}) {
   const source = useMemo(() => spacedImages(markdown), [markdown])
   const themes = useCodeThemes()
   const plugins = useMemo(() => pluginsFor(themes), [themes])
@@ -301,6 +324,7 @@ const Chunk = memo(function Chunk({ markdown, live }: { markdown: string; live: 
         mode="streaming"
         parseIncompleteMarkdown={live}
         isAnimating={live}
+        animated={reveal ? REVEAL : false}
         skipHtml
         plugins={plugins}
         remarkPlugins={remarkPlugins}

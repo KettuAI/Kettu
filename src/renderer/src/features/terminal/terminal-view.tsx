@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  ClipboardPasteIcon,
-  CopyIcon,
-  EraserIcon,
-  MessageSquareTextIcon,
-  RotateCwIcon,
-  TextSelectIcon,
-} from 'lucide-react'
+  BubbleChatIcon,
+  Copy01Icon,
+  Eraser01Icon,
+  ReloadIcon,
+  TextSelectionIcon,
+  ClipboardIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
+import type { AgentId } from '@shared/thread'
 import { onAppEvent } from '@renderer/app/events'
-import { Button } from '@renderer/components/ui/button'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -18,8 +19,8 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { replaceStale, restartTerminal, type TerminalState } from '@renderer/stores/terminals'
@@ -36,11 +37,13 @@ import {
 } from './xterm-registry'
 
 /** The agent of the session on screen, for "Ask Claude Code". */
-function useAskLabel(): string {
+function useAsk(): { label: string; agentId: AgentId | null } {
   const { t } = useTranslation('terminal')
   const sessionId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
   const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : undefined))
-  return agentId ? t('view.askAgent', { agent: agentName(agentId) }) : t('view.askGeneric')
+  return agentId
+    ? { label: t('view.askAgent', { agent: agentName(agentId) }), agentId }
+    : { label: t('view.askGeneric'), agentId: null }
 }
 
 /**
@@ -59,7 +62,7 @@ export function TerminalView({
   const [instance, setInstance] = useState<Instance | null>(null)
   const [selection, setSelection] = useState<{ x: number; y: number } | null>(null)
   const stopped = terminal.stale
-  const ask = useAskLabel()
+  const ask = useAsk()
 
   useEffect(() => {
     let live = true
@@ -115,7 +118,7 @@ export function TerminalView({
         return
       }
       setSelection({
-        x: el.offsetLeft + Math.min(el.clientWidth - 8, position.end.x * cellWidth),
+        x: el.offsetLeft + Math.min(el.clientWidth - 140, position.end.x * cellWidth),
         y: el.offsetTop + (row + 1) * cellHeight,
       })
     }
@@ -138,30 +141,22 @@ export function TerminalView({
   const exited = terminal.exitCode !== null
 
   return (
-    <div className="absolute inset-0 flex flex-col bg-code-block">
+    <>
       <ContextMenu>
-        <ContextMenuTrigger
-          render={
-            <div
-              className="relative min-h-0 flex-1 bg-(--terminal-background) px-4 py-3.5"
-              data-terminal=""
-            />
-          }
-        >
-          <div ref={container} className="size-full" />
+        <ContextMenuTrigger render={<div className="kp-tscreen" data-terminal="" />}>
+          <div ref={container} className="kp-tscreen__xterm" />
           {selection && instance && (
-            <Button
-              variant="outline"
-              size="xs"
-              className="absolute z-10 animate-in shadow-md fade-in zoom-in-95 animation-duration-(--duration-fast)"
-              style={{ left: selection.x, top: selection.y + 2 }}
+            <button
+              type="button"
+              className="kp-ask"
+              style={{ left: Math.max(0, selection.x), top: selection.y + 6 }}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => askAboutSelection(instance)}
             >
-              <MessageSquareTextIcon data-icon="inline-start" />
-              {ask}
-              <span className="opacity-60">{formatShortcut('Mod+L')}</span>
-            </Button>
+              {ask.agentId && <AgentMark agent={ask.agentId} size={13} />}
+              {ask.label}
+              <kbd>{formatShortcut('Mod+L')}</kbd>
+            </button>
           )}
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -169,21 +164,21 @@ export function TerminalView({
             disabled={!instance?.term.hasSelection()}
             onClick={() => instance && void copySelection(instance)}
           >
-            <CopyIcon />
+            <PaneIcon icon={Copy01Icon} size={16} />
             {t('common:actions.copy')}
             <ContextMenuShortcut>{isMac ? '⌘C' : 'Ctrl+Shift+C'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance && void pasteClipboard(instance)}>
-            <ClipboardPasteIcon />
+            <PaneIcon icon={ClipboardIcon} size={16} />
             {t('view.paste')}
             <ContextMenuShortcut>{isMac ? '⌘V' : 'Ctrl+Shift+V'}</ContextMenuShortcut>
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance?.term.selectAll()}>
-            <TextSelectIcon />
+            <PaneIcon icon={TextSelectionIcon} size={16} />
             {t('view.selectAll')}
           </ContextMenuItem>
           <ContextMenuItem onClick={() => instance?.term.clear()}>
-            <EraserIcon />
+            <PaneIcon icon={Eraser01Icon} size={16} />
             {t('view.clear')}
           </ContextMenuItem>
           <ContextMenuSeparator />
@@ -191,29 +186,29 @@ export function TerminalView({
             disabled={!instance?.term.hasSelection()}
             onClick={() => instance && askAboutSelection(instance)}
           >
-            <MessageSquareTextIcon />
-            {ask}
+            <PaneIcon icon={BubbleChatIcon} size={16} />
+            {ask.label}
             <ContextMenuShortcut>{formatShortcut('Mod+L')}</ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
       {(exited || stopped) && (
-        <div className="flex h-8 shrink-0 animate-in items-center gap-2 border-t border-subtle bg-(--terminal-background) px-3.5 text-xs text-tertiary fade-in animation-duration-(--duration-base)">
-          <span className={cn(stopped && 'text-danger')}>
+        <div className="kp-texit" data-failed={stopped || undefined}>
+          <span className="min-w-0 flex-1 truncate">
             {stopped ? t('view.stopped') : t('view.exited', { code: terminal.exitCode })}
           </span>
-          <Button
-            variant="quiet"
-            size="xs"
+          <button
+            type="button"
+            className="kp-btn kp-btn--sm"
             onClick={() =>
               stopped ? void replaceStale(terminal.id) : void restartTerminal(terminal.id)
             }
           >
-            <RotateCwIcon data-icon="inline-start" />
+            <PaneIcon icon={ReloadIcon} size={13} />
             {t('view.restart')}
-          </Button>
+          </button>
         </div>
       )}
-    </div>
+    </>
   )
 }

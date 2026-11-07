@@ -1,34 +1,36 @@
-import { useRef, type Ref } from 'react'
+import { useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import { File01Icon, FileEditIcon } from '@hugeicons/core-free-icons'
+import { Trans, useTranslation } from 'react-i18next'
 import {
-  CheckIcon,
-  FolderIcon,
-  HandIcon,
-  PencilIcon,
-  Undo2Icon,
-  XIcon,
-  type LucideIcon,
-} from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { previewsCommand, type PermissionKind, type ToolEntry } from '@shared/thread'
+  previewsCommand,
+  type PermissionKind,
+  type PermissionOption,
+  type ToolContent,
+  type ToolEntry,
+} from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
-import { basename } from '@renderer/lib/format'
+import { Icon } from '@renderer/components/affect/app-shell'
+import {
+  PermissionRequest,
+  type PermissionDecision,
+  type PermissionLabels,
+  type PermissionPreviewItem,
+  type PermissionScope,
+} from '@renderer/components/affect/permission-request'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { basename, relativePath } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import {
-  AnswerList,
-  CardError,
-  OptionName,
-  WaitingCard,
-  WaitingHeader,
-  WaitingStatus,
-} from './answer-list'
-import { primaryOption, respondToPermission, toolLabel } from './helpers'
-import { ContentBlock, KIND_ICON, Target, ToolMedia } from './tool-parts'
+import { codeSpans, respondToPermission, toolLabel } from './helpers'
+import { StepCard } from './tool-call'
+import { KIND_GLYPH, stepFacts, useToolCallLabels } from './tool-call-model'
+import { ContentBlock, ToolMedia } from './tool-parts'
 import { useAnswering } from './use-answering'
-import { useDiffStats } from './use-diff-stats'
+import { cachedStats, useDiffStats } from './use-diff-stats'
 
-const ASK_KEY = {
+const ACTION_KEY = {
   read: 'read',
   edit: 'edit',
   delete: 'delete',
@@ -48,16 +50,107 @@ const ANSWER_KEY = {
   reject_always: 'rejectAlways',
 } as const satisfies Record<PermissionKind, string>
 
-/** What the agent says a command does, short enough to sit in the header after the verb. */
-function headerNote(text: string | undefined): string | null {
-  return text && text.length <= 60 && !text.includes('\n') ? text : null
+/**
+ * The agent's options on the card: its allows as the how-long choice, in its order, its first
+ * denial as Deny, and any other option as a button of its own before Deny.
+ */
+interface Answers {
+  scopes: PermissionScope[]
+  allows: Partial<Record<PermissionScope, PermissionOption>>
+  deny: PermissionOption | null
+  others: PermissionOption[]
+}
+
+function answersOf(options: readonly PermissionOption[]): Answers {
+  const allows: Partial<Record<PermissionScope, PermissionOption>> = {}
+  const scopes: PermissionScope[] = []
+  const deny =
+    options.find((o) => o.kind === 'reject_once') ??
+    options.find((o) => o.kind === 'reject_always') ??
+    null
+  const others: PermissionOption[] = []
+  for (const option of options) {
+    if (option === deny) continue
+    const order: PermissionScope[] | null =
+      option.kind === 'allow_once'
+        ? ['once', 'timed', 'always']
+        : option.kind === 'allow_always'
+          ? ['always', 'timed', 'once']
+          : null
+    const scope = order?.find((s) => !allows[s])
+    if (!scope) {
+      others.push(option)
+      continue
+    }
+    allows[scope] = option
+    scopes.push(scope)
+  }
+  return { scopes, allows, deny, others }
+}
+
+/** An option's name as plain words, for a button that sets no code. */
+const plainName = (name: string): string =>
+  codeSpans(name)
+    .map((part) => part.text)
+    .join('')
+
+const isAllow = (option: PermissionOption): boolean =>
+  option.kind === 'allow_once' || option.kind === 'allow_always'
+
+/** How an answered request reads on the folded card. */
+function decisionOf(result: NonNullable<ToolEntry['permissionResult']>): PermissionDecision {
+  if (typeof result !== 'object') return { allow: false, scope: 'once', at: 0 }
+  return {
+    allow: result.kind === 'allow_once' || result.kind === 'allow_always',
+    scope: result.kind === 'allow_always' ? 'always' : 'once',
+    at: 0,
+  }
+}
+
+/** What a request would touch: each file it edits with its counts, or reads. */
+function previewOf(
+  entry: ToolEntry,
+  projectPath: string,
+  stats: (diff: ToolContent) => { insertions: number; deletions: number } | null,
+): PermissionPreviewItem[] {
+  const items: PermissionPreviewItem[] = []
+  const seen = new Set<string>()
+  entry.content.forEach((content, i) => {
+    if (content.type !== 'diff') return
+    seen.add(content.path)
+    const counts = stats(content)
+    items.push({
+      id: `diff:${i}`,
+      label: relativePath(content.path, projectPath),
+      icon: <Icon icon={FileEditIcon} size={14} />,
+      meta: counts && (
+        <span className="tabular">
+          <span className="ks-add">+{counts.insertions}</span>{' '}
+          <span className="ks-del">−{counts.deletions}</span>
+        </span>
+      ),
+    })
+  })
+  if (entry.toolKind !== 'execute') {
+    entry.locations.forEach((location, i) => {
+      if (seen.has(location.path)) return
+      seen.add(location.path)
+      items.push({
+        id: `path:${i}`,
+        label: relativePath(location.path, projectPath),
+        icon: <Icon icon={entry.toolKind === 'edit' ? FileEditIcon : File01Icon} size={14} />,
+      })
+    })
+  }
+  return items
 }
 
 /**
- * A request waiting for the user, in the tool call's own card: its row as the header, what it
- * would run or change, then its options as tiles in the agent's order. A choice answers at once.
+ * A tool call that asks for permission, on affectUI's Permission Request: who asks for what, why,
+ * and what it touches, then the agent's own answers. Once answered the card folds to one line of
+ * what was chosen, which an allowed call's own card follows.
  */
-export function PermissionCard({
+export function PermissionEntry({
   ref,
   sessionId,
   entry,
@@ -75,197 +168,226 @@ export function PermissionCard({
   className?: string
 }) {
   const { t } = useTranslation(['session', 'routines'])
+  const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
   const routine = useSessionsStore((s) => s.byId[sessionId]?.routine ?? null)
   const level = useRoutinesStore((s) =>
     routine ? (s.byId[routine.routineId]?.scope.level ?? null) : null,
   )
   const { answering, error, away, send } = useAnswering(sessionId)
-  const stats = useDiffStats(entry.content)
-  const list = useRef<HTMLDivElement>(null)
-  const permission = entry.permission!
-  const question = entry.question
+  const toolLabels = useToolCallLabels()
+  const root = useRef<HTMLDivElement>(null)
+  const [scope, setScope] = useState<PermissionScope | undefined>(undefined)
+  useDiffStats(entry.content)
+  const permission = entry.permission
+  const result = entry.permissionResult
+  const answers = useMemo(() => answersOf(permission?.options ?? []), [permission])
   const label = toolLabel(entry, projectPath)
   const command = label.kind === 'command' ? label.target : null
-  const note = headerNote(entry.description)
-  const Icon =
-    question !== undefined
-      ? HandIcon
-      : entry.toolKind === 'edit'
-        ? PencilIcon
-        : KIND_ICON[entry.toolKind]
+  const action = t(`permission.card.action.${ACTION_KEY[entry.toolKind]}`)
+  const target = command ? command.split('\n')[0]! : label.target
+  const preview = previewOf(entry, projectPath, (diff) => cachedStats([diff]))
+  const decision = permission ? null : result ? decisionOf(result) : null
+  const busy = away || answering !== null
 
-  const respond = async (index: number) => {
-    const option = permission.options[index]
-    if (!option) return
-    // An answer from the card's own tiles would leave the focus on nothing once the card goes;
-    // a denial or Something else goes on in the composer, where the user says what instead.
-    const focused = !!list.current?.contains(document.activeElement)
+  const respond = async (option: PermissionOption | null | undefined) => {
+    if (!option || !permission || busy) return
+    // An answer from the card's own buttons would leave the focus on nothing once the card folds;
+    // after a denial the user says what to do instead in the composer.
+    const focused = !!root.current?.contains(document.activeElement)
     const sent = await send(option.id, () =>
       respondToPermission(sessionId, permission.requestId, option.id),
     )
-    if (sent && (focused || option.kind === 'reject_once' || option.kind === 'reject_always')) {
-      emitAppEvent({ kind: 'focus-composer' })
+    if (sent && (focused || !isAllow(option))) emitAppEvent({ kind: 'focus-composer' })
+  }
+
+  const scopeWords = (s: PermissionScope): string => {
+    const option = answers.allows[s]
+    if (!option) return ''
+    const alike = answers.scopes.filter((x) => answers.allows[x]?.kind === option.kind).length
+    if (alike === 1 && option.kind === 'allow_once') return t('permission.card.once')
+    if (alike === 1 && option.kind === 'allow_always') return t('permission.card.always')
+    return plainName(option.name)
+  }
+
+  // The Allow button's words. An agent may spell out everything an always answer allows, which
+  // reads under the choice instead, so the button keeps one line.
+  const allowWords = (s: PermissionScope): string => {
+    const option = answers.allows[s]
+    if (!option) return ''
+    const alike = answers.scopes.filter((x) => answers.allows[x]?.kind === option.kind).length
+    if (alike === 1 && option.kind === 'allow_once') return t('permission.card.allowOnce')
+    if (alike === 1 && option.kind === 'allow_always') return t('permission.card.allowAlways')
+    return plainName(option.name)
+  }
+  const allowNote = (s: PermissionScope): string | null => {
+    const option = answers.allows[s]
+    if (!option) return null
+    const name = plainName(option.name)
+    return name === allowWords(s) || name === scopeWords(s) ? null : name
+  }
+
+  const labels: Partial<PermissionLabels> = {
+    title: (name, what) => (
+      <Trans
+        t={t}
+        i18nKey="permission.card.title"
+        values={{ agent: name, action: what }}
+        components={{ b: <b dir="auto" /> }}
+      />
+    ),
+    risk: (risk) => t(`permission.card.${risk}`),
+    scope: (s) => scopeWords(s),
+    allow: (s) => allowWords(s),
+    deny: answers.deny ? t('permission.card.deny') : '',
+    howLong: t('permission.card.howLong'),
+    more: (count) => t('permission.card.more', { count }),
+    showLess: t('permission.card.showLess'),
+    result: () => answeredWords(),
+  }
+
+  // The folded card's line: what was answered, and what follows from it.
+  const answeredWords = (): { headline: string; note: string } => {
+    if (result === 'cancelled') {
+      return {
+        headline: t('permission.answer.cancelled'),
+        note: t('permission.card.note.cancelled'),
+      }
+    }
+    if (result === 'withdrawn' || !result) {
+      return {
+        headline: t('permission.answer.withdrawn'),
+        note: t('permission.card.note.withdrawn', { agent: agentName }),
+      }
+    }
+    const key = ANSWER_KEY[result.kind]
+    const note = t(`permission.card.note.${key}`, { agent: agentName })
+    return {
+      headline: t(`permission.answer.${key}`),
+      note: result.device
+        ? t('permission.answer.onDevice', { answer: note, device: result.device.name })
+        : note,
+    }
+  }
+
+  const allowed = typeof result === 'object' && result !== null && decision?.allow === true
+  const facts = allowed ? stepFacts(sessionId, entry) : null
+  const more: ReactNode[] = []
+  if (permission) {
+    if (command && previewsCommand(command)) {
+      more.push(
+        <div key="command" data-selectable="" className="ks-permission__command">
+          <pre>
+            <span aria-hidden className="select-none">
+              ${' '}
+            </span>
+            {command}
+          </pre>
+          <span className="ks-permission__cwd">{basename(projectPath)}</span>
+        </div>,
+      )
+    }
+    entry.content.forEach((content, i) =>
+      more.push(
+        <ContentBlock
+          key={`content:${i}`}
+          sessionId={sessionId}
+          entryId={entry.id}
+          index={i}
+          content={content}
+          projectPath={projectPath}
+        />,
+      ),
+    )
+    if (media.length > 0) {
+      more.push(<ToolMedia key="media" sessionId={sessionId} entryId={entry.id} media={media} />)
+    }
+    if (level) {
+      more.push(
+        <p key="scope" className="ks-permission__note">
+          {t('permission.outsideScope', { level: t(`routines:permission.level.${level}.name`) })}
+        </p>,
+      )
     }
   }
 
   return (
-    <WaitingCard
+    <div
       ref={ref}
-      entryId={entry.id}
-      label={question !== undefined ? t('question.label') : t('permission.label')}
-      description={
-        question !== undefined
-          ? t('question.ask', { agent: agentName })
-          : t(`permission.ask.${ASK_KEY[entry.toolKind]}`, { agent: agentName })
-      }
-      className={className}
+      data-entry-id={entry.id}
+      className={cn('flex min-w-0 flex-col gap-3.5', className)}
     >
-      <WaitingHeader>
-        <Icon aria-hidden className="size-4 shrink-0" />
-        {question !== undefined ? (
-          <span className="min-w-0 flex-1 truncate text-ui font-semibold text-foreground">
-            {t('question.label')}
-          </span>
-        ) : command ? (
-          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-            <span className="shrink-0 text-ui font-semibold text-foreground">
-              {t('permission.runCommand')}
-            </span>
-            {note && <span className="min-w-0 truncate text-control text-tertiary">· {note}</span>}
-          </span>
-        ) : label.verb ? (
-          <span className="flex min-w-0 flex-1 items-baseline gap-2">
-            <span className="shrink-0 text-ui font-semibold text-foreground">{label.verb}</span>
-            {label.target && <Target label={label} />}
-            {stats && (stats.insertions > 0 || stats.deletions > 0) && (
-              <span className="flex shrink-0 gap-1.5 font-mono text-xs tabular">
-                <span className="text-success">+{stats.insertions}</span>
-                <span className="text-danger">−{stats.deletions}</span>
-              </span>
-            )}
-          </span>
-        ) : (
-          <span className="min-w-0 flex-1 truncate text-ui font-semibold text-foreground">
-            {label.target}
-          </span>
-        )}
-        <WaitingStatus>
-          {question !== undefined ? t('question.asksYou') : t('status.needsApproval')}
-        </WaitingStatus>
-      </WaitingHeader>
-      {question !== undefined && (
-        <p data-selectable="" className="px-5 pt-2 text-row leading-normal text-foreground">
-          {question}
-        </p>
-      )}
-      {question === undefined && entry.description && !note && (
-        <p data-selectable="" className="px-5 pt-2 text-row text-secondary">
-          {entry.description}
-        </p>
-      )}
-      {command && (
-        <div
-          data-selectable=""
-          className="mx-5 mt-3 rounded-xl bg-code-block px-3.5 py-2.5 font-mono text-command leading-relaxed text-foreground shadow-sunk"
+      <div ref={root} className="min-w-0">
+        <PermissionRequest
+          className="ks-permission"
+          agent={{
+            name: agentName,
+            avatar: agentId ? <AgentMark agent={agentId} size={14} /> : undefined,
+          }}
+          action={action}
+          target={target ?? undefined}
+          toolIcon={<Icon icon={KIND_GLYPH[entry.toolKind]} size={12} />}
+          risk={entry.toolKind === 'execute' || entry.toolKind === 'delete' ? 'risky' : 'safe'}
+          reason={entry.description}
+          previewTitle={t('permission.card.touches')}
+          preview={preview}
+          scopes={answers.scopes.length > 0 ? answers.scopes : ['once']}
+          scope={scope}
+          onScopeChange={setScope}
+          renderScopes={({ scopes, scope: shown, onChange }) => {
+            const note = allowNote(shown)
+            return (
+              <>
+                <SegmentedControl
+                  aria-label={t('permission.card.howLong')}
+                  variant="tray"
+                  value={shown}
+                  onChange={onChange}
+                  disabled={busy}
+                  options={scopes.map((s) => ({ value: s, label: scopeWords(s) }))}
+                />
+                {note && <p className="ks-permission__allows">{note}</p>}
+              </>
+            )
+          }}
+          decision={decision}
+          onDecisionChange={(next) => {
+            if (!next) return
+            void respond(next.allow ? answers.allows[next.scope] : answers.deny)
+          }}
+          revocable={false}
+          disabled={busy}
+          actions={answers.others.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className="ui-prc__btn"
+              disabled={busy}
+              title={option.description}
+              onClick={() => void respond(option)}
+            >
+              {plainName(option.name)}
+            </button>
+          ))}
+          labels={labels}
         >
-          <pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-            <span aria-hidden className="mr-2 text-tertiary select-none">
-              $
-            </span>
-            {previewsCommand(command) ? command : command.split('\n')[0]}
-          </pre>
-          <p className="mt-1.5 flex min-w-0 items-center gap-1.5 font-sans text-hint text-tertiary">
-            <FolderIcon aria-hidden className="size-3.25 shrink-0" />
-            <span className="truncate">{basename(projectPath)}</span>
+          {more.length > 0 ? more : undefined}
+        </PermissionRequest>
+        {error && permission && (
+          <p role="alert" className="ks-card-error">
+            {error}
           </p>
-        </div>
+        )}
+      </div>
+      {facts && (
+        <StepCard
+          {...facts}
+          icon={<Icon icon={facts.glyph} size={14} />}
+          sessionId={sessionId}
+          entry={entry}
+          projectPath={projectPath}
+          labels={toolLabels}
+        />
       )}
-      {entry.content.map((content, i) => (
-        <div key={i} className="mx-5 mt-3 min-w-0">
-          <ContentBlock
-            sessionId={sessionId}
-            entryId={entry.id}
-            index={i}
-            content={content}
-            projectPath={projectPath}
-          />
-        </div>
-      ))}
-      {media.length > 0 && (
-        <div className="mx-5 mt-3">
-          <ToolMedia sessionId={sessionId} entryId={entry.id} media={media} />
-        </div>
-      )}
-      {level && (
-        <p className="px-5 pt-3 text-xs text-tertiary">
-          {t('permission.outsideScope', {
-            level: t(`routines:permission.level.${level}.name`),
-          })}
-        </p>
-      )}
-      <AnswerList
-        ref={list}
-        label={t('permission.answerGroup')}
-        answers={permission.options.map((option) => ({
-          key: option.id,
-          label: <OptionName name={option.name} />,
-          ...(option.description ? { description: option.description } : {}),
-        }))}
-        primary={primaryOption(permission.options)}
-        answering={answering}
-        disabled={away}
-        onAnswer={(index) => void respond(index)}
-      />
-      <CardError error={error} />
-    </WaitingCard>
-  )
-}
-
-/** The gray tag a tool row carries once its request is answered: what was chosen, and where. */
-export function PermissionAnswer({
-  result,
-  question,
-}: {
-  result: NonNullable<ToolEntry['permissionResult']>
-  question: boolean
-}) {
-  const { t } = useTranslation('session')
-  const asked = typeof result === 'object' ? result.questions : undefined
-  const given = asked?.filter((q) => q.answered) ?? []
-  const answer =
-    result === 'cancelled'
-      ? t('permission.answer.cancelled')
-      : result === 'withdrawn'
-        ? t('permission.answer.withdrawn')
-        : asked
-          ? given.length === 0
-            ? t('question.skipped')
-            : asked.length > 1
-              ? t('question.answered', { answered: given.length, total: asked.length })
-              : (given[0]!.answer ?? t('question.answeredOne'))
-          : result.name
-            ? result.name
-            : question && result.kind === 'reject_once'
-              ? t('question.answeredOther')
-              : result.by === 'routine'
-                ? t('permission.answer.allowedByRoutine')
-                : t(`permission.answer.${ANSWER_KEY[result.kind]}`)
-  const device = typeof result === 'object' ? result.device : undefined
-  const Icon: LucideIcon =
-    result === 'withdrawn'
-      ? Undo2Icon
-      : result === 'cancelled' || result.kind === 'reject_once' || result.kind === 'reject_always'
-        ? XIcon
-        : CheckIcon
-  return (
-    <span
-      className={cn(
-        'inline-flex h-5.5 min-w-0 shrink animate-in items-center gap-1.25 rounded-lg bg-muted px-2 text-small leading-none font-medium text-secondary animation-duration-(--duration-base) fade-in',
-      )}
-    >
-      {!asked && <Icon aria-hidden strokeWidth={2} className="size-3 shrink-0" />}
-      <span className="min-w-0 truncate">{answer}</span>
-      {device && <span className="shrink-0 font-normal text-tertiary">· {device.name}</span>}
-    </span>
+    </div>
   )
 }

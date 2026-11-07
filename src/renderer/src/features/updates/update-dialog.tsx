@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { InfoIcon } from 'lucide-react'
+import { InformationCircleIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { releaseUrl } from '@shared/updates'
 import {
@@ -14,6 +14,7 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { errorMessage } from '@renderer/lib/host'
 import { openUpdateDialog, useUpdatesStore } from '@renderer/stores/updates'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /**
  * A downloaded update, before the restart into it: its version, what it changed in the user's
@@ -56,8 +57,8 @@ export function UpdateDialog() {
             ))}
           </ul>
         )}
-        <AlertDialogDescription className="mt-3 flex gap-2 rounded-2xl bg-subtle px-3 py-2.5 text-hint leading-normal text-secondary">
-          <InfoIcon aria-hidden className="mt-0.5 size-3.5 shrink-0 text-tertiary" />
+        <AlertDialogDescription className="mt-3 flex gap-2 rounded-[10px] bg-(--shell-chip) px-3 py-2.5 text-hint leading-normal text-secondary">
+          <Glyph icon={InformationCircleIcon} size={14} className="mt-0.5 shrink-0 text-tertiary" />
           {t('dialog.note')}
         </AlertDialogDescription>
         <AlertDialogFooter className="mt-4.5 items-center">

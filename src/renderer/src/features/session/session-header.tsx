@@ -1,16 +1,17 @@
 import { useRef, useState } from 'react'
-import { BotIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { AiChat02Icon, ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
 import { backTo } from '@renderer/app/history'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { usePane } from '@renderer/features/split/pane-context'
 import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
-import { SessionGitChips } from '@renderer/features/git/git-status'
-import { HeaderTools } from '@renderer/features/shell/header-tools'
+import { PrBarChip } from '@renderer/features/git/pr-bar-chip'
+import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-tools'
 import { HostChip } from './host-chip'
 import { PlanChip } from './plan-chip'
 import { ViewersChip } from './viewers-chip'
@@ -18,7 +19,6 @@ import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { SessionTitleField } from '@renderer/features/sidebar/session-menu'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
 import { agentName } from '@renderer/stores/agents'
-import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import {
   hostOfSession,
@@ -42,7 +42,7 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
               variant="quiet"
               size="compact"
               aria-label={label}
-              className="h-6.5 min-w-16 shrink-1000 gap-1.5 pr-2 pl-1 font-normal text-tertiary"
+              className="ks-crumb h-6.5 min-w-16 shrink-1000 gap-1.5 pr-2 pl-1 font-normal"
               onClick={() =>
                 backTo({ kind: 'session', sessionId: parent.id }, () =>
                   openSession(parent.id, parent.projectPath),
@@ -51,9 +51,9 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
             />
           }
         >
-          <ChevronLeftIcon aria-hidden strokeWidth={1.6} className="size-[13px]" />
+          <Icon icon={ArrowLeft01Icon} size={13} />
           {parent.origin === 'subagent' ? (
-            <BotIcon aria-hidden className="size-3.5" />
+            <Icon icon={AiChat02Icon} size={14} />
           ) : (
             <AgentMark agent={parent.agentId} size={14} hostId={hostOfSession(parent)} />
           )}
@@ -69,8 +69,9 @@ export function ParentLink({ parent }: { parent: SessionSummary }) {
 }
 
 /**
- * The session's top bar: its title, which a click renames and which drags its pane, its menu, who
- * else has it in front, the project's git status and the agent's plan.
+ * The session's top bar, as App Shell's chat bar: the agent's mark and the title, which a click
+ * renames and which drags its pane, then its More menu, the branch's pull request, the agent's plan
+ * and who else has it in front; the pane buttons at the right.
  */
 export function SessionHeader({
   summary,
@@ -95,28 +96,30 @@ export function SessionHeader({
 
   return (
     <TopBar cornered={pane?.cornered}>
-      {/* The title gives way before the git chips (see SessionGitChips). What is left once the
-          title reaches its least width is cut at the group's edge, not under the tools. Only the
-          sides are cut, so the rename field's ring is not clipped above and below. */}
-      <NoDrag className="min-w-0 gap-0.5 overflow-x-clip">
+      {/* The plan's step gives way first, then the title. What is left once the title reaches
+          its least width is cut at the group's edge, not under the tools. Only the sides are cut,
+          so the rename field's ring is not clipped above and below. */}
+      <NoDrag className="min-w-0 gap-2 overflow-x-clip">
         {routine && summary.routine && (
           <>
             <Button
               variant="quiet"
               size="compact"
-              className="min-w-16 shrink-1000 px-1.5"
+              className="ks-crumb min-w-16 shrink-1000 px-1.5"
               aria-label={ts('routine.link', { name: routine.name })}
               onClick={() => openRoutine(summary.routine!.routineId)}
             >
               <span className="truncate">{routine.name}</span>
             </Button>
-            <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-icon" />
+            <span className="ks-crumb-sep">
+              <Icon icon={ArrowRight01Icon} size={14} />
+            </span>
           </>
         )}
         {parent && <ParentLink parent={parent} />}
         <span className="grid w-4 shrink-0 place-items-center">
           {summary.origin === 'subagent' ? (
-            <BotIcon className="size-4 text-secondary" />
+            <Icon icon={AiChat02Icon} size={16} />
           ) : (
             <AgentMark agent={summary.agentId} size={16} hostId={hostOfSession(summary)} />
           )}
@@ -126,10 +129,10 @@ export function SessionHeader({
           <SessionTitleField
             summary={summary}
             onDone={rename.finish}
-            // The ring's outer edge is the button's box (30 px tall, text 4 px in, 6 px radius), so
+            // The ring's outer edge is the button's box (28 px tall, text 4 px in, 6 px radius), so
             // the hover fill and the ring match and the text does not move.
             style={{ minWidth: Math.max(titleWidth - 5, 0) }}
-            className="mx-[5.5px] field-sizing-content h-[25px] rounded-sm bg-transparent px-[1.5px] py-0 font-sans text-subheading font-semibold outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
+            className="ks-title mx-[2.5px] field-sizing-content h-[23px] rounded-sm bg-transparent px-[1.5px] py-0 font-sans text-label font-medium outline-[1.5px] outline-offset-1 outline-edit-ring outline-solid selection:bg-edit-selection aria-invalid:outline-danger"
           />
         ) : (
           <TitleButton
@@ -145,32 +148,31 @@ export function SessionHeader({
             }}
           />
         )}
+        <SessionMoreMenu
+          summary={summary}
+          session={session}
+          onRename={() => {
+            measureTitle()
+            rename.menu.onRename()
+          }}
+          onNewSubSession={rename.menu.onLeave}
+          menu={rename.menu}
+        />
+        <PrBarChip projectPath={summary.projectPath} />
+        {session && !archived && summary.origin !== 'subagent' && (
+          <PlanChip sessionId={summary.id} status={session.status} />
+        )}
         <ViewersChip sessionId={summary.id} projectPath={summary.projectPath} />
       </NoDrag>
-      <SessionGitChips projectPath={summary.projectPath} />
       <span className="flex-1" />
-      {session && !archived && summary.origin !== 'subagent' && (
-        <PlanChip sessionId={summary.id} status={session.status} />
-      )}
-      <HeaderTools
-        projectPath={summary.projectPath}
-        panel={summary.id}
-        summary={summary}
-        session={session}
-        onRename={() => {
-          measureTitle()
-          rename.menu.onRename()
-        }}
-        onNewSubSession={rename.menu.onLeave}
-        menu={rename.menu}
-      />
+      <HeaderTools projectPath={summary.projectPath} panel={summary.id} />
     </TopBar>
   )
 }
 
 /**
  * The title: a click renames it, and a press drags its pane to another place. Out of focus its text
- * is `--text-secondary`, `--text-primary` under the pointer.
+ * is quieter, full ink under the pointer.
  */
 function TitleButton({
   buttonRef,
@@ -198,10 +200,8 @@ function TitleButton({
       }}
       variant="ghost"
       title={`${title} · ${description}`}
-      className={cn(
-        'mx-[3px] h-7.5 min-w-16 shrink-10 rounded-md px-[3px] font-sans text-subheading font-semibold text-foreground focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0',
-        !focused && 'text-secondary hover:text-primary',
-      )}
+      data-unfocused={focused ? undefined : ''}
+      className="ks-title -mx-1 h-7 min-w-16 shrink-10 rounded-md px-1 font-sans text-label font-medium focus-visible:outline-[1.5px] focus-visible:-outline-offset-[1.5px] focus-visible:outline-edit-ring focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-0"
       onClick={onRename}
     >
       <span className="truncate">{title}</span>

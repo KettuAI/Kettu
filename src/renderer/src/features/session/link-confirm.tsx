@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { AppWindowMacIcon, GlobeIcon } from 'lucide-react'
+import { Globe02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { LinkDestination } from '@shared/settings'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -35,7 +36,7 @@ function SiteIcon({ url }: { url: string }) {
   }
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-card text-secondary shadow-outline">
-      <GlobeIcon className="size-4" />
+      <HugeiconsIcon icon={Globe02Icon} strokeWidth={1.9} aria-hidden className="size-4" />
     </span>
   )
 }
@@ -163,7 +164,7 @@ export function LinkConfirm({
             />
             <Destination
               value="session"
-              icon={<AppWindowMacIcon />}
+              icon={<HugeiconsIcon icon={Globe02Icon} strokeWidth={1.9} aria-hidden />}
               name={t('link.sessionBrowser')}
               hint={agent ? t('link.sessionHint', { agent }) : t('link.sessionHintGeneric')}
               disabled={!session}

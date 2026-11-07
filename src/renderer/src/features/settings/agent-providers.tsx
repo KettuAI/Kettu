@@ -3,32 +3,25 @@
 
 import { useId, useMemo, useState, type FormEvent } from 'react'
 import {
-  CircleAlertIcon,
-  CopyIcon,
-  KeyRoundIcon,
-  PlusIcon,
-  RotateCwIcon,
-  SearchIcon,
-  SquareTerminalIcon,
-} from 'lucide-react'
+  Add01Icon,
+  ComputerTerminal01Icon,
+  Copy01Icon,
+  Key01Icon,
+  RefreshIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentProvider, AgentStatus, ProviderBalance } from '@shared/agent-host'
-import { CommandLine } from '@renderer/components/command-line'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
-import { Input } from '@renderer/components/ui/input'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { currentLocale } from '@renderer/lib/i18n'
 import { mediumAgo, money } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { UsageGroup } from './agent-parts'
 import { useAction } from './agent-helpers'
-import { ControlError, GROUP_ACTION, IconAction, Pill, ROW_BUTTON } from './controls'
+import { CommandLine, ControlError, FindField, IconAction, Pill, SetButton, Spin } from './controls'
 import {
   activeProviderAccount,
   connectedProviders,
@@ -108,7 +101,7 @@ export function AgentProviders({
 
   return (
     <>
-      <section className="flex flex-col">
+      <section className="k-group" aria-label={t('agents.providers.group')}>
         <GroupLabel
           group={{
             id: 'providers',
@@ -116,18 +109,19 @@ export function AgentProviders({
             ...(connectedCount > 0 && { count: connectedCount }),
             actions: (
               <>
-                <Button variant="ghost" className={GROUP_ACTION} onClick={() => setAddOpen(true)}>
-                  <PlusIcon data-icon="inline-start" />
+                <SetButton
+                  variant="ghost"
+                  icon={<Icon icon={Add01Icon} size={14} />}
+                  onClick={() => setAddOpen(true)}
+                >
                   {t('agents.providers.add')}
-                </Button>
+                </SetButton>
                 <IconAction
                   label={t('agents.providers.refresh')}
-                  disabled={busy}
+                  icon={RefreshIcon}
                   busy={busy}
                   onClick={retry}
-                >
-                  {busy ? <Spinner className="size-3.5" /> : <RotateCwIcon />}
-                </IconAction>
+                />
               </>
             ),
           }}
@@ -135,23 +129,21 @@ export function AgentProviders({
         {providersError && (
           <Notice
             variant="error"
-            icon={<CircleAlertIcon />}
             title={t('agents.providers.readFailed')}
             action={
-              <Button variant="outline" className={ROW_BUTTON} disabled={busy} onClick={retry}>
-                {busy && <Spinner data-icon="inline-start" />}
+              <SetButton loading={busy} onClick={retry}>
                 {t('agents.providers.retry')}
-              </Button>
+              </SetButton>
             }
           >
             {providersError}
           </Notice>
         )}
         {connectedCount === 0 && !providersError ? (
-          <p className="py-1 text-group text-tertiary">
+          <p className="k-reading">
             {reading && providers.every((provider) => provider.accounts.length === 0) ? (
-              <span className="flex items-center gap-2">
-                <Spinner className="size-3.5" />
+              <span className="k-end">
+                <Spin />
                 {t('agents.providers.reading')}
               </span>
             ) : (
@@ -176,7 +168,7 @@ export function AgentProviders({
           </RowGroup>
         )}
         {error && (
-          <p role="alert" className="pt-2 text-hint text-danger">
+          <p role="alert" className="ui-sg-hint k-error" data-wrap="">
             {error}
           </p>
         )}
@@ -246,54 +238,41 @@ function ProviderRow({
     })
   return (
     <RowShell>
-      <div className="flex flex-col gap-2 py-3.75">
-        <div className="flex min-h-7 min-w-0 flex-wrap items-center gap-2.5">
-          <div className="flex min-w-30 flex-1 flex-col gap-1">
-            <span
-              className="truncate text-label leading-[normal] font-medium"
-              title={provider.name}
-            >
-              {provider.name}
-            </span>
-            {methods && (
-              <span className="truncate text-hint text-tertiary" title={methods}>
-                {methods}
-              </span>
-            )}
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      <div className="k-block">
+        <div className="k-line">
+          <span className="ui-sg-label k-lines">
+            <b title={provider.name}>{provider.name}</b>
+            {methods && <small title={methods}>{methods}</small>}
+          </span>
+          <span className="ui-sg-control">
             {provider.loginCommand && !remote && (
-              <Button
-                variant="outline"
-                className={ROW_BUTTON}
+              <SetButton
                 disabled={busy}
+                icon={<Icon icon={ComputerTerminal01Icon} size={14} />}
                 onClick={() => onSignIn(provider.loginCommand)}
               >
-                <SquareTerminalIcon data-icon="inline-start" />
                 {t(
                   provider.accounts.length > 0
                     ? 'agents.providers.again'
                     : 'agents.providers.signIn',
                 )}
-              </Button>
+              </SetButton>
             )}
             {keyMethod && (
-              <Button
-                variant="outline"
-                className={ROW_BUTTON}
+              <SetButton
                 disabled={busy}
+                icon={<Icon icon={Key01Icon} size={14} />}
                 onClick={() => onSetKey()}
               >
-                <KeyRoundIcon data-icon="inline-start" />
                 {t('agents.providers.setKey')}
-              </Button>
+              </SetButton>
             )}
-          </div>
+          </span>
         </div>
         {provider.accounts.length === 0 ? (
-          <p className="text-group text-tertiary">{t('agents.providers.notConnected')}</p>
+          <p className="k-muted">{t('agents.providers.notConnected')}</p>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <div className="k-inset k-list">
             {provider.accounts.map((account, index) => {
               const typed = account as ProviderAccount
               const isActive = active === typed
@@ -303,40 +282,34 @@ function ProviderRow({
               const activateKey = `${provider.id}:activate:${accountKey}`
               const logoutKey = `${provider.id}:logout:${accountKey}`
               return (
-                <div
-                  key={typed.id ?? `${provider.id}-${index}`}
-                  className="flex min-h-7 min-w-0 items-center gap-2"
-                >
-                  <span className="truncate text-lede leading-[normal] text-secondary">
+                <div key={typed.id ?? `${provider.id}-${index}`} className="k-list__row">
+                  <span className="k-list__name k-grow-0">
                     {typed.label || t('agents.providers.connected')}
                   </span>
-                  <span className="text-hint text-tertiary">{t(METHOD_KEY[typed.method])}</span>
+                  <span className="k-muted">{t(METHOD_KEY[typed.method])}</span>
                   {isActive && <Pill tone="success">{t('agents.providers.active')}</Pill>}
                   {typed.needsAuth && (
                     <Pill tone="attention">{t('agents.providers.needsSignIn')}</Pill>
                   )}
-                  <span className="ml-auto flex shrink-0 items-center gap-1">
+                  <span className="k-end k-push">
                     {!isActive && canPick && (
-                      <Button
-                        variant="outline"
-                        className={ROW_BUTTON}
-                        disabled={busy}
+                      <SetButton
+                        loading={pending === activateKey}
+                        disabled={busy && pending !== activateKey}
                         onClick={() => run(activateKey, () => action('activate', typed.id))}
                       >
-                        {pending === activateKey && <Spinner data-icon="inline-start" />}
                         {t('agents.providers.use')}
-                      </Button>
+                      </SetButton>
                     )}
                     {canPick && (
-                      <Button
+                      <SetButton
                         variant="ghost"
-                        className={GROUP_ACTION}
-                        disabled={busy}
+                        loading={pending === logoutKey}
+                        disabled={busy && pending !== logoutKey}
                         onClick={() => run(logoutKey, () => action('logout', typed.id))}
                       >
-                        {pending === logoutKey && <Spinner data-icon="inline-start" />}
                         {t('agents.providers.logOut')}
-                      </Button>
+                      </SetButton>
                     )}
                   </span>
                 </div>
@@ -374,7 +347,7 @@ function ProviderUsage({
     )
   }
   return (
-    <section className="flex flex-col">
+    <section className="k-group" aria-label={t('agents.usage')}>
       <GroupLabel group={{ id: 'provider-usage', label: t('agents.usage') }} />
       <RowGroup>
         {providers.map((provider) => {
@@ -396,10 +369,7 @@ function ProviderUsage({
           return (
             <RowFrame key={provider.id} text={<RowText name={provider.name} />}>
               <span
-                className={cn(
-                  'max-w-70 truncate text-hint leading-[normal]',
-                  usage?.state === 'error' ? 'text-danger' : 'text-tertiary',
-                )}
+                className={usage?.state === 'error' ? 'k-value k-error' : 'k-value'}
                 title={usage?.error ?? undefined}
               >
                 {message}
@@ -424,7 +394,7 @@ function ProviderUsageNotes({
   const notes = providers.filter((provider) => provider.usage?.state !== 'ready')
   if (notes.length === 0) return null
   return (
-    <div className="flex flex-col gap-1 pt-2">
+    <div>
       {notes.map((provider) => {
         const usage = provider.usage
         const text =
@@ -439,10 +409,8 @@ function ProviderUsageNotes({
         return (
           <p
             key={provider.id}
-            className={cn(
-              'text-hint text-pretty',
-              usage?.state === 'error' ? 'text-danger' : 'text-tertiary',
-            )}
+            className={usage?.state === 'error' ? 'ui-sg-hint k-error' : 'ui-sg-hint'}
+            data-wrap=""
           >
             {usage?.state === 'error' ? `${provider.name}: ${text}` : text}
           </p>
@@ -463,7 +431,7 @@ function ProviderBalances({ providers }: { providers: readonly AgentProvider[] }
   if (rows.length === 0) return null
   const stale = withBalances.filter((provider) => provider.usage?.state === 'error')
   return (
-    <section className="flex flex-col">
+    <section className="k-group" aria-label={t('agents.providers.usage.balances')}>
       <GroupLabel
         group={{
           id: 'provider-balances',
@@ -481,14 +449,14 @@ function ProviderBalances({ providers }: { providers: readonly AgentProvider[] }
               />
             }
           >
-            <span className="font-display text-sheet-title font-bold" data-selectable="">
+            <span className="k-figure" data-selectable="">
               {balanceText(balance)}
             </span>
           </RowFrame>
         ))}
       </RowGroup>
       {stale.map((provider) => (
-        <p key={provider.id} className="mt-2 text-hint text-pretty text-danger">
+        <p key={provider.id} className="ui-sg-hint k-error" data-wrap="">
           {provider.name}:{' '}
           {provider.usage!.observedAt > 0
             ? t('agents.providers.usage.balancesStale', {
@@ -530,23 +498,16 @@ function AddProviderDialog({
           {t('agents.providers.addDescription')}
         </SettingsDialogHeader>
         <SettingsDialogBody>
-          <InputGroup className="h-8">
-            <InputGroupAddon>
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              value={query}
-              autoFocus
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={t('agents.providers.searchPlaceholder')}
-              aria-label={t('agents.providers.search')}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </InputGroup>
-          <div className="-mx-1 max-h-96 min-h-0 overflow-y-auto px-1">
+          <FindField
+            value={query}
+            onChange={setQuery}
+            label={t('agents.providers.searchPlaceholder')}
+            clearLabel={t('page.clearSearch')}
+            autoFocus
+          />
+          <div className="kettu-sd__picklist">
             {shown.length === 0 ? (
-              <p className="py-3 text-group text-tertiary">{t('agents.providers.noMatches')}</p>
+              <p className="k-muted">{t('agents.providers.noMatches')}</p>
             ) : (
               shown.map((provider) => (
                 <AddProviderRow
@@ -568,9 +529,7 @@ function AddProviderDialog({
           </div>
         </SettingsDialogBody>
         <SettingsDialogFooter>
-          <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
-            {t('common:actions.close')}
-          </DialogClose>
+          <DialogClose render={<SetButton size="md" />}>{t('common:actions.close')}</DialogClose>
         </SettingsDialogFooter>
       </SettingsDialogContent>
     </Dialog>
@@ -592,27 +551,23 @@ function AddProviderRow({
   const keyMethod = provider.methods.some((method) => method.type === 'key')
   const methods = provider.methods.map((method) => t(METHOD_KEY[method.type])).join(' · ')
   return (
-    <div className="flex min-w-0 items-center gap-3 py-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-lede leading-[normal] font-medium text-primary">
-          {provider.name}
-        </span>
-        <span className="truncate text-hint text-tertiary">
+    <div className="kettu-sd__row">
+      <span className="ui-sg-label k-lines">
+        <b>{provider.name}</b>
+        <small>
           {methods}
           {provider.accounts.length > 0 && ` · ${t('agents.providers.connected')}`}
-        </span>
-      </div>
-      <span className="flex shrink-0 items-center gap-1.5">
+        </small>
+      </span>
+      <span className="k-end">
         {provider.loginCommand && !remote && (
-          <Button variant="outline" className={ROW_BUTTON} onClick={onSignIn}>
-            <SquareTerminalIcon data-icon="inline-start" />
+          <SetButton icon={<Icon icon={ComputerTerminal01Icon} size={14} />} onClick={onSignIn}>
             {t(provider.accounts.length > 0 ? 'agents.providers.again' : 'agents.providers.signIn')}
-          </Button>
+          </SetButton>
         )}
         {provider.loginCommand && remote && (
-          <Button
-            variant="outline"
-            className={ROW_BUTTON}
+          <SetButton
+            icon={<Icon icon={Copy01Icon} size={14} />}
             onClick={() => {
               const command = provider.loginCommand
               if (!command) return
@@ -622,18 +577,16 @@ function AddProviderRow({
               )
             }}
           >
-            <CopyIcon data-icon="inline-start" />
             {t('agents.providers.copyCommand')}
-          </Button>
+          </SetButton>
         )}
         {keyMethod && (
-          <Button variant="outline" className={ROW_BUTTON} onClick={onSetKey}>
-            <KeyRoundIcon data-icon="inline-start" />
+          <SetButton icon={<Icon icon={Key01Icon} size={14} />} onClick={onSetKey}>
             {t('agents.providers.setKey')}
-          </Button>
+          </SetButton>
         )}
         {!provider.loginCommand && !keyMethod && (
-          <span className="text-hint text-tertiary">{t('agents.providers.unavailable')}</span>
+          <span className="k-muted">{t('agents.providers.unavailable')}</span>
         )}
       </span>
     </div>
@@ -691,11 +644,9 @@ function ProviderKeyDialog({
             {t('agents.providers.key.description')}
           </SettingsDialogHeader>
           <SettingsDialogBody>
-            <div className="flex min-w-0 flex-col gap-1.75">
-              <label htmlFor={id} className="text-control leading-[normal] font-medium">
-                {t('agents.providers.key.label')}
-              </label>
-              <Input
+            <div className="kettu-sd__field">
+              <label htmlFor={id}>{t('agents.providers.key.label')}</label>
+              <input
                 id={id}
                 type="password"
                 value={key}
@@ -709,13 +660,18 @@ function ProviderKeyDialog({
             <ControlError error={error} />
           </SettingsDialogBody>
           <SettingsDialogFooter>
-            <DialogClose render={<Button type="button" variant="ghost" className={ROW_BUTTON} />}>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button type="submit" className={ROW_BUTTON} disabled={!key.trim() || busy}>
-              {busy && <Spinner data-icon="inline-start" />}
+            <SetButton
+              size="md"
+              variant="primary"
+              type="submit"
+              loading={busy}
+              disabled={!key.trim() && !busy}
+            >
               {t('agents.providers.key.save')}
-            </Button>
+            </SetButton>
           </SettingsDialogFooter>
         </form>
       </SettingsDialogContent>

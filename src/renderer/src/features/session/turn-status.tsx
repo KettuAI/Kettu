@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { duration, tokens } from '@renderer/lib/format'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { TurnDots } from './turn-dots'
-import { turnPhase, turnTokens } from './turn-phase'
+import { turnPhase, turnTokens, writingId } from './turn-phase'
 
 /** The time since `since` in whole seconds, ticking on its own so nothing around it re-renders. */
 function TurnClock({ since }: { since: number }) {
@@ -30,10 +30,16 @@ function TurnClock({ since }: { since: number }) {
 /**
  * The running turn's status, the thread's last line at the left, where the reply will start: how
  * long it has run, its tokens and its phase, with the attention dot in place of the running dots
- * while it waits for you. It is as tall as the reply's action row, which takes its place once it
- * ends.
+ * while it waits for you. While the agent writes a message, that message's own label carries the
+ * turn, so this line steps aside: two turn marks never show at once.
  */
-export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: string }) {
+export const TurnStatus = memo(function TurnStatus({
+  sessionId,
+  afterSent,
+}: {
+  sessionId: string
+  afterSent: boolean
+}) {
   const { t } = useTranslation('session')
   const startedAt = useThreadsStore(
     (s) => s.replicas[sessionId]?.state?.session.turnStartedAt ?? null,
@@ -42,18 +48,13 @@ export const TurnStatus = memo(function TurnStatus({ sessionId }: { sessionId: s
   const { phase, count } = useThreadsStore(
     useShallow((s) => turnPhase(s.replicas[sessionId]?.state)),
   )
-  const separator = (
-    <span aria-hidden className="opacity-60">
-      ·
-    </span>
-  )
+  const writing = useThreadsStore((s) => writingId(s.replicas[sessionId]?.state) !== null)
+  if (writing) return null
+  const separator = <i aria-hidden>·</i>
   return (
-    <div
-      role="status"
-      className="flex h-6 min-w-0 animate-in items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground animation-duration-(--duration-base) fade-in"
-    >
+    <div role="status" className="ks-status" data-after-sent={afterSent ? '' : undefined}>
       {phase === 'approval' ? (
-        <span aria-hidden className="size-2 shrink-0 rounded-full bg-attention-dot" />
+        <span aria-hidden className="ks-status__attn" />
       ) : (
         <TurnDots phase={phase} />
       )}

@@ -1,5 +1,5 @@
 import { createContext, type ReactNode } from 'react'
-import type { LucideIcon } from 'lucide-react'
+import type { IconSvgElement } from '@hugeicons/react'
 import { i18n } from '@renderer/lib/i18n'
 import type { SettingsSection } from '@renderer/stores/view'
 
@@ -53,7 +53,7 @@ export interface SectionDef {
   title: string
   /** The page's one line under its title. */
   description: string
-  icon: LucideIcon
+  icon: IconSvgElement
   rows: RowDef[]
   /** Takes the place of the title and description, as About's app name does. */
   hero?: ReactNode

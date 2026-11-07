@@ -27,11 +27,17 @@ export function UnsavedPrompt({ projectPath }: { projectPath: string }) {
           <AlertDialogTitle>{t('unsaved.title', { name: nameOf(path ?? '') })}</AlertDialogTitle>
           <AlertDialogDescription>{t('unsaved.description')}</AlertDialogDescription>
         </AlertDialogHeader>
+        {/* As macOS lays it out: Don't Save apart on the left, away from Save. */}
         <AlertDialogFooter>
-          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-          <Button variant="outline" onClick={() => void answerPending(projectPath, 'discard')}>
+          <Button
+            variant="outline"
+            size="dialog"
+            className="sm:mr-auto"
+            onClick={() => void answerPending(projectPath, 'discard')}
+          >
             {t('unsaved.dontSave')}
           </Button>
+          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
           <AlertDialogAction onClick={() => void answerPending(projectPath, 'save')}>
             {t('unsaved.save')}
           </AlertDialogAction>

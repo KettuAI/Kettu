@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from 'react'
 import { Progress as ProgressPrimitive } from '@base-ui/react/progress'
-import { XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { CommandLine } from '@renderer/components/command-line'
 import { Button } from '@renderer/components/ui/button'
@@ -50,6 +50,7 @@ import {
 } from './update-parts'
 import { CARD_BUTTON, runAppAction } from './update-actions'
 import { UpdateReview } from './update-review'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 // From the card's edge past the footer's padding and the sidebar's border, to sit beside it.
 const BESIDE_SIDEBAR = 18
@@ -150,20 +151,20 @@ function CardFrame({
       data-update-card=""
       onKeyDown={onKeyDown}
       className={cn(
-        'group/card relative rounded-xl bg-surface transition-shadow duration-(--duration-fast) motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:animation-duration-(--duration-slow)',
+        'group/card relative rounded-xl bg-(--shell-card) transition-shadow duration-(--duration-fast) motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:animation-duration-(--duration-slow)',
         failed
           ? 'shadow-(--card-failed)'
           : open
-            ? 'shadow-(--card-open)'
-            : 'shadow-card hover:shadow-(--card-lift)',
+            ? 'shadow-(--shell-card-shadow-hover)'
+            : 'shadow-(--shell-card-shadow) hover:shadow-(--shell-card-shadow-hover)',
       )}
     >
       {hit}
-      <div className="pointer-events-none relative flex min-h-11 items-center gap-2.5 py-1.75 pr-1.75 pl-2.5">
+      <div className="pointer-events-none relative flex min-h-11 items-center gap-2.5 py-2 pr-2 pl-2.5">
         <span className="pointer-events-auto relative flex shrink-0">{icon}</span>
         <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-hint leading-3.75 font-medium text-primary">{title}</span>
-          <span className="mt-px truncate text-caption leading-3.5 text-tertiary">{note}</span>
+          <span className="truncate text-control font-medium text-(--shell-ink)">{title}</span>
+          <span className="truncate text-small text-(--shell-muted)">{note}</span>
         </span>
         {action && <span className="pointer-events-auto relative flex shrink-0">{action}</span>}
       </div>
@@ -177,11 +178,11 @@ function CardFrame({
                 size="icon-xs"
                 aria-label={closeLabel ?? t('close')}
                 onClick={onClose}
-                className="absolute -top-1.5 -right-1.5 size-5 rounded-full text-icon opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/card:opacity-100 group-hover/card:opacity-100 hover:text-primary focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [&_svg:not([class*=size-])]:size-3"
+                className="absolute -top-1.5 -right-1.5 size-4.5 rounded-full text-(--shell-faint) opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/card:opacity-100 group-hover/card:opacity-100 hover:text-(--shell-ink) focus-visible:opacity-100 [@media(hover:none)]:opacity-100 [&_svg:not([class*=size-])]:size-3"
               />
             }
           >
-            <XIcon strokeWidth={1.8} />
+            <Glyph icon={Cancel01Icon} size={12} />
           </TooltipTrigger>
           <TooltipContent>{closeLabel ?? t('close')}</TooltipContent>
         </Tooltip>
@@ -480,7 +481,7 @@ function FailedCard({ failure, label }: { failure: HarnessFailure; label: string
             aria-hidden
             className="absolute -right-0.75 -bottom-0.75 grid size-2.75 place-items-center rounded-full bg-danger text-(--on-fill) shadow-[0_0_0_1.5px_var(--bg-surface)]"
           >
-            <XIcon strokeWidth={1.2} className="size-2" />
+            <Glyph icon={Cancel01Icon} size={8} />
           </span>
         </span>
       }

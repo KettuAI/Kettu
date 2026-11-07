@@ -82,7 +82,18 @@
     "recentlyDeleted": "最近删除",
     "backToArtifacts": "返回 Artifacts",
     "deletedDescription": "删除的 artifact 会在这里保留 30 天，之后它和它的所有版本都会被永久移除。",
-    "nothingDeleted": "最近删除中没有内容"
+    "nothingDeleted": "最近删除中没有内容",
+    "description": "Agent 在各个项目里做的文档、幻灯片、网页和画布。",
+    "filterLabel": "筛选",
+    "noMatchQuery": "没有与“{{query}}”匹配的 Artifact。",
+    "noMatchFilters": "没有符合这些筛选条件的 Artifact。",
+    "importShort": "导入",
+    "askNotes": {
+      "document": "报告、方案或笔记，可导出为 Word 和 Markdown。",
+      "slides": "用来演示的幻灯片，可导出为 PowerPoint 和 PDF。",
+      "web": "可以在浏览器里打开和分享的网页。",
+      "canvas": "把多个界面和流程并排放在一起，方便评论。"
+    }
   },
   "card": {
     "canvas_other": "画布 · {{count}} 页",
@@ -111,7 +122,8 @@
     "deleteAsk": "删除…",
     "restore": "恢复",
     "erase": "永久删除…",
-    "exportNoFolders": "这个浏览器不能保存含多个文件的文件夹"
+    "exportNoFolders": "这个浏览器不能保存含多个文件的文件夹",
+    "exportTo": "导出"
   },
   "dialog": {
     "renameTitle": "重命名 artifact",
@@ -162,7 +174,8 @@
     "placesTip_other": "这个 artifact 在 Kettu 中的 {{count}} 处打开",
     "history": "历史",
     "versionChip": "版本 {{version}}，历史",
-    "present": "演示"
+    "present": "演示",
+    "sideLabel": "历史与评论"
   },
   "canvas": {
     "role": "画布",
@@ -189,7 +202,8 @@
   },
   "history": {
     "title": "历史",
-    "you": "你"
+    "you": "你",
+    "latest": "最新"
   },
   "share": {
     "open": "分享",

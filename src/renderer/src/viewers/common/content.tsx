@@ -1,6 +1,7 @@
 // The controls a viewer edits its content with: Edit, the bar while editing, and what a save did.
 
-import { PencilIcon } from 'lucide-react'
+import { PencilEdit02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -18,7 +19,7 @@ export function EditButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="fixed top-3 right-3 z-20 bg-popover shadow-float"
     >
-      <PencilIcon />
+      <HugeiconsIcon icon={PencilEdit02Icon} strokeWidth={1.9} aria-hidden />
       {t('edit.start')}
     </Button>
   )

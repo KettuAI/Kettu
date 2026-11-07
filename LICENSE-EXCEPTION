@@ -1,0 +1,21 @@
+Kettu
+Copyright (C) 2026 Amigoer
+
+Kettu is free software: you can redistribute it and/or modify it under the
+terms of the GNU Affero General Public License, version 3, as published by
+the Free Software Foundation (see LICENSE).
+
+Additional permission under GNU AGPL version 3 section 7
+
+If you modify this Program, or any covered work, by linking or combining it
+with affectUI (https://www.affectui.com), or a modified version of it,
+containing parts covered by the terms of the affectUI license
+(https://www.affectui.com/license), the licensors of this Program grant you
+additional permission to convey the resulting work. Corresponding Source for
+a non-source form of such a combination shall include the source code for
+the parts of affectUI used as well as that of the covered work.
+
+The affectUI files are in src/renderer/src/components/affect, each marked at
+its top. They are not licensed under the GNU AGPL, and this permission grants
+no rights in them: they remain under the affectUI license and may be used
+only as part of this Program.

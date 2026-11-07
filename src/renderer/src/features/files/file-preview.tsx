@@ -1,20 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from 'react'
-import { BookOpenIcon, CodeIcon, FileIcon, FileWarningIcon, SaveIcon } from 'lucide-react'
+import { File01Icon, FileNotFoundIcon, FloppyDiskIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ChangeStatus } from '@shared/git'
 import type { MediaGrant } from '@shared/media'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { CopyButton } from '@renderer/features/git/branch-popover'
-import { PanelButton } from '@renderer/features/shell/panel-button'
+import { PaneEmpty, PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
 import { bytes, clock } from '@renderer/lib/format'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -45,8 +35,7 @@ import {
   type OpenFile,
 } from '@renderer/stores/files'
 import { ChangeBadge } from './change-badge'
-import { DiffFileToggle, PathLabel } from './file-header'
-import { FileTabs } from './file-tabs'
+import { DiffFileToggle, PathCopy, PreviewEditToggle } from './file-header'
 import { nameOf } from './paths'
 
 const CodeEditor = lazy(() => import('./code-editor'))
@@ -60,16 +49,14 @@ interface Picture {
 /** The room a fitted picture leaves on each side of the pane, as it always has. */
 const PANE_FIT_MARGIN = 24
 
-/** The open files' tabs and the shown one, in the editor, or what stands in for it. */
+/** The open file in the editor, or what stands in for it, under its bar. */
 export function FilePreview({
   projectPath,
-  files,
   file,
   changes,
   onShowDiff,
 }: {
   projectPath: string
-  files: OpenFile[]
   file: OpenFile | null
   changes: ReadonlyMap<string, ChangeStatus>
   /** Shows the file's uncommitted change instead, offered while it has one. */
@@ -78,7 +65,7 @@ export function FilePreview({
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
   const svgSource = useFilesStore((s) => s.svgSource)
-  // The picture's own zoom, shown in the header and turned by the keys; a clip or a text has none.
+  // The picture's own zoom, shown in the bar and turned by the keys; a clip or a text has none.
   const [media, setMedia] = useState<{ path: string; picture: Picture } | null>(null)
   const picture = file && media?.path === file.path ? media.picture : null
   const onPicture = useCallback((path: string, next: Picture | null) => {
@@ -89,22 +76,19 @@ export function FilePreview({
   }, [])
   if (!file) {
     return (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <FileIcon />
-          </EmptyMedia>
-          <EmptyTitle>{t('preview.emptyTitle')}</EmptyTitle>
-          <EmptyDescription>{t('preview.emptyDescription')}</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <PaneEmpty
+        icon={<PaneIcon icon={File01Icon} size={20} />}
+        title={t('preview.emptyTitle')}
+        text={t('preview.emptyDescription')}
+      />
     )
   }
   const change = changes.get(file.path)
+  const markdown = isMarkdown(file.path) && file.content?.kind === 'text'
   return (
     <div
       data-file-preview=""
-      className="flex h-full min-h-0 flex-col bg-background"
+      className="flex min-h-0 flex-1 flex-col"
       // Anywhere in the pane, so it still saves after a click on one of the bars' buttons.
       onKeyDown={(event) => {
         if (handleZoomKeys(event, picture?.controls ?? null)) return
@@ -114,60 +98,43 @@ export function FilePreview({
         void saveFile(projectPath, file.path)
       }}
     >
-      <FileTabs projectPath={projectPath} files={files} active={file.path} changes={changes} />
-      <div className="flex h-10 shrink-0 items-center gap-1 pr-2 pl-3.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
-        <span className="mr-1 flex min-w-0 flex-1 items-center gap-1.5">
-          <PathLabel path={file.path} />
-          {change && !onShowDiff && <ChangeBadge status={change} />}
+      <div className="kp-doc__bar">
+        <PathCopy path={file.path} />
+        {change && !onShowDiff && <ChangeBadge status={change} />}
+        <span className="kp-doc__tools">
           {file.dirty && (
-            <span
-              role="img"
-              aria-label={t('preview.unsaved')}
-              className="size-1.5 shrink-0 rounded-full bg-primary"
+            <PanelButton
+              label={t('preview.save')}
+              shortcut={formatShortcut('Mod+S')}
+              onClick={() => void saveFile(projectPath, file.path)}
+            >
+              <PaneIcon icon={FloppyDiskIcon} />
+            </PanelButton>
+          )}
+          {picture && <ZoomControls zoom={picture.zoom} controls={picture.controls} size="xs" />}
+          {onShowDiff && (
+            <DiffFileToggle value="file" onChange={(next) => next === 'diff' && onShowDiff()} />
+          )}
+          {markdown && (
+            <PreviewEditToggle
+              value={rendered(file, source) ? 'preview' : 'edit'}
+              onChange={(next) =>
+                next === 'edit'
+                  ? useFilesStore.setState({ markdownSource: true })
+                  : showMarkdownRendered(projectPath, file.path)
+              }
+            />
+          )}
+          {isSvgFile(file.path) && file.content && (
+            <PreviewEditToggle
+              value={svgSource ? 'edit' : 'preview'}
+              onChange={(next) => showSvgSource(next === 'edit')}
             />
           )}
         </span>
-        {onShowDiff && (
-          <DiffFileToggle value="file" onChange={(next) => next === 'diff' && onShowDiff()} />
-        )}
-        {file.dirty && (
-          <PanelButton
-            label={t('preview.save')}
-            shortcut={formatShortcut('Mod+S')}
-            onClick={() => void saveFile(projectPath, file.path)}
-          >
-            <SaveIcon className="size-3.5" />
-          </PanelButton>
-        )}
-        {picture && <ZoomControls zoom={picture.zoom} controls={picture.controls} size="xs" />}
-        {isMarkdown(file.path) && file.content?.kind === 'text' && (
-          <PanelButton
-            label={rendered(file, source) ? t('preview.showSource') : t('preview.showRendered')}
-            onClick={() =>
-              rendered(file, source)
-                ? useFilesStore.setState({ markdownSource: true })
-                : showMarkdownRendered(projectPath, file.path)
-            }
-          >
-            {rendered(file, source) ? (
-              <CodeIcon className="size-3.5" />
-            ) : (
-              <BookOpenIcon className="size-3.5" />
-            )}
-          </PanelButton>
-        )}
-        {isSvgFile(file.path) && file.content && (
-          <PanelButton
-            label={svgSource ? t('preview.showRendered') : t('preview.showSource')}
-            onClick={() => showSvgSource(!svgSource)}
-          >
-            {svgSource ? <BookOpenIcon className="size-3.5" /> : <CodeIcon className="size-3.5" />}
-          </PanelButton>
-        )}
-        <CopyButton text={file.path} label={t('preview.copyPath')} className="size-6.5" />
       </div>
       <Notes projectPath={projectPath} file={file} />
-      <div className="relative min-h-0 flex-1">
+      <div className="kp-doc__body">
         <Body projectPath={projectPath} file={file} onPicture={onPicture} />
       </div>
     </div>
@@ -193,26 +160,26 @@ function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
     return (
       <Bar tone="notice">
         <span className="min-w-0 flex-1">{t('preview.changedOnDisk')}</span>
-        <Button
-          size="xs"
-          variant="outline"
+        <button
+          type="button"
+          className="kp-btn kp-btn--sm"
           onClick={(event) => {
             backToEditor(event.currentTarget)
             discardEdits(projectPath, file.path)
           }}
         >
           {t('preview.reload')}
-        </Button>
-        <Button
-          size="xs"
-          variant="outline"
+        </button>
+        <button
+          type="button"
+          className="kp-btn kp-btn--sm"
           onClick={(event) => {
             backToEditor(event.currentTarget)
             keepEdits(projectPath, file.path)
           }}
         >
           {t('preview.keepMine')}
-        </Button>
+        </button>
       </Bar>
     )
   }
@@ -242,15 +209,7 @@ function backToEditor(from: HTMLElement): void {
 
 function Bar({ tone, children }: { tone: 'notice' | 'error' | 'muted'; children: ReactNode }) {
   return (
-    <div
-      role={tone === 'muted' ? undefined : 'status'}
-      className={cn(
-        'flex min-h-row shrink-0 items-center gap-1.5 border-b border-subtle py-1 pr-1.5 pl-3.5 text-xs',
-        tone === 'notice' && 'bg-subtle text-secondary',
-        tone === 'error' && 'bg-danger-tint text-danger',
-        tone === 'muted' && 'text-tertiary',
-      )}
-    >
+    <div role={tone === 'muted' ? undefined : 'status'} className="kp-doc__note" data-tone={tone}>
       {children}
     </div>
   )
@@ -371,27 +330,19 @@ function FileMedia({
   }
   if (failure || grant.tooLarge) {
     return (
-      <Empty className="h-full">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <FileWarningIcon />
-          </EmptyMedia>
-          <EmptyTitle>
-            {grant.tooLarge ? (
-              t('preview.mediaTooLargeTitle')
-            ) : (
-              <UnsupportedReason kind={grant.kind} />
-            )}
-          </EmptyTitle>
-          <EmptyDescription>{bytes(grant.size)}</EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <span className="flex flex-wrap justify-center gap-1.5">
-            <PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />
-          </span>
-          {error && <span className="text-xs text-danger">{error}</span>}
-        </EmptyContent>
-      </Empty>
+      <PaneEmpty
+        className="absolute inset-0"
+        icon={<PaneIcon icon={FileNotFoundIcon} size={20} />}
+        title={
+          grant.tooLarge ? t('preview.mediaTooLargeTitle') : <UnsupportedReason kind={grant.kind} />
+        }
+        text={bytes(grant.size)}
+      >
+        <span className="mt-3 flex flex-wrap justify-center gap-1.5">
+          <PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />
+        </span>
+        {error && <span className="text-xs text-danger">{error}</span>}
+      </PaneEmpty>
     )
   }
 
@@ -564,14 +515,11 @@ function PictureStage({
 
 export function Notice({ title, description }: { title: string; description: string }) {
   return (
-    <Empty className="h-full">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <FileWarningIcon />
-        </EmptyMedia>
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
-      </EmptyHeader>
-    </Empty>
+    <PaneEmpty
+      className="absolute inset-0"
+      icon={<PaneIcon icon={FileNotFoundIcon} size={20} />}
+      title={title}
+      text={description}
+    />
   )
 }

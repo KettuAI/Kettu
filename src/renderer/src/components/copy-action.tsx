@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { CheckIcon, CopyIcon } from 'lucide-react'
+import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 
@@ -52,9 +53,14 @@ export function CopyAction({ text, label }: { text: string | (() => string); lab
       }}
     >
       {copied ? (
-        <CheckIcon className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75" />
+        <HugeiconsIcon
+          icon={Tick02Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="animate-in text-icon animation-duration-(--duration-fast) fade-in zoom-in-75"
+        />
       ) : (
-        <CopyIcon />
+        <HugeiconsIcon icon={Copy01Icon} strokeWidth={1.9} aria-hidden />
       )}
     </IconAction>
   )

@@ -7,7 +7,10 @@
     "routines": "例程",
     "sessions": "会话",
     "unavailable": "暂时无法加载项目。",
-    "empty": "会话会显示在这里。"
+    "empty": "会话会显示在这里。",
+    "searchField": "搜索…",
+    "projects": "项目",
+    "resize": "调整侧边栏宽度"
   },
   "search": {
     "placeholder": "搜索会话、Artifacts、例程等",
@@ -58,6 +61,13 @@
       "navigate": "导航",
       "open": "打开",
       "scope": "下一个范围"
+    },
+    "latest": {
+      "sessions": "最近的会话",
+      "artifacts": "最近的 Artifacts",
+      "routines": "最近的例程",
+      "projects": "最近的项目",
+      "settings": "全部设置"
     }
   },
   "project": {
@@ -247,7 +257,14 @@
     "cancelSignIn": "取消登录",
     "connecting": "正在连接 {{name}}…",
     "escKey": "esc",
-    "cancelSwitch": "回到之前的主机"
+    "cancelSwitch": "回到之前的主机",
+    "hosts": "主机",
+    "usage": "用量",
+    "window": {
+      "fiveHour": "5 小时",
+      "sevenDay": "7 天",
+      "monthly": "本月"
+    }
   },
   "rename": {
     "save": "保存",

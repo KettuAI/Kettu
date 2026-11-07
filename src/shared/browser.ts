@@ -7,7 +7,7 @@ export interface BrowserBounds {
   y: number
   width: number
   height: number
-  /** The radius of the pane's lower corners, which the page fills. */
+  /** The radius of the page's corners, as the pane's frame for it draws them. */
   radius: number
 }
 

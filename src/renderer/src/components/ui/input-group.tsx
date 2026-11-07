@@ -18,7 +18,7 @@ const inputGroupVariants = cva(
           'border border-input bg-card shadow-field transition-[border-color,box-shadow] not-has-disabled:hover:border-strong has-[[data-slot=input-group-control]:focus-visible]:border-focused has-[[data-slot=input-group-control]:focus-visible]:shadow-field-focus has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-3 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40',
         // Raised on surface 3; only color and shadow change on hover and focus, so the text never moves.
         composer:
-          'h-auto min-h-(--composer-min) items-end rounded-dialog bg-popover shadow-composer transition-shadow duration-(--duration-fast) not-focus-within:hover:shadow-composer-hover focus-within:shadow-composer-focus has-disabled:opacity-100',
+          'h-auto min-h-(--composer-min) items-end rounded-[21px] bg-popover shadow-composer transition-shadow duration-(--duration-fast) not-focus-within:hover:shadow-composer-hover focus-within:shadow-composer-focus has-disabled:opacity-100',
       },
     },
     defaultVariants: { variant: 'default' },

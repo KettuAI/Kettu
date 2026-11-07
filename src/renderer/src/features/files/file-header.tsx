@@ -1,8 +1,10 @@
+import { useState } from 'react'
+import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { SegmentedControl } from '@renderer/components/segmented-control'
-import { folderOf, nameOf } from './paths'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
+import { PaneIcon } from '@renderer/features/shell/panel-button'
 
-/** The Diff and File toggle of a changed file's header. */
+/** The Diff and File toggle of a changed file's bar. */
 export function DiffFileToggle({
   value,
   onChange,
@@ -13,33 +15,70 @@ export function DiffFileToggle({
   disabled?: boolean
 }) {
   const { t } = useTranslation('files')
-  // The fieldset disables the segments natively; without pointer events the track's own press
-  // and drag cannot move the thumb either.
   return (
-    <fieldset disabled={disabled} className="shrink-0 disabled:pointer-events-none">
-      <SegmentedControl
-        aria-label={t('diff.view')}
-        value={value}
-        onChange={onChange}
-        size="small"
-        className="app-region-no-drag"
-        itemClassName="h-5.5 px-2 text-small"
-        segments={[
-          { value: 'diff', label: t('diff.diff') },
-          { value: 'file', label: t('diff.file') },
-        ]}
-      />
-    </fieldset>
+    <SegmentedControl
+      aria-label={t('diff.view')}
+      variant="tray"
+      size="md"
+      value={value}
+      disabled={disabled}
+      onChange={onChange}
+      options={[
+        { value: 'diff', label: t('diff.diff') },
+        { value: 'file', label: t('diff.file') },
+      ]}
+    />
   )
 }
 
-/** A file's path in a preview's header: the folder quiet, the name after it. */
-export function PathLabel({ path }: { path: string }) {
-  const folder = folderOf(path)
+/** Between a Markdown or SVG file drawn as it shows and its text in the editor. */
+export function PreviewEditToggle({
+  value,
+  onChange,
+}: {
+  value: 'preview' | 'edit'
+  onChange: (value: 'preview' | 'edit') => void
+}) {
+  const { t } = useTranslation('files')
   return (
-    <span className="min-w-0 flex-1 truncate font-mono text-caption text-secondary" title={path}>
-      {folder && <span className="text-tertiary">{folder}/</span>}
-      {nameOf(path)}
-    </span>
+    <SegmentedControl
+      aria-label={t('preview.view')}
+      variant="tray"
+      size="md"
+      value={value}
+      onChange={onChange}
+      options={[
+        { value: 'preview', label: t('preview.preview') },
+        { value: 'edit', label: t('preview.edit') },
+      ]}
+    />
+  )
+}
+
+/** A file's path in a bar, which copies itself when clicked; a long one keeps its end in view. */
+export function PathCopy({ path, shown = path }: { path: string; shown?: string }) {
+  const { t } = useTranslation(['files', 'common'])
+  const [copied, setCopied] = useState(false)
+  const label = copied ? t('common:actions.copied') : t('preview.copyPath')
+  return (
+    <button
+      type="button"
+      className="kp-doc__path"
+      title={`${shown} · ${label}`}
+      aria-label={`${shown}, ${label}`}
+      data-copied={copied || undefined}
+      onClick={() =>
+        void navigator.clipboard.writeText(path).then(() => {
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
+        })
+      }
+    >
+      {/* The bidi isolate keeps a path's slashes in place in the right-to-left box. */}
+      <span>
+        <bdi>{shown}</bdi>
+      </span>
+      <PaneIcon icon={copied ? Tick02Icon : Copy01Icon} size={12} />
+    </button>
   )
 }

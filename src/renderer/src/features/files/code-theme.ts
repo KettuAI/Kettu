@@ -150,8 +150,8 @@ async function themeOf(id: CodeTheme): Promise<ThemeRegistrationResolved> {
 }
 
 /**
- * The editor's colors under a code theme in the app's light or dark mode, on the code block's
- * surface. Each is built once and kept, so the same promise comes back for the same choice.
+ * The editor's colors under a code theme in the app's light or dark mode, on the open files'
+ * card. Each is built once and kept, so the same promise comes back for the same choice.
  */
 export function editorTheme(id: CodeTheme, dark: boolean): Promise<Extension> {
   const key = `${id} ${dark}`
@@ -161,12 +161,12 @@ export function editorTheme(id: CodeTheme, dark: boolean): Promise<Extension> {
       return [
         EditorView.theme(
           {
-            '&': { color: theme.fg, backgroundColor: 'var(--bg-code-block)' },
+            '&': { color: theme.fg, backgroundColor: 'var(--bg-surface)' },
             '.cm-content': { caretColor: 'var(--control-on)' },
             '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--control-on)' },
             '.cm-gutters': {
-              backgroundColor: 'var(--bg-code-block)',
-              color: 'var(--syntax-comment)',
+              backgroundColor: 'var(--bg-surface)',
+              color: 'var(--text-disabled)',
               borderRightColor: 'transparent',
             },
             // The line being edited shows only while the editor has the focus.

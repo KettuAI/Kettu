@@ -1,9 +1,26 @@
 // What a permission mode looks like in the composer, from the ids Claude Code and Codex give
 // their modes; any other agent's mode reads as one that asks.
 
+import {
+  Alert02Icon,
+  PencilEdit01Icon,
+  SecurityCheckIcon,
+  Shield01Icon,
+  ViewIcon,
+} from '@hugeicons/core-free-icons'
+import type { IconSvgElement } from '@hugeicons/react'
 import { isFullAccessMode } from '@shared/agents'
 
 export type ModeLook = 'asks' | 'edits' | 'plan' | 'auto' | 'full'
+
+/** Each mode's icon. */
+export const MODE_GLYPH: Record<ModeLook, IconSvgElement> = {
+  asks: Shield01Icon,
+  edits: PencilEdit01Icon,
+  plan: ViewIcon,
+  auto: SecurityCheckIcon,
+  full: Alert02Icon,
+}
 
 const LOOKS: Record<string, ModeLook> = {
   default: 'asks',

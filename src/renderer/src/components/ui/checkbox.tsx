@@ -1,6 +1,7 @@
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox'
 import { cn } from 'cn'
-import { CheckIcon } from 'lucide-react'
+import { Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 
 function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
   return (
@@ -14,10 +15,15 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none [&>svg]:size-2.5"
+        className="grid place-content-center text-current transition-none [&>svg]:size-2.75"
       >
         {/* Mixed shows a bar instead of the check. */}
-        <CheckIcon strokeWidth={1.6} className="group-data-indeterminate/checkbox:hidden" />
+        <HugeiconsIcon
+          icon={Tick02Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="group-data-indeterminate/checkbox:hidden"
+        />
         <span className="hidden h-0.5 w-2 rounded-full bg-current group-data-indeterminate/checkbox:block" />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>

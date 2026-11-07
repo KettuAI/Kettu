@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { LogInIcon, RotateCwIcon, SquareTerminalIcon } from 'lucide-react'
+import { ComputerTerminal01Icon, Login03Icon, RefreshIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAuthMethod } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
@@ -107,12 +108,22 @@ export function SignIn({
                       })
                     }
                   >
-                    <SquareTerminalIcon data-icon="inline-start" />
+                    <HugeiconsIcon
+                      icon={ComputerTerminal01Icon}
+                      strokeWidth={1.9}
+                      aria-hidden
+                      data-icon="inline-start"
+                    />
                     {t('signIn.inTerminal')}
                   </Button>
                 )}
                 <Button variant="outline" size="compact" onClick={onRetry}>
-                  <RotateCwIcon data-icon="inline-start" />
+                  <HugeiconsIcon
+                    icon={RefreshIcon}
+                    strokeWidth={1.9}
+                    aria-hidden
+                    data-icon="inline-start"
+                  />
                   {t('signIn.signedIn')}
                 </Button>
               </div>
@@ -128,7 +139,12 @@ export function SignIn({
               {busy === method.id ? (
                 <Spinner data-icon="inline-start" className="size-3" />
               ) : (
-                <LogInIcon data-icon="inline-start" />
+                <HugeiconsIcon
+                  icon={Login03Icon}
+                  strokeWidth={1.9}
+                  aria-hidden
+                  data-icon="inline-start"
+                />
               )}
               {method.name}
             </Button>
@@ -136,7 +152,12 @@ export function SignIn({
         )}
         {methods.length === 0 && (
           <Button variant="outline" size="compact" onClick={onRetry}>
-            <RotateCwIcon data-icon="inline-start" />
+            <HugeiconsIcon
+              icon={RefreshIcon}
+              strokeWidth={1.9}
+              aria-hidden
+              data-icon="inline-start"
+            />
             {t('common:actions.retry')}
           </Button>
         )}

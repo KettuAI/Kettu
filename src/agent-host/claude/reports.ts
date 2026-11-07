@@ -1,6 +1,7 @@
 // What Claude Code answers about the account, its plan limits and a session's context, in
 // Kettu's terms. Claude Code works each out itself, without a request to the model.
 
+import { isAbsolute, relative, sep } from 'node:path'
 import type { AgentAccount, ContextBreakdown, ContextList, PlanLimit } from '@shared/agent-host'
 import { WINDOW_LABELS } from '../session-updates'
 import type { AccountInfo, ContextUsageAnswer, UsageAnswer, UsageWindow } from './sdk'
@@ -143,8 +144,31 @@ export function compactTokens(tokens: number): string {
   return String(Math.round(tokens))
 }
 
+/** The folders a context's file paths are written from: the session's, then the home folder. */
+export interface ContextPlaces {
+  cwd: string
+  home: string
+}
+
+/** A path from the session's folder, or as `~/...` from the home folder; else whole. */
+function shortPath(path: string, { cwd, home }: ContextPlaces): string {
+  const under = (root: string): string | null => {
+    if (!root || !isAbsolute(path)) return null
+    const rest = relative(root, path)
+    return rest && rest !== '..' && !rest.startsWith(`..${sep}`) && !isAbsolute(rest) ? rest : null
+  }
+  const inProject = under(cwd)
+  if (inProject) return inProject
+  const inHome = under(home)
+  return inHome ? `~${sep}${inHome}` : path
+}
+
 /** What fills a session's context, from Claude Code's summary of it. */
-export function mapContextUsage(answer: ContextUsageAnswer, now: number): ContextBreakdown {
+export function mapContextUsage(
+  answer: ContextUsageAnswer,
+  now: number,
+  places?: ContextPlaces,
+): ContextBreakdown {
   const size = answer.rawMaxTokens ?? answer.maxTokens
   const share = (tokens: number): number | null => (size > 0 ? tokens / size : null)
   const categories = answer.categories
@@ -179,8 +203,8 @@ export function mapContextUsage(answer: ContextUsageAnswer, now: number): Contex
   list(
     'Memory Files',
     (answer.memoryFiles ?? []).map((file) => ({
-      name: file.type ?? file.path,
-      detail: file.type ? file.path : null,
+      name: places ? shortPath(file.path, places) : file.path,
+      detail: null,
       tokens: compactTokens(file.tokens),
     })),
   )

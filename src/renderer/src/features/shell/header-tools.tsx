@@ -1,16 +1,17 @@
 import { useState, type ReactNode } from 'react'
+import type { IconSvgElement } from '@hugeicons/react'
 import {
-  EllipsisIcon,
-  FolderIcon,
-  GlobeIcon,
-  SquareTerminalIcon,
-  XIcon,
-  SmartphoneIcon,
-} from 'lucide-react'
+  Cancel01Icon,
+  ComputerTerminal01Icon,
+  File01Icon,
+  Globe02Icon,
+  MoreHorizontalIcon,
+  SidebarRightIcon,
+  SmartPhone01Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { SessionView } from '@shared/thread'
-import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,17 +40,32 @@ import {
   useViewStore,
   type SidePane,
 } from '@renderer/stores/view'
+import { PaneIcon } from './panel-button'
 import { NoDrag } from './top-bar'
 
-/** A top-bar tool: 30 px, its 17 px icon in the icon color, filled while its pane shows. */
-const TOOL =
-  'relative size-7.5 text-secondary aria-expanded:bg-pressed aria-expanded:text-foreground aria-pressed:shadow-none [&_svg:not([class*=size-])]:size-4.25'
+type Pane = Exclude<SidePane, 'artifact'>
+
+// The pane each panel showed last, which the side panel button opens again.
+const lastPanes = new Map<string, Pane>()
+let tracking = false
+function trackLastPanes(): void {
+  if (tracking) return
+  tracking = true
+  const record = (panes: Record<string, SidePane>) => {
+    for (const [panel, pane] of Object.entries(panes))
+      if (pane !== 'artifact') lastPanes.set(panel, pane)
+  }
+  record(useViewStore.getState().sidePane)
+  useViewStore.subscribe((state, previous) => {
+    if (state.sidePane !== previous.sidePane) record(state.sidePane)
+  })
+}
 
 /**
- * The right end of the top bar: the project's git status, the toggles of the bar's own side panel,
- * a session's More menu and, in a split, **Close pane**. The git status shrinks a thousand times faster than the
- * session title, so in a crowded bar the branch gives way first, down to its icon, and the title
- * keeps its room.
+ * The right end of the top bar: a button for each of the bar's side panes, which opens that pane
+ * or folds it away when it already shows, then the side panel button while none shows. A session's
+ * More menu leads them while the bar does not place it after the title itself, and in a split
+ * **Close pane** ends them.
  */
 export function HeaderTools({
   projectPath,
@@ -86,103 +102,96 @@ export function HeaderTools({
       s.environment.android ||
       (!!sessionId && s.devices.some((device) => device.sessionId === sessionId)),
   )
+  // The browser runs in the desktop app, for another host's agents too; a web page has no such
+  // view. A session has one, so a session still being created does not.
+  const browser = !isWeb && !!sessionId
+  const available: Pane[] = [
+    ...(terminal ? (['terminal'] as const) : []),
+    ...(browser ? (['browser'] as const) : []),
+    ...(sessionId && devices ? (['devices'] as const) : []),
+    'files',
+  ]
   return (
-    <>
-      <NoDrag className="shrink-0 gap-2">
-        {/* Another host's terminal opens only while its owner allows devices it. */}
-        {terminal && (
-          <PaneToggle
-            panel={panel}
-            pane="terminal"
-            label={t('headerTools.terminal')}
-            shortcut="Ctrl+`"
-          >
-            <SquareTerminalIcon />
-          </PaneToggle>
-        )}
-        {/* The browser runs in the desktop app, for another host's agents too; a web page has
-            no such view. A session has one, so a session still being created does not. */}
-        {!isWeb && sessionId && (
-          <PaneToggle panel={panel} pane="browser" label={t('headerTools.browser')} dot={dot}>
-            <GlobeIcon />
-          </PaneToggle>
-        )}
-        {sessionId && devices && (
-          <PaneToggle panel={panel} pane="devices" label={t('headerTools.devices')} dot={deviceDot}>
-            <SmartphoneIcon />
-          </PaneToggle>
-        )}
-        <PaneToggle panel={panel} pane="files" label={t('headerTools.files')}>
-          <FolderIcon />
-        </PaneToggle>
-        {summary && onRename && onNewSubSession && (
-          <MoreMenu
-            summary={summary}
-            session={session}
-            onRename={onRename}
-            onNewSubSession={onNewSubSession}
-            menu={menu}
-          />
-        )}
-        {pane?.split && (
-          <ClosePaneButton
-            paneId={pane.paneId}
-            focused={pane.focused}
-            label={t('headerTools.closePane')}
-          />
-        )}
-      </NoDrag>
-    </>
+    <NoDrag className="kp-bar-tools">
+      {summary && onRename && onNewSubSession && (
+        <SessionMoreMenu
+          summary={summary}
+          session={session}
+          onRename={onRename}
+          onNewSubSession={onNewSubSession}
+          menu={menu}
+        />
+      )}
+      {/* Another host's terminal opens only while its owner allows devices it. */}
+      {terminal && (
+        <PaneToggle
+          panel={panel}
+          pane="terminal"
+          label={t('headerTools.terminal')}
+          shortcut="Ctrl+`"
+          icon={ComputerTerminal01Icon}
+        />
+      )}
+      {browser && (
+        <PaneToggle
+          panel={panel}
+          pane="browser"
+          label={t('headerTools.browser')}
+          dot={dot}
+          icon={Globe02Icon}
+        />
+      )}
+      {sessionId && devices && (
+        <PaneToggle
+          panel={panel}
+          pane="devices"
+          label={t('headerTools.devices')}
+          dot={deviceDot}
+          icon={SmartPhone01Icon}
+        />
+      )}
+      <PaneToggle panel={panel} pane="files" label={t('headerTools.files')} icon={File01Icon} />
+      <SidePanelButton panel={panel} available={available} />
+      {pane?.split && (
+        <BarButton
+          label={t('headerTools.closePane')}
+          onClick={() => closeSplitPane(pane.paneId, pane.focused)}
+        >
+          <PaneIcon icon={Cancel01Icon} size={15} />
+        </BarButton>
+      )}
+    </NoDrag>
   )
 }
 
-function PaneToggle({
-  panel,
-  pane,
+/** A 28 px button of the bar, with its name and shortcut on hover. */
+function BarButton({
   label,
   shortcut,
-  dot,
+  pressed,
+  onClick,
   children,
 }: {
-  panel: string
-  pane: SidePane
   label: string
   shortcut?: string
-  /** A small `--foreground` dot: the pane has news while another one shows. */
-  dot?: boolean
+  pressed?: boolean
+  onClick: () => void
   children: ReactNode
 }) {
-  const context = usePane()
-  const open = useViewStore((s) => shownPanel(s) === panel && s.sidePane[panel] === pane)
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
-            variant="quiet"
-            size="icon-compact"
+          <button
+            type="button"
             aria-label={label}
-            aria-pressed={open}
-            onClick={() => {
-              // In a pane out of focus the toggle shows its pane there and never closes the panel.
-              if (context && !context.focused) {
-                focusPane(context.paneId)
-                toggleSidePane(panel, pane, true)
-                return
-              }
-              toggleSidePane(panel, pane)
-            }}
-            className={TOOL}
+            aria-pressed={pressed}
+            onClick={onClick}
+            className="kp-tool"
           />
         }
       >
         {children}
-        {dot && !open && (
-          <span
-            aria-hidden
-            className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-foreground"
-          />
-        )}
       </TooltipTrigger>
       <TooltipContent>
         {label}
@@ -192,11 +201,72 @@ function PaneToggle({
   )
 }
 
+function PaneToggle({
+  panel,
+  pane,
+  label,
+  shortcut,
+  dot,
+  icon,
+}: {
+  panel: string
+  pane: Pane
+  label: string
+  shortcut?: string
+  /** The pane has news while another one shows. */
+  dot?: boolean
+  icon: IconSvgElement
+}) {
+  const context = usePane()
+  const open = useViewStore((s) => shownPanel(s) === panel && s.sidePane[panel] === pane)
+  return (
+    <BarButton
+      label={label}
+      shortcut={shortcut}
+      pressed={open}
+      onClick={() => {
+        // In a pane out of focus the toggle shows its pane there and never closes the panel.
+        if (context && !context.focused) {
+          focusPane(context.paneId)
+          toggleSidePane(panel, pane, true)
+          return
+        }
+        toggleSidePane(panel, pane)
+      }}
+    >
+      <PaneIcon icon={icon} size={16} />
+      {dot && !open && <span aria-hidden className="kp-bar-dot" />}
+    </BarButton>
+  )
+}
+
+/** While the panel shows nothing, it opens again on the pane it showed last. */
+function SidePanelButton({ panel, available }: { panel: string; available: Pane[] }) {
+  const { t } = useTranslation('common')
+  const context = usePane()
+  trackLastPanes()
+  const shown = useViewStore((s) => shownPanel(s) === panel && !!s.sidePane[panel])
+  if (shown) return null
+  const last = lastPanes.get(panel)
+  const pane = last && available.includes(last) ? last : 'files'
+  return (
+    <BarButton
+      label={t('pane.open')}
+      onClick={() => {
+        if (context && !context.focused) focusPane(context.paneId)
+        toggleSidePane(panel, pane, true)
+      }}
+    >
+      <PaneIcon icon={SidebarRightIcon} size={16} />
+    </BarButton>
+  )
+}
+
 /**
  * The session's More menu: who runs it, then what can be done with it from here, as the sidebar
  * row's menu does with what a row needs.
  */
-function MoreMenu({
+export function SessionMoreMenu({
   summary,
   session,
   onRename,
@@ -218,23 +288,16 @@ function MoreMenu({
           <TooltipTrigger
             render={
               <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="quiet"
-                    size="icon-compact"
-                    aria-label={t('row.more')}
-                    className={TOOL}
-                  />
-                }
+                render={<button type="button" aria-label={t('row.more')} className="kp-tool" />}
               />
             }
           >
-            <EllipsisIcon />
+            <PaneIcon icon={MoreHorizontalIcon} size={16} />
           </TooltipTrigger>
           <TooltipContent>{t('row.more')}</TooltipContent>
         </Tooltip>
         <DropdownMenuContent
-          align="end"
+          align="start"
           className="w-68"
           finalFocus={menu?.finalFocus}
           onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
@@ -256,35 +319,5 @@ function MoreMenu({
         onOpenChange={setDeleting}
       />
     </>
-  )
-}
-
-/** Closes the pane, leaving its session running; its composer takes the keyboard focus. */
-function ClosePaneButton({
-  paneId,
-  focused,
-  label,
-}: {
-  paneId: string
-  focused: boolean
-  label: string
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="quiet"
-            size="icon-compact"
-            aria-label={label}
-            onClick={() => closeSplitPane(paneId, focused)}
-            className={TOOL}
-          />
-        }
-      >
-        <XIcon />
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
   )
 }

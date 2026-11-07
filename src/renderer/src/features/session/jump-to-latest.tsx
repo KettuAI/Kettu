@@ -14,18 +14,6 @@ import { turnPhase } from './turn-phase'
 
 type Mark = 'idle' | 'running' | 'waiting' | 'ended' | 'failed'
 
-/** What the nine dots draw for each mark; hovering or focusing the button draws the arrow. */
-const SHAPE: Record<Mark, 'arrow' | 'grid' | 'center' | 'bang'> = {
-  idle: 'arrow',
-  running: 'grid',
-  waiting: 'center',
-  ended: 'arrow',
-  failed: 'bang',
-}
-
-// The cells' centres in the button's 36 px box.
-const AT = [12.5, 18, 23.5]
-
 // Kettu's own records, which may follow the entry that ended a turn.
 const AFTER_END = new Set([
   'git',
@@ -69,10 +57,10 @@ function turnEnding(state: ThreadState | null | undefined): Ending {
 }
 
 /**
- * Jumps to the thread's end, drawn with the running turn's nine dots so it carries the turn's
- * state while the status line is out of view: an arrow at rest, the phase's motion while the turn
- * runs, one dot while it waits for the user, and how it ended when it ended out of view, until
- * the end comes into view.
+ * Jumps to the thread's end, drawn with the turn's nine dots in the fox orange so it carries the
+ * turn's state while the status line is out of view: a chevron at rest, the phase's motion while
+ * the turn runs, the centre beating while it waits for the user, and how it ended when it ended
+ * out of view, until the end comes into view. Pointing at it always shows the chevron.
  */
 export const JumpToLatest = memo(function JumpToLatest({
   sessionId,
@@ -113,22 +101,26 @@ export const JumpToLatest = memo(function JumpToLatest({
       <TooltipTrigger
         render={
           <MessageScrollerButton
-            variant="outline"
+            variant="ghost"
             data-jump=""
             data-mark={mark}
-            data-shape={SHAPE[mark]}
             aria-label={state ? t('thread.jump.labelWith', { state }) : t('thread.jump.label')}
-            className="size-9 rounded-full bg-card shadow-menu"
+            className="ks-jump size-[34px] rounded-full data-[direction=end]:bottom-3"
           />
         }
       >
-        <svg data-jump-dots viewBox="0 0 36 36" aria-hidden className="size-9">
-          <circle data-halo cx={18} cy={18} r={4} />
-          <g>
-            {CELLS.map(([x, y], i) => (
-              <circle key={`${x}${y}`} cx={AT[x]} cy={AT[y]} r={1.7} style={styles?.[i]} />
-            ))}
-          </g>
+        <svg data-jump-dots viewBox="0 0 16 16" aria-hidden className="ks-jump__dots size-4">
+          {CELLS.map(([x, y], i) => (
+            <circle
+              key={`${x}${y}`}
+              data-cell={i}
+              data-still={styles && !styles[i] ? '' : undefined}
+              cx={3 + x * 5}
+              cy={3 + y * 5}
+              r={1.6}
+              style={styles?.[i]}
+            />
+          ))}
         </svg>
       </TooltipTrigger>
       <TooltipContent>

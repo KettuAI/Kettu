@@ -1,20 +1,11 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
-import {
-  ChartPieIcon,
-  ChevronDownIcon,
-  ClockIcon,
-  CircleAlertIcon,
-  EllipsisIcon,
-  PlusIcon,
-  SearchIcon,
-  ShapesIcon,
-} from 'lucide-react'
+import { useMemo, useState, type KeyboardEvent } from 'react'
+import { Add01Icon, ArrowRight01Icon, MoreHorizontalIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus, PlanLimit, Project } from '@shared/agent-host'
-import type { RoutineView } from '@shared/routines'
+import type { Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
-import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { FolderClosedMark } from '@renderer/components/affect/app-shell'
+import { FolderMark } from '@renderer/components/affect/assistant-home'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,34 +16,18 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarMenu,
-  SidebarMenuAction,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSkeleton,
-} from '@renderer/components/ui/sidebar'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { HostSwitchBar } from '@renderer/features/account/host-switch'
-import { SidebarTitleBar } from '@renderer/features/shell/top-bar'
-import { strongestSignal, signalText } from '@renderer/features/routines/model'
-import { RunningDot } from '@renderer/features/routines/run-mark'
-import { dayOf } from '@renderer/features/usage/model'
-import { limitLabel, tokens } from '@renderer/lib/format'
-import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
-import { formatShortcut, isMac } from '@renderer/lib/platform'
-import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
-import { useAgentsStore } from '@renderer/stores/agents'
-import { useProjectsStore } from '@renderer/stores/projects'
-import { useRoutinesStore } from '@renderer/stores/routines'
+import { Glyph } from '@renderer/features/shell/glyph'
+import { UpdateCardView } from '@renderer/features/updates/update-card'
+import { NoticeCard } from '@renderer/features/updates/update-notice'
+import { useUpdates } from '@renderer/features/updates/use-updates'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
+import { isWeb } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
 import { isAway, shownHosts, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
+import { useProjectsStore } from '@renderer/stores/projects'
 import {
   hostOfSession,
   inPinnedTree,
@@ -63,31 +38,25 @@ import {
   type SidebarTabStop,
   useSessionsStore,
 } from '@renderer/stores/sessions'
-import { useSettingsStore } from '@renderer/stores/settings'
-import { loadToday, useUsageStore } from '@renderer/stores/usage'
-import {
-  openArtifacts,
-  openRoutines,
-  openUsage,
-  PINNED_GROUP,
-  showAllRows,
-  showSearch,
-  useViewStore,
-} from '@renderer/stores/view'
+import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
 import { ImportSessionsDialog } from './import-sessions'
+import { InsecureCard } from './insecure-card'
+import { signInLabel, useNotices } from './notices'
 import { ProjectMenuItems } from './project-menu'
-import { tightestLimit } from './plan-usage'
 import { visibleProjects } from './project-group'
-import { keepInSight, limitRows, ROWS_SHOWN } from './row-limit'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
+import { keepInSight, limitRows, ROWS_SHOWN } from './row-limit'
 import { SessionRow } from './session-row'
-import { SidebarFooterContent } from './sidebar-footer'
-import { costText } from './usage-row'
 
-export function AppSidebar() {
+/**
+ * The sidebar's list under its menu, in App Shell's look: Pinned, then the projects as folders
+ * holding their sessions, then No project; with other hosts, Needs you and each host's projects
+ * under its heading.
+ */
+export function SidebarList() {
   const { t } = useTranslation('sidebar')
   const projects = useProjectsStore((s) => s.projects)
   const projectsLoaded = useProjectsStore((s) => s.loaded)
@@ -116,120 +85,72 @@ export function AppSidebar() {
     sessionsById,
     shownProjects,
   )
-  // The viewer opened from the page belongs to it.
-  const artifactsShown = useViewStore(
-    (s) =>
-      !s.settings.open &&
-      (s.main.kind === 'artifacts' ||
-        (s.main.kind === 'artifact' && s.main.back.kind === 'artifacts')),
-  )
   // One dialog serves every project; it mounts the first time a project asks for it.
   const [importing, setImporting] = useState<{ project: Project; open: boolean } | null>(null)
   const importSessions = (project: Project) => setImporting({ project, open: true })
 
   return (
-    <Sidebar
-      collapsible="none"
-      role="navigation"
-      // An added agent's dot is ringed in the color behind its mark.
-      className="w-full bg-transparent [--agent-dot-ring:var(--bg-sidebar)]"
-      aria-label={t('nav.label')}
-    >
-      <SidebarTitleBar />
-      <div className="flex shrink-0 flex-col gap-0.5 px-2 pt-0.5">
-        <NavRow
-          icon={<PlusIcon />}
-          label={t('nav.newSession')}
-          shortcut="Mod+N"
-          onClick={() => newSession()}
-        />
-        <NavRow
-          icon={<SearchIcon />}
-          label={t('nav.search')}
-          shortcut="Mod+K"
-          onClick={() => showSearch(true)}
-        />
-        <NavRow
-          icon={<ShapesIcon />}
-          label={t('nav.artifacts')}
-          current={artifactsShown}
-          onClick={openArtifacts}
-        />
-        <RoutinesNavRow />
-        <UsageNavRow />
-      </div>
-      <SidebarContent
-        className="scroll-fade-y gap-0 overflow-x-hidden overflow-y-auto px-2 pt-1.5 pb-2"
-        onKeyDown={moveRowFocus}
+    <div className="kettu-side-list" role="presentation" onKeyDown={moveRowFocus}>
+      <HostSwitchBar />
+      <div
+        role="group"
+        aria-label={t('nav.sessions')}
+        className={cn(
+          'flex flex-col',
+          loaded &&
+            'motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-(--duration-base)',
+        )}
       >
-        <HostSwitchBar />
-        {/* No header row: projects are added with Mod+O, the File menu or New session. */}
-        <SidebarGroup
-          role="group"
-          aria-label={t('nav.sessions')}
-          className={cn(
-            'gap-0.5 p-0',
-            loaded &&
-              'motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-(--duration-base)',
-          )}
-        >
-          {!loaded && loadError ? (
-            <p className="mt-3.5 px-2.5 py-1 text-xs leading-normal text-secondary">
-              {t('nav.unavailable')}
-            </p>
-          ) : !loaded ? (
-            // A project's label and its rows at their real sizes, so nothing moves as they arrive.
-            <>
-              <div className="mt-3.5 flex h-[30px] items-center pl-2.5">
-                <Skeleton className="h-3 w-20" />
+        {!loaded && loadError ? (
+          <p className="ui-as-side__empty mt-4">{t('nav.unavailable')}</p>
+        ) : !loaded ? (
+          // A group's label and its rows at their real sizes, so nothing moves as they arrive.
+          <div className="ui-as-side__group">
+            <span className="ui-as-side__label">
+              <Skeleton className="h-3 w-16" />
+            </span>
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="flex h-[30px] items-center gap-2 px-1.5">
+                <Skeleton className="size-4 rounded-sm" />
+                <Skeleton className="h-3" style={{ width: `${55 + ((i * 17) % 30)}%` }} />
               </div>
-              <SidebarMenu className="gap-0.5">
-                {[0, 1, 2, 3].map((i) => (
-                  <SidebarMenuItem key={i}>
-                    <SidebarMenuSkeleton showIcon className="h-row gap-[9px] px-2.5" />
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </>
-          ) : hosts ? (
-            <>
-              <NeedsYouGroup hosts={hosts} away={away} />
-              <PinnedGroup stop={stop} hosts={hosts} />
-              {hosts.map((hostId) => (
-                <HostSection
-                  key={hostId ?? 'this-computer'}
-                  hostId={hostId}
-                  projects={shownProjects}
+            ))}
+          </div>
+        ) : hosts ? (
+          <>
+            <NeedsYouGroup hosts={hosts} away={away} />
+            <PinnedGroup stop={stop} hosts={hosts} />
+            {hosts.map((hostId) => (
+              <HostSection
+                key={hostId ?? 'this-computer'}
+                hostId={hostId}
+                projects={shownProjects}
+                stop={stop}
+                onImport={importSessions}
+              />
+            ))}
+          </>
+        ) : (
+          <>
+            <PinnedGroup stop={stop} />
+            <div className="ui-as-side__group" role="group" aria-label={t('nav.projects')}>
+              <span className="ui-as-side__label">{t('nav.projects')}</span>
+              {shownProjects.length === 0 && (
+                <span className="ui-as-side__empty">{t('nav.empty')}</span>
+              )}
+              {shownProjects.map((project) => (
+                <ProjectGroup
+                  key={project.path}
+                  project={project}
                   stop={stop}
                   onImport={importSessions}
                 />
               ))}
-            </>
-          ) : (
-            <>
-              <PinnedGroup stop={stop} />
-              {shownProjects.length === 0 ? (
-                <p className="mt-3.5 px-2.5 py-1 text-xs leading-normal text-secondary">
-                  {t('nav.empty')}
-                </p>
-              ) : (
-                shownProjects.map((project) => (
-                  <ProjectGroup
-                    key={project.path}
-                    project={project}
-                    stop={stop}
-                    onImport={importSessions}
-                  />
-                ))
-              )}
               <ProjectGroup project={null} stop={stop} onImport={importSessions} />
-            </>
-          )}
-        </SidebarGroup>
-      </SidebarContent>
-      <SidebarFooter className="gap-1.5 p-2">
-        <SidebarFooterContent />
-      </SidebarFooter>
+            </div>
+          </>
+        )}
+      </div>
       {importing && (
         <ImportSessionsDialog
           project={importing.project}
@@ -237,224 +158,11 @@ export function AppSidebar() {
           onOpenChange={(open) => setImporting({ ...importing, open })}
         />
       )}
-    </Sidebar>
+    </div>
   )
 }
 
-export function NavRow({
-  icon,
-  label,
-  shortcut,
-  current,
-  onClick,
-  extra,
-  ariaLabel,
-}: {
-  icon: React.ReactNode
-  label: string
-  shortcut?: string
-  current?: boolean
-  onClick?: () => void
-  extra?: React.ReactNode
-  /** The row's name in words, when `extra` says more than its marks. */
-  ariaLabel?: string
-}) {
-  return (
-    <SidebarMenuButton
-      size="row"
-      isActive={current}
-      onClick={onClick}
-      aria-label={ariaLabel}
-      aria-keyshortcuts={shortcut?.replace('Mod', isMac ? 'Meta' : 'Control')}
-      className="gap-2.5 pr-2.5 text-row data-active:font-medium [&_svg]:size-[18px]"
-    >
-      {icon}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {extra}
-      {shortcut && (
-        <span aria-hidden className="shrink-0 text-meta font-normal text-tertiary">
-          {formatShortcut(shortcut)}
-        </span>
-      )}
-    </SidebarMenuButton>
-  )
-}
-
-/** The Routines row; its end shows the strongest signal among the routines' runs. */
-function RoutinesNavRow() {
-  const { t } = useTranslation('sidebar')
-  const { t: tr } = useTranslation('routines')
-  const routines = useRoutinesStore(
-    useShallow((s) =>
-      s.order.map((id) => s.byId[id]).filter((routine): routine is RoutineView => !!routine),
-    ),
-  )
-  const main = useViewStore((s) => s.main)
-  const settingsOpen = useViewStore((s) => s.settings.open)
-  const runSession = useSessionsStore((s) =>
-    main.kind === 'session' ? s.byId[main.sessionId]?.origin === 'routine' : false,
-  )
-  const current =
-    !settingsOpen && (main.kind === 'routines' || main.kind === 'routine' || runSession)
-  const signal = strongestSignal(routines)
-  const name = signal ? tr('signal.name', { signal: signalText(signal) }) : t('nav.routines')
-
-  return (
-    <NavRow
-      icon={<ClockIcon />}
-      label={t('nav.routines')}
-      current={current}
-      onClick={openRoutines}
-      ariaLabel={name}
-      extra={signal ? <RoutineSignalMark signal={signal} /> : undefined}
-    />
-  )
-}
-
-/** The routines' strongest signal, as a session row draws its own; runs waiting are counted. */
-function RoutineSignalMark({
-  signal,
-}: {
-  signal: NonNullable<ReturnType<typeof strongestSignal>>
-}) {
-  if (signal.kind === 'waiting') {
-    return (
-      <span
-        aria-hidden
-        className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-attention px-[5px] text-meta font-semibold text-attention-foreground tabular"
-      >
-        {signal.count}
-      </span>
-    )
-  }
-  return (
-    <span aria-hidden className="grid size-4 shrink-0 place-items-center">
-      {signal.kind === 'failed' ? (
-        <CircleAlertIcon className="size-3.5 text-danger" />
-      ) : signal.kind === 'running' ? (
-        <RunningDot />
-      ) : (
-        <span className="size-2 rounded-full bg-current text-tertiary" />
-      )}
-    </span>
-  )
-}
-
-/** The Usage row; its end shows today's tokens, cost or plan limit, as Settings chooses. */
-function UsageNavRow() {
-  const { t } = useTranslation('usage')
-  const current = useViewStore((s) => s.main.kind === 'usage' && !s.settings.open)
-  const end = useSettingsStore((s) => s.settings.usage.sidebar)
-  const extra =
-    end === 'today' ? (
-      <TodayTokens />
-    ) : end === 'cost' ? (
-      <TodayCost />
-    ) : end === 'limit' ? (
-      <TightestLimit />
-    ) : undefined
-  return (
-    <NavRow
-      icon={<ChartPieIcon />}
-      label={t('nav.usage')}
-      current={current}
-      onClick={openUsage}
-      extra={extra}
-    />
-  )
-}
-
-function TodayTokens() {
-  const { t } = useTranslation('usage')
-  const today = useUsageStore((s) => s.today)
-  const day = dayOf(useNow())
-  // A new day starts from nothing, whether or not a turn ends to say so.
-  useEffect(() => void loadToday(), [day])
-  // Quiet until there is something to count.
-  if (!today) return null
-  return (
-    <span className="text-xs font-normal text-tertiary tabular-nums">
-      <span aria-hidden>{tokens(today)}</span>
-      <span className="sr-only">{t('nav.today', { tokens: tokens(today) })}</span>
-    </span>
-  )
-}
-
-function TodayCost() {
-  const { t } = useTranslation('usage')
-  const cost = useUsageStore((s) => s.todayCost)
-  const day = dayOf(useNow())
-  // A new day starts from nothing, whether or not a turn ends to say so.
-  useEffect(() => void loadToday(), [day])
-  const text = costText(cost)
-  // Quiet until there is something to show.
-  if (!text) return null
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<span className="text-xs font-normal text-tertiary tabular-nums" />}
-        delay={700}
-      >
-        <span aria-hidden>{text}</span>
-        <span className="sr-only">{t('nav.todayCost', { cost: text })}</span>
-      </TooltipTrigger>
-      <TooltipContent>{t('nav.costEstimate')}</TooltipContent>
-    </Tooltip>
-  )
-}
-
-/** Across the agents, a reached window first, then the fullest. */
-function tightestOf(
-  agents: AgentStatus[],
-  now: number,
-): { agent: AgentStatus; limit: PlanLimit } | null {
-  let best: { agent: AgentStatus; limit: PlanLimit } | null = null
-  for (const agent of agents) {
-    const limit = tightestLimit(agent.limits, now)
-    if (!limit || limit.usedPercent === null) continue
-    const rank = (l: PlanLimit) => (l.state === 'reached' ? 1000 : 0) + (l.usedPercent ?? 0)
-    if (!best || rank(limit) > rank(best.limit)) best = { agent, limit }
-  }
-  return best
-}
-
-function TightestLimit() {
-  const { t } = useTranslation('usage')
-  const agents = useAgentsStore(
-    useShallow((s) =>
-      s.order
-        .map((id) => s.byId[id])
-        .filter(
-          (a): a is AgentStatus =>
-            !!a && a.registered !== false && !a.disabled && a.limits.length > 0,
-        ),
-    ),
-  )
-  const tightest = tightestOf(agents, useNow())
-  if (!tightest) return null
-  const { agent, limit } = tightest
-  const percent = `${Math.round(limit.usedPercent ?? 0)}%`
-  const level = limitLevel(limit)
-  return (
-    <span
-      className={cn(
-        'flex min-w-0 items-center gap-1 text-xs font-normal tabular-nums',
-        LIMIT_TEXT[level],
-        level === 'ok' && 'group-data-active/menu-button:text-secondary',
-      )}
-    >
-      <AgentMark agent={agent.id} size={12} />
-      <span aria-hidden className="truncate">
-        {t('nav.limitShort', { limit: limitLabel(limit), percent })}
-      </span>
-      <span className="sr-only">
-        {t('nav.limit', { agent: agent.name, limit: limitLabel(limit), percent })}
-      </span>
-    </span>
-  )
-}
-
-/** A host's heading, its projects' groups and its No project group. */
+/** A host's heading, its projects' folders and its No project folder. */
 function HostSection({
   hostId,
   projects,
@@ -474,49 +182,39 @@ function HostSection({
     ),
   )
   return (
-    <section aria-label={useHostLabel(hostId)} className="flex flex-col gap-0.5">
+    <section aria-label={useHostLabel(hostId)} className="ui-as-side__group">
       <HostHeading hostId={hostId} />
-      {own.map((project, i) => (
+      {own.map((project) => (
         <ProjectGroup
           key={project.path}
           project={project}
           stop={stop}
           onImport={onImport}
           hostId={hostId}
-          first={i === 0}
           away={away}
         />
       ))}
-      <ProjectGroup
-        project={null}
-        stop={stop}
-        onImport={onImport}
-        hostId={hostId}
-        first={own.length === 0}
-        away={away}
-      />
+      <ProjectGroup project={null} stop={stop} onImport={onImport} hostId={hostId} away={away} />
       {own.length === 0 && !scratch && <HostEmpty />}
     </section>
   )
 }
 
 /**
- * A project's sessions, or with a null project those started with No project on `hostId`, if any.
- * Under a host's heading, the first sits close to it; an offline host's offer nothing to start.
+ * A project's folder and its sessions, or with a null project those started with No project on
+ * `hostId`, if any. An offline host's offer nothing to start.
  */
 function ProjectGroup({
   project,
   stop,
   onImport,
   hostId = null,
-  first = false,
   away = false,
 }: {
   project: Project | null
   stop: SidebarTabStop | null
   onImport: (project: Project) => void
   hostId?: string | null
-  first?: boolean
   away?: boolean
 }) {
   const key = project?.path ?? noProjectGroup(hostId)
@@ -526,6 +224,7 @@ function ProjectGroup({
   const allShown = useViewStore((s) => !!s.allRowsShown[key])
   const shownId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
   const [moreOpen, setMoreOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const summaries = useSessionsStore(
     useShallow((s) =>
       Object.values(s.byId).filter((x) =>
@@ -546,10 +245,13 @@ function ProjectGroup({
   const toggle = () => toggleGroup(key)
   const groupStop = stop?.kind === 'group' && stop.key === key
   const tabStopId = stop?.kind === 'session' ? stop.id : null
+  const newLabel = project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')
+  // New session starts No project sessions on this computer only.
+  const canStart = !project?.missing && !away && (!!project || local)
 
   const row = (
-    <SidebarMenuButton
-      size="label"
+    <button
+      type="button"
       data-sidebar-row=""
       tabIndex={groupStop ? 0 : -1}
       aria-expanded={open}
@@ -563,13 +265,20 @@ function ProjectGroup({
         else if (event.key === 'ArrowLeft' && open) toggle()
       }}
       className={cn(
-        GROUP_LABEL,
-        project?.missing ? 'text-disabled' : away ? 'text-tertiary' : 'text-primary',
+        'ui-as-side__item ui-as-chat-folder',
+        (project?.missing || away) && 'text-(--faint)!',
       )}
     >
-      <span className="min-w-0 truncate text-group font-semibold">{name}</span>
-      <FoldChevron open={open} />
-    </SidebarMenuButton>
+      {open ? <FolderMark /> : <FolderClosedMark />}
+      <span className="ui-as-side__text">{name}</span>
+      {project?.missing && (
+        <span className="shrink-0 text-[12px] text-(--faint)">{t('project.missing')}</span>
+      )}
+      {/* On hover a small arrow after the name: right when closed, down when open. */}
+      <span className="ui-as-chat-folder__arrow" aria-hidden>
+        <Glyph icon={ArrowRight01Icon} size={13} />
+      </span>
+    </button>
   )
   const tooltip = project ? (
     <TooltipContent side="right" className="max-w-sm font-mono break-all">
@@ -583,10 +292,10 @@ function ProjectGroup({
   )
 
   return (
-    <div className="group/project flex flex-col gap-0.5">
-      <div className={cn('group/menu-item', GROUP_ROW, first && 'mt-1')}>
+    <>
+      <div className="ui-as-chat-folder-row" data-menu={moreOpen || menuOpen || undefined}>
         {project && local ? (
-          <ContextMenu>
+          <ContextMenu onOpenChange={setMenuOpen}>
             {/* A trigger's render must take its props, so the tooltip Root wraps the menu trigger. */}
             <Tooltip>
               <TooltipTrigger render={<ContextMenuTrigger render={row} />} delay={700} />
@@ -600,106 +309,65 @@ function ProjectGroup({
             {tooltip}
           </Tooltip>
         )}
-        {project?.missing && (
-          <span className="ml-1.5 shrink-0 text-meta text-tertiary">{t('project.missing')}</span>
-        )}
-        {/* Room for the More button and the +, so the name never runs under them. */}
-        <span className="min-w-13 flex-1" />
-        {project && local && (
-          <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
-            <Tooltip>
-              <TooltipTrigger
+        <span className="ui-as-chat-row__tools">
+          {project && local && (
+            <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+              <DropdownMenuTrigger
                 render={
-                  <DropdownMenuTrigger
-                    render={
-                      <SidebarMenuAction
-                        showOnHover
-                        tabIndex={-1}
-                        aria-label={t('row.more')}
-                        className={cn(
-                          GROUP_ACTION,
-                          'group-hover/project:opacity-100 data-popup-open:bg-selected data-popup-open:text-primary',
-                          !project.missing && 'right-7.5',
-                        )}
-                      />
-                    }
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-label={t('row.moreFor', { title: name })}
+                    title={t('row.more')}
+                    className="ui-as-chat-row__tool"
                   />
                 }
               >
-                <EllipsisIcon />
-              </TooltipTrigger>
-              <TooltipContent>{t('row.more')}</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
-          </DropdownMenu>
-        )}
-        {/* New session starts No project sessions on this computer only. */}
-        {!project?.missing && !away && (project || local) && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <SidebarMenuAction
-                  showOnHover={!project}
-                  aria-label={
-                    project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')
-                  }
-                  onClick={() => newSession(projectPath, !project)}
-                  className={GROUP_ACTION}
-                />
-              }
+                <Glyph icon={MoreHorizontalIcon} size={15} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">{menuItems}</DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {canStart && (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-label={newLabel}
+              title={newLabel}
+              onClick={() => newSession(projectPath, !project)}
+              className="ui-as-chat-row__tool"
             >
-              <PlusIcon strokeWidth={1.5} />
-            </TooltipTrigger>
-            <TooltipContent>
-              {project ? t('project.newSessionIn', { name }) : t('project.newSessionNoProject')}
-            </TooltipContent>
-          </Tooltip>
-        )}
+              <Glyph icon={Add01Icon} size={14} />
+            </button>
+          )}
+        </span>
       </div>
       {open && tree.length > 0 && (
-        <SidebarMenu className="gap-0.5">
+        <ul className="ui-as-chat-folder__chats">
           <RenameScope value={key}>
             {limited.rows.map((node) => (
-              <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} />
+              <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} indent />
             ))}
           </RenameScope>
           {(limited.hidden > 0 || allShown) && tree.length > ROWS_SHOWN && (
-            <SidebarMenuItem>
-              <SidebarMenuButton
+            <li className="flex">
+              <button
+                type="button"
                 data-sidebar-row=""
                 tabIndex={-1}
                 onClick={() => showAllRows(key, !allShown)}
-                className="h-[30px] pr-2.5 pl-[35px] text-[13px] text-tertiary hover:text-secondary"
+                className="ui-as-side__item kettu-side-more"
               >
-                {allShown ? t('list.showLess') : t('list.showMore', { count: limited.hidden })}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
+                <span className="ui-as-side__text">
+                  {allShown ? t('list.showLess') : t('list.showMore', { count: limited.hidden })}
+                </span>
+              </button>
+            </li>
           )}
           <GroupRenameHints scope={key} />
-        </SidebarMenu>
+        </ul>
       )}
-    </div>
-  )
-}
-
-// A group's label row: the label hugs its name, as a heading over its rows, with its buttons at
-// the row's end.
-const GROUP_ROW = 'relative mt-3.5 flex h-[30px] items-center pr-1 pl-2.5'
-const GROUP_LABEL = '-ml-1.5 min-w-0 group-has-data-[sidebar=menu-action]/menu-item:pr-1.5'
-const GROUP_ACTION =
-  'top-[3px] right-1 w-6 text-tertiary peer-hover/menu-button:text-tertiary [&>svg]:size-3.5'
-
-function FoldChevron({ open, className }: { open: boolean; className?: string }) {
-  return (
-    <ChevronDownIcon
-      aria-hidden
-      strokeWidth={1.6}
-      className={cn(
-        'size-3! shrink-0 text-tertiary transition-transform duration-(--duration-fast) ease-standard',
-        !open && '-rotate-90',
-        className,
-      )}
-    />
+    </>
   )
 }
 
@@ -714,7 +382,7 @@ function toggleGroup(key: string): void {
 
 /**
  * The pinned sessions across the projects, above them, while there are any; with other hosts, of
- * the hosts shown, each row naming its host.
+ * the hosts shown, each row naming its host. Its title folds it.
  */
 function PinnedGroup({
   stop,
@@ -739,32 +407,30 @@ function PinnedGroup({
   const toggle = () => toggleGroup(PINNED_GROUP)
   const tabStopId = stop?.kind === 'session' ? stop.id : null
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className={GROUP_ROW}>
-        <SidebarMenuButton
-          size="label"
-          data-sidebar-row=""
-          tabIndex={stop?.kind === 'group' && stop.key === PINNED_GROUP ? 0 : -1}
-          aria-expanded={open}
-          onClick={toggle}
-          onKeyDown={(event) => {
-            if (event.key === 'ArrowRight' && !open) toggle()
-            else if (event.key === 'ArrowLeft' && open) toggle()
-          }}
-          className={cn(GROUP_LABEL, 'text-small font-medium text-tertiary')}
-        >
-          <span className="min-w-0 truncate">{t('pinned.label')}</span>
-          <FoldChevron
-            open={open}
-            className={cn(
-              open &&
-                'opacity-0 group-hover/menu-button:opacity-100 group-focus-visible/menu-button:opacity-100',
-            )}
-          />
-        </SidebarMenuButton>
-      </div>
+    <div
+      className="ui-as-side__group ui-as-chat-pinned"
+      role="group"
+      aria-label={t('pinned.label')}
+    >
+      <button
+        type="button"
+        data-sidebar-row=""
+        tabIndex={stop?.kind === 'group' && stop.key === PINNED_GROUP ? 0 : -1}
+        aria-expanded={open}
+        onClick={toggle}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowRight' && !open) toggle()
+          else if (event.key === 'ArrowLeft' && open) toggle()
+        }}
+        className="ui-as-side__label kettu-side-label"
+      >
+        {t('pinned.label')}
+        <span className="kettu-side-label__arrow" aria-hidden>
+          <Glyph icon={ArrowRight01Icon} size={12} />
+        </span>
+      </button>
       {open && (
-        <SidebarMenu className="gap-0.5">
+        <ul className="flex flex-col">
           <RenameScope value={PINNED_GROUP}>
             {tree.map((node) => (
               <SessionRow
@@ -776,7 +442,7 @@ function PinnedGroup({
             ))}
           </RenameScope>
           <GroupRenameHints scope={PINNED_GROUP} />
-        </SidebarMenu>
+        </ul>
       )}
     </div>
   )
@@ -803,4 +469,35 @@ function moveRowFocus(event: KeyboardEvent<HTMLDivElement>): void {
   if (event.key === 'End') next = rows.length - 1
   event.preventDefault()
   rows[next]?.focus()
+}
+
+/**
+ * The cards over the account row: the web client's insecure page, agents that need sign-in and
+ * one update card for Kettu and the harnesses, never stacked.
+ */
+export function SidebarNotices() {
+  const { signIn } = useNotices()
+  const { card, items } = useUpdates()
+  return (
+    <>
+      {isWeb && !window.isSecureContext && <InsecureCard />}
+      {signIn.length > 0 && <SignInCard names={signIn} />}
+      {card && <UpdateCardView card={card} items={items} />}
+    </>
+  )
+}
+
+/** An agent needs sign-in: something to do, so it takes the warning color, and it cannot be dismissed. */
+function SignInCard({ names }: { names: string[] }) {
+  const { t } = useTranslation('sidebar')
+  const label = signInLabel(names)
+  return (
+    <NoticeCard
+      icon={<span aria-hidden className="size-1.5 rounded-full bg-current text-warning" />}
+      text={label}
+      label={label}
+      detail={t('footer.signInDetail')}
+      onOpen={() => openSettings('agents')}
+    />
+  )
 }

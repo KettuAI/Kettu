@@ -53,5 +53,14 @@
   },
   "windowTitle": {
     "onHost": "{{host}} — Kettu"
+  },
+  "toasts": {
+    "region": "通知"
+  },
+  "pane": {
+    "maximize": "最大化",
+    "restore": "还原",
+    "collapse": "隐藏侧边面板",
+    "open": "显示侧边面板"
   }
 }

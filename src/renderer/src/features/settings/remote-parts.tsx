@@ -1,9 +1,36 @@
 import type { ReactNode } from 'react'
-import { GlobeIcon, LaptopIcon, MonitorIcon, SmartphoneIcon, TabletIcon } from 'lucide-react'
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
+import {
+  ComputerIcon,
+  Globe02Icon,
+  LaptopIcon,
+  SmartPhone01Icon,
+  Tablet01Icon,
+} from '@hugeicons/core-free-icons'
 import type { PairedDevice } from '@shared/remote/device'
 import { SystemLogo } from '@renderer/components/system-logo'
 import { cn } from '@renderer/lib/utils'
 import { deviceShape, systemLogoOf } from './remote-text'
+
+function Glyph({ icon, className }: { icon: IconSvgElement; className?: string }) {
+  return (
+    <HugeiconsIcon
+      icon={icon}
+      size={24}
+      strokeWidth={1.9}
+      aria-hidden
+      className={cn('shrink-0', className)}
+    />
+  )
+}
+
+const SHAPE_ICON = {
+  web: Globe02Icon,
+  laptop: LaptopIcon,
+  desktop: ComputerIcon,
+  tablet: Tablet01Icon,
+  phone: SmartPhone01Icon,
+} as const
 
 /** A device's system logo; a globe for a browser, else a phone, tablet, laptop or desktop. */
 export function DeviceIcon({
@@ -16,27 +43,16 @@ export function DeviceIcon({
   const shape = deviceShape(device)
   const logo = shape === 'web' ? null : systemLogoOf(device.platform)
   if (logo) return <SystemLogo name={logo} className={className} />
-  switch (shape) {
-    case 'web':
-      return <GlobeIcon className={className} />
-    case 'laptop':
-      return <LaptopIcon className={className} />
-    case 'desktop':
-      return <MonitorIcon className={className} />
-    case 'tablet':
-      return <TabletIcon className={className} />
-    case 'phone':
-      return <SmartphoneIcon className={className} />
-  }
+  return <Glyph icon={SHAPE_ICON[shape]} className={className} />
 }
 
-/** A host's system logo, or a monitor for a system without one. */
+/** A host's system logo, or a computer for a system without one. */
 export function HostIcon({ platform, className }: { platform: string; className?: string }) {
   const logo = systemLogoOf(platform)
   return logo ? (
     <SystemLogo name={logo} className={className} />
   ) : (
-    <MonitorIcon className={className} />
+    <Glyph icon={ComputerIcon} className={className} />
   )
 }
 
@@ -45,16 +61,10 @@ export function OnlineDot() {
   return <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-success" />
 }
 
-/** A device's icon on a tile, 34 px in the list and 40 px on its page and in the question. */
+/** A device's mark, unframed: 20 px in a list, 28 px on its page and in a dialog. */
 export function DeviceTile({ icon, large }: { icon: ReactNode; large?: boolean }) {
   return (
-    <span
-      aria-hidden
-      className={cn(
-        'grid shrink-0 place-items-center rounded-segments bg-subtle text-secondary',
-        large ? 'size-10' : 'size-8.5',
-      )}
-    >
+    <span aria-hidden className={cn('k-device', large && 'k-device--large')}>
       {icon}
     </span>
   )

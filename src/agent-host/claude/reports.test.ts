@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapAccount } from './reports'
+import { mapAccount, mapContextUsage } from './reports'
 
 describe('mapAccount', () => {
   it('reads a subscription sign-in as an account', () => {
@@ -36,5 +36,34 @@ describe('mapAccount', () => {
     expect(
       mapAccount({ subscriptionType: 'max', tokenSource: 'ANTHROPIC_AUTH_TOKEN' }),
     ).toMatchObject({ kind: 'gateway' })
+  })
+})
+
+describe('mapContextUsage', () => {
+  const answer = (paths: string[]) => ({
+    categories: [{ name: 'Memory files', tokens: 900 }],
+    totalTokens: 900,
+    maxTokens: 200_000,
+    memoryFiles: paths.map((path) => ({ path, type: 'Project', tokens: 300 })),
+  })
+  const places = { cwd: '/work/app', home: '/home/me' }
+  const names = (paths: string[]) =>
+    mapContextUsage(answer(paths), 0, places).lists.find((l) => l.name === 'Memory Files')?.items
+
+  it('names memory files from the session folder, then the home folder', () => {
+    expect(
+      names(['/work/app/CLAUDE.md', '/work/app/docs/AGENTS.md', '/home/me/.claude/CLAUDE.md']),
+    ).toEqual([
+      { name: 'CLAUDE.md', detail: null, tokens: '300' },
+      { name: 'docs/AGENTS.md', detail: null, tokens: '300' },
+      { name: '~/.claude/CLAUDE.md', detail: null, tokens: '300' },
+    ])
+  })
+
+  it('keeps a path outside both folders whole', () => {
+    expect(names(['/etc/claude/CLAUDE.md', '/work/apple/CLAUDE.md'])?.map((i) => i.name)).toEqual([
+      '/etc/claude/CLAUDE.md',
+      '/work/apple/CLAUDE.md',
+    ])
   })
 })

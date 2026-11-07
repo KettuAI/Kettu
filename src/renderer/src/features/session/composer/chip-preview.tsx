@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileIcon, FolderIcon, GlobeIcon } from 'lucide-react'
+import { File01Icon, Folder01Icon, GlobalIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { FileContent } from '@shared/files'
 import { bytes, fileUrlPath, relativePath } from '@renderer/lib/format'
@@ -10,6 +10,7 @@ import type { DraftAttachment } from '@renderer/stores/attachments'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { defaultDestination } from '../link-open'
 import type { Chip } from './chips'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 // Lines a file preview shows: the range with one before it, or the file's first lines.
 const PREVIEW_LINES = 6
@@ -34,7 +35,7 @@ export function ChipPreview({
     return (
       <div className="flex w-75 flex-col gap-2 p-3">
         <div className="flex min-w-0 items-center gap-1.75 text-small text-tertiary">
-          <GlobeIcon strokeWidth={1.4} className="size-3.5 shrink-0" />
+          <Glyph icon={GlobalIcon} className="size-3.5 shrink-0" />
           <span className="min-w-0 truncate">
             <b className="font-semibold text-primary">{chip.host}</b>
             {chip.path}
@@ -87,11 +88,11 @@ export function ChipPreview({
         )
       : chip.label)
   if (chip.kind === 'folder' || chip.missing) {
-    const Icon = chip.kind === 'folder' ? FolderIcon : FileIcon
+    const icon = chip.kind === 'folder' ? Folder01Icon : File01Icon
     return (
       <div className="flex w-75 flex-col gap-1.5 p-2.5">
         <div className="flex items-center gap-2">
-          <Icon strokeWidth={1.4} className="size-3.5 shrink-0 text-tertiary" />
+          <Glyph icon={icon} className="size-3.5 shrink-0 text-tertiary" />
           <span className="min-w-0 flex-1 truncate font-mono text-caption text-secondary">
             {path}
           </span>
@@ -136,7 +137,7 @@ function FilePreview({
   return (
     <div className="flex w-85 flex-col p-2.5">
       <div className="mb-2 flex items-center gap-2">
-        <FileIcon strokeWidth={1.4} className="size-3.5 shrink-0 text-tertiary" />
+        <Glyph icon={File01Icon} className="size-3.5 shrink-0 text-tertiary" />
         <span className="min-w-0 flex-1 truncate font-mono text-caption text-secondary">
           {path}
         </span>

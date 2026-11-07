@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
+@import 'streamdown/styles.css';
 @import '@fontsource-variable/inter/opsz.css';
 @import '@fontsource-variable/inter/opsz-italic.css';
 @import '@fontsource-variable/source-serif-4/opsz.css';
@@ -8,6 +9,8 @@
 @import '@fontsource-variable/jetbrains-mono/wght.css';
 @import '@fontsource-variable/manrope/wght.css';
 @import './tokens.css';
+@import './affect.css';
+@import './session.css';
 
 /* Chinese: the platform's face with pinned weights, since CSS would match the dark theme's 360 to
    its Light. Each range takes the Regular, Medium or Semibold, or the nearest weight a face has. */
@@ -142,9 +145,11 @@
   --color-destructive-tint: var(--destructive-tint);
   --color-destructive-tint-hover: var(--destructive-tint-hover);
   --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
+  /* The palette itself, not --accent and --muted: App Shell's frame redefines both for its own
+     parts (a blue and a text gray), and every utility inside the frame would read those. */
+  --color-accent: var(--bg-hover);
   --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
+  --color-muted: var(--bg-subtle);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
@@ -232,11 +237,11 @@
   --radius-3xl: calc(var(--radius) * 2);
   /* Settings over the app, a card in it such as Remote access's status, and a dialog over
      Settings; Settings' segmented choices, whose chosen segment sits 2 px inside the track. */
-  --radius-modal: 14px;
+  --radius-modal: 12px;
   --radius-card: 12px;
-  --radius-dialog: 16px;
-  --radius-segments: 9px;
-  --radius-segment: 7px;
+  --radius-dialog: 12px;
+  --radius-segments: 8px;
+  --radius-segment: 6px;
 
   --shadow-sm: var(--elevation-sm);
   --shadow-md: var(--elevation-md);
@@ -319,16 +324,16 @@
   --text-subheading--line-height: 20px;
   --text-subheading--letter-spacing: -0.006em;
   /* A sidebar row, and a settings row's label. */
-  --text-row: 14px;
+  --text-row: 13px;
   --text-row--line-height: 20px;
-  --text-label: 14.5px;
+  --text-label: 13px;
   --text-label--line-height: 20px;
   --text-group: 13px;
   --text-group--line-height: 18px;
   --text-small: 12px;
   --text-small--line-height: 1.45;
   /* Hints and a segmented control's segments. */
-  --text-hint: 12.5px;
+  --text-hint: 12px;
   --text-hint--line-height: 18px;
   --text-control: 13px;
   --text-control--line-height: 18px;
@@ -340,13 +345,13 @@
   --text-meta: 12px;
   --text-meta--line-height: 16px;
   /* Tooltips and a menu item's shortcut. */
-  --text-caption: 11.5px;
+  --text-caption: 11px;
   --text-caption--line-height: 16px;
   /* A file card's name in a reply. */
-  --text-file: 13.5px;
+  --text-file: 13px;
   --text-file--line-height: 18px;
   /* A menu item, and rows read like one. */
-  --text-menu: 13.5px;
+  --text-menu: 13px;
   --text-menu--line-height: 18px;
   --text-menu--letter-spacing: -0.003em;
   /* A count over a picture, such as a grid's +3. */
@@ -379,11 +384,18 @@
   --text-sheet-title--line-height: 1.3;
 }
 
+/* On a high-density screen a hairline is one device pixel, as fine as the reference's rings. */
+@media (min-resolution: 2dppx) {
+  :root {
+    --hairline: 0.5px;
+  }
+}
+
 :root {
   --hairline: 1px;
 
   /* Density: heights on 4 px steps. */
-  --radius: 5px;
+  --radius: 6px;
   --control-height: 28px;
   --control-height-sm: 24px;
   --row-height: 32px;
@@ -392,7 +404,7 @@
   --card-header: 40px;
   --composer-min: 56px;
   --icon-size: 16px;
-  --top-bar: 48px;
+  --top-bar: 52px;
   /* The desk around the sheets: from the window's edges and between two sheets. */
   --sheet-gap: 8px;
   /* Windows and Linux: the band across the window's top, where the window controls sit;
@@ -401,9 +413,14 @@
   /* The page zoom, from settings; the macOS traffic lights keep their size under it. */
   --zoom: 1;
   --traffic-lights: calc(52px / var(--zoom));
-  /* A top bar in the window's top left corner starts clear of the traffic lights, from the edge
-     of its sheet. */
-  --corner-inset: calc(36px - var(--sheet-gap) + var(--traffic-lights));
+  /* The space between the traffic lights and the corner's controls. */
+  --corner-gap: 16px;
+  /* A top bar in the window's top left corner starts where the corner's controls do, from the
+     edge of its sheet. */
+  --corner-inset: calc(20px + var(--corner-gap) - var(--sheet-gap) + var(--traffic-lights));
+  /* What such a bar keeps clear for the controls: the sidebar toggle, 8 px, Back and Forward 2 px
+     apart, 28 px each, then 16 px before its own content. */
+  --corner-controls: calc(3 * 28px + 8px + 2px + 16px);
   --scroll-fade-size: 28px;
   /* Windows only, where the app draws its scrollbars: a 4 px thumb in a 10 px gutter. */
   --scrollbar-size: 10px;
@@ -440,7 +457,7 @@
 
   --ui-face: var(--face-inter);
   --prose-face: var(--face-inter);
-  --display-face: var(--face-manrope);
+  --display-face: var(--ui-face);
   --greeting-face:
     'Source Serif 4 Variable', 'Songti SC', STSong, SimSun, 'Noto Serif CJK SC', ui-serif, Georgia,
     serif;
@@ -946,287 +963,6 @@
   }
 }
 
-/* The jump-to-latest button (features/session/jump-to-latest.tsx): the running turn's nine dots,
-   moved into a shape for each mark. Every offset is from the dot's cell in the 36 px box. */
-[data-jump-dots] {
-  overflow: visible;
-}
-[data-jump-dots] g {
-  transition: transform var(--duration-base) var(--ease-standard);
-}
-[data-jump-dots] g circle {
-  fill: var(--text-primary);
-  opacity: 0.22;
-  transform-box: fill-box;
-  transform-origin: center;
-  transition:
-    transform 360ms var(--ease-standard),
-    opacity var(--duration-base) var(--ease-standard),
-    fill 250ms var(--ease-standard);
-}
-[data-jump-dots] g circle:nth-child(2) {
-  transition-delay: 18ms;
-}
-[data-jump-dots] g circle:nth-child(3) {
-  transition-delay: 36ms;
-}
-[data-jump-dots] g circle:nth-child(4) {
-  transition-delay: 18ms;
-}
-[data-jump-dots] g circle:nth-child(5) {
-  transition-delay: 36ms;
-}
-[data-jump-dots] g circle:nth-child(6) {
-  transition-delay: 54ms;
-}
-[data-jump-dots] g circle:nth-child(7) {
-  transition-delay: 36ms;
-}
-[data-jump-dots] g circle:nth-child(8) {
-  transition-delay: 54ms;
-}
-[data-jump-dots] g circle:nth-child(9) {
-  transition-delay: 72ms;
-}
-[data-jump-dots] [data-halo] {
-  fill: var(--attention-dot);
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-[data-jump]:is([data-mark='running'], [data-mark='ended']) g circle {
-  fill: var(--focus);
-}
-[data-jump][data-mark='waiting'] g circle {
-  fill: var(--attention-dot);
-}
-[data-jump][data-mark='failed'] g circle {
-  fill: var(--danger);
-}
-[data-jump]:is(:hover, :focus-visible):not([data-mark='ended']) g circle {
-  fill: var(--text-primary);
-}
-[data-jump][data-shape='grid']:is(:hover, :focus-visible) g circle {
-  animation: none !important;
-}
-[data-jump][data-shape='center'] g circle:nth-child(1) {
-  transform: translate(5.5px, 5.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='center'] g circle:nth-child(2) {
-  transform: translate(0, 5.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='center'] g circle:nth-child(3) {
-  transform: translate(-5.5px, 5.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='center'] g circle:nth-child(4) {
-  transform: translate(5.5px, 0);
-  opacity: 0;
-}
-[data-jump][data-shape='center'] g circle:nth-child(5) {
-  transform: translate(0, 0) scale(2.35);
-  opacity: 1;
-}
-[data-jump][data-shape='center'] g circle:nth-child(6) {
-  transform: translate(-5.5px, 0);
-  opacity: 0;
-}
-[data-jump][data-shape='center'] g circle:nth-child(7) {
-  transform: translate(5.5px, -5.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='center'] g circle:nth-child(8) {
-  transform: translate(0, -5.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='center'] g circle:nth-child(9) {
-  transform: translate(-5.5px, -5.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(1) {
-  transform: translate(5.5px, -2.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(2) {
-  transform: translate(0, -2.5px);
-  opacity: 1;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(3) {
-  transform: translate(-5.5px, -2.5px);
-  opacity: 0;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(4) {
-  transform: translate(5.5px, 1px);
-  opacity: 1;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(5) {
-  transform: translate(0, -3.5px);
-  opacity: 1;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(6) {
-  transform: translate(-5.5px, 1px);
-  opacity: 0;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(7) {
-  transform: translate(5.5px, 2px);
-  opacity: 0;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(8) {
-  transform: translate(0, 2px);
-  opacity: 1;
-}
-[data-jump][data-shape='bang'] g circle:nth-child(9) {
-  transform: translate(-5.5px, 2px);
-  opacity: 0;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(1) {
-  transform: translate(5.5px, -1.5px);
-  opacity: 0;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(2) {
-  transform: translate(0, -1.5px);
-  opacity: 1;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(3) {
-  transform: translate(-5.5px, -1.5px);
-  opacity: 0;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(4) {
-  transform: translate(0.5px, 2px);
-  opacity: 1;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(5) {
-  transform: translate(0, -2px);
-  opacity: 1;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(6) {
-  transform: translate(-0.5px, 2px);
-  opacity: 1;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(7) {
-  transform: translate(5.5px, 1.5px);
-  opacity: 0;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(8) {
-  transform: translate(0, 1.5px);
-  opacity: 1;
-}
-[data-jump]:is([data-shape='arrow'], :hover, :focus-visible) g circle:nth-child(9) {
-  transform: translate(-5.5px, 1.5px);
-  opacity: 0;
-}
-[data-jump][data-active='false'] g circle:nth-child(1) {
-  transform: translate(5.5px, 5.5px) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(2) {
-  transform: translate(0, 5.5px) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(3) {
-  transform: translate(-5.5px, 5.5px) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(4) {
-  transform: translate(5.5px, 0) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(5) {
-  transform: translate(0, 0) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(6) {
-  transform: translate(-5.5px, 0) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(7) {
-  transform: translate(5.5px, -5.5px) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(8) {
-  transform: translate(0, -5.5px) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-active='false'] g circle:nth-child(9) {
-  transform: translate(-5.5px, -5.5px) scale(0.3) !important;
-  opacity: 0 !important;
-}
-[data-jump][data-mark='idle']:hover g {
-  transform: translateY(1.5px);
-}
-[data-jump][data-mark='waiting'] {
-  box-shadow: var(--attention-ring-shadow);
-}
-[data-jump][data-mark='waiting']:not(:hover, :focus-visible) [data-halo] {
-  animation: jump-halo 1.8s var(--ease-standard) 0.4s infinite;
-}
-[data-jump][data-mark='ended'] g {
-  animation: jump-nudge 420ms cubic-bezier(0.3, 0, 0.3, 1) 800ms both;
-}
-[data-jump][data-mark='ended'] g circle:nth-child(2) {
-  animation: jump-pour 260ms ease-out 300ms both;
-}
-[data-jump][data-mark='ended'] g circle:nth-child(5) {
-  animation: jump-pour 260ms ease-out 380ms both;
-}
-[data-jump][data-mark='ended'] g :is(circle:nth-child(4), circle:nth-child(6)) {
-  animation: jump-pour 260ms ease-out 460ms both;
-}
-[data-jump][data-mark='ended'] g circle:nth-child(8) {
-  animation: jump-pour 260ms ease-out 540ms both;
-}
-[data-jump][data-mark='failed'] {
-  animation: jump-shake 420ms cubic-bezier(0.36, 0.07, 0.19, 0.97) 340ms both;
-}
-@keyframes jump-halo {
-  0% {
-    opacity: 0.4;
-    transform: scale(1);
-  }
-  80%,
-  100% {
-    opacity: 0;
-    transform: scale(2.6);
-  }
-}
-@keyframes jump-pour {
-  from {
-    opacity: 0.2;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes jump-nudge {
-  0%,
-  100% {
-    transform: none;
-  }
-  45% {
-    transform: translateY(2.5px);
-  }
-}
-@keyframes jump-shake {
-  0%,
-  100% {
-    transform: none;
-  }
-  20% {
-    transform: translateX(-3px);
-  }
-  40% {
-    transform: translateX(3px);
-  }
-  60% {
-    transform: translateX(-2px);
-  }
-  80% {
-    transform: translateX(1.5px);
-  }
-}
-
 /* Reduce motion: movement and loops stop; opacity and color changes remain. The transform
    variables do not inherit, so they are reset on every element. */
 @media (prefers-reduced-motion: reduce) {
@@ -1248,22 +984,22 @@
   .animate-breathe,
   .animate-computer-glow,
   .shimmer,
-  [data-caret] {
+  [data-caret],
+  [data-sd-animate],
+  [data-sd-animate-marker]::marker {
     animation: none !important;
   }
   /* Held, not removed: each dot keeps the frame its delay starts it on. */
   [data-turn-dots] circle {
     animation-play-state: paused !important;
   }
-  /* The jump button's dots hold their frame and change shape at once; it neither shakes nor pulses. */
-  [data-jump-dots] g circle {
+  /* The jump button's dots hold their frame and change at once; it neither nudges nor shakes. */
+  [data-jump-dots] circle {
     animation-play-state: paused !important;
     transition-duration: 0s !important;
   }
   [data-jump],
-  [data-jump-dots] g,
-  [data-jump-dots] [data-halo],
-  [data-jump][data-mark='ended'] g circle {
+  [data-jump-dots] {
     animation: none !important;
   }
   [data-slot='collapsible-content'] {
@@ -1288,20 +1024,20 @@
   & .animate-attention,
   & .animate-breathe,
   & .shimmer,
-  & [data-caret] {
+  & [data-caret],
+  & [data-sd-animate],
+  & [data-sd-animate-marker]::marker {
     animation: none !important;
   }
   & [data-turn-dots] circle {
     animation-play-state: paused !important;
   }
-  & [data-jump-dots] g circle {
+  & [data-jump-dots] circle {
     animation-play-state: paused !important;
     transition-duration: 0s !important;
   }
   & [data-jump],
-  & [data-jump-dots] g,
-  & [data-jump-dots] [data-halo],
-  & [data-jump][data-mark='ended'] g circle {
+  & [data-jump-dots] {
     animation: none !important;
   }
   & [data-slot='collapsible-content'] {
@@ -1340,7 +1076,8 @@
   line-height: 1.65;
   /* Italics are the face's own; Chinese, which has none, stays upright. */
   font-synthesis-style: none;
-  color: var(--text-primary);
+  /* affectUI's answer: the prose a step softer than the ink, which bold text keeps. */
+  color: color-mix(in srgb, var(--text-primary) 84%, var(--bg-app));
   overflow-wrap: anywhere;
   user-select: text;
 
@@ -1467,7 +1204,7 @@
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--text-tertiary);
+    background: var(--text-disabled);
   }
   &
     [data-streamdown='list-item']

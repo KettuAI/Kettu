@@ -1,0 +1,5158 @@
+/* affectUI components keep their colors in variables on their root class. These point them at the
+   theme's tokens, so they follow the chosen theme and color mode. The doubled class outranks the
+   component's own rules, which it injects after this sheet. */
+
+.ui-ts.ui-ts {
+  --ui-ts-card: var(--bg-surface);
+  --ui-ts-line: var(--border-subtle);
+  --ui-ts-ink: var(--text-primary);
+  --ui-ts-text: var(--text-secondary);
+  --ui-ts-muted: var(--text-tertiary);
+  --ui-ts-faint: var(--text-disabled);
+  --ui-ts-button: var(--bg-subtle);
+  --ui-ts-button-hover: var(--bg-selected);
+  --ui-ts-hairline: var(--border-default);
+  --ui-ts-success: var(--success);
+  --ui-ts-danger: var(--danger);
+  --ui-ts-focus: color-mix(in srgb, var(--focus) 50%, transparent);
+}
+
+/* shell: the window frame on AffectUI's App Shell (components/affect/app-shell.tsx). Its variables
+   point at the shell's tokens; the page is the desk, which <html> paints once. */
+.ui-as.ui-as {
+  --tray: var(--shell-tray);
+  --card: var(--shell-card);
+  --page: var(--bg-sidebar);
+  --panel: var(--bg-app);
+  --line: var(--border-subtle);
+  --line-soft: var(--shell-line-soft);
+  --strong: var(--shell-strong);
+  --ink: var(--shell-ink);
+  --text: var(--shell-text);
+  --muted: var(--shell-muted);
+  --faint: var(--shell-faint);
+  --placeholder: var(--shell-faint);
+  --chip: var(--shell-chip);
+  --chip-hover: var(--shell-chip-hover);
+  --hover: var(--shell-hover);
+  --accent: var(--shell-accent);
+  --button: var(--shell-button);
+  --button-hover: var(--shell-button-hover);
+  --accent-soft: var(--shell-accent-soft);
+  --shadow: var(--shell-shadow);
+  --card-shadow: var(--shell-card-shadow);
+  --card-shadow-hover: var(--shell-card-shadow-hover);
+  --frame: var(--shell-frame);
+  --line-strong: var(--shell-line-strong);
+  --edge-active: var(--shell-edge-active);
+  --subtle: var(--shell-subtle);
+  --disabled: var(--shell-disabled);
+  --on-ink: var(--shell-on-ink);
+  --ink-hover: var(--shell-ink-hover);
+  --select: var(--shell-select);
+  --toggle-off: var(--shell-toggle-off);
+  --switch-on: var(--shell-switch-on);
+  --logo-bg: var(--shell-logo-bg);
+  --font: var(--font-sans);
+}
+
+/* The window: the desk shows through the frame, which keeps no color of its own. */
+.kettu-frame.ui-as-app {
+  --page: transparent;
+  min-height: 0;
+}
+/* The main area holds the sheets (features/shell/sheet.ts) on the desk: its gaps are padding, so
+   the desk around them drags the window, and it draws no panel of its own. */
+.kettu-frame.ui-as-app > .ui-as-main {
+  min-height: 0;
+  margin: 0;
+  padding: var(--frame-gap) var(--frame-gap) var(--frame-gap) 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+/* As DESK in features/shell/sheet.ts: drawn first, so the sheets' own regions over it win. */
+.kettu-frame.ui-as-app > .ui-as-main::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+/* The sidebar's head keeps the corner controls' room however long the list grows; the list
+   scrolls instead of squeezing it. */
+.kettu-frame.ui-as-app > .ui-as-side > .ui-as-side__head {
+  flex: none;
+}
+/* Short enough that the search sits 12px under the corner's buttons (their bottom at 49px), as
+   far as the list starts under it; App Shell's 50px left it floating halfway. */
+.kettu-frame.ui-as-app:not(.kettu-band) > .ui-as-side > .ui-as-side__head[data-chrome='mac'] {
+  height: 33px;
+}
+/* A narrow window's sidebar is a drawer: the sheets keep the gap on their left too, the drawer
+   takes the sidebar's color, and the corner controls stay over it. */
+@container ui-as (max-width: 900px) {
+  .kettu-frame.ui-as-app > .ui-as-main {
+    padding-left: var(--frame-gap);
+  }
+  .kettu-frame.ui-as-app > .ui-as-side {
+    background: var(--bg-sidebar);
+  }
+  .kettu-frame.ui-as-app > .ui-as-corner {
+    z-index: 51;
+  }
+}
+/* While the sidebar slides, the frame cuts the sheets to its shape and draws their edge, and a
+   wing of sheet fills it where it is wider than they are (app/app.tsx). */
+.kettu-slide[data-sliding] {
+  overflow: clip;
+  outline: 1px solid var(--border-subtle);
+  outline-offset: -1px;
+}
+.kettu-slide__wing {
+  display: none;
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  background: var(--bg-app);
+}
+.kettu-slide[data-sliding] > .kettu-slide__wing {
+  display: block;
+}
+/* Collapsing hides the whole sidebar instead of the shell's rail of icons; the toggle, Back and
+   Forward stay in the top left corner, and the sheets run to the window's left edge. */
+.ui-as-app[data-collapsed] {
+  --side-col: 0px;
+}
+.ui-as-app[data-collapsed] > .ui-as-side {
+  visibility: hidden;
+  opacity: 0;
+}
+.ui-as-app[data-collapsed] > .ui-as-side-open {
+  visibility: visible;
+  opacity: 1;
+  background: var(--panel);
+  transition:
+    opacity 260ms ease 160ms,
+    visibility 0s;
+}
+.ui-as-app[data-collapsed] > .ui-as-side-open:hover {
+  background: var(--chip);
+}
+.ui-as-side__group.ui-as-chats {
+  display: none;
+}
+/* The corner sits on the frame, not the screen, and leaves the traffic lights their room when the
+   window draws its own. Its controls keep clear of the lights, and the sidebar toggle stands apart
+   from Back and Forward, which go together. */
+.kettu-frame .ui-as-corner {
+  position: absolute;
+  gap: var(--corner-gap);
+}
+.ui-as-corner__tools > [data-sidebar-toggle] {
+  margin-right: 6px;
+}
+.ui-as-corner[data-lights='window'] .ui-as-lights {
+  width: var(--traffic-lights);
+  height: 12px;
+}
+.ui-as-corner .ui-as-icon-btn {
+  -webkit-app-region: no-drag;
+}
+.ui-as-corner .ui-as-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ui-as-corner .ui-as-icon-btn[data-popup-open] {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* The sidebar's title bar drags the window; drawn first, so the corner's buttons over it win. */
+.kettu-frame.ui-as-app::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--side-col);
+  height: 60px;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+.kettu-frame > .ui-as-resizer {
+  -webkit-app-region: no-drag;
+}
+/* Windows and Linux: the band across the window's top holds the corner's controls and the
+   window's own; the frame starts under it. */
+.kettu-frame.kettu-band {
+  padding-top: var(--title-bar);
+}
+.kettu-frame.kettu-band::before {
+  display: none;
+}
+.kettu-frame.kettu-band .ui-as-corner {
+  top: 0;
+  height: var(--title-bar);
+  padding-left: var(--frame-gap);
+}
+.kettu-frame.kettu-band .ui-as-lights {
+  display: none;
+}
+.kettu-frame.kettu-band .ui-as-side__head[data-chrome='mac'] {
+  height: 0;
+  margin-bottom: 0;
+}
+.kettu-frame.kettu-band .ui-as-side {
+  padding-top: 0;
+}
+.kettu-frame.kettu-band .ui-as-side__search {
+  margin-top: 4px;
+}
+.kettu-frame.kettu-band > .ui-as-resizer {
+  top: calc(var(--title-bar) + var(--frame-gap));
+}
+/* The account row's Settings button marks what needs you there with a fox dot. */
+.ui-as-user-action {
+  position: relative;
+}
+.ui-as-user-action__dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--attention-dot);
+  box-shadow: 0 0 0 1.5px var(--bg-sidebar);
+}
+/* Project folders: the composer's blue folder at the menu's icon size. */
+.ui-as-chat-folder > .ui-as-tray-link__folder {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+/* Icons and logos stand on their own, with no tile, ring or shadow around them, in a box only as
+   big as the mark, so they line up with the text above them. */
+.ui-as-app :is(.ui-ss-tile, .ui-prc__avatar, .ui-apc__icon, .ui-cmc__logo) {
+  width: 16px;
+  height: 16px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+.ui-as-chat-row__logo {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+/* Kettu's running turn: nine dots in the fox orange (features/session/turn-dots.tsx). */
+.ui-as-app [data-turn-dots] {
+  flex: none;
+}
+/* Kettu's list in the sidebar: rows in view in a split take the open row's fill; a row's status
+   and host give way to its tools on hover; Pinned's title folds it; Show more lines up with the
+   folder's sessions. */
+.ui-as-chat-row > .ui-as-chat-row__link.kettu-row-in-view {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* App Shell mutes every icon in a sidebar row; Kettu's marks there (the turn's dots, an error, a
+   pull request, a caret) keep their own colors. */
+.ui-as-side__item
+  :is(
+    [data-turn-dots],
+    svg[role='img'],
+    svg[class*='text-'],
+    :is([role='img'], [role='button']) > svg
+  ) {
+  color: revert-layer;
+}
+.ui-as-chat-row:is(:hover, :has(:focus-visible), [data-menu]) .kettu-row-end {
+  opacity: 0;
+}
+.ui-as-chat-row:has([data-subagent-badge]:hover) .kettu-row-end {
+  opacity: 1;
+}
+.ui-as-chat-row__rename:has(input[aria-invalid='true']) {
+  box-shadow:
+    inset 0 0 0 1px var(--danger),
+    0 0 0 3px var(--chip);
+}
+.kettu-side-label.ui-as-side__label {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: fit-content;
+  border-radius: 4px;
+  text-align: left;
+}
+.kettu-side-label:hover {
+  color: var(--muted);
+}
+.kettu-side-label__arrow {
+  display: grid;
+  opacity: 0;
+  transform: rotate(90deg);
+  transition:
+    opacity 120ms ease,
+    transform 200ms var(--ease);
+}
+.kettu-side-label[aria-expanded='false'] .kettu-side-label__arrow {
+  opacity: 1;
+  transform: none;
+}
+.kettu-side-label:is(:hover, :focus-visible) .kettu-side-label__arrow {
+  opacity: 1;
+}
+.ui-as-side__item.kettu-side-more {
+  padding-left: 30px;
+  color: var(--muted);
+}
+.ui-as-side__item.kettu-side-more:hover {
+  color: var(--ink);
+}
+.kettu-side-list {
+  display: flex;
+  flex-direction: column;
+}
+/* Its groups follow the menu's as App Shell spaces sibling groups. */
+.kettu-side-list .ui-as-side__group.ui-as-side__group {
+  margin-top: 10px;
+}
+.kettu-side-list .ui-as-side__group > .ui-as-side__label:first-child {
+  margin-top: 6px;
+}
+.kettu-side-list :is(ul, li) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A host's title over its projects, as a group's: its mark, name and state. */
+.kettu-host-label.ui-as-side__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.kettu-host-label h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font: inherit;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+/* The account menu on Profile Menu (features/account/account-menu.tsx), as wide as the sidebar and
+   at least 260 px. */
+.kettu-account .ui-pmc.kettu-account__card {
+  width: 100%;
+  max-width: none;
+}
+.kettu-account .ui-pmc__items {
+  max-height: none;
+  overflow: visible;
+}
+/* A short window scrolls the card instead of letting the popover flip below the window: it stays
+   between the corner controls (61 px from the top) and its row (54 px from the bottom, gap
+   included). Help's card sits beside it, outside the scrolling card. */
+.kettu-account .ui-pmc__card {
+  max-height: calc(100dvh - 115px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.kettu-account .ui-pmc__avatar > .kettu-account__avatar {
+  display: grid;
+  place-items: center;
+  background: var(--shell-accent-soft);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ui-pmc-accent);
+}
+.kettu-account .ui-pmc__icon :is(.hgi, svg) {
+  width: 16px;
+  height: 16px;
+}
+/* The shell's icons scale their stroke like everywhere else; the card's fixed 1.1 px made them heavy. */
+.kettu-account .ui-pmc__icon svg * {
+  vector-effect: none;
+}
+.kettu-account .ui-pmc__control {
+  padding: 0 8px;
+}
+/* Wide enough for the version line on one line. */
+.kettu-account .ui-pmc__side {
+  width: 284px;
+}
+.kettu-account .ui-pmc__side .ui-pmc__heading {
+  padding: 6px 8px 4px;
+}
+/* A plan card in the account menu, a tile as on the Usage page; Profile Menu clears its buttons'
+   padding and background, so the card sets its own. */
+.kettu-account .kettu-plan-card {
+  padding: 8px 8px 9px;
+  background: var(--bg-subtle);
+  cursor: default;
+}
+.kettu-account .kettu-plan-card:is(:hover, :focus-visible) {
+  background: var(--bg-selected);
+}
+.ui-as-user-action__dot.kettu-remote-dot {
+  top: auto;
+  bottom: 5px;
+  background: var(--success);
+}
+
+/* shell: Search, the Command Menu near the top of the window on a soft scrim. */
+.kettu-search-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--shell-scrim);
+  transition: opacity 200ms ease;
+}
+.kettu-search-scrim:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+.kettu-search-popup {
+  position: fixed;
+  top: min(12vh, 96px);
+  left: 50%;
+  z-index: 50;
+  width: min(600px, calc(100vw - 32px));
+  outline: none;
+  translate: -50% 0;
+  transition:
+    opacity 260ms var(--ease-standard),
+    transform 260ms var(--ease-standard);
+}
+.kettu-search-popup:is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+.kettu-search {
+  max-width: none;
+  font-family: var(--font-sans);
+}
+.kettu-search .ui-cmc__list {
+  max-height: min(420px, calc(100vh - 240px));
+}
+.ui-as-app .kettu-search .ui-cmc__logo,
+.kettu-search .ui-cmc__logo {
+  width: 20px;
+  height: 20px;
+  background: none;
+  box-shadow: none;
+}
+.kettu-search .ui-cmc__logo .ui-as-tray-link__folder {
+  width: 16px;
+  height: 16px;
+}
+/* The name keeps its room; the line after it gives way first. */
+.kettu-search .ui-cmc__name {
+  flex-shrink: 0;
+  max-width: 70%;
+}
+.kettu-search .ui-cmc__hints kbd {
+  min-width: 18px;
+}
+.kettu-search-empty {
+  display: grid;
+  gap: 4px;
+  padding: 28px 16px 32px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ui-cmc-muted);
+}
+.kettu-search-empty b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ui-cmc-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-search-scrim,
+  .kettu-search-popup {
+    transition: none;
+  }
+}
+
+/* ---------- panes: the side panel's Terminal, Browser, Mobile devices and Files ---------- */
+
+/* A pane is a sheet of its own: its head on top, its body under it, each a column. */
+.kp-pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 10px 10px 10px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+/* Maximized, it leaves its slot and covers the whole area. */
+.kp-pane[data-maximized] {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
+/* A pane fades in when it shows, as a transition so that it never runs again on its own. */
+.kp-pane {
+  transition: opacity var(--duration-fast) ease;
+}
+@starting-style {
+  .kp-pane {
+    opacity: 0;
+  }
+}
+/* Opening or closing the side panel glides the columns as App Shell's work area does: the pane
+   grows from nothing, fading in and sliding 16px from the right, and closing runs it back. Only
+   while it glides, so dragging the edge and resizing the window still follow at once. */
+.kettu-pane-area[data-glide] > :is([data-panel], .kp-resizer) {
+  transition:
+    flex-grow 420ms var(--ease),
+    width 420ms var(--ease);
+}
+.kettu-pane-area[data-glide] > [data-panel]:not(#content) .kp-pane {
+  transition:
+    opacity 260ms ease,
+    translate 420ms var(--ease);
+}
+@starting-style {
+  .kettu-pane-area[data-glide='open'] > [data-panel]:not(#content) {
+    flex-grow: 0 !important;
+  }
+  .kettu-pane-area[data-glide='open'] > .kp-resizer {
+    width: 0 !important;
+  }
+  .kettu-pane-area[data-glide='open'] > [data-panel]:not(#content) .kp-pane {
+    opacity: 0;
+    translate: 16px 0;
+  }
+}
+.kettu-pane-area[data-glide='close'] > [data-panel]:not(#content) {
+  flex-grow: 0 !important;
+}
+.kettu-pane-area[data-glide='close'] > .kp-resizer {
+  width: 0 !important;
+}
+.kettu-pane-area[data-glide='close'] > [data-panel]:not(#content) .kp-pane {
+  opacity: 0;
+  translate: 16px 0;
+  transition-duration: 200ms, 420ms;
+}
+.kp-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+.kp-head--cornered {
+  padding-left: var(--corner-inset);
+}
+.kp-head__main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 28px;
+}
+.kp-head__main > * {
+  -webkit-app-region: no-drag;
+}
+.kp-head__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+}
+.kp-head__tools > :last-child {
+  margin-left: 2px;
+}
+.kp-head__tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.kp-head__tabs::-webkit-scrollbar {
+  display: none;
+}
+.kp-head__title {
+  padding-left: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-head__error {
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--danger);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 10px 0 4px;
+}
+
+.kp-tool {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--pane-muted);
+  outline: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.kp-tool--sm {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+}
+.kp-tool:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-tool[aria-pressed='true'],
+.kp-tool[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kp-tool:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.kp-tool:focus-visible,
+.kp-btn:focus-visible,
+.kp-tab__btn:focus-visible,
+.kp-tab__x:focus-visible,
+.kp-node:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: -2px;
+}
+
+/* A tab in a pane's head: a name with a quiet mark before it, and a close button that shows on
+   hover or while chosen; another tab's floats over its end. */
+.kp-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 58px;
+  max-width: 220px;
+  height: 26px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  user-select: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.kp-tab:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-tab[data-selected] {
+  flex-shrink: 0;
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kp-tab[data-dragging] {
+  background: var(--bg-selected);
+}
+.kp-tab[data-editing] {
+  background: var(--bg-surface);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.kp-tab__btn {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 8px;
+  border-radius: inherit;
+  text-align: left;
+  outline: none;
+}
+.kp-tab[data-selected] .kp-tab__btn {
+  padding-right: 25px;
+}
+.kp-tab__icon {
+  flex: none;
+  color: var(--text-disabled);
+}
+.kp-tab[data-selected] .kp-tab__icon:not(.kp-tab__icon--mark) {
+  color: var(--pane-muted);
+}
+.kp-tab__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-tab__note {
+  color: var(--text-tertiary);
+}
+.kp-tab[data-italic] .kp-tab__name {
+  padding-right: 2px;
+  font-style: italic;
+}
+.kp-tab__code {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.kp-tab__code[data-failed] {
+  color: var(--danger);
+}
+.kp-tab__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pane-live);
+}
+.kp-tab__dot[data-dot='output'] {
+  background: var(--pane-fox);
+}
+.kp-tab__dot[data-dot='unsaved'] {
+  background: var(--text-tertiary);
+}
+.kp-tab__x {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: var(--text-disabled);
+  opacity: 0;
+  outline: none;
+  transition: opacity 120ms ease;
+}
+.kp-tab:is(:hover, :focus-within, [data-selected]) .kp-tab__x {
+  opacity: 1;
+}
+.kp-tab__x:hover {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__name {
+  mask-image: linear-gradient(to left, transparent 14px, var(--on-fill) 26px);
+}
+.kp-tab:not([data-selected]):is(:hover, :focus-within) .kp-tab__dot {
+  opacity: 0;
+}
+.kp-tab__rename {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 28px;
+}
+.kp-tab__rename input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-primary);
+}
+
+.kp-spin {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--border-default);
+  border-top-color: var(--text-tertiary);
+  border-radius: 50%;
+  animation: kp-spin 800ms linear infinite;
+}
+@keyframes kp-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+.kp-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: var(--bg-surface);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  outline: none;
+}
+.kp-btn:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, var(--bg-surface));
+}
+.kp-btn:disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.kp-btn--sm {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.kp-btn--solid {
+  background: var(--text-primary);
+  box-shadow: none;
+  color: var(--bg-surface);
+}
+.kp-btn--solid:hover {
+  background: var(--text-primary);
+  opacity: 0.88;
+}
+.kp-btn--danger {
+  background: var(--danger);
+  box-shadow: none;
+  color: var(--on-fill);
+}
+.kp-btn--danger:hover {
+  background: color-mix(in srgb, var(--danger) 90%, var(--text-primary));
+}
+.kp-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  outline: none;
+}
+.kp-link:hover {
+  color: var(--text-primary);
+}
+.kp-mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+.kp-pane kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-disabled);
+}
+
+.kp-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 0;
+  padding: 24px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.kp-empty__icon {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  margin-bottom: 8px;
+  color: var(--text-disabled);
+}
+.kp-empty b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-empty p {
+  max-width: 280px;
+  margin: 0;
+  line-height: 19px;
+  text-wrap: balance;
+}
+.kp-empty > .kp-btn {
+  margin-top: 12px;
+}
+.kp-empty .kp-spin {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
+/* A question the pane asks over itself, such as ending a running terminal. */
+.kp-confirm {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--bg-app) 60%, transparent);
+  backdrop-filter: blur(2px);
+}
+.kp-confirm__card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(calc(100% - 32px), 300px);
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-dialog);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  translate: -50% -50%;
+  outline: none;
+}
+.kp-confirm__card h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-confirm__card p {
+  margin: 0;
+  line-height: 19px;
+}
+.kp-confirm__acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* "Claude Code is driving", over a page or a device's screen, with the control to swap who drives. */
+.kp-drive {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 5px 0 10px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-popover);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.kp-drive[data-driver='user'] > svg {
+  color: var(--pane-added);
+}
+
+/* ---------- panes: Terminal ---------- */
+/* The terminal lies on the pane's sheet with no box of its own: a hairline from edge to edge
+   under the head and the screen out to the sheet's edges. Its tabs are names in a row, the chosen
+   one on a gray pill, each with its close button. */
+.kp-pane[data-pane='terminal'] > .kp-head {
+  position: relative;
+  margin-bottom: 8px;
+}
+/* Out past the pane's padding, which is 10px 10px 10px 12px. */
+.kp-pane[data-pane='terminal'] > .kp-head::after {
+  content: '';
+  position: absolute;
+  inset: auto -10px -8px -12px;
+  height: var(--hairline);
+  background: var(--border-subtle);
+  pointer-events: none;
+}
+.kp-pane[data-pane='terminal'] .kp-tab {
+  height: 28px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+.kp-pane[data-pane='terminal'] .kp-tab[data-selected] {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+.kp-pane[data-pane='terminal'] .kp-tab .kp-tab__btn {
+  padding: 0 6px 0 10px;
+}
+.kp-pane[data-pane='terminal'] .kp-tab__x {
+  position: static;
+  margin-right: 5px;
+  opacity: 1;
+}
+.kp-pane[data-pane='terminal'] .kp-tab[data-selected] .kp-tab__x {
+  color: var(--text-tertiary);
+}
+.kp-pane[data-pane='terminal']
+  .kp-tab:not([data-selected]):is(:hover, :focus-within)
+  :is(.kp-tab__name, .kp-tab__dot) {
+  opacity: 1;
+  mask-image: none;
+}
+.kp-pane[data-pane='terminal'] .kp-tab:not([data-owned]) .kp-tab__rename {
+  padding-left: 10px;
+}
+.kp-pane[data-pane='terminal'] > .kp-body {
+  margin: 0 -10px -10px -12px;
+  padding: 0;
+}
+.kp-tview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.kp-towner {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 8px 10px 0 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  container-type: inline-size;
+}
+.kp-towner__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-towner__dir {
+  margin-left: 8px;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+@container (inline-size < 320px) {
+  .kp-towner__url {
+    display: none;
+  }
+}
+.kp-towner .kp-link {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.kp-tbox {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--terminal-background);
+  transition: opacity 140ms ease;
+}
+.kp-tview[data-split]:not([data-focused]) .kp-tbox {
+  opacity: 0.72;
+}
+.kp-tscreen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 16px;
+}
+.kp-tscreen__xterm {
+  width: 100%;
+  height: 100%;
+}
+.kp-texit {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 6px 0 16px;
+  border-top: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-texit[data-failed] > span {
+  color: var(--danger);
+}
+.kp-tlock {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 9px 16px;
+  border-top: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-tertiary);
+}
+.kp-tlock > svg {
+  margin-top: 2px;
+  color: var(--text-disabled);
+}
+.kp-tlock kbd {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.kp-ask {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-popover);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  animation: kp-rise 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kp-ask kbd {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-disabled);
+}
+.kp-split-handle {
+  background: var(--border-subtle);
+}
+.kp-split-handle:is([data-separator='hover'], [data-separator='active']) {
+  background: var(--border-strong);
+}
+@keyframes kp-rise {
+  from {
+    opacity: 0;
+    translate: 0 -4px;
+  }
+}
+
+/* ---------- panes: Browser ---------- */
+.kp-addr-row {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  container-type: inline-size;
+}
+.kp-addr {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 30px;
+  margin-left: 4px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--bg-surface);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  color: var(--text-disabled);
+  transition: box-shadow 140ms ease;
+}
+.kp-addr:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--border-default),
+    0 0 0 3px var(--bg-hover);
+}
+.kp-addr[data-invalid] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.kp-addr input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+.kp-addr input::placeholder {
+  color: var(--text-disabled);
+}
+.kp-addr-row--empty {
+  width: min(100%, 300px);
+  margin-top: 14px;
+}
+.kp-addr-row--empty .kp-addr {
+  margin: 0;
+}
+.kp-addr-row .kp-drive {
+  height: 30px;
+  margin-left: 6px;
+  box-shadow: 0 0 0 var(--hairline) var(--border-default);
+}
+/* At the pane's usual width the address keeps the room; the label stays for screen readers. */
+@container (inline-size < 560px) {
+  .kp-addr-row .kp-drive__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+.kp-load {
+  position: absolute;
+  right: 0;
+  bottom: -5px;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: var(--bg-hover);
+}
+.kp-load::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--pane-fox);
+  animation: kp-load 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes kp-load {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 250% 0;
+  }
+}
+.kp-origin {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  animation: kp-rise 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kp-origin b {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-origin__text {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.kp-origin__text > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-origin__acts {
+  display: flex;
+  flex: 1 0 100%;
+  gap: 6px;
+}
+.kp-origin__gap {
+  flex: 1;
+}
+.kp-origin[data-answered] {
+  padding-block: 8px;
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 var(--hairline) var(--border-subtle);
+}
+.kp-origin[data-answered] svg {
+  color: var(--pane-added);
+}
+.kp-origin[data-answered][data-denied] svg {
+  color: var(--text-tertiary);
+}
+.kp-origin .kp-link {
+  margin-left: auto;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+/* The page itself is a view main draws over this frame, so the frame's ring and the glow of an
+   agent driving it sit outside it. */
+.kp-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 10px;
+  background: var(--bg-app);
+  box-shadow: 0 0 0 var(--hairline) var(--border-default);
+  transition: box-shadow 260ms ease;
+}
+.kp-view[data-driver='agent'] {
+  box-shadow: var(--pane-drive-glow);
+}
+.kp-view__still {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: fill;
+  pointer-events: none;
+}
+.kp-sitemark {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+/* ---------- panes: Mobile devices ---------- */
+.kp-stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 52px;
+}
+.kp-stage > .kp-drive {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 3;
+  translate: -50% 0;
+}
+.kp-device-screen {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 0;
+}
+.kp-device-screen__room {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-self: center;
+  height: 100%;
+  max-height: 640px;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+}
+.kp-device-screen__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.kp-device-screen__status[data-on-screen] {
+  color: var(--media-control);
+}
+.kp-device-screen__note {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+.kp-screen-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  box-shadow: var(--pane-drive-glow-inset);
+  pointer-events: none;
+}
+.kp-tap {
+  position: absolute;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pane-fox) 22%, transparent);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 70%, transparent);
+  pointer-events: none;
+  animation: kp-tap 700ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes kp-tap {
+  0% {
+    scale: 0.5;
+    opacity: 0;
+  }
+  25% {
+    scale: 1;
+    opacity: 1;
+  }
+  100% {
+    scale: 1.5;
+    opacity: 0;
+  }
+}
+.kp-hw {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--bg-hover);
+  translate: -50% 0;
+}
+.kp-hw__gap {
+  width: 1px;
+  height: 14px;
+  margin: 0 3px;
+  background: var(--border-default);
+}
+.kp-devlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(100%, 320px);
+  margin-top: 14px;
+  text-align: left;
+}
+.kp-devlist__head {
+  padding: 8px 8px 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+.kp-devrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  text-align: left;
+  outline: none;
+}
+.kp-devrow:hover,
+.kp-devrow:focus-visible {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+}
+.kp-devrow > svg {
+  color: var(--pane-muted);
+}
+.kp-devrow__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.kp-devrow__name {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-devrow__detail {
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-checklist {
+  flex: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.kp-checklist b {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-checklist li {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  line-height: 17px;
+}
+.kp-checklist li > svg {
+  margin-top: 2px;
+  color: var(--text-disabled);
+}
+.kp-alert {
+  flex: none;
+  font-size: 12px;
+  color: var(--danger);
+}
+
+/* ---------- panes: Files ---------- */
+.kp-find {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 340px;
+  height: 28px;
+  margin-left: 2px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-control);
+  color: var(--text-disabled);
+}
+.kp-find input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+.kp-find input::placeholder {
+  color: var(--text-disabled);
+}
+.kp-find kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-disabled);
+}
+.kp-tree {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.kp-tree__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-disabled);
+}
+.kp-tree__note[data-tone='error'] {
+  color: var(--danger);
+}
+.kp-tree__more {
+  flex: none;
+  margin: 0;
+  padding: 6px 8px;
+  border-top: var(--hairline) solid var(--border-subtle);
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.kp-node {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding: 0 6px 0 8px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  text-align: left;
+  outline: none;
+}
+.kp-node:hover {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-node[aria-current] {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kp-node > svg,
+.kp-node > img {
+  flex: none;
+}
+.kp-node__chev {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 12px;
+  margin-right: -2px;
+  color: var(--text-disabled);
+}
+.kp-node__chev svg {
+  transition: rotate 160ms ease;
+}
+.kp-node[aria-expanded='true'] .kp-node__chev svg {
+  rotate: 90deg;
+}
+.kp-node__name {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-node__name > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-node--dir .kp-node__name {
+  color: var(--text-tertiary);
+}
+.kp-node--change {
+  height: 40px;
+  padding: 4px 8px;
+}
+.kp-node__name small {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--text-disabled);
+  text-overflow: ellipsis;
+}
+.kp-node__line {
+  width: 30px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-disabled);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.kp-node mark {
+  background: transparent;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.kp-node__group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+.kp-badge[data-tone='modified'] {
+  background: color-mix(in srgb, var(--pane-modified) 12%, transparent);
+  color: var(--pane-modified);
+}
+.kp-badge[data-tone='added'] {
+  background: color-mix(in srgb, var(--pane-added) 12%, transparent);
+  color: var(--pane-added);
+}
+.kp-badge[data-tone='deleted'] {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+.kp-files-handle {
+  width: 8px;
+  background: transparent;
+}
+.kp-doc {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--bg-surface);
+}
+/* Drawn over the content, whose own backgrounds would cover an inset ring. */
+.kp-doc::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 var(--hairline) var(--border-default);
+  pointer-events: none;
+}
+.kp-doc__tabs {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+}
+.kp-doc__tabs::-webkit-scrollbar {
+  display: none;
+}
+.kp-doc__tabs .kp-tool {
+  width: 26px;
+  height: 26px;
+}
+.kp-doc__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 4px 0 12px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+}
+.kp-doc__path {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 24px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  outline: none;
+}
+.kp-doc__path > span {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+.kp-doc__path > svg {
+  color: var(--text-disabled);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.kp-doc__path:hover,
+.kp-doc__path:focus-visible {
+  background: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  color: var(--text-primary);
+}
+.kp-doc__path:is(:hover, :focus-visible, [data-copied]) > svg {
+  opacity: 1;
+}
+.kp-doc__ref {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.kp-doc__tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.kp-doc__hunks {
+  display: flex;
+  align-items: center;
+  margin-right: 2px;
+}
+.kp-doc__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+/* In the pane the diff lies on the document's card, as the editor does. */
+.kp-doc .files-diff {
+  --diffs-light-bg: var(--bg-surface);
+  --diffs-dark-bg: var(--bg-surface);
+}
+.kp-doc__note {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: var(--hairline) solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-doc__note[data-tone='notice'] {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.kp-doc__note[data-tone='error'] {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+.kp-doc__hint {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  padding: 6px 12px;
+  background: linear-gradient(transparent, var(--bg-surface) 40%);
+  font-size: 11.5px;
+  color: var(--text-disabled);
+  pointer-events: none;
+}
+.kp-doc__hint[data-tone='error'] {
+  color: var(--danger);
+}
+.kp-lines {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-popover);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  translate: -50% 0;
+  animation: kp-rise 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kp-lines > svg {
+  color: var(--pane-fox);
+}
+.kp-lines kbd {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-disabled);
+}
+.kp-files__foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 0 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.kp-files__acts {
+  display: flex;
+  gap: 6px;
+}
+
+/* ---------- panes: the pane buttons in a session's top bar ---------- */
+.kp-bar-tools {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+.kp-bar-tools .kp-tool {
+  position: relative;
+}
+.kp-bar-tools .kp-tool[aria-pressed='true'] {
+  background: var(--bg-selected);
+}
+.kp-bar-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pane-fox);
+  box-shadow: 0 0 0 2px var(--bg-app);
+}
+
+/* The edge between the main area and a pane: no grip, a line fading at both ends while dragged. */
+.kp-resizer.kp-resizer {
+  background: transparent;
+}
+.kp-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--border-strong) 22%,
+    var(--border-strong) 78%,
+    transparent
+  );
+  opacity: 0;
+  translate: -50% 0;
+  transition: opacity 180ms ease;
+}
+.kp-resizer:is([data-separator='hover'], [data-separator='active'], :focus-visible)::before {
+  opacity: 1;
+}
+
+/* settings: the Settings modal over the app, drawn as the hi-fi draws it: the command menu's scrim,
+   a box with the section list on the left in the sidebar's rows, and the section on the right in
+   affectUI's settings cards of rows. The box carries .ui-as, so the shell's variables hold inside
+   it wherever it is mounted. Rules sit under .kettu-settings to outrank the vendored sheets,
+   whose order among the hoisted styles is not fixed. */
+
+.kettu-settings-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--settings-scrim);
+  transition: opacity 200ms ease;
+}
+.kettu-settings-scrim[data-starting-style],
+.kettu-settings-scrim[data-ending-style] {
+  opacity: 0;
+}
+
+.kettu-settings.ui-as {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  z-index: 50;
+  display: flex;
+  width: min(1060px, calc(100% - 64px));
+  height: calc(100% - 112px);
+  translate: -50% 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    var(--settings-drop);
+  outline: none;
+  transition:
+    opacity 260ms var(--ease),
+    transform 260ms var(--ease);
+}
+.kettu-settings.ui-as[data-starting-style],
+.kettu-settings.ui-as[data-ending-style] {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+
+/* The section list */
+.kettu-settings .kettu-settings__nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 236px;
+  padding: 16px 10px 12px 12px;
+  background: var(--frame);
+  box-shadow: inset -0.5px 0 0 var(--line);
+}
+.kettu-settings .kettu-settings__title {
+  margin: 0;
+  padding: 2px 6px 12px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.kettu-settings .kettu-settings__search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-bottom: 8px;
+  padding: 0 8px 0 10px;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  color: var(--muted);
+  transition: box-shadow 140ms ease;
+}
+.kettu-settings .kettu-settings__search:focus-within {
+  box-shadow:
+    var(--card-shadow),
+    0 0 0 3px var(--accent-soft);
+}
+.kettu-settings .kettu-settings__search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+}
+.kettu-settings .kettu-settings__search input::placeholder {
+  color: var(--faint);
+}
+.kettu-settings .kettu-settings__search kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+}
+.kettu-settings .kettu-settings__clear {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--muted);
+}
+.kettu-settings .kettu-settings__clear::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+.kettu-settings .kettu-settings__clear:hover {
+  color: var(--ink);
+}
+.kettu-settings .kettu-settings__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.kettu-settings .kettu-settings__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.kettu-settings .kettu-settings__group + .kettu-settings__group {
+  margin-top: 6px;
+  padding-top: 6px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-settings .kettu-settings__group .ui-as-side__item {
+  flex: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+.kettu-settings .kettu-settings__group .ui-as-side__item[data-dim] {
+  opacity: 0.42;
+}
+.kettu-settings .kettu-settings__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 4px 0 auto;
+  border-radius: 50%;
+  background: var(--attention-dot);
+}
+.kettu-settings .kettu-settings__group .ui-as-side__count {
+  margin-right: 4px;
+  animation: ui-as-cmd-fade 200ms ease both;
+}
+.kettu-settings .kettu-settings__scope {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 14px 0 6px;
+}
+.kettu-settings .kettu-settings__scope > .ui-as-side__label {
+  margin: 0;
+}
+.kettu-settings .kettu-settings__scope .ui-as-anchor {
+  display: block;
+}
+.kettu-settings .kettu-settings__scope .ui-ss-select {
+  width: 100%;
+}
+.kettu-settings .kettu-settings__scope .ui-as-menu {
+  width: 100%;
+}
+
+/* The page */
+.kettu-settings .kettu-settings__page {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  container: ui-as-main / inline-size;
+}
+.kettu-settings .kettu-settings__close {
+  position: sticky;
+  top: 12px;
+  z-index: 2;
+  float: right;
+  margin: 12px 12px 0 0;
+}
+.kettu-settings .kettu-settings__body {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 32px 48px;
+  animation: ui-as-cmd-in 220ms var(--ease) both;
+}
+@container ui-as-main (max-width: 600px) {
+  .kettu-settings .kettu-settings__body {
+    padding: 36px 16px 40px;
+  }
+}
+
+/* A page's title, then its groups: a head, a card of rows, a note under it */
+:is(.kettu-settings, .kettu-sd) .k-page-sub {
+  text-wrap: pretty;
+}
+:is(.kettu-settings, .kettu-sd) .k-groups > .k-group:first-child > .ui-sg-head {
+  margin-top: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .ui-sg-card:first-child {
+  margin-top: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-ss-head > span {
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-head-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .ui-sg-hint + .ui-sg-hint {
+  margin-top: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-group > .k-plain {
+  margin-top: 12px;
+}
+
+/* Rows: the hairline between them is drawn by each row after the first, since each row is wrapped
+   to carry the light a search result leaves on it */
+:is(.kettu-settings, .kettu-sd) .k-row {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card > * + .k-row {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-flash {
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  background: var(--mark);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 600ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-flash[data-on] {
+  opacity: 1;
+}
+:is(.kettu-settings, .kettu-sd) .k-row > .ui-sg-row,
+:is(.kettu-settings, .kettu-sd) .k-row > .k-block {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-row > .ui-sg-label {
+  flex: 1 1 auto;
+}
+:is(.kettu-settings, .kettu-sd) .k-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 10px 12px 10px 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 40px;
+}
+:is(.kettu-settings, .kettu-sd) .k-line > .ui-sg-label,
+:is(.kettu-settings, .kettu-sd) .k-line > .k-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Buttons never squeeze into an ellipsis next to a long label, as in affectUI's rows */
+:is(.kettu-settings, .kettu-sd) .k-line > :is(button, .ui-buttonc) {
+  flex: none;
+}
+/* A grid item keeps its content's width, so a long path would push the control out */
+:is(.kettu-settings, .kettu-sd) .ui-sg-label > :is(b, small) {
+  min-width: 0;
+}
+/* A gray block inside a card: a preview, or what a row reveals */
+:is(.kettu-settings, .kettu-sd) .k-inset {
+  margin: 0 12px 12px 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--frame);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-block .k-inset {
+  margin: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-error {
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--danger);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-error[data-wrap] {
+  max-width: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-muted {
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-num {
+  font-variant-numeric: tabular-nums;
+}
+:is(.kettu-settings, .kettu-sd) .k-mono {
+  font-family: var(--code-face);
+  font-size: 12.5px;
+}
+:is(.kettu-settings, .kettu-sd) .k-link {
+  border-radius: 4px;
+  font: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+:is(.kettu-settings, .kettu-sd) .k-link:hover {
+  text-decoration-color: currentColor;
+}
+:is(.kettu-settings, .kettu-sd) .k-code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--chip);
+  font-family: var(--code-face);
+  font-size: 11.5px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* A thing with its mark: agents, hosts, devices, servers; the mark has no tile, 24px beside two
+   lines of text */
+:is(.kettu-settings, .kettu-sd) .k-thing {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-mark > :is(svg, img) {
+  max-width: 24px;
+  max-height: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .k-thing .ui-sg-label b {
+  font-weight: 500;
+}
+:is(.kettu-settings, .kettu-sd) .k-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-row-title > .k-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-thing .ui-sg-label small {
+  overflow-wrap: normal;
+}
+:is(.kettu-settings, .kettu-sd) .k-lines {
+  display: grid;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-lines > small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A row that opens a page of its own: the whole row is a button laid under its content */
+:is(.kettu-settings, .kettu-sd) .k-item > .k-hit {
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-item > .k-hit:hover {
+  background: var(--hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-item > :not(.k-hit) {
+  position: relative;
+  pointer-events: none;
+}
+:is(.kettu-settings, .kettu-sd) .k-item > :not(.k-hit) :is(button, a, [role='switch']) {
+  pointer-events: auto;
+}
+:is(.kettu-settings, .kettu-sd) .k-chevron {
+  color: var(--faint);
+}
+
+/* States */
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge[data-tone='warn'] {
+  background: var(--settings-warn-bg);
+  color: var(--settings-warn-ink);
+}
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge {
+  white-space: nowrap;
+}
+:is(.kettu-settings, .kettu-sd) .k-skel {
+  display: block;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--chip);
+  animation: k-skel-pulse 1.4s ease-in-out infinite;
+}
+@keyframes k-skel-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+:is(.kettu-settings, .kettu-sd) .ui-as-empty {
+  margin-top: 24px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-as-empty > .ui-buttonc {
+  margin-top: 18px;
+}
+
+/* Controls. The select also sits outside Settings, as in an agent's question in the thread. */
+.ui-ss-select.k-select {
+  width: 210px;
+}
+.ui-ss-select.k-select > .k-select__value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ui-ss-select.k-select > .k-select__lead {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+.ui-ss-select.k-select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+:is(.kettu-settings, .kettu-sd) .k-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-path {
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-path__name {
+  font-weight: 500;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-row .ui-as-menu {
+  min-width: 210px;
+}
+:is(.kettu-settings, .kettu-sd) .k-input.ui-sg-input {
+  width: 200px;
+  height: 30px;
+}
+:is(.kettu-settings, .kettu-sd) .k-input.ui-sg-input[aria-invalid='true'] {
+  box-shadow:
+    inset 0 0 0 0.5px var(--danger),
+    0 0 0 3px var(--danger-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-input--short.ui-sg-input {
+  width: 90px;
+}
+:is(.kettu-settings, .kettu-sd) .k-input--wide.ui-sg-input {
+  width: 260px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-danger {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-danger[aria-busy='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar {
+  width: 72px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--chip);
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--k-level, var(--usage-green));
+}
+
+/* An item's own page: the way back, then its mark, title and state */
+:is(.kettu-settings, .kettu-sd) .k-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 16px -4px;
+  padding: 2px 6px 2px 2px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+  transition: color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-back:hover {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head > .k-flash {
+  inset: -8px;
+  border-radius: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__mark {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__text {
+  position: relative;
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__text > .ui-as-page-title {
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-item-head__actions {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A notice: the settings' gray block, tinted by what it means */
+:is(.kettu-settings, .kettu-sd) .k-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--frame);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='success'] {
+  background: var(--success-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='warning'] {
+  background: var(--warning-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='error'] {
+  background: var(--danger-tint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='success'] .k-notice__icon {
+  color: var(--success);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='warning'] .k-notice__icon {
+  color: var(--warning);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice[data-tone='error'] .k-notice__icon {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__body {
+  display: grid;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__text > b {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__desc {
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin: -2px 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notice__more {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card .k-notice {
+  margin: 0 12px 12px 16px;
+}
+
+/* Search results: each row a button to its place */
+:is(.kettu-settings, .kettu-sd) .k-result {
+  position: relative;
+  width: 100%;
+  text-align: left;
+}
+:is(.kettu-settings, .kettu-sd) .k-result::before {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-result:hover::before {
+  background: var(--hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-result > * {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .k-hl {
+  border-radius: 3px;
+  background: var(--mark);
+  color: inherit;
+}
+:is(.kettu-settings, .kettu-sd) .k-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Parts of single rows */
+:is(.kettu-settings, .kettu-sd) .k-zoom {
+  width: 44px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-value {
+  max-width: 224px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-rtl {
+  display: block;
+  overflow: hidden;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+}
+:is(.kettu-settings, .kettu-sd) .k-term {
+  margin: 0 12px 12px 16px;
+  padding: 10px 12px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--settings-term-bg);
+  color: var(--settings-term-ink);
+  font-family: var(--code-face);
+  line-height: 1.6;
+  white-space: pre;
+}
+:is(.kettu-settings, .kettu-sd) .k-term__path {
+  color: var(--settings-term-path);
+}
+:is(.kettu-settings, .kettu-sd) .k-term__branch {
+  color: var(--settings-term-branch);
+}
+:is(.kettu-settings, .kettu-sd) .k-term__ok {
+  color: var(--settings-term-ok);
+}
+:is(.kettu-settings, .kettu-sd) .k-term__faint {
+  color: var(--settings-term-faint);
+}
+:is(.kettu-settings, .kettu-sd) .k-notify {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--frame);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__mock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 360px;
+  min-width: 0;
+  padding: 10px 14px 10px 10px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow:
+    var(--settings-notify-drop),
+    inset 0 0 0 0.5px var(--line-strong);
+  font-size: 12.5px;
+  line-height: 17px;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__top > b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify__text small {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-notify > :last-child {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-groups > .k-group:first-child > .k-plain {
+  margin-top: 20px;
+}
+@container ui-as-main (max-width: 600px) {
+  :is(.kettu-settings, .kettu-sd) .k-notify {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  :is(.kettu-settings, .kettu-sd) .k-notify__mock {
+    width: auto;
+  }
+}
+:is(.kettu-settings, .kettu-sd) .k-subrows {
+  margin: 0 -12px -10px -16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-subrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 52px;
+  padding: 8px 12px 8px 32px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+:is(.kettu-settings, .kettu-sd) .k-subnote {
+  padding: 0 12px 0 32px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-subnote:not(:empty) {
+  padding-bottom: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-subnote[data-invalid] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-saved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-list {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px 6px 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-list__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+:is(.kettu-settings, .kettu-sd) .k-list__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card .k-notice.k-notice--row {
+  margin: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-avatar {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--chip);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-avatar > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+:is(.kettu-settings, .kettu-sd) .k-account {
+  min-height: 68px;
+}
+:is(.kettu-settings, .kettu-sd) .k-about {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-about > .ui-sg-label {
+  flex: 1;
+}
+:is(.kettu-settings, .kettu-sd) .k-about__skel {
+  margin-top: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-ok {
+  display: inline-grid;
+  color: var(--success);
+  animation: ui-as-cmd-fade 200ms ease both;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar--long {
+  width: 200px;
+}
+.ui-ss-select.k-select.k-select--wide {
+  width: 240px;
+}
+
+/* Inside Settings, on, checked and picked are blue, as everywhere in affectUI */
+.kettu-settings.ui-as,
+.kettu-sd.ui-as {
+  --control-on: var(--switch-on);
+  --control-on-tint: var(--accent-soft);
+}
+
+/* A dialog over Settings, on the settings' panel */
+.kettu-sd.ui-as {
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    var(--settings-drop);
+  font-size: 13px;
+  color: var(--text);
+}
+.kettu-sd .kettu-sd__head {
+  padding: 20px 20px 4px 24px;
+}
+.kettu-sd .kettu-sd__titles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kettu-sd .kettu-sd__title {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  color: var(--strong);
+}
+.kettu-sd .kettu-sd__desc {
+  margin: 4px 4px 0 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+  text-wrap: pretty;
+}
+.kettu-sd .kettu-sd__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 24px 4px;
+}
+.kettu-sd .kettu-sd__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px 20px;
+}
+.kettu-sd .kettu-sd__start {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+.kettu-sd .kettu-sd__field > label {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__input.ui-sg-input {
+  width: 100%;
+  height: 32px;
+}
+.kettu-sd .kettu-sd__input--mono.ui-sg-input {
+  font-family: var(--code-face);
+  font-size: 12.5px;
+}
+.kettu-sd .kettu-sd__input.ui-sg-input[aria-invalid='true'] {
+  box-shadow:
+    inset 0 0 0 0.5px var(--danger),
+    0 0 0 3px var(--danger-tint);
+}
+.kettu-sd .kettu-sd__tile {
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__tile:not([data-checked]):not([data-disabled]):hover {
+  box-shadow: inset 0 0 0 0.5px var(--edge-active);
+}
+.kettu-sd .kettu-sd__tile[data-checked] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--switch-on);
+}
+.kettu-sd .kettu-sd__tile > [aria-hidden] {
+  margin-top: 1px;
+}
+.kettu-sd .ui-sg-card {
+  margin-top: 0;
+}
+.kettu-sd .kettu-sd__error {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+/* Appearance: the themes as cards in two columns, the chosen one ringed in ink */
+:is(.kettu-settings, .kettu-sd) .k-themes-wrap {
+  display: grid;
+  gap: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-themes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@container ui-as-main (max-width: 420px) {
+  :is(.kettu-settings, .kettu-sd) .k-themes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+:is(.kettu-settings, .kettu-sd) .k-theme-cell {
+  position: relative;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  text-align: left;
+  transition: box-shadow 160ms ease;
+}
+:is(.kettu-settings, .kettu-sd) button.k-theme:hover {
+  box-shadow: var(--card-shadow-hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme[aria-pressed='true'] {
+  box-shadow:
+    0 0 0 1.5px var(--ink),
+    var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme b {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__name > b {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__swatch {
+  display: block;
+  width: 100%;
+  height: 64px;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__swatch > span {
+  border-radius: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme--more {
+  justify-content: flex-end;
+  min-height: 108px;
+  background: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--line-strong);
+  outline-offset: -1px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__more {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-theme__more > .ui-as-icon-btn {
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+:is(.kettu-settings, .kettu-sd) .k-theme-cell:is(:hover, :focus-within) .k-theme__more,
+:is(.kettu-settings, .kettu-sd) .k-theme__more:has([aria-expanded='true']) {
+  opacity: 1;
+}
+:is(.kettu-settings, .kettu-sd) .k-warn {
+  display: inline-grid;
+  flex: none;
+  color: var(--warning);
+}
+.kettu-sd .kettu-sd__pad {
+  padding: 12px 24px 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-find.ui-sm-search {
+  width: 100%;
+}
+.kettu-sd .kettu-sd__scroll {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 8px 24px;
+}
+.kettu-sd .kettu-sd__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 64px 0;
+  color: var(--muted);
+}
+.kettu-sd .ui-as-empty[data-bare] {
+  padding: 40px 0;
+}
+.kettu-sd .ui-as-empty > .ui-buttonc {
+  margin-top: 16px;
+}
+.kettu-sd .kettu-sd__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.kettu-sd .kettu-sd__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 0;
+}
+.kettu-sd .kettu-sd__row + .kettu-sd__row {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__row > .ui-sg-label {
+  flex: 1;
+}
+.kettu-sd .kettu-sd__swatches {
+  display: flex;
+  flex: none;
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.kettu-sd .kettu-sd__swatches > span {
+  width: 14px;
+  height: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__value {
+  min-width: 30px;
+  text-align: right;
+}
+:is(.kettu-settings, .kettu-sd) .k-meter__bar > span:not([class]) {
+  background: var(--usage-green);
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 2px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd > code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--code-face);
+  font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-log {
+  max-height: 86px;
+  min-width: 0;
+  overflow: auto;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  font-family: var(--code-face);
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-log > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-log > span[data-last] {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-log > span[data-failed] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-figure {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  color: var(--strong);
+  font-variant-numeric: tabular-nums;
+}
+:is(.kettu-settings, .kettu-sd) .k-reading {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-mask-pad:has([data-slot='masked']) {
+  margin-right: -6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-fact {
+  max-width: 280px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-wrap {
+  flex-wrap: wrap;
+}
+
+/* Agents */
+:is(.kettu-settings, .kettu-sd) .k-agent-mark {
+  display: grid;
+  place-items: center;
+}
+:is(.kettu-settings, .kettu-sd) .k-off {
+  opacity: 0.5;
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row {
+  position: relative;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  font-size: 13px;
+  color: var(--text);
+  text-align: left;
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row::before {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row:hover {
+  color: var(--ink);
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row:hover::before {
+  background: var(--hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-add-row > * {
+  position: relative;
+}
+:is(.kettu-settings, .kettu-sd) .k-empty-actions {
+  margin-top: 18px;
+}
+:is(.kettu-settings, .kettu-sd) .k-shrink {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-tall {
+  line-height: 26px;
+}
+:is(.kettu-settings, .kettu-sd) .k-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+:is(.kettu-settings, .kettu-sd) .k-dot[data-tone='ok'] {
+  background: var(--success);
+}
+:is(.kettu-settings, .kettu-sd) .k-row-note {
+  margin: -6px 12px 0 16px;
+  padding-bottom: 12px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-skel.k-skel--field {
+  height: 32px;
+  border-radius: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-swatches {
+  display: flex;
+  gap: 10px;
+}
+.kettu-sd .kettu-sd__choices {
+  display: grid;
+  gap: 8px;
+}
+.kettu-sd .kettu-sd__choice {
+  display: grid;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.kettu-sd .kettu-sd__choice:not([data-checked]):hover {
+  box-shadow: inset 0 0 0 0.5px var(--edge-active);
+}
+.kettu-sd .kettu-sd__choice[data-checked] {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--switch-on);
+}
+.kettu-sd .kettu-sd__choice > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+.kettu-sd .kettu-sd__choice-extra {
+  padding-left: 26px;
+}
+.kettu-sd .kettu-sd__stack {
+  display: grid;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-push {
+  margin-left: auto;
+}
+:is(.kettu-settings, .kettu-sd) .k-list__name.k-grow-0 {
+  flex: 0 1 auto;
+}
+.kettu-sd .kettu-sd__picklist {
+  max-height: 384px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Harnesses */
+:is(.kettu-settings, .kettu-sd) .k-danger {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-dot[data-tone='new'] {
+  background: var(--accent);
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-label small > .k-dot {
+  display: inline-block;
+  margin: 0 6px 1px 0;
+}
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge.k-badge-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 3px;
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-badge-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+}
+:is(.kettu-settings, .kettu-sd) .k-pill-close {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border-radius: 50%;
+}
+:is(.kettu-settings, .kettu-sd) .k-pill-close:hover {
+  background: var(--chip-hover);
+}
+:is(.kettu-settings, .kettu-sd) .k-head-meta {
+  font-size: 12px;
+  font-weight: 400;
+}
+:is(.kettu-settings, .kettu-sd) .k-self-start {
+  align-self: flex-start;
+}
+:is(.kettu-settings, .kettu-sd) .k-break {
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd.k-cmd--wrap {
+  align-items: flex-start;
+  padding: 8px 4px 8px 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-cmd.k-cmd--wrap > code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.kettu-sd .kettu-sd__text {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--strong);
+  text-align: left;
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure > svg {
+  color: var(--muted);
+  rotate: -90deg;
+  transition: rotate 200ms var(--ease);
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure[data-panel-open] > svg {
+  rotate: 0deg;
+}
+:is(.kettu-settings, .kettu-sd) .k-disclosure__body > .ui-sg-card {
+  margin-top: 12px;
+}
+:is(.kettu-settings, .kettu-sd) .k-env {
+  margin-top: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-env__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-pathline {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+:is(.kettu-settings, .kettu-sd) .k-place {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 4px;
+}
+:is(.kettu-settings, .kettu-sd) .k-place__after {
+  flex: none;
+}
+
+/* MCP servers */
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge[data-tone='danger'] {
+  background: var(--danger-tint);
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-skel.k-skel--mark {
+  height: 24px;
+  border-radius: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-device {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-device > svg {
+  width: 20px;
+  height: 20px;
+}
+:is(.kettu-settings, .kettu-sd) .k-device--large > svg {
+  width: 28px;
+  height: 28px;
+}
+.kettu-sd .kettu-sd__address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.kettu-sd .kettu-sd__address + .kettu-sd__address {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__address > .k-mono {
+  flex: 1;
+}
+.kettu-sd .kettu-sd__inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kettu-sd .kettu-sd__tabs {
+  display: flex;
+}
+.kettu-sd .kettu-sd__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.kettu-sd .k-inset > b {
+  display: block;
+  font-weight: 500;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__steps {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 6px 0 0;
+  list-style: none;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__step-mark {
+  display: grid;
+  flex: none;
+  width: 16px;
+  height: 18px;
+  place-items: center;
+}
+.kettu-sd .kettu-sd__step[data-state='done'] .kettu-sd__step-mark {
+  color: var(--success);
+}
+.kettu-sd .kettu-sd__step[data-state='failed'] .kettu-sd__step-mark {
+  color: var(--danger);
+}
+.kettu-sd .kettu-sd__step[data-state='pending'] {
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__step-ring {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.kettu-sd .kettu-sd__step-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.kettu-sd .kettu-sd__output {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--frame);
+  font-family: var(--code-face);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.kettu-sd .kettu-sd__inline > .kettu-sd__input {
+  flex: 1;
+}
+
+/* Remote access */
+:is(.kettu-settings, .kettu-sd) .ui-sg-label > .k-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-status[data-failed] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-status__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card .ui-as-empty[data-bare] {
+  margin: 0;
+  padding: 36px 24px 32px;
+}
+:is(.kettu-settings, .kettu-sd) .k-activities {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-row.k-activity {
+  justify-content: flex-start;
+  gap: 16px;
+  min-height: 40px;
+  font-size: 13px;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .k-activity__when {
+  flex: none;
+  width: 112px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-activity__what {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:is(.kettu-settings, .kettu-sd) .k-activity__where {
+  flex: none;
+  font-size: 12px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-title-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-title-edit > .ui-ss-badge {
+  font-family: var(--font-sans, inherit);
+}
+:is(.kettu-settings, .kettu-sd) .k-title-input {
+  min-width: 32px;
+  max-width: 100%;
+  margin: 0 -2px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 4px 4px 0 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--line-strong);
+  font: inherit;
+  color: inherit;
+  outline: none;
+  field-sizing: content;
+}
+:is(.kettu-settings, .kettu-sd) .k-title-input:focus-visible {
+  box-shadow: inset 0 -1.5px 0 var(--switch-on);
+}
+:is(.kettu-settings, .kettu-sd) .k-title-error {
+  display: block;
+  margin-top: 4px;
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+:is(.kettu-settings, .kettu-sd) .k-block-note {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-input.k-mono {
+  font-family: var(--code-face);
+  font-size: 12.5px;
+}
+.kettu-sd .kettu-sd__pair {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px 4px;
+}
+.kettu-sd .kettu-sd__qr {
+  position: relative;
+  flex: none;
+  width: 224px;
+  height: 224px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--canvas);
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.kettu-sd .kettu-sd__qr-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--canvas-ink) 60%, transparent);
+}
+.kettu-sd .kettu-sd__pair-text {
+  display: flex;
+  max-width: 360px;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text);
+  text-align: center;
+  text-wrap: pretty;
+}
+.kettu-sd .kettu-sd__end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.kettu-sd .kettu-sd__end > svg {
+  color: var(--muted);
+}
+.kettu-sd .kettu-sd__end[data-tone='danger'] > svg {
+  color: var(--danger);
+}
+.kettu-sd .kettu-sd__linkbox {
+  width: 100%;
+}
+.kettu-sd .kettu-sd__link.ui-sg-input {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  line-height: 32px;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-sd .kettu-sd__link[data-disabled] {
+  color: var(--faint);
+}
+.kettu-sd .kettu-sd__waiting {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.kettu-sd .kettu-sd__waiting-text {
+  flex: 1;
+}
+
+/* Sharing */
+.ui-ss-select.k-select.k-select--full {
+  width: 100%;
+}
+:is(.kettu-settings, .kettu-sd) .k-block-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: 12px;
+  line-height: 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+:is(.kettu-settings, .kettu-sd) .k-link.k-mono {
+  font-family: var(--code-face);
+  font-size: 11.5px;
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-card.k-pending {
+  margin-top: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  font-size: 13px;
+  color: var(--muted);
+}
+:is(.kettu-settings, .kettu-sd) .k-notice.k-pending {
+  margin-top: 28px;
+}
+:is(.kettu-settings, .kettu-sd) .k-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+}
+:is(.kettu-settings, .kettu-sd) .k-state[data-tone='danger'] {
+  color: var(--danger);
+}
+:is(.kettu-settings, .kettu-sd) .k-dot[data-tone='warn'] {
+  background: var(--warning);
+}
+:is(.kettu-settings, .kettu-sd) .ui-sg-label small .k-mono {
+  font-size: 11.5px;
+}
+
+/* composer: affectUI's Chat Composer as the session's and New session's composer, the Model
+   Picker in it, the tray's popovers, the queue behind the composer and New session's list
+   (features/session/composer, features/session/new-session.tsx, features/session/queue-stack.tsx).
+   The tray links take AppShell's variables from the window's frame, as the start screen has them. */
+.kettu-composer {
+  position: relative;
+  z-index: 1;
+}
+.kettu-composer > .ui-ccc {
+  max-width: none;
+}
+[data-computer-using] .kettu-composer .ui-ccc {
+  --ui-ccc-shadow: var(--computer-composer-ring);
+}
+/* Kettu's editor in the Chat Composer's type: a size under the thread's prose, its caret blue. */
+.kettu-prompt .cm-editor {
+  color: var(--ui-ccc-strong);
+}
+.kettu-prompt .cm-editor .cm-content {
+  font-size: calc(var(--prose-size) - 2px);
+  caret-color: var(--ui-ccc-accent);
+}
+.kettu-prompt .cm-editor .cm-placeholder {
+  color: var(--ui-ccc-hint);
+}
+.kettu-prompt[data-disabled] {
+  cursor: default;
+}
+.kettu-menu-keys {
+  flex: none;
+  font-size: 11px;
+  color: var(--ui-ccc-faint);
+}
+.kettu-option {
+  gap: 4px;
+  padding-right: 8px;
+}
+.kettu-option__chevron {
+  color: var(--ui-ccc-faint);
+}
+/* Send in the fox once there is something to send; Stop stays in the composer's ink. */
+.ui-ccc__send.kettu-send:not(:disabled, [data-stop]) {
+  background: var(--send) !important;
+  color: var(--on-fill);
+  box-shadow: var(--send-shadow);
+}
+.ui-ccc__send.kettu-send:not(:disabled, [data-stop]):hover {
+  background: var(--send-hover) !important;
+}
+.ui-ccc__send.kettu-send:not(:disabled, [data-stop]):active {
+  background: var(--send-active) !important;
+  box-shadow: none;
+}
+/* Send outside a composer, as a reply to a passage: the Chat Composer's button on its own. */
+.kettu-send:not(.ui-ccc .kettu-send) {
+  --ui-ccc-fill: var(--composer-chip-hover);
+  --ui-ccc-faint: var(--composer-faint);
+  --ui-ccc-solid: var(--composer-ink);
+  --ui-ccc-on-solid: var(--composer-card);
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ui-ccc-solid);
+  color: var(--ui-ccc-on-solid);
+  cursor: pointer;
+}
+.kettu-send:not(.ui-ccc .kettu-send):disabled {
+  background: var(--ui-ccc-fill);
+  color: var(--ui-ccc-faint);
+  cursor: default;
+}
+.kettu-send:not(.ui-ccc .kettu-send) svg {
+  width: 16px;
+  height: 16px;
+}
+.kettu-send-wrap {
+  display: inline-flex;
+  flex: none;
+  margin-left: 2px;
+}
+.kettu-send-wrap > .ui-ccc__send {
+  margin-left: 0;
+}
+
+/* The tray: the host, the project and the branch on the left, the prompt cache and the context on
+   the right. */
+.kettu-tray__group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.kettu-tray {
+  container: kettu-tray / inline-size;
+}
+/* Short of room, the host and then the project keep only their marks, and the branch shortens. */
+.kettu-tray-link--host {
+  flex: none;
+}
+.kettu-tray-link--project {
+  flex-shrink: 2;
+}
+@container kettu-tray (inline-size < 520px) {
+  .kettu-tray-link--host {
+    padding-right: 7px;
+  }
+  /* Still read out, and in the tooltip. */
+  .kettu-tray-link--host > .kettu-tray-link__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@container kettu-tray (inline-size < 420px) {
+  .kettu-tray-link--project {
+    flex: none;
+    padding-right: 7px;
+  }
+  .kettu-tray-link--project > .kettu-tray-link__text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+.kettu-tray__group:empty {
+  display: none;
+}
+/* Keeps the right end, whole, when there is no branch before it. */
+.kettu-tray__group--end {
+  flex: none;
+  margin-left: auto;
+}
+.kettu-tray__error {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--danger);
+}
+.ui-as-tray-link:is([data-popup-open], [aria-expanded='true']) {
+  background: var(--hover);
+  color: var(--ink);
+}
+.ui-as-tray-link:is(.kettu-tray-link--meter, .kettu-tray-link--agent) {
+  gap: 6px;
+}
+.ui-as-tray-link[data-static] {
+  cursor: default;
+}
+.ui-as-tray-link[data-static]:hover {
+  background: none;
+}
+.ui-as-tray-link[data-tone='warn'] {
+  color: var(--warning);
+}
+.ui-as-tray-link > :is(.kettu-tray-link__text, .kettu-branch__name) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ui-as-tray-link > :is(.kettu-tray-link__danger, .kettu-branch__danger) {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  color: var(--danger);
+}
+.kettu-branch__dim {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Four levels by how much is used, for the context ring, the tray's limit and the plan bars. */
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit) {
+  --meter: var(--composer-meter-ok);
+  --meter-wash: var(--composer-meter-ok-wash);
+}
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='mid'] {
+  --meter: var(--composer-meter-mid);
+  --meter-wash: var(--composer-meter-mid-wash);
+}
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='high'] {
+  --meter: var(--composer-meter-high);
+  --meter-wash: var(--composer-meter-high-wash);
+}
+:is(.kettu-meter-ring, .kettu-tray-limit, .kettu-limit)[data-level='full'] {
+  --meter: var(--composer-meter-full);
+  --meter-wash: var(--composer-meter-full-wash);
+}
+.kettu-meter-ring {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+.kettu-meter-ring__disc {
+  fill: var(--meter-wash);
+}
+.kettu-meter-ring__pie {
+  fill: none;
+  stroke: var(--meter);
+}
+.kettu-tray-limit {
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--meter-wash);
+  color: var(--meter);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* The tray's popovers, in the composer's card. */
+.kettu-pop.kettu-pop {
+  gap: 0;
+  padding: 0;
+  border-radius: 12px;
+  background: var(--composer-card);
+  color: var(--composer-ink);
+  box-shadow: var(--composer-pop-shadow);
+  font-size: 13px;
+  line-height: 20px;
+}
+.kettu-pop.kettu-branch-pop {
+  padding: 14px;
+}
+.kettu-cache {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px 12px;
+}
+.kettu-cache > b {
+  font-weight: 600;
+}
+.kettu-cache__arc {
+  width: 64px;
+  height: 36px;
+  margin-bottom: 4px;
+  fill: none;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.kettu-cache__track {
+  stroke: var(--composer-chip);
+}
+.kettu-cache__fill {
+  stroke: var(--composer-ink);
+}
+.kettu-cache__line {
+  color: var(--composer-muted);
+}
+.kettu-cache__line b {
+  font-weight: 600;
+  color: var(--composer-ink);
+}
+.kettu-cache__note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--composer-muted);
+}
+.kettu-cache__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--composer-line);
+  font-size: 12px;
+  color: var(--composer-faint);
+}
+.kettu-ctx {
+  display: flex;
+  flex-direction: column;
+}
+.kettu-ctx__window > .ui-cwc {
+  max-width: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.kettu-ctx__window[data-busy] {
+  opacity: 0.6;
+}
+/* affectUI pulls a part's rows 4px past its clip, which cuts off their counts' last digit. */
+.kettu-ctx__window .ui-cwc__item {
+  margin-right: 0;
+}
+/* Denser rows than affectUI's 32px and items than its 28px; a touch screen keeps its own. */
+@media (pointer: fine) {
+  .kettu-ctx__window :is(.ui-cwc__row, .ui-cwc__main) {
+    min-height: 28px;
+    height: 28px;
+  }
+  .kettu-ctx__window .ui-cwc__item {
+    height: 24px;
+  }
+}
+/* Nine rows at most: an open list scrolls inside them instead of growing the card. The inline
+   padding keeps the rows' own -8px margins inside the scroller. */
+.kettu-ctx__window .ui-cwc__parts {
+  max-height: calc(9 * 28px);
+  margin-inline: -8px;
+  padding-inline: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.kettu-ctx__note {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 12px;
+  color: var(--composer-muted);
+}
+.kettu-ctx__pad {
+  padding: 0 16px 12px;
+}
+.kettu-ctx__session {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 40px;
+  padding: 0 16px;
+  border-top: 0.5px solid var(--composer-line);
+  color: var(--composer-ink);
+}
+.kettu-ctx__session > :last-child {
+  color: var(--composer-text);
+}
+.kettu-ctx__plan {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px 14px;
+  border-top: 0.5px solid var(--composer-line);
+}
+.kettu-ctx__plan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 500;
+  color: var(--composer-strong);
+}
+.kettu-ctx__tier {
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--composer-chip-hover);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--composer-text);
+}
+.kettu-limit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kettu-limit__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.kettu-limit__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-ink);
+}
+.kettu-limit__reset {
+  flex: none;
+  font-size: 12px;
+  color: var(--composer-muted);
+}
+.kettu-limit__value {
+  flex: none;
+  min-width: 36px;
+  text-align: right;
+  color: var(--composer-text);
+}
+.kettu-limit__bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--composer-chip-hover);
+}
+.kettu-limit__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--meter);
+}
+
+/* The Model Picker: room for the names next to the bars and keys, the agent's mark without a
+   tile, one line under the switches, and effort as one track with a sliding thumb. */
+.kettu-model-picker .ui-mdpc__pop {
+  width: min(380px, calc(100vw - 32px));
+}
+.kettu-model-picker .ui-mdpc__glyph {
+  background: none;
+  box-shadow: none;
+}
+.kettu-model-picker .ui-mdpc__glyph > svg {
+  width: 16px;
+  height: 16px;
+}
+.kettu-model-picker .ui-mdpc__trigger .ui-mdpc__glyph > svg {
+  width: 14px;
+  height: 14px;
+}
+.kettu-model-picker .ui-mdpc__caption .ui-mdpc__swap-item {
+  display: block;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-model-picker .ui-mdpc__fly-row {
+  min-width: 0;
+}
+.kettu-model-picker .ui-mdpc__fly-row .ui-mdpc__title-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-model-picker .ui-mdpc__effort--own .ui-mdpc__segmented {
+  gap: 0;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--ui-mdpc-fill);
+}
+.kettu-model-picker .ui-mdpc__effort--own .ui-mdpc__seg-btn {
+  height: 24px;
+  box-shadow: none;
+  background: none !important;
+}
+.kettu-model-picker .ui-mdpc__seg-btn[aria-checked='false']:hover {
+  color: var(--ui-mdpc-ink);
+}
+.kettu-model-picker .ui-mdpc__thumb {
+  top: 2px;
+  bottom: 2px;
+  border-radius: 6px;
+  background: var(--composer-thumb);
+  box-shadow: var(--composer-thumb-shadow);
+  transition:
+    transform 280ms var(--ui-mdpc-ease),
+    width 280ms var(--ui-mdpc-ease);
+}
+.kettu-model-warn {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+/* Ultracode: violet words with a light running through them, and a glow under the menu's rows. */
+.kettu-model-picker .ui-mdpc__glow > .kettu-ultra-floor {
+  --ui-gf-bg: transparent;
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+}
+[data-theme='dark'] .kettu-ultra-floor .ui-gf-layer--light {
+  opacity: 0.3;
+}
+.kettu-ultra-floor stop:nth-child(1) {
+  stop-color: var(--composer-ultra-1);
+}
+.kettu-ultra-floor stop:nth-child(2) {
+  stop-color: var(--composer-ultra-2);
+}
+.kettu-ultra-floor stop:nth-child(3) {
+  stop-color: var(--composer-ultra-3);
+}
+.ui-shm-text.kettu-ultra-text {
+  --ui-shm-text: var(--composer-ultra-text);
+  --ui-shm-text-glow: var(--composer-ultra-shine);
+}
+
+/* Queued messages tucked behind the composer: the next one in front, the next two peeking above,
+   fanned out as layers on hover and scrolled like a periscope past three. */
+.kettu-queue {
+  position: relative;
+  z-index: 0;
+  height: 48px;
+  margin: 0 14px -26px;
+  font-size: 12.5px;
+  color: var(--composer-muted);
+}
+.kettu-queue[data-open]::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: calc(var(--shown) * 28px + 40px);
+}
+.kettu-queue__card {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 8px 18px 10px;
+  border-radius: 12px 12px 0 0;
+  background: color-mix(in srgb, var(--composer-ink) var(--mix, 5%), var(--composer-panel));
+  box-shadow: inset 0 0 0 0.5px var(--composer-line);
+  outline: none;
+  transition:
+    transform 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    left 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    right 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 340ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 340ms ease,
+    background-color 340ms ease,
+    box-shadow 200ms ease,
+    opacity 220ms ease;
+}
+.kettu-queue__card > * {
+  opacity: var(--c);
+  transition: opacity 160ms ease;
+}
+.kettu-queue__card[data-row] > * {
+  transition-delay: 90ms;
+}
+.kettu-queue[data-open] .kettu-queue__card {
+  box-shadow:
+    inset 0 0 0 0.5px var(--composer-line),
+    0 -6px 14px -10px var(--composer-queue-drop);
+}
+.kettu-queue[data-open]:not([data-scrolling]) .kettu-queue__card:is(:hover, :focus-visible) > * {
+  opacity: 1;
+}
+.kettu-queue[data-scrolling] .kettu-queue__card,
+.kettu-queue[data-scrolling] .kettu-queue__card > * {
+  transition: none;
+}
+.kettu-queue__n {
+  display: grid;
+  flex: none;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 5px;
+  background: var(--composer-card);
+  box-shadow: inset 0 0 0 0.5px var(--composer-line-strong);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--composer-muted);
+  font-variant-numeric: tabular-nums;
+}
+.kettu-queue__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-ink);
+}
+.kettu-queue__dim,
+.kettu-queue__from {
+  flex: none;
+  font-size: 12px;
+  color: var(--composer-faint);
+}
+.kettu-queue__paused {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--composer-text);
+}
+.kettu-queue__resume {
+  font-weight: 500;
+  color: var(--composer-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--composer-line-strong);
+  text-underline-offset: 2px;
+}
+.kettu-queue__count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(var(--front) * 100px);
+  margin-left: calc((var(--front) - 1) * 8px);
+  padding-right: calc(var(--front) * 4px);
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  opacity: calc(var(--c) * var(--count));
+}
+.kettu-queue__count svg {
+  transition: transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kettu-queue[data-open] .kettu-queue__count svg {
+  transform: rotate(180deg);
+}
+.kettu-queue__actions {
+  display: none;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+.kettu-queue__actions button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--composer-muted);
+}
+.kettu-queue__actions button:hover {
+  background: var(--composer-hover-fill);
+  color: var(--composer-ink);
+}
+.kettu-queue[data-open]:not([data-scrolling])
+  .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
+  .kettu-queue__actions {
+  display: flex;
+}
+.kettu-queue[data-open]:not([data-scrolling])
+  .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
+  .kettu-queue__count {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-queue__card,
+  .kettu-queue__card > *,
+  .kettu-queue__count svg {
+    transition: none;
+  }
+}
+
+/* New session: the notes under the composer and the sessions to pick up. */
+.kettu-start__notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 10px;
+}
+.kettu-start__notes:empty {
+  display: none;
+}
+.kettu-start__error {
+  margin: 0;
+  padding: 0 11px;
+  overflow: hidden;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--danger);
+}
+.kettu-pickup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  max-width: 640px;
+  margin-top: 28px;
+  animation: ui-as-cmd-in 320ms ease both 120ms;
+  transition:
+    opacity 180ms ease,
+    visibility 0s linear 180ms;
+}
+.kettu-pickup[data-hidden] {
+  visibility: hidden;
+  opacity: 0;
+}
+.kettu-pickup__label {
+  margin: 0;
+  padding: 0 10px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--composer-faint);
+}
+.kettu-pickup__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--composer-ink);
+  transition: background-color 120ms ease;
+}
+.kettu-pickup__row:hover {
+  background: var(--composer-hover-fill);
+}
+.kettu-pickup__row:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.kettu-pickup__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-pickup__status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--composer-muted);
+}
+.kettu-pickup__status[data-status='waiting'] {
+  color: var(--composer-waiting);
+}
+.kettu-pickup__status[data-status='failed'] {
+  color: var(--danger);
+}
+.kettu-pickup__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--composer-waiting-dot);
+  box-shadow: 0 0 0 3px var(--composer-waiting-halo);
+}
+.kettu-pickup__project {
+  flex: none;
+  width: 96px;
+  overflow: hidden;
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--composer-faint);
+}
+/* The project menu's folder marks take the line icons' 15px, so every name starts in one place. */
+.kettu-menu-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 15px;
+}
+/* A provider out of credit: a tinted note over the text, inside the writing area. */
+.kettu-credit {
+  margin: -4px -6px 10px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 10px;
+  background: var(--ui-ccc-wash);
+  box-shadow: inset 0 0 0 0.5px var(--ui-ccc-line);
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--ui-ccc-ink);
+}
+/* New session's menus as AppShell's: rows in the quiet gray, the chosen one in ink. */
+:is(.kettu-project-menu, .kettu-agent-menu) [role='option'] {
+  color: var(--composer-text);
+}
+:is(.kettu-project-menu, .kettu-agent-menu)
+  [role='option']:is([data-selected], [aria-selected='true']) {
+  font-weight: 500;
+  color: var(--composer-ink);
+}
+
+/* themes: under an installed theme (data-installed-theme on <html>, see tokens.css), affectUI's
+   components take the theme's tokens instead of the values they ship with, which the built-in
+   theme keeps as the hi-fi draws them. Their white sheens stay. */
+[data-installed-theme] .ui-stc {
+  --ui-stc-card: var(--shell-card);
+  --ui-stc-strong: var(--text-primary);
+  --ui-stc-ink: var(--text-primary);
+  --ui-stc-text: var(--text-secondary);
+  --ui-stc-muted: var(--text-tertiary);
+  --ui-stc-faint: var(--text-disabled);
+  --ui-stc-icon: var(--icon-default);
+  --ui-stc-line: var(--border-subtle);
+  --ui-stc-rail: var(--border-strong);
+  --ui-stc-wash: var(--bg-hover);
+  --ui-stc-fill: var(--bg-selected);
+  --ui-stc-solid: var(--primary-from);
+  --ui-stc-on-solid: var(--primary-foreground);
+  --ui-stc-accent: var(--control-on);
+  --ui-stc-accent-bg: var(--control-on-tint);
+  --ui-stc-amber: var(--warning);
+  --ui-stc-green: var(--success);
+  --ui-stc-focus: var(--focus-ring-color);
+  --ui-stc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-ansc {
+  --ui-ansc-card: var(--shell-card);
+  --ui-ansc-ink: var(--text-primary);
+  --ui-ansc-strong: var(--text-primary);
+  --ui-ansc-text: var(--text-secondary);
+  --ui-ansc-muted: var(--text-tertiary);
+  --ui-ansc-faint: var(--text-disabled);
+  --ui-ansc-icon: var(--icon-default);
+  --ui-ansc-line: var(--border-subtle);
+  --ui-ansc-fill: var(--bg-selected);
+  --ui-ansc-fill-strong: var(--pressed-hover);
+  --ui-ansc-wash: var(--bg-hover);
+  --ui-ansc-accent: var(--control-on);
+  --ui-ansc-ok: var(--success);
+  --ui-ansc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-ansc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-ansc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-apc {
+  --ui-apc-tray: var(--bg-subtle);
+  --ui-apc-bg: var(--shell-card);
+  --ui-apc-ink: var(--text-primary);
+  --ui-apc-text: var(--text-secondary);
+  --ui-apc-muted: var(--text-tertiary);
+  --ui-apc-line: var(--border-subtle);
+  --ui-apc-soft: var(--shell-subtle);
+  --ui-apc-tile: var(--bg-subtle);
+  --ui-apc-hover: var(--bg-selected);
+  --ui-apc-primary: var(--primary-from);
+  --ui-apc-check: var(--control-on);
+  --ui-apc-check-ink: var(--on-fill);
+  --ui-apc-primary-hover: var(--primary-hover-from);
+  --ui-apc-primary-ink: var(--primary-foreground);
+  --ui-apc-primary-kbd: color-mix(in srgb, var(--primary-foreground) 14%, transparent);
+  --ui-apc-primary-kbd-ink: color-mix(in srgb, var(--primary-foreground) 70%, transparent);
+  --ui-apc-kbd: var(--bg-hover);
+  --ui-apc-box: var(--border-strong);
+  --ui-apc-box-hover: var(--text-disabled);
+  --ui-apc-ring: var(--focus-ring-color);
+  --ui-apc-timer-low: var(--warning);
+  --ui-apc-low-bg: var(--bg-subtle);
+  --ui-apc-low-ink: var(--text-secondary);
+  --ui-apc-med-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --ui-apc-med-ink: var(--warning);
+  --ui-apc-high-bg: color-mix(in srgb, var(--danger) 10%, transparent);
+  --ui-apc-high-ink: var(--danger);
+  --ui-apc-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-apc-ok-ink: var(--success);
+  --ui-apc-no-bg: var(--bg-subtle);
+  --ui-apc-no-ink: var(--text-secondary);
+}
+[data-installed-theme] .ui-buttonc {
+  --ui-btnc-title: var(--text-primary);
+  --ui-btnc-ink: var(--text-primary);
+  --ui-btnc-muted: var(--text-tertiary);
+  --ui-btnc-icon: var(--icon-default);
+  --ui-btnc-solid: var(--primary-from);
+  --ui-btnc-solid-hover: var(--primary-hover-from);
+  --ui-btnc-on-solid: var(--primary-foreground);
+  --ui-btnc-surface: var(--shell-card);
+  --ui-btnc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-btnc-shadow-hover: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --ui-btnc-wash: var(--bg-hover);
+  --ui-btnc-danger: var(--danger);
+  --ui-btnc-danger-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-btnc-danger-bg-hover: color-mix(in srgb, var(--danger) 12%, transparent);
+  --ui-btnc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-ccc {
+  --ui-ccc-card: var(--shell-card);
+  --ui-ccc-strong: var(--text-primary);
+  --ui-ccc-ink: var(--text-primary);
+  --ui-ccc-text: var(--text-secondary);
+  --ui-ccc-muted: var(--text-tertiary);
+  --ui-ccc-faint: var(--text-disabled);
+  --ui-ccc-hint: var(--text-placeholder);
+  --ui-ccc-icon: var(--icon-default);
+  --ui-ccc-line: var(--border-subtle);
+  --ui-ccc-fill: var(--bg-selected);
+  --ui-ccc-wash: var(--bg-hover);
+  --ui-ccc-tray: light-dark(var(--bg-subtle), var(--shell-subtle));
+  --ui-ccc-tray-hover: var(--bg-hover);
+  --ui-ccc-solid: var(--primary-from);
+  --ui-ccc-on-solid: var(--primary-foreground);
+  --ui-ccc-accent: var(--control-on);
+  --ui-ccc-alert: var(--danger);
+  --ui-ccc-alert-wash: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-ccc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-ccc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-ccc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-cmc {
+  --ui-cmc-card: var(--shell-card);
+  --ui-cmc-ink: var(--text-primary);
+  --ui-cmc-strong: var(--text-primary);
+  --ui-cmc-text: var(--text-secondary);
+  --ui-cmc-muted: var(--text-tertiary);
+  --ui-cmc-faint: var(--text-disabled);
+  --ui-cmc-icon: var(--icon-default);
+  --ui-cmc-line: var(--border-subtle);
+  --ui-cmc-line-strong: var(--border-default);
+  --ui-cmc-active: var(--bg-selected);
+  --ui-cmc-tile: var(--bg-raised);
+  --ui-cmc-tile-ring: var(--border-default);
+  --ui-cmc-mark: var(--match);
+  --ui-cmc-accent: var(--control-on);
+  --ui-cmc-ok: var(--success);
+  --ui-cmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-cbc {
+  --ui-cbc-card: var(--shell-card);
+  --ui-cbc-ink: var(--text-primary);
+  --ui-cbc-strong: var(--text-primary);
+  --ui-cbc-text: var(--text-secondary);
+  --ui-cbc-muted: var(--text-tertiary);
+  --ui-cbc-faint: var(--text-disabled);
+  --ui-cbc-line: var(--border-subtle);
+  --ui-cbc-wash: var(--bg-hover);
+  --ui-cbc-fill: var(--bg-selected);
+  --ui-cbc-up: var(--success);
+  --ui-cbc-up-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-cbc-down: var(--danger);
+  --ui-cbc-down-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-cbc-c1: color-mix(in srgb, var(--context-1) 76.5%, transparent);
+  --ui-cbc-c2: color-mix(in srgb, var(--context-1) 50%, transparent);
+  --ui-cbc-c3: color-mix(in srgb, var(--context-1) 32%, transparent);
+  --ui-cbc-c4: color-mix(in srgb, var(--context-1) 18%, transparent);
+  --ui-cbc-c5: var(--border-strong);
+  --ui-cbc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-cbc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-cwc {
+  --ui-cwc-card: var(--shell-card);
+  --ui-cwc-strong: var(--text-primary);
+  --ui-cwc-ink: var(--text-primary);
+  --ui-cwc-text: var(--text-secondary);
+  --ui-cwc-muted: var(--text-tertiary);
+  --ui-cwc-faint: var(--text-disabled);
+  --ui-cwc-icon: var(--icon-default);
+  --ui-cwc-line: var(--border-subtle);
+  --ui-cwc-fill: var(--bg-selected);
+  --ui-cwc-wash: var(--bg-hover);
+  --ui-cwc-free: var(--border-subtle);
+  --ui-cwc-c1: var(--context-1);
+  --ui-cwc-c2: var(--context-2);
+  --ui-cwc-c3: var(--context-3);
+  --ui-cwc-c4: var(--context-4);
+  --ui-cwc-c5: var(--context-5);
+  --ui-cwc-c6: var(--context-6);
+  --ui-cwc-accent: var(--control-on);
+  --ui-cwc-warn: var(--warning);
+  --ui-cwc-warn-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --ui-cwc-full: var(--danger);
+  --ui-cwc-full-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-cwc-ok: var(--success);
+  --ui-cwc-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-cwc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-cwc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-drpc {
+  --ui-drpc-card: var(--shell-card);
+  --ui-drpc-ink: var(--text-primary);
+  --ui-drpc-strong: var(--text-primary);
+  --ui-drpc-text: var(--text-secondary);
+  --ui-drpc-muted: var(--text-tertiary);
+  --ui-drpc-faint: var(--text-disabled);
+  --ui-drpc-icon: var(--icon-default);
+  --ui-drpc-line: var(--border-subtle);
+  --ui-drpc-wash: var(--bg-hover);
+  --ui-drpc-fill: var(--bg-selected);
+  --ui-drpc-fill-strong: var(--pressed-hover);
+  --ui-drpc-chip: var(--primary-from);
+  --ui-drpc-chip-hover: var(--primary-hover-from);
+  --ui-drpc-on-chip: var(--primary-foreground);
+  --ui-drpc-band: var(--bg-selected);
+  --ui-drpc-band-preview: var(--bg-hover);
+  --ui-drpc-compare: var(--control-on-tint);
+  --ui-drpc-compare-edge: color-mix(in srgb, var(--control-on) 40%, transparent);
+  --ui-drpc-accent: var(--control-on);
+  --ui-drpc-today-on-chip: var(--control-on);
+  --ui-drpc-focus: var(--focus-ring-color);
+  --ui-drpc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-drpc-shadow-hover: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --ui-drpc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+}
+[data-installed-theme] .ui-xcc {
+  --ui-xcc-card: var(--shell-card);
+  --ui-xcc-ink: var(--text-primary);
+  --ui-xcc-strong: var(--text-primary);
+  --ui-xcc-text: var(--text-secondary);
+  --ui-xcc-muted: var(--text-tertiary);
+  --ui-xcc-faint: var(--text-disabled);
+  --ui-xcc-icon: var(--icon-default);
+  --ui-xcc-line: var(--border-subtle);
+  --ui-xcc-fill: var(--bg-selected);
+  --ui-xcc-wash: var(--bg-hover);
+  --ui-xcc-track: var(--border-subtle);
+  --ui-xcc-pick: var(--control-on-tint);
+  --ui-xcc-pick-line: color-mix(in srgb, var(--control-on) 40%, transparent);
+  --ui-xcc-tile-line: var(--border-default);
+  --ui-xcc-primary: var(--primary-from);
+  --ui-xcc-on-primary: var(--primary-foreground);
+  --ui-xcc-c0: var(--border-strong);
+  --ui-xcc-c1: var(--context-1);
+  --ui-xcc-c2: var(--context-2);
+  --ui-xcc-c3: var(--context-3);
+  --ui-xcc-c4: var(--context-4);
+  --ui-xcc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-xcc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-xcc [data-tone='red'] {
+  --ui-xcc-tag: var(--danger);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='amber'] {
+  --ui-xcc-tag: var(--warning);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='green'] {
+  --ui-xcc-tag: var(--success);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--success) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='blue'] {
+  --ui-xcc-tag: var(--context-1);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--context-1) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='violet'] {
+  --ui-xcc-tag: var(--merged);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--merged) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='gray'] {
+  --ui-xcc-tag: var(--text-secondary);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+}
+[data-installed-theme] .ui-fmc {
+  --ui-fmc-card: var(--shell-card);
+  --ui-fmc-ink: var(--text-primary);
+  --ui-fmc-strong: var(--text-primary);
+  --ui-fmc-text: var(--text-secondary);
+  --ui-fmc-muted: var(--text-tertiary);
+  --ui-fmc-faint: var(--text-disabled);
+  --ui-fmc-icon: var(--icon-default);
+  --ui-fmc-line: var(--border-subtle);
+  --ui-fmc-fill: var(--bg-selected);
+  --ui-fmc-fill-strong: var(--pressed-hover);
+  --ui-fmc-wash: var(--bg-hover);
+  --ui-fmc-box-ring: var(--border-strong);
+  --ui-fmc-accent: var(--control-on);
+  --ui-fmc-check: var(--control-on);
+  --ui-fmc-focus: var(--focus-ring-color);
+  --ui-fmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-kpic {
+  --ui-kpic-card: var(--shell-card);
+  --ui-kpic-pop: var(--bg-surface);
+  --ui-kpic-ink: var(--text-primary);
+  --ui-kpic-strong: var(--text-primary);
+  --ui-kpic-text: var(--text-secondary);
+  --ui-kpic-muted: var(--text-tertiary);
+  --ui-kpic-line: var(--border-subtle);
+  --ui-kpic-grid: var(--border-subtle);
+  --ui-kpic-guide: var(--border-default);
+  --ui-kpic-up: var(--success);
+  --ui-kpic-up-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-kpic-down: var(--danger);
+  --ui-kpic-down-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-kpic-focus: var(--focus-ring-color);
+  --ui-kpic-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-kpic-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+}
+[data-installed-theme] .ui-mac {
+  --ui-mac-card: var(--shell-card);
+  --ui-mac-strong: var(--text-primary);
+  --ui-mac-ink: var(--text-primary);
+  --ui-mac-text: var(--text-secondary);
+  --ui-mac-muted: var(--text-tertiary);
+  --ui-mac-faint: var(--text-disabled);
+  --ui-mac-icon: var(--icon-default);
+  --ui-mac-line: var(--border-subtle);
+  --ui-mac-fill: var(--bg-selected);
+  --ui-mac-wash: var(--bg-hover);
+  --ui-mac-solid: var(--primary-from);
+  --ui-mac-solid-hover: var(--primary-hover-from);
+  --ui-mac-on-solid: var(--primary-foreground);
+  --ui-mac-accent: var(--control-on);
+  --ui-mac-ok: var(--success);
+  --ui-mac-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-mac-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-mac-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-mac-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-mdpc {
+  --ui-mdpc-card: var(--shell-card);
+  --ui-mdpc-strong: var(--text-primary);
+  --ui-mdpc-ink: var(--text-primary);
+  --ui-mdpc-text: var(--text-secondary);
+  --ui-mdpc-muted: var(--text-tertiary);
+  --ui-mdpc-faint: var(--text-disabled);
+  --ui-mdpc-icon: var(--icon-default);
+  --ui-mdpc-line: var(--border-subtle);
+  --ui-mdpc-line-strong: var(--border-default);
+  --ui-mdpc-fill: var(--bg-selected);
+  --ui-mdpc-wash: var(--bg-hover);
+  --ui-mdpc-bar: var(--border-strong);
+  --ui-mdpc-bar-off: var(--border-subtle);
+  --ui-mdpc-switch: var(--track);
+  --ui-mdpc-knob: var(--switch-thumb);
+  --ui-mdpc-accent: var(--control-on);
+  --ui-mdpc-focus: var(--focus-ring-color);
+  --ui-mdpc-shadow-tile: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --ui-mdpc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+}
+[data-installed-theme] .ui-prc {
+  --ui-prc-card: var(--shell-card);
+  --ui-prc-strong: var(--text-primary);
+  --ui-prc-ink: var(--text-primary);
+  --ui-prc-text: var(--text-secondary);
+  --ui-prc-muted: var(--text-tertiary);
+  --ui-prc-faint: var(--text-disabled);
+  --ui-prc-icon: var(--icon-default);
+  --ui-prc-line: var(--border-subtle);
+  --ui-prc-wash: var(--bg-hover);
+  --ui-prc-fill: var(--bg-selected);
+  --ui-prc-accent: var(--control-on);
+  --ui-prc-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-prc-ok-fg: var(--success);
+  --ui-prc-warn-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --ui-prc-warn-fg: var(--warning);
+  --ui-prc-danger-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-prc-danger-fg: var(--danger);
+  --ui-prc-primary: var(--primary-from);
+  --ui-prc-on-primary: var(--primary-foreground);
+  --ui-prc-focus: var(--focus-ring-color);
+  --ui-prc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-pmc {
+  --ui-pmc-card: var(--shell-card);
+  --ui-pmc-strong: var(--text-primary);
+  --ui-pmc-ink: var(--text-primary);
+  --ui-pmc-text: var(--text-secondary);
+  --ui-pmc-muted: var(--text-tertiary);
+  --ui-pmc-faint: var(--text-disabled);
+  --ui-pmc-icon: var(--icon-default);
+  --ui-pmc-line: var(--border-subtle);
+  --ui-pmc-wash: var(--bg-hover);
+  --ui-pmc-hover: var(--bg-selected);
+  --ui-pmc-track: var(--bg-selected);
+  --ui-pmc-accent: var(--control-on);
+  --ui-pmc-focus: var(--focus-ring-color);
+  --ui-pmc-badge: var(--danger);
+  --ui-pmc-badge-wash: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-pmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-segc {
+  --ui-segc-ink: var(--text-primary);
+  --ui-segc-text: var(--text-secondary);
+  --ui-segc-hover-text: var(--text-primary);
+  --ui-segc-line: var(--border-subtle);
+  --ui-segc-wash: var(--bg-hover);
+  --ui-segc-fill: var(--bg-selected);
+  --ui-segc-track: var(--bg-hover);
+  --ui-segc-card: var(--bg-raised);
+  --ui-segc-card-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-segc-accent: var(--control-on);
+  --ui-segc-accent-soft: var(--control-on-tint);
+  --ui-segc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-sgc {
+  --ui-sgc-card: var(--shell-card);
+  --ui-sgc-strong: var(--text-primary);
+  --ui-sgc-ink: var(--text-primary);
+  --ui-sgc-text: var(--text-secondary);
+  --ui-sgc-muted: var(--text-tertiary);
+  --ui-sgc-faint: var(--text-disabled);
+  --ui-sgc-icon: var(--icon-default);
+  --ui-sgc-line: var(--border-subtle);
+  --ui-sgc-fill: var(--bg-selected);
+  --ui-sgc-ring: var(--border-strong);
+  --ui-sgc-wash: var(--bg-hover);
+  --ui-sgc-open: var(--bg-hover);
+  --ui-sgc-accent: var(--control-on);
+  --ui-sgc-on-accent: var(--on-fill);
+  --ui-sgc-focus: var(--focus-ring-color);
+  --ui-sgc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-thinkc {
+  --ui-tkc-card: var(--shell-card);
+  --ui-tkc-ink: var(--text-primary);
+  --ui-tkc-strong: var(--text-primary);
+  --ui-tkc-text: var(--text-secondary);
+  --ui-tkc-muted: var(--text-tertiary);
+  --ui-tkc-faint: var(--text-disabled);
+  --ui-tkc-icon: var(--icon-default);
+  --ui-tkc-line: var(--border-subtle);
+  --ui-tkc-rail: var(--border-subtle);
+  --ui-tkc-fill: var(--bg-selected);
+  --ui-tkc-wash: var(--bg-hover);
+  --ui-tkc-accent: var(--control-on);
+  --ui-tkc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-tkc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-tkc-ring: 0 0 0 0.5px var(--border-default);
+  --ui-tkc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-tcc,
+[data-installed-theme] .ui-tcc-group {
+  --ui-tcc-card: var(--shell-card);
+  --ui-tcc-strong: var(--text-primary);
+  --ui-tcc-ink: var(--text-primary);
+  --ui-tcc-text: var(--text-secondary);
+  --ui-tcc-muted: var(--text-tertiary);
+  --ui-tcc-faint: var(--text-disabled);
+  --ui-tcc-icon: var(--icon-default);
+  --ui-tcc-line: var(--border-subtle);
+  --ui-tcc-wash: var(--bg-hover);
+  --ui-tcc-wash-big: color-mix(in srgb, var(--bg-hover) 40%, transparent);
+  --ui-tcc-code: var(--bg-code-block);
+  --ui-tcc-accent: var(--control-on);
+  --ui-tcc-red: var(--danger);
+  --ui-tcc-red-bg: color-mix(in srgb, var(--danger) 5%, transparent);
+  --ui-tcc-red-line: color-mix(in srgb, var(--danger) 16%, transparent);
+  --ui-tcc-key: var(--text-primary);
+  --ui-tcc-str: var(--syntax-string);
+  --ui-tcc-num: var(--syntax-number);
+  --ui-tcc-lit: var(--syntax-keyword);
+  --ui-tcc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-tcc-focus: var(--focus-ring-color);
+}
+/* What the components draw in fixed colors outside their variables. */
+[data-installed-theme] .ui-as-menu__item[data-danger],
+[data-installed-theme] .ui-as-menu__item[data-danger] > svg {
+  color: var(--danger);
+}
+[data-installed-theme] .ui-sg-danger:not(.ui-sg-danger--solid) {
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--danger);
+}
+[data-installed-theme] .ui-sg-danger:not(.ui-sg-danger--solid):hover {
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+[data-installed-theme] .ui-sg-danger.ui-sg-danger--solid {
+  background: var(--shell-danger);
+  color: var(--destructive-foreground);
+}
+[data-installed-theme] .ui-sg-danger.ui-sg-danger--solid:not(:disabled):hover {
+  background: var(--shell-danger-hover);
+}
+[data-installed-theme] .ui-ss-badge[data-tone='ok'] {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+}
+[data-installed-theme] .ui-segc__icon {
+  color: var(--icon-default);
+}
+[data-installed-theme] .ui-pmc__item:active {
+  background: var(--bg-selected);
+}
+[data-installed-theme] :is(.ui-cwc__action, .ui-ansc__stop):hover {
+  background: var(--shell-subtle);
+}
+[data-installed-theme] .ui-prc__scope[aria-checked='false']:hover {
+  background: var(--bg-selected);
+}
+[data-installed-theme] .ui-prc[data-risk='destructive'] .ui-prc__btn--primary {
+  background: var(--danger);
+  color: var(--destructive-foreground);
+}
+[data-installed-theme] .ui-prc__btn--primary .ui-prc__kbd {
+  background: color-mix(in srgb, var(--ui-prc-on-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--ui-prc-on-primary) 72%, transparent);
+}
+[data-installed-theme] .ui-prc[data-risk='destructive'] .ui-prc__btn--primary .ui-prc__kbd {
+  background: color-mix(in srgb, var(--destructive-foreground) 18%, transparent);
+  color: color-mix(in srgb, var(--destructive-foreground) 75%, transparent);
+}
+[data-installed-theme] .ui-tcc__ok path {
+  stroke: var(--ui-tcc-card);
+}
+[data-installed-theme] .ui-stc__step-icon[data-status='done'] path {
+  stroke: var(--ui-stc-card);
+}

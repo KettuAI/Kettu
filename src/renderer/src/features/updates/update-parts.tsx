@@ -34,7 +34,7 @@ export function HarnessTile({ agentId, size }: { agentId: AgentId; size: number 
     <span
       aria-hidden
       style={tileStyle(size)}
-      className="grid shrink-0 place-items-center bg-tile shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]"
+      className="grid shrink-0 place-items-center bg-(--shell-logo-bg) shadow-[inset_0_0_0_0.5px_var(--shell-line-strong)]"
     >
       <AgentMark agent={agentId} size={Math.round(size * 0.62)} />
     </span>

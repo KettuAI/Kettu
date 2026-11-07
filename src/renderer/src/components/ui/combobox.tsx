@@ -3,8 +3,10 @@
 import * as React from 'react'
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox'
 import { cn } from 'cn'
-import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react'
+import { ArrowDown01Icon, Cancel01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useOverlayRoot } from '@renderer/stores/overlays'
+import { GlideHighlight } from '@renderer/components/glide-highlight'
 
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -45,8 +47,10 @@ function ComboboxTrigger({ className, children, ...props }: ComboboxPrimitive.Tr
       {...props}
     >
       {children}
-      <ChevronDownIcon
-        strokeWidth={1.6}
+      <HugeiconsIcon
+        icon={ArrowDown01Icon}
+        strokeWidth={1.9}
+        aria-hidden
         data-icon="inline-end"
         className="pointer-events-none size-3 text-icon"
       />
@@ -62,7 +66,12 @@ function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
       className={cn(className)}
       {...props}
     >
-      <XIcon className="pointer-events-none" />
+      <HugeiconsIcon
+        icon={Cancel01Icon}
+        strokeWidth={1.9}
+        aria-hidden
+        className="pointer-events-none"
+      />
     </ComboboxPrimitive.Clear>
   )
 }
@@ -140,12 +149,29 @@ function ComboboxContent({
   )
 }
 
-function ComboboxList({ className, ...props }: ComboboxPrimitive.List.Props) {
+function ComboboxList({
+  className,
+  render,
+  highlight,
+  ...props
+}: ComboboxPrimitive.List.Props & {
+  /** Classes for the highlight that glides between the rows. */
+  highlight?: string
+}) {
   return (
     <ComboboxPrimitive.List
       data-slot="combobox-list"
+      render={
+        render ??
+        ((listProps) => (
+          <div {...listProps}>
+            <GlideHighlight className={highlight} />
+            {listProps.children}
+          </div>
+        ))
+      }
       className={cn(
-        'max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1.25 overflow-y-auto overscroll-contain p-1.25 data-empty:p-0',
+        'relative max-h-[min(calc(--spacing(72)---spacing(9)),calc(var(--available-height)---spacing(9)))] scroll-py-1.25 overflow-y-auto overscroll-contain p-1.25 data-empty:p-0',
         className,
       )}
       {...props}
@@ -158,7 +184,7 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
     <ComboboxPrimitive.Item
       data-slot="combobox-item"
       className={cn(
-        "relative flex min-h-7.5 w-full cursor-default items-center gap-2.5 rounded-md py-1 pr-8 pl-2 text-menu outline-hidden select-none data-highlighted:bg-selected data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.75",
+        "relative flex min-h-8 w-full cursor-default items-center gap-2.5 rounded-lg py-1 pr-8 pl-2 text-menu outline-hidden select-none data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.75",
         className,
       )}
       {...props}
@@ -169,7 +195,12 @@ function ComboboxItem({ className, children, ...props }: ComboboxPrimitive.Item.
           <span className="pointer-events-none absolute top-0 right-2 flex h-7.5 items-center justify-center [&_svg]:size-3" />
         }
       >
-        <CheckIcon strokeWidth={1.6} className="pointer-events-none" />
+        <HugeiconsIcon
+          icon={Tick02Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="pointer-events-none"
+        />
       </ComboboxPrimitive.ItemIndicator>
     </ComboboxPrimitive.Item>
   )
@@ -259,7 +290,12 @@ function ComboboxChip({
           className="-ml-1 opacity-50 hover:opacity-100"
           data-slot="combobox-chip-remove"
         >
-          <XIcon className="pointer-events-none" />
+          <HugeiconsIcon
+            icon={Cancel01Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="pointer-events-none"
+          />
         </ComboboxPrimitive.ChipRemove>
       )}
     </ComboboxPrimitive.Chip>

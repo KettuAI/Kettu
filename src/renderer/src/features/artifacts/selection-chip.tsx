@@ -1,4 +1,5 @@
-import { MousePointer2Icon, XIcon } from 'lucide-react'
+import { Cancel01Icon, Cursor01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { PaneSelection } from '@renderer/stores/artifacts'
 import { anchorLabel } from './anchors'
@@ -19,7 +20,12 @@ export function SelectionChip({
   return (
     <div className="flex w-full min-w-0 animate-in pb-0.5 fade-in animation-duration-(--duration-fast)">
       <span className="flex h-6.5 min-w-0 items-center gap-1.5 rounded-lg bg-subtle pr-0.5 pl-2 text-small text-secondary">
-        <MousePointer2Icon className="size-3.25 shrink-0 text-tertiary" />
+        <HugeiconsIcon
+          aria-hidden
+          icon={Cursor01Icon}
+          strokeWidth={1.9}
+          className="size-3.25 shrink-0 text-tertiary"
+        />
         <span className="min-w-0 truncate">{label}</span>
         <button
           type="button"
@@ -27,7 +33,7 @@ export function SelectionChip({
           onClick={onRemove}
           className="flex size-5.5 shrink-0 items-center justify-center rounded-md text-tertiary outline-none transition-colors duration-(--duration-fast) hover:bg-hover hover:text-secondary focus-ring"
         >
-          <XIcon className="size-3.5" />
+          <HugeiconsIcon aria-hidden icon={Cancel01Icon} strokeWidth={1.9} className="size-3.5" />
         </button>
       </span>
     </div>

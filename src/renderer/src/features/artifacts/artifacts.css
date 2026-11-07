@@ -1,0 +1,548 @@
+/* Artifacts on affectUI's Files screen: the page, its cards and each kind's sketch. */
+
+.k-arts-scroll {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  container: k-arts / inline-size;
+}
+.k-arts-drag {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 40px;
+}
+.k-arts-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  padding-left: var(--corner-inset, 12px);
+}
+.k-arts {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+.k-arts .ui-as-section-head .ui-as-toolbar__right {
+  flex-wrap: wrap;
+}
+/* The frame's own wrap starts at a 900px window; beside the sidebar the page is narrower sooner,
+   so the tools move under the kinds before a kind's label breaks. */
+.k-arts .ui-as-section-head .ui-as-toolbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.k-arts .ui-as-tabs__tab {
+  white-space: nowrap;
+}
+.k-arts__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px 14px;
+  margin-top: 16px;
+}
+.k-art {
+  position: relative;
+  min-width: 0;
+}
+.k-art .ui-as-template {
+  width: 100%;
+  outline: none;
+}
+.k-art .ui-as-template__preview {
+  position: relative;
+  height: auto;
+  aspect-ratio: 16 / 10;
+}
+.k-art .ui-as-template:focus-visible .ui-as-template__preview,
+.k-art[data-held] .ui-as-template__preview {
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    0 0 0 2px var(--accent-soft);
+}
+.k-art[data-held] .ui-as-template__preview {
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.k-art[data-gone] .k-th {
+  opacity: 0.72;
+  filter: grayscale(0.85);
+}
+.k-art__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.k-art__meta > span:not(.k-art__shared) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-art__shared {
+  display: flex;
+  flex: none;
+  color: var(--faint);
+}
+.k-art__more {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.k-art:is(:hover, :focus-within) .k-art__more,
+.k-art__more:has([aria-expanded='true']) {
+  opacity: 1;
+}
+.k-art__more-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  color: var(--muted);
+}
+.k-art__more-btn:hover {
+  color: var(--ink);
+}
+.k-art__more .ui-as-menu {
+  width: 232px;
+}
+.k-art__editing {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-art__editing i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone-editing);
+  box-shadow: 0 0 0 2px var(--tone-editing-halo);
+}
+.k-arts__none {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+.k-arts__none .ui-as-empty {
+  width: 100%;
+}
+.k-arts__bin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 28px;
+  padding: 6px 8px;
+  margin-left: -8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.k-arts__bin:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-arts__bin .k-num {
+  color: var(--faint);
+}
+.k-num {
+  font-variant-numeric: tabular-nums;
+}
+.k-arts__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: -18px 0 10px -6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.k-arts__back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-arts__group {
+  margin-top: 28px;
+}
+.k-arts__project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-arts__project small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.k-arts__project .ui-as-tray-link__folder {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.k-arts__session {
+  margin-top: 12px;
+}
+.k-arts__session-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 8px 0 6px;
+  margin-left: -6px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-arts__session-row > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-arts__session-row small {
+  flex: none;
+  font-size: 12px;
+  color: var(--faint);
+}
+button.k-arts__session-row:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-arts__session .k-arts__grid {
+  margin-top: 8px;
+}
+.k-arts__menu .ui-as-menu {
+  width: 232px;
+}
+.k-arts__menu .ui-as-tray-link__folder {
+  width: 15px;
+  height: 15px;
+}
+/* Import sits at the page's right end, so its projects open on the left of the menu. */
+.k-arts__menu .ui-as-menu__subpanel {
+  right: calc(100% + 4px);
+  left: auto;
+}
+.k-arts__menu .ui-as-menu__subpanel::before {
+  right: -8px;
+  left: auto;
+}
+.k-arts__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 28px;
+  padding: 40px 24px 36px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  text-align: center;
+}
+.k-arts__empty b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-arts__empty p {
+  max-width: 440px;
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
+  text-wrap: balance;
+}
+.k-arts__asks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+.k-arts__ask {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+.k-arts__ask .ui-as-template__preview {
+  height: auto;
+  aspect-ratio: 16 / 10;
+  margin-bottom: 6px;
+}
+.k-arts__ask:hover .ui-as-template__preview {
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.k-arts__ask b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-arts__ask b svg {
+  color: var(--muted);
+}
+.k-arts__ask small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.k-arts .k-alert {
+  margin-top: 16px;
+}
+.k-bone {
+  display: block;
+  height: 10px;
+  border-radius: 4px;
+  background: var(--chip);
+}
+
+/* Thumbnails: a white sheet on the card's gray stage, drawn with the kind's own shapes */
+.k-th {
+  --t: var(--sketch-accent);
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.k-th--image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+/* A canvas's pages lie on a light desk in either theme, as their content is light. */
+.k-th--image[data-canvas] {
+  background: color-mix(in oklab, var(--canvas-ink) 5%, var(--canvas));
+}
+.k-th--image > i {
+  position: absolute;
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.k-th--loading {
+  background: var(--chip);
+  box-shadow: none;
+}
+.k-th b {
+  display: block;
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--strong);
+}
+.k-th__line {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+.k-th--doc {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+  background: var(--frame);
+  box-shadow: none;
+}
+.k-th__page {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 64%;
+  height: 120%;
+  padding: 12px 12px 0;
+  border-radius: 4px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.k-th__page b {
+  margin-bottom: 4px;
+  font-size: 9px;
+}
+.k-th__page b::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 3px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+  background: var(--t);
+}
+.k-th__gap {
+  display: block;
+  height: 3px;
+}
+.k-th--slide {
+  display: grid;
+  place-items: center;
+  background: var(--frame);
+  box-shadow: none;
+}
+.k-th__slide {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 82%;
+  aspect-ratio: 16 / 9;
+  padding: 10px 12px;
+  border-radius: 5px;
+  background: var(--t);
+  box-shadow: var(--card-shadow);
+  color: var(--sketch-on-accent);
+}
+.k-th__slide b {
+  color: var(--sketch-on-accent);
+  font-size: 10px;
+}
+.k-th__kicker {
+  width: 22px;
+  height: 3px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+  background: var(--sketch-on-accent-soft);
+}
+.k-th__bars {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 5px;
+  margin-top: 6px;
+}
+.k-th__bars i {
+  width: 12%;
+  border-radius: 2px 2px 0 0;
+  background: var(--sketch-on-accent-bar);
+}
+.k-th__bars i:last-child {
+  background: var(--sketch-on-accent);
+}
+.k-th__nav {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  box-shadow: inset 0 -0.5px 0 var(--line);
+}
+.k-th__nav i {
+  width: 16px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+.k-th__nav i:first-child {
+  width: 10px;
+  background: var(--t);
+}
+.k-th__hero {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  padding: 10px 10px 8px;
+}
+.k-th__hero b {
+  max-width: 100%;
+  font-size: 11px;
+}
+.k-th__btn {
+  width: 30px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--t);
+}
+.k-th__cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  padding: 0 10px;
+}
+.k-th__cards i {
+  height: 26px;
+  border-radius: 4px;
+  background: var(--chip);
+}
+.k-th--canvas {
+  background-color: var(--frame);
+  background-image: radial-gradient(var(--line-strong) 0.8px, transparent 0.8px);
+  background-size: 9px 9px;
+  box-shadow: none;
+}
+.k-th__frame {
+  position: absolute;
+  width: 24%;
+  height: 58%;
+  border-radius: 4px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.k-th__frame::before {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 12%;
+  height: 22%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--t) 22%, transparent);
+}
+.k-th__frame::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  width: 55%;
+  bottom: 14%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+.k-th__wire {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.k-th__wire path {
+  fill: none;
+  stroke: var(--t);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+@container k-arts (max-width: 900px) {
+  .k-arts__asks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Room for a format's whole name in the Export submenu. */
+.k-art__more .ui-as-menu__subpanel {
+  min-width: 220px;
+}

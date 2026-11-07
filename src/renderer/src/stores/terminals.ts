@@ -102,6 +102,7 @@ function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
   // A host before terminals had sessions sends none: its terminals go to New session.
   info = { ...info, sessionId: info.sessionId ?? null }
   const panel = terminalPanel(info)
+  const known = info.id in useTerminalsStore.getState().byId
   useTerminalsStore.setState((s) => {
     const previous = s.byId[info.id]
     return {
@@ -119,6 +120,7 @@ function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
       active: s.active[panel] ? s.active : { ...s.active, [panel]: info.id },
     }
   })
+  if (!known && showOnArrival.delete(panel)) showTerminal(panel, info.id)
   const signIn = signIns.get(info.id)
   if (signIn) {
     if (info.busy) signIn.sawBusy = true
@@ -128,6 +130,12 @@ function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
     }
   }
 }
+
+/**
+ * Panels whose New terminal is waiting on the host. The host announces the terminal before it
+ * answers, so it is shown as it arrives rather than a moment after its tab.
+ */
+const showOnArrival = new Set<string>()
 
 /** A create still waiting on the host. Closing then would hide the tab it is about to show. */
 const createsInFlight = new Map<string, number>()
@@ -345,7 +353,9 @@ export async function createTerminal(
   size: Size = SIZE,
   options?: CreateTerminalOptions,
 ): Promise<TerminalInfo | null> {
+  showOnArrival.add(panel)
   const info = await startTerminal(projectPath, panel, size, options)
+  showOnArrival.delete(panel)
   if (info) showTerminal(panel, info.id)
   return info
 }

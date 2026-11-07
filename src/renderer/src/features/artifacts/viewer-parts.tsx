@@ -1,32 +1,24 @@
+import type { ReactNode } from 'react'
+import type { IconSvgElement } from '@hugeicons/react'
 import {
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  MessageSquareIcon,
-  Minimize2Icon,
-  MinusIcon,
-  MousePointer2Icon,
-  PlusIcon,
-  RotateCcwIcon,
-  ScanIcon,
-} from 'lucide-react'
+  ArrowDown01Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  ArrowShrink01Icon,
+  Comment01Icon,
+  Cursor01Icon,
+  MinusSignIcon,
+  PlusSignIcon,
+  RotateLeft01Icon,
+} from '@hugeicons/core-free-icons'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
 import type { ArtifactSession } from '@shared/artifacts'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Button } from '@renderer/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from '@renderer/components/ui/dropdown-menu'
+import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -43,12 +35,20 @@ import { useEditorState, type ArtifactEditor } from './editor'
 import { daysLeft, presenceShown } from './model'
 import { PageFrame } from './page-frame'
 import { pageUrl, type Presence as PresenceState, type ShownVersion } from './use-artifact'
+import './viewer.css'
 
 type Size = 'compact' | 'pane'
 
+const BUTTON = {
+  compact: 'ui-as-icon-btn k-av-btn',
+  group: 'ui-as-icon-btn k-av-btn k-av-btn--group',
+  pane: 'kp-tool kp-tool--sm',
+} as const
+const GLYPH = { compact: 16, group: 15, pane: 14 } as const
+
 /**
- * A quiet icon button with its label, and its key, in a tooltip: `compact` in the top bar, `group`
- * inside one of its control groups, `pane` in a pane's header.
+ * An icon button with its label, and its key, in a tooltip: `compact` in the top bar, `group`
+ * inside one of its control groups or the tools at the foot, `pane` in a pane's head.
  */
 export function BarButton({
   label,
@@ -56,6 +56,7 @@ export function BarButton({
   size = 'compact',
   pressed,
   disabled,
+  icon,
   onClick,
   children,
 }: {
@@ -64,30 +65,26 @@ export function BarButton({
   size?: Size | 'group'
   pressed?: boolean
   disabled?: boolean
+  icon: IconSvgElement
   onClick: () => void
-  children: React.ReactNode
+  /** What sits over the glyph, such as a dot. */
+  children?: ReactNode
 }) {
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
-            variant="quiet"
-            size={size === 'pane' ? 'icon-xs' : 'icon-sm'}
+          <button
+            type="button"
             aria-label={label}
             aria-pressed={pressed}
             disabled={disabled}
             onClick={onClick}
-            className={cn(
-              size === 'compact'
-                ? 'size-7.5 rounded-tile text-secondary'
-                : size === 'group'
-                  ? 'text-secondary'
-                  : 'text-foreground',
-            )}
+            className={BUTTON[size]}
           />
         }
       >
+        <Icon icon={icon} size={GLYPH[size]} />
         {children}
       </TooltipTrigger>
       <TooltipContent>
@@ -99,20 +96,11 @@ export function BarButton({
 }
 
 /** A hairline between the bar's groups of controls. */
-function Rule({ size }: { size: Size }) {
-  return (
-    <span
-      aria-hidden
-      // The top bar spaces its controls 8 px apart, the pane's header 2 px.
-      className={cn(
-        'w-(--hairline) shrink-0 bg-border',
-        size === 'pane' ? 'mx-1.5 h-4' : 'mx-0.5 h-4.5',
-      )}
-    />
-  )
+export function Rule({ size = 'compact' }: { size?: Size }) {
+  return <span aria-hidden className="k-av-rule" data-size={size} />
 }
 
-/** Controls that go together in the bar, inside one hairline. */
+/** Controls that go together in a bar, inside one hairline. */
 function ControlGroup({
   label,
   size,
@@ -120,25 +108,18 @@ function ControlGroup({
 }: {
   label: string
   size: Size
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
-    <span
-      role="group"
-      aria-label={label}
-      className={cn(
-        'flex shrink-0 items-center rounded-lg shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-        size === 'pane' ? 'h-6' : 'h-7',
-      )}
-    >
+    <span role="group" aria-label={label} className="k-av-group" data-size={size}>
       {children}
     </span>
   )
 }
 
 /**
- * The viewer's title: the artifact's, or on a focused page the page's name and then the
- * artifact's. The version shown has its own chip after it.
+ * The viewer's title in the bar's crumbs: the artifact's, or on a focused page the artifact's,
+ * which leads back to the canvas, then the page's name.
  */
 export function ViewerTitle({
   title,
@@ -150,18 +131,37 @@ export function ViewerTitle({
   /** A canvas's page names; null for a single page. */
   pageName: ((index: number) => string) | null
 }) {
+  const { t } = useTranslation('artifacts')
   const { focused } = useCanvasState(controls)
   const page = focused !== null && pageName ? pageName(focused) : null
   if (page !== null) {
     return (
-      <h1 className="mx-1 flex min-w-0 items-baseline gap-2">
-        <span className="max-w-60 shrink-0 truncate text-subheading font-semibold">{page}</span>
-        <span className="min-w-0 truncate text-small text-secondary">{title}</span>
-      </h1>
+      <>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="k-av__crumb"
+                onClick={() => controls.commands?.focus(null)}
+              />
+            }
+          >
+            {title}
+          </TooltipTrigger>
+          <TooltipContent>{t('canvas.backToCanvas')}</TooltipContent>
+        </Tooltip>
+        <i aria-hidden>/</i>
+        <h1 className="k-av__title" title={page}>
+          {page}
+        </h1>
+      </>
     )
   }
   return title ? (
-    <h1 className="mx-1 min-w-0 truncate text-subheading font-semibold">{title}</h1>
+    <h1 className="k-av__title" title={title}>
+      {title}
+    </h1>
   ) : null
 }
 
@@ -185,11 +185,11 @@ export function VersionChip({
       aria-expanded={open}
       aria-label={t('viewer.versionChip', { version })}
       onClick={onClick}
-      className="flex h-6.5 shrink-0 items-center gap-1.25 rounded-tile bg-subtle px-2 text-hint whitespace-nowrap text-secondary outline-none transition-colors duration-(--duration-fast) hover:bg-selected focus-ring"
+      className="k-av-chip"
     >
-      {t('viewer.version', { version })}
-      {at !== null && <span className="text-tertiary">· {longAgo(at, now)}</span>}
-      <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
+      <span className="k-av-chip__num">{t('viewer.version', { version })}</span>
+      {at !== null && <span className="k-av-chip__dim">{longAgo(at, now)}</span>}
+      <Icon icon={ArrowDown01Icon} size={12} />
     </button>
   )
 }
@@ -218,29 +218,25 @@ export function EditToolbar({
     <div
       role="toolbar"
       aria-label={t('tools.label')}
-      className={cn(
-        'absolute bottom-5 z-10 flex h-10 items-center gap-0.5 rounded-2xl bg-surface px-1 shadow-menu',
-        aside ? 'left-5' : 'left-1/2 -translate-x-1/2',
-      )}
+      className="k-av-dock"
+      data-aside={aside || undefined}
     >
       {editor && (
         <>
-          <ToolButton
+          <ModeButton
             label={t('tools.select')}
             shortcut="V"
+            icon={Cursor01Icon}
             pressed={mode === 'select'}
             onClick={() => editor.toggle('select')}
-          >
-            <MousePointer2Icon />
-          </ToolButton>
-          <ToolButton
+          />
+          <ModeButton
             label={t('tools.comment')}
             shortcut="C"
+            icon={Comment01Icon}
             pressed={mode === 'comment'}
             onClick={() => editor.toggle('comment')}
-          >
-            <MessageSquareIcon />
-          </ToolButton>
+          />
         </>
       )}
       {controls && <ZoomTools controls={controls} divided={!!editor} />}
@@ -250,34 +246,32 @@ export function EditToolbar({
 
 const IDLE_CONTROLS = new CanvasControls()
 
-function ToolButton({
+/** A mode the pages are in, on until it is pressed again or Esc goes back to the base one. */
+export function ModeButton({
   label,
   shortcut,
+  icon,
   pressed,
   onClick,
-  children,
 }: {
   label: string
   shortcut: string
+  icon: IconSvgElement
   pressed: boolean
   onClick: () => void
-  children: React.ReactNode
 }) {
   return (
-    <Button
-      variant="quiet"
-      size="sm"
+    <button
+      type="button"
       aria-pressed={pressed}
       aria-keyshortcuts={shortcut}
       onClick={onClick}
-      className="h-8 gap-1.5 rounded-xl px-2.5 text-control font-normal text-secondary aria-pressed:bg-selected aria-pressed:text-foreground"
+      className="k-av-dock__mode"
     >
-      {children}
+      <Icon icon={icon} size={15} />
       {label}
-      <span aria-hidden className="text-hint text-tertiary">
-        {shortcut}
-      </span>
-    </Button>
+      <kbd aria-hidden>{shortcut}</kbd>
+    </button>
   )
 }
 
@@ -287,85 +281,68 @@ function ZoomTools({ controls, divided }: { controls: CanvasControls; divided: b
   const state = useCanvasState(controls)
   const commands = controls.commands
   if (state.focused !== null) return null
+  const percent = Math.round(state.zoom * 100)
   return (
     <>
-      {divided && <span aria-hidden className="mx-1 h-4.5 w-(--hairline) bg-border" />}
+      {divided && <Rule />}
       <BarButton
         label={t('canvas.zoomOut')}
         shortcut="−"
         size="group"
+        icon={MinusSignIcon}
         disabled={atMinZoom(state.zoom)}
         onClick={() => commands?.zoomStep(-1)}
-      >
-        <MinusIcon className="size-3.75" />
-      </BarButton>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="quiet"
-              size="sm"
-              aria-label={t('canvas.zoomMenu', { percent: Math.round(state.zoom * 100) })}
-              className="h-8 min-w-16 gap-1 rounded-xl px-2 text-control font-normal text-secondary tabular-nums"
-            />
-          }
-        >
-          {t('canvas.zoom', { percent: Math.round(state.zoom * 100) })}
-          <ChevronDownIcon strokeWidth={1.75} className="size-3 text-tertiary" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent side="top" align="center" sideOffset={10} className="min-w-50">
-          <DropdownMenuGroup>
-            <DropdownMenuItem onClick={() => commands?.fitAll()}>
-              {t('canvas.fitAll')}
-              <DropdownMenuShortcut>⇧1</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => commands?.fitSelected()}>
-              {t('canvas.fitSelection')}
-              <DropdownMenuShortcut>⇧2</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => commands?.actualSize()}>
-              {t('canvas.actualSize')}
-              <DropdownMenuShortcut>⇧0</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              disabled={atMaxZoom(state.zoom)}
-              onClick={() => commands?.zoomStep(1)}
-            >
-              {t('canvas.zoomIn')}
-              <DropdownMenuShortcut>+</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={atMinZoom(state.zoom)}
-              onClick={() => commands?.zoomStep(-1)}
-            >
-              {t('canvas.zoomOut')}
-              <DropdownMenuShortcut>−</DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      />
+      <Dropdown
+        side="top"
+        className="k-av-zoom"
+        items={[
+          { label: t('canvas.fitAll'), shortcut: '⇧1', onSelect: () => commands?.fitAll() },
+          {
+            label: t('canvas.fitSelection'),
+            shortcut: '⇧2',
+            onSelect: () => commands?.fitSelected(),
+          },
+          { label: t('canvas.actualSize'), shortcut: '⇧0', onSelect: () => commands?.actualSize() },
+          {
+            label: t('canvas.zoomIn'),
+            shortcut: '+',
+            divider: true,
+            disabled: atMaxZoom(state.zoom),
+            onSelect: () => commands?.zoomStep(1),
+          },
+          {
+            label: t('canvas.zoomOut'),
+            shortcut: '−',
+            disabled: atMinZoom(state.zoom),
+            onSelect: () => commands?.zoomStep(-1),
+          },
+        ]}
+        trigger={({ open, toggle }) => (
+          <button
+            type="button"
+            aria-label={t('canvas.zoomMenu', { percent })}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={toggle}
+            className="k-av-dock__zoom"
+          >
+            {t('canvas.zoom', { percent })}
+            <Icon icon={ArrowDown01Icon} size={12} />
+          </button>
+        )}
+      />
       <BarButton
         label={t('canvas.zoomIn')}
         shortcut="+"
         size="group"
+        icon={PlusSignIcon}
         disabled={atMaxZoom(state.zoom)}
         onClick={() => commands?.zoomStep(1)}
-      >
-        <PlusIcon className="size-3.75" />
-      </BarButton>
+      />
     </>
   )
 }
-
-/** The avatars' stacking, the first of them over the one after it. */
-const STACK = ['z-3', 'z-2', 'z-1'] as const
-
-/** A 24 px round avatar on the tile, with its hairline ring and the sheet's 2 px ring around it. */
-const AVATAR =
-  'grid size-6 shrink-0 place-items-center rounded-full bg-tile text-icon shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle),0_0_0_2px_var(--bg-app)] outline-none transition-shadow duration-(--duration-fast) hover:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong),0_0_0_2px_var(--bg-app)] focus-visible:shadow-[inset_0_0_0_var(--hairline)_var(--border-strong),0_0_0_2px_var(--bg-app)] focus-ring'
 
 /**
  * Who is at the artifact: every session using it now, the editing ones first, as avatars that
@@ -410,24 +387,23 @@ export function Presence({
     t(session.editing ? 'viewer.editingLabel' : 'viewer.readingLabel', {
       session: name(session.sessionId),
     })
+  const enter = reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }
 
   return (
     <>
       {all.length > 0 && (
-        <span role="group" aria-label={t('viewer.using')} className="flex shrink-0 items-center">
+        <span role="group" aria-label={t('viewer.using')} className="k-av-people">
           <AnimatePresence initial={false}>
             {shown.map((session, i) => (
               <motion.span
                 key={session.sessionId}
-                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                initial={enter}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={fadeExit}
                 transition={glide}
-                className={cn(
-                  'relative flex hover:z-10 has-focus-visible:z-10',
-                  i > 0 && '-ml-1.5',
-                  STACK[i] ?? 'z-0',
-                )}
+                className="k-av-people__one"
+                // The first avatar lies over the one after it.
+                style={{ '--stack': shown.length - i + 1 } as React.CSSProperties}
               >
                 <Tooltip>
                   <TooltipTrigger
@@ -436,7 +412,7 @@ export function Presence({
                         type="button"
                         aria-label={label(session)}
                         onClick={() => open(session.sessionId)}
-                        className={AVATAR}
+                        className="k-av-avatar"
                       />
                     }
                   >
@@ -449,63 +425,40 @@ export function Presence({
                     </span>
                   </TooltipContent>
                 </Tooltip>
-                {session.editing && (
-                  <Spinner
-                    aria-hidden
-                    className="pointer-events-none absolute -inset-1 z-10 m-auto size-8 text-info"
-                  />
-                )}
+                {session.editing && <Spinner aria-hidden className="k-av-avatar__spin" />}
               </motion.span>
             ))}
             {more > 0 && (
               <motion.span
                 key="more"
-                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
+                initial={enter}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={fadeExit}
                 transition={glide}
-                className={cn('relative -ml-1.5 flex z-0 hover:z-10 has-focus-visible:z-10')}
+                className="k-av-people__one"
               >
-                <DropdownMenu>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <DropdownMenuTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label={t('viewer.moreSessions', { count: more })}
-                              className={cn(
-                                AVATAR,
-                                'text-xs font-medium text-secondary tabular-nums hover:text-primary',
-                              )}
-                            />
-                          }
-                        />
-                      }
+                <Dropdown
+                  align="end"
+                  title={t('viewer.using')}
+                  items={all.map((session) => ({
+                    label: name(session.sessionId),
+                    description: state(session.editing),
+                    logo: <AgentMark agent={summaries[session.sessionId].agentId} size={14} />,
+                    onSelect: () => open(session.sessionId),
+                  }))}
+                  trigger={({ open: shownMenu, toggle }) => (
+                    <button
+                      type="button"
+                      aria-label={t('viewer.moreSessions', { count: more })}
+                      aria-haspopup="menu"
+                      aria-expanded={shownMenu}
+                      onClick={toggle}
+                      className="k-av-avatar k-av-avatar--more"
                     >
                       {`+${more}`}
-                    </TooltipTrigger>
-                    <TooltipContent>{t('viewer.moreSessions', { count: more })}</TooltipContent>
-                  </Tooltip>
-                  <DropdownMenuContent align="end" className="min-w-55">
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel>{t('viewer.using')}</DropdownMenuLabel>
-                      {all.map((session) => (
-                        <DropdownMenuItem
-                          key={session.sessionId}
-                          onClick={() => open(session.sessionId)}
-                        >
-                          <AgentMark agent={summaries[session.sessionId].agentId} size={14} />
-                          <span className="min-w-0 flex-1 truncate">{name(session.sessionId)}</span>
-                          <span className="shrink-0 text-muted-foreground">
-                            {state(session.editing)}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    </button>
+                  )}
+                />
               </motion.span>
             )}
           </AnimatePresence>
@@ -513,9 +466,7 @@ export function Presence({
       )}
       {places > 1 && (
         <Tooltip>
-          <TooltipTrigger
-            render={<span className="shrink-0 px-2 text-xs whitespace-nowrap text-tertiary" />}
-          >
+          <TooltipTrigger render={<span className="k-av-places" />}>
             {t('viewer.places', { count: places })}
           </TooltipTrigger>
           <TooltipContent>{t('viewer.placesTip', { count: places })}</TooltipContent>
@@ -527,104 +478,56 @@ export function Presence({
 }
 
 /**
- * The canvas's controls in a bar: the zoom and Zoom to fit, or a focused page's own. The top bar
- * names a focused page in its title; the pane's header, here.
+ * A focused page's controls in a bar: the pages before and after it, and the way back to the
+ * canvas. The top bar names the page in its crumbs; the pane's head, here.
  */
 export function CanvasBarControls({
   controls,
   pageName,
   size = 'compact',
-  zoom = true,
 }: {
   controls: CanvasControls
   pageName: (index: number) => string
   size?: Size
-  /** Whether the overview shows the zoom; the pane's header has no room for it. */
-  zoom?: boolean
 }) {
   const { t } = useTranslation('artifacts')
   const state = useCanvasState(controls)
   const commands = controls.commands
   const inner = size === 'pane' ? 'pane' : 'group'
-  if (state.focused === null && !zoom) return null
-  if (state.focused !== null) {
-    return (
-      <>
-        {size === 'pane' && (
-          <span className="max-w-60 truncate px-1.5 text-ui font-medium">
-            {pageName(state.focused)}
-          </span>
-        )}
-        <ControlGroup label={t('canvas.pages')} size={size}>
-          <BarButton
-            label={t('canvas.previous')}
-            shortcut="←"
-            size={inner}
-            disabled={state.focused === 0}
-            onClick={() => commands?.focus(state.focused! - 1)}
-          >
-            <ChevronLeftIcon />
-          </BarButton>
-          <span className="min-w-11.5 text-center text-xs text-secondary tabular-nums">
-            {t('canvas.counter', { number: state.focused + 1, count: state.count })}
-          </span>
-          <BarButton
-            label={t('canvas.next')}
-            shortcut="→"
-            size={inner}
-            disabled={state.focused === state.count - 1}
-            onClick={() => commands?.focus(state.focused! + 1)}
-          >
-            <ChevronRightIcon />
-          </BarButton>
-        </ControlGroup>
-        <BarButton
-          label={t('canvas.backToCanvas')}
-          shortcut="Esc"
-          size={inner}
-          onClick={() => commands?.focus(null)}
-        >
-          <Minimize2Icon />
-        </BarButton>
-        {size === 'compact' && <Rule size={size} />}
-      </>
-    )
-  }
+  if (state.focused === null) return null
+  const focused = state.focused
   return (
     <>
-      <ControlGroup label={t('canvas.zoomGroup')} size={size}>
+      {size === 'pane' && <span className="k-av-pagename">{pageName(focused)}</span>}
+      <ControlGroup label={t('canvas.pages')} size={size}>
         <BarButton
-          label={t('canvas.zoomOut')}
-          shortcut="−"
+          label={t('canvas.previous')}
+          shortcut="←"
           size={inner}
-          disabled={atMinZoom(state.zoom)}
-          onClick={() => commands?.zoomStep(-1)}
-        >
-          <MinusIcon />
-        </BarButton>
-        <span className="min-w-11.5 text-center text-xs text-secondary tabular-nums">
-          {t('canvas.zoom', { percent: Math.round(state.zoom * 100) })}
+          icon={ArrowLeft01Icon}
+          disabled={focused === 0}
+          onClick={() => commands?.focus(focused - 1)}
+        />
+        <span className="k-av-group__count">
+          {t('canvas.counter', { number: focused + 1, count: state.count })}
         </span>
         <BarButton
-          label={t('canvas.zoomIn')}
-          shortcut="+"
+          label={t('canvas.next')}
+          shortcut="→"
           size={inner}
-          disabled={atMaxZoom(state.zoom)}
-          onClick={() => commands?.zoomStep(1)}
-        >
-          <PlusIcon />
-        </BarButton>
+          icon={ArrowRight01Icon}
+          disabled={focused === state.count - 1}
+          onClick={() => commands?.focus(focused + 1)}
+        />
       </ControlGroup>
       <BarButton
-        label={t('canvas.zoomToFit')}
-        shortcut="⇧1"
-        size={inner}
-        pressed={state.fitted}
-        onClick={() => commands?.fitAll()}
-      >
-        <ScanIcon />
-      </BarButton>
-      {size === 'compact' && <Rule size={size} />}
+        label={t('canvas.backToCanvas')}
+        shortcut="Esc"
+        size={size}
+        icon={ArrowShrink01Icon}
+        onClick={() => commands?.focus(null)}
+      />
+      {size === 'compact' && <Rule />}
     </>
   )
 }
@@ -637,21 +540,22 @@ export function StatusBar({
   onAction,
 }: {
   lead: string
-  rest: React.ReactNode
+  rest: ReactNode
   action: string
   onAction: () => void
 }) {
   return (
-    <div
-      role="status"
-      className="absolute top-3.5 left-1/2 z-10 flex h-10 max-w-[calc(100%-24px)] -translate-x-1/2 animate-in items-center gap-3.5 rounded-xl bg-surface pr-1.5 pl-3.5 text-small whitespace-nowrap text-secondary shadow-menu fade-in slide-in-from-top-1 duration-(--duration-fast)"
-    >
-      <span className="min-w-0 truncate">
-        <span className="font-medium text-foreground">{lead}</span>
+    <div role="status" className="k-av-status">
+      <span className="k-av-status__text">
+        <b>{lead}</b>
         {rest}
       </span>
-      <Button variant="outline" size="sm" onClick={onAction}>
-        <RotateCcwIcon data-icon="inline-start" />
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={<Icon icon={RotateLeft01Icon} size={14} />}
+        onClick={onAction}
+      >
         {action}
       </Button>
     </div>
@@ -675,6 +579,36 @@ export function DaysLeft({ deletedAt }: { deletedAt: number }) {
   const { t } = useTranslation('artifacts')
   const now = useNow()
   return <>{t('viewer.daysLeft', { count: daysLeft(deletedAt, now) })}</>
+}
+
+/** The area's state when it shows no page: its mark, what happened and what can be done. */
+export function ViewerEmpty({
+  icon,
+  danger = false,
+  title,
+  text,
+  children,
+}: {
+  icon?: IconSvgElement
+  danger?: boolean
+  title: string
+  text: string
+  children?: ReactNode
+}) {
+  return (
+    <div className="k-av-empty">
+      <div className="ui-as-empty" data-bare="">
+        {icon && (
+          <span className={cn('ui-as-empty__icon', danger && 'k-av-empty__danger')}>
+            <Icon icon={icon} size={18} />
+          </span>
+        )}
+        <b className="ui-as-empty__title">{title}</b>
+        <p className="ui-as-empty__text">{text}</p>
+        {children && <div className="k-av-empty__acts">{children}</div>}
+      </div>
+    </div>
+  )
 }
 
 /** The version on screen: a canvas of its pages, or the single page at the area's size. */

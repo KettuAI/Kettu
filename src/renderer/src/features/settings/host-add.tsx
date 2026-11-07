@@ -9,7 +9,7 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
-import { CheckIcon, CircleAlertIcon } from 'lucide-react'
+import { Alert02Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
 import {
@@ -21,23 +21,19 @@ import {
   type SshStep,
 } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
-import { SegmentedControl } from '@renderer/components/segmented-control'
-import { Button } from '@renderer/components/ui/button'
-import { Dialog, DialogClose, DialogFooter } from '@renderer/components/ui/dialog'
-import { Field, FieldDescription, FieldError, FieldLabel } from '@renderer/components/ui/field'
-import { Input } from '@renderer/components/ui/input'
-import { Spinner } from '@renderer/components/ui/spinner'
-import { cn } from '@renderer/lib/utils'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { changeHost, platformName, routeName } from './host-text'
-import { ROW_BUTTON } from './controls'
+import { Segmented, SetButton, Spin } from './controls'
 import { DeviceTile, HostIcon } from './remote-parts'
 import {
-  DIALOG_BODY,
   DIALOG_FIELD,
-  DIALOG_FOOTER,
   DIALOG_MONO_FIELD,
+  SettingsDialogBody,
   SettingsDialogContent,
+  SettingsDialogFooter,
   SettingsDialogHeader,
+  SettingsField,
 } from './settings-dialog'
 
 /** Why Add host shows no host: what pairing said, or what kept it from starting. */
@@ -318,18 +314,17 @@ function AddHostFlow({
 function AddHostTabs({ tab, onTab }: { tab: AddHostTab; onTab: (tab: AddHostTab) => void }) {
   const { t } = useTranslation('settings')
   return (
-    <SegmentedControl
-      aria-label={t('hosts.add.tabs.label')}
-      value={tab}
-      onChange={onTab}
-      className="h-8 self-start rounded-segments"
-      itemClassName="h-7 rounded-segment px-3 text-control font-medium"
-      thumbClassName={() => 'rounded-segment'}
-      segments={[
-        { value: 'link', label: t('hosts.add.tabs.link') },
-        { value: 'ssh', label: t('hosts.add.tabs.ssh') },
-      ]}
-    />
+    <div className="kettu-sd__tabs">
+      <Segmented
+        label={t('hosts.add.tabs.label')}
+        value={tab}
+        onChange={onTab}
+        options={[
+          { value: 'link', label: t('hosts.add.tabs.link') },
+          { value: 'ssh', label: t('hosts.add.tabs.ssh') },
+        ]}
+      />
+    </div>
   )
 }
 
@@ -375,18 +370,18 @@ export function AddHostBody({
   return (
     <>
       <SettingsDialogHeader title={t('hosts.add.title')} />
-      <div className={DIALOG_BODY}>
+      <SettingsDialogBody>
         {tabs}
-        <p className="text-lede leading-normal text-pretty text-tertiary">
+        <p className="kettu-sd__text">
           <Trans
             t={t}
             i18nKey="hosts.add.hint"
             components={{
-              code: <code className="font-mono whitespace-nowrap text-code text-primary" />,
+              code: <code className="k-code" />,
             }}
           />
         </p>
-        <Input
+        <input
           ref={inputRef}
           value={pasting ? draft : link}
           readOnly={!pasting}
@@ -407,66 +402,60 @@ export function AddHostBody({
           }}
         />
         {problem && (
-          <p
-            id={errorId}
-            role="alert"
-            className="mt-2.5 flex items-start gap-2 text-ui text-danger"
-          >
-            <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
-            <span className="text-pretty">
-              {problem === 'unavailable' ? t('hosts.keyFailed') : t(`hosts.add.${problem}`)}
-            </span>
+          <p id={errorId} role="alert" className="kettu-sd__error">
+            {problem === 'unavailable' ? t('hosts.keyFailed') : t(`hosts.add.${problem}`)}
           </p>
         )}
         {step.kind === 'confirm' && (
-          <div className="mt-3.5 rounded-lg bg-subtle px-3.5 py-3 shadow-[inset_0_0_0_var(--hairline)_var(--border-default)]">
-            <div className="text-ui font-medium">{t('hosts.add.confirmTitle')}</div>
-            <div className="mt-0.5 text-xs leading-4.5 text-pretty text-tertiary">
-              {t('hosts.add.confirmBody')}
-            </div>
+          <div className="k-inset">
+            <b>{t('hosts.add.confirmTitle')}</b>
+            <div className="kettu-sd__hint">{t('hosts.add.confirmBody')}</div>
           </div>
         )}
-      </div>
-      <DialogFooter className={DIALOG_FOOTER}>
-        {(step.kind === 'connecting' || step.kind === 'confirm') && (
-          <span role="status" className="flex items-center gap-2 text-ui text-tertiary">
-            <Spinner className="size-4" />
-            {t(step.kind === 'connecting' ? 'hosts.add.connecting' : 'hosts.add.waiting')}
-          </span>
-        )}
-        <span className="flex-1" />
+      </SettingsDialogBody>
+      <SettingsDialogFooter
+        start={
+          (step.kind === 'connecting' || step.kind === 'confirm') && (
+            <span role="status" className="kettu-sd__status">
+              <Spin />
+              {t(step.kind === 'connecting' ? 'hosts.add.connecting' : 'hosts.add.waiting')}
+            </span>
+          )
+        }
+      >
         {failure ? (
           <>
-            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.close')}
             </DialogClose>
             {failure === 'unreachable' ? (
-              <Button className={ROW_BUTTON} onClick={onRetry}>
+              <SetButton size="md" variant="primary" onClick={onRetry}>
                 {t('hosts.add.retry')}
-              </Button>
+              </SetButton>
             ) : (
-              <Button className={ROW_BUTTON} onClick={onAgain}>
+              <SetButton size="md" variant="primary" onClick={onAgain}>
                 {t('hosts.add.newLink')}
-              </Button>
+              </SetButton>
             )}
           </>
         ) : (
           <>
-            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.cancel')}
             </DialogClose>
             {pasting && (
-              <Button
-                className={ROW_BUTTON}
+              <SetButton
+                size="md"
+                variant="primary"
                 disabled={!parsePairingLink(draft.trim())}
                 onClick={() => onSubmit(draft)}
               >
                 {t('hosts.add.add')}
-              </Button>
+              </SetButton>
             )}
           </>
         )}
-      </DialogFooter>
+      </SettingsDialogFooter>
     </>
   )
 }
@@ -505,14 +494,15 @@ export function SshAddBody({
   return (
     <>
       <SettingsDialogHeader title={t('hosts.add.title')} />
-      <div className={DIALOG_BODY}>
+      <SettingsDialogBody>
         {tabs}
-        <div className="flex flex-col gap-1.75">
-          <label htmlFor={fieldId} className="text-control leading-[normal] font-medium">
-            {t('hosts.add.ssh.label')}
-          </label>
-          <div className="flex gap-2">
-            <Input
+        <SettingsField
+          label={t('hosts.add.ssh.label')}
+          htmlFor={fieldId}
+          hint={!failure && t('hosts.add.ssh.note')}
+        >
+          <div className="kettu-sd__inline">
+            <input
               id={fieldId}
               ref={inputRef}
               value={working ? target : draft}
@@ -523,7 +513,7 @@ export function SshAddBody({
               spellCheck={false}
               autoComplete="off"
               autoCapitalize="off"
-              className={cn(DIALOG_MONO_FIELD, 'flex-1')}
+              className={DIALOG_MONO_FIELD}
               onChange={(event) => onDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (working || isComposing(event) || event.key !== 'Enter') return
@@ -532,21 +522,17 @@ export function SshAddBody({
               }}
             />
             {!failure && (
-              <Button
-                className={ROW_BUTTON}
+              <SetButton
+                size="md"
+                variant="primary"
                 disabled={!valid || working}
                 onClick={() => onSubmit(draft)}
               >
                 {t('hosts.add.ssh.connect')}
-              </Button>
+              </SetButton>
             )}
           </div>
-          {!failure && (
-            <span className="text-hint leading-[normal] text-tertiary">
-              {t('hosts.add.ssh.note')}
-            </span>
-          )}
-        </div>
+        </SettingsField>
         {steps.length > 0 && (
           <SshProgress steps={steps} failed={failure !== null} target={target} />
         )}
@@ -558,30 +544,28 @@ export function SshAddBody({
             detail={failure.detail}
           />
         )}
-      </div>
-      <DialogFooter className={DIALOG_FOOTER}>
-        <span className="flex-1" />
+      </SettingsDialogBody>
+      <SettingsDialogFooter>
         {failure ? (
           <>
-            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.close')}
             </DialogClose>
-            <Button
-              className={ROW_BUTTON}
+            <SetButton
+              size="md"
+              variant="primary"
               disabled={!valid}
               onClick={() => (draft.trim() === target ? onRetry() : onSubmit(draft))}
             >
               {t('hosts.add.retry')}
-            </Button>
+            </SetButton>
           </>
         ) : (
-          <>
-            <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
-              {t('common:actions.cancel')}
-            </DialogClose>
-          </>
+          <DialogClose render={<SetButton size="md" variant="ghost" />}>
+            {t('common:actions.cancel')}
+          </DialogClose>
         )}
-      </DialogFooter>
+      </SettingsDialogFooter>
     </>
   )
 }
@@ -623,39 +607,30 @@ function SshProgress({
   const stateAt = (index: number): StepState =>
     index < at ? 'done' : index > at ? 'pending' : failed ? 'failed' : 'active'
   return (
-    <ol
-      aria-label={t('hosts.add.ssh.steps.label')}
-      aria-live="polite"
-      className="flex flex-col pt-1.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]"
-    >
+    <ol aria-label={t('hosts.add.ssh.steps.label')} aria-live="polite" className="kettu-sd__steps">
       {items.map((item, index) => {
         const state = stateAt(index)
         return (
           <li
             key={item.id}
             aria-current={state === 'active' ? 'step' : undefined}
-            className="flex items-start gap-2.5 py-1.75 text-lede leading-[normal]"
+            className="kettu-sd__step"
+            data-state={state}
           >
-            <span aria-hidden className="mt-px grid size-4 shrink-0 place-items-center">
-              {state === 'done' && <CheckIcon strokeWidth={2} className="size-3.5 text-success" />}
-              {state === 'active' && <Spinner className="size-3.25" />}
-              {state === 'failed' && <CircleAlertIcon className="size-3.5 text-danger" />}
-              {state === 'pending' && (
-                <span className="size-2 rounded-full shadow-[inset_0_0_0_1.5px_var(--border-strong)]" />
-              )}
+            <span aria-hidden className="kettu-sd__step-mark">
+              {state === 'done' && <Icon icon={Tick02Icon} size={14} />}
+              {state === 'active' && <span className="ui-ss-spinner" />}
+              {state === 'failed' && <Icon icon={Alert02Icon} size={14} />}
+              {state === 'pending' && <span className="kettu-sd__step-ring" />}
             </span>
-            <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate">
+            <span className="kettu-sd__step-text">
+              <span className="k-name">
                 {item.label}
                 {(state === 'done' || state === 'failed') && (
                   <span className="sr-only"> {t(`hosts.add.ssh.steps.${state}`)}</span>
                 )}
               </span>
-              {item.detail && (
-                <span className="truncate text-hint leading-[normal] text-tertiary">
-                  {item.detail}
-                </span>
-              )}
+              {item.detail && <span className="k-name kettu-sd__hint">{item.detail}</span>}
             </span>
           </li>
         )
@@ -698,25 +673,18 @@ function SshFailure({
         t={t}
         i18nKey={`hosts.add.ssh.errors.${reason.slice(4) as SshErrorKey}`}
         values={{ target }}
-        components={{ code: <code className="font-mono whitespace-nowrap text-code" /> }}
+        components={{ code: <code className="k-code" /> }}
       />
     )
   } else text = t(`hosts.add.${reason as Exclude<LinkFailure, 'unavailable'>}`)
   const output = detail && WITH_OUTPUT.has(reason) ? detail : null
   return (
-    <div id={id} role="alert" className="mt-3 flex flex-col gap-2">
-      <p className="flex items-start gap-2 text-ui text-danger">
-        <CircleAlertIcon className="mt-0.5 size-3.5 shrink-0" />
-        <span className="text-pretty" data-selectable="">
-          {text}
-        </span>
+    <div id={id} role="alert" className="kettu-sd__stack">
+      <p className="kettu-sd__error" data-selectable="">
+        {text}
       </p>
       {output && (
-        <pre
-          data-selectable=""
-          aria-label={t('hosts.add.ssh.output')}
-          className="max-h-40 overflow-auto rounded-lg bg-muted px-2.5 py-2 font-mono text-meta leading-relaxed whitespace-pre-wrap text-muted-foreground"
-        >
+        <pre data-selectable="" aria-label={t('hosts.add.ssh.output')} className="kettu-sd__output">
           {output}
         </pre>
       )}
@@ -745,27 +713,32 @@ function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
   return (
     <form className="contents" onSubmit={(event) => void submit(event)}>
       <SettingsDialogHeader title={t('hosts.add.title')} />
-      <div className={DIALOG_BODY}>
-        <div className="flex items-center gap-3">
-          <DeviceTile large icon={<HostIcon platform={host.platform} className="size-5" />} />
-          <div className="min-w-0">
-            <div className="truncate text-ui font-medium">
-              {t('hosts.add.added', { name: host.name })}
-            </div>
-            <div className="truncate text-xs leading-4.5 text-tertiary">
+      <SettingsDialogBody>
+        <div className="kettu-sd__row">
+          <DeviceTile large icon={<HostIcon platform={host.platform} />} />
+          <span className="ui-sg-label">
+            <b>{t('hosts.add.added', { name: host.name })}</b>
+            <small>
               {[
                 platformName(host.platform),
                 t('hosts.version', { version: host.version }),
                 routeName(t, host),
               ].join(' · ')}
-            </div>
-          </div>
+            </small>
+          </span>
         </div>
-        <Field data-invalid={!valid || error !== null || undefined}>
-          <FieldLabel htmlFor="host-device-name" className="text-ui">
-            {t('hosts.add.nameLabel', { name: host.name })}
-          </FieldLabel>
-          <Input
+        <SettingsField
+          label={t('hosts.add.nameLabel', { name: host.name })}
+          htmlFor="host-device-name"
+          hint={
+            error ? (
+              <span className="kettu-sd__error">{error}</span>
+            ) : (
+              t('hosts.add.nameHint', { name: host.name })
+            )
+          }
+        >
+          <input
             id="host-device-name"
             value={name}
             autoFocus
@@ -779,21 +752,13 @@ function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
               setError(null)
             }}
           />
-          {error ? (
-            <FieldError>{error}</FieldError>
-          ) : (
-            <FieldDescription className="text-xs">
-              {t('hosts.add.nameHint', { name: host.name })}
-            </FieldDescription>
-          )}
-        </Field>
-      </div>
-      <DialogFooter className={DIALOG_FOOTER}>
-        <Button type="submit" className={ROW_BUTTON} disabled={!valid || busy}>
-          {busy && <Spinner data-icon="inline-start" />}
+        </SettingsField>
+      </SettingsDialogBody>
+      <SettingsDialogFooter>
+        <SetButton size="md" variant="primary" type="submit" loading={busy} disabled={!valid}>
           {t('hosts.add.done')}
-        </Button>
-      </DialogFooter>
+        </SetButton>
+      </SettingsDialogFooter>
     </form>
   )
 }

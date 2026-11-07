@@ -1,31 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog'
 import { DragDropProvider, type DragEndEvent } from '@dnd-kit/react'
 import { isSortable, useSortable } from '@dnd-kit/react/sortable'
 import {
-  Columns2Icon,
-  Maximize2Icon,
-  Minimize2Icon,
-  PencilIcon,
-  PlusIcon,
-  SquareTerminalIcon,
-  XIcon,
-} from 'lucide-react'
+  Cancel01Icon,
+  ComputerTerminal01Icon,
+  Layout2ColumnIcon,
+  PencilEdit02Icon,
+  PlusSignIcon,
+} from '@hugeicons/core-free-icons'
 import { useDefaultLayout } from 'react-resizable-panels'
 import { Trans, useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { onAppEvent } from '@renderer/app/events'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@renderer/components/ui/alert-dialog'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { tabSensors } from '@renderer/components/tab-sensors'
-import { Button } from '@renderer/components/ui/button'
+import { AlertDialog } from '@renderer/components/ui/alert-dialog'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -33,27 +23,22 @@ import {
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-} from '@renderer/components/ui/empty'
-import { Kbd } from '@renderer/components/ui/kbd'
-import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
 } from '@renderer/components/ui/resizable'
-import { Spinner } from '@renderer/components/ui/spinner'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { PanelButton } from '@renderer/features/shell/panel-button'
-import { SHEET } from '@renderer/features/shell/sheet'
-import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
+import {
+  PaneEmpty,
+  PaneHead,
+  PaneIcon,
+  PaneSheet,
+  PaneSpinner,
+  PaneTabClose,
+  PanelButton,
+} from '@renderer/features/shell/panel-button'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { hasBand } from '@renderer/lib/platform'
+import { formatShortcut } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
-import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
 import {
   createTerminal,
@@ -69,17 +54,17 @@ import {
   type TerminalSide,
   type TerminalState,
 } from '@renderer/stores/terminals'
-import { toggleTerminal, useViewStore } from '@renderer/stores/view'
 import { OwnerBar, TakeoverNotice } from './terminal-owner'
 import { TerminalView } from './terminal-view'
 
 // The two sides of a split panel; alone, the left one fills it.
 const LEFT = 'terminal-left'
 const RIGHT = 'terminal-right'
+const SLOW_START_MS = 400
 
 /**
- * The side panel: a card holding a session's terminals, or New session's, with their tabs in its
- * header. They open in `projectPath`, the session's folder.
+ * The side panel's Terminal pane: a session's terminals, or New session's, with their tabs in its
+ * head. They open in `projectPath`, the session's folder.
  */
 export function TerminalPanel({
   projectPath,
@@ -91,14 +76,15 @@ export function TerminalPanel({
   maximized: boolean
 }) {
   const { t } = useTranslation(['terminal', 'common'])
-  // On macOS, maximized with the sidebar collapsed, the header is the window's top left corner.
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
+  const sheet = useRef<HTMLDivElement>(null)
   const list = useTerminalsStore(useShallow((s) => terminalsOf(s.byId, panel, s.order[panel])))
   const activeId = useTerminalsStore((s) => s.active[panel])
   const rightId = useTerminalsStore((s) => s.split[panel] ?? null)
   const side = useTerminalsStore((s) => s.focusedSide[panel] ?? 'left')
   const error = useTerminalsStore((s) => s.error)
   const [creating, setCreating] = useState(false)
+  // Only a start that takes a while shows its Starting tab, so a quick one shows its tab at once.
+  const [slowStart, setSlowStart] = useState(false)
   const [closing, setClosing] = useState<TerminalState | null>(null)
   const right = list.find((t) => t.id === rightId) ?? null
   const active =
@@ -113,8 +99,11 @@ export function TerminalPanel({
 
   const starting = async (start: () => Promise<unknown>) => {
     setCreating(true)
+    const slow = window.setTimeout(() => setSlowStart(true), SLOW_START_MS)
     await start()
+    window.clearTimeout(slow)
     setCreating(false)
+    setSlowStart(false)
   }
   const newTerminal = () => void starting(() => createTerminal(projectPath, panel))
 
@@ -145,30 +134,40 @@ export function TerminalPanel({
   }
 
   return (
-    <div
-      className={cn(
-        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
-        SHEET,
-        // Maximized, it leaves its slot and covers the whole main area.
-        maximized && 'absolute inset-0 z-10',
-      )}
-      data-terminal-panel=""
-    >
-      {/* The header is a window drag region, which takes every click on macOS, so its tabs and
-          buttons opt out. */}
-      <div
-        className={cn(
-          'app-region-drag flex h-11 shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-          cornered && 'pl-(--corner-inset)',
-        )}
+    <PaneSheet ref={sheet} pane="terminal" maximized={maximized} data-terminal-panel="">
+      <PaneHead
+        panel={panel}
+        pane="terminal"
+        maximized={maximized}
+        tools={
+          <>
+            {error && (
+              <span className="kp-head__error" title={error}>
+                {error}
+              </span>
+            )}
+            <PanelButton
+              label={split ? t('panel.unsplit') : t('panel.split')}
+              pressed={split}
+              disabled={creating || (!split && !active)}
+              // Unsplitting starts nothing.
+              onClick={() =>
+                void (split
+                  ? toggleSplit(projectPath, panel)
+                  : starting(() => toggleSplit(projectPath, panel)))
+              }
+            >
+              <PaneIcon icon={Layout2ColumnIcon} />
+            </PanelButton>
+          </>
+        }
       >
-        {cornered && <CornerControlsSpace className="mr-1" />}
         <DragDropProvider sensors={tabSensors} onDragEnd={dragEnded}>
           <div
             role="tablist"
             aria-label={t('panel.tabs')}
             aria-multiselectable={split || undefined}
-            className="no-scrollbar app-region-no-drag flex min-w-0 items-center gap-1 overflow-x-auto"
+            className="kp-head__tabs"
           >
             {list.map((terminal, index) => (
               <TerminalTab
@@ -180,81 +179,31 @@ export function TerminalPanel({
                 onClose={() => close(terminal)}
               />
             ))}
-            {creating && (
-              <span className="inline-flex h-7 shrink-0 items-center gap-1.75 rounded-lg px-2.5 text-hint text-tertiary">
-                <Spinner className="size-2.75" />
-                {t('panel.starting')}
+            {slowStart && (
+              <span className="kp-tab">
+                <span className="kp-tab__btn">
+                  <PaneSpinner className="kp-tab__icon" />
+                  <span className="kp-tab__name">{t('panel.starting')}</span>
+                </span>
               </span>
             )}
           </div>
         </DragDropProvider>
-        {/* 26 px, between a tab's 28 and the panel buttons' 24. */}
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="quiet"
-                size="icon-xs"
-                aria-label={t('panel.newTerminal')}
-                onClick={newTerminal}
-                className="app-region-no-drag size-6.5 shrink-0"
-              />
-            }
-          >
-            <PlusIcon className="size-3.5 text-icon group-hover/button:text-primary" />
-          </TooltipTrigger>
-          <TooltipContent>
-            {t('panel.newTerminal')}
-            <Kbd>Ctrl+Shift+`</Kbd>
-          </TooltipContent>
-        </Tooltip>
-        <span className="min-w-2 flex-1" />
-        {error && (
-          <span className="max-w-[40%] truncate text-xs text-danger" title={error}>
-            {error}
-          </span>
-        )}
         <PanelButton
-          label={split ? t('panel.unsplit') : t('panel.split')}
-          size="icon-sm"
-          pressed={split}
-          disabled={creating || (!split && !active)}
-          // Unsplitting starts nothing.
-          onClick={() =>
-            void (split
-              ? toggleSplit(projectPath, panel)
-              : starting(() => toggleSplit(projectPath, panel)))
-          }
+          label={t('panel.newTerminal')}
+          shortcut={formatShortcut('Ctrl+Shift+`')}
+          onClick={newTerminal}
         >
-          <Columns2Icon className={HEADER_ICON} />
+          <PaneIcon icon={PlusSignIcon} />
         </PanelButton>
-        <PanelButton
-          label={maximized ? t('panel.restore') : t('panel.maximize')}
-          size="icon-sm"
-          onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
-        >
-          {maximized ? (
-            <Minimize2Icon className={HEADER_ICON} />
-          ) : (
-            <Maximize2Icon className={HEADER_ICON} />
-          )}
-        </PanelButton>
-        <PanelButton
-          label={t('panel.close')}
-          size="icon-sm"
-          shortcut="Ctrl+`"
-          onClick={() => toggleTerminal(panel, false)}
-        >
-          <XIcon className={HEADER_ICON} />
-        </PanelButton>
-      </div>
-      <div className="relative min-h-0 flex-1">
+      </PaneHead>
+      <div className="kp-body">
         {active ? (
           <ResizablePanelGroup
             orientation="horizontal"
             defaultLayout={layout.defaultLayout}
             onLayoutChanged={layout.onLayoutChanged}
-            className="absolute inset-0"
+            className="min-h-0 flex-1"
           >
             <ResizablePanel id={LEFT} minSize="160px" className="min-w-0">
               <TerminalSideView
@@ -266,7 +215,7 @@ export function TerminalPanel({
             </ResizablePanel>
             {split && (
               <>
-                <ResizableHandle className="bg-border-soft" />
+                <ResizableHandle className="kp-split-handle" />
                 <ResizablePanel id={RIGHT} defaultSize="50%" minSize="160px" className="min-w-0">
                   <TerminalSideView
                     panel={panel}
@@ -280,60 +229,73 @@ export function TerminalPanel({
           </ResizablePanelGroup>
         ) : (
           !creating && (
-            <Empty className="h-full">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <SquareTerminalIcon />
-                </EmptyMedia>
-                <EmptyDescription>{t('panel.empty')}</EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button variant="outline" size="compact" onClick={newTerminal}>
-                  <PlusIcon data-icon="inline-start" />
-                  {t('panel.newTerminal')}
-                </Button>
-              </EmptyContent>
-            </Empty>
+            <PaneEmpty
+              icon={<PaneIcon icon={ComputerTerminal01Icon} size={20} />}
+              title={t('panel.empty')}
+            >
+              <button type="button" className="kp-btn" onClick={newTerminal}>
+                <PaneIcon icon={PlusSignIcon} size={13} />
+                {t('panel.newTerminal')}
+              </button>
+            </PaneEmpty>
           )
         )}
       </div>
-      <AlertDialog open={!!closing} onOpenChange={(open) => !open && setClosing(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('closeDialog.title')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              <Trans
-                t={t}
-                i18nKey="closeDialog.body"
-                components={{
-                  title: <span className="font-mono text-xs text-primary">{closing?.title}</span>,
-                }}
-              />
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={() => {
-                if (closing) void killTerminal(closing.id)
-                setClosing(null)
-              }}
-            >
-              {t('closeDialog.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+      <EndTerminal
+        container={sheet}
+        closing={closing}
+        onCancel={() => setClosing(null)}
+        onConfirm={() => {
+          if (closing) void killTerminal(closing.id)
+          setClosing(null)
+        }}
+      />
+    </PaneSheet>
   )
 }
 
-const HEADER_ICON =
-  'size-3.75 text-icon group-hover/button:text-primary group-aria-pressed/button:text-primary'
+/** "End this terminal?", asked over the pane before a running terminal's tab closes. */
+function EndTerminal({
+  container,
+  closing,
+  onCancel,
+  onConfirm,
+}: {
+  container: RefObject<HTMLDivElement | null>
+  closing: TerminalState | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const { t } = useTranslation(['terminal', 'common'])
+  return (
+    <AlertDialog open={!!closing} onOpenChange={(open) => !open && onCancel()}>
+      <AlertDialogPrimitive.Portal container={container}>
+        <AlertDialogPrimitive.Backdrop className="kp-confirm" />
+        <AlertDialogPrimitive.Popup className="kp-confirm__card" data-overlay-layer="">
+          <AlertDialogPrimitive.Title>{t('closeDialog.title')}</AlertDialogPrimitive.Title>
+          <AlertDialogPrimitive.Description>
+            <Trans
+              t={t}
+              i18nKey="closeDialog.body"
+              components={{ title: <span className="kp-mono text-primary">{closing?.title}</span> }}
+            />
+          </AlertDialogPrimitive.Description>
+          <span className="kp-confirm__acts">
+            <AlertDialogPrimitive.Close className="kp-btn">
+              {t('common:actions.cancel')}
+            </AlertDialogPrimitive.Close>
+            <button type="button" className="kp-btn kp-btn--danger" onClick={onConfirm}>
+              {t('closeDialog.confirm')}
+            </button>
+          </span>
+        </AlertDialogPrimitive.Popup>
+      </AlertDialogPrimitive.Portal>
+    </AlertDialog>
+  )
+}
 
 /**
- * One terminal shown in the panel, under the bar of the agent that started it and over its notice
+ * One terminal shown in the pane, under the strip of the agent that started it and over its notice
  * that typing takes it over. While split, a press or focus in it makes its side the focused one.
  */
 function TerminalSideView({
@@ -350,15 +312,17 @@ function TerminalSideView({
   const focus = side ? () => focusTerminalSide(panel, side) : undefined
   return (
     <div
-      className="flex h-full min-h-0 flex-col"
+      className="kp-tview"
+      data-split={side ? '' : undefined}
+      data-focused={focused || undefined}
       onPointerDownCapture={focus}
       onFocusCapture={focus}
     >
       {terminal.owner && <OwnerBar terminal={terminal} owner={terminal.owner} />}
-      <div className="relative min-h-0 flex-1">
+      <div className="kp-tbox">
         <TerminalView key={terminal.id} terminal={terminal} focused={focused} />
+        {terminal.owner && <TakeoverNotice terminal={terminal} owner={terminal.owner} />}
       </div>
-      {terminal.owner && <TakeoverNotice terminal={terminal} owner={terminal.owner} />}
     </div>
   )
 }
@@ -395,6 +359,9 @@ export function TerminalTab({
   const exited = terminal.exitCode !== null
   const running = terminal.busy && !exited
   const owner = terminal.owner
+  const ownerName = owner ? agentName(owner.agentId, hostOfPath(terminal.projectPath)) : null
+  // New output waits on a tab out of view; a running one shows that it runs.
+  const dot = terminal.activity && !selected ? 'output' : running ? 'running' : null
 
   // A full strip scrolls; a tab selected out of sight, such as one an agent starts, comes into view.
   useEffect(() => {
@@ -426,16 +393,11 @@ export function TerminalTab({
     >
       <ContextMenuTrigger
         ref={ref}
-        className={cn(
-          'group/tab relative flex h-7 items-center rounded-lg text-hint transition-[color,background-color,box-shadow] duration-(--duration-fast)',
-          // An agent's tab is the widest, so it would shrink the most: it keeps room for its name.
-          owner ? 'max-w-64 min-w-28' : 'max-w-48 min-w-14',
-          editing
-            ? 'bg-surface text-primary ring-1 ring-border-strong ring-inset'
-            : selected || isDragging
-              ? 'bg-raised text-primary shadow-segment'
-              : 'text-tertiary hover:bg-hover hover:text-secondary',
-        )}
+        className="kp-tab"
+        data-selected={selected || undefined}
+        data-dragging={isDragging || undefined}
+        data-editing={editing || undefined}
+        data-owned={owner ? '' : undefined}
       >
         {/* Stays mounted while renaming, hidden under the input, so the tab keeps its width. */}
         <button
@@ -443,78 +405,40 @@ export function TerminalTab({
           type="button"
           role="tab"
           aria-selected={selected}
-          // A renamed tab keeps its process title in reach.
-          title={terminal.name ? automatic : undefined}
+          // Who started it, and a renamed tab's process title, stay in reach.
+          title={[terminal.name ? automatic : name, ownerName].filter(Boolean).join(' · ')}
           onClick={onSelect}
           onDoubleClick={() => setEditing(true)}
           onAuxClick={(e) => e.button === 1 && onClose()}
-          className={cn(
-            'flex h-full min-w-0 items-center rounded-lg pl-2.5 outline-none focus-ring',
-            // The selected tab makes room for its close button.
-            selected ? 'pr-7.75' : 'pr-2.5',
-            editing && 'invisible',
-          )}
+          className="kp-tab__btn"
+          style={editing ? { visibility: 'hidden' } : undefined}
         >
-          {/* Another tab shows its close button on hover, over its end, which fades out under it. */}
-          <span
-            className={cn(
-              'flex min-w-0 flex-1 items-center gap-1.75',
-              !selected &&
-                'group-focus-within/tab:mask-r-from-[calc(100%-26px)] group-focus-within/tab:mask-r-to-[calc(100%-14px)] group-hover/tab:mask-r-from-[calc(100%-26px)] group-hover/tab:mask-r-to-[calc(100%-14px)]',
-            )}
-          >
-            {/* An agent's running command turns in the icon's place, without the running dot. */}
-            {owner && running ? (
-              <Spinner aria-label={t('tab.running')} className="size-2.75 shrink-0" />
-            ) : (
-              <SquareTerminalIcon aria-hidden className="size-3.25 shrink-0" strokeWidth={1.4} />
-            )}
-            {/* One line, so the agent's name after it is cut before the terminal's. */}
-            <span className="truncate">
-              {name}
-              {owner && (
-                <span className="ml-1.75 text-tertiary">
-                  {t('tab.owner', {
-                    agent: agentName(owner.agentId, hostOfPath(terminal.projectPath)),
-                  })}
-                </span>
-              )}
+          {owner && (
+            <AgentMark
+              agent={owner.agentId}
+              size={13}
+              className="kp-tab__icon kp-tab__icon--mark"
+            />
+          )}
+          <span className="kp-tab__name">{name}</span>
+          {exited && (
+            <span className="kp-tab__code" data-failed={terminal.exitCode !== 0 || undefined}>
+              {terminal.exitCode}
             </span>
-            {exited && (
-              <span className={cn('shrink-0 tabular', terminal.exitCode !== 0 && 'text-danger')}>
-                {terminal.exitCode}
-              </span>
-            )}
-            {running && !owner && (
-              <span
-                role="img"
-                aria-label={t('tab.running')}
-                className="size-1.5 shrink-0 rounded-full bg-success"
-              />
-            )}
-            {!running && terminal.activity && !selected && (
-              <span
-                role="img"
-                aria-label={t('tab.newOutput')}
-                className="size-1.5 shrink-0 rounded-full bg-current text-tertiary"
-              />
-            )}
-          </span>
+          )}
+          {dot && (
+            <span
+              role="img"
+              aria-label={dot === 'output' ? t('tab.newOutput') : t('tab.running')}
+              className="kp-tab__dot"
+              data-dot={dot}
+            />
+          )}
         </button>
         {editing ? (
           <TabNameInput initial={name} label={t('tab.nameLabel')} onFinish={finishRename} />
         ) : (
-          <button
-            type="button"
-            aria-label={t('tab.close', { name })}
-            onClick={onClose}
-            className={cn(
-              'absolute right-1.5 flex size-4.5 items-center justify-center rounded-md text-tertiary opacity-0 outline-none transition-opacity duration-(--duration-fast) hover:bg-pressed-hover hover:text-primary focus-visible:opacity-100 focus-ring group-focus-within/tab:opacity-100 group-hover/tab:opacity-100',
-              selected && 'opacity-100',
-            )}
-          >
-            <XIcon className="size-2.75" />
-          </button>
+          <PaneTabClose label={t('tab.close', { name })} onClick={onClose} />
         )}
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -523,11 +447,11 @@ export function TerminalTab({
             renameAfterMenu.current = true
           }}
         >
-          <PencilIcon />
+          <PaneIcon icon={PencilEdit02Icon} size={16} />
           {t('tab.rename')}
         </ContextMenuItem>
         <ContextMenuItem onClick={onClose}>
-          <XIcon />
+          <PaneIcon icon={Cancel01Icon} size={16} />
           {t('common:actions.close')}
         </ContextMenuItem>
       </ContextMenuContent>
@@ -554,14 +478,13 @@ function TabNameInput({
   }
   return (
     // Its text starts where the label does, past the icon.
-    <div className="absolute inset-0 flex items-center pr-2.5 pl-7.5">
+    <div className="kp-tab__rename">
       <input
         autoFocus
         aria-label={label}
         defaultValue={initial}
         autoComplete="off"
         spellCheck={false}
-        className="h-full min-w-0 flex-1 bg-transparent outline-none"
         onFocus={(e) => e.currentTarget.select()}
         onBlur={(e) => finish(e.currentTarget.value, false)}
         onKeyDown={(e) => {

@@ -1,17 +1,27 @@
 import { cn } from 'cn'
-import { Loader2Icon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
+// AffectUI's own spinner, a faint ring with a quarter arc turning on it: Hugeicons has none.
 function Spinner({ className, ...props }: React.ComponentProps<'svg'>) {
   const { t } = useTranslation('common')
   return (
-    <Loader2Icon
+    <svg
       data-slot="spinner"
       role="status"
       aria-label={t('loading')}
+      width={24}
+      height={24}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.9}
+      strokeLinecap="round"
       className={cn('size-4 animate-spin', className)}
       {...props}
-    />
+    >
+      <circle cx="12" cy="12" r="9" opacity={0.2} />
+      <path d="M12 3a9 9 0 0 1 9 9" />
+    </svg>
   )
 }
 

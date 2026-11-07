@@ -1,8 +1,7 @@
 import { useRef, useState, type PointerEvent } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui/react/menu'
-import { ArrowUpIcon, HistoryIcon } from 'lucide-react'
+import { ArrowUp02Icon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
-import { Button } from '@renderer/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -10,43 +9,66 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { formatShortcut } from '@renderer/lib/platform'
+import { cn } from '@renderer/lib/utils'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { DESCRIBED_ROW, ItemText } from './menu-parts'
 
 // Held this long, the Stop button offers to queue or send the message instead.
 const HOLD_MS = 450
 
-const ROUND = 'size-8 rounded-full p-0 [&_svg:not([class*=size-])]:size-4'
-
-/** A send button that can send: the fox in place of the primary button's ink. */
-export const SEND_FILL =
-  'bg-send bg-none text-(--on-fill) shadow-(--send-shadow) hover:bg-send-hover hover:bg-none active:bg-send-active active:shadow-none'
-
-/** Send: quiet while there is nothing to send, the fox once there is. */
+/**
+ * Send, as the Chat Composer draws it: a round 28 px button, the fox once there is something to
+ * send and quiet gray while there is not.
+ */
 export function SendButton({
   disabled,
   label,
   onClick,
+  className,
 }: {
   disabled: boolean
   label: string
   onClick?: () => void
+  className?: string
 }) {
   return (
-    <Button
-      variant="default"
+    <button
+      type="button"
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`${ROUND} animate-in zoom-in-75 fade-in animation-duration-(--duration-fast) ${SEND_FILL} disabled:bg-subtle disabled:text-tertiary disabled:opacity-100 disabled:shadow-none`}
+      className={cn('ui-ccc__send kettu-send', className)}
     >
-      <ArrowUpIcon strokeWidth={2} />
-    </Button>
+      <ArrowUpGlyph />
+    </button>
+  )
+}
+
+/** The Chat Composer's own arrow, so Send reads the same on every composer. */
+function ArrowUpGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 5.5V19"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M18 11C18 11 13.5811 5.00001 12 5C10.4188 4.99999 6 11 6 11"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   )
 }
 
 /**
- * Stop while a turn runs. With a message in the box, holding it offers Queue it and, where the
- * agent takes messages into a running turn, Send now; the keys do the same without the menu.
+ * Stop while a turn runs, in ink. With a message in the box, holding it offers Queue it and, where
+ * the agent takes messages into a running turn, Send now; the keys do the same without the menu.
  */
 export function RunningButton({
   holds,
@@ -88,10 +110,11 @@ export function RunningButton({
       <Tooltip>
         <TooltipTrigger
           render={
-            <Button
+            <button
               ref={anchor}
-              variant="default"
+              type="button"
               aria-label={t('prompt.stop')}
+              data-stop=""
               onPointerDown={press}
               onPointerUp={release}
               onPointerLeave={release}
@@ -99,11 +122,13 @@ export function RunningButton({
                 if (held.current) held.current = false
                 else onStop()
               }}
-              className={`${ROUND} animate-in zoom-in-75 fade-in animation-duration-(--duration-fast)`}
+              className="ui-ccc__send kettu-send"
             />
           }
         >
-          <span aria-hidden className="size-2.5 rounded-[2.5px] bg-current" />
+          <svg viewBox="0 0 16 16" aria-hidden>
+            <rect x="4" y="4" width="8" height="8" rx="1.6" fill="currentColor" />
+          </svg>
         </TooltipTrigger>
         <TooltipContent>
           <Trans
@@ -128,13 +153,13 @@ export function RunningButton({
             className="z-50 w-78 origin-(--transform-origin) rounded-xl bg-popover p-1 text-popover-foreground shadow-menu duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
           >
             <DropdownMenuItem className={DESCRIBED_ROW} onClick={onQueue}>
-              <HistoryIcon />
+              <Glyph icon={Clock01Icon} />
               <ItemText name={t('prompt.queueIt')} description={t('prompt.queueItHint')} />
               <DropdownMenuShortcut>{formatShortcut(queueKey)}</DropdownMenuShortcut>
             </DropdownMenuItem>
             {steering && (
               <DropdownMenuItem className={DESCRIBED_ROW} onClick={onSteer}>
-                <ArrowUpIcon />
+                <Glyph icon={ArrowUp02Icon} />
                 <ItemText name={t('prompt.sendNow')} description={t('prompt.sendNowHint')} />
                 <DropdownMenuShortcut>{formatShortcut(steerKey)}</DropdownMenuShortcut>
               </DropdownMenuItem>

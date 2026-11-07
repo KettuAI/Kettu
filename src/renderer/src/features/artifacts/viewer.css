@@ -1,0 +1,1180 @@
+/* One artifact on affectUI: the viewer as a sheet with App Shell's chat bar, its tools at the foot,
+   its column of Settings' cards, and the artifact pane beside a session. Colors come from the
+   shell's variables inside the frame and from the theme's tokens outside it. */
+
+.k-av {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------- The bar ---------- */
+
+.k-av__crumbs {
+  flex: 0 1 auto;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.k-av__crumbs > * {
+  flex: none;
+}
+.k-av__crumbs i {
+  font-style: normal;
+  color: var(--faint);
+}
+.k-av__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px 0 5px;
+  border-radius: 8px;
+  color: var(--muted);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.k-av__back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-av__mark {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.k-av__mark[data-kind='document'] {
+  color: var(--kind-document);
+}
+.k-av__mark[data-kind='slides'] {
+  color: var(--kind-slides);
+}
+.k-av__mark[data-kind='web'] {
+  color: var(--kind-web);
+}
+.k-av__mark[data-kind='canvas'] {
+  color: var(--kind-canvas);
+}
+/* The artifact's name gives way before the page's, and both before the chip after them. */
+.k-av__crumbs > :is(.k-av__title, .k-av__crumb) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-av__crumbs > .k-av__crumb {
+  flex-shrink: 4;
+  max-width: 220px;
+  border-radius: 6px;
+  color: var(--muted);
+  transition: color 140ms ease;
+}
+.k-av__crumb:hover {
+  color: var(--ink);
+}
+.k-av__gap {
+  flex: 1;
+  min-width: 8px;
+}
+.k-av__tools {
+  flex: none;
+  gap: 2px;
+  min-width: 0;
+}
+
+.k-av-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 7px 0 8px;
+  border-radius: 7px;
+  background: var(--chip);
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.k-av-chip:hover,
+.k-av-chip[aria-expanded='true'] {
+  background: var(--select);
+  color: var(--ink);
+}
+.k-av-chip__num {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.k-av-chip__dim,
+.k-av-chip svg {
+  color: var(--faint);
+}
+
+.k-av-btn {
+  position: relative;
+  flex: none;
+}
+.k-av-btn[aria-pressed='true'],
+.k-av-btn[aria-expanded='true'] {
+  background: var(--select);
+  color: var(--ink);
+}
+.k-av-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.k-av-btn--group {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+}
+:is(
+  .k-av__back,
+  .k-av__crumb,
+  .k-av-chip,
+  .k-av-btn,
+  .k-av-avatar,
+  .k-av-dock__mode,
+  .k-av-dock__zoom,
+  .k-av-ver,
+  .k-av-link,
+  .k-av-thread__anchor
+):focus-visible {
+  outline: 2px solid var(--accent, var(--focus-ring-color));
+  outline-offset: 1px;
+}
+
+.k-av-rule {
+  flex: none;
+  width: 0.5px;
+  height: 16px;
+  margin: 0 6px;
+  background: var(--line-strong, var(--border-default));
+}
+.k-av-rule[data-size='pane'] {
+  height: 14px;
+  margin: 0 4px;
+}
+.k-av-group {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 28px;
+  padding: 0 1px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.k-av-group[data-size='pane'] {
+  height: 26px;
+}
+.k-av-group__count {
+  min-width: 44px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  text-align: center;
+}
+.k-av-pagename {
+  max-width: 160px;
+  padding: 0 6px;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Who is at the artifact: overlapping round marks, the first on top. */
+.k-av-people {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.k-av-people__one {
+  position: relative;
+  z-index: var(--stack, 0);
+  display: flex;
+}
+.k-av-people__one + .k-av-people__one {
+  margin-left: -6px;
+}
+.k-av-people__one:is(:hover, :focus-within) {
+  z-index: 20;
+}
+.k-av-avatar {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    0 0 0 2px var(--bg-app);
+  transition: box-shadow 140ms ease;
+}
+.k-av-avatar:hover {
+  box-shadow:
+    inset 0 0 0 0.5px var(--faint),
+    0 0 0 2px var(--bg-app);
+}
+.k-av-avatar--more {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.k-av-avatar__spin {
+  position: absolute;
+  inset: -4px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  margin: auto;
+  color: var(--accent);
+  pointer-events: none;
+}
+.k-av-places {
+  flex: none;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.k-av-more .ui-as-popover,
+.k-av-more .ui-as-menu__subpanel,
+.k-av-zoom .ui-as-popover {
+  min-width: 220px;
+}
+/* The pane's menu is end-aligned at the window's right edge, so Export opens on its left. */
+.k-av-more [data-align='end'] .ui-as-menu__subpanel {
+  right: calc(100% + 4px);
+  left: auto;
+}
+.k-av-more [data-align='end'] .ui-as-menu__subpanel::before {
+  right: -8px;
+  left: auto;
+}
+
+/* ---------- The area ---------- */
+
+.k-av__body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.k-av__area {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-app);
+}
+
+.k-av-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.k-av-empty .ui-as-empty {
+  margin-top: 0;
+}
+.k-av-empty .k-av-empty__danger {
+  color: var(--danger);
+}
+.k-av-empty__acts {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* What shows instead of the latest version, floating over the page's top. */
+.k-av-status {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: calc(100% - 24px);
+  height: 40px;
+  padding: 0 5px 0 14px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  translate: -50% 0;
+  animation: k-av-in 180ms var(--ease);
+}
+.k-av-status__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-av-status__text b {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* A navigation the page tried and main blocked. */
+.k-av-blocked {
+  position: absolute;
+  inset: 10px 12px auto;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+  font-size: 13px;
+}
+.k-av-blocked__text {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  white-space: pre;
+}
+.k-av-blocked__host {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-blocked > a {
+  flex: none;
+}
+
+/* ---------- The tools at the foot ---------- */
+
+.k-av-dock {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 4px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-float);
+  translate: -50% 0;
+}
+.k-av-dock[data-aside] {
+  left: 20px;
+  translate: none;
+}
+.k-av-dock__mode,
+.k-av-dock__zoom {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.k-av-dock__mode {
+  gap: 6px;
+  padding: 0 10px;
+}
+.k-av-dock__mode svg {
+  color: var(--muted);
+}
+.k-av-dock__mode kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+}
+.k-av-dock__zoom {
+  justify-content: center;
+  gap: 4px;
+  min-width: 64px;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+.k-av-dock__zoom svg {
+  color: var(--faint);
+}
+:is(.k-av-dock__mode, .k-av-dock__zoom):hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+:is(.k-av-dock__mode[aria-pressed='true'], .k-av-dock__zoom[aria-expanded='true']) {
+  background: var(--select);
+  color: var(--ink);
+}
+.k-av-dock__mode[aria-pressed='true'] svg {
+  color: var(--ink);
+}
+
+/* ---------- The column: history, comments, or the picked element's look ---------- */
+
+.k-av-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 300px;
+  min-height: 0;
+  background: var(--bg-app);
+  box-shadow: inset 0.5px 0 0 var(--line-strong);
+  animation: k-av-fade 160ms ease;
+}
+.k-av-side__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 48px;
+  padding: 0 10px 0 14px;
+}
+.k-av-side__title {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-av-side__tag {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-side__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 2px 12px 16px;
+  overflow-y: auto;
+}
+.k-av-side__wait {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 4px;
+}
+.k-av-side__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 16px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+  text-align: center;
+}
+.k-av-side__empty svg {
+  color: var(--faint);
+}
+.k-av-side__empty p {
+  margin: 0;
+  text-wrap: balance;
+}
+.k-av-side__foot {
+  flex: none;
+  margin: 0;
+  padding: 11px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.k-av-side .ui-sg-card {
+  flex: none;
+  margin-top: 0;
+}
+.k-av-error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+.k-av-note {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.k-av-link {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  align-self: flex-start;
+  gap: 5px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+.k-av-link:hover {
+  color: var(--ink);
+}
+
+/* Versions: rows of one card, the one shown picked. */
+.k-av-versions {
+  display: grid;
+  gap: 1px;
+}
+.k-av-ver {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px 7px 10px;
+  border-radius: 8px;
+  text-align: left;
+  transition: background-color 120ms ease;
+}
+.k-av-ver:hover {
+  background: var(--hover);
+}
+.k-av-ver[aria-pressed='true'] {
+  background: var(--select);
+}
+.k-av-ver__num {
+  flex: none;
+  width: 24px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.k-av-ver__text {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+.k-av-ver__text b {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.k-av-ver[aria-pressed='true'] .k-av-ver__text b {
+  font-weight: 500;
+}
+.k-av-ver__text small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.k-av-ver__text small span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-ver__tag {
+  flex: none;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--accent);
+}
+
+/* Comments: a card for each thread, and the comments to send at the foot. */
+.k-av-comments {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.k-av-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+.k-av-thread[data-resolved] {
+  opacity: 0.7;
+}
+.k-av-thread__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-right: -4px;
+}
+.k-av-pin {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--edit-ring);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--on-fill);
+}
+.k-av-pin[data-answered] {
+  background: var(--muted);
+}
+.k-av-author {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.k-av-author > :is(svg, span) {
+  flex: none;
+}
+.k-av-author b {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-author__you {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--muted);
+}
+.k-av-resolve {
+  width: 26px;
+  height: 26px;
+}
+.k-av-resolve[aria-pressed='true'] {
+  background: none;
+  color: var(--tone-green);
+}
+.k-av-thread__anchor {
+  align-self: flex-start;
+  max-width: 100%;
+  border-radius: 7px;
+}
+.k-av-anchor {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--chip);
+  font-size: 12px;
+  color: var(--text);
+}
+.k-av-anchor svg,
+.k-av-anchor em {
+  flex: none;
+  font-style: normal;
+  color: var(--faint);
+}
+.k-av-anchor__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-thread__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.k-av-reply {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.k-av-thread__write {
+  display: grid;
+  gap: 8px;
+}
+.k-av-thread__acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.k-av-text {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  max-height: 240px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  resize: none;
+  outline: none;
+  transition: box-shadow 140ms ease;
+}
+.k-av-text:focus {
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    0 0 0 3px var(--accent-soft);
+}
+.k-av-text::placeholder {
+  color: var(--faint);
+}
+.k-av-text--grow {
+  min-height: 34px;
+  max-height: 160px;
+  field-sizing: content;
+}
+.k-av-send {
+  display: grid;
+  flex: none;
+  gap: 8px;
+  padding: 12px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.k-av-send p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-av-send__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.k-av-send__to {
+  flex: 1;
+  min-width: 0;
+}
+.k-av-send .k-av-send__pick {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+}
+.k-av-send__pick > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-send__to .ui-as-popover {
+  min-width: 100%;
+  max-width: 280px;
+}
+
+/* The box a comment is written in, beside what was picked. */
+.k-av-compose {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 0.5px var(--line-strong),
+    var(--elevation-popover);
+  opacity: 0;
+  pointer-events: none;
+}
+.k-av-compose[data-placed] {
+  opacity: 1;
+  pointer-events: auto;
+  animation: k-av-in 180ms var(--ease);
+}
+.k-av-compose > .k-av-anchor {
+  align-self: flex-start;
+}
+.k-av-compose .k-av-text {
+  min-height: 80px;
+}
+.k-av-compose__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.k-av-compose__hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The picked element's look: Settings' rows, the names in one column and the controls in another. */
+.k-av-prop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 8px 6px 14px;
+}
+.k-av-prop + .k-av-prop {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.k-av-prop__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-prop--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 10px 10px 14px;
+}
+.k-av-prop .ui-segc {
+  flex: none;
+}
+.k-av-prop .k-select {
+  min-width: 0;
+}
+.k-av-input.ui-sg-input {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.k-av-input[aria-invalid='true'] {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.k-av-px,
+.k-av-color {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+.k-av-px .k-av-input {
+  padding-right: 28px;
+}
+.k-av-px > span {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  font-size: 12px;
+  color: var(--faint);
+  translate: 0 -50%;
+  pointer-events: none;
+}
+.k-av-color__swatch,
+.k-av-color__empty {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  translate: 0 -50%;
+}
+.k-av-color__swatch {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.k-av-color__swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.k-av-color__swatch::-webkit-color-swatch {
+  border: 0.5px solid var(--line-strong);
+  border-radius: 5px;
+}
+.k-av-color__empty {
+  display: none;
+  border: 1px dashed var(--line-strong);
+  border-radius: 5px;
+  pointer-events: none;
+}
+.k-av-color__empty[data-shown] {
+  display: block;
+}
+.k-av-input--hex.ui-sg-input {
+  padding-left: 32px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+
+/* ---------- Sharing ---------- */
+
+.k-share {
+  flex: none;
+}
+.k-share__dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone-green);
+  box-shadow: 0 0 0 2px var(--bg-app);
+  pointer-events: none;
+}
+.ui-as-popover.k-share__pop {
+  z-index: 40;
+  display: grid;
+  gap: 10px;
+  width: 320px;
+  padding: 14px;
+  white-space: normal;
+}
+.k-share__wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.k-share__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-share__title svg {
+  color: var(--tone-green);
+}
+.k-share__url {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.k-share__url .k-av-input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.k-share__lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+}
+.k-share__meta {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.k-share__note {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+.k-share__note p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.k-share__pop > .ui-buttonc {
+  justify-self: start;
+}
+.k-share__pop > .ui-buttonc.k-share__wide {
+  justify-self: stretch;
+}
+.k-share__target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--chip);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.k-share__target svg {
+  flex: none;
+  color: var(--muted);
+}
+.k-share__target span {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-share__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  margin: 2px -4px -4px;
+  padding: 8px 0 0 4px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.k-share__foot .k-av-link {
+  align-self: center;
+}
+
+/* ---------- Presenting, on the dark theme over the whole window ---------- */
+
+.k-av-present {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  padding: 0 6px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-default),
+    var(--elevation-float);
+  color: var(--text-primary);
+  translate: -50% 0;
+  backdrop-filter: blur(12px);
+}
+.k-av-present__where {
+  min-width: 112px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.k-av-present__rule {
+  width: var(--hairline);
+  height: 16px;
+  margin: 0 4px;
+  background: var(--border-default);
+}
+.k-av-present__exit {
+  padding: 4px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  outline: none;
+  transition: color 140ms ease;
+}
+.k-av-present__exit:hover {
+  color: var(--text-primary);
+}
+.k-av-present__exit:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+}
+
+/* ---------- The artifact pane beside a session ---------- */
+
+.k-av-pane__title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-av-pane__version {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.k-av-frame {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--bg-app);
+  box-shadow: 0 0 0 var(--hairline) var(--border-default);
+}
+
+@keyframes k-av-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes k-av-fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-av-status,
+  .k-av-compose[data-placed],
+  .k-av-side {
+    animation: none;
+  }
+}

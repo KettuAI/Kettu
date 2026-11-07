@@ -1,4 +1,10 @@
-import { ArchiveIcon, DownloadIcon, FolderIcon, PlusIcon, SquareTerminalIcon } from 'lucide-react'
+import {
+  Archive01Icon,
+  ComputerTerminal01Icon,
+  Download04Icon,
+  FolderOpenIcon,
+  PencilEdit02Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
@@ -8,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from '@renderer/components/ui/dropdown-menu'
+import { MenuGlyph } from '@renderer/features/shell/glyph'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, formatShortcut, isWeb } from '@renderer/lib/platform'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
@@ -36,7 +43,7 @@ export function ProjectMenuItems({
     <>
       <DropdownMenuGroup>
         <DropdownMenuItem disabled={gone} onClick={() => newSession(project.path)}>
-          <PlusIcon />
+          <MenuGlyph icon={PencilEdit02Icon} />
           {t('project.menu.newSession')}
           <DropdownMenuShortcut>{formatShortcut('Mod+N')}</DropdownMenuShortcut>
         </DropdownMenuItem>
@@ -44,12 +51,12 @@ export function ProjectMenuItems({
       <DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={gone} onClick={onImport}>
-          <DownloadIcon />
+          <MenuGlyph icon={Download04Icon} />
           {t('project.importSessions')}
         </DropdownMenuItem>
         {terminal && (
           <DropdownMenuItem disabled={gone} onClick={() => void openProjectTerminal(project.path)}>
-            <SquareTerminalIcon />
+            <MenuGlyph icon={ComputerTerminal01Icon} />
             {t('project.menu.openInTerminal')}
           </DropdownMenuItem>
         )}
@@ -58,7 +65,7 @@ export function ProjectMenuItems({
             disabled={gone}
             onClick={() => void window.kettu.shell.showItem(project.path)}
           >
-            <FolderIcon />
+            <MenuGlyph icon={FolderOpenIcon} />
             {t('project.menu.showIn', { name: fileManagerName() })}
           </DropdownMenuItem>
         )}
@@ -66,7 +73,7 @@ export function ProjectMenuItems({
       <DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => openSettings('archived')}>
-          <ArchiveIcon />
+          <MenuGlyph icon={Archive01Icon} />
           {t('project.menu.showArchived')}
         </DropdownMenuItem>
       </DropdownMenuGroup>

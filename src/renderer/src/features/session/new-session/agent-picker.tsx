@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { CheckIcon, SearchIcon } from 'lucide-react'
+import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox'
+import { Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentId } from '@shared/thread'
@@ -14,7 +15,6 @@ import {
   ComboboxItem,
   ComboboxList,
   ComboboxSeparator,
-  ComboboxTrigger,
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
 import { InputGroupAddon } from '@renderer/components/ui/input-group'
@@ -23,6 +23,7 @@ import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
@@ -95,33 +96,30 @@ export function AgentPicker({
         }}
         autoHighlight
       >
-        <ComboboxTrigger
+        <ComboboxPrimitive.Trigger
           render={
-            <Button
-              variant="quiet"
-              size="sm"
+            <button
+              type="button"
               aria-label={t('newSession.agent')}
-              className="h-7.5 min-w-0 shrink gap-1.5 overflow-hidden rounded-xl bg-subtle px-2.25 text-control font-normal text-primary hover:bg-selected aria-expanded:bg-selected [&>[data-icon=inline-end]]:text-tertiary"
+              className="ui-as-tray-link kettu-tray-link--agent"
             />
           }
         >
           {agentId ? (
             <>
-              <AgentMark agent={agentId} size={15} className="shrink-0" />
-              <span className="min-w-0 truncate" title={agentName(agentId, hostId)}>
+              <AgentMark agent={agentId} size={13} className="shrink-0" />
+              <span className="kettu-tray-link__text" title={agentName(agentId, hostId)}>
                 {agentName(agentId, hostId)}
               </span>
             </>
           ) : (
-            <span className="truncate">{t('newSession.chooseAgentShort')}</span>
+            <span className="kettu-tray-link__text">{t('newSession.chooseAgentShort')}</span>
           )}
-        </ComboboxTrigger>
-        {/* Below the composer's edge, its marks in line with the chip's. */}
+        </ComboboxPrimitive.Trigger>
         <ComboboxContent
           align="start"
-          sideOffset={20}
-          alignOffset={-14}
-          className="flex w-85 flex-col"
+          sideOffset={8}
+          className="kettu-agent-menu flex w-70 flex-col"
         >
           <ComboboxInput
             showTrigger={false}
@@ -131,7 +129,7 @@ export function AgentPicker({
             className="h-10.5! px-2"
           >
             <InputGroupAddon>
-              <SearchIcon className="size-3.5" />
+              <Glyph icon={Search01Icon} size={14} />
             </InputGroupAddon>
           </ComboboxInput>
           {statuses.length === 0 ? (
@@ -152,7 +150,7 @@ export function AgentPicker({
                     value={id}
                     className="group/agent h-11 gap-2.5 rounded-xl py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
                   >
-                    <AgentMark agent={id} size={20} className="shrink-0" />
+                    <AgentMark agent={id} size={16} className="shrink-0" />
                     <span className="flex min-w-0 flex-1 flex-col gap-px">
                       <span className="truncate text-menu text-primary">{status.name}</span>
                       {line && (
@@ -162,11 +160,7 @@ export function AgentPicker({
                       )}
                     </span>
                     {id === agentId && (
-                      <CheckIcon
-                        aria-hidden
-                        strokeWidth={1.75}
-                        className="size-3.75 shrink-0 text-control-on"
-                      />
+                      <Glyph icon={Tick02Icon} size={15} className="shrink-0 text-primary" />
                     )}
                   </ComboboxItem>
                 )

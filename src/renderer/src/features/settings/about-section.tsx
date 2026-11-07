@@ -1,32 +1,23 @@
 import { useState, type ReactNode } from 'react'
-import { CheckIcon, ExternalLinkIcon } from 'lucide-react'
+import { ArrowUpRight01Icon, GithubIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AppInfo } from '@shared/ipc'
 import type { SettingsFile } from '@shared/settings'
 import { releaseUrl, type UpdateStatus } from '@shared/updates'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { BrandIcon } from '@renderer/components/brand'
 import { useRefresh } from '@renderer/components/refresh'
-import { RefreshIcon } from '@renderer/components/refresh-icon'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
-import { Progress } from '@renderer/components/ui/progress'
-import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
-import { ControlError, GROUP_ACTION, ROW_BUTTON, SettingSelect } from './controls'
-import { FlashMark, PageHeader } from './rows'
+import { ControlError, LinkButton, SetButton, SettingSelect, Skel, Spin } from './controls'
+import { FlashMark, PageHeader, RowText } from './rows'
 import { useApply } from './use-apply'
 
 const SOURCE_URL = 'https://github.com/KettuAI/Kettu'
-
-// GitHub mark: Octicons mark-github, https://github.com/primer/octicons (MIT), Copyright (c) GitHub Inc.
-const GITHUB_MARK =
-  'M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656'
 
 /**
  * The top of the About page: its title, then a card with Kettu's icon, name, line, version and
@@ -39,35 +30,24 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
       <PageHeader id="settings-about" title={t('sections.about')}>
         {t('pages.about')}
       </PageHeader>
-      <div className="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-card bg-subtle px-4.5 py-4">
-        <BrandIcon size={52} />
-        <div className="flex min-w-0 flex-[1_1_240px] flex-col">
-          <span className="font-display text-app-name font-extrabold">Kettu</span>
-          <p className="mt-0.5 text-group text-pretty text-secondary">
-            {t('about.version.description')}
-          </p>
+      <div className="k-about">
+        <BrandIcon size={48} />
+        <span className="ui-sg-label">
+          <b>Kettu</b>
+          <small>{t('about.version.description')}</small>
           {info ? (
-            <p data-selectable="" className="mt-1.5 text-group text-tertiary tabular">
+            <small data-selectable="" className="k-num">
               {t('about.version.line', { version: info.version, system: info.system })}
-            </p>
+            </small>
           ) : (
-            <Skeleton className="mt-2 h-3.5 w-44" />
+            <Skel width={176} className="k-about__skel" />
           )}
-        </div>
-        <span data-setting-row="github" className="relative">
+        </span>
+        <span data-setting-row="github" className="k-row">
           <FlashMark id="github" />
-          <a
-            href={SOURCE_URL}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(buttonVariants({ variant: 'outline' }), ROW_BUTTON, 'relative')}
-          >
-            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden data-icon="inline-start">
-              <path d={GITHUB_MARK} />
-            </svg>
+          <LinkButton href={SOURCE_URL} icon={<Icon icon={GithubIcon} size={14} />}>
             {t('about.github.name')}
-            <ExternalLinkIcon data-icon="inline-end" />
-          </a>
+          </LinkButton>
         </span>
       </div>
     </>
@@ -86,41 +66,27 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   }
   if (!status) {
     return (
-      <div className="flex items-center gap-4">
-        <span className="min-w-0 flex-1 text-label leading-[normal]">
-          {t('about.updates.name')}
-        </span>
-        <Spinner className="size-3.5 text-tertiary" />
+      <div className="k-line">
+        <RowText name={t('about.updates.name')} />
+        <Spin />
       </div>
     )
   }
   const { state } = status
   const whatsNew = (version: string) => (
-    <a
-      href={releaseUrl(version)}
-      target="_blank"
-      rel="noreferrer"
-      className={cn(buttonVariants({ variant: 'ghost' }), GROUP_ACTION)}
-    >
-      {t('about.updates.whatsNew')}
-    </a>
+    <LinkButton href={releaseUrl(version)}>{t('about.updates.whatsNew')}</LinkButton>
   )
   // While a check runs the button stays, busy, so the row does not change shape.
   const check = (
-    <Button
-      className={ROW_BUTTON}
-      variant="outline"
-
-      aria-busy={refresh.phase === 'turning'}
-      disabled={refresh.phase === 'turning'}
+    <SetButton
+      loading={refresh.phase === 'turning'}
       onClick={() => {
         setError(null)
         void refresh.run(checkForUpdates).catch((e: unknown) => setError(errorMessage(e)))
       }}
     >
-      <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
       {t('about.updates.check')}
-    </Button>
+    </SetButton>
   )
 
   let title: ReactNode
@@ -132,7 +98,9 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
         title = (
           <>
             {justChecked && (
-              <CheckIcon className="size-3.5 shrink-0 animate-in text-success fade-in animation-duration-(--duration-base)" />
+              <span className="k-ok">
+                <Icon icon={Tick02Icon} size={14} />
+              </span>
             )}
             {t('about.updates.upToDate')}
           </>
@@ -150,13 +118,18 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
     case 'downloading':
       title = t('about.updates.downloading', { version: state.version })
       detail = (
-        <span className="mt-1 flex items-center gap-2.5 text-tertiary">
-          <Progress
-            value={state.percent}
+        <span className="k-meter">
+          <span
+            role="progressbar"
             aria-label={t('about.updates.downloadProgress')}
-            className="max-w-65 flex-1"
-          />
-          <span className="tabular">{Math.round(state.percent)}%</span>
+            aria-valuenow={Math.round(state.percent)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="k-meter__bar k-meter__bar--long"
+          >
+            <span style={{ width: `${state.percent}%` }} />
+          </span>
+          <span className="k-num">{Math.round(state.percent)}%</span>
         </span>
       )
       break
@@ -166,9 +139,9 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       action = (
         <>
           {whatsNew(state.version)}
-          <Button className={ROW_BUTTON} onClick={() => run(window.kettu.updates.restart)}>
+          <SetButton variant="primary" onClick={() => run(window.kettu.updates.restart)}>
             {t('about.updates.restart')}
-          </Button>
+          </SetButton>
         </>
       )
       break
@@ -179,19 +152,16 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
         <>
           {whatsNew(state.version)}
           {state.mode === 'link' ? (
-            <a
+            <LinkButton
               href={state.downloadUrl ?? releaseUrl(state.version)}
-              target="_blank"
-              rel="noreferrer"
-              className={buttonVariants({ size: 'sm' })}
+              icon={<Icon icon={ArrowUpRight01Icon} size={14} />}
             >
               {t('about.updates.download')}
-              <ExternalLinkIcon data-icon="inline-end" />
-            </a>
+            </LinkButton>
           ) : (
-            <Button className={ROW_BUTTON} onClick={() => run(window.kettu.updates.download)}>
+            <SetButton variant="primary" onClick={() => run(window.kettu.updates.download)}>
               {t('about.updates.update')}
-            </Button>
+            </SetButton>
           )}
         </>
       )
@@ -203,9 +173,7 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       title = state.move ? t('about.updates.moveFailed') : t('about.updates.failed')
       detail = <span data-selectable="">{state.message}</span>
       action = (
-        <Button className={ROW_BUTTON} variant="outline" onClick={() => run(checkForUpdates)}>
-          {t('about.updates.tryAgain')}
-        </Button>
+        <SetButton onClick={() => run(checkForUpdates)}>{t('about.updates.tryAgain')}</SetButton>
       )
       break
     case 'off':
@@ -216,15 +184,13 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   }
   // What the updater is doing is the row's name, as it is the news; the group says it is updates.
   return (
-    <div className="flex items-center gap-x-7 gap-y-3">
-      <div className="flex min-w-0 flex-[1_1_280px] flex-col">
-        <span className="flex items-center gap-1.75 text-label leading-[normal]">{title}</span>
-        {detail && (
-          <span className="mt-0.75 text-group leading-normal text-tertiary">{detail}</span>
-        )}
-      </div>
+    <div className="k-line">
+      <span className="ui-sg-label">
+        <b className="k-row-title">{title}</b>
+        {detail && <small>{detail}</small>}
+      </span>
       <ControlError error={error} />
-      {action && <span className="flex shrink-0 items-center gap-2">{action}</span>}
+      {action && <span className="ui-sg-control">{action}</span>}
     </div>
   )
 }
@@ -234,11 +200,11 @@ export function NoUpdates() {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   return (
-    <div className="flex flex-col">
-      <span className="text-label leading-[normal]">{t('about.updates.none', onHost)}</span>
-      <span className="mt-0.75 text-group leading-normal text-tertiary">
-        {t('about.updates.noneDetail', onHost)}
-      </span>
+    <div className="k-line">
+      <RowText
+        name={t('about.updates.none', onHost)}
+        description={t('about.updates.noneDetail', onHost)}
+      />
     </div>
   )
 }
@@ -273,7 +239,7 @@ export function AutomaticUpdates() {
         value={value}
         options={options}
         onChange={(v) => apply({ updates: { automatic: v } })}
-        className="w-57.5"
+        className="k-select--wide"
       />
     </>
   )

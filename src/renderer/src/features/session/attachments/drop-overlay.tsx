@@ -1,7 +1,8 @@
-import { ArrowDownToLineIcon } from 'lucide-react'
+import { Download04Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { cn } from '@renderer/lib/utils'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** Says what a drop does while files are dragged over the column; it never takes the pointer. */
 export function DropOverlay({
@@ -30,7 +31,7 @@ export function DropOverlay({
             : 'border-control-on bg-control-on/6 text-control-on',
         )}
       >
-        <ArrowDownToLineIcon strokeWidth={1.5} className="size-5" />
+        <Glyph icon={Download04Icon} className="size-5" />
         <div className="text-ui font-medium">
           {starting
             ? t('attachments.waitForAgent', { agent: agentName })

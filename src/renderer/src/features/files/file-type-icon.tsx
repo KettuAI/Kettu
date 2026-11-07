@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
-import { FileIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
+import { File01Icon, Folder01Icon, FolderOpenIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useDark } from '@renderer/hooks/use-dark'
 import { cn } from '@renderer/lib/utils'
 import { iconId } from './file-icons'
@@ -45,8 +46,14 @@ export function FileTypeIcon({
     iconId(loaded.manifest, path, folder ? 'folder' : 'file', { open, light: !dark }),
   )
   if (!url) {
-    const Fallback = folder ? (open ? FolderOpenIcon : FolderIcon) : FileIcon
-    return <Fallback aria-hidden className={cn('shrink-0 text-icon', className)} />
+    return (
+      <HugeiconsIcon
+        icon={folder ? (open ? FolderOpenIcon : Folder01Icon) : File01Icon}
+        strokeWidth={1.9}
+        aria-hidden
+        className={cn('shrink-0 text-icon', className)}
+      />
+    )
   }
   return (
     <img

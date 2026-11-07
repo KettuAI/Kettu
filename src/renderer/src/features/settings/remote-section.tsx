@@ -1,5 +1,11 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
-import { CircleAlertIcon, ClockIcon, PlusIcon, QrCodeIcon, SmartphoneIcon } from 'lucide-react'
+import {
+  Add01Icon,
+  AlertCircleIcon,
+  RefreshIcon,
+  SmartPhone01Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { PairedDevice } from '@shared/remote/device'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -13,37 +19,33 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
-import { RefreshIcon } from '@renderer/components/refresh-icon'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
-import { Badge } from '@renderer/components/ui/badge'
-import { Input } from '@renderer/components/ui/input'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
-import { CONFIRM, ControlError, ROW_BUTTON, ROW_FIELD, SettingSwitch } from './controls'
+import {
+  CONFIRM,
+  ControlError,
+  DangerButton,
+  Pill,
+  SetButton,
+  SetInput,
+  SettingSwitch,
+  Spin,
+} from './controls'
 import { PairDialog } from './remote-pairing'
-import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
+import { DeviceIcon, DeviceTile } from './remote-parts'
 import { daysToRemoval, daysUnseen, focusDirectPort, kindLabel, lastSeen } from './remote-text'
-import { GroupNote, ItemLine, ItemRow, PageHeader } from './rows'
+import { GroupNote, ItemLine, ItemRow } from './rows'
 import { useApply } from './use-apply'
 
-/** The page's title and line, with remote access's switch at their end. */
-export function RemoteHeader({ id }: { id: string }) {
+/** Remote access's switch, the first row: whether it runs and the devices online under it. */
+export function RemoteSwitchRow() {
   const { hostId, useSettingsStore } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
   const onHost = useHostContext()
@@ -60,20 +62,17 @@ export function RemoteHeader({ id }: { id: string }) {
   }
   return (
     <>
-      <PageHeader id={id} title={t('sections.remote')}>
-        {t('pages.remote', onHost)}
-      </PageHeader>
-      <div className="mt-3.5 flex items-center gap-4 rounded-card bg-subtle px-4.5 py-4">
-        <div className="min-w-0 flex-1">
-          <div className="text-subheading leading-[normal] font-semibold tracking-normal">
-            {t('remote.switch')}
-          </div>
+      <div className="ui-sg-row">
+        <span className="ui-sg-label">
+          <b>{t('remote.switch')}</b>
           <RemoteStatusLine on={enabled} />
-        </div>
-        <ControlError error={error} />
-        {switchable !== false && (
-          <SettingSwitch label={t('remote.switch')} checked={enabled} onChange={change} />
-        )}
+        </span>
+        <span className="ui-sg-control">
+          <ControlError error={error} />
+          {switchable !== false && (
+            <SettingSwitch label={t('remote.switch')} checked={enabled} onChange={change} />
+          )}
+        </span>
       </div>
       <AlertDialog open={asking} onOpenChange={setAsking}>
         <AlertDialogContent className={CONFIRM}>
@@ -112,11 +111,7 @@ export function ThisBrowserBadge({
   const { t } = useTranslation('settings')
   const own = useWebHostStore((s) => s.host?.device.id === deviceId)
   if (!own) return null
-  return (
-    <Badge variant="neutral" className={className}>
-      {t('remote.web.thisBrowser')}
-    </Badge>
-  )
+  return <Pill className={className}>{t('remote.web.thisBrowser')}</Pill>
 }
 
 /** Under the status card's title: whether remote access runs, and the devices online. */
@@ -127,7 +122,7 @@ function RemoteStatusLine({ on }: { on: boolean }) {
   if (on) return <RemoteStatusRow status={status} />
   return (
     <StatusLine>
-      <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
+      <span aria-hidden className="k-dot" />
       {t('remote.status.offLine')}
     </StatusLine>
   )
@@ -139,15 +134,15 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
   if (!status || status.state === 'starting' || status.state === 'off') {
     return (
       <StatusLine>
-        <Spinner className="size-3" />
+        <Spin />
         {t('remote.status.starting')}
       </StatusLine>
     )
   }
   if (status.state === 'failed') {
     return (
-      <StatusLine hint={t('remote.status.failedHint')}>
-        <CircleAlertIcon className="size-3.5 shrink-0 text-danger" />
+      <StatusLine hint={t('remote.status.failedHint')} failed>
+        <Icon icon={AlertCircleIcon} size={14} />
         {t('remote.status.failed')}
       </StatusLine>
     )
@@ -158,8 +153,9 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
       <StatusLine
         hint={t(`remote.status.cannotListenHint.${direct.reason}`)}
         actions={<RetryDirect />}
+        failed
       >
-        <CircleAlertIcon className="size-3.5 shrink-0 text-danger" />
+        <Icon icon={AlertCircleIcon} size={14} />
         {t('remote.status.cannotListen', { port: direct.port })}
       </StatusLine>
     )
@@ -175,7 +171,7 @@ export function RemoteStatusRow({ status }: { status: RemoteStatus | null }) {
   if (direct.state === 'listening') parts.push(t('remote.status.listening', { port: direct.port }))
   return (
     <StatusLine>
-      <OnlineDot />
+      <span aria-hidden className="k-dot" data-tone="ok" />
       {[...parts, devices].join(' · ')}
     </StatusLine>
   )
@@ -190,15 +186,10 @@ function RetryDirect() {
   return (
     <>
       <ControlError error={error} />
-      <Button className={ROW_BUTTON} variant="outline" onClick={focusDirectPort}>
-        {t('remote.status.changePort')}
-      </Button>
-      <Button
-        className={ROW_BUTTON}
-        variant="outline"
-
-        aria-busy={refresh.phase === 'turning'}
-        disabled={refresh.phase === 'turning'}
+      <SetButton onClick={focusDirectPort}>{t('remote.status.changePort')}</SetButton>
+      <SetButton
+        loading={refresh.phase === 'turning'}
+        icon={<Icon icon={refresh.phase === 'done' ? Tick02Icon : RefreshIcon} size={14} />}
         onClick={() => {
           setError(null)
           void refresh
@@ -206,9 +197,8 @@ function RetryDirect() {
             .catch((e: unknown) => setError(errorMessage(e)))
         }}
       >
-        <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
         {t('remote.status.retry')}
-      </Button>
+      </SetButton>
     </>
   )
 }
@@ -216,20 +206,22 @@ function RetryDirect() {
 function StatusLine({
   hint,
   actions,
+  failed,
   children,
 }: {
   hint?: string
   actions?: ReactNode
+  failed?: boolean
   children: ReactNode
 }) {
   return (
-    <div className="mt-2 flex flex-col gap-2">
-      <div className="flex items-center gap-1.5 text-hint leading-[normal] text-secondary">
+    <>
+      <small className="k-status" data-failed={failed || undefined}>
         {children}
-      </div>
-      {hint && <p className="text-hint text-pretty text-tertiary">{hint}</p>}
-      {actions && <div className="flex items-center gap-2">{actions}</div>}
-    </div>
+      </small>
+      {hint && <small>{hint}</small>}
+      {actions && <span className="k-status__actions">{actions}</span>}
+    </>
   )
 }
 
@@ -261,14 +253,14 @@ export function HostNameField({ label }: { label: string }) {
   return (
     <>
       <ControlError error={error} />
-      <Input
+      <SetInput
         aria-label={label}
         value={draft ?? shown}
         placeholder={systemName}
         maxLength={256}
         spellCheck={false}
         autoComplete="off"
-        className={cn(ROW_FIELD, 'w-55 md:text-lede')}
+        className="k-input--wide"
         onFocus={() => setDraft(shown)}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
@@ -288,29 +280,20 @@ export function DeviceRow({ device, online }: { device: PairedDevice; online: bo
       item={device.id}
       label={device.name}
       onOpen={() => openSettingsItem('remote', device.id)}
-      tile={<DeviceTile icon={<DeviceIcon device={device} className="size-4.25" />} />}
+      tile={<DeviceTile icon={<DeviceIcon device={device} />} />}
       name={
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate">{device.name}</span>
+        <>
+          <span className="k-name">{device.name}</span>
           <ThisBrowserBadge deviceId={device.id} />
-        </span>
+        </>
       }
       right={
         online ? (
-          <span className="flex items-center gap-1.5 text-hint whitespace-nowrap text-secondary">
-            <OnlineDot />
-            {t('remote.devices.online')}
-          </span>
+          <Pill tone="success">{t('remote.devices.online')}</Pill>
         ) : removal !== null ? (
-          <span className="flex items-center gap-1.25 text-hint whitespace-nowrap text-warning">
-            <ClockIcon className="size-3.5" />
-            {t('remote.devices.removedIn', { count: removal })}
-          </span>
+          <Pill tone="warning">{t('remote.devices.removedIn', { count: removal })}</Pill>
         ) : (
-          <span className="flex items-center gap-1.5 text-hint whitespace-nowrap text-secondary">
-            <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-border-strong" />
-            {lastSeen(t, device, now)}
-          </span>
+          <Pill>{lastSeen(t, device, now)}</Pill>
         )
       }
     >
@@ -325,10 +308,14 @@ export function AddDeviceButton({ disabled = false }: { disabled?: boolean }) {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Button className={ROW_BUTTON} disabled={disabled} onClick={() => setOpen(true)}>
-        <QrCodeIcon data-icon="inline-start" />
+      <SetButton
+        variant="primary"
+        icon={<Icon icon={Add01Icon} size={14} />}
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
         {t('remote.devices.add')}
-      </Button>
+      </SetButton>
       <PairDialog open={open} onOpenChange={setOpen} />
     </>
   )
@@ -340,23 +327,22 @@ export function NoDevices() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <Empty className="px-6 py-7">
-        <EmptyHeader className="max-w-md">
-          <EmptyMedia variant="icon">
-            <SmartphoneIcon />
-          </EmptyMedia>
-          <EmptyTitle>{t('remote.devices.emptyTitle')}</EmptyTitle>
-          <EmptyDescription className="max-w-none">
-            {t('remote.devices.emptyHint')}
-          </EmptyDescription>
-        </EmptyHeader>
-        <EmptyContent>
-          <Button className={ROW_BUTTON} variant="outline" onClick={() => setOpen(true)}>
-            <PlusIcon data-icon="inline-start" />
+      <div className="ui-as-empty" data-bare="">
+        <span className="ui-as-empty__icon">
+          <Icon icon={SmartPhone01Icon} size={18} />
+        </span>
+        <b className="ui-as-empty__title">{t('remote.devices.emptyTitle')}</b>
+        <p className="ui-as-empty__text">{t('remote.devices.emptyHint')}</p>
+        <span className="k-empty-actions">
+          <SetButton
+            variant="primary"
+            icon={<Icon icon={Add01Icon} size={14} />}
+            onClick={() => setOpen(true)}
+          >
             {t('remote.devices.add')}
-          </Button>
-        </EmptyContent>
-      </Empty>
+          </SetButton>
+        </span>
+      </div>
       <PairDialog open={open} onOpenChange={setOpen} />
     </>
   )
@@ -445,15 +431,9 @@ export function ResetRemote() {
   return (
     <>
       <ControlError error={open ? null : error} />
-      <Button
-        className={ROW_BUTTON}
-        variant="destructive-outline"
-        disabled={!on || busy}
-        onClick={() => setOpen(true)}
-      >
-        {busy && <Spinner data-icon="inline-start" className="size-3.5" />}
+      <DangerButton busy={busy} disabled={!on} onClick={() => setOpen(true)}>
         {t('remote.reset.button')}
-      </Button>
+      </DangerButton>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

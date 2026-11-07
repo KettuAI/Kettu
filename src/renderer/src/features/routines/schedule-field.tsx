@@ -1,30 +1,24 @@
-// A routine's schedule: the kind and its fields, the runs ahead, and what is wrong with it.
+// A routine's schedule as a card of rows: the kind and its fields, the runs ahead, and what is
+// wrong with it.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  CalendarIcon,
-  ChevronDownIcon,
-  CircleAlertIcon,
-  ClockIcon,
-  InfoIcon,
-  TriangleAlertIcon,
-} from 'lucide-react'
+  Alert02Icon,
+  ArrowDown01Icon,
+  Calendar03Icon,
+  InformationCircleIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { enUS, zhCN } from 'react-day-picker/locale'
 import { nextRuns, validateSchedule, type ScheduleProblem } from '@shared/schedule'
 import type { Schedule } from '@shared/routines'
-import { SegmentedControl } from '@renderer/components/segmented-control'
-import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { Calendar } from '@renderer/components/ui/calendar'
-import { Input } from '@renderer/components/ui/input'
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@renderer/components/ui/input-group'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
-import { FieldSelect } from './fields'
+import { Row, Select } from './kit'
 import {
   CRON_FIELDS,
   clockTime,
@@ -231,124 +225,136 @@ export function ScheduleField({
   const badField =
     problem && segment === 'cron' ? CRON_FIELDS.findIndex((field) => field === problem.field) : -1
 
+  const clockRow = (
+    <Row title={t('schedule.time')}>
+      <ClockField value={time} label={t('schedule.time')} onChange={setClock} />
+    </Row>
+  )
+
   return (
-    <div className="flex w-full flex-col">
-      <SegmentedControl
-        aria-label={t('routine.schedule')}
-        value={segment}
-        segments={SEGMENTS.map((value) => ({
-          value,
-          label: t(`schedule.kind.${value}`),
-        }))}
-        onChange={choose}
-        className="self-start"
-      />
-      {segment !== 'cron' && (
-        <div className="mt-4 flex flex-wrap items-end gap-4">
-          {segment === 'once' && (
-            <Labeled label={t('schedule.date')}>
-              <Popover open={picking} onOpenChange={setPicking}>
-                <PopoverTrigger
-                  render={<Button variant="outline" aria-label={t('schedule.date')} />}
-                >
-                  <CalendarIcon data-icon="inline-start" className="size-3.5 text-tertiary" />
-                  <span className="tabular-nums">{dayDate(localTime(date), now)}</span>
-                  <ChevronDownIcon data-icon="inline-end" className="size-3.5 text-tertiary" />
-                </PopoverTrigger>
-                <PopoverContent align="start" className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    required
-                    selected={new Date(localTime(date))}
-                    defaultMonth={new Date(localTime(date))}
-                    disabled={{ before: new Date(today) }}
-                    locale={currentLocale() === 'zh-CN' ? zhCN : enUS}
-                    onSelect={(day: Date) => {
-                      const next = dateOf(day.getTime())
-                      setDate(next)
-                      setPicking(false)
-                      update({ kind: 'once', at: `${next}T${time}` })
-                    }}
+    <div className="ui-sg-card">
+      <Row title={t('schedule.runs')}>
+        <SegmentedControl
+          size="lg"
+          variant="tray"
+          aria-label={t('routine.schedule')}
+          value={segment}
+          onChange={choose}
+          options={SEGMENTS.map((value) => ({ value, label: t(`schedule.kind.${value}`) }))}
+        />
+      </Row>
+      {segment === 'once' && (
+        <>
+          <Row title={t('schedule.date')}>
+            <Popover open={picking} onOpenChange={setPicking}>
+              <PopoverTrigger
+                render={
+                  <button
+                    type="button"
+                    className="ui-ss-select ui-spf-lang k-select"
+                    aria-label={t('schedule.date')}
                   />
-                </PopoverContent>
-              </Popover>
-            </Labeled>
-          )}
-          {segment === 'every' && (
-            <>
-              <Labeled label={t('schedule.everyValue')}>
-                <FieldSelect
-                  label={t('schedule.everyValue')}
-                  value={String(minutes)}
-                  options={everyChoices(minutes).map((choice) => ({
-                    value: String(choice),
-                    label: minutesLabel(choice),
-                  }))}
-                  onChange={(value) => {
-                    const next = Number(value)
-                    const start = from ?? nextHour()
-                    setMinutes(next)
-                    setFrom(start)
-                    update({ kind: 'every', minutes: next, from: start })
-                  }}
-                />
-              </Labeled>
-              <Labeled label={t('schedule.countedFrom')}>
-                <ClockField
-                  value={fromText ?? clockOf(from ?? nextHour())}
-                  label={t('schedule.countedFrom')}
-                  onChange={(text) => {
-                    setFromText(text)
-                    if (!isClock(text)) return
-                    const start = todayAt(text)
-                    setFrom(start)
-                    update({ kind: 'every', minutes, from: start })
-                  }}
-                  onBlur={() => setFromText(null)}
-                />
-              </Labeled>
-            </>
-          )}
-          {segment === 'weekly' && (
-            <Labeled label={t('schedule.days')}>
-              <ToggleGroup
-                aria-label={t('schedule.days')}
-                multiple
-                value={days.map(String)}
-                onValueChange={(next) => {
-                  // At least one day stays on, so the schedule always runs.
-                  if (next.length === 0) return
-                  const picked = next.map(Number).sort((a, b) => a - b)
-                  setDays(picked)
-                  update({ kind: 'weekly', days: picked, time })
-                }}
-                variant="fill"
-                spacing={1}
+                }
               >
-                {WEEK.map((day) => (
-                  <ToggleGroupItem
-                    key={day}
-                    value={String(day)}
-                    aria-label={weekdayName(day, 'long')}
-                    className="h-8 min-w-8.5 px-1.75 text-hint"
-                  >
-                    {weekdayName(day, 'short')}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-            </Labeled>
-          )}
-          {(segment === 'once' || segment === 'daily' || segment === 'weekly') && (
-            <Labeled label={t('schedule.time')}>
-              <ClockField value={time} label={t('schedule.time')} onChange={setClock} />
-            </Labeled>
-          )}
-        </div>
+                <Icon icon={Calendar03Icon} size={14} />
+                <span className="k-num">{dayDate(localTime(date), now)}</span>
+                <Icon icon={ArrowDown01Icon} size={14} />
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  required
+                  selected={new Date(localTime(date))}
+                  defaultMonth={new Date(localTime(date))}
+                  disabled={{ before: new Date(today) }}
+                  locale={currentLocale() === 'zh-CN' ? zhCN : enUS}
+                  onSelect={(day: Date) => {
+                    const next = dateOf(day.getTime())
+                    setDate(next)
+                    setPicking(false)
+                    update({ kind: 'once', at: `${next}T${time}` })
+                  }}
+                />
+              </PopoverContent>
+            </Popover>
+          </Row>
+          {clockRow}
+        </>
+      )}
+      {segment === 'every' && (
+        <>
+          <Row title={t('schedule.everyValue')}>
+            <Select
+              label={t('schedule.everyValue')}
+              value={String(minutes)}
+              options={everyChoices(minutes).map((choice) => ({
+                value: String(choice),
+                label: minutesLabel(choice),
+              }))}
+              onChange={(value) => {
+                const next = Number(value)
+                const start = from ?? nextHour()
+                setMinutes(next)
+                setFrom(start)
+                update({ kind: 'every', minutes: next, from: start })
+              }}
+            />
+          </Row>
+          <Row title={t('schedule.countedFrom')}>
+            <ClockField
+              value={fromText ?? clockOf(from ?? nextHour())}
+              label={t('schedule.countedFrom')}
+              onChange={(text) => {
+                setFromText(text)
+                if (!isClock(text)) return
+                const start = todayAt(text)
+                setFrom(start)
+                update({ kind: 'every', minutes, from: start })
+              }}
+              onBlur={() => setFromText(null)}
+            />
+          </Row>
+        </>
+      )}
+      {segment === 'daily' && clockRow}
+      {segment === 'weekly' && (
+        <>
+          <Row title={t('schedule.days')}>
+            <span className="k-days" role="group" aria-label={t('schedule.days')}>
+              {WEEK.map((day) => (
+                <button
+                  key={day}
+                  type="button"
+                  aria-pressed={days.includes(day)}
+                  aria-label={weekdayName(day, 'long')}
+                  onClick={() => {
+                    const next = days.includes(day)
+                      ? days.filter((other) => other !== day)
+                      : [...days, day]
+                    // At least one day stays on, so the schedule always runs.
+                    if (next.length === 0) return
+                    const picked = next.sort((a, b) => a - b)
+                    setDays(picked)
+                    update({ kind: 'weekly', days: picked, time })
+                  }}
+                >
+                  {weekdayName(day, 'short').slice(0, 2)}
+                </button>
+              ))}
+            </span>
+          </Row>
+          {clockRow}
+        </>
       )}
       {segment === 'cron' && (
-        <div className="mt-4">
-          <Labeled label={t('schedule.expression')}>
-            <Input
+        <div className="ui-sg-row k-cron">
+          <span className="ui-sg-label">
+            <b>{t('schedule.expression')}</b>
+            <small>{t('schedule.cronNote')}</small>
+          </span>
+          <span className="k-cron__field">
+            <input
+              className="ui-sg-input k-mono"
               value={expression}
               aria-label={t('schedule.expression')}
               aria-invalid={!!problem || undefined}
@@ -362,99 +368,78 @@ export function ScheduleField({
               onSelect={(event) => trackCaret(event.currentTarget)}
               onFocus={(event) => trackCaret(event.currentTarget)}
               onBlur={() => setCaretField(null)}
-              className="font-mono text-command md:text-command"
             />
-          </Labeled>
-          {tokens && (
-            // Each field's text over its name, as the expression gives them.
-            <div aria-hidden className="mt-2 grid grid-cols-5 gap-2 px-3">
-              {CRON_FIELDS.map((field, index) => (
-                <span
-                  key={field}
-                  className={cn(
-                    'flex min-w-0 flex-col text-tertiary',
-                    index === caretField && 'text-primary',
-                    index === badField && 'text-danger',
-                  )}
-                >
-                  <span className="truncate font-mono text-code-sm">{tokens[index] ?? ' '}</span>
-                  <span className="truncate text-meta">{t(`schedule.field.${field}`)}</span>
-                </span>
-              ))}
-            </div>
-          )}
-          {!problem && (
-            <p className="mt-2 px-3 text-hint text-tertiary">{t('schedule.cronSyntax')}</p>
-          )}
+            {tokens && (
+              // Each field's text over its name, as the expression gives them.
+              <span aria-hidden className="k-cron__parts">
+                {CRON_FIELDS.map((field, index) => (
+                  <span
+                    key={field}
+                    data-at={index === caretField || undefined}
+                    data-bad={index === badField || undefined}
+                  >
+                    <b className="k-mono">{tokens[index] ?? '–'}</b>
+                    {t(`schedule.field.${field}`)}
+                  </span>
+                ))}
+              </span>
+            )}
+            {!problem && <span className="k-cron__syntax">{t('schedule.cronSyntax')}</span>}
+          </span>
         </div>
       )}
 
       {problem && !ran ? (
-        <>
-          <p className="mt-2.5 flex gap-1.5 text-hint text-danger">
-            <CircleAlertIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+        <div className="k-problem" role="alert">
+          <b>
+            <Icon icon={Alert02Icon} size={14} />
             {problemText(problem, translate)}
-          </p>
-          <Alert variant="warning" className="mt-3 bg-warning-tint">
-            <TriangleAlertIcon />
-            <AlertDescription className="text-primary">
-              {saved
-                ? t('schedule.unvalid', { schedule: scheduleWords(saved) })
-                : t('routine.scheduleNotSaved')}
-            </AlertDescription>
-          </Alert>
-        </>
+          </b>
+          <span>
+            {saved
+              ? t('schedule.unvalid', { schedule: scheduleWords(saved) })
+              : t('routine.scheduleNotSaved')}
+          </span>
+        </div>
       ) : (
-        <div className="mt-4 rounded-code bg-subtle px-3.5 py-3">
-          <div className="flex gap-6">
-            <div className="min-w-0 flex-1">
-              <p className="text-lede leading-5 font-medium">{scheduleWords(draft)}</p>
-              <p className="mt-px text-hint text-tertiary">
-                {ran && onceAt !== null
-                  ? t('schedule.ranOnce', { date: dayDate(onceAt, now), time: clockTime(onceAt) })
-                  : draft.kind === 'once'
-                    ? t('schedule.onceOff')
-                    : t('schedule.nextRuns')}
-              </p>
-            </div>
-            {!ran && (
-              <ul className="flex shrink-0 flex-col gap-0.75 text-right text-hint text-secondary tabular">
-                {preview.map((run) => (
-                  <li key={`${run.at}-${run.shift ?? ''}`}>{previewTime(run.at, now)}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {!ran &&
-            preview.map((run) =>
-              run.shift ? (
-                <p key={`shift-${run.at}`} className="mt-2.5 flex gap-2 text-hint text-warning">
-                  <InfoIcon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
-                  {run.shift === 'gap'
-                    ? t('schedule.clockGap', { time: clockTime(run.at) })
-                    : t('schedule.clockOverlap')}
-                </p>
-              ) : null,
-            )}
+        <div className="ui-sg-row k-next">
+          <span className="ui-sg-label">
+            <b>{draft.kind === 'once' ? t('schedule.runsOnce') : t('schedule.nextRuns')}</b>
+            <small>
+              {ran && onceAt !== null
+                ? t('schedule.ranOnce', { date: dayDate(onceAt, now), time: clockTime(onceAt) })
+                : draft.kind === 'once'
+                  ? t('schedule.onceOff')
+                  : t('schedule.dstNote')}
+            </small>
+            {!ran &&
+              preview.map((run) =>
+                run.shift ? (
+                  <span key={`shift-${run.at}`} className="k-next__shift">
+                    <Icon icon={InformationCircleIcon} size={13} />
+                    {run.shift === 'gap'
+                      ? t('schedule.clockGap', { time: clockTime(run.at) })
+                      : t('schedule.clockOverlap')}
+                  </span>
+                ) : null,
+              )}
+          </span>
+          {!ran && (
+            <span className="k-next__list">
+              {preview.map((run) => (
+                <span key={`${run.at}-${run.shift ?? ''}`} className="k-num">
+                  {previewTime(run.at, now)}
+                </span>
+              ))}
+            </span>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-/** A field's label over it. */
-function Labeled({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col">
-      <span aria-hidden className="mb-1.5 text-small leading-4 font-medium text-tertiary">
-        {label}
-      </span>
-      {children}
-    </div>
-  )
-}
-
-/** A time of day, typed, with a clock before it. */
+/** A time of day, typed. */
 function ClockField({
   value,
   label,
@@ -467,19 +452,14 @@ function ClockField({
   onBlur?: () => void
 }) {
   return (
-    <InputGroup className="w-28.5">
-      <InputGroupAddon>
-        <ClockIcon className="text-tertiary" />
-      </InputGroupAddon>
-      <InputGroupInput
-        type="time"
-        value={value}
-        aria-label={label}
-        onChange={(event) => onChange(event.target.value)}
-        onBlur={onBlur}
-        className="tabular [&::-webkit-calendar-picker-indicator]:hidden"
-      />
-    </InputGroup>
+    <input
+      type="time"
+      className="ui-sg-input k-time"
+      value={value}
+      aria-label={label}
+      onChange={(event) => onChange(event.target.value)}
+      onBlur={onBlur}
+    />
   )
 }
 

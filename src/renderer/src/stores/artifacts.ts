@@ -23,10 +23,10 @@ interface ArtifactsStore {
   /** The page's filters, kept while the viewer shows so Back returns to the same list. */
   filter: string
   kindFilter: ArtifactKind | null
-  /** A project's folder, or NO_PROJECT. */
-  projectFilter: string | null
-  /** The agent of the sessions the artifacts show under. */
-  agentFilter: AgentId | null
+  /** Projects' folders, or NO_PROJECT; none keeps every project. */
+  projectFilter: readonly string[]
+  /** The agents of the sessions the artifacts show under; none keeps every agent. */
+  agentFilter: readonly AgentId[]
   /** When this device last showed each artifact. */
   openedAt: OpenedTimes
   /** The card the viewer was opened from, which takes the focus back. */
@@ -60,8 +60,8 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   error: null,
   filter: '',
   kindFilter: null,
-  projectFilter: null,
-  agentFilter: null,
+  projectFilter: [],
+  agentFilter: [],
   openedAt: parseOpened(readJson<unknown>(OPENED_KEY, {})),
   opened: null,
   importFailed: null,
@@ -124,11 +124,11 @@ export function setArtifactsKindFilter(kindFilter: ArtifactKind | null): void {
   useArtifactsStore.setState({ kindFilter })
 }
 
-export function setArtifactsProjectFilter(projectFilter: string | null): void {
+export function setArtifactsProjectFilter(projectFilter: readonly string[]): void {
   useArtifactsStore.setState({ projectFilter })
 }
 
-export function setArtifactsAgentFilter(agentFilter: AgentId | null): void {
+export function setArtifactsAgentFilter(agentFilter: readonly AgentId[]): void {
   useArtifactsStore.setState({ agentFilter })
 }
 

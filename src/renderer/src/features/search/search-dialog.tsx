@@ -1,20 +1,34 @@
-import { useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent } from 'react'
-import { useTranslation } from 'react-i18next'
-import { SearchIcon } from 'lucide-react'
-import { newSession, openProjectDialog } from '@renderer/app/actions'
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import {
-  Combobox,
-  ComboboxCollection,
-  ComboboxEmpty,
-  ComboboxGroup,
-  ComboboxInput,
-  ComboboxLabel,
-  ComboboxList,
-} from '@renderer/components/ui/combobox'
-import { Dialog, DialogContent, DialogTitle } from '@renderer/components/ui/dialog'
-import { Kbd } from '@renderer/components/ui/kbd'
-import { Toggle } from '@renderer/components/ui/toggle'
-import { cn } from '@renderer/lib/utils'
+  Analytics01Icon,
+  ArrowRight01Icon,
+  Clock01Icon,
+  DashboardSquare02Icon,
+  File01Icon,
+  FolderOpenIcon,
+  Globe02Icon,
+  KeyboardIcon,
+  PaintBoardIcon,
+  PencilEdit02Icon,
+  Presentation01Icon,
+  RepeatIcon,
+  Settings02Icon,
+  SidebarLeftIcon,
+} from '@hugeicons/core-free-icons'
+import type { IconSvgElement } from '@hugeicons/react'
+import { useTranslation } from 'react-i18next'
+import { newSession, openProjectDialog } from '@renderer/app/actions'
+import { FolderClosedMark, Icon } from '@renderer/components/affect/app-shell'
+import {
+  CommandMenu,
+  type Command,
+  type CommandGroup,
+} from '@renderer/components/affect/command-menu'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { Dialog } from '@renderer/components/ui/dialog'
+import type { ArtifactKind } from '@renderer/features/artifacts/model'
+import { keyCaps } from '@renderer/features/shell/shortcuts'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import {
@@ -31,6 +45,7 @@ import {
   useViewStore,
 } from '@renderer/stores/view'
 import {
+  markParts,
   runSearch,
   SCOPES,
   type ResultGroup,
@@ -38,34 +53,28 @@ import {
   type SearchEntry,
   type SearchScope,
 } from './search-model'
-import { SearchRow } from './search-row'
 import { useSearchEntries } from './use-search-entries'
 
 /**
- * Base UI takes 'always' to keep the first row highlighted, on open and when the list changes with
- * the scope; its prop type only says boolean.
- */
-const ALWAYS_HIGHLIGHT = 'always' as unknown as boolean
-
-/** Keeps the focus in the field when a control beside it is pressed. */
-const keepFocus = (event: MouseEvent) => event.preventDefault()
-
-/**
- * Search over the window, from the sidebar or Mod+K: sessions, artifacts, routines, projects,
- * settings sections and actions. An empty field lists the recent ones; typing narrows them.
+ * Search over the window, from the sidebar's field or Mod+K: sessions, artifacts, routines,
+ * projects, settings sections and actions, in scopes, on affectUI's Command Menu over a soft scrim.
  */
 export function SearchDialog() {
   const { t } = useTranslation('sidebar')
   const open = useViewStore((s) => s.searchOpen)
   return (
     <Dialog open={open} onOpenChange={showSearch}>
-      <DialogContent
-        showCloseButton={false}
-        className="top-[12svh] translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-[620px]"
-      >
-        <DialogTitle className="sr-only">{t('nav.search')}</DialogTitle>
-        {open && <SearchPalette />}
-      </DialogContent>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Backdrop className="kettu-search-scrim" />
+        <DialogPrimitive.Popup
+          data-overlay-layer=""
+          aria-label={t('nav.search')}
+          className="kettu-search-popup"
+        >
+          <DialogPrimitive.Title className="sr-only">{t('nav.search')}</DialogPrimitive.Title>
+          {open && <SearchPalette />}
+        </DialogPrimitive.Popup>
+      </DialogPrimitive.Portal>
     </Dialog>
   )
 }
@@ -122,13 +131,34 @@ function openEntry(entry: SearchEntry): void {
   }
 }
 
+const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], Exclude<SearchScope, 'all'>>> = {
+  session: 'sessions',
+  artifact: 'artifacts',
+  routine: 'routines',
+  project: 'projects',
+  section: 'settings',
+}
+
+// A row that switches to its group's scope, "Show all 12".
+const SHOW_ALL = 'scope:'
+
 function SearchPalette() {
   const { t } = useTranslation('sidebar')
   const entries = useSearchEntries()
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<SearchScope>('all')
   const results = useMemo(() => runSearch(entries, query, scope), [entries, query, scope])
+  const byKey = useMemo(() => new Map(entries.map((entry) => [entry.key, entry])), [entries])
   const trimmed = query.trim()
+  const { words } = results
+  // Each word of the query is marked wherever it matches, as the matching reads them.
+  const mark = useCallback(
+    (text: string) =>
+      markParts(text, words).map((part, i) =>
+        part.match ? <mark key={i}>{part.text}</mark> : <Fragment key={i}>{part.text}</Fragment>,
+      ),
+    [words],
+  )
 
   // The artifact list is read while the palette shows; routines load with the window.
   useEffect(() => {
@@ -139,195 +169,137 @@ function SearchPalette() {
   }, [])
   const artifactsLoaded = useArtifactsStore((s) => s.list !== null)
 
-  const choose = (entry: SearchEntry | null) => {
-    if (!entry) return
-    showSearch(false)
-    openEntry(entry)
-  }
+  const groups: CommandGroup[] = results.groups.map((group) => {
+    const scopeOf = SCOPE_OF_KIND[group.key]
+    const label =
+      scope === 'all'
+        ? t(`search.group.${group.key}`)
+        : trimmed
+          ? t('search.results', { count: group.total })
+          : t(`search.latest.${scope}`)
+    const more: Command[] =
+      scope === 'all' && scopeOf && group.total > group.items.length
+        ? [
+            {
+              id: `${SHOW_ALL}${scopeOf}`,
+              label: t('search.showAll', { count: group.total }),
+              icon: <Icon icon={ArrowRight01Icon} size={16} />,
+            },
+          ]
+        : []
+    return { id: group.key, label, commands: [...group.items.map(commandOf), ...more] }
+  })
 
-  const step = (by: 1 | -1) => {
-    const at = SCOPES.indexOf(scope)
-    setScope(SCOPES[(at + by + SCOPES.length) % SCOPES.length]!)
-  }
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== 'Tab' || event.nativeEvent.isComposing) return
-    event.preventDefault()
-    step(event.shiftKey ? -1 : 1)
-  }
+  const scopes = SCOPES.map((id) => ({
+    id,
+    label: t(`search.scope.${id}`),
+    count: id === 'all' ? undefined : results.counts[id],
+  }))
 
-  return (
-    <Combobox<SearchEntry>
-      inline
-      open
-      autoHighlight={ALWAYS_HIGHLIGHT}
-      items={results.groups}
-      filter={null}
-      value={null}
-      onValueChange={choose}
-      inputValue={query}
-      onInputValueChange={setQuery}
-      itemToStringLabel={(entry) => entry.title}
-    >
-      <div className="flex items-center gap-2.5 px-4">
-        <SearchIcon aria-hidden className="size-4.5 shrink-0 text-tertiary" />
-        <ComboboxInput
-          showTrigger={false}
-          autoFocus
-          placeholder={t('search.placeholder')}
-          onKeyDown={onKeyDown}
-          className="h-13 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none has-[[data-slot=input-group-control]:focus-visible]:shadow-none! **:data-[slot=input-group-control]:px-0 **:data-[slot=input-group-control]:text-label"
-        />
-        <Kbd>Esc</Kbd>
+  const empty: ReactNode =
+    scope === 'artifacts' && !artifactsLoaded ? (
+      <div className="kettu-search-empty">
+        <span>{t('search.loading')}</span>
       </div>
-      <div className="hairline-x bg-border-soft" />
-      <div
-        role="group"
-        aria-label={t('search.scopes')}
-        className="flex gap-1 overflow-x-auto px-3 py-2"
-      >
-        {SCOPES.map((item) => (
-          <ScopeTab
-            key={item}
-            scope={item}
-            active={item === scope}
-            count={item === 'all' && !trimmed ? 0 : results.counts[item]}
-            onSelect={setScope}
-          />
-        ))}
-      </div>
-      <div className="hairline-x bg-border-soft" />
-      <p role="status" className="sr-only">
-        {t('search.results', { count: results.counts[scope] })}
-      </p>
-      <ComboboxEmpty className="flex flex-col items-center gap-1 px-4 py-10 text-center empty:hidden">
-        <EmptyNote
-          query={trimmed}
-          scope={scope}
-          loading={scope === 'artifacts' && !artifactsLoaded}
-        />
-      </ComboboxEmpty>
-      <ComboboxList
-        aria-label={t('nav.search')}
-        className="max-h-[min(440px,58svh)] p-1.5 data-empty:hidden"
-      >
-        {(group: ResultGroup) => (
-          <ComboboxGroup key={group.key} items={group.items}>
-            {scope === 'all' && <GroupHeader group={group} onShowAll={setScope} />}
-            <ComboboxCollection>
-              {(entry: SearchEntry) => (
-                <SearchRow key={entry.key} entry={entry} words={results.words} />
-              )}
-            </ComboboxCollection>
-          </ComboboxGroup>
+    ) : (
+      <div className="kettu-search-empty">
+        <b>{trimmed ? t('search.noMatch', { query: trimmed }) : t(`search.none.${scope}`)}</b>
+        {trimmed && (
+          <span>
+            {scope === 'all'
+              ? t('search.searchedAll')
+              : t('search.searchedScope', { scope: t(`search.scope.${scope}`) })}
+          </span>
         )}
-      </ComboboxList>
-      <div className="hairline-x bg-border-soft" />
-      <div className="flex h-10 items-center gap-4 px-4 text-hint text-tertiary">
-        <Hint keys={['↑', '↓']} label={t('search.hint.navigate')} />
-        <Hint keys={['↵']} label={t('search.hint.open')} />
-        <Hint keys={['⇥']} label={t('search.hint.scope')} />
       </div>
-    </Combobox>
-  )
-}
+    )
 
-function Hint({ keys, label }: { keys: string[]; label: string }) {
   return (
-    <span className="flex items-center gap-1.5">
-      <span className="flex gap-1">
-        {keys.map((key) => (
-          <Kbd key={key}>{key}</Kbd>
-        ))}
-      </span>
-      {label}
-    </span>
+    <CommandMenu
+      className="kettu-search"
+      groups={groups}
+      autoFocus
+      filter={false}
+      ask={false}
+      placeholder={t('search.placeholder')}
+      scopes={scopes}
+      scope={scope}
+      onScopeChange={(id) => setScope(id as SearchScope)}
+      onQueryChange={setQuery}
+      empty={empty}
+      labels={{ input: t('nav.search'), scopes: t('search.scopes'), list: t('nav.search') }}
+      mark={mark}
+      hints={
+        <>
+          <span>
+            <kbd>↑</kbd>
+            <kbd>↓</kbd> {t('search.hint.navigate')}
+          </span>
+          <span>
+            <kbd>↵</kbd> {t('search.hint.open')}
+          </span>
+          <span>
+            <kbd>⇥</kbd> {t('search.hint.scope')}
+          </span>
+        </>
+      }
+      onClose={() => showSearch(false)}
+      onRun={(id) => {
+        if (id.startsWith(SHOW_ALL)) return setScope(id.slice(SHOW_ALL.length) as SearchScope)
+        const entry = byKey.get(id)
+        if (!entry) return
+        showSearch(false)
+        openEntry(entry)
+      }}
+    />
   )
 }
 
-function ScopeTab({
-  scope,
-  active,
-  count,
-  onSelect,
-}: {
-  scope: SearchScope
-  active: boolean
-  count: number
-  onSelect: (scope: SearchScope) => void
-}) {
-  const { t } = useTranslation('sidebar')
-  return (
-    <Toggle
-      size="sm"
-      pressed={active}
-      onPressedChange={() => onSelect(scope)}
-      // Tab steps through the scopes from the field, so the tabs themselves take no focus.
-      tabIndex={-1}
-      onMouseDown={keepFocus}
-      className={cn('gap-1.5 text-secondary aria-pressed:font-medium aria-pressed:text-foreground')}
-    >
-      {t(`search.scope.${scope}`)}
-      {count > 0 && <span className="font-normal text-tertiary tabular-nums">{count}</span>}
-    </Toggle>
-  )
+const ACTION_ICON: Record<SearchAction, IconSvgElement> = {
+  newSession: PencilEdit02Icon,
+  openProject: FolderOpenIcon,
+  openUsage: Analytics01Icon,
+  openArtifacts: DashboardSquare02Icon,
+  openRoutines: RepeatIcon,
+  openSettings: Settings02Icon,
+  showShortcuts: KeyboardIcon,
+  toggleSidebar: SidebarLeftIcon,
 }
 
-function GroupHeader({
-  group,
-  onShowAll,
-}: {
-  group: ResultGroup
-  onShowAll: (scope: SearchScope) => void
-}) {
-  const { t } = useTranslation('sidebar')
-  const more = group.total > group.items.length
-  const scope = SCOPE_OF_KIND[group.key]
-  return (
-    <div className="flex items-center justify-between pr-2">
-      <ComboboxLabel className="px-2.5">{t(`search.group.${group.key}`)}</ComboboxLabel>
-      {more && scope && (
-        <button
-          type="button"
-          tabIndex={-1}
-          onMouseDown={keepFocus}
-          onClick={() => onShowAll(scope)}
-          className="rounded-md px-1.5 text-small text-tertiary transition-colors hover:text-foreground"
-        >
-          {t('search.showAll', { count: group.total })}
-        </button>
-      )}
-    </div>
-  )
+const KIND_ICON: Record<ArtifactKind, IconSvgElement> = {
+  document: File01Icon,
+  slides: Presentation01Icon,
+  web: Globe02Icon,
+  canvas: PaintBoardIcon,
 }
 
-const SCOPE_OF_KIND: Partial<Record<ResultGroup['key'], SearchScope>> = {
-  session: 'sessions',
-  artifact: 'artifacts',
-  routine: 'routines',
-  project: 'projects',
-  section: 'settings',
-}
-
-function EmptyNote({
-  query,
-  scope,
-  loading,
-}: {
-  query: string
-  scope: SearchScope
-  loading: boolean
-}) {
-  const { t } = useTranslation('sidebar')
-  if (loading) return <span className="text-tertiary">{t('search.loading')}</span>
-  if (!query) return <span className="text-tertiary">{t(`search.none.${scope}`)}</span>
-  return (
-    <>
-      <span className="text-secondary">{t('search.noMatch', { query })}</span>
-      <span className="text-hint text-tertiary">
-        {scope === 'all'
-          ? t('search.searchedAll')
-          : t('search.searchedScope', { scope: t(`search.scope.${scope}`) })}
-      </span>
-    </>
-  )
+/** One result as the menu's row: its mark, its name, a line about it and when, and its keys. */
+function commandOf(entry: SearchEntry): Command {
+  const base = {
+    id: entry.key,
+    label: entry.title,
+    hint: entry.meta ?? undefined,
+    trail: entry.trailing ?? undefined,
+  }
+  switch (entry.kind) {
+    case 'session':
+      return {
+        ...base,
+        logo: <AgentMark agent={entry.agentId} size={16} hostId={entry.hostId} />,
+      }
+    case 'project':
+      return { ...base, logo: <FolderClosedMark /> }
+    case 'artifact':
+      return { ...base, icon: <Icon icon={KIND_ICON[entry.artifactKind]} size={16} /> }
+    case 'routine':
+      return { ...base, icon: <Icon icon={Clock01Icon} size={16} /> }
+    case 'section':
+      return { ...base, icon: <Icon icon={Settings02Icon} size={16} /> }
+    case 'action':
+      return {
+        ...base,
+        icon: <Icon icon={ACTION_ICON[entry.action]} size={16} />,
+        keys: entry.shortcut ? keyCaps(entry.shortcut) : undefined,
+      }
+  }
 }

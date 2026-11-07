@@ -67,18 +67,6 @@
     "showFullDiff": "显示完整差异"
   },
   "permission": {
-    "ask": {
-      "read": "{{agent}} 想读取这个文件。",
-      "edit": "{{agent}} 想做出这项更改。",
-      "delete": "{{agent}} 想删除这个文件。",
-      "move": "{{agent}} 想移动这个文件。",
-      "search": "{{agent}} 想搜索这个项目。",
-      "execute": "{{agent}} 想运行这条命令。",
-      "fetch": "{{agent}} 想获取这个网页。",
-      "switchMode": "{{agent}} 想切换模式。",
-      "other": "{{agent}} 想使用这个工具。"
-    },
-    "answerGroup": "回应",
     "outsideScope": "超出此例程的权限：{{level}}。",
     "answer": {
       "allowOnce": "已允许一次",
@@ -90,16 +78,43 @@
       "withdrawn": "已不再需要",
       "onDevice": "{{answer}} · {{device}}"
     },
-    "label": "权限请求",
     "answeredOn": "已在 {{device}} 上回答过。",
     "answeredInWindow": "已在另一个窗口中回答过。",
-    "needsYou": "需要你",
-    "runCommand": "运行命令"
+    "card": {
+      "title": "<b>{{agent}}</b> 想要<b>{{action}}</b>",
+      "action": {
+        "read": "读取文件",
+        "edit": "编辑文件",
+        "delete": "删除文件",
+        "move": "移动文件",
+        "search": "搜索项目",
+        "execute": "运行命令",
+        "fetch": "获取网页",
+        "switchMode": "切换模式",
+        "other": "使用工具"
+      },
+      "risky": "有风险",
+      "destructive": "破坏性",
+      "once": "仅这一次",
+      "always": "始终",
+      "allowOnce": "允许一次",
+      "allowAlways": "始终允许",
+      "deny": "拒绝",
+      "howLong": "有效期",
+      "touches": "涉及的内容",
+      "more": "还有 {{count}} 项",
+      "showLess": "收起",
+      "note": {
+        "allowOnce": "仅此一次，不会延续到下次",
+        "allowAlways": "{{agent}} 不会再为此询问",
+        "rejectOnce": "已告知 {{agent}}，它不会执行",
+        "rejectAlways": "{{agent}} 不会再为此询问",
+        "cancelled": "回合在回答前已结束",
+        "withdrawn": "{{agent}} 已不再需要"
+      }
+    }
   },
   "browserOrigin": {
-    "label": "新站点",
-    "ask": "{{agent}} 想要在浏览器中打开此站点。",
-    "answerGroup": "答复",
     "decision": {
       "session": "本会话内允许",
       "project": "在本项目中始终允许 {{site}}",
@@ -111,15 +126,9 @@
       "deny": "已拒绝",
       "timeout": "未在限定时间内得到答复"
     },
-    "open": "打开",
-    "newSite": "新网站",
-    "wants": "{{agent}} 想打开 <site>{{site}}</site>",
     "where": "在本会话的浏览器里打开 · 带着你的登录状态"
   },
   "deviceAccess": {
-    "label": "移动设备",
-    "ask": "{{agent}} 想使用这台设备。",
-    "answerGroup": "回答",
     "decision": {
       "session": "本次会话允许",
       "always": "始终允许这台设备",
@@ -131,15 +140,9 @@
       "deny": "已拒绝",
       "timeout": "没有及时回答"
     },
-    "use": "使用",
-    "status": "设备",
-    "wants": "{{agent}} 想使用 <device>{{device}}</device>",
     "where": "点按、输入和截图，截图会交给这个 Agent 的模型服务商"
   },
   "computerApp": {
-    "label": "使用应用",
-    "ask": "{{agent}} 想使用你电脑上的这个应用。",
-    "answerGroup": "答复",
     "decision": {
       "session": "本会话内允许",
       "always": "始终允许 {{app}}",
@@ -151,9 +154,6 @@
       "deny": "已拒绝",
       "timeout": "未在限定时间内得到答复"
     },
-    "use": "使用",
-    "newApp": "新应用",
-    "wants": "{{agent}} 想使用 <app>{{app}}</app>",
     "where": "读取它的窗口，在后台点击和输入"
   },
   "computerBar": {
@@ -205,10 +205,7 @@
   },
   "subagent": {
     "fallbackTitle": "子 Agent",
-    "tools_other": "{{count}} 个工具",
-    "earlier_other": "前面还有 {{count}} 步",
-    "stop": "停止",
-    "openLog": "打开完整记录"
+    "tools_other": "{{count}} 个工具"
   },
   "subagentBar": {
     "runsFor": "{{agent}} 正在为 <parent/> 运行这个子 Agent",
@@ -268,26 +265,23 @@
     "stop": "停止",
     "deletedLine": "已删除 artifact <title/>"
   },
-  "plan": {
-    "inProgress": "进行中",
-    "todo": "待办"
-  },
   "planChip": {
     "label": "计划：第 {{step}} 步，共 {{total}} 步，{{content}}",
     "labelDone": "计划：{{total}} 步都已完成",
     "title": "计划",
-    "count": "{{step}}/{{total}}",
-    "step": "第 {{step}} 步，共 {{total}} 步"
+    "count": "{{step}}/{{total}}"
   },
   "userActions": {
     "steered": "已插入当前对话",
-    "copyMessage": "复制消息"
+    "copyMessage": "复制消息",
+    "label": "消息操作"
   },
   "replyFooter": {
     "copyReply": "复制回复",
     "fork": "从这里分叉",
     "forking": "正在分叉…",
-    "forkNotReady": "会话就绪后才能分叉"
+    "forkNotReady": "会话就绪后才能分叉",
+    "label": "回复操作"
   },
   "changes": {
     "label": "改动",
@@ -561,8 +555,6 @@
     "exit": "退出码 {{code}}",
     "openInTerminal": "在终端中打开",
     "showEarlier_other": "显示前面的 {{count}} 行",
-    "openDiff": "打开 diff",
-    "copyNew": "复制新内容",
     "copy": "复制",
     "wrap": "自动换行",
     "showMore_other": "再显示 {{count}} 行",
@@ -626,16 +618,12 @@
     "awayComposer": "{{name}} 没有连上：{{state}}。它回来后才能接着发消息。"
   },
   "question": {
-    "label": "问题",
-    "ask": "{{agent}} 问你一个问题。",
     "asksYou": "等你回答",
     "answeredOther": "其他回答",
     "other": "其他回答…",
     "otherPlaceholder": "写下你自己的回答",
     "steps": "问题",
     "step": "第 {{number}} 个问题",
-    "stepAnswered": "第 {{number}} 个问题，已回答",
-    "selectMany": "可多选",
     "skip": "跳过",
     "skipAll": "全部跳过",
     "next": "下一题",
@@ -645,7 +633,24 @@
     "skipped": "已跳过",
     "secret": "已隐藏",
     "count_other": "{{count}} 个问题",
-    "secretHint": "输入时隐藏，也不留在对话里"
+    "secretHint": "输入时隐藏，也不留在对话里",
+    "hint": {
+      "one": "选一项",
+      "oneOrOwn": "选一项，或写下你自己的回答",
+      "any": "选择所有适用的",
+      "anyOrOwn": "选择所有适用的，或写下你自己的回答"
+    },
+    "picked_other": "已选 {{count}} 项",
+    "ownAnswer": "你自己的回答",
+    "typing": "写下你的回答",
+    "separator": "、",
+    "sendStep": "发送",
+    "send": "发送回答",
+    "back": "返回",
+    "review": "把这些回答发给 {{agent}}？",
+    "reviewHint": "点一个回答可以修改它",
+    "of": "{{agent}} · 第 {{number}} 个问题，共 {{count}} 个",
+    "otherTell": "还有别的？告诉 {{agent}}"
   },
   "reply": {
     "button": "回复",
@@ -656,7 +661,6 @@
   "planCard": {
     "label": "计划",
     "version": "计划 {{version}}",
-    "ask": "{{agent}} 写好了计划，等你决定。",
     "show": "显示",
     "plan": "计划",
     "changes": "改动",
@@ -667,8 +671,6 @@
     "buildIn": "开始构建，使用",
     "implementAsk": "按这个计划实施吗？",
     "keepPlanning": "继续计划，告诉 {{agent}} 要改什么…",
-    "staysPlanning": "留在计划模式，把你的意见交给 {{agent}}",
-    "leavesTo": "离开计划模式，切到 {{mode}}",
     "sendNote": "发送意见",
     "keepPlanningButton": "继续计划",
     "startBuilding": "开始构建",
@@ -682,13 +684,12 @@
     "copy": "复制计划",
     "copied": "已复制计划",
     "copyFailed": "无法复制计划",
-    "showWhole": "显示完整计划"
+    "showWhole": "显示完整计划",
+    "finishedBuild": "{{agent}} 已完成计划。开始构建，或附上意见继续计划。",
+    "finishedImplement": "{{agent}} 已完成计划。按它实施，或附上意见继续计划。"
   },
   "elicitation": {
     "inAgent": "{{agent}} 里的 MCP 服务器",
-    "label": "{{server}} 的请求",
-    "ask": "{{server}} 请你填写表单。",
-    "askOpen": "{{server}} 请你打开 {{site}}。",
     "optional": "可选",
     "required": "必填",
     "tooShort_other": "至少 {{count}} 个字符",
@@ -715,5 +716,24 @@
     "openAgain": "再次打开",
     "showValues": "显示填写的值",
     "hideValues": "收起"
+  },
+  "toolCall": {
+    "usingTools": "正在处理…",
+    "announce": {
+      "running": "{{name}} 正在运行",
+      "success": "{{name}} 已完成",
+      "error": "{{name}} 失败",
+      "cancelled": "{{name}} 已取消"
+    }
+  },
+  "access": {
+    "action": {
+      "site": "打开网站",
+      "device": "使用设备",
+      "app": "使用应用"
+    },
+    "session": "本次会话",
+    "project": "此项目",
+    "always": "始终"
   }
 }

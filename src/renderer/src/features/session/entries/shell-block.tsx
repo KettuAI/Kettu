@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { CheckIcon, SquareTerminalIcon, XIcon } from 'lucide-react'
+import { Cancel01Icon, ComputerTerminal01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { harnessOf, isAgentId } from '@shared/agents'
 import type { ToolEntry } from '@shared/thread'
@@ -58,7 +59,12 @@ export function ShellBlock({
       data-selectable=""
       header={
         <>
-          <SquareTerminalIcon aria-hidden className="size-3.25 shrink-0 text-tertiary" />
+          <HugeiconsIcon
+            icon={ComputerTerminal01Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.25 shrink-0 text-tertiary"
+          />
           <span className="block-frame-name font-mono text-xs text-primary" title={command}>
             <span className="text-(--syntax-comment) select-none">$ </span>
             {first}
@@ -73,16 +79,16 @@ export function ShellBlock({
               )}
             >
               {exit.code === 0 ? (
-                <CheckIcon aria-hidden strokeWidth={2} />
+                <HugeiconsIcon icon={Tick02Icon} strokeWidth={1.9} aria-hidden />
               ) : (
-                <XIcon aria-hidden strokeWidth={2} />
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.9} aria-hidden />
               )}
               {t('block.exit', { code: exit.code })}
             </span>
           ) : (
             status === 'failed' && (
               <span className="shell-exit text-code-danger">
-                <XIcon aria-hidden strokeWidth={2} />
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={1.9} aria-hidden />
                 {t('status.failed')}
               </span>
             )
@@ -92,7 +98,7 @@ export function ShellBlock({
               label={t('block.openInTerminal')}
               onClick={() => emitAppEvent({ kind: 'run-in-terminal', panel: sessionId, command })}
             >
-              <SquareTerminalIcon />
+              <HugeiconsIcon icon={ComputerTerminal01Icon} strokeWidth={1.9} aria-hidden />
             </BlockAction>
           )}
         </>

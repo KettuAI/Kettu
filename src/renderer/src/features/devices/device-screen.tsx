@@ -14,9 +14,8 @@ import type {
   DeviceOrientation,
   DeviceScreen as Screen,
 } from '@shared/device-host'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { PaneSpinner } from '@renderer/features/shell/panel-button'
 import { errorMessage } from '@renderer/lib/host'
-import { cn } from '@renderer/lib/utils'
 import { DeviceFrame } from './device-frame'
 
 type StreamState = 'starting' | 'live' | 'stopped' | 'error'
@@ -58,7 +57,7 @@ function send(deviceId: string, input: DeviceInput): void {
  * One device's live screen: the host's encoded frames decoded on the GPU and drawn to a canvas,
  * acknowledged as they are drawn, with the pointer as a finger and the keyboard as the device's.
  */
-export function DeviceScreen({ device, className }: { device: DeviceInfo; className?: string }) {
+export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: boolean }) {
   const { t } = useTranslation('devices')
   const canvas = useRef<HTMLCanvasElement>(null)
   const field = useRef<HTMLTextAreaElement>(null)
@@ -68,6 +67,9 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
   const [focused, setFocused] = useState(false)
   const pointer = useRef<{ id: number; pinch: boolean } | null>(null)
   const box = useRef<HTMLDivElement>(null)
+  // Where the user's finger landed, each a ripple for a moment.
+  const [taps, setTaps] = useState<{ id: number; x: number; y: number }[]>([])
+  const tapId = useRef(0)
   const [picture, setPicture] = useState<{ width: number; height: number }>(() =>
     device.platform === 'ios' ? { width: 1179, height: 2556 } : { width: 1080, height: 2400 },
   )
@@ -335,26 +337,35 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
   // A simulator's frame can take seconds the first time its model's pictures are drawn.
   const status =
     drawn && ready ? null : state === 'error' ? (
-      <span className="max-w-60 px-4 text-center">{error ?? t('screen.error')}</span>
+      <span className="max-w-60 px-4">{error ?? t('screen.error')}</span>
     ) : state === 'stopped' ? (
       <span>{t('screen.stopped')}</span>
     ) : (
       <>
-        <Spinner />
+        <PaneSpinner />
         <span>{t('screen.starting')}</span>
       </>
     )
 
+  const ripple = (event: PointerEvent<HTMLCanvasElement>): void => {
+    const room = box.current?.getBoundingClientRect()
+    if (!room) return
+    const id = ++tapId.current
+    setTaps((all) => [...all, { id, x: event.clientX - room.left, y: event.clientY - room.top }])
+    setTimeout(() => setTaps((all) => all.filter((tap) => tap.id !== id)), 700)
+  }
+
   return (
-    <div className={cn('relative flex min-h-0 min-w-0 flex-1 p-6', className)}>
-      <div ref={box} className="relative flex min-h-0 min-w-0 flex-1 items-center justify-center">
+    <div className="kp-device-screen">
+      <div ref={box} className="kp-device-screen__room">
         <DeviceFrame
-          className={cn(!ready && 'invisible')}
+          className={ready ? undefined : 'invisible'}
           frame={frame ?? null}
           picture={picture}
           orientation={orientation}
           room={room ?? NO_ROOM}
           focused={focused}
+          glow={driven}
         >
           <canvas
             ref={canvas}
@@ -368,6 +379,7 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
               event.currentTarget.setPointerCapture(event.pointerId)
               pointer.current = { id: event.pointerId, pinch: fingers && event.altKey }
               touch(event, 'begin')
+              ripple(event)
               field.current?.focus()
             }}
             onPointerMove={(event) => {
@@ -389,22 +401,17 @@ export function DeviceScreen({ device, className }: { device: DeviceInfo; classN
             }}
           />
           {ready && status && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-hint text-(--media-control)">
+            <div className="kp-device-screen__status" data-on-screen="">
               {status}
             </div>
           )}
         </DeviceFrame>
-        {!ready && status && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-hint text-secondary">
-            {status}
-          </div>
-        )}
+        {!ready && status && <div className="kp-device-screen__status">{status}</div>}
+        {taps.map((tap) => (
+          <span key={tap.id} aria-hidden className="kp-tap" style={{ left: tap.x, top: tap.y }} />
+        ))}
       </div>
-      {!canDecode && (
-        <p className="absolute inset-x-0 top-2 text-center text-small text-tertiary">
-          {t('screen.limited')}
-        </p>
-      )}
+      {!canDecode && <p className="kp-device-screen__note">{t('screen.limited')}</p>}
       {/* The keyboard goes to the device through this field, so input methods compose as usual. */}
       <textarea
         ref={field}

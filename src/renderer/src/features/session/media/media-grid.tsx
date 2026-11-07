@@ -1,5 +1,6 @@
 import { useContext, useEffect, useRef, useState } from 'react'
-import { CircleAlertIcon, ImageOffIcon } from 'lucide-react'
+import { AlertCircleIcon, ImageNotFound01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { cn } from '@renderer/lib/utils'
@@ -126,9 +127,19 @@ function LocalTile({ path, image, more }: { path: string; image: boolean; more: 
   const body = (
     <>
       {failed ? (
-        <CircleAlertIcon className="size-4 text-danger" />
+        <HugeiconsIcon
+          icon={AlertCircleIcon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-4 text-danger"
+        />
       ) : (
-        <ImageOffIcon className="size-4 text-icon" />
+        <HugeiconsIcon
+          icon={ImageNotFound01Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-4 text-icon"
+        />
       )}
       <span className="w-full truncate text-meta text-tertiary">{name}</span>
       <FrameRing />

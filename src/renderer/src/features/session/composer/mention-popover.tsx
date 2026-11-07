@@ -1,4 +1,5 @@
-import { FileIcon, FolderIcon } from 'lucide-react'
+import { File01Icon, Folder01Icon } from '@hugeicons/core-free-icons'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
@@ -34,7 +35,7 @@ export function MentionItem({
 }) {
   const { t } = useTranslation('composer')
   const nameStart = row.path.lastIndexOf('/') + 1
-  const Icon = row.folder ? FolderIcon : FileIcon
+  const icon = row.folder ? Folder01Icon : File01Icon
   return (
     <div
       role="option"
@@ -48,7 +49,7 @@ export function MentionItem({
       title={row.folder ? `${row.path}/` : row.path}
       className="flex min-h-7.5 cursor-default items-center gap-2.25 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
     >
-      <Icon strokeWidth={1.4} className="size-3.75 shrink-0 text-icon" />
+      <Glyph icon={icon} className="size-3.75 shrink-0 text-icon" />
       <span className="min-w-0 flex-1 truncate font-mono text-hint">
         <span className="text-tertiary">
           <Runs text={row.path.slice(0, nameStart)} offset={0} positions={row.positions} />

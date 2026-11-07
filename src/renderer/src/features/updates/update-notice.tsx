@@ -1,9 +1,10 @@
 import { cloneElement, type ReactElement, type ReactNode, type Ref } from 'react'
-import { XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 interface NoticeCardProps {
   /** The card itself, which a popover beside it anchors to. */
@@ -68,9 +69,9 @@ export function NoticeCard({
       <div
         ref={ref}
         className={cn(
-          'relative flex min-h-11 items-center gap-2.5 rounded-xl bg-surface py-1.75 pr-1.75 pl-2.5 shadow-card transition-shadow duration-(--duration-fast)',
+          'relative flex min-h-11 items-center gap-2.5 rounded-xl bg-(--shell-card) py-2 pr-2 pl-2.5 shadow-(--shell-card-shadow) transition-shadow duration-(--duration-fast)',
           opens &&
-            'has-[>[data-notice-hit]:hover]:shadow-(--card-lift) has-data-popup-open:shadow-(--card-open)',
+            'has-[>[data-notice-hit]:hover]:shadow-(--shell-card-shadow-hover) has-data-popup-open:shadow-(--shell-card-shadow-hover)',
         )}
       >
         {/* Buttons cannot nest, so the card opens through a button laid under its content. */}
@@ -88,14 +89,14 @@ export function NoticeCard({
         {/* Beside a second line the icon keeps to the first. */}
         <span
           className={cn(
-            'pointer-events-none relative grid size-5.5 shrink-0 place-items-center rounded-tile bg-tile shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
+            'pointer-events-none relative grid size-4 shrink-0 place-items-center',
             below && 'self-start',
           )}
         >
           {icon}
         </span>
         <span className="pointer-events-none relative flex min-w-0 flex-1 flex-col gap-px">
-          <span className="text-hint leading-4 font-medium text-pretty text-primary">{text}</span>
+          <span className="text-control font-medium text-pretty text-(--shell-ink)">{text}</span>
           {below}
         </span>
         {action && <span className="relative flex shrink-0 items-center">{action}</span>}
@@ -110,14 +111,14 @@ export function NoticeCard({
                 aria-label={closeLabel}
                 onClick={close}
                 className={cn(
-                  'absolute -top-1.5 -right-1.5 size-5 rounded-full text-icon hover:text-primary [&_svg:not([class*=size-])]:size-3',
+                  'absolute -top-1.5 -right-1.5 size-4.5 rounded-full text-(--shell-faint) hover:text-(--shell-ink) [&_svg:not([class*=size-])]:size-3',
                   !onCancel &&
                     'opacity-0 transition-opacity duration-(--duration-fast) group-focus-within/notice:opacity-100 group-hover/notice:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
                 )}
               />
             }
           >
-            <XIcon strokeWidth={1.8} />
+            <Glyph icon={Cancel01Icon} size={12} />
           </TooltipTrigger>
           <TooltipContent>{closeLabel}</TooltipContent>
         </Tooltip>

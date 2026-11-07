@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { RotateCwIcon } from 'lucide-react'
+import { RotateClockwiseIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { GITHUB_PULL_REQUEST_URL, type PullRequest, type PullRequestAuthor } from '@shared/git'
 import { Avatar, AvatarFallback, AvatarImage } from '@renderer/components/ui/avatar'
@@ -187,7 +188,7 @@ function LoadFailed({ url, error }: { url: string; error: string | null }) {
         {retrying ? (
           <Spinner data-icon="inline-start" />
         ) : (
-          <RotateCwIcon data-icon="inline-start" />
+          <HugeiconsIcon icon={RotateClockwiseIcon} strokeWidth={1.9} data-icon="inline-start" />
         )}
         {t('prCard.retry')}
       </Button>

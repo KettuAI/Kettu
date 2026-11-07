@@ -1,10 +1,11 @@
-// The small marks a routine's state and its runs show.
+// The small mark a run shows before its time; the row's words say the same.
 
-import { CircleAlertIcon, CircleCheckIcon, CircleSlashIcon } from 'lucide-react'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Cancel01Icon, CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
+import type { RunStatus } from '@shared/routines'
+import { Icon } from '@renderer/components/affect/app-shell'
+import { RingSpinner } from '@renderer/components/ui/spinner'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { cn } from '@renderer/lib/utils'
-import type { RunStatus } from '@shared/routines'
 
 /** The dot that says work is going on; never the only sign of it. */
 export function RunningDot({ className }: { className?: string }) {
@@ -19,33 +20,26 @@ export function RunningDot({ className }: { className?: string }) {
   )
 }
 
-/** A run's state as its icon; the row's words say the same, so it is not named again. */
-export function RunMark({ status, className }: { status: RunStatus; className?: string }) {
-  const common = cn('size-4 shrink-0', className)
+export function RunMark({ status }: { status: RunStatus }) {
   switch (status) {
     case 'succeeded':
-      return <CircleCheckIcon aria-hidden className={cn(common, 'text-success')} />
+      return <Icon icon={CheckmarkCircle02Icon} size={14} />
     case 'failed':
     case 'timed_out':
-      return <CircleAlertIcon aria-hidden className={cn(common, 'text-danger')} />
+      return <Icon icon={Cancel01Icon} size={14} />
     case 'waiting':
-      return (
-        <span
-          aria-hidden
-          className={cn('size-1.75 shrink-0 rounded-full bg-attention-dot', className)}
-        />
-      )
+      return <span aria-hidden className="k-rs__dot" />
     case 'running':
       // A turn's dot matrix, as the session's own status line shows its agent at work.
-      return <TurnDots phase="working" className={className} />
+      return <TurnDots phase="working" />
     case 'starting':
       // The app's own wait before the agent works, so it keeps a neutral spinner.
-      return <Spinner aria-hidden className={cn('size-3 shrink-0 text-secondary', className)} />
+      return <RingSpinner aria-hidden />
     case 'cancelled':
     case 'interrupted':
     case 'skipped':
-      return <CircleSlashIcon aria-hidden className={cn(common, 'text-tertiary')} />
+      return <span aria-hidden className="k-run__skip" />
     case 'queued':
-      return <span aria-hidden className={cn(common, 'block')} />
+      return null
   }
 }

@@ -1,14 +1,11 @@
 import { useEffect, useState } from 'react'
-import { CircleAlertIcon, PlugIcon, RotateCwIcon } from 'lucide-react'
+import { PlugSocketIcon, RefreshIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { McpStatus } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
-import { Button } from '@renderer/components/ui/button'
-import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Spinner } from '@renderer/components/ui/spinner'
-import { cn } from '@renderer/lib/utils'
 import { usableAgents } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
@@ -21,8 +18,9 @@ import {
   RowGroup,
   RowShell,
   RowText,
+  Thing,
 } from './rows'
-import { Pill, ROW_BUTTON, SettingSwitch } from './controls'
+import { Pill, SetButton, SettingSwitch, Skel } from './controls'
 import { PlaceAction } from './places'
 import { useApply } from './use-apply'
 
@@ -35,34 +33,19 @@ function useKettuOff(): AgentId[] {
   return useSettingsStore((s) => s.settings.mcp.kettu.off)
 }
 
-/** Kettu's own server's tile, in the fox, at the size a row or a page header uses. */
-function ServerTile({ size, glyph }: { size: number; glyph: number }) {
-  return (
-    <span
-      aria-hidden
-      style={{ width: size, height: size }}
-      className="grid shrink-0 place-items-center rounded-segments bg-(image:--brand-kettu-tile) text-(--on-fill)"
-    >
-      <PlugIcon style={{ width: glyph, height: glyph }} />
-    </span>
-  )
+/** Kettu's own server's mark, unframed, at the size a row or a page header uses. */
+function ServerTile({ size }: { size: number }) {
+  return <Icon icon={PlugSocketIcon} size={size} />
 }
 
-/** Whether the server listens: a dot and the word, on its row and its page. */
+/** Whether the server listens, as a badge on its row and its page. */
 function RunningDot({ running }: { running: boolean }) {
   const { t } = useTranslation('settings')
-  return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 text-hint whitespace-nowrap',
-        running ? 'text-secondary' : 'text-danger',
-      )}
-    >
-      <span
-        aria-hidden
-        className={cn('size-1.75 rounded-full', running ? 'bg-success' : 'bg-danger')}
-      />
-      {t(running ? 'mcp.state.running' : 'mcp.state.notRunning')}
+  return running ? (
+    <Pill tone="success">{t('mcp.state.running')}</Pill>
+  ) : (
+    <span className="ui-ss-badge" data-tone="danger">
+      {t('mcp.state.notRunning')}
     </span>
   )
 }
@@ -96,10 +79,10 @@ export function ServerRow({ server }: { server: McpStatus['servers'][number] }) 
       item={server.name}
       label={server.title}
       onOpen={() => openSettingsItem('mcp', server.name)}
-      tile={<ServerTile size={34} glyph={17} />}
+      tile={<ServerTile size={20} />}
       name={
         <>
-          <span className="truncate">{server.title}</span>
+          <span className="k-name">{server.title}</span>
           {server.builtIn && <Pill>{t('mcp.builtIn')}</Pill>}
         </>
       }
@@ -139,20 +122,17 @@ export function AgentPlaceRow({ place }: { place: McpStatus['places'][number] })
       )
     : t(place.exists ? 'mcp.place.ownFrom' : 'mcp.place.ownFromMissing', values)
   return (
-    <div className="flex items-center gap-3.5 py-3.25">
-      <AgentTile agent={place.agentId} size={30} />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-label leading-[normal]">{name}</span>
-        <span
-          className="truncate text-group leading-[normal] text-tertiary"
-          title={line}
-          data-selectable=""
-        >
+    <div className="ui-sg-row">
+      <Thing
+        mark={<AgentTile agent={place.agentId} size={24} />}
+        name={<span className="k-name">{name}</span>}
+      >
+        <small className="k-clamp" title={line} data-selectable="">
           {line}
-        </span>
-      </div>
+        </small>
+      </Thing>
       {place.exists && (
-        <span className="flex shrink-0 items-center gap-2">
+        <span className="ui-sg-control">
           <PlaceAction path={place.path} icon />
         </span>
       )}
@@ -171,13 +151,11 @@ function LoadingRows({ rows }: { rows: number }) {
   return (
     <>
       {Array.from({ length: rows }, (_, i) => (
-        <RowShell key={i} plain>
-          <div className="flex items-center gap-3 py-3">
-            <Skeleton className="size-7.5 rounded-lg" />
-            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              <Skeleton className="h-3.5 w-32" />
-              <Skeleton className="h-3 w-48" />
-            </div>
+        <RowShell key={i}>
+          <div className="ui-sg-row">
+            <Thing mark={<Skel width={24} className="k-skel--mark" />} name={<Skel width={128} />}>
+              <Skel width={192} />
+            </Thing>
           </div>
         </RowShell>
       ))}
@@ -194,25 +172,21 @@ export function FailedRead({ error }: { error: string }) {
   return (
     <Notice
       variant="error"
-      icon={<CircleAlertIcon />}
       title={t('mcp.error.title')}
       action={
-        <Button
-          className={ROW_BUTTON}
-
-          variant="outline"
-          disabled={busy}
+        <SetButton
+          loading={busy}
+          icon={<Icon icon={RefreshIcon} size={14} />}
           onClick={() => {
             setBusy(true)
             void retry().finally(() => setBusy(false))
           }}
         >
-          {busy ? <Spinner data-icon="inline-start" /> : <RotateCwIcon data-icon="inline-start" />}
           {t('common:actions.retry')}
-        </Button>
+        </SetButton>
       }
     >
-      <span className="font-mono text-code break-words" data-selectable="">
+      <span className="k-mono k-break" data-selectable="">
         {error}
       </span>
     </Notice>
@@ -223,12 +197,12 @@ export function FailedRead({ error }: { error: string }) {
 export function PendingList() {
   const { t } = useTranslation('settings')
   return (
-    <div className="flex flex-col gap-7">
+    <div className="k-groups">
       {[
         { id: 'kettu', label: t('mcp.groups.kettu'), rows: 1 },
         { id: 'own', label: t('mcp.groups.own'), rows: 3 },
       ].map((group) => (
-        <section key={group.id} className="flex flex-col" aria-label={group.label}>
+        <section key={group.id} className="k-group" aria-label={group.label}>
           <GroupLabel group={{ id: group.id, label: group.label }} />
           <RowGroup>
             <LoadingRows rows={group.rows} />
@@ -247,16 +221,16 @@ export function McpServerPage({ name }: { name: string }) {
   const error = useMcpStore((s) => s.error)
   const server = status?.servers.find((s) => s.name === name) ?? null
   return (
-    <div className="flex flex-col">
+    <>
       <ItemPageHeader
         back={t('sections.mcp')}
         onBack={() => openSettingsItem('mcp', null)}
         item={name}
-        icon={<ServerTile size={40} glyph={20} />}
+        icon={<ServerTile size={28} />}
         title={server?.title ?? name}
         subtitle={
           <>
-            <span className="font-mono text-code">{name}</span>
+            <span className="k-mono">{name}</span>
             {server?.builtIn && <Pill>{t('mcp.builtIn')}</Pill>}
           </>
         }
@@ -271,17 +245,13 @@ export function McpServerPage({ name }: { name: string }) {
           <LoadingRows rows={1} />
         )
       ) : (
-        <div className="flex flex-col">
-          {!server.running && (
-            <div className="mt-5">
-              <NotRunning server={server} />
-            </div>
-          )}
+        <div className="k-groups">
+          {!server.running && <NotRunning server={server} />}
           <AgentsGroup />
           <ToolsGroup tools={server.tools} />
         </div>
       )}
-    </div>
+    </>
   )
 }
 
@@ -294,26 +264,22 @@ function NotRunning({ server }: { server: McpStatus['servers'][number] }) {
   return (
     <Notice
       variant="error"
-      icon={<CircleAlertIcon />}
       title={t('mcp.server.notRunning.title')}
       action={
-        <Button
-          className={ROW_BUTTON}
-
-          variant="outline"
-          disabled={busy}
+        <SetButton
+          loading={busy}
+          icon={<Icon icon={RefreshIcon} size={14} />}
           onClick={() => {
             setBusy(true)
             void retry().finally(() => setBusy(false))
           }}
         >
-          {busy ? <Spinner data-icon="inline-start" /> : <RotateCwIcon data-icon="inline-start" />}
           {t('common:actions.retry')}
-        </Button>
+        </SetButton>
       }
       more={
         server.error ? (
-          <span className="font-mono text-code break-words text-danger" data-selectable="">
+          <span className="k-mono k-break k-danger" data-selectable="">
             {server.error}
           </span>
         ) : null
@@ -336,9 +302,9 @@ function AgentsGroup() {
     apply({ mcp: { kettu: { off: next } } })
   }
   return (
-    <section className="flex flex-col" aria-label={t('mcp.agents')}>
+    <section className="k-group" aria-label={t('mcp.agents')}>
       <GroupLabel group={{ id: 'agents', label: t('mcp.agents'), count: agents.length }} />
-      {error && <p className="pb-1 text-hint text-danger">{error}</p>}
+      {error && <p className="ui-sg-hint k-danger">{error}</p>}
       <RowGroup>
         {agents.map((agent) => (
           <AgentSwitchRow
@@ -371,25 +337,28 @@ function AgentSwitchRow({
   const takesNone = status?.capabilities.mcpHttp === false
   return (
     <RowShell>
-      <div className="flex items-center gap-3.5 py-3.25">
-        <AgentTile agent={agentId} size={30} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-label leading-[normal]">{name}</span>
-          <span className="text-group leading-[normal] text-tertiary">
+      <div className="ui-sg-row">
+        <Thing
+          mark={<AgentTile agent={agentId} size={24} />}
+          name={<span className="k-name">{name}</span>}
+        >
+          <small>
             {takesNone
               ? t('mcp.agent.takesNone', { name })
               : t(off ? 'mcp.agent.off' : 'mcp.agent.on')}
-          </span>
+          </small>
           {!takesNone && active !== null && active !== runs && (
-            <span className="text-hint text-tertiary">{t('mcp.agent.nextStart', { name })}</span>
+            <small>{t('mcp.agent.nextStart', { name })}</small>
           )}
-        </div>
+        </Thing>
         {!takesNone && (
-          <SettingSwitch
-            label={t('mcp.agent.switch', { name })}
-            checked={!off}
-            onChange={(on) => set(agentId, on)}
-          />
+          <span className="ui-sg-control">
+            <SettingSwitch
+              label={t('mcp.agent.switch', { name })}
+              checked={!off}
+              onChange={(on) => set(agentId, on)}
+            />
+          </span>
         )}
       </div>
     </RowShell>
@@ -400,14 +369,14 @@ function AgentSwitchRow({
 function ToolsGroup({ tools }: { tools: McpStatus['servers'][number]['tools'] }) {
   const { t } = useTranslation('settings')
   return (
-    <section className="flex flex-col" aria-label={t('mcp.tools')}>
+    <section className="k-group" aria-label={t('mcp.tools')}>
       <GroupLabel group={{ id: 'tools', label: t('mcp.tools'), count: tools.length }} />
       <RowGroup>
         {tools.map((tool) => (
           <RowShell key={tool.name}>
-            <div className="py-3.25">
+            <div className="ui-sg-row">
               <RowText
-                name={<span className="font-mono text-code">{tool.name}</span>}
+                name={<span className="k-mono">{tool.name}</span>}
                 description={tool.description}
               />
             </div>

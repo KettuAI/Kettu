@@ -46,6 +46,7 @@ import {
   modelInfo,
   OPTION_IDS,
   settingsModel,
+  type InheritedEffort,
   type SessionChoices,
 } from './config'
 import {
@@ -230,6 +231,8 @@ interface Session {
   titling: Promise<void> | null
   /** The value ultracode inherits from Claude Code's settings; null until resolved. */
   ultracodeDefault: boolean | null
+  /** What a session at its default effort runs at, besides the model's own default. */
+  inheritedEffort: InheritedEffort
   /** Set for a session opened only to read from. */
   quiet: boolean
   /** Its Claude Code process, while it runs. */
@@ -784,6 +787,10 @@ export class ClaudeConnection implements AgentConnection {
       titleForRev: null,
       titling: null,
       ultracodeDefault: settings.known ? settings.values.ultracode === true : null,
+      inheritedEffort: {
+        env: this.env.CLAUDE_CODE_EFFORT_LEVEL,
+        modelSettings: settings.values.modelSettings,
+      },
       quiet: how.quiet === true,
       process: null,
     }
@@ -892,7 +899,13 @@ export class ClaudeConnection implements AgentConnection {
     }
     session.choices.fast = init.fast_mode_state !== undefined && init.fast_mode_state !== 'off'
     session.commands = init.commands ?? []
-    session.config = buildConfig(session.models, session.choices, modes, session.ultracodeDefault)
+    session.config = buildConfig(
+      session.models,
+      session.choices,
+      modes,
+      session.ultracodeDefault,
+      session.inheritedEffort,
+    )
     this.sessions.set(sessionId, session)
     if (!session.quiet) {
       this.unregistered.delete(sessionId)
@@ -1321,7 +1334,8 @@ export class ClaudeConnection implements AgentConnection {
     for (const [id, key] of options) {
       const value = choices[key]
       const option = session.config.find((item) => item.id === id)
-      if (!option || option.value === value) continue
+      // The choices, not the option values: an effort left at its default shows the level it runs at.
+      if (!option || session.choices[key] === value) continue
       try {
         await this.applyOption(session, id, value)
       } catch (error) {
@@ -1486,6 +1500,7 @@ export class ClaudeConnection implements AgentConnection {
           session.choices,
           session.modes,
           session.ultracodeDefault,
+          session.inheritedEffort,
         )
         return
       }
@@ -1498,6 +1513,7 @@ export class ClaudeConnection implements AgentConnection {
           session.choices,
           session.modes,
           session.ultracodeDefault,
+          session.inheritedEffort,
         )
         return
       case OPTION_IDS.fast:
@@ -1508,6 +1524,7 @@ export class ClaudeConnection implements AgentConnection {
           session.choices,
           session.modes,
           session.ultracodeDefault,
+          session.inheritedEffort,
         )
         return
       case OPTION_IDS.ultracode: {
@@ -1520,6 +1537,7 @@ export class ClaudeConnection implements AgentConnection {
           session.choices,
           session.modes,
           session.ultracodeDefault,
+          session.inheritedEffort,
         )
         return
       }
@@ -1562,6 +1580,7 @@ export class ClaudeConnection implements AgentConnection {
       session.choices,
       session.modes,
       session.ultracodeDefault,
+      session.inheritedEffort,
     )
   }
 
@@ -1913,7 +1932,10 @@ export class ClaudeConnection implements AgentConnection {
       : await this.temporary(cwd, { ...options, hidden: 'context' }, sessionId)
     const query = (live ?? temporary)!.query!
     try {
-      return mapContextUsage(await query.getContextUsage({ detail: 'summary' }), Date.now())
+      return mapContextUsage(await query.getContextUsage({ detail: 'summary' }), Date.now(), {
+        cwd,
+        home: os.homedir(),
+      })
     } finally {
       if (temporary) await this.closeSession(temporary.id)
     }

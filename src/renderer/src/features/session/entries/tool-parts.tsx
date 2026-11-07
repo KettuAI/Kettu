@@ -1,20 +1,7 @@
 // The pieces of a tool call that its row, its waiting card and its settled card share.
 
-import {
-  ArrowRightLeftIcon,
-  BrainIcon,
-  FileTextIcon,
-  FilePenIcon,
-  GlobeIcon,
-  RepeatIcon,
-  SearchIcon,
-  SquareTerminalIcon,
-  TrashIcon,
-  WrenchIcon,
-  type LucideIcon,
-} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import type { ToolContent, ToolKind } from '@shared/thread'
+import type { ToolContent } from '@shared/thread'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { basename, dirname } from '@renderer/lib/format'
 import { Clamp } from '../clamp'
@@ -25,19 +12,6 @@ import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { LocalMedia } from '../media/local-media'
 import { DiffBlock } from './diff-block'
 import type { toolLabel } from './helpers'
-
-export const KIND_ICON: Record<ToolKind, LucideIcon> = {
-  read: FileTextIcon,
-  edit: FilePenIcon,
-  delete: TrashIcon,
-  move: ArrowRightLeftIcon,
-  search: SearchIcon,
-  execute: SquareTerminalIcon,
-  think: BrainIcon,
-  fetch: GlobeIcon,
-  switch_mode: RepeatIcon,
-  other: WrenchIcon,
-}
 
 /** Paths keep their file name visible: only the folder part truncates. */
 export function Target({ label }: { label: ReturnType<typeof toolLabel> }) {

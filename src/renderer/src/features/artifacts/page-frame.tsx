@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -95,11 +95,8 @@ export function PageFrame({
       {mode && driven.frame && <PickLayer frame={driven.frame} scale={1} mode={mode} />}
       {!loaded && <Waiting since={since} />}
       {blocked && blockedHost && (
-        <div
-          role="status"
-          className="absolute inset-x-3 top-2.5 flex items-center gap-2.5 rounded-xl bg-popover py-1.5 pr-1.5 pl-3.5 text-ui shadow-menu"
-        >
-          <span className="flex min-w-0 flex-1 whitespace-pre text-secondary">
+        <div role="status" className="k-av-blocked">
+          <span className="k-av-blocked__text">
             <Trans
               t={t}
               i18nKey="viewer.blocked"
@@ -112,18 +109,19 @@ export function PageFrame({
             target="_blank"
             rel="noreferrer"
             onClick={() => setBlocked(null)}
-            className={buttonVariants({ variant: 'outline', size: 'compact' })}
+            className="ui-as-tool ui-as-tool--label"
           >
             {t('viewer.openInBrowser')}
           </a>
-          <Button
-            variant="quiet"
-            size="icon"
+          <button
+            type="button"
             aria-label={t('viewer.dismiss')}
+            title={t('viewer.dismiss')}
             onClick={() => setBlocked(null)}
+            className="ui-as-icon-btn k-av-btn"
           >
-            <XIcon />
-          </Button>
+            <Icon icon={Cancel01Icon} size={15} />
+          </button>
         </div>
       )}
     </div>
@@ -157,7 +155,7 @@ export function Waiting({ since }: { since: number }) {
 /** A host cut from its start when it does not fit, since its end names the site. */
 function HostName({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <span dir="rtl" title={title} className="min-w-0 truncate font-medium text-foreground">
+    <span dir="rtl" title={title} className="k-av-blocked__host">
       <bdi dir="ltr">{children}</bdi>
     </span>
   )

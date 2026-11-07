@@ -1,53 +1,47 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ExternalLinkIcon,
-  GlobeIcon,
-  Maximize2Icon,
-  Minimize2Icon,
-  RotateCwIcon,
-  XIcon,
-} from 'lucide-react'
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Cancel01Icon,
+  Globe02Icon,
+  LinkSquare02Icon,
+  ReloadIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { BrowserNotice } from '@shared/browser'
 import { onAppEvent } from '@renderer/app/events'
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@renderer/components/ui/empty'
-import { PanelButton } from '@renderer/features/shell/panel-button'
-import { SHEET } from '@renderer/features/shell/sheet'
-import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
-import { hasBand, isMac } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
+  PaneEmpty,
+  PaneHead,
+  PaneIcon,
+  PaneSheet,
+  PaneTabClose,
+  PanelButton,
+} from '@renderer/features/shell/panel-button'
+import { isMac } from '@renderer/lib/platform'
 import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useOverlayOpen } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { panelSession, toggleSidePane, useViewStore } from '@renderer/stores/view'
+import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
+import { panelSession, toggleSidePane } from '@renderer/stores/view'
 import { addressText } from './address'
 import { AddressField } from './address-field'
 import { DrivingPill } from './driving-bar'
 import { OriginBar } from './origin-bar'
 
-/** The side panel's third pane: one page per session, drawn by main over the pane's page area. */
+/** The side panel's Browser pane: one page per session, drawn by main over the pane's page area. */
 export function BrowserPane({ panel, maximized }: { panel: string; maximized: boolean }) {
   const { t } = useTranslation(['browser', 'common'])
   const sessionId = panelSession(panel)
   const state = useBrowserStore((s) => (sessionId ? s.bySession[sessionId] : undefined))
   const still = useBrowserStore((s) => (sessionId ? s.stills[sessionId] : undefined))
   const hidden = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
-  const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null))
+  const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null)) ?? null
   const overlayOpen = useOverlayOpen()
-  const cornered = useViewStore((s) => s.sidebarCollapsed) && maximized && !hasBand
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
-  const sheet = useRef<HTMLDivElement>(null)
-  // The area the page fills.
+  // The frame the page fills.
   const page = useRef<HTMLDivElement>(null)
 
   // The pane shows the page, so the toggle's dot has done its work.
@@ -55,22 +49,22 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     if (sessionId) useBrowserStore.getState().seen(sessionId)
   }, [sessionId, hidden])
 
-  // Destroys the page and closes the pane, from its close button and from Mod+W.
-  const closeBrowser = useCallback(() => {
-    if (sessionId) {
-      void window.kettu.browser
-        .close(sessionId)
-        .catch((error: unknown) => console.error('Could not close the page', error))
-    }
-    toggleSidePane(panel, 'browser', false)
-  }, [sessionId, panel])
+  const closePage = useCallback(() => {
+    if (!sessionId) return
+    void window.kettu.browser
+      .close(sessionId)
+      .catch((error: unknown) => console.error('Could not close the page', error))
+  }, [sessionId])
 
+  // Mod+W destroys the page and folds the pane away.
   useEffect(
     () =>
       onAppEvent((event) => {
-        if (event.kind === 'close-browser') closeBrowser()
+        if (event.kind !== 'close-browser') return
+        closePage()
+        toggleSidePane(panel, 'browser', false)
       }),
-    [closeBrowser],
+    [closePage, panel],
   )
 
   const navigate = (url: string) => {
@@ -86,14 +80,15 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     }
   }, [sessionId])
 
-  // The page's area, in the window's own pixels: the renderer's zoom scales CSS pixels. The page
-  // fills the sheet's lower corners, which the sheet cannot clip on a native view, so main rounds
-  // them on the page.
+  // The page's frame, in the window's own pixels: the renderer's zoom scales CSS pixels. Main
+  // rounds the page's corners as the frame's are, since nothing in the renderer can clip a view.
   const report = useCallback(() => {
     const element = page.current
-    if (!element || !sheet.current || !sessionId) return
+    if (!element || !sessionId) return
     const rect = element.getBoundingClientRect()
-    const radius = parseFloat(getComputedStyle(sheet.current).borderBottomLeftRadius) || 0
+    // With no page there is no frame; the page keeps the last one until it comes back.
+    if (rect.width === 0 || rect.height === 0) return
+    const radius = parseFloat(getComputedStyle(element).borderBottomLeftRadius) || 0
     void window.kettu.browser.setBounds(sessionId, {
       x: Math.round(rect.left * zoom),
       y: Math.round(rect.top * zoom),
@@ -103,7 +98,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     })
   }, [sessionId, zoom])
 
-  // A notice, the address row or the progress bar moves the page's area without resizing it.
+  // A notice, the address row or the origin card moves the page's frame without resizing it.
   useLayoutEffect(report)
 
   useLayoutEffect(() => {
@@ -159,175 +154,142 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     }
   }, [sessionId])
 
-  const hasPage = !!state?.url
+  const url = state?.url ?? null
   const driving = state?.control.kind === 'agent'
   // The user keeps control after Hand back's 10 s; only the pill goes until the next call.
   const userControl = state?.control.kind === 'user' && state.control.bar
 
   return (
-    <div
-      ref={sheet}
-      className={cn(
-        'flex h-full min-h-0 animate-in flex-col fade-in animation-duration-(--duration-fast)',
-        SHEET,
-        maximized && 'absolute inset-0 z-10',
-      )}
-      data-browser-panel=""
-    >
-      {/* The tab row is a window drag region, which takes every click on macOS, so its tab and
-          buttons opt out. */}
-      <div
-        className={cn(
-          'app-region-drag flex h-11 shrink-0 items-center gap-1 pr-2 pl-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
-          cornered && 'pl-(--corner-inset)',
-        )}
-      >
-        {cornered && <CornerControlsSpace className="mr-1" />}
-        {hasPage && state?.url && (
-          <div
-            role="tablist"
-            aria-label={t('tabs')}
-            className="app-region-no-drag flex min-w-0 items-center"
-          >
-            <span
-              role="tab"
-              aria-selected
-              title={state.url}
-              className="flex h-7 max-w-55 min-w-0 items-center gap-2 rounded-xl bg-raised px-2.5 text-hint text-primary shadow-segment"
-            >
-              <GlobeIcon aria-hidden className="size-3.5 shrink-0 text-icon" />
-              <span className="min-w-0 truncate">
-                {state.title || addressText(state.url) || state.url}
-              </span>
-            </span>
-          </div>
-        )}
-        <span className="min-w-2 flex-1" />
-        <div className="app-region-no-drag flex items-center gap-0.5">
+    <PaneSheet pane="browser" maximized={maximized} data-browser-panel="">
+      <PaneHead
+        panel={panel}
+        pane="browser"
+        maximized={maximized}
+        tools={
           <PanelButton
             label={t('actions.openExternal')}
-            size="icon-sm"
-            disabled={!hasPage}
+            disabled={!url}
             onClick={() => sessionId && void window.kettu.browser.openExternal(sessionId)}
           >
-            <ExternalLinkIcon className="size-3.75" />
+            <PaneIcon icon={LinkSquare02Icon} />
           </PanelButton>
-          <PanelButton
-            label={maximized ? t('actions.restore') : t('actions.maximize')}
-            size="icon-sm"
-            onClick={() => useViewStore.setState({ sidePaneMaximized: !maximized })}
-          >
-            {maximized ? (
-              <Minimize2Icon className="size-3.75" />
-            ) : (
-              <Maximize2Icon className="size-3.75" />
-            )}
-          </PanelButton>
-          <PanelButton label={t('actions.closeBrowser')} size="icon-sm" onClick={closeBrowser}>
-            <XIcon className="size-3.75" />
-          </PanelButton>
-        </div>
-      </div>
-      {hasPage && state?.url && (
-        <div className="flex h-11 shrink-0 items-center gap-0.5 px-2.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]">
-          <PanelButton
-            label={t('actions.back')}
-            shortcut={isMac ? '⌘[' : 'Ctrl+['}
-            size="icon-sm"
-            disabled={!state.canGoBack}
-            onClick={() => sessionId && void window.kettu.browser.back(sessionId)}
-          >
-            <ChevronLeftIcon className="size-4" />
-          </PanelButton>
-          <PanelButton
-            label={t('actions.forward')}
-            shortcut={isMac ? '⌘]' : 'Ctrl+]'}
-            size="icon-sm"
-            disabled={!state.canGoForward}
-            onClick={() => sessionId && void window.kettu.browser.forward(sessionId)}
-          >
-            <ChevronRightIcon className="size-4" />
-          </PanelButton>
-          {state.loading ? (
-            <PanelButton
-              label={t('actions.stop')}
-              size="icon-sm"
-              onClick={() => sessionId && void window.kettu.browser.stop(sessionId)}
-            >
-              <XIcon className="size-3.75" />
-            </PanelButton>
-          ) : (
-            <PanelButton
-              label={t('actions.reload')}
-              shortcut={isMac ? '⌘R' : 'Ctrl+R'}
-              size="icon-sm"
-              onClick={() => sessionId && void window.kettu.browser.reload(sessionId)}
-            >
-              <RotateCwIcon className="size-3.75" />
-            </PanelButton>
-          )}
-          <AddressField url={state.url} onNavigate={navigate} className="mx-1.5 flex-1" />
-          {(driving || userControl) && (
-            <DrivingPill
-              agent={agentId ?? null}
-              user={userControl}
-              onTakeOver={() => sessionId && void window.kettu.browser.stopDriving(sessionId)}
-              onHandBack={() => sessionId && void window.kettu.browser.handBack(sessionId)}
-            />
-          )}
-        </div>
-      )}
-      {sessionId && state?.originRequest && (
-        <OriginBar
-          request={state.originRequest}
-          agentName={agentId ? agentName(agentId) : ''}
-          onAnswer={(decision) =>
-            void window.kettu.browser.answerOrigin(sessionId, state.originRequest!.id, decision)
-          }
-        />
-      )}
-      {state?.loading && (
-        <div
-          role="progressbar"
-          aria-label={t('loading')}
-          className="h-0.5 shrink-0 overflow-hidden"
-        >
-          <div className="h-full w-full animate-pulse bg-border-strong motion-reduce:animate-none" />
-        </div>
-      )}
-      {state?.notice && <Notice notice={state.notice} sessionId={sessionId} />}
-      <div ref={page} className="relative min-h-0 flex-1 bg-background">
-        <div className="relative h-full w-full bg-background">
-          {!hasPage && (
-            <div className="flex h-full items-center justify-center px-6">
-              <Empty>
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <GlobeIcon />
-                  </EmptyMedia>
-                  <EmptyTitle>{sessionId ? t('empty.title') : t('empty.noSession')}</EmptyTitle>
-                  {!sessionId && <EmptyDescription>{t('empty.noSessionHint')}</EmptyDescription>}
-                </EmptyHeader>
-                {sessionId && (
-                  <div className="w-full max-w-sm">
-                    <AddressField url={null} onNavigate={navigate} autoFocus />
-                  </div>
-                )}
-              </Empty>
+        }
+      >
+        {url && state ? (
+          <div role="tablist" aria-label={t('tabs')} className="kp-head__tabs">
+            <span className="kp-tab" data-selected="">
+              <span role="tab" aria-selected title={url} className="kp-tab__btn">
+                <SiteMark url={url} />
+                <span className="kp-tab__name">{state.title || addressText(url) || url}</span>
+              </span>
+              <PaneTabClose label={t('actions.closePage')} onClick={closePage} />
+            </span>
+          </div>
+        ) : (
+          <span className="kp-head__title">{t('title')}</span>
+        )}
+      </PaneHead>
+      <div className="kp-body">
+        {url && state ? (
+          <>
+            <div className="kp-addr-row">
+              <PanelButton
+                label={t('actions.back')}
+                shortcut={isMac ? '⌘[' : 'Ctrl+['}
+                disabled={!state.canGoBack}
+                onClick={() => sessionId && void window.kettu.browser.back(sessionId)}
+              >
+                <PaneIcon icon={ArrowLeft01Icon} />
+              </PanelButton>
+              <PanelButton
+                label={t('actions.forward')}
+                shortcut={isMac ? '⌘]' : 'Ctrl+]'}
+                disabled={!state.canGoForward}
+                onClick={() => sessionId && void window.kettu.browser.forward(sessionId)}
+              >
+                <PaneIcon icon={ArrowRight01Icon} />
+              </PanelButton>
+              {state.loading ? (
+                <PanelButton
+                  label={t('actions.stop')}
+                  onClick={() => sessionId && void window.kettu.browser.stop(sessionId)}
+                >
+                  <PaneIcon icon={Cancel01Icon} />
+                </PanelButton>
+              ) : (
+                <PanelButton
+                  label={t('actions.reload')}
+                  shortcut={isMac ? '⌘R' : 'Ctrl+R'}
+                  onClick={() => sessionId && void window.kettu.browser.reload(sessionId)}
+                >
+                  <PaneIcon icon={ReloadIcon} />
+                </PanelButton>
+              )}
+              <AddressField url={url} onNavigate={navigate} />
+              {/* Main draws the page over its frame, so the pill sits beside the address. */}
+              {(driving || userControl) && (
+                <DrivingPill
+                  agent={agentId}
+                  user={userControl}
+                  onTakeOver={() => sessionId && void window.kettu.browser.stopDriving(sessionId)}
+                  onHandBack={() => sessionId && void window.kettu.browser.handBack(sessionId)}
+                />
+              )}
+              {state.loading && (
+                <span role="progressbar" aria-label={t('loading')} className="kp-load" />
+              )}
             </div>
-          )}
-          {still && (
-            <img
-              src={still}
-              alt=""
-              aria-hidden
-              className="pointer-events-none absolute inset-0 h-full w-full object-fill"
-            />
-          )}
-        </div>
+            {sessionId && state.originRequest && (
+              <OriginBar
+                request={state.originRequest}
+                agent={agentId}
+                agentName={agentId ? agentName(agentId) : ''}
+                onAnswer={(decision) =>
+                  void window.kettu.browser.answerOrigin(
+                    sessionId,
+                    state.originRequest!.id,
+                    decision,
+                  )
+                }
+              />
+            )}
+            {state.notice && <Notice notice={state.notice} sessionId={sessionId} />}
+            <div ref={page} className="kp-view" data-driver={driving ? 'agent' : undefined}>
+              {still && <img src={still} alt="" aria-hidden className="kp-view__still" />}
+            </div>
+          </>
+        ) : (
+          <>
+            <PaneEmpty
+              icon={<PaneIcon icon={Globe02Icon} size={20} />}
+              title={sessionId ? t('empty.title') : t('empty.noSession')}
+              text={
+                sessionId
+                  ? t('empty.hint', { agent: agentId ? agentName(agentId) : t('empty.agent') })
+                  : t('empty.noSessionHint')
+              }
+            >
+              {sessionId && (
+                <div className="kp-addr-row kp-addr-row--empty">
+                  <AddressField url={null} onNavigate={navigate} autoFocus />
+                </div>
+              )}
+            </PaneEmpty>
+            {/* Main keeps a closed page's view hidden, but still needs a place for the next one. */}
+            <div ref={page} hidden />
+          </>
+        )}
       </div>
-    </div>
+    </PaneSheet>
   )
+}
+
+/** The page's site icon, as recorded when it opened, else a globe. */
+function SiteMark({ url }: { url: string }) {
+  useEffect(loadSiteIcons, [])
+  const icon = useSiteIcon(url)
+  if (icon) return <img src={icon} alt="" aria-hidden className="kp-sitemark" />
+  return <PaneIcon icon={Globe02Icon} size={14} className="kp-tab__icon" />
 }
 
 /** A blocked download, a page lost to make room, or a page that did not load. */
@@ -337,18 +299,16 @@ function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: strin
     if (sessionId) void window.kettu.browser.openExternal(sessionId)
   }
   return (
-    <div className="flex min-h-8 shrink-0 items-center gap-2 bg-subtle px-3 text-small text-secondary">
-      <span className="min-w-0 flex-1 truncate">
-        {notice.kind === 'download-blocked' && t('notice.downloadBlocked')}
-        {notice.kind === 'evicted' && t('notice.evicted')}
-        {notice.kind === 'load-failed' && t('notice.loadFailed', { error: notice.description })}
+    <div role="status" className="kp-origin" data-answered="" data-denied="">
+      <span className="kp-origin__text">
+        <span className="truncate">
+          {notice.kind === 'download-blocked' && t('notice.downloadBlocked')}
+          {notice.kind === 'evicted' && t('notice.evicted')}
+          {notice.kind === 'load-failed' && t('notice.loadFailed', { error: notice.description })}
+        </span>
       </span>
       {notice.kind === 'download-blocked' && (
-        <button
-          type="button"
-          onClick={open}
-          className="shrink-0 text-small text-link hover:underline focus-ring"
-        >
+        <button type="button" onClick={open} className="kp-link">
           {t('actions.openExternal')}
         </button>
       )}
@@ -356,7 +316,7 @@ function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: strin
         <button
           type="button"
           onClick={() => void window.kettu.browser.reload(sessionId)}
-          className="shrink-0 text-small text-link hover:underline focus-ring"
+          className="kp-link"
         >
           {notice.kind === 'evicted' ? t('actions.reload') : t('actions.tryAgain')}
         </button>

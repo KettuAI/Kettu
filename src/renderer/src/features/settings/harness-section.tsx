@@ -3,27 +3,22 @@
 
 import { useState, type ReactNode } from 'react'
 import {
-  ChevronRightIcon,
-  CircleAlertIcon,
-  CircleArrowUpIcon,
-  CircleCheckIcon,
-  DownloadIcon,
-  ExternalLinkIcon,
-  RotateCwIcon,
-  TriangleAlertIcon,
-  XIcon,
-} from 'lucide-react'
+  Alert02Icon,
+  AlertCircleIcon,
+  ArrowDown01Icon,
+  ArrowUpRight01Icon,
+  Cancel01Icon,
+  Download04Icon,
+  RefreshIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentInstallMethod, AgentStatus, AgentTask } from '@shared/agent-host'
 import type { SettingsPatch } from '@shared/settings'
 import type { HarnessId } from '@shared/thread'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
-import { CommandLine } from '@renderer/components/command-line'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
-import { RefreshIcon } from '@renderer/components/refresh-icon'
-import { Badge } from '@renderer/components/ui/badge'
-import { Button, buttonVariants } from '@renderer/components/ui/button'
 import {
   Collapsible,
   CollapsibleContent,
@@ -42,7 +37,6 @@ import {
 import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { RadioGroup, RadioGroupTile } from '@renderer/components/ui/radio-group'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { toast } from '@renderer/components/ui/toast'
 import { listedInstalled, readiness, showsCurrent } from '@renderer/features/agents/readiness'
 import { adapterOnlyUpdate } from '@renderer/features/agents/updates'
@@ -50,7 +44,6 @@ import { PANEL } from '@renderer/features/session/entries/helpers'
 import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
-import { cn } from '@renderer/lib/utils'
 import {
   awaitsPackage,
   harnessStatuses,
@@ -62,7 +55,16 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import { ConfigFrame, DismissButton, Fact, Log, LogCopyButton, TaskLog } from './agent-parts'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
-import { ControlError, CopyAction, GROUP_ACTION, Pill, ROW_BUTTON } from './controls'
+import {
+  CommandLine,
+  ControlError,
+  CopyAction,
+  DangerButton,
+  LinkButton,
+  Pill,
+  SetButton,
+  Spin,
+} from './controls'
 import { PathActions, PathLine } from './places'
 import {
   SETTINGS_TILE,
@@ -188,12 +190,10 @@ function PillClose({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={cn(
-        'grid size-4 place-items-center rounded-full outline-none focus-ring',
-        tone === 'info' ? 'hover:bg-info-tint-hover' : 'hover:bg-destructive-tint-hover',
-      )}
+      className="k-pill-close"
+      data-tone={tone}
     >
-      <XIcon className="size-2.5" />
+      <Icon icon={Cancel01Icon} size={10} />
     </button>
   )
 }
@@ -212,8 +212,8 @@ function HarnessState({ status }: { status: AgentStatus }) {
   const harness = status.harnessId
   if (task?.state === 'running' || status.state === 'installing') {
     return (
-      <span className="flex items-center gap-1.5 text-hint whitespace-nowrap text-secondary">
-        <Spinner className="size-3" />
+      <span className="k-end k-muted">
+        <Spin />
         {t(task?.kind === 'update' ? 'agents.update.updating' : 'agents.install.installing')}
       </span>
     )
@@ -221,18 +221,14 @@ function HarnessState({ status }: { status: AgentStatus }) {
   if (task?.state === 'failed') {
     const updating = task.kind === 'update'
     return (
-      <Badge
-        variant="error"
-        className="rounded-tile pr-1 has-[[data-retry]:hover]:bg-destructive-tint-hover"
-      >
+      <span className="ui-ss-badge k-badge-error">
         <button
           type="button"
-          data-retry=""
           title={task.error ?? undefined}
           onClick={() => retryTask(useAgentsStore, useSettingsStore, harness, task)}
-          className="inline-flex items-center gap-1 rounded-sm outline-none focus-ring"
+          className="k-badge-action"
         >
-          <RotateCwIcon className="size-3" />
+          <Icon icon={RefreshIcon} size={12} />
           {t(updating ? 'agents.update.failed' : 'agents.install.failed')}
         </button>
         <PillClose
@@ -240,33 +236,33 @@ function HarnessState({ status }: { status: AgentStatus }) {
           tone="error"
           onClick={() => cancelTask(useAgentsStore, harness)}
         />
-      </Badge>
+      </span>
     )
   }
   if (taskError) {
     return (
-      <Badge variant="error" className="rounded-tile pr-1" title={taskError.message}>
-        <CircleAlertIcon data-icon="inline-start" />
-        {t(
-          taskError.kind === 'update' ? 'agents.update.failedTitle' : 'agents.install.failedTitle',
-        )}
+      <span className="ui-ss-badge k-badge-error" title={taskError.message}>
+        <span className="k-badge-action">
+          <Icon icon={AlertCircleIcon} size={12} />
+          {t(
+            taskError.kind === 'update'
+              ? 'agents.update.failedTitle'
+              : 'agents.install.failedTitle',
+          )}
+        </span>
         <PillClose
           label={t('agents.task.dismiss')}
           tone="error"
           onClick={() => cancelTask(useAgentsStore, harness)}
         />
-      </Badge>
+      </span>
     )
   }
   if (status.uninstalled) {
     return (
-      <Button
-        variant="outline"
-        className={cn(ROW_BUTTON, 'min-w-20')}
-        onClick={() => void startInstall(useAgentsStore, useSettingsStore, harness)}
-      >
+      <SetButton onClick={() => void startInstall(useAgentsStore, useSettingsStore, harness)}>
         {t('agents.install.button')}
-      </Button>
+      </SetButton>
     )
   }
   const cliUpdate = status.cli?.update
@@ -275,9 +271,8 @@ function HarnessState({ status }: { status: AgentStatus }) {
     return (
       <>
         {version && <Pill tone="attention">{t('harnesses.versionOut', { version })}</Pill>}
-        <Button
-          variant="outline"
-          className={ROW_BUTTON}
+        <SetButton
+          variant="primary"
           title={cliUpdate?.command}
           // The user's own CLI changes outside Kettu, so its update runs from the page that shows
           // the command; Kettu's own package updates here.
@@ -286,7 +281,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
           }
         >
           {t('agents.update.button')}
-        </Button>
+        </SetButton>
       </>
     )
   }
@@ -297,9 +292,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
   if (kind) {
     return (
       <>
-        <Button
-          variant="outline"
-          className={cn(ROW_BUTTON, 'min-w-20')}
+        <SetButton
           onClick={() =>
             kind === 'package'
               ? void startInstall(useAgentsStore, useSettingsStore, harness)
@@ -307,7 +300,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
           }
         >
           {t('agents.install.button')}
-        </Button>
+        </SetButton>
         {kind !== 'package' && (
           <InstallDialog status={status} open={installing} onOpenChange={setInstalling} />
         )}
@@ -320,8 +313,7 @@ function HarnessState({ status }: { status: AgentStatus }) {
 /** A state in the success color's dot, such as Up to date. */
 function StateDot({ label }: { label: string }) {
   return (
-    <span className="flex items-center gap-1.5 text-hint whitespace-nowrap text-secondary">
-      <span aria-hidden className="size-1.75 shrink-0 rounded-full bg-success" />
+    <span className="ui-ss-badge" data-tone="ok">
       {label}
     </span>
   )
@@ -367,7 +359,7 @@ function InstallDialog({
                 aria-label={t('harnesses.install.method')}
                 value={method?.id ?? null}
                 onValueChange={(id) => setPicked(id as AgentInstallMethod['id'])}
-                className="gap-5"
+                className="kettu-sd__choices"
               >
                 {status.installMethods.map((m, index) => (
                   <RadioGroupTile
@@ -376,26 +368,16 @@ function InstallDialog({
                     disabled={!m.available}
                     className={SETTINGS_TILE}
                   >
-                    <span className="flex flex-col gap-0.5">
-                      <span className="leading-[normal]">
+                    <span className="ui-sg-label">
+                      <b className="k-row-title">
                         {methodName(t, m.id)}
                         {index === 0 && m.available && (
-                          <>
-                            {' '}
-                            <Badge
-                              variant="recommended"
-                              className="rounded-tile border-0 font-medium"
-                            >
-                              {t('harnesses.install.recommended')}
-                            </Badge>
-                          </>
+                          <span className="ui-ss-badge" data-tone="ok">
+                            {t('harnesses.install.recommended')}
+                          </span>
                         )}
-                      </span>
-                      {!m.available && (
-                        <span className="text-hint text-tertiary">
-                          {t('agents.install.notFound')}
-                        </span>
-                      )}
+                      </b>
+                      {!m.available && <small>{t('agents.install.notFound')}</small>}
                     </span>
                   </RadioGroupTile>
                 ))}
@@ -403,7 +385,7 @@ function InstallDialog({
             </SettingsField>
           )}
           {!method && status.detail && (
-            <p className="text-group text-secondary" data-selectable="">
+            <p className="kettu-sd__text" data-selectable="">
               {status.detail}
             </p>
           )}
@@ -413,12 +395,8 @@ function InstallDialog({
                 method.id === 'archive' ? 'harnesses.install.downloads' : 'harnesses.install.runs',
               )}
             >
-              <div className="flex items-center gap-2 rounded-segments bg-code-block px-3 py-2.5 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)] [&>button]:size-6.5 [&>button]:rounded-segment [&>button>svg]:size-3.5!">
-                <code
-                  className="min-w-0 flex-1 font-mono text-hint break-all whitespace-pre-wrap text-primary"
-                  data-selectable=""
-                  title={method.command}
-                >
+              <div className="k-cmd k-cmd--wrap">
+                <code data-selectable="" title={method.command}>
                   {method.command}
                 </code>
                 <CopyAction
@@ -428,7 +406,7 @@ function InstallDialog({
                   )}
                 />
               </div>
-              <span className="text-hint text-tertiary">
+              <span className="kettu-sd__hint">
                 {t(
                   method.id === 'archive'
                     ? 'harnesses.install.downloadBody'
@@ -438,20 +416,19 @@ function InstallDialog({
             </SettingsField>
           )}
           {method && status.installNotice && (
-            <p className="text-group text-secondary" data-selectable="">
+            <p className="kettu-sd__text" data-selectable="">
               {status.installNotice}
             </p>
           )}
           {status.installUrl && (
-            <a
-              href={status.installUrl}
-              target="_blank"
-              rel="noreferrer"
-              className={cn(buttonVariants({ variant: 'link', size: 'xs' }), 'self-start')}
-            >
-              {t('harnesses.install.guide')}
-              <ExternalLinkIcon data-icon="inline-end" />
-            </a>
+            <span>
+              <LinkButton
+                href={status.installUrl}
+                icon={<Icon icon={ArrowUpRight01Icon} size={14} />}
+              >
+                {t('harnesses.install.guide')}
+              </LinkButton>
+            </span>
           )}
           {status.binaryCommand && (
             <ChooseElsewhere harness={status.harnessId} onChosen={() => onOpenChange(false)} />
@@ -459,28 +436,29 @@ function InstallDialog({
           <ControlError error={error} />
         </SettingsDialogBody>
         <SettingsDialogFooter>
-          <DialogClose render={<Button variant="ghost" className={ROW_BUTTON} />}>
+          <DialogClose render={<SetButton size="md" variant="ghost" />}>
             {t('common:actions.cancel')}
           </DialogClose>
           {method ? (
-            <Button
-              className={ROW_BUTTON}
+            <SetButton
+              size="md"
+              variant="primary"
               onClick={() => {
                 void startInstall(useAgentsStore, useSettingsStore, status.harnessId, method.id)
                 onOpenChange(false)
               }}
             >
               {t('agents.install.button')}
-            </Button>
+            </SetButton>
           ) : (
-            <Button
-              className={ROW_BUTTON}
-              disabled={checking}
+            <SetButton
+              size="md"
+              variant="primary"
+              loading={checking}
               onClick={() => check(() => useAgentsStore.getState().reloadEnvironment())}
             >
-              {checking && <Spinner data-icon="inline-start" />}
               {t('agents.environment.reload')}
-            </Button>
+            </SetButton>
           )}
         </SettingsDialogFooter>
       </SettingsDialogContent>
@@ -503,11 +481,11 @@ function ChooseElsewhere({ harness, onChosen }: { harness: HarnessId; onChosen: 
         onClick={() =>
           act(() => api.dialogs.chooseAgentBinary(harness).then((path) => path && onChosen()))
         }
-        className="self-start rounded-sm text-control text-secondary underline decoration-border-strong underline-offset-3 outline-none hover:text-primary focus-ring"
+        className="k-link k-self-start"
       >
         {t('agents.install.elsewhere')}
       </button>
-      {error && <p className="text-hint text-danger">{error}</p>}
+      {error && <p className="kettu-sd__error">{error}</p>}
     </>
   )
 }
@@ -530,9 +508,9 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
     ) : status.state === 'installing' ? (
       (status.progress.at(-1) ?? t('agents.install.installing'))
     ) : status.task?.state === 'failed' ? (
-      <span className="text-danger">{status.task.error}</span>
+      <span className="k-danger">{status.task.error}</span>
     ) : taskError ? (
-      <span className="text-danger">{taskError.message}</span>
+      <span className="k-danger">{taskError.message}</span>
     ) : status.uninstalled ? (
       t('harnesses.removedLine')
     ) : awaitsPackage(status) && status.package?.isSdk ? (
@@ -551,13 +529,9 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
       item={status.harnessId}
       label={status.harnessName}
       onOpen={() => openHarnessSettings(status.harnessId)}
-      tile={<AgentTile agent={status.harnessId} mono={!installed} size={30} />}
-      name={<span className="truncate">{status.harnessName}</span>}
-      right={
-        <span className="pointer-events-auto flex items-center gap-2">
-          <HarnessState status={status} />
-        </span>
-      }
+      tile={<AgentTile agent={status.harnessId} mono={!installed} size={32} />}
+      name={<span className="k-name">{status.harnessName}</span>}
+      right={<HarnessState status={status} />}
     >
       {summary && <ItemLine>{summary}</ItemLine>}
     </ItemRow>
@@ -577,7 +551,7 @@ export function HarnessGroupActions() {
   const pending = harnesses.filter((h) => h.update || h.cli?.update).length
   const meta: ReactNode =
     refresh.phase === 'turning' ? null : check.error ? (
-      <span className="text-danger" title={check.error}>
+      <span className="k-error" title={check.error}>
         {t('agents.update.checkFailed')}
       </span>
     ) : check.finishedAt && now - check.finishedAt < JUST_CHECKED_MS ? (
@@ -595,18 +569,14 @@ export function HarnessGroupActions() {
     ) : null
   return (
     <>
-      {meta && <span className="mr-1 text-hint text-tertiary">{meta}</span>}
+      {meta && <span className="k-muted k-head-meta">{meta}</span>}
       {checkable && (
-        <Button
-          variant="ghost"
-          aria-busy={refresh.phase === 'turning'}
-          disabled={refresh.phase === 'turning'}
+        <SetButton
+          loading={refresh.phase === 'turning'}
           onClick={() => void refresh.run(() => checkForUpdates(useAgentsStore)).catch(() => {})}
-          className={GROUP_ACTION}
         >
-          {refresh.phase === 'turning' && <Spinner data-icon="inline-start" />}
           {t('agents.update.check')}
-        </Button>
+        </SetButton>
       )}
     </>
   )
@@ -628,7 +598,7 @@ function HarnessPageHeader({ status }: { status: AgentStatus | null }) {
       back={t('sections.harnesses')}
       onBack={() => openHarnessSettings(null)}
       item={status?.harnessId ?? 'harness'}
-      icon={status && <AgentTile agent={status.harnessId} size={40} mono={!installed} />}
+      icon={status && <AgentTile agent={status.harnessId} size={42} mono={!installed} />}
       title={status?.harnessName ?? null}
       subtitle={status && <HarnessPageLine status={status} />}
     />
@@ -647,7 +617,7 @@ function HarnessPageLine({ status }: { status: AgentStatus }) {
         ? t('agents.via', { vendor, adapter })
         : t('agents.direct', { vendor })
     : null
-  return connection && <span className="truncate">{connection}</span>
+  return connection && <span className="k-name">{connection}</span>
 }
 
 function HarnessPageBody({ status }: { status: AgentStatus }) {
@@ -659,46 +629,34 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
   const installed = listedInstalled(status) || isInstalled(status)
   const kind = installKind(status)
   return (
-    <div className="flex flex-col">
+    <div>
       <HarnessPageHeader status={status} />
 
-      <div className="flex flex-col">
+      <div>
         {r.kind !== 'failed' && r.kind !== 'missing' && status.detail && (
-          <p className="mt-3 text-group text-secondary" data-selectable="">
+          <p className="ui-sg-hint" data-selectable="">
             {status.detail}
           </p>
         )}
         {r.kind === 'missing' && !kind && (
-          <p className="mt-3 text-group text-secondary" data-selectable="">
-            {r.message}
+          <p className="ui-sg-hint" data-selectable="">
+            {r.message}{' '}
             {r.url && (
-              <a
-                href={r.url}
-                target="_blank"
-                rel="noreferrer"
-                className={cn(buttonVariants({ variant: 'link', size: 'xs' }), 'ml-1')}
-              >
+              <a href={r.url} target="_blank" rel="noreferrer" className="k-link">
                 {r.action}
-                <ExternalLinkIcon data-icon="inline-end" />
               </a>
             )}
           </p>
         )}
-        {error && <p className="mt-3 text-group text-danger">{error}</p>}
+        {error && (
+          <p className="ui-sg-hint k-error" data-wrap="">
+            {error}
+          </p>
+        )}
 
-        <div className="mt-5 min-w-0 empty:hidden">
-          <TaskNotice status={status} installed={installed} />
-        </div>
-        {status.uninstalled && (
-          <div className="mt-5 min-w-0">
-            <UninstalledNotice status={status} />
-          </div>
-        )}
-        {kind && (
-          <div className="mt-5 min-w-0">
-            <InstallNotice status={status} kind={kind} />
-          </div>
-        )}
+        <TaskNotice status={status} installed={installed} />
+        {status.uninstalled && <UninstalledNotice status={status} />}
+        {kind && <InstallNotice status={status} kind={kind} />}
 
         <VersionGroup status={status} />
         <ProgramGroup status={status} />
@@ -706,20 +664,20 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
         <AgentsGroup status={status} />
 
         {installed && (
-          <Collapsible className="mt-8">
-            <CollapsibleTrigger className="group/advanced flex h-7.5 w-full items-center gap-1 rounded-sm text-left text-hint font-medium text-tertiary outline-none hover:text-primary focus-ring">
-              <ChevronRightIcon className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/advanced:rotate-90" />
+          <Collapsible className="k-group">
+            <CollapsibleTrigger className="ui-sg-head k-disclosure">
+              <Icon icon={ArrowDown01Icon} size={14} />
               {t('agents.advanced')}
             </CollapsibleTrigger>
             <CollapsibleContent className={PANEL}>
-              <div className="pb-1">
+              <div className="k-disclosure__body">
                 <RowGroup>
                   <RowFrame
                     text={
                       <RowText
                         name={t('agents.launch')}
                         description={
-                          <code className="font-mono text-meta break-all" data-selectable="">
+                          <code className="k-mono k-break" data-selectable="">
                             {status.launchCommand}
                           </code>
                         }
@@ -737,18 +695,15 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
                         />
                       }
                     >
-                      <Button
-                        className={ROW_BUTTON}
-                        variant="outline"
-
-                        disabled={busy || r.kind === 'installing' || r.kind === 'starting'}
+                      <SetButton
+                        loading={busy}
+                        disabled={r.kind === 'installing' || r.kind === 'starting'}
                         onClick={() =>
                           act(() => request('agents.reinstall', { agentId: status.harnessId }))
                         }
                       >
-                        {busy && <Spinner data-icon="inline-start" />}
                         {t('agents.reinstall')}
-                      </Button>
+                      </SetButton>
                     </RowFrame>
                   )}
                   {status.package && !status.package.isSdk && environment?.nodeVersion && (
@@ -805,7 +760,7 @@ function UninstallGroup({ status }: { status: AgentStatus }) {
     }
   }
   return (
-    <section className="flex flex-col pt-6">
+    <section className="k-group">
       <RowGroup>
         <RowFrame
           text={
@@ -815,9 +770,7 @@ function UninstallGroup({ status }: { status: AgentStatus }) {
             />
           }
         >
-          <Button
-            variant="destructive-outline"
-            className={ROW_BUTTON}
+          <DangerButton
             onClick={() => {
               setError(null)
               setRemoveProgram(false)
@@ -825,7 +778,7 @@ function UninstallGroup({ status }: { status: AgentStatus }) {
             }}
           >
             {t('harnesses.uninstall.button')}
-          </Button>
+          </DangerButton>
         </RowFrame>
       </RowGroup>
       <AlertDialog open={open} onOpenChange={setOpen}>
@@ -863,7 +816,6 @@ function UninstallGroup({ status }: { status: AgentStatus }) {
               disabled={busy}
               onClick={() => void uninstall()}
             >
-              {busy && <Spinner data-icon="inline-start" />}
               {t('harnesses.uninstall.button')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -897,13 +849,7 @@ function VersionGroup({ status }: { status: AgentStatus }) {
   ) : (
     <>
       {stated && (
-        <span
-          aria-hidden
-          className={cn(
-            'mr-1.5 inline-block size-1.5 rounded-full bg-current align-[0.1em]',
-            next || status.update ? 'text-info' : 'text-success',
-          )}
-        />
+        <span aria-hidden className="k-dot" data-tone={next || status.update ? 'new' : 'ok'} />
       )}
       {next
         ? t('agents.update.released', { version: next })
@@ -917,7 +863,7 @@ function VersionGroup({ status }: { status: AgentStatus }) {
           : current
             ? t('agents.update.upToDate')
             : null}
-      <span className="text-tertiary">
+      <span>
         {stated && ' · '}
         {checkedAt
           ? t('agents.update.checkedAgo', { ago: mediumAgo(checkedAt, now) })
@@ -926,7 +872,7 @@ function VersionGroup({ status }: { status: AgentStatus }) {
     </>
   )
   return (
-    <section className="flex flex-col">
+    <section className="k-group" aria-label={t('agents.versionGroup')}>
       <GroupLabel group={{ id: 'version', label: t('agents.versionGroup') }} />
       <RowGroup>
         <RowFrame
@@ -934,11 +880,11 @@ function VersionGroup({ status }: { status: AgentStatus }) {
             <RowText
               name={
                 version ? (
-                  <span className="font-mono" data-selectable="">
+                  <span className="k-mono" data-selectable="">
                     {version}
                   </span>
                 ) : (
-                  <span className="font-normal text-tertiary">{t('agents.notReported')}</span>
+                  <span className="k-muted">{t('agents.notReported')}</span>
                 )
               }
               description={line}
@@ -946,19 +892,15 @@ function VersionGroup({ status }: { status: AgentStatus }) {
           }
         >
           {checks && (
-            <Button
-              variant="ghost"
-
-              className={cn(ROW_BUTTON, 'text-secondary')}
-              aria-busy={refresh.phase === 'turning'}
-              disabled={refresh.phase === 'turning' || updating}
+            <SetButton
+              loading={refresh.phase === 'turning'}
+              disabled={updating}
               onClick={() =>
                 void refresh.run(() => checkForUpdates(useAgentsStore)).catch(() => {})
               }
             >
-              <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
               {t('agents.update.check')}
-            </Button>
+            </SetButton>
           )}
         </RowFrame>
       </RowGroup>
@@ -985,7 +927,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     return (
       <Notice
         variant="info"
-        icon={<Spinner />}
+        icon={<Spin />}
         title={
           updating && next
             ? t('agents.update.progressTitleTo', { name, version: next })
@@ -994,13 +936,9 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               })
         }
         action={
-          <Button
-            className={ROW_BUTTON}
-            variant="outline"
-            onClick={() => cancelTask(useAgentsStore, harness)}
-          >
+          <SetButton onClick={() => cancelTask(useAgentsStore, harness)}>
             {t(updating ? 'agents.update.cancel' : 'agents.install.cancel')}
-          </Button>
+          </SetButton>
         }
         more={<TaskLog task={task} />}
       >
@@ -1013,7 +951,6 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     return (
       <Notice
         variant="error"
-        icon={<CircleAlertIcon />}
         title={t(
           taskError.kind === 'update' ? 'agents.update.failedTitle' : 'agents.install.failedTitle',
         )}
@@ -1028,12 +965,12 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     return (
       <Notice
         variant={outdated ? 'warning' : 'info'}
-        icon={outdated ? <TriangleAlertIcon /> : <CircleArrowUpIcon />}
+        icon={outdated ? undefined : <Icon icon={Download04Icon} size={16} />}
         title={t('agents.update.noticeTitle', { name, version: cliUpdate.version })}
         action={
-          <Button className={ROW_BUTTON} onClick={() => startCliUpdate(useAgentsStore, harness)}>
+          <SetButton variant="primary" onClick={() => startCliUpdate(useAgentsStore, harness)}>
             {t('harnesses.updateTo', { version: cliUpdate.version })}
-          </Button>
+          </SetButton>
         }
         more={<CommandLine command={cliUpdate.command} />}
       >
@@ -1052,7 +989,7 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     return (
       <Notice
         variant="info"
-        icon={<CircleArrowUpIcon />}
+        icon={<Icon icon={Download04Icon} size={16} />}
         title={
           adapter
             ? t('agents.update.noticeTitleAdapterOnly', {
@@ -1064,9 +1001,9 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
               : t('agents.update.noticeTitleAdapter', { name })
         }
         action={
-          <Button className={ROW_BUTTON} onClick={() => startUpdate(useAgentsStore, harness)}>
+          <SetButton variant="primary" onClick={() => startUpdate(useAgentsStore, harness)}>
             {t('agents.update.button')}
-          </Button>
+          </SetButton>
         }
       >
         {adapter
@@ -1092,7 +1029,6 @@ function TaskNotice({ status, installed }: { status: AgentStatus; installed: boo
     return (
       <Notice
         variant="success"
-        icon={<CircleCheckIcon />}
         title={t('agents.update.doneTitle', { name })}
         action={<DismissButton onClick={() => setDoneSeen(true)} />}
       >
@@ -1111,22 +1047,18 @@ function FailedTaskNotice({ status, task }: { status: AgentStatus; task: AgentTa
   return (
     <Notice
       variant="error"
-      icon={<CircleAlertIcon />}
       title={t(updating ? 'agents.update.failedTitle' : 'agents.install.failedTitle')}
       action={<DismissButton onClick={() => cancelTask(useAgentsStore, status.harnessId)} />}
       more={
         <>
           <TaskLog task={task} />
-          <span className="flex flex-wrap gap-1.5">
-            <Button
-              className={ROW_BUTTON}
-              variant="outline"
-
+          <span className="k-end k-wrap">
+            <SetButton
+              icon={<Icon icon={RefreshIcon} size={14} />}
               onClick={() => retryTask(useAgentsStore, useSettingsStore, status.harnessId, task)}
             >
-              <RotateCwIcon data-icon="inline-start" />
               {t('common:actions.retry')}
-            </Button>
+            </SetButton>
             <LogCopyButton task={task} />
           </span>
         </>
@@ -1146,15 +1078,15 @@ function UninstalledNotice({ status }: { status: AgentStatus }) {
   return (
     <Notice
       variant="info"
-      icon={<DownloadIcon />}
+      icon={<Icon icon={Download04Icon} size={16} />}
       title={t('harnesses.removedLine')}
       action={
-        <Button
-          className={ROW_BUTTON}
+        <SetButton
+          variant="primary"
           onClick={() => void startInstall(useAgentsStore, useSettingsStore, status.harnessId)}
         >
           {t('agents.install.button')}
-        </Button>
+        </SetButton>
       }
     >
       {t('harnesses.uninstall.installAgain')}
@@ -1175,18 +1107,13 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
     return (
       <Notice
         variant="info"
-        icon={<Spinner />}
+        icon={<Spin />}
         title={t('agents.install.progressTitle', { name })}
         action={
           (task || status.package) && (
-            <Button
-              className={ROW_BUTTON}
-              variant="outline"
-
-              onClick={() => cancelTask(useAgentsStore, status.harnessId)}
-            >
+            <SetButton onClick={() => cancelTask(useAgentsStore, status.harnessId)}>
               {t('agents.install.cancel')}
-            </Button>
+            </SetButton>
           )
         }
         more={lines.length > 0 && <Log lines={lines} />}
@@ -1202,15 +1129,15 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
     return (
       <Notice
         variant="info"
-        icon={<DownloadIcon />}
+        icon={<Icon icon={Download04Icon} size={16} />}
         title={t('agents.install.title', { name })}
         action={
-          <Button
-            className={ROW_BUTTON}
+          <SetButton
+            variant="primary"
             onClick={() => void startInstall(useAgentsStore, useSettingsStore, status.harnessId)}
           >
             {t('agents.install.button')}
-          </Button>
+          </SetButton>
         }
       >
         {t('agents.install.adapterBody', { package: status.package?.name ?? '', name })}
@@ -1220,23 +1147,23 @@ function InstallNotice({ status, kind }: { status: AgentStatus; kind: InstallKin
   return (
     <Notice
       variant="info"
-      icon={<DownloadIcon />}
+      icon={<Icon icon={Download04Icon} size={16} />}
       title={t('agents.install.title', { name })}
       action={
-        <Button className={ROW_BUTTON} onClick={() => setOpen(true)}>
+        <SetButton variant="primary" onClick={() => setOpen(true)}>
           {t('harnesses.install.open')}
-        </Button>
+        </SetButton>
       }
       more={
         status.binaryCommand && (
-          <span className="flex min-w-0 items-center gap-2">
-            <Button
-              variant="ghost"
-              className={cn(ROW_BUTTON, '-ml-2 text-secondary')}
+          <span className="k-end">
+            <button
+              type="button"
+              className="k-link"
               onClick={() => act(() => api.dialogs.chooseAgentBinary(status.harnessId))}
             >
               {t('agents.install.elsewhere')}
-            </Button>
+            </button>
             <ControlError error={error} />
           </span>
         )
@@ -1276,7 +1203,7 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
           ? t('agents.cli.notFound', { command })
           : null
   return (
-    <section className="flex flex-col">
+    <section className="k-group" aria-label={t('agents.program')}>
       <GroupLabel group={{ id: 'program', label: t('agents.program') }} />
       <RowGroup>
         <ConfigFrame
@@ -1293,10 +1220,8 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
               <>
                 <ControlError error={error} />
                 {override && (
-                  <Button
+                  <SetButton
                     variant="ghost"
-
-                    className={cn(ROW_BUTTON, 'text-secondary')}
                     onClick={() =>
                       act(() =>
                         useSettingsStore
@@ -1306,33 +1231,26 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
                     }
                   >
                     {t('agents.reset')}
-                  </Button>
+                  </SetButton>
                 )}
-                <Button
-                  className={ROW_BUTTON}
-                  variant="outline"
-
+                <SetButton
                   onClick={() => act(() => api.dialogs.chooseAgentBinary(status.harnessId))}
                 >
                   {t('agents.chooseBinary')}
-                </Button>
+                </SetButton>
               </>
             )
           }
         >
           {path ? (
             <PathLine path={path} actions={<PathActions path={path} />}>
-              {version && (
-                <span className="shrink-0 font-mono text-code text-tertiary">{version}</span>
-              )}
+              {version && <span className="k-mono k-muted">{version}</span>}
             </PathLine>
           ) : (
-            <span className="flex min-h-6.5 items-center text-hint text-tertiary">
-              {t('agents.programOnPath', { command })}
-            </span>
+            <span className="k-muted">{t('agents.programOnPath', { command })}</span>
           )}
           {note && (
-            <span className="text-hint text-tertiary" data-selectable="">
+            <span className="k-muted" data-selectable="">
               {note}
             </span>
           )}
@@ -1350,14 +1268,14 @@ function PackageGroup({ status }: { status: AgentStatus }) {
   if (!pkg) return null
   const range = `${pkg.version.split('.').slice(0, 2).join('.')}.x`
   return (
-    <section className="flex flex-col">
+    <section className="k-group" aria-label={t('harnesses.packageGroup')}>
       <GroupLabel group={{ id: 'package', label: t('harnesses.packageGroup') }} />
       <RowGroup>
         <RowFrame
           text={
             <RowText
               name={
-                <span className="font-mono" data-selectable="">
+                <span className="k-mono" data-selectable="">
                   {pkg.name}
                 </span>
               }
@@ -1372,18 +1290,16 @@ function PackageGroup({ status }: { status: AgentStatus }) {
           }
         >
           {status.update && (
-            <Button
-              className={ROW_BUTTON}
-
-              variant="outline"
+            <SetButton
+              variant="primary"
               onClick={() => startUpdate(useAgentsStore, status.harnessId)}
             >
               {t('harnesses.updateTo', { version: status.update.adapterVersion })}
-            </Button>
+            </SetButton>
           )}
         </RowFrame>
       </RowGroup>
-      <p className="pt-2.5 text-hint text-tertiary">
+      <p className="ui-sg-hint">
         {pkg.isSdk
           ? t('harnesses.sdkNote', { name: status.harnessName, range })
           : t('harnesses.adapterNote', { name: status.harnessName })}
@@ -1404,7 +1320,7 @@ function AgentsGroup({ status }: { status: AgentStatus }) {
     ),
   )
   return (
-    <section className="flex flex-col">
+    <section className="k-group" aria-label={t('sections.agents')}>
       <GroupLabel group={{ id: 'agents', label: t('sections.agents') }} />
       <RowGroup>
         <RowFrame
@@ -1415,9 +1331,9 @@ function AgentsGroup({ status }: { status: AgentStatus }) {
             />
           }
         >
-          <Button className={ROW_BUTTON} variant="outline" onClick={() => openAgentSettings(null)}>
+          <SetButton onClick={() => openAgentSettings(null)}>
             {t('harnesses.manageAgents')}
-          </Button>
+          </SetButton>
         </RowFrame>
       </RowGroup>
     </section>
@@ -1434,36 +1350,38 @@ export function EnvironmentFooter() {
   const source = environment?.source
   const text = environmentText(t, environment, now)
   return (
-    <div data-setting-row="environment" className="relative mt-6 flex flex-col gap-1">
+    <div data-setting-row="environment" className="k-row k-env">
       <FlashMark id="environment" />
-      <div className="relative flex items-center gap-3 text-hint text-tertiary">
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          {(!environment || source === 'pending') && <Spinner className="size-3.5" />}
-          {source === 'fallback' && (
-            <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0 text-warning" />
-          )}
-          <span className="min-w-0 flex-1">{text}</span>
+      <p className="ui-sg-hint k-env__line">
+        {(!environment || source === 'pending') && <Spin />}
+        {source === 'fallback' && (
+          <span className="k-warn">
+            <Icon icon={Alert02Icon} size={14} />
+          </span>
+        )}
+        <span>
+          {text}{' '}
+          <button
+            type="button"
+            className="k-link"
+            disabled={refresh.phase === 'turning'}
+            onClick={() => {
+              setError(null)
+              void refresh
+                .run(() => useAgentsStore.getState().reloadEnvironment())
+                .catch((e: unknown) => setError(errorMessage(e)))
+            }}
+          >
+            {t('agents.environment.reload')}
+          </button>
         </span>
-        <Button
-          variant="ghost"
-          className={GROUP_ACTION}
-          aria-busy={refresh.phase === 'turning'}
-          disabled={refresh.phase === 'turning'}
-          onClick={() => {
-            setError(null)
-            void refresh
-              .run(() => useAgentsStore.getState().reloadEnvironment())
-              .catch((e: unknown) => setError(errorMessage(e)))
-          }}
-        >
-          <RefreshIcon phase={refresh.phase} data-icon="inline-start" />
-          {t('agents.environment.reload')}
-        </Button>
-      </div>
-      {environment?.warning && (
-        <p className="relative text-hint text-secondary">{environment.warning}</p>
+      </p>
+      {environment?.warning && <p className="ui-sg-hint">{environment.warning}</p>}
+      {error && (
+        <p className="ui-sg-hint k-error" data-wrap="">
+          {error}
+        </p>
       )}
-      {error && <p className="relative text-hint text-danger">{error}</p>}
     </div>
   )
 }

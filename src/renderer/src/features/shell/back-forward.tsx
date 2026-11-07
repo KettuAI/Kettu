@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { ChevronLeftIcon, ChevronRightIcon, HistoryIcon } from 'lucide-react'
+import { ArrowLeft01Icon, ArrowRight01Icon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import {
   back,
@@ -9,7 +9,7 @@ import {
   historyPlaces,
   showHistory,
 } from '@renderer/app/history'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +55,7 @@ function HistoryButton({ direction }: { direction: Direction }) {
   // Set when a press opened or closed the menu, so its click does not also step.
   const held = useRef(false)
   const label = direction === 'back' ? t('topBar.back') : t('topBar.forward')
-  const Icon = direction === 'back' ? ChevronLeftIcon : ChevronRightIcon
+  const glyph = direction === 'back' ? ArrowLeft01Icon : ArrowRight01Icon
   const release = () => clearTimeout(hold.current)
   useEffect(() => () => clearTimeout(hold.current), [])
   return (
@@ -73,9 +73,8 @@ function HistoryButton({ direction }: { direction: Direction }) {
             <DropdownMenuTrigger
               id={id}
               render={
-                <Button
-                  variant="quiet"
-                  size="icon-compact"
+                <button
+                  type="button"
                   aria-label={label}
                   disabled={!enabled}
                   className={TITLE_BUTTON}
@@ -104,7 +103,7 @@ function HistoryButton({ direction }: { direction: Direction }) {
             />
           }
         >
-          <Icon strokeWidth={1.4} className="size-4.25" />
+          <Icon icon={glyph} size={16} />
         </TooltipTrigger>
         {/* The keys follow the name as plain text, a space after it, outside its truncation. */}
         <TooltipContent
@@ -169,7 +168,7 @@ function PlacesMenu({ direction, label }: { direction: Direction; label: string 
       <DropdownMenuSeparator />
       <DropdownMenuItem onClick={() => showHistory(true)}>
         <span aria-hidden className="grid size-4 shrink-0 place-items-center text-icon">
-          <HistoryIcon className="size-3.75" />
+          <Icon icon={Clock01Icon} size={15} />
         </span>
         {t('history.showAll')}
         <DropdownMenuShortcut className="text-small">

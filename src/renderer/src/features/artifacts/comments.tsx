@@ -1,12 +1,13 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
-  ArrowUpIcon,
-  CheckIcon,
-  MessageSquareIcon,
-  MousePointer2Icon,
-  PlusIcon,
-  UserRoundIcon,
-} from 'lucide-react'
+  ArrowDown01Icon,
+  ArrowUp02Icon,
+  Comment01Icon,
+  Cursor01Icon,
+  PlusSignIcon,
+  Tick02Icon,
+  UserIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -19,18 +20,9 @@ import {
 import type { SessionSummary } from '@shared/agent-host'
 import { emitAppEvent } from '@renderer/app/events'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/components/ui/select'
+import { Dropdown, Icon } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import {
@@ -39,6 +31,7 @@ import {
   readDraft,
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
+import { SettingsStyles } from '@renderer/features/routines/kit'
 import { longAgo } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
@@ -55,17 +48,10 @@ const BOX_GAP = 14
 export function AnchorChip({ anchor, className }: { anchor: CommentAnchor; className?: string }) {
   const { t } = useTranslation('artifacts')
   return (
-    <span
-      className={cn(
-        'flex min-w-0 items-center gap-1.5 rounded-lg bg-subtle px-2 py-1 text-small text-secondary',
-        className,
-      )}
-    >
-      <MousePointer2Icon className="size-3.25 shrink-0 text-tertiary" />
-      <span className="min-w-0 truncate">{anchorLabel(anchor)}</span>
-      {anchor.missing && (
-        <span className="shrink-0 text-tertiary">{t('comments.elementGone')}</span>
-      )}
+    <span className={cn('k-av-anchor', className)}>
+      <Icon icon={Cursor01Icon} size={13} />
+      <span className="k-av-anchor__text">{anchorLabel(anchor)}</span>
+      {anchor.missing && <em>{t('comments.elementGone')}</em>}
     </span>
   )
 }
@@ -131,11 +117,9 @@ export function CommentBox({
       role="dialog"
       aria-label={t('comments.new')}
       style={{ width: BOX_WIDTH, left: at?.left ?? 0, top: at?.top ?? 0 }}
-      className={cn(
-        'absolute z-20 flex animate-in flex-col gap-2.5 rounded-2xl bg-popover p-3 shadow-menu fade-in duration-(--duration-fast)',
-        // Placed after its first layout; invisible would keep the text box from taking the focus.
-        !at && 'pointer-events-none opacity-0',
-      )}
+      // Placed after its first layout; invisible would keep the text box from taking the focus.
+      data-placed={at ? '' : undefined}
+      className="k-av-compose"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault()
@@ -144,8 +128,8 @@ export function CommentBox({
         }
       }}
     >
-      <AnchorChip anchor={anchor} className="self-start" />
-      <Textarea
+      <AnchorChip anchor={anchor} />
+      <textarea
         autoFocus
         value={body}
         rows={3}
@@ -158,21 +142,21 @@ export function CommentBox({
           event.preventDefault()
           submit()
         }}
-        className="max-h-60 min-h-20 resize-none"
+        className="k-av-text"
       />
       {error && (
-        <p role="alert" className="text-xs text-danger">
+        <p role="alert" className="k-av-error">
           {error}
         </p>
       )}
-      <div className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate text-xs text-tertiary">
+      <div className="k-av-compose__foot">
+        <span className="k-av-compose__hint">
           {t('comments.sendHint', { keys: formatShortcut('Mod+Enter') })}
         </span>
-        <Button variant="quiet" size="sm" onClick={onCancel}>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
           {t('comments.cancel')}
         </Button>
-        <Button size="sm" disabled={!body.trim() || busy} onClick={submit}>
+        <Button size="sm" disabled={!body.trim()} loading={busy} onClick={submit}>
           {t('comments.comment')}
         </Button>
       </div>
@@ -281,20 +265,22 @@ export function CommentsPanel({
       .finally(() => setSending(false))
   }
 
+  const pickedSession = targets.find((session) => session.id === target)
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3">
-        {error && !threads && <p className="px-1 py-2 text-xs text-danger">{error}</p>}
+    <div className="k-av-comments">
+      <SettingsStyles />
+      <div className="k-av-side__body">
+        {error && !threads && <p className="k-av-error">{error}</p>}
         {!threads && !error && (
-          <div aria-busy className="flex flex-col gap-3 px-1 py-2">
-            <Skeleton className="h-16 w-full rounded-xl" />
-            <Skeleton className="h-16 w-full rounded-xl" />
+          <div aria-busy className="k-av-side__wait">
+            <Skeleton className="h-20 w-full rounded-xl" />
+            <Skeleton className="h-20 w-full rounded-xl" />
           </div>
         )}
         {threads && threads.length === 0 && (
-          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-            <MessageSquareIcon className="size-5 text-tertiary" />
-            <p className="text-small text-secondary">{t('comments.empty')}</p>
+          <div className="k-av-side__empty">
+            <Icon icon={Comment01Icon} size={18} />
+            <p>{t('comments.empty')}</p>
           </div>
         )}
         {open.map((thread, i) => (
@@ -311,7 +297,7 @@ export function CommentsPanel({
             type="button"
             aria-expanded={showResolved}
             onClick={() => setShowResolved((shown) => !shown)}
-            className="self-start rounded-tile px-2 py-1 text-xs text-tertiary outline-none hover:text-secondary focus-ring"
+            className="k-av-link"
           >
             {t(showResolved ? 'comments.hideResolved' : 'comments.showResolved', {
               count: resolved.length,
@@ -330,49 +316,57 @@ export function CommentsPanel({
           ))}
       </div>
       {open.length > 0 && (
-        <div className="flex shrink-0 flex-col gap-2 px-3 pt-3 pb-3 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]">
-          <p className="px-1 text-small text-secondary">
+        <div className="k-av-send">
+          <p>
             {pending.length > 0
               ? t('comments.sendLead', { count: pending.length })
               : t('comments.allSent')}
           </p>
-          <div className="flex items-center gap-2">
-            <Select
-              value={target}
+          <div className="k-av-send__row">
+            <Dropdown
+              side="top"
+              className="k-av-send__to"
               items={[
-                ...targets.map((session) => ({ value: session.id, label: name(session) })),
-                { value: NEW_SESSION, label: t('comments.newSession') },
+                ...targets.map((session) => ({
+                  label: name(session),
+                  logo: <AgentMark agent={session.agentId} size={14} />,
+                  checked: session.id === target,
+                  onSelect: () => setPicked(session.id),
+                })),
+                {
+                  label: t('comments.newSession'),
+                  icon: PlusSignIcon,
+                  checked: target === NEW_SESSION,
+                  divider: targets.length > 0,
+                  onSelect: () => setPicked(NEW_SESSION),
+                },
               ]}
-              onValueChange={(next) => {
-                if (typeof next === 'string') setPicked(next)
-              }}
+              trigger={({ open: menuOpen, toggle }) => (
+                <button
+                  type="button"
+                  aria-label={t('comments.sendTo')}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  onClick={toggle}
+                  className="ui-ss-select k-av-send__pick"
+                >
+                  {pickedSession ? (
+                    <AgentMark agent={pickedSession.agentId} size={14} />
+                  ) : (
+                    <Icon icon={PlusSignIcon} size={14} />
+                  )}
+                  <span>{pickedSession ? name(pickedSession) : t('comments.newSession')}</span>
+                  <Icon icon={ArrowDown01Icon} size={14} />
+                </button>
+              )}
+            />
+            <Button
+              size="sm"
+              icon={<Icon icon={ArrowUp02Icon} size={14} />}
+              disabled={pending.length === 0}
+              loading={sending}
+              onClick={send}
             >
-              <SelectTrigger
-                aria-label={t('comments.sendTo')}
-                className="h-8 min-w-0 flex-1 gap-2 rounded-xl pr-2 pl-2.5 text-control *:data-[slot=select-value]:min-w-0 *:data-[slot=select-value]:truncate"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {targets.map((session) => (
-                    <SelectItem key={session.id} value={session.id}>
-                      <AgentMark agent={session.agentId} size={14} />
-                      <span className="min-w-0 truncate">{name(session)}</span>
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-                {targets.length > 0 && <SelectSeparator />}
-                <SelectGroup>
-                  <SelectItem value={NEW_SESSION}>
-                    <PlusIcon className="size-3.5" />
-                    {t('comments.newSession')}
-                  </SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-            <Button size="sm" disabled={pending.length === 0 || sending} onClick={send}>
-              <ArrowUpIcon data-icon="inline-start" />
               {t('comments.send')}
             </Button>
           </div>
@@ -393,19 +387,18 @@ function Author({ comment }: { comment: ArtifactComment }) {
       ? t('comments.you')
       : (session?.title ?? t('common:untitledSession'))
   return (
-    <span className="flex min-w-0 items-center gap-2 text-small text-tertiary">
+    <span className="k-av-author">
       {comment.author.session === null ? (
-        <span className="grid size-5 shrink-0 place-items-center rounded-full bg-tile">
-          <UserRoundIcon className="size-3 text-secondary" />
+        <span className="k-av-author__you">
+          <Icon icon={UserIcon} size={12} />
         </span>
       ) : session ? (
-        <AgentMark agent={session.agentId} size={16} className="shrink-0" />
+        <AgentMark agent={session.agentId} size={16} />
       ) : (
-        <span className="size-5 shrink-0 rounded-full bg-tile" />
+        <span className="k-av-author__you" />
       )}
-      <span className="min-w-0 truncate">
-        {who} · {longAgo(comment.createdAt, now)}
-      </span>
+      <b>{who}</b>
+      <span className="k-av-author__time">{longAgo(comment.createdAt, now)}</span>
     </span>
   )
 }
@@ -445,31 +438,19 @@ function ThreadCard({
 
   if (!first) return null
   return (
-    <article
-      className={cn(
-        'flex flex-col gap-2.5 rounded-xl bg-surface p-3 shadow-[inset_0_0_0_var(--hairline)_var(--border-subtle)]',
-        resolved && 'opacity-70',
-      )}
-    >
-      <div className="flex items-center gap-2">
+    <article className="ui-sg-card k-av-thread" data-resolved={resolved || undefined}>
+      <div className="k-av-thread__head">
         {number !== null && (
-          <span
-            className={cn(
-              'grid size-5 shrink-0 place-items-center rounded-full text-badge font-semibold tabular-nums text-canvas',
-              isAnswered(thread) ? 'bg-muted-foreground' : 'bg-edit-ring',
-            )}
-          >
+          <span className="k-av-pin" data-answered={isAnswered(thread) || undefined}>
             {number}
           </span>
         )}
         <Author comment={first} />
-        <span className="flex-1" />
         <Tooltip>
           <TooltipTrigger
             render={
-              <Button
-                variant="quiet"
-                size="icon-xs"
+              <button
+                type="button"
                 aria-label={t(resolved ? 'comments.reopen' : 'comments.resolve')}
                 aria-pressed={resolved}
                 onClick={() =>
@@ -479,36 +460,29 @@ function ThreadCard({
                     resolved: !resolved,
                   }).catch(failed)
                 }
-                className="text-tertiary aria-pressed:text-success"
+                className="ui-as-icon-btn k-av-btn k-av-resolve"
               />
             }
           >
-            <CheckIcon />
+            <Icon icon={Tick02Icon} size={15} />
           </TooltipTrigger>
           <TooltipContent>{t(resolved ? 'comments.reopen' : 'comments.resolve')}</TooltipContent>
         </Tooltip>
       </div>
-      <button
-        type="button"
-        onClick={() => onFocus(thread)}
-        className="self-start rounded-lg outline-none focus-ring"
-      >
+      <button type="button" onClick={() => onFocus(thread)} className="k-av-thread__anchor">
         <AnchorChip anchor={thread.anchor} />
       </button>
-      <p className="text-ui break-words whitespace-pre-wrap text-primary">{first.body}</p>
+      <p className="k-av-thread__body">{first.body}</p>
       {replies.map((comment, i) => (
-        <div
-          key={i}
-          className="flex flex-col gap-1.5 pt-2.5 shadow-[inset_0_var(--hairline)_0_var(--border-subtle)]"
-        >
+        <div key={i} className="k-av-reply">
           <Author comment={comment} />
-          <p className="text-ui break-words whitespace-pre-wrap text-primary">{comment.body}</p>
+          <p className="k-av-thread__body">{comment.body}</p>
         </div>
       ))}
       {!resolved &&
         (replying ? (
-          <div className="flex flex-col gap-2">
-            <Textarea
+          <div className="k-av-thread__write">
+            <textarea
               autoFocus
               value={reply}
               rows={2}
@@ -525,23 +499,19 @@ function ThreadCard({
                 event.preventDefault()
                 send()
               }}
-              className="min-h-14 resize-none"
+              className="k-av-text"
             />
-            <div className="flex justify-end gap-2">
-              <Button variant="quiet" size="sm" onClick={() => setReplying(false)}>
+            <div className="k-av-thread__acts">
+              <Button variant="ghost" size="sm" onClick={() => setReplying(false)}>
                 {t('comments.cancel')}
               </Button>
-              <Button size="sm" disabled={!reply.trim() || busy} onClick={send}>
+              <Button size="sm" disabled={!reply.trim()} loading={busy} onClick={send}>
                 {t('comments.reply')}
               </Button>
             </div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setReplying(true)}
-            className="self-start rounded-tile text-xs text-tertiary outline-none hover:text-secondary focus-ring"
-          >
+          <button type="button" onClick={() => setReplying(true)} className="k-av-link">
             {t('comments.reply')}
           </button>
         ))}

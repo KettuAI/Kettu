@@ -14,15 +14,15 @@ const LETTERS: Record<ChangeStatus, string> = {
   conflicted: '!',
 }
 
-const TONES: Record<ChangeStatus, string> = {
-  added: 'bg-success/12 text-success',
-  untracked: 'bg-success/12 text-success',
-  modified: 'bg-warning/12 text-warning',
-  renamed: 'bg-warning/12 text-warning',
-  copied: 'bg-warning/12 text-warning',
-  typechange: 'bg-warning/12 text-warning',
-  deleted: 'bg-danger/12 text-danger',
-  conflicted: 'bg-danger/12 text-danger',
+const TONES: Record<ChangeStatus, 'added' | 'modified' | 'deleted'> = {
+  added: 'added',
+  untracked: 'added',
+  modified: 'modified',
+  renamed: 'modified',
+  copied: 'modified',
+  typechange: 'modified',
+  deleted: 'deleted',
+  conflicted: 'deleted',
 }
 
 /** A file's uncommitted change, as git's letter on a tile of its tone. */
@@ -30,14 +30,7 @@ export function ChangeBadge({ status, className }: { status: ChangeStatus; class
   const { t } = useTranslation('files')
   const label = t(`change.${status}`)
   return (
-    <span
-      title={label}
-      className={cn(
-        'flex size-3.75 shrink-0 items-center justify-center rounded-md text-badge font-bold',
-        TONES[status],
-        className,
-      )}
-    >
+    <span title={label} data-tone={TONES[status]} className={cn('kp-badge', className)}>
       <span aria-hidden>{LETTERS[status]}</span>
       <span className="sr-only">{label}</span>
     </span>

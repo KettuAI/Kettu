@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { PencilIcon } from 'lucide-react'
+import { Edit02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { DeviceActivity } from '@shared/remote/activity'
 import type { PairedDevice } from '@shared/remote/device'
@@ -13,8 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import { Spinner } from '@renderer/components/ui/spinner'
 import { basename, monthDay } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
@@ -24,8 +22,8 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSettingsItem } from '@renderer/stores/view'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { Fact } from './agent-parts'
-import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
-import { DeviceIcon, DeviceTile, OnlineDot } from './remote-parts'
+import { CONFIRM, ControlError, DangerButton, IconAction, Pill, Spin } from './controls'
+import { DeviceIcon, DeviceTile } from './remote-parts'
 import { ThisBrowserBadge } from './remote-section'
 import { changeDevice, deviceLine, nextDeviceName, whenAt } from './remote-text'
 import { GroupLabel, ItemPageHeader, RowFrame, RowGroup, RowText } from './rows'
@@ -40,7 +38,7 @@ export function DevicePage({ id }: { id: string }) {
   const online = useRemoteStore((s) => s.status?.online.includes(id) ?? false)
   if (!device) {
     return (
-      <div className="flex flex-col">
+      <>
         <ItemPageHeader
           back={t('sections.remote')}
           onBack={back}
@@ -48,8 +46,8 @@ export function DevicePage({ id }: { id: string }) {
           icon={null}
           title={null}
         />
-        <p className="px-1 text-small text-tertiary">{t('remote.device.gone')}</p>
-      </div>
+        <p className="ui-sg-hint">{t('remote.device.gone')}</p>
+      </>
     )
   }
   return <DevicePageBody device={device} online={online} />
@@ -72,27 +70,27 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
         ? t('remote.device.onlineSince', { time: whenAt(t, device.lastConnectedAt, now) })
         : whenAt(t, device.lastConnectedAt, now)
   return (
-    <div className="flex flex-col">
+    <>
       <ItemPageHeader
         back={t('sections.remote')}
         onBack={back}
         item={device.id}
-        iconFirst
-        icon={<DeviceTile large icon={<DeviceIcon device={device} className="size-5" />} />}
-        title={<DeviceName device={device} online={online} />}
+        icon={<DeviceTile large icon={<DeviceIcon device={device} />} />}
+        title={<DeviceName device={device} />}
+        subtitle={<span className="k-name">{deviceLine(t, device)}</span>}
       >
-        <p className="truncate text-command leading-4.5 text-tertiary">{deviceLine(t, device)}</p>
+        {online && <Pill tone="success">{t('remote.devices.online')}</Pill>}
       </ItemPageHeader>
 
-      <div className="flex flex-col gap-7">
-        <section aria-label={t('remote.device.facts')} className="flex flex-col">
+      <div className="k-groups">
+        <section aria-label={t('remote.device.facts')} className="k-group">
           <RowGroup>
             <Fact name={t('remote.device.joined')}>{joined}</Fact>
             <Fact name={t('remote.device.lastConnected')}>{last}</Fact>
           </RowGroup>
         </section>
         <Activity device={device} />
-        <section aria-label={t('remote.device.remove.name')} className="flex flex-col">
+        <section aria-label={t('remote.device.remove.name')} className="k-group">
           <RowGroup>
             <RowFrame
               text={
@@ -107,7 +105,7 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
           </RowGroup>
         </section>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -127,34 +125,32 @@ function Activity({ device }: { device: PairedDevice }) {
     }
   }, [device.id, device.lastConnectedAt, device.name, api])
   return (
-    <section aria-label={t('remote.device.activity')} className="flex flex-col">
+    <section aria-label={t('remote.device.activity')} className="k-group">
       <GroupLabel
         group={{
           id: 'activity',
           label: t('remote.device.activity'),
-          actions: <span className="mr-1.5 text-xs text-tertiary">{t('remote.device.days')}</span>,
+          actions: <span className="k-head-meta k-muted">{t('remote.device.days')}</span>,
         }}
       />
       {events === null ? (
         <RowGroup>
-          <div className="flex h-10 items-center px-4">
-            <Spinner className="size-3.5 text-icon" />
+          <div className="ui-sg-row k-activity">
+            <Spin />
           </div>
         </RowGroup>
       ) : events.length === 0 ? (
-        <p className="px-1 py-0.5 text-small text-tertiary">{t('remote.device.noActivity')}</p>
+        <p className="ui-sg-hint">{t('remote.device.noActivity')}</p>
       ) : (
         <RowGroup>
-          <ul aria-label={t('remote.device.activity')}>
+          <ul aria-label={t('remote.device.activity')} className="k-activities">
             {events.map((event, i) => (
               <ActivityRow key={`${event.at}-${i}`} event={event} kind={device.kind} />
             ))}
           </ul>
         </RowGroup>
       )}
-      <p className="mt-2.5 px-1 text-xs text-pretty text-tertiary">
-        {t('remote.device.activityNote')}
-      </p>
+      <p className="ui-sg-hint">{t('remote.device.activityNote')}</p>
     </section>
   )
 }
@@ -180,14 +176,10 @@ export function ActivityRow({ event, kind }: { event: DeviceActivity; kind: stri
   // The title the session had then, which a later rename does not change.
   const title = 'title' in event ? event.title : null
   return (
-    <li className="relative flex h-10 items-center gap-4 px-4 before:absolute before:top-0 before:right-0 before:left-4 before:h-(--hairline) before:bg-border-soft first:before:hidden">
-      <span className="w-28 shrink-0 truncate text-xs text-tertiary tabular">
-        {whenAt(t, event.at, now)}
-      </span>
-      <span className="min-w-0 flex-1 truncate text-ui">
-        {eventText(t, event, kind, title, onHost)}
-      </span>
-      {project && <span className="shrink-0 text-xs text-tertiary">{project}</span>}
+    <li className="ui-sg-row k-activity">
+      <span className="k-activity__when k-num">{whenAt(t, event.at, now)}</span>
+      <span className="k-activity__what">{eventText(t, event, kind, title, onHost)}</span>
+      {project && <span className="k-activity__where">{project}</span>}
     </li>
   )
 }
@@ -245,7 +237,7 @@ const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
   event.nativeEvent.isComposing || event.keyCode === 229
 
 /** The name, edited in place. Enter or leaving the field saves; Esc puts the old name back. */
-function DeviceName({ device, online }: { device: PairedDevice; online: boolean }) {
+function DeviceName({ device }: { device: PairedDevice }) {
   const { api } = useHostScope()
   const { t } = useTranslation('settings')
   const [editing, setEditing] = useState(false)
@@ -318,8 +310,8 @@ function DeviceName({ device, online }: { device: PairedDevice; online: boolean 
   }
 
   return (
-    <span className="flex min-w-0 flex-1 flex-col gap-1 font-sans font-normal">
-      <span className="flex w-full min-w-0 items-center gap-1.5 font-display text-section font-bold">
+    <>
+      <span className="k-title-edit">
         {editing ? (
           <input
             aria-label={t('remote.device.rename')}
@@ -329,7 +321,7 @@ function DeviceName({ device, online }: { device: PairedDevice; online: boolean 
             autoComplete="off"
             spellCheck={false}
             maxLength={256}
-            className="-mx-0.5 h-7 max-w-full min-w-8 field-sizing-content rounded-t-md bg-transparent px-0.5 text-primary shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-strong)] outline-none selection:bg-edit-selection focus-visible:rounded-md focus-visible:shadow-none focus-ring"
+            className="k-title-input"
             onFocus={(event) => event.currentTarget.select()}
             onChange={(event) => {
               setDraft(event.target.value)
@@ -339,36 +331,29 @@ function DeviceName({ device, online }: { device: PairedDevice; online: boolean 
             onKeyDown={onKeyDown}
           />
         ) : (
-          <span className="min-w-0 truncate">{device.name}</span>
+          <span className="k-name">{device.name}</span>
         )}
         {!editing && (
-          <Button
+          <IconAction
             ref={pencil}
-            variant="quiet"
-            size="icon-sm"
-            aria-label={t('remote.device.rename')}
-            title={t('remote.device.rename')}
-            className="text-tertiary"
+            label={t('remote.device.rename')}
+            icon={Edit02Icon}
             onClick={() => {
               setDraft(device.name)
               setError(null)
               live.current = true
               setEditing(true)
             }}
-          >
-            <PencilIcon />
-          </Button>
+          />
         )}
-        <ThisBrowserBadge deviceId={device.id} className="shrink-0 font-sans font-normal" />
-        {online && (
-          <span className="flex shrink-0 items-center gap-1.5 font-sans text-xs font-normal text-tertiary">
-            <OnlineDot />
-            {t('remote.devices.online')}
-          </span>
-        )}
+        <ThisBrowserBadge deviceId={device.id} />
       </span>
-      {error && <span className="truncate text-xs text-danger">{error}</span>}
-    </span>
+      {error && (
+        <span className="k-error k-title-error" data-wrap="">
+          {error}
+        </span>
+      )}
+    </>
   )
 }
 
@@ -396,9 +381,7 @@ function RemoveDevice({ device }: { device: PairedDevice }) {
   return (
     <>
       <ControlError error={open ? null : error} />
-      <Button className={ROW_BUTTON} variant="destructive-outline" onClick={() => setOpen(true)}>
-        {t('remote.device.remove.button')}
-      </Button>
+      <DangerButton onClick={() => setOpen(true)}>{t('remote.device.remove.button')}</DangerButton>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

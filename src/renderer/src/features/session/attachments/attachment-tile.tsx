@@ -1,5 +1,5 @@
 import type { ComponentProps, MouseEvent } from 'react'
-import { FileTextIcon, TriangleAlertIcon, XIcon } from 'lucide-react'
+import { Alert02Icon, Cancel01Icon, File02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { Attachment } from '@shared/thread'
 import { Skeleton } from '@renderer/components/ui/skeleton'
@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { cn } from '@renderer/lib/utils'
 import { cutName } from './cut-name'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 /** What a tile shows, the same in the composer and in the thread. */
 export interface TileView {
@@ -93,11 +94,11 @@ export function AttachmentTile({
           <>
             <span className={cn('flex shrink-0', failed ? 'text-danger' : 'text-tertiary')}>
               {failed ? (
-                <TriangleAlertIcon strokeWidth={1.4} className="size-4" />
+                <Glyph icon={Alert02Icon} className="size-4" />
               ) : adding ? (
                 <Spinner className="size-4 animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)" />
               ) : view.kind === 'text' ? (
-                <FileTextIcon strokeWidth={1.4} className="size-4" />
+                <Glyph icon={File02Icon} className="size-4" />
               ) : (
                 <FileTypeIcon path={view.name} folder={view.kind === 'folder'} className="size-4" />
               )}
@@ -129,7 +130,7 @@ export function AttachmentTile({
                 onClick={remove}
                 className="grid size-5 shrink-0 place-items-center rounded-sm text-tertiary hover:text-primary"
               >
-                <XIcon strokeWidth={1.6} className="size-3" />
+                <Glyph icon={Cancel01Icon} className="size-3" />
               </button>
             ) : (
               <span className="w-1" />
@@ -147,7 +148,7 @@ export function AttachmentTile({
         />
         {view.warn && (
           <span className="absolute bottom-0.5 left-0.5 grid size-4 place-items-center rounded-full bg-surface text-primary shadow-card">
-            <TriangleAlertIcon className="size-2.5" />
+            <Glyph icon={Alert02Icon} className="size-2.5" />
           </span>
         )}
         {image && onRemove && (
@@ -158,7 +159,7 @@ export function AttachmentTile({
             onClick={remove}
             className="absolute -top-1.5 -right-1.5 grid size-4.5 place-items-center rounded-full bg-surface text-icon opacity-0 shadow-card transition-opacity duration-(--duration-fast) group-focus-visible/tile:opacity-100 group-hover/tile:opacity-100 hover:text-primary"
           >
-            <XIcon strokeWidth={1.6} className="size-2.5" />
+            <Glyph icon={Cancel01Icon} className="size-2.5" />
           </button>
         )}
       </TooltipTrigger>

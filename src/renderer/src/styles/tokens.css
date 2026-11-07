@@ -10,34 +10,56 @@
 
   /* The desk is the window behind everything; the main column and the panes are sheets on it. */
   --bg-app: #ffffff;
-  --bg-sidebar: #f5f5f5;
+  --bg-sidebar: #f8f8f8;
   /* On macOS, the share of --bg-sidebar laid over the system's sidebar material on the desk. */
-  --desk-tint: 25%;
+  --desk-tint: 100%;
   --bg-surface: #ffffff;
-  --bg-subtle: #f2f4f7;
+  --bg-subtle: #f4f4f5;
   /* A system notification in Settings › Notifications, as the menu bar draws one. */
   --bg-tray: #f7f8fa;
   /* Inline code: the fox, muted, on a faint fox ground. */
   --bg-code-inline: rgb(242 88 27 / 10%);
   --code-inline: #a8431c;
-  --bg-code-block: #f6f7f9;
-  --bg-hover: rgb(20 26 34 / 5%);
+  --bg-code-block: #f7f7f8;
+  --bg-hover: rgb(0 0 0 / 4%);
   /* Pressed, and a highlighted menu item. */
-  --bg-selected: rgb(20 26 34 / 7%);
+  --bg-selected: rgb(0 0 0 / 6%);
   /* A selected row and the chosen segment: lifted toward the reader, never darker. */
   --bg-raised: #ffffff;
 
-  --border-default: rgb(20 26 34 / 13%);
-  --border-subtle: rgb(20 26 34 / 8%);
+  --border-default: rgb(0 0 0 / 10%);
+  --border-subtle: rgb(0 0 0 / 6%);
   /* One step past border-default: an unchecked control, a link's underline, a hovered field. */
-  --border-strong: rgb(20 26 34 / 20%);
+  --border-strong: rgb(0 0 0 / 16%);
+  /* session: the thread and its header, in affectUI's stepped inks over the sheet. */
+  --thread-ink: rgb(0 0 0 / 88%);
+  --thread-text: rgb(0 0 0 / 61%);
+  --thread-prose: rgb(0 0 0 / 70%);
+  --thread-quiet: rgb(0 0 0 / 55%);
+  --thread-muted: rgb(0 0 0 / 45%);
+  --thread-faint: rgb(0 0 0 / 27%);
+  --thread-chip: var(--bg-hover);
+  --thread-hover: rgb(0 0 0 / 3%);
+  --thread-line: var(--border-subtle);
+  --thread-line-strong: rgb(0 0 0 / 10%);
+  --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  /* The fox orange of the running turn: its dots, the answer's caret, the step at work. */
+  --thread-fox: var(--send);
+  --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 18%, transparent);
+  --thread-add: var(--ansi-green);
+  --thread-del: #dc2626;
+  --thread-done: #22a06b;
+  --thread-card-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 6%), 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --thread-float-shadow: 0 0 0 0.5px rgb(0 0 0 / 10%), 0 6px 16px -6px rgb(0 0 0 / 20%);
+  --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 30%);
 
-  --text-primary: #10161e;
-  --text-secondary: #48525f;
-  --text-tertiary: #5e6875;
-  --text-placeholder: #5e6875;
-  --text-disabled: #9aa1ab;
-  --icon-default: #48525f;
+  --text-primary: #1f1f1f;
+  --text-secondary: #636363;
+  --text-tertiary: #686868;
+  --text-placeholder: #686868;
+  --text-disabled: #b5b5b5;
+  --icon-default: #636363;
 
   /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
   --attention: #c2410c;
@@ -65,11 +87,10 @@
   /* Links are ink with a gray underline (thread-link), which darkens on hover. */
   --link: #10161e;
   --link-hover: #10161e;
-  /* The fox: what is on, chosen or being typed, and a running turn's dots. The focus ring draws it
-     at half strength. */
-  --focus: #f2581b;
+  /* The focus ring, in affectUI's blue; it draws at half strength. */
+  --focus: #0060e2;
   /* A focused field's halo: a little fainter than the focus ring on the light page. */
-  --focus-halo-strength: 42%;
+  --focus-halo-strength: 35%;
   --selection: rgb(242 88 27 / 18%);
   /* An edit in place, such as renaming a session. */
   --edit-ring: #f2581b;
@@ -122,13 +143,13 @@
 
   /* Lightly raised: each layer is a 1 px ring (in the roles below) and a soft drop, which these
      hold. */
-  --elevation-popover: 0 14px 34px -12px rgb(30 45 70 / 25%), 0 2px 6px -2px rgb(20 26 34 / 8%);
+  --elevation-popover: 0 12px 28px -10px rgb(0 0 0 / 16%), 0 1px 2px rgb(0 0 0 / 5%);
   /* Secondary buttons, fields and key caps. */
-  --elevation-control: 0 1px 0 rgb(20 26 34 / 10%);
-  --elevation-control-hover: 0 1px 0 rgb(20 26 34 / 10%);
-  --elevation-card: 0 1px 0 rgb(20 26 34 / 3%);
+  --elevation-control: 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px rgb(0 0 0 / 5%);
+  --elevation-control-hover: 0 1px 1px -1px rgb(0 0 0 / 12%), 0 1px 2px rgb(0 0 0 / 6%);
+  --elevation-card: 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px rgb(0 0 0 / 5%);
   /* The composer and a hovered card; used with the card tier. */
-  --elevation-float: 0 1px 0 rgb(20 26 34 / 4%), 0 16px 36px -20px rgb(30 45 70 / 30%);
+  --elevation-float: 0 1px 2px rgb(0 0 0 / 5%), 0 10px 24px -10px rgb(0 0 0 / 14%);
   /* The system notification drawn in Settings, which keeps the same shadow in either theme. */
   --elevation-notification: 0 10px 24px -14px rgb(30 45 70 / 35%);
   /* Under a card waiting on the user; in dark its ring alone sets it apart. */
@@ -136,9 +157,9 @@
   --elevation-sunk: 0 0 #0000;
   --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
   /* A selected row and the chosen segment. */
-  --elevation-raised: 0 1px 1px rgb(30 45 70 / 6%);
-  --elevation-dialog: 0 28px 70px -20px rgb(30 45 70 / 35%), 0 8px 20px -8px rgb(20 26 34 / 12%);
-  --elevation-primary: 0 1px 2px rgb(16 22 30 / 18%);
+  --elevation-raised: 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px rgb(0 0 0 / 5%);
+  --elevation-dialog: 0 24px 56px -16px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
+  --elevation-primary: 0 2px 4px rgb(0 0 0 / 10%);
   /* A picture's faint drop under its ring, and a clip's play button over its picture. */
   --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
   --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
@@ -147,20 +168,20 @@
 
   /* The primary button: its fill as gradient stops, a ring a shade darker, a highlight along its
      top edge and its label, which a theme may set; the built-in one is solid ink. */
-  --primary-from: #141a22;
-  --primary-to: #141a22;
-  --primary-hover-from: #232b36;
-  --primary-hover-to: #232b36;
+  --primary-from: #323137;
+  --primary-to: #201e25;
+  --primary-hover-from: #47464d;
+  --primary-hover-to: #34323a;
   /* The built-in primary button draws no edge; a theme may give it one. */
-  --primary-ring: transparent;
-  --primary-highlight: rgb(255 255 255 / 12%);
+  --primary-ring: #0d0d0d;
+  --primary-highlight: rgb(255 255 255 / 16%);
   --primary-foreground: #ffffff;
 
-  /* On, checked and chosen controls in the fox orange: a switch, a check box, a radio, an option
+  /* On, checked and chosen controls in affectUI's blue: a switch, a check box, a radio, an option
      tile. Each reaches 3:1 on the page; the tint, which follows it, fills a chosen tile. */
-  --control-on: #f2581b;
+  --control-on: #0060e2;
   --control-on-tint: color-mix(in srgb, var(--control-on) 7%, transparent);
-  --switch-on: #f2581b;
+  --switch-on: #3c85e9;
   /* The send button once there is something to send: the same fox in both themes, since the
      lighter dark-theme fox leaves its white arrow under 3:1. */
   --send: #f2581b;
@@ -268,13 +289,13 @@
   /* Terminal, read by xterm.js: sixteen colors toned to read on white. */
   --ansi-black: #222222;
   --ansi-red: #c4352b;
-  --ansi-green: #2e7d4f;
-  --ansi-yellow: #956700;
+  --ansi-green: #16a34a;
+  --ansi-yellow: #b25b0c;
   --ansi-blue: #2f5d9c;
-  --ansi-magenta: #8d3d84;
-  --ansi-cyan: #2d6e7e;
+  --ansi-magenta: #5b5bd6;
+  --ansi-cyan: #1988b4;
   --ansi-white: #737373;
-  --ansi-bright-black: #8a8a8a;
+  --ansi-bright-black: #b7b7b7;
   --ansi-bright-red: #d4473c;
   --ansi-bright-green: #3a9160;
   --ansi-bright-yellow: #b07c00;
@@ -284,42 +305,208 @@
   --ansi-bright-white: #9a9a9a;
 
   /* The main area and the panes are sheets on the desk: a ring and a long, soft drop. */
-  --elevation-sheet: 0 1px 0 rgb(20 26 34 / 3%), 0 18px 44px -26px rgb(30 45 70 / 28%);
+  --elevation-sheet: 0 0 #0000;
   /* An artifact's page in its tray and on its canvas: a hairline, stronger when lifted, over a
      soft drop; the canvas draws its own hairline at every zoom, so it takes the drop alone. */
   --elevation-page-drop: 0 4px 14px -6px rgb(0 0 0 / 12%);
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* panes: the side panel's terminal, browser, devices and files. The terminal's prompt colors
+     above, the fox that marks an agent at work there, the running and changed marks. */
+  --terminal-selection-tint: rgb(242 88 27 / 22%);
+  --pane-fox: var(--send);
+  /* An icon at rest in a pane's head and the session's pane buttons, as affectUI's shell draws it. */
+  --pane-muted: rgb(0 0 0 / 45%);
+  --pane-live: #22a06b;
+  --pane-modified: var(--ansi-yellow);
+  --pane-added: var(--ansi-green);
+  --pane-phone: #0d0d0f;
+  --pane-phone-edge: #2a2a2e;
+
+  /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
+  --shell-tray: #f4f4f4;
+  /* A card a shade from the page toward the surface: white in light, #1b1b1e in dark. */
+  --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --shell-line-soft: rgb(0 0 0 / 4%);
+  --shell-strong: #000000;
+  --shell-ink: rgb(0 0 0 / 88%);
+  --shell-text: rgb(0 0 0 / 61%);
+  --shell-muted: rgb(0 0 0 / 45%);
+  --shell-faint: rgb(0 0 0 / 27%);
+  --shell-chip: var(--bg-hover);
+  --shell-chip-hover: rgb(0 0 0 / 6%);
+  --shell-hover: rgb(0 0 0 / 3%);
+  --shell-accent: #0060e2;
+  --shell-button: rgb(0 0 0 / 88%);
+  --shell-button-hover: rgb(0 0 0 / 78%);
+  --shell-accent-soft: rgb(0 96 226 / 8%);
+  --shell-shadow: var(--elevation-card);
+  --shell-card-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 6%), 0 1px 1px -1px rgb(0 0 0 / 10%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --shell-card-shadow-hover:
+    0 0 0 0.5px rgb(0 0 0 / 10%), 0 2px 6px -1px rgb(0 0 0 / 8%), 0 1px 2px 0 rgb(0 0 0 / 5%);
+  --shell-frame: color-mix(in srgb, var(--bg-hover) 50%, transparent);
+  --shell-line-strong: rgb(0 0 0 / 10%);
+  --shell-edge-active: rgb(0 0 0 / 14%);
+  --shell-subtle: #fafafa;
+  --shell-disabled: #dcdcdc;
+  --shell-on-ink: #ffffff;
+  --shell-ink-hover: #3a3a3a;
+  --shell-select: rgb(0 0 0 / 5.5%);
+  --shell-toggle-off: #e2e2e2;
+  --shell-switch-on: rgb(0 96 226 / 76.5%);
+  --shell-logo-bg: #ffffff;
+  --shell-scrim: rgb(0 0 0 / 12%);
+  --shell-danger: #dc2626;
+  --shell-danger-hover: #c81e1e;
+  --shell-dialog-shadow:
+    inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 28%),
+    0 4px 12px rgb(0 0 0 / 6%);
+
+  /* settings: the Settings modal, in affectUI's look. */
+  --settings-scrim: rgb(0 0 0 / 12%);
+  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+  --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 25%);
+  --settings-warn-bg: rgb(217 119 6 / 10%);
+  --settings-warn-ink: #b45309;
+  --settings-term-bg: #17181c;
+  --settings-term-ink: #e6e6e6;
+  --settings-term-faint: #8a8a8a;
+  --settings-term-path: #7fa8e8;
+  --settings-term-branch: #c79bf2;
+  --settings-term-ok: #5bb98a;
+
+  /* pages: Routines, Usage and Artifacts on affectUI. A routine waiting for approval in amber:
+     its text, its dot and halo, and its notice's tint and edge. */
+  --tone-amber: #b45309;
+  --tone-amber-dot: #f59e0b;
+  --tone-amber-halo: rgb(245 158 11 / 18%);
+  --tone-amber-fill: rgb(245 158 11 / 8%);
+  --tone-amber-edge: rgb(245 158 11 / 35%);
+  /* What failed: a run, a routine, a notice's tint and edge. */
+  --tone-red: #dc2626;
+  --tone-red-fill: rgb(220 38 38 / 6%);
+  --tone-red-edge: rgb(220 38 38 / 30%);
+  /* A run that succeeded, and what the prompt cache saved. */
+  --tone-green: #16a34a;
+  /* An artifact an agent is editing now: its dot and halo. */
+  --tone-editing: #22a06b;
+  --tone-editing-halo: rgb(34 160 107 / 20%);
+  /* Plan limits: a figure at 70 and at 90 percent, and the chip of a plan that could not be read. */
+  --plan-warn-text: #b77a00;
+  --plan-bad-text: #d1342f;
+  --plan-bad-chip: rgb(220 63 58 / 10%);
+  --plan-bad-chip-text: #c9302b;
+  /* Usage's time of day, its busiest hour, and the activity grid's four steps. */
+  --tod-bar: #b3cff6;
+  --tod-peak: #3c85e9;
+  --activity-1: #d6e5fb;
+  --activity-2: #9fc2f4;
+  --activity-3: #5f9bec;
+  --activity-4: #2f6fd6;
+  /* The hairline a gray tray takes beside white controls, and a hover card's drop. */
+  --tray-edge: rgb(0 0 0 / 6%);
+  --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
+  /* An artifact kind's sketch: its accent, and white on it. */
+  --sketch-accent: #2f6bff;
+  --sketch-on-accent: var(--on-fill);
+  --sketch-on-accent-soft: color-mix(in srgb, var(--on-fill) 55%, transparent);
+  --sketch-on-accent-bar: color-mix(in srgb, var(--on-fill) 60%, transparent);
+  /* Usage's lines and parts per agent, in the agents' order. */
+  --series-1: #2f6bff;
+  --series-2: #8b5cf6;
+  --series-3: #14b8a6;
+  --series-4: #f59e0b;
+  --series-5: #ec4899;
+  --series-6: #64748b;
+
+  /* composer: the composer's tray, popovers and menus (affectUI's Chat Composer and Model
+     Picker), New session's list, and the meters' four levels by how much is used. */
+  --composer-strong: #000000;
+  --composer-ink: rgb(0 0 0 / 88%);
+  --composer-text: rgb(0 0 0 / 61%);
+  --composer-muted: rgb(0 0 0 / 45%);
+  --composer-faint: rgb(0 0 0 / 27%);
+  --composer-line: var(--border-subtle);
+  --composer-line-strong: rgb(0 0 0 / 10%);
+  --composer-chip: var(--bg-hover);
+  --composer-chip-hover: rgb(0 0 0 / 6%);
+  --composer-hover-fill: rgb(0 0 0 / 3%);
+  --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --composer-panel: var(--bg-app);
+  --composer-pop-shadow:
+    0 0 0 0.5px rgb(0 0 0 / 10%), 0 16px 36px -12px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
+  --composer-queue-drop: rgb(0 0 0 / 28%);
+  --composer-thumb: #ffffff;
+  --composer-thumb-shadow: 0 0 0 0.5px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 10%);
+  --composer-meter-ok: #22a06b;
+  --composer-meter-ok-wash: rgb(34 160 107 / 16%);
+  --composer-meter-mid: #3e7bfa;
+  --composer-meter-mid-wash: rgb(62 123 250 / 16%);
+  --composer-meter-high: #e8833a;
+  --composer-meter-high-wash: rgb(232 131 58 / 18%);
+  --composer-meter-full: #e5484d;
+  --composer-meter-full-wash: rgb(229 72 77 / 16%);
+  --composer-waiting: #d9480f;
+  --composer-waiting-dot: #f2581b;
+  --composer-waiting-halo: rgb(242 88 27 / 18%);
+  /* Ultracode: its violet words and the glow under the model menu, from its crest down. */
+  --composer-ultra-text: #7c3aed;
+  --composer-ultra-shine: #e9d5ff;
+  --composer-ultra-1: #e879f9;
+  --composer-ultra-2: #8b5cf6;
+  --composer-ultra-3: #3b82f6;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --desk-tint: 50%;
-    --bg-app: #1e1e1e;
-    --bg-sidebar: #141414;
+    --desk-tint: 100%;
+    --bg-app: #141416;
+    --bg-sidebar: #0e0e10;
     /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-    --bg-surface: #252525;
-    --bg-subtle: #292929;
+    --bg-surface: #212124;
+    --bg-subtle: #2a2a2d;
     --bg-tray: #222222;
     --bg-code-inline: rgb(255 106 43 / 14%);
     --code-inline: #f2a27c;
-    --bg-code-block: #181818;
-    --bg-hover: rgb(230 236 245 / 5%);
-    --bg-selected: rgb(230 236 245 / 8%);
-    --bg-raised: #2a2a2a;
+    --bg-code-block: #161618;
+    --bg-hover: rgb(255 255 255 / 6%);
+    --bg-selected: rgb(255 255 255 / 8%);
+    --bg-raised: #2a2a2d;
 
-    --border-default: rgb(230 236 245 / 14%);
-    --border-subtle: rgb(230 236 245 / 8%);
-    --border-strong: rgb(230 236 245 / 22%);
+    --border-default: rgb(255 255 255 / 12%);
+    --border-subtle: rgb(255 255 255 / 8%);
+    --border-strong: rgb(255 255 255 / 18%);
+    /* session: the thread and its header. */
+    --thread-ink: rgb(255 255 255 / 90%);
+    --thread-text: rgb(255 255 255 / 62%);
+    --thread-prose: rgb(255 255 255 / 74%);
+    --thread-quiet: rgb(255 255 255 / 56%);
+    --thread-muted: rgb(255 255 255 / 45%);
+    --thread-faint: rgb(255 255 255 / 28%);
+    --thread-chip: var(--bg-hover);
+    --thread-hover: rgb(255 255 255 / 5%);
+    --thread-line: var(--border-subtle);
+    --thread-line-strong: rgb(255 255 255 / 14%);
+    --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+    --thread-fox: var(--send);
+    --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 24%, transparent);
+    --thread-add: var(--ansi-green);
+    --thread-del: #f87171;
+    --thread-done: #3fbf86;
+    --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+    --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
+    --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 
-    --text-primary: #e8ecf1;
-    --text-secondary: #aeb6c1;
-    --text-tertiary: #8e98a5;
-    --text-placeholder: #8e98a5;
-    --text-disabled: #5f6873;
-    --icon-default: #aeb6c1;
+    --text-primary: #e6e6e7;
+    --text-secondary: #a5a5a7;
+    --text-tertiary: #98989b;
+    --text-placeholder: #98989b;
+    --text-disabled: #55555a;
+    --icon-default: #a5a5a7;
 
     --attention: #fb8a55;
     --attention-dot: #fa6e28;
@@ -340,7 +527,7 @@
     --warning: #d9b463;
     --link: #e8ecf1;
     --link-hover: #e8ecf1;
-    --focus: #ff6a2b;
+    --focus: #5b9aff;
     --focus-halo-strength: 50%;
     --selection: rgb(255 106 43 / 24%);
     --edit-ring: #ff6a2b;
@@ -368,33 +555,33 @@
     --media-badge: rgb(16 22 30 / 65%);
     --media-overlay: rgb(16 22 30 / 72%);
 
-    --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
+    --elevation-popover: 0 12px 28px -10px rgb(0 0 0 / 50%), 0 1px 2px rgb(0 0 0 / 40%);
     --elevation-control: 0 0 #0000;
     --elevation-control-hover: 0 0 #0000;
-    --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-card: 0 1px 2px rgb(0 0 0 / 40%);
     --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
     --elevation-attention: 0 0 #0000;
     --elevation-sunk: 0 0 #0000;
     --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
     --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
-    --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
-    --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+    --elevation-dialog: 0 24px 56px -16px rgb(0 0 0 / 60%), 0 1px 2px rgb(0 0 0 / 40%);
+    --elevation-primary: 0 2px 4px rgb(0 0 0 / 40%);
     --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
     --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
     --highlight: 0 0 #0000;
 
     /* Inverted: a near-white button with dark text. */
-    --primary-from: #e8ecf1;
-    --primary-to: #e8ecf1;
-    --primary-hover-from: #ffffff;
-    --primary-hover-to: #ffffff;
-    --primary-ring: transparent;
-    --primary-highlight: rgb(255 255 255 / 12%);
-    --primary-foreground: #10161e;
+    --primary-from: #f4f4f5;
+    --primary-to: #e4e4e7;
+    --primary-hover-from: #e6e6e9;
+    --primary-hover-to: #d4d4d8;
+    --primary-ring: rgb(0 0 0 / 60%);
+    --primary-highlight: rgb(255 255 255 / 90%);
+    --primary-foreground: #121213;
 
-    --control-on: #ff6a2b;
+    --control-on: #5b9aff;
     --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
-    --switch-on: #ff6a2b;
+    --switch-on: #4d8dff;
     --send: #f2581b;
     --switch-thumb: #ffffff;
     --track: #3a424d;
@@ -463,13 +650,13 @@
 
     --ansi-black: #3a3a3a;
     --ansi-red: #f07167;
-    --ansi-green: #5bb98a;
-    --ansi-yellow: #d9a441;
+    --ansi-green: #4ade80;
+    --ansi-yellow: #f2a65a;
     --ansi-blue: #7fa8e8;
-    --ansi-magenta: #d88bd0;
-    --ansi-cyan: #6cc0d2;
+    --ansi-magenta: #a5a5ff;
+    --ansi-cyan: #5fc8e8;
     --ansi-white: #d4d4d4;
-    --ansi-bright-black: #6b6b6b;
+    --ansi-bright-black: #5c5c5f;
     --ansi-bright-red: #f4948c;
     --ansi-bright-green: #7fcca4;
     --ansi-bright-yellow: #e5bd6a;
@@ -478,39 +665,174 @@
     --ansi-bright-cyan: #90d2e0;
     --ansi-bright-white: #ececec;
 
-    --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
+    --elevation-sheet: 0 0 #0000;
     --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
     --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+    /* panes */
+    --terminal-selection-tint: rgb(242 88 27 / 22%);
+    --pane-fox: var(--send);
+    --pane-muted: rgb(255 255 255 / 45%);
+    --pane-live: #22a06b;
+    --pane-modified: var(--ansi-yellow);
+    --pane-added: var(--ansi-green);
+    --pane-phone: #0d0d0f;
+    --pane-phone-edge: #2a2a2e;
+
+    /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
+    --shell-tray: #1d1d20;
+    --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+    --shell-line-soft: rgb(255 255 255 / 5%);
+    --shell-strong: #ffffff;
+    --shell-ink: rgb(255 255 255 / 90%);
+    --shell-text: rgb(255 255 255 / 62%);
+    --shell-muted: rgb(255 255 255 / 45%);
+    --shell-faint: rgb(255 255 255 / 28%);
+    --shell-chip: var(--bg-hover);
+    --shell-chip-hover: rgb(255 255 255 / 9%);
+    --shell-hover: rgb(255 255 255 / 5%);
+    --shell-accent: #5b9aff;
+    --shell-button: #f4f4f5;
+    --shell-button-hover: #ffffff;
+    --shell-accent-soft: rgb(91 154 255 / 16%);
+    --shell-shadow: var(--elevation-card);
+    --shell-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+    --shell-card-shadow-hover: 0 0 0 0.5px rgb(255 255 255 / 16%), 0 2px 6px rgb(0 0 0 / 40%);
+    --shell-frame: color-mix(in srgb, var(--bg-hover) 50%, transparent);
+    --shell-line-strong: rgb(255 255 255 / 14%);
+    --shell-edge-active: rgb(255 255 255 / 18%);
+    --shell-subtle: #18181b;
+    --shell-disabled: #3a3a3f;
+    --shell-on-ink: #111113;
+    --shell-ink-hover: #d4d4d8;
+    --shell-select: rgb(255 255 255 / 8%);
+    --shell-toggle-off: #3a3a3f;
+    --shell-switch-on: #4d8dff;
+    --shell-logo-bg: #2a2a2e;
+    --shell-scrim: rgb(0 0 0 / 45%);
+    --shell-dialog-shadow:
+      inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
+      0 4px 12px rgb(0 0 0 / 30%);
+
+    /* settings: the Settings modal, in affectUI's look. */
+    --settings-scrim: rgb(0 0 0 / 45%);
+    --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+    --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
+    --settings-warn-bg: rgb(251 191 36 / 12%);
+    --settings-warn-ink: #fbbf24;
+    --settings-term-bg: #17181c;
+    --settings-term-ink: #e6e6e6;
+    --settings-term-faint: #8a8a8a;
+    --settings-term-path: #7fa8e8;
+    --settings-term-branch: #c79bf2;
+    --settings-term-ok: #5bb98a;
+
+    /* pages: Routines, Usage and Artifacts on affectUI. */
+    --tone-amber: #fbbf24;
+    --tone-amber-dot: #f59e0b;
+    --tone-amber-halo: rgb(245 158 11 / 18%);
+    --tone-amber-fill: rgb(245 158 11 / 8%);
+    --tone-amber-edge: rgb(245 158 11 / 35%);
+    --tone-red: #f87171;
+    --tone-red-fill: rgb(248 113 113 / 8%);
+    --tone-red-edge: rgb(248 113 113 / 30%);
+    --tone-green: #16a34a;
+    --tone-editing: #22a06b;
+    --tone-editing-halo: rgb(34 160 107 / 20%);
+    --plan-warn-text: #e0b03a;
+    --plan-bad-text: #f0716b;
+    --plan-bad-chip: rgb(229 96 90 / 16%);
+    --plan-bad-chip-text: #f0716b;
+    --tod-bar: #b3cff6;
+    --tod-peak: #3c85e9;
+    --activity-1: #1d3354;
+    --activity-2: #27508a;
+    --activity-3: #5f9bec;
+    --activity-4: #2f6fd6;
+    --tray-edge: rgb(255 255 255 / 10%);
+    --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
+    --sketch-accent: #2f6bff;
+    --sketch-on-accent: var(--on-fill);
+    --sketch-on-accent-soft: color-mix(in srgb, var(--on-fill) 55%, transparent);
+    --sketch-on-accent-bar: color-mix(in srgb, var(--on-fill) 60%, transparent);
+    --series-1: #2f6bff;
+    --series-2: #8b5cf6;
+    --series-3: #14b8a6;
+    --series-4: #f59e0b;
+    --series-5: #ec4899;
+    --series-6: #64748b;
+
+    /* composer: the composer's tray, popovers and menus, New session's list. */
+    --composer-strong: #ffffff;
+    --composer-ink: rgb(255 255 255 / 90%);
+    --composer-text: rgb(255 255 255 / 62%);
+    --composer-muted: rgb(255 255 255 / 45%);
+    --composer-faint: rgb(255 255 255 / 28%);
+    --composer-line: var(--border-subtle);
+    --composer-line-strong: rgb(255 255 255 / 14%);
+    --composer-chip: var(--bg-hover);
+    --composer-chip-hover: rgb(255 255 255 / 9%);
+    --composer-hover-fill: rgb(255 255 255 / 5%);
+    --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+    --composer-panel: var(--bg-app);
+    --composer-pop-shadow:
+      0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
+      0 1px 2px rgb(0 0 0 / 5%);
+    --composer-thumb: rgb(255 255 255 / 16%);
+    --composer-thumb-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    --composer-waiting: #ff8a5c;
+    --composer-ultra-text: #a78bfa;
+    --composer-ultra-shine: #faf5ff;
   }
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --desk-tint: 50%;
-  --bg-app: #1e1e1e;
-  --bg-sidebar: #141414;
+  --desk-tint: 100%;
+  --bg-app: #141416;
+  --bg-sidebar: #0e0e10;
   /* What floats over the page sits a step lighter than it, since shadows barely show here. */
-  --bg-surface: #252525;
-  --bg-subtle: #292929;
+  --bg-surface: #212124;
+  --bg-subtle: #2a2a2d;
   --bg-tray: #222222;
   --bg-code-inline: rgb(255 106 43 / 14%);
   --code-inline: #f2a27c;
-  --bg-code-block: #181818;
-  --bg-hover: rgb(230 236 245 / 5%);
-  --bg-selected: rgb(230 236 245 / 8%);
-  --bg-raised: #2a2a2a;
+  --bg-code-block: #161618;
+  --bg-hover: rgb(255 255 255 / 6%);
+  --bg-selected: rgb(255 255 255 / 8%);
+  --bg-raised: #2a2a2d;
 
-  --border-default: rgb(230 236 245 / 14%);
-  --border-subtle: rgb(230 236 245 / 8%);
-  --border-strong: rgb(230 236 245 / 22%);
+  --border-default: rgb(255 255 255 / 12%);
+  --border-subtle: rgb(255 255 255 / 8%);
+  --border-strong: rgb(255 255 255 / 18%);
+  /* session: the thread and its header. */
+  --thread-ink: rgb(255 255 255 / 90%);
+  --thread-text: rgb(255 255 255 / 62%);
+  --thread-prose: rgb(255 255 255 / 74%);
+  --thread-quiet: rgb(255 255 255 / 56%);
+  --thread-muted: rgb(255 255 255 / 45%);
+  --thread-faint: rgb(255 255 255 / 28%);
+  --thread-chip: var(--bg-hover);
+  --thread-hover: rgb(255 255 255 / 5%);
+  --thread-line: var(--border-subtle);
+  --thread-line-strong: rgb(255 255 255 / 14%);
+  --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --thread-fox: var(--send);
+  --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 24%, transparent);
+  --thread-add: var(--ansi-green);
+  --thread-del: #f87171;
+  --thread-done: #3fbf86;
+  --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+  --thread-float-shadow: 0 0 0 0.5px rgb(255 255 255 / 14%), 0 6px 16px -6px rgb(0 0 0 / 60%);
+  --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 
-  --text-primary: #e8ecf1;
-  --text-secondary: #aeb6c1;
-  --text-tertiary: #8e98a5;
-  --text-placeholder: #8e98a5;
-  --text-disabled: #5f6873;
-  --icon-default: #aeb6c1;
+  --text-primary: #e6e6e7;
+  --text-secondary: #a5a5a7;
+  --text-tertiary: #98989b;
+  --text-placeholder: #98989b;
+  --text-disabled: #55555a;
+  --icon-default: #a5a5a7;
 
   --attention: #fb8a55;
   --attention-dot: #fa6e28;
@@ -531,7 +853,7 @@
   --warning: #d9b463;
   --link: #e8ecf1;
   --link-hover: #e8ecf1;
-  --focus: #ff6a2b;
+  --focus: #5b9aff;
   --focus-halo-strength: 50%;
   --selection: rgb(255 106 43 / 24%);
   --edit-ring: #ff6a2b;
@@ -558,33 +880,33 @@
   --media-badge: rgb(16 22 30 / 65%);
   --media-overlay: rgb(16 22 30 / 72%);
 
-  --elevation-popover: 0 16px 40px -12px rgb(0 0 0 / 65%);
+  --elevation-popover: 0 12px 28px -10px rgb(0 0 0 / 50%), 0 1px 2px rgb(0 0 0 / 40%);
   --elevation-control: 0 0 #0000;
   --elevation-control-hover: 0 0 #0000;
-  --elevation-card: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-card: 0 1px 2px rgb(0 0 0 / 40%);
   --elevation-float: 0 16px 36px -16px rgb(0 0 0 / 70%);
   --elevation-attention: 0 0 #0000;
   --elevation-sunk: 0 0 #0000;
   --elevation-thumb: 0 1px 3px rgb(0 0 0 / 22%);
   --elevation-raised: 0 1px 2px rgb(0 0 0 / 40%);
-  --elevation-dialog: 0 28px 70px -20px rgb(0 0 0 / 70%);
-  --elevation-primary: 0 1px 2px rgb(0 0 0 / 30%);
+  --elevation-dialog: 0 24px 56px -16px rgb(0 0 0 / 60%), 0 1px 2px rgb(0 0 0 / 40%);
+  --elevation-primary: 0 2px 4px rgb(0 0 0 / 40%);
   --elevation-media: 0 1px 2px rgb(16 22 30 / 5%);
   --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
   --highlight: 0 0 #0000;
 
   /* Inverted: a near-white button with dark text. */
-  --primary-from: #e8ecf1;
-  --primary-to: #e8ecf1;
-  --primary-hover-from: #ffffff;
-  --primary-hover-to: #ffffff;
-  --primary-ring: transparent;
-  --primary-highlight: rgb(255 255 255 / 12%);
-  --primary-foreground: #10161e;
+  --primary-from: #f4f4f5;
+  --primary-to: #e4e4e7;
+  --primary-hover-from: #e6e6e9;
+  --primary-hover-to: #d4d4d8;
+  --primary-ring: rgb(0 0 0 / 60%);
+  --primary-highlight: rgb(255 255 255 / 90%);
+  --primary-foreground: #121213;
 
-  --control-on: #ff6a2b;
+  --control-on: #5b9aff;
   --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
-  --switch-on: #ff6a2b;
+  --switch-on: #4d8dff;
   --send: #f2581b;
   --switch-thumb: #ffffff;
   --track: #3a424d;
@@ -653,13 +975,13 @@
 
   --ansi-black: #3a3a3a;
   --ansi-red: #f07167;
-  --ansi-green: #5bb98a;
-  --ansi-yellow: #d9a441;
+  --ansi-green: #4ade80;
+  --ansi-yellow: #f2a65a;
   --ansi-blue: #7fa8e8;
-  --ansi-magenta: #d88bd0;
-  --ansi-cyan: #6cc0d2;
+  --ansi-magenta: #a5a5ff;
+  --ansi-cyan: #5fc8e8;
   --ansi-white: #d4d4d4;
-  --ansi-bright-black: #6b6b6b;
+  --ansi-bright-black: #5c5c5f;
   --ansi-bright-red: #f4948c;
   --ansi-bright-green: #7fcca4;
   --ansi-bright-yellow: #e5bd6a;
@@ -668,9 +990,241 @@
   --ansi-bright-cyan: #90d2e0;
   --ansi-bright-white: #ececec;
 
-  --elevation-sheet: 0 12px 32px -14px rgb(0 0 0 / 60%);
+  --elevation-sheet: 0 0 #0000;
   --elevation-page: 0 0 0 1px var(--border-default), var(--elevation-page-drop);
   --elevation-page-lift: 0 0 0 1px var(--border-strong);
+
+  /* panes */
+  --terminal-selection-tint: rgb(242 88 27 / 22%);
+  --pane-fox: var(--send);
+  --pane-muted: rgb(255 255 255 / 45%);
+  --pane-live: #22a06b;
+  --pane-modified: var(--ansi-yellow);
+  --pane-added: var(--ansi-green);
+  --pane-phone: #0d0d0f;
+  --pane-phone-edge: #2a2a2e;
+
+  /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
+  --shell-tray: #1d1d20;
+  --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --shell-line-soft: rgb(255 255 255 / 5%);
+  --shell-strong: #ffffff;
+  --shell-ink: rgb(255 255 255 / 90%);
+  --shell-text: rgb(255 255 255 / 62%);
+  --shell-muted: rgb(255 255 255 / 45%);
+  --shell-faint: rgb(255 255 255 / 28%);
+  --shell-chip: var(--bg-hover);
+  --shell-chip-hover: rgb(255 255 255 / 9%);
+  --shell-hover: rgb(255 255 255 / 5%);
+  --shell-accent: #5b9aff;
+  --shell-button: #f4f4f5;
+  --shell-button-hover: #ffffff;
+  --shell-accent-soft: rgb(91 154 255 / 16%);
+  --shell-shadow: var(--elevation-card);
+  --shell-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
+  --shell-card-shadow-hover: 0 0 0 0.5px rgb(255 255 255 / 16%), 0 2px 6px rgb(0 0 0 / 40%);
+  --shell-frame: color-mix(in srgb, var(--bg-hover) 50%, transparent);
+  --shell-line-strong: rgb(255 255 255 / 14%);
+  --shell-edge-active: rgb(255 255 255 / 18%);
+  --shell-subtle: #18181b;
+  --shell-disabled: #3a3a3f;
+  --shell-on-ink: #111113;
+  --shell-ink-hover: #d4d4d8;
+  --shell-select: rgb(255 255 255 / 8%);
+  --shell-toggle-off: #3a3a3f;
+  --shell-switch-on: #4d8dff;
+  --shell-logo-bg: #2a2a2e;
+  --shell-scrim: rgb(0 0 0 / 45%);
+  --shell-dialog-shadow:
+    inset 0 0 0 0.5px var(--shell-line-strong), 0 24px 64px -16px rgb(0 0 0 / 60%),
+    0 4px 12px rgb(0 0 0 / 30%);
+
+  /* settings: the Settings modal, in affectUI's look. */
+  --settings-scrim: rgb(0 0 0 / 45%);
+  --settings-drop: 0 24px 64px -16px rgb(0 0 0 / 28%), 0 4px 12px rgb(0 0 0 / 6%);
+  --settings-notify-drop: 0 8px 24px -10px rgb(0 0 0 / 50%);
+  --settings-warn-bg: rgb(251 191 36 / 12%);
+  --settings-warn-ink: #fbbf24;
+  --settings-term-bg: #17181c;
+  --settings-term-ink: #e6e6e6;
+  --settings-term-faint: #8a8a8a;
+  --settings-term-path: #7fa8e8;
+  --settings-term-branch: #c79bf2;
+  --settings-term-ok: #5bb98a;
+
+  /* pages: Routines, Usage and Artifacts on affectUI. */
+  --tone-amber: #fbbf24;
+  --tone-amber-dot: #f59e0b;
+  --tone-amber-halo: rgb(245 158 11 / 18%);
+  --tone-amber-fill: rgb(245 158 11 / 8%);
+  --tone-amber-edge: rgb(245 158 11 / 35%);
+  --tone-red: #f87171;
+  --tone-red-fill: rgb(248 113 113 / 8%);
+  --tone-red-edge: rgb(248 113 113 / 30%);
+  --tone-green: #16a34a;
+  --tone-editing: #22a06b;
+  --tone-editing-halo: rgb(34 160 107 / 20%);
+  --plan-warn-text: #e0b03a;
+  --plan-bad-text: #f0716b;
+  --plan-bad-chip: rgb(229 96 90 / 16%);
+  --plan-bad-chip-text: #f0716b;
+  --tod-bar: #b3cff6;
+  --tod-peak: #3c85e9;
+  --activity-1: #1d3354;
+  --activity-2: #27508a;
+  --activity-3: #5f9bec;
+  --activity-4: #2f6fd6;
+  --tray-edge: rgb(255 255 255 / 10%);
+  --hover-card-drop: 0 8px 24px -6px rgb(0 0 0 / 18%);
+  --sketch-accent: #2f6bff;
+  --sketch-on-accent: var(--on-fill);
+  --sketch-on-accent-soft: color-mix(in srgb, var(--on-fill) 55%, transparent);
+  --sketch-on-accent-bar: color-mix(in srgb, var(--on-fill) 60%, transparent);
+  --series-1: #2f6bff;
+  --series-2: #8b5cf6;
+  --series-3: #14b8a6;
+  --series-4: #f59e0b;
+  --series-5: #ec4899;
+  --series-6: #64748b;
+
+  /* composer: the composer's tray, popovers and menus, New session's list. */
+  --composer-strong: #ffffff;
+  --composer-ink: rgb(255 255 255 / 90%);
+  --composer-text: rgb(255 255 255 / 62%);
+  --composer-muted: rgb(255 255 255 / 45%);
+  --composer-faint: rgb(255 255 255 / 28%);
+  --composer-line: var(--border-subtle);
+  --composer-line-strong: rgb(255 255 255 / 14%);
+  --composer-chip: var(--bg-hover);
+  --composer-chip-hover: rgb(255 255 255 / 9%);
+  --composer-hover-fill: rgb(255 255 255 / 5%);
+  --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --composer-panel: var(--bg-app);
+  --composer-pop-shadow:
+    0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
+    0 1px 2px rgb(0 0 0 / 5%);
+  --composer-thumb: rgb(255 255 255 / 16%);
+  --composer-thumb-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --composer-waiting: #ff8a5c;
+  --composer-ultra-text: #a78bfa;
+  --composer-ultra-shine: #faf5ff;
+}
+
+/* themes: an installed theme sets only the tokens a theme file may hold (THEME_TOKENS in
+   shared/themes.ts). While one shows, <html> carries data-installed-theme (lib/theme-style.ts), and
+   the areas' tokens that the built-in theme draws in values of their own take the theme's instead:
+   the steps of ink become its text colors, the hairlines its borders, the fills its surfaces and
+   the blue accent its on color. Tokens defined from the theme's above follow it already. Shadows'
+   drops, a phone's bezel, the terminal drawn in Settings and Ultracode's violet keep their values. */
+:root[data-installed-theme],
+[data-installed-theme] [data-theme] {
+  --thread-ink: var(--text-primary);
+  --thread-text: var(--text-secondary);
+  --thread-prose: var(--text-secondary);
+  --thread-quiet: var(--text-tertiary);
+  --thread-muted: var(--text-tertiary);
+  --thread-faint: var(--text-disabled);
+  --thread-hover: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  --thread-line-strong: var(--border-default);
+  --thread-del: var(--code-danger);
+  --thread-done: var(--success);
+  --thread-card-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --thread-float-shadow:
+    0 0 0 0.5px var(--border-default),
+    0 6px 16px -6px light-dark(rgb(0 0 0 / 20%), rgb(0 0 0 / 60%));
+
+  --terminal-selection-tint: var(--selection);
+  --pane-muted: var(--icon-default);
+  --pane-live: var(--success);
+
+  --shell-tray: var(--bg-subtle);
+  --shell-line-soft: color-mix(in srgb, var(--border-subtle) 66%, transparent);
+  --shell-strong: var(--text-primary);
+  --shell-ink: var(--text-primary);
+  --shell-text: var(--text-secondary);
+  --shell-muted: var(--text-tertiary);
+  --shell-faint: var(--text-disabled);
+  --shell-chip-hover: var(--bg-selected);
+  --shell-hover: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  --shell-accent: var(--control-on);
+  --shell-button: var(--primary-from);
+  --shell-button-hover: var(--primary-hover-from);
+  --shell-accent-soft: var(--control-on-tint);
+  --shell-card-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --shell-card-shadow-hover: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --shell-line-strong: var(--border-default);
+  --shell-edge-active: var(--border-strong);
+  /* A shade under the card, toward the desk. */
+  --shell-subtle: color-mix(in srgb, var(--bg-surface), var(--bg-sidebar));
+  --shell-disabled: var(--text-disabled);
+  --shell-on-ink: var(--primary-foreground);
+  --shell-ink-hover: var(--primary-hover-from);
+  --shell-select: var(--bg-selected);
+  --shell-toggle-off: var(--track);
+  --shell-switch-on: var(--switch-on);
+  --shell-logo-bg: var(--bg-raised);
+  --shell-scrim: var(--scrim);
+  --shell-danger: var(--danger);
+  --shell-danger-hover: color-mix(in srgb, var(--danger) 88%, var(--text-primary));
+
+  --settings-scrim: var(--scrim);
+  --settings-warn-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --settings-warn-ink: var(--warning);
+
+  --tone-amber: var(--warning);
+  --tone-amber-dot: var(--warning);
+  --tone-amber-halo: color-mix(in srgb, var(--warning) 18%, transparent);
+  --tone-amber-fill: color-mix(in srgb, var(--warning) 8%, transparent);
+  --tone-amber-edge: color-mix(in srgb, var(--warning) 35%, transparent);
+  --tone-red: var(--danger);
+  --tone-red-fill: color-mix(in srgb, var(--danger) 7%, transparent);
+  --tone-red-edge: color-mix(in srgb, var(--danger) 30%, transparent);
+  --tone-green: var(--success);
+  --tone-editing: var(--success);
+  --tone-editing-halo: color-mix(in srgb, var(--success) 20%, transparent);
+  --plan-warn-text: var(--warning);
+  --plan-bad-text: var(--danger);
+  --plan-bad-chip: color-mix(in srgb, var(--danger) 12%, transparent);
+  --plan-bad-chip-text: var(--danger);
+  /* Amounts by hour and by day deepen in the theme's heat color, as its heatmap does. */
+  --tod-bar: var(--heat-2);
+  --tod-peak: var(--heat-hue);
+  --activity-1: var(--heat-1);
+  --activity-2: var(--heat-2);
+  --activity-3: var(--heat-3);
+  --activity-4: var(--heat-4);
+  --tray-edge: var(--border-subtle);
+  --sketch-accent: var(--context-1);
+  --series-1: var(--context-1);
+  --series-2: var(--context-2);
+  --series-3: var(--context-3);
+  --series-4: var(--context-4);
+  --series-5: var(--context-5);
+  --series-6: var(--context-6);
+
+  --composer-strong: var(--text-primary);
+  --composer-ink: var(--text-primary);
+  --composer-text: var(--text-secondary);
+  --composer-muted: var(--text-tertiary);
+  --composer-faint: var(--text-disabled);
+  --composer-line-strong: var(--border-default);
+  --composer-chip-hover: var(--bg-selected);
+  --composer-hover-fill: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  --composer-pop-shadow: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --composer-thumb: var(--bg-raised);
+  --composer-thumb-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-thumb);
+  /* The meters' four levels are the context ring's. */
+  --composer-meter-ok: var(--usage-green);
+  --composer-meter-ok-wash: color-mix(in srgb, var(--usage-green) var(--ring-tint), transparent);
+  --composer-meter-mid: var(--usage-blue);
+  --composer-meter-mid-wash: color-mix(in srgb, var(--usage-blue) var(--ring-tint), transparent);
+  --composer-meter-high: var(--usage-orange);
+  --composer-meter-high-wash: color-mix(in srgb, var(--usage-orange) var(--ring-tint), transparent);
+  --composer-meter-full: var(--usage-red);
+  --composer-meter-full-wash: color-mix(in srgb, var(--usage-red) var(--ring-tint), transparent);
+  --composer-waiting: var(--attention);
+  --composer-waiting-dot: var(--attention-dot);
+  --composer-waiting-halo: var(--attention-halo);
 }
 
 /* Roles built from the tokens above. They sit on every theme scope, so a subtree with a theme of
@@ -790,11 +1344,19 @@
   /* The tile after the themes in Settings › Appearance, which offers more: faint diagonal lines. */
   --tile-hatch: repeating-linear-gradient(135deg, transparent 0 6px, var(--bg-hover) 6px 7px);
 
-  --terminal-background: var(--bg-code-block);
-  /* As drawn: output in the secondary ink, the cursor in the primary. */
-  --terminal-foreground: var(--text-secondary);
-  --terminal-cursor: var(--text-primary);
-  --terminal-selection: var(--selection);
+  /* panes: the terminal's screen, on the pane's sheet, in the primary ink with the fox's cursor
+     and selection. */
+  --terminal-background: var(--bg-app);
+  --terminal-foreground: var(--text-primary);
+  --terminal-cursor: var(--pane-fox);
+  --terminal-selection: var(--terminal-selection-tint);
+  /* The glow of a page or a device an agent drives, and its tap. */
+  --pane-drive-glow:
+    0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 60%, transparent),
+    0 0 22px -4px color-mix(in srgb, var(--pane-fox) 40%, transparent);
+  --pane-drive-glow-inset:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 60%, transparent),
+    inset 0 0 22px -4px color-mix(in srgb, var(--pane-fox) 40%, transparent);
 
   /* The primary button's gradients, from their stops, so a theme sets them as colors. */
   --primary-gradient: linear-gradient(180deg, var(--primary-from), var(--primary-to));

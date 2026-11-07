@@ -29,7 +29,7 @@ Kettu is only a GUI: it implements no agent. It drives Claude Code through the C
 ### Reusing code from other projects
 
 - Check the license first. Code under MIT, BSD, ISC or Apache-2.0 may be adapted: keep its copyright and license notice, and add a one-line comment with the source URL.
-- Kettu is licensed under Apache-2.0, so code under GPL or AGPL cannot be reused. Ask the maintainer before reusing LGPL or MPL code, or code without a license.
+- Kettu is licensed under AGPL-3.0 with an additional permission for affectUI ([LICENSE-EXCEPTION](./LICENSE-EXCEPTION)). Others' GPL or AGPL code cannot be reused, since its authors never granted that permission. Ask the maintainer before reusing LGPL or MPL code, or code without a license.
 - When a maintained package already does the job, prefer depending on it over copying it, subject to the dependency rules below.
 
 ## Tech stack
@@ -47,7 +47,8 @@ Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu inst
 | Concern                     | Library                                                               |
 | --------------------------- | --------------------------------------------------------------------- |
 | Components and visual style | shadcn/ui, `base-nova` style on Base UI                               |
-| Icons                       | Lucide (`lucide-react`)                                               |
+| AI, agent and team views    | affectUI, in `components/affect`                                      |
+| Icons                       | Hugeicons' free icons (`@hugeicons/react`), at a 1.9 stroke           |
 | Animation                   | Motion (`motion/react`)                                               |
 | Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`         |
 | Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                            |
@@ -58,6 +59,8 @@ Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu inst
 | Code editing                | CodeMirror 6 (`codemirror`): the Files pane's editor and the composer |
 | Terminal                    | xterm.js in the renderer, `node-pty` in the terminal host             |
 | Localization                | i18next with react-i18next, catalogs in `src/shared/locales`          |
+
+affectUI items come from its registry with `pnpm shadcn add @affectui/<item> -p src/renderer/src/components/affect`, which needs `AFFECTUI_TOKEN` for Pro items. Pro files keep the license notice at their top and are not under this project's license; change them only where wiring and translated copy need it, and point their color variables at the theme's tokens in `styles/affect.css`.
 
 Never add a library that overlaps one of these. The detailed usage rules are in [CONTRIBUTING.md](./CONTRIBUTING.md); read it before UI work.
 

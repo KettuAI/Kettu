@@ -20,11 +20,8 @@ export function isAnswered(draft: QuestionDraft): boolean {
   return draft.choices.length > 0 || draft.text.trim() !== ''
 }
 
-export function answeredCount(state: QuestionState): number {
-  return state.drafts.filter(isAnswered).length
-}
-
-function withDraft(state: QuestionState, draft: QuestionDraft): QuestionState {
+/** Sets the draft of the question shown. */
+export function withDraft(state: QuestionState, draft: QuestionDraft): QuestionState {
   return { ...state, drafts: state.drafts.map((d, i) => (i === state.step ? draft : d)) }
 }
 
@@ -62,12 +59,6 @@ export function typeText(
   return withDraft(state, { choices: replaces ? [] : draft.choices, text })
 }
 
-/** Leaves the question shown unanswered and goes on to the next, if there is one. */
-export function skipStep(state: QuestionState): QuestionState {
-  const cleared = withDraft(state, { choices: [], text: '' })
-  return goTo(cleared, state.step + 1)
-}
-
 export function goTo(state: QuestionState, step: number): QuestionState {
   return { ...state, step: Math.min(Math.max(step, 0), state.drafts.length - 1) }
 }
@@ -81,30 +72,4 @@ export function toAnswers(state: QuestionState): QuestionAnswer[] {
     answers.push({ question, choices: draft.choices, ...(text ? { text } : {}) })
   })
   return answers
-}
-
-export type KeyIntent = 'previous' | 'next' | 'submit'
-
-/**
- * What a key does in the card: the arrows switch question outside the text field, and Enter goes
- * on to the next question or submits from the last, unless a button has its own Enter or an IME
- * is composing.
- */
-export function keyIntent(
-  event: { key: string; isComposing: boolean },
-  at: { step: number; count: number; inText: boolean; onButton: boolean },
-): KeyIntent | null {
-  if (event.isComposing) return null
-  const last = at.step >= at.count - 1
-  switch (event.key) {
-    case 'ArrowLeft':
-      return at.inText || at.step === 0 ? null : 'previous'
-    case 'ArrowRight':
-      return at.inText || last ? null : 'next'
-    case 'Enter':
-      if (at.onButton) return null
-      return last ? 'submit' : 'next'
-    default:
-      return null
-  }
 }

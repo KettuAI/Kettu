@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { FolderIcon, SparkleIcon } from 'lucide-react'
+import { Folder01Icon, SparklesIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactConsentAsk } from '@shared/artifact-capabilities'
 import {
@@ -71,7 +72,11 @@ export function ArtifactConsentDialog() {
           <>
             <AlertDialogHeader>
               <AlertDialogMedia>
-                {ask.capability === 'files' ? <FolderIcon /> : <SparkleIcon />}
+                <HugeiconsIcon
+                  aria-hidden
+                  icon={ask.capability === 'files' ? Folder01Icon : SparklesIcon}
+                  strokeWidth={1.9}
+                />
               </AlertDialogMedia>
               <AlertDialogTitle>
                 {ask.capability === 'files'

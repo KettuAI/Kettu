@@ -1,4 +1,5 @@
-import { CornerDownRightIcon } from 'lucide-react'
+import { ArrowMoveDownRightIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
@@ -16,9 +17,10 @@ export function SubSessionStart({ sessionId }: { sessionId: string }) {
   if (!parent) return null
   return (
     <div className="mb-4 flex items-center gap-2 rounded-tile bg-subtle px-2.5 py-2 text-hint text-secondary">
-      <CornerDownRightIcon
+      <HugeiconsIcon
+        icon={ArrowMoveDownRightIcon}
+        strokeWidth={1.9}
         aria-hidden
-        strokeWidth={1.4}
         className="size-3.5 shrink-0 text-tertiary"
       />
       <p className="min-w-0 flex-1">

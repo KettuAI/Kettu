@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
-import { PanelLeftIcon } from 'lucide-react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { SidebarLeftIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { Button } from '@renderer/components/ui/button'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BackForward } from '@renderer/features/shell/back-forward'
 import { HistoryDialog } from '@renderer/features/shell/history-dialog'
@@ -10,8 +10,12 @@ import { useNotices } from '@renderer/features/sidebar/notices'
 import { formatShortcut, hasBand } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { toggleSidebar, useViewStore } from '@renderer/stores/view'
+import { useNarrowWindow } from './narrow'
 
-/** The main sheet's drag region, leaving room for the window's controls when cornered. */
+/**
+ * A sheet's head, as App Shell's chat bar: 52 px, the window's drag region. In the window's top
+ * left corner, with the sidebar hidden, it starts after the toggle, Back and Forward.
+ */
 export function TopBar({
   children,
   className,
@@ -23,16 +27,18 @@ export function TopBar({
   cornered?: boolean
 }) {
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
-  const cornered = (given ?? true) && collapsed && !hasBand
+  // A narrow window's sidebar is a drawer, so the main area always starts at the corner.
+  const narrow = useNarrowWindow()
+  const cornered = (given ?? true) && (collapsed || narrow) && !hasBand
   return (
     <header
       className={cn(
-        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-4.5 shadow-[inset_0_calc(-1*var(--hairline))_0_var(--border-subtle)]',
+        '@container/top-bar app-region-drag flex h-top-bar shrink-0 items-center gap-2.5 bg-app pr-3 pl-5',
         className,
         cornered && 'pl-(--corner-inset)',
       )}
     >
-      {cornered && <CornerControlsSpace divided={children != null} />}
+      {cornered && <CornerControlsSpace />}
       {children}
     </header>
   )
@@ -44,64 +50,55 @@ export function TitleBand() {
   return <div className="app-region-drag absolute inset-x-0 top-0 h-(--title-bar)" />
 }
 
-/** The sidebar's drag region and the history dialog, which stays mounted with it. */
-export function SidebarTitleBar() {
-  return (
-    <div
-      className={cn(
-        'app-region-drag flex shrink-0 items-center pr-2',
-        hasBand
-          ? 'h-(--title-bar) pl-(--sheet-gap)'
-          : 'h-14 pt-2 pl-[calc(var(--corner-inset)+var(--sheet-gap))]',
-      )}
-    >
-      <CornerControlsSpace />
-      <span className="flex-1" />
-      <HistoryDialog />
-    </div>
-  )
-}
-
-/** One mounted set of controls, outside the panels that slide beneath it. */
+/**
+ * The sidebar toggle, Back and Forward, in the window's top left corner after the traffic lights,
+ * where they stay whether the sidebar shows or not; with them the history dialog.
+ */
 export function CornerControls() {
   return (
-    <div
-      className={cn(
-        'pointer-events-none absolute top-0 left-0 z-20 flex items-center',
-        hasBand
-          ? 'h-(--title-bar) pl-(--sheet-gap)'
-          : 'h-14 pt-2 pl-[calc(var(--corner-inset)+var(--sheet-gap))]',
-      )}
-    >
-      <div className={cn('pointer-events-auto flex items-center gap-0.5', !hasBand && '-ml-0.5')}>
-        <SidebarToggle />
-        <BackForward />
-      </div>
-    </div>
+    <>
+      <SidebarToggle />
+      <BackForward />
+      <HistoryDialog />
+    </>
   )
 }
 
-/** Reserves the controls' width in a header without moving the controls into that panel. */
-export function CornerControlsSpace({
-  className,
-  divided = false,
-}: {
-  className?: string
-  divided?: boolean
-}) {
+/**
+ * Keeps the corner controls clickable over a page head's drag region. Electron applies drag and
+ * no-drag regions in document order, so a head that reaches the corner later in the document
+ * would swallow clicks on the controls; this no-drag box comes after the whole frame.
+ */
+export function CornerDragHole() {
+  const [rect, setRect] = useState<DOMRect | null>(null)
+  useLayoutEffect(() => {
+    const tools = document.querySelector('.ui-as-corner__tools')
+    if (!tools) return
+    const update = (): void => setRect(tools.getBoundingClientRect())
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(tools)
+    window.addEventListener('resize', update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [])
+  if (!rect || rect.width === 0) return null
   return (
     <div
       aria-hidden
-      className={cn(
-        'flex shrink-0 items-center',
-        !hasBand && '-ml-0.5',
-        // No line before the bar's spacer, as on New session, where nothing follows on the left.
-        divided &&
-          'mr-1.5 pr-2.5 shadow-[inset_calc(-1*var(--hairline))_0_0_var(--border-subtle)] [&:has(+_.flex-1)]:shadow-none',
-        className,
-      )}
-    >
-      <span className="h-7.5 w-23.5 shrink-0" />
+      className="app-region-no-drag pointer-events-none fixed"
+      style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
+    />
+  )
+}
+
+/** Reserves the corner controls' width in a head without moving the controls into that sheet. */
+export function CornerControlsSpace({ className }: { className?: string; divided?: boolean }) {
+  return (
+    <div aria-hidden className={cn('flex shrink-0 items-center', className)}>
+      <span className="h-7 w-(--corner-controls) shrink-0" />
     </div>
   )
 }
@@ -114,45 +111,49 @@ export function NoDrag({ children, className }: { children: ReactNode; className
 export function SidebarToggle({ className }: { className?: string }) {
   const { t } = useTranslation('shell')
   const collapsed = useViewStore((s) => s.sidebarCollapsed)
+  const drawer = useViewStore((s) => s.sidebarDrawer)
+  // A narrow window's sidebar is a drawer, shown only while it is open.
+  const shown = useNarrowWindow() ? drawer : !collapsed
   const { summary } = useNotices()
   const button = useRef<HTMLButtonElement>(null)
-  // Move focus out of the sidebar before collapsing makes it inert.
+  // Move focus out of the sidebar before collapsing makes it inert; a closing drawer, whose own
+  // button App Shell would return it to is not drawn, gives it back to this one.
   useLayoutEffect(
     () =>
       useViewStore.subscribe((state, previous) => {
-        if (!state.sidebarCollapsed || previous.sidebarCollapsed) return
-        if (document.activeElement?.closest('[data-slot=sidebar]')) button.current?.focus()
+        const at = document.activeElement
+        if (state.sidebarCollapsed && !previous.sidebarCollapsed) {
+          if (at?.closest('.ui-as-side')) button.current?.focus()
+        } else if (!state.sidebarDrawer && previous.sidebarDrawer) {
+          if (!at || at === document.body || at.closest('.ui-as-side')) button.current?.focus()
+        }
       }),
     [],
   )
-  // Collapsed, the sidebar's notices are out of sight, so the toggle marks and names them.
-  const notices = collapsed ? summary : null
-  const label = collapsed ? t('topBar.showSidebar') : t('topBar.hideSidebar')
+  // Hidden, the sidebar's notices are out of sight, so the toggle marks and names them.
+  const notices = shown ? null : summary
+  const label = shown ? t('topBar.hideSidebar') : t('topBar.showSidebar')
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <Button
+          <button
             ref={button}
+            type="button"
             data-sidebar-toggle=""
-            variant="quiet"
-            size="icon-compact"
             aria-label={label}
+            aria-expanded={shown}
             aria-description={notices?.name}
             onClick={toggleSidebar}
-            className={cn(
-              TITLE_BUTTON,
-              'relative active:not-aria-[haspopup]:translate-y-0',
-              className,
-            )}
+            className={cn(TITLE_BUTTON, className)}
           />
         }
       >
-        <PanelLeftIcon className="size-4.5" />
+        <Icon icon={SidebarLeftIcon} size={16} />
         {notices && (
           <span
             aria-hidden
-            className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-primary ring-2 ring-background"
+            className="absolute top-1.25 right-1.25 size-1.5 rounded-full bg-attention-dot shadow-[0_0_0_1.5px_var(--bg-sidebar)]"
           />
         )}
       </TooltipTrigger>

@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { CircleAlertIcon, XIcon } from 'lucide-react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { addressKey, addressText, parseAddress } from '@shared/remote/address'
 import { DEVICE_NAME_CHARS } from '@shared/remote/device'
@@ -15,29 +15,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@renderer/components/ui/dialog'
-import { Input } from '@renderer/components/ui/input'
-import { Spinner } from '@renderer/components/ui/spinner'
+import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { monthDay } from '@renderer/lib/format'
 import { isAway, useHostsStore } from '@renderer/stores/hosts'
 import { openSettingsItem } from '@renderer/stores/view'
 import { Fact } from './agent-parts'
-import { CONFIRM, ControlError, ROW_BUTTON } from './controls'
+import { CONFIRM, ControlError, DangerButton, IconAction, SetButton, SetInput } from './controls'
 import { AddHostDialog } from './host-add'
 import { openHostSettings } from './host-sections'
 import { changeHost, platformName, routeName, routeText } from './host-text'
 import { HostState } from './hosts-section'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { GroupLabel, GroupNote, ItemPageHeader, Notice, RowFrame, RowGroup, RowText } from './rows'
+import {
+  DIALOG_MONO_FIELD,
+  SettingsDialogBody,
+  SettingsDialogContent,
+  SettingsDialogFooter,
+  SettingsDialogHeader,
+} from './settings-dialog'
 
 const back = () => openSettingsItem('hosts', null)
 
@@ -58,7 +54,7 @@ export function HostPage({ id }: { id: string }) {
       {host ? (
         <HostPageBody host={host} onAddAgain={() => setAgain({ ssh: host.ssh?.target })} />
       ) : (
-        <div className="flex flex-col">
+        <>
           <ItemPageHeader
             back={t('sections.hosts')}
             onBack={back}
@@ -66,8 +62,8 @@ export function HostPage({ id }: { id: string }) {
             icon={null}
             title={null}
           />
-          <p className="px-1 text-small text-tertiary">{t('hosts.page.gone')}</p>
-        </div>
+          <p className="ui-sg-hint">{t('hosts.page.gone')}</p>
+        </>
       )}
       <AddHostDialog
         open={again !== null}
@@ -85,31 +81,25 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
   const { t } = useTranslation('settings')
   const { name } = host
   return (
-    <div className="flex flex-col">
+    <>
       <ItemPageHeader
         back={t('sections.hosts')}
         onBack={back}
         item={host.id}
-        icon={<DeviceTile large icon={<HostIcon platform={host.platform} className="size-5" />} />}
-        title={
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate">{name}</span>
-            <HostState host={host} className="shrink-0 font-sans font-normal" />
-          </span>
-        }
+        icon={<DeviceTile large icon={<HostIcon platform={host.platform} />} />}
+        title={name}
+        subtitle={[
+          platformName(host.platform),
+          t('hosts.version', { version: host.version }),
+          t('hosts.page.added', { date: monthDay(host.addedAt) }),
+        ].join(' · ')}
       >
-        <p className="truncate text-command leading-4.5 text-tertiary">
-          {[
-            platformName(host.platform),
-            t('hosts.version', { version: host.version }),
-            t('hosts.page.added', { date: monthDay(host.addedAt) }),
-          ].join(' · ')}
-        </p>
+        <HostState host={host} />
       </ItemPageHeader>
 
-      <div className="flex flex-col gap-7">
+      <div className="k-groups">
         <StoppedNotice host={host} onAddAgain={onAddAgain} />
-        <section aria-label={t('hosts.page.connection')} className="flex flex-col">
+        <section aria-label={t('hosts.page.connection')} className="k-group">
           <GroupLabel group={{ id: 'connection', label: t('hosts.page.connection') }} />
           <RowGroup>
             {/* The SSH address has a row of its own. */}
@@ -126,7 +116,7 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
                   <RowText
                     name={t('hosts.page.addresses')}
                     description={
-                      <span data-selectable="" className="font-mono text-code text-secondary">
+                      <span data-selectable="" className="k-mono">
                         {host.addresses.map(addressText).join('　')}
                       </span>
                     }
@@ -143,7 +133,7 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
               : t('hosts.page.addressesNote', { name })}
           </GroupNote>
         </section>
-        <section aria-label={t('hosts.page.self', { name })} className="flex flex-col">
+        <section aria-label={t('hosts.page.self', { name })} className="k-group">
           <GroupLabel group={{ id: 'self', label: t('hosts.page.self', { name }) }} />
           <RowGroup>
             <RowFrame
@@ -162,7 +152,7 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
             </RowFrame>
           </RowGroup>
         </section>
-        <section aria-label={t('hostPicker.label')} className="flex flex-col">
+        <section aria-label={t('hostPicker.label')} className="k-group">
           <RowGroup>
             <RowFrame
               text={
@@ -172,19 +162,16 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
                 />
               }
             >
-              <Button
-                className={ROW_BUTTON}
-
-                variant="outline"
+              <SetButton
                 disabled={isAway(host.connection)}
                 onClick={() => openHostSettings(host.id)}
               >
                 {t('hosts.page.settings.open', { name })}
-              </Button>
+              </SetButton>
             </RowFrame>
           </RowGroup>
         </section>
-        <section aria-label={t('hosts.page.remove.name')} className="flex flex-col">
+        <section aria-label={t('hosts.page.remove.name')} className="k-group">
           <RowGroup>
             <RowFrame
               text={
@@ -199,7 +186,7 @@ function HostPageBody({ host, onAddAgain }: { host: HostStatus; onAddAgain: () =
           </RowGroup>
         </section>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -211,13 +198,10 @@ function StoppedNotice({ host, onAddAgain }: { host: HostStatus; onAddAgain: () 
   return (
     <Notice
       variant="warning"
-      icon={<CircleAlertIcon />}
       title={t(`hosts.page.${reason}.title`, { name: host.name })}
       action={
         reason === 'removed' && (
-          <Button className={ROW_BUTTON} variant="outline" onClick={onAddAgain}>
-            {t('hosts.page.removed.action')}
-          </Button>
+          <SetButton onClick={onAddAgain}>{t('hosts.page.removed.action')}</SetButton>
         )
       }
     >
@@ -253,14 +237,14 @@ function DeviceNameField({ host }: { host: HostStatus }) {
   return (
     <>
       <ControlError error={error} />
-      <Input
+      <SetInput
         aria-label={t('hosts.add.nameLabel', { name: host.name })}
         value={draft ?? host.deviceName}
         disabled={!online}
         maxLength={256}
         spellCheck={false}
         autoComplete="off"
-        className="h-7 w-55 text-ui md:text-ui"
+        className="k-input--wide"
         onFocus={() => {
           setError(null)
           setDraft(host.deviceName)
@@ -306,9 +290,7 @@ function EditAddresses({ host }: { host: HostStatus }) {
   }
   return (
     <>
-      <Button className={ROW_BUTTON} variant="outline" onClick={() => setOpen(true)}>
-        {t('hosts.page.edit')}
-      </Button>
+      <SetButton onClick={() => setOpen(true)}>{t('hosts.page.edit')}</SetButton>
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -321,68 +303,55 @@ function EditAddresses({ host }: { host: HostStatus }) {
           setOpen(next)
         }}
       >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t('hosts.page.editTitle', { name: host.name })}</DialogTitle>
-            <DialogDescription>{t('hosts.page.editBody')}</DialogDescription>
-          </DialogHeader>
-          {list.length > 0 && (
-            <ul className="flex flex-col">
-              {list.map((address) => {
-                const shown = addressText(address)
-                return (
-                  <li key={addressKey(address)} className="flex min-h-7 items-center gap-3">
-                    <span
-                      data-selectable=""
-                      className="min-w-0 flex-1 truncate font-mono text-code"
-                    >
-                      {shown}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label={t('remote.direct.own.remove', { address: shown })}
-                      onClick={() => setList(list.filter((kept) => kept !== address))}
-                    >
-                      <XIcon />
-                    </Button>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-          {!full && (
-            <form className="flex items-center gap-2" onSubmit={add}>
-              <Input
-                value={draft}
-                autoFocus
-                aria-label={t('remote.direct.own.label')}
-                aria-invalid={problem !== null || undefined}
-                aria-describedby={problem ? errorId : undefined}
-                placeholder={t('remote.direct.own.placeholder')}
-                spellCheck={false}
-                autoComplete="off"
-                maxLength={300}
-                className="h-7 font-mono text-code md:text-code"
-                onChange={(event) => {
-                  setDraft(event.target.value)
-                  setProblem(null)
-                }}
-              />
-              <Button
-                className={ROW_BUTTON}
-                type="submit"
-                variant="outline"
-                disabled={draft.trim() === ''}
-              >
-                {t('remote.direct.own.add')}
-              </Button>
-            </form>
-          )}
-          {problem && (
-            <p id={errorId} className="flex items-start gap-1.25 text-xs text-secondary">
-              <CircleAlertIcon className="mt-px size-3.5 shrink-0 text-danger" />
-              <span>
+        <SettingsDialogContent>
+          <SettingsDialogHeader title={t('hosts.page.editTitle', { name: host.name })}>
+            {t('hosts.page.editBody')}
+          </SettingsDialogHeader>
+          <SettingsDialogBody>
+            {list.length > 0 && (
+              <ul className="kettu-sd__list">
+                {list.map((address) => {
+                  const shown = addressText(address)
+                  return (
+                    <li key={addressKey(address)} className="kettu-sd__address">
+                      <span data-selectable="" className="k-mono k-name">
+                        {shown}
+                      </span>
+                      <IconAction
+                        label={t('remote.direct.own.remove', { address: shown })}
+                        icon={Cancel01Icon}
+                        onClick={() => setList(list.filter((kept) => kept !== address))}
+                      />
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+            {!full && (
+              <form className="kettu-sd__inline" onSubmit={add}>
+                <input
+                  value={draft}
+                  autoFocus
+                  aria-label={t('remote.direct.own.label')}
+                  aria-invalid={problem !== null || undefined}
+                  aria-describedby={problem ? errorId : undefined}
+                  placeholder={t('remote.direct.own.placeholder')}
+                  spellCheck={false}
+                  autoComplete="off"
+                  maxLength={300}
+                  className={DIALOG_MONO_FIELD}
+                  onChange={(event) => {
+                    setDraft(event.target.value)
+                    setProblem(null)
+                  }}
+                />
+                <SetButton size="md" type="submit" disabled={draft.trim() === ''}>
+                  {t('remote.direct.own.add')}
+                </SetButton>
+              </form>
+            )}
+            {problem && (
+              <p id={errorId} className="kettu-sd__error">
                 {problem === 'repeat' ? (
                   t('remote.direct.own.repeat')
                 ) : (
@@ -390,25 +359,30 @@ function EditAddresses({ host }: { host: HostStatus }) {
                     t={t}
                     i18nKey="remote.direct.own.invalid"
                     components={{
-                      strong: <span className="text-danger" />,
-                      code: <span className="font-mono text-primary" />,
+                      strong: <span />,
+                      code: <span className="k-mono" />,
                     }}
                   />
                 )}
-              </span>
-            </p>
-          )}
-          {error && <p className="text-xs text-danger">{error}</p>}
-          <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>
+              </p>
+            )}
+            {error && <p className="kettu-sd__error">{error}</p>}
+          </SettingsDialogBody>
+          <SettingsDialogFooter>
+            <DialogClose render={<SetButton size="md" variant="ghost" />}>
               {t('common:actions.cancel')}
             </DialogClose>
-            <Button disabled={busy || unchanged || list.length === 0} onClick={() => void save()}>
-              {busy && <Spinner data-icon="inline-start" />}
+            <SetButton
+              size="md"
+              variant="primary"
+              loading={busy}
+              disabled={unchanged || list.length === 0}
+              onClick={() => void save()}
+            >
               {t('hosts.page.save')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+            </SetButton>
+          </SettingsDialogFooter>
+        </SettingsDialogContent>
       </Dialog>
     </>
   )
@@ -434,9 +408,7 @@ function RemoveHost({ host }: { host: HostStatus }) {
   return (
     <>
       <ControlError error={open ? null : error} />
-      <Button className={ROW_BUTTON} variant="destructive-outline" onClick={() => setOpen(true)}>
-        {t('hosts.page.remove.button')}
-      </Button>
+      <DangerButton onClick={() => setOpen(true)}>{t('hosts.page.remove.button')}</DangerButton>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent className={CONFIRM}>
           <AlertDialogHeader>

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState, type RefObject } from 'react'
 import type { TFunction } from 'i18next'
-import { CheckIcon, FolderGit2Icon, GitBranchIcon, PlusIcon, SearchIcon } from 'lucide-react'
+import {
+  Add01Icon,
+  FolderLinksIcon,
+  GitBranchIcon,
+  Search01Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { BranchInfo, BranchList, GitStatus } from '@shared/git'
 import {
@@ -27,6 +33,7 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 import { runStep } from './steps'
 import { isBranchName, recentBranches, sameFolder } from './switcher-model'
+import { Glyph } from '@renderer/features/shell/glyph'
 
 // The New branch item's value, which no branch name can take.
 const NEW_BRANCH = '\0new-branch'
@@ -157,7 +164,7 @@ export function BranchSwitcher({
           spellCheck={false}
         >
           <InputGroupAddon>
-            <SearchIcon className="size-3.5" />
+            <Glyph icon={Search01Icon} className="size-3.5" />
           </InputGroupAddon>
         </ComboboxInput>
         <ComboboxList className="max-h-[min(--spacing(90),calc(var(--available-height)---spacing(12)))] p-0">
@@ -169,7 +176,7 @@ export function BranchSwitcher({
                   {(value: string) => (
                     <ComboboxItem key={value} value={value} className={ITEM}>
                       <span className="flex w-4 justify-center text-secondary">
-                        <PlusIcon className="size-3.5" />
+                        <Glyph icon={Add01Icon} className="size-3.5" />
                       </span>
                       <span className="min-w-0 truncate">
                         {creates ? t('switcher.create', { name: typed }) : t('switcher.newBranch')}
@@ -197,13 +204,13 @@ export function BranchSwitcher({
                         >
                           <span className="flex shrink-0 gap-2">
                             <span className="flex w-4 justify-center text-primary">
-                              {name === current && <CheckIcon strokeWidth={2} className="size-3" />}
+                              {name === current && <Glyph icon={Tick02Icon} className="size-3" />}
                             </span>
                             <span className="flex w-4 justify-center text-secondary">
                               {branch?.worktree ? (
-                                <FolderGit2Icon className="size-3.5" />
+                                <Glyph icon={FolderLinksIcon} className="size-3.5" />
                               ) : (
-                                <GitBranchIcon className="size-3.5" />
+                                <Glyph icon={GitBranchIcon} className="size-3.5" />
                               )}
                             </span>
                           </span>

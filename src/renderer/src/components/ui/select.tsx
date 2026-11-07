@@ -3,8 +3,10 @@
 import * as React from 'react'
 import { Select as SelectPrimitive } from '@base-ui/react/select'
 import { cn } from 'cn'
-import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from 'lucide-react'
+import { ArrowDown01Icon, ArrowUp01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useOverlayRoot } from '@renderer/stores/overlays'
+import { GlideHighlight } from '@renderer/components/glide-highlight'
 
 function Select<Value, Multiple extends boolean | undefined = false>({
   open,
@@ -63,7 +65,11 @@ function SelectTrigger({
       {children}
       <SelectPrimitive.Icon
         render={
-          <ChevronDownIcon strokeWidth={1.6} className="pointer-events-none size-3 text-icon" />
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            strokeWidth={1.9}
+            className="pointer-events-none size-3 text-icon"
+          />
         }
       />
     </SelectPrimitive.Trigger>
@@ -104,6 +110,7 @@ function SelectContent({
           )}
           {...props}
         >
+          <GlideHighlight />
           <SelectScrollUpButton />
           <SelectPrimitive.List>{children}</SelectPrimitive.List>
           <SelectScrollDownButton />
@@ -131,7 +138,7 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex w-full cursor-default items-center gap-2.5 min-h-7.5 rounded-md py-1 pr-8 pl-2 text-menu outline-hidden select-none focus:bg-selected focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.75 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative flex w-full cursor-default items-center gap-2.5 min-h-8 rounded-lg py-1 pr-8 pl-2 text-menu outline-hidden select-none focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.75 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className,
       )}
       {...props}
@@ -144,7 +151,12 @@ function SelectItem({ className, children, ...props }: SelectPrimitive.Item.Prop
           <span className="pointer-events-none absolute right-2 flex size-4 items-center justify-center" />
         }
       >
-        <CheckIcon strokeWidth={1.6} className="pointer-events-none size-3" />
+        <HugeiconsIcon
+          icon={Tick02Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="pointer-events-none size-3.5"
+        />
       </SelectPrimitive.ItemIndicator>
     </SelectPrimitive.Item>
   )
@@ -173,7 +185,7 @@ function SelectScrollUpButton({
       )}
       {...props}
     >
-      <ChevronUpIcon />
+      <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={1.9} aria-hidden />
     </SelectPrimitive.ScrollUpArrow>
   )
 }
@@ -191,7 +203,7 @@ function SelectScrollDownButton({
       )}
       {...props}
     >
-      <ChevronDownIcon />
+      <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={1.9} aria-hidden />
     </SelectPrimitive.ScrollDownArrow>
   )
 }

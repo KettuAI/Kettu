@@ -200,7 +200,7 @@ export function ReplyToSelection({
         initialFocus={false}
         finalFocus={false}
         className={cn(
-          writing ? 'w-80 gap-2 p-3' : 'w-auto flex-row gap-0 p-1',
+          writing ? 'w-80 gap-2 p-3' : 'ks-reply-pop w-auto',
           writing && !visible && 'invisible',
         )}
       >
@@ -239,7 +239,7 @@ export function ReplyToSelection({
         ) : (
           <Button
             variant="ghost"
-            size="sm"
+            className="ks-reply-pill"
             // The click must not take focus, which would drop the selection it quotes.
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => setWriting(true)}

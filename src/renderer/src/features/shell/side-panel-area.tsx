@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useDefaultLayout } from 'react-resizable-panels'
 import { onAppEvent } from '@renderer/app/events'
 import {
@@ -17,7 +17,8 @@ import {
   trackTerminalOpen,
 } from '@renderer/stores/terminals'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
-import { toggleTerminal, useViewStore } from '@renderer/stores/view'
+import { prefersReducedMotion } from '@renderer/stores/settings'
+import { toggleTerminal, useViewStore, type SidePane } from '@renderer/stores/view'
 import { SHEET, SHEET_PANEL } from './sheet'
 
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
@@ -31,19 +32,57 @@ const BrowserPane = lazy(() =>
 
 // Each pane is a panel of its own, so each keeps the width the user gives it. The terminal keeps
 // the id it had when it was the only pane.
+const PANE_SIZE = { defaultSize: '480px', minSize: '360px', maxSize: '760px' } as const
 const PANES = {
-  terminal: { id: 'side-panel', defaultSize: '600px', minSize: '280px' },
-  files: { id: 'side-panel-files', defaultSize: '600px', minSize: '360px' },
+  terminal: { id: 'side-panel', ...PANE_SIZE },
+  files: { id: 'side-panel-files', ...PANE_SIZE },
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
-  browser: { id: 'side-panel-browser', defaultSize: '600px', minSize: '360px' },
-  devices: { id: 'side-panel-devices', defaultSize: '480px', minSize: '320px' },
+  browser: { id: 'side-panel-browser', ...PANE_SIZE },
+  devices: { id: 'side-panel-devices', ...PANE_SIZE },
 } as const
+
+// As long as App Shell's columns take to glide.
+const GLIDE_MS = 420
+
+/**
+ * The pane the side panel holds and how it moves. Opening or closing glides the columns; a closed
+ * pane stays until its glide ends. Switching panes or sessions, dragging and resizing the window
+ * do not glide.
+ */
+function usePaneGlide(panel: string | null, pane: SidePane | undefined) {
+  const [held, setHeld] = useState(pane)
+  const [heldPanel, setHeldPanel] = useState(panel)
+  const [glide, setGlide] = useState<'open' | 'close' | null>(null)
+  const still = prefersReducedMotion()
+  if (panel !== heldPanel) {
+    setHeldPanel(panel)
+    setHeld(pane)
+    setGlide(null)
+  } else if (pane && pane !== held) {
+    setHeld(pane)
+    setGlide(!still && (held === undefined || glide === 'close') ? 'open' : null)
+  } else if (pane && glide === 'close') {
+    setGlide('open')
+  } else if (!pane && held && glide !== 'close') {
+    if (still) setHeld(undefined)
+    else setGlide('close')
+  }
+  useEffect(() => {
+    if (!glide) return
+    const timer = setTimeout(() => {
+      setGlide(null)
+      if (glide === 'close') setHeld(undefined)
+    }, GLIDE_MS)
+    return () => clearTimeout(timer)
+  }, [glide])
+  return { held, glide }
+}
 
 /**
  * The main area with the side panel of the pane in focus on its right: its session's, or New
  * session's in its project, holding the terminal, the files, the browser or, opened from the
- * thread, an artifact. Opening or closing it changes the content's width at once. Maximized, the
- * panel covers the whole area while the layout underneath keeps its sizes.
+ * thread, an artifact. Opening or closing it glides the content's edge as App Shell's work area
+ * does. Maximized, the panel covers the whole area while the layout underneath keeps its sizes.
  */
 export function SidePanelArea({
   projectPath,
@@ -67,9 +106,10 @@ export function SidePanelArea({
   const artifactId = useViewStore((s) => (panel ? s.sideArtifact[panel] : undefined))
   const maximized = useViewStore((s) => s.sidePaneMaximized) && !!pane
   const open = pane === 'terminal'
+  const { held, glide } = usePaneGlide(panel, pane)
   const layout = useDefaultLayout({
     id: 'side-panel',
-    panelIds: pane ? ['content', PANES[pane].id] : ['content'],
+    panelIds: held ? ['content', PANES[held].id] : ['content'],
     storage: layoutStorage,
     onlySaveAfterUserInteractions: true,
   })
@@ -122,7 +162,8 @@ export function SidePanelArea({
       orientation="horizontal"
       defaultLayout={layout.defaultLayout}
       onLayoutChanged={layout.onLayoutChanged}
-      className="relative"
+      className="kettu-pane-area relative"
+      data-glide={glide ?? undefined}
       style={SHEET_PANEL}
     >
       <ResizablePanel id="content" minSize="360px" className="min-w-0" style={SHEET_PANEL}>
@@ -132,30 +173,32 @@ export function SidePanelArea({
           {children}
         </div>
       </ResizablePanel>
-      {pane && (
+      {held && (
         <>
-          {/* The desk between the two sheets. */}
+          {/* The desk between the two sheets, with a faint line along it while it is dragged. */}
           <ResizableHandle
-            withHandle={!maximized}
-            className={cn('app-region-no-drag w-(--sheet-gap)', maximized && 'pointer-events-none')}
+            className={cn(
+              'kp-resizer app-region-no-drag w-(--sheet-gap)',
+              maximized && 'pointer-events-none',
+            )}
           />
           <ResizablePanel
-            key={pane}
-            {...PANES[pane]}
+            key={held}
+            {...PANES[held]}
             groupResizeBehavior="preserve-pixel-size"
             className="min-w-0"
             style={SHEET_PANEL}
           >
-            {pane === 'terminal' && panel ? (
+            {held === 'terminal' && panel ? (
               <TerminalPanel projectPath={projectPath} panel={panel} maximized={maximized} />
             ) : (
               panel && (
                 <Suspense fallback={<div className={cn('h-full', SHEET)} />}>
-                  {pane === 'files' ? (
+                  {held === 'files' ? (
                     <FilesPanel projectPath={projectPath} panel={panel} maximized={maximized} />
-                  ) : pane === 'browser' ? (
+                  ) : held === 'browser' ? (
                     <BrowserPane panel={panel} maximized={maximized} />
-                  ) : pane === 'devices' ? (
+                  ) : held === 'devices' ? (
                     <DevicesPane panel={panel} maximized={maximized} />
                   ) : (
                     artifactId && (

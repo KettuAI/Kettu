@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
-import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react'
+import { ArrowLeft01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
+import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogPortal, DialogTitle } from '@renderer/components/ui/dialog'
 import { PanelButton } from '@renderer/features/shell/panel-button'
 import { isWeb } from '@renderer/lib/platform'
-import { cn } from '@renderer/lib/utils'
 import type { PlacedPage } from './canvas'
 import { pageUrl } from './use-artifact'
+import './viewer.css'
 
 const MARGIN = 48
 const BAR_ROOM = 72
@@ -127,44 +128,32 @@ export function Presenter({
               )
             )}
           </div>
-          <div
-            role="toolbar"
-            aria-label={t('present.controls')}
-            className={cn(
-              'absolute bottom-5 left-1/2 flex h-10 -translate-x-1/2 items-center gap-1 rounded-2xl bg-toast/80 px-1.5 text-toast-foreground shadow-menu backdrop-blur-sm',
-            )}
-          >
+          <div role="toolbar" aria-label={t('present.controls')} className="k-av-present">
             {pages && (
               <>
                 <PanelButton
-                  size="icon-sm"
                   label={t('canvas.previous')}
                   shortcut="←"
                   disabled={index === 0}
                   onClick={() => move(-1)}
                 >
-                  <ChevronLeftIcon />
+                  <Icon icon={ArrowLeft01Icon} size={16} />
                 </PanelButton>
-                <span className="min-w-28 px-2 text-center text-ui tabular-nums">
+                <span className="k-av-present__where">
                   {t('present.position', { name, number: index + 1, count })}
                 </span>
                 <PanelButton
-                  size="icon-sm"
                   label={t('canvas.next')}
                   shortcut="→"
                   disabled={index === count - 1}
                   onClick={() => move(1)}
                 >
-                  <ChevronRightIcon />
+                  <Icon icon={ArrowRight01Icon} size={16} />
                 </PanelButton>
-                <span aria-hidden className="mx-1 h-4 w-(--hairline) bg-toast-muted" />
+                <span aria-hidden className="k-av-present__rule" />
               </>
             )}
-            <button
-              type="button"
-              onClick={() => onExit(index)}
-              className="rounded-xl px-2.5 py-1 text-ui text-toast-muted outline-none transition-colors duration-(--duration-fast) hover:text-toast-foreground focus-ring"
-            >
+            <button type="button" onClick={() => onExit(index)} className="k-av-present__exit">
               {t('present.exit')}
             </button>
           </div>

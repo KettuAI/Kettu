@@ -17,7 +17,8 @@
       "routine": "Routine",
       "schedule": "Schedule",
       "agent": "Agent",
-      "status": "Status"
+      "status": "Status",
+      "name": "Name"
     },
     "footnote": "Routines only run while Kettu is open. A routine pauses when its agent is within 10% of a plan limit."
   },
@@ -70,7 +71,8 @@
     "skipped": "Skipped",
     "skippedAt": "Skipped · {{when}}",
     "nextAt": "{{when}} · {{away}}",
-    "never": "Never run"
+    "never": "Never run",
+    "nextAtRich": "{{when}} · <away>{{away}}</away>"
   },
   "signal": {
     "name": "Routines, {{signal}}",
@@ -181,7 +183,11 @@
       "frequent": "{{field}}: runs must be at least 5 minutes apart.",
       "empty": "{{field}}: choose at least one day."
     },
-    "unvalid": "Not saved. The routine still runs on its last valid schedule: {{schedule}}"
+    "unvalid": "Not saved. The routine still runs on its last valid schedule: {{schedule}}",
+    "runs": "Runs",
+    "runsOnce": "Runs once",
+    "dstNote": "Clocks moving for daylight saving shift a run by the hour, never skip it.",
+    "cronNote": "Five fields, in your local time."
   },
   "routine": {
     "back": "Routines",

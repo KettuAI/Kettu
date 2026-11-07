@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { cacheExpiry } from '@shared/prompt-cache'
 import type { SessionView, UserContent } from '@shared/thread'
+import { ChatComposer } from '@renderer/components/affect/chat-composer'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { BranchTrayLink } from '@renderer/features/git/git-status'
 import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
@@ -15,26 +18,41 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useViewStore } from '@renderer/stores/view'
 import { endedOnRejection } from '../turn-phase'
+import { TrayStyles } from './affect-styles'
 import { attachmentContent, attachmentsBlock } from './attachments'
-import { ControlRow } from './control-row'
+import { OptionMenu } from './control-row'
+import { useModeControl } from './mode-control'
+import { isSelect, onCycleKeys } from './options'
 import { hasMessage } from './drafts'
 import { HistoryHeader } from './history-header'
 import { levelsOf, type SelectOption } from './levels'
+import { shownChoice } from './model-list'
+import { ModelMenu } from './model-menu'
 import { nextChoice, nextMode } from './modes'
 import { OutOfCreditStrip } from './out-of-credit-strip'
-import { AddMenu, PromptBox } from './prompt-box'
+import { useAddMenu } from './add-menu'
+import { PromptBox } from './prompt-box'
 import { RunningButton, SendButton } from './send-button'
+import { SessionPlace } from './session-place'
+import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
+import type { Select } from './use-pick'
 import { usePromptBox } from './use-prompt-box'
 
-/** The prompt box and the session's controls under it. */
+/**
+ * The session's composer on affectUI's Chat Composer: the white card with **+**, the permission
+ * mode, the model menu and Send over the text, and the gray tray under it: the host, the project
+ * and the branch, then the prompt cache and the context.
+ */
 export function Composer({ session, agentName }: { session: SessionView; agentName: string }) {
   const { t } = useTranslation('composer')
   const sessionId = session.id
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
-  const limits = useAgentsStore((s) => s.byId[session.agentId]?.limits)
-  const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
+  const agent = useAgentsStore((s) => s.byId[session.agentId])
+  const limits = agent?.limits
+  const steering = !!agent?.capabilities.steering
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const [configError, setConfigError] = useState<string | null>(null)
   const outOfCredit = useOutOfCredit(sessionId)
   const rejected = useThreadsStore((s) => endedOnRejection(s.replicas[sessionId]?.state))
   // An element picked in the artifact beside this thread goes with the next message.
@@ -70,6 +88,30 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
+  const add = useAddMenu({ box, agentName, commands: session.commands })
+
+  const config = session.config
+  const mode = config.find((o): o is SelectOption => o.category === 'mode' && isSelect(o))
+  const model = config.find((o): o is SelectOption => o.category === 'model' && isSelect(o))
+  const effort = config.find((o) => o.category === 'thought_level' && isSelect(o))
+  const switches = config.filter((o) => o.type === 'boolean')
+  const others = config.filter(
+    (o): o is SelectOption => isSelect(o) && o !== mode && o !== model && o !== effort,
+  )
+  const leftOthers = others.filter((o) => o.category === 'other')
+  const rightOthers = others.filter((o) => o.category !== 'other')
+
+  const set: Select = (optionId, value) => {
+    setConfigError(null)
+    return host('sessions.setConfigOption', { sessionId, optionId, value }).then(
+      () => true,
+      (e: unknown) => {
+        setConfigError(errorMessage(e))
+        return false
+      },
+    )
+  }
+  const modeControl = useModeControl(mode, set)
 
   // Starting a session focuses its composer, in the pane in focus only.
   const focused = usePane()?.focused ?? true
@@ -115,15 +157,19 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const stepped = useRef<Record<string, { from: string | undefined; to: string }>>({})
   // Shift+Tab steps through the permission modes and Alt+E through the effort levels.
   const cycle = (category: 'mode' | 'thought_level') => {
-    const option = session.config.find((o) => o.category === category && o.type === 'select')
+    const option = config.find((o) => o.category === category && o.type === 'select')
     if (!option?.choices?.length) return false
     const reported = option.value === undefined ? undefined : String(option.value)
     const asked = stepped.current[option.id]
     const current = asked && asked.from === reported ? asked.to : reported
-    const next =
+    const model = config.find((o) => o.category === 'model')?.value
+    const levels =
       category === 'mode'
-        ? nextMode(option.choices, current)
-        : nextChoice(levelsOf(option as SelectOption, current).levels, current)
+        ? null
+        : levelsOf(option as SelectOption, current, typeof model === 'string' ? model : undefined)
+    const next = levels
+      ? nextChoice(levels.levels, levels.shown)
+      : nextMode(option.choices, current)
     if (next === undefined || next === current) return true
     stepped.current[option.id] = { from: reported, to: next }
     host('sessions.setConfigOption', { sessionId, optionId: option.id, value: next }).catch(
@@ -133,17 +179,7 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
-    const plain = !isMod(event) && !event.altKey
-    if (
-      (event.key === 'Tab' && event.shiftKey && plain && cycle('mode')) ||
-      (event.code === 'KeyE' &&
-        event.altKey &&
-        !event.shiftKey &&
-        !isMod(event) &&
-        // A layout whose Option+E types a character, as the euro sign, keeps it.
-        !(event.key.length === 1 && event.key.toLowerCase() !== 'e') &&
-        cycle('thought_level'))
-    ) {
+    if (onCycleKeys(event, cycle)) {
       event.preventDefault()
       return
     }
@@ -185,81 +221,139 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
               : t('prompt.placeholder.runningQueue')
             : t('prompt.placeholder.ask', { agent: agentName })
 
+  const cache = cacheExpiry(session, agent?.account ?? null)
+  const timed = cache?.expiresAt != null ? cache : null
+  const modelName = model
+    ? (shownChoice(model.choices, String(model.value))?.name ?? String(model.value))
+    : null
+  const sendControl = running ? (
+    <RunningButton
+      holds={canQueue}
+      steering={steering}
+      queueKey={queueKey}
+      steerKey={steerKey}
+      onStop={cancel}
+      onQueue={() => queue(false)}
+      onSteer={() => queue(true)}
+    />
+  ) : blocked && holdsMessage ? (
+    // A disabled button takes no pointer, so the tooltip says why from around it.
+    <Tooltip>
+      <TooltipTrigger render={<span key="send" className="kettu-send-wrap" />}>
+        <SendButton disabled label={t('prompt.send')} />
+      </TooltipTrigger>
+      <TooltipContent>{blocked.message}</TooltipContent>
+    </Tooltip>
+  ) : (
+    <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={send} />
+  )
+  const shownError = error ?? (blocked?.notice ? blocked.message : null) ?? configError
+
   return (
-    <div data-composer="" className="flex flex-col">
-      <PromptBox
-        box={box}
-        agentId={session.agentId}
-        agentName={agentName}
-        commands={session.commands}
-        placeholder={placeholder}
-        label={t('prompt.label', { agent: agentName })}
-        size={{
-          minHeight: 'calc(var(--spacing) * 9)',
-          padding: 'calc(var(--spacing) * 2) 0',
-          lineHeight: 'calc(var(--spacing) * 5)',
-        }}
-        onKeyDown={onKeyDown}
-        wrap={!!outOfCredit || !!selection || !!box.historyPosition}
-        top={
-          <>
-            {box.historyPosition && <HistoryHeader position={box.historyPosition} />}
-            <AnimatePresence initial={false}>
-              {outOfCredit && !starting && (
-                <OutOfCreditStrip
-                  key={outOfCredit.id}
-                  sessionId={sessionId}
-                  notice={outOfCredit}
-                  config={session.config}
-                  onSwitchModel={() => setModelMenuOpen(true)}
-                />
-              )}
-            </AnimatePresence>
-            {selection && (
-              <SelectionChip selection={selection} onRemove={() => setPaneSelection(null)} />
-            )}
-          </>
+    <div data-composer="" className="kettu-composer" data-starting={starting || undefined}>
+      <ChatComposer
+        field={
+          <PromptBox
+            box={box}
+            agentId={session.agentId}
+            agentName={agentName}
+            commands={session.commands}
+            placeholder={placeholder}
+            label={t('prompt.label', { agent: agentName })}
+            size={{ minHeight: '40px', padding: '0', lineHeight: '20px' }}
+            onKeyDown={onKeyDown}
+            top={
+              <>
+                {box.historyPosition && <HistoryHeader position={box.historyPosition} />}
+                <AnimatePresence initial={false}>
+                  {outOfCredit && !starting && (
+                    <OutOfCreditStrip
+                      key={outOfCredit.id}
+                      sessionId={sessionId}
+                      notice={outOfCredit}
+                      config={config}
+                      onSwitchModel={() => setModelMenuOpen(true)}
+                    />
+                  )}
+                </AnimatePresence>
+                {selection && (
+                  <SelectionChip selection={selection} onRemove={() => setPaneSelection(null)} />
+                )}
+              </>
+            }
+          />
         }
-        end={
-          running ? (
-            <RunningButton
-              holds={canQueue}
-              steering={steering}
-              queueKey={queueKey}
-              steerKey={steerKey}
-              onStop={cancel}
-              onQueue={() => queue(false)}
-              onSteer={() => queue(true)}
+        onFieldFocus={box.focus}
+        addSections={add.sections}
+        onAttach={add.onAttach}
+        addDisabled={add.disabled}
+        {...modeControl}
+        start={
+          !starting && leftOthers.map((o) => <OptionMenu key={o.id} option={o} onSelect={set} />)
+        }
+        extra={
+          !starting &&
+          rightOthers.map((o) => <OptionMenu key={o.id} option={o} onSelect={set} align="end" />)
+        }
+        modelSlot={
+          !starting &&
+          (model || effort || switches.length > 0) && (
+            <ModelMenu
+              agentId={session.agentId}
+              agentName={agent?.name ?? agentName}
+              config={config}
+              running={running}
+              onSelect={set}
+              open={modelMenuOpen}
+              onOpenChange={setModelMenuOpen}
+              outOfCredit={!!outOfCredit}
+              account={agent?.account ?? null}
+              limits={limits ?? []}
+              source={agent?.version ? `${agent.harnessName} ${agent.version}` : null}
             />
-          ) : blocked && holdsMessage ? (
-            // A disabled button takes no pointer, so the tooltip says why from around it.
-            <Tooltip>
-              <TooltipTrigger render={<span key="send" />}>
-                <SendButton disabled label={t('prompt.send')} />
-              </TooltipTrigger>
-              <TooltipContent>{blocked.message}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={send} />
           )
         }
+        models={[]}
+        voice={false}
+        send={sendControl}
+        labels={{
+          composer: t('prompt.label', { agent: agentName }),
+          add: t('attachments.add'),
+          addMenu: t('attachments.add'),
+          approvalMenu: t('controls.permissionMode'),
+          selected: (label) => t('controls.selected', { label }),
+        }}
+        foot={
+          <div className="ui-as-composer__tray kettu-tray">
+            <TrayStyles />
+            <span className="kettu-tray__group">
+              <SessionPlace sessionId={sessionId} projectPath={session.projectPath} />
+              <BranchTrayLink projectPath={session.projectPath} />
+            </span>
+            {shownError && (
+              <p className="kettu-tray__error" role="alert" title={shownError}>
+                {shownError}
+              </p>
+            )}
+            <span className="kettu-tray__group kettu-tray__group--end">
+              <CacheButton cache={timed} running={running} used={session.usage?.used ?? 0} />
+              <ContextButton
+                sessionId={sessionId}
+                agentId={session.agentId}
+                idle={!running && !starting}
+                reports={agent?.capabilities.context ?? false}
+                direct={agent?.capabilities.liveContext ?? false}
+                live={running && (agent?.capabilities.liveContext ?? false)}
+                usage={session.usage}
+                context={session.context}
+                limits={limits ?? []}
+                account={agent?.account ?? null}
+                model={modelName}
+              />
+            </span>
+          </div>
+        }
       />
-      {/* Holds the row's height while the agent starts, so nothing jumps when the options arrive. */}
-      <div className="flex min-h-9 flex-col">
-        {(error || blocked?.notice) && (
-          <p className="animate-in px-2 pt-1 text-xs text-danger fade-in" role="alert">
-            {error ?? blocked?.message}
-          </p>
-        )}
-        {!starting && (
-          <ControlRow
-            session={session}
-            addMenu={<AddMenu box={box} agentName={agentName} commands={session.commands} />}
-            modelMenu={{ open: modelMenuOpen, onOpenChange: setModelMenuOpen }}
-            outOfCredit={!!outOfCredit}
-          />
-        )}
-      </div>
     </div>
   )
 }
