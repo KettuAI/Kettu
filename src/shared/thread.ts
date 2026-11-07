@@ -1,7 +1,7 @@
 // Kettu's own session and thread model, shared by the agent host and the renderer.
 // It never imports ACP types; only the mapper in src/agent-host/acp/ does.
 
-import type { AgentId } from './agents'
+import { isAgentId, type AgentId } from './agents'
 import type { BrowserOriginAnswer } from './browser'
 import type { DeviceAccessAnswer } from './device-agent'
 import type { ComputerAppAnswer, ComputerSetupOutcome, ComputerSetupStep } from './computer-use'
@@ -228,12 +228,30 @@ export type ThreadEntry =
       durationMs: number
       after?: string | null // the agent's entry before it, to put it back after a replay
     }
+  | TakeoverEntry // Kettu's own record of another agent taking the session over
   | GitEntry // Kettu's own observation of the repository, see the git design
   | ArtifactEntry // Kettu's own record of a write to the artifacts service
   | BrowserOriginEntry // Kettu's own record of a new site's request and answer
   | DeviceAccessEntry // Kettu's own record of an agent asking for a mobile device
   | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
   | ComputerSetupEntry // Kettu's own record of the setup a first call waited on, and its end
+
+/**
+ * Where another agent took the session over: from here on its turns are that agent's. `turns` of
+ * the earlier ones went to it in `carried`, as it was given them, and `omitted` were left out for
+ * it to read with the history tool. `after`: the agent's entry before it, for a replay.
+ */
+export interface TakeoverEntry {
+  kind: 'takeover'
+  id: string
+  agentId: AgentId
+  turns: number
+  omitted: number
+  carried: string
+  /** The agent was asked to summarize the earlier conversation before carrying on. */
+  summarize?: boolean
+  after: string | null
+}
 
 /** `after`: the agent's entry before it, to put it back after a replay; older entries lack it. */
 export type GitEntry =
@@ -881,6 +899,15 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         typeof value.stopReason === 'string' &&
         typeof value.durationMs === 'number' &&
         (value.after === undefined || value.after === null || typeof value.after === 'string')
+      )
+    case 'takeover':
+      return (
+        isAgentId(value.agentId) &&
+        typeof value.turns === 'number' &&
+        typeof value.omitted === 'number' &&
+        typeof value.carried === 'string' &&
+        (value.summarize === undefined || typeof value.summarize === 'boolean') &&
+        (value.after === null || typeof value.after === 'string')
       )
     case 'git':
       return (

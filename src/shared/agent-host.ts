@@ -604,6 +604,18 @@ export interface HostContract {
   'sessions.retry': { params: { sessionId: string }; result: void }
   // `entryId`: a reply's agent message, to fork the session up to its turn; see the session model.
   'sessions.fork': { params: { sessionId: string; entryId?: string }; result: SessionSummary }
+  // Hands the session to another agent between turns and sends `content` as its first turn;
+  // `options` are the values chosen for that agent, `summarize` asks it to summarize first.
+  'sessions.switchAgent': {
+    params: {
+      sessionId: string
+      agentId: AgentId
+      content: UserContent[]
+      options?: Record<string, string | boolean>
+      summarize?: boolean
+    }
+    result: void
+  }
   'sessions.context': { params: { sessionId: string }; result: ContextBreakdown | null }
   'sessions.queue': {
     params: { sessionId: string; content: UserContent[] }
@@ -962,6 +974,7 @@ export const HOST_METHODS = [
   'sessions.cancel',
   'sessions.retry',
   'sessions.fork',
+  'sessions.switchAgent',
   'sessions.context',
   'sessions.queue',
   'sessions.unqueue',

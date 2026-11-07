@@ -293,14 +293,16 @@ const setFirstRead = (agentId: AgentId, read: FirstRead | null): void =>
   })
 
 /**
- * Reads the options of an agent with none cached while New session has no folder, so its menu
- * lists the models before a project is chosen: once per agent, and after a failure only on a
- * retry. The options reach the cache as any the host sees do.
+ * Reads the options of an agent whose own defaults are not cached, while New session has no
+ * folder or another agent is picked to take a session over, so its menu lists the models and its
+ * modes before it starts: once per agent, and after a failure only on a retry. The options reach
+ * the cache as any the host sees do.
  */
 export async function readFirstOptions(agentId: AgentId, retry = false): Promise<void> {
   const { loaded, byId, firstReads } = useAgentOptionsStore.getState()
   const current = firstReads[agentId]
-  if (!loaded || byId[agentId] || current?.reading || (current && !retry)) return
+  const known = byId[agentId] && !byId[agentId].provisional
+  if (!loaded || known || current?.reading || (current && !retry)) return
   setFirstRead(agentId, { reading: true, error: null })
   try {
     await host('agents.readFirstOptions', { agentId })

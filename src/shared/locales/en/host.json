@@ -20,6 +20,7 @@
     "noForkPoint": "This reply cannot be forked from",
     "forkTitle": "{{title}} (fork)",
     "forkTitleNumbered": "{{title}} (fork {{n}})",
+    "alreadyInSession": "This session is already part of a Kettu session",
     "cannotList": "{{agent}} cannot list its sessions",
     "configBetweenTurns": "{{option}} changes between turns",
     "ultracodeDescription": "Dynamic workflows for substantial tasks",

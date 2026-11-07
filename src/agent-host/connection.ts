@@ -193,6 +193,12 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
   })
 }
 
+/** A message of the conversation before an agent took a session over, as it is carried to it. */
+export interface HistoryMessage {
+  role: 'user' | 'assistant'
+  text: string
+}
+
 /** A turn's tokens for one model, as the agent names it. */
 export interface ModelTokens {
   model: string
@@ -269,6 +275,11 @@ export interface AgentConnection {
    */
   steer(sessionId: string, prompt: readonly PromptBlock[]): Promise<'injected' | 'promptRequired'>
   cancel(sessionId: string): Promise<void>
+  /**
+   * Adds earlier messages to the history the session's model sees, ahead of its next turn. False
+   * where this agent's version takes none, and the host sends them with the prompt instead.
+   */
+  injectHistory?(sessionId: string, messages: readonly HistoryMessage[]): Promise<boolean>
   setMode(sessionId: string, modeId: string): Promise<void>
   setConfigOption(
     sessionId: string,

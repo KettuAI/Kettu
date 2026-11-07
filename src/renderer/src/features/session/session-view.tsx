@@ -244,17 +244,15 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 <SubagentBar summary={summary} session={session} />
               ) : archived ? (
                 <ArchivedComposer sessionId={sessionId} />
-              ) : agentRemoved ? (
-                <p className="px-3 py-4 text-small text-tertiary">
-                  {t('view.agentRemovedComposer')}
-                </p>
-              ) : agentOff ? (
-                <p className="px-3 py-4 text-small text-tertiary">
-                  {t('view.agentTurnedOffComposer')}
-                </p>
               ) : session ? (
                 <div className="relative z-10">
-                  <Composer key={sessionId} session={session} agentName={name} />
+                  {/* An agent removed or turned off: the session goes on with another one. */}
+                  <Composer
+                    key={sessionId}
+                    session={session}
+                    agentName={name}
+                    mustSwitch={agentRemoved || agentOff}
+                  />
                 </div>
               ) : (
                 <ComposerPlaceholder agentId={summary.agentId} />

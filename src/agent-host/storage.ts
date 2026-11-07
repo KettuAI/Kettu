@@ -267,6 +267,31 @@ export interface SessionRecord {
   startedBy?: string // the session whose agent started it through start_session
   configDir?: string // the configuration folder picked for its agent when it was created
   pullRequests?: string[] // the pull requests it opened, oldest first, by their github.com URL
+  /** The agents that had the session before its current one took over, oldest first. */
+  earlier?: EarlierAgent[]
+  /** A takeover whose first turn has not gone to its agent yet. */
+  carry?: PendingCarry
+}
+
+/** What a session's new agent is to be given with its first turn, kept until that turn goes. */
+export interface PendingCarry {
+  /** The takeover entry; the conversation carried is the one before it. */
+  entryId: string
+  /** The first turn the agent has not seen: 1 for one that never had the session. */
+  fromTurn: number
+  summarize?: boolean
+  /** The values chosen for it, set once its session opens. */
+  values?: Record<string, string | boolean>
+}
+
+/** An agent that had a session before another took it over, and its own session for it. */
+export interface EarlierAgent {
+  agentId: AgentId
+  /** Its own session id; empty once it no longer resumes, as in a fork. */
+  acpSessionId: string
+  configDir?: string
+  /** The takeover entry that ended its turns, so it has seen every entry before it. */
+  endedAt: string
 }
 
 export interface SessionsFile {
@@ -523,6 +548,59 @@ function routineRefOf(value: unknown): { routine?: RoutineRef } {
   }
 }
 
+/** The earlier agents a session lists; one that does not read is dropped, not the session. */
+function earlierOf(value: unknown): { earlier?: EarlierAgent[] } {
+  if (!Array.isArray(value)) return {}
+  const earlier = value.flatMap((item): EarlierAgent[] =>
+    isRecord(item) &&
+    isAgentId(item.agentId) &&
+    isString(item.acpSessionId) &&
+    isString(item.endedAt) &&
+    item.endedAt !== ''
+      ? [
+          {
+            agentId: item.agentId as AgentId,
+            acpSessionId: item.acpSessionId,
+            ...(isString(item.configDir) && item.configDir !== ''
+              ? { configDir: item.configDir }
+              : {}),
+            endedAt: item.endedAt,
+          },
+        ]
+      : [],
+  )
+  return earlier.length > 0 ? { earlier } : {}
+}
+
+function carryOf(value: unknown): { carry?: PendingCarry } {
+  if (
+    !isRecord(value) ||
+    !isString(value.entryId) ||
+    value.entryId === '' ||
+    typeof value.fromTurn !== 'number' ||
+    !Number.isInteger(value.fromTurn) ||
+    value.fromTurn < 1
+  ) {
+    return {}
+  }
+  const values = isRecord(value.values)
+    ? Object.fromEntries(
+        Object.entries(value.values).filter(
+          (entry): entry is [string, string | boolean] =>
+            typeof entry[1] === 'string' || typeof entry[1] === 'boolean',
+        ),
+      )
+    : null
+  return {
+    carry: {
+      entryId: value.entryId,
+      fromTurn: value.fromTurn,
+      ...(value.summarize === true ? { summarize: true } : {}),
+      ...(values && Object.keys(values).length > 0 ? { values } : {}),
+    },
+  }
+}
+
 export function parseSessionsFile(data: Record<string, unknown>): SessionsFile | string {
   if (!Array.isArray(data.sessions)) return 'sessions is not a list'
   const sessions: SessionRecord[] = []
@@ -572,6 +650,8 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...(isString(item.startedBy) ? { startedBy: item.startedBy } : {}),
       ...(isString(item.configDir) && item.configDir !== '' ? { configDir: item.configDir } : {}),
       ...pullRequestsOf(item.pullRequests),
+      ...earlierOf(item.earlier),
+      ...carryOf(item.carry),
     })
   }
   return {

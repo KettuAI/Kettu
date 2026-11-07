@@ -139,8 +139,16 @@ import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import {
+  carriedContext,
+  threadTurns,
+  type CarriedContext,
+  type RenderedTurn,
+} from './carried-context'
+import {
   MAX_SESSION_PULL_REQUESTS,
+  type EarlierAgent,
   type JsonFile,
+  type PendingCarry,
   type ReturnedFile,
   type SessionRecord,
   type SessionsFile,
@@ -713,6 +721,17 @@ export class SessionManager {
       if (record.agentId === agentId && record.acpSessionId === acpSessionId) return record
     }
     return undefined
+  }
+
+  /** Whether a session lists the agent's own session as an earlier agent's, which it may take back. */
+  private takenEarlier(agentId: AgentId, acpSessionId: string): boolean {
+    const holds = (record: SessionRecord): boolean =>
+      record.earlier?.some(
+        (item) => item.agentId === agentId && item.acpSessionId === acpSessionId,
+      ) === true
+    for (const live of this.live.values()) if (holds(live.record)) return true
+    for (const record of this.records.values()) if (holds(record)) return true
+    return false
   }
 
   private recordOf(sessionId: string): SessionRecord {
@@ -3715,19 +3734,40 @@ export class SessionManager {
     const runtime = await this.deps.agents.ensureReady(record.agentId)
     const caps = runtime.init.capabilities
     const { connection } = runtime
+    // A takeover's agent opens its own session at the values chosen for it, not the session's.
+    const carry = record.carry
     // A released session is marked closed on the connection; what the agent sends before the
     // session attaches waits for it instead of being dropped.
-    connection.reopen(record.acpSessionId)
+    if (record.acpSessionId !== '') connection.reopen(record.acpSessionId)
     let config: ConfigOption[]
-    if (caps.resumeSession) {
+    if (record.acpSessionId === '') {
+      // An agent taking the session over that never had it.
+      config = await this.renew(live, connection, this.mcpServers(live.id, record, runtime))
+      this.deps.options?.started(
+        record.agentId,
+        config,
+        pathKey(record.projectPath, this.deps.platform),
+      )
+    } else if (caps.resumeSession) {
       const mcpServers = this.mcpServers(live.id, record, runtime)
       try {
         config = (
           await connection.resumeSession(record.acpSessionId, record.projectPath, { mcpServers })
         ).config
       } catch (error) {
-        if (!this.neverAnswered(live, error)) throw this.otherConfig(live, error)
-        config = await this.renew(live, connection, mcpServers)
+        if (carry) {
+          // The session it had is gone, so it starts over with the whole conversation.
+          carry.fromTurn = 1
+          config = await this.renew(live, connection, mcpServers)
+          this.deps.options?.started(
+            record.agentId,
+            config,
+            pathKey(record.projectPath, this.deps.platform),
+          )
+        } else {
+          if (!this.neverAnswered(live, error)) throw this.otherConfig(live, error)
+          config = await this.renew(live, connection, mcpServers)
+        }
       }
     } else if (caps.loadSession) {
       const mcpServers = this.mcpServers(live.id, record, runtime)
@@ -3743,9 +3783,11 @@ export class SessionManager {
       )
     }
     const gone = (): boolean => live.closing || this.live.get(live.id) !== live
-    const wanted = carryMode(own, config)
+    const wanted = carry
+      ? this.takeoverValues(record.agentId, config, carry)
+      : carryMode(own, config)
     config = await this.applyStartOptions(live, connection, agentValues(wanted), {
-      restore: true,
+      restore: !carry,
       from: config,
       stop: () => gone() || connection.isClosed,
     })
@@ -3831,6 +3873,26 @@ export class SessionManager {
     if (runtime.init.capabilities.closeSession && !connection.isClosed) {
       await connection.closeSession(acpSessionId).catch(() => {})
     }
+  }
+
+  /**
+   * The options a takeover's agent starts with, as a new session's would: its start mode, its
+   * remembered values, then what was chosen with the switch.
+   */
+  private takeoverValues(
+    agentId: AgentId,
+    config: readonly ConfigOption[],
+    carry: PendingCarry,
+  ): ConfigOption[] {
+    const values = {
+      ...this.startModeOf(agentId),
+      ...this.deps.options?.rememberedOf(agentId),
+      ...carry.values,
+    }
+    return config.flatMap((option): ConfigOption[] => {
+      const value = values[option.id]
+      return value !== undefined && isValueOf(option, value) ? [{ ...option, value }] : [option]
+    })
   }
 
   /** A loaded or resumed session's options, which New session also learns from. */
@@ -4147,6 +4209,229 @@ export class SessionManager {
     live.used = true
     const now = this.now()
     this.startTurn(live, content, now, this.addPrompt(live, content, now, from, device), portId)
+  }
+
+  /**
+   * Hands the session to another agent between turns and sends `content` as its first turn: the
+   * current agent lets its own session go, and the new one starts a session of its own, or resumes
+   * the one it had, given the conversation it has not seen.
+   */
+  async switchAgent(
+    params: {
+      sessionId: string
+      agentId: AgentId
+      content: UserContent[]
+      options?: Record<string, string | boolean>
+      summarize?: boolean
+    },
+    portId?: string,
+    device?: FromDevice,
+  ): Promise<void> {
+    const { sessionId, agentId } = params
+    // Not the current agent's checks: a session whose agent was removed or turned off goes on so.
+    if (this.recordOf(sessionId).origin === 'subagent') {
+      throw new HostError('restricted', t('session.subagent.noPrompt'))
+    }
+    this.refuseIfArchived(sessionId)
+    if (!this.deps.agents.has(agentId)) throw invalidParams(`Unknown agent ${agentId}`)
+    this.deps.agents.assertEnabled(agentId)
+    const hydrated = this.hydrate(params.content)
+    const live = await this.revive(sessionId)
+    const { status } = live.thread.session
+    if (!canSend(status) || live.turn || waitingCount(live) > 0) throw busyError(status)
+    if (live.record.agentId !== agentId || live.record.carry) {
+      await this.handOver(live, agentId, params.options ?? {}, params.summarize === true)
+    }
+    this.sendPrompt(live, hydrated, undefined, portId, device)
+  }
+
+  /**
+   * The session's agent becomes `agentId`: its subagents and its own session close, the thread
+   * marks the takeover, and what the new agent is to be given waits for its first turn.
+   */
+  private async handOver(
+    live: Live,
+    agentId: AgentId,
+    values: Record<string, string | boolean>,
+    summarize: boolean,
+  ): Promise<void> {
+    const { record } = live
+    const from = record.agentId
+    await this.closeAll(this.descendants(live.id, 'subagent'), true)
+    await this.letGo(live)
+    // A takeover whose turn never went keeps its line in the thread, now for this agent.
+    const pending = record.carry
+    const entryId = pending?.entryId ?? this.nextId(live)
+    const earlier: EarlierAgent[] = [...(record.earlier ?? [])]
+    // An agent taken back whose turn never went is listed still, with what it saw.
+    const listed = earlier.some(
+      (item) => item.agentId === from && item.acpSessionId === record.acpSessionId,
+    )
+    if (record.acpSessionId !== '' && !listed) {
+      earlier.push({
+        agentId: from,
+        acpSessionId: record.acpSessionId,
+        ...(record.configDir ? { configDir: record.configDir } : {}),
+        endedAt: entryId,
+      })
+    }
+    // Its own session again, when it had the session before; it saw every turn up to then.
+    const back = earlier.findLast((item) => item.agentId === agentId && item.acpSessionId !== '')
+    let fromTurn = 1
+    if (back) {
+      fromTurn = turnsBefore(live.thread, back.endedAt) + 1
+      record.acpSessionId = back.acpSessionId
+      if (back.configDir) record.configDir = back.configDir
+      else delete record.configDir
+    } else {
+      record.acpSessionId = ''
+      delete record.configDir
+    }
+    record.agentId = agentId
+    if (earlier.length > 0) record.earlier = earlier
+    record.carry = {
+      entryId,
+      fromTurn,
+      ...(summarize ? { summarize: true } : {}),
+      ...(Object.keys(values).length > 0 ? { values } : {}),
+    }
+    // As a fork does: a title of its own, so one the new agent gives its session does not replace it.
+    const title = record.customTitle ?? live.thread.session.title
+    if (title !== null && record.customTitle === undefined) record.customTitle = title
+    delete record.cache
+    delete record.model
+    const usage = live.thread.session.usage
+    const cached = this.deps.options?.get(agentId)?.config ?? []
+    this.emit(live, [
+      pending && live.thread.byId[entryId]?.kind === 'takeover'
+        ? { op: 'entry.update', id: entryId, changes: { agentId, summarize } }
+        : {
+            op: 'entry.add',
+            entry: {
+              kind: 'takeover',
+              id: entryId,
+              agentId,
+              turns: 0,
+              omitted: 0,
+              carried: '',
+              ...(summarize ? { summarize: true } : {}),
+              after: agentEntryBefore(live.thread),
+            },
+          },
+    ])
+    this.update(live, {
+      agentId,
+      acpSessionId: record.acpSessionId,
+      config: chosenConfig(cached, values),
+      commands: [],
+      // The totals stay the session's; the context is the new agent's, unknown until it reports.
+      usage: usage ? { ...usage, used: 0, size: 0, cache: undefined } : null,
+      status: 'closed',
+      error: null,
+    })
+    this.save(live)
+    this.touch(live.id)
+    this.deps.agents.sessionsChanged(from)
+    this.deps.agents.sessionsChanged(agentId)
+    this.deps.diagnostics.event(agentId, 'session taken over', `${live.id} from ${from}`)
+  }
+
+  /** Closes the agent's own session of a live session that stays, as a release would. */
+  private async letGo(live: Live): Promise<void> {
+    const { connection } = live
+    const { agentId, acpSessionId } = live.record
+    if (live.contextTimer) clearTimeout(live.contextTimer)
+    live.contextTimer = null
+    this.contextRuns.delete(live.id)
+    live.background = false
+    if (!connection) return
+    connection.unregister(acpSessionId, live.target)
+    live.connection = null
+    this.deps.mcp?.detached(live.id)
+    const runtime = this.deps.agents.runtime(agentId)
+    if (acpSessionId && runtime?.init.capabilities.closeSession && !connection.isClosed) {
+      await connection.closeSession(acpSessionId).catch((error: unknown) => {
+        this.deps.diagnostics.log(
+          'warn',
+          `session/close failed for ${live.id}: ${(error as Error).message}`,
+        )
+      })
+    }
+  }
+
+  /** What the session's new agent is given with its first turn, from the thread before it took over. */
+  private carriedFor(live: Live, carry: PendingCarry): CarriedContext | null {
+    const { order, byId } = live.thread
+    const end = order.indexOf(carry.entryId)
+    const entries = (end < 0 ? order : order.slice(0, end)).flatMap((id) => {
+      const entry = byId[id]
+      return entry ? [entry] : []
+    })
+    return carriedContext(entries, {
+      firstAgent: this.firstAgentOf(live.record),
+      agentName: (id) => this.deps.agents.name(id),
+      fromTurn: carry.fromTurn,
+      summarize: carry.summarize === true,
+    })
+  }
+
+  /**
+   * The first turn of a takeover's agent: the conversation it missed goes into its history where
+   * its agent takes one, else in front of the prompt, and the takeover's line says what went.
+   */
+  private async withCarried(
+    live: Live,
+    connection: AgentConnection,
+    carry: PendingCarry,
+    wire: PromptBlock[],
+  ): Promise<PromptBlock[]> {
+    const { record } = live
+    const carried = this.carriedFor(live, carry)
+    let out = wire
+    if (carried) {
+      let injected = false
+      if (connection.injectHistory) {
+        injected = await connection
+          .injectHistory(record.acpSessionId, carried.messages)
+          .catch((error: unknown) => {
+            this.deps.diagnostics.log(
+              'warn',
+              `Could not add the earlier conversation to ${live.id}: ${agentError(error).message}`,
+            )
+            return false
+          })
+      }
+      if (!injected) out = [{ type: 'text', text: `${carried.text}\n\n` }, ...wire]
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: carry.entryId,
+          changes: { turns: carried.turns, omitted: carried.omitted, carried: carried.text },
+        },
+      ])
+    }
+    delete record.carry
+    // The session it had is its current one now, no longer an earlier agent's to take back.
+    record.earlier = record.earlier?.map((item) =>
+      item.agentId === record.agentId && item.acpSessionId === record.acpSessionId
+        ? { ...item, acpSessionId: '' }
+        : item,
+    )
+    this.save(live)
+    return out
+  }
+
+  /** The agent that had the session before any takeover. */
+  private firstAgentOf(record: SessionRecord): AgentId {
+    return record.earlier?.[0]?.agentId ?? record.agentId
+  }
+
+  /** The session's turns as the history tool reads them, numbered over the whole thread. */
+  async historyTurns(sessionId: string): Promise<RenderedTurn[]> {
+    const live = await this.revive(sessionId)
+    return threadTurns(threadEntries(live.thread), this.firstAgentOf(live.record), (id) =>
+      this.deps.agents.name(id),
+    )
   }
 
   /** The user entry of a prompt, and the title it gives a session that has none; its entry id. */
@@ -4638,6 +4923,13 @@ export class SessionManager {
     const cut = at === undefined ? null : forkCut(source.thread, at)
     // Nothing before the running turn, or a reply of it, has no end to cut at yet.
     if (turnRuns && cut === null) throw busyError(status)
+    // A reply of an agent that had the session before goes to that agent, as a takeover would.
+    const writer =
+      at === undefined
+        ? source.record.agentId
+        : writerOf(source.thread, at, this.firstAgentOf(source.record))
+    if (cut && writer !== source.record.agentId)
+      return this.forkToEarlier(source, cut.entries, writer)
     // Not every agent forks a session it does not have open, so a closed one attaches first.
     try {
       await this.attachClosed(source)
@@ -4778,6 +5070,100 @@ export class SessionManager {
     return this.summary(live.id)
   }
 
+  /**
+   * A fork that an earlier agent of the source takes on: no fork of its own session, which ended
+   * before the reply's turn did, but a session of its own given the conversation up to the reply.
+   */
+  private async forkToEarlier(
+    source: Live,
+    entries: ThreadEntry[],
+    agentId: AgentId,
+  ): Promise<SessionSummary> {
+    this.deps.agents.assertEnabled(agentId)
+    const kept = entries.filter((entry) => entry.kind !== 'subagent')
+    const blobs = (
+      await Promise.all(
+        [...attachmentBlobs(kept)].map((hash) =>
+          this.storedBlob(source.id, hash).catch(() => null),
+        ),
+      )
+    ).filter((blob) => blob !== null)
+    const now = this.now()
+    const sourceTitle = source.record.customTitle ?? source.thread.session.title
+    const title =
+      sourceTitle === null
+        ? null
+        : forkTitle(forkBase(sourceTitle), this.titlesIn(source.record.projectPath))
+    const ids = new Set(kept.map((entry) => entry.id))
+    const record: SessionRecord = {
+      ...source.record,
+      origin: 'user',
+      id: randomUUID(),
+      agentId,
+      acpSessionId: '',
+      title,
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      branch: null,
+    }
+    for (const key of [
+      'queue',
+      'pinnedAt',
+      'archivedAt',
+      'routine',
+      'configDir',
+      'cache',
+      'model',
+    ] as const) {
+      delete record[key]
+    }
+    if (title === null) delete record.customTitle
+    else record.customTitle = title
+    // The takeovers it keeps, none of whose sessions it resumes: they belong to the source.
+    const earlier = (source.record.earlier ?? [])
+      .filter((item) => ids.has(item.endedAt))
+      .map((item) => ({ ...item, acpSessionId: '' }))
+    if (earlier.length > 0) record.earlier = earlier
+    else delete record.earlier
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    live.used = true
+    live.blobs = new Map(blobs.map((blob) => [blob.hash, blob]))
+    for (const entry of kept) live.counter = Math.max(live.counter, idNumber(entry.id))
+    const entryId = this.nextId(live)
+    record.carry = { entryId, fromTurn: 1 }
+    this.emit(
+      live,
+      kept.map((entry): Patch => ({ op: 'entry.add', entry })),
+    )
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'takeover',
+          id: entryId,
+          agentId,
+          turns: 0,
+          omitted: 0,
+          carried: '',
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+    this.update(live, {
+      agentId,
+      acpSessionId: '',
+      config: this.deps.options?.get(agentId)?.config ?? [],
+      usage: null,
+      status: 'closed',
+    })
+    this.save(live)
+    this.persist(live)
+    this.touch(live.id)
+    return this.summary(live.id)
+  }
+
   private async runTurn(live: Live, turn: Turn): Promise<void> {
     let connection: AgentConnection
     try {
@@ -4798,7 +5184,12 @@ export class SessionManager {
           ])
         }
       }
-      const sending = connection.prompt(live.record.acpSessionId, resolved.wire).finally(() => {
+      const carry = live.record.carry
+      const wire = carry
+        ? await this.withCarried(live, connection, carry, resolved.wire)
+        : resolved.wire
+      if (turn.ended) return
+      const sending = connection.prompt(live.record.acpSessionId, wire).finally(() => {
         if (live.unansweredCancel === turn) live.unansweredCancel = null
       })
       this.refreshContext(live)
@@ -6101,20 +6492,33 @@ export class SessionManager {
     const all = [...this.descendants(sessionId), record]
     await this.closeAll(all, false)
     this.deps.events.ended(all.map((item) => item.id))
-    const deleting: { item: SessionRecord; acpSessionId: string; runtime: AgentRuntime }[] = []
+    const deleting: {
+      item: SessionRecord
+      agentId: AgentId
+      acpSessionId: string
+      runtime: AgentRuntime
+    }[] = []
     for (const item of all) {
-      if (item.origin === 'subagent' || !item.acpSessionId) continue
-      try {
-        const runtime = await this.deps.agents.ensureReady(item.agentId)
-        if (runtime.init.capabilities.deleteSession) {
-          deleting.push({ item, acpSessionId: item.acpSessionId, runtime })
+      if (item.origin === 'subagent') continue
+      // Every agent that had the session keeps a session of its own for it.
+      const owned = [
+        { agentId: item.agentId, acpSessionId: item.acpSessionId },
+        ...(item.earlier ?? []),
+      ].filter((owner) => owner.acpSessionId !== '')
+      for (const { agentId, acpSessionId } of owned) {
+        if (!this.deps.agents.has(agentId)) continue
+        try {
+          const runtime = await this.deps.agents.ensureReady(agentId)
+          if (runtime.init.capabilities.deleteSession) {
+            deleting.push({ item, agentId, acpSessionId, runtime })
+          }
+        } catch (error) {
+          this.deleteFailed(item, error)
         }
-      } catch (error) {
-        this.deleteFailed(item, error)
       }
     }
     // The agent deletes the session's log too, so what it holds is counted first.
-    await this.deps.usage?.syncAgents([...new Set(deleting.map(({ item }) => item.agentId))])
+    await this.deps.usage?.syncAgents([...new Set(deleting.map(({ agentId }) => agentId))])
     for (const { item, acpSessionId, runtime } of deleting) {
       try {
         await runtime.connection.deleteSession(acpSessionId)
@@ -6326,7 +6730,9 @@ export class SessionManager {
         acpSessionId: item.sessionId,
         title: item.title,
         updatedAt: item.updatedAt,
-        imported: this.findByAcp(agentId, item.sessionId) !== undefined,
+        imported:
+          this.findByAcp(agentId, item.sessionId) !== undefined ||
+          this.takenEarlier(agentId, item.sessionId),
       })),
       nextCursor: page.nextCursor,
     }
@@ -6343,6 +6749,9 @@ export class SessionManager {
     const projectPath = await this.deps.projects.resolveDirectory(params.projectPath)
     const existing = this.findByAcp(params.agentId, params.acpSessionId)
     if (existing) return this.summary(existing.id)
+    if (this.takenEarlier(params.agentId, params.acpSessionId)) {
+      throw new HostError('busy', t('session.alreadyInSession'))
+    }
     await this.deps.projects.add(projectPath)
     const listed = this.listed.get(`${params.agentId}\n${params.acpSessionId}`)
     const now = this.now()
@@ -6499,6 +6908,32 @@ export function forkTitle(base: string, taken: ReadonlySet<string>): string {
 }
 
 /** The last agent message before the turn in progress, or undefined when it is the first turn. */
+/** The agent that had the session when `entryId` was written, by the takeovers before it. */
+export function writerOf(
+  thread: Pick<ThreadState, 'order' | 'byId'>,
+  entryId: string,
+  firstAgent: AgentId,
+): AgentId {
+  let agentId = firstAgent
+  for (const id of thread.order) {
+    if (id === entryId) break
+    const entry = thread.byId[id]
+    if (entry?.kind === 'takeover') agentId = entry.agentId
+  }
+  return agentId
+}
+
+/** The turns the thread holds before `entryId`, counted by the user's own messages. */
+export function turnsBefore(thread: Pick<ThreadState, 'order' | 'byId'>, entryId: string): number {
+  let turns = 0
+  for (const id of thread.order) {
+    if (id === entryId) break
+    const entry = thread.byId[id]
+    if (entry?.kind === 'user' && !entry.steered) turns++
+  }
+  return turns
+}
+
 export function replyBeforeTurn(thread: Pick<ThreadState, 'order' | 'byId'>): string | undefined {
   let i = thread.order.length - 1
   while (i >= 0) {

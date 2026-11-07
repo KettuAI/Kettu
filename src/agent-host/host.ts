@@ -409,6 +409,8 @@ export class AgentHost {
         started: (callerId) => this.sessions.startedBy(callerId),
         name: (sessionId) => this.sessions.toolName(sessionId),
         agentName: (sessionId) => this.sessions.agentName(sessionId),
+        agentLabel: (agentId) => this.agents.name(agentId),
+        history: (sessionId) => this.sessions.historyTurns(sessionId),
       },
       log,
       appVersion: options.appVersion,
@@ -1211,7 +1213,8 @@ export class AgentHost {
       'agents.cancelTask': ({ agentId }) => agents.cancelTask(agentId),
       'agents.readOptions': async ({ agentId, projectPath }) => {
         const entry = this.agentOptions.get(agentId)
-        if (entry && Date.now() - entry.observedAt < OPTIONS_FRESH_MS) return
+        // A provisional entry lacks the agent's defaults and its mode, which a switch to it shows.
+        if (entry && !entry.provisional && Date.now() - entry.observedAt < OPTIONS_FRESH_MS) return
         const folder =
           projectPath === null
             ? null
@@ -1219,7 +1222,7 @@ export class AgentHost {
         await agents.readOptions(agentId, folder ?? undefined)
       },
       'agents.readFirstOptions': async ({ agentId }) => {
-        if (this.agentOptions.get(agentId)) return
+        if (this.agentOptions.known(agentId)) return
         await agents.readFirstOptions(agentId)
       },
       'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
@@ -1267,6 +1270,8 @@ export class AgentHost {
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
       'sessions.fork': ({ sessionId, entryId }) => sessions.fork(sessionId, entryId),
+      'sessions.switchAgent': (params, { portId, device }) =>
+        sessions.switchAgent(params, portId, fromDevice(device)),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.queue': ({ sessionId, content }, { portId, device }) =>
         sessions.queue(sessionId, content, portId, fromDevice(device)),

@@ -20,6 +20,7 @@
     "noForkPoint": "无法从这条回复分叉",
     "forkTitle": "{{title}}（分叉）",
     "forkTitleNumbered": "{{title}}（分叉 {{n}}）",
+    "alreadyInSession": "这个会话已经属于 Kettu 里的一个会话",
     "cannotList": "{{agent}} 无法列出它的会话",
     "configBetweenTurns": "{{option}} 只能在两轮对话之间更改",
     "ultracodeDescription": "用于大型任务的动态工作流",

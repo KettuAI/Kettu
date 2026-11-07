@@ -6,6 +6,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { GradientFloor } from '@renderer/components/affect/gradient-floor'
 import {
   ModelPicker,
+  type PickerAction,
   type PickerModel,
   type PickerToggle,
 } from '@renderer/components/affect/model-picker'
@@ -44,6 +45,7 @@ export function ModelMenu({
   account,
   limits,
   source,
+  actions,
 }: {
   agentId: AgentId
   agentName: string
@@ -57,6 +59,8 @@ export function ModelMenu({
   limits: readonly PlanLimit[]
   /** The harness and version the models come from. */
   source: string | null
+  /** Rows after the switches, such as Switch agent. */
+  actions?: PickerAction[]
 }) {
   const { t } = useTranslation('composer')
   const now = useNow()
@@ -159,6 +163,7 @@ export function ModelMenu({
         effortLabel={effort?.name ?? t('controls.effort')}
         effortHint={t('controls.effortHint', { shortcut: formatShortcut('Alt+E') })}
         toggles={toggles}
+        {...(actions ? { actions } : {})}
         onToggle={(id, on) => {
           const option = switches.find((o) => o.id === id)
           if (option) flips.pick(option, on)

@@ -466,6 +466,12 @@
     "inTerminal": "在终端中登录",
     "signedIn": "我已登录，重试"
   },
+  "takeover": {
+    "title": "由 {{agent}} 接手",
+    "carried_other": "由 {{agent}} 接手 · 带上前面 {{count}} 轮",
+    "omitted_other": "带过去的内容。还有 {{count}} 轮没带，它能用读历史的工具取回。",
+    "whole": "带过去的内容。"
+  },
   "view": {
     "couldntOpen": "无法打开此会话",
     "hostSilent": "Agent 后台进程没有响应。",
@@ -475,11 +481,9 @@
     "historyStays": "历史记录会保留在这里，会话会从中断的地方继续。",
     "signIn": "登录…",
     "agentRemoved": "{{agent}} 已移除",
-    "agentRemovedBody": "历史仍留在这里，但这个会话不能再继续。可以重新添加这个 Agent，或用别的 Agent 带着上下文新建会话。",
-    "agentRemovedComposer": "这个 Agent 已移除，会话不能再继续。",
+    "agentRemovedBody": "历史仍留在这里。可以在输入框里选另一个 Agent 接着做，或重新添加这个 Agent。",
     "agentTurnedOff": "{{agent}} 已停用",
-    "agentTurnedOffBody": "历史仍留在这里。到设置里启用这个 Agent 后，会话就能继续。",
-    "agentTurnedOffComposer": "这个 Agent 已停用，会话暂时不能继续。",
+    "agentTurnedOffBody": "历史仍留在这里。到设置里启用这个 Agent，或在输入框里选另一个 Agent 接着做。",
     "openAgent": "打开 Agent",
     "archivedComposer": "这个会话已归档，不能再发消息。",
     "restore": "恢复",

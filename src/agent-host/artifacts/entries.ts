@@ -18,6 +18,7 @@ type OwnEntry = Extract<
       | 'device_access'
       | 'computer_app'
       | 'computer_setup'
+      | 'takeover'
   }
 >
 
@@ -144,6 +145,7 @@ function isOwn(entry: ThreadEntry): entry is OwnEntry {
     case 'session_started':
     case 'git':
     case 'turn_end':
+    case 'takeover':
       return true
     case 'notice':
       return entry.after !== undefined

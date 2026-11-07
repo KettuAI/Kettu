@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDataTransferHorizontalIcon } from '@hugeicons/core-free-icons'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { cacheExpiry } from '@shared/prompt-cache'
-import type { SessionView, UserContent } from '@shared/thread'
+import type { AgentId, ConfigOption, SessionView, UserContent } from '@shared/thread'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BranchTrayLink } from '@renderer/features/git/git-status'
@@ -12,7 +13,17 @@ import { isMac, isMod } from '@renderer/lib/platform'
 import { selectionPrompt } from '@renderer/features/artifacts/anchors'
 import { SelectionChip } from '@renderer/features/artifacts/selection-chip'
 import { usePane } from '@renderer/features/split/pane-context'
+import { useAgentOptionsStore } from '@renderer/stores/agent-options'
+import {
+  setPendingSwitch,
+  updatePendingSwitch,
+  useAgentSwitchStore,
+} from '@renderer/stores/agent-switch'
 import { useAgentsStore } from '@renderer/stores/agents'
+import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
+import { readFirstOptions } from '@renderer/features/session/new-session/prepared'
+import { startConfig } from '@renderer/features/session/new-session/start-options'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useThreadsStore } from '@renderer/stores/threads'
@@ -34,19 +45,53 @@ import { useAddMenu } from './add-menu'
 import { PromptBox } from './prompt-box'
 import { RunningButton, SendButton } from './send-button'
 import { SessionPlace } from './session-place'
+import { SwitchStrip } from './switch-strip'
 import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
 import type { Select } from './use-pick'
 import { usePromptBox } from './use-prompt-box'
 
+const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
+  Object.fromEntries(config.map((o) => [o.id, o.value]))
+
 /**
  * The session's composer on affectUI's Chat Composer: the white card with **+**, the permission
  * mode, the model menu and Send over the text, and the gray tray under it: the host, the project
- * and the branch, then the prompt cache and the context.
+ * and the branch, then the prompt cache and the context. With `mustSwitch`, its agent can no
+ * longer go on, so a message goes only once another agent is picked.
  */
-export function Composer({ session, agentName }: { session: SessionView; agentName: string }) {
+export function Composer({
+  session,
+  agentName: ownName,
+  mustSwitch = false,
+}: {
+  session: SessionView
+  agentName: string
+  mustSwitch?: boolean
+}) {
   const { t } = useTranslation('composer')
   const sessionId = session.id
+  // Another agent picked to take the session over with the next message, shown as its own.
+  const pending = useAgentSwitchStore((s) => s.pending[sessionId] ?? null)
+  const pendingEntry = useAgentOptionsStore((s) => (pending ? s.byId[pending.agentId] : undefined))
+  const pendingName = useAgentsStore((s) => (pending ? s.byId[pending.agentId]?.name : undefined))
+  const pendingConfig = useMemo(
+    () =>
+      pending
+        ? pendingEntry
+          ? startConfig(pendingEntry, pending.values, { startMode: true })
+          : []
+        : null,
+    [pending, pendingEntry],
+  )
+  const [choosingAgent, setChoosingAgent] = useState(false)
+  const pendingAgent = pending?.agentId ?? null
+  const pendingKnown = !!pendingEntry && !pendingEntry.provisional
+  useEffect(() => {
+    // Its modes come with its own defaults, which a session it only resumed did not report.
+    if (pendingAgent && !pendingKnown) void readFirstOptions(pendingAgent)
+  }, [pendingAgent, pendingKnown])
+  const agentName = pendingName ?? ownName
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const agent = useAgentsStore((s) => s.byId[session.agentId])
   const limits = agent?.limits
@@ -82,15 +127,16 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
   const { text, attachments, error, setError } = box
   const blocked = attachmentsBlock(attachments, text)
   const holdsMessage = hasMessage(text, attachments)
-  const canSend = idle && holdsMessage && !blocked
+  const canSend = idle && holdsMessage && !blocked && (!mustSwitch || pending !== null)
   // During a turn the send key queues the message and the steer key sends it into the turn.
-  const canQueue = running && holdsMessage && !blocked
+  const canQueue = running && holdsMessage && !blocked && pending === null && !mustSwitch
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
   const add = useAddMenu({ box, agentName, commands: session.commands })
 
-  const config = session.config
+  // An agent that is gone takes no settings; the one picked to carry on shows its own.
+  const config = pendingConfig ?? (mustSwitch ? [] : session.config)
   const mode = config.find((o): o is SelectOption => o.category === 'mode' && isSelect(o))
   const model = config.find((o): o is SelectOption => o.category === 'model' && isSelect(o))
   const effort = config.find((o) => o.category === 'thought_level' && isSelect(o))
@@ -103,6 +149,10 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   const set: Select = (optionId, value) => {
     setConfigError(null)
+    if (pending) {
+      updatePendingSwitch(sessionId, { values: { ...pending.values, [optionId]: value } })
+      return Promise.resolve(true)
+    }
     return host('sessions.setConfigOption', { sessionId, optionId, value }).then(
       () => true,
       (e: unknown) => {
@@ -120,12 +170,14 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
     if (status === 'ready' && document.activeElement === document.body) box.editor.current?.focus()
   }, [status, focused, box.editor])
 
-  // Both go through the host's queue, which sends at once when the session is free.
+  // Both go through the host's queue, which sends at once when the session is free; a message
+  // that hands the session to another agent goes as that agent's first turn.
   const send = () => {
-    if (canSend || canQueue) queue(false)
+    if (pending && canSend) handOver()
+    else if (canSend || canQueue) queue(false)
   }
 
-  const queue = (steer: boolean) => {
+  const takeContent = () => {
     const taken = box.take()
     const sent = selection && taken.prompt.trim() ? selection : null
     const prompt = sent ? selectionPrompt(taken.prompt, sent) : taken.prompt
@@ -134,6 +186,47 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       ...(prompt.trim() ? [{ type: 'text' as const, text: prompt }] : []),
       ...attachmentContent(taken.held),
     ]
+    return { taken, sent, content }
+  }
+
+  const handOver = () => {
+    if (!pending) return
+    const { taken, sent, content } = takeContent()
+    const options = Object.keys(pending.values).length > 0 ? { options: pending.values } : {}
+    host('sessions.switchAgent', {
+      sessionId,
+      agentId: pending.agentId,
+      content,
+      ...options,
+      ...(pending.summarize ? { summarize: true } : {}),
+    })
+      .then(() => setPendingSwitch(sessionId, null))
+      .catch((reason: unknown) => {
+        if (sent) setPaneSelection(sent)
+        box.restore(taken)(reason)
+      })
+  }
+
+  // Picking a model of another agent makes it the pending one; the session's own agent undoes it.
+  const chooseAgent = (agentId: AgentId, modelValue: string | null) => {
+    setChoosingAgent(false)
+    if (agentId === session.agentId && !mustSwitch) {
+      setPendingSwitch(sessionId, null)
+      const own = session.config.find((o) => o.category === 'model')
+      if (own && modelValue !== null && modelValue !== own.value) void set(own.id, modelValue)
+      return
+    }
+    const entry = useAgentOptionsStore.getState().byId[agentId]
+    const modelId = entry?.config.find((o) => o.category === 'model')?.id
+    setPendingSwitch(sessionId, {
+      agentId,
+      values: modelId && modelValue !== null ? { [modelId]: modelValue } : {},
+      summarize: pending?.summarize ?? false,
+    })
+  }
+
+  const queue = (steer: boolean) => {
+    const { taken, sent, content } = takeContent()
     host('sessions.queue', { sessionId, content })
       .then(({ itemId }) => {
         // Once queued, a failed steer leaves the message in the queue, not lost.
@@ -172,6 +265,10 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
       : nextMode(option.choices, current)
     if (next === undefined || next === current) return true
     stepped.current[option.id] = { from: reported, to: next }
+    if (pending) {
+      void set(option.id, next)
+      return true
+    }
     host('sessions.setConfigOption', { sessionId, optionId: option.id, value: next }).catch(
       (e: unknown) => setError(errorMessage(e)),
     )
@@ -206,20 +303,22 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
 
   const placeholder = starting
     ? t('prompt.placeholder.starting', { agent: agentName })
-    : awaiting
-      ? t('prompt.placeholder.awaiting')
-      : !running && reached?.resetsAt
-        ? t('prompt.placeholder.limitReached', {
-            limit: limitLabel(reached),
-            time: resetTime(reached.resetsAt),
-          })
-        : !running && rejected
-          ? t('prompt.placeholder.denied', { agent: agentName })
-          : running
-            ? steering
-              ? t('prompt.placeholder.running', { keys: steerKeys(sendKey) })
-              : t('prompt.placeholder.runningQueue')
-            : t('prompt.placeholder.ask', { agent: agentName })
+    : mustSwitch && !pending
+      ? t('prompt.placeholder.pickAgent')
+      : awaiting
+        ? t('prompt.placeholder.awaiting')
+        : !running && reached?.resetsAt
+          ? t('prompt.placeholder.limitReached', {
+              limit: limitLabel(reached),
+              time: resetTime(reached.resetsAt),
+            })
+          : !running && rejected
+            ? t('prompt.placeholder.denied', { agent: agentName })
+            : running
+              ? steering
+                ? t('prompt.placeholder.running', { keys: steerKeys(sendKey) })
+                : t('prompt.placeholder.runningQueue')
+              : t('prompt.placeholder.ask', { agent: agentName })
 
   const cache = cacheExpiry(session, agent?.account ?? null)
   const timed = cache?.expiresAt != null ? cache : null
@@ -276,6 +375,18 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
                     />
                   )}
                 </AnimatePresence>
+                <AnimatePresence initial={false}>
+                  {pending && (
+                    <SwitchStrip
+                      key="switch"
+                      agentName={agentName}
+                      config={config}
+                      summarize={pending.summarize}
+                      onSummarize={(on) => updatePendingSwitch(sessionId, { summarize: on })}
+                      {...(mustSwitch ? {} : { onUndo: () => setPendingSwitch(sessionId, null) })}
+                    />
+                  )}
+                </AnimatePresence>
                 {selection && (
                   <SelectionChip selection={selection} onRemove={() => setPaneSelection(null)} />
                 )}
@@ -297,7 +408,17 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
         }
         modelSlot={
           !starting &&
-          (model || effort || switches.length > 0) && (
+          // An agent with no model menu switches from the agent menu itself.
+          (pending || choosingAgent || mustSwitch || !(model || effort || switches.length > 0) ? (
+            <AgentMenu
+              agentId={pending?.agentId ?? (mustSwitch ? null : session.agentId)}
+              values={pending ? pending.values : valuesOf(session.config)}
+              onValues={(optionId, value) => void set(optionId, value)}
+              onChoose={chooseAgent}
+              defaultOpen={choosingAgent}
+              onClose={() => setChoosingAgent(false)}
+            />
+          ) : (
             <ModelMenu
               agentId={session.agentId}
               agentName={agent?.name ?? agentName}
@@ -310,8 +431,18 @@ export function Composer({ session, agentName }: { session: SessionView; agentNa
               account={agent?.account ?? null}
               limits={limits ?? []}
               source={agent?.version ? `${agent.harnessName} ${agent.version}` : null}
+              actions={[
+                {
+                  id: 'switch-agent',
+                  label: t('switchAgent.menu'),
+                  icon: <Glyph icon={ArrowDataTransferHorizontalIcon} />,
+                  disabled: !idle,
+                  ...(idle ? {} : { hint: t('switchAgent.betweenTurns') }),
+                  onSelect: () => setChoosingAgent(true),
+                },
+              ]}
             />
-          )
+          ))
         }
         models={[]}
         voice={false}
