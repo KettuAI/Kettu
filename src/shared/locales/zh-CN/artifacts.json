@@ -71,7 +71,8 @@
     "importFailed": {
       "too_large": "超出了一个 artifact 的上限：每个文件 20 MiB，合计 64 MiB。",
       "too_many": "文件超过 256 个，超出了一个 artifact 的上限。",
-      "no_index": "文件夹里没有 index.html，也就是 artifact 打开时的页面。",
+      "no_index": "文件夹里既没有 index.html（artifact 打开时的页面），也没有 canvas.json（画布文档）。",
+      "bad_canvas": "它的 canvas.json 不是 Kettu 读得懂的画布文档，或者写到了文件夹里没有的页面文件。",
       "bad_name": "里面有文件的名字 artifact 不能用：带有 : 或 ? 这类字符、以 _kettu 开头，或两个名字只差大小写。",
       "not_utf8": "其中的 HTML 不是 UTF-8 文本。",
       "unreadable": "无法读取。",

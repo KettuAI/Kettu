@@ -39,6 +39,37 @@ describe('importing a folder', () => {
     expect(await readImport(site)).toEqual({ failed: 'bad_name' })
   })
 
+  it('takes a canvas document without index.html, checked, and drops the overview Kettu wrote', async () => {
+    rmSync(path.join(site, 'index.html'))
+    const canvas = (pages: unknown[]) =>
+      writeFileSync(path.join(site, 'canvas.json'), JSON.stringify({ pages }))
+    canvas([{ id: 'a', name: 'A', file: 'a.html' }])
+    writeFileSync(path.join(site, 'a.html'), '<p>a')
+    let read = await readImport(site)
+    if ('failed' in read) throw new Error(read.failed)
+    expect(read.files.map((f) => f.path)).toEqual(['a.html', 'canvas.json', 'css/app.css'])
+    expect(read.title).toBe('My site')
+    expect(read.pages).toBe(1)
+
+    // An export of it: the overview goes, a page of its own named index.html stays.
+    const { canvasOverview } = await import('@shared/canvas-overview')
+    const { parseCanvasDoc } = await import('@shared/canvas-doc')
+    const words = { zoomIn: '+', zoomOut: '-', fit: 'Fit', empty: '', lang: 'en' }
+    writeFileSync(
+      path.join(site, 'index.html'),
+      canvasOverview(parseCanvasDoc(JSON.stringify({ pages: [] })), 'Launch plan', words),
+    )
+    read = await readImport(site)
+    if ('failed' in read) throw new Error(read.failed)
+    expect(read.files.map((f) => f.path)).not.toContain('index.html')
+    expect(read.title).toBe('Launch plan')
+
+    canvas([{ id: 'a', name: 'A', file: 'missing.html' }])
+    expect(await readImport(site)).toEqual({ failed: 'bad_canvas' })
+    writeFileSync(path.join(site, 'canvas.json'), '{"pages": 3}')
+    expect(await readImport(site)).toEqual({ failed: 'bad_canvas' })
+  })
+
   it('refuses more files than a version holds', async () => {
     for (let i = 0; i < 256; i++) writeFileSync(path.join(site, `f${i}.txt`), '')
     expect(await readImport(site)).toEqual({ failed: 'too_many' })

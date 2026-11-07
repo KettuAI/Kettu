@@ -16,7 +16,14 @@ export const NO_SESSION = ''
  * what could not be read; `unavailable` when the agent host cannot take it.
  */
 export type ArtifactImportFailure =
-  'too_large' | 'too_many' | 'no_index' | 'bad_name' | 'not_utf8' | 'unreadable' | 'unavailable'
+  | 'too_large'
+  | 'too_many'
+  | 'no_index'
+  | 'bad_canvas'
+  | 'bad_name'
+  | 'not_utf8'
+  | 'unreadable'
+  | 'unavailable'
 
 /**
  * `artifact:import`: the new artifact's id, or why the file or folder could not be imported; null

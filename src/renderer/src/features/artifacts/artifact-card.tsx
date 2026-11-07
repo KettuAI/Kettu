@@ -19,6 +19,7 @@ import { openArtifact } from '@renderer/stores/view'
 import { ArtifactMenuItems } from './artifact-menu'
 import { useArtifactMenu } from './menu-entries'
 import { artifactKind, type ArtifactKind } from './model'
+import { CardFaces } from './presence-faces'
 import { KindSketch } from './sketch'
 import { useThumbnail, type Thumbnail } from './thumbnails'
 import { useInView } from './use-in-view'
@@ -125,7 +126,7 @@ export const ArtifactCard = memo(function ArtifactCard({
           <Preview thumbnail={thumbnail} kind={kind} title={artifact.title} />
           {artifact.editing.length > 0 && (
             <span className="k-art__editing">
-              <i />
+              <CardFaces sessions={artifact.editing} fallback={<i />} />
               {t('card.editing')}
             </span>
           )}

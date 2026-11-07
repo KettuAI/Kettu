@@ -71,7 +71,8 @@
     "importFailed": {
       "too_large": "It is over the most an artifact holds: 20 MiB a file and 64 MiB in all.",
       "too_many": "It has more than 256 files, the most an artifact holds.",
-      "no_index": "The folder has no index.html, the page an artifact opens on.",
+      "no_index": "The folder has neither index.html, the page an artifact opens on, nor canvas.json, a canvas's document.",
+      "bad_canvas": "Its canvas.json is not a canvas document Kettu can read, or names a page file the folder lacks.",
       "bad_name": "A file in it has a name an artifact can't use: one with a character such as : or ?, one starting with _kettu, or two names that differ only in case.",
       "not_utf8": "Its HTML is not UTF-8 text.",
       "unreadable": "It could not be read.",

@@ -297,6 +297,28 @@
   font-weight: 500;
   color: var(--ink);
 }
+.k-art-faces.ui-agc {
+  container-type: normal;
+  display: inline-flex;
+  align-items: center;
+  margin-left: -3px;
+}
+.k-art-faces .ui-agc__face {
+  width: 18px;
+  height: 18px;
+  margin-left: -4px;
+}
+.k-art-faces .ui-agc__face:first-child {
+  margin-left: 0;
+}
+.k-art-faces .ui-agc__face-mark,
+.k-art-faces .ui-agc__face-mark svg {
+  width: 11px;
+  height: 11px;
+}
+.k-art-faces .ui-agc__face-more {
+  font-size: 9px;
+}
 .k-art__editing i {
   width: 6px;
   height: 6px;

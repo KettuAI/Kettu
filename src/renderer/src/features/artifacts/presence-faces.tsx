@@ -1,7 +1,9 @@
 import { useTranslation } from 'react-i18next'
-import { AgentFace } from '@renderer/components/affect/agent-cursors'
+import { useShallow } from 'zustand/react/shallow'
+import { AgentCursorStyles, AgentFace } from '@renderer/components/affect/agent-cursors'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import type { CanvasAgent } from './canvas-editor'
 import type { Presence } from './use-artifact'
 
@@ -45,6 +47,7 @@ export function PresenceFaces({
   }
   return (
     <span className="ui-agc k-av-faces" role="group" aria-label={t('viewer.using')}>
+      <AgentCursorStyles />
       {clients.map((client) => {
         const page = pageName(client.page)
         const where = client.kind === 'host' ? t('board.device.host') : client.name
@@ -83,6 +86,41 @@ export function PresenceFaces({
           )}
           onFollow={() => onFollow(following === agent.sessionId ? null : agent.sessionId)}
         />
+      ))}
+      {more > 0 && <span className="ui-agc__face ui-agc__face-more">{`+${more}`}</span>}
+    </span>
+  )
+}
+
+/** The most faces a card shows. */
+const CARD_FACES = 3
+
+/**
+ * The agents writing an artifact, as a card shows them: the same faces a size smaller, at most
+ * three, and not buttons, since the whole card is one.
+ */
+export function CardFaces({
+  sessions,
+  fallback,
+}: {
+  sessions: readonly string[]
+  /** Shown when this window knows none of the sessions. */
+  fallback: React.ReactNode
+}) {
+  const agents = useSessionsStore(
+    useShallow((s) => sessions.flatMap((id) => (s.byId[id] ? [s.byId[id].agentId] : []))),
+  )
+  if (agents.length === 0) return fallback
+  const more = agents.length - CARD_FACES
+  return (
+    <span className="ui-agc k-art-faces" aria-hidden>
+      <AgentCursorStyles />
+      {agents.slice(0, CARD_FACES).map((agent, i) => (
+        <span key={`${agent}-${i}`} className="ui-agc__face" data-here="">
+          <span className="ui-agc__face-mark">
+            <AgentMark agent={agent} size={11} />
+          </span>
+        </span>
       ))}
       {more > 0 && <span className="ui-agc__face ui-agc__face-more">{`+${more}`}</span>}
     </span>

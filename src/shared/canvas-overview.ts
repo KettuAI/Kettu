@@ -339,6 +339,13 @@ const SCRIPT = `
 })()
 `
 
+const GENERATOR = '<meta name="generator" content="kettu-canvas-overview">'
+
+/** Whether an HTML file is an overview Kettu wrote, which a canvas brought back in leaves out. */
+export function isCanvasOverview(html: string): boolean {
+  return html.includes(GENERATOR)
+}
+
 /**
  * The overview page of a canvas document, in the reader's language for its few words. The pages
  * load from their files beside it, so it goes at the root of the artifact's files.
@@ -354,7 +361,7 @@ export function canvasOverview(
     '\\u003c',
   )
   return (
-    `<!doctype html><html lang="${escapeHtml(words.lang)}"><head><meta charset="utf-8">` +
+    `<!doctype html><html lang="${escapeHtml(words.lang)}"><head><meta charset="utf-8">${GENERATOR}` +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     `<title>${escapeHtml(title)}</title><style>${STYLE}</style></head><body>` +
     `<header><h1>${escapeHtml(title)}</h1><nav role="tablist"></nav><div class="zoom">` +

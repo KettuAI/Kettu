@@ -14,6 +14,8 @@ import {
   VERSION_FILES,
 } from '@shared/artifact-files'
 import { ARTIFACT_TITLE_CHARS, type ArtifactImportFailure } from '@shared/artifacts'
+import { CANVAS_FILE, CanvasError, missingPageFiles, parseCanvasDoc } from '@shared/canvas-doc'
+import { isCanvasOverview } from '@shared/canvas-overview'
 import { countPages } from './pages'
 
 export type ImportRead =
@@ -149,7 +151,9 @@ async function readFolder(root: string): Promise<ImportRead> {
     return { failed: 'unreadable' }
   }
   if (!Array.isArray(listed)) return listed
-  if (!listed.some((f) => f.path === ARTIFACT_ENTRY)) return { failed: 'no_index' }
+  if (!listed.some((f) => f.path === ARTIFACT_ENTRY || f.path === CANVAS_FILE)) {
+    return { failed: 'no_index' }
+  }
   const files: { path: string; data: Uint8Array }[] = []
   let total = 0
   let html = ''
@@ -173,5 +177,20 @@ async function readFolder(root: string): Promise<ImportRead> {
     }
     files.push({ path: at, data: bytes })
   }
-  return { files, title: importTitle(html, path.basename(root)), pages: countPages(html) }
+  const title = importTitle(html, path.basename(root))
+  const canvas = files.find((f) => f.path === CANVAS_FILE)
+  if (!canvas) return { files, title, pages: countPages(html) }
+  // A canvas is checked as any write of it is; the overview Kettu wrote when it went out is not
+  // part of it, while a page of its own may be named index.html.
+  const kept = isCanvasOverview(html) ? files.filter((f) => f.path !== ARTIFACT_ENTRY) : files
+  try {
+    const doc = parseCanvasDoc(text(canvas.data) ?? '')
+    if (missingPageFiles(doc, (at) => kept.some((f) => f.path === at)).length > 0) {
+      return { failed: 'bad_canvas' }
+    }
+    return { files: kept, title, pages: doc.pages.length }
+  } catch (error) {
+    if (error instanceof CanvasError) return { failed: 'bad_canvas' }
+    throw error
+  }
 }
