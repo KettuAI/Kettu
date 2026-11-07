@@ -242,6 +242,9 @@ function gitPath(o: Fields, key: string): string {
   return value
 }
 
+// The pull requests and issues one window shows, at most as many as a request should carry.
+const WATCHED_REFERENCES = 100
+
 // The files of one commit or discard, at most as many as a request should carry.
 const GIT_PATHS = 1_000
 
@@ -1140,6 +1143,19 @@ export function createValidators(platform: Platform): Validators {
       const url = string(fields(params), 'url', URL_CHARS)
       if (githubReferenceOf(url)?.kind !== 'issue') throw invalidParams('url is not a GitHub issue')
       return { url }
+    },
+    'git.watchReferences': (params) => {
+      const value = fields(params).urls
+      if (!Array.isArray(value) || value.length > WATCHED_REFERENCES) {
+        throw invalidParams(`urls must be an array of at most ${WATCHED_REFERENCES} addresses`)
+      }
+      const urls = value.map((url: unknown, index) => {
+        const at = `urls[${index}]`
+        const checked = string({ [at]: url }, at, URL_CHARS)
+        if (!githubReferenceOf(checked)) throw invalidParams(`${at} is not a GitHub reference`)
+        return checked
+      })
+      return { urls }
     },
     'git.avatarUrl': (params) => {
       const login = string(fields(params), 'login', 128)

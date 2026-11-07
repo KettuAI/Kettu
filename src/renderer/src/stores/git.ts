@@ -6,6 +6,7 @@ import {
   type GitHubReference,
   type GitTools,
   type Issue,
+  type IssueLookup,
   type PullRequest,
   type RepositoryVisibility,
 } from '@shared/git'
@@ -128,6 +129,7 @@ export function refreshShownProject(): void {
       .then(receiveGitStatus)
       .catch(() => {})
   }
+  syncReferences(true)
 }
 
 /**
@@ -138,6 +140,7 @@ export function rewatchGit(hostId: string | null = null): void {
   const paths = livePaths
   livePaths = paths.filter((path) => hostOfPath(path) !== hostId)
   showProjects(paths)
+  if (hostId === null) syncReferences(true)
 }
 
 const RETRY_MS = 60_000
@@ -191,17 +194,21 @@ function loadIssue(url: string, fresh = false): Promise<void> {
   const s = useGitStore.getState()
   if (!fresh && (s.issues[url] || s.pullRequestAliases[url])) return Promise.resolve()
   return loadOnce(url, async () => {
-    const found = await host('git.issue', { url })
-    if (found.kind === 'pull') {
-      receivePullRequest(found.pullRequest, url)
-      return
-    }
-    loadedAt.set(url, Date.now())
-    useGitStore.setState((s) => ({
-      issues: { ...s.issues, [url]: found.issue },
-      referenceErrors: without(s.referenceErrors, url),
-    }))
+    receiveReference(url, await host('git.issue', { url }))
   })
+}
+
+/** What the host says a reference now is, read for a request or pushed because it changed. */
+export function receiveReference(url: string, found: IssueLookup): void {
+  if (found.kind === 'pull') {
+    receivePullRequest(found.pullRequest, url)
+    return
+  }
+  loadedAt.set(url, Date.now())
+  useGitStore.setState((s) => ({
+    issues: { ...s.issues, [url]: found.issue },
+    referenceErrors: without(s.referenceErrors, url),
+  }))
 }
 
 /** Loads what a reference names, once; a card asks with `fresh` to read a live one again. */
@@ -232,6 +239,53 @@ function isStale(url: string): boolean {
 function forget(url: string): void {
   loadedAt.delete(url)
   referenceLoads.delete(url)
+}
+
+/** Whether a reference's state is final, so the host need not read it again. */
+export function isReferenceSettled(s: GitStore, ref: GitHubReference): boolean {
+  const pr = s.pullRequests[s.pullRequestAliases[ref.url] ?? ref.url]
+  if (pr) return pr.state === 'merged' || pr.state === 'closed'
+  const issue = ref.kind === 'issue' ? s.issues[ref.url] : undefined
+  return issue !== undefined && issue.state !== 'open'
+}
+
+// The references on screen, counted once for each place that shows one.
+const shownReferences = new Map<string, number>()
+let sentReferences = ''
+let referenceSync: ReturnType<typeof setTimeout> | null = null
+
+/** Tells the host a reference is on screen, so it keeps its state current, until released. */
+export function watchReference(url: string): () => void {
+  shownReferences.set(url, (shownReferences.get(url) ?? 0) + 1)
+  scheduleReferenceSync()
+  return () => {
+    const left = (shownReferences.get(url) ?? 1) - 1
+    if (left > 0) shownReferences.set(url, left)
+    else shownReferences.delete(url)
+    scheduleReferenceSync()
+  }
+}
+
+// Scrolling shows and hides many at once, so one request carries the settled set.
+function scheduleReferenceSync(): void {
+  if (referenceSync !== null) return
+  referenceSync = setTimeout(() => {
+    referenceSync = null
+    syncReferences(false)
+  }, 300)
+}
+
+/**
+ * Sends the shown references to the host, none while the window is hidden. `again` sends them
+ * though they did not change, which makes the host read the stale ones at once: on focus, on
+ * showing the window, and after the host restarted.
+ */
+export function syncReferences(again: boolean): void {
+  const urls = document.visibilityState === 'visible' ? [...shownReferences.keys()] : []
+  const key = urls.join('\n')
+  if (key === sentReferences && (!again || key === '')) return
+  sentReferences = key
+  void host('git.watchReferences', { urls }).catch(() => {})
 }
 
 const avatarLoads = new Set<string>()

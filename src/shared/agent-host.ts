@@ -706,6 +706,7 @@ export interface HostContract {
   'git.pullRequest': { params: { url: string }; result: PullRequest }
   // A github.com issue URL, which may turn out to be a pull request.
   'git.issue': { params: { url: string }; result: IssueLookup }
+  'git.watchReferences': { params: { urls: string[] }; result: void }
   // A chip's author; null when GitHub's avatar host has no picture for the login.
   'git.avatarUrl': { params: { login: string }; result: string | null }
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
@@ -1019,6 +1020,7 @@ export const HOST_METHODS = [
   'git.discardChanges',
   'git.pullRequest',
   'git.issue',
+  'git.watchReferences',
   'git.avatarUrl',
   'git.currentPullRequest',
   'git.tools',
@@ -1092,6 +1094,7 @@ export type HostEvent =
   | { type: 'environment.changed'; info: EnvironmentInfo }
   | { type: 'git.changed'; status: GitStatus }
   | { type: 'git.pr'; projectPath: string; pr: PullRequest | null }
+  | { type: 'git.reference'; url: string; found: IssueLookup } // to the ports watching `url`
   | { type: 'git.tools'; tools: GitTools }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'usage.status'; status: UsageStatus }

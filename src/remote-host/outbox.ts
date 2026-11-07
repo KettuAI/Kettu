@@ -402,6 +402,8 @@ function stateKey(value: unknown): string | null {
       return idKey('git', of('status').projectPath)
     case 'git.pr':
       return idKey('git.pr', fields.projectPath)
+    case 'git.reference':
+      return idKey('git.reference', fields.url)
     case 'artifacts.version':
     case 'artifacts.activity':
     case 'artifacts.comments':

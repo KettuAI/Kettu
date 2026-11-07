@@ -28,7 +28,14 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { loadAvatar, loadReference, retryReference, useGitStore } from '@renderer/stores/git'
+import {
+  isReferenceSettled,
+  loadAvatar,
+  loadReference,
+  retryReference,
+  useGitStore,
+  watchReference,
+} from '@renderer/stores/git'
 import { CopyButton } from './copy-button'
 import {
   shortReference,
@@ -104,25 +111,32 @@ function clip(title: string): string {
   return chars.length > TITLE_CHARS ? chars.slice(0, TITLE_CHARS - 1).join('') + '…' : title
 }
 
-/** Loads a reference's details the first time it scrolls into view. */
-function useLoadWhenSeen(ref: GitHubReference) {
+/**
+ * Loads a reference's details the first time it scrolls into view, and has the host keep an open
+ * one current for as long as it stays in view.
+ */
+function useReferenceOnScreen(ref: GitHubReference) {
   const target = useRef<HTMLSpanElement>(null)
   const [seen, setSeen] = useState(false)
+  const [inView, setInView] = useState(false)
+  const settled = useGitStore((s) => isReferenceSettled(s, ref))
   useEffect(() => {
     const el = target.current
-    if (!el || seen) return
+    if (!el) return
     const observer = new IntersectionObserver((entries) => {
-      if (entries.some((e) => e.isIntersecting)) {
-        setSeen(true)
-        observer.disconnect()
-      }
+      const latest = entries.at(-1)
+      if (!latest) return
+      setInView(latest.isIntersecting)
+      if (latest.isIntersecting) setSeen(true)
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [seen])
+  }, [])
   useEffect(() => {
     if (seen) loadReference(ref)
   }, [seen, ref])
+  const { url } = ref
+  useEffect(() => (inView && !settled ? watchReference(url) : undefined), [inView, settled, url])
   return target
 }
 
@@ -139,7 +153,7 @@ export function ReferenceText({
   bare: boolean
   children: ReactNode
 }) {
-  const target = useLoadWhenSeen(reference)
+  const target = useReferenceOnScreen(reference)
   const { data } = useReferenceData(reference)
   const repo = useProjectRepository()
   const title = bare ? titleOf(data) : null

@@ -6804,11 +6804,17 @@ export class SessionManager {
     for (const summary of this.list(projectPath)) this.touch(summary.id)
   }
 
-  /** A row's pull request gh had not described yet has been read. */
+  /** A pull request was read for the first time or changed: the rows that show it refresh. */
   pullRequestLoaded(url: string): void {
+    const git = this.deps.git()
     for (const id of new Set([...this.records.keys(), ...this.live.keys()])) {
       const record = this.live.get(id)?.record ?? this.records.get(id)
-      if (record?.pullRequests?.includes(url)) this.touch(id)
+      if (!record) continue
+      const ofBranch =
+        record.branch && git
+          ? git.branchPullRequests(record.projectPath).get(record.branch)?.url === url
+          : false
+      if (ofBranch || record.pullRequests?.includes(url)) this.touch(id)
     }
   }
 

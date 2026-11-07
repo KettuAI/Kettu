@@ -705,7 +705,10 @@ export class AgentHost {
       ),
       git.onTools((tools) => this.broadcast({ type: 'git.tools', tools })),
       git.onBranchPullRequests((projectPath) => this.sessions.pullRequestsChanged(projectPath)),
-      git.onPullRequestLoaded((url) => this.sessions.pullRequestLoaded(url)),
+      git.onReferenceChanged((url, found) => {
+        this.hub.send(git.referenceWatchers(url), { type: 'git.reference', url, found })
+        if (found.kind === 'pull') this.sessions.pullRequestLoaded(found.pullRequest.url)
+      }),
       git.onSessionEvents((sessionId, events) => this.sessions.gitEvents(sessionId, events)),
     ]
   }
@@ -1415,6 +1418,9 @@ export class AgentHost {
         this.gitProjectCall(projectPath, (g, p) => g.discardChanges(p, paths)),
       'git.pullRequest': ({ url }) => this.gitCall((g) => g.pullRequest(url)),
       'git.issue': ({ url }) => this.gitCall((g) => g.issue(url)),
+      'git.watchReferences': ({ urls }, { portId }) => {
+        if (this.hub.has(portId)) this.requireGit().watchReferences(portId, urls)
+      },
       'git.avatarUrl': ({ login }) => this.gitCall((g) => g.avatarUrl(login)),
       'git.currentPullRequest': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),

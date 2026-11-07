@@ -29,8 +29,10 @@ import {
   loadGitTools,
   receiveCurrentPr,
   receiveGitStatus,
+  receiveReference,
   refreshShownProject,
   rewatchGit,
+  syncReferences,
   useGitStore,
 } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -96,6 +98,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       return
     case 'git.pr':
       receiveCurrentPr(event.projectPath, event.pr)
+      return
+    case 'git.reference':
+      receiveReference(event.url, event.found)
       return
     case 'agent.status':
       if (hostId === null) useAgentsStore.getState().setOne(event.status)
@@ -295,5 +300,6 @@ export function bootstrap(): Promise<unknown> {
   void Promise.allSettled([settingsReady, sessionState]).then(finishLaunch)
 
   window.addEventListener('focus', refreshShownProject)
+  document.addEventListener('visibilitychange', () => syncReferences(true))
   return Promise.allSettled([settingsReady, themesReady])
 }
