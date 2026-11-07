@@ -65,6 +65,8 @@ export type ContextWindowProps = {
   className?: string;
   /** Items can only be looked at, not removed */
   readOnly?: boolean;
+  /** The head always shows the whole window; a hovered part shows only in the last row */
+  steadyHead?: boolean;
   labels?: Partial<ContextLabels>;
 };
 
@@ -306,6 +308,7 @@ export function ContextWindow({
   columns = 36,
   className,
   readOnly,
+  steadyHead,
   labels: ownLabels,
 }: ContextWindowProps) {
   const labels = { ...defaultLabels, ...ownLabels };
@@ -359,11 +362,12 @@ export function ContextWindow({
   const share = cap > 0 ? used / cap : 0;
   const level = share >= 0.95 ? "full" : share >= warnAt ? "warn" : "ok";
   const hotPart = list.find((p) => p.id === hot) ?? null;
+  const headPart = steadyHead ? null : hotPart;
 
   // One tween for the total, the big figure (total or hovered part) and every row
   const target: Record<string, number> = {
     "#used": used,
-    "#figure": hotPart ? hotPart.tokens : used,
+    "#figure": headPart ? headPart.tokens : used,
   };
   for (const p of list) target[p.id] = p.tokens;
   const shown = useRolling(target, 640);
@@ -546,7 +550,7 @@ export function ContextWindow({
             {tokens(shown["#figure"] ?? used)}
           </span>
           <span className="ui-cwc__of" aria-hidden="true">
-            <Swap id={hotPart ? hotPart.id : "total"}>{hotPart ? hotPart.label : labels.of(plain(cap))}</Swap>
+            <Swap id={headPart ? headPart.id : "total"}>{headPart ? headPart.label : labels.of(plain(cap))}</Swap>
           </span>
           <span className="ui-cwc__pill" aria-hidden="true">
             {cap > 0 ? Math.round(((shown["#used"] ?? used) / cap) * 100) : 0}%

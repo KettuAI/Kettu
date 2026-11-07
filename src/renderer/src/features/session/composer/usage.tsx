@@ -502,6 +502,7 @@ function ContextPart({
           model={model ?? undefined}
           modelIcon={model ? <AgentMark agent={agentId} size={12} /> : undefined}
           readOnly
+          steadyHead
           labels={{
             free: (n) => t('usage.window.free', { n }),
             left: (n) => t('usage.window.left', { n }),
