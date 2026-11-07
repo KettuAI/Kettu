@@ -2,28 +2,6 @@
    theme's tokens, so they follow the chosen theme and color mode. The doubled class outranks the
    component's own rules, which it injects after this sheet. */
 
-.ui-pr.ui-pr {
-  --ui-pr-tray: var(--bg-subtle);
-  --ui-pr-card: var(--bg-surface);
-  --ui-pr-ink: var(--text-primary);
-  --ui-pr-text: var(--text-secondary);
-  --ui-pr-muted: var(--text-tertiary);
-  --ui-pr-faint: var(--text-disabled);
-  --ui-pr-line: var(--border-subtle);
-  --ui-pr-chip: var(--bg-subtle);
-  --ui-pr-track: var(--border-default);
-  --ui-pr-accent: var(--control-on);
-  --ui-pr-ok-bg: var(--success-tint);
-  --ui-pr-ok-fg: var(--success);
-  --ui-pr-warn-bg: var(--warning-tint);
-  --ui-pr-warn-fg: var(--warning);
-  --ui-pr-danger-bg: var(--danger-tint);
-  --ui-pr-danger-fg: var(--danger);
-  --ui-pr-primary: var(--primary);
-  --ui-pr-on-primary: var(--primary-foreground);
-  --ui-pr-ring: color-mix(in srgb, var(--focus) 50%, transparent);
-}
-
 .ui-ts.ui-ts {
   --ui-ts-card: var(--bg-surface);
   --ui-ts-line: var(--border-subtle);
@@ -37,60 +15,6 @@
   --ui-ts-success: var(--success);
   --ui-ts-danger: var(--danger);
   --ui-ts-focus: color-mix(in srgb, var(--focus) 50%, transparent);
-}
-
-.ui-mdp.ui-mdp {
-  --ui-mdp-tray: var(--bg-subtle);
-  --ui-mdp-card: var(--bg-surface);
-  --ui-mdp-line: var(--border-subtle);
-  --ui-mdp-ink: var(--text-primary);
-  --ui-mdp-text: var(--text-secondary);
-  --ui-mdp-muted: var(--text-tertiary);
-  --ui-mdp-well: var(--bg-subtle);
-  --ui-mdp-bar: var(--border-strong);
-  --ui-mdp-bar-off: var(--border-subtle);
-  --ui-mdp-switch: var(--border-strong);
-  --ui-mdp-knob: var(--switch-thumb);
-  --ui-mdp-focus: color-mix(in srgb, var(--focus) 50%, transparent);
-}
-
-.ui-cw.ui-cw {
-  --ui-cw-tray: var(--bg-subtle);
-  --ui-cw-card: var(--bg-surface);
-  --ui-cw-line: var(--border-subtle);
-  --ui-cw-ink: var(--text-primary);
-  --ui-cw-text: var(--text-secondary);
-  --ui-cw-muted: var(--text-tertiary);
-  --ui-cw-well: var(--bg-subtle);
-  --ui-cw-free: var(--border-subtle);
-  --ui-cw-warn: var(--warning);
-  --ui-cw-warn-bg: var(--warning-tint);
-  --ui-cw-full: var(--danger);
-  --ui-cw-full-bg: var(--danger-tint);
-  --ui-cw-ok: var(--success);
-  --ui-cw-ok-bg: var(--success-tint);
-  --ui-cw-focus: color-mix(in srgb, var(--focus) 50%, transparent);
-}
-
-.ui-tc.ui-tc,
-.ui-tc-group.ui-tc-group {
-  --ui-tc-ink: var(--text-primary);
-  --ui-tc-text: var(--text-secondary);
-  --ui-tc-muted: var(--text-tertiary);
-  --ui-tc-bg: var(--bg-surface);
-  --ui-tc-line: var(--border-subtle);
-  --ui-tc-hover: var(--bg-hover);
-  --ui-tc-tile: var(--bg-subtle);
-  --ui-tc-code: var(--bg-code-block);
-  --ui-tc-ring: var(--bg-surface);
-  --ui-tc-red: var(--danger);
-  --ui-tc-red-bg: var(--danger-tint);
-  --ui-tc-red-line: var(--danger-border);
-  --ui-tc-key: var(--text-primary);
-  --ui-tc-str: var(--syntax-string);
-  --ui-tc-num: var(--syntax-number);
-  --ui-tc-lit: var(--syntax-keyword);
-  --ui-tc-focus: color-mix(in srgb, var(--focus) 50%, transparent);
 }
 
 /* shell: the window frame on AffectUI's App Shell (components/affect/app-shell.tsx). Its variables
@@ -4635,4 +4559,498 @@
   [role='option']:is([data-selected], [aria-selected='true']) {
   font-weight: 500;
   color: var(--composer-ink);
+}
+
+/* themes: under an installed theme (data-installed-theme on <html>, see tokens.css), affectUI's
+   components take the theme's tokens instead of the values they ship with, which the built-in
+   theme keeps as the hi-fi draws them. Their white sheens stay. */
+[data-installed-theme] .ui-stc {
+  --ui-stc-card: var(--shell-card);
+  --ui-stc-strong: var(--text-primary);
+  --ui-stc-ink: var(--text-primary);
+  --ui-stc-text: var(--text-secondary);
+  --ui-stc-muted: var(--text-tertiary);
+  --ui-stc-faint: var(--text-disabled);
+  --ui-stc-icon: var(--icon-default);
+  --ui-stc-line: var(--border-subtle);
+  --ui-stc-rail: var(--border-strong);
+  --ui-stc-wash: var(--bg-hover);
+  --ui-stc-fill: var(--bg-selected);
+  --ui-stc-solid: var(--primary-from);
+  --ui-stc-on-solid: var(--primary-foreground);
+  --ui-stc-accent: var(--control-on);
+  --ui-stc-accent-bg: var(--control-on-tint);
+  --ui-stc-amber: var(--warning);
+  --ui-stc-green: var(--success);
+  --ui-stc-focus: var(--focus-ring-color);
+  --ui-stc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-ansc {
+  --ui-ansc-card: var(--shell-card);
+  --ui-ansc-ink: var(--text-primary);
+  --ui-ansc-strong: var(--text-primary);
+  --ui-ansc-text: var(--text-secondary);
+  --ui-ansc-muted: var(--text-tertiary);
+  --ui-ansc-faint: var(--text-disabled);
+  --ui-ansc-icon: var(--icon-default);
+  --ui-ansc-line: var(--border-subtle);
+  --ui-ansc-fill: var(--bg-selected);
+  --ui-ansc-fill-strong: var(--pressed-hover);
+  --ui-ansc-wash: var(--bg-hover);
+  --ui-ansc-accent: var(--control-on);
+  --ui-ansc-ok: var(--success);
+  --ui-ansc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-ansc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-ansc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-apc {
+  --ui-apc-tray: var(--bg-subtle);
+  --ui-apc-bg: var(--shell-card);
+  --ui-apc-ink: var(--text-primary);
+  --ui-apc-text: var(--text-secondary);
+  --ui-apc-muted: var(--text-tertiary);
+  --ui-apc-line: var(--border-subtle);
+  --ui-apc-soft: var(--shell-subtle);
+  --ui-apc-tile: var(--bg-subtle);
+  --ui-apc-hover: var(--bg-selected);
+  --ui-apc-primary: var(--primary-from);
+  --ui-apc-check: var(--control-on);
+  --ui-apc-check-ink: var(--on-fill);
+  --ui-apc-primary-hover: var(--primary-hover-from);
+  --ui-apc-primary-ink: var(--primary-foreground);
+  --ui-apc-primary-kbd: color-mix(in srgb, var(--primary-foreground) 14%, transparent);
+  --ui-apc-primary-kbd-ink: color-mix(in srgb, var(--primary-foreground) 70%, transparent);
+  --ui-apc-kbd: var(--bg-hover);
+  --ui-apc-box: var(--border-strong);
+  --ui-apc-box-hover: var(--text-disabled);
+  --ui-apc-ring: var(--focus-ring-color);
+  --ui-apc-timer-low: var(--warning);
+  --ui-apc-low-bg: var(--bg-subtle);
+  --ui-apc-low-ink: var(--text-secondary);
+  --ui-apc-med-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --ui-apc-med-ink: var(--warning);
+  --ui-apc-high-bg: color-mix(in srgb, var(--danger) 10%, transparent);
+  --ui-apc-high-ink: var(--danger);
+  --ui-apc-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-apc-ok-ink: var(--success);
+  --ui-apc-no-bg: var(--bg-subtle);
+  --ui-apc-no-ink: var(--text-secondary);
+}
+[data-installed-theme] .ui-buttonc {
+  --ui-btnc-title: var(--text-primary);
+  --ui-btnc-ink: var(--text-primary);
+  --ui-btnc-muted: var(--text-tertiary);
+  --ui-btnc-icon: var(--icon-default);
+  --ui-btnc-solid: var(--primary-from);
+  --ui-btnc-solid-hover: var(--primary-hover-from);
+  --ui-btnc-on-solid: var(--primary-foreground);
+  --ui-btnc-surface: var(--shell-card);
+  --ui-btnc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-btnc-shadow-hover: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --ui-btnc-wash: var(--bg-hover);
+  --ui-btnc-danger: var(--danger);
+  --ui-btnc-danger-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-btnc-danger-bg-hover: color-mix(in srgb, var(--danger) 12%, transparent);
+  --ui-btnc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-ccc {
+  --ui-ccc-card: var(--shell-card);
+  --ui-ccc-strong: var(--text-primary);
+  --ui-ccc-ink: var(--text-primary);
+  --ui-ccc-text: var(--text-secondary);
+  --ui-ccc-muted: var(--text-tertiary);
+  --ui-ccc-faint: var(--text-disabled);
+  --ui-ccc-hint: var(--text-placeholder);
+  --ui-ccc-icon: var(--icon-default);
+  --ui-ccc-line: var(--border-subtle);
+  --ui-ccc-fill: var(--bg-selected);
+  --ui-ccc-wash: var(--bg-hover);
+  --ui-ccc-tray: light-dark(var(--bg-subtle), var(--shell-subtle));
+  --ui-ccc-tray-hover: var(--bg-hover);
+  --ui-ccc-solid: var(--primary-from);
+  --ui-ccc-on-solid: var(--primary-foreground);
+  --ui-ccc-accent: var(--control-on);
+  --ui-ccc-alert: var(--danger);
+  --ui-ccc-alert-wash: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-ccc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-ccc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-ccc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-cmc {
+  --ui-cmc-card: var(--shell-card);
+  --ui-cmc-ink: var(--text-primary);
+  --ui-cmc-strong: var(--text-primary);
+  --ui-cmc-text: var(--text-secondary);
+  --ui-cmc-muted: var(--text-tertiary);
+  --ui-cmc-faint: var(--text-disabled);
+  --ui-cmc-icon: var(--icon-default);
+  --ui-cmc-line: var(--border-subtle);
+  --ui-cmc-line-strong: var(--border-default);
+  --ui-cmc-active: var(--bg-selected);
+  --ui-cmc-tile: var(--bg-raised);
+  --ui-cmc-tile-ring: var(--border-default);
+  --ui-cmc-mark: var(--match);
+  --ui-cmc-accent: var(--control-on);
+  --ui-cmc-ok: var(--success);
+  --ui-cmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-cbc {
+  --ui-cbc-card: var(--shell-card);
+  --ui-cbc-ink: var(--text-primary);
+  --ui-cbc-strong: var(--text-primary);
+  --ui-cbc-text: var(--text-secondary);
+  --ui-cbc-muted: var(--text-tertiary);
+  --ui-cbc-faint: var(--text-disabled);
+  --ui-cbc-line: var(--border-subtle);
+  --ui-cbc-wash: var(--bg-hover);
+  --ui-cbc-fill: var(--bg-selected);
+  --ui-cbc-up: var(--success);
+  --ui-cbc-up-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-cbc-down: var(--danger);
+  --ui-cbc-down-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-cbc-c1: color-mix(in srgb, var(--context-1) 76.5%, transparent);
+  --ui-cbc-c2: color-mix(in srgb, var(--context-1) 50%, transparent);
+  --ui-cbc-c3: color-mix(in srgb, var(--context-1) 32%, transparent);
+  --ui-cbc-c4: color-mix(in srgb, var(--context-1) 18%, transparent);
+  --ui-cbc-c5: var(--border-strong);
+  --ui-cbc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-cbc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-cwc {
+  --ui-cwc-card: var(--shell-card);
+  --ui-cwc-strong: var(--text-primary);
+  --ui-cwc-ink: var(--text-primary);
+  --ui-cwc-text: var(--text-secondary);
+  --ui-cwc-muted: var(--text-tertiary);
+  --ui-cwc-faint: var(--text-disabled);
+  --ui-cwc-icon: var(--icon-default);
+  --ui-cwc-line: var(--border-subtle);
+  --ui-cwc-fill: var(--bg-selected);
+  --ui-cwc-wash: var(--bg-hover);
+  --ui-cwc-free: var(--border-subtle);
+  --ui-cwc-c1: var(--context-1);
+  --ui-cwc-c2: var(--context-2);
+  --ui-cwc-c3: var(--context-3);
+  --ui-cwc-c4: var(--context-4);
+  --ui-cwc-c5: var(--context-5);
+  --ui-cwc-c6: var(--context-6);
+  --ui-cwc-accent: var(--control-on);
+  --ui-cwc-warn: var(--warning);
+  --ui-cwc-warn-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --ui-cwc-full: var(--danger);
+  --ui-cwc-full-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-cwc-ok: var(--success);
+  --ui-cwc-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-cwc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-cwc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-drpc {
+  --ui-drpc-card: var(--shell-card);
+  --ui-drpc-ink: var(--text-primary);
+  --ui-drpc-strong: var(--text-primary);
+  --ui-drpc-text: var(--text-secondary);
+  --ui-drpc-muted: var(--text-tertiary);
+  --ui-drpc-faint: var(--text-disabled);
+  --ui-drpc-icon: var(--icon-default);
+  --ui-drpc-line: var(--border-subtle);
+  --ui-drpc-wash: var(--bg-hover);
+  --ui-drpc-fill: var(--bg-selected);
+  --ui-drpc-fill-strong: var(--pressed-hover);
+  --ui-drpc-chip: var(--primary-from);
+  --ui-drpc-chip-hover: var(--primary-hover-from);
+  --ui-drpc-on-chip: var(--primary-foreground);
+  --ui-drpc-band: var(--bg-selected);
+  --ui-drpc-band-preview: var(--bg-hover);
+  --ui-drpc-compare: var(--control-on-tint);
+  --ui-drpc-compare-edge: color-mix(in srgb, var(--control-on) 40%, transparent);
+  --ui-drpc-accent: var(--control-on);
+  --ui-drpc-today-on-chip: var(--control-on);
+  --ui-drpc-focus: var(--focus-ring-color);
+  --ui-drpc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-drpc-shadow-hover: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --ui-drpc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+}
+[data-installed-theme] .ui-xcc {
+  --ui-xcc-card: var(--shell-card);
+  --ui-xcc-ink: var(--text-primary);
+  --ui-xcc-strong: var(--text-primary);
+  --ui-xcc-text: var(--text-secondary);
+  --ui-xcc-muted: var(--text-tertiary);
+  --ui-xcc-faint: var(--text-disabled);
+  --ui-xcc-icon: var(--icon-default);
+  --ui-xcc-line: var(--border-subtle);
+  --ui-xcc-fill: var(--bg-selected);
+  --ui-xcc-wash: var(--bg-hover);
+  --ui-xcc-track: var(--border-subtle);
+  --ui-xcc-pick: var(--control-on-tint);
+  --ui-xcc-pick-line: color-mix(in srgb, var(--control-on) 40%, transparent);
+  --ui-xcc-tile-line: var(--border-default);
+  --ui-xcc-primary: var(--primary-from);
+  --ui-xcc-on-primary: var(--primary-foreground);
+  --ui-xcc-c0: var(--border-strong);
+  --ui-xcc-c1: var(--context-1);
+  --ui-xcc-c2: var(--context-2);
+  --ui-xcc-c3: var(--context-3);
+  --ui-xcc-c4: var(--context-4);
+  --ui-xcc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-xcc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-xcc [data-tone='red'] {
+  --ui-xcc-tag: var(--danger);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='amber'] {
+  --ui-xcc-tag: var(--warning);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--warning) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='green'] {
+  --ui-xcc-tag: var(--success);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--success) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='blue'] {
+  --ui-xcc-tag: var(--context-1);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--context-1) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='violet'] {
+  --ui-xcc-tag: var(--merged);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--merged) 10%, transparent);
+}
+[data-installed-theme] .ui-xcc [data-tone='gray'] {
+  --ui-xcc-tag: var(--text-secondary);
+  --ui-xcc-tag-bg: color-mix(in srgb, var(--text-secondary) 10%, transparent);
+}
+[data-installed-theme] .ui-fmc {
+  --ui-fmc-card: var(--shell-card);
+  --ui-fmc-ink: var(--text-primary);
+  --ui-fmc-strong: var(--text-primary);
+  --ui-fmc-text: var(--text-secondary);
+  --ui-fmc-muted: var(--text-tertiary);
+  --ui-fmc-faint: var(--text-disabled);
+  --ui-fmc-icon: var(--icon-default);
+  --ui-fmc-line: var(--border-subtle);
+  --ui-fmc-fill: var(--bg-selected);
+  --ui-fmc-fill-strong: var(--pressed-hover);
+  --ui-fmc-wash: var(--bg-hover);
+  --ui-fmc-box-ring: var(--border-strong);
+  --ui-fmc-accent: var(--control-on);
+  --ui-fmc-check: var(--control-on);
+  --ui-fmc-focus: var(--focus-ring-color);
+  --ui-fmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-kpic {
+  --ui-kpic-card: var(--shell-card);
+  --ui-kpic-pop: var(--bg-surface);
+  --ui-kpic-ink: var(--text-primary);
+  --ui-kpic-strong: var(--text-primary);
+  --ui-kpic-text: var(--text-secondary);
+  --ui-kpic-muted: var(--text-tertiary);
+  --ui-kpic-line: var(--border-subtle);
+  --ui-kpic-grid: var(--border-subtle);
+  --ui-kpic-guide: var(--border-default);
+  --ui-kpic-up: var(--success);
+  --ui-kpic-up-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-kpic-down: var(--danger);
+  --ui-kpic-down-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-kpic-focus: var(--focus-ring-color);
+  --ui-kpic-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-kpic-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+}
+[data-installed-theme] .ui-mac {
+  --ui-mac-card: var(--shell-card);
+  --ui-mac-strong: var(--text-primary);
+  --ui-mac-ink: var(--text-primary);
+  --ui-mac-text: var(--text-secondary);
+  --ui-mac-muted: var(--text-tertiary);
+  --ui-mac-faint: var(--text-disabled);
+  --ui-mac-icon: var(--icon-default);
+  --ui-mac-line: var(--border-subtle);
+  --ui-mac-fill: var(--bg-selected);
+  --ui-mac-wash: var(--bg-hover);
+  --ui-mac-solid: var(--primary-from);
+  --ui-mac-solid-hover: var(--primary-hover-from);
+  --ui-mac-on-solid: var(--primary-foreground);
+  --ui-mac-accent: var(--control-on);
+  --ui-mac-ok: var(--success);
+  --ui-mac-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-mac-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-mac-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-mac-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-mdpc {
+  --ui-mdpc-card: var(--shell-card);
+  --ui-mdpc-strong: var(--text-primary);
+  --ui-mdpc-ink: var(--text-primary);
+  --ui-mdpc-text: var(--text-secondary);
+  --ui-mdpc-muted: var(--text-tertiary);
+  --ui-mdpc-faint: var(--text-disabled);
+  --ui-mdpc-icon: var(--icon-default);
+  --ui-mdpc-line: var(--border-subtle);
+  --ui-mdpc-line-strong: var(--border-default);
+  --ui-mdpc-fill: var(--bg-selected);
+  --ui-mdpc-wash: var(--bg-hover);
+  --ui-mdpc-bar: var(--border-strong);
+  --ui-mdpc-bar-off: var(--border-subtle);
+  --ui-mdpc-switch: var(--track);
+  --ui-mdpc-knob: var(--switch-thumb);
+  --ui-mdpc-accent: var(--control-on);
+  --ui-mdpc-focus: var(--focus-ring-color);
+  --ui-mdpc-shadow-tile: 0 0 0 0.5px var(--border-default), var(--elevation-card);
+  --ui-mdpc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+}
+[data-installed-theme] .ui-prc {
+  --ui-prc-card: var(--shell-card);
+  --ui-prc-strong: var(--text-primary);
+  --ui-prc-ink: var(--text-primary);
+  --ui-prc-text: var(--text-secondary);
+  --ui-prc-muted: var(--text-tertiary);
+  --ui-prc-faint: var(--text-disabled);
+  --ui-prc-icon: var(--icon-default);
+  --ui-prc-line: var(--border-subtle);
+  --ui-prc-wash: var(--bg-hover);
+  --ui-prc-fill: var(--bg-selected);
+  --ui-prc-accent: var(--control-on);
+  --ui-prc-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-prc-ok-fg: var(--success);
+  --ui-prc-warn-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --ui-prc-warn-fg: var(--warning);
+  --ui-prc-danger-bg: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-prc-danger-fg: var(--danger);
+  --ui-prc-primary: var(--primary-from);
+  --ui-prc-on-primary: var(--primary-foreground);
+  --ui-prc-focus: var(--focus-ring-color);
+  --ui-prc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-pmc {
+  --ui-pmc-card: var(--shell-card);
+  --ui-pmc-strong: var(--text-primary);
+  --ui-pmc-ink: var(--text-primary);
+  --ui-pmc-text: var(--text-secondary);
+  --ui-pmc-muted: var(--text-tertiary);
+  --ui-pmc-faint: var(--text-disabled);
+  --ui-pmc-icon: var(--icon-default);
+  --ui-pmc-line: var(--border-subtle);
+  --ui-pmc-wash: var(--bg-hover);
+  --ui-pmc-hover: var(--bg-selected);
+  --ui-pmc-track: var(--bg-selected);
+  --ui-pmc-accent: var(--control-on);
+  --ui-pmc-focus: var(--focus-ring-color);
+  --ui-pmc-badge: var(--danger);
+  --ui-pmc-badge-wash: color-mix(in srgb, var(--danger) 8%, transparent);
+  --ui-pmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-segc {
+  --ui-segc-ink: var(--text-primary);
+  --ui-segc-text: var(--text-secondary);
+  --ui-segc-hover-text: var(--text-primary);
+  --ui-segc-line: var(--border-subtle);
+  --ui-segc-wash: var(--bg-hover);
+  --ui-segc-fill: var(--bg-selected);
+  --ui-segc-track: var(--bg-hover);
+  --ui-segc-card: var(--bg-raised);
+  --ui-segc-card-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-segc-accent: var(--control-on);
+  --ui-segc-accent-soft: var(--control-on-tint);
+  --ui-segc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-sgc {
+  --ui-sgc-card: var(--shell-card);
+  --ui-sgc-strong: var(--text-primary);
+  --ui-sgc-ink: var(--text-primary);
+  --ui-sgc-text: var(--text-secondary);
+  --ui-sgc-muted: var(--text-tertiary);
+  --ui-sgc-faint: var(--text-disabled);
+  --ui-sgc-icon: var(--icon-default);
+  --ui-sgc-line: var(--border-subtle);
+  --ui-sgc-fill: var(--bg-selected);
+  --ui-sgc-ring: var(--border-strong);
+  --ui-sgc-wash: var(--bg-hover);
+  --ui-sgc-open: var(--bg-hover);
+  --ui-sgc-accent: var(--control-on);
+  --ui-sgc-on-accent: var(--on-fill);
+  --ui-sgc-focus: var(--focus-ring-color);
+  --ui-sgc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-thinkc {
+  --ui-tkc-card: var(--shell-card);
+  --ui-tkc-ink: var(--text-primary);
+  --ui-tkc-strong: var(--text-primary);
+  --ui-tkc-text: var(--text-secondary);
+  --ui-tkc-muted: var(--text-tertiary);
+  --ui-tkc-faint: var(--text-disabled);
+  --ui-tkc-icon: var(--icon-default);
+  --ui-tkc-line: var(--border-subtle);
+  --ui-tkc-rail: var(--border-subtle);
+  --ui-tkc-fill: var(--bg-selected);
+  --ui-tkc-wash: var(--bg-hover);
+  --ui-tkc-accent: var(--control-on);
+  --ui-tkc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-tkc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+  --ui-tkc-ring: 0 0 0 0.5px var(--border-default);
+  --ui-tkc-focus: var(--focus-ring-color);
+}
+[data-installed-theme] .ui-tcc,
+[data-installed-theme] .ui-tcc-group {
+  --ui-tcc-card: var(--shell-card);
+  --ui-tcc-strong: var(--text-primary);
+  --ui-tcc-ink: var(--text-primary);
+  --ui-tcc-text: var(--text-secondary);
+  --ui-tcc-muted: var(--text-tertiary);
+  --ui-tcc-faint: var(--text-disabled);
+  --ui-tcc-icon: var(--icon-default);
+  --ui-tcc-line: var(--border-subtle);
+  --ui-tcc-wash: var(--bg-hover);
+  --ui-tcc-wash-big: color-mix(in srgb, var(--bg-hover) 40%, transparent);
+  --ui-tcc-code: var(--bg-code-block);
+  --ui-tcc-accent: var(--control-on);
+  --ui-tcc-red: var(--danger);
+  --ui-tcc-red-bg: color-mix(in srgb, var(--danger) 5%, transparent);
+  --ui-tcc-red-line: color-mix(in srgb, var(--danger) 16%, transparent);
+  --ui-tcc-key: var(--text-primary);
+  --ui-tcc-str: var(--syntax-string);
+  --ui-tcc-num: var(--syntax-number);
+  --ui-tcc-lit: var(--syntax-keyword);
+  --ui-tcc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --ui-tcc-focus: var(--focus-ring-color);
+}
+/* What the components draw in fixed colors outside their variables. */
+[data-installed-theme] .ui-as-menu__item[data-danger],
+[data-installed-theme] .ui-as-menu__item[data-danger] > svg {
+  color: var(--danger);
+}
+[data-installed-theme] .ui-sg-danger:not(.ui-sg-danger--solid) {
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--danger);
+}
+[data-installed-theme] .ui-sg-danger:not(.ui-sg-danger--solid):hover {
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
+}
+[data-installed-theme] .ui-sg-danger.ui-sg-danger--solid {
+  background: var(--shell-danger);
+  color: var(--destructive-foreground);
+}
+[data-installed-theme] .ui-sg-danger.ui-sg-danger--solid:not(:disabled):hover {
+  background: var(--shell-danger-hover);
+}
+[data-installed-theme] .ui-ss-badge[data-tone='ok'] {
+  background: color-mix(in srgb, var(--success) 10%, transparent);
+  color: var(--success);
+}
+[data-installed-theme] .ui-segc__icon {
+  color: var(--icon-default);
+}
+[data-installed-theme] .ui-pmc__item:active {
+  background: var(--bg-selected);
+}
+[data-installed-theme] :is(.ui-cwc__action, .ui-ansc__stop):hover {
+  background: var(--shell-subtle);
+}
+[data-installed-theme] .ui-prc__scope[aria-checked='false']:hover {
+  background: var(--bg-selected);
+}
+[data-installed-theme] .ui-prc[data-risk='destructive'] .ui-prc__btn--primary {
+  background: var(--danger);
+  color: var(--destructive-foreground);
+}
+[data-installed-theme] .ui-stc__step-icon[data-status='done'] path {
+  stroke: var(--ui-stc-card);
 }
