@@ -48,7 +48,7 @@ Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu inst
 | --------------------------- | --------------------------------------------------------------------- |
 | Components and visual style | shadcn/ui, `base-nova` style on Base UI                               |
 | AI, agent and team views    | affectUI, in `components/affect`                                      |
-| Icons                       | Lucide (`lucide-react`)                                               |
+| Icons                       | Hugeicons' free icons (`@hugeicons/react`), at a 1.9 stroke           |
 | Animation                   | Motion (`motion/react`)                                               |
 | Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`         |
 | Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                            |
