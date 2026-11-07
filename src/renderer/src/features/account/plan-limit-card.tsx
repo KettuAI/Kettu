@@ -74,21 +74,12 @@ function CardFace({ card }: { card: PlanCard }) {
                 </span>
                 <span
                   aria-hidden
-                  className={cn(
-                    'tabular',
-                    w.level === null
-                      ? 'text-tertiary'
-                      : w.level === 'ok'
-                        ? 'text-primary'
-                        : LIMIT_TEXT[w.level],
-                  )}
+                  className={cn('tabular', w.level === 'ok' ? 'text-primary' : LIMIT_TEXT[w.level])}
                 >
-                  {w.percent === null ? '—' : `${w.percent}%`}
+                  {w.percent}%
                 </span>
                 <span className="sr-only">
-                  {w.percent === null
-                    ? t('sidebar:account.limitStale', { window: name })
-                    : t('sidebar:account.limitUsed', { window: name, percent: w.percent })}
+                  {t('sidebar:account.limitUsed', { window: name, percent: w.percent })}
                 </span>
               </span>
             )

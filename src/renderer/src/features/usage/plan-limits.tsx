@@ -197,18 +197,14 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
                   <span aria-hidden className="k-u-plan__win">
                     {shortName(ring.limit)}
                   </span>
-                  <b aria-hidden className="k-num" data-level={ring.level ?? 'stale'}>
-                    {ring.percent === null
-                      ? '—'
-                      : ring.reached && ring.limit.resetsAt! > now
-                        ? t('limits.backIn', { time: countdown(ring.limit.resetsAt! - now)! })
-                        : `${ring.percent}%`}
+                  <b aria-hidden className="k-num" data-level={ring.level}>
+                    {ring.reached && ring.limit.resetsAt! > now
+                      ? t('limits.backIn', { time: countdown(ring.limit.resetsAt! - now)! })
+                      : `${ring.percent}%`}
                   </b>
                   {reset && <small aria-hidden>{reset}</small>}
                   <span className="sr-only">
-                    {ring.percent === null
-                      ? t('limits.windowStale', { window: name })
-                      : t('limits.windowUsed', { window: name, percent: ring.percent })}
+                    {t('limits.windowUsed', { window: name, percent: ring.percent })}
                     {reset && ` ${reset}`}
                   </span>
                 </span>
@@ -260,7 +256,7 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
             <span key={ring.limit.window} className="contents">
               <span className="truncate text-tertiary">{limitLabel(ring.limit)}</span>
               <span className="text-right font-medium text-primary tabular-nums">
-                {ring.percent === null ? '—' : `${ring.percent}%`}
+                {ring.percent}%
               </span>
               <span className="text-right whitespace-nowrap text-secondary">
                 {resetText(ring, now) ?? ''}

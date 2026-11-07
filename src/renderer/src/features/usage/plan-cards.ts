@@ -26,9 +26,9 @@ const perModel = (window: string): boolean => window.startsWith('seven_day_')
 
 export interface CardRing {
   limit: PlanLimit
-  /** The whole percentage used; null once its reset has passed and it is not read again. */
-  percent: number | null
-  level: LimitLevel | null
+  /** The whole percentage used; 0 once its reset has passed, since the window starts again. */
+  percent: number
+  level: LimitLevel
   /** Used up: the window shows when it comes back instead of its percentage. */
   reached: boolean
 }
@@ -49,10 +49,10 @@ export function cardRings(limits: readonly PlanLimit[], now: number): CardRing[]
   )
   return rings.map(({ limit }) => {
     const stale = limit.resetsAt !== null && limit.resetsAt <= now
-    const level = stale ? null : limitLevel(limit)
+    const level = stale ? 'ok' : limitLevel(limit)
     return {
       limit,
-      percent: stale ? null : Math.round(limit.usedPercent!),
+      percent: stale ? 0 : Math.round(limit.usedPercent!),
       level,
       reached:
         !stale &&
