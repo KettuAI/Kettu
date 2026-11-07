@@ -260,6 +260,18 @@
   --kind-document-tint: #e8f0fc;
   --kind-slides: #c65a14;
   --kind-slides-tint: #fcefe5;
+  /* The glow behind an artifact card's page: each kind's light color, bright enough to glow on the
+     card's panel in either theme, at the strength the theme gives it. */
+  --kind-web-glow: #6cc0d2;
+  --kind-canvas-glow: #a88beb;
+  --kind-document-glow: #7fa9f2;
+  --kind-slides-glow: #f2a066;
+  --artifact-glow: 0.62;
+  --artifact-glow-hover: 0.82;
+  --artifact-card-shadow: 0 1px 2px rgb(0 0 0 / 5%), 0 12px 32px rgb(0 0 0 / 6%);
+  --artifact-card-shadow-hover: 0 1px 2px rgb(0 0 0 / 6%), 0 16px 36px rgb(0 0 0 / 9%);
+  --artifact-page-lift:
+    0 0 0 0.5px rgb(0 0 0 / 10%), 0 10px 22px -8px rgb(0 0 0 / 18%), 0 2px 4px -1px rgb(0 0 0 / 6%);
 
   /* Usage charts: each agent's series, and the empty day the heatmap deepens from. */
   --agent-opencode: oklch(0.6 0 0);
@@ -628,6 +640,13 @@
     --kind-document-tint: #1f2a3d;
     --kind-slides: #f2a066;
     --kind-slides-tint: #3a271b;
+    --artifact-glow: 0.46;
+    --artifact-glow-hover: 0.64;
+    --artifact-card-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 12px 32px rgb(0 0 0 / 30%);
+    --artifact-card-shadow-hover: 0 1px 2px rgb(0 0 0 / 45%), 0 16px 36px rgb(0 0 0 / 40%);
+    --artifact-page-lift:
+      0 0 0 0.5px rgb(255 255 255 / 16%), 0 12px 24px -8px rgb(0 0 0 / 70%),
+      0 2px 4px rgb(0 0 0 / 40%);
 
     --agent-opencode: oklch(0.74 0 0);
     /* Pi's yellow mixed 86% with the dark surface. */
@@ -953,6 +972,13 @@
   --kind-document-tint: #1f2a3d;
   --kind-slides: #f2a066;
   --kind-slides-tint: #3a271b;
+  --artifact-glow: 0.46;
+  --artifact-glow-hover: 0.64;
+  --artifact-card-shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 12px 32px rgb(0 0 0 / 30%);
+  --artifact-card-shadow-hover: 0 1px 2px rgb(0 0 0 / 45%), 0 16px 36px rgb(0 0 0 / 40%);
+  --artifact-page-lift:
+    0 0 0 0.5px rgb(255 255 255 / 16%), 0 12px 24px -8px rgb(0 0 0 / 70%),
+    0 2px 4px rgb(0 0 0 / 40%);
 
   --agent-opencode: oklch(0.74 0 0);
   /* Pi's yellow mixed 86% with the dark surface. */
