@@ -3,7 +3,9 @@ import {
   GITHUB_LOGIN,
   type GitOperation,
   type GitStatus,
+  type GitHubReference,
   type GitTools,
+  type Issue,
   type PullRequest,
   type RepositoryVisibility,
 } from '@shared/git'
@@ -55,9 +57,12 @@ export type GitDialog =
 interface GitStore {
   status: Record<string, GitStatus>
   currentPr: Record<string, PullRequest | null>
-  pullRequests: Record<string, PullRequest> // by URL, for chips
-  /** By URL, why a chip's details did not load, until they do. */
-  pullRequestErrors: Record<string, string>
+  pullRequests: Record<string, PullRequest> // by URL, for references
+  issues: Record<string, Issue> // by URL, for references
+  /** By issue URL, the pull request URL GitHub said it really is. */
+  pullRequestAliases: Record<string, string>
+  /** By URL, why a reference's details did not load, until they do. */
+  referenceErrors: Record<string, string>
   /** By login, a chip author's picture as a data: URL, or null when GitHub has none. */
   avatars: Record<string, string | null>
   tools: GitTools | null
@@ -74,7 +79,9 @@ export const useGitStore = create<GitStore>()(() => ({
   status: {},
   currentPr: {},
   pullRequests: {},
-  pullRequestErrors: {},
+  issues: {},
+  pullRequestAliases: {},
+  referenceErrors: {},
   avatars: {},
   tools: null,
   toolsError: null,
@@ -134,43 +141,97 @@ export function rewatchGit(hostId: string | null = null): void {
 }
 
 const RETRY_MS = 60_000
-const prLoads = new Map<string, Promise<PullRequest | null>>()
+// A card shown this long after its details were read reads them again.
+const STALE_MS = 60_000
+const referenceLoads = new Map<string, Promise<unknown>>()
+const loadedAt = new Map<string, number>()
 
-/** A chip's details; a failure is kept and asked again a minute later, or at once by a retry. */
-export function loadPullRequest(url: string): Promise<PullRequest | null> {
-  const cached = useGitStore.getState().pullRequests[url]
-  if (cached) return Promise.resolve(cached)
-  let load = prLoads.get(url)
+function receivePullRequest(pr: PullRequest, asked: string): void {
+  loadedAt.set(asked, Date.now())
+  useGitStore.setState((s) => ({
+    pullRequests: { ...s.pullRequests, [pr.url]: pr },
+    pullRequestAliases:
+      asked === pr.url ? s.pullRequestAliases : { ...s.pullRequestAliases, [asked]: pr.url },
+    referenceErrors: without(s.referenceErrors, asked),
+  }))
+}
+
+// One load per URL at a time; a failure is kept and asked again a minute later, or by a retry.
+function loadOnce(url: string, run: () => Promise<void>): Promise<void> {
+  let load = referenceLoads.get(url) as Promise<void> | undefined
   if (!load) {
-    const started: Promise<PullRequest | null> = host('git.pullRequest', { url })
-      .then((pr) => {
-        useGitStore.setState((s) => ({
-          pullRequests: { ...s.pullRequests, [url]: pr },
-          pullRequestErrors: without(s.pullRequestErrors, url),
-        }))
-        return pr
-      })
+    const started: Promise<void> = run()
       .catch((error: unknown) => {
         const message = errorMessage(error)
         useGitStore.setState((s) => ({
-          pullRequestErrors: { ...s.pullRequestErrors, [url]: message },
+          referenceErrors: { ...s.referenceErrors, [url]: message },
         }))
-        return null
       })
       .finally(() =>
         setTimeout(() => {
-          if (prLoads.get(url) === started) prLoads.delete(url)
+          if (referenceLoads.get(url) === started) referenceLoads.delete(url)
         }, RETRY_MS),
       )
     load = started
-    prLoads.set(url, load)
+    referenceLoads.set(url, load)
   }
   return load
 }
 
-export function retryPullRequest(url: string): Promise<PullRequest | null> {
-  prLoads.delete(url)
-  return loadPullRequest(url)
+/** A pull request's details for a reference or a card; resolves to null when they did not load. */
+export async function loadPullRequest(url: string, fresh = false): Promise<PullRequest | null> {
+  const cached = useGitStore.getState().pullRequests[url]
+  if (cached && !fresh) return cached
+  await loadOnce(url, async () => receivePullRequest(await host('git.pullRequest', { url }), url))
+  return useGitStore.getState().pullRequests[url] ?? null
+}
+
+/** An issue's details; GitHub may answer that the address is a pull request. */
+function loadIssue(url: string, fresh = false): Promise<void> {
+  const s = useGitStore.getState()
+  if (!fresh && (s.issues[url] || s.pullRequestAliases[url])) return Promise.resolve()
+  return loadOnce(url, async () => {
+    const found = await host('git.issue', { url })
+    if (found.kind === 'pull') {
+      receivePullRequest(found.pullRequest, url)
+      return
+    }
+    loadedAt.set(url, Date.now())
+    useGitStore.setState((s) => ({
+      issues: { ...s.issues, [url]: found.issue },
+      referenceErrors: without(s.referenceErrors, url),
+    }))
+  })
+}
+
+/** Loads what a reference names, once; a card asks with `fresh` to read a live one again. */
+export function loadReference(ref: GitHubReference, fresh = false): void {
+  const again = fresh && isStale(ref.url)
+  if (again) forget(ref.url)
+  void (ref.kind === 'pull' ? loadPullRequest(ref.url, again) : loadIssue(ref.url, again))
+}
+
+export function retryReference(ref: GitHubReference): Promise<void> {
+  forget(ref.url)
+  return ref.kind === 'pull'
+    ? loadPullRequest(ref.url, true).then(() => {})
+    : loadIssue(ref.url, true)
+}
+
+// Merged and closed pull requests and closed issues do not change enough to read again.
+function isStale(url: string): boolean {
+  const at = loadedAt.get(url)
+  if (at === undefined || Date.now() - at < STALE_MS) return false
+  const s = useGitStore.getState()
+  const pr = s.pullRequests[s.pullRequestAliases[url] ?? url]
+  if (pr) return pr.state === 'open' || pr.state === 'draft'
+  return s.issues[url]?.state === 'open'
+}
+
+// Lets the next load ask gh again; what is shown stays until the new answer replaces it.
+function forget(url: string): void {
+  loadedAt.delete(url)
+  referenceLoads.delete(url)
 }
 
 const avatarLoads = new Set<string>()

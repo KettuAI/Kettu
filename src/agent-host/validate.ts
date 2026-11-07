@@ -13,7 +13,12 @@ import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
-import { GITHUB_LOGIN, GITHUB_PULL_REQUEST_URL, isRepositoryName } from '@shared/git'
+import {
+  GITHUB_LOGIN,
+  GITHUB_PULL_REQUEST_URL,
+  githubReferenceOf,
+  isRepositoryName,
+} from '@shared/git'
 import type { Platform } from '@shared/platform'
 import type { ClockRequest, ClockZone } from '@shared/usage'
 import {
@@ -1116,6 +1121,11 @@ export function createValidators(platform: Platform): Validators {
       const url = string(fields(params), 'url', URL_CHARS)
       if (!GITHUB_PULL_REQUEST_URL.test(url))
         throw invalidParams('url is not a GitHub pull request')
+      return { url }
+    },
+    'git.issue': (params) => {
+      const url = string(fields(params), 'url', URL_CHARS)
+      if (githubReferenceOf(url)?.kind !== 'issue') throw invalidParams('url is not a GitHub issue')
       return { url }
     },
     'git.avatarUrl': (params) => {

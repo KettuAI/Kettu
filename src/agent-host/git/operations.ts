@@ -301,5 +301,8 @@ export function createdPullRequest(
     createdAt: at,
     mergedAt: null,
     closedAt: null,
+    additions: 0,
+    deletions: 0,
+    changedFiles: 0,
   }
 }

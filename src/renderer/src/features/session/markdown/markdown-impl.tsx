@@ -19,8 +19,10 @@ import { createCodePlugin } from '@streamdown/code'
 import { Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { defaultComponents, Streamdown, type Components, type ExtraProps } from 'streamdown'
+import { githubIssueUrl } from '@shared/git'
 import { FileLink } from '@renderer/features/files/file-link'
 import { ProjectPathContext, useFileRef } from '@renderer/features/files/file-refs'
+import { useProjectRepository } from '@renderer/features/git/gh-reference-data'
 import { ConfirmedLink } from '@renderer/features/session/link-confirm'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { LocalMedia, MediaRows } from '@renderer/features/session/media/local-media'
@@ -37,6 +39,7 @@ import { splitIntoChunks } from './chunks'
 import { codeThemeInput, useCodeThemes, type CodeThemes } from './code-themes'
 import { localImageTarget, pictureRun, spacedImages } from './local-images'
 import { localTarget } from './local-links'
+import { bareReferenceNumber } from './github-refs'
 import { remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
 import { MarkdownTable } from './markdown-table'
@@ -81,6 +84,15 @@ function isWebLink(href: string): boolean {
   return protocol === 'http:' || protocol === 'https:'
 }
 
+/** A `#12` in a reply: an issue or pull request of the project's own GitHub repository. */
+function BareReference({ number, children }: { number: number; children: ReactNode }) {
+  const repo = useProjectRepository()
+  if (!repo) return children
+  return (
+    <ConfirmedLink url={githubIssueUrl(repo.owner, repo.repo, number)}>{children}</ConfirmedLink>
+  )
+}
+
 /** A link: a project file, or a web link with its site's icon. */
 function Link(props: ComponentProps<'a'> & ExtraProps) {
   const raw = typeof props.href === 'string' ? props.href : ''
@@ -92,6 +104,8 @@ function Link(props: ComponentProps<'a'> & ExtraProps) {
   // nothing but web links.
   if (local !== null) return <span title={local}>{props.children}</span>
   if (raw === INCOMPLETE_LINK) return <span className="thread-link">{props.children}</span>
+  const bare = bareReferenceNumber(raw)
+  if (bare !== null) return <BareReference number={bare}>{props.children}</BareReference>
   if (!isWebLink(raw)) return <span title={raw}>{props.children}</span>
   return <ConfirmedLink url={raw}>{props.children}</ConfirmedLink>
 }

@@ -105,6 +105,7 @@ import {
   type SessionMenuPlace,
 } from './session-menu-model'
 import { confirmArchive } from './archive-confirm-model'
+import { sessionPullRequests } from './session-prs'
 
 /** An accelerator as the menu shows it: macOS's symbols, or the key names elsewhere. */
 function shortcutLabel(shortcut: string): string {
@@ -329,19 +330,46 @@ export function SessionMenuItems({
         )
       case 'openInSplit':
         return <OpenInSplit summary={summary} key={name} />
-      case 'pullRequest':
-        return (
-          summary.pr && (
+      case 'pullRequest': {
+        const prs = sessionPullRequests(summary)
+        if (prs.length === 1) {
+          const pr = prs[0]!
+          return (
             <DropdownMenuItem
               {...props}
-              render={<a href={summary.pr.url} target="_blank" rel="noreferrer" />}
+              render={<a href={pr.url} target="_blank" rel="noreferrer" />}
             >
-              <PrIcon state={summary.pr.state} />
-              {t('row.openPullRequest', { number: summary.pr.number })}
+              <PrIcon state={pr.state} />
+              {t('row.openPullRequest', { number: pr.number })}
               {shortcut}
             </DropdownMenuItem>
           )
+        }
+        return (
+          prs.length > 1 && (
+            <DropdownMenuSub key={name}>
+              <DropdownMenuSubTrigger>
+                <PrIcon state={null} />
+                {t('row.pullRequests')}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-80">
+                {prs.map((pr) => (
+                  <DropdownMenuItem
+                    key={pr.url}
+                    render={<a href={pr.url} target="_blank" rel="noreferrer" />}
+                  >
+                    <PrIcon state={pr.state} />
+                    <span className="shrink-0 text-tertiary tabular-nums">
+                      {pr.repo}#{pr.number}
+                    </span>
+                    <PrTitle url={pr.url} />
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )
         )
+      }
       case 'openInEditor':
         return <OpenInEditor key={name} path={summary.projectPath} />
       case 'showInFolder':
@@ -1026,4 +1054,10 @@ export function DeleteSessionDialog({
       </AlertDialogContent>
     </AlertDialog>
   )
+}
+
+/** A pull request's title in the menu, once its details have loaded somewhere. */
+function PrTitle({ url }: { url: string }) {
+  const title = useGitStore((s) => s.pullRequests[url]?.title ?? '')
+  return <span className="min-w-0 flex-1 truncate">{title}</span>
 }

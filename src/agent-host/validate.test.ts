@@ -544,4 +544,19 @@ describe('computer use requests', () => {
     rejects(() => posix['computer.declineSetup']({ entryId: 'e:2' }))
     rejects(() => posix['computer.declineSetup']({ sessionId: 's', entryId: 7 }))
   })
+
+  it('reads issues only from github.com issue addresses', () => {
+    const url = 'https://github.com/KettuAI/Kettu/issues/546'
+    expect(posix['git.issue']({ url })).toEqual({ url })
+    rejects(() => posix['git.issue']({}))
+    rejects(() => posix['git.issue']({ url: 'https://github.com/KettuAI/Kettu/pull/546' }))
+    rejects(() => posix['git.issue']({ url: 'http://github.com/KettuAI/Kettu/issues/546' }))
+    rejects(() => posix['git.issue']({ url: 'https://github.example.com/a/b/issues/1' }))
+    rejects(() => posix['git.issue']({ url: 'https://github.com/a/b/issues/1?x=--repo' }))
+    rejects(() => posix['git.issue']({ url: 'https://github.com/a/b/issues/1/../../x' }))
+    rejects(() => posix['git.issue']({ url: 'https://github.com/-a/b/issues/1' }))
+    rejects(() => posix['git.issue']({ url: 'https://github.com/a/../issues/1' }))
+    rejects(() => posix['git.issue']({ url: 'https://github.com/a/b/issues/0' }))
+    rejects(() => posix['git.issue']({ url: `${url}\n` }))
+  })
 })

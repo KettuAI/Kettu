@@ -529,6 +529,7 @@
     "userinfo": "链接中“@”之前的文字并不是它的去向。",
     "copy": "复制链接",
     "copyMarkdown": "复制为 Markdown",
+    "copyReference": "复制引用",
     "firstVisit": "首次访问",
     "firstVisitNote": "你还没有从 Kettu 打开过这个站点。会话浏览器打开它之后才会显示它的图标。",
     "defaultBrowser": "默认浏览器",

@@ -78,7 +78,7 @@ export interface SessionMenuContext {
  * not hold.
  */
 export function sessionMenuGroups(
-  summary: Pick<SessionSummary, 'status' | 'parentId' | 'origin' | 'pr'>,
+  summary: Pick<SessionSummary, 'status' | 'parentId' | 'origin' | 'pr' | 'prs'>,
   {
     canFork,
     shown = false,
@@ -122,7 +122,9 @@ export function sessionMenuGroups(
           topLevel && canFork ? ['fork', 'newSubSession'] : ['newSubSession'],
           [
             ...(shown ? [] : (['openInSplit'] as const)),
-            ...(summary.pr ? (['pullRequest'] as const) : []),
+            ...((summary.prs?.length ?? (summary.pr ? 1 : 0)) > 0
+              ? (['pullRequest'] as const)
+              : []),
             'copyResume',
             'showInFolder',
           ],

@@ -24,7 +24,6 @@ import {
 import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marker'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { AIAnswer, type AnswerSource } from '@renderer/components/affect/ai-answer'
-import { PrChip } from '@renderer/features/git/pr-chip'
 import { dayTime } from '@renderer/features/routines/model'
 import { PANEL, stopReasonText } from './helpers'
 import { cn } from '@renderer/lib/utils'
@@ -443,7 +442,7 @@ export const GitEventEntry = memo(function GitEventEntry({ sessionId, entryId }:
             className="size-3.5 shrink-0"
           />
           <span>{t('gitEvent.openedPr')}</span>
-          <PrChip url={entry.url} />
+          <ConfirmedLink url={entry.url} />
         </div>
       )
   }

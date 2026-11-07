@@ -84,6 +84,18 @@
       "showArchived": "显示已归档"
     }
   },
+  "prs": {
+    "count_one": "{{count}} 个 Pull Request",
+    "count_other": "{{count}} 个 Pull Request",
+    "all": "全部{{state}}",
+    "failing_one": "{{count}} 个检查失败",
+    "failing_other": "{{count}} 个检查失败",
+    "separator": "，",
+    "title_one": "{{count}} 个 Pull Request",
+    "title_other": "{{count}} 个 Pull Request",
+    "more_one": "还有 {{count}} 个",
+    "more_other": "还有 {{count}} 个"
+  },
   "row": {
     "collapse": "收起子会话",
     "expand": "展开子会话",
@@ -104,6 +116,7 @@
     "markRead": "标为已读",
     "fork": "分叉",
     "openPullRequest": "打开 Pull Request #{{number}}",
+    "pullRequests": "Pull Request",
     "showIn": "在{{name}}中显示",
     "archive": "归档",
     "archived": "已归档“{{title}}”",

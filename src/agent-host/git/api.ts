@@ -8,6 +8,7 @@ import type {
   GitOperation,
   GitStatus,
   GitTools,
+  IssueLookup,
   LogCommit,
   PullRequest,
   PullRequestState,
@@ -24,6 +25,7 @@ export interface BranchPullRequest {
   number: number
   state: PullRequestState
   url: string
+  failing: boolean // open with a failing check
 }
 
 export interface GitServiceDeps {
@@ -85,6 +87,10 @@ export interface GitServiceApi {
   branches(projectPath: string): Promise<BranchList>
   /** Details for a pull request chip; `url` matches GITHUB_PULL_REQUEST_URL. */
   pullRequest(url: string): Promise<PullRequest>
+  /** Details for an issue reference; `url` matches GITHUB_ISSUE_URL. */
+  issue(url: string): Promise<IssueLookup>
+  /** What is known of a session row's pull request without asking gh; asks in the background. */
+  knownPullRequest(url: string): { state: PullRequestState; failing: boolean } | null
   /** The avatar URL of a chip's author, null when GitHub's avatar host has none; `login` matches GITHUB_LOGIN. */
   avatarUrl(login: string): Promise<string | null>
   /** The current branch's pull request, from the last `gh pr view`. */
@@ -110,6 +116,8 @@ export interface GitServiceApi {
   onChanged(listener: (status: GitStatus) => void): () => void
   onPullRequest(listener: (projectPath: string, pr: PullRequest | null) => void): () => void
   onBranchPullRequests(listener: (projectPath: string) => void): () => void
+  /** A pull request knownPullRequest did not know has been read. */
+  onPullRequestLoaded(listener: (url: string) => void): () => void
   onSessionEvents(listener: (sessionId: string, events: GitEventDraft[]) => void): () => void
   onTools(listener: (tools: GitTools) => void): () => void
   dispose(): Promise<void>

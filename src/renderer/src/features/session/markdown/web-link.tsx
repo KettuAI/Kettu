@@ -10,9 +10,16 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react'
-import { Copy01Icon, Globe02Icon, Link01Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
+import {
+  Copy01Icon,
+  Globe02Icon,
+  Link01Icon,
+  LinkSquare02Icon,
+  Tag01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
+import { githubReferenceFromLink, type GitHubReference } from '@shared/git'
 import type { DefaultBrowser } from '@shared/ipc'
 import type { LinkDestination } from '@shared/settings'
 import {
@@ -23,7 +30,13 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from '@renderer/components/ui/context-menu'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import {
+  REFERENCE_CARD_CLASS,
+  ReferenceCard,
+  ReferenceText,
+} from '@renderer/features/git/gh-reference'
 import { SessionIdContext } from '@renderer/features/session/media/grants'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -225,6 +238,7 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
   useEffect(loadSiteIcons, [])
 
   const label = children ?? url
+  const reference = useMemo<GitHubReference | null>(() => githubReferenceFromLink(url), [url])
   const primary = defaultDestination(url, thread, context)
   const browserName = browser.name ?? t('link.yourBrowser')
 
@@ -253,67 +267,91 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
   const shortcut = (destination: LinkDestination) =>
     destination === primary ? formatShortcut('Enter') : formatShortcut('Mod+Enter')
 
+  const anchor = (
+    <ContextMenuTrigger
+      className="select-text"
+      render={
+        <a
+          ref={link}
+          href={url}
+          rel="noreferrer"
+          draggable={false}
+          data-streamdown="link"
+          onClick={(event) => {
+            event.preventDefault()
+            openFromClick(isMod(event))
+          }}
+          onAuxClick={(event) => {
+            if (event.button !== 1) return
+            event.preventDefault()
+            openFromClick(false)
+          }}
+          className={cn(
+            'thread-link rounded-xs outline-none focus-ring',
+            isBareLink(textOf(label), url) && '[overflow-wrap:anywhere]',
+          )}
+        />
+      }
+    />
+  )
+  const text = (
+    <InsideLink value>
+      {reference ? (
+        <ReferenceText reference={reference} bare={isBareLink(textOf(label), url)}>
+          {label}
+        </ReferenceText>
+      ) : (
+        <LinkText url={url}>{label}</LinkText>
+      )}
+    </InsideLink>
+  )
+
   return (
     <>
       <ContextMenu open={menuOpen} onOpenChange={setMenuOpen}>
-        <Tooltip>
-          <TooltipTrigger
-            delay={500}
-            render={
-              <ContextMenuTrigger
-                className="select-text"
-                render={
-                  <a
-                    ref={link}
-                    href={url}
-                    rel="noreferrer"
-                    draggable={false}
-                    data-streamdown="link"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      openFromClick(isMod(event))
-                    }}
-                    onAuxClick={(event) => {
-                      if (event.button !== 1) return
-                      event.preventDefault()
-                      openFromClick(false)
-                    }}
-                    className={cn(
-                      'thread-link rounded-xs outline-none focus-ring',
-                      isBareLink(textOf(label), url) && '[overflow-wrap:anywhere]',
-                    )}
-                  />
-                }
-              />
-            }
-          >
-            <InsideLink value>
-              <LinkText url={url}>{label}</LinkText>
-            </InsideLink>
-          </TooltipTrigger>
-          <TooltipContent anchor={firstLine} align="start" sideOffset={6} className="max-w-md">
-            {primary === 'session' ? (
-              <HugeiconsIcon
-                icon={Globe02Icon}
-                strokeWidth={1.9}
-                aria-hidden
-                className="size-2.75"
-              />
-            ) : (
-              <HugeiconsIcon
-                icon={LinkSquare02Icon}
-                strokeWidth={1.9}
-                aria-hidden
-                className="size-2.75"
-              />
-            )}
-            <span className="min-w-0 [overflow-wrap:anywhere]">
-              {primary === 'session'
-                ? t('link.opensInSession', { url })
-                : t('link.opensIn', { url, browser: browserName })}
-            </span>
-          </TooltipContent>
-        </Tooltip>
+        {reference ? (
+          <HoverCard>
+            <HoverCardTrigger delay={400} render={anchor}>
+              {text}
+            </HoverCardTrigger>
+            <HoverCardContent
+              anchor={firstLine}
+              align="start"
+              sideOffset={6}
+              className={REFERENCE_CARD_CLASS}
+            >
+              <ReferenceCard reference={reference} />
+            </HoverCardContent>
+          </HoverCard>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger delay={500} render={anchor}>
+              {text}
+            </TooltipTrigger>
+            <TooltipContent anchor={firstLine} align="start" sideOffset={6} className="max-w-md">
+              {primary === 'session' ? (
+                <HugeiconsIcon
+                  icon={Globe02Icon}
+                  strokeWidth={1.9}
+                  aria-hidden
+                  className="size-2.75"
+                />
+              ) : (
+                <HugeiconsIcon
+                  icon={LinkSquare02Icon}
+                  strokeWidth={1.9}
+                  aria-hidden
+                  className="size-2.75"
+                />
+              )}
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                {primary === 'session'
+                  ? t('link.opensInSession', { url })
+                  : t('link.opensIn', { url, browser: browserName })}
+              </span>
+            </TooltipContent>
+          </Tooltip>
+        )}
         <ContextMenuContent className="min-w-60" onKeyDownCapture={onMenuKey}>
           <ContextMenuItem onClick={() => openTo('browser')}>
             <BrowserIcon browser={browser} className="size-3.75" />
@@ -334,6 +372,14 @@ function OuterWebLink({ url, children, confirm: Confirm }: WebLinkProps) {
             <HugeiconsIcon icon={Link01Icon} strokeWidth={1.9} aria-hidden />
             {t('link.copyMarkdown')}
           </ContextMenuItem>
+          {reference && (
+            <ContextMenuItem
+              onClick={() => copy(`${reference.owner}/${reference.repo}#${reference.number}`)}
+            >
+              <HugeiconsIcon icon={Tag01Icon} strokeWidth={1.9} aria-hidden />
+              {t('link.copyReference')}
+            </ContextMenuItem>
+          )}
         </ContextMenuContent>
       </ContextMenu>
       {ask && (

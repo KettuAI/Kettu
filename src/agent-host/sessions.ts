@@ -16,6 +16,7 @@ import {
   type OutlineTitle,
   type ReturnedMessage,
   type SessionAttention,
+  type SessionPullRequest,
   type SessionSummary,
   type StartNotice,
 } from '@shared/agent-host'
@@ -124,6 +125,7 @@ import { holdsNothing, mayBeEmpty } from './empty-sessions'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
+import { GITHUB_PULL_REQUEST_URL, githubReferenceOf } from '@shared/git'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { pathKey, samePath } from './paths'
 import { isOutOfCredit } from './out-of-credit'
@@ -136,7 +138,13 @@ import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hoo
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
-import type { JsonFile, ReturnedFile, SessionRecord, SessionsFile } from './storage'
+import {
+  MAX_SESSION_PULL_REQUESTS,
+  type JsonFile,
+  type ReturnedFile,
+  type SessionRecord,
+  type SessionsFile,
+} from './storage'
 import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
 import { listedTitle, titleMessageText, writeSessionTitle } from './session-titles'
 import {
@@ -585,6 +593,31 @@ const CONNECTED: ReadonlySet<SessionStatus> = new Set([
   'awaiting_permission',
 ])
 
+/** A row's pull requests: the ones it opened, newest first, then its branch's if not among them. */
+function sessionPullRequests(
+  record: SessionRecord,
+  branchUrl: string | null,
+  git: GitServiceApi | null,
+): SessionPullRequest[] {
+  const urls = [...(record.pullRequests ?? [])].reverse()
+  if (branchUrl && !urls.includes(branchUrl)) urls.push(branchUrl)
+  return urls.flatMap((url) => {
+    const ref = githubReferenceOf(url)
+    if (ref?.kind !== 'pull') return []
+    const known = git?.knownPullRequest(url) ?? null
+    return [
+      {
+        url,
+        owner: ref.owner,
+        repo: ref.repo,
+        number: ref.number,
+        state: known?.state ?? null,
+        failing: known?.failing ?? false,
+      },
+    ]
+  })
+}
+
 export class SessionManager {
   private readonly records = new Map<string, SessionRecord>()
   private readonly live = new Map<string, Live>()
@@ -838,6 +871,7 @@ export class SessionManager {
       missing: this.missing.has(record.id),
       branch: record.branch,
       pr: pr ? { number: pr.number, state: pr.state, url: pr.url } : null,
+      prs: sessionPullRequests(record, pr?.url ?? null, git),
       cache: record.cache ?? null,
       model: record.model ?? null,
       pinnedAt: record.pinnedAt ?? null,
@@ -6344,11 +6378,29 @@ export class SessionManager {
       live,
       drafts.map((draft) => gitPatch(live.thread, draft, () => this.nextId(live, 'g'))),
     )
+    const opened = drafts.flatMap((draft) =>
+      draft.event === 'pull_request' && GITHUB_PULL_REQUEST_URL.test(draft.url) ? [draft.url] : [],
+    )
+    const known = live.record.pullRequests ?? []
+    const added = opened.filter((url) => !known.includes(url))
+    if (added.length > 0) {
+      live.record.pullRequests = [...known, ...added].slice(-MAX_SESSION_PULL_REQUESTS)
+      this.persist(live)
+      this.touch(live.id)
+    }
   }
 
   /** Pull requests changed for a project's branches: its rows may show a new badge. */
   pullRequestsChanged(projectPath: string): void {
     for (const summary of this.list(projectPath)) this.touch(summary.id)
+  }
+
+  /** A row's pull request gh had not described yet has been read. */
+  pullRequestLoaded(url: string): void {
+    for (const id of new Set([...this.records.keys(), ...this.live.keys()])) {
+      const record = this.live.get(id)?.record ?? this.records.get(id)
+      if (record?.pullRequests?.includes(url)) this.touch(id)
+    }
   }
 
   // For main.

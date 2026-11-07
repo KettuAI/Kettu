@@ -48,6 +48,7 @@ const READS = new Set([
   'fileDiff',
   'held',
   'incoming',
+  'issue',
   'list',
   'listSessions',
   'options',
