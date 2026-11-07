@@ -43,6 +43,7 @@ import type { BrowserViews } from './browser/views'
 import type { SiteIcons } from './browser/site-icons'
 import { originOf } from './browser/origins'
 import { defaultBrowser } from './default-browser'
+import { debugStatus, prepareRelaunch } from './debug-mode'
 import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { Editors } from './editors'
 import { sendEvent } from './events'
@@ -523,6 +524,13 @@ export function registerIpcHandlers({
       throw new Error('Turn detailed records off before deleting them')
     }
     await clearVerboseRecords()
+  })
+
+  handle('debug:get', 0, () => debugStatus())
+
+  handle('debug:restart', 1, (_, debug) => {
+    if (typeof debug !== 'boolean') throw new Error('"debug" must be a boolean')
+    quit.restart(() => prepareRelaunch(debug))
   })
 
   handle('shell:show-data-folder', 0, async () => {

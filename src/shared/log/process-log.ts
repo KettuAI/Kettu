@@ -34,6 +34,7 @@ export const VERBOSE_PREFIX = 'verbose-'
 // What a parent passes to a host it forks, so the host logs from its first line.
 const ENV_DIR = 'KETTU_LOG_DIR'
 const ENV_LEVEL = 'KETTU_LOG_LEVEL'
+const ENV_VERBOSE = 'KETTU_LOG_VERBOSE'
 const ENV_ECHO = 'KETTU_LOG_ECHO'
 
 const BEFORE_OPEN_LIMIT = 1000
@@ -45,6 +46,8 @@ export interface ProcessLogOptions {
   /** The process's name, which is also its file's: main, agent-host, daemon. */
   name: string
   level?: LogLevel
+  /** Whether detailed records are written, which the debug level alone does not turn on. */
+  verbose?: boolean
   /** Also prints each record, for a terminal or a development run. */
   echo?: boolean
   /** Whether this process prunes the folder; one process per folder does. */
@@ -68,6 +71,7 @@ let processName = 'process'
 let dir: string | null = null
 let file: RotatingFile | null = null
 let level: LogLevel = 'info'
+let verbose = false
 let echo = true
 let prunes = false
 let pruning: Promise<void> | null = null
@@ -78,6 +82,7 @@ export function openProcessLog(options: ProcessLogOptions): void {
   processName = options.name
   dir = options.dir
   level = options.level ?? 'info'
+  verbose = options.verbose ?? false
   echo = options.echo ?? false
   prunes = options.prune ?? false
   file = new RotatingFile({
@@ -98,20 +103,33 @@ export function openProcessLog(options: ProcessLogOptions): void {
 export function openProcessLogFromEnv(name: string): void {
   const logDir = process.env[ENV_DIR]
   const envLevel = process.env[ENV_LEVEL]
+  const envVerbose = process.env[ENV_VERBOSE] === '1'
   const envEcho = process.env[ENV_ECHO] === '1'
   // Agents and shells get this process's environment; these are not theirs.
   delete process.env[ENV_DIR]
   delete process.env[ENV_LEVEL]
+  delete process.env[ENV_VERBOSE]
   delete process.env[ENV_ECHO]
   echo = envEcho
   if (!logDir) return
-  openProcessLog({ dir: logDir, name, level: isLevel(envLevel) ? envLevel : 'info', echo: envEcho })
+  openProcessLog({
+    dir: logDir,
+    name,
+    level: isLevel(envLevel) ? envLevel : 'info',
+    verbose: envVerbose,
+    echo: envEcho,
+  })
 }
 
 /** The variables that make a forked host log into `logDir` from its first line. */
 export function logEnvironment(): Record<string, string> {
   if (!dir) return {}
-  return { [ENV_DIR]: dir, [ENV_LEVEL]: level, ...(echo ? { [ENV_ECHO]: '1' } : {}) }
+  return {
+    [ENV_DIR]: dir,
+    [ENV_LEVEL]: level,
+    ...(verbose ? { [ENV_VERBOSE]: '1' } : {}),
+    ...(echo ? { [ENV_ECHO]: '1' } : {}),
+  }
 }
 
 export function logFolder(): string | null {
@@ -123,17 +141,22 @@ function isLevel(value: unknown): value is LogLevel {
 }
 
 export function setLogLevel(next: LogLevel): void {
-  const wasDebug = level === 'debug'
   level = next
-  if (wasDebug && next !== 'debug') closeVerboseLogs()
 }
 
 export function logLevel(): LogLevel {
   return level
 }
 
-export function logsDebug(): boolean {
-  return level === 'debug'
+/** Turns detailed records, which hold agents' messages, on or off; off closes their files. */
+export function setVerboseRecords(on: boolean): void {
+  const was = verbose
+  verbose = on
+  if (was && !on) closeVerboseLogs()
+}
+
+export function verboseRecords(): boolean {
+  return verbose
 }
 
 /**
@@ -260,7 +283,7 @@ export function sideLog(kind: 'agent' | 'verbose', name: string): SideLog {
   return {
     write: (source, message, data) => {
       if (!dir) return
-      if (kind === 'verbose' && level !== 'debug') return
+      if (kind === 'verbose' && !verbose) return
       if (!admit(`${fileName}:${source}`)) return
       let side = sideFiles.get(fileName)
       if (!side) {

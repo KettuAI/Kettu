@@ -1,6 +1,7 @@
 import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import type { AppCommand } from '@shared/ipc'
 import type { ZoomStep } from '@shared/settings'
+import { isDebugRun } from './debug-mode'
 import { sendCommand, sendEvent } from './events'
 import { t } from './i18n'
 import { currentWindow } from './window'
@@ -30,14 +31,17 @@ export function installMenu(deps: MenuDeps): void {
     return
   }
   const name = app.name
-  const development: MenuItemConstructorOptions[] = app.isPackaged
-    ? []
-    : [
+  // An installed build opens developer tools only in a debug run, and reloads in none.
+  const development: MenuItemConstructorOptions[] = !app.isPackaged
+    ? [
         { type: 'separator' },
         { role: 'reload', label: t('menu.reload') },
         { role: 'forceReload', label: t('menu.forceReload') },
         { role: 'toggleDevTools', label: t('menu.toggleDevTools') },
       ]
+    : isDebugRun()
+      ? [{ type: 'separator' }, { role: 'toggleDevTools', label: t('menu.toggleDevTools') }]
+      : []
   const template: MenuItemConstructorOptions[] = [
     {
       label: name,

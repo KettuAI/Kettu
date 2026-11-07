@@ -153,6 +153,12 @@
 .ui-as-corner__tools > [data-sidebar-toggle] {
   margin-right: 6px;
 }
+/* Debug mode's mark keeps the fox orange that marks what waits on the user, hovered too. */
+.ui-as-corner__tools > [data-debug-marker],
+.ui-as-corner__tools > [data-debug-marker]:hover {
+  margin-left: 6px;
+  color: var(--attention);
+}
 .ui-as-corner[data-lights='window'] .ui-as-lights {
   width: var(--traffic-lights);
   height: 12px;
@@ -3402,6 +3408,23 @@
 }
 :is(.kettu-settings, .kettu-sd) .k-list__name.k-grow-0 {
   flex: 0 1 auto;
+}
+/* Debug mode's ports: the names in a column, so the addresses line up, and a long address cut
+   short inside its row, which a grid item would otherwise widen to fit. */
+:is(.kettu-settings, .kettu-sd) .k-debug-ports .k-list__row {
+  min-width: 0;
+}
+:is(.kettu-settings, .kettu-sd) .k-debug-ports .k-list__name {
+  flex: none;
+  min-width: 144px;
+}
+:is(.kettu-settings, .kettu-sd) .k-debug-ports .k-mono {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .kettu-sd .kettu-sd__picklist {
   max-height: 384px;

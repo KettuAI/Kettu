@@ -68,6 +68,7 @@ export function QuitConfirm() {
   }
 
   const reason = request?.reason ?? 'quit'
+  const restarts = reason === 'update' || reason === 'restart'
   const sessions = request?.sessions ?? []
   const terminals = request?.terminals ?? []
   const busy = sessions.length + terminals.length > 0
@@ -76,13 +77,15 @@ export function QuitConfirm() {
   const title =
     reason === 'update'
       ? t('quit.titleUpdate')
-      : reason === 'close'
-        ? t('quit.titleClose')
-        : busy
-          ? sessions.length > 0
-            ? t('quit.sessionsRunning', { count: sessions.length })
-            : t('quit.terminalsRunning', { count: terminals.length })
-          : t('quit.titleQuit')
+      : reason === 'restart'
+        ? t('quit.titleRestart')
+        : reason === 'close'
+          ? t('quit.titleClose')
+          : busy
+            ? sessions.length > 0
+              ? t('quit.sessionsRunning', { count: sessions.length })
+              : t('quit.terminalsRunning', { count: terminals.length })
+            : t('quit.titleQuit')
   return (
     <AlertDialog open={open} onOpenChange={(open) => !open && !saving && answer(false)}>
       <AlertDialogContent
@@ -94,7 +97,7 @@ export function QuitConfirm() {
           {!keepRunning && (
             <AlertDialogDescription>
               {busy
-                ? reason === 'update'
+                ? restarts
                   ? t('quit.stopsUpdate')
                   : t('quit.stopsQuit')
                 : t('quit.unsavedFiles')}
@@ -162,7 +165,7 @@ export function QuitConfirm() {
         ) : (
           busy && (
             <p className="mt-3 text-control leading-normal text-secondary">
-              {reason === 'update' ? t('quit.comeBackUpdate') : t('quit.comeBackQuit')}
+              {restarts ? t('quit.comeBackUpdate') : t('quit.comeBackQuit')}
             </p>
           )
         )}
@@ -183,7 +186,7 @@ export function QuitConfirm() {
               </Button>
               <AlertDialogAction disabled={saving} onClick={() => void saveThenAnswer()}>
                 {saving && <Spinner />}
-                {reason === 'update'
+                {restarts
                   ? t('quit.saveAndRestart')
                   : reason === 'close'
                     ? t('quit.saveAndClose')
@@ -201,7 +204,7 @@ export function QuitConfirm() {
             </>
           ) : (
             <AlertDialogAction onClick={() => answer(true)}>
-              {reason === 'update' ? t('quit.restart') : t('quit.quit')}
+              {restarts ? t('quit.restart') : t('quit.quit')}
             </AlertDialogAction>
           )}
         </AlertDialogFooter>

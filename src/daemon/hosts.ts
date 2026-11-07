@@ -116,6 +116,8 @@ export interface HostsOptions {
   sshPort: number | null
   /** The remote host listens for SSH on another port, to keep for the next run. */
   sshPortChanged?(port: number): void
+  /** A host's inspector in a debug run, by its name, or null once the host is gone. */
+  inspector?(name: string, url: string | null): void
 }
 
 type AnyHost = ForkedHost<unknown, { type: string }>
@@ -155,6 +157,7 @@ export class Hosts {
       modulePath: bundle('agent-host.cjs'),
       socketName: 'agent-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('agent-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'host:init',
@@ -181,6 +184,7 @@ export class Hosts {
       modulePath: bundle('terminal-host.cjs'),
       socketName: 'terminal-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('terminal-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'terminal-host:init',
@@ -202,6 +206,7 @@ export class Hosts {
       modulePath: bundle('device-host.cjs'),
       socketName: 'device-host',
       env: options.env,
+      inspector: (url) => options.inspector?.('device-host', url),
       timings: options.timings,
       initMessage: (socketPath) => ({
         type: 'device-host:init',
@@ -228,6 +233,7 @@ export class Hosts {
       modulePath: bundle('remote-host.cjs'),
       socketName: null,
       env: options.env,
+      inspector: (url) => options.inspector?.('remote-host', url),
       timings: options.timings,
       initMessage: () => ({
         type: 'remote-host:init',

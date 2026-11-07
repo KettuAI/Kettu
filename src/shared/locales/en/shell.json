@@ -84,5 +84,9 @@
       "settings": "Settings › {{section}}",
       "settingsItem": "Settings › {{section}} › {{item}}"
     }
+  },
+  "debugMode": {
+    "label": "Debug mode",
+    "tooltip": "Debug mode is on · Show the ports"
   }
 }

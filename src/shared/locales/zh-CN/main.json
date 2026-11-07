@@ -57,6 +57,7 @@
   },
   "quit": {
     "titleQuit": "退出 {{name}}？",
+    "titleRestart": "重启 {{name}}？",
     "titleUpdate": "重启以完成更新？",
     "quit": "退出",
     "restart": "重启",
@@ -99,7 +100,8 @@
     "newSession": "新建会话",
     "quit": "退出 {{name}}",
     "remoteAccess": "远程访问",
-    "checkForUpdates": "检查更新…"
+    "checkForUpdates": "检查更新…",
+    "debugMode": "调试模式已打开"
   },
   "agents": {
     "folderTaken": "这个目录已经属于 {{agent}}。请换一个，或者让 Kettu 新建一个。"

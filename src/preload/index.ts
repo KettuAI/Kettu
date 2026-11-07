@@ -72,6 +72,7 @@ function systemLocale(): Locale {
   return isLocale(value) ? value : 'en'
 }
 const onUpdateChanged = subscribe('update:changed')
+const onDebugChanged = subscribe('debug:changed')
 const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
@@ -216,6 +217,11 @@ const api: KettuApi = {
     chooseAgentBinary: (harnessId) => invoke('dialog:choose-agent-binary', harnessId),
     chooseAgentFolder: () => invoke('dialog:choose-agent-folder'),
     chooseShell: () => invoke('dialog:choose-shell'),
+  },
+  debug: {
+    get: () => invoke('debug:get'),
+    restart: (debug) => invoke('debug:restart', debug),
+    onChanged: onDebugChanged,
   },
   diagnostics: {
     save: (bundle) => invoke('diagnostics:save', bundle),

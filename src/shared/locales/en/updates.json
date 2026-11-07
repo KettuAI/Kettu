@@ -67,6 +67,7 @@
   "quit": {
     "titleUpdate": "Restart to update?",
     "titleQuit": "Quit Kettu?",
+    "titleRestart": "Restart Kettu?",
     "stopsUpdate": "Restarting stops what is running now:",
     "stopsQuit": "Quitting stops what is running now:",
     "terminal": "Terminal",

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AiBrain01Icon,
   Analytics01Icon,
@@ -40,6 +40,7 @@ import {
   usableAgents,
 } from '@renderer/stores/agents'
 import { useAccountStore } from '@renderer/stores/account'
+import { useDebugStore } from '@renderer/stores/debug'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { archivedSessions, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -66,6 +67,7 @@ import {
 } from './harness-section'
 import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
+import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { Group, GroupNote } from './rows'
 import { SettingSwitch } from './controls'
@@ -830,6 +832,7 @@ export function useAdvancedSection(): SectionDef {
   const onHost = useHostContext()
   const { hostId } = useHostScope()
   const en = english()
+  const debugOn = useDebugStore((s) => s.status.on)
   const data = group('data', t('advanced.groups.data'))
   return {
     id: 'advanced',
@@ -878,6 +881,18 @@ export function useAdvancedSection(): SectionDef {
               keywords: t('advanced.detailedRecords.keywords'),
               group: data,
               render: () => <DetailedRecords label={t('advanced.detailedRecords.name')} />,
+            },
+            {
+              id: 'debug-mode',
+              name: t('advanced.debugMode.name'),
+              english: en('advanced.debugMode.name'),
+              description: debugOn
+                ? t('advanced.debugMode.descriptionOn')
+                : t('advanced.debugMode.description'),
+              keywords: t('advanced.debugMode.keywords'),
+              group: data,
+              layout: 'block' as const,
+              render: (text: ReactNode) => <DebugModeRow text={text} />,
             },
           ]),
       {

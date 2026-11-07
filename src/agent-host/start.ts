@@ -4,7 +4,7 @@
 
 import { Worker } from 'node:worker_threads'
 import type { HostEvent } from '@shared/agent-host'
-import { setLogLevel, writeLog } from '@shared/log/process-log'
+import { setLogLevel, setVerboseRecords, writeLog } from '@shared/log/process-log'
 import { ARTIFACT_ID } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { HostToMain, MainToHost } from '@shared/host-control'
@@ -161,6 +161,7 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         break
       case 'host:log-level':
         if (message.level === 'debug' || message.level === 'info') setLogLevel(message.level)
+        if (typeof message.verbose === 'boolean') setVerboseRecords(message.verbose)
         break
       case 'host:permission-answer':
         if (

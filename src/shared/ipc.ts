@@ -5,6 +5,7 @@ import type { SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
+import type { DebugStatus } from './debug'
 import type { ComputerPermissionKind, ComputerUseStatus } from './computer-use'
 import type { EditorApp, EditorList } from './editors'
 import type { BusySession, BusyTerminal } from './host-control'
@@ -81,7 +82,8 @@ export interface UnsavedFile {
  */
 export interface QuitRequest {
   id: number
-  reason: 'quit' | 'update' | 'close'
+  /** `restart`: the user asked for one, as to turn debug mode on or off. */
+  reason: 'quit' | 'update' | 'restart' | 'close'
   sessions: BusySession[]
   terminals: BusyTerminal[]
   unsaved: UnsavedFile[]
@@ -100,6 +102,8 @@ export type AppCommand =
   | { kind: 'open-project' }
   | { kind: 'new-session' }
   | { kind: 'open-settings'; section?: string }
+  /** Kettu was started again to debug, while this run is a normal one. */
+  | { kind: 'confirm-debug-restart' }
   | { kind: 'toggle-sidebar' }
   | { kind: 'open-session'; sessionId: string }
   | { kind: 'open-routines' }
@@ -204,6 +208,9 @@ export interface IpcInvokeContract {
   }
   'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'diagnostics:clear-verbose': { args: []; result: void }
+  'debug:get': { args: []; result: DebugStatus }
+  // true restarts in debug mode, false normally; through the quit flow, which may ask first.
+  'debug:restart': { args: [debug: boolean]; result: void }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
   'editors:list': { args: []; result: EditorList }
@@ -353,6 +360,7 @@ export interface IpcEventContract {
   'themes:changed': ThemesState
   'update:changed': UpdateStatus
   'app:confirm-quit': QuitRequest
+  'debug:changed': DebugStatus
   'app:command': AppCommand
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
@@ -618,6 +626,12 @@ export interface KettuApi {
     /** Picks or creates a configuration folder for an agent to add, which `addAgent` accepts. */
     chooseAgentFolder(): Promise<string | null>
     chooseShell(): Promise<string | null>
+  }
+  /** Debug mode: this run's ports, and restarting into it or out of it. */
+  debug: {
+    get(): Promise<DebugStatus>
+    restart(debug: boolean): Promise<void>
+    onChanged(listener: (status: DebugStatus) => void): () => void
   }
   diagnostics: {
     /** Asks where to save and writes the bundle; resolves to the path, or null if cancelled. */

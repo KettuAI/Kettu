@@ -3,6 +3,7 @@
 // ports, framed as their sockets frame it.
 
 import type { Server } from 'node:net'
+import type { DebugStatus } from '@shared/debug'
 import type { DirectStatus } from '@shared/host-control'
 import type { PortChannel } from '@shared/port-channel'
 import { isPort, MIN_OWN_PORT, parseDirectAddress } from '@shared/remote/address'
@@ -61,6 +62,8 @@ export interface DaemonStatus {
   connectedDevices: number | null
   /** Direct connections as the remote host runs them, or null while remote access is not running. */
   direct: DirectStatus | null
+  /** This run's inspectors and their file in a debug run; null or absent, from older daemons, else. */
+  debug?: { inspectors: DebugStatus['inspectors']; file: string | null } | null
 }
 
 /** Direct connections: what the settings ask for and what the remote host makes of them. */

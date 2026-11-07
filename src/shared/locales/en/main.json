@@ -57,6 +57,7 @@
   },
   "quit": {
     "titleQuit": "Quit {{name}}?",
+    "titleRestart": "Restart {{name}}?",
     "titleUpdate": "Restart to update?",
     "quit": "Quit",
     "restart": "Restart",
@@ -105,7 +106,8 @@
     "newSession": "New session",
     "quit": "Quit {{name}}",
     "remoteAccess": "Remote access",
-    "checkForUpdates": "Check for updates…"
+    "checkForUpdates": "Check for updates…",
+    "debugMode": "Debug mode is on"
   },
   "agents": {
     "folderTaken": "This folder already belongs to {{agent}}. Choose another one, or let Kettu make a new one."

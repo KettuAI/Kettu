@@ -84,5 +84,9 @@
       "settings": "设置 › {{section}}",
       "settingsItem": "设置 › {{section}} › {{item}}"
     }
+  },
+  "debugMode": {
+    "label": "调试模式",
+    "tooltip": "调试模式已打开 · 查看端口"
   }
 }
