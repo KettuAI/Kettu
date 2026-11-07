@@ -397,6 +397,19 @@ function MeterRing({ share, level }: { share: number; level: string }) {
   )
 }
 
+const SKILLS = /^skills$/i
+const MEMORY_FILES = /^memory files$/i
+// What fits a list row of the context card beside its count.
+const PATH_ROOM = 36
+
+/** A long path cut in the middle, so its file's name stays whole: `~/.claude/pr…MEMORY.md`. */
+function middlePath(path: string): string {
+  if (path.length <= PATH_ROOM) return path
+  const name = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)
+  const head = PATH_ROOM - name.length - 1
+  return head > 0 ? `${path.slice(0, head)}…${name}` : path
+}
+
 /** A list's token count as the agent wrote it, such as "1.2k", as a number. */
 function parseTokens(text: string): number {
   const match = /([\d.,]+)\s*([kKmM])?/.exec(text)
@@ -445,12 +458,16 @@ function ContextPart({
     ? rows
         .filter((row) => row.part.kind !== 'free')
         .map((row) => {
-          const list = listOf(row.name)
+          // Skills get a page of their own, so their row lists none of them.
+          const skills = SKILLS.test(row.name)
+          const list = skills ? undefined : listOf(row.name)
+          const paths = MEMORY_FILES.test(row.name)
           return {
             id: row.name,
             label: row.name,
             tokens: row.tokens,
             locked: true,
+            ...(skills ? { link: true } : {}),
             ...(row.part.kind === 'buffer'
               ? { color: 'var(--composer-faint)', reserved: true }
               : {}),
@@ -458,8 +475,13 @@ function ContextPart({
               ? {
                   items: list.items.map((item, index) => ({
                     id: String(index),
-                    label: item.detail ? `${item.name} · ${item.detail}` : item.name,
+                    label: paths
+                      ? middlePath(item.name)
+                      : item.detail
+                        ? `${item.name} · ${item.detail}`
+                        : item.name,
                     tokens: parseTokens(item.tokens),
+                    ...(paths ? { title: item.name } : {}),
                   })),
                 }
               : {}),
@@ -467,7 +489,8 @@ function ContextPart({
         })
     : [{ id: 'used', label: t('usage.context.used'), tokens: usage.used, locked: true }]
   const unlisted = lists.filter(
-    (l) => !rows?.some((r) => r.name.toLowerCase() === l.name.toLowerCase()),
+    (l) =>
+      !SKILLS.test(l.name) && !rows?.some((r) => r.name.toLowerCase() === l.name.toLowerCase()),
   )
   return (
     <>

@@ -15,7 +15,13 @@ import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type Re
  * The styles are injected below, so no extra files are needed.
  */
 
-export type ContextItem = { id: string; label: string; tokens: number };
+export type ContextItem = {
+  id: string;
+  label: string;
+  tokens: number;
+  /** Shown on hover in place of the label, e.g. a whole path the label shortens */
+  title?: string;
+};
 
 export type ContextPart = {
   id: string;
@@ -32,6 +38,8 @@ export type ContextPart = {
   color?: string;
   /** Held back rather than used, e.g. an autocompact buffer: drawn and listed, not in the total */
   reserved?: boolean;
+  /** Its row opens something elsewhere: a pointer and a pressed state */
+  link?: boolean;
 };
 
 export type ContextWindowProps = {
@@ -265,7 +273,7 @@ const Items = memo(function Items({
         <li key={it.id} className="ui-cwc__fold ui-cwc__fold--item" data-open={leaving[`${partId}/${it.id}`] ? undefined : ""}>
           <div className="ui-cwc__clip">
             <div className="ui-cwc__item">
-              <span className="ui-cwc__item-label" title={it.label} dir="auto">
+              <span className="ui-cwc__item-label" title={it.title ?? it.label} dir="auto">
                 {it.label}
               </span>
               <span className="ui-cwc__item-value" title={`${exact(it.tokens)} tokens`}>
@@ -605,6 +613,7 @@ export function ContextWindow({
                 key={p.id}
                 className="ui-cwc__part"
                 data-hot={hot === p.id ? "" : undefined}
+                data-link={p.link ? "" : undefined}
                 data-dim={hot && hot !== p.id ? "" : undefined}
                 onPointerEnter={(e) =>
                   e.pointerType === "mouse" && setHot(p.id)
@@ -764,6 +773,8 @@ const css = /* css */ `
 .ui-cwc__parts { margin-top: 10px !important; }
 .ui-cwc__part { margin: 0 -8px; padding: 0 8px; border-radius: 6px; transition: background-color 120ms ease-out, opacity 220ms ease; }
 .ui-cwc__part[data-hot] { background: var(--ui-cwc-wash); }
+.ui-cwc__part[data-link] { cursor: pointer; }
+.ui-cwc__part[data-link]:active { background: var(--ui-cwc-fill); }
 .ui-cwc__part[data-dim] { opacity: 0.5; }
 .ui-cwc__row { display: flex; align-items: center; gap: 8px; min-height: 32px; }
 .ui-cwc__main { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; height: 32px; border-radius: 6px; }

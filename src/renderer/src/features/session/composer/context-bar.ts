@@ -30,31 +30,47 @@ const FREE = /^free space$/i
 const BUFFER = /^autocompact buffer$/i
 // The kinds that take the four colors, in the order every context breakdown shows them.
 const KINDS = [/^messages$/i, /^memory files$/i, /^system tools$/i, /^mcp tools$/i]
+// The small fixed costs that come next, in this order, before any other the report names.
+const SMALL = [/^system prompt$/i, /^skills$/i, /^mcp server instructions$/i]
 // The small fixed costs take the grays, `--context-5` on.
 const FIRST_GRAY = KINDS.length + 1
 
+type Category = ContextBreakdown['categories'][number]
+
 /**
  * The report's categories as rows: messages, memory files, system tools and MCP tools in their own
- * colors and that order, then the other sources in the report's order in grays (one past the
- * third reuses the last), then the autocompact buffer, then free space.
+ * colors and that order; then the system prompt, skills, MCP server instructions and any other
+ * source in the report's order, in grays (one past the third reuses the last); then the
+ * autocompact buffer, then free space.
  */
 export function contextRows(categories: ContextBreakdown['categories']): ContextRow[] {
-  const kinds: ContextRow[][] = KINDS.map(() => [])
-  const others: ContextRow[] = []
+  const kinds: Category[][] = KINDS.map(() => [])
+  const small: Category[][] = SMALL.map(() => [])
+  const others: Category[] = []
   const free: ContextRow[] = []
   const buffer: ContextRow[] = []
   for (const category of categories) {
-    const kind = KINDS.findIndex((name) => name.test(category.name))
     if (FREE.test(category.name)) free.push({ ...category, part: { kind: 'free' } })
     else if (BUFFER.test(category.name)) buffer.push({ ...category, part: { kind: 'buffer' } })
-    else if (kind >= 0)
-      kinds[kind]!.push({ ...category, part: { kind: 'source', color: kind + 1 } })
     else {
-      const color = Math.min(FIRST_GRAY + others.length, CONTEXT_COLORS)
-      others.push({ ...category, part: { kind: 'source', color } })
+      const kind = KINDS.findIndex((name) => name.test(category.name))
+      const fixed = SMALL.findIndex((name) => name.test(category.name))
+      if (kind >= 0) kinds[kind]!.push(category)
+      else if (fixed >= 0) small[fixed]!.push(category)
+      else others.push(category)
     }
   }
-  return [...kinds.flat(), ...others, ...buffer, ...free]
+  const colored = kinds.flatMap((list, index) =>
+    list.map((category): ContextRow => ({
+      ...category,
+      part: { kind: 'source', color: index + 1 },
+    })),
+  )
+  const grays = [...small.flat(), ...others].map((category, index): ContextRow => ({
+    ...category,
+    part: { kind: 'source', color: Math.min(FIRST_GRAY + index, CONTEXT_COLORS) },
+  }))
+  return [...colored, ...grays, ...buffer, ...free]
 }
 
 export interface ContextSegment {

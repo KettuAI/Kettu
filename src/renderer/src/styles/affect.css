@@ -4135,6 +4135,15 @@
 .kettu-ctx__window .ui-cwc__item {
   margin-right: 0;
 }
+/* Nine rows at most: an open list scrolls inside them instead of growing the card. The inline
+   padding keeps the rows' own -8px margins inside the scroller. */
+.kettu-ctx__window .ui-cwc__parts {
+  max-height: calc(9 * 32px);
+  margin-inline: -8px;
+  padding-inline: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 .kettu-ctx__note {
   margin: 0;
   padding: 0 16px 10px;

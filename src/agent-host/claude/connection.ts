@@ -1932,7 +1932,10 @@ export class ClaudeConnection implements AgentConnection {
       : await this.temporary(cwd, { ...options, hidden: 'context' }, sessionId)
     const query = (live ?? temporary)!.query!
     try {
-      return mapContextUsage(await query.getContextUsage({ detail: 'summary' }), Date.now())
+      return mapContextUsage(await query.getContextUsage({ detail: 'summary' }), Date.now(), {
+        cwd,
+        home: os.homedir(),
+      })
     } finally {
       if (temporary) await this.closeSession(temporary.id)
     }
