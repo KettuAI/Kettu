@@ -967,7 +967,16 @@ export function ModelPicker({
                   <span className="ui-mdpc__switch" aria-hidden="true" />
                 </button>
                 {t.reset && (
-                  <button type="button" className="ui-mdpc__reset" disabled={t.disabled} onClick={t.reset.onReset}>
+                  <button
+                    type="button"
+                    className="ui-mdpc__reset"
+                    disabled={t.disabled}
+                    onClick={(e) => {
+                      // The row goes once reset, so focus stays in the menu on its switch.
+                      (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
+                      t.reset?.onReset();
+                    }}
+                  >
                     {t.reset.label}
                   </button>
                 )}
