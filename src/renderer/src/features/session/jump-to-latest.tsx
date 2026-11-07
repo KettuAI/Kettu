@@ -1,3 +1,4 @@
+import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { memo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -7,6 +8,7 @@ import {
   useMessageScrollerScrollable,
 } from '@renderer/components/ui/message-scroller'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { Glyph } from '@renderer/features/shell/glyph'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { stopReasonText } from './entries/helpers'
 import { CELLS, turnDotStyles } from './turn-dot-patterns'
@@ -57,10 +59,11 @@ function turnEnding(state: ThreadState | null | undefined): Ending {
 }
 
 /**
- * Jumps to the thread's end, drawn with the turn's nine dots in the fox orange so it carries the
- * turn's state while the status line is out of view: a chevron at rest, the phase's motion while
- * the turn runs, the centre beating while it waits for the user, and how it ended when it ended
- * out of view, until the end comes into view. Pointing at it always shows the chevron.
+ * Jumps to the thread's end. At rest it is an ink chevron; the turn's nine dots in the fox orange
+ * appear only while there is a state to carry, the status line being out of view: the phase's
+ * motion while the turn runs, the centre beating while it waits for the user, a red mark when it
+ * failed. A turn that ended out of view turns the chevron fox orange until the end comes into
+ * view. Pointing at it always shows the chevron.
  */
 export const JumpToLatest = memo(function JumpToLatest({
   sessionId,
@@ -109,6 +112,7 @@ export const JumpToLatest = memo(function JumpToLatest({
           />
         }
       >
+        <Glyph icon={ArrowDown01Icon} size={18} className="ks-jump__arrow size-[18px]" />
         <svg data-jump-dots viewBox="0 0 16 16" aria-hidden className="ks-jump__dots size-4">
           {CELLS.map(([x, y], i) => (
             <circle
