@@ -9,6 +9,7 @@ import { entryPictures } from './row-pictures'
 import { RowThumbs } from './row-thumbs'
 import { ThoughtBody, ToolBody, ToolSummary } from './tool-call-parts'
 import { toolHasBody, type StepFacts } from './tool-call-model'
+import { useOpenedOnce } from './use-opened'
 
 const COMPACTION_KEY = {
   in_progress: 'inProgress',
@@ -20,7 +21,9 @@ const COMPACTION_KEY = {
 /**
  * A step of the thread's work on affectUI's Tool Call Card: a tool call, a thought or a
  * compaction. Its facts come as props of their own (tool-call-model.ts), which a group reads.
- * `note` follows a tool call's target; a call a routine allowed says so by default.
+ * `note` follows a tool call's target; a call a routine allowed says so by default. Its content
+ * renders once the card first opens; until then the body is null, since false would leave the card
+ * without one.
  */
 export function StepCard({
   sessionId,
@@ -44,6 +47,7 @@ export function StepCard({
   const { t } = useTranslation('session')
   // A step that arrived while shown draws its part of a run's timeline in (session.css).
   const [fresh] = useState(() => isFresh(sessionId, entry.id))
+  const [opened, onOpenChange] = useOpenedOnce(status)
   const facts = {
     status,
     startedAt,
@@ -53,6 +57,7 @@ export function StepCard({
     labels,
     chevron: 'after' as const,
     className: fresh ? 'ks-step-new' : undefined,
+    onOpenChange,
   }
   if (entry.kind === 'tool') {
     const label = toolLabel(entry, projectPath, entry.status === 'completed')
@@ -77,7 +82,9 @@ export function StepCard({
         }
       >
         {toolHasBody(entry, projectPath) ? (
-          <ToolBody sessionId={sessionId} entryId={entry.id} projectPath={projectPath} />
+          opened ? (
+            <ToolBody sessionId={sessionId} entryId={entry.id} projectPath={projectPath} />
+          ) : null
         ) : (
           false
         )}
@@ -91,7 +98,13 @@ export function StepCard({
         name={t('summary.thought')}
         summary={thoughtTitle(entry.markdown) ?? undefined}
       >
-        {entry.markdown.trim() ? <ThoughtBody sessionId={sessionId} entryId={entry.id} /> : false}
+        {entry.markdown.trim() ? (
+          opened ? (
+            <ThoughtBody sessionId={sessionId} entryId={entry.id} />
+          ) : null
+        ) : (
+          false
+        )}
       </ToolCallCard>
     )
   }
@@ -99,13 +112,15 @@ export function StepCard({
     return (
       <ToolCallCard {...facts} name={t(`compaction.${COMPACTION_KEY[entry.status]}`)}>
         {entry.summary ? (
-          <div data-selectable="" className="text-muted-foreground">
-            <Markdown
-              markdown={entry.summary}
-              streaming={entry.status === 'in_progress'}
-              className="markdown-muted"
-            />
-          </div>
+          opened ? (
+            <div data-selectable="" className="text-muted-foreground">
+              <Markdown
+                markdown={entry.summary}
+                streaming={entry.status === 'in_progress'}
+                className="markdown-muted"
+              />
+            </div>
+          ) : null
         ) : (
           false
         )}

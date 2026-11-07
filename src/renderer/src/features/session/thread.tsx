@@ -33,21 +33,52 @@ import {
   type Item,
 } from './thread-items'
 
-// A thread opens on its latest page, and older pages load as it scrolls back toward them, a
-// viewport ahead. Loaded items render from the end: the first frame shows the last items, and
-// older ones follow in transitions after it, which MessageScroller keeps in place as they are
-// prepended. Each prepend lays the thread out again, so the shown count doubles rather than
-// growing by a fixed step: N items take log2(N / 40) passes instead of N / 60.
-const FIRST_ITEMS = 40
+// A thread renders near its viewport, so opening one costs its first screen however long it is.
+// It opens on its latest page with its newest items rendered. Whenever less than a viewport of
+// rendered items lies above the view, a batch of older ones renders in a transition, which
+// MessageScroller keeps in place as they are prepended; once every loaded item is rendered, the
+// page before them loads. Rendered items stay, and off-screen ones skip layout and paint.
+const FIRST_ITEMS = 24
+const MORE_ITEMS = 16
 
-function useShownFrom(total: number, held: boolean): number {
-  const [limit, setLimit] = useState(FIRST_ITEMS)
-  useEffect(() => {
-    if (held || limit >= total) return
-    const frame = requestAnimationFrame(() => startTransition(() => setLimit((l) => l * 2)))
-    return () => cancelAnimationFrame(frame)
-  }, [held, limit, total])
-  return Math.max(0, total - limit)
+/** The entry an item starts with; a reply's footer and the turn's status start with none. */
+function firstEntryOf(item: Item | undefined): string | null {
+  if (item?.type === 'entry') return item.id
+  if (item?.type === 'run' || item?.type === 'group') return item.ids[0] ?? null
+  return null
+}
+
+/** The entry that starts the first item at or after `index` that starts with one. */
+function entryFrom(items: readonly Item[], index: number): string | null {
+  for (let i = Math.max(0, index); i < items.length; i++) {
+    const id = firstEntryOf(items[i])
+    if (id !== null) return id
+  }
+  return null
+}
+
+/**
+ * The index of the first rendered item. The rendered items start at an entry rather than an
+ * index, so items arriving at the end never push older ones out, and a page loaded before them
+ * shows only as the view comes near it.
+ */
+function useShownFrom(
+  items: readonly Item[],
+  order: readonly string[],
+): { shownFrom: number; showFrom: (index: number) => void } {
+  const positions = useMemo(() => new Map(order.map((id, i) => [id, i])), [order])
+  const [from, setFrom] = useState(() => entryFrom(items, items.length - FIRST_ITEMS))
+  let shownFrom = Math.max(0, items.length - FIRST_ITEMS)
+  const start = from === null ? undefined : positions.get(from)
+  if (start !== undefined) {
+    shownFrom = items.findIndex((item) => {
+      const id = firstEntryOf(item)
+      return id !== null && positions.get(id)! >= start
+    })
+    if (shownFrom < 0) shownFrom = items.length
+  }
+  const showFrom = useCallback((index: number) => setFrom(entryFrom(items, index)), [items])
+  return { shownFrom, showFrom }
 }
 
 /** What a jump in the outline needs of the thread. */
@@ -145,14 +176,18 @@ export const Thread = memo(function Thread({
   useEffect(() => () => hoverReply(null), [sessionId])
   const sent = lastSent(order, signature)
   const [held, setHeld] = useState(false)
-  const shownFrom = useShownFrom(items.length, held)
+  const { shownFrom, showFrom } = useShownFrom(items, order)
   const revealing = useRef<{ key: string; resolve: () => void } | null>(null)
   const [, setRevealTick] = useState(0)
   useEffect(() => {
     const waiting = revealing.current
     if (!waiting) return
     const index = items.findIndex((item) => item.key === waiting.key)
-    if (index < 0 || shownFrom > index) return
+    if (index < 0) return
+    if (shownFrom > index) {
+      showFrom(index)
+      return
+    }
     revealing.current = null
     waiting.resolve()
   })
@@ -172,10 +207,10 @@ export const Thread = memo(function Thread({
   const content = useRef<HTMLDivElement | null>(null)
   const nearStart = useCallback(() => {
     const el = viewport.current
-    if (el && !held && hasOlder && shownFrom === 0 && el.scrollTop < el.clientHeight) {
-      loadOlder(sessionId)
-    }
-  }, [sessionId, held, hasOlder, shownFrom])
+    if (!el || held || el.scrollTop >= el.clientHeight) return
+    if (shownFrom > 0) startTransition(() => showFrom(shownFrom - MORE_ITEMS))
+    else if (hasOlder) loadOlder(sessionId)
+  }, [sessionId, held, hasOlder, shownFrom, showFrom])
   // Also after each prepend, and for a page too short to scroll.
   useEffect(nearStart, [nearStart, items.length])
 

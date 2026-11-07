@@ -130,6 +130,10 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
   const entry = useEntry(sessionId, entryId, 'agent')
   const animation = useEntryAnimation(sessionId, entryId)
   const writing = useThreadsStore((s) => writingId(s.replicas[sessionId]?.state) === entryId)
+  // A reply shown already written never shows its label, so only one written while shown has the
+  // dots, for the label to fade out when it is done.
+  const [wrote, setWrote] = useState(writing)
+  if (writing && !wrote) setWrote(true)
   if (!entry) return null
   return (
     <div className={cn('ks-answer min-w-0', animation)} data-selectable="" data-agent-message="">
@@ -137,7 +141,7 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
         sources={NO_SOURCES}
         answer=""
         streaming={writing}
-        mark={<TurnDots phase="writing" />}
+        mark={wrote && <TurnDots phase="writing" />}
         labels={{ writing: t('thread.phase.writing', { count: 1 }) }}
       >
         <SessionIdContext value={sessionId}>

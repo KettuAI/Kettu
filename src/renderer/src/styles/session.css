@@ -110,6 +110,10 @@
 .ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) .ui-ansc__label {
   opacity: 0;
 }
+/* Written, the hidden dots stop instead of looping on; their loop is set inline. */
+.ks-answer .ui-ansc:is([data-phase='done'], [data-phase='stopped']) [data-turn-dots] circle {
+  animation: none !important;
+}
 .ks-answer .ui-ansc__answer {
   font-size: inherit;
   line-height: inherit;

@@ -9,6 +9,7 @@ import { groupLabel, toolStep } from './helpers'
 import { RowThumbs } from './row-thumbs'
 import { StepCard } from './tool-call'
 import { runPictures, stepFacts, useToolCallLabels } from './tool-call-model'
+import { useOpenedOnce } from './use-opened'
 
 /** A run of completed lookups as one line ("Read a.ts and 2 more"), opening to a card for each. */
 export const ToolGroup = memo(function ToolGroup({
@@ -32,6 +33,7 @@ export const ToolGroup = memo(function ToolGroup({
   const tools = entries.flatMap((entry) => (entry?.kind === 'tool' ? [entry] : []))
   const pictures = useMemo(() => runPictures(entries), [entries])
   const label = groupLabel(tools.map(toolStep))
+  const [opened, onOpenChange] = useOpenedOnce()
   return (
     <ToolCallGroup
       className={cn('min-w-0', animation)}
@@ -43,21 +45,23 @@ export const ToolGroup = memo(function ToolGroup({
       trail={
         pictures.length > 0 ? <RowThumbs sessionId={sessionId} pictures={pictures} /> : undefined
       }
+      onOpenChange={onOpenChange}
     >
-      {tools.map((entry) => {
-        const { glyph, ...facts } = stepFacts(sessionId, entry)!
-        return (
-          <StepCard
-            key={entry.id}
-            {...facts}
-            icon={<Icon icon={glyph} size={14} />}
-            sessionId={sessionId}
-            entry={entry}
-            projectPath={projectPath}
-            labels={labels}
-          />
-        )
-      })}
+      {opened &&
+        tools.map((entry) => {
+          const { glyph, ...facts } = stepFacts(sessionId, entry)!
+          return (
+            <StepCard
+              key={entry.id}
+              {...facts}
+              icon={<Icon icon={glyph} size={14} />}
+              sessionId={sessionId}
+              entry={entry}
+              projectPath={projectPath}
+              labels={labels}
+            />
+          )
+        })}
     </ToolCallGroup>
   )
 })
