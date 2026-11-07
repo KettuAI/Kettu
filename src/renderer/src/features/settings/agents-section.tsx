@@ -27,6 +27,7 @@ import { newSession } from '@renderer/app/actions'
 import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
+import { joinPlanTier } from '@renderer/features/account/model'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -179,17 +180,6 @@ function useAddable(): AgentStatus[] {
   return useAgentsStore(useShallow((s) => addableHarnesses(s.order, s.byId)))
 }
 
-/** The plan, with its tier once. A label that already names the tier is left as it is. */
-function planText(
-  label: string,
-  tier: string | undefined,
-  join: (plan: string, tier: string) => string,
-): string {
-  const extra = tier?.trim()
-  if (!extra || label.toLowerCase().includes(extra.toLowerCase())) return label
-  return join(label, extra)
-}
-
 /**
  * What the account line says. A missing program or a failed start comes first. An email is shown
  * as itself; an API key, which has none, is named by how it signs in. Otherwise the line says
@@ -201,14 +191,13 @@ function accountIdentity(
   ready: AgentReadiness,
   reading: boolean,
   text: (key: 'agents.needsSignInLine' | 'agents.readingAccount' | 'agents.noAccount') => string,
-  joinTier: (plan: string, tier: string) => string,
 ): { tone: 'clear' | 'quiet' | 'failed'; text: string } {
   if (ready.kind === 'failed') return { tone: 'failed', text: ready.message }
   if (ready.kind === 'missing') return { tone: 'clear', text: ready.message }
   const email = account?.email?.trim()
   if (email) return { tone: 'clear', text: email }
   const label = account?.label.trim()
-  if (label) return { tone: 'clear', text: planText(label, account?.tier, joinTier) }
+  if (label) return { tone: 'clear', text: joinPlanTier(label, account?.tier) }
   if (ready.kind === 'sign-in') return { tone: 'quiet', text: text('agents.needsSignInLine') }
   if (reading && status.capabilities.account)
     return { tone: 'quiet', text: text('agents.readingAccount') }
@@ -228,15 +217,14 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
   const account = status.account?.kind === 'none' ? null : status.account
   const limits = currentLimits(status.limits, now)
   const folder = details?.config.find((item) => item.id === 'folder')?.path
-  const joinTier = (plan: string, tier: string) => t('agents.planTier', { plan, tier })
   const off = status.disabled === true
-  const identity = accountIdentity(status, account, ready, reading, (key) => t(key), joinTier)
+  const identity = accountIdentity(status, account, ready, reading, (key) => t(key))
   const blocked = ready.kind === 'missing' || ready.kind === 'failed'
   const email = account?.email?.trim() ?? ''
   const label = account?.label.trim() ?? ''
   // The plan sits with the harness when the email is the account line. An API key has no email,
   // so its login is that line and the folder it keeps takes the plan's place.
-  const plan = !blocked && email && label ? planText(label, account?.tier, joinTier) : ''
+  const plan = !blocked && email && label ? joinPlanTier(label, account?.tier) : ''
   const showFolder = !blocked && account?.kind === 'api_key' && !email && folder
   const end: ReactNode =
     ready.kind === 'sign-in' ? (

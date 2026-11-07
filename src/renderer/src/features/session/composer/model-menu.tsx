@@ -11,6 +11,7 @@ import {
   type PickerToggle,
 } from '@renderer/components/affect/model-picker'
 import { ShimmerText } from '@renderer/components/affect/shimmer-loader'
+import { joinPlanTier } from '@renderer/features/account/model'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
 import { formatShortcut } from '@renderer/lib/platform'
@@ -129,11 +130,7 @@ export function ModelMenu({
   })
 
   const limit = tightestLimit(limits, now)
-  const plan = account?.label
-    ? account.tier
-      ? t('usage.limits.tier', { plan: account.label, tier: account.tier })
-      : account.label
-    : null
+  const plan = account?.label ? joinPlanTier(account.label, account.tier) : null
   const note = [
     account?.email,
     plan,

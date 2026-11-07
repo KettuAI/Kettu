@@ -98,7 +98,6 @@
     },
     "limits": {
       "plan": "套餐",
-      "tier": "{{plan}} ({{tier}})",
       "used": "已使用：{{limit}}",
       "resets": "重置时间：{{time}}",
       "updated": "{{ago}}更新",
