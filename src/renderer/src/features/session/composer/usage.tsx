@@ -346,10 +346,12 @@ export function ContextButton({
           </>
         )}
       </PopoverTrigger>
+      {/* A long list scrolls above the tray rather than flipping the card beside it. */}
       <PopoverContent
         side="top"
         align="end"
         sideOffset={8}
+        collisionAvoidance={{ fallbackAxisSide: 'none' }}
         className="kettu-pop max-h-(--available-height) w-90 overflow-y-auto"
       >
         <div className="kettu-ctx">

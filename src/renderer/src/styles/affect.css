@@ -4131,6 +4131,10 @@
 .kettu-ctx__window[data-busy] {
   opacity: 0.6;
 }
+/* affectUI pulls a part's rows 4px past its clip, which cuts off their counts' last digit. */
+.kettu-ctx__window .ui-cwc__item {
+  margin-right: 0;
+}
 .kettu-ctx__note {
   margin: 0;
   padding: 0 16px 10px;
