@@ -38,7 +38,9 @@ import { HostAdmin } from './host-admin'
 import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
 import { locale as currentLocale, setLocale, t } from './i18n'
-import { appInfo, registerIpcHandlers, registerTrayIpc } from './ipc'
+import { mainDiagnostics } from './diagnostics'
+import { appInfo, launchToInteractive, registerIpcHandlers, registerTrayIpc } from './ipc'
+import { Reports } from './report'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
@@ -75,6 +77,8 @@ import {
   watchConsole,
   watchProcesses,
 } from './app-log'
+import { redactLogText } from '@shared/log/process-log'
+import { writeReport } from '@shared/log/report-bundle'
 import {
   applyTheme,
   applyWindowTheme,
@@ -190,7 +194,15 @@ async function start(): Promise<void> {
     await accountProxy
     return accountSession.fetch(url, init) as unknown as Promise<Response>
   }
-  const accountAvatars = new Avatars(accountFetch, accountAvatarRequestUrl)
+  let accountBase = ACCOUNT_URL
+  try {
+    accountBase = accountBaseUrl(process.env)
+  } catch (error) {
+    log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
+  }
+  const accountAvatars = new Avatars(accountFetch, (url) =>
+    accountAvatarRequestUrl(url, accountBase),
+  )
   // Made once sharing and the updater are, before remote access starts and a device can ask.
   let hostAdmin: HostAdmin | null = null
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
@@ -369,12 +381,6 @@ async function start(): Promise<void> {
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
   }
   const hostName = (): string => settings.get().remote.name ?? hostname()
-  let accountBase = ACCOUNT_URL
-  try {
-    accountBase = accountBaseUrl(process.env)
-  } catch (error) {
-    log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
-  }
   const account = await Account.load({
     file: accountFile(userDataPath),
     api: new AccountApi(accountBase, accountFetch),
@@ -561,6 +567,41 @@ async function start(): Promise<void> {
     (message) => log.warn(message),
   )
   await agentFolders.moveCreatedAgents(join(userDataPath, 'agent-config'))
+  const reportsFolder = join(userDataPath, 'reports')
+  const reports = new Reports(
+    {
+      build: async (params) => {
+        if (agentHost.state === 'ready') return agentHost.report(params)
+        // The agent host is what the report is often about; main reads the logs itself then.
+        return writeReport(
+          {
+            request: params.request,
+            now: Date.now(),
+            parent: params.parent,
+            settings: params.settings,
+            host: null,
+            logDir: logsFolder(),
+            crashDir: params.crashDir,
+            screenshot: params.screenshot
+              ? new Uint8Array(Buffer.from(params.screenshot, 'base64'))
+              : null,
+            redact: redactLogText,
+          },
+          reportsFolder,
+        )
+      },
+      parent: () =>
+        mainDiagnostics({ agentHost, terminalHost, launchToInteractiveMs: launchToInteractive() }),
+      settings: () => settings.get(),
+      setVerbose: (until) => void settings.update({ diagnostics: { verboseUntil: until } }),
+      verboseUntil: () => settings.get().diagnostics.verboseUntil,
+      onRecording: (recording) => broadcast('report:recording-changed', recording),
+      onRecorded: (span) => sendCommand({ kind: 'report-problem', span }),
+    },
+    reportsFolder,
+  )
+  void reports.clearFolder()
+
   hostAdmin = new HostAdmin({
     settings,
     agentFolders,
@@ -582,6 +623,7 @@ async function start(): Promise<void> {
     thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
     png: (id, version, page, size) => artifacts.png(id, version, page, size),
     printPdf: (id, version) => artifacts.printPdf(id, version),
+    report: (request) => reports.forDevice(request),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),
   })
 
@@ -594,6 +636,7 @@ async function start(): Promise<void> {
     zoom: (step: ZoomStep) => {
       settings.update({ appearance: { zoom: stepZoom(settings.get().appearance.zoom, step) } })
     },
+    reportProblem: () => sendCommand({ kind: 'report-problem' }),
   }
   const applyDiagnostics = (until: number | null): void =>
     applyVerbose(
@@ -670,6 +713,7 @@ async function start(): Promise<void> {
     computerModel: readComputerModel,
     updater,
     quit: quitFlow,
+    reports,
   })
   ipcReady = true
   installMenu(menuDeps)

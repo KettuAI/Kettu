@@ -14,6 +14,7 @@ import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import { newSessionPanel } from '@renderer/stores/view'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
@@ -55,6 +56,10 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
             title={t('pending.couldntStart', { agent: name })}
             message={error.message}
             onRetry={retry}
+            report={{
+              hostId: pending.projectPath ? hostOfPath(pending.projectPath) : null,
+              agentId: pending.agentId,
+            }}
           />
         </div>
       </ColumnScroller>

@@ -29,8 +29,10 @@ import type {
   IpcInvokeChannel,
   IpcInvokeResult,
   IpcSendContract,
+  ReportPrepareResult,
   UnsavedFile,
 } from '@shared/ipc'
+import { parseReportRequest, type PreparedReport } from '@shared/report'
 import { isHarnessId, type HarnessId } from '@shared/thread'
 import { isTrayTarget } from '@shared/tray'
 import type { Account } from './account'
@@ -39,12 +41,12 @@ import type { AgentHost } from './agent-host'
 import { grantClipboardFiles, grantPaths } from './attachments'
 import type { Artifacts } from './artifacts'
 import type { Avatars } from './avatars'
+import { ReportError, type Reports } from './report'
 import type { BrowserViews } from './browser/views'
 import type { SiteIcons } from './browser/site-icons'
 import { originOf } from './browser/origins'
 import { defaultBrowser } from './default-browser'
 import { debugStatus, prepareRelaunch } from './debug-mode'
-import { mainDiagnostics, saveDiagnostics } from './diagnostics'
 import { Editors } from './editors'
 import { sendEvent } from './events'
 import { deviceIdArg, deviceName, pairingCode, runnableProgram } from './host-admin'
@@ -52,7 +54,7 @@ import { t } from './i18n'
 import { loginItemStatus } from './login-item'
 import { createLogger } from './log'
 import { parseActionBatch } from './action-records'
-import { clearVerboseRecords } from './app-log'
+import { clearVerboseRecords, dismissUnexpectedExit, unexpectedExitNotice } from './app-log'
 import { grantedPath, type MediaGrants } from './media'
 import { copyImage, ON_HOST, revealMedia, saveMediaAs } from './media-actions'
 import { notifyTest } from './notifications'
@@ -101,6 +103,7 @@ export interface IpcDeps {
   computerModel(): Promise<string>
   updater: Updater
   quit: QuitFlow
+  reports: Reports
 }
 
 interface Caller {
@@ -380,6 +383,11 @@ export async function appInfo(): Promise<AppInfo> {
 
 let launchToInteractiveMs: number | null = null
 
+/** How long the first window took to become interactive in this run, once it did. */
+export function launchToInteractive(): number | null {
+  return launchToInteractiveMs
+}
+
 export function registerIpcHandlers({
   settings,
   account,
@@ -402,6 +410,7 @@ export function registerIpcHandlers({
   computerModel,
   updater,
   quit,
+  reports,
 }: IpcDeps): void {
   handle('app:get-info', 0, () => appInfo())
   handle('app:default-browser', 0, () => defaultBrowser(app))
@@ -510,13 +519,39 @@ export function registerIpcHandlers({
     ),
   )
 
-  handle('diagnostics:save', 1, ({ window }, bundle) =>
-    saveDiagnostics(
-      window,
-      bundle,
-      mainDiagnostics({ agentHost, terminalHost, launchToInteractiveMs }),
-    ),
-  )
+  const prepared = async (run: () => Promise<PreparedReport>): Promise<ReportPrepareResult> => {
+    try {
+      return { ok: true, report: await run() }
+    } catch (error) {
+      log.warn(`No problem report: ${(error as Error).message}`)
+      const tooLarge = error instanceof ReportError && error.code === 'too_large'
+      return { ok: false, reason: tooLarge ? 'too_large' : 'failed' }
+    }
+  }
+  handle('report:capture', 0, async ({ window }) => {
+    if (window) await reports.capture(window)
+  })
+  handle('report:prepare', 1, ({ window }, request) => {
+    const checked = parseReportRequest(request)
+    actionLog.info('report.prepare', {
+      range: checked.range.kind,
+      extras: checked.extras.join(','),
+    })
+    return prepared(() => reports.prepare(window, checked))
+  })
+  handle('report:adopt', 1, (_, zip) => prepared(() => reports.adopt(zip)))
+  handle('report:view', 2, (_, id, path) => reports.view(id, path))
+  handle('report:save', 1, ({ window }, id) => reports.save(window, id))
+  handle('report:discard', 1, (_, id) => reports.discard(id))
+  handle('report:recording', 0, () => reports.recordingState())
+  handle('report:record', 1, (_, on) => {
+    if (typeof on !== 'boolean') throw new Error('"report:record" takes a boolean')
+    if (on) return reports.startRecording()
+    reports.stopRecording()
+    return null
+  })
+  handle('report:crash-notice', 0, () => unexpectedExitNotice())
+  handle('report:dismiss-crash-notice', 0, () => dismissUnexpectedExit())
 
   handle('diagnostics:clear-verbose', 0, async () => {
     const until = settings.get().diagnostics.verboseUntil

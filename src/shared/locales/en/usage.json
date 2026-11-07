@@ -242,9 +242,8 @@
     "title": "The usage could not be read",
     "retry": "Retry",
     "kept": "The figures below are the last ones read.",
-    "unavailable": "The usage database cannot be read. Restart Kettu; if it still cannot, export diagnostics.",
-    "export": "Export diagnostics",
-    "savedTo": "Saved to {{path}}"
+    "unavailable": "The usage database cannot be read. Restart Kettu; if it still cannot, report the problem.",
+    "report": "Report a problem"
   },
   "picker": {
     "label": "Choose a time range",

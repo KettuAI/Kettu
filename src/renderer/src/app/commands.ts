@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { recordAction, watchNavigation } from '@renderer/lib/action-log'
 import { confirmDebugRestart } from '@renderer/stores/debug'
+import { openReport } from '@renderer/stores/report'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { checkForUpdates } from '@renderer/stores/updates'
 import {
@@ -63,6 +64,11 @@ export function useAppCommands(): void {
             break
           case 'confirm-debug-restart':
             confirmDebugRestart()
+            break
+          case 'report-problem':
+            void openReport(
+              command.span ? { range: { kind: 'span', ...command.span }, extras: ['verbose'] } : {},
+            )
             break
         }
       }),

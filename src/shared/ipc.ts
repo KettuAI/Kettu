@@ -1,5 +1,5 @@
 import type { AccountStatus } from './account'
-import type { AgentsApi, DiagnosticsBundle, HostMethod } from './agent-host'
+import type { AgentsApi, HostMethod } from './agent-host'
 import type { ArtifactImportKind, ArtifactImportResult, ThumbnailPage } from './artifacts'
 import type { SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
@@ -23,6 +23,7 @@ import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
 import type { DevicesApi } from './device-host'
+import type { PreparedReport, ReportFileView, ReportRequest } from './report'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
 import type { TrayTarget } from './tray'
@@ -38,6 +39,16 @@ export interface AppInfo {
   logsPath?: string
   isPackaged: boolean
 }
+
+/** Steps to reproduce being recorded, in Unix milliseconds. */
+export interface ReportRecording {
+  startedAt: number
+  endsAt: number
+}
+
+/** A bundle prepared, or why not: too large for the range and extras chosen, or failed. */
+export type ReportPrepareResult =
+  { ok: true; report: PreparedReport } | { ok: false; reason: 'too_large' | 'failed' }
 
 /** Something the user did in a window, for the log: ids, counts and switches, never text. */
 export interface ActionReport {
@@ -112,6 +123,8 @@ export type AppCommand =
   | { kind: 'show-history' }
   /** Cmd+W: the page closes the part used last, else the shown session, else the window. */
   | { kind: 'close'; browser?: true }
+  /** Report a problem, from the Help menu or the end of a recording, with its span then. */
+  | { kind: 'report-problem'; span?: { from: number; to: number } }
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:
@@ -206,11 +219,23 @@ export interface IpcInvokeContract {
     args: [pastedPath: string]
     result: GrantedAttachment[] | null
   }
-  'diagnostics:save': { args: [bundle: DiagnosticsBundle]; result: string | null }
   'diagnostics:clear-verbose': { args: []; result: void }
   'debug:get': { args: []; result: DebugStatus }
   // true restarts in debug mode, false normally; through the quit flow, which may ask first.
   'debug:restart': { args: [debug: boolean]; result: void }
+  // A problem report: the window's screenshot first, then this computer's bundle or one another
+  // host sent, its files to view, and saving or dropping it.
+  'report:capture': { args: []; result: void }
+  'report:prepare': { args: [request: ReportRequest]; result: ReportPrepareResult }
+  'report:adopt': { args: [zip: string]; result: ReportPrepareResult }
+  'report:view': { args: [id: string, path: string]; result: ReportFileView }
+  'report:save': { args: [id: string]; result: string | null }
+  'report:discard': { args: [id: string]; result: void }
+  'report:recording': { args: []; result: ReportRecording | null }
+  'report:record': { args: [on: boolean]; result: ReportRecording | null }
+  // When the last run ended unexpectedly, until the notice of it is dismissed.
+  'report:crash-notice': { args: []; result: number | null }
+  'report:dismiss-crash-notice': { args: []; result: void }
   'shell:show-data-folder': { args: []; result: void }
   'shell:show-item': { args: [path: string]; result: void }
   'editors:list': { args: []; result: EditorList }
@@ -362,6 +387,7 @@ export interface IpcEventContract {
   'app:confirm-quit': QuitRequest
   'debug:changed': DebugStatus
   'app:command': AppCommand
+  'report:recording-changed': ReportRecording | null
   'app:shortcut': ForwardedKey
   'artifact:blocked': ArtifactBlockedEvent
   'artifact:stopped': ArtifactStoppedEvent
@@ -633,9 +659,24 @@ export interface KettuApi {
     restart(debug: boolean): Promise<void>
     onChanged(listener: (status: DebugStatus) => void): () => void
   }
+  report: {
+    /** Takes the window's screenshot, before the dialog covers it. */
+    capture(): Promise<void>
+    prepare(request: ReportRequest): Promise<ReportPrepareResult>
+    /** A bundle another host built, in base64, kept here like this computer's. */
+    adopt(zip: string): Promise<ReportPrepareResult>
+    view(id: string, path: string): Promise<ReportFileView>
+    /** Asks where to save the zip; resolves to the path, or null if cancelled. */
+    save(id: string): Promise<string | null>
+    discard(id: string): Promise<void>
+    recording(): Promise<ReportRecording | null>
+    /** Starts or stops recording steps to reproduce; stopping opens the dialog. */
+    record(on: boolean): Promise<ReportRecording | null>
+    onRecording(listener: (recording: ReportRecording | null) => void): () => void
+    crashNotice(): Promise<number | null>
+    dismissCrashNotice(): Promise<void>
+  }
   diagnostics: {
-    /** Asks where to save and writes the bundle; resolves to the path, or null if cancelled. */
-    save(bundle: DiagnosticsBundle): Promise<string | null>
     /** Deletes the detailed records; refused while they are on. */
     clearVerbose(): Promise<void>
     /** Adds what the user did to the log, in batches. */

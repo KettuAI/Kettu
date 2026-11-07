@@ -674,15 +674,30 @@ describe('devices not seen for 90 days', () => {
   })
 
   it('are looked for every hour', async () => {
-    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] })
+    const hour = 60 * 60 * 1000
+    let now = Date.now()
+    const t = await setup({ now: () => now })
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
     try {
-      const t = await setup()
       t.server.startSweeping()
-      await vi.advanceTimersByTimeAsync(90 * DAY + 60 * 60 * 1000)
+      // Age the device without replaying 90 days of hourly callbacks.
+      now += 90 * DAY - hour
+      await vi.advanceTimersByTimeAsync(hour)
+      expect(t.devices.list()).toHaveLength(1)
+      now += hour
+      await vi.advanceTimersByTimeAsync(hour - 1)
+      expect(t.devices.list()).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(1)
       expect(t.devices.list()).toEqual([])
-      await t.server.stop('stopping')
+      await expect
+        .poll(() => t.activity.list(t.phone.id))
+        .toEqual([{ kind: 'removed', by: 'unseen', at: now }])
     } finally {
-      vi.useRealTimers()
+      try {
+        await t.server.stop('stopping')
+      } finally {
+        vi.useRealTimers()
+      }
     }
   })
 })
@@ -822,6 +837,44 @@ describe("an owner's calls beyond its sessions", () => {
     const device = await t.connect()
     await device.first
     await expect(call(device)('host.info')).rejects.toMatchObject({ code: 'internal' })
+  })
+})
+
+describe('a problem report of the host', () => {
+  const request = { description: 'It froze', range: { kind: 'hour' }, extras: [], context: null }
+
+  it("is built by the host's parent for the owner's device, never by the agent host", async () => {
+    const asked: string[] = []
+    const t = await setup({
+      admin: async (deviceId, method) => {
+        asked.push(`${deviceId} ${method}`)
+        return { result: { ok: true, zip: 'UEsFBg==', files: [], size: 4 } }
+      },
+    })
+    const device = await t.connect()
+    await device.first
+    expect(await call(device)('host.report', { request })).toMatchObject({ ok: true })
+    expect(asked).toEqual([`${t.phone.id} host.report`])
+    expect(t.forwarded).toEqual([])
+  })
+
+  it('is refused to a device while the host takes no owner calls', async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    await expect(call(device)('host.report', { request })).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+    expect(t.forwarded).toEqual([])
+  })
+
+  it("cannot be read from the agent host's diagnostics, which it no longer answers", async () => {
+    const t = await setup({ admin: async () => ({ result: null }) })
+    const device = await t.connect()
+    await device.first
+    await expect(call(device)('diagnostics.collect')).rejects.toMatchObject({
+      code: 'unknown_method',
+    })
   })
 })
 

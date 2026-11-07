@@ -11,7 +11,7 @@
     "reconnecting": "Reconnecting to the host…",
     "stopped": "The agent host stopped and could not be restarted.",
     "restart": "Restart",
-    "exportDiagnostics": "Export diagnostics"
+    "reportProblem": "Report a problem"
   },
   "launch": {
     "loadFailed": "Couldn't load your projects",

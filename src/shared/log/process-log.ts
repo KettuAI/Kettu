@@ -174,6 +174,11 @@ export function removeLogSecret(value: string): void {
   secrets.delete(value)
 }
 
+/** Text masked as this process masks its log, with the secrets it holds now. */
+export function redactLogText(text: string): string {
+  return redact(text)
+}
+
 /** Only for tests: a redactor with a fixed home folder. */
 export function setLogRedactorForTests(next: Redactor): void {
   redact = next

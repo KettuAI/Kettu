@@ -3,14 +3,14 @@ import {
   AlertCircleIcon,
   Archive01Icon,
   ArrowUp02Icon,
-  FileDownloadIcon,
+  Bug01Icon,
   RefreshIcon,
   WifiDisconnected01Icon,
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentId, UserContent } from '@shared/thread'
-import { exportDiagnostics, unarchiveSession } from '@renderer/app/actions'
+import { unarchiveSession } from '@renderer/app/actions'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/components/ui/input-group'
 import { Skeleton } from '@renderer/components/ui/skeleton'
@@ -21,6 +21,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import type { OtherHost } from '@renderer/stores/hosts'
+import { openReport } from '@renderer/stores/report'
 import { contentAttachments } from './composer/attachments'
 import { SentAttachments, UserContentView } from './entries/user-content'
 
@@ -221,27 +222,16 @@ export function FailedState({
   message,
   detail,
   onRetry,
+  report,
 }: {
   title: string
   message: string
   detail?: string
   onRetry: () => void
+  /** What the report carries of where it failed, and the host it failed on. */
+  report?: { hostId: string | null; sessionId?: string; agentId?: AgentId }
 }) {
   const { t } = useTranslation(['session', 'common'])
-  const [exporting, setExporting] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-  const save = async () => {
-    setExporting(true)
-    setNote(null)
-    try {
-      const path = await exportDiagnostics()
-      if (path) setNote(t('failed.savedTo', { path }))
-    } catch (e) {
-      setNote(errorMessage(e))
-    } finally {
-      setExporting(false)
-    }
-  }
   return (
     <div
       className="flex animate-in flex-col gap-2.5 rounded-xl bg-card px-3.5 py-3 shadow-card fade-in animation-duration-(--duration-base)"
@@ -279,20 +269,23 @@ export function FailedState({
           />
           {t('common:actions.retry')}
         </Button>
-        <Button variant="outline" size="compact" disabled={exporting} onClick={() => void save()}>
-          {exporting ? (
-            <Spinner data-icon="inline-start" className="size-3" />
-          ) : (
-            <HugeiconsIcon
-              icon={FileDownloadIcon}
-              strokeWidth={1.9}
-              aria-hidden
-              data-icon="inline-start"
-            />
-          )}
-          {t('failed.exportDiagnostics')}
+        <Button
+          variant="outline"
+          size="compact"
+          onClick={() =>
+            void openReport({
+              hostId: report?.hostId ?? null,
+              context: {
+                sessionId: report?.sessionId ?? null,
+                agentId: report?.agentId ?? null,
+                error: detail ? `${message}\n${detail}` : message,
+              },
+            })
+          }
+        >
+          <HugeiconsIcon icon={Bug01Icon} strokeWidth={1.9} aria-hidden data-icon="inline-start" />
+          {t('failed.reportProblem')}
         </Button>
-        {note && <span className="min-w-0 truncate text-xs text-muted-foreground">{note}</span>}
       </div>
     </div>
   )

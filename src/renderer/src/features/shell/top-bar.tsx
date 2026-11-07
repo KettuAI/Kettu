@@ -151,7 +151,7 @@ export function SidebarToggle({ className }: { className?: string }) {
           />
         }
       >
-        <Icon icon={SidebarLeftIcon} size={16} />
+        <Icon icon={SidebarLeftIcon} size={18} />
         {notices && (
           <span
             aria-hidden

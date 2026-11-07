@@ -314,8 +314,7 @@
     "loading": "正在加载对话…"
   },
   "failed": {
-    "savedTo": "已保存到 {{path}}",
-    "exportDiagnostics": "导出诊断信息"
+    "reportProblem": "报告问题"
   },
   "pending": {
     "back": "返回",

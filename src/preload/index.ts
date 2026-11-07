@@ -73,6 +73,7 @@ function systemLocale(): Locale {
 }
 const onUpdateChanged = subscribe('update:changed')
 const onDebugChanged = subscribe('debug:changed')
+const onRecordingChanged = subscribe('report:recording-changed')
 const onShortcut = subscribe('app:shortcut')
 const onArtifactBlocked = subscribe('artifact:blocked')
 const onArtifactStopped = subscribe('artifact:stopped')
@@ -223,8 +224,20 @@ const api: KettuApi = {
     restart: (debug) => invoke('debug:restart', debug),
     onChanged: onDebugChanged,
   },
+  report: {
+    capture: () => invoke('report:capture'),
+    prepare: (request) => invoke('report:prepare', request),
+    adopt: (zip) => invoke('report:adopt', zip),
+    view: (id, path) => invoke('report:view', id, path),
+    save: (id) => invoke('report:save', id),
+    discard: (id) => invoke('report:discard', id),
+    recording: () => invoke('report:recording'),
+    record: (on) => invoke('report:record', on),
+    onRecording: onRecordingChanged,
+    crashNotice: () => invoke('report:crash-notice'),
+    dismissCrashNotice: () => invoke('report:dismiss-crash-notice'),
+  },
   diagnostics: {
-    save: (bundle) => invoke('diagnostics:save', bundle),
     clearVerbose: () => invoke('diagnostics:clear-verbose'),
     recordActions: (actions) => send('diagnostics:actions', actions),
   },

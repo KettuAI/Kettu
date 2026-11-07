@@ -13,6 +13,7 @@ import {
   hostSettingsPart,
   isHostAdminMethod,
   splitSettingsPatch,
+  type DeviceReport,
   type HostAdminEvent,
   type HostAdminMethod,
   type HostAdminResult,
@@ -21,6 +22,7 @@ import {
   type HostThemes,
 } from '@shared/remote/host-admin'
 import type { PairingState } from '@shared/remote/pairing'
+import { parseReportRequest, type ReportRequest } from '@shared/report'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { SettingsFile, SettingsPatch } from '@shared/settings'
 import type { SharingConnectResult, SharingResult, SharingStatus } from '@shared/sharing'
@@ -170,6 +172,8 @@ export interface HostAdminDeps {
     ((id: unknown, version: unknown, page: unknown, size: unknown) => Promise<Buffer | null>) | null
   /** A typed version's PDF; null where nothing renders artifacts. */
   printPdf?: ((id: unknown, version: unknown) => Promise<Buffer>) | null
+  /** A problem report's bundle for an owner's device, built with the host's own logs. */
+  report?: (request: ReportRequest) => Promise<DeviceReport>
   /** Remote access is always on, as under the daemon, so a device may not turn it off. */
   remoteAlwaysOn?: boolean
   /** Tells every owner's device, or only `deviceId`. */
@@ -492,6 +496,16 @@ export class HostAdmin {
         if (!this.deps.printPdf) throw new AdminError('unavailable', 'This host does not print')
         const { id, version } = fields(params)
         return (await this.deps.printPdf(id, version)).toString('base64')
+      }
+      case 'host.report': {
+        if (!this.deps.report) throw new AdminError('unavailable', 'This host makes no reports')
+        let request: ReportRequest
+        try {
+          request = parseReportRequest(fields(params).request)
+        } catch (error) {
+          throw invalid((error as Error).message)
+        }
+        return this.deps.report(request)
       }
     }
   }
