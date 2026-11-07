@@ -70,6 +70,13 @@
 .ks-user__meta:focus-within {
   opacity: 1;
 }
+/* A turn's item clips 10px past its box, so a tip centered on a button at the column's edge is
+   cut off. It starts at the button's edge instead; translate cancels the tip's own -50%. */
+.ks-user__meta .ui-mac__tip {
+  right: 0;
+  left: auto;
+  translate: 50% 0;
+}
 
 /* An agent's message on AI Answer: the thread's type, its label (nine dots, "Writing") under the
    text only while it writes, and no row of its own under it, since Stop sits in the composer and
@@ -160,6 +167,10 @@
 }
 .ks-reply-foot .ui-mac__after {
   color: var(--thread-faint);
+}
+.ks-reply-foot .ui-mac__tip {
+  left: 0;
+  translate: 50% 0;
 }
 
 /* The running turn's status: the nine dots or the attention dot, the clock, tokens and phase. */
