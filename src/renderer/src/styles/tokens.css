@@ -38,15 +38,15 @@
   --thread-quiet: rgb(0 0 0 / 55%);
   --thread-muted: rgb(0 0 0 / 45%);
   --thread-faint: rgb(0 0 0 / 27%);
-  --thread-chip: rgb(0 0 0 / 4%);
+  --thread-chip: var(--bg-hover);
   --thread-hover: rgb(0 0 0 / 3%);
-  --thread-line: rgb(0 0 0 / 6%);
+  --thread-line: var(--border-subtle);
   --thread-line-strong: rgb(0 0 0 / 10%);
-  --thread-card: #ffffff;
+  --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
   /* The fox orange of the running turn: its dots, the answer's caret, the step at work. */
-  --thread-fox: #f2581b;
-  --thread-fox-halo: rgb(242 88 27 / 18%);
-  --thread-add: #16a34a;
+  --thread-fox: var(--send);
+  --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 18%, transparent);
+  --thread-add: var(--ansi-green);
   --thread-del: #dc2626;
   --thread-done: #22a06b;
   --thread-card-shadow:
@@ -490,14 +490,14 @@
     --thread-quiet: rgb(255 255 255 / 56%);
     --thread-muted: rgb(255 255 255 / 45%);
     --thread-faint: rgb(255 255 255 / 28%);
-    --thread-chip: rgb(255 255 255 / 6%);
+    --thread-chip: var(--bg-hover);
     --thread-hover: rgb(255 255 255 / 5%);
-    --thread-line: rgb(255 255 255 / 8%);
+    --thread-line: var(--border-subtle);
     --thread-line-strong: rgb(255 255 255 / 14%);
-    --thread-card: #1b1b1e;
-    --thread-fox: #f2581b;
-    --thread-fox-halo: rgb(242 88 27 / 24%);
-    --thread-add: #4ade80;
+    --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+    --thread-fox: var(--send);
+    --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 24%, transparent);
+    --thread-add: var(--ansi-green);
     --thread-del: #f87171;
     --thread-done: #3fbf86;
     --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
@@ -817,14 +817,14 @@
   --thread-quiet: rgb(255 255 255 / 56%);
   --thread-muted: rgb(255 255 255 / 45%);
   --thread-faint: rgb(255 255 255 / 28%);
-  --thread-chip: rgb(255 255 255 / 6%);
+  --thread-chip: var(--bg-hover);
   --thread-hover: rgb(255 255 255 / 5%);
-  --thread-line: rgb(255 255 255 / 8%);
+  --thread-line: var(--border-subtle);
   --thread-line-strong: rgb(255 255 255 / 14%);
-  --thread-card: #1b1b1e;
-  --thread-fox: #f2581b;
-  --thread-fox-halo: rgb(242 88 27 / 24%);
-  --thread-add: #4ade80;
+  --thread-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --thread-fox: var(--send);
+  --thread-fox-halo: color-mix(in srgb, var(--thread-fox) 24%, transparent);
+  --thread-add: var(--ansi-green);
   --thread-del: #f87171;
   --thread-done: #3fbf86;
   --thread-card-shadow: 0 0 0 0.5px rgb(255 255 255 / 10%), 0 1px 2px rgb(0 0 0 / 40%);
@@ -1123,6 +1123,21 @@
    drops, a phone's bezel, the terminal drawn in Settings and Ultracode's violet keep their values. */
 :root[data-installed-theme],
 [data-installed-theme] [data-theme] {
+  --thread-ink: var(--text-primary);
+  --thread-text: var(--text-secondary);
+  --thread-prose: var(--text-secondary);
+  --thread-quiet: var(--text-tertiary);
+  --thread-muted: var(--text-tertiary);
+  --thread-faint: var(--text-disabled);
+  --thread-hover: color-mix(in srgb, var(--bg-hover) 75%, transparent);
+  --thread-line-strong: var(--border-default);
+  --thread-del: var(--code-danger);
+  --thread-done: var(--success);
+  --thread-card-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+  --thread-float-shadow:
+    0 0 0 0.5px var(--border-default),
+    0 6px 16px -6px light-dark(rgb(0 0 0 / 20%), rgb(0 0 0 / 60%));
+
   --terminal-screen: var(--bg-code-block);
   --terminal-selection-tint: var(--selection);
   --pane-muted: var(--icon-default);

@@ -5051,6 +5051,17 @@
   background: var(--danger);
   color: var(--destructive-foreground);
 }
+[data-installed-theme] .ui-prc__btn--primary .ui-prc__kbd {
+  background: color-mix(in srgb, var(--ui-prc-on-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--ui-prc-on-primary) 72%, transparent);
+}
+[data-installed-theme] .ui-prc[data-risk='destructive'] .ui-prc__btn--primary .ui-prc__kbd {
+  background: color-mix(in srgb, var(--destructive-foreground) 18%, transparent);
+  color: color-mix(in srgb, var(--destructive-foreground) 75%, transparent);
+}
+[data-installed-theme] .ui-tcc__ok path {
+  stroke: var(--ui-tcc-card);
+}
 [data-installed-theme] .ui-stc__step-icon[data-status='done'] path {
   stroke: var(--ui-stc-card);
 }
