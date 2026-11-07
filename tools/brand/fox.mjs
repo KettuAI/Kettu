@@ -1,4 +1,4 @@
-// The Kettu icon: an orange fox's head on a rounded tile, as one SVG template. Its coordinates are
+// The Kettu icon: a white fox's head on a cobalt tile, as one SVG template. Its coordinates are
 // those of the 974 px tile the approved artwork was traced on; each framing scales them.
 
 const TILE = { x: 136.5, y: 139.75, size: 974 }
@@ -166,6 +166,79 @@ const FOX = `
   </g>
 `
 
+// The icon's palette. The drawing above keeps the orange of the artwork it was traced from, which
+// the bots' colorways and the glyph's shading are taken from; the icon repaints it, the tile and
+// its sheets in cobalt and the fox white with a cool shade, each color keeping its place in the
+// drawing's light and dark.
+
+/** `#RRGGBB` to OKLCH, `l` 0 to 1 and `h` in degrees. */
+function toOklch(hex) {
+  const linear = (i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+  }
+  const [r, g, b] = [linear(1), linear(3), linear(5)]
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+  const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s
+  const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s
+  return {
+    l: 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    c: Math.hypot(a, bb),
+    h: ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360,
+  }
+}
+
+/** OKLCH to `#RRGGBB`, each channel clipped to sRGB. */
+function toHex({ l, c, h }) {
+  const a = c * Math.cos((h * Math.PI) / 180)
+  const b = c * Math.sin((h * Math.PI) / 180)
+  const l3 = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3
+  const m3 = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3
+  const s3 = (l - 0.0894841775 * a - 1.291485548 * b) ** 3
+  const channel = (v) => {
+    const g = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055
+    return Math.round(Math.min(1, Math.max(0, g)) * 255)
+      .toString(16)
+      .padStart(2, '0')
+  }
+  const rgb = [
+    4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3,
+    -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3,
+    -0.0041960863 * l3 - 0.7034186147 * m3 + 1.707614701 * s3,
+  ]
+  return `#${rgb.map(channel).join('').toUpperCase()}`
+}
+
+const unit = (v) => Math.min(1, Math.max(0, v))
+
+// t runs from the sheets' deepest red (l 0.4) to their palest gold (l 0.98): cobalt from dark to
+// light, its chroma easing off toward the highlights.
+function sheetTone({ l }) {
+  const t = unit((l - 0.4) / 0.58)
+  return { l: 0.33 + t ** 1.1 * 0.38, c: 0.16 - t * 0.06, h: 259 }
+}
+
+// t runs from the fox's deepest orange (l 0.55) to its palest cream: white, shaded in a cool
+// gray-blue where the orange was.
+function foxTone({ l }) {
+  const t = unit((l - 0.55) / 0.45)
+  return { l: 0.8 + t * 0.195, c: 0.004 + 0.04 * (1 - t), h: 258 }
+}
+
+const repaint = (text, tone) =>
+  text.replace(/#[0-9A-Fa-f]{6}\b/g, (hex) => toHex(tone(toOklch(hex))))
+
+// The drawing as the artwork has it, and as the icon wears it.
+const ARTWORK = { defs: DEFS, background: BACKGROUND, foxDefs: FOX_DEFS, fox: FOX }
+const ICON = {
+  defs: repaint(DEFS, sheetTone),
+  background: repaint(BACKGROUND, sheetTone),
+  foxDefs: repaint(FOX_DEFS, foxTone),
+  fox: repaint(FOX, foxTone),
+}
+
 const n = (v) => String(Math.round(v * 100) / 100)
 
 function badge(corners) {
@@ -191,24 +264,25 @@ function badge(corners) {
 export const FRAMINGS = ['tile', 'square', 'background', 'fox']
 
 /**
- * The icon as SVG text on a 1024 px canvas. `colors` maps the drawing's `#RRGGBB` colors to others,
- * for a colorway.
+ * The icon as SVG text on a 1024 px canvas, in the icon's palette. `colors` instead maps the
+ * artwork's own `#RRGGBB` colors to others, for a colorway; `{}` leaves the artwork's orange.
  */
 export function foxSvg(framing = 'tile', { colors } = {}) {
   if (!FRAMINGS.includes(framing)) throw new Error(`Unknown framing: ${framing}`)
   const tile = framing === 'tile'
   const inset = tile ? TILE_INSET : 0
   const scale = (CANVAS - 2 * inset) / TILE.size
+  const art = colors ? ARTWORK : ICON
   const parts = [
-    framing !== 'fox' ? `<g id="background" clip-path="url(#badgeClip)">${BACKGROUND}</g>` : '',
+    framing !== 'fox' ? `<g id="background" clip-path="url(#badgeClip)">${art.background}</g>` : '',
     tile ? EDGE_LIGHT : '',
     framing !== 'background'
-      ? `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX_SHADOW}${FOX}</g>`
+      ? `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX_SHADOW}${art.fox}</g>`
       : '',
   ]
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}">\n` +
-    `<defs>\n<path id="badge" d="${badge(tile)}"/>${DEFS}${FOX_DEFS}</defs>\n` +
+    `<defs>\n<path id="badge" d="${badge(tile)}"/>${art.defs}${art.foxDefs}</defs>\n` +
     `<g transform="translate(${inset} ${inset}) scale(${+scale.toFixed(6)}) translate(${-TILE.x} ${-TILE.y})">\n` +
     parts.filter(Boolean).join('\n') +
     '\n</g>\n</svg>\n'
@@ -228,8 +302,8 @@ export function foxMarkSvg() {
   const { x, y, size } = MARK
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="${x} ${y} ${size} ${size}">\n` +
-    `<defs>${FOX_DEFS}</defs>\n` +
-    `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX}</g>\n</svg>\n`
+    `<defs>${ICON.foxDefs}</defs>\n` +
+    `<g id="fox" transform="translate(${FOX_DX} 0)">${ICON.fox}</g>\n</svg>\n`
   )
 }
 
