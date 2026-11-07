@@ -179,7 +179,15 @@ async function start(): Promise<void> {
     await accountProxy
     return accountSession.fetch(url, init) as unknown as Promise<Response>
   }
-  const accountAvatars = new Avatars(accountFetch, accountAvatarRequestUrl)
+  let accountBase = ACCOUNT_URL
+  try {
+    accountBase = accountBaseUrl(process.env)
+  } catch (error) {
+    log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
+  }
+  const accountAvatars = new Avatars(accountFetch, (url) =>
+    accountAvatarRequestUrl(url, accountBase),
+  )
   // Made once sharing and the updater are, before remote access starts and a device can ask.
   let hostAdmin: HostAdmin | null = null
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
@@ -357,12 +365,6 @@ async function start(): Promise<void> {
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
   }
   const hostName = (): string => settings.get().remote.name ?? hostname()
-  let accountBase = ACCOUNT_URL
-  try {
-    accountBase = accountBaseUrl(process.env)
-  } catch (error) {
-    log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
-  }
   const account = await Account.load({
     file: accountFile(userDataPath),
     api: new AccountApi(accountBase, accountFetch),
