@@ -277,8 +277,6 @@ export const SessionRow = memo(function SessionRow({
     </button>
   )
 
-  // As drawn: the menu for several rows is narrower than one row's.
-  const menuWidth = picked ? 'w-52.5' : 'w-59'
   const menuItems = picked ? (
     <MultiSessionMenuItems ids={picked} onDelete={() => setDeleting(true)} />
   ) : (
@@ -347,7 +345,6 @@ export const SessionRow = memo(function SessionRow({
                 </HoverCardContent>
               </HoverCard>
               <ContextMenuContent
-                className={menuWidth}
                 finalFocus={rename.menu.finalFocus}
                 onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
               >
@@ -376,7 +373,6 @@ export const SessionRow = memo(function SessionRow({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
                   align="start"
-                  className={menuWidth}
                   finalFocus={rename.menu.finalFocus}
                   onKeyDown={(event) => runSessionMenuAccelerator(event, isMac)}
                 >
