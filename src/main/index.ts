@@ -14,6 +14,7 @@ import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { BROWSER_PARTITION } from '@shared/browser'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
+import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { RemoteStatus } from '@shared/remote/status'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
@@ -63,6 +64,7 @@ import {
   newRelayKey,
   type IdentityCipher,
 } from './remote-identity'
+import { watchPresence } from './presence'
 import { RelayToken } from './relay-token'
 import { readJsonFile } from './json-file'
 import { computerModelForRun } from './system-model'
@@ -340,7 +342,10 @@ async function start(): Promise<void> {
         agentHost.answerPermission(sessionId, requestId, optionId),
       )
       hostAdmin?.attention(message)
+      remoteHost.attention(message)
     },
+    onWaiting: (sessions) => remoteHost.setWaiting(sessions),
+    onSeen: (sessionId) => remoteHost.seen(sessionId),
     onBadge: (count) => setBadgeCount(count),
     onBusy: (counts) => tray.setBusy(counts),
     onProjects: (paths) => terminalHost.setProjects(paths),
@@ -400,6 +405,12 @@ async function start(): Promise<void> {
     relayUrl = relayUrlFrom(process.env[RELAY_URL_ENV])
   } catch (error) {
     log.error(`Using the relay at ${RELAY_URL} instead`, error)
+  }
+  let pushUrl = PUSH_URL
+  try {
+    pushUrl = pushUrlFrom(process.env[PUSH_URL_ENV])
+  } catch (error) {
+    log.error(`Using the push gateway at ${PUSH_URL} instead`, error)
   }
   const account = await Account.load({
     file: accountFile(userDataPath),
@@ -511,6 +522,7 @@ async function start(): Promise<void> {
     relayKey: () => loadRelayKey(userDataPath, identityCipher),
     newRelayKey: () => newRelayKey(userDataPath, identityCipher),
     relayUrl,
+    pushUrl,
     relay: () => settings.get().remote.relay,
     relayTokenReady: () => relayToken.ready(),
     deviceKey: () => loadDeviceKey(userDataPath, identityCipher),
@@ -823,6 +835,7 @@ async function start(): Promise<void> {
   agentHost.start()
   relayToken.update()
   void remoteHost.setEnabled(settings.get().remote.enabled)
+  watchPresence((present) => remoteHost.setPresent(present))
   const window = createMainWindow(start)
   window.once('show', () => updater.start())
   ready = true

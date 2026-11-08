@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { MessageChannelMain, type MessagePortMain } from 'electron'
 import type {
   AdminAnswer,
+  HostToMain,
   MainToRemoteHost,
   RemoteHostStatus,
   RemoteHostStopReason,
@@ -62,6 +63,8 @@ export interface RemoteHostDeps {
   newRelayKey(): Promise<unknown>
   /** The main relay's origin. */
   relayUrl: string
+  /** The push gateway's origin. */
+  pushUrl: string
   /** Use the Kettu relay, as the setting is now. */
   relay(): boolean
   /** A pairing is about to start: resolves once the relay's token was handed on, or none can be. */
@@ -175,6 +178,9 @@ export class RemoteHost {
   private stored: StoredDevices | null = null
   /** The paired devices as last read, from the remote host's reports or the files. */
   private paired: PairedDevice[] = []
+  /** What waits for the user and whether they are at the computer, for each process to start with. */
+  private waiting: Record<string, string[]> = {}
+  private present: boolean | null = null
 
   constructor(private readonly deps: RemoteHostDeps) {}
 
@@ -308,6 +314,29 @@ export class RemoteHost {
   /** Tells the owner's devices something of the host: every one, or only `deviceId`. */
   adminEvent(event: HostAdminEvent, deviceId: string | null): void {
     this.toServer({ type: 'remote-host:admin-event', event, deviceId })
+  }
+
+  /** What the agent host says needs the user, which devices may be notified of. */
+  attention(attention: Extract<HostToMain, { type: 'host:attention' }>): void {
+    this.toServer({ type: 'remote-host:attention', attention })
+  }
+
+  /** What waits for the user now, by session. */
+  setWaiting(sessions: Record<string, string[]>): void {
+    this.waiting = sessions
+    this.host?.post({ type: 'remote-host:waiting', sessions })
+  }
+
+  /** A session was seen, which withdraws its turn's notifications. */
+  seen(sessionId: string): void {
+    this.toServer({ type: 'remote-host:seen', sessionId })
+  }
+
+  /** Whether the user is at this computer, which holds back the notifications devices want away. */
+  setPresent(present: boolean): void {
+    if (present === this.present) return
+    this.present = present
+    this.host?.post({ type: 'remote-host:presence', present })
   }
 
   /** The name the next welcomes carry, and the one pairing suggests to a host. */
@@ -643,6 +672,9 @@ export class RemoteHost {
       webRoot: WEB_ROOT,
       terminal: this.initTerminal(),
       relay: this.initRelay(identity !== null),
+      push: this.deps.pushUrl,
+      waiting: this.waiting,
+      ...(this.present === null ? {} : { present: this.present }),
       ...(this.device
         ? { device: { privateKey: this.device.privateKey, platform: this.platform } }
         : {}),

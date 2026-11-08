@@ -22,6 +22,7 @@ import {
 } from '@shared/log/process-log'
 import { matchLocale } from '@shared/locale'
 import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
+import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { HostAdmin } from '../main/host-admin'
 import { Account } from '../main/account'
@@ -308,6 +309,12 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   } catch (error) {
     log.error(`Using the relay at ${RELAY_URL} instead: ${(error as Error).message}`)
   }
+  let pushUrl = PUSH_URL
+  try {
+    pushUrl = pushUrlFrom(options.env[PUSH_URL_ENV])
+  } catch (error) {
+    log.error(`Using the push gateway at ${PUSH_URL} instead: ${(error as Error).message}`)
+  }
   let accountBase: string | null = null
   try {
     accountBase = accountBaseUrl(options.env)
@@ -389,6 +396,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     relayKey: relayKey?.privateKey ?? null,
     newRelayKey: async () => (await newRelayHostKey(options.dataPath)).privateKey,
     relayUrl,
+    pushUrl,
     signedIn,
     hostName: os.hostname(),
     env: hostEnv,

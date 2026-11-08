@@ -12,9 +12,11 @@ import { isHostAdminEvent, type HostAdminEvent } from '@shared/remote/host-admin
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
 import { PROTOCOL_VERSION } from '@shared/remote/protocol'
+import { importRelayKey, newRelaySeed, relayHostId } from '@shared/remote/relay'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
+import { DeviceNotifications } from './notifications'
 import { PairingCodes } from './pairing'
 import { RemoteServer, type RemoteServerOptions } from './server'
 import { connectDevice, type TestDevice, type TestDeviceOptions } from './testing/device'
@@ -40,6 +42,8 @@ async function setup(
     ttlMs?: number
     now?: () => number
     admin?: RemoteServerOptions['admin']
+    /** Whether the host has its signing key, and so sends notifications. */
+    push?: boolean
   } = {},
 ) {
   agent = await startTestHost()
@@ -69,7 +73,21 @@ async function setup(
   const agentPorts: { closed: boolean }[] = []
   let changes = 0
   const host = agent.host
+  const relayKey = await importRelayKey(await newRelaySeed())
+  const notifications = options.push
+    ? new DeviceNotifications({
+        devices,
+        key: relayKey,
+        hostId: await relayHostId(relayKey.publicKey),
+        url: 'https://push.example.test',
+        hostName: () => 'Studio',
+        token: () => null,
+        showing: () => false,
+        log,
+      })
+    : null
   const server = new RemoteServer({
+    notifications: () => notifications,
     staticKey: hostKey,
     devices,
     activity,
@@ -144,6 +162,7 @@ async function setup(
     logs,
     forwarded,
     agentPorts,
+    relayKey,
     connect,
     openCode,
     pairWith,
@@ -325,6 +344,99 @@ describe('a paired device', () => {
     const device = await t.connect()
     expect(await device.first).toEqual({ type: 'closing', reason: 'unavailable' })
     expect(await device.closing).toEqual({ type: 'closing', reason: 'unavailable' })
+  })
+})
+
+describe("a device's notifications", () => {
+  // Requests the remote host answers itself, which the host protocol does not list.
+  const ask = (device: TestDevice, method: string, params: unknown) =>
+    (device.port.request as (method: string, params: unknown) => Promise<unknown>)(method, params)
+  const target = { apns: { token: 'a1'.repeat(32), environment: 'sandbox' } }
+
+  it('are offered from version 4, kept with the device, and never reach the agent host', async () => {
+    const t = await setup({ push: true })
+    const device = await t.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
+    expect(await device.first).toMatchObject({ protocol: 4, features: ['bytes', 'push'] })
+    const state = await ask(device, 'notifications.set', {
+      target,
+      choices: { routines: true, muted: ['s1'] },
+    })
+    expect(state).toMatchObject({
+      choices: { permission: true, routines: true, muted: ['s1'] },
+      target: { apns: true, activityStart: false, activityUpdate: false },
+      signedIn: false,
+      host: { id: await relayHostId(t.relayKey.publicKey) },
+    })
+    expect(t.devices.push(t.phone.id)).toMatchObject({ target, choices: { routines: true } })
+    expect(await ask(device, 'notifications.get', undefined)).toEqual(state)
+    await expect(ask(device, 'notifications.set', { target: { apns: {} } })).rejects.toMatchObject({
+      code: 'invalid_params',
+    })
+    const methods = t.forwarded.map((message) => (message as { method: string }).method)
+    expect(methods.filter((method) => method.startsWith('notifications.'))).toEqual([])
+
+    await t.server.removeDevice(t.phone.id)
+    expect(t.devices.push(t.phone.id)).toBeNull()
+  })
+
+  it('are not offered to an older device, or by a host without its signing key', async () => {
+    const t = await setup({ push: true })
+    const older = await t.connect(undefined, { protocol: { min: 1, max: 3 } })
+    expect(await older.first).toMatchObject({ protocol: 3, features: ['bytes'] })
+    await expect(ask(older, 'notifications.get', undefined)).rejects.toMatchObject({
+      code: 'unavailable',
+    })
+    const plain = await setup()
+    const device = await plain.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
+    expect(await device.first).toMatchObject({ features: ['bytes'] })
+    await expect(ask(device, 'notifications.set', { target })).rejects.toMatchObject({
+      code: 'unavailable',
+    })
+  })
+
+  it('answered from a notification after another answer, hear that it was answered', async () => {
+    const t = await setup({ push: true })
+    const device = await t.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
+    await device.first
+    const session = await device.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+    })
+    await device.port.open(session.id)
+    await device.port.request('sessions.prompt', {
+      sessionId: session.id,
+      content: [{ type: 'text', text: '/permission' }],
+    })
+    let answer = { sessionId: session.id, requestId: '', optionId: '' }
+    await device.port.untilEntry(session.id, (entry) => {
+      if (entry.kind !== 'tool' || !entry.permission) return false
+      const { requestId, options } = entry.permission
+      const optionId = options.find((option) => option.kind === 'allow_once')!.id
+      answer = { sessionId: session.id, requestId, optionId }
+      return true
+    })
+    await device.port.request('permissions.respond', answer)
+    await expect(device.port.request('permissions.respond', answer)).rejects.toMatchObject({
+      code: 'not_found',
+      data: { reason: 'already_answered' },
+    })
+  })
+
+  it('know which sessions a device shows in front while it is in the foreground', async () => {
+    const t = await setup({ push: true })
+    const device = await t.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
+    await device.first
+    const session = await device.port.request('sessions.create', {
+      agentId: 'fake-agent',
+      projectPath: t.agent.project,
+    })
+    await device.port.open(session.id)
+    expect(t.server.showing(t.phone.id, session.id)).toBe(true)
+    await device.send({ type: 'pace', ms: 1000 })
+    await expect.poll(() => t.server.showing(t.phone.id, session.id)).toBe(false)
+    await device.send({ type: 'pace', ms: 0 })
+    await device.port.request('sessions.show', { sessionIds: [] })
+    expect(t.server.showing(t.phone.id, session.id)).toBe(false)
   })
 })
 

@@ -19,6 +19,7 @@ import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admi
 import { importKeyPair } from '@shared/remote/noise'
 import { parseSshTarget } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
+import { PUSH_URL } from '@shared/remote/push'
 import { importRelayKey, relayHostId } from '@shared/remote/relay'
 import { RelayHost } from '@shared/remote/relay-host'
 import type { Transport } from '@shared/remote/transport'
@@ -31,6 +32,7 @@ import { DeviceStore } from './devices'
 import { DirectListener } from './direct'
 import { HostStore, uniqueAddresses } from './hosts'
 import { LoopbackListener } from './loopback'
+import { DeviceNotifications, parseAttention, parseWaiting } from './notifications'
 import { PairingCodes } from './pairing'
 import { RemoteServer } from './server'
 import { clearUploads } from './uploads'
@@ -78,6 +80,8 @@ interface Serving {
   relay: RelayHost | null
   /** Under the daemon, the channels through SSH. */
   loopback: LoopbackListener | null
+  /** The devices' notifications, with the host's key; null without one. */
+  notifications: DeviceNotifications | null
   /** Sends the first status and every change after it. */
   report(): void
 }
@@ -109,6 +113,11 @@ export function startRemoteHost(
   let relayUrl: string | null = null
   let relayEnabled = false
   let relayToken: string | null = null
+  // The push gateway, what waits for the user now and whether they are at the desktop app, which
+  // a server starting later begins with.
+  let pushUrl = PUSH_URL
+  let waiting: Record<string, string[]> = {}
+  let present: boolean | null = null
   const adminCalls = new Map<number, (answer: AdminAnswer) => void>()
   let nextAdminCall = 1
 
@@ -185,7 +194,23 @@ export function startRemoteHost(
       changed,
       log,
       relay: onRelay,
+      notifications: () => notifications,
     })
+    const notifications =
+      relayKey && relayId
+        ? new DeviceNotifications({
+            devices,
+            key: relayKey,
+            hostId: relayId,
+            url: pushUrl,
+            hostName: () => server.options.host.name,
+            token: () => relayToken,
+            showing: (deviceId, sessionId) => server.showing(deviceId, sessionId),
+            log,
+          })
+        : null
+    notifications?.setWaiting(waiting)
+    if (present !== null) notifications?.setPresent(present)
     const relay =
       relayKey && relayId && relayUrl
         ? new RelayHost({
@@ -219,7 +244,7 @@ export function startRemoteHost(
       ready = true
       changed()
     }
-    return { server, direct, relay, loopback, report }
+    return { server, direct, relay, loopback, notifications, report }
   }
 
   async function stopServing(
@@ -227,6 +252,7 @@ export function startRemoteHost(
     reason: 'remote_off' | 'stopping',
   ): Promise<null> {
     if (!current) return null
+    current.notifications?.stop()
     current.relay?.stop()
     current.direct.stop()
     current.loopback?.stop()
@@ -266,6 +292,9 @@ export function startRemoteHost(
     init = message
     hostName = message.hostName
     terminal = message.terminal === true
+    if (typeof message.push === 'string') pushUrl = message.push
+    waiting = parseWaiting(message.waiting) ?? {}
+    if (typeof message.present === 'boolean') present = message.present
     if (message.relay && typeof message.relay.url === 'string') {
       relayUrl = message.relay.url
       relayEnabled = message.relay.enabled === true
@@ -478,6 +507,35 @@ export function startRemoteHost(
         withServing(({ server: s }) => s.adminEvent(event, deviceId))
         break
       }
+      case 'remote-host:attention': {
+        const attention = parseAttention(message.attention)
+        if (!attention) {
+          log('warn', 'Ignored an attention message that is not one')
+          break
+        }
+        withServing(({ notifications }) => notifications?.attention(attention))
+        break
+      }
+      case 'remote-host:waiting': {
+        const sessions = parseWaiting(message.sessions)
+        if (!sessions) break
+        waiting = sessions
+        withServing(({ notifications }) => notifications?.setWaiting(sessions))
+        break
+      }
+      case 'remote-host:seen':
+        if (typeof message.sessionId === 'string') {
+          const { sessionId } = message
+          withServing(({ notifications }) => notifications?.seen(sessionId))
+        }
+        break
+      case 'remote-host:presence':
+        if (typeof message.present === 'boolean') {
+          const now = message.present
+          present = now
+          withServing(({ notifications }) => notifications?.setPresent(now))
+        }
+        break
       case 'remote-host:host-name':
         if (typeof message.name === 'string') {
           hostName = message.name

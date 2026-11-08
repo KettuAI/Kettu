@@ -32,7 +32,7 @@ import type {
   ComputerSetupOutcome,
   ComputerSetupStep,
 } from '@shared/computer-use'
-import type { BusyCounts, BusySession } from '@shared/host-control'
+import type { AttentionRequest, BusyCounts, BusySession } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
@@ -239,14 +239,19 @@ export interface SessionEvents {
   returned(sessionId: string | null, portIds?: readonly string[]): void
   /** Who shows the session in front changed, or a port began to watch it: `showing` are their ports. */
   viewers(sessionId: string, showing: readonly string[], to: readonly string[]): void
+  /** `request`: what waits, for a permission, with the answers a notification may give itself. */
   attention(
     sessionId: string,
     kind: 'permission' | 'turn-ended' | 'error',
     title: string,
     body: string,
-    allowOnce?: { requestId: string; optionId: string },
+    request?: AttentionRequest,
   ): void
   badge(count: number): void
+  /** What waits for the user now, by session, each change of it. */
+  waiting(sessions: Record<string, string[]>): void
+  /** The session was shown or marked read, so its turn was seen. */
+  seen(sessionId: string): void
   busy(counts: BusyCounts): void
 }
 
@@ -505,6 +510,16 @@ function waitingCount(live: Live): number {
   return live.permissions.size + live.origins.size + live.apps.size + live.setups.size
 }
 
+/** The ids of what waits: each permission's request id, and the entry id of the others. */
+function waitingIds(live: Live): string[] {
+  return [
+    ...live.permissions.keys(),
+    ...live.origins.values(),
+    ...live.apps.values(),
+    ...live.setups.values(),
+  ]
+}
+
 /** A first use of an app that waits for the user, and the first answer a window or device gave. */
 interface AppRequest {
   sessionId: string
@@ -665,6 +680,7 @@ export class SessionManager {
   // A notification outlives the host that asked, so its answer must not fit the next run's ids.
   private readonly requestPrefix = `p${randomUUID().slice(0, 8)}-`
   private badgeCount = 0
+  private waitingIds = '{}'
   private busyCounts: BusyCounts = { running: 0, waiting: 0 }
   /** Set once the host shuts down: the last checkpoints are written and no more follow. */
   private stopped = false
@@ -954,7 +970,18 @@ export class SessionManager {
 
   private updateBadge(): void {
     let count = 0
-    for (const live of this.live.values()) count += waitingCount(live)
+    const waiting: Record<string, string[]> = {}
+    for (const live of this.live.values()) {
+      count += waitingCount(live)
+      const ids = waitingIds(live)
+      if (ids.length > 0) waiting[live.id] = ids
+    }
+    // One request can end as another starts, which leaves the count as it was.
+    const json = JSON.stringify(waiting)
+    if (json !== this.waitingIds) {
+      this.waitingIds = json
+      this.deps.events.waiting(waiting)
+    }
     if (count === this.badgeCount) return
     this.badgeCount = count
     this.deps.events.badge(count)
@@ -1062,6 +1089,7 @@ export class SessionManager {
       'permission',
       this.titleOf(live),
       t('attention.browserOrigin', { site: originLabel(origin) }),
+      { id: entry.id },
     )
   }
 
@@ -1143,6 +1171,7 @@ export class SessionManager {
       'permission',
       this.titleOf(live),
       t('attention.deviceAccess', { device: deviceName }),
+      { id: entry.id },
     )
     return new Promise((resolve) => {
       const timer = setTimeout(
@@ -1278,6 +1307,7 @@ export class SessionManager {
       'permission',
       this.titleOf(live),
       t('attention.computerApp', { app: app.name }),
+      { id: entry.id },
     )
   }
 
@@ -1367,6 +1397,7 @@ export class SessionManager {
       'permission',
       this.titleOf(live),
       t('attention.computerSetup'),
+      { id: entry.id },
     )
   }
 
@@ -2315,7 +2346,8 @@ export class SessionManager {
     if (live) this.refreshContext(live)
   }
 
-  private showing(sessionId: string): string[] {
+  /** The ports that show the session in front now. */
+  showing(sessionId: string): string[] {
     const ports: string[] = []
     for (const [portId, shown] of this.shown) if (shown.has(sessionId)) ports.push(portId)
     return ports
@@ -2395,6 +2427,7 @@ export class SessionManager {
   }
 
   private markViewed(sessionId: string, record: SessionRecord): void {
+    this.deps.events.seen(sessionId)
     record.lastViewedAt = this.now()
     const live = this.live.get(sessionId)
     if (live) {
@@ -5844,12 +5877,18 @@ export class SessionManager {
         )
       } else {
         const optionId = allowOnceOption(tool, request.options)
+        const allow = request.options.find((option) => option.id === optionId)
+        const deny = request.options.find((option) => option.kind === 'reject_once')
         this.deps.events.attention(
           live.id,
           'permission',
           this.titleOf(live),
           requestText(tool, live.record.projectPath),
-          optionId !== null ? { requestId, optionId } : undefined,
+          {
+            id: requestId,
+            ...(allow ? { allow: { optionId: allow.id, name: allow.name } } : {}),
+            ...(allow && deny ? { deny: { optionId: deny.id, name: deny.name } } : {}),
+          },
         )
       }
     })
@@ -5918,6 +5957,7 @@ export class SessionManager {
       }
     }
     this.stopWaiting(live)
+    this.updateBadge()
   }
 
   /** Once no request or new site waits for the user, the session goes back to its turn or rests. */

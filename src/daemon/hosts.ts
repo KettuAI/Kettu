@@ -117,6 +117,8 @@ export interface HostsOptions {
   newRelayKey(): Promise<string>
   /** The main relay's origin. */
   relayUrl: string
+  /** The push gateway's origin. */
+  pushUrl: string
   /** Whether the daemon is signed in to a Kettu account now. */
   signedIn(): boolean
   /** The system's name for this computer, which devices show unless the owner names it. */
@@ -162,6 +164,8 @@ export class Hosts {
   private readonly settings: () => SettingsFile
   private readonly statusListeners = new Set<() => void>()
   private readonly attentionListeners = new Set<(message: Attention) => void>()
+  /** What waits for the user by session, which each remote host process starts with. */
+  private waiting: Record<string, string[]> = {}
   private readonly askers = new Map<number, (pairing: PairingState) => void>()
   private nextCode = 1
   private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
@@ -277,6 +281,8 @@ export class Hosts {
         agentHostSocket: this.agent.socketPath ?? undefined,
         sshPort: this.sshPort,
         relay: this.initRelay(),
+        push: options.pushUrl,
+        waiting: this.waiting,
       }),
       shutdownMessage: { type: 'remote-host:shutdown', reason: 'stopping' },
       readyType: 'remote-host:ready',
@@ -886,6 +892,18 @@ export class Hosts {
         break
       case 'host:attention':
         for (const listener of this.attentionListeners) listener(message)
+        this.remote.post({ type: 'remote-host:attention', attention: message })
+        break
+      case 'host:waiting':
+        if (typeof message.sessions === 'object' && message.sessions !== null) {
+          this.waiting = message.sessions
+          this.remote.post({ type: 'remote-host:waiting', sessions: message.sessions })
+        }
+        break
+      case 'host:seen':
+        if (typeof message.sessionId === 'string') {
+          this.remote.post({ type: 'remote-host:seen', sessionId: message.sessionId })
+        }
         break
       case 'host:report':
         this.reportRequests.get(message.requestId)?.(reportBuildResult(message.result))
