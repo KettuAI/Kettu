@@ -115,8 +115,9 @@ function Part({
           {index > 0 && (
             <ResizableHandle
               withHandle
-              // The handle's own height for a stacked split is set under the same variant.
-              className={row ? 'w-(--sheet-gap)' : 'aria-[orientation=horizontal]:h-(--sheet-gap)'}
+              // The handle lies on the desk, which drags the window. The handle's own height for a
+              // stacked split is set under the same variant.
+              className={`app-region-no-drag ${row ? 'w-(--sheet-gap)' : 'aria-[orientation=horizontal]:h-(--sheet-gap)'}`}
             />
           )}
           <ResizablePanel
