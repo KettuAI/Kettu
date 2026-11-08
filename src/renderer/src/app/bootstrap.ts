@@ -58,6 +58,7 @@ import {
 import {
   lastSessionId,
   layoutSessions,
+  openArtifact,
   openSession,
   resetLayout,
   restoreLayout,
@@ -175,11 +176,15 @@ let launched = false
 function finishLaunch(): void {
   launched = true
   if (usePendingSession.getState().pending) return
+  const { main } = useViewStore.getState()
+  // A viewer opened while launch was restoring would go back to the launch view, which nothing
+  // leaves again: what launch shows goes beneath it, and the viewer opens over that.
+  const over = main.kind === 'artifact' && main.back.kind === 'launch' ? main : null
   const target = launchTarget({
     enabled: useSettingsStore.getState().settings.general.restoreLastSession,
     layout: savedLayout,
     lastSessionId,
-    main: useViewStore.getState().main,
+    main: over ? over.back : main,
     byId: useSessionsStore.getState().byId,
   })
   if (target?.kind === 'layout') restoreLayout(target.layout)
@@ -193,6 +198,7 @@ function finishLaunch(): void {
       useSettingsStore.getState().settings.general.defaultAgent,
     )
   }
+  if (over) openArtifact(over.id, over.history ? { history: true } : {})
 }
 
 let shownSessions = ''
