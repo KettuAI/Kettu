@@ -68,9 +68,19 @@ All your coding agents, side by side in one window that looks good and feels rig
 - **Artifacts**: the pages, documents, slides and canvases agents make. Lay out a canvas's frames and mark them up for the agent, comment, edit them yourself, or export them to Word and PowerPoint.
 - **Publish to Kettu**: give an artifact its own page on kettu.page, private, behind an access code or public.
 - **Computer use**: once you turn it on, agents use the apps on your computer.
-- **Mobile devices**: iOS simulators, Android emulators and real phones beside the session, for you and the agent to use.
 - **Routines**: run an agent on a schedule; every run is kept as a session.
 - **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
+
+### Mobile devices
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-mobile-dark.webp">
+  <img src="./assets/feature-mobile-light.webp" alt="Codex drives an iPhone 17 simulator beside its session to check a page in dark mode, with Take over above the device">
+</picture>
+
+- **Right beside the session**: iOS simulators, Android emulators and real iPhones and Android phones, each in a frame with its hardware buttons.
+- **For you and the agent**: tap, swipe and type on the screen yourself, or let the agent open apps and pages, tap, type, switch between light and dark and take screenshots. Take over at any time.
+- **Ready for app work**: the agent installs your build, launches it and reads its logs.
 
 ### Everywhere
 

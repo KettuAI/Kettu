@@ -68,9 +68,19 @@
 - **Artifacts**：Agent 做的网页、文档、幻灯片和画布。画布上的画框可以排版、标注后交给 Agent，也可以留言、自己编辑，或导出成 Word 和 PowerPoint。
 - **发布到 Kettu**：给 Artifact 一个 kettu.page 上的页面，可以只有自己能看、凭访问码看或公开。
 - **Computer use**：打开之后，Agent 能操作你电脑上的应用。
-- **移动设备**：iOS 模拟器、Android 模拟器和真机就在会话旁边，你和 Agent 都能操作。
 - **Routines**：按时让 Agent 干活，每次运行都留成会话。
 - **搜索**：在一个命令面板里搜会话、Artifacts、Routines、项目、设置和操作。
+
+### 移动设备
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-mobile-dark.webp">
+  <img src="./assets/feature-mobile-light.webp" alt="Codex 在会话旁边操作 iPhone 17 模拟器，检查网页的深色模式，设备上方有接手按钮">
+</picture>
+
+- **就在会话旁边**：iOS 模拟器、Android 模拟器，以及 iPhone 和 Android 真机，各自装在带实体按键的外框里。
+- **你和 Agent 都能操作**：你可以直接在屏幕上点按、滑动和输入，也可以让 Agent 打开应用和网页、点按、输入、切换浅色和深色、截图，你随时可以接手。
+- **为开发应用准备**：Agent 能安装你的构建、启动它并读取日志。
 
 ### 随处可用
 
