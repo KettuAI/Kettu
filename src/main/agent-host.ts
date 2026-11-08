@@ -47,6 +47,7 @@ import sessionRouterPath from '../agent-host/session-router/router?modulePath'
 import threadWorkerPath from '../agent-host/threads/worker?modulePath'
 import usageWorkerPath from '../agent-host/usage/worker?modulePath'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
+import { ContentCache } from './artifacts/content-cache'
 import { computerHostOptions } from './computer-use'
 import { GrantRequests } from './grant-requests'
 import { t } from './i18n'
@@ -278,6 +279,7 @@ export class AgentHost {
   )
   private readonly contentRequests = new Map<number, (result: ArtifactContentResult) => void>()
   private nextContentId = 1
+  private readonly contents = new ContentCache((id, version) => this.askContent(id, version))
   private readonly importRequests = new Map<number, (result: ImportAnswer) => void>()
   private nextImportId = 1
   private readonly exportRequests = new Map<number, (result: ArtifactExportResult) => void>()
@@ -440,6 +442,10 @@ export class AgentHost {
   /** The file of an artifact's version, the latest when `version` is null; `failed` without a host. */
   artifactContent(id: string, version: number | null): Promise<ArtifactContentResult> {
     if (this.host.state !== 'ready') return Promise.resolve({ kind: 'failed' })
+    return this.contents.get(id, version)
+  }
+
+  private askContent(id: string, version: number | null): Promise<ArtifactContentResult> {
     const requestId = this.nextContentId++
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -623,6 +629,7 @@ export class AgentHost {
         if (isStringList(message.paths)) this.deps.onProjects(message.paths)
         break
       case 'host:artifacts-changed':
+        this.contents.clear()
         this.deps.onArtifactsChanged?.()
         break
       case 'host:sessions-ended':
@@ -786,6 +793,7 @@ export class AgentHost {
     this.grants.failAll()
     for (const resolve of this.contentRequests.values()) resolve({ kind: 'failed' })
     this.contentRequests.clear()
+    this.contents.clear()
     for (const resolve of this.importRequests.values()) resolve(UNAVAILABLE)
     this.importRequests.clear()
     for (const resolve of this.exportRequests.values()) resolve(FAILED_EXPORT)

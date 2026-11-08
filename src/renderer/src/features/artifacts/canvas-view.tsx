@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { CenterFocusIcon, Download04Icon, PlayIcon } from '@hugeicons/core-free-icons'
 import { animate, type AnimationPlaybackControls } from 'motion/react'
 import { useTranslation } from 'react-i18next'
@@ -16,6 +24,7 @@ import {
   pageAt,
   pageInNextRow,
   reveal,
+  stepLive,
   stepZoom,
   TITLE_MIN_WIDTH,
   zoomAt,
@@ -29,8 +38,8 @@ import { isModeKey } from './keys'
 import { pageUrl } from './use-artifact'
 import { BarButton } from './viewer-parts'
 
-/** Pages that may start loading in one frame. */
-const LOADS_PER_FRAME = 2
+/** How long a page may load before the next one starts anyway. */
+const SETTLE_WAIT_MS = 3000
 /** The layer keeps `will-change` this long after the camera stops, then draws crisp again. */
 const SETTLE_MS = 160
 /** A press that moves less than this is a click. */
@@ -108,6 +117,9 @@ export const CanvasView = memo(function CanvasView({
   const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const liveFrame = useRef(0)
   const [live, setLive] = useState<ReadonlySet<number>>(new Set())
+  const liveNow = useRef(live)
+  // The live pages that have loaded, or loaded long enough for the next to start.
+  const settled = useRef(new Set<number>())
   const [picked, setSelected] = useState(0)
   // The selection shows once a page is picked, or while the canvas has the keyboard's focus.
   const [chosen, setChosen] = useState(false)
@@ -120,27 +132,26 @@ export const CanvasView = memo(function CanvasView({
   const focused = focusedAt === null ? null : Math.min(focusedAt, pages.length - 1)
   const name = useCallback((p: PlacedPage) => p.name ?? t('canvas.page', { number: p.number }), [t])
 
-  // Live pages follow the camera, nearest first, a few more each frame.
+  // Live pages follow the camera, nearest first, one more each time the last has settled.
   const syncLive = useCallback(() => {
-    const step = (): void => {
-      const wanted = livePages(pages, camera.current, view.current)
-      setLive((current) => {
-        const next = new Set(wanted.filter((i) => current.has(i)))
-        let added = 0
-        for (const i of wanted) {
-          if (next.has(i)) continue
-          if (added === LOADS_PER_FRAME) break
-          next.add(i)
-          added++
-        }
-        if (next.size < wanted.length) liveFrame.current = requestAnimationFrame(step)
-        const same = next.size === current.size && [...next].every((i) => current.has(i))
-        return same ? current : next
-      })
-    }
     cancelAnimationFrame(liveFrame.current)
-    liveFrame.current = requestAnimationFrame(step)
+    liveFrame.current = requestAnimationFrame(() => {
+      const wanted = livePages(pages, camera.current, view.current)
+      const next = stepLive(liveNow.current, wanted, settled.current)
+      if (next === liveNow.current) return
+      for (const i of settled.current) if (!next.has(i)) settled.current.delete(i)
+      liveNow.current = next
+      setLive(next)
+    })
   }, [pages])
+  const pageSettled = useCallback(
+    (index: number) => {
+      if (settled.current.has(index) || !liveNow.current.has(index)) return
+      settled.current.add(index)
+      syncLive()
+    },
+    [syncLive],
+  )
 
   const draw = useCallback(() => {
     const { x, y, z } = camera.current
@@ -505,6 +516,7 @@ export const CanvasView = memo(function CanvasView({
                   height={p.height}
                   editor={editor}
                   page={i}
+                  onSettled={() => pageSettled(i)}
                   register={(frame) => {
                     if (frame) frames.current.set(i, frame)
                     else frames.current.delete(i)
@@ -693,7 +705,10 @@ export const CanvasView = memo(function CanvasView({
   )
 })
 
-/** One page on the canvas, at its own size, shown once it has loaded. */
+/**
+ * One page on the canvas, at its own size, shown once it has loaded. It has settled once it has
+ * loaded, or after a while without, so a page that never finishes holds up no other.
+ */
 export function CanvasFrame({
   src,
   title,
@@ -701,6 +716,7 @@ export function CanvasFrame({
   height,
   editor,
   page,
+  onSettled,
   register,
   registerEditor,
 }: {
@@ -710,10 +726,16 @@ export function CanvasFrame({
   height: number
   editor: ArtifactEditor | undefined
   page: number
+  onSettled: () => void
   register: (frame: HTMLIFrameElement | null) => void
   registerEditor: (frame: EditorFrame | null) => void
 }) {
   const [loaded, setLoaded] = useState(false)
+  const settle = useEffectEvent(onSettled)
+  useEffect(() => {
+    const timer = setTimeout(() => settle(), SETTLE_WAIT_MS)
+    return () => clearTimeout(timer)
+  }, [])
   const driven = useEditorFrame(editor, page)
   const { frame, ref: drivenRef } = driven
   useEffect(() => {
@@ -735,6 +757,7 @@ export function CanvasFrame({
       onLoad={() => {
         setLoaded(true)
         driven.onLoad()
+        onSettled()
       }}
       style={{ width, height }}
       className={cn(

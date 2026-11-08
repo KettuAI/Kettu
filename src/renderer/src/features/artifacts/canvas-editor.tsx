@@ -42,6 +42,7 @@ import {
   livePages,
   NAME_MIN_WIDTH,
   reveal,
+  stepLive,
   stepZoom,
   zoomAt,
   type Camera,
@@ -75,7 +76,6 @@ export interface DocPageActions {
   handOff: (ids: string[]) => void
 }
 
-const LOADS_PER_FRAME = 2
 const DRAG_SLOP = 3
 /** How near, in screen pixels, a moved edge snaps to another. */
 const SNAP_PX = 6
@@ -366,6 +366,9 @@ export const CanvasEditor = memo(function CanvasEditor({
   const glideTo = useRef<AnimationPlaybackControls | null>(null)
   const liveFrame = useRef(0)
   const [live, setLive] = useState<ReadonlySet<string>>(new Set())
+  const liveNow = useRef(live)
+  // The live pages that have loaded, or loaded long enough for the next to start.
+  const settled = useRef(new Set<string>())
   const frames = useRef(new Map<string, HTMLIFrameElement>())
   const editorFrames = useRef(new Map<string, EditorFrame>())
   const editing = useEditorState(editor)
@@ -410,26 +413,30 @@ export const CanvasEditor = memo(function CanvasEditor({
     ? null
     : (side ?? (shownSelection.length > 0 && !inside ? 'props' : null))
 
+  // Live pages follow the camera, nearest first, one more each time the last has settled; a page
+  // without its file yet has nothing to load.
   const syncLive = useCallback(() => {
-    const step = (): void => {
-      const wanted = livePages(pages, camera.current, view.current).map((i) => pages[i]!.id)
-      setLive((current) => {
-        const next = new Set(wanted.filter((id) => current.has(id)))
-        let added = 0
-        for (const id of wanted) {
-          if (next.has(id)) continue
-          if (added === LOADS_PER_FRAME) break
-          next.add(id)
-          added++
-        }
-        if (next.size < wanted.length) liveFrame.current = requestAnimationFrame(step)
-        const same = next.size === current.size && [...next].every((id) => current.has(id))
-        return same ? current : next
-      })
-    }
     cancelAnimationFrame(liveFrame.current)
-    liveFrame.current = requestAnimationFrame(step)
-  }, [pages])
+    liveFrame.current = requestAnimationFrame(() => {
+      const wanted = livePages(pages, camera.current, view.current)
+        .map((i) => pages[i]!)
+        .filter((p) => files.has(p.file))
+        .map((p) => p.id)
+      const next = stepLive(liveNow.current, wanted, settled.current)
+      if (next === liveNow.current) return
+      for (const id of settled.current) if (!next.has(id)) settled.current.delete(id)
+      liveNow.current = next
+      setLive(next)
+    })
+  }, [pages, files])
+  const pageSettled = useCallback(
+    (id: string) => {
+      if (settled.current.has(id) || !liveNow.current.has(id)) return
+      settled.current.add(id)
+      syncLive()
+    },
+    [syncLive],
+  )
 
   const draw = useCallback(() => {
     const { x, y, z } = camera.current
@@ -1311,6 +1318,7 @@ export const CanvasEditor = memo(function CanvasEditor({
                     height={p.height}
                     editor={editor}
                     page={doc ? doc.pages.findIndex((q) => q.id === p.id) : -1}
+                    onSettled={() => pageSettled(p.id)}
                     register={(frame) => {
                       if (frame) frames.current.set(p.id, frame)
                       else frames.current.delete(p.id)
