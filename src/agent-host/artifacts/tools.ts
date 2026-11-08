@@ -91,7 +91,10 @@ export const GUIDE = {
     'folders and has no `.` or `..` segment, backslash, control character or any of : * ? " < > |. ' +
     'Paths are case-sensitive, and no two may differ only in case. Paths starting with ' +
     `\`${ARTIFACT_RESERVED}\` are Kettu's. Scripts, styles and fonts may also load from ${CDNS}; ` +
-    'nothing else loads, so bring any other library or asset as a file of the artifact. Give each ' +
+    'nothing else loads, so bring any other library or asset as a file of the artifact. Draw icons ' +
+    'in the page itself, as inline `<svg>` or as `<symbol>`s in the page used with ' +
+    '`<use href="#id">`, never with `<use>` from a separate sprite file: Kettu loads that whole ' +
+    'file again for each icon. Give each ' +
     "file's text in content, at most 5 MiB, or in source the path of a file in your working " +
     'directory, at most 20 MiB, which Kettu reads itself: use source for images, fonts and large ' +
     'or binary files, so their bytes never pass through you; one call carries at most 16 MiB in ' +
@@ -112,7 +115,8 @@ export const GUIDE = {
     'and others on a canvas of their own; a canvas may be left out of a page when there is one. The ' +
     "user's interface calls a canvas a page and a page a frame, so when the user speaks of a page " +
     'they may mean a canvas. Plan the canvases and the page names first, then write one page per ' +
-    'file: never put several pages in one file, and keep shared styles in shared files. Once the ' +
+    'file: never put several pages in one file, and keep shared styles in shared files but the ' +
+    'icons in each page (topic files). Once the ' +
     `canvas exists, change its layout with canvas operations in update_artifact rather than by rewriting ${CANVAS_FILE}: ` +
     '`{"op": "add", "object": {"type": "page", "id": "privacy", "name": "Privacy", "file": ' +
     '"privacy.html", "canvas": "flow"}}` (also type canvas or note), `{"op": "set", ' +
