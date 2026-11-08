@@ -26,6 +26,8 @@ asarUnpack:
   - node_modules/node-pty/**
   # The device host runs these as programs, and serve-sim loads native code and dylibs.
   - node_modules/@expo/serve-sim/**
+  # serve-sim's runtime dependency, which it cannot import from inside app.asar.
+  - node_modules/ws/**
   - node_modules/agent-device/**
   - out/main/chunks/router-*.js
 # The postinstall step (tools/install/app-deps.mjs) already readied node-pty for Electron: its
