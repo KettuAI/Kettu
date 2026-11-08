@@ -13,9 +13,6 @@
   inset: 0;
   outline: none;
 }
-.k-ce__stage:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--focus);
-}
 .k-ce__layer {
   position: absolute;
   top: 0;
