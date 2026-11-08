@@ -102,6 +102,8 @@ interface Drag {
   ids?: string[]
   corner?: Corner
   points?: number[]
+  /** A press on a frame that picks the element under it unless it turns into a drag. */
+  pick?: { page: string; x: number; y: number; at: { x: number; y: number } }
 }
 
 /** The ops that move an object by (dx, dy) from where `doc` has it. */
@@ -156,6 +158,9 @@ function union(boxes: Box[]): Box | null {
   const bottom = Math.max(...boxes.map((b) => b.y + b.height))
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
+
+/** The band above a frame, in screen pixels, where its name selects the whole frame. */
+const LABEL_BAND = 24
 
 /** The room the open layers panel takes at the left, which fitting leaves free. */
 const LAYERS_ROOM = 256
@@ -573,12 +578,15 @@ export const CanvasEditor = memo(function CanvasEditor({
     return () => el.removeEventListener('wheel', onWheel)
   }, [focused, place])
 
-  // The canvas itself is no mode: the comment tool is comment mode, a page entered select mode.
+  // The move tool selects what is in the frames, outlined under the pointer, as design tools do;
+  // the comment tool is comment mode; a read-only canvas selects only in a page entered.
   useEffect(() => {
     if (!editor) return
     editor.setBase(null)
-    editor.setMode(tool === 'comment' ? 'comment' : inside ? 'select' : null)
-  }, [editor, tool, inside])
+    editor.setMode(
+      tool === 'comment' ? 'comment' : inside || (tool === 'move' && !readOnly) ? 'select' : null,
+    )
+  }, [editor, tool, inside, readOnly])
 
   // The page in the middle of the view, for the faces of the user's other devices.
   const lastViewed = useRef<string | null>(null)
@@ -864,7 +872,7 @@ export const CanvasEditor = memo(function CanvasEditor({
       return
     }
     if (readOnly && tool !== 'move' && tool !== 'comment') return
-    if (mode || tool === 'comment' || inside) {
+    if (tool === 'comment' || inside || (mode && tool !== 'move')) {
       // Picking inside pages goes to their runtime.
       drag.current = null
       const page = pages.find((p) => contains(p, at.x, at.y))
@@ -912,12 +920,38 @@ export const CanvasEditor = memo(function CanvasEditor({
       drag.current = { ...start, kind: 'resize', ids: [handle.id], corner: handle.corner }
       return
     }
-    const id = hit(at.x, at.y)
+    // A frame's name selects the frame; a press inside it picks the element there on release.
+    const named = pages.find((p) =>
+      contains(
+        { ...p, y: p.y - LABEL_BAND / camera.current.z, height: LABEL_BAND / camera.current.z },
+        at.x,
+        at.y,
+      ),
+    )
+    const id = named?.id ?? hit(at.x, at.y)
     if (!id) {
       if (!event.shiftKey) setSelection([])
+      editor?.clearPick()
       drag.current = { ...start, kind: 'marquee' }
       return
     }
+    const framed =
+      !named && !event.shiftKey && mode === 'select' ? pages.find((p) => p.id === id) : null
+    if (framed) {
+      drag.current = {
+        ...start,
+        kind: 'move',
+        ids: [framed.id],
+        pick: {
+          page: framed.id,
+          x: at.x - framed.x,
+          y: at.y - framed.y,
+          at: { x: event.clientX, y: event.clientY },
+        },
+      }
+      return
+    }
+    editor?.clearPick()
     const next = event.shiftKey
       ? shownSelection.includes(id)
         ? shownSelection.filter((s) => s !== id)
@@ -946,6 +980,11 @@ export const CanvasEditor = memo(function CanvasEditor({
     if (!held.moved && Math.hypot(sx - held.sx, sy - held.sy) > DRAG_SLOP) {
       held.moved = true
       setDragging(true)
+      // A press on a frame that drags moves the frame, which it selects.
+      if (held.pick) {
+        editor?.clearPick()
+        setSelection(held.ids!)
+      }
     }
     if (!held.moved || !layout || !base) return
     const dx = at.x - held.cx
@@ -1099,6 +1138,11 @@ export const CanvasEditor = memo(function CanvasEditor({
       }
       case 'move':
       case 'resize':
+        if (!held.moved && held.pick) {
+          setSelection([])
+          editorFrames.current.get(held.pick.page)?.pick(held.pick.x, held.pick.y, held.pick.at)
+          return
+        }
         if (held.moved && canvas.base) {
           // The preview under way becomes the change, as one step of undo.
           const shown = canvas.doc
