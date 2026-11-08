@@ -457,7 +457,7 @@ export const CanvasView = memo(function CanvasView({
   const ringed = chosen || keyFocus ? selected : -1
 
   return (
-    <div className="absolute inset-0 overflow-hidden bg-sidebar">
+    <div className="absolute inset-0 overflow-hidden rounded-[inherit] bg-sidebar">
       <div
         ref={dots}
         aria-hidden
@@ -478,7 +478,7 @@ export const CanvasView = memo(function CanvasView({
         onBlur={(event) => {
           if (event.target === event.currentTarget) setKeyFocus(false)
         }}
-        className="absolute inset-0 outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
+        className="absolute inset-0 rounded-[inherit] outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
       >
         {/* In the overview the pages take no pointer and no focus, but their scripts keep running. */}
         <div ref={layer} inert className="absolute top-0 left-0 origin-top-left">
@@ -814,7 +814,7 @@ function FocusedPage({
         event.stopPropagation()
       }}
       style={{ paddingTop: top }}
-      className="absolute inset-0 flex items-center justify-center bg-sidebar outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
+      className="absolute inset-0 flex items-center justify-center rounded-[inherit] bg-sidebar outline-none focus-visible:shadow-[inset_0_0_0_2px_var(--focus)]"
     >
       {size && (
         <div

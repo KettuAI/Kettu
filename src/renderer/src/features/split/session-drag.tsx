@@ -100,7 +100,7 @@ export function DropHint() {
     <div
       ref={ref}
       aria-hidden
-      className="pointer-events-none absolute top-0 left-0 z-20 animate-in rounded-xl bg-selection fade-in ring-1 ring-focus animation-duration-(--duration-fast)"
+      className="pointer-events-none absolute top-0 left-0 z-20 animate-in rounded-card bg-selection fade-in ring-1 ring-focus animation-duration-(--duration-fast)"
     />
   )
 }

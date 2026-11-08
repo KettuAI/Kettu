@@ -86,7 +86,7 @@ export function AttachmentTile({
             />
           ) : (
             // Shown only when reading takes a while, so a quick one never flashes.
-            <div className="absolute inset-0 animate-in fade-in fill-mode-both delay-200 duration-(--duration-fast)">
+            <div className="absolute inset-0 animate-in rounded-[inherit] fade-in fill-mode-both delay-200 duration-(--duration-fast)">
               <Skeleton className="size-full rounded-[inherit]" />
             </div>
           )
