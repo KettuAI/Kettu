@@ -6,6 +6,7 @@
 import type { DeviceEvent } from '@shared/device-host'
 import type { HostEvent } from '@shared/agent-host'
 import type { ArtifactContent } from '@shared/artifacts'
+import { CANVAS_FILE } from '@shared/canvas-doc'
 import { DEBUG_OFF } from '@shared/debug'
 import type { AppCommand, KettuApi } from '@shared/ipc'
 import { safeName } from '@shared/file-name'
@@ -277,7 +278,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       openExternal: () => unsupported('open an artifact outside the app'),
       export: async (id, version) => {
         const read = (await link.request('artifacts.read', { id, version })) as ArtifactContent
-        if (read.files.length > 1) return exportFiles(link, id, read)
+        if (read.files.length > 1 || read.files.some((f) => f.path === CANVAS_FILE)) {
+          return exportFiles(link, id, read)
+        }
         downloadFile(new Blob([read.html], { type: 'text/html' }), `${read.title || id}.html`)
         return true
       },
@@ -294,6 +297,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         const bytes = Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0))
         downloadFile(new Blob([bytes], { type: 'image/png' }), `${safeName(name, 'page')}.png`)
         return true
+      },
+      pageImage: async (id, version, page, size) => {
+        const url = await admin('artifacts.png', { id, version, page, size })
+        return url ? url.slice(url.indexOf(',') + 1) : null
       },
     },
     // Only the desktop app signs in to a Kettu account so far.
@@ -316,6 +323,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       setAccess: (id, access) => admin('sharing.setAccess', { id, access }),
       newCode: (id) => admin('sharing.newCode', { id }),
       openLink: (id) => admin('sharing.openLink', { id }),
+      visitors: (id) => admin('sharing.visitors', { id }),
       unpublish: (id) => admin('sharing.unpublish', { id }),
       setAuto: (enabled) => admin('sharing.setAuto', { enabled }),
       onChanged: (listener) => adminEvent('sharing.changed', (event) => listener(event.status)),

@@ -46,12 +46,6 @@ export async function writeContent(
       deleted: true,
     })
   }
-  if (base.artifact.head !== input.baseVersion) {
-    throw new ArtifactError('conflict', 'Not the latest version', {
-      version: base.artifact.head,
-      deleted: false,
-    })
-  }
   const entry = CONTENT_ENTRIES[type.name]
   const bytes = Buffer.from(input.text, 'utf8')
   if (bytes.length > INLINE_FILE_BYTES) {

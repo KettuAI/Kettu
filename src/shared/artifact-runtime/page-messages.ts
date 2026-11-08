@@ -57,6 +57,14 @@ export interface PageSelection {
   style: ElementStyle
 }
 
+/** Where an element lies in its page, in CSS pixels from the document's top left. */
+export interface PageBox {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 /** The page's report of a pick, or of the pick cleared. */
 export interface SelectMessage {
   v: typeof RUNTIME_VERSION
@@ -65,6 +73,8 @@ export interface SelectMessage {
   /** The frame's, as its client gave it with select mode. */
   channel: string
   selection: PageSelection | null
+  /** An answer to `select-locate` instead of a pick: where the element at `src` lies, if anywhere. */
+  located?: { src: number; box: PageBox | null }
 }
 
 /** A numbered pin on an element, or on the page when `src` is null or the element is gone. */
@@ -100,6 +110,10 @@ export type DriveMessage =
   | { v: typeof RUNTIME_VERSION; kind: 'preview-text'; text: string }
   | { v: typeof RUNTIME_VERSION; kind: 'preview-reset' }
   | { v: typeof RUNTIME_VERSION; kind: 'transport' }
+  // Where the element whose start tag lies at `src` is, answered as a select message's `located`.
+  | { v: typeof RUNTIME_VERSION; kind: 'select-locate'; src: number; channel: string }
+  // Values for the parameters the page declares, shown at once and kept until the page reloads.
+  | { v: typeof RUNTIME_VERSION; kind: 'params'; values: Record<string, string | number | boolean> }
 
 /** The properties a direct edit may write into a start tag's `style`, by their CSS names. */
 export const EDITABLE_PROPERTIES = [
@@ -230,7 +244,40 @@ export function parseSelectMessage(value: unknown): SelectMessage | null {
   if (typeof channel !== 'string' || !CHANNEL.test(channel)) return null
   const picked = selection(value.selection)
   if (picked === undefined) return null
-  return { v: RUNTIME_VERSION, id, kind: 'select', channel, selection: picked }
+  const message: SelectMessage = {
+    v: RUNTIME_VERSION,
+    id,
+    kind: 'select',
+    channel,
+    selection: picked,
+  }
+  if (value.located !== undefined) {
+    const located = locatedOf(value.located)
+    if (!located || picked !== null) return null
+    message.located = located
+  }
+  return message
+}
+
+function locatedOf(value: unknown): { src: number; box: PageBox | null } | null {
+  if (!isRecord(value)) return null
+  const { src, box } = value
+  if (!Number.isSafeInteger(src) || (src as number) < 0 || (src as number) > MAX_OFFSET) return null
+  if (box === null) return { src: src as number, box: null }
+  if (!isRecord(box)) return null
+  const n = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 1e6
+  if (
+    !n(box.x) ||
+    !n(box.y) ||
+    !n(box.width) ||
+    !n(box.height) ||
+    box.width < 0 ||
+    box.height < 0
+  ) {
+    return null
+  }
+  return { src: src as number, box: { x: box.x, y: box.y, width: box.width, height: box.height } }
 }
 
 /** A page's message by its kind: phase-owned `select` and `preview` ones, or a capability's. */

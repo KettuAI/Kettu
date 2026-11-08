@@ -14,7 +14,7 @@ import { writeReport } from '@shared/log/report-bundle'
 import { parseReportRequest } from '@shared/report'
 import { harnessOf, type HarnessId } from '@shared/agents'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
-import { artifactFileType } from '@shared/artifact-files'
+import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
@@ -359,9 +359,29 @@ export class AgentHost {
       },
       version: (portIds, id, version) =>
         this.hub.send(portIds, { type: 'artifacts.version', id, version }),
-      activity: (portIds, activity) =>
-        this.hub.send(portIds, { type: 'artifacts.activity', ...activity }),
+      // Each port hears of the other clients showing the artifact, named as it knows them.
+      activity: (portIds, activity) => {
+        const showing = [...portIds]
+        for (const portId of showing) {
+          this.hub.send([portId], {
+            type: 'artifacts.activity',
+            ...activity,
+            clients: this.hub.viewers(showing, portId).map((viewer) => ({
+              ...viewer,
+              page:
+                activity.pages.get(
+                  showing.find((p) =>
+                    viewer.kind === 'host'
+                      ? !this.hub.deviceOf(p)
+                      : this.hub.deviceOf(p)?.id === viewer.id,
+                  ) ?? '',
+                ) ?? null,
+            })),
+          })
+        }
+      },
       comments: (portIds, id) => this.hub.send(portIds, { type: 'artifacts.comments', id }),
+      canvas: (portIds, event) => this.hub.send(portIds, { type: 'artifacts.canvas', ...event }),
       unwatched: (id) => this.consents.unwatched(id),
     })
     this.artifactData = new ArtifactData({ store: this.artifacts })
@@ -1491,8 +1511,12 @@ export class AgentHost {
         return {
           title: read.artifact.title,
           version: read.version.version,
-          // A typed artifact's page is its type's viewer, which has no text of its own.
-          html: read.type ? '' : await artifacts.entryText(read),
+          // A typed artifact's page is its type's viewer, which has no text of its own, and a
+          // canvas document need not have an entry page.
+          html:
+            read.type || !read.files.some((f) => f.path === ARTIFACT_ENTRY)
+              ? ''
+              : await artifacts.entryText(read),
           type: read.type,
           files: read.files.map((file) => ({
             path: file.path,
@@ -1558,6 +1582,12 @@ export class AgentHost {
         artifacts.markSent(id, threadIds, sessionId),
       'artifacts.editElement': ({ id, baseVersion, path, offset, style, text }) =>
         artifacts.editElement({ id, baseVersion, path, offset, change: { style, text } }),
+      'artifacts.view': ({ id, page }, { portId }) => artifacts.view(id, portId, page),
+      'artifacts.setParams': ({ id, baseVersion, path, values }) =>
+        artifacts.setParams({ id, baseVersion, path, values }),
+      'artifacts.canvas': ({ id }) => artifacts.canvases.state(id),
+      'artifacts.canvasOps': ({ id, ops, client, clientSeq }) =>
+        artifacts.canvases.apply(id, ops, client, clientSeq),
       'artifacts.runtime': ({ artifactId, message, stream }, { portId, device }) => {
         // A window's frames reach the runtime through main; only a device's remote host relays.
         if (!device) {

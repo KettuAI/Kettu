@@ -21,7 +21,12 @@ import { useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
 import { closeArtifact, useViewStore } from '@renderer/stores/view'
+import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { anchorOf, pinsOf } from './anchors'
+import { CanvasEditor } from './canvas-editor'
+import { PresenceFaces } from './presence-faces'
+import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
+import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
 import { ArtifactMoreButton } from './artifact-menu'
 import { ShareButton } from './share-popover'
 import { CanvasControls, useCanvasState } from './canvas-controls'
@@ -34,6 +39,7 @@ import { KIND_ICON } from './kinds'
 import { artifactKind } from './model'
 import { Waiting } from './page-frame'
 import { Presenter } from './present'
+import { clampSize, useDocActions } from './use-doc-actions'
 import { PreviewOnly } from './preview-only'
 import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
 import { useComments } from './use-comments'
@@ -46,7 +52,6 @@ import {
   DaysLeft,
   EarlierDetails,
   EditToolbar,
-  Presence,
   StatusBar,
   VersionChip,
   ViewerEmpty,
@@ -65,12 +70,6 @@ function leaveArtifact(): void {
 }
 
 type Panel = 'history' | 'comments'
-
-/** A page's size for its image: a canvas page's own, or a single page at the area's. */
-function clampSize(width: number, height: number): { width: number; height: number } {
-  const clamp = (n: number) => Math.min(8_000, Math.max(64, Math.round(n)))
-  return { width: clamp(width), height: clamp(height) }
-}
 
 /**
  * An artifact in the main area, live, away from the app and the machine: a single page at the
@@ -108,6 +107,23 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   const canvasState = useCanvasState(controls)
   // A version just written counts as the latest while it loads, so editing goes on across it.
   const latest = !!shown && earlier === null && !states.inTrash
+  // A canvas document: the latest is edited live on the host, an earlier one only shown.
+  const docShown = shown?.doc ?? null
+  const legacyCanvas = !!shown?.canvas && !docShown
+  const liveCanvas = useCanvasDoc(id, latest && (!!docShown || legacyCanvas))
+  const shownCanvas = useMemo(
+    () => (latest || !docShown ? liveCanvas : staticCanvas(docShown)),
+    [latest, docShown, liveCanvas],
+  )
+  const [following, setFollowing] = useState<string | null>(null)
+  const agents = usePresentAgents(artifact.presence, summary?.deletedAt != null)
+  const visitors = useVisitors(id)
+  const followingNow = following && agents.some((a) => a.sessionId === following) ? following : null
+  const pageTitle = useCallback(
+    (page: string | null) =>
+      page ? (shownCanvas.doc?.pages.find((p) => p.id === page)?.name ?? null) : null,
+    [shownCanvas.doc],
+  )
   // Comment mode shows the comments, unless the history was chosen over them.
   const shownPanel: Panel | null =
     editing.mode === 'comment' && panel !== 'history' ? 'comments' : panel
@@ -122,7 +138,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   // arriving keeps the mode. A canvas is in select mode unless another is chosen, while a single
   // page, or a canvas page in focus, stays live for its own clicks.
   const leftLatest = earlier !== null || states.inTrash
-  const selects = !!shown?.canvas && canvasState.focused === null
+  const selects = !!shown?.canvas && !docShown && canvasState.focused === null
   useEffect(() => {
     if (!editor) return
     editor.setBase(!leftLatest && selects ? 'select' : null)
@@ -157,6 +173,15 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
     () => ({ download: renders ? downloadPng : null, present: (index) => setPresenting(index) }),
     [renders, downloadPng],
   )
+  const docActions = useDocActions({
+    id,
+    title,
+    shown,
+    doc: shownCanvas.doc,
+    summary: summary ?? null,
+    agents,
+    present: setPresenting,
+  })
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -245,26 +270,63 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
       </ViewerEmpty>
     )
   } else if (url && shown) {
+    if (!bar && latest && legacyCanvas && liveCanvas.legacy) {
+      bar = (
+        <StatusBar
+          lead={t('board.legacy')}
+          rest={null}
+          action={t('board.legacySplit')}
+          onAction={() => {
+            const sheet = 'canvas-1'
+            liveCanvas.start([{ op: 'set', id: sheet, key: 'name', value: 'Canvas 1' }])
+          }}
+        />
+      )
+    }
     body = (
       <>
-        <ArtifactSurface
-          url={url}
-          shown={shown}
-          title={title}
-          reloads={artifact.reloads}
-          since={since}
-          controls={controls}
-          top={bar ? BAR_ROOM : 0}
-          bottom={TOOLBAR_ROOM}
-          onEscape={leaveArtifact}
-          editor={latest ? (editor ?? undefined) : undefined}
-          actions={actions}
-        />
-        <EditToolbar
-          editor={latest ? editor : null}
-          controls={shown.canvas ? controls : null}
-          aside={!!summary?.type}
-        />
+        {docShown ? (
+          <CanvasEditor
+            artifactId={id}
+            url={url}
+            version={shown.version}
+            title={title}
+            canvas={shownCanvas}
+            files={shown.paths}
+            readOnly={!latest}
+            controls={controls}
+            top={bar ? BAR_ROOM : 0}
+            editor={latest ? (editor ?? undefined) : undefined}
+            actions={docActions}
+            agents={latest ? agents : []}
+            following={followingNow}
+            onFollowDone={() => setFollowing(null)}
+            onViewPage={(page) => void host('artifacts.view', { id, page }).catch(() => {})}
+            sessionName={(session) => noteAuthor(agents, session, t('board.note.agent'))}
+            reloads={artifact.reloads}
+          />
+        ) : (
+          <ArtifactSurface
+            url={url}
+            shown={shown}
+            title={title}
+            reloads={artifact.reloads}
+            since={since}
+            controls={controls}
+            top={bar ? BAR_ROOM : 0}
+            bottom={TOOLBAR_ROOM}
+            onEscape={leaveArtifact}
+            editor={latest ? (editor ?? undefined) : undefined}
+            actions={actions}
+          />
+        )}
+        {!docShown && (
+          <EditToolbar
+            editor={latest ? editor : null}
+            controls={shown.canvas ? controls : null}
+            aside={!!summary?.type}
+          />
+        )}
         {editor && editing.mode === 'comment' && editing.picked?.point && (
           <CommentBox
             key={`${editing.picked.point.x},${editing.picked.point.y}`}
@@ -432,7 +494,15 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         <span className="k-av__gap" />
         {showing && (
           <NoDrag className="k-av__tools">
-            <Presence id={id} presence={artifact.presence} deleted={summary?.deletedAt != null} />
+            <AgentCursorStyles />
+            <PresenceFaces
+              agents={agents}
+              presence={artifact.presence}
+              pageName={pageTitle}
+              following={followingNow}
+              onFollow={setFollowing}
+              visitors={visitors}
+            />
             {pageName && <CanvasBarControls controls={controls} pageName={pageName} />}
             {/* A type's viewer presents its content itself, as a deck does. */}
             {shown && !summary?.type && (

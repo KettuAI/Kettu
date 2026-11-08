@@ -7,6 +7,7 @@ import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import { RUNTIME_VERSION } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
+import { CANVAS_FILE } from '@shared/canvas-doc'
 import {
   COMMENTS_PER_THREAD,
   THREADS_PER_ARTIFACT,
@@ -264,7 +265,9 @@ type Row = Record<string, SQLOutputValue>
 const LISTING = `
   SELECT a.id, a.title, a.project, COALESCE(v.author, a.session_id) AS shown_under, a.head,
     v.pages, v.size, a.created_at, a.updated_at, a.deleted_at,
-    (SELECT COUNT(*) FROM artifact_files f WHERE f.artifact_id = a.id AND f.n = a.head) AS files
+    (SELECT COUNT(*) FROM artifact_files f WHERE f.artifact_id = a.id AND f.n = a.head) AS files,
+    EXISTS (SELECT 1 FROM artifact_files f
+      WHERE f.artifact_id = a.id AND f.n = a.head AND f.path = '${CANVAS_FILE}') AS canvas
   FROM artifacts a JOIN artifact_versions v ON v.artifact_id = a.id AND v.n = a.head`
 
 const optionalText = (value: SQLOutputValue | undefined): string | null =>
@@ -306,6 +309,7 @@ function listing(row: Row): ArtifactListing {
     sessionId: String(row.shown_under),
     version: Number(row.head),
     pages: Number(row.pages),
+    canvas: Number(row.canvas) === 1,
     files: Number(row.files),
     size: Number(row.size),
     createdAt: Number(row.created_at),
@@ -980,14 +984,45 @@ export class ThreadDb {
     return artifact
   }
 
-  /** Refuses a new version unless it starts from the latest. */
-  private fromHead(artifact: ArtifactRecord, baseVersion: number): void {
+  /**
+   * Refuses a new version that writes a file someone else changed since `baseVersion`, the
+   * version its writer read: a write that touches only files no one else changed lands on the
+   * latest version, so sessions changing different pages of a canvas do not stop each other.
+   * `declares` says it sets the version's declaration, which counts as a file of its own.
+   */
+  private fromBase(
+    sql: Statements,
+    db: DatabaseSync,
+    artifact: ArtifactRecord,
+    baseVersion: number,
+    paths: Iterable<string>,
+    declares: boolean,
+  ): void {
     if (baseVersion === artifact.head) return
-    throw new ThreadDbError(
-      `${artifact.id} is at version ${artifact.head}, not ${baseVersion}`,
-      'conflict',
-      stateOf(artifact),
-    )
+    const refuse = (changed: string[]): never => {
+      throw new ThreadDbError(
+        `${artifact.id} is at version ${artifact.head}, and ${changed.join(', ')} changed since ` +
+          `version ${baseVersion}`,
+        'conflict',
+        { ...stateOf(artifact), changed },
+      )
+    }
+    if (!Number.isSafeInteger(baseVersion) || baseVersion < 1 || baseVersion > artifact.head) {
+      refuse([])
+    }
+    const hashes = (n: number): Map<string, string> =>
+      new Map(sql.files.all(artifact.id, n).map((row) => [String(row.path), String(row.hash)]))
+    const base = hashes(baseVersion)
+    const head = hashes(artifact.head)
+    const changed = [...new Set(paths)].filter((path) => base.get(path) !== head.get(path))
+    if (declares) {
+      const runtime = this.runtimeStatements(db)
+      const was = JSON.stringify(declarationAt(runtime, artifact.id, baseVersion))
+      if (was !== JSON.stringify(declarationAt(runtime, artifact.id, artifact.head))) {
+        changed.push('the runtime declaration')
+      }
+    }
+    if (changed.length > 0) refuse(changed)
   }
 
   /** Writes a file's bytes, unless they are there, and returns what its row records. */
@@ -1017,8 +1052,11 @@ export class ThreadDb {
       type?: ArtifactTypeInfo | null
     },
   ): void {
-    if (!row.type && !files.some((file) => file.path === ARTIFACT_ENTRY)) {
-      throw new Error(`Version ${n} of ${id} has no ${ARTIFACT_ENTRY}`)
+    if (
+      !row.type &&
+      !files.some((file) => file.path === ARTIFACT_ENTRY || file.path === CANVAS_FILE)
+    ) {
+      throw new Error(`Version ${n} of ${id} has no ${ARTIFACT_ENTRY} or ${CANVAS_FILE}`)
     }
     const size = files.reduce((sum, file) => sum + file.size, 0)
     sql.insertVersion.run(id, n, size, row.pages, row.author, row.note, row.at)
@@ -1095,7 +1133,16 @@ export class ThreadDb {
     return this.must((sql, db) =>
       this.transaction(db, () => {
         const artifact = this.artifactIn(sql, params.id, params.project, true)
-        this.fromHead(artifact, params.baseVersion)
+        this.fromBase(
+          sql,
+          db,
+          artifact,
+          params.baseVersion,
+          params.changes
+            .map((change) => change.path)
+            .filter((path) => !params.unchecked?.includes(path)),
+          params.declaration !== undefined,
+        )
         const files = new Map<string, StoredFile>()
         for (const row of sql.files.all(artifact.id, artifact.head)) {
           files.set(String(row.path), storedFile(row))
@@ -1112,7 +1159,14 @@ export class ThreadDb {
           throw new Error(`${artifact.id} is ${kind(was)}, not ${kind(type)}`)
         }
         const n = artifact.head + 1
-        const { pages, author, note, at } = params
+        const { author, note, at } = params
+        // A write that leaves both entries alone keeps the latest version's page count, which a
+        // writer that started from an older version could not know.
+        const entryChanged = params.changes.some(
+          (change) => change.path === ARTIFACT_ENTRY || change.path === CANVAS_FILE,
+        )
+        const headRow = sql.version.get(artifact.id, artifact.head)
+        const pages = entryChanged || !headRow ? params.pages : versionRecord(headRow).pages
         this.insertVersion(sql, artifact.id, n, [...files.values()], {
           pages,
           author,
@@ -1138,11 +1192,21 @@ export class ThreadDb {
     return this.must((sql, db) =>
       this.transaction(db, () => {
         const artifact = this.artifactIn(sql, params.id, params.project, true)
-        this.fromHead(artifact, params.baseVersion)
         const row = sql.version.get(artifact.id, params.version)
         if (!row) {
           throw new ThreadDbError(`${artifact.id} has no version ${params.version}`, 'not_found')
         }
+        // Restoring writes every file in which the old version differs from the latest.
+        const old = new Map(
+          sql.files.all(artifact.id, params.version).map((r) => [String(r.path), String(r.hash)]),
+        )
+        const latest = new Map(
+          sql.files.all(artifact.id, artifact.head).map((r) => [String(r.path), String(r.hash)]),
+        )
+        const differ = [...new Set([...old.keys(), ...latest.keys()])].filter(
+          (path) => old.get(path) !== latest.get(path),
+        )
+        this.fromBase(sql, db, artifact, params.baseVersion, differ, true)
         const restored = versionRecord(row)
         const n = artifact.head + 1
         const { author, note, at } = params

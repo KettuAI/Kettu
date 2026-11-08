@@ -47,9 +47,9 @@ export function atMaxZoom(z: number): boolean {
 }
 
 /** The camera that shows `box` whole and centred, never above 100%; `top` is covered by a bar. */
-export function fitBox(box: Box, view: Size, top = 0, bottom = 0): Camera {
+export function fitBox(box: Box, view: Size, top = 0, bottom = 0, left = 0, right = 0): Camera {
   const room = {
-    width: view.width - 2 * FIT_SIDE,
+    width: view.width - left - right - 2 * FIT_SIDE,
     height: view.height - top - bottom - FIT_ABOVE - FIT_BELOW,
   }
   const z = clampZoom(
@@ -57,7 +57,7 @@ export function fitBox(box: Box, view: Size, top = 0, bottom = 0): Camera {
   )
   return {
     z,
-    x: (view.width - box.width * z) / 2 - box.x * z,
+    x: left + FIT_SIDE + (room.width - box.width * z) / 2 - box.x * z,
     y: top + FIT_ABOVE + (room.height - box.height * z) / 2 - box.y * z,
   }
 }
@@ -137,12 +137,7 @@ export function pageAt(
 }
 
 /** Pages within one and a half views of the visible area, nearest first, at most `max`. */
-export function livePages(
-  pages: readonly PlacedPage[],
-  camera: Camera,
-  view: Size,
-  max = 48,
-): number[] {
+export function livePages(pages: readonly Box[], camera: Camera, view: Size, max = 48): number[] {
   const area = visible(camera, view)
   const reach = { x: area.width * 1.5, y: area.height * 1.5 }
   const cx = area.x + area.width / 2

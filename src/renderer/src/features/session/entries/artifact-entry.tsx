@@ -207,7 +207,12 @@ function ArtifactCard({
   const inView = useInView(card)
   const version = useEntryVersion(entry.artifactId, entry.version, summary?.version ?? null, inView)
   const made = useThumbnail(
-    { id: entry.artifactId, version: entry.version ?? 0, pages: summary?.pages ?? 0 },
+    {
+      id: entry.artifactId,
+      version: entry.version ?? 0,
+      pages: summary?.pages ?? 0,
+      canvas: summary?.canvas ?? false,
+    },
     inView && summary !== null && entry.version !== null,
   )
   // A later write keeps the earlier picture under the new one until the new one is made.

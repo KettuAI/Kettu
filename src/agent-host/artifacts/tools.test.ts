@@ -482,3 +482,157 @@ describe("what an artifact's pages use", () => {
     expect(gone.structuredContent).toMatchObject({ code: 'not_found' })
   })
 })
+
+describe('canvases', () => {
+  const layout = (pages: Array<Record<string, unknown>>) =>
+    JSON.stringify({ canvases: [{ id: 'settings', name: 'Settings' }], pages })
+
+  async function canvas(): Promise<string> {
+    return create({
+      files: [
+        {
+          path: 'canvas.json',
+          content: layout([
+            { id: 'account', name: 'Account', file: 'account.html' },
+            { id: 'general', name: 'General', file: 'general.html' },
+          ]),
+        },
+        { path: 'account.html', content: '<h1>Account</h1>' },
+        { path: 'general.html', content: '<h1>General</h1>' },
+      ],
+    })
+  }
+
+  it('are a canvas document and a file per page, stored with every page placed', async () => {
+    const id = await canvas()
+    const summary = (await store.list({ project: work })).find((a) => a.id === id)!
+    expect(summary.pages).toBe(2)
+    const { value } = await call('read_artifact', { id, path: 'canvas.json' })
+    const stored = JSON.parse(value.text as string)
+    expect(stored.format).toBe(1)
+    expect(stored.pages[1]).toMatchObject({ x: 1280 + 48, y: 0, canvas: 'settings' })
+  })
+
+  it('refuse a document that lays out a page the version does not have', async () => {
+    const { error } = await call('create_artifact', {
+      title: 'Broken',
+      files: [{ path: 'canvas.json', content: layout([{ id: 'a', name: 'A', file: 'a.html' }]) }],
+    })
+    expect(error).toMatchObject({ code: 'invalid' })
+    expect(error!.message).toContain('a.html')
+    expect(await count()).toBe(0)
+  })
+
+  it('take operations next to files, merged with what the user did meanwhile', async () => {
+    const id = await canvas()
+    // The user moves a page on the canvas: pending, not yet a version.
+    await store.canvases.apply(
+      id,
+      [{ op: 'set', id: 'account', key: 'y', value: 500 }],
+      'window',
+      1,
+    )
+    // The agent, from version 1, adds a page with its file.
+    const { error, value } = await call('update_artifact', {
+      id,
+      base_version: 1,
+      files: [{ path: 'privacy.html', content: '<h1>Privacy</h1>' }],
+      canvas: [
+        {
+          op: 'add',
+          object: {
+            type: 'page',
+            id: 'privacy',
+            name: 'Privacy',
+            file: 'privacy.html',
+          },
+        },
+        {
+          op: 'add',
+          object: { type: 'note', id: 'n1', kind: 'sticky', x: 0, y: 0, text: 'Check' },
+        },
+      ],
+    })
+    expect(error).toBeNull()
+    // The user's move became its own version first, then the agent's.
+    expect(value.version).toBe(3)
+    const versions = await store.versions(id)
+    expect(versions.map((v) => v.author)).toEqual(['s1', null, 's1'])
+    const doc = JSON.parse(
+      (await call('read_artifact', { id, path: 'canvas.json' })).value.text as string,
+    )
+    expect(doc.pages.map((p: { id: string }) => p.id)).toEqual(['account', 'general', 'privacy'])
+    expect(doc.pages[0].y).toBe(500)
+    expect(doc.notes[0]).toMatchObject({ id: 'n1', by: 's1' })
+  })
+
+  it('refuse operations on an artifact that is no canvas', async () => {
+    const id = await create({ html: '<p>one page</p>' })
+    const { error } = await call('update_artifact', {
+      id,
+      base_version: 1,
+      canvas: [{ op: 'remove', id: 'x' }],
+    })
+    expect(error).toMatchObject({ code: 'invalid' })
+  })
+
+  it('split an old canvas the first time the user changes it on the canvas', async () => {
+    const id = await create({
+      html: '<html><head><title>Old</title></head><body><section data-page="A">a</section><section data-page="B">b</section></body></html>',
+    })
+    expect((await store.canvases.state(id)).legacy).toBe(true)
+    await store.canvases.apply(id, [{ op: 'set', id: 'p1', key: 'x', value: 10 }], 'window', 1)
+    const state = await store.canvases.state(id)
+    expect(state.legacy).toBe(false)
+    expect(state.doc!.pages.map((p) => [p.file, p.x])).toEqual([
+      ['a.html', 10],
+      ['b.html', 1328],
+    ])
+    const { value } = await call('read_artifact', { id, path: 'a.html' })
+    expect(value.text).toContain('<title>Old</title>')
+    await store.canvases.flush(id)
+    expect((await store.versions(id)).map((v) => v.note)).toEqual([
+      null,
+      'kettu:canvas-split',
+      null,
+    ])
+  })
+})
+
+describe('presence', () => {
+  it("names what an agent's turn read and changed, down to the element", async () => {
+    const turn = { session: 's1', current: () => true }
+    const sessions: unknown[] = []
+    store = new ArtifactStore({
+      threads: threadsAt(dir),
+      contentDir: path.join(dir, 'content'),
+      log: () => {},
+      changed: () => {},
+      version: () => {},
+      activity: (_ports, activity) => sessions.push(activity.sessions),
+    })
+    tools = new ArtifactTools({
+      store,
+      sessionTitle: () => 'Session',
+      runningTurn: () => turn as never,
+    })
+    const id = await create({ html: '<main><h1>Title</h1><p class="lead">Old</p></main>' })
+    await store.watch(id, 'window')
+    await call('read_artifact', { id })
+    await call('update_artifact', {
+      id,
+      base_version: 1,
+      edits: [{ old_text: 'Old', new_text: 'New' }],
+    })
+    const last = sessions.at(-1) as Array<{
+      doing: string
+      focus: { path: string; offset: number }
+    }>
+    expect(last[0]!.doing).toBe('write')
+    expect(last[0]!.focus).toEqual({
+      path: 'index.html',
+      offset: '<main><h1>Title</h1>'.length,
+      page: null,
+    })
+  })
+})

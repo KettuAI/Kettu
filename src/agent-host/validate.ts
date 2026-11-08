@@ -10,6 +10,8 @@ import {
   SNIPPET_CHARS,
 } from '@shared/artifact-runtime/page-messages'
 import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
+import { CanvasError, parseCanvasOps, type CanvasOp } from '@shared/canvas-doc'
+import { PARAMS_MAX, type ParamValue } from '@shared/artifact-params'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
@@ -1362,6 +1364,59 @@ export function createValidators(platform: Platform): Validators {
         style,
         text: text as string | null,
       }
+    },
+    'artifacts.view': (params) => {
+      const o = fields(params)
+      const page = o.page
+      if (page !== null && (typeof page !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(page))) {
+        throw invalidParams('page must be a canvas page id or null')
+      }
+      return { id: artifactId(o), page: page as string | null }
+    },
+    'artifacts.setParams': (params) => {
+      const o = fields(params)
+      const values = o.values
+      if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+        throw invalidParams('values must be an object of parameter names and values')
+      }
+      const entries = Object.entries(values as Record<string, unknown>)
+      if (entries.length === 0 || entries.length > PARAMS_MAX) {
+        throw invalidParams(`values must set 1 to ${PARAMS_MAX} parameters`)
+      }
+      for (const [name, value] of entries) {
+        if (!/^[a-z][a-z0-9-]{0,31}$/.test(name))
+          throw invalidParams(`${name} is not a parameter name`)
+        if (
+          typeof value !== 'boolean' &&
+          !(typeof value === 'number' && Number.isFinite(value)) &&
+          !(typeof value === 'string' && value.length <= 200)
+        ) {
+          throw invalidParams(`${name} must be a string, a number or true or false`)
+        }
+      }
+      return {
+        id: artifactId(o),
+        baseVersion: version(o, 'baseVersion'),
+        path: htmlPath(o, 'path'),
+        values: values as Record<string, ParamValue>,
+      }
+    },
+    'artifacts.canvas': artifact,
+    'artifacts.canvasOps': (params) => {
+      const o = fields(params)
+      let ops: CanvasOp[]
+      try {
+        ops = parseCanvasOps(o.ops)
+      } catch (error) {
+        if (error instanceof CanvasError) throw invalidParams(error.message)
+        throw error
+      }
+      if (ops.length === 0) throw invalidParams('Give at least one canvas operation')
+      const clientSeq = o.clientSeq
+      if (typeof clientSeq !== 'number' || !Number.isSafeInteger(clientSeq) || clientSeq < 0) {
+        throw invalidParams('clientSeq must be a whole number from 0')
+      }
+      return { id: artifactId(o), ops, client: string(o, 'client', ID_CHARS), clientSeq }
     },
     // The message is the page's, which the runtime itself checks.
     'artifacts.runtime': (params) => {

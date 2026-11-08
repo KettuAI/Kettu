@@ -20,9 +20,11 @@ export type ArtifactKind = 'document' | 'slides' | 'web' | 'canvas'
 
 export const ARTIFACT_KINDS: readonly ArtifactKind[] = ['document', 'slides', 'web', 'canvas']
 
-export function artifactKind(artifact: Pick<ArtifactSummary, 'type' | 'pages'>): ArtifactKind {
+export function artifactKind(
+  artifact: Pick<ArtifactSummary, 'type' | 'pages' | 'canvas'>,
+): ArtifactKind {
   if (artifact.type) return artifact.type
-  return artifact.pages >= 2 ? 'canvas' : 'web'
+  return artifact.canvas || artifact.pages >= 2 ? 'canvas' : 'web'
 }
 
 /** When this device last showed each artifact, by id. */

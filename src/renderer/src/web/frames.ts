@@ -2,7 +2,10 @@
 // the artifact's files on its direct port under the folder it answers with, sandboxed on an opaque
 // origin with the artifact policy; the frames load from there, and nothing passes through this page.
 
+import { ARTIFACT_ENTRY } from '@shared/artifact-files'
 import type { ArtifactContent } from '@shared/artifacts'
+import { CANVAS_FILE, parseCanvasDoc } from '@shared/canvas-doc'
+import { canvasOverview } from '@shared/canvas-overview'
 import type { ArtifactOpenResult } from '@shared/ipc'
 import { errorCode } from '@renderer/lib/host'
 import type { HostLink } from './link'
@@ -63,10 +66,32 @@ export async function exportFiles(
     for (const name of segments.slice(0, -1)) {
       folder = await folder.getDirectoryHandle(name, { create: true })
     }
-    const handle = await folder.getFileHandle(segments.at(-1)!, { create: true })
-    const writable = await handle.createWritable()
-    await writable.write(bytes)
-    await writable.close()
+    await save(folder, segments.at(-1)!, bytes)
+    if (file.path === CANVAS_FILE && !read.files.some((f) => f.path === ARTIFACT_ENTRY)) {
+      await save(root, ARTIFACT_ENTRY, await overviewPage(read.title, bytes))
+    }
   }
   return true
+}
+
+async function save(
+  folder: FileSystemDirectoryHandle,
+  name: string,
+  data: ArrayBuffer | string,
+): Promise<void> {
+  const writable = await (await folder.getFileHandle(name, { create: true })).createWritable()
+  await writable.write(data)
+  await writable.close()
+}
+
+/** The entry page a canvas document without one gets in its exported folder. */
+async function overviewPage(title: string, doc: ArrayBuffer): Promise<string> {
+  const { i18n } = await import('@renderer/lib/i18n')
+  return canvasOverview(parseCanvasDoc(new TextDecoder().decode(doc)), title, {
+    zoomIn: i18n.t('artifacts:overview.zoomIn'),
+    zoomOut: i18n.t('artifacts:overview.zoomOut'),
+    fit: i18n.t('artifacts:overview.fit'),
+    empty: i18n.t('artifacts:overview.empty'),
+    lang: i18n.language,
+  })
 }

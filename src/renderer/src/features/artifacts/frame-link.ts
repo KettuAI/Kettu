@@ -17,7 +17,7 @@ import { isWeb } from '@renderer/lib/platform'
 /** The picks a frame may report each second over its port; more are dropped. */
 const PICKS_PER_SECOND = 20
 
-type PickListener = (selection: PageSelection | null) => void
+type PickListener = (selection: PageSelection | null, located?: SelectMessage['located']) => void
 type RuntimeRelay = (url: string, port: MessagePort) => () => void
 
 let relay: RuntimeRelay | null = null
@@ -35,7 +35,7 @@ let listening = false
 
 function deliver(origin: string, message: SelectMessage): void {
   const entry = channels.get(message.channel)
-  if (entry && entry.origin === origin) entry.listener(message.selection)
+  if (entry && entry.origin === origin) entry.listener(message.selection, message.located)
 }
 
 /** Main's picks, from every frame of an origin this window opened. */

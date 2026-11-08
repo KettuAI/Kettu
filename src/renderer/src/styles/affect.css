@@ -5252,3 +5252,17 @@ li[data-row-exit='dust'] > * {
 [data-installed-theme] .ui-stc__step-icon[data-status='done'] path {
   stroke: var(--ui-stc-card);
 }
+
+/* agent-cursors: the faces, pointers and flags of agents on an artifact. Every agent shares the one
+   ink, as the component draws them without a color of their own. */
+.ui-agc.ui-agc {
+  --ui-agc-card: var(--bg-surface);
+  --ui-agc-tray: var(--bg-app);
+  --ui-agc-ink: var(--text-primary);
+  --ui-agc-text: var(--text-secondary);
+  --ui-agc-muted: var(--text-tertiary);
+  --ui-agc-line: var(--border-subtle);
+  --ui-agc-agent: var(--agent-ink);
+  --ui-agc-flag: var(--agent-flag);
+  --ui-agc-flag-ink: var(--agent-flag-ink);
+}

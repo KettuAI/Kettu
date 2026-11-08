@@ -16,7 +16,14 @@ export const NO_SESSION = ''
  * what could not be read; `unavailable` when the agent host cannot take it.
  */
 export type ArtifactImportFailure =
-  'too_large' | 'too_many' | 'no_index' | 'bad_name' | 'not_utf8' | 'unreadable' | 'unavailable'
+  | 'too_large'
+  | 'too_many'
+  | 'no_index'
+  | 'bad_canvas'
+  | 'bad_name'
+  | 'not_utf8'
+  | 'unreadable'
+  | 'unavailable'
 
 /**
  * `artifact:import`: the new artifact's id, or why the file or folder could not be imported; null
@@ -62,6 +69,7 @@ export interface ArtifactSummary {
   sessionId: string // the session it shows under: its latest version's, else its creator
   version: number // the latest
   pages: number // two or more is a canvas
+  canvas: boolean // the latest version is a canvas document, whatever its page count
   files: number // of the latest version
   size: number // of the latest version, in bytes
   createdAt: number // when the artifact was made
@@ -75,6 +83,18 @@ export interface ArtifactSummary {
 export interface ArtifactSession {
   sessionId: string
   editing: boolean // its running turn changed it; false while it only reads
+  /** What it did last, which its pointer shows: read, write a file, add a page or move one. */
+  doing?: ArtifactDoing
+  /** Where it did it: a file, the start tag of the element it changed in that file, a canvas page. */
+  focus?: ArtifactFocus
+}
+
+export type ArtifactDoing = 'read' | 'write' | 'draw' | 'move'
+
+export interface ArtifactFocus {
+  path: string | null
+  offset: number | null
+  page: string | null
 }
 
 export interface VersionSummary {
@@ -95,7 +115,7 @@ export interface ArtifactFileInfo {
 export interface ArtifactContent {
   title: string
   version: number
-  /** The entry page's text; empty for an artifact made from a type, whose viewer is its page. */
+  /** The entry page's text; empty for an artifact made from a type, whose viewer is its page, and for a canvas document without one. */
   html: string
   files: ArtifactFileInfo[]
   type?: ArtifactTypeInfo | null
@@ -113,6 +133,7 @@ export const THUMBNAIL_PAGES = 500
 export interface ThumbnailPage {
   group: number // the body's `data-page-group` child it is in, from 1, or 0 outside any
   index: number // its place among the pages there, from 1
+  file?: string // a canvas document's page: its own HTML file
   x: number
   y: number
   width: number
@@ -150,4 +171,6 @@ export function fitThumbnail(pages: readonly ThumbnailPage[]): {
 export interface ArtifactState {
   version: number
   deleted: boolean
+  /** For a write refused because someone changed what it writes: those files, since its base. */
+  changed?: string[]
 }

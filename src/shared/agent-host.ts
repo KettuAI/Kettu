@@ -4,6 +4,9 @@ import type { DeviceAccessDecision } from './device-agent'
 import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
 import type { CommentAnchor, CommentThread } from './artifact-comments'
+import type { CanvasEvent, CanvasState } from './artifact-canvas'
+import type { CanvasOp } from './canvas-doc'
+import type { ParamValue } from './artifact-params'
 import type { PreviewStyle } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat, ArtifactTypeInfo } from './artifact-types'
 import type {
@@ -837,8 +840,27 @@ export interface HostContract {
     params: { id: string; threadIds: string[]; sessionId: string }
     result: void
   }
-  // The user's direct edit of one element as a new version; `conflict` when `baseVersion` is not
-  // the latest. `style` sets properties of its start tag's style; `text` replaces the text of an
+  // The canvas page this client shows the artifact at, for the others' faces and agents' reads.
+  'artifacts.view': { params: { id: string; page: string | null }; result: void }
+  // New values for the parameters a page declares, written into its file as the user's version;
+  // `conflict` when the file changed since `baseVersion`.
+  'artifacts.setParams': {
+    params: { id: string; baseVersion: number; path: string; values: Record<string, ParamValue> }
+    result: { version: number }
+  }
+  // The live canvas document a client works on: the latest version's, with the operations clients
+  // sent since that are not yet in a version.
+  'artifacts.canvas': { params: { id: string }; result: CanvasState }
+  // The user's operations on a canvas, applied in the order they arrive, the last one winning per
+  // property; every port showing the artifact gets them as an `artifacts.canvas` event, the sender
+  // knowing its own by `client` and `clientSeq`, and they become a version once the canvas has been
+  // quiet a while. An old canvas is split into the canvas format first.
+  'artifacts.canvasOps': {
+    params: { id: string; ops: CanvasOp[]; client: string; clientSeq: number }
+    result: { seq: number }
+  }
+  // The user's direct edit of one element as a new version; `conflict` when the file changed since
+  // `baseVersion`. `style` sets properties of its start tag's style; `text` replaces the text of an
   // element that holds text alone.
   'artifacts.editElement': {
     params: {
@@ -1058,6 +1080,10 @@ export const HOST_METHODS = [
   'artifacts.resolve',
   'artifacts.markSent',
   'artifacts.editElement',
+  'artifacts.view',
+  'artifacts.setParams',
+  'artifacts.canvas',
+  'artifacts.canvasOps',
   'artifacts.runtime',
   'artifacts.consent',
   'artifacts.consents',
@@ -1100,9 +1126,18 @@ export type HostEvent =
   | { type: 'usage.status'; status: UsageStatus }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
-  | { type: 'artifacts.activity'; id: string; viewers: number; sessions: ArtifactSession[] }
+  // `clients` are the other clients showing it, as `session.viewers` names them for the receiver.
+  | {
+      type: 'artifacts.activity'
+      id: string
+      viewers: number
+      clients: Array<SessionViewer & { page: string | null }>
+      sessions: ArtifactSession[]
+    }
   // To the ports watching the artifact: its comments changed, so they read them again.
   | { type: 'artifacts.comments'; id: string }
+  // To the ports watching a canvas: operations in the order they applied, or its document again.
+  | ({ type: 'artifacts.canvas' } & CanvasEvent)
   // A stream's event or end, to the port that asked under `stream`.
   | { type: 'artifacts.runtime'; stream: string; answer: RuntimeAnswer }
   // To the ports showing the artifact on the client a page asked from: the user's consent, asked

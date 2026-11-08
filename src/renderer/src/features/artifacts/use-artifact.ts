@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { versionUrlPath } from '@shared/artifact-page'
+import type { SessionViewer } from '@shared/agent-host'
 import type { ArtifactSession, ArtifactSummary } from '@shared/artifacts'
 import { errorCode, host } from '@renderer/lib/host'
 import {
@@ -8,6 +9,7 @@ import {
   useArtifactsStore,
 } from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
+import { CANVAS_FILE, parseCanvasDoc, type CanvasDoc } from '@shared/canvas-doc'
 import { layoutCanvas, parseCanvas, type CanvasLayout } from './canvas'
 
 export type ViewerError = 'notFound' | 'unavailable' | 'failed' | 'previewOnly'
@@ -20,11 +22,34 @@ export interface ShownVersion {
   files: number
   /** Laid out when the version marks two or more pages; null for a single page. */
   canvas: CanvasLayout | null
+  /** A canvas document's version: the document as stored, which the canvas editor shows. */
+  doc: CanvasDoc | null
+  /** The version's files, by path. */
+  paths: ReadonlySet<string>
+}
+
+/** A canvas document's pages in reading order, for the parts that number them: present, pins. */
+function docPages(doc: CanvasDoc): CanvasLayout {
+  const pages = doc.pages.map((p, i) => ({
+    name: p.name,
+    number: i + 1,
+    group: 0,
+    index: i + 1,
+    width: p.width,
+    height: p.height,
+    x: p.x,
+    y: p.y,
+    file: p.file,
+    id: p.id,
+  }))
+  return { pages, titles: [], width: 0, height: 0 }
 }
 
 export interface Presence {
   viewers: number
   sessions: ArtifactSession[]
+  /** The other clients showing it, and the canvas page each one is on. */
+  clients: Array<SessionViewer & { page: string | null }>
 }
 
 /**
@@ -95,16 +120,33 @@ export function useArtifact(id: string, version: number | null) {
     if (version === null && wanted !== null && lastRead.current === wanted) return
     let live = true
     host('artifacts.read', wanted === null ? { id } : { id, version: wanted }).then(
-      (read) => {
+      async (read) => {
+        if (!live) return
+        const paths = new Set(read.files.map((f) => f.path))
+        // A canvas document is the entry when there is one.
+        let doc: CanvasDoc | null = null
+        if (paths.has(CANVAS_FILE)) {
+          const { bytes } = await host('artifacts.file', {
+            id,
+            version: read.version,
+            path: CANVAS_FILE,
+          })
+          try {
+            doc = parseCanvasDoc(new TextDecoder().decode(bytes))
+          } catch (error) {
+            console.error(`The canvas document of ${id} could not be read`, error)
+          }
+        }
         if (!live) return
         lastRead.current = read.version
-        const rows = parseCanvas(read.html)
-        const layout = layoutCanvas(rows)
+        const layout = doc ? docPages(doc) : layoutCanvas(parseCanvas(read.html))
         setShown({
           version: read.version,
           title: read.title,
           files: read.files.length,
-          canvas: layout.pages.length >= 2 ? layout : null,
+          canvas: doc || layout.pages.length >= 2 ? layout : null,
+          doc,
+          paths,
         })
         setReadError(null)
       },
@@ -123,7 +165,7 @@ export function useArtifact(id: string, version: number | null) {
     void host('artifacts.watch', { id }).catch(() => {})
     const off = window.kettu.agents.onEvent((event) => {
       if (event.type === 'artifacts.activity' && event.id === id) {
-        setPresence({ viewers: event.viewers, sessions: event.sessions })
+        setPresence({ viewers: event.viewers, sessions: event.sessions, clients: event.clients })
       } else if (event.type === 'artifacts.version' && event.id === id) {
         setAnnounced((n) => Math.max(n, event.version))
       } else if (event.type === 'artifacts.consentSettled' && event.artifactId === id) {
@@ -157,6 +199,7 @@ export function useArtifact(id: string, version: number | null) {
         ? {
             viewers: 1,
             sessions: summary.editing.map((sessionId) => ({ sessionId, editing: true })),
+            clients: [],
           }
         : null),
     stopped,
@@ -202,8 +245,9 @@ export function useListsRead(): boolean {
 export function pageUrl(
   url: string,
   version: number,
-  page?: { group: number; index: number },
+  page?: { group: number; index: number; file?: string | null },
 ): string {
+  if (page?.file) return `${url.slice(0, -1)}${versionUrlPath(version, page.file)}`
   const entry = `${url.slice(0, -1)}${versionUrlPath(version)}`
   return page ? `${entry}?page=${page.group}.${page.index}` : entry
 }

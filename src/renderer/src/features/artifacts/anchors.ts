@@ -50,13 +50,16 @@ export function pinsOf(
       const { anchor } = thread
       const number = page === null ? null : (shown.canvas?.pages[page]?.number ?? null)
       if (page !== null && anchor.page?.number !== number) return []
-      // Frames show the entry page, so an element of another file pins its page.
-      const src = anchor.missing || anchor.path !== ARTIFACT_ENTRY ? null : anchor.offset
+      // A frame shows its page's own file, or the entry page of an old canvas; an element of
+      // another file pins its page.
+      const file = (page === null ? null : shown.canvas?.pages[page]?.file) ?? ARTIFACT_ENTRY
+      const src = anchor.missing || anchor.path !== file ? null : anchor.offset
       return [{ n: i + 1, src, answered: isAnswered(thread) }]
     })
 }
 
-function boundary(texts: readonly string[]): string {
+/** A line around data that no text inside it holds, so the data cannot end it. */
+export function boundary(texts: readonly string[]): string {
   for (;;) {
     const bytes = crypto.getRandomValues(new Uint8Array(8))
     const mark = `kettu-data-${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`
@@ -82,7 +85,7 @@ function dataLine(anchor: CommentAnchor): string {
   return `${parts.join(', ')}${text ? `: "${text}"` : ''}`
 }
 
-function block(mark: string, lines: string[]): string {
+export function block(mark: string, lines: string[]): string {
   return [mark, ...lines, mark].join('\n')
 }
 

@@ -27,7 +27,15 @@ import { ArtifactEditor, useEditorState } from './editor'
 import { Waiting } from './page-frame'
 import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
 import { useComments } from './use-comments'
-import { ArtifactSurface, CanvasBarControls, Presence } from './viewer-parts'
+import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
+import { CanvasEditor } from './canvas-editor'
+import { PresenceFaces } from './presence-faces'
+import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
+import { useCanvasDoc } from './use-canvas-doc'
+import { useDocActions } from './use-doc-actions'
+import { EditPanel } from './edit-panel'
+import { Presenter } from './present'
+import { ArtifactSurface, CanvasBarControls } from './viewer-parts'
 import { PreviewOnly } from './preview-only'
 
 /**
@@ -60,6 +68,23 @@ export default function ArtifactPane({
   const editing = useEditorState(editor)
   const latest = !!shown && !!summary && shown.version === summary.version && !states.inTrash
   const { threads } = useComments(editing.mode === 'comment' ? id : null)
+  const liveCanvas = useCanvasDoc(id, latest && !!shown?.doc)
+  const agents = usePresentAgents(artifact.presence, summary?.deletedAt != null)
+  const visitors = useVisitors(id)
+  const [following, setFollowing] = useState<string | null>(null)
+  const followingNow = following && agents.some((a) => a.sessionId === following) ? following : null
+  const [presenting, setPresenting] = useState<number | null>(null)
+  const docActions = useDocActions({
+    id,
+    title,
+    shown: shown ?? null,
+    doc: liveCanvas.doc ?? shown?.doc ?? null,
+    summary: summary ?? null,
+    agents,
+    present: setPresenting,
+  })
+  // A canvas document gets the whole editor here too, edge to edge, as in the main area.
+  const docCanvas = !!(url && shown?.doc)
 
   useEffect(() => {
     if (states.inTrash) editor?.setMode(null)
@@ -147,6 +172,27 @@ export default function ArtifactPane({
         </button>
       </PaneEmpty>
     )
+  } else if (url && shown && shown.doc) {
+    body = (
+      <CanvasEditor
+        artifactId={id}
+        url={url}
+        version={shown.version}
+        title={title}
+        canvas={liveCanvas}
+        files={shown.paths}
+        readOnly={!latest}
+        controls={controls}
+        editor={latest ? (editor ?? undefined) : undefined}
+        actions={docActions}
+        agents={latest ? agents : []}
+        following={followingNow}
+        onFollowDone={() => setFollowing(null)}
+        onViewPage={(page) => void host('artifacts.view', { id, page }).catch(() => {})}
+        sessionName={(session) => noteAuthor(agents, session, t('board.note.agent'))}
+        reloads={artifact.reloads}
+      />
+    )
   } else if (url && shown) {
     body = (
       <ArtifactSurface
@@ -174,20 +220,25 @@ export default function ArtifactPane({
         tools={
           showing && (
             <>
-              <Presence
-                id={id}
+              <AgentCursorStyles />
+              <PresenceFaces
+                agents={agents.slice(0, 3)}
                 presence={artifact.presence}
-                deleted={summary?.deletedAt != null}
-                size="pane"
+                pageName={(page) =>
+                  page ? (liveCanvas.doc?.pages.find((p) => p.id === page)?.name ?? null) : null
+                }
+                following={followingNow}
+                onFollow={setFollowing}
+                visitors={visitors}
               />
-              {shown?.canvas && (
+              {shown?.canvas && !shown.doc && (
                 <CanvasBarControls
                   controls={controls}
                   pageName={canvasPageName(shown, (number) => t('canvas.page', { number }))}
                   size="pane"
                 />
               )}
-              {latest && editor && (
+              {latest && editor && !shown?.doc && (
                 <>
                   <PanelButton
                     label={t('tools.select')}
@@ -239,8 +290,8 @@ export default function ArtifactPane({
           </span>
         )}
       </PaneHead>
-      <div className="kp-body">
-        <div className="k-av-frame">
+      <div className={docCanvas ? 'kp-body k-av-pane__canvas' : 'kp-body'}>
+        <div className="k-av-frame" data-canvas={docCanvas ? '' : undefined}>
           {body}
           {editor && shown && editing.mode === 'comment' && editing.picked?.point && (
             <CommentBox
@@ -259,7 +310,30 @@ export default function ArtifactPane({
             />
           )}
         </div>
+        {docCanvas && editor && shown && editing.mode === 'select' && editing.picked && latest && (
+          <EditPanel
+            key={`${editing.picked.page}:${editing.picked.selection.path}:${editing.picked.selection.src}`}
+            id={id}
+            version={shown.version}
+            editable="yes"
+            picked={editing.picked}
+            editor={editor}
+          />
+        )}
       </div>
+      {presenting !== null && url && shown && (
+        <Presenter
+          url={url}
+          version={shown.version}
+          title={title}
+          pages={shown.canvas?.pages ?? null}
+          start={presenting}
+          pageName={
+            canvasPageName(shown, (number) => t('canvas.page', { number })) ?? (() => title)
+          }
+          onExit={() => setPresenting(null)}
+        />
+      )}
     </PaneSheet>
   )
 }

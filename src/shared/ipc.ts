@@ -162,7 +162,7 @@ export interface ArtifactSelectedEvent {
 
 /** One page of a canvas, by the protocol's numbers, at its own size, for `artifact:png`. */
 export interface ArtifactPngPage {
-  page: { group: number; index: number } | null
+  page: { group: number; index: number; file?: string } | null
   width: number
   height: number
 }
@@ -286,6 +286,16 @@ export interface IpcInvokeContract {
   }
   'artifact:open-external': { args: [id: string, version: number]; result: void }
   'artifact:export': { args: [id: string, version: number]; result: boolean }
+  // A page's image as a base64 PNG, for a message to an agent; null when it cannot render.
+  'artifact:page-image': {
+    args: [
+      id: string,
+      version: number,
+      page: ArtifactPngPage['page'],
+      size: { width: number; height: number },
+    ]
+    result: string | null
+  }
   // `name` is the file's default name; false when the user cancelled the save dialog.
   'artifact:png': {
     args: [
@@ -332,6 +342,7 @@ export interface IpcInvokeContract {
   'sharing:set-access': { args: [id: string, access: ShareAccess]; result: SharingResult }
   'sharing:new-code': { args: [id: string]; result: SharingResult }
   'sharing:open-link': { args: [id: string]; result: SharingOpenResult }
+  'sharing:visitors': { args: [id: string]; result: number | null }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
   'remote:status': { args: []; result: RemoteStatus }
   // A pairing code for this page, voiding any other; null while remote access is not on. Its
@@ -562,6 +573,13 @@ export interface KettuApi {
       size: { width: number; height: number },
       name: string,
     ): Promise<boolean>
+    /** Renders a page as `png` does and hands its image back, base64, for a message to an agent. */
+    pageImage(
+      id: string,
+      version: number,
+      page: ArtifactPngPage['page'],
+      size: { width: number; height: number },
+    ): Promise<string | null>
   }
   /** The Kettu account; main holds its tokens and makes every request. */
   account: {
@@ -610,6 +628,8 @@ export interface KettuApi {
     newCode(id: string): Promise<SharingResult>
     /** An address that opens the page for its publisher, without its code or a sign-in. */
     openLink(id: string): Promise<SharingOpenResult>
+    /** How many people look at the artifact's page on Kettu now; null when nobody can say. */
+    visitors(id: string): Promise<number | null>
     unpublish(id: string): Promise<SharingResult>
     /** Turns publishing to Kettu on its own on or off, which also answers its one-time notice. */
     setAuto(enabled: boolean): Promise<SharingResult>

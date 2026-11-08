@@ -12,7 +12,8 @@ import {
   THUMBNAIL_WIDTH,
   type ThumbnailPage,
 } from '@shared/artifacts'
-import { versionUrlPath, type CanvasPage } from '@shared/artifact-page'
+import { canvasPagePath, versionUrlPath, type CanvasPage } from '@shared/artifact-page'
+import { artifactPathProblem, isHtmlPath } from '@shared/artifact-files'
 import type { ArtifactContentResult } from '@shared/host-control'
 import { createLogger } from '../log'
 import { restrictPermissions } from '../permissions'
@@ -76,8 +77,26 @@ export function parseLayout(value: unknown): ThumbnailPage[] | null {
     ) {
       throw new Error('Not a thumbnail layout')
     }
-    return { group: p.group, index: p.index, x: p.x, y: p.y, width: p.width, height: p.height }
+    const file = pageFile(p.file)
+    return {
+      group: p.group,
+      index: p.index,
+      ...(file ? { file } : {}),
+      x: p.x,
+      y: p.y,
+      width: p.width,
+      height: p.height,
+    }
   })
+}
+
+/** A canvas document's page file from the renderer: a valid path of an HTML file, or none. */
+function pageFile(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || artifactPathProblem(value) !== null || !isHtmlPath(value)) {
+    throw new Error('Not a page file')
+  }
+  return value
 }
 
 const FRAME_ATTRIBUTES =
@@ -95,18 +114,20 @@ export function thumbnailDocument(
   view: 'thumbnail' | null = null,
 ): string {
   // A type's viewer draws its content alone for a thumbnail, without its controls.
-  const page = `${origin.replace(/\/$/, '')}${versionUrlPath(version)}${view ? `?view=${view}` : ''}`
-  const frame = (query: string, style: string): string =>
-    `<iframe src="${page}${query}" ${FRAME_ATTRIBUTES} style="${style}"></iframe>`
+  const root = origin.replace(/\/$/, '')
+  const page = `${root}${versionUrlPath(version)}${view ? `?view=${view}` : ''}`
+  // A page file's path is escaped segment by segment, so it cannot leave the attribute.
+  const frame = (src: string, style: string): string =>
+    `<iframe src="${src}" ${FRAME_ATTRIBUTES} style="${style}"></iframe>`
   let frames: string
   if (!layout) {
-    frames = frame('', `width:${THUMBNAIL_WIDTH}px;height:${THUMBNAIL_HEIGHT}px`)
+    frames = frame(page, `width:${THUMBNAIL_WIDTH}px;height:${THUMBNAIL_HEIGHT}px`)
   } else {
     const fit = fitThumbnail(layout)
     frames = layout
       .map((p) =>
         frame(
-          `?page=${p.group}.${p.index}`,
+          `${root}${canvasPagePath(version, p)}`,
           `left:${fit.x + p.x * fit.scale}px;top:${fit.y + p.y * fit.scale}px;` +
             `width:${p.width}px;height:${p.height}px;transform:scale(${fit.scale})`,
         ),
@@ -132,7 +153,7 @@ export function pageDocument(
   page: CanvasPage | null,
   size: Size,
 ): string {
-  const src = `${origin.replace(/\/$/, '')}${versionUrlPath(version)}${page ? `?page=${page.group}.${page.index}` : ''}`
+  const src = `${origin.replace(/\/$/, '')}${canvasPagePath(version, page)}`
   return (
     '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; ' +
@@ -164,7 +185,8 @@ export function parsePage(value: unknown): CanvasPage | null {
   ) {
     throw new Error('Not a page')
   }
-  return { group: p.group, index: p.index }
+  const file = pageFile(p.file)
+  return file ? { group: p.group, index: p.index, file } : { group: p.group, index: p.index }
 }
 
 /** How long the capture waits for a thumbnail of this many pages to load. */

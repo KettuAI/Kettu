@@ -7,6 +7,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { app, type BrowserWindow, dialog, shell } from 'electron'
 import { ARTIFACT_ENTRY } from '@shared/artifact-files'
+import { CANVAS_FILE } from '@shared/canvas-doc'
 import { isImagePath } from '@shared/artifact-document'
 import {
   type ArtifactExportFormat,
@@ -18,6 +19,7 @@ import {
 import { ARTIFACT_ID, type ArtifactImportKind, type ArtifactImportResult } from '@shared/artifacts'
 import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-control'
 import { safeName } from '@shared/file-name'
+import { overviewOf } from './overview'
 import { isInside } from './protocol'
 
 const MAX_PROJECT_CHARS = 4_096
@@ -87,8 +89,9 @@ export class ArtifactFiles {
     const found = await this.find(id, version)
     await mkdir(this.tempDir, { recursive: true, mode: 0o700 })
     const name = `${found.id}-v${found.version}`
+    const overview = await overviewOf(found.files, found.title)
     let page: string
-    if (found.files.length === 1) {
+    if (found.files.length === 1 && !overview) {
       page = path.join(this.tempDir, `${name}.html`)
       await copyFile(found.files[0]!.file, page)
     } else {
@@ -96,6 +99,7 @@ export class ArtifactFiles {
       await rm(folder, { recursive: true, force: true })
       await copyInto(folder, found.files)
       page = path.join(folder, ARTIFACT_ENTRY)
+      if (overview) await writeFile(page, overview)
     }
     await shell.openExternal(pathToFileURL(page).href)
   }
@@ -106,7 +110,8 @@ export class ArtifactFiles {
    */
   async export(window: BrowserWindow | null, id: unknown, version: unknown): Promise<boolean> {
     const found = await this.find(id, version)
-    const single = found.files.length === 1
+    const overview = await overviewOf(found.files, found.title)
+    const single = found.files.length === 1 && !overview
     const name = safeName(found.title, found.id)
     const options: Electron.SaveDialogOptions = single
       ? {
@@ -122,7 +127,10 @@ export class ArtifactFiles {
       : await dialog.showSaveDialog(options)
     if (result.canceled || !result.filePath) return false
     if (single) await copyFile(found.files[0]!.file, result.filePath)
-    else await copyInto(result.filePath, found.files)
+    else {
+      await copyInto(result.filePath, found.files)
+      if (overview) await writeFile(path.join(result.filePath, ARTIFACT_ENTRY), overview)
+    }
     return true
   }
 
@@ -209,7 +217,7 @@ export class ArtifactFiles {
     if (found.kind === 'failed') throw new Error('The agent host did not answer')
     if (
       found.kind === 'not_found' ||
-      !found.files.some((file) => file.path === ARTIFACT_ENTRY) ||
+      !found.files.some((file) => file.path === ARTIFACT_ENTRY || file.path === CANVAS_FILE) ||
       !found.files.every((file) => isInside(this.deps.contentDir, file.file))
     ) {
       throw new Error('Not found')

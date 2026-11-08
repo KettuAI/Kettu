@@ -300,3 +300,46 @@ export function findAnchor(
   })
   return (best as { offset: number } | null)?.offset ?? null
 }
+
+/** Where the comments and the text of raw-text elements lie, which hold no tags. */
+function opaqueRanges(html: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  for (const m of html.matchAll(/<!--[\s\S]*?(?:-->|$)/g))
+    ranges.push([m.index, m.index + m[0].length])
+  eachStartTag(html, (tag) => {
+    const close = RAW_TEXT.get(tag.name)
+    if (!close) return
+    close.lastIndex = tag.end
+    const m = close.exec(html)
+    ranges.push([tag.end, m ? m.index : html.length])
+  })
+  return ranges.sort((a, b) => a[0] - b[0])
+}
+
+/**
+ * Where the element whose start tag is `tag` ends, after its end tag, counting nested elements of
+ * the same name; null when it is never closed. Enough to cut out a page of an old canvas, whose
+ * pages are written as elements with end tags.
+ */
+export function elementEnd(html: string, tag: StartTag): number | null {
+  if (VOID.has(tag.name)) return tag.end
+  const opaque = opaqueRanges(html)
+  const hidden = (at: number): boolean => opaque.some(([from, to]) => at >= from && at < to)
+  const opens: number[] = []
+  eachStartTag(html, (t) => {
+    if (t.start > tag.start && t.name === tag.name) opens.push(t.start)
+  })
+  const closer = new RegExp(`</${tag.name}(?=[\\s/>])[^>]*>`, 'gi')
+  closer.lastIndex = tag.end
+  let depth = 1
+  let next = 0
+  for (let m = closer.exec(html); m; m = closer.exec(html)) {
+    if (hidden(m.index)) continue
+    while (next < opens.length && opens[next]! < m.index) {
+      depth++
+      next++
+    }
+    if (--depth === 0) return m.index + m[0].length
+  }
+  return null
+}
