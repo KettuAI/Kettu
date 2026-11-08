@@ -16,10 +16,16 @@ async function take(call: () => Promise<AccountStatus>, what: string): Promise<v
   }
 }
 
-/** Reads the status and follows main's changes; called once at bootstrap, in the desktop app. */
+/**
+ * Reads the status and follows main's changes, then reads the account from the service, at start
+ * and whenever the window comes back, so the sidebar's row stays current without Settings open.
+ * Called once at bootstrap.
+ */
 export async function initAccount(): Promise<void> {
   window.kettu.account.onChanged((status) => useAccountStore.setState({ status }))
+  window.addEventListener('focus', () => void checkAccount())
   await take(() => window.kettu.account.status(), 'read the account')
+  await checkAccount()
 }
 
 /** Reads the account from the service again, as when Settings › Account shows. */
