@@ -529,11 +529,16 @@ function PageParams({
   version,
   page,
   frame,
+  selected,
+  onSelect,
 }: {
   artifactId: string
   version: number
   page: CanvasPage
   frame: EditorFrame | null
+  /** The frame is the one selected, which its group shows. */
+  selected: boolean
+  onSelect: () => void
 }) {
   const { t } = useTranslation('artifacts')
   const [params, setParams] = useState<PageParam[] | null>(null)
@@ -594,10 +599,12 @@ function PageParams({
 
   return (
     <>
-      <div className="k-ce-psec">
+      <div className="k-ce-psec" data-selected={selected ? '' : undefined}>
         <h5>
-          {t('board.props.params')}
-          <span>{t('board.props.paramsHint')}</span>
+          <button type="button" className="k-ce-psec__frame" onClick={onSelect}>
+            <HugeiconsIcon icon={TOOL_ICONS.page} size={13} strokeWidth={1.9} />
+            <span className="truncate">{page.name}</span>
+          </button>
         </h5>
         {params.map((p) => (
           <div key={p.name} className="k-ce-prow">
@@ -676,18 +683,12 @@ export function CanvasProps({
   apply,
   remove,
   duplicate,
-  editorFrame,
-  artifactId,
-  version,
 }: {
   layout: DocLayout
   selection: readonly string[]
   apply: (ops: CanvasOp[]) => void
   remove: () => void
   duplicate: () => void
-  editorFrame: (page: string) => EditorFrame | null
-  artifactId: string
-  version: number
 }) {
   const { t } = useTranslation('artifacts')
   const one = selection.length === 1 ? selection[0]! : null
@@ -754,7 +755,7 @@ export function CanvasProps({
   const locked = page?.locked ?? note?.locked ?? false
 
   return (
-    <div className="k-ce-panel k-ce-props k-ce-float" aria-label={t('board.props.title')}>
+    <>
       {page && (
         <div className="k-ce-psec">
           <h5>
@@ -817,15 +818,6 @@ export function CanvasProps({
             </div>
           </div>
         </div>
-      )}
-      {page && (
-        <PageParams
-          key={page.id}
-          artifactId={artifactId}
-          version={version}
-          page={page}
-          frame={editorFrame(page.id)}
-        />
       )}
       {note && (
         <div className="k-ce-psec">
@@ -948,7 +940,55 @@ export function CanvasProps({
           <IconAct label={t('board.props.delete')} icon={Delete02Icon} onClick={remove} />
         </div>
       </div>
-    </div>
+    </>
+  )
+}
+
+/**
+ * The Tweaks tab: the parameters each frame of the page declares, to change them live; the
+ * selected frame's group is marked, and a frame's name selects it.
+ */
+export function CanvasTweaks({
+  layout,
+  params,
+  selection,
+  onSelect,
+  editorFrame,
+  artifactId,
+  version,
+}: {
+  layout: DocLayout
+  params: ReadonlyMap<string, PageParam[]>
+  selection: readonly string[]
+  onSelect: (id: string) => void
+  editorFrame: (page: string) => EditorFrame | null
+  artifactId: string
+  version: number
+}) {
+  const { t } = useTranslation('artifacts')
+  const frames = layout.pages.filter((p) => params.has(p.id))
+  if (frames.length === 0) {
+    return (
+      <div className="k-ce-side__empty">
+        <p>{t('board.tweaks.empty')}</p>
+        <p>{t('board.tweaks.hint')}</p>
+      </div>
+    )
+  }
+  return (
+    <>
+      {frames.map((page) => (
+        <PageParams
+          key={page.id}
+          artifactId={artifactId}
+          version={version}
+          page={page}
+          frame={editorFrame(page.id)}
+          selected={selection.includes(page.id)}
+          onSelect={() => onSelect(page.id)}
+        />
+      ))}
+    </>
   )
 }
 

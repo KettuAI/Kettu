@@ -544,7 +544,23 @@
     "handOffPrompt": "照这些画框上的标注改，别的地方不动。",
     "handedOff": "已交给 Agent",
     "handOffFailed": "没能交给 Agent。{{error}}",
-    "legacySplit": "在画布上编辑"
+    "legacySplit": "在画布上编辑",
+    "tweaks": {
+      "empty": "这一页的画框还没有可调节的参数。",
+      "hint": "可以让 Agent 加上，比如主题、强调色或密度。"
+    },
+    "side": {
+      "props": "属性",
+      "tweaks": "调节",
+      "close": "关闭面板",
+      "none": "选中一个画框或标注，查看它的属性。",
+      "tabs": "面板"
+    },
+    "top": {
+      "present": "演示",
+      "tweaks": "调节",
+      "toolbar": "视图"
+    }
   },
   "overview": {
     "zoomIn": "放大",

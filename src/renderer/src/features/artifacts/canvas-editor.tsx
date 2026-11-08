@@ -5,6 +5,7 @@ import {
   Download04Icon,
   GridIcon,
   MinusSignIcon,
+  Cancel01Icon,
   PlayIcon,
   PlusSignIcon,
   SlidersHorizontalIcon,
@@ -48,11 +49,12 @@ import {
 } from './camera'
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { CanvasFrame, FocusedPage } from './canvas-view'
-import { CanvasLayers, CanvasProps, CanvasToolbar } from './canvas-editor-panels'
+import { CanvasLayers, CanvasProps, CanvasToolbar, CanvasTweaks } from './canvas-editor-panels'
 import { contains, docLayout, overlaps, snap, type DocLayout } from './canvas-model'
 import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
 import { isModeKey } from './keys'
 import type { CanvasDocState } from './use-canvas-doc'
+import { useFrameParams } from './use-frame-params'
 import { pageUrl } from './use-artifact'
 import { NOTE_COLOR_VAR, type PenStyle, type ShapeKind, type Tool } from './canvas-tools'
 import './canvas-editor.css'
@@ -161,6 +163,9 @@ function union(boxes: Box[]): Box | null {
 
 /** The band above a frame, in screen pixels, where its name selects the whole frame. */
 const LABEL_BAND = 24
+
+/** The room the right panel takes, which fitting leaves free. */
+const SIDE_ROOM = 300
 
 /** The room the open layers panel takes at the left, which fitting leaves free. */
 const LAYERS_ROOM = 256
@@ -370,6 +375,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   const [textEdit, setTextEdit] = useState<string | null>(null)
   // Open in the full editor, as the list of what the canvas holds; the side panel has no room.
   const [layersOpen, setLayersOpen] = useState(!readOnly)
+  // The right panel's tab the user chose; without one it shows the selection's properties.
+  const [side, setSide] = useState<'props' | 'tweaks' | null>(null)
   const [guides, setGuides] = useState<ReturnType<typeof snap>['guides']>([])
   const [marquee, setMarquee] = useState<Box | null>(null)
   const [stroke, setStroke] = useState<number[] | null>(null)
@@ -390,6 +397,11 @@ export const CanvasEditor = memo(function CanvasEditor({
     () => (layout ? selection.filter((id) => boxOf(layout, id)) : []),
     [layout, selection],
   )
+  const frameParams = useFrameParams(artifactId, version, pages)
+  // The right panel: the tab chosen, else the selection's properties while there is one.
+  const shownSide = readOnly
+    ? null
+    : (side ?? (shownSelection.length > 0 && !inside ? 'props' : null))
 
   const syncLive = useCallback(() => {
     const step = (): void => {
@@ -451,21 +463,24 @@ export const CanvasEditor = memo(function CanvasEditor({
     [place, draw],
   )
 
+  // Fitting leaves the open panels' room free.
+  const leftRoom = layersOpen ? LAYERS_ROOM : 0
+  const rightRoom = shownSide ? SIDE_ROOM : 0
   const fitAll = useCallback(
     (glides: boolean) => {
       const bounds = layout?.bounds
       if (!bounds || bounds.width === 0)
         return place({ x: view.current.width / 2, y: view.current.height / 2, z: 1 }, true)
-      const target = fitBox(bounds, view.current, top + 56, 56, layersOpen ? LAYERS_ROOM : 0)
+      const target = fitBox(bounds, view.current, top + 56, 56, leftRoom, rightRoom)
       if (glides) moveTo(target, true)
       else place(target, true)
     },
-    [layout, top, layersOpen, moveTo, place],
+    [layout, top, leftRoom, rightRoom, moveTo, place],
   )
 
   const fitBoxGlide = useCallback(
-    (box: Box) => moveTo(fitBox(box, view.current, top + 56, 56, layersOpen ? LAYERS_ROOM : 0)),
-    [top, layersOpen, moveTo],
+    (box: Box) => moveTo(fitBox(box, view.current, top + 56, 56, leftRoom, rightRoom)),
+    [top, leftRoom, rightRoom, moveTo],
   )
 
   const zoomAround = useCallback(
@@ -493,6 +508,15 @@ export const CanvasEditor = memo(function CanvasEditor({
     observer.observe(el)
     return () => observer.disconnect()
   }, [fitAll, draw])
+
+  // A fitted view fits again in the room a panel that opened or closed leaves.
+  const rooms = `${leftRoom}:${rightRoom}`
+  const lastRooms = useRef(rooms)
+  useEffect(() => {
+    if (lastRooms.current === rooms) return
+    lastRooms.current = rooms
+    if (fitted.current && atFit.current) fitAll(true)
+  }, [rooms, fitAll])
 
   // Another canvas fits its own pages.
   const lastCanvas = useRef(canvasKey)
@@ -1347,11 +1371,16 @@ export const CanvasEditor = memo(function CanvasEditor({
               <span className="k-ce-label__name">{name(p)}</span>
               {actions && (
                 <span className="k-ce-label__acts">
-                  <LabelAct
-                    label={t('board.page.tweak')}
-                    icon={SlidersHorizontalIcon}
-                    onClick={() => setSelection([p.id])}
-                  />
+                  {!readOnly && frameParams.has(p.id) && (
+                    <LabelAct
+                      label={t('board.page.tweak')}
+                      icon={SlidersHorizontalIcon}
+                      onClick={() => {
+                        setSelection([p.id])
+                        setSide('tweaks')
+                      }}
+                    />
+                  )}
                   {!readOnly && (
                     <LabelAct
                       label={t('board.page.ask')}
@@ -1543,17 +1572,65 @@ export const CanvasEditor = memo(function CanvasEditor({
           onClose={() => setLayersOpen(false)}
         />
       )}
-      {layout && shownSelection.length > 0 && !inside && !readOnly && (
-        <CanvasProps
-          layout={layout}
-          selection={shownSelection}
-          apply={apply}
-          remove={remove}
-          duplicate={duplicate}
-          editorFrame={(page) => editorFrames.current.get(page) ?? null}
-          artifactId={artifactId}
-          version={version}
-        />
+      {layout && shownSide && (
+        <aside className="k-ce-side" aria-label={t('board.side.tabs')}>
+          <div className="k-ce-side__head">
+            <div role="tablist" className="k-ce-side__tabs">
+              {(['props', 'tweaks'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={shownSide === tab}
+                  className="k-ce-side__tab"
+                  onClick={() => setSide(tab)}
+                >
+                  {t(`board.side.${tab}`)}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              aria-label={t('board.side.close')}
+              className="k-ce-tool"
+              onClick={() => {
+                setSide(null)
+                setSelection([])
+              }}
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={14} strokeWidth={1.9} />
+            </button>
+          </div>
+          <div className="k-ce-side__body">
+            {shownSide === 'tweaks' ? (
+              <CanvasTweaks
+                layout={layout}
+                params={frameParams}
+                selection={shownSelection}
+                onSelect={(id) => {
+                  setSelection([id])
+                  const page = layout.pages.find((p) => p.id === id)
+                  if (page) moveTo(revealBox(camera.current, page, view.current))
+                }}
+                editorFrame={(page) => editorFrames.current.get(page) ?? null}
+                artifactId={artifactId}
+                version={version}
+              />
+            ) : shownSelection.length > 0 && !inside ? (
+              <CanvasProps
+                layout={layout}
+                selection={shownSelection}
+                apply={apply}
+                remove={remove}
+                duplicate={duplicate}
+              />
+            ) : (
+              <div className="k-ce-side__empty">
+                <p>{t('board.side.none')}</p>
+              </div>
+            )}
+          </div>
+        </aside>
       )}
       {following && followed && (
         <FollowBanner name={followed.name} agentId={followed.agentId} onStop={onFollowDone} />
@@ -1570,7 +1647,23 @@ export const CanvasEditor = memo(function CanvasEditor({
           </div>
         </div>
       )}
-      <div className="k-ce-zoom k-ce-float">
+      <div
+        className="k-ce-zoom k-ce-float"
+        role="toolbar"
+        aria-label={t('board.top.toolbar')}
+        style={{ right: rightRoom + 12 }}
+      >
+        {!readOnly && (
+          <>
+            <ZoomButton
+              label={t('board.top.tweaks')}
+              icon={SlidersHorizontalIcon}
+              pressed={shownSide === 'tweaks'}
+              onClick={() => setSide(shownSide === 'tweaks' ? null : 'tweaks')}
+            />
+            <span className="k-ce-tools__sep" />
+          </>
+        )}
         <ZoomButton
           label={t('canvas.zoomOut')}
           icon={MinusSignIcon}
@@ -1656,16 +1749,27 @@ function LabelAct({
 function ZoomButton({
   label,
   icon,
+  pressed,
   onClick,
 }: {
   label: string
   icon: IconSvgElement
+  /** A panel's switch, shown on while the panel is open. */
+  pressed?: boolean
   onClick: () => void
 }) {
   return (
     <Tooltip>
       <TooltipTrigger
-        render={<button type="button" aria-label={label} className="k-ce-tool" onClick={onClick} />}
+        render={
+          <button
+            type="button"
+            aria-label={label}
+            aria-pressed={pressed}
+            className={cn('k-ce-tool', pressed !== undefined && 'k-ce-tool--toggle')}
+            onClick={onClick}
+          />
+        }
       >
         <HugeiconsIcon icon={icon} size={14} strokeWidth={1.9} />
       </TooltipTrigger>

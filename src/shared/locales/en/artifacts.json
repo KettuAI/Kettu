@@ -553,7 +553,23 @@
     "handOffPrompt": "Change what the notes on these frames ask for; leave the rest as it is.",
     "handedOff": "Handed to the agent",
     "handOffFailed": "Could not hand it to the agent. {{error}}",
-    "legacySplit": "Edit on the canvas"
+    "legacySplit": "Edit on the canvas",
+    "tweaks": {
+      "empty": "No frame on this page declares tweaks yet.",
+      "hint": "Ask the agent to add some, such as a theme, an accent color or a density."
+    },
+    "side": {
+      "props": "Properties",
+      "tweaks": "Tweaks",
+      "close": "Close the panel",
+      "none": "Select a frame or a note to see its properties.",
+      "tabs": "Panel"
+    },
+    "top": {
+      "present": "Present",
+      "tweaks": "Tweaks",
+      "toolbar": "View"
+    }
   },
   "overview": {
     "zoomIn": "Zoom in",

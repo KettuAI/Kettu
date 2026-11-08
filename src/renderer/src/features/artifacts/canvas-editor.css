@@ -324,12 +324,63 @@
   width: 232px;
   max-height: calc(100% - 74px);
 }
-.k-ce-props {
-  top: 12px;
-  right: 12px;
-  width: 268px;
-  max-height: calc(100% - 24px);
-  padding: 0;
+/* The right panel: the selection's properties and the frames' tweaks, docked to the edge. */
+.k-ce-side {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  border-left: 1px solid var(--line);
+  background: var(--card);
+}
+.k-ce-side__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 52px;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+.k-ce-side__tabs {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+}
+.k-ce-side__tab {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.k-ce-side__tab:hover {
+  color: var(--ink);
+}
+.k-ce-side__tab[aria-selected='true'] {
+  background: var(--hover);
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-ce-side__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.k-ce-side__empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 14px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.k-ce-side__empty p:first-child {
+  color: var(--ink);
 }
 .k-ce-panel__head {
   display: flex;
@@ -398,6 +449,21 @@
 .k-ce-psec h5 span {
   font-weight: 400;
   color: var(--muted);
+}
+.k-ce-psec__frame {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+}
+.k-ce-psec__frame svg {
+  flex: none;
+  color: var(--muted);
+}
+.k-ce-psec[data-selected] .k-ce-psec__frame {
+  color: var(--control-on);
 }
 .k-ce-grid2 {
   display: grid;
@@ -477,15 +543,16 @@
   font-size: 12px;
   color: var(--muted);
 }
+/* At the top right, beside the right panel when it is open; its right side is set inline. */
 .k-ce-zoom {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 5;
+  top: 12px;
+  z-index: 6;
   display: flex;
   align-items: center;
-  height: 36px;
-  padding: 0 2px;
+  gap: 2px;
+  height: 40px;
+  padding: 0 4px;
 }
 .k-ce-zoom__pct {
   min-width: 52px;
