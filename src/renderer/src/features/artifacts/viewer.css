@@ -1241,6 +1241,10 @@
   align-items: center;
   margin-right: 6px;
 }
+/* The tip's lines may shrink to nothing, so without a width it shrinks to the 28 px face. */
+.k-av-faces .ui-agc__face-tip {
+  width: max-content;
+}
 .k-av-faces__you {
   background: var(--control-on);
   font-size: 12px;
