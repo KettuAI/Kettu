@@ -757,7 +757,7 @@
 .k-radio:hover {
   background: var(--hover);
 }
-.k-radio:first-child:hover {
+.k-radio:first-child {
   border-radius: 12px 12px 0 0;
 }
 .k-radio + .k-radio {
@@ -830,6 +830,9 @@ button.k-run:focus-visible {
 }
 .k-run[data-active] {
   background: var(--tone-amber-fill);
+}
+.k-run:last-child {
+  border-radius: 0 0 12px 12px;
 }
 .k-run[data-fresh] {
   animation: ui-as-rise 420ms var(--ease) both;

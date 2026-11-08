@@ -247,7 +247,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               ) : archived ? (
                 <ArchivedComposer sessionId={sessionId} />
               ) : session ? (
-                <div className="relative z-10">
+                // Its menus open inside it, so while one is open it rises over the computer label.
+                <div className="relative z-10 has-aria-expanded:z-20">
                   {/* An agent removed or turned off: the session goes on with another one. */}
                   <Composer
                     key={sessionId}

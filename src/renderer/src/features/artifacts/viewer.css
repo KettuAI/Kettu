@@ -278,11 +278,16 @@
   flex: 1;
   min-height: 0;
 }
+/* Its lower corners are the page sheet's, inside the sheet's 1 px border. */
 .k-av__area {
   position: relative;
   flex: 1;
   min-width: 0;
+  border-bottom-left-radius: calc(var(--radius-card) - 1px);
   background: var(--bg-app);
+}
+.k-av__area:last-child {
+  border-bottom-right-radius: calc(var(--radius-card) - 1px);
 }
 
 .k-av-empty {

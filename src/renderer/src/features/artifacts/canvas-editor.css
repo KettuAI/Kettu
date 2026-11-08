@@ -6,6 +6,8 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
+  /* The viewer area's rounded lower corners, which the canvas fills. */
+  border-radius: inherit;
   background: var(--bg-sidebar);
 }
 .k-ce__stage {

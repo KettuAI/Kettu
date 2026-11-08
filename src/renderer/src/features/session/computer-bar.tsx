@@ -4,6 +4,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { SessionView } from '@shared/thread'
 import { Spinner } from '@renderer/components/ui/spinner'
+import { SHEET_INSIDE } from '@renderer/features/shell/sheet'
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
@@ -18,7 +19,9 @@ export function ComputerGlow() {
       aria-hidden
       className="pointer-events-none absolute inset-0 z-20 animate-in fade-in animation-duration-(--duration-slow)"
     >
-      <div className="absolute inset-0 animate-computer-glow shadow-computer-glow" />
+      <div
+        className={cn('absolute inset-0 animate-computer-glow shadow-computer-glow', SHEET_INSIDE)}
+      />
     </div>
   )
 }
