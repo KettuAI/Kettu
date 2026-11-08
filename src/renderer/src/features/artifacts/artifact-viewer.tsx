@@ -23,9 +23,7 @@ import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
 import { closeArtifact, useViewStore } from '@renderer/stores/view'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { anchorOf, pinsOf } from './anchors'
-import { CanvasEditor, type DocPageActions } from './canvas-editor'
-import { docLayout } from './canvas-model'
-import { handOff } from './handoff'
+import { CanvasEditor } from './canvas-editor'
 import { PresenceFaces } from './presence-faces'
 import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
 import { staticCanvas, useCanvasDoc } from './use-canvas-doc'
@@ -41,6 +39,7 @@ import { KIND_ICON } from './kinds'
 import { artifactKind } from './model'
 import { Waiting } from './page-frame'
 import { Presenter } from './present'
+import { clampSize, useDocActions } from './use-doc-actions'
 import { PreviewOnly } from './preview-only'
 import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
 import { useComments } from './use-comments'
@@ -71,12 +70,6 @@ function leaveArtifact(): void {
 }
 
 type Panel = 'history' | 'comments'
-
-/** A page's size for its image: a canvas page's own, or a single page at the area's. */
-function clampSize(width: number, height: number): { width: number; height: number } {
-  const clamp = (n: number) => Math.min(8_000, Math.max(64, Math.round(n)))
-  return { width: clamp(width), height: clamp(height) }
-}
 
 /**
  * An artifact in the main area, live, away from the app and the machine: a single page at the
@@ -180,48 +173,15 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
     () => ({ download: renders ? downloadPng : null, present: (index) => setPresenting(index) }),
     [renders, downloadPng],
   )
-  // A canvas document's pages by their place in reading order, which present and PNG number.
-  const indexOf = useCallback(
-    (pageId: string) => shown?.canvas?.pages.findIndex((p) => p.id === pageId) ?? -1,
-    [shown],
-  )
-  const docActions = useMemo<DocPageActions>(
-    () => ({
-      download: renders
-        ? (page) => {
-            const index = indexOf(page.id)
-            if (index >= 0) downloadPng(index)
-          }
-        : null,
-      present: (page) => setPresenting(Math.max(0, indexOf(page.id))),
-      handOff: (ids) => {
-        const doc = shownCanvas.doc
-        if (!doc || !summary || !shown) return
-        const first = ids[0]
-        const canvas =
-          doc.pages.find((p) => p.id === first)?.canvas ??
-          doc.notes.find((n) => n.id === first)?.canvas ??
-          doc.canvases[0]!.id
-        const session =
-          agents.find((a) => a.doing && a.doing !== 'read')?.sessionId ?? summary.sessionId ?? null
-        void handOff({
-          artifact: { id, title, version: shown.version, project: summary.project },
-          layout: docLayout(doc, canvas),
-          ids,
-          session: session || null,
-        })
-          .then((sent) => {
-            if (sent) toast(t('board.handedOff'), undefined, { tone: 'success' })
-          })
-          .catch((error: unknown) =>
-            toast(t('board.handOffFailed', { error: errorMessage(error) }), undefined, {
-              tone: 'warning',
-            }),
-          )
-      },
-    }),
-    [renders, indexOf, downloadPng, shownCanvas.doc, summary, shown, agents, id, title, t],
-  )
+  const docActions = useDocActions({
+    id,
+    title,
+    shown,
+    doc: shownCanvas.doc,
+    summary: summary ?? null,
+    agents,
+    present: setPresenting,
+  })
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {

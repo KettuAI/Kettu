@@ -164,6 +164,9 @@ function union(boxes: Box[]): Box | null {
 /** The band above a frame, in screen pixels, where its name selects the whole frame. */
 const LABEL_BAND = 24
 
+/** The width from which the panels take room beside the pages instead of covering them. */
+const WIDE_PX = 900
+
 /** The room the right panel takes, which fitting leaves free. */
 const SIDE_ROOM = 300
 
@@ -374,7 +377,11 @@ export const CanvasEditor = memo(function CanvasEditor({
   const [focused, setFocused] = useState<string | null>(null)
   const [textEdit, setTextEdit] = useState<string | null>(null)
   // Open in the full editor, as the list of what the canvas holds; the side panel has no room.
-  const [layersOpen, setLayersOpen] = useState(!readOnly)
+  // Whether the canvas has room for its panels beside the pages, as in the main area; narrower,
+  // as in a session's side panel, they open over the pages and the layers start closed.
+  const [wide, setWide] = useState(true)
+  const [layersChoice, setLayersOpen] = useState<boolean | null>(null)
+  const layersOpen = layersChoice ?? (!readOnly && wide)
   // The right panel's tab the user chose; without one it shows the selection's properties.
   const [side, setSide] = useState<'props' | 'tweaks' | null>(null)
   const [guides, setGuides] = useState<ReturnType<typeof snap>['guides']>([])
@@ -464,14 +471,14 @@ export const CanvasEditor = memo(function CanvasEditor({
   )
 
   // Fitting leaves the open panels' room free.
-  const leftRoom = layersOpen ? LAYERS_ROOM : 0
-  const rightRoom = shownSide ? SIDE_ROOM : 0
+  const leftRoom = layersOpen && wide ? LAYERS_ROOM : 0
+  const rightRoom = shownSide && wide ? SIDE_ROOM : 0
   const fitAll = useCallback(
-    (glides: boolean) => {
+    (glides: boolean, rooms = { left: leftRoom, right: rightRoom }) => {
       const bounds = layout?.bounds
       if (!bounds || bounds.width === 0)
         return place({ x: view.current.width / 2, y: view.current.height / 2, z: 1 }, true)
-      const target = fitBox(bounds, view.current, top + 56, 56, leftRoom, rightRoom)
+      const target = fitBox(bounds, view.current, top + 56, 56, rooms.left, rooms.right)
       if (glides) moveTo(target, true)
       else place(target, true)
     },
@@ -499,15 +506,22 @@ export const CanvasEditor = memo(function CanvasEditor({
       const { width, height } = entry.contentRect
       if (width === view.current.width && height === view.current.height) return
       view.current = { width, height }
+      const isWide = width >= WIDE_PX
+      setWide(isWide)
+      // The rooms this width gives, before the state above renders.
+      const rooms = {
+        left: (layersChoice ?? (!readOnly && isWide)) && isWide ? LAYERS_ROOM : 0,
+        right: shownSide && isWide ? SIDE_ROOM : 0,
+      }
       if (!fitted.current && width > 0) {
         fitted.current = true
-        fitAll(false)
-      } else if (atFit.current) fitAll(false)
+        fitAll(false, rooms)
+      } else if (atFit.current) fitAll(false, rooms)
       else draw()
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [fitAll, draw])
+  }, [fitAll, draw, layersChoice, readOnly, shownSide])
 
   // A fitted view fits again in the room a panel that opened or closed leaves.
   const rooms = `${leftRoom}:${rightRoom}`
@@ -1254,7 +1268,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   }, [])
 
   return (
-    <div className="k-ce">
+    <div className="k-ce" data-narrow={wide ? undefined : ''}>
       <AgentCursorStyles />
       <div
         ref={stage}
@@ -1553,7 +1567,7 @@ export const CanvasEditor = memo(function CanvasEditor({
           pen={pen}
           onPen={setPen}
           layersOpen={layersOpen}
-          onLayers={() => setLayersOpen((v) => !v)}
+          onLayers={() => setLayersOpen(!layersOpen)}
           comment={Boolean(editor)}
         />
       )}
@@ -1651,7 +1665,7 @@ export const CanvasEditor = memo(function CanvasEditor({
         className="k-ce-zoom k-ce-float"
         role="toolbar"
         aria-label={t('board.top.toolbar')}
-        style={{ right: rightRoom + 12 }}
+        style={{ right: (shownSide ? SIDE_ROOM : 0) + 12 }}
       >
         {!readOnly && (
           <>

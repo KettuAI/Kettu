@@ -540,6 +540,11 @@
   font-size: 12px;
   color: var(--muted);
 }
+/* A narrow canvas keeps the zoom at the bottom right, clear of the toolbar. */
+.k-ce[data-narrow] .k-ce-zoom {
+  top: auto;
+  bottom: 12px;
+}
 /* At the top right, beside the right panel when it is open; its right side is set inline. */
 .k-ce-zoom {
   position: absolute;
