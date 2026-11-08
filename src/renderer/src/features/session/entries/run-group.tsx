@@ -18,7 +18,7 @@ import {
 } from './helpers'
 import { RowThumbs } from './row-thumbs'
 import { StepCard, StepStub } from './tool-call'
-import { runPictures, stepFacts, useToolCallLabels } from './tool-call-model'
+import { runPictures, stackedGlyphs, stepFacts, useToolCallLabels } from './tool-call-model'
 import { cachedStats, useDiffStats } from './use-diff-stats'
 import { useOpenedOnce } from './use-opened'
 
@@ -150,6 +150,10 @@ export const RunGroup = memo(function RunGroup({
       labels={labels}
       time={known}
       duration={summary.running ? undefined : total}
+      icons={stackedGlyphs(sessionId, shown).map(({ id, glyph }) => ({
+        key: id,
+        icon: <Icon icon={glyph} size={14} />,
+      }))}
       trail={
         pictures.length > 0 ? <RowThumbs sessionId={sessionId} pictures={pictures} /> : undefined
       }

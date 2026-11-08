@@ -8,7 +8,7 @@ import { useEntryAnimation } from '../use-thread'
 import { groupLabel, toolStep } from './helpers'
 import { RowThumbs } from './row-thumbs'
 import { StepCard, StepStub } from './tool-call'
-import { runPictures, stepFacts, useToolCallLabels } from './tool-call-model'
+import { runPictures, stackedGlyphs, stepFacts, useToolCallLabels } from './tool-call-model'
 import { useOpenedOnce } from './use-opened'
 
 /** A run of completed lookups as one line ("Read a.ts and 2 more"), opening to a card for each. */
@@ -42,6 +42,10 @@ export const ToolGroup = memo(function ToolGroup({
       chevron="before"
       labels={labels}
       time={false}
+      icons={stackedGlyphs(sessionId, tools).map(({ id, glyph }) => ({
+        key: id,
+        icon: <Icon icon={glyph} size={14} />,
+      }))}
       trail={
         pictures.length > 0 ? <RowThumbs sessionId={sessionId} pictures={pictures} /> : undefined
       }

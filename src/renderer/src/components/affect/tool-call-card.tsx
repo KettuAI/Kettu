@@ -9,6 +9,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type Key,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -130,6 +131,8 @@ export type ToolCallGroupProps = {
   chevron?: "after" | "before";
   /** Beside the line at its end, outside the toggle */
   trail?: ReactNode;
+  /** The stacked icons, oldest first – defaults to the last three cards' icons */
+  icons?: { key: Key; icon: ReactNode }[];
   /** false shows no time, e.g. when it is not known when the calls started */
   time?: boolean;
   labels?: Partial<ToolCallLabels>;
@@ -309,6 +312,7 @@ export function ToolCallGroup({
   onOpenChange,
   chevron = "after",
   trail,
+  icons: iconsProp,
   time = true,
   labels,
   className,
@@ -338,7 +342,9 @@ export function ToolCallGroup({
 
   const count = L.used(calls.length);
   const title = running ? runningLabel : (label ?? count);
-  const icons = calls.slice(-3);
+  const icons =
+    iconsProp ??
+    calls.slice(-3).map((c, i, last) => ({ key: calls.length - last.length + i, icon: c.icon ?? <WrenchIcon /> }));
 
   return (
     <div
@@ -367,9 +373,9 @@ export function ToolCallGroup({
       >
         {chevron === "before" && <Chevron />}
         <span className="ui-tcc-group__stack" aria-hidden="true">
-          {icons.map((c, i) => (
-            <span className="ui-tcc__icon" key={calls.length - icons.length + i}>
-              {c.icon ?? <WrenchIcon />}
+          {icons.map(({ key, icon }) => (
+            <span className="ui-tcc__icon" key={key}>
+              {icon}
             </span>
           ))}
         </span>

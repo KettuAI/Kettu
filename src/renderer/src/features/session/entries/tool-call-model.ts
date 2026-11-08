@@ -90,6 +90,23 @@ export function stepFacts(sessionId: string, entry: ThreadEntry): StepFacts | nu
   return null
 }
 
+/**
+ * The kinds a run's row stacks: those of its latest steps, each once and up to three, oldest
+ * first, each keyed by its latest step so a new step's icon pops in.
+ */
+export function stackedGlyphs(
+  sessionId: string,
+  entries: readonly ThreadEntry[],
+): { id: string; glyph: IconSvgElement }[] {
+  const stack: { id: string; glyph: IconSvgElement }[] = []
+  for (let i = entries.length - 1; i >= 0 && stack.length < 3; i--) {
+    const entry = entries[i]!
+    const glyph = stepFacts(sessionId, entry)?.glyph
+    if (glyph && !stack.some((s) => s.glyph === glyph)) stack.unshift({ id: entry.id, glyph })
+  }
+  return stack
+}
+
 /** Whether a call has details to open. */
 export function toolHasBody(entry: ToolEntry, projectPath: string): boolean {
   const label = toolLabel(entry, projectPath)
