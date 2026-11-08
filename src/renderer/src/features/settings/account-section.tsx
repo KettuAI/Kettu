@@ -44,7 +44,7 @@ import { subscriptionLabel } from './subscription-label'
 
 type SignedIn = Extract<AccountStatus, { state: 'signed-in' }>
 
-/** The account row; it reads the account again when it shows and when the window comes back. */
+/** The account row; it reads the account again when it shows. */
 export function AccountRow() {
   const status = useAccountStore((s) => s.status)
   const row = useRef<HTMLDivElement>(null)
@@ -54,9 +54,6 @@ export function AccountRow() {
 
   useEffect(() => {
     void checkAccount()
-    const onFocus = (): void => void checkAccount()
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
   }, [])
 
   useLayoutEffect(() => {
