@@ -1176,10 +1176,12 @@
   & [data-streamdown='ordered-list'] > [data-streamdown='list-item']::before {
     content: counter(list-item) '.';
     position: absolute;
-    left: 0;
-    width: 1.2em;
+    right: calc(100% - 1.2em);
+    width: max-content;
     color: var(--text-tertiary);
     text-align: right;
+    /* The reply's overflow-wrap would break "10." and drop its tail onto the next item. */
+    white-space: nowrap;
   }
   /* A list hangs under its lead-in and leaves more room before what follows. */
   & :is([data-streamdown='unordered-list'], [data-streamdown='ordered-list']) {
