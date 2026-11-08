@@ -184,6 +184,28 @@ export interface AgentProcess {
   startedAt: number
 }
 
+/** A request's one-time answer a notification may offer, by the agent's own name for it. */
+export interface AttentionAnswer {
+  optionId: string
+  name: string
+}
+
+/**
+ * The request behind a permission's attention: the id `host:waiting` lists it under while it
+ * waits, and the one-time answers when the request fits in a notification.
+ */
+export interface AttentionRequest {
+  id: string
+  allow?: AttentionAnswer
+  deny?: AttentionAnswer
+}
+
+/** Who had the session in front when it happened: any window or device, and which devices. */
+export interface AttentionFront {
+  any: boolean
+  devices: string[]
+}
+
 export type HostToMain =
   | { type: 'host:ready' }
   | { type: 'host:agent-processes'; processes: AgentProcess[] }
@@ -201,6 +223,8 @@ export type HostToMain =
       body: string
       // A request the notification may allow once itself, without opening the session.
       allowOnce?: { requestId: string; optionId: string }
+      request?: AttentionRequest
+      front?: AttentionFront
     }
   // An agent's routines paused at a plan limit; it has no session and opens the Routines page.
   | {
@@ -211,6 +235,10 @@ export type HostToMain =
       body: string
     }
   | { type: 'host:badge'; count: number } // pending permission requests across sessions
+  // What waits for the user, by session: the ids of the requests, new sites, apps and setups.
+  | { type: 'host:waiting'; sessions: Record<string, string[]> }
+  // A window or device showed the session, or it was marked read: its turn was seen.
+  | { type: 'host:seen'; sessionId: string }
   | ({ type: 'host:busy-changed' } & BusyCounts) // for the tray's state line
   // Whether any routine run is starting or running, for keeping the computer from idle sleep.
   | { type: 'host:routines-working'; working: boolean }
@@ -346,6 +374,11 @@ export type MainToRemoteHost =
       sshPort?: number | null
       /** The Kettu relay, for serving devices through it and reaching other hosts. */
       relay?: RelayInit
+      /** The push gateway's origin, which the devices' notifications go through. */
+      push?: string
+      /** What waits for the user and whether they are at the computer, as last told. */
+      waiting?: Record<string, string[]>
+      present?: boolean
     }
   // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
   // none comes while the agent host is not running. It answers remote-host:open-terminal-port the
@@ -431,6 +464,14 @@ export type MainToRemoteHost =
   | ({ type: 'remote-host:admin-result'; requestId: number } & AdminAnswer)
   // Something the owner's devices hear of the host: every one, or only `deviceId`'s sessions.
   | { type: 'remote-host:admin-event'; event: HostAdminEvent; deviceId: string | null }
+  // What the agent host says needs the user, what waits and what was seen, for the devices'
+  // notifications.
+  | { type: 'remote-host:attention'; attention: Extract<HostToMain, { type: 'host:attention' }> }
+  | { type: 'remote-host:waiting'; sessions: Record<string, string[]> }
+  | { type: 'remote-host:seen'; sessionId: string }
+  // The desktop app's user is at the computer: its screen unlocked and input in the last two
+  // minutes. The daemon sends none, since it cannot tell.
+  | { type: 'remote-host:presence'; present: boolean }
   // Tells every device why, then stops.
   | { type: 'remote-host:shutdown'; reason: RemoteHostStopReason }
 

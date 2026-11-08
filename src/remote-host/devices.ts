@@ -1,6 +1,8 @@
 // `remote/devices.json`: the devices paired with this computer, which the remote host owns, and
 // the keys of the devices removed, so one that comes back hears why it can no longer connect. Main
 // adds and removes them; the remote host reads them for each handshake and notes each connection.
+// Each device keeps its notifications there too, its push target and its choices, which go with it
+// when it is removed and never leave the remote host.
 
 import path from 'node:path'
 import {
@@ -11,6 +13,7 @@ import {
   type NewDevice,
   type PairedDevice,
 } from '@shared/remote/device'
+import { parseDevicePush, type DevicePush } from '@shared/remote/push'
 import { JsonFile, type LogFn, type Migration } from '../agent-host/storage'
 
 const DEVICES_VERSION = 1
@@ -26,9 +29,12 @@ export interface RemovedDevice {
   removedAt: number
 }
 
+/** A device as the file keeps it: with its notifications once it set any. */
+type StoredDevice = PairedDevice & { push?: DevicePush }
+
 interface DevicesFile {
   version: 1
-  devices: PairedDevice[]
+  devices: StoredDevice[]
   /** Oldest first; absent in files written before removed devices were kept. */
   removed?: RemovedDevice[]
 }
@@ -47,18 +53,18 @@ export function publicKeyBytes(text: unknown): Uint8Array | null {
 const isTime = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0
 
-function parseDevice(value: unknown): PairedDevice | null {
+function parseDevice(value: unknown): StoredDevice | null {
   if (typeof value !== 'object' || value === null) return null
-  const { id, publicKey, name, kind, platform, model, addedAt, lastConnectedAt } = value as Record<
-    string,
-    unknown
-  >
+  const { id, publicKey, name, kind, platform, model, addedAt, lastConnectedAt, push } =
+    value as Record<string, unknown>
   if (typeof id !== 'string' || publicKeyBytes(publicKey) === null) return null
   if (!isDeviceName(name) || !isDeviceField(kind) || !isDeviceField(platform)) return null
   // Devices paired before models were kept have none.
   const kept = model ?? ''
   if (!isDeviceModel(kept)) return null
   if (!isTime(addedAt) || !(lastConnectedAt === null || isTime(lastConnectedAt))) return null
+  // Notifications that do not read are dropped, not the device: it sets them again.
+  const notifications = push === undefined ? null : parseDevicePush(push)
   return {
     id,
     publicKey: publicKey as string,
@@ -68,6 +74,7 @@ function parseDevice(value: unknown): PairedDevice | null {
     model: kept,
     addedAt,
     lastConnectedAt,
+    ...(notifications ? { push: notifications } : {}),
   }
 }
 
@@ -84,7 +91,7 @@ function parseDevicesFile(data: Record<string, unknown>): DevicesFile | string {
   if (!Array.isArray(data.devices) || data.devices.length > MAX_DEVICES) {
     return 'devices is not a list'
   }
-  const devices: PairedDevice[] = []
+  const devices: StoredDevice[] = []
   for (const [index, item] of data.devices.entries()) {
     const device = parseDevice(item)
     if (!device) return `device ${index} is malformed`
@@ -112,16 +119,21 @@ async function withTrueIds<T extends { id: string; publicKey: string }>(
 export class DeviceStore {
   private readonly byId = new Map<string, PairedDevice>()
   private readonly byKey = new Map<string, PairedDevice>()
+  /** Each device's notifications, kept apart so they never leave with the device list. */
+  private readonly pushById = new Map<string, DevicePush>()
   /** In the order they were removed, so the first is the oldest. */
   private readonly removedByKey = new Map<string, RemovedDevice>()
 
   private constructor(
     private readonly file: JsonFile<DevicesFile>,
-    devices: PairedDevice[],
+    devices: StoredDevice[],
     removed: RemovedDevice[],
     private readonly now: () => number,
   ) {
-    for (const device of devices) this.put(device)
+    for (const { push, ...device } of devices) {
+      this.put(device)
+      if (push) this.pushById.set(device.id, push)
+    }
     for (const entry of removed) this.removedByKey.set(entry.publicKey, entry)
   }
 
@@ -184,6 +196,8 @@ export class DeviceStore {
       lastConnectedAt: null,
     }
     this.put(added)
+    // Paired again, it starts over and sets its notifications anew.
+    this.pushById.delete(id)
     this.removedByKey.delete(added.publicKey)
     this.save()
     await this.file.flush()
@@ -196,6 +210,7 @@ export class DeviceStore {
     if (!device) return false
     this.byId.delete(id)
     this.byKey.delete(device.publicKey)
+    this.pushById.delete(id)
     const { publicKey } = device
     this.removedByKey.set(publicKey, { id, publicKey, removedAt: this.now() })
     for (const key of this.removedByKey.keys()) {
@@ -236,6 +251,21 @@ export class DeviceStore {
     this.save()
   }
 
+  /** A device's notifications, or null for a device that set none or is not there. */
+  push(id: string): DevicePush | null {
+    return this.pushById.get(id) ?? null
+  }
+
+  /** Sets a device's notifications, or forgets them with null; false when there is no such device. */
+  async setPush(id: string, push: DevicePush | null): Promise<boolean> {
+    if (!this.byId.has(id)) return false
+    if (push) this.pushById.set(id, push)
+    else this.pushById.delete(id)
+    this.save()
+    await this.file.flush()
+    return true
+  }
+
   flush(): Promise<void> {
     return this.file.flush()
   }
@@ -246,6 +276,10 @@ export class DeviceStore {
   }
 
   private save(): void {
-    this.file.save({ version: 1, devices: this.list(), removed: [...this.removedByKey.values()] })
+    const devices = this.list().map((device): StoredDevice => {
+      const push = this.pushById.get(device.id)
+      return push ? { ...device, push } : device
+    })
+    this.file.save({ version: 1, devices, removed: [...this.removedByKey.values()] })
   }
 }

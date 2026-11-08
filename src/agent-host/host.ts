@@ -20,6 +20,7 @@ import type { AttachmentGrant } from '@shared/attachments'
 import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
 import type {
   AgentProcess,
+  AttentionFront,
   ArtifactBrief,
   ArtifactContentResult,
   ArtifactExportResult,
@@ -593,16 +594,22 @@ export class AgentHost {
             this.hub.send([portId], { type: 'session.viewers', sessionId, viewers })
           }
         },
-        attention: (sessionId, kind, title, body, allowOnce) =>
+        attention: (sessionId, kind, title, body, request) =>
           options.send({
             type: 'host:attention',
             sessionId,
             kind,
             title,
             body,
-            ...(allowOnce ? { allowOnce } : {}),
+            ...(request?.allow
+              ? { allowOnce: { requestId: request.id, optionId: request.allow.optionId } }
+              : {}),
+            ...(request ? { request } : {}),
+            front: this.front(sessionId),
           }),
         badge: (count) => options.send({ type: 'host:badge', count }),
+        waiting: (sessions) => options.send({ type: 'host:waiting', sessions }),
+        seen: (sessionId) => options.send({ type: 'host:seen', sessionId }),
         busy: (counts) => options.send({ type: 'host:busy-changed', ...counts }),
       },
     })
@@ -633,7 +640,14 @@ export class AgentHost {
         run: (run) => this.broadcast({ type: 'routine.run', run }),
         working: (working) => options.send({ type: 'host:routines-working', working }),
         attention: (kind, sessionId, title, body) =>
-          options.send({ type: 'host:attention', sessionId, kind, title, body }),
+          options.send({
+            type: 'host:attention',
+            sessionId,
+            kind,
+            title,
+            body,
+            front: this.front(sessionId),
+          }),
         paused: (agentId, title, body) =>
           options.send({ type: 'host:attention', kind: 'routine-paused', agentId, title, body }),
       },
@@ -756,6 +770,13 @@ export class AgentHost {
 
   private broadcast(event: HostEvent): void {
     this.hub.broadcast(event)
+  }
+
+  /** Who shows a session in front now: any window or device, and which devices. */
+  private front(sessionId: string): AttentionFront {
+    const ports = this.sessions.showing(sessionId)
+    const devices = ports.flatMap((portId) => this.hub.deviceOf(portId)?.id ?? [])
+    return { any: ports.length > 0, devices: [...new Set(devices)] }
   }
 
   private sendToRetainers(projectPath: string, event: HostEvent): void {

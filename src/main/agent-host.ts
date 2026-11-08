@@ -59,6 +59,9 @@ const log = createLogger('agent-host')
 export interface AgentHostDeps {
   settings(): HostSettings
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
+  /** What waits for the user by session, and a session seen, for the devices' notifications. */
+  onWaiting?(sessions: Record<string, string[]>): void
+  onSeen?(sessionId: string): void
   onBadge(count: number): void
   onBusy(counts: BusyCounts): void
   onProjects(paths: string[]): void
@@ -646,6 +649,14 @@ export class AgentHost {
         break
       case 'host:badge':
         if (typeof message.count === 'number') this.deps.onBadge(message.count)
+        break
+      case 'host:waiting':
+        if (typeof message.sessions === 'object' && message.sessions !== null) {
+          this.deps.onWaiting?.(message.sessions)
+        }
+        break
+      case 'host:seen':
+        if (typeof message.sessionId === 'string') this.deps.onSeen?.(message.sessionId)
         break
       case 'host:busy-changed':
         if (isCount(message.running) && isCount(message.waiting)) {

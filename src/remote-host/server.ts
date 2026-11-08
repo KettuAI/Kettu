@@ -43,6 +43,7 @@ import {
 import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/noise'
 import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
+  BACKGROUND_PACE_MS,
   BROWSER_FEATURE,
   negotiate,
   parseHello,
@@ -58,6 +59,13 @@ import {
   type TerminalAccess,
   type Welcome,
 } from '@shared/remote/protocol'
+import {
+  NOTIFICATIONS_GET,
+  NOTIFICATIONS_SET,
+  PUSH_FEATURE,
+  PUSH_VERSION,
+  parseNotificationsUpdate,
+} from '@shared/remote/push'
 import { removalAt } from '@shared/remote/status'
 import {
   BYTES_FEATURE,
@@ -79,6 +87,7 @@ import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
 import { HostForwards } from './forwards'
 import { ArtifactFrames, FRAME_PATH } from './frames'
+import type { DeviceNotifications } from './notifications'
 import { IN_FLIGHT_BYTES, Outbox, type OutboxLimits } from './outbox'
 import type { PairingCode, PairingCodes } from './pairing'
 import { SessionTitles } from './titles'
@@ -136,6 +145,8 @@ export interface RemoteServerOptions {
   terminal?: boolean
   /** The host's id on the Kettu relay and its relays while it uses the relay, for welcomes. */
   relay?(): HostRelay | null
+  /** The devices' notifications, which a host without its signing key has none of. */
+  notifications?(): DeviceNotifications | null
   /** A port to the terminal host for a device's terminals, or null while it cannot have one. */
   openTerminalPort?(device: PortDevice): Promise<PortChannel | null>
   /** A port to the device host for a device's mobile devices, or null while it cannot have one. */
@@ -224,6 +235,14 @@ export class RemoteServer {
     for (const session of this.sessions) session.terminalChanged(allowed)
   }
 
+  /** Whether the device shows the session in front now, connected and not in the background. */
+  showing(deviceId: string, sessionId: string): boolean {
+    for (const session of this.sessions) {
+      if (session.device.id === deviceId && session.showing(sessionId)) return true
+    }
+    return false
+  }
+
   /** The ids of the devices connected to a session now. */
   online(): string[] {
     const ids = new Set<string>()
@@ -257,6 +276,7 @@ export class RemoteServer {
     const removed = await removing
     await Promise.all(closing)
     if (removed) {
+      this.options.notifications?.()?.forget(id)
       this.options.activity.record(id, { kind: 'removed', by })
       this.options.changed()
     }
@@ -769,6 +789,9 @@ class DeviceSession {
   private mediaReads = 0
   /** Whether uploads stopped reading the device until the disk catches up, on any connection. */
   private readingPaused = false
+  /** The sessions the device last said it shows in front, and the pace it last asked for. */
+  private shown = new Set<string>()
+  private paceMs = 0
 
   constructor(
     private readonly server: RemoteServer,
@@ -830,6 +853,11 @@ class DeviceSession {
   /** Whether the session runs on a connection now. */
   get connected(): boolean {
     return this.state === 'open'
+  }
+
+  /** Whether the device shows the session in front: connected, in the foreground and showing it. */
+  showing(sessionId: string): boolean {
+    return this.connected && this.paceMs < BACKGROUND_PACE_MS && this.shown.has(sessionId)
   }
 
   /** Whether the session goes on, connected or waiting for its device. */
@@ -985,7 +1013,12 @@ class DeviceSession {
       type: 'welcome',
       protocol: this.version,
       host: this.server.options.host,
-      features: [BYTES_FEATURE],
+      features: [
+        BYTES_FEATURE,
+        ...(this.version >= PUSH_VERSION && this.server.options.notifications?.()
+          ? [PUSH_FEATURE]
+          : []),
+      ],
       role: this.role,
       device: { id: this.device.id, name: this.device.name },
       terminal: this.server.terminal,
@@ -1008,6 +1041,7 @@ class DeviceSession {
       case 'ack':
         return this.outbox.ack(received)
       case 'pace':
+        if (typeof ms === 'number' && Number.isFinite(ms)) this.paceMs = ms
         return this.outbox.pace(ms)
       case 'rename':
         void this.server.renameDevice(this.device.id, name, 'device').then((renamed) => {
@@ -1094,6 +1128,9 @@ class DeviceSession {
       this.devices?.request({ type, id, method, params })
       return
     }
+    if (method === NOTIFICATIONS_GET || method === NOTIFICATIONS_SET) {
+      return void this.notificationsRequest(id, method, params)
+    }
     if (method === 'media.read') return void this.readMedia(id, params)
     if (method === 'artifacts.openFrame') return void this.openFrame(id, params)
     if (method === 'artifacts.closeFrame') return this.closeFrame(id, params)
@@ -1101,6 +1138,31 @@ class DeviceSession {
     const named = findPlaces(value as Record<string, unknown>, 'params', isUploadRef)
     if (named.length === 0) return this.forward(value)
     void this.withUploads(value, id, named)
+  }
+
+  /**
+   * A device's `notifications.get` or `notifications.set`: its push target and choices for this
+   * host, which the remote host keeps with the device and never passes to the agent host.
+   */
+  private async notificationsRequest(id: unknown, method: string, params: unknown): Promise<void> {
+    if (typeof id !== 'number') return
+    const reply = (message: unknown): void => {
+      if (this.live) this.send(message)
+    }
+    const fail = (code: string, message: string): void =>
+      reply({ type: 'error', id, error: { code, message } })
+    const notifications = this.server.options.notifications?.()
+    if (!notifications || this.version < PUSH_VERSION) {
+      return fail('unavailable', 'This host sends no notifications')
+    }
+    if (method === NOTIFICATIONS_GET) {
+      return reply({ type: 'response', id, result: notifications.state(this.device.id) })
+    }
+    const update = parseNotificationsUpdate(params)
+    if (!update) return fail('invalid_params', 'The target or the choices are not ones')
+    const state = await notifications.update(this.device.id, update)
+    if (!state) return fail('not_found', 'The device is no longer paired')
+    reply({ type: 'response', id, result: state })
   }
 
   /** An owner's call beyond its sessions, which the host's parent answers. */
@@ -1156,6 +1218,13 @@ class DeviceSession {
   private forward(request: object): void {
     const { id, method, params } = request as Record<string, unknown>
     this.titles.request(id, method)
+    if (method === 'sessions.show') {
+      const ids = (params as { sessionIds?: unknown } | null)?.sessionIds
+      // The agent host refuses a list that is not one, and the device then shows nothing.
+      this.shown = new Set(
+        Array.isArray(ids) ? ids.filter((value): value is string => typeof value === 'string') : [],
+      )
+    }
     if (typeof id === 'number' && Object.hasOwn(NOTED, method as string)) {
       const kind = NOTED[method as keyof typeof NOTED]
       const sessionId = (params as { sessionId?: unknown } | null)?.sessionId
