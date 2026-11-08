@@ -23,6 +23,8 @@ import {
   noteBox,
   PAGE_MAX,
   PAGE_MIN,
+  SECTION_HEAD,
+  SECTION_PAD,
   type Box,
   type CanvasNote,
   type CanvasOp,
@@ -49,12 +51,28 @@ import {
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { CanvasFrame, FocusedPage } from './canvas-view'
 import { CanvasLayers, CanvasProps, CanvasToolbar } from './canvas-editor-panels'
-import { contains, docLayout, overlaps, snap, type DocLayout } from './canvas-model'
+import {
+  contains,
+  docLayout,
+  FRAME_FOOT,
+  FRAME_HEAD,
+  FRAME_SIDE,
+  overlaps,
+  sectionFrame,
+  snap,
+  type DocLayout,
+} from './canvas-model'
 import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
 import { isModeKey } from './keys'
 import type { CanvasDocState } from './use-canvas-doc'
 import { pageUrl } from './use-artifact'
-import { NOTE_COLOR_VAR, type PenStyle, type ShapeKind, type Tool } from './canvas-tools'
+import {
+  NOTE_COLOR_VAR,
+  TOOL_ICONS,
+  type PenStyle,
+  type ShapeKind,
+  type Tool,
+} from './canvas-tools'
 import './canvas-editor.css'
 
 /** An agent working on the artifact, as its pointer shows it. */
@@ -155,6 +173,20 @@ function boxOf(layout: DocLayout, id: string): Box | null {
   return note ? noteBox(note) : null
 }
 
+/** A section's frame on the zoomed layer: its pages with a margin that keeps its screen size. */
+function frameStyle(box: Box): React.CSSProperties {
+  const x = box.x + SECTION_PAD
+  const y = box.y + SECTION_HEAD
+  const width = box.width - 2 * SECTION_PAD
+  const height = box.height - SECTION_HEAD - SECTION_PAD
+  return {
+    left: `calc(${x}px - ${FRAME_SIDE}px * var(--unscale))`,
+    top: `calc(${y}px - ${FRAME_HEAD}px * var(--unscale))`,
+    width: `calc(${width}px + ${2 * FRAME_SIDE}px * var(--unscale))`,
+    height: `calc(${height}px + ${FRAME_HEAD + FRAME_FOOT}px * var(--unscale))`,
+  }
+}
+
 function union(boxes: Box[]): Box | null {
   if (boxes.length === 0) return null
   const left = Math.min(...boxes.map((b) => b.x))
@@ -164,8 +196,11 @@ function union(boxes: Box[]): Box | null {
   return { x: left, y: top, width: right - left, height: bottom - top }
 }
 
+/** The room the open layers panel takes at the left, which fitting leaves free. */
+const LAYERS_ROOM = 256
+
 /** A label's action button and the gap after it, in screen pixels. */
-const LABEL_ACT = 24
+const LABEL_ACT = 22
 
 /** Hides a page's name row where the page is too narrow on screen for its name and actions. */
 function fitLabels(layer: HTMLElement | undefined, z: number): void {
@@ -367,7 +402,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   const [inside, setInside] = useState<string | null>(null)
   const [focused, setFocused] = useState<string | null>(null)
   const [textEdit, setTextEdit] = useState<string | null>(null)
-  const [layersOpen, setLayersOpen] = useState(false)
+  // Open in the full editor, as the list of what the canvas holds; the side panel has no room.
+  const [layersOpen, setLayersOpen] = useState(!readOnly)
   const [guides, setGuides] = useState<ReturnType<typeof snap>['guides']>([])
   const [marquee, setMarquee] = useState<Box | null>(null)
   const [stroke, setStroke] = useState<number[] | null>(null)
@@ -454,16 +490,16 @@ export const CanvasEditor = memo(function CanvasEditor({
       const bounds = layout?.bounds
       if (!bounds || bounds.width === 0)
         return place({ x: view.current.width / 2, y: view.current.height / 2, z: 1 }, true)
-      const target = fitBox(bounds, view.current, top + 56, 56)
+      const target = fitBox(bounds, view.current, top + 56, 56, layersOpen ? LAYERS_ROOM : 0)
       if (glides) moveTo(target, true)
       else place(target, true)
     },
-    [layout, top, moveTo, place],
+    [layout, top, layersOpen, moveTo, place],
   )
 
   const fitBoxGlide = useCallback(
-    (box: Box) => moveTo(fitBox(box, view.current, top + 56, 56)),
-    [top, moveTo],
+    (box: Box) => moveTo(fitBox(box, view.current, top + 56, 56, layersOpen ? LAYERS_ROOM : 0)),
+    [top, layersOpen, moveTo],
   )
 
   const zoomAround = useCallback(
@@ -700,7 +736,8 @@ export const CanvasEditor = memo(function CanvasEditor({
       }
       for (let i = layout.pages.length - 1; i >= 0; i--)
         if (contains(layout.pages[i]!, x, y)) return layout.pages[i]!.id
-      for (const s of layout.sections) if (contains(s.box, x, y)) return s.id
+      const z = camera.current.z
+      for (const s of layout.sections) if (contains(sectionFrame(s.box, z), x, y)) return s.id
       return null
     },
     [layout],
@@ -1249,9 +1286,17 @@ export const CanvasEditor = memo(function CanvasEditor({
               key={s.id}
               className="k-ce-section"
               data-selected={shownSelection.includes(s.id) ? '' : undefined}
-              style={{ left: s.box.x, top: s.box.y, width: s.box.width, height: s.box.height }}
+              style={frameStyle(s.box)}
             >
-              <span className="k-ce-section__title">{s.title}</span>
+              <span className="k-ce-section__title">
+                <HugeiconsIcon icon={TOOL_ICONS.section} strokeWidth={1.9} />
+                <b>{s.title}</b>
+                <span>
+                  {t('board.section.pages', {
+                    count: pages.filter((p) => p.section === s.id).length,
+                  })}
+                </span>
+              </span>
             </div>
           ))}
           {pages.map((p) => {
@@ -1350,7 +1395,7 @@ export const CanvasEditor = memo(function CanvasEditor({
               className="k-ce-label"
               data-width={p.width}
               data-selected={shownSelection.includes(p.id) ? '' : undefined}
-              style={{ left: p.x, top: `calc(${p.y}px - 26px * var(--unscale))`, width: p.width }}
+              style={{ left: p.x, top: `calc(${p.y}px - 24px * var(--unscale))`, width: p.width }}
             >
               <span className="k-ce-label__name">{name(p)}</span>
               {actions && (
@@ -1390,11 +1435,16 @@ export const CanvasEditor = memo(function CanvasEditor({
           ))}
           {shownSelection.map((id) => {
             const box = layout && boxOf(layout, id)
+            const section = layout?.sections.some((s) => s.id === id)
             return box ? (
               <div
                 key={id}
                 className="k-ce-sel"
-                style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
+                style={
+                  section
+                    ? frameStyle(box)
+                    : { left: box.x, top: box.y, width: box.width, height: box.height }
+                }
               />
             ) : null
           })}

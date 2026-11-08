@@ -12,6 +12,7 @@ import {
   Delete02Icon,
   DistributeHorizontalCenterIcon,
   DistributeVerticalCenterIcon,
+  PencilEdit02Icon,
   PlusSignIcon,
   SquareLock01Icon,
   SquareUnlock01Icon,
@@ -63,6 +64,7 @@ function ToolButton({
   shortcut,
   icon,
   pressed,
+  toggle,
   onClick,
   children,
 }: {
@@ -70,6 +72,8 @@ function ToolButton({
   shortcut?: string
   icon: IconSvgElement
   pressed?: boolean
+  /** A panel's switch rather than a tool, shown on in a quieter way. */
+  toggle?: boolean
   onClick: () => void
   children?: React.ReactNode
 }) {
@@ -81,7 +85,7 @@ function ToolButton({
             type="button"
             aria-label={label}
             aria-pressed={pressed}
-            className="k-ce-tool"
+            className={cn('k-ce-tool', toggle && 'k-ce-tool--toggle')}
             onClick={onClick}
           />
         }
@@ -203,11 +207,13 @@ export function CanvasToolbar({
           />
         ) : (
           <Dropdown
+            className="k-ce-canvas-menu"
             title={t('board.canvases.menu')}
             items={[
               ...(doc?.canvases ?? []).map((c) => ({
                 label: c.name,
-                description: t('board.canvases.pages', { count: pagesOn(c.id) }),
+                // The count sits at the row's end, where the menu draws a shortcut.
+                shortcut: t('board.canvases.pages', { count: pagesOn(c.id) }),
                 checked: c.id === canvasKey,
                 onSelect: () => onCanvas(c.id),
               })),
@@ -217,26 +223,28 @@ export function CanvasToolbar({
                 divider: true,
                 onSelect: () => addCanvas(null),
               },
-              { label: t('board.canvases.rename'), onSelect: () => setRenaming(true) },
+              {
+                label: t('board.canvases.rename'),
+                icon: PencilEdit02Icon,
+                onSelect: () => setRenaming(true),
+              },
               {
                 label: t('board.canvases.duplicate'),
                 icon: Copy01Icon,
                 onSelect: () => addCanvas(canvasKey),
               },
-              ...((doc?.canvases.length ?? 0) > 1
-                ? [
-                    {
-                      label: t('board.canvases.delete'),
-                      icon: Delete02Icon,
-                      danger: true,
-                      onSelect: () => {
-                        const next = doc!.canvases.find((c) => c.id !== canvasKey)
-                        apply([{ op: 'remove', id: canvasKey }])
-                        if (next) onCanvas(next.id)
-                      },
-                    },
-                  ]
-                : []),
+              {
+                label: t('board.canvases.delete'),
+                icon: Delete02Icon,
+                danger: true,
+                // The last canvas stays: a canvas artifact keeps at least one.
+                disabled: (doc?.canvases.length ?? 0) < 2,
+                onSelect: () => {
+                  const next = doc!.canvases.find((c) => c.id !== canvasKey)
+                  apply([{ op: 'remove', id: canvasKey }])
+                  if (next) onCanvas(next.id)
+                },
+              },
             ]}
             trigger={({ open, toggle }) => (
               <button
@@ -274,6 +282,7 @@ export function CanvasToolbar({
           label={t('board.layers.open')}
           icon={LAYERS_ICON}
           pressed={layersOpen}
+          toggle
           onClick={onLayers}
         />
       </div>
@@ -376,7 +385,7 @@ export function CanvasLayers({
 }) {
   const { t } = useTranslation('artifacts')
   const [renaming, setRenaming] = useState<string | null>(null)
-  const row = (id: string, name: string, depth: number, meta?: string) => (
+  const row = (id: string, name: string, depth: number, icon: IconSvgElement, meta?: string) => (
     <div
       key={id}
       role="treeitem"
@@ -384,6 +393,7 @@ export function CanvasLayers({
       data-depth={depth}
       className="k-ce-row"
     >
+      <HugeiconsIcon icon={icon} size={14} strokeWidth={1.9} className="k-ce-row__icon" />
       {renaming === id ? (
         <input
           autoFocus
@@ -436,15 +446,22 @@ export function CanvasLayers({
           <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.9} />
         </button>
       </div>
-      {layout.sections.map((s) => (
-        <div key={s.id} role="group">
-          {row(s.id, s.title, 0)}
-          {layout.pages
-            .filter((p) => p.section === s.id)
-            .map((p) => row(p.id, p.name, 1, `${p.width}×${p.height}`))}
-        </div>
-      ))}
-      {loose.map((p) => row(p.id, p.name, 0, `${p.width}×${p.height}`))}
+      {layout.sections.map((s) => {
+        const inside = layout.pages.filter((p) => p.section === s.id)
+        return (
+          <div key={s.id} role="group">
+            {row(
+              s.id,
+              s.title,
+              0,
+              TOOL_ICONS.section,
+              t('board.section.pages', { count: inside.length }),
+            )}
+            {inside.map((p) => row(p.id, p.name, 1, TOOL_ICONS.page))}
+          </div>
+        )
+      })}
+      {loose.map((p) => row(p.id, p.name, 0, TOOL_ICONS.page))}
       {layout.notes.map((n) =>
         row(
           n.id,
@@ -452,6 +469,9 @@ export function CanvasLayers({
             ? n.text || t(`board.layers.notes.${n.kind}`)
             : t(`board.layers.notes.${n.kind}`),
           0,
+          n.kind === 'text' || n.kind === 'sticky' || n.kind === 'pen'
+            ? TOOL_ICONS[n.kind]
+            : SHAPE_ICONS[n.kind],
         ),
       )}
     </div>

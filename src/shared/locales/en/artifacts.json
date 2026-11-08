@@ -508,7 +508,9 @@
       "tweak": "Tweaks"
     },
     "section": {
-      "newName": "Section {{number}}"
+      "newName": "Section {{number}}",
+      "pages": "{{count}} pages",
+      "pages_one": "{{count}} page"
     },
     "note": {
       "text": "Text",

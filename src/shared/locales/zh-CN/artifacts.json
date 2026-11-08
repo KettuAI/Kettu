@@ -499,7 +499,9 @@
       "tweak": "调节"
     },
     "section": {
-      "newName": "分区 {{number}}"
+      "newName": "分区 {{number}}",
+      "pages": "{{count}} 个页面",
+      "pages_one": "{{count}} 个页面"
     },
     "note": {
       "text": "文字",

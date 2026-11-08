@@ -3,6 +3,8 @@
 
 import {
   noteBox,
+  SECTION_HEAD,
+  SECTION_PAD,
   sectionBox,
   type Box,
   type CanvasDoc,
@@ -128,4 +130,26 @@ export function overlaps(a: Box, b: Box): boolean {
 
 export function contains(box: Box, x: number, y: number): boolean {
   return x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height
+}
+
+/**
+ * A section's frame as the editor draws it: its pages with a margin that keeps its size on screen
+ * at any zoom, so its title and the page names in its head always fit.
+ */
+export const FRAME_SIDE = 20
+export const FRAME_HEAD = 68
+export const FRAME_FOOT = 22
+
+/** The section's frame at zoom `z`, from the box the document gives it. */
+export function sectionFrame(box: Box, z: number): Box {
+  const x = box.x + SECTION_PAD
+  const y = box.y + SECTION_HEAD
+  const width = box.width - 2 * SECTION_PAD
+  const height = box.height - SECTION_HEAD - SECTION_PAD
+  return {
+    x: x - FRAME_SIDE / z,
+    y: y - FRAME_HEAD / z,
+    width: width + (2 * FRAME_SIDE) / z,
+    height: height + (FRAME_HEAD + FRAME_FOOT) / z,
+  }
 }
