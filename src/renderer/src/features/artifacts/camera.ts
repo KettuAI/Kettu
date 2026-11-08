@@ -154,6 +154,25 @@ export function livePages(pages: readonly Box[], camera: Camera, view: Size, max
   return near.slice(0, max).map((n) => n.index)
 }
 
+/**
+ * The live pages one step on: those still wanted stay, and the nearest wanted page joins once every
+ * live one has settled. Pages of one artifact loading together each fetch a shared SVG sprite once
+ * per icon and take each other's loads over, since Chromium keeps a custom scheme's fragments in
+ * its cache keys, which turns seconds into half a minute.
+ */
+export function stepLive<K>(
+  current: ReadonlySet<K>,
+  wanted: readonly K[],
+  settled: ReadonlySet<K>,
+): ReadonlySet<K> {
+  const next = new Set(wanted.filter((key) => current.has(key)))
+  const loading = [...next].some((key) => !settled.has(key))
+  const joining = loading ? undefined : wanted.find((key) => !next.has(key))
+  if (joining !== undefined) next.add(joining)
+  const same = next.size === current.size && [...next].every((key) => current.has(key))
+  return same ? current : next
+}
+
 /** The nearest page, by its centre, in the row above or below the page at `from`; -1 if none. */
 export function pageInNextRow(
   pages: readonly PlacedPage[],
