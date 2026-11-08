@@ -13,6 +13,9 @@ export const ON_DESK =
 /** A sheet laid on the desk: the main area, a page or a side pane, as App Shell's main panel. */
 export const SHEET = `${ON_DESK} overflow-clip rounded-card border border-(--border-subtle) bg-app`
 
+/** The corners of a layer over a sheet's whole inside, flush with its rounded 1 px border. */
+export const SHEET_INSIDE = 'rounded-[calc(var(--radius-card)-1px)]'
+
 /** The edge of the pane in focus in a split view. */
 export const SHEET_FOCUSED = 'border-(--border-strong)'
 
