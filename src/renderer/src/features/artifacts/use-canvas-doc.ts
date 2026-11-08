@@ -44,8 +44,6 @@ function applyLoose(doc: CanvasDoc, ops: readonly CanvasOp[]): CanvasDoc {
 function objectOf(doc: CanvasDoc, id: string): CanvasObject | null {
   const canvas = doc.canvases.find((c) => c.id === id)
   if (canvas) return { type: 'canvas', ...canvas }
-  const section = doc.sections.find((s) => s.id === id)
-  if (section) return { type: 'section', ...section }
   const page = doc.pages.find((p) => p.id === id)
   if (page) return { type: 'page', ...page }
   const note = doc.notes.find((n) => n.id === id)
@@ -73,19 +71,13 @@ export function inverseOps(doc: CanvasDoc, ops: readonly CanvasOp[]): CanvasOp[]
         const list = found.type === 'page' ? at.pages : found.type === 'note' ? at.notes : null
         const index = list?.findIndex((o) => o.id === op.id) ?? -1
         if (index >= 0) back.push({ op: 'order', id: op.id, index })
-        // A page takes the arrows joined to it along, and a section its pages' membership.
+        // A page takes the arrows joined to it along.
         if (found.type === 'page') {
           for (const n of at.notes) {
             if ('from' in n && (n.from === op.id || n.to === op.id)) {
               if (n.from === op.id) back.push({ op: 'set', id: n.id, key: 'from', value: op.id })
               if (n.to === op.id) back.push({ op: 'set', id: n.id, key: 'to', value: op.id })
             }
-          }
-        }
-        if (found.type === 'section') {
-          for (const p of at.pages) {
-            if (p.section === op.id)
-              back.push({ op: 'set', id: p.id, key: 'section', value: op.id })
           }
         }
         out.unshift(...back)

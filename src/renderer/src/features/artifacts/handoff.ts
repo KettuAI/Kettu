@@ -29,8 +29,6 @@ export function handOffSet(
   for (const id of ids) {
     const page = layout.pages.find((p) => p.id === id)
     if (page) pages.set(page.id, page)
-    const section = layout.sections.find((s) => s.id === id)
-    if (section) for (const p of layout.pages.filter((q) => q.section === id)) pages.set(p.id, p)
   }
   const notes = layout.notes.filter(
     (n) => ids.includes(n.id) || [...pages.values()].some((p) => overlaps(p, noteBox(n))),

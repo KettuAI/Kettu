@@ -9,11 +9,9 @@ import {
   PAGE_GAP,
   PAGE_MAX,
   PAGE_MIN,
-  SECTION_GAP,
-  SECTION_HEAD,
   type CanvasDoc,
   type CanvasPage,
-  type CanvasSection,
+  type CanvasSheet,
 } from './canvas-doc'
 import { eachStartTag, elementEnd, type StartTag } from './artifact-source'
 
@@ -104,8 +102,9 @@ function legacyPages(html: string): LegacyPage[] {
 }
 
 /**
- * The canvas document and page files for an old canvas, laid out as the old canvas showed it:
- * rows of up to six pages, each group a section. `taken` holds the paths already in the version.
+ * The canvas document and page files for an old canvas, laid out as the old canvas showed it in
+ * rows of up to six pages; each group goes on a canvas of its own, and the pages in no group on a
+ * first one. `taken` holds the paths already in the version.
  */
 export function splitLegacyCanvas(html: string, taken: ReadonlySet<string>): LegacySplit | null {
   const pages = legacyPages(html)
@@ -132,33 +131,28 @@ export function splitLegacyCanvas(html: string, taken: ReadonlySet<string>): Leg
 
   const used = new Set(taken)
   const files = new Map<string, string>()
-  const sections: CanvasSection[] = []
+  const canvases: CanvasSheet[] = []
+  const rows = new Map<string, { x: number; y: number; height: number; count: number }>()
   const placed: CanvasPage[] = []
-  let rowY = 0
-  let rowX = 0
-  let rowHeight = 0
-  let inRow = 0
-  let lastGroup: number | null = -1
   let n = 0
   for (const page of pages) {
     n++
-    const name = attribute(page.tag, 'data-page')!.trim() || `Page ${n}`
-    const group = page.group?.n ?? 0
-    if (group !== lastGroup || inRow === ROW_PAGES) {
-      if (inRow > 0) {
-        rowY += rowHeight + (group !== lastGroup ? SECTION_GAP + SECTION_HEAD : PAGE_GAP)
-      }
-      rowX = 0
-      rowHeight = 0
-      inRow = 0
-      if (group !== lastGroup && page.group) {
-        sections.push({
-          id: `s${page.group.n}`,
-          canvas: 'canvas-1',
-          title: page.group.title ?? `Group ${page.group.n}`,
-        })
-      }
-      lastGroup = group
+    const name = attribute(page.tag, 'data-page')!.trim() || `Frame ${n}`
+    const canvas = page.group ? `group-${page.group.n}` : 'canvas-1'
+    let row = rows.get(canvas)
+    if (!row) {
+      canvases.push({
+        id: canvas,
+        name: page.group ? (page.group.title ?? `Group ${page.group.n}`) : 'Page 1',
+      })
+      row = { x: 0, y: 0, height: 0, count: 0 }
+      rows.set(canvas, row)
+    }
+    if (row.count === ROW_PAGES) {
+      row.y += row.height + PAGE_GAP
+      row.x = 0
+      row.height = 0
+      row.count = 0
     }
     const { width, height } = sizeOf(page.tag)
     // Beside the old entry page, so the relative paths in its head still find their files.
@@ -173,25 +167,23 @@ export function splitLegacyCanvas(html: string, taken: ReadonlySet<string>): Leg
     )
     placed.push({
       id: `p${n}`,
-      canvas: 'canvas-1',
-      section: page.group ? `s${page.group.n}` : null,
+      canvas,
       name,
       file: path,
-      x: rowX,
-      y: rowY,
+      x: row.x,
+      y: row.y,
       width,
       height,
       locked: false,
     })
-    rowX += width + PAGE_GAP
-    rowHeight = Math.max(rowHeight, height)
-    inRow++
+    row.x += width + PAGE_GAP
+    row.height = Math.max(row.height, height)
+    row.count++
   }
   return {
     doc: {
       format: CANVAS_FORMAT,
-      canvases: [{ id: 'canvas-1', name: 'Canvas 1' }],
-      sections,
+      canvases,
       pages: placed,
       notes: [],
     },

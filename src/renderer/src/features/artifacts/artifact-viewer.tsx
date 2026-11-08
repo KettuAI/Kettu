@@ -201,7 +201,6 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         const canvas =
           doc.pages.find((p) => p.id === first)?.canvas ??
           doc.notes.find((n) => n.id === first)?.canvas ??
-          doc.sections.find((x) => x.id === first)?.canvas ??
           doc.canvases[0]!.id
         const session =
           agents.find((a) => a.doing && a.doing !== 'read')?.sessionId ?? summary.sessionId ?? null

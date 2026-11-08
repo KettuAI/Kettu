@@ -103,19 +103,21 @@ export const GUIDE = {
     'A canvas holds several pages side by side, such as design options, the screens of a flow or ' +
     'slides. Make it with files: one HTML file per page, which loads what the pages share by ' +
     `relative paths, and ${CANVAS_FILE}, which lays them out, such as ` +
-    '`{"canvases": [{"id": "main", "name": "Settings"}], "sections": [{"id": "settings", "title": ' +
-    '"Settings"}], "pages": [{"id": "account", "name": "Account", "file": "account.html", "section": ' +
-    '"settings", "width": 1440, "height": 900}]}`. An id is 1 to 64 letters, digits, - or _. width ' +
-    "and height are the page's viewport in CSS pixels, 64 to 8000, 1280 by 800 if left out; x and y " +
-    'place it and may be left out, so Kettu puts it after the other pages of its section. A section ' +
-    'is a titled area around its pages; canvases are tabs of the artifact and may be left out when ' +
-    'there is one. Plan the sections and the page names first, then write one page per file: never ' +
-    'put several pages in one file, and keep shared styles in shared files. Once the canvas exists, ' +
-    `change its layout with canvas operations in update_artifact rather than by rewriting ${CANVAS_FILE}: ` +
+    '`{"canvases": [{"id": "flow", "name": "Sign-up flow"}, {"id": "done", "name": "All set"}], ' +
+    '"pages": [{"id": "welcome", "canvas": "flow", "name": "Welcome", "file": "welcome.html", ' +
+    '"width": 1440, "height": 900}]}`. An id is 1 to 64 letters, digits, - or _. width and height ' +
+    "are the page's viewport in CSS pixels, 64 to 8000, 1280 by 800 if left out; x and y place it " +
+    'and may be left out, so Kettu puts it after the other pages of its canvas. Canvases are shown ' +
+    'one at a time, as the pages of a design tool: put pages that belong side by side on one canvas ' +
+    'and others on a canvas of their own; a canvas may be left out of a page when there is one. The ' +
+    "user's interface calls a canvas a page and a page a frame, so when the user speaks of a page " +
+    'they may mean a canvas. Plan the canvases and the page names first, then write one page per ' +
+    'file: never put several pages in one file, and keep shared styles in shared files. Once the ' +
+    `canvas exists, change its layout with canvas operations in update_artifact rather than by rewriting ${CANVAS_FILE}: ` +
     '`{"op": "add", "object": {"type": "page", "id": "privacy", "name": "Privacy", "file": ' +
-    '"privacy.html", "section": "settings"}}` (also type section, canvas or note), `{"op": "set", ' +
-    '"id": "account", "key": "x", "value": 0}`, `{"op": "remove", "id": "privacy"}` or `{"op": ' +
-    '"order", "id": "account", "index": 0}`. They merge with what the user does on the canvas ' +
+    '"privacy.html", "canvas": "flow"}}` (also type canvas or note), `{"op": "set", ' +
+    '"id": "welcome", "key": "x", "value": 0}`, `{"op": "remove", "id": "privacy"}` or `{"op": ' +
+    '"order", "id": "welcome", "index": 0}`. They merge with what the user does on the canvas ' +
     `meanwhile, while a ${CANVAS_FILE} written as a file is refused when the user changed the ` +
     "layout since your base version. Write a page's file in the call that adds the page. The user " +
     'may draw notes on the canvas: text, stickies, pen strokes, shapes and arrows between pages; ' +
@@ -1035,7 +1037,7 @@ function focusOf(
 function canvasFocus(ops: readonly CanvasOp[]): { doing: ArtifactDoing; page: string | null } {
   for (const op of ops) {
     if (op.op === 'add' && op.object.type === 'page') return { doing: 'draw', page: op.object.id }
-    if (op.op === 'set' && ['x', 'y', 'width', 'height', 'section'].includes(op.key)) {
+    if (op.op === 'set' && ['x', 'y', 'width', 'height'].includes(op.key)) {
       return { doing: 'move', page: op.id }
     }
   }

@@ -1,27 +1,18 @@
-// A canvas document as the editor lays one of its canvases out: the pages, the sections around them
-// and the notes, with the bounds the camera fits.
+// A canvas document as the editor lays one of its canvases out: the pages and the notes, with the
+// bounds the camera fits.
 
 import {
   noteBox,
-  SECTION_HEAD,
-  SECTION_PAD,
-  sectionBox,
   type Box,
   type CanvasDoc,
   type CanvasNote,
   type CanvasPage,
-  type CanvasSection,
 } from '@shared/canvas-doc'
 import { THUMBNAIL_PAGES, type ThumbnailPage } from '@shared/artifacts'
-
-export interface PlacedSection extends CanvasSection {
-  box: Box
-}
 
 export interface DocLayout {
   canvas: string
   pages: CanvasPage[]
-  sections: PlacedSection[]
   notes: CanvasNote[]
   /** Around everything on the canvas; zero sized when it is empty. */
   bounds: Box
@@ -44,19 +35,9 @@ export function boundsOf(boxes: readonly Box[]): Box {
 
 export function docLayout(doc: CanvasDoc, canvas: string): DocLayout {
   const pages = doc.pages.filter((p) => p.canvas === canvas)
-  const sections: PlacedSection[] = []
-  for (const s of doc.sections) {
-    if (s.canvas !== canvas) continue
-    const box = sectionBox({ pages }, s.id)
-    if (box) sections.push({ ...s, box })
-  }
   const notes = doc.notes.filter((n) => n.canvas === canvas)
-  const bounds = boundsOf([
-    ...pages,
-    ...sections.map((s) => s.box),
-    ...notes.map((n) => noteBox(n)),
-  ])
-  return { canvas, pages, sections, notes, bounds }
+  const bounds = boundsOf([...pages, ...notes.map((n) => noteBox(n))])
+  return { canvas, pages, notes, bounds }
 }
 
 /** A canvas document's thumbnail layout: its first canvas's pages, moved to start at the origin. */
@@ -130,26 +111,4 @@ export function overlaps(a: Box, b: Box): boolean {
 
 export function contains(box: Box, x: number, y: number): boolean {
   return x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height
-}
-
-/**
- * A section's frame as the editor draws it: its pages with a margin that keeps its size on screen
- * at any zoom, so its title and the page names in its head always fit.
- */
-export const FRAME_SIDE = 20
-export const FRAME_HEAD = 68
-export const FRAME_FOOT = 22
-
-/** The section's frame at zoom `z`, from the box the document gives it. */
-export function sectionFrame(box: Box, z: number): Box {
-  const x = box.x + SECTION_PAD
-  const y = box.y + SECTION_HEAD
-  const width = box.width - 2 * SECTION_PAD
-  const height = box.height - SECTION_HEAD - SECTION_PAD
-  return {
-    x: x - FRAME_SIDE / z,
-    y: y - FRAME_HEAD / z,
-    width: width + (2 * FRAME_SIDE) / z,
-    height: height + (FRAME_HEAD + FRAME_FOOT) / z,
-  }
 }

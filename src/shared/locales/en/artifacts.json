@@ -405,8 +405,7 @@
     "tools": {
       "move": "Move",
       "hand": "Hand",
-      "page": "Page",
-      "section": "Section",
+      "page": "Frame",
       "text": "Text",
       "sticky": "Sticky note",
       "pen": "Pen",
@@ -431,15 +430,15 @@
       }
     },
     "canvases": {
-      "menu": "Canvases",
-      "pages": "{{count}} pages",
-      "pages_one": "{{count}} page",
-      "new": "New canvas",
+      "menu": "Pages",
+      "pages": "{{count}} frames",
+      "pages_one": "{{count}} frame",
+      "new": "New page",
       "rename": "Rename",
-      "duplicate": "Duplicate canvas",
-      "delete": "Delete canvas",
-      "newName": "Canvas {{number}}",
-      "lastOne": "A canvas artifact keeps at least one canvas"
+      "duplicate": "Duplicate page",
+      "delete": "Delete page",
+      "newName": "Page {{number}}",
+      "lastOne": "A canvas keeps at least one page"
     },
     "layers": {
       "title": "Layers",
@@ -457,7 +456,7 @@
     },
     "props": {
       "title": "Title",
-      "page": "Page",
+      "page": "Frame",
       "name": "Name",
       "size": "Size",
       "width": "W",
@@ -472,10 +471,9 @@
         "custom": "Custom"
       },
       "params": "Tweaks",
-      "paramsHint": "Parameters the page declares",
+      "paramsHint": "Parameters the frame declares",
       "saving": "Saving…",
       "saved": "Saved as v{{version}}, history can restore the one before",
-      "section": "Section",
       "note": "Note",
       "color": "Color",
       "strokeWidth": "Thickness",
@@ -500,17 +498,12 @@
       "paramsFailed": "The tweak was not saved. {{error}}"
     },
     "page": {
-      "blank": "New page",
+      "blank": "New frame",
       "blankHint": "Empty until an agent draws it",
-      "drawing": "{{agent}} is drawing this page",
-      "newName": "Page {{number}}",
+      "drawing": "{{agent}} is drawing this frame",
+      "newName": "Frame {{number}}",
       "ask": "Hand to the agent",
       "tweak": "Tweaks"
-    },
-    "section": {
-      "newName": "Section {{number}}",
-      "pages": "{{count}} pages",
-      "pages_one": "{{count}} page"
     },
     "note": {
       "text": "Text",
@@ -548,16 +541,16 @@
       "hint": "Looking at the shared link, read-only: they cannot see you, comment or change it"
     },
     "empty": {
-      "title": "This canvas has no pages yet",
-      "body": "Drag out a blank page with the page tool, or ask an agent to draw one. Lay pages out and mark them up here, then hand them to the agent.",
-      "pageTool": "Page tool",
-      "ask": "Ask an agent for a page"
+      "title": "This page has no frames yet",
+      "body": "Drag out a blank frame with the frame tool, or ask an agent to draw one. Lay frames out and mark them up here, then hand them to the agent.",
+      "pageTool": "Frame tool",
+      "ask": "Ask an agent for a frame"
     },
-    "legacy": "An older canvas: the first change you make on it splits it into a file per page, as a new version.",
+    "legacy": "An older canvas: the first change you make on it splits it into a file per frame, as a new version.",
     "zoom": "Zoom",
     "undo": "Undo",
     "redo": "Redo",
-    "handOffPrompt": "Change what the notes on these pages ask for; leave the rest as it is.",
+    "handOffPrompt": "Change what the notes on these frames ask for; leave the rest as it is.",
     "handedOff": "Handed to the agent",
     "handOffFailed": "Could not hand it to the agent. {{error}}",
     "legacySplit": "Edit on the canvas"

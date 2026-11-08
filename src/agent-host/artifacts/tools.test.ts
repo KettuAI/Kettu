@@ -485,7 +485,7 @@ describe("what an artifact's pages use", () => {
 
 describe('canvases', () => {
   const layout = (pages: Array<Record<string, unknown>>) =>
-    JSON.stringify({ sections: [{ id: 'settings', title: 'Settings' }], pages })
+    JSON.stringify({ canvases: [{ id: 'settings', name: 'Settings' }], pages })
 
   async function canvas(): Promise<string> {
     return create({
@@ -493,8 +493,8 @@ describe('canvases', () => {
         {
           path: 'canvas.json',
           content: layout([
-            { id: 'account', name: 'Account', file: 'account.html', section: 'settings' },
-            { id: 'general', name: 'General', file: 'general.html', section: 'settings' },
+            { id: 'account', name: 'Account', file: 'account.html' },
+            { id: 'general', name: 'General', file: 'general.html' },
           ]),
         },
         { path: 'account.html', content: '<h1>Account</h1>' },
@@ -510,7 +510,7 @@ describe('canvases', () => {
     const { value } = await call('read_artifact', { id, path: 'canvas.json' })
     const stored = JSON.parse(value.text as string)
     expect(stored.format).toBe(1)
-    expect(stored.pages[1]).toMatchObject({ x: 1280 + 48, y: 0, canvas: 'canvas-1' })
+    expect(stored.pages[1]).toMatchObject({ x: 1280 + 48, y: 0, canvas: 'settings' })
   })
 
   it('refuse a document that lays out a page the version does not have', async () => {
@@ -545,7 +545,6 @@ describe('canvases', () => {
             id: 'privacy',
             name: 'Privacy',
             file: 'privacy.html',
-            section: 'settings',
           },
         },
         {

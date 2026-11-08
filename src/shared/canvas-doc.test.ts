@@ -4,7 +4,6 @@ import {
   CanvasError,
   parseCanvasDoc,
   parseCanvasOps,
-  sectionBox,
   stringifyCanvasDoc,
   PAGE_GAP,
 } from './canvas-doc'
@@ -17,29 +16,26 @@ describe('the canvas document', () => {
   it('fills in the one canvas and places pages written without a place', () => {
     const parsed = parseCanvasDoc(
       doc({
-        sections: [{ id: 'settings', title: 'Settings' }],
         pages: [
           {
             id: 'a',
             name: 'Account',
             file: 'pages/a.html',
-            section: 'settings',
             x: 0,
             y: 0,
             width: 1440,
             height: 900,
           },
-          { id: 'b', name: 'General', file: 'pages/b.html', section: 'settings' },
+          { id: 'b', name: 'General', file: 'pages/b.html' },
           { id: 'c', name: 'Loose', file: 'c.html' },
         ],
       }),
     )
-    expect(parsed.canvases).toEqual([{ id: 'canvas-1', name: 'Canvas 1' }])
+    expect(parsed.canvases).toEqual([{ id: 'canvas-1', name: 'Page 1' }])
     const [a, b, c] = parsed.pages
     expect(a!.canvas).toBe('canvas-1')
     expect(b).toMatchObject({ x: 1440 + PAGE_GAP, y: 0, width: 1280, height: 800 })
     expect(c!.x).toBe(b!.x + b!.width + PAGE_GAP)
-    expect(sectionBox(parsed, 'settings')).toMatchObject({ x: -40, y: -56 })
   })
 
   it('refuses what a stored document must not hold, saying what is wrong', () => {
@@ -55,7 +51,8 @@ describe('the canvas document', () => {
         },
         /used more than once/,
       ],
-      [{ pages: [{ id: 'a', name: 'A', file: 'a.html', section: 'nope' }] }, /names no section/],
+      [{ sections: [] }, /unknown property "sections"/],
+      [{ pages: [{ id: 'a', name: 'A', file: 'a.html', canvas: 'nope' }] }, /names no canvas/],
       [{ pages: [{ id: 'a', name: 'A', file: 'a.html', width: 10 }] }, /from 64 to 8000/],
       [
         { notes: [{ id: 'n', kind: 'arrow', x1: 0, y1: 0, x2: 1, y2: 1, to: 'missing' }] },
@@ -96,10 +93,9 @@ describe('the canvas document', () => {
 describe('canvas operations', () => {
   const start = parseCanvasDoc(
     doc({
-      sections: [{ id: 's', title: 'S' }],
       pages: [
-        { id: 'a', name: 'A', file: 'a.html', section: 's', x: 0, y: 0 },
-        { id: 'b', name: 'B', file: 'b.html', section: 's', x: 2000, y: 0 },
+        { id: 'a', name: 'A', file: 'a.html', x: 0, y: 0 },
+        { id: 'b', name: 'B', file: 'b.html', x: 2000, y: 0 },
       ],
       notes: [{ id: 'arrow', kind: 'arrow', x1: 0, y1: 0, x2: 1, y2: 1, from: 'a', to: 'b' }],
     }),
@@ -109,13 +105,13 @@ describe('canvas operations', () => {
     const ops = parseCanvasOps([
       { op: 'set', id: 'a', key: 'x', value: 100 },
       { op: 'set', id: 'a', key: 'x', value: 300 },
-      { op: 'set', id: 's', key: 'title', value: 'Settings' },
+      { op: 'set', id: 'canvas-1', key: 'name', value: 'Settings' },
       { op: 'add', object: { type: 'note', id: 'n', kind: 'sticky', x: 5, y: 5, text: 'Hi' } },
       { op: 'order', id: 'n', index: 0 },
     ])
     const next = applyCanvasOps(start, ops)
     expect(next.pages[0]!.x).toBe(300)
-    expect(next.sections[0]!.title).toBe('Settings')
+    expect(next.canvases[0]!.name).toBe('Settings')
     expect(next.notes.map((n) => n.id)).toEqual(['n', 'arrow'])
     expect(start.pages[0]!.x).toBe(0)
   })
@@ -126,11 +122,9 @@ describe('canvas operations', () => {
       parseCanvasOps([
         { op: 'remove', id: 'a' },
         { op: 'set', id: 'a', key: 'x', value: 5 },
-        { op: 'remove', id: 's' },
       ]),
     )
     expect(next.pages.map((p) => p.id)).toEqual(['b'])
-    expect(next.pages[0]!.section).toBeNull()
     expect(next.notes[0]).toMatchObject({ from: null, to: 'b' })
   })
 
@@ -173,23 +167,25 @@ describe('old canvases', () => {
     )
   })
 
-  it('splits into a file per page with the head and the body scripts, laid out as shown', () => {
+  it('splits into a file per page with the head and the body scripts, each group a canvas', () => {
     expect(isLegacyCanvas(old)).toBe(true)
     const split = splitLegacyCanvas(old, new Set(['index.html', 'account.html']))!
-    expect([...split.files.keys()]).toEqual(['sign-in.html', 'account-2.html', 'page-3.html'])
+    expect([...split.files.keys()]).toEqual(['sign-in.html', 'account-2.html', 'frame-3.html'])
     const account = split.files.get('account-2.html')!
     expect(account).toContain('<title>Old</title>')
     expect(account).toContain('<body class="b">')
     expect(account).toContain('<section data-page="Account"><!-- </section> --><p>a</p></section>')
     expect(account).toContain(`window.x = '</section>'`)
     expect(account).not.toContain('Sign in')
-    expect(split.doc.sections).toEqual([{ id: 's1', canvas: 'canvas-1', title: 'Settings' }])
-    expect(split.doc.pages.map((p) => [p.name, p.section, p.width])).toEqual([
-      ['Sign in', null, 390],
-      ['Account', 's1', 1280],
-      ['Page 3', 's1', 1280],
+    expect(split.doc.canvases).toEqual([
+      { id: 'canvas-1', name: 'Page 1' },
+      { id: 'group-1', name: 'Settings' },
     ])
-    expect(split.doc.pages[1]!.y).toBeGreaterThan(844)
+    expect(split.doc.pages.map((p) => [p.name, p.canvas, p.x, p.width])).toEqual([
+      ['Sign in', 'canvas-1', 0, 390],
+      ['Account', 'group-1', 0, 1280],
+      ['Frame 3', 'group-1', 1280 + PAGE_GAP, 1280],
+    ])
     expect(parseCanvasDoc(stringifyCanvasDoc(split.doc))).toEqual(split.doc)
   })
 
@@ -208,8 +204,7 @@ describe('the overview page', () => {
       parseCanvasDoc(
         doc({
           canvases: [{ id: 'c', name: evil }],
-          sections: [{ id: 's', canvas: 'c', title: evil }],
-          pages: [{ id: 'p', canvas: 'c', section: 's', name: evil, file: 'p.html' }],
+          pages: [{ id: 'p', canvas: 'c', name: evil, file: 'p.html' }],
           notes: [{ id: 'n', canvas: 'c', kind: 'sticky', x: 0, y: 0, width: 200, text: evil }],
         }),
       ),

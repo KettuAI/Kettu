@@ -1,4 +1,4 @@
-/* The canvas editor: a canvas document's pages, sections and notes, with the floating tools of a
+/* The canvas editor: a canvas document's frames and notes, with the floating tools of a
    design app over them. Sizes inside the layer use --unscale, so lines and labels keep their
    screen size at any zoom. */
 
@@ -30,41 +30,7 @@
   inset: 0;
 }
 
-/* Sections, pages and their labels. */
-.k-ce-section {
-  position: absolute;
-  border-radius: calc(18px * var(--unscale));
-  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
-  box-shadow: inset 0 0 0 calc(1px * var(--unscale)) var(--border-default);
-}
-.k-ce-section[data-selected] {
-  box-shadow: inset 0 0 0 calc(1.5px * var(--unscale)) var(--control-on);
-}
-.k-ce-section__title {
-  position: absolute;
-  top: calc(12px * var(--unscale));
-  left: calc(14px * var(--unscale));
-  display: flex;
-  align-items: center;
-  gap: calc(6px * var(--unscale));
-  max-width: calc(100% - 28px * var(--unscale));
-  font-size: calc(12px * var(--unscale));
-  line-height: 1.4;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-.k-ce-section__title svg {
-  flex: none;
-  width: calc(14px * var(--unscale));
-  height: calc(14px * var(--unscale));
-}
-.k-ce-section__title b {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-size: calc(13px * var(--unscale));
-  font-weight: 600;
-  color: var(--text-primary);
-}
+/* Frames and their labels. */
 .k-ce-page {
   position: absolute;
   overflow: hidden;

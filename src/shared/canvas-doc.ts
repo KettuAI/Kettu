@@ -1,6 +1,6 @@
-// A canvas artifact's document: its canvases, the sections and pages on them and the notes drawn
-// over them. It is the entry of a canvas, stored as `canvas.json` in each version; pages are HTML
-// files of the same version. Clients and agents change it through operations, which the agent
+// A canvas artifact's document: its canvases, the pages on them and the notes drawn over them. The
+// interface calls a canvas a page and a page a frame, as design tools do. It is the entry of a
+// canvas, stored as `canvas.json` in each version; pages are HTML files of the same version. Clients and agents change it through operations, which the agent
 // host applies in arrival order, the last one winning per property.
 
 export const CANVAS_FILE = 'canvas.json'
@@ -9,7 +9,6 @@ export const CANVAS_FORMAT = 1
 /** The most of each kind of object a document holds. */
 export const CANVAS_LIMITS = {
   canvases: 50,
-  sections: 500,
   pages: 500,
   notes: 5000,
   /** Numbers in one pen stroke: x, y and pressure for each point. */
@@ -27,13 +26,8 @@ export const DEFAULT_PAGE = { width: 1280, height: 800 }
 /** Far enough for any layout, near enough that a coordinate never loses precision. */
 const COORD_MAX = 1_000_000
 
-/** Between pages in a row, and around the pages of a section. */
+/** Between pages in a row. */
 export const PAGE_GAP = 48
-export const SECTION_PAD = 40
-/** The band at a section's top that holds its title. */
-export const SECTION_HEAD = 56
-/** Between a section and what is placed below it. */
-export const SECTION_GAP = 160
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 
@@ -57,16 +51,9 @@ export interface CanvasSheet {
   name: string
 }
 
-export interface CanvasSection {
-  id: string
-  canvas: string
-  title: string
-}
-
 export interface CanvasPage {
   id: string
   canvas: string
-  section: string | null
   name: string
   /** The page's HTML file in the artifact. */
   file: string
@@ -130,7 +117,6 @@ export type CanvasNote = TextNote | StickyNote | PenNote | ShapeNote
 export interface CanvasDoc {
   format: typeof CANVAS_FORMAT
   canvases: CanvasSheet[]
-  sections: CanvasSection[]
   /** In paint order, first at the back. */
   pages: CanvasPage[]
   /** In paint order, over the pages. */
@@ -139,7 +125,6 @@ export interface CanvasDoc {
 
 export type CanvasObject =
   | ({ type: 'canvas' } & CanvasSheet)
-  | ({ type: 'section' } & CanvasSection)
   | ({ type: 'page' } & CanvasPage)
   | ({ type: 'note' } & CanvasNote)
 
@@ -249,19 +234,7 @@ function only(record: Record<string, unknown>, keys: readonly string[], what: st
 }
 
 const SHEET_KEYS = ['id', 'name'] as const
-const SECTION_KEYS = ['id', 'canvas', 'title'] as const
-const PAGE_KEYS = [
-  'id',
-  'canvas',
-  'section',
-  'name',
-  'file',
-  'x',
-  'y',
-  'width',
-  'height',
-  'locked',
-] as const
+const PAGE_KEYS = ['id', 'canvas', 'name', 'file', 'x', 'y', 'width', 'height', 'locked'] as const
 const NOTE_KEYS: Record<NoteKind, readonly string[]> = {
   text: ['id', 'canvas', 'kind', 'color', 'locked', 'by', 'x', 'y', 'text', 'size'],
   sticky: ['id', 'canvas', 'kind', 'color', 'locked', 'by', 'x', 'y', 'width', 'text', 'done'],
@@ -334,16 +307,6 @@ function sheetOf(value: unknown, what: string): CanvasSheet {
   return { id: id(value.id, `${what}.id`), name: text(value.name, `${what}.name`, NAME_CHARS) }
 }
 
-function sectionOf(value: unknown, what: string): CanvasSection {
-  if (!isRecord(value)) fail(`${what} must be an object`)
-  only(value, SECTION_KEYS, what)
-  return {
-    id: id(value.id, `${what}.id`),
-    canvas: id(value.canvas, `${what}.canvas`),
-    title: text(value.title, `${what}.title`, NAME_CHARS),
-  }
-}
-
 /** A page as written; its place may be missing, for `placePages` to fill in. */
 type LoosePage = Omit<CanvasPage, 'x' | 'y'> & { x: number | null; y: number | null }
 
@@ -353,7 +316,6 @@ function pageOf(value: unknown, what: string): LoosePage {
   return {
     id: id(value.id, `${what}.id`),
     canvas: id(value.canvas, `${what}.canvas`),
-    section: ref(value.section, `${what}.section`),
     name: text(value.name, `${what}.name`, NAME_CHARS),
     file: pageFile(value.file, `${what}.file`),
     x: value.x === undefined || value.x === null ? null : coord(value.x, `${what}.x`),
@@ -455,31 +417,21 @@ function list(value: unknown, what: string, max: number): unknown[] {
 /** Every reference points at an object of the right kind, and every id is used once. */
 function checkLinks(doc: {
   canvases: CanvasSheet[]
-  sections: CanvasSection[]
   pages: LoosePage[]
   notes: CanvasNote[]
 }): void {
-  const kinds = new Map<string, 'canvas' | 'section' | 'page' | 'note'>()
-  const claim = (key: string, kind: 'canvas' | 'section' | 'page' | 'note'): void => {
+  const kinds = new Map<string, 'canvas' | 'page' | 'note'>()
+  const claim = (key: string, kind: 'canvas' | 'page' | 'note'): void => {
     if (kinds.has(key)) fail(`the id "${key}" is used more than once`)
     kinds.set(key, kind)
   }
   doc.canvases.forEach((c) => claim(c.id, 'canvas'))
-  doc.sections.forEach((s) => claim(s.id, 'section'))
   doc.pages.forEach((p) => claim(p.id, 'page'))
   doc.notes.forEach((n) => claim(n.id, 'note'))
   const canvasOf = (key: string, what: string): void => {
     if (kinds.get(key) !== 'canvas') fail(`${what} names no canvas "${key}"`)
   }
-  for (const s of doc.sections) canvasOf(s.canvas, `section "${s.id}"`)
-  for (const p of doc.pages) {
-    canvasOf(p.canvas, `page "${p.id}"`)
-    if (p.section !== null) {
-      if (kinds.get(p.section) !== 'section') fail(`page "${p.id}" names no section "${p.section}"`)
-      const section = doc.sections.find((s) => s.id === p.section)!
-      if (section.canvas !== p.canvas) fail(`page "${p.id}" is on another canvas than its section`)
-    }
-  }
+  for (const p of doc.pages) canvasOf(p.canvas, `page "${p.id}"`)
   for (const n of doc.notes) {
     canvasOf(n.canvas, `note "${n.id}"`)
     if (n.kind === 'rect' || n.kind === 'ellipse' || n.kind === 'line' || n.kind === 'arrow') {
@@ -504,29 +456,26 @@ export function parseCanvasDoc(json: string): CanvasDoc {
     fail(`the canvas document is not valid JSON: ${(error as Error).message}`)
   }
   if (!isRecord(raw)) fail('the canvas document must be a JSON object')
-  only(raw, ['format', 'canvases', 'sections', 'pages', 'notes'], 'the canvas document')
+  only(raw, ['format', 'canvases', 'pages', 'notes'], 'the canvas document')
   if (raw.format !== undefined && raw.format !== CANVAS_FORMAT) {
     fail(`the canvas document's format must be ${CANVAS_FORMAT}`)
   }
   let canvases = list(raw.canvases, 'canvases', CANVAS_LIMITS.canvases).map((c, i) =>
     sheetOf(c, `canvases[${i}]`),
   )
-  if (canvases.length === 0) canvases = [{ id: 'canvas-1', name: 'Canvas 1' }]
+  if (canvases.length === 0) canvases = [{ id: 'canvas-1', name: 'Page 1' }]
   const only1 = canvases.length === 1 ? canvases[0]!.id : null
   const withCanvas = (value: unknown): unknown =>
     isRecord(value) && value.canvas === undefined && only1 !== null
       ? { ...value, canvas: only1 }
       : value
-  const sections = list(raw.sections, 'sections', CANVAS_LIMITS.sections).map((s, i) =>
-    sectionOf(withCanvas(s), `sections[${i}]`),
-  )
   const pages = list(raw.pages, 'pages', CANVAS_LIMITS.pages).map((p, i) =>
     pageOf(withCanvas(p), `pages[${i}]`),
   )
   const notes = list(raw.notes, 'notes', CANVAS_LIMITS.notes).map((n, i) =>
     noteOf(withCanvas(n), `notes[${i}]`),
   )
-  const loose = { canvases, sections, pages, notes }
+  const loose = { canvases, pages, notes }
   checkLinks(loose)
   return placePages(loose)
 }
@@ -556,18 +505,6 @@ function boundsOf(boxes: readonly Box[]): Box | null {
     bottom = Math.max(bottom, b.y + b.height)
   }
   return { x: left, y: top, width: right - left, height: bottom - top }
-}
-
-/** A section's frame on its canvas: around its pages with room for its title; null when empty. */
-export function sectionBox(doc: Pick<CanvasDoc, 'pages'>, section: string): Box | null {
-  const inner = boundsOf(doc.pages.filter((p) => p.section === section))
-  if (!inner) return null
-  return {
-    x: inner.x - SECTION_PAD,
-    y: inner.y - SECTION_HEAD,
-    width: inner.width + 2 * SECTION_PAD,
-    height: inner.height + SECTION_HEAD + SECTION_PAD,
-  }
 }
 
 /** A note's box on its canvas, for selection, snapping and hit tests. */
@@ -638,7 +575,6 @@ export function joinedEnds(
 /** Gives each page written without a place one after the pages already placed. */
 function placePages(doc: {
   canvases: CanvasSheet[]
-  sections: CanvasSection[]
   pages: LoosePage[]
   notes: CanvasNote[]
 }): CanvasDoc {
@@ -652,27 +588,11 @@ function placePages(doc: {
   for (const p of pending) {
     const onCanvas = [...done.values()].filter((q) => q.canvas === p.canvas)
     const all = boundsOf(onCanvas)
-    let x: number
-    let y: number
-    const mates = p.section === null ? [] : onCanvas.filter((q) => q.section === p.section)
-    if (mates.length > 0) {
-      const right = Math.max(...mates.map((q) => q.x + q.width))
-      x = right + PAGE_GAP
-      y = Math.min(...mates.map((q) => q.y))
-    } else if (p.section !== null) {
-      // A section's first page starts a new band below everything on its canvas.
-      x = 0
-      y = all ? all.y + all.height + SECTION_GAP + SECTION_HEAD : 0
-    } else {
-      x = all ? all.x + all.width + PAGE_GAP : 0
-      y = all ? all.y : 0
-    }
-    done.set(p.id, { ...p, x, y })
+    done.set(p.id, { ...p, x: all ? all.x + all.width + PAGE_GAP : 0, y: all ? all.y : 0 })
   }
   return {
     format: CANVAS_FORMAT,
     canvases: doc.canvases,
-    sections: doc.sections,
     pages: doc.pages.map((p) => done.get(p.id)!),
     notes: doc.notes,
   }
@@ -685,8 +605,7 @@ export function missingPageFiles(doc: CanvasDoc, has: (path: string) => boolean)
 
 const SETTABLE: Record<CanvasObject['type'], readonly string[]> = {
   canvas: ['name'],
-  section: ['title'],
-  page: ['section', 'name', 'file', 'x', 'y', 'width', 'height', 'locked'],
+  page: ['name', 'file', 'x', 'y', 'width', 'height', 'locked'],
   note: [
     'color',
     'locked',
@@ -710,8 +629,6 @@ const SETTABLE: Record<CanvasObject['type'], readonly string[]> = {
 function find(doc: CanvasDoc, key: string): { type: CanvasObject['type']; index: number } | null {
   let index = doc.canvases.findIndex((c) => c.id === key)
   if (index >= 0) return { type: 'canvas', index }
-  index = doc.sections.findIndex((s) => s.id === key)
-  if (index >= 0) return { type: 'section', index }
   index = doc.pages.findIndex((p) => p.id === key)
   if (index >= 0) return { type: 'page', index }
   index = doc.notes.findIndex((n) => n.id === key)
@@ -732,8 +649,8 @@ export function parseCanvasOps(value: unknown): CanvasOp[] {
         only(op, ['op', 'object'], what)
         if (!isRecord(op.object)) fail(`${what}.object must be an object`)
         const type = op.object.type
-        if (type !== 'canvas' && type !== 'section' && type !== 'page' && type !== 'note') {
-          fail(`${what}.object.type must be canvas, section, page or note`)
+        if (type !== 'canvas' && type !== 'page' && type !== 'note') {
+          fail(`${what}.object.type must be canvas, page or note`)
         }
         return { op: 'add', object: op.object as unknown as CanvasObject }
       }
@@ -760,13 +677,11 @@ function checkCounts(doc: CanvasDoc): void {
   if (doc.canvases.length === 0) fail('a canvas document keeps at least one canvas')
   if (doc.canvases.length > CANVAS_LIMITS.canvases)
     fail(`at most ${CANVAS_LIMITS.canvases} canvases`)
-  if (doc.sections.length > CANVAS_LIMITS.sections)
-    fail(`at most ${CANVAS_LIMITS.sections} sections`)
   if (doc.pages.length > CANVAS_LIMITS.pages) fail(`at most ${CANVAS_LIMITS.pages} pages`)
   if (doc.notes.length > CANVAS_LIMITS.notes) fail(`at most ${CANVAS_LIMITS.notes} notes`)
 }
 
-/** Removes an object and what cannot stand without it: a canvas's contents, a section's membership, a page's joins. */
+/** Removes an object and what cannot stand without it: a canvas's contents, a page's joins. */
 function removeFrom(doc: CanvasDoc, key: string): CanvasDoc {
   const found = find(doc, key)
   if (!found) return doc
@@ -775,15 +690,8 @@ function removeFrom(doc: CanvasDoc, key: string): CanvasDoc {
       return {
         ...doc,
         canvases: doc.canvases.filter((c) => c.id !== key),
-        sections: doc.sections.filter((s) => s.canvas !== key),
         pages: doc.pages.filter((p) => p.canvas !== key),
         notes: doc.notes.filter((n) => n.canvas !== key),
-      }
-    case 'section':
-      return {
-        ...doc,
-        sections: doc.sections.filter((s) => s.id !== key),
-        pages: doc.pages.map((p) => (p.section === key ? { ...p, section: null } : p)),
       }
     case 'page':
       return {
@@ -823,8 +731,6 @@ export function applyCanvasOps(start: CanvasDoc, ops: readonly CanvasOp[]): Canv
           fail(`${what} adds an id that is already used`)
         if (type === 'canvas')
           doc = { ...doc, canvases: [...doc.canvases, sheetOf(rest, `${what}.object`)] }
-        else if (type === 'section')
-          doc = { ...doc, sections: [...doc.sections, sectionOf(rest, `${what}.object`)] }
         else if (type === 'page') {
           const loose = pageOf(rest, `${what}.object`)
           doc = placePages({ ...doc, pages: [...doc.pages, loose] })
@@ -838,21 +744,17 @@ export function applyCanvasOps(start: CanvasDoc, ops: readonly CanvasOp[]): Canv
           fail(`${what} cannot set "${op.key}" on a ${found.type}`)
         const list = (found.type === 'canvas'
           ? doc.canvases
-          : found.type === 'section'
-            ? doc.sections
-            : found.type === 'page'
-              ? doc.pages
-              : doc.notes) as unknown as Record<string, unknown>[]
+          : found.type === 'page'
+            ? doc.pages
+            : doc.notes) as unknown as Record<string, unknown>[]
         const current = list[found.index]!
         const next = { ...current, [op.key]: op.value }
         const checked =
           found.type === 'canvas'
             ? sheetOf(next, what)
-            : found.type === 'section'
-              ? sectionOf(next, what)
-              : found.type === 'page'
-                ? (pageOf(next, what) as CanvasPage)
-                : noteOf(next, what)
+            : found.type === 'page'
+              ? (pageOf(next, what) as CanvasPage)
+              : noteOf(next, what)
         if (
           found.type === 'page' &&
           ((checked as LoosePage).x === null || (checked as LoosePage).y === null)
@@ -863,11 +765,9 @@ export function applyCanvasOps(start: CanvasDoc, ops: readonly CanvasOp[]): Canv
         doc =
           found.type === 'canvas'
             ? { ...doc, canvases: replaced as unknown as CanvasSheet[] }
-            : found.type === 'section'
-              ? { ...doc, sections: replaced as unknown as CanvasSection[] }
-              : found.type === 'page'
-                ? { ...doc, pages: replaced as unknown as CanvasPage[] }
-                : { ...doc, notes: replaced as unknown as CanvasNote[] }
+            : found.type === 'page'
+              ? { ...doc, pages: replaced as unknown as CanvasPage[] }
+              : { ...doc, notes: replaced as unknown as CanvasNote[] }
         break
       }
       case 'remove':

@@ -2,14 +2,7 @@
 // exported or opened in a browser. It shows the canvases read-only, each page live in a frame of
 // its own file, panned and zoomed as in the editor; a page opens alone when clicked.
 
-import {
-  joinedEnds,
-  noteBox,
-  NOTE_COLORS,
-  sectionBox,
-  type CanvasDoc,
-  type CanvasNote,
-} from './canvas-doc'
+import { joinedEnds, noteBox, NOTE_COLORS, type CanvasDoc, type CanvasNote } from './canvas-doc'
 import { strokePath } from './canvas-stroke'
 
 type Drawn =
@@ -36,7 +29,6 @@ type Drawn =
 
 interface Sheet {
   name: string
-  sections: { title: string; x: number; y: number; width: number; height: number }[]
   pages: { name: string; file: string; x: number; y: number; width: number; height: number }[]
   notes: Drawn[]
 }
@@ -78,12 +70,6 @@ function sheets(doc: CanvasDoc): Sheet[] {
     const pages = doc.pages.filter((p) => p.canvas === canvas.id)
     return {
       name: canvas.name,
-      sections: doc.sections
-        .filter((s) => s.canvas === canvas.id)
-        .flatMap((s) => {
-          const box = sectionBox({ pages }, s.id)
-          return box ? [{ title: s.title, ...box }] : []
-        }),
       pages: pages.map((p) => ({
         name: p.name,
         file: p.file,
@@ -127,10 +113,10 @@ const vars = (colors: Record<string, string>): string =>
 
 const STYLE = `
 :root{color-scheme:light dark;--bg:#f5f5f4;--dot:rgba(0,0,0,.09);--bar:rgba(250,250,249,.86);--line:rgba(0,0,0,.08);
---text:#1c1c1c;--muted:#76767a;--hover:rgba(0,0,0,.05);--section:rgba(0,0,0,.025);--page:#fff;
+--text:#1c1c1c;--muted:#76767a;--hover:rgba(0,0,0,.05);--page:#fff;
 --shadow:0 1px 2px rgba(0,0,0,.06),0 8px 28px -8px rgba(0,0,0,.18);--sticky:#fff0b3;--sticky-ink:#4d3b00;${vars(NOTE_LIGHT)}}
 @media (prefers-color-scheme:dark){:root{--bg:#161616;--dot:rgba(255,255,255,.08);--bar:rgba(28,28,28,.86);--line:rgba(255,255,255,.09);
---text:#ededed;--muted:#9a9a9e;--hover:rgba(255,255,255,.07);--section:rgba(255,255,255,.03);--page:#fff;
+--text:#ededed;--muted:#9a9a9e;--hover:rgba(255,255,255,.07);--page:#fff;
 --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px -8px rgba(0,0,0,.6);--sticky:#5a4812;--sticky-ink:#fdeeb5;${vars(NOTE_DARK)}}}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
@@ -151,8 +137,6 @@ nav button[aria-selected=true]{color:var(--text);background:var(--hover);font-we
 background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:24px 24px}
 #stage.panning{cursor:grabbing}
 #world{position:absolute;left:0;top:0;transform-origin:0 0}
-.section{position:absolute;border-radius:24px;background:var(--section);border:1px solid var(--line)}
-.section span{position:absolute;left:calc(4px / var(--z));bottom:100%;padding-bottom:calc(8px / var(--z));font-weight:600;font-size:calc(13px / var(--z));color:var(--text);white-space:nowrap}
 .page{position:absolute;display:block;color:inherit;text-decoration:none}
 .page>span{position:absolute;left:0;bottom:100%;padding-bottom:calc(6px / var(--z));font-size:calc(12px / var(--z));color:var(--muted);
 white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
@@ -206,12 +190,6 @@ const SCRIPT = `
     for (const tab of nav.children) tab.setAttribute('aria-selected', String(tab.dataset.i === String(index)))
     world.replaceChildren()
     const boxes = []
-    for (const s of sheet.sections) {
-      const node = el('div', 'section', world)
-      Object.assign(node.style, { left: s.x + 'px', top: s.y + 'px', width: s.width + 'px', height: s.height + 'px' })
-      el('span', '', node).textContent = s.title
-      boxes.push(s)
-    }
     for (const p of sheet.pages) {
       const link = el('a', 'page', world)
       link.href = encodeURI(p.file)

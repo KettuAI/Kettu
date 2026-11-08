@@ -23,8 +23,6 @@ import {
   noteBox,
   PAGE_MAX,
   PAGE_MIN,
-  SECTION_HEAD,
-  SECTION_PAD,
   type Box,
   type CanvasNote,
   type CanvasOp,
@@ -51,28 +49,12 @@ import {
 import { useCanvasState, type CanvasControls } from './canvas-controls'
 import { CanvasFrame, FocusedPage } from './canvas-view'
 import { CanvasLayers, CanvasProps, CanvasToolbar } from './canvas-editor-panels'
-import {
-  contains,
-  docLayout,
-  FRAME_FOOT,
-  FRAME_HEAD,
-  FRAME_SIDE,
-  overlaps,
-  sectionFrame,
-  snap,
-  type DocLayout,
-} from './canvas-model'
+import { contains, docLayout, overlaps, snap, type DocLayout } from './canvas-model'
 import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
 import { isModeKey } from './keys'
 import type { CanvasDocState } from './use-canvas-doc'
 import { pageUrl } from './use-artifact'
-import {
-  NOTE_COLOR_VAR,
-  TOOL_ICONS,
-  type PenStyle,
-  type ShapeKind,
-  type Tool,
-} from './canvas-tools'
+import { NOTE_COLOR_VAR, type PenStyle, type ShapeKind, type Tool } from './canvas-tools'
 import './canvas-editor.css'
 
 /** An agent working on the artifact, as its pointer shows it. */
@@ -131,11 +113,6 @@ function moveOps(layout: DocLayout, id: string, dx: number, dy: number): CanvasO
       { op: 'set', id, key: 'y', value: Math.round(page.y + dy) },
     ]
   }
-  const section = layout.sections.find((s) => s.id === id)
-  if (section)
-    return layout.pages
-      .filter((p) => p.section === id)
-      .flatMap((p) => moveOps(layout, p.id, dx, dy))
   const note = layout.notes.find((n) => n.id === id)
   if (!note) return []
   switch (note.kind) {
@@ -167,24 +144,8 @@ function moveOps(layout: DocLayout, id: string, dx: number, dy: number): CanvasO
 function boxOf(layout: DocLayout, id: string): Box | null {
   const page = layout.pages.find((p) => p.id === id)
   if (page) return page
-  const section = layout.sections.find((s) => s.id === id)
-  if (section) return section.box
   const note = layout.notes.find((n) => n.id === id)
   return note ? noteBox(note) : null
-}
-
-/** A section's frame on the zoomed layer: its pages with a margin that keeps its screen size. */
-function frameStyle(box: Box): React.CSSProperties {
-  const x = box.x + SECTION_PAD
-  const y = box.y + SECTION_HEAD
-  const width = box.width - 2 * SECTION_PAD
-  const height = box.height - SECTION_HEAD - SECTION_PAD
-  return {
-    left: `calc(${x}px - ${FRAME_SIDE}px * var(--unscale))`,
-    top: `calc(${y}px - ${FRAME_HEAD}px * var(--unscale))`,
-    width: `calc(${width}px + ${2 * FRAME_SIDE}px * var(--unscale))`,
-    height: `calc(${height}px + ${FRAME_HEAD + FRAME_FOOT}px * var(--unscale))`,
-  }
 }
 
 function union(boxes: Box[]): Box | null {
@@ -326,7 +287,7 @@ export function NoteView({
 }
 
 /**
- * A canvas document's active canvas, edited like a design app: its sections, pages and notes on a
+ * A canvas document's active canvas, edited like a design app: its pages and notes on a
  * surface that pans and zooms, the floating tools over it, and the agents at work on it.
  */
 export const CanvasEditor = memo(function CanvasEditor({
@@ -712,7 +673,7 @@ export const CanvasEditor = memo(function CanvasEditor({
     return { sx: event.clientX - rect.left, sy: event.clientY - rect.top }
   }
 
-  /** What lies under a canvas point: the topmost note, a page, or a section's ground. */
+  /** What lies under a canvas point: the topmost note or a page. */
   const hit = useCallback(
     (x: number, y: number): string | null => {
       if (!layout) return null
@@ -736,8 +697,6 @@ export const CanvasEditor = memo(function CanvasEditor({
       }
       for (let i = layout.pages.length - 1; i >= 0; i--)
         if (contains(layout.pages[i]!, x, y)) return layout.pages[i]!.id
-      const z = camera.current.z
-      for (const s of layout.sections) if (contains(sectionFrame(s.box, z), x, y)) return s.id
       return null
     },
     [layout],
@@ -772,7 +731,6 @@ export const CanvasEditor = memo(function CanvasEditor({
           type: 'page',
           id,
           canvas: canvasKey,
-          section: null,
           name: t('board.page.newName', { number: pageNumber.current }),
           file: `page-${id}.html`,
           x: Math.round(box.x),
@@ -782,27 +740,6 @@ export const CanvasEditor = memo(function CanvasEditor({
           locked: false,
         },
       },
-    ])
-    setSelection([id])
-    setTool('move')
-  }
-
-  const newSection = (box: Box): void => {
-    if (!layout) return
-    const inside = layout.pages.filter((p) => contains(box, p.x + p.width / 2, p.y + p.height / 2))
-    if (inside.length === 0) return
-    const id = canvasId('s')
-    apply([
-      {
-        op: 'add',
-        object: {
-          type: 'section',
-          id,
-          canvas: canvasKey,
-          title: t('board.section.newName', { number: layout.sections.length + 1 }),
-        },
-      },
-      ...inside.map((p): CanvasOp => ({ op: 'set', id: p.id, key: 'section', value: id })),
     ])
     setSelection([id])
     setTool('move')
@@ -946,7 +883,7 @@ export const CanvasEditor = memo(function CanvasEditor({
       setStroke(drag.current.points!)
       return
     }
-    if (tool === 'page' || tool === 'section' || tool === 'shape') {
+    if (tool === 'page' || tool === 'shape') {
       drag.current = { ...start, kind: 'create' }
       return
     }
@@ -1051,9 +988,7 @@ export const CanvasEditor = memo(function CanvasEditor({
         })
         const moving = union(ids.map((id) => boxOf(base, id)).filter((b): b is Box => b !== null))
         if (!moving) return
-        const others = base.pages.filter(
-          (p) => !ids.includes(p.id) && !(p.section && ids.includes(p.section)),
-        )
+        const others = base.pages.filter((p) => !ids.includes(p.id))
         const snapped = event.metaKey
           ? { dx: 0, dy: 0, guides: [] }
           : snap(
@@ -1138,7 +1073,6 @@ export const CanvasEditor = memo(function CanvasEditor({
             }
           : null
         if (tool === 'page') newPage(box ?? { x: held.cx, y: held.cy, ...NEW_PAGE })
-        else if (tool === 'section' && box) newSection(box)
         else if (tool === 'shape' && box) {
           const from =
             shape === 'line' || shape === 'arrow'
@@ -1178,19 +1112,6 @@ export const CanvasEditor = memo(function CanvasEditor({
                 for (const key of ['x', 'y', 'width', 'height'] as const) {
                   if (before[key] !== after[key])
                     ops.push({ op: 'set', id, key, value: after[key] })
-                }
-                continue
-              }
-              const section = base.sections.find((s) => s.id === id)
-              if (section) {
-                for (const p of base.pages.filter((q) => q.section === id)) {
-                  const moved = shown.pages.find((q) => q.id === p.id)
-                  if (moved && (moved.x !== p.x || moved.y !== p.y)) {
-                    ops.push(
-                      { op: 'set', id: p.id, key: 'x', value: moved.x },
-                      { op: 'set', id: p.id, key: 'y', value: moved.y },
-                    )
-                  }
                 }
                 continue
               }
@@ -1281,24 +1202,6 @@ export const CanvasEditor = memo(function CanvasEditor({
       >
         {/* The pages and notes; they take no pointer, but their scripts keep running. */}
         <div ref={firstLayer} inert className="k-ce__layer">
-          {layout?.sections.map((s) => (
-            <div
-              key={s.id}
-              className="k-ce-section"
-              data-selected={shownSelection.includes(s.id) ? '' : undefined}
-              style={frameStyle(s.box)}
-            >
-              <span className="k-ce-section__title">
-                <HugeiconsIcon icon={TOOL_ICONS.section} strokeWidth={1.9} />
-                <b>{s.title}</b>
-                <span>
-                  {t('board.section.pages', {
-                    count: pages.filter((p) => p.section === s.id).length,
-                  })}
-                </span>
-              </span>
-            </div>
-          ))}
           {pages.map((p) => {
             const blank = !files.has(p.file)
             const agent = drawing.get(p.id)
@@ -1435,16 +1338,11 @@ export const CanvasEditor = memo(function CanvasEditor({
           ))}
           {shownSelection.map((id) => {
             const box = layout && boxOf(layout, id)
-            const section = layout?.sections.some((s) => s.id === id)
             return box ? (
               <div
                 key={id}
                 className="k-ce-sel"
-                style={
-                  section
-                    ? frameStyle(box)
-                    : { left: box.x, top: box.y, width: box.width, height: box.height }
-                }
+                style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
               />
             ) : null
           })}

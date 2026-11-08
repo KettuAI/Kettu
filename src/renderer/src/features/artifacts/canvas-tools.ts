@@ -6,7 +6,6 @@ import {
   Comment01Icon,
   Cursor01Icon,
   GridIcon,
-  GroupItemsIcon,
   HandGripIcon,
   HighlighterIcon,
   Layers01Icon,
@@ -19,8 +18,7 @@ import {
 import type { IconSvgElement } from '@hugeicons/react'
 import type { NoteColor } from '@shared/canvas-doc'
 
-export type Tool =
-  'move' | 'hand' | 'page' | 'section' | 'text' | 'sticky' | 'pen' | 'shape' | 'comment'
+export type Tool = 'move' | 'hand' | 'page' | 'text' | 'sticky' | 'pen' | 'shape' | 'comment'
 export type ShapeKind = 'rect' | 'ellipse' | 'line' | 'arrow'
 
 export interface PenStyle {
@@ -43,7 +41,6 @@ export const TOOL_ICONS: Record<Tool, IconSvgElement> = {
   move: Cursor01Icon,
   hand: HandGripIcon,
   page: GridIcon,
-  section: GroupItemsIcon,
   text: TextFontIcon,
   sticky: StickyNote01Icon,
   pen: Pen01Icon,

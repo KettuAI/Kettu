@@ -139,7 +139,6 @@ export function CanvasToolbar({
     ['move', 'V'],
     ['hand', 'H'],
     ['page', 'F'],
-    ['section', ''],
     ['text', 'T'],
     ['sticky', 'S'],
     ['pen', 'P'],
@@ -162,12 +161,6 @@ export function CanvasToolbar({
       },
     ]
     if (copyOf) {
-      const sections = new Map<string, string>()
-      for (const s of doc.sections.filter((x) => x.canvas === copyOf)) {
-        const sid = canvasId('s')
-        sections.set(s.id, sid)
-        ops.push({ op: 'add', object: { type: 'section', ...s, id: sid, canvas: id } })
-      }
       for (const p of doc.pages.filter((x) => x.canvas === copyOf)) {
         ops.push({
           op: 'add',
@@ -176,7 +169,6 @@ export function CanvasToolbar({
             ...p,
             id: canvasId('p'),
             canvas: id,
-            section: p.section ? (sections.get(p.section) ?? null) : null,
           },
         })
       }
@@ -369,7 +361,7 @@ function ColorRow({ value, onChange }: { value: NoteColor; onChange: (color: Not
   )
 }
 
-/** The sections, pages and notes of the canvas, to find, select and rename. */
+/** The frames and notes of the page, to find, select and rename. */
 export function CanvasLayers({
   layout,
   selection,
@@ -401,8 +393,7 @@ export function CanvasLayers({
           className="k-ce-row__name rounded bg-surface px-1 outline-none"
           onBlur={(event) => {
             const value = event.target.value.trim()
-            const key = layout.sections.some((s) => s.id === id) ? 'title' : 'name'
-            if (value && value !== name) apply([{ op: 'set', id, key, value }])
+            if (value && value !== name) apply([{ op: 'set', id, key: 'name', value }])
             setRenaming(null)
           }}
           onKeyDown={(event) => {
@@ -418,16 +409,14 @@ export function CanvasLayers({
           onClick={(event) =>
             onSelect(event.shiftKey ? [...selection.filter((s) => s !== id), id] : [id], true)
           }
-          onDoubleClick={() => setRenaming(id)}
+          // Only a frame has a name to change; a note's text changes on the canvas.
+          onDoubleClick={() => layout.pages.some((p) => p.id === id) && setRenaming(id)}
         >
           {name}
         </button>
       )}
       {meta && <span className="k-ce-row__meta">{meta}</span>}
     </div>
-  )
-  const loose = layout.pages.filter(
-    (p) => !p.section || !layout.sections.some((s) => s.id === p.section),
   )
   return (
     <div
@@ -446,22 +435,7 @@ export function CanvasLayers({
           <HugeiconsIcon icon={Cancel01Icon} size={12} strokeWidth={1.9} />
         </button>
       </div>
-      {layout.sections.map((s) => {
-        const inside = layout.pages.filter((p) => p.section === s.id)
-        return (
-          <div key={s.id} role="group">
-            {row(
-              s.id,
-              s.title,
-              0,
-              TOOL_ICONS.section,
-              t('board.section.pages', { count: inside.length }),
-            )}
-            {inside.map((p) => row(p.id, p.name, 1, TOOL_ICONS.page))}
-          </div>
-        )
-      })}
-      {loose.map((p) => row(p.id, p.name, 0, TOOL_ICONS.page))}
+      {layout.pages.map((p) => row(p.id, p.name, 0, TOOL_ICONS.page))}
       {layout.notes.map((n) =>
         row(
           n.id,
@@ -718,7 +692,6 @@ export function CanvasProps({
   const { t } = useTranslation('artifacts')
   const one = selection.length === 1 ? selection[0]! : null
   const page = one ? layout.pages.find((p) => p.id === one) : undefined
-  const section = one ? layout.sections.find((s) => s.id === one) : undefined
   const note = one ? layout.notes.find((n) => n.id === one) : undefined
   const set = (id: string, key: string, value: unknown) => apply([{ op: 'set', id, key, value }])
 
@@ -853,16 +826,6 @@ export function CanvasProps({
           page={page}
           frame={editorFrame(page.id)}
         />
-      )}
-      {section && (
-        <div className="k-ce-psec">
-          <h5>{t('board.props.section')}</h5>
-          <TextField
-            label={t('board.props.title')}
-            value={section.title}
-            onCommit={(v) => set(section.id, 'title', v)}
-          />
-        </div>
       )}
       {note && (
         <div className="k-ce-psec">
