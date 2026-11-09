@@ -11,10 +11,10 @@ import {
   type Welcome,
 } from '@shared/remote/protocol'
 import { webApi } from './api'
-import { hello, HostLink, type Dial } from './link'
+import { hello, HostLink, type Dial } from '@shared/remote/link'
 import { startMediaWorker } from './media'
 import mediaWorker from './media-worker.ts?worker&url'
-import type { Paired } from './pair'
+import type { Paired } from '@shared/remote/pair'
 import type { WebSettings } from './settings'
 
 export interface LaunchOptions {

@@ -1,0 +1,33 @@
+{
+  // The shared code on its own, against the globals every runtime it runs in provides
+  // (runtime.d.ts), with neither the DOM's nor Node's types.
+  "compilerOptions": {
+    "target": "ES2025",
+    "lib": ["ES2025"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noEmit": true,
+    "paths": {
+      "@shared/*": ["./*"]
+    }
+  },
+  "include": ["**/*"],
+  "exclude": [
+    "node_modules",
+    "**/*.test.ts",
+    // Node.js only: the desktop's processes' logs and the socket a host listens on.
+    "log/**",
+    "socket-port.ts",
+    // Runs inside an artifact's page.
+    "artifact-runtime/runtime.ts"
+  ]
+}

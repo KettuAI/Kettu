@@ -35,5 +35,10 @@
     "src/daemon/**/*"
   ],
   // The page runtime runs in an artifact's page, and the web project checks it with the DOM's types.
-  "exclude": ["src/shared/artifact-runtime/runtime.ts"]
+  // The shared package's own globals are for its own check alone; Node's types replace them here.
+  "exclude": [
+    "src/shared/artifact-runtime/runtime.ts",
+    "src/shared/runtime.d.ts",
+    "src/shared/node_modules"
+  ]
 }

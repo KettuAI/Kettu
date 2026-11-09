@@ -3,7 +3,7 @@
 
 import { EXPORT_EXTENSIONS, EXPORT_TYPES, type ArtifactExportFormat } from '@shared/artifact-types'
 import { safeName } from '@shared/file-name'
-import type { HostLink } from './link'
+import type { HostLink } from '@shared/remote/link'
 import { downloadFile } from './media'
 
 /** The directory picker of the browsers that have one. */

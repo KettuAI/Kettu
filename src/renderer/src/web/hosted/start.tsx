@@ -15,8 +15,8 @@ import type { Hello } from '@shared/remote/protocol'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { deviceName, type BrowserDevice } from '../device-name'
 import { launchApp } from '../launch'
-import type { HostLink } from '../link'
-import type { Paired, PairFailure, PairProgress } from '../pair'
+import type { HostLink } from '@shared/remote/link'
+import type { Paired, PairFailure, PairProgress } from '@shared/remote/pair'
 import type { PairingNotice } from '../pairing-page'
 import type { WebSettings } from '../settings'
 import { keepStorage, loadDevice, saveDevice, type WebDevice } from '../storage'
@@ -196,7 +196,7 @@ async function showPairing(
   const [{ createRoot }, { PairingPage }, { pair }, { initSettings }] = await Promise.all([
     import('react-dom/client'),
     import('../pairing-page'),
-    import('../pair'),
+    import('@shared/remote/pair'),
     import('@renderer/stores/settings'),
   ])
   await initSettings()

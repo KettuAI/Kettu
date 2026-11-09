@@ -1,11 +1,11 @@
-// Pairing this browser with a host, the one that served it or through the relay, with the code from
-// a link: the IKpsk1 handshake with the code's secret, then the owner's answer on the host. A
+// Pairing a device with a host, directly or through the relay, with the code from a link or a
+// scan: the IKpsk1 handshake with the code's secret, then the owner's answer on the host. A
 // pairing the owner accepts leaves its connection open, for the link to take as its first.
 
-import { HandshakeDropped } from '@shared/remote/device-channel'
-import type { KeyPair } from '@shared/remote/noise'
-import type { PairingPayload } from '@shared/remote/pairing'
-import type { Hello, Welcome } from '@shared/remote/protocol'
+import { HandshakeDropped } from './device-channel'
+import type { KeyPair } from './noise'
+import type { PairingPayload } from './pairing'
+import type { Hello, Welcome } from './protocol'
 import { awaitWelcome, hello, openChannel, type Dial, type Later, type Opened } from './link'
 
 export type PairFailure =
