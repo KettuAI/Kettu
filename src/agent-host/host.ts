@@ -97,6 +97,7 @@ import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
+import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
@@ -114,6 +115,7 @@ import {
   agentsFile,
   agentUpdatesFile,
   projectsFile,
+  projectMcpFile,
   returnedFile,
   routinesFile,
   sessionsFile,
@@ -566,6 +568,7 @@ export class AgentHost {
       scratch: this.scratch,
       file: sessionsFile(options.userDataPath, log),
       returned: returnedFile(options.userDataPath, log),
+      projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
       portOpen: (portId) => this.hub.has(portId),
       portDevice: (portId) => this.hub.deviceOf(portId),
       threads: this.threads,
@@ -1802,6 +1805,9 @@ export class AgentHost {
         if (!this.computer?.answer(requestId, decision)) {
           throw new HostError('not_found', `No app waits in ${entryId}`)
         }
+      },
+      'sessions.answerProjectMcp': ({ sessionId, entryId, decision }, { device }) => {
+        sessions.answerProjectMcp(sessionId, entryId, decision, fromDevice(device))
       },
       'computer.stop': ({ sessionId }) => {
         this.computer?.stop(sessionId)

@@ -14,6 +14,7 @@ import { ArtifactEntry } from './artifact-entry'
 import { BrowserOriginEntry } from './browser-origin-entry'
 import { DeviceAccessEntry } from './device-access-entry'
 import { ComputerAppEntry } from './computer-app-entry'
+import { ProjectMcpEntry } from './project-mcp-entry'
 import { ComputerSetupEntry } from './computer-setup-entry'
 import { SessionStartedEntry } from './session-started-entry'
 import { SubagentCard } from './subagent-card'
@@ -71,6 +72,8 @@ export const Entry = memo(function Entry({
       return <ComputerAppEntry {...props} agentName={agentName} />
     case 'computer_setup':
       return <ComputerSetupEntry {...props} agentName={agentName} />
+    case 'project_mcp':
+      return <ProjectMcpEntry {...props} agentName={agentName} />
     default:
       return null
   }

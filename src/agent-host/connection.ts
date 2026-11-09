@@ -9,6 +9,7 @@ import type {
 } from '@shared/agent-host'
 import type {
   ConfigOption,
+  DeclaredMcpServer,
   FormValues,
   PendingElicitation,
   PendingPermission,
@@ -241,6 +242,19 @@ export interface SessionOptions {
   localPlugins?: readonly string[]
   /** Set for a session Kettu opens for itself, which no thread shows and nobody sees. */
   hidden?: HiddenPurpose
+  /** The user's answers about the MCP servers the folder declares itself; without it none start. */
+  projectMcp?: ProjectMcpGate
+}
+
+/** Decides which of the MCP servers a session's folder declares itself may start. */
+export interface ProjectMcpGate {
+  /**
+   * Of `servers`, the names that may not start in `cwd`; those nobody answered for yet wait for
+   * the user in the session's thread.
+   */
+  hold(cwd: string, servers: readonly DeclaredMcpServer[]): Promise<string[]>
+  /** Of `names`, those that still may not start in `cwd`, without asking. */
+  held(cwd: string, names: readonly string[]): Promise<string[]>
 }
 
 /**

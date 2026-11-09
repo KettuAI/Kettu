@@ -446,10 +446,20 @@ export interface AgentProcessesFile {
   processes: { pid: number; startedAt: number; seenAt?: number }[]
 }
 
+/**
+ * The user's answers about the MCP servers each folder declares itself, by the folder's path key:
+ * the servers they let start (`all`: every one, later ones too) and those they refused.
+ */
+export interface ProjectMcpFile {
+  version: 1
+  folders: Record<string, { all?: true; use: string[]; skip: string[] }>
+}
+
 export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
 export const AGENTS_VERSION = 1
 export const RETURNED_VERSION = 1
+export const PROJECT_MCP_VERSION = 1
 export const AGENT_PROCESSES_VERSION = 1
 export const AGENT_UPDATES_VERSION = 1
 export const ROUTINES_VERSION = 1
@@ -459,6 +469,7 @@ export const PROJECTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const RETURNED_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const PROJECT_MCP_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_PROCESSES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_UPDATES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 
@@ -664,6 +675,20 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
 }
 
 // A message whose content does not parse is dropped rather than failing the whole file.
+export function parseProjectMcpFile(data: Record<string, unknown>): ProjectMcpFile | string {
+  if (!isRecord(data.folders)) return 'folders is not an object'
+  const folders: ProjectMcpFile['folders'] = {}
+  for (const [folder, value] of Object.entries(data.folders)) {
+    if (!isRecord(value)) continue
+    folders[folder] = {
+      ...(value.all === true ? { all: true as const } : {}),
+      use: Array.isArray(value.use) ? value.use.filter(isString) : [],
+      skip: Array.isArray(value.skip) ? value.skip.filter(isString) : [],
+    }
+  }
+  return { version: 1, folders }
+}
+
 export function parseReturnedFile(data: Record<string, unknown>): ReturnedFile | string {
   if (!Array.isArray(data.messages)) return 'messages is not a list'
   const nullableString = isNullable(isString)
@@ -863,6 +888,19 @@ export function returnedFile(userDataPath: string, log: LogFn): JsonFile<Returne
     empty: () => ({ version: 1, messages: [] }),
     log,
     // Written at once: a quit right after the message was kept must not lose it.
+    debounceMs: 0,
+  })
+}
+
+export function projectMcpFile(userDataPath: string, log: LogFn): JsonFile<ProjectMcpFile> {
+  return new JsonFile<ProjectMcpFile>({
+    file: path.join(userDataPath, 'state', 'project-mcp.json'),
+    version: PROJECT_MCP_VERSION,
+    migrations: PROJECT_MCP_MIGRATIONS,
+    parse: parseProjectMcpFile,
+    empty: () => ({ version: 1, folders: {} }),
+    log,
+    // Written at once: a refusal lost to a quit would start the server next time.
     debounceMs: 0,
   })
 }

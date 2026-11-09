@@ -156,6 +156,25 @@
     },
     "where": "读取它的窗口，在后台点击和输入"
   },
+  "projectMcp": {
+    "where": "来自项目的 .mcp.json；使用后它们在这台电脑上以你的权限运行。",
+    "servers": "服务器",
+    "scope": {
+      "use": "这几个",
+      "all": "这个项目的全部"
+    },
+    "decision": {
+      "use": "使用",
+      "all": "全部使用",
+      "skip": "不使用"
+    },
+    "answer": {
+      "use": "已使用",
+      "all": "已使用这个项目的全部",
+      "skip": "未使用",
+      "timeout": "未回答"
+    }
+  },
   "computerBar": {
     "using": "{{agent}} 正在使用你的电脑",
     "usingApp": "{{agent}} 正在使用 <app>{{app}}</app>",
@@ -730,7 +749,8 @@
     "action": {
       "site": "打开网站",
       "device": "使用设备",
-      "app": "使用应用"
+      "app": "使用应用",
+      "projectMcp": "启动 MCP 服务器"
     },
     "session": "本次会话",
     "project": "此项目",

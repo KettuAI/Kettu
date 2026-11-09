@@ -1616,6 +1616,17 @@ export function createValidators(platform: Platform): Validators {
         decision: o.decision,
       }
     },
+    'sessions.answerProjectMcp': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'use' && o.decision !== 'all' && o.decision !== 'skip') {
+        throw invalidParams('decision must be use, all or skip')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+      }
+    },
     'computer.stop': (params) => ({ sessionId: sessionId(fields(params)) }),
     'computer.declineSetup': (params) => {
       const o = fields(params)

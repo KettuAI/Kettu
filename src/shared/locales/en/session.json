@@ -165,6 +165,25 @@
     },
     "where": "Reads its windows and clicks and types in them, in the background"
   },
+  "projectMcp": {
+    "where": "Declared in the project’s .mcp.json. Once used, they run on this computer as you.",
+    "servers": "Servers",
+    "scope": {
+      "use": "These servers",
+      "all": "All of this project’s"
+    },
+    "decision": {
+      "use": "Use",
+      "all": "Use all",
+      "skip": "Don’t use"
+    },
+    "answer": {
+      "use": "Used",
+      "all": "All of this project’s used",
+      "skip": "Not used",
+      "timeout": "Not answered"
+    }
+  },
   "computerBar": {
     "using": "{{agent}} is using your computer",
     "usingApp": "{{agent}} is using <app>{{app}}</app>",
@@ -767,7 +786,8 @@
     "action": {
       "site": "open a site",
       "device": "use a device",
-      "app": "use an app"
+      "app": "use an app",
+      "projectMcp": "start MCP servers"
     },
     "session": "This session",
     "project": "This project",

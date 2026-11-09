@@ -654,6 +654,19 @@ describe('computer use requests', () => {
     rejects(() => posix['computer.declineSetup']({ sessionId: 's', entryId: 7 }))
   })
 
+  it("takes an answer to a card holding a folder's own MCP servers", () => {
+    for (const decision of ['use', 'all', 'skip']) {
+      expect(
+        posix['sessions.answerProjectMcp']({ sessionId: 's', entryId: 'e:1', decision }),
+      ).toEqual({ sessionId: 's', entryId: 'e:1', decision })
+    }
+    rejects(() =>
+      posix['sessions.answerProjectMcp']({ sessionId: 's', entryId: 'e:1', decision: 'timeout' }),
+    )
+    rejects(() => posix['sessions.answerProjectMcp']({ entryId: 'e:1', decision: 'use' }))
+    rejects(() => posix['sessions.answerProjectMcp']({ sessionId: 's', decision: 'use' }))
+  })
+
   it('reads issues only from github.com issue addresses', () => {
     const url = 'https://github.com/KettuAI/Kettu/issues/546'
     expect(posix['git.issue']({ url })).toEqual({ url })

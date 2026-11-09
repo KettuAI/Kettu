@@ -7,6 +7,7 @@ import {
   applyPatches,
   threadFromSnapshot,
   type ConfigOption,
+  type DeclaredMcpServer,
   type SessionView,
   type ThreadEntry,
   type ThreadState,
@@ -18,6 +19,7 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
   type SessionTarget,
+  type ProjectMcpGate,
 } from '../connection'
 import type { HostedContext, HostedSpawnOptions } from '../driver'
 import {
@@ -403,6 +405,66 @@ describe('the Claude Agent SDK driver', () => {
       playwright: { type: 'stdio', command: 'npx', args: [], env: {} },
     })
     expect(sdk.last.calls.some((call) => call.method === 'setMcpServers')).toBe(false)
+  })
+
+  async function repoWithServers(): Promise<string> {
+    const repo = await mkdtemp(path.join(os.tmpdir(), 'kettu-claude-repo-'))
+    dirs.push(repo)
+    await writeFile(
+      path.join(repo, '.mcp.json'),
+      JSON.stringify({
+        mcpServers: { db: { command: 'db-mcp' }, web: { url: 'https://example.com/mcp' } },
+      }),
+    )
+    return repo
+  }
+
+  it("turns off the servers of the folder's .mcp.json that may not start", async () => {
+    const { sdk, connection } = await setup()
+    const repo = await repoWithServers()
+    // Without the user's answers, none of them starts.
+    await connection.newSession(repo, {})
+    expect(sdk.last.options.settings).toEqual({ disabledMcpjsonServers: ['db', 'web'] })
+    const asked: DeclaredMcpServer[][] = []
+    const gate: ProjectMcpGate = {
+      hold: async (_cwd, servers) => {
+        asked.push([...servers])
+        return ['web']
+      },
+      held: async (_cwd, names) => [...names],
+    }
+    await connection.newSession(repo, { projectMcp: gate })
+    expect(asked).toEqual([
+      [
+        { name: 'db', target: 'db-mcp' },
+        { name: 'web', target: 'https://example.com/mcp' },
+      ],
+    ])
+    expect(sdk.last.options.settings).toEqual({ disabledMcpjsonServers: ['web'] })
+    // Kettu's own hidden sessions ask nobody.
+    await connection.newSession(repo, { projectMcp: gate, hidden: 'options' })
+    expect(sdk.last.options.settings).toMatchObject({ disabledMcpjsonServers: ['db', 'web'] })
+    await connection.newSession('/repo', { projectMcp: gate })
+    expect(sdk.last.options.settings).toBeUndefined()
+    expect(asked).toHaveLength(1)
+  })
+
+  it('opens the query again before the next prompt once a server it held is allowed', async () => {
+    const { sdk, connection } = await setup()
+    const repo = await repoWithServers()
+    let allowed = false
+    const gate: ProjectMcpGate = {
+      hold: async (_cwd, servers) => (allowed ? [] : servers.map((server) => server.name)),
+      held: async (_cwd, names) => (allowed ? [] : [...names]),
+    }
+    const { sessionId } = await connection.newSession(repo, { projectMcp: gate })
+    await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(sdk.queries).toHaveLength(1)
+    allowed = true
+    await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(sdk.queries).toHaveLength(2)
+    expect(sdk.last.options.resume).toBe(sessionId)
+    expect(sdk.last.options.settings).toBeUndefined()
   })
 })
 

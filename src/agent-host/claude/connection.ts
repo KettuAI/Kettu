@@ -72,6 +72,7 @@ import {
   questionOptions,
   QUESTIONS_SKIPPED,
 } from './permissions'
+import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
 import { askedQuestions } from './tools'
 import type {
@@ -223,6 +224,8 @@ interface Session {
   terminal: Set<string>
   /** Reopen before the next prompt: the last one failed to sign in, or the query ended. */
   stale: boolean
+  /** The servers the folder declares itself that the query was started without. */
+  held: string[]
   /** What the title is generated from, until one is settled on. */
   titleText: string | null
   /** Bumps each time `titleText` grows, so a failed ask is not repeated for the same text. */
@@ -807,6 +810,7 @@ export class ClaudeConnection implements AgentConnection {
       commands: [],
       terminal: new Set(),
       stale: false,
+      held: [],
       titleText: '',
       titleRev: 0,
       titleForRev: null,
@@ -823,6 +827,9 @@ export class ClaudeConnection implements AgentConnection {
     if (hidden) flags.disableAllHooks = true
     // A page's question reads none of the user's settings but how they sign in, which may be there.
     if (bare) Object.assign(flags, signInSettings((await this.settings(cwd, ['user'])).values))
+    // Through the SDK, Claude Code starts the servers of a folder's .mcp.json without asking.
+    session.held = bare ? [] : await this.heldServers(cwd, options)
+    if (session.held.length > 0) flags.disabledMcpjsonServers = session.held
     const servers = bare ? [] : (options.mcpServers ?? [])
     // The SDK writes this option onto Claude Code's command line, which other users can read, so a
     // server that holds a key comes only through the control channel once the query has started.
@@ -1353,7 +1360,9 @@ export class ClaudeConnection implements AgentConnection {
         RESOURCE_NOT_FOUND,
       )
     }
-    if (session.query && !session.stale) return session
+    if (session.query && !session.stale && (session.turn || !(await this.released(session)))) {
+      return session
+    }
     if (session.options.hidden) {
       throw new AgentRequestError('agent_error', `Session ${sessionId} has ended`)
     }
@@ -1370,6 +1379,36 @@ export class ClaudeConnection implements AgentConnection {
     reopened.buildMode = session.buildMode
     reopened.titleText = session.titleText
     return reopened
+  }
+
+  /**
+   * The servers `cwd`'s .mcp.json files declare that may not start: all of them without a gate, and
+   * a hidden session asks nobody about the rest.
+   */
+  private async heldServers(cwd: string, options: SessionOptions): Promise<string[]> {
+    const declared = await declaredServers(cwd, (message) =>
+      this.context.hooks.log('warn', message),
+    )
+    if (declared.length === 0) return []
+    const names = declared.map((server) => server.name)
+    const gate = options.projectMcp
+    if (!gate) return names
+    try {
+      return await (options.hidden ? gate.held(cwd, names) : gate.hold(cwd, declared))
+    } catch (error) {
+      this.context.hooks.log('warn', `Could not read the answers for ${cwd}: ${errorText(error)}`)
+      return names
+    }
+  }
+
+  /**
+   * Whether the user allowed a server the query was started without since, which a running query
+   * never takes up, so it opens again.
+   */
+  private async released(session: Session): Promise<boolean> {
+    const gate = session.options.projectMcp
+    if (!gate || session.held.length === 0) return false
+    return (await gate.held(session.cwd, session.held)).length < session.held.length
   }
 
   private async restoreChoices(session: Session, choices: SessionChoices): Promise<void> {

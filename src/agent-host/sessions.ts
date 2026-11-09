@@ -3,7 +3,7 @@
 
 import type { DeviceAccessAnswer, DeviceAccessDecision } from '@shared/device-agent'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -70,6 +70,9 @@ import {
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
+  type DeclaredMcpServer,
+  type ProjectMcpDecision,
+  type ProjectMcpEntry,
   type ThreadEntry,
   type ThreadState,
   type TokenTotals,
@@ -116,6 +119,7 @@ import {
   type ModelTokens,
   type PermissionAnswer,
   type PermissionRequest,
+  type ProjectMcpGate,
   type PromptBlock,
   type SessionOptions,
   type SessionTarget,
@@ -129,7 +133,8 @@ import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
 import { GITHUB_PULL_REQUEST_URL, githubReferenceOf } from '@shared/git'
 import type { GitEventDraft, GitServiceApi } from './git/api'
-import { pathKey, samePath } from './paths'
+import { canonicalizePath, pathKey, samePath } from './paths'
+import type { ProjectMcpAnswers } from './project-mcp'
 import { isOutOfCredit } from './out-of-credit'
 import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
@@ -279,6 +284,8 @@ export interface SessionManagerDeps {
   file: JsonFile<SessionsFile>
   /** Messages no session took, kept until a window takes them back. */
   returned: JsonFile<ReturnedFile>
+  /** The user's answers about each folder's own MCP servers; without them none start. */
+  projectMcp?: ProjectMcpAnswers
   /** Whether a port is still open, so a failed start knows whether its window can take its message. */
   portOpen(portId: string): boolean
   /** The paired device an open port serves, null for a window's; without it every port is one. */
@@ -662,6 +669,8 @@ export class SessionManager {
   private readonly deviceWaits = new Map<string, (answer: DeviceAccessAnswer) => void>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
+  /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
+  private readonly projectMcpCards = new Map<string, { entryId: string; folder: string }>()
   /** Each setup that waits, by the computer use service's request id, with who said Not now. */
   private readonly setupRequests = new Map<
     number,
@@ -729,10 +738,15 @@ export class SessionManager {
     }
     this.emptySessionsRemovedAt = file.emptySessionsRemovedAt ?? null
     this.returned = (await this.deps.returned.load()).messages
+    await this.deps.projectMcp?.load()
   }
 
   async flush(): Promise<void> {
-    await Promise.all([this.deps.file.flush(), this.deps.returned.flush()])
+    await Promise.all([
+      this.deps.file.flush(),
+      this.deps.returned.flush(),
+      this.deps.projectMcp?.flush(),
+    ])
   }
 
   // Lookups.
@@ -2006,7 +2020,113 @@ export class SessionManager {
     runtime: AgentRuntime | null | undefined,
   ): SessionOptions {
     const skills = this.deps.skills?.(record.agentId) ?? {}
-    return { mcpServers: this.mcpServers(sessionId, record, runtime), ...skills }
+    const projectMcp = this.projectMcpGate(sessionId)
+    return {
+      mcpServers: this.mcpServers(sessionId, record, runtime),
+      ...skills,
+      ...(projectMcp ? { projectMcp } : {}),
+    }
+  }
+
+  /** Lets the user answer, in the session's thread, for the MCP servers its folder declares. */
+  private projectMcpGate(sessionId: string): ProjectMcpGate | undefined {
+    const answers = this.deps.projectMcp
+    if (!answers) return undefined
+    return {
+      hold: async (cwd, servers) => {
+        const folder = await this.folderKey(cwd)
+        const unanswered = servers.filter((server) => answers.allowed(folder, server.name) === null)
+        if (unanswered.length > 0) this.askProjectMcp(sessionId, folder, unanswered)
+        return answers.held(
+          folder,
+          servers.map((server) => server.name),
+        )
+      },
+      held: async (cwd, names) => answers.held(await this.folderKey(cwd), names),
+    }
+  }
+
+  private async folderKey(folder: string): Promise<string> {
+    const platform = this.deps.platform
+    try {
+      return pathKey(await canonicalizePath(folder, platform, realpath), platform)
+    } catch {
+      return pathKey(folder, platform)
+    }
+  }
+
+  /**
+   * The session's folder declares MCP servers nobody answered for: one card asks the user, taking
+   * up the servers a later start of the session finds too.
+   */
+  private askProjectMcp(sessionId: string, folder: string, servers: DeclaredMcpServer[]): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const card = this.projectMcpCards.get(sessionId)
+    const open = card ? live.thread.byId[card.entryId] : undefined
+    if (card?.folder === folder && open?.kind === 'project_mcp' && open.decision === null) {
+      const known = new Set(open.servers.map((server) => server.name))
+      const added = servers.filter((server) => !known.has(server.name))
+      if (added.length > 0) {
+        const changes = { servers: [...open.servers, ...added] }
+        this.emit(live, [{ op: 'entry.update', id: card.entryId, changes }])
+      }
+      return
+    }
+    const entry: ProjectMcpEntry = {
+      kind: 'project_mcp',
+      id: this.nextId(live),
+      servers,
+      decision: null,
+      after: agentEntryBefore(live.thread),
+    }
+    this.projectMcpCards.set(sessionId, { entryId: entry.id, folder })
+    this.emit(live, [{ op: 'entry.add', entry }])
+  }
+
+  /**
+   * A window's or a device's answer to a card holding its folder's own MCP servers. The first one
+   * counts: it is kept for the folder and settles every card of the folder it answers in full.
+   */
+  answerProjectMcp(
+    sessionId: string,
+    entryId: string,
+    decision: ProjectMcpDecision,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'project_mcp') throw notFound(`No MCP servers wait in ${entryId}`)
+    if (entry.decision !== null) {
+      throw new HostError('not_found', `The MCP servers of ${entryId} were already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    const card = this.projectMcpCards.get(sessionId)
+    const answers = this.deps.projectMcp
+    if (card?.entryId !== entryId || !answers) throw notFound(`No MCP servers wait in ${entryId}`)
+    answers.answer(
+      card.folder,
+      entry.servers.map((server) => server.name),
+      decision,
+    )
+    for (const [id, other] of [...this.projectMcpCards]) {
+      if (other.folder !== card.folder) continue
+      const otherLive = this.live.get(id)
+      const waiting = otherLive?.thread.byId[other.entryId]
+      if (!otherLive || waiting?.kind !== 'project_mcp' || waiting.decision !== null) {
+        this.projectMcpCards.delete(id)
+        continue
+      }
+      if (waiting.servers.some((server) => answers.allowed(card.folder, server.name) === null)) {
+        continue
+      }
+      this.projectMcpCards.delete(id)
+      const changes = { decision, ...(device ? { device } : {}) }
+      this.emit(otherLive, [{ op: 'entry.update', id: other.entryId, changes }])
+    }
   }
 
   private mcpServers(
@@ -2029,6 +2149,13 @@ export class SessionManager {
   }
 
   private dropLive(live: Live): void {
+    // A card still waiting goes unanswered; the session's next start asks again.
+    const card = this.projectMcpCards.get(live.id)
+    const waiting = card ? live.thread.byId[card.entryId] : undefined
+    if (card && waiting?.kind === 'project_mcp' && waiting.decision === null) {
+      this.emit(live, [{ op: 'entry.update', id: card.entryId, changes: { decision: 'timeout' } }])
+    }
+    this.projectMcpCards.delete(live.id)
     this.flushPatches(live)
     if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
     if (live.releaseTimer) clearTimeout(live.releaseTimer)
