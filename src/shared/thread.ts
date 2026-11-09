@@ -235,6 +235,7 @@ export type ThreadEntry =
   | DeviceAccessEntry // Kettu's own record of an agent asking for a mobile device
   | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
   | ComputerSetupEntry // Kettu's own record of the setup a first call waited on, and its end
+  | ProjectMcpEntry // Kettu's own record of a folder's MCP servers held for the user, and the answer
 
 /**
  * Where another agent took the session over: from here on its turns are that agent's. `turns` of
@@ -363,6 +364,34 @@ export interface ComputerSetupEntry {
   done: ComputerSetupStep[]
   outcome: ComputerSetupOutcome | null
   /** Set when a paired device said Not now; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** Which of a folder's own MCP servers the user lets start: these, every one of the folder's, none. */
+export type ProjectMcpDecision = 'use' | 'all' | 'skip'
+
+/** `timeout` when the session left memory before an answer came. */
+export type ProjectMcpAnswer = ProjectMcpDecision | 'timeout'
+
+/** A server a folder's own MCP config declares: its name and the command or URL it runs on. */
+export interface DeclaredMcpServer {
+  name: string
+  target: string
+}
+
+/**
+ * The folder's own MCP config declares servers the user has not answered for, which the agent does
+ * not start until they do. `decision` is null while it waits, then the answer, `timeout` when none
+ * came.
+ */
+export interface ProjectMcpEntry {
+  kind: 'project_mcp'
+  id: string
+  servers: DeclaredMcpServer[]
+  decision: ProjectMcpAnswer | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null

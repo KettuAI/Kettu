@@ -68,6 +68,7 @@ import type {
   OlderPage,
   PatchBatch,
   PromptCache,
+  ProjectMcpDecision,
   QuestionAnswer,
   FormValues,
   SessionSnapshot,
@@ -976,6 +977,12 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: ComputerAppDecision }
     result: void
   }
+  // Any window's or device's answer to a card holding the MCP servers a session's folder declares
+  // itself; the first counts, as for `permissions.respond`, and settles the folder's other cards.
+  'sessions.answerProjectMcp': {
+    params: { sessionId: string; entryId: string; decision: ProjectMcpDecision }
+    result: void
+  }
   // The label's Stop using: the session stops using the computer for the rest of its turn.
   'computer.stop': {
     params: { sessionId: string }
@@ -1161,6 +1168,7 @@ export const HOST_METHODS = [
   'devices.allowed',
   'devices.forget',
   'computer.answerApp',
+  'sessions.answerProjectMcp',
   'computer.stop',
   'computer.declineSetup',
 ] as const satisfies readonly HostMethod[]

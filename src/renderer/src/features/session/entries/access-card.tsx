@@ -6,6 +6,7 @@ import { Icon } from '@renderer/components/affect/app-shell'
 import {
   PermissionRequest,
   type PermissionDecision,
+  type PermissionPreviewItem,
   type PermissionScope,
 } from '@renderer/components/affect/permission-request'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
@@ -41,6 +42,8 @@ export function AccessCard({
   target,
   glyph,
   reason,
+  preview,
+  previewTitle,
   answer,
   device,
   words,
@@ -55,6 +58,9 @@ export function AccessCard({
   target: string
   glyph: IconSvgElement
   reason: string
+  /** What an allow starts, listed under the reason. */
+  preview?: PermissionPreviewItem[]
+  previewTitle?: string
   /** The answer, or null while it waits; anything but an allow reads as denied. */
   answer: string | null
   device: FromDevice | undefined
@@ -123,6 +129,7 @@ export function AccessCard({
         toolIcon={<Icon icon={glyph} size={12} />}
         risk="safe"
         reason={reason}
+        {...(preview ? { preview, previewTitle, previewLimit: preview.length } : {})}
         scopes={[SCOPE.session, SCOPE.always]}
         renderScopes={({ scopes, scope, onChange }) => (
           <SegmentedControl
