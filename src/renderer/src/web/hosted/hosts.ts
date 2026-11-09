@@ -6,7 +6,7 @@ import type { RelayProblem } from '@shared/remote/hosts'
 import { trustedRelay, type HostRelay } from '@shared/remote/relay'
 import { dialRelay } from '@shared/remote/relay-device'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
-import type { Dial } from '../link'
+import type { Dial } from '@shared/remote/link'
 import { HOSTED_STORE, run } from '../storage'
 import { relayUrl } from './config'
 

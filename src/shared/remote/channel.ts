@@ -104,29 +104,52 @@ async function decode(kind: number, body: Uint8Array): Promise<ChannelMessage> {
   return { kind: 'json', value: JSON.parse(utf8.decode(json)) }
 }
 
-async function deflate(body: Uint8Array): Promise<Uint8Array> {
-  const stream = new Blob([buffer(body)]).stream().pipeThrough(new CompressionStream('deflate-raw'))
-  return new Uint8Array(await new Response(stream).arrayBuffer())
+/** Raw deflate (RFC 1951), which JSON messages over 1 KiB travel in. */
+export interface Compression {
+  deflate(body: Uint8Array): Promise<Uint8Array>
+  /** Null as soon as the output passes `limit` bytes, however small the input. */
+  inflate(body: Uint8Array, limit: number): Promise<Uint8Array | null>
 }
 
-/** Stops as soon as the output passes the longest message, however small the input. */
-async function inflate(body: Uint8Array): Promise<Uint8Array> {
-  const reader = new Blob([buffer(body)])
-    .stream()
-    .pipeThrough(new DecompressionStream('deflate-raw'))
-    .getReader()
-  const parts: Uint8Array[] = []
-  let length = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) return concat(parts, length)
-    length += value.length
-    if (length > MAX_MESSAGE) {
-      await reader.cancel()
-      throw new Error('Channel message inflates past 32 MiB')
+/** The platform's compression streams, which browsers and Node.js have. */
+const streamCompression: Compression = {
+  async deflate(body) {
+    const stream = new Blob([buffer(body)])
+      .stream()
+      .pipeThrough(new CompressionStream('deflate-raw'))
+    return new Uint8Array(await new Response(stream).arrayBuffer())
+  },
+  async inflate(body, limit) {
+    const reader = new Blob([buffer(body)])
+      .stream()
+      .pipeThrough(new DecompressionStream('deflate-raw'))
+      .getReader()
+    const parts: Uint8Array[] = []
+    let length = 0
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) return concat(parts, length)
+      length += value.length
+      if (length > limit) {
+        await reader.cancel()
+        return null
+      }
+      parts.push(value)
     }
-    parts.push(value)
-  }
+  },
+}
+
+let compression = streamCompression
+
+/** Replaces the compression channels use, for a runtime without compression streams. */
+export function setCompression(next: Compression): void {
+  compression = next
+}
+
+async function inflate(body: Uint8Array): Promise<Uint8Array> {
+  const json = await compression.inflate(body, MAX_MESSAGE)
+  if (!json) throw new Error('Channel message inflates past 32 MiB')
+  return json
 }
 
 /**
@@ -183,7 +206,7 @@ export class Channel {
 
   private async transmit(kind: number, body: Uint8Array): Promise<void> {
     if (kind === JSON_KIND && body.length > COMPRESS_OVER) {
-      body = await deflate(body)
+      body = await compression.deflate(body)
       kind = DEFLATED_JSON_KIND
     }
     let offset = 0

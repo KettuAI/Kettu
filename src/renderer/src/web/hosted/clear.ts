@@ -5,7 +5,7 @@
 
 import type { KeyPair } from '@shared/remote/noise'
 import type { Hello } from '@shared/remote/protocol'
-import { hello, HostLink } from '../link'
+import { hello, HostLink } from '@shared/remote/link'
 import { clearAll } from '../storage'
 import type { HostedAccount } from './account'
 import { relayDial, type HostedHost } from './hosts'

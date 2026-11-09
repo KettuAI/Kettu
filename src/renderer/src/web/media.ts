@@ -7,7 +7,7 @@
 import type { DeviceFileContent, FileContent } from '@shared/files'
 import type { MediaGrant, MediaOpenResult } from '@shared/media'
 import type { MediaReadParams, MediaReadResult } from '@shared/remote/streams'
-import type { HostLink } from './link'
+import type { HostLink } from '@shared/remote/link'
 import { MEDIA_PATH, mediaToken, PART_BYTES, type Part, type PartAsk } from './media-ranges'
 
 /** Blob URLs kept alive; older ones are revoked, and a view that still shows one asks again. */

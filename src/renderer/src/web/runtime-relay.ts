@@ -11,7 +11,7 @@ import {
   RUNTIME_VERSION,
   type RuntimeAnswer,
 } from '@shared/artifact-capabilities'
-import type { HostLink } from './link'
+import type { HostLink } from '@shared/remote/link'
 
 let relays = 0
 

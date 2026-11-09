@@ -3,7 +3,7 @@
 // the host is signed in to one. The app's own states cover a connection that drops and comes back.
 
 import type { RelayProblem } from '@shared/remote/hosts'
-import type { HostLink } from '../link'
+import type { HostLink } from '@shared/remote/link'
 import { ProblemCard, type ProblemOptions, type ShownProblem } from './problem-card'
 
 export type { ProblemOptions }

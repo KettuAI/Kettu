@@ -1,19 +1,16 @@
-// The web client's connection to the host that served it: a WebSocket on the page's own origin
-// carrying the encrypted channel, then hello and welcome, then the host protocol as a window's
-// port carries it, with binary values going as byte streams both ways. It reconnects with backoff
-// while the page is visible, and stops for good once the host says this browser may not connect.
+// A device's connection to a host, which the web client and the other clients share: the encrypted
+// channel over what the caller dials (a WebSocket to the host's direct port, or the relay), then
+// hello and welcome, then the host protocol as a window's port carries it, with binary values going
+// as byte streams both ways. It reconnects with backoff while the client is visible, and stops for
+// good once the host says this device may not connect.
 // A host of version 2 keeps the session through a drop for a while: the link acknowledges what it
 // receives, resumes with the welcome's token, and sends again the requests the host did not read.
 
-import type { PortError, PortErrorCode } from '@shared/port-rpc'
-import { Acknowledger } from '@shared/remote/acks'
-import { BYTES_PER_FRAME, type ChannelMessage } from '@shared/remote/channel'
-import {
-  HandshakeDropped,
-  startDeviceChannel,
-  type DeviceChannel,
-} from '@shared/remote/device-channel'
-import { isHostAdminEvent, type HostAdminEvent } from '@shared/remote/host-admin'
+import type { PortError, PortErrorCode } from '../port-rpc'
+import { Acknowledger } from './acks'
+import { BYTES_PER_FRAME, type ChannelMessage } from './channel'
+import { HandshakeDropped, startDeviceChannel, type DeviceChannel } from './device-channel'
+import { isHostAdminEvent, type HostAdminEvent } from './host-admin'
 import {
   DEVICE_KEEPALIVE,
   Keepalive,
@@ -22,9 +19,9 @@ import {
   type KeepaliveTimings,
   type Ping,
   type Pong,
-} from '@shared/remote/keepalive'
-import type { KeyPair } from '@shared/remote/noise'
-import { bytesOf, isBinary } from '@shared/remote/places'
+} from './keepalive'
+import type { KeyPair } from './noise'
+import { bytesOf, isBinary } from './places'
 import {
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
@@ -36,9 +33,9 @@ import {
   type Hello,
   type Pace,
   type Welcome,
-} from '@shared/remote/protocol'
-import type { Transport } from '@shared/remote/transport'
-import { webSocketTransport } from '@shared/remote/websocket-transport'
+} from './protocol'
+import type { Transport } from './transport'
+import { webSocketTransport } from './websocket-transport'
 
 /** What a transport may hold before an upload waits for it to drain, as the host's downloads do. */
 const HIGH_WATER = 256 * 1024

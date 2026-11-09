@@ -17,8 +17,8 @@ import { loadPlatformPrimitives } from '@shared/remote/primitives'
 import { devicePlatform, pageAddress } from './api'
 import { browserDevice, deviceName } from './device-name'
 import { launchApp } from './launch'
-import { channelUrl, dialWebSocket } from './link'
-import type { Paired, PairProgress } from './pair'
+import { channelUrl, dialWebSocket } from '@shared/remote/link'
+import type { Paired, PairProgress } from '@shared/remote/pair'
 import type { PairingNotice } from './pairing-page'
 import { WebSettings } from './settings'
 import { keepStorage, loadDevice, saveDevice, type WebDevice } from './storage'
@@ -61,7 +61,7 @@ async function showPairing(
   const [{ createRoot }, { PairingPage }, { pair }, { initSettings }] = await Promise.all([
     import('react-dom/client'),
     import('./pairing-page'),
-    import('./pair'),
+    import('@shared/remote/pair'),
     import('@renderer/stores/settings'),
   ])
   await initSettings()

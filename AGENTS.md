@@ -83,7 +83,8 @@ src/
 │   ├── components/ui  shadcn/ui components (managed by the shadcn CLI)
 │   ├── lib/           Helpers (cn, format, host requests)
 │   └── styles/        globals.css: Tailwind entry and theme tokens
-└── shared/            Shared across processes: the IPC and host contracts, the thread model
+└── shared/            Shared across processes and clients: the IPC and host contracts, the thread
+                       model, the encrypted channel and the host link
 tools/
 ├── fake-agent/        Scripted ACP agent for development and tests
 └── workflow/          The macOS signing steps of the release run
@@ -132,6 +133,7 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 
 - **Formatting**: Prettier (single quotes, no semicolons, 100 columns) and ESLint own the style; do not format against them.
 - **Imports**: use the `@renderer/*` and `@shared/*` aliases instead of deep relative paths.
+- **Shared code**: `src/shared` is a workspace package that clients outside the browser and Node.js run too. It uses only the globals `src/shared/runtime.d.ts` declares, and `pnpm typecheck` checks it against them; its Node.js-only and page-only files are listed in its `tsconfig.json`.
 - **Comments**: English and ASCII only, and only when they say what the code cannot, such as the reason for a workaround or an edge case. No commented-out code.
 - **Dependencies**: ask the maintainer before adding any. Renderer-only libraries go in `devDependencies` because Vite bundles them; only modules a process loads at runtime instead of from the bundle, such as `node-pty` and `electron-updater`, go in `dependencies`. `pnpm shadcn add` installs into `dependencies`, so move what it adds.
 - **Docs**: `README.md` and `README.zh-CN.md` are kept in sync, and so are `ROADMAP.md` and `ROADMAP.zh-CN.md`; change both of a pair together. The README is for users; setup and commands live in `CONTRIBUTING.md`, and plans in the roadmap, which follows the GitHub milestones.

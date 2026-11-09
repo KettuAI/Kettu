@@ -274,6 +274,31 @@ importers:
         specifier: 0.13.3
         version: 0.13.3(patch_hash=0e07708cdb85dbf247bd110e2b31af35606956eb4b10e7d6666b35ebc2d7a7a5)(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@6.0.3)
 
+  src/shared:
+    dependencies:
+      '@lezer/markdown':
+        specifier: 1.8.1
+        version: 1.8.1
+      '@noble/ciphers':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@noble/curves':
+        specifier: 2.4.0
+        version: 2.4.0
+      '@noble/hashes':
+        specifier: 2.4.0
+        version: 2.4.0
+      perfect-freehand:
+        specifier: ^1.2.3
+        version: 1.2.3
+    devDependencies:
+      i18next:
+        specifier: 26.5.4
+        version: 26.5.4(typescript@6.0.3)
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
 packages:
 
   '@agentclientprotocol/sdk@2.0.0':

@@ -1,0 +1,21 @@
+{
+  "name": "@kettu/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "What Kettu's processes and clients share: the host contracts, the thread model, and the encrypted channel with the link and pairing a device reaches a host with.",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@lezer/markdown": "1.8.1",
+    "@noble/ciphers": "2.4.0",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "perfect-freehand": "^1.2.3"
+  },
+  "devDependencies": {
+    "i18next": "26.5.4",
+    "typescript": "~6.0.3"
+  }
+}

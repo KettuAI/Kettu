@@ -10,7 +10,7 @@ import {
   type HostSettingsPart,
 } from '@shared/remote/host-admin'
 import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
-import type { LinkState } from './link'
+import type { LinkState } from '@shared/remote/link'
 
 const KEY = 'kettu.settings'
 

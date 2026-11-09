@@ -8,7 +8,7 @@ import { CANVAS_FILE, parseCanvasDoc } from '@shared/canvas-doc'
 import { canvasOverview } from '@shared/canvas-overview'
 import type { ArtifactOpenResult } from '@shared/ipc'
 import { errorCode } from '@renderer/lib/host'
-import type { HostLink } from './link'
+import type { HostLink } from '@shared/remote/link'
 
 const FRAME_PATH = '/frame/'
 

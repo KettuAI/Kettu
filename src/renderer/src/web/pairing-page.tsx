@@ -9,7 +9,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Field, FieldError, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { Spinner } from '@renderer/components/ui/spinner'
-import type { PairProgress } from './pair'
+import type { PairProgress } from '@shared/remote/pair'
 
 export type PairingNotice = 'removed' | null
 
