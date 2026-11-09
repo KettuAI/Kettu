@@ -347,6 +347,8 @@ interface Turn {
   fallback: ReturnType<typeof setTimeout> | null
   /** The agent reported a request of the session's thread during the turn. */
   requested: boolean
+  /** The agent started it between the host's turns, with no message, and says when it ends. */
+  byAgent: boolean
 }
 
 /** What `sessions.prepare` asks for: the agent and where the session will work. */
@@ -477,6 +479,8 @@ interface Live {
   unansweredCancel: Turn | null
   /** It started work that runs on after its tool call, which Claude Code reports no end of. */
   background: boolean
+  /** The agent runs a turn of its own, which shows as the session's once no other turn runs. */
+  agentTurn: boolean
   /** Set while it is a prepared session, not yet in the index. */
   prepared: Prepared | null
   /** A run's session: the mode it must start in, its scope, and its first turn's course. */
@@ -1965,6 +1969,7 @@ export class SessionManager {
       startValues: {},
       unansweredCancel: null,
       background: false,
+      agentTurn: false,
       prepared: null,
       routineMode: null,
       routineScope: null,
@@ -2140,6 +2145,9 @@ export class SessionManager {
       case 'background':
         live.background = true
         this.refreshRelease(live)
+        break
+      case 'agentTurn':
+        this.agentTurn(live, effect)
         break
       case 'request':
         this.refreshContext(live, this.timings.contextDebounceMs)
@@ -3490,6 +3498,7 @@ export class SessionManager {
       live.connection = null
       // Its background work ended with its process.
       live.background = false
+      live.agentTurn = false
       const status = live.thread.session.status
       if (!CONNECTED.has(status) || status === 'starting' || status === 'auth_required') continue
       const turn = live.turn?.ended === false ? live.turn : null
@@ -4419,6 +4428,7 @@ export class SessionManager {
     live.contextTimer = null
     this.contextRuns.delete(live.id)
     live.background = false
+    live.agentTurn = false
     if (!connection) return
     connection.unregister(acpSessionId, live.target)
     live.connection = null
@@ -4878,6 +4888,23 @@ export class SessionManager {
     entryId: string | null = null,
     portId: string | null = null,
   ): void {
+    const turn = this.openTurn(live, now, content, entryId, portId, false)
+    if (live.record.origin === 'routine' && !live.routineTurnStarted) {
+      live.routineTurnStarted = true
+      this.deps.routine?.current?.turnStarted(live.id)
+    }
+    this.maybeWriteTitle(live)
+    void this.runTurn(live, turn)
+  }
+
+  private openTurn(
+    live: Live,
+    now: number,
+    content: UserContent[],
+    entryId: string | null,
+    portId: string | null,
+    byAgent: boolean,
+  ): Turn {
     const turn: Turn = {
       startedAt: now,
       content,
@@ -4889,6 +4916,7 @@ export class SessionManager {
       cancelRequested: false,
       fallback: null,
       requested: false,
+      byAgent,
     }
     live.turn = turn
     live.sender =
@@ -4904,12 +4932,39 @@ export class SessionManager {
     })
     this.persist(live)
     this.touch(live.id)
-    if (live.record.origin === 'routine' && !live.routineTurnStarted) {
-      live.routineTurnStarted = true
-      this.deps.routine?.current?.turnStarted(live.id)
+    return turn
+  }
+
+  /**
+   * A turn the agent started between the host's, as when a command it ran in the background
+   * ended. It runs as any turn does, with no message, and ends when the agent says it has.
+   */
+  private agentTurn(live: Live, effect: Extract<MapperEffect, { kind: 'agentTurn' }>): void {
+    if (effect.phase === 'started' || effect.phase === 'joined') {
+      // A prompt that crossed it joins it, and its turn ends the two as one.
+      live.agentTurn = effect.phase === 'started'
+      this.followAgentTurn(live)
+      return
     }
-    this.maybeWriteTitle(live)
-    void this.runTurn(live, turn)
+    live.agentTurn = false
+    if (live.unansweredCancel?.byAgent) live.unansweredCancel = null
+    const turn = live.turn
+    if (!turn?.byAgent || turn.ended) return
+    if (effect.phase === 'failed') {
+      this.failTurn(live, turn, effect.error)
+      return
+    }
+    const { stopReason, tokens, models } = effect.result
+    this.endTurn(live, turn, stopReason, tokens, models)
+  }
+
+  /**
+   * Shows the agent's own turn once no other runs: it can start just as the host's turn ends,
+   * before the host has heard that turn's answer.
+   */
+  private followAgentTurn(live: Live): void {
+    if (!live.agentTurn || live.turn || live.closing) return
+    this.openTurn(live, this.now(), [], null, null, true)
   }
 
   /**
@@ -5439,6 +5494,7 @@ export class SessionManager {
     }
     if (stopReason === 'end_turn' || chosen) this.drainQueue(live, chosen)
     else this.pauseQueue(live)
+    this.followAgentTurn(live)
     // An agent that lists its titles sends none in the thread: the turn's end reads the session's.
     this.maybeReadListedTitle(live, this.userMessages(live) === 1)
     this.checkpoint(live)
@@ -5662,7 +5718,10 @@ export class SessionManager {
       },
     ])
     if (authRequired) {
-      live.failure = { action: 'prompt', content: turn.content, entryId: turn.entryId }
+      // A turn the agent started has no message to send again; Retry reopens the session.
+      live.failure = turn.byAgent
+        ? null
+        : { action: 'prompt', content: turn.content, entryId: turn.entryId }
       this.deps.agents.authRequired(live.record.agentId)
       this.update(live, {
         status: 'auth_required',
@@ -5701,6 +5760,7 @@ export class SessionManager {
     if (!routineTurn) {
       this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
     }
+    this.followAgentTurn(live)
     this.checkpoint(live)
     this.refreshContext(live)
   }

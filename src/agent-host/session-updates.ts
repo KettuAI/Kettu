@@ -13,6 +13,7 @@ import type {
   ToolEntry,
   ToolKind,
 } from '@shared/thread'
+import type { PromptResult } from './connection'
 
 /** Per-turn bookkeeping the mapper needs to find "current" entries. */
 export interface TurnScope {
@@ -75,6 +76,12 @@ export type MapperEffect =
     }
   // Work the agent runs on after its tool call ended, such as a command in the background.
   | { kind: 'background' }
+  // A turn the agent started between the host's own, as when such a command ended. A prompt that
+  // crossed it joins it, and the prompt's answer ends both.
+  | { kind: 'agentTurn'; phase: 'started' }
+  | { kind: 'agentTurn'; phase: 'joined' }
+  | { kind: 'agentTurn'; phase: 'ended'; result: PromptResult }
+  | { kind: 'agentTurn'; phase: 'failed'; error: unknown }
   // The session's own thread sent a request to its model, which renews its prompt cache.
   | { kind: 'request' }
   // An image replayed by `session/load`, whose bytes the session keeps in its thread store.

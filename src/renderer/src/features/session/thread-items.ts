@@ -154,10 +154,25 @@ export function buildItems(order: string[], signature: string, live = false): It
 const isTool = (char: string | undefined): boolean =>
   char === 'g' || char === 't' || char === 'w' || char === 'r'
 
-/** The turns starting at each user message: [start, end) indexes into the signature. */
+/**
+ * The turns: [start, end) indexes into the signature. Each starts at a user message, or after a
+ * turn's end where the agent goes on with no message, as when its background command ended.
+ */
 function turnsOf(signature: string): [number, number][] {
   const starts = [0]
-  for (let i = 1; i < signature.length; i++) if (signature[i] === 'u') starts.push(i)
+  let ended = -1
+  for (let i = 1; i < signature.length; i++) {
+    const char = signature[i]
+    if (char === 'u') {
+      starts.push(i)
+      ended = -1
+    } else if (char === 'e') {
+      ended = i
+    } else if (ended !== -1 && (char === 'a' || isWork(char))) {
+      starts.push(ended + 1)
+      ended = -1
+    }
+  }
   return starts.map((start, n) => [start, starts[n + 1] ?? signature.length])
 }
 

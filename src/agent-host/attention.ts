@@ -5,6 +5,7 @@ import path from 'node:path'
 import {
   previewsCommand,
   type PendingPermission,
+  type ThreadEntry,
   type ThreadState,
   type ToolEntry,
 } from '@shared/thread'
@@ -61,14 +62,31 @@ export function allowOnceOption(
 }
 
 /**
+ * The finished turn's entries, newest first: back to its message, or to the end of the turn before
+ * for a turn the agent started with no message. Its own end comes first.
+ */
+function* finishedTurn(thread: ThreadState): Generator<ThreadEntry> {
+  let ended = false
+  for (let i = thread.order.length - 1; i >= 0; i--) {
+    const entry = thread.byId[thread.order[i]!]
+    if (!entry) continue
+    if (entry.kind === 'user') return
+    if (entry.kind === 'turn_end') {
+      if (ended) return
+      ended = true
+      continue
+    }
+    yield entry
+  }
+}
+
+/**
  * The finished turn's reply in a line or two, as plain text: its first paragraph past a heading,
  * without the Markdown around words. Null when the turn ended without one.
  */
 export function replySummary(thread: ThreadState): string | null {
-  for (let i = thread.order.length - 1; i >= 0; i--) {
-    const entry = thread.byId[thread.order[i]!]
-    if (entry?.kind === 'user') return null
-    if (entry?.kind !== 'agent' || !entry.markdown.trim()) continue
+  for (const entry of finishedTurn(thread)) {
+    if (entry.kind !== 'agent' || !entry.markdown.trim()) continue
     const paragraphs = entry.markdown
       .replace(/```[\s\S]*?(```|$)/g, '')
       .split(/\n\s*\n/)
@@ -92,10 +110,8 @@ export function replySummary(thread: ThreadState): string | null {
 /** How many files the turn's finished edits changed, each counted once. */
 export function changedFiles(thread: ThreadState): number {
   const paths = new Set<string>()
-  for (let i = thread.order.length - 1; i >= 0; i--) {
-    const entry = thread.byId[thread.order[i]!]
-    if (entry?.kind === 'user') break
-    if (entry?.kind !== 'tool' || entry.status !== 'completed') continue
+  for (const entry of finishedTurn(thread)) {
+    if (entry.kind !== 'tool' || entry.status !== 'completed') continue
     for (const item of entry.content) if (item.type === 'diff') paths.add(item.path)
   }
   return paths.size

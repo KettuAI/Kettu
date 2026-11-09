@@ -980,6 +980,91 @@ describe('a turn', () => {
       AgentRequestError,
     )
   })
+
+  /** Claude Code runs a turn of its own, as when a command it ran in the background ends. */
+  function wake(query: FakeQuery): void {
+    query.running()
+    query.emit({
+      type: 'user',
+      message: { role: 'user', content: '<task-notification>done</task-notification>' },
+      parent_tool_use_id: null,
+      origin: { kind: 'task-notification' },
+      isReplay: true,
+      session_id: query.sessionId,
+    } as SdkMessage)
+    query.emit(assistant(query, 'msg_wake', [{ type: 'text', text: 'The build finished.' }]))
+  }
+
+  const turns = (): MapperEffect[] => target.effects.filter((effect) => effect.kind === 'agentTurn')
+
+  it('reports a turn Claude Code starts between turns, as when a background command ends', async () => {
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Build it' }])
+    const query = s.sdk.last
+    wake(query)
+    await settle()
+    expect(turns()).toEqual([{ kind: 'agentTurn', phase: 'started' }])
+    expect(target.entries().at(-1)).toMatchObject({
+      kind: 'agent',
+      markdown: 'The build finished.',
+    })
+    query.finish()
+    await settle()
+    expect(turns()).toEqual([
+      { kind: 'agentTurn', phase: 'started' },
+      {
+        kind: 'agentTurn',
+        phase: 'ended',
+        result: expect.objectContaining({
+          stopReason: 'end_turn',
+          tokens: expect.objectContaining({ input: 10, output: 5 }),
+        }),
+      },
+    ])
+  })
+
+  it('stops a turn Claude Code started on its own', async () => {
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Build it' }])
+    const query = s.sdk.last
+    s.sdk.onInterrupt = (q) => q.finish({ terminal_reason: 'aborted_streaming' })
+    wake(query)
+    await settle()
+    await s.connection.cancel(sessionId)
+    await settle()
+    expect(query.calls.map((call) => call.method)).toContain('interrupt')
+    expect(turns().at(-1)).toEqual({
+      kind: 'agentTurn',
+      phase: 'ended',
+      result: expect.objectContaining({ stopReason: 'cancelled' }),
+    })
+  })
+
+  it('lets a prompt sent during a turn Claude Code started join it', async () => {
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Build it' }])
+    const query = s.sdk.last
+    wake(query)
+    await settle()
+    s.sdk.script = () => {}
+    const joined = s.connection.prompt(sessionId, [{ type: 'text', text: 'And test it' }])
+    await settle()
+    expect(query.inputs.at(-1)!.message.content).toEqual([{ type: 'text', text: 'And test it' }])
+    query.finish()
+    await expect(joined).resolves.toMatchObject({ stopReason: 'end_turn' })
+    // The prompt's turn ends it, so the host hears no end of the agent's own.
+    expect(turns()).toEqual([
+      { kind: 'agentTurn', phase: 'started' },
+      { kind: 'agentTurn', phase: 'joined' },
+    ])
+  })
+
+  it('fails a turn Claude Code started on its own when its query ends', async () => {
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'Build it' }])
+    const query = s.sdk.last
+    wake(query)
+    await settle()
+    query.close()
+    await settle()
+    expect(turns().at(-1)).toMatchObject({ kind: 'agentTurn', phase: 'failed' })
+  })
 })
 
 describe('ultracode', () => {
