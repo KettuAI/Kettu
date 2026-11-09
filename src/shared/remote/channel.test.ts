@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Channel, MAX_MESSAGE, type ChannelMessage, type ChannelOptions } from './channel'
+import {
+  Channel,
+  MAX_MESSAGE,
+  setCompression,
+  type ChannelMessage,
+  type ChannelOptions,
+  type Compression,
+} from './channel'
 import { Handshake, generateKeyPair, type CipherState, type TransportCiphers } from './noise'
 
 const MINUTE = 60_000
@@ -247,6 +254,39 @@ describe('Channel', () => {
       'Channel message inflates past 32 MiB',
     ])
     expect(host.messages).toEqual([])
+  })
+
+  it('deflates and inflates with the compression a runtime sets', async () => {
+    const used: string[] = []
+    const plain: Compression = {
+      deflate: async (body) => (used.push('deflate'), body),
+      inflate: async (body, limit) => (used.push(`inflate ${limit}`), body),
+    }
+    const previous = setCompression(plain)
+    try {
+      const { device, host } = await pair()
+      const value = { text: 'b'.repeat(4096) }
+      await device.channel.send({ kind: 'json', value })
+      expect(device.plaintexts[0]![0]! & KIND).toBe(1)
+      await deliver(device, host)
+      expect(host.messages).toEqual([{ kind: 'json', value }])
+      expect(used).toEqual(['deflate', `inflate ${MAX_MESSAGE}`])
+    } finally {
+      setCompression(previous)
+    }
+  })
+
+  it('ends when the compression a runtime sets finds the limit passed', async () => {
+    const previous = setCompression({ deflate: async (body) => body, inflate: async () => null })
+    try {
+      const { device, host } = await pair()
+      await host.channel.receive(await seal(device.ciphers.send, 1, bytes(64)))
+      expect(host.errors.map((error) => error.message)).toEqual([
+        'Channel message inflates past 32 MiB',
+      ])
+    } finally {
+      setCompression(previous)
+    }
   })
 
   it.each([0b11, 0b100, 0b1000_0000 | 0b10_0000])('ends on the unknown flags %s', async (flags) => {

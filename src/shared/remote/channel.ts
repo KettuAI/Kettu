@@ -141,9 +141,14 @@ const streamCompression: Compression = {
 
 let compression = streamCompression
 
-/** Replaces the compression channels use, for a runtime without compression streams. */
-export function setCompression(next: Compression): void {
+/**
+ * Replaces the compression channels use, for a runtime without compression streams; returns the
+ * one it replaced.
+ */
+export function setCompression(next: Compression): Compression {
+  const previous = compression
   compression = next
+  return previous
 }
 
 async function inflate(body: Uint8Array): Promise<Uint8Array> {
