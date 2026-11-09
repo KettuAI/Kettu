@@ -24,6 +24,7 @@ import {
 } from '@renderer/components/ui/dialog'
 import { Field, FieldError, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
+import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import {
@@ -35,6 +36,7 @@ import {
   type ArtifactDialog,
 } from '@renderer/stores/artifacts'
 import { unpublishArtifact } from '@renderer/stores/sharing'
+import { removeCard } from './card-dust'
 
 /** Renaming and deleting permanently, asked from any artifact's menu. */
 export function ArtifactDialogs() {
@@ -170,13 +172,19 @@ function DeleteDialog({
           return
         }
       }
-      await deleteArtifact(shown.id)
-      shown.onDeleted?.()
-      onClose()
     } catch (failure) {
       setError(errorMessage(failure))
+      return
     } finally {
       setBusy(false)
+    }
+    // Closed first, since the card's dust is read from the window the dialog covers.
+    onClose()
+    try {
+      await removeCard(shown.id, () => deleteArtifact(shown.id))
+      shown.onDeleted?.()
+    } catch (failure) {
+      toast(errorMessage(failure))
     }
   }
   return (
@@ -233,12 +241,17 @@ function EraseDialog({
           return
         }
       }
-      await eraseArtifact(shown.id)
-      onClose()
     } catch (failure) {
       setError(errorMessage(failure))
+      return
     } finally {
       setBusy(false)
+    }
+    onClose()
+    try {
+      await removeCard(shown.id, () => eraseArtifact(shown.id))
+    } catch (failure) {
+      toast(errorMessage(failure))
     }
   }
   return (

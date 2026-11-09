@@ -20,6 +20,7 @@ import { useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { isPublished, useSharingStore } from '@renderer/stores/sharing'
 import { openSessionWithArtifact } from '@renderer/stores/view'
+import { removeCard } from './card-dust'
 
 /** Whether this browser can save a folder, which exporting a version of several files needs. */
 function canSaveFolders(): boolean {
@@ -221,7 +222,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
         askArtifactDialog({ kind: 'delete', id: target.id, title: target.title, onDeleted })
         return
       }
-      deleteArtifact(target.id).then(onDeleted, failed('delete'))
+      removeCard(target.id, () => deleteArtifact(target.id)).then(onDeleted, failed('delete'))
     },
   })
   return entries
