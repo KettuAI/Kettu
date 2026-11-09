@@ -258,6 +258,21 @@
 .ui-as-app [data-turn-dots] {
   flex: none;
 }
+/* A sidebar row is a step darker than the shell's text, its icons in the row's color; hovered and
+   current rows are ink. Section labels are small semibold, so their faint gray still reads. */
+.ui-as.ui-as .ui-as-side__item {
+  color: var(--shell-row);
+}
+.ui-as.ui-as .ui-as-side__item:is(:hover, [aria-current='page'], [data-drop]) {
+  color: var(--ink);
+}
+.ui-as.ui-as .ui-as-side__item svg {
+  color: inherit;
+}
+.ui-as.ui-as .ui-as-side__label {
+  font-size: 12px;
+  font-weight: 600;
+}
 /* Kettu's list in the sidebar: rows in view in a split take the open row's fill; a row's status
    and host give way to its tools on hover; Pinned's title folds it; Show more lines up with the
    folder's sessions. */
@@ -265,9 +280,10 @@
   background: var(--hover);
   color: var(--ink);
 }
-/* App Shell mutes every icon in a sidebar row; Kettu's marks there (the turn's dots, an error, a
-   pull request, a caret) keep their own colors. */
-.ui-as-side__item
+/* Kettu's marks in a sidebar row (the turn's dots, an error, a pull request, a caret) keep their
+   own colors instead of the row's. */
+.ui-as.ui-as
+  .ui-as-side__item
   :is(
     [data-turn-dots],
     svg[role='img'],
@@ -320,11 +336,11 @@ li[data-row-exit='dust'] > * {
 .kettu-side-label:is(:hover, :focus-visible) .kettu-side-label__arrow {
   opacity: 1;
 }
-.ui-as-side__item.kettu-side-more {
+.ui-as.ui-as .ui-as-side__item.kettu-side-more {
   padding-left: 30px;
   color: var(--muted);
 }
-.ui-as-side__item.kettu-side-more:hover {
+.ui-as.ui-as .ui-as-side__item.kettu-side-more:hover {
   color: var(--ink);
 }
 .kettu-side-list {

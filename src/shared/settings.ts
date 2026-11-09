@@ -174,7 +174,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     colorTheme: BUILTIN_THEME_ID,
     textSize: 'default',
     reduceMotion: 'system',
-    zoom: 1,
+    zoom: 1.1,
   },
   notifications: {
     permission: true,
