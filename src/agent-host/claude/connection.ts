@@ -37,6 +37,7 @@ import {
   firstUserMessage,
   repeatsFirstMessage,
   type MapperContext,
+  type MapperEffect,
   type MapperOutput,
 } from '../session-updates'
 import {
@@ -192,6 +193,8 @@ interface Turn {
   texts: string[] | null
   /** The agent's text as it streams, for `answer`. */
   onText: ((text: string) => void) | null
+  /** Claude Code started it between Kettu's turns, so its end goes to the host as an effect. */
+  byAgent: boolean
 }
 
 interface Session {
@@ -247,6 +250,28 @@ interface Session {
 interface Pending {
   at: number
   items: Delivery[]
+}
+
+function newTurn(
+  resolve: (result: PromptResult) => void,
+  reject: (error: unknown) => void,
+  texts: string[] | null,
+): Turn {
+  return {
+    resolve,
+    reject,
+    running: false,
+    cancelled: false,
+    tokens: null,
+    models: new Map(),
+    stopReason: 'end_turn',
+    error: null,
+    notice: null,
+    failure: null,
+    texts,
+    onText: null,
+    byAgent: false,
+  }
 }
 
 function tokenTotals(usage: {
@@ -1074,6 +1099,7 @@ export class ClaudeConnection implements AgentConnection {
       } else if (system.subtype === 'session_state_changed') {
         session.states = true
         if (system.state === 'running' && turn) turn.running = true
+        else if (system.state === 'running' && !session.options.hidden) this.agentTurn(session)
         if (system.state === 'idle' && turn?.running) this.settle(session)
         return
       } else if (system.subtype === 'task_started' && typeof system.task_id === 'string') {
@@ -1452,25 +1478,41 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   private startTurn(session: Session, texts: string[] | null): Promise<PromptResult> {
-    if (session.turn) {
+    const current = session.turn
+    // A prompt that crossed a turn Claude Code started joins it, as Claude Code runs them as one.
+    if (current?.byAgent && texts === null) {
+      current.byAgent = false
+      this.tellTurn(session, { kind: 'agentTurn', phase: 'joined' })
+      return new Promise((resolve, reject) => {
+        current.resolve = resolve
+        current.reject = reject
+      })
+    }
+    if (current) {
       return Promise.reject(new AgentRequestError('agent_error', 'A turn is already running'))
     }
     return new Promise((resolve, reject) => {
-      session.turn = {
-        resolve,
-        reject,
-        running: false,
-        cancelled: false,
-        tokens: null,
-        models: new Map(),
-        stopReason: 'end_turn',
-        error: null,
-        notice: null,
-        failure: null,
-        texts,
-        onText: null,
-      }
+      session.turn = newTurn(resolve, reject, texts)
     })
+  }
+
+  /**
+   * Claude Code started a turn between Kettu's, as when a command it ran in the background
+   * ended. The host hears of it and its end, so the session shows it running as any turn.
+   */
+  private agentTurn(session: Session): void {
+    session.turn = newTurn(
+      (result) => this.tellTurn(session, { kind: 'agentTurn', phase: 'ended', result }),
+      (error) => this.tellTurn(session, { kind: 'agentTurn', phase: 'failed', error }),
+      null,
+    )
+    session.turn.running = true
+    session.turn.byAgent = true
+    this.tellTurn(session, { kind: 'agentTurn', phase: 'started' })
+  }
+
+  private tellTurn(session: Session, effect: MapperEffect): void {
+    this.deliver({ sessionId: session.id, map: () => ({ patches: [], effects: [effect] }) })
   }
 
   async prompt(sessionId: string, prompt: readonly PromptBlock[]): Promise<PromptResult> {
