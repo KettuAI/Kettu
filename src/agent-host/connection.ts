@@ -170,7 +170,7 @@ export type McpServer =
       autoAllow?: string[]
       /** A paragraph for the agent's own instructions, where it takes one. */
       prompt?: string
-      /** Holds a value from the key store, so it must never reach a command line. */
+      /** Holds a token or a value from the key store, so it must never reach a command line. */
       secret?: boolean
     }
   | {
