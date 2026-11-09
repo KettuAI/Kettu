@@ -81,6 +81,8 @@
       "artifacts": "Artifacts",
       "recentlyDeleted": "Artifacts › 最近删除",
       "artifact": "Artifact",
+      "marketplace": "Marketplace",
+      "marketplaceItem": "Marketplace › {{item}}",
       "settings": "设置 › {{section}}",
       "settingsItem": "设置 › {{section}} › {{item}}"
     }

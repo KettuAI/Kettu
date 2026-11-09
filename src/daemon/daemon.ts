@@ -29,6 +29,7 @@ import { Account } from '../main/account'
 import { accountBaseUrl, AccountApi, clientInfo, DAEMON_CLIENT } from '../main/account/service'
 import { accountFile } from '../main/account/store'
 import { createLogger } from '../main/log'
+import { MarketKeys, marketKeysFile } from '../main/market-keys'
 import { RelayToken } from '../main/relay-token'
 import { nodeSystemReleaseForRun } from '../main/system-name'
 import type { RemoteIdentity } from '../main/remote-identity'
@@ -385,12 +386,25 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   } catch (error) {
     log.warn(`Problem reports cannot be submitted: ${(error as Error).message}`)
   }
+  // The data folder is the user's alone, which is all that guards the keys without encryption.
+  const marketKeys = await MarketKeys.load({
+    file: marketKeysFile(options.dataPath),
+    cipher: NO_SYSTEM_ENCRYPTION,
+    plainTextAllowed: true,
+    servers: () => settings.get().marketplace.mcp,
+    changed: (values) => hosts?.marketKeysChanged(values),
+    log: createLogger('market-keys'),
+  })
+  settings.onChange((_, changed) => {
+    if (changed.has('marketplace')) marketKeys.prune()
+  })
   const running = new Hosts({
     bundleDir: options.bundleDir,
     dataPath: options.dataPath,
     version: options.version,
     systemLocale: matchLocale([Intl.DateTimeFormat().resolvedOptions().locale]),
     settings: () => settings.get(),
+    marketKeys: () => marketKeys.values(),
     privateKey: identity.privateKey,
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
     relayKey: relayKey?.privateKey ?? null,
@@ -429,6 +443,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     settings,
     hosts: running,
     env: options.env,
+    marketKeys,
     report: async (request) =>
       bundleForDevice(
         await daemonReport(
@@ -528,7 +543,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
         relayToken?.stop()
         account?.stop()
         await running.stop()
-        await settings.flush()
+        await Promise.all([settings.flush(), marketKeys.flush()])
         // Held until now, so a daemon that starts meanwhile cannot run hosts beside these.
         await release(server, options.controlSocket)
         log.info('Stopped')

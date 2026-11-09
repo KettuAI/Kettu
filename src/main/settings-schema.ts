@@ -21,10 +21,18 @@ import {
 } from '@shared/settings'
 import { isComputerApp } from '@shared/computer-use'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
+import {
+  MARKET_NAME,
+  type MarketServer,
+  type MarketSkill,
+  type McpSpec,
+  type McpValue,
+} from '@shared/marketplace'
 import { addressKey, isPort, MAX_OWN_ADDRESSES, parseDirectAddress } from '@shared/remote/address'
 import type { DirectAddress } from '@shared/remote/protocol'
 import { DEVICE_NAME_CHARS, isDeviceName } from '@shared/remote/device'
 import { THEME_ID } from '@shared/themes'
+import { isAbsolutePath } from '../agent-host/paths'
 import {
   AUTO_AGENT_HARNESSES,
   HARNESS_IDS,
@@ -229,6 +237,422 @@ function checkMcp(value: unknown, path: string): string | null {
   return checkAgentIds(kettu.off, `${path}.kettu.off`)
 }
 
+export const MAX_MARKET_SERVERS = 200
+const MAX_MARKET_ID = 200
+const MAX_MARKET_TITLE = 200
+const MAX_MARKET_VERSION = 100
+const MAX_SPEC_TEXT = 4096
+const MAX_SPEC_ARGS = 200
+const MAX_SPEC_VALUES = 64
+const MAX_VALUE_NAME = 128
+const MAX_INPUT_DESCRIPTION = 1000
+// The registry's own pattern for a server's name.
+const REGISTRY_NAME = /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/
+const MANUAL_ID = /^manual:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+// A token as RFC 9110 defines a field name.
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
+const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
+/** Whether `text` holds a control character; with `lines`, tabs and line breaks are allowed. */
+function hasControl(text: string, lines = false): boolean {
+  return [...text].some((char) => {
+    const code = char.charCodeAt(0)
+    if (lines && (char === '\t' || char === '\n' || char === '\r')) return false
+    return code < 0x20 || code === 0x7f
+  })
+}
+
+function isText(value: unknown, max: number): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= max && !hasControl(value)
+}
+
+/** The first key of `value` outside `allowed`, as a problem; a file's unknown keys are ignored. */
+function extraKey(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+  path: string,
+  strict: boolean,
+): string | null {
+  const extra = strict ? Object.keys(value).find((key) => !allowed.includes(key)) : undefined
+  return extra === undefined ? null : `Unknown setting "${path}.${extra}"`
+}
+
+/** A header or environment variable of a server's spec, or why it is not one. */
+function parseMcpValue(
+  raw: unknown,
+  path: string,
+  kind: 'header' | 'env',
+  strict: boolean,
+): McpValue | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  const { name } = raw
+  const pattern = kind === 'header' ? HEADER_NAME : ENV_NAME
+  if (typeof name !== 'string' || name.length > MAX_VALUE_NAME || !pattern.test(name)) {
+    return `"${path}.name" must be ${kind === 'header' ? 'a header' : 'an environment variable'} name`
+  }
+  if ('input' in raw) {
+    const extra = extraKey(
+      raw,
+      ['name', 'input', 'secret', 'required', 'description', 'prefix'],
+      path,
+      strict,
+    )
+    if (extra) return extra
+    const { input, secret, required, description, prefix } = raw
+    if (input !== true) return `"${path}.input" must be true`
+    const problem = isBoolean(secret, `${path}.secret`) ?? isBoolean(required, `${path}.required`)
+    if (problem) return problem
+    const value: Extract<McpValue, { input: true }> = {
+      name,
+      input,
+      secret: secret as boolean,
+      required: required as boolean,
+    }
+    if (description !== undefined) {
+      if (
+        typeof description !== 'string' ||
+        description.length > MAX_INPUT_DESCRIPTION ||
+        description.includes('\0')
+      ) {
+        return `"${path}.description" must be a string of at most ${MAX_INPUT_DESCRIPTION} characters`
+      }
+      value.description = description
+    }
+    if (prefix !== undefined) {
+      // Sent before the stored value, so it may not break a header line either.
+      if (typeof prefix !== 'string' || prefix.length > 64 || /[\0\r\n]/.test(prefix)) {
+        return `"${path}.prefix" must be a string of at most 64 characters on one line`
+      }
+      value.prefix = prefix
+    }
+    return value
+  }
+  const extra = extraKey(raw, ['name', 'value'], path, strict)
+  if (extra) return extra
+  const { value } = raw
+  // A header's value cannot hold a line break, which would start another header.
+  const broken = typeof value === 'string' && kind === 'header' && /[\r\n]/.test(value)
+  if (typeof value !== 'string' || value.length > MAX_SPEC_TEXT || value.includes('\0') || broken) {
+    return `"${path}.value" must be a string of at most ${MAX_SPEC_TEXT} characters on one line`
+  }
+  return { name, value }
+}
+
+function parseMcpValues(
+  raw: unknown,
+  path: string,
+  kind: 'header' | 'env',
+  strict: boolean,
+): McpValue[] | string {
+  if (!Array.isArray(raw) || raw.length > MAX_SPEC_VALUES) {
+    return `"${path}" must list at most ${MAX_SPEC_VALUES} values`
+  }
+  const values: McpValue[] = []
+  const names = new Set<string>()
+  for (const [index, entry] of raw.entries()) {
+    const value = parseMcpValue(entry, `${path}[${index}]`, kind, strict)
+    if (typeof value === 'string') return value
+    // Header names are compared without case, as HTTP does.
+    const key = kind === 'header' ? value.name.toLowerCase() : value.name
+    if (names.has(key)) return `"${path}" names "${value.name}" twice`
+    names.add(key)
+    values.push(value)
+  }
+  return values
+}
+
+function parseMcpSpec(raw: unknown, path: string, strict: boolean): McpSpec | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  if (raw.type === 'http') {
+    const extra = extraKey(raw, ['type', 'transport', 'url', 'headers'], path, strict)
+    if (extra) return extra
+    const { transport, url } = raw
+    const problem = oneOf('streamable-http', 'sse')(transport, `${path}.transport`)
+    if (problem) return problem
+    const parsed = typeof url === 'string' && url.length <= MAX_URL_LENGTH ? URL.parse(url) : null
+    if (
+      !parsed ||
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      !parsed.hostname ||
+      /\s/.test(url as string)
+    ) {
+      return `"${path}.url" must be an http or https URL of at most ${MAX_URL_LENGTH} characters`
+    }
+    const headers = parseMcpValues(raw.headers, `${path}.headers`, 'header', strict)
+    if (typeof headers === 'string') return headers
+    return {
+      type: 'http',
+      transport: transport as 'streamable-http' | 'sse',
+      url: url as string,
+      headers,
+    }
+  }
+  if (raw.type === 'stdio') {
+    const extra = extraKey(raw, ['type', 'command', 'args', 'env'], path, strict)
+    if (extra) return extra
+    const { command, args } = raw
+    if (
+      typeof command !== 'string' ||
+      command.trim().length === 0 ||
+      command.length > MAX_SPEC_TEXT ||
+      /[\0\r\n]/.test(command)
+    ) {
+      return `"${path}.command" must be a command of 1 to ${MAX_SPEC_TEXT} characters on one line`
+    }
+    if (
+      !Array.isArray(args) ||
+      args.length > MAX_SPEC_ARGS ||
+      !args.every(
+        (arg) => typeof arg === 'string' && arg.length <= MAX_SPEC_TEXT && !arg.includes('\0'),
+      )
+    ) {
+      return `"${path}.args" must list at most ${MAX_SPEC_ARGS} strings of at most ${MAX_SPEC_TEXT} characters`
+    }
+    const env = parseMcpValues(raw.env, `${path}.env`, 'env', strict)
+    if (typeof env === 'string') return env
+    return { type: 'stdio', command, args: [...(args as string[])], env }
+  }
+  return `"${path}.type" must be one of "http", "stdio"`
+}
+
+/** A server of the Marketplace as a patch or the file gives it, or why it is not one. */
+function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketServer | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  const allowed = ['id', 'name', 'title', 'source', 'version', 'spec', 'agents', 'on']
+  const extra = extraKey(raw, allowed, path, strict)
+  if (extra) return extra
+  const { id, name, title, source, version, agents, on } = raw
+  const sourceProblem = oneOf('registry', 'manual')(source, `${path}.source`)
+  if (sourceProblem) return sourceProblem
+  const idPattern = source === 'manual' ? MANUAL_ID : REGISTRY_NAME
+  if (typeof id !== 'string' || id.length > MAX_MARKET_ID || !idPattern.test(id)) {
+    return source === 'manual'
+      ? `"${path}.id" must be manual: and a UUID`
+      : `"${path}.id" must be a registry name of at most ${MAX_MARKET_ID} characters`
+  }
+  if (typeof name !== 'string' || !MARKET_NAME.test(name) || name === 'kettu') {
+    return `"${path}.name" must be lowercase letters, digits, - and _, and not "kettu"`
+  }
+  if (!isText(title, MAX_MARKET_TITLE)) {
+    return `"${path}.title" must be 1 to ${MAX_MARKET_TITLE} characters`
+  }
+  if (version !== null && !isText(version, MAX_MARKET_VERSION)) {
+    return `"${path}.version" must be null or 1 to ${MAX_MARKET_VERSION} characters`
+  }
+  const spec = parseMcpSpec(raw.spec, `${path}.spec`, strict)
+  if (typeof spec === 'string') return spec
+  const served = parseServedAgents(agents, `${path}.agents`, strict)
+  if (typeof served === 'string') return served
+  const onProblem = isBoolean(on, `${path}.on`)
+  if (onProblem) return onProblem
+  return {
+    id,
+    name,
+    title,
+    source: source as MarketServer['source'],
+    version: version as string | null,
+    spec,
+    agents: served.agents,
+    on: on as boolean,
+  }
+}
+
+/** The agents a server or skill goes to: all, or a list, whose unknown ids a file loses. */
+function parseServedAgents(
+  agents: unknown,
+  path: string,
+  strict: boolean,
+): { agents: MarketServer['agents'] } | string {
+  if (agents === 'all') return { agents }
+  if (strict) {
+    const problem = checkAgentIds(agents, path)
+    return problem ? `${problem}, or be "all"` : { agents: [...(agents as AgentId[])] }
+  }
+  if (!Array.isArray(agents)) return `"${path}" must be "all" or a list of agents`
+  return { agents: readAgentIds(agents) }
+}
+
+export const MAX_MARKET_SKILLS = 500
+const MAX_SKILL_ID = 512
+const MAX_SKILL_DESCRIPTION = 1024
+// A skill's name as the Agent Skills specification has it.
+const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
+const CATALOG_SKILL_PREFIX = 'anthropics/skills:'
+const GITHUB_SKILL_PREFIX = 'github:'
+const LOCAL_SKILL_ID = /^local:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const GITHUB_OWNER = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/
+const GITHUB_REPO = /^[A-Za-z0-9._-]{1,100}$/
+const SKILL_IDS = {
+  catalog: `${CATALOG_SKILL_PREFIX} and a skill's name`,
+  github: `${GITHUB_SKILL_PREFIX} and owner/repo, with a folder in it or not`,
+  local: 'local: and a UUID',
+} as const
+
+/** A folder's name in a skill's id: no `.` or `..`, which would leave the repository. */
+function isIdSegment(part: string): boolean {
+  return part.length > 0 && part !== '.' && part !== '..' && !part.includes('\\')
+}
+
+function isSkillId(id: string, source: MarketSkill['source']): boolean {
+  if (id.length > MAX_SKILL_ID || hasControl(id)) return false
+  if (source === 'local') return LOCAL_SKILL_ID.test(id)
+  if (source === 'catalog') {
+    return (
+      id.startsWith(CATALOG_SKILL_PREFIX) && SKILL_NAME.test(id.slice(CATALOG_SKILL_PREFIX.length))
+    )
+  }
+  if (!id.startsWith(GITHUB_SKILL_PREFIX)) return false
+  const [owner = '', repo = '', ...folder] = id.slice(GITHUB_SKILL_PREFIX.length).split('/')
+  return (
+    GITHUB_OWNER.test(owner) &&
+    GITHUB_REPO.test(repo) &&
+    isIdSegment(repo) &&
+    folder.every(isIdSegment)
+  )
+}
+
+function isHttpsUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > MAX_URL_LENGTH || /\s/.test(value)) return false
+  const url = URL.parse(value)
+  return url !== null && url.protocol === 'https:' && url.hostname.length > 0
+}
+
+/** A skill of the Marketplace as a patch or the file gives it, or why it is not one. */
+function parseMarketSkill(raw: unknown, path: string, strict: boolean): MarketSkill | string {
+  if (!isRecord(raw)) return `"${path}" must be an object`
+  const allowed = ['id', 'name', 'description', 'source', 'origin', 'version', 'agents', 'on']
+  const extra = extraKey(raw, allowed, path, strict)
+  if (extra) return extra
+  const { id, name, description, source, origin, version, on } = raw
+  const sourceProblem = oneOf('catalog', 'github', 'local')(source, `${path}.source`)
+  if (sourceProblem) return sourceProblem
+  const from = source as MarketSkill['source']
+  if (typeof id !== 'string' || !isSkillId(id, from))
+    return `"${path}.id" must be ${SKILL_IDS[from]}`
+  if (typeof name !== 'string' || !SKILL_NAME.test(name)) {
+    return `"${path}.name" must be 1 to 64 lowercase letters, digits and -, not starting or ending with -`
+  }
+  if (
+    typeof description !== 'string' ||
+    description.length === 0 ||
+    description.length > MAX_SKILL_DESCRIPTION ||
+    hasControl(description, true)
+  ) {
+    return `"${path}.description" must be 1 to ${MAX_SKILL_DESCRIPTION} characters`
+  }
+  if (from === 'local') {
+    const problem = checkStoredPath(origin, `${path}.origin`)
+    if (problem) return problem
+    if (!isAbsolutePath(origin as string, process.platform)) {
+      return `"${path}.origin" must be an absolute path`
+    }
+  } else if (!isHttpsUrl(origin)) {
+    return `"${path}.origin" must be an https URL of at most ${MAX_URL_LENGTH} characters`
+  }
+  if (version !== null && !isText(version, MAX_MARKET_VERSION)) {
+    return `"${path}.version" must be null or 1 to ${MAX_MARKET_VERSION} characters`
+  }
+  const served = parseServedAgents(raw.agents, `${path}.agents`, strict)
+  if (typeof served === 'string') return served
+  const onProblem = isBoolean(on, `${path}.on`)
+  if (onProblem) return onProblem
+  return {
+    id,
+    name,
+    description,
+    source: from,
+    origin: origin as string,
+    version: version as string | null,
+    agents: served.agents,
+    on: on as boolean,
+  }
+}
+
+type MarketParse<T> = (raw: unknown, path: string, strict: boolean) => T | string
+
+/** A list of a patch, checked whole: each item valid, its id and name once. */
+function checkMarketList<T extends { id: string; name: string }>(
+  raw: unknown,
+  path: string,
+  max: number,
+  parse: MarketParse<T>,
+  kind: string,
+): T[] | string {
+  if (!Array.isArray(raw) || raw.length > max) return `"${path}" must list at most ${max} ${kind}s`
+  const items: T[] = []
+  for (const [index, entry] of raw.entries()) {
+    const item = parse(entry, `${path}[${index}]`, true)
+    if (typeof item === 'string') return item
+    if (items.some((other) => other.id === item.id || other.name === item.name)) {
+      return `"${path}[${index}]" repeats another ${kind}'s id or name`
+    }
+    items.push(item)
+  }
+  return items
+}
+
+/** A list of the file, dropping each item that is invalid or repeats an id or a name. */
+function readMarketList<T extends { id: string; name: string }>(
+  raw: unknown,
+  path: string,
+  max: number,
+  parse: MarketParse<T>,
+  kind: string,
+  problems: string[],
+): T[] {
+  if (raw === undefined) return []
+  if (!Array.isArray(raw)) {
+    problems.push(`"${path}" must be an array`)
+    return []
+  }
+  const items: T[] = []
+  for (const [index, entry] of raw.entries()) {
+    const itemPath = `${path}[${index}]`
+    const item = parse(entry, itemPath, false)
+    if (typeof item === 'string') problems.push(item)
+    else if (items.some((other) => other.id === item.id || other.name === item.name)) {
+      problems.push(`"${itemPath}" repeats another ${kind}'s id or name`)
+    } else if (items.length === max) {
+      problems.push(`"${itemPath}" is beyond the ${max} ${kind}s kept`)
+    } else items.push(item)
+  }
+  return items
+}
+
+/** `marketplace` in a patch: each list it holds replaces the stored one whole. */
+function checkMarketplace(
+  value: unknown,
+  path: string,
+): NonNullable<SettingsPatch['marketplace']> | string {
+  if (!isRecord(value)) return `"${path}" must be an object`
+  const extra = extraKey(value, ['mcp', 'skills'], path, true)
+  if (extra) return extra
+  const checked: NonNullable<SettingsPatch['marketplace']> = {}
+  if (value.mcp !== undefined) {
+    const mcp = checkMarketList(
+      value.mcp,
+      `${path}.mcp`,
+      MAX_MARKET_SERVERS,
+      parseMarketServer,
+      'server',
+    )
+    if (typeof mcp === 'string') return mcp
+    checked.mcp = mcp
+  }
+  if (value.skills !== undefined) {
+    const skills = checkMarketList(
+      value.skills,
+      `${path}.skills`,
+      MAX_MARKET_SKILLS,
+      parseMarketSkill,
+      'skill',
+    )
+    if (typeof skills === 'string') return skills
+    checked.skills = skills
+  }
+  return checked
+}
+
 /** The start modes a patch sets: each for an agent that takes one, or null to clear it. */
 function checkStartModes(value: unknown, path: string): string | null {
   if (!isRecord(value)) return `"${path}" must be an object`
@@ -312,6 +736,8 @@ function normalizeProxy(proxy: ProxySettings): ProxySettings {
 export function validateSettingsPatch(raw: unknown): SettingsPatch {
   if (!isRecord(raw)) throw new SettingsError('Settings patch must be an object')
   const problems: string[] = []
+  // Sections kept as checked, without what a value may carry beyond its type.
+  const checked: Partial<SettingsPatch> = {}
   for (const [section, value] of Object.entries(raw)) {
     if (FIELD_SECTIONS.includes(section as FieldSection)) {
       const fields: Record<string, Check> = SECTION_FIELDS[section as FieldSection]
@@ -363,6 +789,10 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
     } else if (section === 'mcp') {
       const problem = checkMcp(value, 'mcp')
       if (problem) problems.push(problem)
+    } else if (section === 'marketplace') {
+      const marketplace = checkMarketplace(value, 'marketplace')
+      if (typeof marketplace === 'string') problems.push(marketplace)
+      else checked.marketplace = marketplace
     } else if (section === 'disabledAgents') {
       const problem = checkAgentIds(value, 'disabledAgents')
       if (problem) problems.push(problem)
@@ -395,7 +825,7 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
     }
   }
   if (problems.length > 0) throw new SettingsError(problems.join('; '))
-  return raw as SettingsPatch
+  return { ...(raw as SettingsPatch), ...checked }
 }
 
 /**
@@ -428,6 +858,10 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
   }
   if (patch.proxy) next.proxy = normalizeProxy(patch.proxy)
   if (patch.mcp) next.mcp = { kettu: { off: [...patch.mcp.kettu.off] } }
+  if (patch.marketplace?.mcp) next.marketplace.mcp = structuredClone(patch.marketplace.mcp)
+  if (patch.marketplace?.skills) {
+    next.marketplace.skills = structuredClone(patch.marketplace.skills)
+  }
   if (patch.disabledAgents) next.disabledAgents = [...patch.disabledAgents]
   if (patch.startModes) {
     for (const [id, mode] of Object.entries(patch.startModes) as [AgentId, string | null][]) {
@@ -575,6 +1009,9 @@ export function withMovedAgent(
   if (defaultAgent) next.agents[agentId] = { ...next.agents[agentId], enabled: false }
   else next.addedAgents = next.addedAgents.filter((agent) => agent.id !== agentId)
   next.mcp.kettu.off = next.mcp.kettu.off.filter((id) => id !== agentId)
+  for (const item of [...next.marketplace.mcp, ...next.marketplace.skills]) {
+    if (item.agents !== 'all') item.agents = item.agents.filter((id) => id !== agentId)
+  }
   next.disabledAgents = next.disabledAgents.filter((id) => id !== agentId)
   delete next.startModes[agentId]
   if (next.general.defaultAgent === agentId) next.general.defaultAgent = null
@@ -682,6 +1119,9 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   if (raw.mcp !== undefined) {
     if (!isRecord(raw.mcp)) problems.push('"mcp" must be an object')
     else settings.mcp = readMcp(raw.mcp)
+  }
+  if (raw.marketplace !== undefined) {
+    settings.marketplace = readMarketplace(raw.marketplace, problems)
   }
   if (raw.disabledAgents !== undefined) {
     if (!Array.isArray(raw.disabledAgents)) problems.push('"disabledAgents" must be an array')
@@ -825,6 +1265,32 @@ function readMcp(raw: Record<string, unknown>): SettingsFile['mcp'] {
   return { kettu: { off: readAgentIds(Array.isArray(kettu.off) ? kettu.off : []) } }
 }
 
+/** Reads the Marketplace's servers and skills, dropping each that is invalid or repeated. */
+function readMarketplace(raw: unknown, problems: string[]): SettingsFile['marketplace'] {
+  if (!isRecord(raw)) {
+    problems.push('"marketplace" must be an object')
+    return { mcp: [], skills: [] }
+  }
+  return {
+    mcp: readMarketList(
+      raw.mcp,
+      'marketplace.mcp',
+      MAX_MARKET_SERVERS,
+      parseMarketServer,
+      'server',
+      problems,
+    ),
+    skills: readMarketList(
+      raw.skills,
+      'marketplace.skills',
+      MAX_MARKET_SKILLS,
+      parseMarketSkill,
+      'skill',
+      problems,
+    ),
+  }
+}
+
 /** Reads the start modes leniently: an entry that is no start mode of an agent is dropped. */
 function readStartModes(raw: unknown, problems: string[]): SettingsFile['startModes'] {
   if (!isRecord(raw)) {
@@ -848,6 +1314,7 @@ export function hostSettings(settings: SettingsFile, systemLocale: Locale): Host
     proxy: structuredClone(settings.proxy),
     git: { ...settings.git },
     mcp: structuredClone(settings.mcp),
+    marketplace: structuredClone(settings.marketplace),
     startModes: { ...settings.startModes },
     usage: { fromComputer: settings.usage.fromComputer },
     sessionTitles: settings.general.sessionTitles,
@@ -876,6 +1343,7 @@ const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'proxy',
   'git',
   'mcp',
+  'marketplace',
   'startModes',
   'usage',
   'computerUse',

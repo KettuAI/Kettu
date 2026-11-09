@@ -94,6 +94,9 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:settings':
         withHost((h) => h.updateSettings(message.settings))
         break
+      case 'host:market-keys':
+        withHost((h) => h.setMarketKeys(message.values))
+        break
       case 'host:busy-request':
         withHost((h) => h.busy(message.requestId))
         break

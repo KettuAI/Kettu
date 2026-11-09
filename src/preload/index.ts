@@ -197,6 +197,9 @@ const api: KettuApi = {
     setAuto: (enabled) => invoke('sharing:set-auto', enabled),
     onChanged: onSharingChanged,
   },
+  marketplace: {
+    setKeys: (patch) => invoke('marketplace:set-keys', patch),
+  },
   settings: {
     get: () => invoke('settings:get'),
     update: (patch) => invoke('settings:update', patch),

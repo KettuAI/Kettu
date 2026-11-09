@@ -31,7 +31,6 @@ import { askHostPath, type HostPathPurpose } from '@renderer/web/host-path-reque
 import { createAgentsStore, useAgentsStore, type AgentsStoreHook } from './agents'
 import { loadGitTools, useGitStore } from './git'
 import { otherHosts, useHostsStore } from './hosts'
-import { createMcpStore, useMcpStore, type McpStoreHook } from './mcp'
 import { useRemoteStore, type RemoteStore } from './remote'
 import { useSettingsStore, type SettingsStore } from './settings'
 import { createSharing, localSharing, type Sharing } from './sharing'
@@ -59,7 +58,6 @@ export interface HostScope {
   api: ScopeApi
   useSettingsStore: UseBoundStore<StoreApi<SettingsStore>>
   useAgentsStore: AgentsStoreHook
-  useMcpStore: McpStoreHook
   useRemoteStore: ReadStore<RemoteStore>
   sharing: Sharing
   useUsageStore: ReadStore<{ status: UsageStatus | null }>
@@ -90,7 +88,6 @@ export const LOCAL_SCOPE: HostScope = {
   },
   useSettingsStore,
   useAgentsStore,
-  useMcpStore,
   useRemoteStore,
   sharing: localSharing,
   useUsageStore,
@@ -337,7 +334,6 @@ function createScope(hostId: string): OtherScope {
     },
     useSettingsStore: settings,
     useAgentsStore: createAgentsStore(request),
-    useMcpStore: createMcpStore(request),
     useRemoteStore: remote,
     sharing: createSharing(() => sharingApi),
     useUsageStore: usage,

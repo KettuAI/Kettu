@@ -117,11 +117,13 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
   type PromptBlock,
+  type SessionOptions,
   type SessionTarget,
 } from './connection'
 import type { Diagnostics } from './diagnostics'
 import { answeredFields, checkedValues } from './elicitation'
 import { holdsNothing, mayBeEmpty } from './empty-sessions'
+import type { McpTransports } from './marketplace/servers'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
@@ -255,10 +257,15 @@ export interface SessionEvents {
   busy(counts: BusyCounts): void
 }
 
-/** The artifacts service, as the sessions pass it to their agents. */
+/** The artifacts service and the Marketplace's servers, as the sessions pass them to their agents. */
 export interface SessionMcp {
   /** What an attach of the session through `connection` passes in `mcpServers`. */
   servers(sessionId: string, record: SessionRecord, connection: AgentConnection): McpServer[]
+  /**
+   * The Marketplace's servers an attach of the agent's session passes beside those, over the
+   * transports it speaks, renamed where `taken` already has a name.
+   */
+  library(agentId: AgentId, transports: McpTransports, taken: readonly string[]): McpServer[]
   /** The session left memory, closed, released or deleted: its token ends. */
   detached(sessionId: string): void
   turnEnded(sessionId: string): void
@@ -297,6 +304,8 @@ export interface SessionManagerDeps {
   attachments?: Attachments
   /** The artifacts service; without it every attach passes no MCP servers. */
   mcp?: SessionMcp
+  /** The Marketplace's skills an attach of the agent's session passes; without it none. */
+  skills?: (agentId: AgentId) => Pick<SessionOptions, 'skillRoots' | 'localPlugins'>
   /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
   prepared?: PreparedRecords
   /** What to watch for changes to the agent's options in a folder; without it nothing is. */
@@ -1986,14 +1995,37 @@ export class SessionManager {
     connection.register(live.record.acpSessionId, live.target)
   }
 
-  /** The artifacts service for an attach of the session, to an agent that takes MCP over HTTP. */
+  /**
+   * What an attach of the session hands its agent: the Marketplace's skills, and the MCP servers,
+   * the artifacts service to an agent that takes MCP over HTTP while Kettu's server is on for it,
+   * then the Marketplace's servers meant for its agent.
+   */
+  private attachOptions(
+    sessionId: string,
+    record: SessionRecord,
+    runtime: AgentRuntime | null | undefined,
+  ): SessionOptions {
+    const skills = this.deps.skills?.(record.agentId) ?? {}
+    return { mcpServers: this.mcpServers(sessionId, record, runtime), ...skills }
+  }
+
   private mcpServers(
     sessionId: string,
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
   ): McpServer[] {
-    if (!this.deps.mcp || !runtime?.init.capabilities.mcpHttp || !runtime.kettu) return []
-    return this.deps.mcp.servers(sessionId, record, runtime.connection)
+    if (!this.deps.mcp || !runtime) return []
+    const transports = runtime.init.capabilities
+    const own =
+      transports.mcpHttp && runtime.kettu
+        ? this.deps.mcp.servers(sessionId, record, runtime.connection)
+        : []
+    const library = this.deps.mcp.library(
+      record.agentId,
+      transports,
+      own.map((server) => server.name),
+    )
+    return [...own, ...library]
   }
 
   private dropLive(live: Live): void {
@@ -2765,9 +2797,10 @@ export class SessionManager {
     if (gone()) throw removedWhileStarting()
     let setup
     try {
-      setup = await runtime.connection.newSession(live.record.projectPath, {
-        mcpServers: this.mcpServers(live.id, live.record, runtime),
-      })
+      setup = await runtime.connection.newSession(
+        live.record.projectPath,
+        this.attachOptions(live.id, live.record, runtime),
+      )
     } catch (error) {
       if (gone()) throw removedWhileStarting()
       const mapped = agentError(error)
@@ -2941,9 +2974,10 @@ export class SessionManager {
     if (gone()) throw removedWhileStarting()
     let setup
     try {
-      setup = await runtime.connection.newSession(live.record.projectPath, {
-        mcpServers: this.mcpServers(live.id, live.record, runtime),
-      })
+      setup = await runtime.connection.newSession(
+        live.record.projectPath,
+        this.attachOptions(live.id, live.record, runtime),
+      )
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
       if (gone()) throw removedWhileStarting()
@@ -3314,13 +3348,13 @@ export class SessionManager {
       )
     }
     this.attach(live, connection)
-    const mcpServers = this.mcpServers(live.id, live.record, runtime)
+    const attach = this.attachOptions(live.id, live.record, runtime)
     try {
       if (useLoad) {
         this.prepareReplay(live, connection)
         let setup
         try {
-          setup = await connection.loadSession(acpSessionId, projectPath, { mcpServers })
+          setup = await connection.loadSession(acpSessionId, projectPath, attach)
         } catch (error) {
           this.finishReplay(live, false)
           throw error
@@ -3328,7 +3362,7 @@ export class SessionManager {
         this.finishReplay(live, true)
         this.opened(live, setup.config)
       } else {
-        const setup = await connection.resumeSession(acpSessionId, projectPath, { mcpServers })
+        const setup = await connection.resumeSession(acpSessionId, projectPath, attach)
         this.opened(live, setup.config)
         if (live.thread.order.length === 0) {
           this.emit(live, [
@@ -3415,6 +3449,15 @@ export class SessionManager {
   /** The agent's start mode changed: its prepared sessions started in the old one. */
   startModeChanged(agentId: AgentId): void {
     this.configChanged(agentId)
+  }
+
+  /**
+   * The Marketplace's servers, their keys or its skills changed: the prepared sessions of each agent
+   * for which `changed` holds started with the old ones. Open sessions keep theirs.
+   */
+  libraryChanged(changed: (agentId: AgentId) => boolean): void {
+    const agentIds = new Set([...this.live.values()].map((live) => live.record.agentId))
+    for (const agentId of agentIds) if (changed(agentId)) this.configChanged(agentId)
   }
 
   /**
@@ -3775,23 +3818,22 @@ export class SessionManager {
     let config: ConfigOption[]
     if (record.acpSessionId === '') {
       // An agent taking the session over that never had it.
-      config = await this.renew(live, connection, this.mcpServers(live.id, record, runtime))
+      config = await this.renew(live, connection, this.attachOptions(live.id, record, runtime))
       this.deps.options?.started(
         record.agentId,
         config,
         pathKey(record.projectPath, this.deps.platform),
       )
     } else if (caps.resumeSession) {
-      const mcpServers = this.mcpServers(live.id, record, runtime)
+      const attach = this.attachOptions(live.id, record, runtime)
       try {
-        config = (
-          await connection.resumeSession(record.acpSessionId, record.projectPath, { mcpServers })
-        ).config
+        config = (await connection.resumeSession(record.acpSessionId, record.projectPath, attach))
+          .config
       } catch (error) {
         if (carry) {
           // The session it had is gone, so it starts over with the whole conversation.
           carry.fromTurn = 1
-          config = await this.renew(live, connection, mcpServers)
+          config = await this.renew(live, connection, attach)
           this.deps.options?.started(
             record.agentId,
             config,
@@ -3799,13 +3841,13 @@ export class SessionManager {
           )
         } else {
           if (!this.neverAnswered(live, error)) throw this.otherConfig(live, error)
-          config = await this.renew(live, connection, mcpServers)
+          config = await this.renew(live, connection, attach)
         }
       }
     } else if (caps.loadSession) {
-      const mcpServers = this.mcpServers(live.id, record, runtime)
+      const attach = this.attachOptions(live.id, record, runtime)
       try {
-        config = (await this.loadQuietly(live, connection, mcpServers)).config
+        config = (await this.loadQuietly(live, connection, attach)).config
       } catch (error) {
         throw this.otherConfig(live, error)
       }
@@ -3983,9 +4025,9 @@ export class SessionManager {
   private async renew(
     live: Live,
     connection: AgentConnection,
-    mcpServers: McpServer[],
+    attach: SessionOptions,
   ): Promise<ConfigOption[]> {
-    const setup = await connection.newSession(live.record.projectPath, { mcpServers })
+    const setup = await connection.newSession(live.record.projectPath, attach)
     live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     live.rewrite = true
@@ -3998,7 +4040,7 @@ export class SessionManager {
   private async loadQuietly(
     live: Live,
     connection: AgentConnection,
-    mcpServers: McpServer[],
+    attach: SessionOptions,
   ): Promise<{ config: ConfigOption[] }> {
     const { record } = live
     const scratch = threadFromSnapshot({ session: live.thread.session, entries: [], seq: 0 })
@@ -4020,7 +4062,7 @@ export class SessionManager {
     }
     connection.register(record.acpSessionId, quiet)
     try {
-      return await connection.loadSession(record.acpSessionId, record.projectPath, { mcpServers })
+      return await connection.loadSession(record.acpSessionId, record.projectPath, attach)
     } finally {
       connection.unregister(record.acpSessionId, quiet)
       // Updates after the replay wait for the session, which attaches once its values are set.
@@ -5006,7 +5048,7 @@ export class SessionManager {
       setup = await runtime.connection.forkSession(
         source.record.acpSessionId,
         source.record.projectPath,
-        { mcpServers: this.mcpServers(forkId, source.record, runtime) },
+        this.attachOptions(forkId, source.record, runtime),
         cut?.point,
       )
     } catch (error) {

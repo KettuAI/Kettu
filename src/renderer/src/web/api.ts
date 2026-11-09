@@ -328,6 +328,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       setAuto: (enabled) => admin('sharing.setAuto', { enabled }),
       onChanged: (listener) => adminEvent('sharing.changed', (event) => listener(event.status)),
     },
+    marketplace: {
+      setKeys: (patch) => admin('marketplace.setKeys', { patch }),
+    },
     remote: {
       status: () => admin('remote.status'),
       pair: () => admin('remote.pair'),

@@ -274,6 +274,66 @@ describe('sessions', () => {
     ])
   })
 
+  it('sets the Marketplace’s skill folders on app-server before a thread starts, once while unchanged', async () => {
+    const { server, connection } = await connect()
+    server.on('skills/extraRoots/set', () => ({}))
+    await connection.newSession('/project', { skillRoots: ['/kettu/skills/pdf-1'] })
+    await connection.newSession('/project', { skillRoots: ['/kettu/skills/pdf-1'] })
+    await connection.newSession('/project', { hidden: 'options' })
+    await connection.newSession('/project', { skillRoots: [] })
+    expect(server.sent('skills/extraRoots/set')).toEqual([
+      { extraRoots: ['/kettu/skills/pdf-1'] },
+      { extraRoots: [] },
+    ])
+    const methods = server.requests.map((request) => request.method)
+    expect(methods.indexOf('skills/extraRoots/set')).toBeLessThan(methods.indexOf('thread/start'))
+  })
+
+  it('passes the Marketplace’s servers in the thread config, leaving out SSE, which Codex lacks', async () => {
+    const { server, connection } = await connect()
+    await connection.newSession('/project', {
+      mcpServers: [
+        {
+          type: 'stdio',
+          name: 'context7',
+          command: 'npx',
+          args: ['-y', '@upstash/context7-mcp@4.6.0'],
+          env: [{ name: 'CONTEXT7_API_KEY', value: 'c7-secret' }],
+          secret: true,
+        },
+        {
+          type: 'stdio',
+          name: 'playwright',
+          command: 'npx',
+          args: ['-y', '@playwright/mcp@1'],
+          env: [],
+        },
+        {
+          type: 'http',
+          name: 'github',
+          url: 'https://api.githubcopilot.com/mcp/',
+          headers: [{ name: 'Authorization', value: 'Bearer ghp_secret' }],
+          secret: true,
+        },
+        { type: 'sse', name: 'notion', url: 'https://mcp.notion.com/sse', headers: [] },
+      ],
+    })
+    const sent = server.sent('thread/start')[0] as { config: Record<string, unknown> }
+    expect(sent.config.mcp_servers).toEqual({
+      context7: {
+        command: 'npx',
+        args: ['-y', '@upstash/context7-mcp@4.6.0'],
+        env: { CONTEXT7_API_KEY: 'c7-secret' },
+      },
+      playwright: { command: 'npx', args: ['-y', '@playwright/mcp@1'] },
+      github: {
+        url: 'https://api.githubcopilot.com/mcp/',
+        http_headers: { Authorization: 'Bearer ghp_secret' },
+      },
+    })
+    expect(sent).not.toHaveProperty('developerInstructions')
+  })
+
   it('needs a sign-in before a session opens on an install that has none', async () => {
     const { server, connection } = await connect()
     server.on('account/read', () => ({ account: null, requiresOpenaiAuth: true }))

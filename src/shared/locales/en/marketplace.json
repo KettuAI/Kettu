@@ -1,0 +1,357 @@
+{
+  "page": {
+    "title": "Marketplace",
+    "description": "Plugins, skills and MCP servers for your agents, from the makers of the tools you use and from the community.",
+    "search": "Search the Marketplace",
+    "tabs": {
+      "all": "All",
+      "mcp": "MCP servers",
+      "installed": "Installed",
+      "plugins": "Plugins",
+      "skills": "Skills"
+    }
+  },
+  "add": {
+    "button": "Add",
+    "heading": "Add your own",
+    "mcp": "An MCP server…",
+    "mcpLine": "A command to run, or a URL",
+    "marketplace": "A marketplace…",
+    "marketplaceLine": "A GitHub repository or Git URL",
+    "skillGithub": "A skill from GitHub…",
+    "skillGithubLine": "A repository, or a folder in one",
+    "skillFolder": "A skill from a folder…",
+    "skillFolderLine": "A folder with a SKILL.md"
+  },
+  "sections": {
+    "featured": "Featured",
+    "development": "Developer tools",
+    "data": "Data",
+    "productivity": "Productivity",
+    "design": "Design",
+    "other": "More servers",
+    "results": "From the MCP Registry",
+    "anthropic": "From Anthropic",
+    "codex": "For Codex",
+    "otherPlugins": "Other plugins",
+    "from": "From {{publisher}}",
+    "plugins": "Plugins",
+    "skills": "Skills",
+    "mcp": "MCP servers"
+  },
+  "row": {
+    "install": "Install {{name}}",
+    "installing": "Installing {{name}}",
+    "manage": "Manage {{name}}",
+    "installTitle": "Install",
+    "manageTitle": "Installed – open to manage"
+  },
+  "more": {
+    "two": "{{first}} and {{second}}",
+    "many_one": "{{first}}, {{second}} and {{count}} more",
+    "many_other": "{{first}}, {{second}} and {{count}} more"
+  },
+  "catalog": {
+    "failedTitle": "Couldn’t reach the MCP Registry",
+    "emptyTitle": "The catalog is empty",
+    "emptyText": "The MCP Registry lists no servers your agents can run right now.",
+    "stale": "The MCP Registry couldn’t be reached, so the catalog may be out of date.",
+    "staleSince": "The MCP Registry couldn’t be reached, so this is the catalog from {{ago}}."
+  },
+  "search": {
+    "noneTitle": "Nothing found",
+    "none": "Nothing matches “{{query}}”.",
+    "failedTitle": "Couldn’t search the MCP Registry"
+  },
+  "install": {
+    "title": "Install {{name}}",
+    "note": "Kettu keeps it and hands it to these agents when a session starts.",
+    "useIn": "Use in",
+    "allAgents": "All agents",
+    "required": "Required",
+    "secretHint": "Kept on this computer and never shown again.",
+    "valueHint": "Kept on this computer.",
+    "submit": "Install",
+    "installing": "Installing",
+    "noSkills": "Doesn't take skills yet"
+  },
+  "toast": {
+    "ready": "{{name}} is ready for every agent",
+    "readyFor": "{{name}} is ready for {{agents}}",
+    "keysNotSaved": "{{name}} is installed, but its keys weren’t saved: {{error}}",
+    "installFailed": "Couldn’t install {{name}}: {{error}}",
+    "changeFailed": "Couldn’t change {{name}}: {{error}}",
+    "uninstalled": "{{name}} uninstalled",
+    "keysSaved": "Keys for {{name}} saved",
+    "pluginReady": "{{name}} is installed in {{agent}}",
+    "uninstalledFrom": "{{name}} uninstalled from {{agent}}",
+    "marketplaceAdded": "{{name}} added to {{agent}}",
+    "marketplaceRemoved": "{{name}} removed",
+    "skillFailed": "Couldn’t add the skill: {{error}}"
+  },
+  "listing": {
+    "back": "Marketplace",
+    "kind": "MCP server",
+    "official": "Official",
+    "addedByYou": "Added by you",
+    "installed": "Installed",
+    "switch": "{{name}} on",
+    "more": "More for {{name}}",
+    "changeKeys": "Change keys…",
+    "chooseAgents": "Choose agents…",
+    "uninstall": "Uninstall…",
+    "facts": {
+      "worksWith": "Works with",
+      "source": "From",
+      "version": "Version",
+      "updated": "Updated"
+    },
+    "everyAgent": "Every agent",
+    "registry": "MCP Registry",
+    "manual": "Added by you",
+    "runs": "Runs and needs",
+    "connectsTo": "Connects to it over {{transport}}",
+    "runsHere": "Runs on this computer",
+    "transport": {
+      "streamable-http": "Streamable HTTP",
+      "sse": "SSE"
+    },
+    "input": {
+      "set": "Set",
+      "notSet": "Not set",
+      "notSetRequired": "Not set · required",
+      "asked": "Asked for when you install",
+      "secret": "Secret",
+      "prefix": "Sent after “{{prefix}}”"
+    },
+    "side": {
+      "publisher": "Publisher",
+      "name": "Registry name",
+      "repository": "Source",
+      "website": "Website",
+      "listedIn": "Listed in"
+    },
+    "related": "More like this",
+    "relatedFrom": "More from {{publisher}}",
+    "missingTitle": "This server isn’t listed",
+    "missingText": "It may have left the MCP Registry, or been uninstalled.",
+    "backToDirectory": "Back to the Marketplace"
+  },
+  "installed": {
+    "builtIn": "Built in",
+    "kept": "MCP servers",
+    "emptyTitle": "Nothing installed yet",
+    "emptyText": "Install servers from All, or add your own with Add.",
+    "noMatch": "Nothing installed matches “{{query}}”.",
+    "off": "Off",
+    "forAgents_one": "For {{count}} agent",
+    "forAgents_other": "For {{count}} agents",
+    "plugins": "Plugins",
+    "noPlugins": "No agent has a plugin yet. Install one from Plugins.",
+    "marketplaces": "Plugin marketplaces",
+    "marketplacesNote": "Where each agent finds plugins. Its harness’s own marketplace stays.",
+    "marketplaceKept": "Built in",
+    "removeMarketplace": "Remove {{name}}",
+    "skills": "Skills",
+    "noSkills": "Kettu keeps no skills yet. Install one from Skills.",
+    "ownSkills": "Each agent’s own skills",
+    "ownSkillsNote": "The skills each agent keeps itself. Kettu shows them; change them in the agent.",
+    "fromPlugin": "from {{plugin}}"
+  },
+  "kettu": {
+    "note": "Artifacts, sessions and the browser reach every agent through Kettu’s own server.",
+    "builtIn": "Built in",
+    "tools_one": "{{count}} tool",
+    "tools_other": "{{count}} tools",
+    "running": "Running",
+    "notRunning": "Not running",
+    "notRunningTitle": "Kettu’s server isn’t running",
+    "notRunningBody": "Sessions start without its tools until it runs.",
+    "readFailed": "Couldn’t read the MCP servers",
+    "agent": {
+      "switch": "Kettu’s tools in {{name}}",
+      "on": "Adds these tools to its sessions.",
+      "off": "Its sessions start without these tools.",
+      "takesNone": "{{name}} takes no MCP servers over HTTP.",
+      "nextStart": "Takes effect from {{name}}’s next start."
+    }
+  },
+  "own": {
+    "title": "In each agent’s own configuration",
+    "note": "Each agent also connects to the servers it keeps itself. Kettu shows where; change them in the agent.",
+    "withCommand": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project.",
+    "withCommandFrom": "Its own servers too, from {{path}}. Type {{command}} in a session to see them, or add {{file}} to a project.",
+    "withCommandMissing": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project. {{path}} is not created yet.",
+    "from": "Its own servers too, from {{path}} and {{file}} in a project.",
+    "fromMissing": "Its own servers too, from {{file}} in a project. {{path}} is not created yet.",
+    "pathNote": "{{path}} ({{note}})"
+  },
+  "dialogs": {
+    "keys": {
+      "title": "Keys for {{name}}",
+      "description": "Type a value to replace the one kept on this computer. Kettu never shows a secret again.",
+      "replace": "Set · type to replace",
+      "notSet": "Not set",
+      "cleared": "Cleared when you save",
+      "clear": "Clear",
+      "save": "Save",
+      "failed": "Couldn’t save the keys: {{error}}"
+    },
+    "agents": {
+      "title": "Agents for {{name}}",
+      "description": "Their new sessions get the server; sessions already open keep what they started with.",
+      "save": "Save"
+    },
+    "uninstall": {
+      "title": "Uninstall {{name}}?",
+      "body": "New sessions start without it, and its keys are deleted from this computer.",
+      "confirm": "Uninstall"
+    },
+    "add": {
+      "title": "Add an MCP server",
+      "description": "Every agent gets it when a session starts. Values marked secret are kept on this computer and never shown again.",
+      "name": "Name",
+      "namePlaceholder": "my-server",
+      "nameHint": "What agents call it: lowercase letters, digits, - and _.",
+      "nameEmpty": "Give it a name.",
+      "nameFormat": "Use lowercase letters, digits, - and _, starting with a letter or digit.",
+      "nameReserved": "kettu is the name of Kettu’s own server.",
+      "nameTaken": "Another server already has this name.",
+      "kind": "Connects through",
+      "kindUrl": "A URL",
+      "kindCommand": "A command",
+      "url": "URL",
+      "urlPlaceholder": "https://",
+      "urlInvalid": "Enter an http or https address.",
+      "transport": "Transport",
+      "command": "Command",
+      "commandPlaceholder": "npx -y @modelcontextprotocol/server-everything",
+      "commandHint": "The program and its arguments; quote an argument with spaces.",
+      "commandEmpty": "Enter the command that starts the server.",
+      "commandQuote": "A quote is left open.",
+      "headers": "Headers",
+      "env": "Environment",
+      "headerPlaceholder": "Authorization",
+      "envPlaceholder": "API_KEY",
+      "valueName": "Name",
+      "value": "Value",
+      "secret": "Secret",
+      "remove": "Remove {{name}}",
+      "addHeader": "Add header",
+      "addVariable": "Add variable",
+      "secretHint": "Agents receive every value; a secret is kept apart from the settings.",
+      "valueNameInvalid": "This name can’t be used here.",
+      "valueNameTaken": "This name is already used above.",
+      "secretEmpty": "A secret needs a value.",
+      "submit": "Add",
+      "failed": "Couldn’t add the server: {{error}}"
+    },
+    "failed": "It didn’t work: {{error}}",
+    "uninstallPlugin": {
+      "title": "Uninstall {{name}}?",
+      "body": "{{agent}} removes it from its configuration; its sessions start without it."
+    },
+    "removeSkill": {
+      "title": "Remove {{name}}?",
+      "body": "Agents’ new sessions start without it, and its files are deleted from this computer.",
+      "confirm": "Remove"
+    },
+    "removeMarketplace": {
+      "title": "Remove {{name}}?",
+      "body": "{{agent}} stops listing its plugins; plugins already installed from it may stop working.",
+      "confirm": "Remove"
+    },
+    "marketplace": {
+      "title": "Add a plugin marketplace",
+      "description": "A marketplace lists plugins for Claude Code or Codex. The agent you pick keeps it in its own configuration.",
+      "agent": "Agent",
+      "noAgents": "Add a Claude Code or Codex agent first.",
+      "source": "Source",
+      "sourceHint": "A GitHub repository as owner/repo, or a Git URL.",
+      "sourcePlaceholder": "owner/repo",
+      "submit": "Add"
+    },
+    "skill": {
+      "title": "Add a skill from GitHub",
+      "description": "Kettu copies the skill to this computer and hands it to the agents you choose.",
+      "url": "URL",
+      "urlPlaceholder": "https://github.com/owner/repo",
+      "urlHint": "A repository, or a folder in it with a SKILL.md.",
+      "urlInvalid": "Enter a github.com address.",
+      "submit": "Add"
+    }
+  },
+  "kind": {
+    "mcp": "MCP",
+    "plugin": "Plugin",
+    "skill": "Skill"
+  },
+  "notes": {
+    "plugins": "Couldn’t list the plugins: {{error}}",
+    "agentPlugins": "Couldn’t read {{agent}}’s plugins: {{error}}",
+    "skills": "Couldn’t read the skills catalog, so it may be out of date: {{error}}",
+    "catalog": "Couldn’t reach the MCP Registry: {{error}}",
+    "search": "Couldn’t search the MCP Registry: {{error}}"
+  },
+  "empty": {
+    "pluginsTitle": "No plugins to show",
+    "plugins": "Claude Code and Codex list no plugins yet. Add a marketplace with Add.",
+    "skillsTitle": "No skills to show",
+    "skills": "The skills catalog is empty. Add a skill from GitHub or a folder with Add."
+  },
+  "plugin": {
+    "installs_one": "{{value}} install",
+    "installs_other": "{{value}} installs",
+    "installNote": "{{harness}} installs it into the agent’s own configuration, so its terminal sees it too.",
+    "agent": "Agent",
+    "noAgents": "Add a {{harness}} agent first.",
+    "scope": "Scope",
+    "scopeUser": "Every project",
+    "scopeProject": "One project",
+    "project": "Project",
+    "scopeProjectIn": "In {{project}}",
+    "scopeLocalIn": "In {{project}}, for you only",
+    "hooksWarning": "Has hooks: they run commands on this computer by themselves, outside the agent’s sandbox.",
+    "facts": {
+      "installs": "Installs",
+      "category": "Category"
+    },
+    "side": {
+      "marketplace": "Marketplace",
+      "id": "Plugin",
+      "homepage": "Homepage"
+    },
+    "installAnother": "Install for another agent",
+    "installedIn": "Installed in",
+    "switch": "{{name}} in {{agent}}",
+    "uninstall": "Uninstall",
+    "uninstallFrom": "Uninstall {{name}} from {{agent}}",
+    "adds": "Adds",
+    "willAdd": "Will add",
+    "detailsFailed": "Couldn’t read what it adds: {{error}}",
+    "parts": {
+      "skills": "Skills",
+      "commands": "Commands",
+      "agents": "Subagents",
+      "hooks": "Hooks",
+      "mcpServers": "MCP servers",
+      "lspServers": "LSP servers",
+      "context": "Context"
+    },
+    "tokensEachTurn": "About {{value}} tokens in every session"
+  },
+  "skill": {
+    "installNote": "Kettu keeps it on this computer and hands it to these agents when a session starts.",
+    "source": {
+      "catalog": "Skills catalog",
+      "github": "GitHub",
+      "local": "A folder"
+    },
+    "howItWorks": "An agent reads a skill when a task calls for it, so it costs little until then.",
+    "side": {
+      "path": "Folder",
+      "folder": "Copied from"
+    },
+    "remove": "Remove…"
+  }
+}

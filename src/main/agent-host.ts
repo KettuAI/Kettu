@@ -50,6 +50,7 @@ import { processControl, stopTrees, type ProcessId } from '../agent-host/process
 import { ContentCache } from './artifacts/content-cache'
 import { computerHostOptions } from './computer-use'
 import { GrantRequests } from './grant-requests'
+import type { MarketKeyValues } from './market-keys'
 import { t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
@@ -58,6 +59,8 @@ const log = createLogger('agent-host')
 
 export interface AgentHostDeps {
   settings(): HostSettings
+  /** The values of the Marketplace servers' inputs, which follow init at each start. */
+  marketKeys(): MarketKeyValues
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
   /** What waits for the user by session, and a session seen, for the devices' notifications. */
   onWaiting?(sessions: Record<string, string[]>): void
@@ -315,6 +318,7 @@ export class AgentHost {
         settings: deps.settings(),
         computer: computerHostOptions(),
       }),
+      startMessages: () => [{ type: 'host:market-keys', values: deps.marketKeys() }],
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
@@ -364,6 +368,11 @@ export class AgentHost {
 
   pushSettings(settings: HostSettings): void {
     this.host.post({ type: 'host:settings', settings })
+  }
+
+  /** The values of the Marketplace servers' inputs, all of them; a host started later gets them too. */
+  pushMarketKeys(values: MarketKeyValues): void {
+    this.host.post({ type: 'host:market-keys', values })
   }
 
   /** Allow once from a request's notification, which the host answers as its own window would. */

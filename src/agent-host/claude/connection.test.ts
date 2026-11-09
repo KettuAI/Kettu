@@ -304,6 +304,106 @@ describe('the Claude Agent SDK driver', () => {
       ...(process.getuid?.() === 0 ? [] : ['bypassPermissions']),
     ])
   })
+
+  it('keeps a server that holds a key off the command line and adds it once the query starts', async () => {
+    const { sdk, connection } = await setup()
+    await connection.newSession('/repo', {
+      mcpServers: [
+        {
+          type: 'http',
+          name: 'kettu',
+          url: 'http://127.0.0.1:9/mcp',
+          headers: [{ name: 'X-Key', value: 'k' }],
+          autoAllow: ['set_plan'],
+        },
+        {
+          type: 'stdio',
+          name: 'playwright',
+          command: 'npx',
+          args: ['-y', '@playwright/mcp@1'],
+          env: [],
+        },
+        {
+          type: 'http',
+          name: 'github',
+          url: 'https://api.githubcopilot.com/mcp/',
+          headers: [{ name: 'Authorization', value: 'Bearer ghp_secret' }],
+          secret: true,
+        },
+        {
+          type: 'stdio',
+          name: 'context7',
+          command: 'npx',
+          args: ['-y', '@upstash/context7-mcp@4.6.0'],
+          env: [{ name: 'CONTEXT7_API_KEY', value: 'c7-secret' }],
+          secret: true,
+        },
+        {
+          type: 'sse',
+          name: 'notion',
+          url: 'https://mcp.notion.com/sse',
+          headers: [],
+        },
+      ],
+    })
+    const query = sdk.last
+    const initial = {
+      kettu: { type: 'http', url: 'http://127.0.0.1:9/mcp', headers: { 'X-Key': 'k' } },
+      playwright: { type: 'stdio', command: 'npx', args: ['-y', '@playwright/mcp@1'], env: {} },
+      notion: { type: 'sse', url: 'https://mcp.notion.com/sse', headers: {} },
+    }
+    expect(query.options.mcpServers).toEqual(initial)
+    expect(JSON.stringify(query.options)).not.toContain('secret')
+    expect(query.options.allowedTools).toEqual(['mcp__kettu__set_plan'])
+    const set = query.calls.filter((call) => call.method === 'setMcpServers')
+    expect(set).toEqual([
+      {
+        method: 'setMcpServers',
+        args: [
+          {
+            ...initial,
+            github: {
+              type: 'http',
+              url: 'https://api.githubcopilot.com/mcp/',
+              headers: { Authorization: 'Bearer ghp_secret' },
+            },
+            context7: {
+              type: 'stdio',
+              command: 'npx',
+              args: ['-y', '@upstash/context7-mcp@4.6.0'],
+              env: { CONTEXT7_API_KEY: 'c7-secret' },
+            },
+          },
+        ],
+      },
+    ])
+    // Set once the query has answered its initialization, before anything else is asked of it.
+    const methods = query.calls.map((call) => call.method)
+    expect(methods.indexOf('setMcpServers')).toBeGreaterThan(
+      methods.indexOf('initializationResult'),
+    )
+  })
+
+  it("loads the plugin of the Marketplace's skills beside the user's own", async () => {
+    const { sdk, connection } = await setup()
+    await connection.newSession('/repo', { localPlugins: ['/data/marketplace/claude/claude-code'] })
+    expect(sdk.last.options.plugins).toEqual([
+      { type: 'local', path: '/data/marketplace/claude/claude-code' },
+    ])
+    await connection.newSession('/repo', {})
+    expect(sdk.last.options.plugins).toBeUndefined()
+  })
+
+  it('sets no servers over the control channel when none holds a key', async () => {
+    const { sdk, connection } = await setup()
+    await connection.newSession('/repo', {
+      mcpServers: [{ type: 'stdio', name: 'playwright', command: 'npx', args: [], env: [] }],
+    })
+    expect(sdk.last.options.mcpServers).toEqual({
+      playwright: { type: 'stdio', command: 'npx', args: [], env: {} },
+    })
+    expect(sdk.last.calls.some((call) => call.method === 'setMcpServers')).toBe(false)
+  })
 })
 
 describe('a turn', () => {

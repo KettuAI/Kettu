@@ -1,0 +1,357 @@
+{
+  "page": {
+    "title": "Marketplace",
+    "description": "给你的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
+    "search": "搜索 Marketplace",
+    "tabs": {
+      "all": "全部",
+      "mcp": "MCP 服务器",
+      "installed": "已安装",
+      "plugins": "插件",
+      "skills": "技能"
+    }
+  },
+  "add": {
+    "button": "添加",
+    "heading": "自己添加",
+    "mcp": "MCP 服务器…",
+    "mcpLine": "要运行的命令，或一个 URL",
+    "marketplace": "插件市场…",
+    "marketplaceLine": "GitHub 仓库或 Git URL",
+    "skillGithub": "来自 GitHub 的技能…",
+    "skillGithubLine": "一个仓库，或仓库中的一个文件夹",
+    "skillFolder": "来自文件夹的技能…",
+    "skillFolderLine": "含有 SKILL.md 的文件夹"
+  },
+  "sections": {
+    "featured": "精选",
+    "development": "开发工具",
+    "data": "数据",
+    "productivity": "效率",
+    "design": "设计",
+    "other": "更多服务器",
+    "results": "来自 MCP Registry",
+    "anthropic": "来自 Anthropic",
+    "codex": "适用于 Codex",
+    "otherPlugins": "其他插件",
+    "from": "来自 {{publisher}}",
+    "plugins": "插件",
+    "skills": "技能",
+    "mcp": "MCP 服务器"
+  },
+  "row": {
+    "install": "安装 {{name}}",
+    "installing": "正在安装 {{name}}",
+    "manage": "管理 {{name}}",
+    "installTitle": "安装",
+    "manageTitle": "已安装，点开管理"
+  },
+  "more": {
+    "two": "{{first}}和{{second}}",
+    "many_one": "{{first}}、{{second}}等另外 {{count}} 个",
+    "many_other": "{{first}}、{{second}}等另外 {{count}} 个"
+  },
+  "catalog": {
+    "failedTitle": "无法连接 MCP Registry",
+    "emptyTitle": "目录是空的",
+    "emptyText": "MCP Registry 目前没有你的 Agent 能运行的服务器。",
+    "stale": "无法连接 MCP Registry，目录可能不是最新的。",
+    "staleSince": "无法连接 MCP Registry，这是{{ago}}的目录。"
+  },
+  "search": {
+    "noneTitle": "没有找到",
+    "none": "没有结果匹配“{{query}}”。",
+    "failedTitle": "无法搜索 MCP Registry"
+  },
+  "install": {
+    "title": "安装 {{name}}",
+    "note": "由 Kettu 保管，在会话开始时交给这些 Agent。",
+    "useIn": "用于",
+    "allAgents": "所有 Agent",
+    "required": "必填",
+    "secretHint": "保存在这台电脑上，之后不会再显示。",
+    "valueHint": "保存在这台电脑上。",
+    "submit": "安装",
+    "installing": "正在安装",
+    "noSkills": "暂不支持 Skills"
+  },
+  "toast": {
+    "ready": "{{name}} 已可供所有 Agent 使用",
+    "readyFor": "{{name}} 已可供 {{agents}} 使用",
+    "keysNotSaved": "{{name}} 已安装，但它的密钥没有保存：{{error}}",
+    "installFailed": "无法安装 {{name}}：{{error}}",
+    "changeFailed": "无法修改 {{name}}：{{error}}",
+    "uninstalled": "已卸载 {{name}}",
+    "keysSaved": "已保存 {{name}} 的密钥",
+    "pluginReady": "{{name}} 已安装到 {{agent}}",
+    "uninstalledFrom": "已从 {{agent}} 卸载 {{name}}",
+    "marketplaceAdded": "已将 {{name}} 添加到 {{agent}}",
+    "marketplaceRemoved": "已移除 {{name}}",
+    "skillFailed": "无法添加技能：{{error}}"
+  },
+  "listing": {
+    "back": "Marketplace",
+    "kind": "MCP 服务器",
+    "official": "官方",
+    "addedByYou": "由你添加",
+    "installed": "已安装",
+    "switch": "启用 {{name}}",
+    "more": "{{name}} 的更多操作",
+    "changeKeys": "更改密钥…",
+    "chooseAgents": "选择 Agent…",
+    "uninstall": "卸载…",
+    "facts": {
+      "worksWith": "适用于",
+      "source": "来源",
+      "version": "版本",
+      "updated": "更新于"
+    },
+    "everyAgent": "所有 Agent",
+    "registry": "MCP Registry",
+    "manual": "由你添加",
+    "runs": "运行方式和所需配置",
+    "connectsTo": "通过 {{transport}} 连接",
+    "runsHere": "在这台电脑上运行",
+    "transport": {
+      "streamable-http": "Streamable HTTP",
+      "sse": "SSE"
+    },
+    "input": {
+      "set": "已设置",
+      "notSet": "未设置",
+      "notSetRequired": "未设置 · 必填",
+      "asked": "安装时填写",
+      "secret": "保密",
+      "prefix": "发送时前面加上“{{prefix}}”"
+    },
+    "side": {
+      "publisher": "发布者",
+      "name": "Registry 名称",
+      "repository": "源代码",
+      "website": "网站",
+      "listedIn": "收录于"
+    },
+    "related": "类似的服务器",
+    "relatedFrom": "{{publisher}} 的更多服务器",
+    "missingTitle": "找不到这个服务器",
+    "missingText": "它可能已从 MCP Registry 下架，或者已被卸载。",
+    "backToDirectory": "返回 Marketplace"
+  },
+  "installed": {
+    "builtIn": "内置",
+    "kept": "MCP 服务器",
+    "emptyTitle": "还没有安装任何服务器",
+    "emptyText": "可以从“全部”里安装，或用“添加”加入你自己的服务器。",
+    "noMatch": "已安装的服务器中没有匹配“{{query}}”的。",
+    "off": "已关闭",
+    "forAgents_one": "用于 {{count}} 个 Agent",
+    "forAgents_other": "用于 {{count}} 个 Agent",
+    "plugins": "插件",
+    "noPlugins": "还没有 Agent 安装插件。可以在“插件”中安装。",
+    "marketplaces": "插件市场",
+    "marketplacesNote": "每个 Agent 从这里查找插件。各自工具自带的插件市场会保留。",
+    "marketplaceKept": "内置",
+    "removeMarketplace": "移除 {{name}}",
+    "skills": "技能",
+    "noSkills": "Kettu 还没有保存任何技能。可以在“技能”中安装。",
+    "ownSkills": "各 Agent 自己的技能",
+    "ownSkillsNote": "每个 Agent 自己保存的技能。Kettu 只显示它们，要修改请在 Agent 中进行。",
+    "fromPlugin": "来自 {{plugin}}"
+  },
+  "kettu": {
+    "note": "Artifacts、会话和浏览器都通过 Kettu 自带的服务器提供给每个 Agent。",
+    "builtIn": "内置",
+    "tools_one": "{{count}} 个工具",
+    "tools_other": "{{count}} 个工具",
+    "running": "运行中",
+    "notRunning": "未运行",
+    "notRunningTitle": "Kettu 的服务器没有运行",
+    "notRunningBody": "在它运行之前，会话启动时不带它的工具。",
+    "readFailed": "无法读取 MCP 服务器",
+    "agent": {
+      "switch": "在 {{name}} 中使用 Kettu 的工具",
+      "on": "在它的会话中加入这些工具。",
+      "off": "它的会话启动时不带这些工具。",
+      "takesNone": "{{name}} 不支持通过 HTTP 连接的 MCP 服务器。",
+      "nextStart": "将在 {{name}} 下次启动时生效。"
+    }
+  },
+  "own": {
+    "title": "各 Agent 自己的配置",
+    "note": "每个 Agent 也会连接它自己配置的服务器。Kettu 只显示它们在哪里，要修改请在 Agent 中进行。",
+    "withCommand": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
+    "withCommandFrom": "它自己的服务器也会连接，来自 {{path}}。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
+    "withCommandMissing": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。{{path}} 尚未创建。",
+    "from": "它自己的服务器也会连接，来自 {{path}} 和项目里的 {{file}}。",
+    "fromMissing": "它自己的服务器也会连接，来自项目里的 {{file}}。{{path}} 尚未创建。",
+    "pathNote": "{{path}}（{{note}}）"
+  },
+  "dialogs": {
+    "keys": {
+      "title": "{{name}} 的密钥",
+      "description": "输入新值即可替换这台电脑上保存的值。保密的值不会再显示。",
+      "replace": "已设置 · 输入新值替换",
+      "notSet": "未设置",
+      "cleared": "保存后清除",
+      "clear": "清除",
+      "save": "保存",
+      "failed": "无法保存密钥：{{error}}"
+    },
+    "agents": {
+      "title": "{{name}} 用于哪些 Agent",
+      "description": "这些 Agent 的新会话会用上这个服务器；已打开的会话保持原样。",
+      "save": "保存"
+    },
+    "uninstall": {
+      "title": "卸载 {{name}}？",
+      "body": "新会话启动时将不再带上它，它的密钥也会从这台电脑上删除。",
+      "confirm": "卸载"
+    },
+    "add": {
+      "title": "添加 MCP 服务器",
+      "description": "每个 Agent 在会话开始时都会用上它。标为保密的值保存在这台电脑上，之后不会再显示。",
+      "name": "名称",
+      "namePlaceholder": "my-server",
+      "nameHint": "Agent 用这个名字称呼它：小写字母、数字、- 和 _。",
+      "nameEmpty": "请填写名称。",
+      "nameFormat": "只能用小写字母、数字、- 和 _，并以字母或数字开头。",
+      "nameReserved": "kettu 是 Kettu 自带服务器的名称。",
+      "nameTaken": "已有服务器使用这个名称。",
+      "kind": "连接方式",
+      "kindUrl": "URL",
+      "kindCommand": "命令",
+      "url": "URL",
+      "urlPlaceholder": "https://",
+      "urlInvalid": "请输入 http 或 https 地址。",
+      "transport": "传输方式",
+      "command": "命令",
+      "commandPlaceholder": "npx -y @modelcontextprotocol/server-everything",
+      "commandHint": "程序和它的参数；带空格的参数请加引号。",
+      "commandEmpty": "请输入启动服务器的命令。",
+      "commandQuote": "有一个引号没有闭合。",
+      "headers": "请求头",
+      "env": "环境变量",
+      "headerPlaceholder": "Authorization",
+      "envPlaceholder": "API_KEY",
+      "valueName": "名称",
+      "value": "值",
+      "secret": "保密",
+      "remove": "移除 {{name}}",
+      "addHeader": "添加请求头",
+      "addVariable": "添加变量",
+      "secretHint": "Agent 会收到所有值；保密的值与设置分开保存。",
+      "valueNameInvalid": "这个名称不能用在这里。",
+      "valueNameTaken": "上面已经用过这个名称。",
+      "secretEmpty": "保密的值不能为空。",
+      "submit": "添加",
+      "failed": "无法添加服务器：{{error}}"
+    },
+    "failed": "操作失败：{{error}}",
+    "uninstallPlugin": {
+      "title": "卸载 {{name}}？",
+      "body": "{{agent}} 会把它从自己的配置中移除，之后的会话不再带上它。"
+    },
+    "removeSkill": {
+      "title": "移除 {{name}}？",
+      "body": "Agent 的新会话将不再带上它，它的文件也会从这台电脑上删除。",
+      "confirm": "移除"
+    },
+    "removeMarketplace": {
+      "title": "移除 {{name}}？",
+      "body": "{{agent}} 将不再列出其中的插件；已从这里安装的插件可能无法继续使用。",
+      "confirm": "移除"
+    },
+    "marketplace": {
+      "title": "添加插件市场",
+      "description": "插件市场为 Claude Code 或 Codex 列出插件。你选择的 Agent 会把它保存在自己的配置中。",
+      "agent": "Agent",
+      "noAgents": "请先添加一个 Claude Code 或 Codex Agent。",
+      "source": "来源",
+      "sourceHint": "GitHub 仓库（owner/repo），或 Git URL。",
+      "sourcePlaceholder": "owner/repo",
+      "submit": "添加"
+    },
+    "skill": {
+      "title": "从 GitHub 添加技能",
+      "description": "Kettu 会把技能复制到这台电脑上，并交给你选择的 Agent。",
+      "url": "URL",
+      "urlPlaceholder": "https://github.com/owner/repo",
+      "urlHint": "一个仓库，或其中含有 SKILL.md 的文件夹。",
+      "urlInvalid": "请输入 github.com 的地址。",
+      "submit": "添加"
+    }
+  },
+  "kind": {
+    "mcp": "MCP",
+    "plugin": "插件",
+    "skill": "技能"
+  },
+  "notes": {
+    "plugins": "无法列出插件：{{error}}",
+    "agentPlugins": "无法读取 {{agent}} 的插件：{{error}}",
+    "skills": "无法读取技能目录，内容可能不是最新的：{{error}}",
+    "catalog": "无法连接 MCP Registry：{{error}}",
+    "search": "无法搜索 MCP Registry：{{error}}"
+  },
+  "empty": {
+    "pluginsTitle": "没有可显示的插件",
+    "plugins": "Claude Code 和 Codex 还没有列出任何插件。可以用“添加”加入一个插件市场。",
+    "skillsTitle": "没有可显示的技能",
+    "skills": "技能目录是空的。可以用“添加”从 GitHub 或文件夹加入技能。"
+  },
+  "plugin": {
+    "installs_one": "{{value}} 次安装",
+    "installs_other": "{{value}} 次安装",
+    "installNote": "由 {{harness}} 安装到这个 Agent 自己的配置中，它的终端也能用上。",
+    "agent": "Agent",
+    "noAgents": "请先添加一个 {{harness}} Agent。",
+    "scope": "范围",
+    "scopeUser": "所有项目",
+    "scopeProject": "单个项目",
+    "project": "项目",
+    "scopeProjectIn": "在 {{project}} 中",
+    "scopeLocalIn": "在 {{project}} 中，仅自己可用",
+    "hooksWarning": "包含 hook：它们会在这台电脑上自行运行命令，不受 Agent 沙盒限制。",
+    "facts": {
+      "installs": "安装次数",
+      "category": "类别"
+    },
+    "side": {
+      "marketplace": "插件市场",
+      "id": "插件",
+      "homepage": "主页"
+    },
+    "installAnother": "为其他 Agent 安装",
+    "installedIn": "已安装于",
+    "switch": "在 {{agent}} 中启用 {{name}}",
+    "uninstall": "卸载",
+    "uninstallFrom": "从 {{agent}} 卸载 {{name}}",
+    "adds": "包含",
+    "willAdd": "将会加入",
+    "detailsFailed": "无法读取它包含的内容：{{error}}",
+    "parts": {
+      "skills": "技能",
+      "commands": "命令",
+      "agents": "子 Agent",
+      "hooks": "Hook",
+      "mcpServers": "MCP 服务器",
+      "lspServers": "LSP 服务器",
+      "context": "上下文"
+    },
+    "tokensEachTurn": "每个会话约占用 {{value}} 个 token"
+  },
+  "skill": {
+    "installNote": "由 Kettu 保存在这台电脑上，在会话开始时交给这些 Agent。",
+    "source": {
+      "catalog": "技能目录",
+      "github": "GitHub",
+      "local": "文件夹"
+    },
+    "howItWorks": "Agent 只在任务需要时才读取技能，在那之前几乎不占用上下文。",
+    "side": {
+      "path": "文件夹",
+      "folder": "复制自"
+    },
+    "remove": "移除…"
+  }
+}

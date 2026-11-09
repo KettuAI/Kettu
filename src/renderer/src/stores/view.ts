@@ -48,6 +48,12 @@ type PageView =
   | { kind: 'routine'; routineId: string | null; example?: RoutineExampleId }
   // The Artifacts page, opened from the sidebar; with `deleted`, its Recently deleted view.
   | { kind: 'artifacts'; deleted?: true }
+  // The Marketplace, opened from the sidebar: its directory on a tab, or with `item`, the listing
+  // of the server with that id, a step of the history of its own.
+  | { kind: 'marketplace'; item?: string; tab?: MarketplaceTab }
+
+/** The Marketplace directory's tabs. */
+export type MarketplaceTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'installed'
 
 // An artifact in the viewer, which Back leaves for what the main area showed before; `history`
 // opens it with its version history.
@@ -111,7 +117,6 @@ export type SettingsSection =
   | 'notifications'
   | 'account'
   | 'usage'
-  | 'mcp'
   | 'archived'
   | 'artifacts'
   | 'sharing'
@@ -552,6 +557,32 @@ export function openRoutine(
   else open()
 }
 
+/**
+ * The Marketplace: its directory on `tab`, All unless given, or the listing of `item`. A tab
+ * changes the page shown in place, so Back leaves the Marketplace rather than its tabs.
+ */
+export function openMarketplace({ item, tab }: { item?: string; tab?: MarketplaceTab } = {}): void {
+  useViewStore.setState((s) => ({
+    main: marketplaceView(item, tab),
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** Shows another tab of the Marketplace's directory in place, as the same step of the history. */
+export function setMarketplaceTab(tab: MarketplaceTab): void {
+  useViewStore.setState((s) =>
+    s.main.kind === 'marketplace' && !s.main.item ? { main: marketplaceView(undefined, tab) } : s,
+  )
+}
+
+function marketplaceView(item: string | undefined, tab: MarketplaceTab | undefined): MainView {
+  return {
+    kind: 'marketplace',
+    ...(item ? { item } : {}),
+    ...(tab && tab !== 'all' ? { tab } : {}),
+  }
+}
+
 /** The Artifacts page from the sidebar, with its whole list. */
 export function openArtifacts(): void {
   useArtifactsStore.setState({ filter: '', kindFilter: null, projectFilter: [], opened: null })
@@ -846,6 +877,8 @@ export function viewKey(view: HistoryView): string {
       return `routine:${view.routineId ?? view.example ?? ''}`
     case 'artifacts':
       return view.deleted ? 'artifacts:deleted' : 'artifacts'
+    case 'marketplace':
+      return view.item ? `marketplace:${view.item}` : 'marketplace'
     case 'artifact':
       return `artifact:${view.id}`
     default:

@@ -9,6 +9,8 @@ import type {
   ContextUsageAnswer,
   FlagSettings,
   InitializeAnswer,
+  McpServerConfig,
+  McpSetServersResult,
   PermissionMode,
   Query,
   QueryOptions,
@@ -180,6 +182,11 @@ export class FakeQuery implements Query {
 
   async stopTask(taskId: string): Promise<void> {
     this.record('stopTask', taskId)
+  }
+
+  async setMcpServers(servers: Record<string, McpServerConfig>): Promise<McpSetServersResult> {
+    this.record('setMcpServers', servers)
+    return { added: Object.keys(servers), removed: [], errors: {} }
   }
 
   async generateSessionTitle(description: string, options: { persist: boolean }) {

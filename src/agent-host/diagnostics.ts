@@ -57,28 +57,66 @@ function methodOf(message: unknown): string | null {
   return typeof method === 'string' ? method : null
 }
 
+const REDACTED = '<redacted>'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** `{ name, value }` pairs with every value masked. */
+function maskedPairs(list: unknown): unknown {
+  if (!Array.isArray(list)) return list
+  return list.map((item: unknown) => (isRecord(item) ? { ...item, value: REDACTED } : item))
+}
+
+/** A record of names to values with every value masked. */
+function maskedRecord(record: unknown): unknown {
+  if (!isRecord(record)) return record
+  return Object.fromEntries(Object.keys(record).map((key) => [key, REDACTED]))
+}
+
 /**
- * The message without the values of its MCP servers' headers, which carry the artifacts service's
- * session tokens; only attach requests hold servers.
+ * The message without the values of the headers and environment its MCP servers carry: the
+ * artifacts service's session tokens and the keys of the Marketplace's servers. Masked by where
+ * they sit, ACP's `params.mcpServers` and Codex's `params.config.mcp_servers`, whatever they hold.
  */
 function redacted(message: unknown): unknown {
-  if (typeof message !== 'object' || message === null) return message
-  const params = (message as { params?: unknown }).params
-  if (typeof params !== 'object' || params === null) return message
-  const servers = (params as { mcpServers?: unknown }).mcpServers
-  if (!Array.isArray(servers)) return message
-  const mcpServers = servers.map((server: unknown) => {
-    const headers = (server as { headers?: unknown } | null)?.headers
-    if (!Array.isArray(headers)) return server
-    return {
-      ...(server as object),
-      headers: headers.map((header: unknown) => ({
-        ...(header as object),
-        value: '<redacted>',
-      })),
+  if (!isRecord(message) || !isRecord(message.params)) return message
+  const params = message.params
+  let masked = params
+  if (Array.isArray(params.mcpServers)) {
+    masked = {
+      ...masked,
+      mcpServers: params.mcpServers.map((server: unknown) =>
+        isRecord(server)
+          ? {
+              ...server,
+              ...('headers' in server ? { headers: maskedPairs(server.headers) } : {}),
+              ...('env' in server ? { env: maskedPairs(server.env) } : {}),
+            }
+          : server,
+      ),
     }
-  })
-  return { ...message, params: { ...params, mcpServers } }
+  }
+  const config = params.config
+  if (isRecord(config) && isRecord(config.mcp_servers)) {
+    const servers = Object.fromEntries(
+      Object.entries(config.mcp_servers).map(([name, server]) => [
+        name,
+        isRecord(server)
+          ? {
+              ...server,
+              ...('http_headers' in server
+                ? { http_headers: maskedRecord(server.http_headers) }
+                : {}),
+              ...('env' in server ? { env: maskedRecord(server.env) } : {}),
+            }
+          : server,
+      ]),
+    )
+    masked = { ...masked, config: { ...config, mcp_servers: servers } }
+  }
+  return masked === params ? message : { ...message, params: masked }
 }
 
 export interface DiagnosticsOptions {

@@ -231,7 +231,8 @@
   --code-success: #1a7f4b;
   --code-danger: #cf222e;
 
-  /* Agent marks: with the Kettu icon, the only brand colors in the interface. */
+  /* Agent marks: with the Kettu icon and the Marketplace's marks, the only brand colors in the
+     interface. */
   --brand-claude: #d97757;
   --brand-codex-1: #b1a7ff;
   --brand-codex-2: #7a9dff;
@@ -251,6 +252,24 @@
   --brand-muse: #5b45e0;
   --brand-codewhale-1: #1e8fd8;
   --brand-codewhale-2: #0b48bb;
+  /* The marks of the services the Marketplace features, in Simple Icons' colors in both variants:
+     a tile in the brand's color under a light mark, or the mark alone in its color. */
+  --brand-tile-ink: #ffffff;
+  --brand-github: #171717;
+  --brand-linear: #5e6ad2;
+  --brand-sentry: #362d59;
+  --brand-stripe: #635bff;
+  --brand-vercel: #000000;
+  --brand-supabase: #3ecf8e;
+  --brand-supabase-tile: #1c1c1c;
+  --brand-playwright: #2ead33;
+  --brand-jira: #0052cc;
+  --brand-postgresql: #4169e1;
+  --brand-figma-red: #f24e1e;
+  --brand-figma-coral: #ff7262;
+  --brand-figma-violet: #a259ff;
+  --brand-figma-blue: #1abcfe;
+  --brand-figma-green: #0acf83;
 
   /* Artifact kinds: each one's color, as file type icons carry it, and its tint, used only on the
      kind's icon and on the ground of its tile and thumbnail. */

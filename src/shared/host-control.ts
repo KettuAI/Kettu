@@ -77,6 +77,9 @@ export type MainToHost =
   // travels in the transfer list; under Node.js this is the first message on the socket's port.
   | { type: 'host:connect'; device: PortDevice }
   | { type: 'host:settings'; settings: HostSettings }
+  // The values of the Marketplace servers' inputs, by server id and input name, all of them each
+  // time: right after host:init at every start, and whenever they change.
+  | { type: 'host:market-keys'; values: Record<string, Record<string, string>> }
   | { type: 'host:busy-request'; requestId: number }
   // A problem report's bundle, answered by host:report. The parent adds its own part; the host
   // reads the logs, its agents and sessions, and writes the zip under its data folder.

@@ -78,9 +78,21 @@ import { HostError, invalidParams } from './errors'
 import { setLocale, t } from './i18n'
 import { FilesService } from './files'
 import { MediaService } from './media'
+import { catalogFile, MarketCatalogService } from './marketplace/catalog'
+import type { CodexRequest } from './marketplace/codex-plugins'
+import { MarketPluginsService, pluginsFile } from './marketplace/plugins'
+import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
+import {
+  ALL_TRANSPORTS,
+  keyState,
+  libraryServers,
+  parseMarketKeys,
+  type MarketKeys,
+} from './marketplace/servers'
 import type { Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
+import type { SkillsListResponse } from './codex/protocol'
 import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
@@ -287,6 +299,14 @@ export class AgentHost {
   private readonly deviceAccess: DeviceAccessStore
   /** Browser calls sent to the desktop apps that sent their turns. */
   private readonly deviceBrowser: DeviceBrowserCalls
+  /** The values of the Marketplace servers' inputs from main, held only in memory. */
+  private marketKeys: MarketKeys = new Map()
+  /** The Marketplace's catalog of MCP servers, from the registry. */
+  private readonly marketCatalog: MarketCatalogService
+  /** Claude Code's and Codex's plugins, through each agent's harness. */
+  private readonly marketPlugins: MarketPluginsService
+  /** The skills catalog, the skills Kettu keeps, and what each agent gets of them. */
+  private readonly marketSkills: MarketSkillsService
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -333,6 +353,33 @@ export class AgentHost {
         this.hub.broadcast({ type: 'agent.options', options: this.withStartMode(changed) }),
     })
     this.preparedRecords = new PreparedRecords(preparedFile(options.userDataPath, log))
+    this.marketCatalog = new MarketCatalogService({
+      file: catalogFile(options.userDataPath, log),
+      log,
+    })
+    const home = options.homeDir ?? os.homedir()
+    this.marketPlugins = new MarketPluginsService({
+      file: pluginsFile(options.userDataPath, log),
+      log,
+      platform,
+      agents: () => this.installedAgents(['claude-code', 'codex']),
+      program: (agentId) => this.agents.harnessProgram(agentId),
+      appServer: (agentId) => this.appServer(agentId),
+    })
+    this.marketSkills = new MarketSkillsService({
+      userDataPath: options.userDataPath,
+      file: skillsCatalogFile(options.userDataPath, log),
+      log,
+      platform,
+      home,
+      settings: () => this.settings.marketplace.skills,
+      agents: () => this.agents.ids().filter((id) => !this.settings.disabledAgents.includes(id)),
+      configFolder: (agentId) => this.agents.configFolder(agentId),
+      codexSkills: async (agentId) => {
+        if ((await this.installedAgents(['codex'], [agentId])).length === 0) return null
+        return (await this.appServer(agentId))<SkillsListResponse>('skills/list', { cwds: [home] })
+      },
+    })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
       control: options.processControl ?? processControl(platform),
@@ -509,6 +556,7 @@ export class AgentHost {
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
       remember: (file) => this.remembered.save(file),
       rememberUpdates: (file) => this.updates.save(file),
+      launchEnv: (agentId, env) => this.marketSkills.launchEnv(agentId, env),
     })
     const routineHooks: RoutineSessionHooksRef = { current: null }
     this.sessions = new SessionManager({
@@ -528,6 +576,11 @@ export class AgentHost {
           this.agents.mcpServersByName(record.agentId)
             ? this.artifactService.folderServers(connection, record.projectPath, sessionId)
             : this.artifactService.servers(sessionId, record.projectPath),
+        library: (agentId, transports, taken) =>
+          libraryServers(this.settings.marketplace.mcp, this.marketKeys, agentId, transports, {
+            platform,
+            taken,
+          }),
         detached: (sessionId) => {
           this.artifactService.revoke(sessionId)
           this.artifacts.stopUsing(sessionId)
@@ -538,6 +591,7 @@ export class AgentHost {
           this.computer?.turnEnded(sessionId)
         },
       },
+      skills: (agentId) => this.marketSkills.sessionOptions(agentId),
       usage: this.usage,
       cacheTtl:
         options.cacheTtl ??
@@ -730,6 +784,7 @@ export class AgentHost {
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
     host.routines.start()
+    void host.marketSkills.sync()
     host.sendFolders()
     host.usage.start()
     host.artifacts.start()
@@ -827,10 +882,77 @@ export class AgentHost {
     }
     this.env.setConfigFolders(configFolders(this.catalog, next))
     this.startModesChanged(previous, next)
+    this.marketChanged(previous.marketplace.mcp, this.marketKeys)
+    if (JSON.stringify(previous.marketplace.skills) !== JSON.stringify(next.marketplace.skills)) {
+      void this.skillsChanged(previous.marketplace.skills)
+    }
     const removed = await this.agents.settingsChanged(previous, next)
     const turnedOff = next.disabledAgents.filter((id) => !previous.disabledAgents.includes(id))
     const gone = [...removed, ...turnedOff]
     if (gone.length > 0) await this.sessions.agentsRemoved(gone)
+  }
+
+  /**
+   * `host:market-keys`: every value of the Marketplace servers' inputs, replacing those before.
+   * They stay in memory and go only into what agents are handed; a malformed message is dropped.
+   */
+  setMarketKeys(values: unknown): void {
+    const keys = parseMarketKeys(values)
+    if (!keys) {
+      this.diagnostics.log('warn', 'host:market-keys was not a map of values; ignored')
+      return
+    }
+    const previous = this.marketKeys
+    this.marketKeys = keys
+    this.marketChanged(this.settings.marketplace.mcp, previous)
+    this.hub.broadcast({ type: 'market.keysChanged' })
+  }
+
+  /**
+   * The Marketplace's servers or keys may have changed from `servers` and `keys`: each agent whose
+   * servers differ now has its prepared sessions replaced.
+   */
+  private marketChanged(servers: HostSettings['marketplace']['mcp'], keys: MarketKeys): void {
+    const options = { platform: this.options.platform }
+    const of = (list: typeof servers, held: MarketKeys, agentId: AgentId): string =>
+      JSON.stringify(libraryServers(list, held, agentId, ALL_TRANSPORTS, options))
+    const now = this.settings.marketplace.mcp
+    if (servers === now && keys === this.marketKeys) return
+    this.sessions.libraryChanged(
+      (agentId) => of(servers, keys, agentId) !== of(now, this.marketKeys, agentId),
+    )
+  }
+
+  /**
+   * The skills in the settings changed from `before`: the disk follows, then the prepared sessions
+   * of each agent whose skills differ are replaced.
+   */
+  private async skillsChanged(before: HostSettings['marketplace']['skills']): Promise<void> {
+    await this.marketSkills.sync()
+    const now = this.settings.marketplace.skills
+    const of = (skills: typeof now, agentId: AgentId): string =>
+      JSON.stringify(skills.filter((skill) => skillFor(skill, agentId)).map((s) => [s.id, s.name]))
+    this.sessions.libraryChanged((agentId) => of(before, agentId) !== of(now, agentId))
+  }
+
+  /** The agents of these harnesses that are turned on and whose program is installed. */
+  private async installedAgents(
+    harnesses: readonly HarnessId[],
+    among: readonly AgentId[] = this.agents.ids(),
+  ): Promise<AgentId[]> {
+    const wanted = among.filter(
+      (id) => harnesses.includes(harnessOf(id)) && !this.settings.disabledAgents.includes(id),
+    )
+    const found = await Promise.all(wanted.map((id) => this.agents.harnessProgram(id)))
+    return wanted.filter((_, index) => found[index] !== null)
+  }
+
+  /** The agent's app-server for requests outside a session, started if it is not running. */
+  private async appServer(agentId: AgentId): Promise<CodexRequest> {
+    const { connection } = await this.agents.ensureReady(agentId)
+    const request = connection.request?.bind(connection)
+    if (!request) throw new HostError('agent_unavailable', 'The agent takes no such request')
+    return request
   }
 
   /** The options as New session takes them, with the start mode the settings name for the agent. */
@@ -1181,6 +1303,9 @@ export class AgentHost {
         this.agentOptions.flush(),
         this.preparedRecords.flush(),
         this.attachments.flush(),
+        this.marketCatalog.flush(),
+        this.marketPlugins.flush(),
+        this.marketSkills.flush(),
         this.threads?.close(),
         this.usage.close(),
       ])
@@ -1327,6 +1452,24 @@ export class AgentHost {
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
       'mcp.status': () => this.mcpStatus(),
+      'market.catalog': ({ refresh }) => this.marketCatalog.catalog(refresh === true),
+      'market.search': ({ query }) => this.marketCatalog.search(query),
+      'market.keys': () => keyState(this.settings.marketplace.mcp, this.marketKeys),
+      'market.plugins': ({ refresh }) => this.marketPlugins.plugins(refresh === true),
+      'market.pluginDetails': ({ agentId, pluginId }) =>
+        this.marketPlugins.details(agentId, pluginId),
+      'market.installPlugin': ({ agentId, pluginId, scope, projectPath }) =>
+        this.marketPlugins.install(agentId, pluginId, scope, projectPath ?? null),
+      'market.uninstallPlugin': ({ agentId, pluginId, scope, projectPath }) =>
+        this.marketPlugins.uninstall(agentId, pluginId, scope, projectPath ?? null),
+      'market.setPluginEnabled': ({ agentId, pluginId, enabled, scope, projectPath }) =>
+        this.marketPlugins.setEnabled(agentId, pluginId, enabled, scope, projectPath ?? null),
+      'market.addMarketplace': ({ agentId, source }) =>
+        this.marketPlugins.addMarketplace(agentId, source),
+      'market.removeMarketplace': ({ agentId, name }) =>
+        this.marketPlugins.removeMarketplace(agentId, name),
+      'market.skills': ({ refresh }) => this.marketSkills.skills(refresh === true),
+      'market.addSkill': ({ source }) => this.marketSkills.add(source),
       'mcp.retry': async () => {
         await this.artifactService.start()
         this.options.send({ type: 'host:service-port', port: this.artifactService.listeningPort })

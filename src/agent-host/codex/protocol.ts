@@ -426,6 +426,9 @@ export interface SkillMetadata {
   shortDescription?: string
   path: string
   enabled: boolean
+  scope?: 'user' | 'repo' | 'system' | 'admin'
+  /** The plugin it came with, by id, when known. */
+  pluginId?: string | null
 }
 
 export interface SkillsListResponse {
@@ -582,4 +585,59 @@ export interface McpServerElicitationRequestResponse {
   action: 'accept' | 'decline' | 'cancel'
   content: JsonValue | null
   _meta: JsonValue | null
+}
+
+export interface PluginInterface {
+  displayName: string | null
+  shortDescription: string | null
+  developerName: string | null
+  category: string | null
+  websiteUrl: string | null
+}
+
+export interface PluginSummary {
+  id: string
+  name: string
+  version: string | null
+  localVersion: string | null
+  source: { type: 'local' | 'git' | 'npm' | 'remote' }
+  installed: boolean
+  enabled: boolean
+  installPolicy: 'NOT_AVAILABLE' | 'AVAILABLE' | 'INSTALLED_BY_DEFAULT'
+  availability: 'AVAILABLE' | 'DISABLED_BY_ADMIN'
+  interface: PluginInterface | null
+}
+
+export interface PluginMarketplaceEntry {
+  name: string
+  /** The marketplace's file; null for a catalog only the remote service has. */
+  path: string | null
+  interface: { displayName: string | null } | null
+  plugins: PluginSummary[]
+}
+
+export interface PluginListResponse {
+  marketplaces: PluginMarketplaceEntry[]
+  marketplaceLoadErrors: { marketplacePath: string; message: string }[]
+  featuredPluginIds: string[]
+}
+
+export interface PluginDetail {
+  marketplaceName: string
+  marketplacePath: string | null
+  summary: PluginSummary
+  description: string | null
+  skills: { name: string }[]
+  hooks: { key: string; eventName: string }[]
+  mcpServers: string[]
+}
+
+export interface PluginReadResponse {
+  plugin: PluginDetail
+}
+
+export interface MarketplaceAddResponse {
+  marketplaceName: string
+  installedRoot: string
+  alreadyAdded: boolean
 }

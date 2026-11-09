@@ -14,7 +14,6 @@
     "sharing": "分享",
     "remote": "远程访问",
     "browser": "浏览器",
-    "mcp": "MCP 服务器",
     "harnesses": "Harness",
     "hosts": "主机",
     "devices": "移动设备",
@@ -679,6 +678,11 @@
     "registrationNote": "安装或检测到 Harness 不会自动添加 Agent。",
     "onHarness": "运行于 {{harness}}",
     "openHarness": "到 Harness 里打开 {{harness}}",
+    "mcpServers": {
+      "name": "MCP 服务器",
+      "description": "Kettu 自带的服务器，以及你安装的服务器。在 Marketplace 中管理。",
+      "open": "打开 Marketplace"
+    },
     "openHarnessButton": "打开",
     "harness": "Harness",
     "signInRow": "登录",
@@ -908,7 +912,6 @@
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
     "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
-    "mcp": "Agent 通过这些 MCP 服务器使用工具：Kettu 自带的，以及各 Agent 自己配置的。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。",
@@ -1462,53 +1465,6 @@
   },
   "usage": {
     "cleared": "已清除 Kettu 的记录"
-  },
-  "mcp": {
-    "keywords": "MCP 服务器 工具 artifact 会话 浏览器",
-    "groups": {
-      "kettu": "来自 Kettu",
-      "own": "各 Agent 自己的配置",
-      "kettuNote": "Artifacts、会话和浏览器都通过这个服务器提供给每个 Agent。"
-    },
-    "state": {
-      "running": "运行中",
-      "notRunning": "未运行"
-    },
-    "row": {
-      "tools_one": "{{count}} 个工具",
-      "tools_other": "{{count}} 个工具",
-      "off": "已对 {{names}} 关闭",
-      "offEvery": "已对所有 Agent 关闭"
-    },
-    "error": {
-      "title": "无法读取 MCP 服务器"
-    },
-    "server": {
-      "notRunning": {
-        "title": "Kettu 的服务器没有运行",
-        "body": "在它运行之前，会话启动时不带它的工具。"
-      }
-    },
-    "place": {
-      "connects": "{{name}} 也会连接它自己配置的服务器。",
-      "keywords": "配置文件 MCP",
-      "ownWithCommand": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
-      "ownWithCommandFrom": "它自己的服务器也会连接，来自 {{path}}。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
-      "ownWithCommandMissing": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。{{path}} 尚未创建。",
-      "ownFrom": "它自己的服务器也会连接，来自 {{path}} 和项目里的 {{file}}。",
-      "ownFromMissing": "它自己的服务器也会连接，来自项目里的 {{file}}。{{path}} 尚未创建。",
-      "pathNote": "{{path}}（{{note}}）"
-    },
-    "agents": "Agent",
-    "tools": "工具",
-    "agent": {
-      "switch": "在 {{name}} 中使用 Kettu 的工具",
-      "on": "在它的会话中加入这些工具。",
-      "off": "它的会话启动时不带这些工具。",
-      "takesNone": "{{name}} 不支持通过 HTTP 连接的 MCP 服务器。",
-      "nextStart": "将在 {{name}} 下次启动时生效。"
-    },
-    "builtIn": "内置"
   },
   "harnesses": {
     "groups": {

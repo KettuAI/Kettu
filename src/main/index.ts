@@ -67,6 +67,7 @@ import {
 import { watchPresence } from './presence'
 import { RelayToken } from './relay-token'
 import { readJsonFile } from './json-file'
+import { MarketKeys, marketKeysFile } from './market-keys'
 import { computerModelForRun } from './system-model'
 import { systemReleaseForRun } from './system-name'
 import { rendererPage } from './renderer'
@@ -335,8 +336,24 @@ async function start(): Promise<void> {
   // Set once the sharing service exists; the host reports ready only after that, at each start.
   let reconcileSharing: (() => void) | null = null
   let sharingArtifactsChanged: (() => void) | null = null
+  const identityCipher: IdentityCipher = {
+    available: () => safeStorage.isAsyncEncryptionAvailable(),
+    encrypt: (text) => safeStorage.encryptStringAsync(text),
+    decrypt: (encrypted) => safeStorage.decryptStringAsync(encrypted),
+    plainText: () =>
+      process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
+  }
+  const marketKeys = await MarketKeys.load({
+    file: marketKeysFile(userDataPath),
+    cipher: identityCipher,
+    plainTextAllowed: false,
+    servers: () => settings.get().marketplace.mcp,
+    changed: (values) => hostRef.current?.pushMarketKeys(values),
+    log: createLogger('market-keys'),
+  })
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
+    marketKeys: () => marketKeys.values(),
     onAttention: (message) => {
       notifyAttention(message, settings.get(), (sessionId, requestId, optionId) =>
         agentHost.answerPermission(sessionId, requestId, optionId),
@@ -390,13 +407,6 @@ async function start(): Promise<void> {
       }),
   })
   hostRef.current = agentHost
-  const identityCipher: IdentityCipher = {
-    available: () => safeStorage.isAsyncEncryptionAvailable(),
-    encrypt: (text) => safeStorage.encryptStringAsync(text),
-    decrypt: (encrypted) => safeStorage.decryptStringAsync(encrypted),
-    plainText: () =>
-      process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
-  }
   const hostName = (): string => settings.get().remote.name ?? hostname()
   // Set once the sharing service exists, which publishes with the account.
   let sharingKettuChanged: (() => void) | null = null
@@ -623,6 +633,7 @@ async function start(): Promise<void> {
         windowState.flush(),
         appState.flush(),
         sharing.flush(),
+        marketKeys.flush(),
         browserOrigins.flush(),
         siteIcons.flush(),
       ])
@@ -697,6 +708,7 @@ async function start(): Promise<void> {
     sharing,
     updates: updater,
     themes,
+    marketKeys,
     thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
     png: (id, version, page, size) => artifacts.png(id, version, page, size),
     printPdf: (id, version) => artifacts.printPdf(id, version),
@@ -737,6 +749,7 @@ async function start(): Promise<void> {
     if (reachesHost(changed) || localeChanged || changed.has('general')) {
       agentHost.pushSettings(hostSettings(next, systemLocale))
     }
+    if (changed.has('marketplace')) marketKeys.prune()
     if (changed.has('remote')) {
       remoteHost.directChanged()
       remoteHost.terminalChanged()
@@ -782,6 +795,7 @@ async function start(): Promise<void> {
     siteIcons,
     mediaGrants,
     sharing,
+    marketKeys,
     remoteHost,
     hostSessions,
     hostMedia,

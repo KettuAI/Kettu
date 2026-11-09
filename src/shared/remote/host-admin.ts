@@ -5,7 +5,13 @@
 import type { ThumbnailPage } from '../artifacts'
 import type { HostToMain } from '../host-control'
 import type { AppInfo, RemotePairingEvent } from '../ipc'
-import type { AgentColor, SettingsFile, SettingsPatch } from '../settings'
+import type { MarketKeysPatch, MarketKeyState } from '../marketplace'
+import {
+  DEFAULT_SETTINGS,
+  type AgentColor,
+  type SettingsFile,
+  type SettingsPatch,
+} from '../settings'
 import type {
   ShareAccess,
   SharingConnectResult,
@@ -40,6 +46,7 @@ export const HOST_SETTING_KEYS = {
   terminal: ['shellPath'],
   git: 'all',
   mcp: 'all',
+  marketplace: 'all',
   startModes: 'all',
   updates: 'all',
   usage: ['fromComputer'],
@@ -56,6 +63,7 @@ export interface HostSettingsPart {
   terminal: Pick<SettingsFile['terminal'], 'shellPath'>
   git: SettingsFile['git']
   mcp: SettingsFile['mcp']
+  marketplace: SettingsFile['marketplace']
   startModes: SettingsFile['startModes']
   updates: SettingsFile['updates']
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
@@ -88,7 +96,9 @@ export function withHostSettings(file: SettingsFile, part: HostSettingsPart): Se
   for (const [section, keys] of Object.entries(HOST_SETTING_KEYS) as [string, Keys][]) {
     const value = (part as unknown as Record<string, unknown>)[section]
     if (keys === 'all') {
-      next[section] = structuredClone(value)
+      // A host older than a section has none, and works as its default.
+      const fallback = DEFAULT_SETTINGS[section as keyof SettingsFile]
+      next[section] = structuredClone(value === undefined ? fallback : value)
       continue
     }
     // A key the host's part leaves out is unset there, as an unpicked shell is.
@@ -187,6 +197,11 @@ export interface HostAdminContract {
   }
   /** A shell on the host; the host checks it is a file it may run. */
   'settings.setShellPath': { params: { path: string }; result: HostSettingsPart }
+  /**
+   * Fills or clears inputs of a server in the host's `marketplace.mcp`, as `marketplace.setKeys`
+   * of the window does; answers which inputs are set, never their values.
+   */
+  'marketplace.setKeys': { params: { patch: MarketKeysPatch }; result: MarketKeyState }
   'remote.status': { params: undefined; result: RemoteStatus }
   /** Opens a pairing code whose progress goes to this device alone; null while remote access is off. */
   'remote.pair': { params: undefined; result: number | null }
@@ -276,6 +291,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'settings.removeAgent': true,
   'settings.setAgentBinary': true,
   'settings.setShellPath': true,
+  'marketplace.setKeys': true,
   'remote.status': true,
   'remote.pair': true,
   'remote.closePairing': true,

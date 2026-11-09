@@ -15,6 +15,7 @@ import { PARAMS_MAX, type ParamValue } from '@shared/artifact-params'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
+import type { PluginScope, SkillSource } from '@shared/marketplace'
 import {
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
@@ -63,6 +64,9 @@ const PROMPT_ITEMS = 1_000
 const KEPT_SESSIONS = 10_000
 // The panes a split view shows at most, which a window reports as in front.
 const SHOWN_SESSIONS = 9
+// The Marketplace's search, which the registry matches against server names.
+const MARKET_QUERY_MIN = 3
+const MARKET_QUERY_MAX = 100
 // Attachments the drafts name, checked once at launch.
 const HELD_ATTACHMENTS = 100_000
 const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
@@ -712,6 +716,64 @@ export function promptContent(value: unknown): UserContent[] {
 
 type Validators = { [M in HostMethod]: (params: unknown) => HostParams<M> }
 
+/** Params that hold at most a `refresh` flag, which skips a cache. */
+function refreshOnly(params: unknown): { refresh?: boolean } {
+  const o = params === undefined || params === null ? {} : fields(params)
+  const refresh = optionalFlag(o, 'refresh')
+  return refresh === undefined ? {} : { refresh }
+}
+
+// A plugin's or marketplace's name; never one that could pass for a command line flag.
+const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
+
+/** `<name>@<marketplace>`, as Claude Code and Codex name a plugin. */
+function pluginId(o: Fields): string {
+  const id = string(o, 'pluginId', ID_CHARS)
+  const at = id.lastIndexOf('@')
+  if (at <= 0 || !PLUGIN_PART.test(id.slice(0, at)) || !PLUGIN_PART.test(id.slice(at + 1))) {
+    throw invalidParams('pluginId must be <name>@<marketplace>')
+  }
+  return id
+}
+
+/** A plugin and where it is installed: for the user, or a project's folder for the others. */
+function pluginChange(
+  o: Fields,
+  platform: Platform,
+): { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string } {
+  const scope = o.scope as PluginScope
+  if (scope !== 'user' && scope !== 'project' && scope !== 'local') {
+    throw invalidParams('scope must be user, project or local')
+  }
+  const base = { agentId: agentId(o), pluginId: pluginId(o), scope }
+  if (scope === 'user') {
+    if (o.projectPath !== undefined) throw invalidParams('A user scope takes no projectPath')
+    return base
+  }
+  return { ...base, projectPath: absolutePath(o, 'projectPath', platform) }
+}
+
+/** Where a skill to add comes from: the catalog, a github.com URL or a folder on the host. */
+function skillSource(value: unknown, platform: Platform): SkillSource {
+  const o = fields(value)
+  if (o.kind === 'catalog') {
+    const id = string(o, 'id', ID_CHARS)
+    if (!/^anthropics\/skills:[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/.test(id)) {
+      throw invalidParams('id is not a skill of the catalog')
+    }
+    return { kind: 'catalog', id }
+  }
+  if (o.kind === 'github') {
+    const url = string(o, 'url', URL_CHARS).trim()
+    if (!url.startsWith('https://github.com/') || /\s/.test(url)) {
+      throw invalidParams('url must be a https://github.com/ address')
+    }
+    return { kind: 'github', url }
+  }
+  if (o.kind === 'local') return { kind: 'local', path: absolutePath(o, 'path', platform) }
+  throw invalidParams('source.kind must be catalog, github or local')
+}
+
 export function createValidators(platform: Platform): Validators {
   const project = (params: unknown): { projectPath: string } => ({
     projectPath: absolutePath(fields(params), 'projectPath', platform),
@@ -826,6 +888,49 @@ export function createValidators(platform: Platform): Validators {
     'agents.options': none,
     'mcp.status': none,
     'mcp.retry': none,
+    'market.catalog': refreshOnly,
+    'market.search': (params) => {
+      const query = fields(params).query
+      const trimmed = typeof query === 'string' ? query.trim() : ''
+      if (
+        trimmed.length < MARKET_QUERY_MIN ||
+        trimmed.length > MARKET_QUERY_MAX ||
+        /\p{Cc}/u.test(trimmed)
+      ) {
+        throw invalidParams(
+          `query must be ${MARKET_QUERY_MIN} to ${MARKET_QUERY_MAX} characters on one line`,
+        )
+      }
+      return { query: trimmed }
+    },
+    'market.keys': none,
+    'market.plugins': refreshOnly,
+    'market.pluginDetails': (params) => {
+      const o = fields(params)
+      return { agentId: agentId(o), pluginId: pluginId(o) }
+    },
+    'market.installPlugin': (params) => pluginChange(fields(params), platform),
+    'market.uninstallPlugin': (params) => pluginChange(fields(params), platform),
+    'market.setPluginEnabled': (params) => {
+      const o = fields(params)
+      return { ...pluginChange(o, platform), enabled: flag(o, 'enabled') }
+    },
+    'market.addMarketplace': (params) => {
+      const o = fields(params)
+      const source = string(o, 'source', URL_CHARS).trim()
+      if (source === '' || source.startsWith('-') || /\p{Cc}/u.test(source)) {
+        throw invalidParams('source must be owner/repo, a Git URL or a path, on one line')
+      }
+      return { agentId: agentId(o), source }
+    },
+    'market.removeMarketplace': (params) => {
+      const o = fields(params)
+      const name = string(o, 'name', ID_CHARS)
+      if (!PLUGIN_PART.test(name)) throw invalidParams('name is not a marketplace name')
+      return { agentId: agentId(o), name }
+    },
+    'market.skills': refreshOnly,
+    'market.addSkill': (params) => ({ source: skillSource(fields(params).source, platform) }),
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)

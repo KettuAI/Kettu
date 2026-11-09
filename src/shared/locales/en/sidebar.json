@@ -5,6 +5,7 @@
     "search": "Search",
     "artifacts": "Artifacts",
     "routines": "Routines",
+    "marketplace": "Marketplace",
     "sessions": "Sessions",
     "unavailable": "Projects are unavailable right now.",
     "empty": "Sessions appear here.",
@@ -38,6 +39,7 @@
       "openUsage": "Open Usage",
       "openArtifacts": "Open Artifacts",
       "openRoutines": "Open Routines",
+      "openMarketplace": "Open Marketplace",
       "openSettings": "Open Settings",
       "showShortcuts": "Show keyboard shortcuts",
       "toggleSidebar": "Toggle sidebar"
