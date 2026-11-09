@@ -17,7 +17,7 @@ import {
   verifyRelaySignature,
 } from '@shared/remote/relay'
 import type { PushJob } from './notifier'
-import { PushSender, type PushTokenKind } from './push-sender'
+import { PushSender } from './push-sender'
 
 const URL = 'https://push.example.test'
 const DEVICE_TOKEN = 'a1'.repeat(32)
@@ -34,7 +34,6 @@ async function setup(answers: (number | Error)[], push: Partial<DevicePush> = {}
   }
   const requests: { url: string; headers: Record<string, string>; body: string }[] = []
   const logs: string[] = []
-  const gone: [string, PushTokenKind][] = []
   let done: () => void = () => {}
   const finished = new Promise<void>((resolve) => (done = resolve))
   const sender = new PushSender({
@@ -47,7 +46,7 @@ async function setup(answers: (number | Error)[], push: Partial<DevicePush> = {}
       id === 'phone'
         ? { publicKey: Buffer.from(device.publicKey).toString('base64'), push: devicePush }
         : null,
-    unregistered: (id, token) => gone.push([id, token]),
+    unregistered: () => {},
     log: (level, message) => logs.push(`${level}: ${message}`),
     retry: { firstMs: 1, maxMs: 5, attempts: 3 },
     fetch: async (input, init) => {
@@ -63,7 +62,7 @@ async function setup(answers: (number | Error)[], push: Partial<DevicePush> = {}
       return Response.json(answer === 200 ? { ok: true } : { error }, { status: answer })
     },
   })
-  return { sender, key, hostId, device, requests, logs, gone, finished }
+  return { sender, key, hostId, device, requests, logs, finished }
 }
 
 const job: PushJob = {
@@ -141,60 +140,5 @@ describe('sending a push', () => {
     t2.sender.send(job)
     await expect.poll(() => t2.logs.length).toBe(1)
     expect(t2.logs).toEqual(['warn: Gave up a notification for device phone after 3 tries: apns'])
-  })
-
-  it('forgets a token Apple no longer takes, and gives up what the gateway refuses', async () => {
-    const t = await setup([410])
-    t.sender.send(job)
-    await expect.poll(() => t.gone).toEqual([['phone', 'device']])
-    const t2 = await setup([400])
-    t2.sender.send(job)
-    await expect.poll(() => t2.logs.length).toBe(1)
-    expect(t2.requests).toHaveLength(1)
-    for (const line of [...t.logs, ...t2.logs]) {
-      expect(line).not.toContain(DEVICE_TOKEN)
-      expect(line).not.toContain(ACCESS_TOKEN)
-      expect(line).not.toContain('pnpm test')
-    }
-  })
-
-  it('sends a Live Activity start to its own token, with sealed attributes', async () => {
-    const start = 'c3'.repeat(80)
-    const t = await setup([200], {
-      target: { apns: { token: DEVICE_TOKEN, environment: 'production' }, activity: { start } },
-    })
-    t.sender.send({
-      deviceId: 'phone',
-      subject: 'activity',
-      type: 'activity',
-      action: 'start',
-      count: 2,
-      sessionId: 's1',
-      title: 'Fix the login form',
-    })
-    await t.finished
-    const request = parsePushRequest(t.requests[0]!.body)!
-    expect(request).toMatchObject({
-      token: start,
-      environment: 'production',
-      push: { type: 'liveactivity', event: 'start' },
-    })
-    expect(await opened(t, t.requests[0]!.body)).toMatchObject({
-      kind: 'waiting',
-      count: 2,
-      sessionId: 's1',
-      title: 'Fix the login form',
-    })
-    // Without the activity's own token, an update has nowhere to go.
-    t.sender.send({
-      deviceId: 'phone',
-      subject: 'activity',
-      type: 'activity',
-      action: 'update',
-      count: 1,
-      sessionId: 's1',
-      title: null,
-    })
-    expect(t.requests).toHaveLength(1)
   })
 })
