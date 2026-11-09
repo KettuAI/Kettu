@@ -163,6 +163,7 @@ function entry(url: string, token: string): McpServer[] {
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
       autoAllow: [PLAN_TOOL],
       prompt: PLAN_PROMPT,
+      secret: true,
     },
   ]
 }
