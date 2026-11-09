@@ -6,6 +6,7 @@ import type {
   CatalogPlugin,
   CatalogServer,
   InstalledPlugin,
+  MarketConnection,
   MarketServer,
   MarketSkill,
   McpSpec,
@@ -18,7 +19,15 @@ import { toast } from '@renderer/components/ui/toast'
 import { errorMessage, host } from '@renderer/lib/host'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
 import { agentName } from '@renderer/stores/agents'
-import { busyKey, setBusy, updatePlugins, useMarketplaceStore } from '@renderer/stores/marketplace'
+import {
+  busyKey,
+  setBusy,
+  setConnectFlow,
+  updatePlugins,
+  useMarketplaceStore,
+  waitForLogin,
+  type ConnectFlow,
+} from '@renderer/stores/marketplace'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { serverName } from './model'
 
@@ -345,4 +354,149 @@ export async function removeSkill(id: string): Promise<void> {
   if (!skill) return
   await saveSkills(kept.filter((s) => s.id !== id))
   toast(t('toast.uninstalled', { name: skill.name }), undefined, { tone: 'success' })
+}
+
+/** How long a Connect waits for the sign-in at the service before it gives up. */
+const LOGIN_TIMEOUT_MS = 5 * 60_000
+
+function flowOf(serverId: string): ConnectFlow | null {
+  return useMarketplaceStore.getState().connecting[serverId] ?? null
+}
+
+/** An http(s) page in the system browser, as the app opens every outside link. */
+export function openPage(url: string): void {
+  window.open(url, '_blank', 'noreferrer')
+}
+
+/** Why a sign-in did not end connected, in the words its state gives. */
+export function connectionProblem(connection: MarketConnection): string | null {
+  if (connection.state === 'error') return connection.message
+  if (connection.state === 'needs-reconnect') return connection.reason
+  return null
+}
+
+/** Takes a server that a Connect added out of the settings again. */
+async function dropFresh(serverId: string, title: string): Promise<void> {
+  try {
+    await save(keptServers().filter((s) => s.id !== serverId))
+  } catch (e) {
+    warn(t('toast.changeFailed', { name: title, error: errorMessage(e) }))
+  }
+}
+
+/** Ends a Connect as failed: the popover shows why, and a server it added goes again. */
+async function failConnect(serverId: string, title: string, error: string): Promise<void> {
+  const flow = flowOf(serverId)
+  if (!flow) return
+  if (flow.fresh) await dropFresh(serverId, title)
+  setConnectFlow(serverId, { ...flow, fresh: false, phase: 'failed', start: null, error })
+}
+
+/**
+ * Connects a server that signs in with OAuth. A catalog server is installed for `agents` first,
+ * since connecting is installing; a kept one only signs in again. The browser page opens at once;
+ * the device code shows in the popover. A Connect that fails, is cancelled or takes longer than
+ * five minutes takes a server it added out again.
+ */
+export async function connectServer(
+  server: CatalogServer | MarketServer,
+  agents: AgentChoice,
+): Promise<void> {
+  const serverId = server.id
+  const current = flowOf(serverId)
+  if (current && current.phase !== 'failed') return
+  setConnectFlow(serverId, { serverId, fresh: false, phase: 'starting', start: null, error: null })
+  const kept = keptServers()
+  if (!kept.some((s) => s.id === serverId) && 'publisher' in server) {
+    // Marked before it is saved, so its Connect button stays while the server turns kept.
+    setConnectFlow(serverId, { ...flowOf(serverId)!, fresh: true })
+    const others = kept.filter((s) => s.id !== serverId)
+    try {
+      await save([
+        ...others,
+        {
+          id: serverId,
+          name: serverName(serverId, others),
+          title: server.title,
+          source: 'registry',
+          version: server.version,
+          spec: server.spec,
+          agents,
+          on: true,
+        },
+      ])
+    } catch (e) {
+      setConnectFlow(serverId, {
+        serverId,
+        fresh: false,
+        phase: 'failed',
+        start: null,
+        error: errorMessage(e),
+      })
+      return
+    }
+    // Cancelled while it was saved: the cancel found nothing to take out yet.
+    if (!flowOf(serverId)) return dropFresh(serverId, server.title)
+  }
+
+  let start
+  try {
+    start = await host('market.connect', { serverId })
+  } catch (e) {
+    return failConnect(serverId, server.title, errorMessage(e))
+  }
+  const flow = flowOf(serverId)
+  // Cancelled while the host was asked: the sign-in it began is let go at once.
+  if (!flow || flow.phase !== 'starting') return cancelLogin(start.loginId)
+  setConnectFlow(serverId, { ...flow, phase: 'waiting', start })
+  if (start.kind === 'browser') openPage(start.url)
+
+  const end = await waitForLogin(start.loginId, LOGIN_TIMEOUT_MS)
+  // Cancelled, or another Connect began meanwhile.
+  if (flowOf(serverId)?.start?.loginId !== start.loginId) return
+  if (!end) {
+    cancelLogin(start.loginId)
+    return failConnect(serverId, server.title, t('connect.timedOut'))
+  }
+  if (end.connection.state !== 'connected') {
+    const why = end.error ?? connectionProblem(end.connection) ?? t('connect.notConnected')
+    return failConnect(serverId, server.title, why)
+  }
+  setConnectFlow(serverId, null)
+  toast(t('toast.connected', { name: server.title }), undefined, { tone: 'success' })
+}
+
+function cancelLogin(loginId: string): void {
+  host('market.cancelConnect', { loginId }).catch((e: unknown) =>
+    console.warn(`Could not cancel a sign-in: ${errorMessage(e)}`),
+  )
+}
+
+/** Stops a Connect under way; a server it added goes again. */
+export async function cancelConnect(serverId: string, title: string): Promise<void> {
+  const flow = flowOf(serverId)
+  if (!flow) return
+  setConnectFlow(serverId, null)
+  if (flow.start) cancelLogin(flow.start.loginId)
+  if (flow.fresh) await dropFresh(serverId, title)
+}
+
+/** Forgets a Connect that failed, once its popover closes. */
+export function dismissConnect(serverId: string): void {
+  if (flowOf(serverId)?.phase === 'failed') setConnectFlow(serverId, null)
+}
+
+/** Clears a server's tokens and keeps the server; every agent loses it at once. */
+export async function disconnectServer(server: MarketServer): Promise<void> {
+  try {
+    await host('market.disconnect', { serverId: server.id })
+    useMarketplaceStore.setState((s) =>
+      s.connections
+        ? { connections: { ...s.connections, [server.id]: { state: 'disconnected' } } }
+        : s,
+    )
+    toast(t('toast.disconnected', { name: server.title }), undefined, { tone: 'success' })
+  } catch (e) {
+    warn(t('toast.disconnectFailed', { name: server.title, error: errorMessage(e) }))
+  }
 }

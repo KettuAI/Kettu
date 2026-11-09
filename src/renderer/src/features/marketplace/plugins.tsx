@@ -77,11 +77,13 @@ export function PluginRow({
 }
 
 function PluginAddButton({ plugin, onOpen }: { plugin: CatalogPlugin; onOpen: () => void }) {
+  const { t } = useTranslation('marketplace')
   const installs = usePluginInstalls(plugin.harness, plugin.id)
   const busy = useBusy(busyKey('plugin', `${plugin.harness}/${plugin.id}`))
   return (
     <AddControl
       name={plugin.title}
+      label={t('row.install')}
       state={busy ? 'busy' : installs.length > 0 ? 'on' : 'off'}
       onOpen={onOpen}
       form={(close) => (

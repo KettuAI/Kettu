@@ -1,7 +1,10 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { KettuApi } from '@shared/ipc'
+import type { HostEvent } from '@shared/agent-host'
 import type {
+  ConnectStart,
   MarketCatalog,
+  MarketConnections,
   MarketKeyState,
   MarketKeysPatch,
   MarketPlugins,
@@ -23,6 +26,18 @@ export interface MarketSearchState {
   error: string | null
 }
 
+/** A Connect under way or failed, as its popover shows it, by server id. */
+export interface ConnectFlow {
+  serverId: string
+  /** Added to the settings by this Connect, so removed again if it does not finish. */
+  fresh: boolean
+  phase: 'starting' | 'waiting' | 'failed'
+  start: ConnectStart | null
+  error: string | null
+}
+
+export type ConnectionEvent = Extract<HostEvent, { type: 'market.connectionChanged' }>
+
 /** What a plugin adds as one agent's harness reports it, or why it could not say. */
 export interface DetailsState {
   details: PluginDetails | null
@@ -39,6 +54,11 @@ export interface MarketplaceStore {
   /** Which inputs of the servers Kettu keeps have a value; null until read. */
   keys: MarketKeyState | null
   keysError: string | null
+  /** Where each OAuth server Kettu keeps stands with its sign-in; null until read. */
+  connections: MarketConnections | null
+  connectionsError: string | null
+  /** By server id. */
+  connecting: Record<string, ConnectFlow>
   /** The harnesses' plugins, installed ones and marketplaces; null until the host answers. */
   plugins: MarketPlugins | null
   pluginsError: string | null
@@ -60,6 +80,7 @@ export interface MarketplaceStore {
   clearSearch(): void
   loadKeys(): Promise<void>
   setKeys(patch: MarketKeysPatch): Promise<void>
+  loadConnections(): Promise<void>
   loadPlugins(refresh?: boolean): Promise<void>
   loadDetails(agentId: AgentId, pluginId: string): Promise<void>
   loadSkills(refresh?: boolean): Promise<void>
@@ -81,6 +102,7 @@ export function createMarketplaceStore(
   let catalogRead = 0
   let searchRead = 0
   let keysRead = 0
+  let connectionsRead = 0
   let pluginsRead = 0
   let skillsRead = 0
   return create<MarketplaceStore>()((set, get) => ({
@@ -90,6 +112,9 @@ export function createMarketplaceStore(
     search: null,
     keys: null,
     keysError: null,
+    connections: null,
+    connectionsError: null,
+    connecting: {},
     plugins: null,
     pluginsError: null,
     pluginsLoading: false,
@@ -139,6 +164,16 @@ export function createMarketplaceStore(
       // A read under way would bring back what was there before this change.
       keysRead++
       set({ keys, keysError: null })
+    },
+    async loadConnections() {
+      const id = ++connectionsRead
+      set({ connectionsError: null })
+      try {
+        const connections = await request('market.connections', undefined)
+        if (id === connectionsRead) set({ connections })
+      } catch (e) {
+        if (id === connectionsRead) set({ connectionsError: errorMessage(e) })
+      }
     },
     async loadPlugins(refresh = false) {
       const id = ++pluginsRead
@@ -197,4 +232,52 @@ export function marketKeysChanged(): void {
 /** Changes the plugins the host last listed, as an install, uninstall or switch answered. */
 export function updatePlugins(change: (plugins: MarketPlugins) => MarketPlugins): void {
   useMarketplaceStore.setState((s) => (s.plugins ? { plugins: change(s.plugins) } : s))
+}
+
+/** Shows a Connect's progress; null ends it. */
+export function setConnectFlow(serverId: string, flow: ConnectFlow | null): void {
+  useMarketplaceStore.setState((s) => {
+    const connecting = { ...s.connecting }
+    if (flow) connecting[serverId] = flow
+    else delete connecting[serverId]
+    return { connecting }
+  })
+}
+
+// The Connects waiting for how their sign-in ends, by login id, and the ends that came before
+// their Connect learned its id.
+const loginWaiters = new Map<string, (event: ConnectionEvent) => void>()
+const earlyEnds = new Map<string, ConnectionEvent>()
+const EARLY_ENDS_KEPT = 20
+
+/** How the sign-in `loginId` ends, or null after `timeoutMs`. */
+export function waitForLogin(loginId: string, timeoutMs: number): Promise<ConnectionEvent | null> {
+  const early = earlyEnds.get(loginId)
+  if (early) {
+    earlyEnds.delete(loginId)
+    return Promise.resolve(early)
+  }
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      loginWaiters.delete(loginId)
+      resolve(null)
+    }, timeoutMs)
+    loginWaiters.set(loginId, (event) => {
+      clearTimeout(timer)
+      loginWaiters.delete(loginId)
+      resolve(event)
+    })
+  })
+}
+
+/** A server's sign-in changed: its state shows at once, and a Connect waiting for it ends. */
+export function marketConnectionChanged(event: ConnectionEvent): void {
+  useMarketplaceStore.setState((s) =>
+    s.connections ? { connections: { ...s.connections, [event.serverId]: event.connection } } : s,
+  )
+  if (!event.loginId) return
+  const waiter = loginWaiters.get(event.loginId)
+  if (waiter) return waiter(event)
+  earlyEnds.set(event.loginId, event)
+  if (earlyEnds.size > EARLY_ENDS_KEPT) earlyEnds.delete(earlyEnds.keys().next().value!)
 }

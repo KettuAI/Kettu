@@ -348,12 +348,13 @@ async function start(): Promise<void> {
     cipher: identityCipher,
     plainTextAllowed: false,
     servers: () => settings.get().marketplace.mcp,
-    changed: (values) => hostRef.current?.pushMarketKeys(values),
+    changed: (contents) => hostRef.current?.pushMarketKeys(contents),
     log: createLogger('market-keys'),
   })
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
-    marketKeys: () => marketKeys.values(),
+    marketKeys: () => marketKeys.contentsForHost(),
+    onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     onAttention: (message) => {
       notifyAttention(message, settings.get(), (sessionId, requestId, optionId) =>
         agentHost.answerPermission(sessionId, requestId, optionId),

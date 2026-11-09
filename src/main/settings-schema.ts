@@ -364,7 +364,7 @@ function parseMcpValues(
 function parseMcpSpec(raw: unknown, path: string, strict: boolean): McpSpec | string {
   if (!isRecord(raw)) return `"${path}" must be an object`
   if (raw.type === 'http') {
-    const extra = extraKey(raw, ['type', 'transport', 'url', 'headers'], path, strict)
+    const extra = extraKey(raw, ['type', 'transport', 'url', 'headers', 'oauth'], path, strict)
     if (extra) return extra
     const { transport, url } = raw
     const problem = oneOf('streamable-http', 'sse')(transport, `${path}.transport`)
@@ -380,12 +380,20 @@ function parseMcpSpec(raw: unknown, path: string, strict: boolean): McpSpec | st
     }
     const headers = parseMcpValues(raw.headers, `${path}.headers`, 'header', strict)
     if (typeof headers === 'string') return headers
-    return {
+    const spec: Extract<McpSpec, { type: 'http' }> = {
       type: 'http',
       transport: transport as 'streamable-http' | 'sse',
       url: url as string,
       headers,
     }
+    if (raw.oauth === undefined) return spec
+    const { oauth } = raw
+    if (!isRecord(oauth)) return `"${path}.oauth" must be an object`
+    const oauthExtra = extraKey(oauth, ['flow'], `${path}.oauth`, strict)
+    if (oauthExtra) return oauthExtra
+    const flowProblem = oneOf('browser', 'device')(oauth.flow, `${path}.oauth.flow`)
+    if (flowProblem) return flowProblem
+    return { ...spec, oauth: { flow: oauth.flow as 'browser' | 'device' } }
   }
   if (raw.type === 'stdio') {
     const extra = extraKey(raw, ['type', 'command', 'args', 'env'], path, strict)

@@ -40,11 +40,14 @@
     "mcp": "MCP servers"
   },
   "row": {
-    "install": "Install {{name}}",
-    "installing": "Installing {{name}}",
+    "install": "Install",
     "manage": "Manage {{name}}",
-    "installTitle": "Install",
-    "manageTitle": "Installed – open to manage"
+    "manageTitle": "Installed – open to manage",
+    "setUp": "Set up",
+    "add": "Add",
+    "connect": "Connect",
+    "connecting": "Connecting…",
+    "action": "{{action}} {{name}}"
   },
   "more": {
     "two": "{{first}} and {{second}}",
@@ -87,7 +90,10 @@
     "uninstalledFrom": "{{name}} uninstalled from {{agent}}",
     "marketplaceAdded": "{{name}} added to {{agent}}",
     "marketplaceRemoved": "{{name}} removed",
-    "skillFailed": "Couldn’t add the skill: {{error}}"
+    "skillFailed": "Couldn’t add the skill: {{error}}",
+    "connected": "Connected to {{name}}; every chosen agent can use it",
+    "disconnected": "Disconnected from {{name}}",
+    "disconnectFailed": "Couldn’t disconnect {{name}}: {{error}}"
   },
   "listing": {
     "back": "Marketplace",
@@ -135,7 +141,10 @@
     "relatedFrom": "More from {{publisher}}",
     "missingTitle": "This server isn’t listed",
     "missingText": "It may have left the MCP Registry, or been uninstalled.",
-    "backToDirectory": "Back to the Marketplace"
+    "backToDirectory": "Back to the Marketplace",
+    "signsIn": "Signs in with {{service}} in your browser",
+    "signsInDevice": "Connects with a code at {{service}}",
+    "signsInNote": "Kettu keeps the sign-in; no agent sees the token"
   },
   "installed": {
     "builtIn": "Built in",
@@ -279,6 +288,11 @@
       "urlHint": "A repository, or a folder in it with a SKILL.md.",
       "urlInvalid": "Enter a github.com address.",
       "submit": "Add"
+    },
+    "remove": {
+      "title": "Remove {{name}}?",
+      "body": "New sessions start without it, and Kettu signs out of it on this computer.",
+      "confirm": "Remove"
     }
   },
   "kind": {
@@ -352,6 +366,34 @@
       "path": "Folder",
       "folder": "Copied from"
     },
+    "remove": "Remove…"
+  },
+  "connect": {
+    "title": "Connect {{name}}",
+    "browserNote": "You sign in with {{service}} in your browser. Kettu keeps the sign-in, and these agents reach the server through Kettu.",
+    "deviceNote": "You enter a code at {{service}}. Kettu keeps the sign-in, and these agents reach the server through Kettu.",
+    "submit": "Connect",
+    "browserWaiting": "Finish signing in in your browser",
+    "browserHint": "Didn’t the page open? Copy the link into your browser.",
+    "copyLink": "Copy link",
+    "copyCode": "Copy code",
+    "copied": "Copied",
+    "deviceTitle": "Enter this code at {{service}}",
+    "openService": "Open {{service}}",
+    "deviceWaiting": "Waiting for {{service}}…",
+    "failed": "Couldn’t connect: {{error}}",
+    "timedOut": "Signing in took longer than five minutes, so Kettu stopped waiting.",
+    "notConnected": "The sign-in did not finish."
+  },
+  "connection": {
+    "connected": "Connected",
+    "connectedAs": "Connected as {{account}}",
+    "needsReconnect": "Needs reconnecting",
+    "error": "Error: {{message}}",
+    "disconnected": "Not connected",
+    "connect": "Connect",
+    "reconnect": "Reconnect",
+    "disconnect": "Disconnect",
     "remove": "Remove…"
   }
 }

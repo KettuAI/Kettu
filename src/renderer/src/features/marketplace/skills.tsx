@@ -41,6 +41,7 @@ export function SkillRow({
   showKind: boolean
   fresh?: boolean
 }) {
+  const { t } = useTranslation('marketplace')
   const open = () => openMarketplace({ item: itemKey({ kind: 'skill', id: skill.id }), tab })
   const kept = useKeptSkill(skill.id)
   const busy = useBusy(busyKey('skill', skill.id))
@@ -56,6 +57,7 @@ export function SkillRow({
       end={
         <AddControl
           name={displayTitle(skill.name)}
+          label={t('row.add')}
           state={busy ? 'busy' : kept ? 'on' : 'off'}
           onOpen={open}
           form={(close) => <SkillInstallForm skill={skill} onDone={close} />}

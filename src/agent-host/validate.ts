@@ -726,6 +726,15 @@ function refreshOnly(params: unknown): { refresh?: boolean } {
 // A plugin's or marketplace's name; never one that could pass for a command line flag.
 const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
+/** A server Kettu keeps: a registry name, or `manual:` and a UUID. */
+function marketServerId(o: Fields): string {
+  const id = string(o, 'serverId', ID_CHARS)
+  if (!/^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/.test(id) && !/^manual:[0-9a-f-]{36}$/.test(id)) {
+    throw invalidParams('serverId is not a server Kettu keeps')
+  }
+  return id
+}
+
 /** `<name>@<marketplace>`, as Claude Code and Codex name a plugin. */
 function pluginId(o: Fields): string {
   const id = string(o, 'pluginId', ID_CHARS)
@@ -904,6 +913,14 @@ export function createValidators(platform: Platform): Validators {
       return { query: trimmed }
     },
     'market.keys': none,
+    'market.connect': (params) => ({ serverId: marketServerId(fields(params)) }),
+    'market.cancelConnect': (params) => {
+      const loginId = string(fields(params), 'loginId', ID_CHARS)
+      if (!/^[0-9a-f-]{36}$/.test(loginId)) throw invalidParams('loginId is not a login of Connect')
+      return { loginId }
+    },
+    'market.disconnect': (params) => ({ serverId: marketServerId(fields(params)) }),
+    'market.connections': none,
     'market.plugins': refreshOnly,
     'market.pluginDetails': (params) => {
       const o = fields(params)

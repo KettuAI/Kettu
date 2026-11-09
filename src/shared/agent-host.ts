@@ -20,8 +20,11 @@ import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile } from './host-control'
 import type {
+  ConnectStart,
   InstalledPlugin,
   MarketCatalog,
+  MarketConnection,
+  MarketConnections,
   MarketKeyState,
   MarketPlugins,
   MarketSearch,
@@ -553,6 +556,13 @@ export interface HostContract {
   'market.search': { params: { query: string }; result: MarketSearch }
   // Which inputs of the servers Kettu keeps have a value; never the values.
   'market.keys': { params: void; result: MarketKeyState }
+  // Signs in to a server Kettu keeps that uses OAuth; it must already be in the settings. The window
+  // opens the browser page or shows the code; `market.connectionChanged` tells how it ended.
+  'market.connect': { params: { serverId: string }; result: ConnectStart }
+  'market.cancelConnect': { params: { loginId: string }; result: void }
+  // Clears a server's tokens and keeps the server; every agent loses it at once.
+  'market.disconnect': { params: { serverId: string }; result: void }
+  'market.connections': { params: void; result: MarketConnections }
   // Plugins from Claude Code's and Codex's own marketplaces, and the ones each agent has installed;
   // adds Claude's official marketplace to an agent that has none, as Claude Code does on first start.
   'market.plugins': { params: { refresh?: boolean }; result: MarketPlugins }
@@ -1035,6 +1045,10 @@ export const HOST_METHODS = [
   'market.catalog',
   'market.search',
   'market.keys',
+  'market.connect',
+  'market.cancelConnect',
+  'market.disconnect',
+  'market.connections',
   'market.plugins',
   'market.pluginDetails',
   'market.installPlugin',
@@ -1195,6 +1209,14 @@ export type HostEvent =
   | { type: 'git.tools'; tools: GitTools }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
+  // A server's sign-in changed; `loginId` and `error` close a Connect the window started.
+  | {
+      type: 'market.connectionChanged'
+      serverId: string
+      connection: MarketConnection
+      loginId?: string
+      error?: string
+    }
   | { type: 'usage.status'; status: UsageStatus }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }

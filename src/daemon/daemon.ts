@@ -392,7 +392,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     cipher: NO_SYSTEM_ENCRYPTION,
     plainTextAllowed: true,
     servers: () => settings.get().marketplace.mcp,
-    changed: (values) => hosts?.marketKeysChanged(values),
+    changed: (contents) => hosts?.marketKeysChanged(contents),
     log: createLogger('market-keys'),
   })
   settings.onChange((_, changed) => {
@@ -404,7 +404,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     version: options.version,
     systemLocale: matchLocale([Intl.DateTimeFormat().resolvedOptions().locale]),
     settings: () => settings.get(),
-    marketKeys: () => marketKeys.values(),
+    marketKeys: () => marketKeys.contentsForHost(),
+    marketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
     privateKey: identity.privateKey,
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
     relayKey: relayKey?.privateKey ?? null,

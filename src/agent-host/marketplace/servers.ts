@@ -12,6 +12,8 @@ import {
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import type { AgentInit, McpServer } from '../connection'
+import type { Access } from './connections'
+import { proxyPath } from './proxy'
 
 /** The values of each server's inputs, by server id and input name. */
 export type MarketKeys = ReadonlyMap<string, ReadonlyMap<string, string>>
@@ -98,23 +100,62 @@ function program(command: string, args: string[], platform: Platform): [string, 
   return [command, args]
 }
 
+/** How the session reaches the OAuth servers: where each stands, and its bearer for the proxy. */
+export interface OAuthAccess {
+  access(server: MarketServer): Access
+  bearer(): { origin: string; token: string } | null
+}
+
+/** A server's fixed headers and filled inputs, as its requests carry them. */
+export function serverHeaders(server: MarketServer, keys: MarketKeys): Record<string, string> {
+  if (server.spec.type !== 'http') return {}
+  const values = filled(server.spec.headers, keys.get(server.id))
+  return Object.fromEntries((values?.values ?? []).map((value) => [value.name, value.value]))
+}
+
 /**
  * The servers among `servers` that go to `agentId`, as its sessions get them. A server whose
  * required input has no value, or whose transport the agent cannot speak, is left out; one whose
- * name another server already has, such as Kettu's own, gets a number after it.
+ * name another server already has, such as Kettu's own, gets a number after it. A server that
+ * signs in goes through the proxy with the session's bearer while it is connected, directly when
+ * it turned out to need no sign-in, and not at all otherwise.
  */
 export function libraryServers(
   servers: readonly MarketServer[],
   keys: MarketKeys,
   agentId: AgentId,
   transports: McpTransports,
-  options: { platform: Platform; taken?: readonly string[] },
+  options: { platform: Platform; taken?: readonly string[]; oauth?: OAuthAccess },
 ): McpServer[] {
   const used = new Set(options.taken ?? [])
   const out: McpServer[] = []
+  const nameOf = (server: MarketServer): string => {
+    let name = server.name
+    for (let n = 2; used.has(name); n++) name = `${server.name}-${n}`
+    used.add(name)
+    return name
+  }
   for (const server of servers) {
     if (!serverFor(server, agentId)) continue
     const { spec } = server
+    if (spec.type === 'http' && spec.oauth) {
+      const access = options.oauth?.access(server) ?? null
+      if (access === null) continue
+      if (access === 'proxy') {
+        // The proxy speaks streamable HTTP to agents and to the server.
+        if (!transports.mcpHttp || spec.transport !== 'streamable-http') continue
+        const bearer = options.oauth?.bearer()
+        if (!bearer) continue
+        out.push({
+          type: 'http',
+          name: nameOf(server),
+          url: `${bearer.origin}${proxyPath(server.id)}`,
+          headers: [{ name: 'Authorization', value: `Bearer ${bearer.token}` }],
+          secret: true,
+        })
+        continue
+      }
+    }
     if (spec.type === 'http') {
       const speaks = spec.transport === 'sse' ? transports.mcpSse : transports.mcpHttp
       if (!speaks) continue
@@ -123,9 +164,7 @@ export function libraryServers(
     }
     const values = filled(spec.type === 'http' ? spec.headers : spec.env, keys.get(server.id))
     if (!values) continue
-    let name = server.name
-    for (let n = 2; used.has(name); n++) name = `${server.name}-${n}`
-    used.add(name)
+    const name = nameOf(server)
     if (spec.type === 'http') {
       out.push({
         type: spec.transport === 'sse' ? 'sse' : 'http',

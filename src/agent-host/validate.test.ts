@@ -37,6 +37,23 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it('checks the connection methods: servers Kettu keeps and logins of Connect', () => {
+    expect(posix['market.connect']({ serverId: 'app.linear/linear' })).toEqual({
+      serverId: 'app.linear/linear',
+    })
+    expect(
+      posix['market.disconnect']({ serverId: 'manual:0f8fad5b-d9cb-469f-a165-70867728950e' }),
+    ).toEqual({ serverId: 'manual:0f8fad5b-d9cb-469f-a165-70867728950e' })
+    rejects(() => posix['market.connect']({ serverId: 'no slash' }))
+    rejects(() => posix['market.connect']({}))
+    expect(
+      posix['market.cancelConnect']({ loginId: '0f8fad5b-d9cb-469f-a165-70867728950e' }),
+    ).toEqual({ loginId: '0f8fad5b-d9cb-469f-a165-70867728950e' })
+    rejects(() => posix['market.cancelConnect']({ loginId: 'anything' }))
+    expect(posix['market.connections'](undefined)).toBeUndefined()
+    rejects(() => posix['market.connections']({ serverId: 'x' }))
+  })
+
   it("checks the Marketplace's catalog refresh and search query", () => {
     expect(posix['market.catalog'](undefined)).toEqual({})
     expect(posix['market.catalog']({})).toEqual({})

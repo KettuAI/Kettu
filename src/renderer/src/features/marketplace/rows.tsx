@@ -2,22 +2,19 @@
 // line, the round add button that installs, and the button that unfolds a section.
 
 import { useState, type ReactNode } from 'react'
-import {
-  ArrowRight01Icon,
-  CheckmarkBadge01Icon,
-  PlusSignIcon,
-  Tick02Icon,
-} from '@hugeicons/core-free-icons'
+import { ArrowRight01Icon, CheckmarkBadge01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { CatalogServer, PluginHarness } from '@shared/marketplace'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
+import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { installServer } from './actions'
 import { ServerTile } from './brand-marks'
-import { useInstalling, useKept } from './hooks'
+import { ConnectButton } from './connect'
+import { useConnectFlow, useInstalling, useKept } from './hooks'
 import { InstallForm } from './install'
-import { asksFirst } from './model'
+import { asksFirst, oauthFlow } from './model'
 
 /** The official badge, for what the maker of the service or the harness publishes. */
 export function OfficialBadge() {
@@ -85,18 +82,38 @@ export function ItemRow({
   )
 }
 
+/** The Integrations screen's check once installed, which opens the listing to manage it. */
+export function InstalledCheck({ name, onOpen }: { name: string; onOpen: () => void }) {
+  const { t } = useTranslation('marketplace')
+  return (
+    <button
+      type="button"
+      className="ui-as-int-add"
+      data-state="on"
+      aria-label={t('row.manage', { name })}
+      title={t('row.manageTitle')}
+      onClick={onOpen}
+    >
+      <Icon icon={Tick02Icon} size={15} />
+    </button>
+  )
+}
+
 /**
- * The Integrations screen's add button: a check once installed, which opens the listing; else it
- * opens `form` in a popover, or installs at once with `onAdd` when nothing needs asking.
+ * A row's action: a small button that says what it does, Install, Set up or Add, which opens
+ * `form` in a popover, or acts at once with `onAdd` when nothing needs asking; the check once
+ * installed.
  */
 export function AddControl({
   name,
+  label,
   state,
   onOpen,
   onAdd,
   form,
 }: {
   name: string
+  label: string
   state: 'on' | 'off' | 'busy'
   onOpen: () => void
   onAdd?: () => void
@@ -104,35 +121,22 @@ export function AddControl({
 }) {
   const { t } = useTranslation('marketplace')
   const [open, setOpen] = useState(false)
+  if (state === 'on') return <InstalledCheck name={name} onOpen={onOpen} />
   return (
     <span className="ui-as-anchor">
-      <button
-        type="button"
-        className="ui-as-int-add"
-        data-state={state}
-        aria-label={
-          state === 'on'
-            ? t('row.manage', { name })
-            : state === 'busy'
-              ? t('row.installing', { name })
-              : t('row.install', { name })
-        }
-        aria-expanded={form && state === 'off' ? open : undefined}
-        aria-busy={state === 'busy' || undefined}
-        title={state === 'on' ? t('row.manageTitle') : t('row.installTitle')}
+      <Button
+        size="sm"
+        variant="secondary"
+        loading={state === 'busy'}
+        aria-label={t('row.action', { action: label, name })}
+        aria-expanded={form ? open : undefined}
         onClick={() => {
-          if (state === 'busy') return
-          if (state === 'on') return onOpen()
           if (form) return setOpen((o) => !o)
           onAdd?.()
         }}
       >
-        {state === 'busy' ? (
-          <span className="ui-as-spinner" />
-        ) : (
-          <Icon key={state} icon={state === 'on' ? Tick02Icon : PlusSignIcon} size={15} />
-        )}
-      </button>
+        {label}
+      </Button>
       {form && (
         <Popover
           open={open}
@@ -147,14 +151,23 @@ export function AddControl({
   )
 }
 
-/** An MCP server's add button: at once when it asks for nothing, else through the form. */
+/**
+ * An MCP server's action: Connect for one that signs in, Set up for one that asks for values,
+ * Install at once for one that asks for nothing.
+ */
 export function AddButton({ server, onOpen }: { server: CatalogServer; onOpen: () => void }) {
+  const { t } = useTranslation('marketplace')
   const kept = useKept(server.id)
   const busy = useInstalling(server.id)
+  const flow = useConnectFlow(server.id)
+  // A Connect that installs it keeps its button, and the popover with it, until it ends.
+  if (kept && !flow?.fresh) return <InstalledCheck name={server.title} onOpen={onOpen} />
+  if (oauthFlow(server.spec)) return <ConnectButton server={server} />
   return (
     <AddControl
       name={server.title}
-      state={busy ? 'busy' : kept ? 'on' : 'off'}
+      label={asksFirst(server.spec) ? t('row.setUp') : t('row.install')}
+      state={busy ? 'busy' : 'off'}
       onOpen={onOpen}
       onAdd={() => void installServer(server, 'all', {})}
       form={

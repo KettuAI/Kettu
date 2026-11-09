@@ -291,11 +291,14 @@ function AgentsForm({
 /** The one confirmation an uninstall asks. */
 export function UninstallDialog({
   server,
+  oauth = false,
   open,
   onOpenChange,
   onUninstalled,
 }: {
   server: MarketServer
+  /** A server that signs in: removing it signs it out too. */
+  oauth?: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
   onUninstalled: () => void
@@ -305,9 +308,13 @@ export function UninstallDialog({
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={t('dialogs.uninstall.title', { name: server.title })}
-      body={t('dialogs.uninstall.body')}
-      confirm={t('dialogs.uninstall.confirm')}
+      title={
+        oauth
+          ? t('dialogs.remove.title', { name: server.title })
+          : t('dialogs.uninstall.title', { name: server.title })
+      }
+      body={oauth ? t('dialogs.remove.body') : t('dialogs.uninstall.body')}
+      confirm={oauth ? t('dialogs.remove.confirm') : t('dialogs.uninstall.confirm')}
       action={async () => {
         await uninstallServer(server.id)
         onUninstalled()

@@ -270,7 +270,13 @@ export interface SessionMcp {
    * The Marketplace's servers an attach of the agent's session passes beside those, over the
    * transports it speaks, renamed where `taken` already has a name.
    */
-  library(agentId: AgentId, transports: McpTransports, taken: readonly string[]): McpServer[]
+  library(
+    sessionId: string,
+    record: SessionRecord,
+    connection: AgentConnection,
+    transports: McpTransports,
+    taken: readonly string[],
+  ): McpServer[]
   /** The session left memory, closed, released or deleted: its token ends. */
   detached(sessionId: string): void
   turnEnded(sessionId: string): void
@@ -2146,7 +2152,9 @@ export class SessionManager {
         ? this.deps.mcp.servers(sessionId, record, runtime.connection)
         : []
     const library = this.deps.mcp.library(
-      record.agentId,
+      sessionId,
+      record,
+      runtime.connection,
       transports,
       own.map((server) => server.name),
     )

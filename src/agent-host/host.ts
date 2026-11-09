@@ -36,6 +36,7 @@ import type { PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import type { HostSettings } from '@shared/settings'
+import { serverFor, type MarketConnection, type MarketServer } from '@shared/marketplace'
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import type { AgentId, FromDevice } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
@@ -79,6 +80,9 @@ import { setLocale, t } from './i18n'
 import { FilesService } from './files'
 import { MediaService } from './media'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
+import { MarketConnectionsService } from './marketplace/connections'
+import { parseSignIns } from './marketplace/oauth'
+import { McpProxy } from './marketplace/proxy'
 import type { CodexRequest } from './marketplace/codex-plugins'
 import { MarketPluginsService, pluginsFile } from './marketplace/plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
@@ -87,6 +91,7 @@ import {
   keyState,
   libraryServers,
   parseMarketKeys,
+  serverHeaders,
   type MarketKeys,
 } from './marketplace/servers'
 import type { Env } from './find-command'
@@ -305,6 +310,12 @@ export class AgentHost {
   private marketKeys: MarketKeys = new Map()
   /** The Marketplace's catalog of MCP servers, from the registry. */
   private readonly marketCatalog: MarketCatalogService
+  /** The sign-ins of the Marketplace's OAuth servers. */
+  private readonly marketConnections: MarketConnectionsService
+  /** Where agents reach the OAuth servers, with a fresh token. */
+  private readonly mcpProxy: McpProxy
+  /** The sign-ins sent to main that no push has carried back yet, by server id. */
+  private readonly unkept = new Map<string, { state: string | null; pushes: number }>()
   /** Claude Code's and Codex's plugins, through each agent's harness. */
   private readonly marketPlugins: MarketPluginsService
   /** The skills catalog, the skills Kettu keeps, and what each agent gets of them. */
@@ -358,6 +369,20 @@ export class AgentHost {
     this.marketCatalog = new MarketCatalogService({
       file: catalogFile(options.userDataPath, log),
       log,
+    })
+    this.marketConnections = new MarketConnectionsService({
+      log,
+      servers: () => this.settings.marketplace.mcp,
+      headers: (server) => serverHeaders(server, this.marketKeys),
+      keep: (serverId, state) => this.keepSignIn(serverId, state),
+      changed: (serverId, connection, loginId, error) =>
+        this.connectionChanged(serverId, connection, loginId, error),
+    })
+    this.mcpProxy = new McpProxy({
+      servers: () => this.settings.marketplace.mcp,
+      headers: (server) => serverHeaders(server, this.marketKeys),
+      token: (serverId) => this.marketConnections.token(serverId),
+      refused: (serverId, used) => this.marketConnections.refused(serverId, used),
     })
     const home = options.homeDir ?? os.homedir()
     this.marketPlugins = new MarketPluginsService({
@@ -482,6 +507,7 @@ export class AgentHost {
       },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       ...(this.computer ? { computer: this.computer } : {}),
+      proxy: this.mcpProxy,
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
         list: (projectPath) => this.sessions.toolSessions(projectPath),
@@ -579,11 +605,26 @@ export class AgentHost {
           this.agents.mcpServersByName(record.agentId)
             ? this.artifactService.folderServers(connection, record.projectPath, sessionId)
             : this.artifactService.servers(sessionId, record.projectPath),
-        library: (agentId, transports, taken) =>
-          libraryServers(this.settings.marketplace.mcp, this.marketKeys, agentId, transports, {
-            platform,
-            taken,
-          }),
+        library: (sessionId, record, connection, transports, taken) =>
+          libraryServers(
+            this.settings.marketplace.mcp,
+            this.marketKeys,
+            record.agentId,
+            transports,
+            {
+              platform,
+              taken,
+              oauth: {
+                access: (server) => this.marketConnections.access(server),
+                bearer: () =>
+                  this.artifactService.bearer(
+                    sessionId,
+                    record.projectPath,
+                    this.agents.mcpServersByName(record.agentId) ? connection : null,
+                  ),
+              },
+            },
+          ),
         detached: (sessionId) => {
           this.artifactService.revoke(sessionId)
           this.artifacts.stopUsing(sessionId)
@@ -899,16 +940,72 @@ export class AgentHost {
    * `host:market-keys`: every value of the Marketplace servers' inputs, replacing those before.
    * They stay in memory and go only into what agents are handed; a malformed message is dropped.
    */
-  setMarketKeys(values: unknown): void {
+  setMarketKeys(values: unknown, oauth?: unknown): void {
     const keys = parseMarketKeys(values)
-    if (!keys) {
+    const signIns = oauth === undefined ? undefined : parseSignIns(oauth)
+    if (!keys || signIns === null) {
       this.diagnostics.log('warn', 'host:market-keys was not a map of values; ignored')
       return
     }
     const previous = this.marketKeys
     this.marketKeys = keys
     this.marketChanged(this.settings.marketplace.mcp, previous)
+    if (signIns) this.signInsPushed(signIns)
     this.hub.broadcast({ type: 'market.keysChanged' })
+  }
+
+  /**
+   * Main's copy of the sign-ins. Every message to main is answered with one, so a sign-in two
+   * pushes have not carried back was refused: it keeps working until the host restarts.
+   */
+  private signInsPushed(signIns: Record<string, string>): void {
+    const before = this.marketConnections.view()
+    this.marketConnections.load(signIns)
+    for (const [serverId, sent] of this.unkept) {
+      const kept = Object.hasOwn(signIns, serverId) ? signIns[serverId]! : null
+      if (kept === sent.state) {
+        this.unkept.delete(serverId)
+      } else if (++sent.pushes >= 2) {
+        this.unkept.delete(serverId)
+        this.diagnostics.log(
+          'warn',
+          `Main did not keep the sign-in of ${serverId}; it lasts until the host restarts`,
+        )
+      }
+    }
+    const after = this.marketConnections.view()
+    for (const [serverId, connection] of Object.entries(after)) {
+      if (JSON.stringify(before[serverId]) !== JSON.stringify(connection)) {
+        this.connectionChanged(serverId, connection)
+      }
+    }
+  }
+
+  /** Asks main to keep a server's sign-in, or to forget it with null. */
+  private keepSignIn(serverId: string, state: string | null): void {
+    this.unkept.set(serverId, { state, pushes: 0 })
+    this.options.send({ type: 'host:market-oauth', serverId, state })
+  }
+
+  /**
+   * A server's sign-in changed: the clients hear of it, and the prepared sessions of its agents
+   * are replaced, since they started with the server or without it.
+   */
+  private connectionChanged(
+    serverId: string,
+    connection: MarketConnection,
+    loginId?: string,
+    error?: string,
+  ): void {
+    this.hub.broadcast({
+      type: 'market.connectionChanged',
+      serverId,
+      connection,
+      ...(loginId !== undefined ? { loginId } : {}),
+      ...(error !== undefined ? { error } : {}),
+    })
+    const server = this.settings.marketplace.mcp.find((item) => item.id === serverId)
+    if (server) this.sessions.libraryChanged((agentId) => serverFor(server, agentId))
   }
 
   /**
@@ -916,7 +1013,12 @@ export class AgentHost {
    * servers differ now has its prepared sessions replaced.
    */
   private marketChanged(servers: HostSettings['marketplace']['mcp'], keys: MarketKeys): void {
-    const options = { platform: this.options.platform }
+    // Proxied servers compare by where they go, without a session's bearer.
+    const oauth = {
+      access: (server: MarketServer) => this.marketConnections.access(server),
+      bearer: () => ({ origin: '', token: '' }),
+    }
+    const options = { platform: this.options.platform, oauth }
     const of = (list: typeof servers, held: MarketKeys, agentId: AgentId): string =>
       JSON.stringify(libraryServers(list, held, agentId, ALL_TRANSPORTS, options))
     const now = this.settings.marketplace.mcp
@@ -1458,6 +1560,10 @@ export class AgentHost {
       'market.catalog': ({ refresh }) => this.marketCatalog.catalog(refresh === true),
       'market.search': ({ query }) => this.marketCatalog.search(query),
       'market.keys': () => keyState(this.settings.marketplace.mcp, this.marketKeys),
+      'market.connect': ({ serverId }) => this.marketConnections.connect(serverId),
+      'market.cancelConnect': ({ loginId }) => this.marketConnections.cancel(loginId),
+      'market.disconnect': ({ serverId }) => this.marketConnections.disconnect(serverId),
+      'market.connections': () => this.marketConnections.view(),
       'market.plugins': ({ refresh }) => this.marketPlugins.plugins(refresh === true),
       'market.pluginDetails': ({ agentId, pluginId }) =>
         this.marketPlugins.details(agentId, pluginId),

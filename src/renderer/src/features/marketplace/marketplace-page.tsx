@@ -28,6 +28,7 @@ export default function MarketplacePage({
     if (!store.pluginsLoading && (!store.plugins || store.pluginsError)) void store.loadPlugins()
     if (!store.skillsLoading && (!store.skills || store.skills.error)) void store.loadSkills()
     void store.loadKeys()
+    void store.loadConnections()
   }, [])
 
   // A listing and the directory share the page's scroll, which starts at the top for each.

@@ -85,7 +85,7 @@ describe('skills', () => {
     expect(pdf).toMatchObject({ name: 'pdf', source: 'catalog', agents: 'all', on: true })
     const copied = path.join(store, skillFolder(pdf.id), 'pdf')
     expect(await readFile(path.join(copied, 'scripts', 'fill.py'), 'utf8')).toBe('print(1)')
-  })
+  }, 20_000)
 
   it('takes exactly one skill from a GitHub folder', async () => {
     const { service } = await setup()

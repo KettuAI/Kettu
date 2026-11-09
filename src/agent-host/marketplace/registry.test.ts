@@ -71,14 +71,8 @@ function entry(server: Record<string, unknown>, meta: unknown = active): unknown
 }
 
 describe('catalogServer', () => {
-  it("reads GitHub's entry as its remote, with the token header as a secret input", () => {
-    expect(
-      catalogServer(github, {
-        official: true,
-        brand: 'github',
-        prefixes: { Authorization: 'Bearer ' },
-      }),
-    ).toEqual({
+  it("reads GitHub's entry as its remote, signing in with the device flow in place of its token", () => {
+    expect(catalogServer(github, { official: true, brand: 'github' })).toEqual({
       id: 'io.github.github/github-mcp-server',
       title: 'GitHub',
       publisher: 'github',
@@ -94,18 +88,35 @@ describe('catalogServer', () => {
         type: 'http',
         transport: 'streamable-http',
         url: 'https://api.githubcopilot.com/mcp/',
-        headers: [
-          {
-            name: 'Authorization',
-            input: true,
-            secret: true,
-            required: false,
-            description: 'Authorization header with authentication token (PAT or App token)',
-            prefix: 'Bearer ',
-          },
-        ],
+        headers: [],
+        oauth: { flow: 'device' },
       },
     })
+  })
+
+  it('signs in through the browser to a remote with no secret to type, and not to one with', () => {
+    const open = catalogServer(
+      entry({ remotes: [{ type: 'streamable-http', url: 'https://mcp.notion.com/mcp' }] }),
+    )
+    expect(open?.spec).toEqual({
+      type: 'http',
+      transport: 'streamable-http',
+      url: 'https://mcp.notion.com/mcp',
+      headers: [],
+      oauth: { flow: 'browser' },
+    })
+    const keyed = catalogServer(
+      entry({
+        remotes: [
+          {
+            type: 'streamable-http',
+            url: 'https://mcp.acme.dev/mcp',
+            headers: [{ name: 'X-Api-Key', isSecret: true, isRequired: true }],
+          },
+        ],
+      }),
+    )
+    expect(keyed?.spec).not.toHaveProperty('oauth')
   })
 
   it("runs GitHub's image with its token passed by name, never on the command line", () => {

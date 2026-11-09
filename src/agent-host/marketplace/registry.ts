@@ -149,13 +149,32 @@ function remoteSpec(remotes: Fields[], listing: Listing | undefined): McpSpec | 
       if (!url || url.includes('{')) continue
       try {
         const headers = values(list(remote.headers), HEADER_NAME, listing)
-        if (headers) return { type: 'http', transport, url, headers }
+        if (headers) return withSignIn({ type: 'http', transport, url, headers })
       } catch (error) {
         if (!(error instanceof Unrunnable)) throw error
       }
     }
   }
   return null
+}
+
+// Remote servers whose service registers no clients: Kettu signs in with the device flow of an app
+// it registered there, in place of the token header they ask for.
+const DEVICE_HOSTS: ReadonlySet<string> = new Set(['api.githubcopilot.com'])
+
+/**
+ * A remote with no secret to type in signs in with OAuth, if it turns out to need any: GitHub's
+ * through the device flow, without its token header, and every other through the browser.
+ */
+function withSignIn(spec: Extract<McpSpec, { type: 'http' }>): McpSpec {
+  if (DEVICE_HOSTS.has(new URL(spec.url).hostname)) {
+    const headers = spec.headers.filter(
+      (header) => !('input' in header && header.name.toLowerCase() === 'authorization'),
+    )
+    return { ...spec, headers, oauth: { flow: 'device' } }
+  }
+  const secret = spec.headers.some((header) => 'input' in header && header.secret)
+  return secret ? spec : { ...spec, oauth: { flow: 'browser' } }
 }
 
 /** A package's argument as words of the command line; empty when it is left out. */
