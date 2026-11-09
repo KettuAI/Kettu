@@ -66,6 +66,7 @@ import {
   newSessionPanel,
   openAgentSettings,
   openHarnessSettings,
+  openMarketplace,
   panelOf,
   sessionsShown,
   toggleTerminal,
@@ -1143,7 +1144,7 @@ function ApiKeyDialog({
 
 /** Where the agent reads its configuration, and the harness it runs on. */
 function ConfigurationGroup({ status }: { status: AgentStatus }) {
-  const { useAgentsStore } = useHostScope()
+  const { hostId, useAgentsStore } = useHostScope()
   const { t } = useTranslation('settings')
   const details = useAgentsStore((s) => s.details[status.id])
   const version = harnessVersion(status)
@@ -1160,6 +1161,21 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
           </SetButton>
         </RowFrame>
         {takesStartMode(status.id) && <StartModeRow key={status.id} status={status} />}
+        {/* The Marketplace shows this computer's servers only. */}
+        {hostId === null && (
+          <RowFrame
+            text={
+              <RowText
+                name={t('agents.mcpServers.name')}
+                description={t('agents.mcpServers.description')}
+              />
+            }
+          >
+            <SetButton variant="ghost" onClick={() => openMarketplace({ tab: 'installed' })}>
+              {t('agents.mcpServers.open')}
+            </SetButton>
+          </RowFrame>
+        )}
         {details?.config.map((item) => (
           <PlaceRow
             key={item.id}

@@ -39,6 +39,8 @@ export interface ForkedHostConfig<ToChild, FromChild extends { type: string }> {
   socketName: string | null
   env: NodeJS.ProcessEnv
   initMessage(socketPath: string | null): ToChild
+  /** What follows init at each start, before any other message, as main's UtilityHost sends. */
+  startMessages?(): ToChild[]
   shutdownMessage: ToChild
   readyType: FromChild['type']
   stoppedType: FromChild['type']
@@ -241,6 +243,7 @@ export class ForkedHost<ToChild, FromChild extends { type: string }> {
       })
     })
     child.send(this.config.initMessage(socketPath) as object)
+    for (const message of this.config.startMessages?.() ?? []) child.send(message as object)
     this.readyTimer = setTimeout(() => {
       this.config.log.error(`No ready message within ${this.timings.readyMs} ms; killing it`)
       child.kill('SIGKILL')

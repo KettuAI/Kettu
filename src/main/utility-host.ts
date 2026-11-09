@@ -38,6 +38,8 @@ export interface UtilityHostConfig<ToChild, FromChild extends { type: string }> 
   modulePath: string
   serviceName: string
   initMessage(): ToChild
+  /** What follows init at each start, before any other message, as state the process needs first. */
+  startMessages?(): ToChild[]
   connectMessage?(windowId: number): ToChild
   shutdownMessage: ToChild
   readyType: FromChild['type']
@@ -213,6 +215,7 @@ export class UtilityHost<ToChild, FromChild extends { type: string }> {
       })
     })
     child.postMessage(this.config.initMessage())
+    for (const message of this.config.startMessages?.() ?? []) child.postMessage(message)
     this.readyTimer = setTimeout(() => {
       this.log.error(`No ready message within ${READY_TIMEOUT_MS} ms; killing it`)
       child.kill()

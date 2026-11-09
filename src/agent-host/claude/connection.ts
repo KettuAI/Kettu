@@ -18,6 +18,7 @@ import {
   type AgentInit,
   type ForkPoint,
   type ListedSession,
+  type McpServer,
   type ModelTokens,
   type OpenedSession,
   type PermissionAnswer,
@@ -82,6 +83,7 @@ import type {
   ElicitationRequest,
   ElicitationResult,
   FlagSettings,
+  McpServerConfig,
   ModelInfo,
   ModelUsage,
   PermissionMode,
@@ -295,6 +297,27 @@ function spentSince(
   return spent
 }
 
+/** Servers as the SDK's `mcpServers` record, by name. */
+function claudeServers(servers: readonly McpServer[]): Record<string, McpServerConfig> {
+  return Object.fromEntries(
+    servers.map((server): [string, McpServerConfig] => [
+      server.name,
+      server.type === 'stdio'
+        ? {
+            type: 'stdio',
+            command: server.command,
+            args: [...server.args],
+            env: Object.fromEntries(server.env.map((v) => [v.name, v.value])),
+          }
+        : {
+            type: server.type,
+            url: server.url,
+            headers: Object.fromEntries(server.headers.map((h) => [h.name, h.value])),
+          },
+    ]),
+  )
+}
+
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -470,6 +493,8 @@ export class ClaudeConnection implements AgentConnection {
         logout: true,
         steering: true,
         mcpHttp: true,
+        mcpSse: true,
+        mcpStdio: true,
         prompt: { image: true, audio: false, embeddedContext: true },
       },
       // A browser on another machine cannot finish the sign-in, so there Claude Code's own runs.
@@ -798,20 +823,21 @@ export class ClaudeConnection implements AgentConnection {
     if (hidden) flags.disableAllHooks = true
     // A page's question reads none of the user's settings but how they sign in, which may be there.
     if (bare) Object.assign(flags, signInSettings((await this.settings(cwd, ['user'])).values))
-    const mcpServers = Object.fromEntries(
-      (options.mcpServers ?? []).map((server) => [
-        server.name,
-        {
-          type: 'http' as const,
-          url: server.url,
-          headers: Object.fromEntries(server.headers.map((header) => [header.name, header.value])),
-        },
-      ]),
+    const servers = bare ? [] : (options.mcpServers ?? [])
+    // The SDK writes this option onto Claude Code's command line, which other users can read, so a
+    // server that holds a key comes only through the control channel once the query has started.
+    const mcpServers = claudeServers(servers.filter((server) => !server.secret))
+    const allowedTools = servers.flatMap((server) =>
+      server.type === 'stdio'
+        ? []
+        : (server.autoAllow ?? []).map((tool) => `mcp__${server.name}__${tool}`),
     )
-    const allowedTools = (options.mcpServers ?? []).flatMap((server) =>
-      (server.autoAllow ?? []).map((tool) => `mcp__${server.name}__${tool}`),
+    const plugins = bare
+      ? []
+      : (options.localPlugins ?? []).map((folder) => ({ type: 'local' as const, path: folder }))
+    const prompts = servers.flatMap((server) =>
+      server.type === 'stdio' ? [] : (server.prompt ?? []),
     )
-    const prompts = (options.mcpServers ?? []).flatMap((server) => server.prompt ?? [])
     const queryOptions: QueryOptions = {
       cwd,
       env: {
@@ -851,7 +877,8 @@ export class ClaudeConnection implements AgentConnection {
         this.canUseTool(session, name, toolInput, permission),
       onElicitation: (request, { signal, requestId }) =>
         this.elicit(session, request, requestId, signal),
-      ...(Object.keys(mcpServers).length > 0 && !bare ? { mcpServers } : {}),
+      ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
+      ...(plugins.length > 0 ? { plugins } : {}),
       ...(Object.keys(flags).length > 0 ? { settings: flags } : {}),
       extraArgs: { 'replay-user-messages': null },
       ...(hidden ? { persistSession: false } : {}),
@@ -887,6 +914,7 @@ export class ClaudeConnection implements AgentConnection {
       query.close()
       throw this.closedError()
     }
+    if (servers.some((server) => server.secret)) this.addSecretServers(session, query, servers)
     this.reportAccount(init.account)
     session.models = init.models ?? []
     const model =
@@ -912,6 +940,27 @@ export class ClaudeConnection implements AgentConnection {
       this.publishCommands(session)
     }
     return session
+  }
+
+  /**
+   * Hands the query all its servers, those holding keys among them, in place of the ones its
+   * options started it with. Not awaited: the answer comes once every server has tried to connect,
+   * and a server that cannot only leaves the session without its tools.
+   */
+  private addSecretServers(session: Session, query: Query, servers: readonly McpServer[]): void {
+    const names = servers.map((server) => server.name)
+    this.context.hooks.traffic('out', { method: 'setMcpServers', sessionId: session.id, names })
+    query.setMcpServers(claudeServers(servers)).then(
+      (result) => {
+        for (const [name, error] of Object.entries(result.errors)) {
+          this.context.hooks.log('warn', `MCP server ${name} did not connect: ${error}`)
+        }
+      },
+      (error: unknown) => {
+        if (session.query !== query) return
+        this.context.hooks.log('warn', `Could not add MCP servers: ${errorText(error)}`)
+      },
+    )
   }
 
   private reportAccount(info: AccountInfo | undefined): void {

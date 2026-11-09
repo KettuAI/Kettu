@@ -67,6 +67,7 @@ import { isRendererUrl, rendererPage } from './renderer'
 import type { TrayPanel } from './tray-panel'
 import type { SettingsStore } from './settings'
 import type { Sharing } from './sharing'
+import type { MarketKeys } from './market-keys'
 import { computerAppIcon, computerUseStatus, requestComputerPermission } from './computer-use'
 import { framesSettled, isRevoked } from './subframes'
 import { systemNameForRun } from './system-name'
@@ -94,6 +95,7 @@ export interface IpcDeps {
   siteIcons: SiteIcons
   mediaGrants: MediaGrants
   sharing: Sharing
+  marketKeys: MarketKeys
   remoteHost: RemoteHost
   hostSessions: HostSessions
   hostMedia: HostMedia
@@ -421,6 +423,7 @@ export function registerIpcHandlers({
   siteIcons,
   mediaGrants,
   sharing,
+  marketKeys,
   remoteHost,
   hostSessions,
   hostMedia,
@@ -696,6 +699,8 @@ export function registerIpcHandlers({
   handle('sharing:visitors', 1, (_, id) => sharing.visitors(id))
   handle('sharing:unpublish', 1, (_, id) => sharing.unpublish(id))
   handle('sharing:set-auto', 1, (_, enabled) => sharing.setAuto(enabled))
+  // The store checks the patch against the server's spec in the settings.
+  handle('marketplace:set-keys', 1, (_, patch) => marketKeys.set(patch))
 
   handle('remote:status', 0, () => remoteStatus())
   // Each code belongs to the page that opened it, which alone hears it and answers it.

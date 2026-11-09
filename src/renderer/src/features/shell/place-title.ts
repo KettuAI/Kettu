@@ -4,6 +4,8 @@ import { shortAgo } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { AGENT_NAMES, agentName } from '@renderer/stores/agents'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
+import { listingTitle } from '@renderer/features/marketplace/model'
+import { useMarketplaceStore } from '@renderer/stores/marketplace'
 import { otherHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useRoutinesStore } from '@renderer/stores/routines'
@@ -33,6 +35,12 @@ export function placeTitle(place: HistoryPlace): string {
       return useRoutinesStore.getState().byId[place.routineId]?.name ?? t('history.places.routines')
     case 'artifacts':
       return place.deleted ? t('history.places.recentlyDeleted') : t('history.places.artifacts')
+    case 'marketplace': {
+      const title = place.item ? listingTitle(place.item) : null
+      return title
+        ? t('history.places.marketplaceItem', { item: title })
+        : t('history.places.marketplace')
+    }
     case 'artifact': {
       const { list, deleted } = useArtifactsStore.getState()
       const found = [...(list ?? []), ...(deleted ?? [])].find((a) => a.id === place.id)
@@ -50,7 +58,7 @@ export function placeTitle(place: HistoryPlace): string {
   }
 }
 
-/** A place's name, kept current as its session, routine or artifact is renamed. */
+/** A place's name, kept current as its session, routine, artifact or listing is renamed. */
 export function usePlaceTitle(place: HistoryPlace): string {
   useTranslation('shell')
   useSessionsStore((s) => (place.kind === 'session' ? s.byId[place.sessionId]?.title : null))
@@ -58,6 +66,7 @@ export function usePlaceTitle(place: HistoryPlace): string {
     place.kind === 'routine' && place.routineId ? s.byId[place.routineId]?.name : null,
   )
   useArtifactsStore((s) => (place.kind === 'artifact' ? s.list : null))
+  useMarketplaceStore((s) => (place.kind === 'marketplace' && place.item ? s.catalog : null))
   return placeTitle(place)
 }
 
@@ -76,8 +85,6 @@ function itemName({ section, item }: SettingsPlace): string | null {
       return agentName(item as AgentId)
     case 'harnesses':
       return AGENT_NAMES[item as HarnessId] ?? null
-    case 'mcp':
-      return item
     case 'hosts':
       return otherHosts(useHostsStore.getState()).find((host) => host.id === item)?.name ?? null
     case 'remote':

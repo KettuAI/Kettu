@@ -5,6 +5,7 @@ import {
   PencilEdit02Icon,
   RepeatIcon,
   Settings01Icon,
+  Store01Icon,
 } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -43,6 +44,8 @@ function PageIcon({ place }: { place: HistoryPlace }) {
     case 'artifacts':
     case 'artifact':
       return <Glyph icon={DashboardSquare02Icon} size={15} />
+    case 'marketplace':
+      return <Glyph icon={Store01Icon} size={15} />
     default:
       return <Glyph icon={PencilEdit02Icon} size={15} />
   }

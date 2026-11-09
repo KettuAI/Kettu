@@ -6,6 +6,7 @@ import { stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { AdminAnswer, HostToMain } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
+import type { MarketKeyState } from '@shared/marketplace'
 import type { PortErrorCode } from '@shared/port-rpc'
 import type { DeviceActivity } from '@shared/remote/activity'
 import { DEVICE_ID, normalizeDeviceName } from '@shared/remote/device'
@@ -37,6 +38,7 @@ import type { UpdateStatus } from '@shared/updates'
 import { isAbsolutePath } from '../agent-host/paths'
 import type { AgentFolders } from './agent-folders'
 import { isExecutableFile } from './executable'
+import { MarketKeysError } from './market-keys'
 import type { SettingsStore } from './settings'
 import { SettingsError } from './settings-schema'
 import { checkThemeText, type ThemeReadResult, type ThemeSelect } from './themes'
@@ -177,6 +179,8 @@ export interface HostAdminDeps {
   /** Null where Kettu is not updated from Settings, as under the daemon. */
   updates: AdminUpdates | null
   themes: AdminThemes
+  /** The Marketplace's keys, which check an untrusted patch themselves. */
+  marketKeys: { set(patch: unknown): Promise<MarketKeyState> }
   /** An artifact version's preview as a data URL; null where the host cannot capture, as the daemon. */
   thumbnail: ((id: unknown, version: unknown, layout: unknown) => Promise<string | null>) | null
   /** A page as a PNG; the host's own windows render it, so the daemon has none. */
@@ -229,6 +233,9 @@ export class HostAdmin {
       }
       if (error instanceof SettingsError) {
         return { error: { code: 'invalid_params', message: error.message } }
+      }
+      if (error instanceof MarketKeysError) {
+        return { error: { code: error.code, message: error.message } }
       }
       return { error: { code: 'internal', message: (error as Error)?.message ?? String(error) } }
     }
@@ -372,6 +379,8 @@ export class HostAdmin {
         settings.setShellPath(await runnableProgram(typedPath(file, 'path', platform), platform))
         return this.hostPart()
       }
+      case 'marketplace.setKeys':
+        return this.deps.marketKeys.set(fields(params).patch)
       case 'remote.status':
         return this.deps.remoteStatus()
       case 'remote.pair': {

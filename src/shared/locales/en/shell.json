@@ -81,6 +81,8 @@
       "artifacts": "Artifacts",
       "recentlyDeleted": "Artifacts › Recently deleted",
       "artifact": "Artifact",
+      "marketplace": "Marketplace",
+      "marketplaceItem": "Marketplace › {{item}}",
       "settings": "Settings › {{section}}",
       "settingsItem": "Settings › {{section}} › {{item}}"
     }

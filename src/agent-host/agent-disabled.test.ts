@@ -17,6 +17,7 @@ function settings(disabledAgents: AgentId[]): HostSettings {
     proxy: DEFAULT_SETTINGS.proxy,
     git: DEFAULT_SETTINGS.git,
     mcp: DEFAULT_SETTINGS.mcp,
+    marketplace: DEFAULT_SETTINGS.marketplace,
     startModes: {},
     usage: { fromComputer: false },
     sessionTitles: true,

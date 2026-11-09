@@ -14,7 +14,6 @@
     "sharing": "Sharing",
     "remote": "Remote access",
     "browser": "Browser",
-    "mcp": "MCP servers",
     "harnesses": "Harnesses",
     "hosts": "Hosts",
     "devices": "Mobile devices",
@@ -683,6 +682,11 @@
     "registrationNote": "Installing or detecting a harness does not add an agent.",
     "onHarness": "on {{harness}}",
     "openHarness": "Open {{harness}} in Harnesses",
+    "mcpServers": {
+      "name": "MCP servers",
+      "description": "Kettu’s own server and the ones you install. Manage them in Marketplace.",
+      "open": "Open Marketplace"
+    },
     "openHarnessButton": "Open",
     "harness": "Harness",
     "signInRow": "Sign-in",
@@ -914,7 +918,6 @@
     "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer.",
     "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
     "browserWeb": "Links in agents’ replies open in a new tab.",
-    "mcp": "Agents reach tools through these MCP servers: Kettu’s own, and the ones each agent keeps.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu installs and updates them for you.",
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it.",
@@ -1477,53 +1480,6 @@
   },
   "usage": {
     "cleared": "Kettu’s record is cleared"
-  },
-  "mcp": {
-    "keywords": "MCP server tools artifacts sessions browser",
-    "groups": {
-      "kettu": "From Kettu",
-      "own": "In each agent’s own configuration",
-      "kettuNote": "Artifacts, sessions and the browser reach every agent through this server."
-    },
-    "state": {
-      "running": "Running",
-      "notRunning": "Not running"
-    },
-    "row": {
-      "tools_one": "{{count}} tool",
-      "tools_other": "{{count}} tools",
-      "off": "Off for {{names}}",
-      "offEvery": "Off for every agent"
-    },
-    "error": {
-      "title": "Couldn’t read the MCP servers"
-    },
-    "server": {
-      "notRunning": {
-        "title": "Kettu’s server isn’t running",
-        "body": "Sessions start without its tools until it runs."
-      }
-    },
-    "place": {
-      "connects": "{{name}} also connects to the servers it keeps itself.",
-      "keywords": "configuration file MCP",
-      "ownWithCommand": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project.",
-      "ownWithCommandFrom": "Its own servers too, from {{path}}. Type {{command}} in a session to see them, or add {{file}} to a project.",
-      "ownWithCommandMissing": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project. {{path}} is not created yet.",
-      "ownFrom": "Its own servers too, from {{path}} and {{file}} in a project.",
-      "ownFromMissing": "Its own servers too, from {{file}} in a project. {{path}} is not created yet.",
-      "pathNote": "{{path}} ({{note}})"
-    },
-    "agents": "Agents",
-    "tools": "Tools",
-    "agent": {
-      "switch": "Kettu’s tools in {{name}}",
-      "on": "Adds these tools to its sessions.",
-      "off": "Its sessions start without these tools.",
-      "takesNone": "{{name}} takes no MCP servers over HTTP.",
-      "nextStart": "Takes effect from {{name}}’s next start."
-    },
-    "builtIn": "Built in"
   },
   "harnesses": {
     "groups": {

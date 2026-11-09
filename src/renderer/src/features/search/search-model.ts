@@ -12,6 +12,7 @@ export type SearchAction =
   | 'openUsage'
   | 'openArtifacts'
   | 'openRoutines'
+  | 'openMarketplace'
   | 'openSettings'
   | 'showShortcuts'
   | 'toggleSidebar'
@@ -22,6 +23,7 @@ export const SEARCH_ACTIONS: readonly SearchAction[] = [
   'openUsage',
   'openArtifacts',
   'openRoutines',
+  'openMarketplace',
   'openSettings',
   'showShortcuts',
   'toggleSidebar',

@@ -1,5 +1,6 @@
 import type { ComputerUseSettings } from './computer-use'
 import type { LanguageSetting, Locale } from './locale'
+import type { MarketServer, MarketSkill } from './marketplace'
 import type { DirectAddress } from './remote/protocol'
 import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId, HarnessId } from './thread'
@@ -62,6 +63,8 @@ export interface SettingsFile {
   }
   git: { backgroundFetch: boolean }
   mcp: { kettu: { off: AgentId[] } } // the agents whose sessions get no Kettu MCP server
+  // What the Marketplace installed that Kettu keeps and hands to agents; keys live apart.
+  marketplace: { mcp: MarketServer[]; skills: MarketSkill[] }
   // The permission mode each agent's new sessions start in; an agent with none starts as its own.
   startModes: Partial<Record<AgentId, string>>
   updates: { automatic: 'download' | 'restart' | 'notify' | 'off' }
@@ -191,6 +194,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   terminal: { fontSize: 13 },
   git: { backgroundFetch: false },
   mcp: { kettu: { off: [] } },
+  marketplace: { mcp: [], skills: [] },
   startModes: {},
   updates: { automatic: 'download' },
   privacy: { hideAccount: false },
@@ -239,6 +243,7 @@ export interface SettingsPatch {
   terminal?: { shellPath?: null; fontSize?: SettingsFile['terminal']['fontSize'] }
   git?: Partial<SettingsFile['git']>
   mcp?: { kettu: { off: AgentId[] } } // the list is replaced whole
+  marketplace?: { mcp?: MarketServer[]; skills?: MarketSkill[] } // each list is replaced whole
   disabledAgents?: AgentId[] // replaced whole
   startModes?: Partial<Record<AgentId, string | null>> // merged by agent; null clears one
   updates?: Partial<SettingsFile['updates']>
@@ -265,6 +270,7 @@ export interface HostSettings {
   proxy: ProxySettings
   git: SettingsFile['git']
   mcp: SettingsFile['mcp']
+  marketplace: SettingsFile['marketplace']
   startModes: SettingsFile['startModes']
   usage: { fromComputer: boolean }
   sessionTitles: boolean // write a title for a session its agent leaves untitled

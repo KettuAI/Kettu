@@ -4,6 +4,7 @@ import {
   DashboardSquare02Icon,
   PencilEdit02Icon,
   RepeatIcon,
+  Store01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -14,12 +15,18 @@ import { strongestSignal, signalText } from '@renderer/features/routines/model'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { openArtifacts, openRoutines, openUsage, useViewStore } from '@renderer/stores/view'
+import {
+  openArtifacts,
+  openMarketplace,
+  openRoutines,
+  openUsage,
+  useViewStore,
+} from '@renderer/stores/view'
 import { RoutineSignalMark, TightestLimit, TodayCost, TodayTokens } from './nav-ends'
 
 /**
- * The sidebar's menu for App Shell: New session, Artifacts, Routines and Usage, with the row the
- * main area shows marked, and the Routines and Usage rows' marks at their ends.
+ * The sidebar's menu for App Shell: New session, Artifacts, Routines, Marketplace and Usage, with
+ * the row the main area shows marked, and the Routines and Usage rows' marks at their ends.
  */
 export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavigate'> {
   const { t } = useTranslation('sidebar')
@@ -28,6 +35,7 @@ export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavig
     newSession: t('nav.newSession'),
     artifacts: t('nav.artifacts'),
     routines: t('nav.routines'),
+    marketplace: t('nav.marketplace'),
     usage: tu('nav.usage'),
   }
   const routines = useRoutinesRow()
@@ -39,6 +47,7 @@ export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavig
     if (main.kind === 'artifacts' || (main.kind === 'artifact' && main.back.kind === 'artifacts'))
       return 'artifacts'
     if (main.kind === 'routines' || main.kind === 'routine') return 'routines'
+    if (main.kind === 'marketplace') return 'marketplace'
     if (main.kind === 'usage') return 'usage'
     return null
   })
@@ -48,6 +57,7 @@ export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavig
     { label: labels.newSession, icon: PencilEdit02Icon },
     { label: labels.artifacts, icon: DashboardSquare02Icon },
     { label: labels.routines, icon: RepeatIcon, end: routines.end, ariaLabel: routines.name },
+    { label: labels.marketplace, icon: Store01Icon },
     { label: labels.usage, icon: Analytics01Icon, end: usageEnd },
   ]
   return {
@@ -57,6 +67,7 @@ export function useSidebarNav(): Pick<AppShellProps, 'nav' | 'active' | 'onNavig
       if (label === labels.newSession) newSession()
       else if (label === labels.artifacts) openArtifacts()
       else if (label === labels.routines) openRoutines()
+      else if (label === labels.marketplace) openMarketplace()
       else if (label === labels.usage) openUsage()
     },
   }

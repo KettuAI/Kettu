@@ -54,7 +54,6 @@ import {
   useGeneralSection,
   useGitSection,
   useHostsSection,
-  useMcpSection,
   useNotificationsSection,
   useRemoteSection,
   useSharingSection,
@@ -206,13 +205,7 @@ function SettingsLayout({
   // The list in clusters: what belongs to this client first, then the host's, then About.
   const all: SectionDef[][] = [
     client,
-    [
-      useAgentsSection(),
-      useHarnessesSection(),
-      useUsageSection(),
-      useGitSection(),
-      useMcpSection(),
-    ],
+    [useAgentsSection(), useHarnessesSection(), useUsageSection(), useGitSection()],
     [useArchivedSection(), useArtifactsSection(), useSharingSection(), useTerminalSection()],
     [useRemoteSection(), useAdvancedSection()],
     [about],
@@ -232,14 +225,6 @@ function SettingsLayout({
   const active = useViewStore((s) => s.settings.section) ?? 'general'
   const page = sections.find((s) => s.id === active) ?? sections[0]!
   const item = useViewStore((s) => (s.settings.section === active ? s.settings.item : null))
-  // Read when Settings opens, so search finds every row, and again when its section shows.
-  const loadMcp = scope.useMcpStore((s) => s.load)
-  useEffect(() => {
-    void loadMcp()
-  }, [loadMcp])
-  useEffect(() => {
-    if (active === 'mcp') void loadMcp()
-  }, [active, item, loadMcp])
   const scroller = useRef<HTMLDivElement>(null)
   const search = useRef<HTMLInputElement>(null)
   const [jump, setJump] = useState<string | null>(null)

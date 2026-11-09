@@ -109,9 +109,25 @@ export interface SpawnOptions {
 }
 
 export interface HttpMcpServer {
-  type: 'http'
+  type: 'http' | 'sse'
   url: string
   headers?: Record<string, string>
+}
+
+export interface StdioMcpServer {
+  type: 'stdio'
+  command: string
+  args?: string[]
+  env?: Record<string, string>
+}
+
+export type McpServerConfig = HttpMcpServer | StdioMcpServer
+
+export interface McpSetServersResult {
+  added: string[]
+  removed: string[]
+  /** Why each server that failed to connect did, by name. */
+  errors: Record<string, string>
 }
 
 /** The settings layer a query adds on top of the files. */
@@ -146,7 +162,9 @@ export interface QueryOptions {
   canUseTool?: CanUseTool
   /** Without it the SDK declines every MCP server's request that no hook answers. */
   onElicitation?: OnElicitation
-  mcpServers?: Record<string, HttpMcpServer>
+  mcpServers?: Record<string, McpServerConfig>
+  /** Plugin folders loaded for the session beside the user's own plugins. */
+  plugins?: { type: 'local'; path: string }[]
   settings?: FlagSettings
   extraArgs?: Record<string, string | null>
   persistSession?: boolean
@@ -367,6 +385,11 @@ export interface Query extends AsyncIterable<SdkMessage> {
   getContextUsage(options?: { detail?: 'summary' | 'full' }): Promise<ContextUsageAnswer>
   accountInfo(): Promise<AccountInfo>
   stopTask(taskId: string): Promise<void>
+  /**
+   * Replaces the servers the query added by itself, those of its `mcpServers` option among them,
+   * over the control channel; the settings files' servers stay.
+   */
+  setMcpServers(servers: Record<string, McpServerConfig>): Promise<McpSetServersResult>
   close(): void
   /** Present in the SDK Kettu pins, though not in its published types. */
   generateSessionTitle?(description: string, options: { persist: boolean }): Promise<string | null>

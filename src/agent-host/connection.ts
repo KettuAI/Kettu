@@ -106,6 +106,10 @@ export interface AgentInit {
     steering: boolean
     /** MCP servers over HTTP, which the artifacts service needs. */
     mcpHttp: boolean
+    /** MCP servers over the older SSE transport. */
+    mcpSse: boolean
+    /** MCP servers the agent starts as programs and talks to over stdio. */
+    mcpStdio: boolean
     prompt: PromptCapabilities
   }
   authMethods: AuthMethodInfo[]
@@ -152,17 +156,31 @@ export interface ForkPoint {
   occurrence: number // 1-based, among the agent messages up to it with the same text
 }
 
-/** An MCP server a session gets: Kettu's artifacts service, over HTTP. */
-export interface McpServer {
-  type: 'http'
-  name: string
-  url: string
-  headers: { name: string; value: string }[]
-  /** Tools of the server that an agent runs without asking, where its own settings can say so. */
-  autoAllow?: string[]
-  /** A paragraph for the agent's own instructions, where it takes one. */
-  prompt?: string
-}
+/**
+ * An MCP server a session gets: Kettu's artifacts service over HTTP, or one the Marketplace
+ * installed, over streamable HTTP, SSE or a program the agent starts.
+ */
+export type McpServer =
+  | {
+      type: 'http' | 'sse'
+      name: string
+      url: string
+      headers: { name: string; value: string }[]
+      /** Tools of the server that an agent runs without asking, where its own settings can say so. */
+      autoAllow?: string[]
+      /** A paragraph for the agent's own instructions, where it takes one. */
+      prompt?: string
+      /** Holds a value from the key store, so it must never reach a command line. */
+      secret?: boolean
+    }
+  | {
+      type: 'stdio'
+      name: string
+      command: string
+      args: string[]
+      env: { name: string; value: string }[]
+      secret?: boolean
+    }
 
 /** A content block of a prompt, as Kettu sends it; each protocol converts it for its wire. */
 export type PromptBlock =
@@ -217,6 +235,10 @@ export type HiddenPurpose = 'options' | 'limits' | 'context' | 'titles' | 'sampl
 /** How a session is opened, loaded, resumed or forked. */
 export interface SessionOptions {
   mcpServers?: readonly McpServer[]
+  /** Folders whose subfolders are skills Kettu adds, for an agent that takes extra skill roots. */
+  skillRoots?: readonly string[]
+  /** Plugin folders Kettu adds, for an agent that loads local plugins. */
+  localPlugins?: readonly string[]
   /** Set for a session Kettu opens for itself, which no thread shows and nobody sees. */
   hidden?: HiddenPurpose
 }
@@ -312,6 +334,8 @@ export interface AgentConnection {
    * runs the agent's report command in a hidden session.
    */
   readLimits?(): Promise<PlanLimit[]>
+  /** A request of the agent's own protocol outside any session, for what only its harness has. */
+  request?<T>(method: string, params?: unknown): Promise<T>
   /**
    * What fills a session's context, answered by the agent itself. Without it the host runs the
    * agent's report command in a hidden fork of the session.

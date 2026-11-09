@@ -247,32 +247,46 @@ function sessionConfig(
   servers: readonly McpServer[] | undefined,
 ): Record<string, JsonValue> {
   const config: Record<string, JsonValue> = { projects: { [cwd]: { trust_level: 'trusted' } } }
-  if (servers && servers.length > 0) {
-    config.mcp_servers = Object.fromEntries(
-      servers.map((server) => [
-        server.name.replace(/\s+/g, '_'),
-        {
-          url: server.url,
-          http_headers: Object.fromEntries(server.headers.map((h) => [h.name, h.value])),
-          ...(server.autoAllow && server.autoAllow.length > 0
-            ? {
-                tools: Object.fromEntries(
-                  server.autoAllow.map((tool) => [tool, { approval_mode: 'approve' }]),
-                ),
-              }
-            : {}),
-        },
-      ]),
-    )
-  }
+  const entries = (servers ?? []).flatMap((server) => {
+    const entry = codexServer(server)
+    return entry ? [[server.name.replace(/\s+/g, '_'), entry] as const] : []
+  })
+  if (entries.length > 0) config.mcp_servers = Object.fromEntries(entries)
   return config
+}
+
+/** A server as a thread's `mcp_servers` entry; none for SSE, which Codex cannot speak. */
+function codexServer(server: McpServer): JsonValue | null {
+  if (server.type === 'stdio') {
+    return {
+      command: server.command,
+      args: [...server.args],
+      ...(server.env.length > 0
+        ? { env: Object.fromEntries(server.env.map((v) => [v.name, v.value])) }
+        : {}),
+    }
+  }
+  if (server.type === 'sse') return null
+  return {
+    url: server.url,
+    http_headers: Object.fromEntries(server.headers.map((h) => [h.name, h.value])),
+    ...(server.autoAllow && server.autoAllow.length > 0
+      ? {
+          tools: Object.fromEntries(
+            server.autoAllow.map((tool) => [tool, { approval_mode: 'approve' }]),
+          ),
+        }
+      : {}),
+  }
 }
 
 /** The servers' paragraphs for the model, as a thread takes them. */
 function developerInstructions(
   servers: readonly McpServer[] | undefined,
 ): { developerInstructions: string } | Record<string, never> {
-  const prompts = (servers ?? []).flatMap((server) => server.prompt ?? [])
+  const prompts = (servers ?? []).flatMap((server) =>
+    server.type === 'stdio' ? [] : (server.prompt ?? []),
+  )
   return prompts.length > 0 ? { developerInstructions: prompts.join('\n\n') } : {}
 }
 
@@ -363,6 +377,8 @@ export class CodexConnection implements AgentConnection {
   /** The models once listed, which each turn's service tier is read from. */
   private knownModels: Model[] = []
   private initialized = false
+  /** The skill folders last set on app-server, as JSON. */
+  private skillRoots: string | null = null
   private account: AgentAccount | null = null
   private readonly startup = new McpStartup()
 
@@ -396,6 +412,28 @@ export class CodexConnection implements AgentConnection {
   }
 
   // Requests to app-server.
+
+  /** A request of app-server outside any thread, such as its plugins and skills. */
+  request<T>(method: string, params?: unknown): Promise<T> {
+    return this.call<T>(method, params)
+  }
+
+  /**
+   * The folders of the skills Kettu adds, which app-server keeps for the whole process, so each
+   * thread's start sets them only when they changed. A Codex without the request runs without them.
+   */
+  private async setSkillRoots(roots: readonly string[] | undefined): Promise<void> {
+    if (roots === undefined) return
+    const key = JSON.stringify(roots)
+    if (key === this.skillRoots) return
+    try {
+      await this.call('skills/extraRoots/set', { extraRoots: [...roots] })
+    } catch (error) {
+      if (this.isClosed) throw error
+      this.hooks.log('warn', `Could not give Codex Kettu's skills: ${(error as Error).message}`)
+    }
+    this.skillRoots = key
+  }
 
   private async call<T>(method: string, params?: unknown): Promise<T> {
     try {
@@ -457,6 +495,9 @@ export class CodexConnection implements AgentConnection {
         logout: this.launch !== null,
         steering: true,
         mcpHttp: true,
+        // Codex speaks streamable HTTP and stdio to MCP servers; it has no SSE client.
+        mcpSse: false,
+        mcpStdio: true,
         prompt: { image: true, audio: false, embeddedContext: true },
       },
       authMethods: this.authMethods(),
@@ -604,6 +645,7 @@ export class CodexConnection implements AgentConnection {
     await this.requireSignIn()
     const mode = modeOf(DEFAULT_MODE)!
     const hidden = options.hidden !== undefined
+    await this.setSkillRoots(options.skillRoots)
     const response = await this.call<ThreadResponse>('thread/start', {
       cwd,
       approvalPolicy: mode.approvalPolicy,
@@ -628,6 +670,7 @@ export class CodexConnection implements AgentConnection {
     const seen = this.threads.get(threadId)
     const known = seen?.known ? seen.settings : undefined
     const mode = known ? modeOf(known.mode) : null
+    await this.setSkillRoots(options.skillRoots)
     const response = await this.call<ThreadResponse>('thread/resume', {
       threadId,
       cwd,
@@ -720,6 +763,7 @@ export class CodexConnection implements AgentConnection {
     const lastTurnId = point ? await this.turnOf(sessionId, point) : null
     const hidden = options.hidden !== undefined
     const mode = modeOf(source?.mode ?? DEFAULT_MODE)!
+    await this.setSkillRoots(options.skillRoots)
     const response = await this.call<ThreadResponse>('thread/fork', {
       threadId: sessionId,
       ...(lastTurnId ? { lastTurnId } : {}),

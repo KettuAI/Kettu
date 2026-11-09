@@ -14,10 +14,12 @@ const RoutinesPage = lazy(() => import('@renderer/features/routines/routines-pag
 const RoutinePage = lazy(() => import('@renderer/features/routines/routine-page'))
 const ArtifactsPage = lazy(() => import('@renderer/features/artifacts/artifacts-page'))
 const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
+const MarketplacePage = lazy(() => import('@renderer/features/marketplace/marketplace-page'))
 
 /**
  * What the main area shows: the split of sessions and New session, the usage page, the routines
- * pages, the Artifacts page, or an artifact. A page shows alone, and the split waits as it was.
+ * pages, the Artifacts page, an artifact, or the Marketplace. A page shows alone, and the split
+ * waits as it was.
  */
 export function MainArea() {
   const projects = useProjectsStore((s) => s.projects)
@@ -76,6 +78,15 @@ export function MainArea() {
       <PageSheet>
         <Suspense fallback={null}>
           <ArtifactViewer key={main.id} id={main.id} history={main.history === true} />
+        </Suspense>
+      </PageSheet>
+    )
+  }
+  if (main.kind === 'marketplace') {
+    return (
+      <PageSheet>
+        <Suspense fallback={null}>
+          <MarketplacePage item={main.item ?? null} tab={main.tab ?? 'all'} />
         </Suspense>
       </PageSheet>
     )

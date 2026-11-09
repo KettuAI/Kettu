@@ -11,6 +11,7 @@ import type { EditorApp, EditorList } from './editors'
 import type { BusySession, BusyTerminal } from './host-control'
 import type { HostSessionChange } from './host-sessions'
 import type { Locale } from './locale'
+import type { MarketKeysPatch, MarketKeyState } from './marketplace'
 import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
@@ -344,6 +345,8 @@ export interface IpcInvokeContract {
   'sharing:open-link': { args: [id: string]; result: SharingOpenResult }
   'sharing:visitors': { args: [id: string]; result: number | null }
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
+  // Fills or clears inputs of a server the settings keep; answers which inputs are set, never values.
+  'marketplace:set-keys': { args: [patch: MarketKeysPatch]; result: MarketKeyState }
   'remote:status': { args: []; result: RemoteStatus }
   // A pairing code for this page, voiding any other; null while remote access is not on. Its
   // progress comes as `remote:pairing` under the id.
@@ -634,6 +637,14 @@ export interface KettuApi {
     /** Turns publishing to Kettu on its own on or off, which also answers its one-time notice. */
     setAuto(enabled: boolean): Promise<SharingResult>
     onChanged(listener: (status: SharingStatus) => void): () => void
+  }
+  /** The Marketplace's keys, which the host keeps apart from its settings and never hands back. */
+  marketplace: {
+    /**
+     * Fills or clears the inputs of a server already in the settings' `marketplace.mcp`; null
+     * clears one. Answers which inputs of each server are set.
+     */
+    setKeys(patch: MarketKeysPatch): Promise<MarketKeyState>
   }
   /** Remote access: devices paired with this computer, and pairing more. */
   remote: {

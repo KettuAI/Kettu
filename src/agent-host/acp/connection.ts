@@ -222,13 +222,23 @@ function contentBlocks(prompt: readonly PromptBlock[]): ContentBlock[] {
 }
 
 /** Kettu's MCP servers as ACP's. */
-function mcpServers(servers: readonly McpServer[] | undefined): AcpMcpServer[] {
-  return (servers ?? []).map((server) => ({
-    type: 'http',
-    name: server.name,
-    url: server.url,
-    headers: server.headers.map(({ name, value }) => ({ name, value })),
-  }))
+export function mcpServers(servers: readonly McpServer[] | undefined): AcpMcpServer[] {
+  return (servers ?? []).map((server): AcpMcpServer => {
+    if (server.type === 'stdio') {
+      return {
+        name: server.name,
+        command: server.command,
+        args: [...server.args],
+        env: server.env.map(({ name, value }) => ({ name, value })),
+      }
+    }
+    return {
+      type: server.type,
+      name: server.name,
+      url: server.url,
+      headers: server.headers.map(({ name, value }) => ({ name, value })),
+    }
+  })
 }
 
 export class AcpConnection implements AgentConnection {
@@ -508,6 +518,9 @@ export class AcpConnection implements AgentConnection {
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
             ?.supported === true,
         mcpHttp: caps.mcpCapabilities?.http === true,
+        mcpSse: caps.mcpCapabilities?.sse === true,
+        // Every ACP agent takes stdio servers; the others it declares.
+        mcpStdio: true,
         prompt: {
           image: caps.promptCapabilities?.image === true,
           audio: caps.promptCapabilities?.audio === true,

@@ -243,6 +243,8 @@ export interface AgentManagerDeps extends DriverOverrides {
   remember?(file: AgentsFile): void
   /** Keeps what the last update check found, for the next run. */
   rememberUpdates?(file: AgentUpdatesFile): void
+  /** The environment the agent's own process starts with, from the one it would have. */
+  launchEnv?(agentId: AgentId, env: Env): Env
 }
 
 /** An install that was stopped on purpose, which leaves the agent as it was rather than failed. */
@@ -867,7 +869,8 @@ export class AgentManager {
     slot.progress.clear()
     slot.intentionalStop = false
     slot.launchSpec = spec
-    const env = this.deps.env.agentEnv(agentId)
+    const base = this.deps.env.agentEnv(agentId)
+    const env = this.deps.launchEnv?.(agentId, base) ?? base
     slot.launchConfig = this.configIn(slot, env)
     this.emit(slot)
     diagnostics.event(agentId, 'start', formatCommand(spec.display, this.deps.platform))
@@ -3143,6 +3146,33 @@ export class AgentManager {
 
   ids(): AgentId[] {
     return [...this.slots.keys()].filter((id) => this.has(id))
+  }
+
+  /**
+   * The user's own program of the agent's harness and the agent's environment, for the harness's
+   * own commands such as Claude Code's `plugin`; null when detection found no program.
+   */
+  async harnessProgram(agentId: AgentId): Promise<{ program: string; env: Env } | null> {
+    const slot = this.registeredSlot(agentId)
+    await this.detectAll()
+    const program = this.userProgram(slot.h)
+    return program ? { program: program.path, env: this.deps.env.agentEnv(agentId) } : null
+  }
+
+  /** The agent's own configuration folder, as the agent resolves it; null when it has none. */
+  configFolder(agentId: AgentId): string | null {
+    const slot = this.slots.get(agentId)
+    if (!slot) return null
+    const { platform } = this.deps
+    const env = this.deps.env.agentEnv(agentId)
+    const locations = configLocations(
+      slot.def.id,
+      (name) => getEnv(env, name, platform),
+      os.homedir(),
+      platform,
+      this.chosenFolder(slot),
+    )
+    return locations.find((location) => location.id === 'folder')?.candidates[0] ?? null
   }
 
   private onStderr(slot: Slot, text: string): void {

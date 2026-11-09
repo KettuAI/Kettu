@@ -3,7 +3,7 @@ import type { McpStatus } from '@shared/agent-host'
 import { errorMessage, host, type HostRequest } from '@renderer/lib/host'
 
 export interface McpStore {
-  /** The last read of Settings › MCP servers; null until one answers. */
+  /** The last read for Marketplace › Installed; null until one answers. */
   status: McpStatus | null
   error: string | null
   /** True while a read runs, so the page can hold its skeleton until the first one. */

@@ -19,6 +19,19 @@ import type { ComputerAppDecision } from './computer-use'
 import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile } from './host-control'
+import type {
+  InstalledPlugin,
+  MarketCatalog,
+  MarketKeyState,
+  MarketPlugins,
+  MarketSearch,
+  MarketSkill,
+  MarketSkills,
+  PluginDetails,
+  PluginMarketplace,
+  PluginScope,
+  SkillSource,
+} from './marketplace'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   BranchList,
@@ -313,7 +326,7 @@ export interface AgentConfigItem {
   chosen: boolean // the agent's own folder, set by Kettu, whose env is then null
 }
 
-/** For Settings › MCP servers: the servers Kettu gives agents, and where each agent keeps its own. */
+/** For Marketplace › Installed: Kettu's own server, and where each agent keeps its own servers. */
 export interface McpStatus {
   servers: {
     name: string // as agents know it: kettu
@@ -528,11 +541,49 @@ export interface HostContract {
     result: { sessions: ImportableSession[]; nextCursor: string | null }
   }
   'agents.options': { params: void; result: AgentOptions[] }
-  // For Settings › MCP servers: the servers Kettu gives agents and each agent's own file.
+  // For Marketplace › Installed: Kettu's own server and each agent's own file.
   // Neither starts an agent, and neither reads an agent's configuration file.
   'mcp.status': { params: void; result: McpStatus }
   // Listens again when Kettu's MCP server does not, then sends main its port.
   'mcp.retry': { params: void; result: McpStatus }
+  // The Marketplace's catalog of MCP servers from the registry, cached for a day; refresh skips the cache.
+  'market.catalog': { params: { refresh?: boolean }; result: MarketCatalog }
+  // The registry's servers whose name has `query` in it, for the Marketplace's search.
+  'market.search': { params: { query: string }; result: MarketSearch }
+  // Which inputs of the servers Kettu keeps have a value; never the values.
+  'market.keys': { params: void; result: MarketKeyState }
+  // Plugins from Claude Code's and Codex's own marketplaces, and the ones each agent has installed;
+  // adds Claude's official marketplace to an agent that has none, as Claude Code does on first start.
+  'market.plugins': { params: { refresh?: boolean }; result: MarketPlugins }
+  'market.pluginDetails': { params: { agentId: AgentId; pluginId: string }; result: PluginDetails }
+  // Installs, removes or switches a plugin through the agent's own harness, in its configuration.
+  'market.installPlugin': {
+    params: { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string }
+    result: InstalledPlugin
+  }
+  'market.uninstallPlugin': {
+    params: { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string }
+    result: void
+  }
+  'market.setPluginEnabled': {
+    params: {
+      agentId: AgentId
+      pluginId: string
+      enabled: boolean
+      scope: PluginScope
+      projectPath?: string
+    }
+    result: void
+  }
+  'market.addMarketplace': {
+    params: { agentId: AgentId; source: string }
+    result: PluginMarketplace
+  }
+  'market.removeMarketplace': { params: { agentId: AgentId; name: string }; result: void }
+  // The skills catalog and each agent's own skills.
+  'market.skills': { params: { refresh?: boolean }; result: MarketSkills }
+  // Copies a skill's files onto the host; the caller then adds the entry to settings.marketplace.skills.
+  'market.addSkill': { params: { source: SkillSource }; result: MarketSkill }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
@@ -974,6 +1025,18 @@ export const HOST_METHODS = [
   'agents.options',
   'mcp.status',
   'mcp.retry',
+  'market.catalog',
+  'market.search',
+  'market.keys',
+  'market.plugins',
+  'market.pluginDetails',
+  'market.installPlugin',
+  'market.uninstallPlugin',
+  'market.setPluginEnabled',
+  'market.addMarketplace',
+  'market.removeMarketplace',
+  'market.skills',
+  'market.addSkill',
   'projects.list',
   'projects.add',
   'projects.remove',
@@ -1123,6 +1186,7 @@ export type HostEvent =
   | { type: 'git.reference'; url: string; found: IssueLookup } // to the ports watching `url`
   | { type: 'git.tools'; tools: GitTools }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
+  | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
   | { type: 'usage.status'; status: UsageStatus }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }

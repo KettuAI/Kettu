@@ -10,7 +10,6 @@ import {
   Notification01Icon,
   PackageIcon,
   PaintBoardIcon,
-  PlugSocketIcon,
   ServerStack02Icon,
   Setting07Icon,
   Settings02Icon,
@@ -65,7 +64,6 @@ import {
   HarnessListItem,
   HarnessPage,
 } from './harness-section'
-import { AgentPlaceRow, FailedRead, McpServerPage, PendingList, ServerRow } from './mcp-section'
 import { ArchivedRow } from './archived-section'
 import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
@@ -1022,53 +1020,6 @@ export function useAboutSection(): SectionDef {
         render: () => null,
       },
     ],
-  }
-}
-
-export function useMcpSection(): SectionDef {
-  const { t } = useTranslation('settings')
-  const { hostId, useMcpStore } = useHostScope()
-  const en = english()
-  const status = useMcpStore((s) => s.status)
-  const error = useMcpStore((s) => s.error)
-  const servers = status?.servers ?? []
-  const places = status?.places ?? []
-  const rows: RowDef[] = servers.map((server) => ({
-    id: server.name,
-    name: server.title,
-    description: t('mcp.row.tools', { count: server.tools.length }),
-    keywords: t('mcp.keywords'),
-    english: en('sections.mcp'),
-    group: group('kettu', t('mcp.groups.kettu'), {
-      count: servers.length,
-      note: <GroupNote>{t('mcp.groups.kettuNote')}</GroupNote>,
-    }),
-    layout: 'custom',
-    render: () => <ServerRow server={server} />,
-    open: () => openSettingsItem('mcp', server.name),
-  }))
-  for (const place of places) {
-    const name = agentName(place.agentId, hostId)
-    rows.push({
-      id: place.agentId,
-      name,
-      description: t('mcp.place.connects', { name }),
-      keywords: `${t('mcp.place.keywords')} ${place.path} ${place.project}`,
-      english: en('sections.mcp'),
-      group: group('own', t('mcp.groups.own')),
-      layout: 'custom',
-      render: () => <AgentPlaceRow place={place} />,
-    })
-  }
-  return {
-    id: 'mcp',
-    title: t('sections.mcp'),
-    description: t('pages.mcp'),
-    icon: PlugSocketIcon,
-    // A read that failed shows its notice in place of both groups.
-    rows: error ? [] : rows,
-    itemPage: (item) => <McpServerPage name={item} />,
-    footer: error ? <FailedRead error={error} /> : !status ? <PendingList /> : undefined,
   }
 }
 

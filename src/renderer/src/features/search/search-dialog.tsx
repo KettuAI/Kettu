@@ -15,6 +15,7 @@ import {
   RepeatIcon,
   Settings02Icon,
   SidebarLeftIcon,
+  Store01Icon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -34,6 +35,7 @@ import { useRoutinesStore } from '@renderer/stores/routines'
 import {
   openArtifact,
   openArtifacts,
+  openMarketplace,
   openRoutine,
   openRoutines,
   openSession,
@@ -95,6 +97,9 @@ function runAction(action: SearchAction): void {
       break
     case 'openRoutines':
       openRoutines()
+      break
+    case 'openMarketplace':
+      openMarketplace()
       break
     case 'openSettings':
       openSettings()
@@ -261,6 +266,7 @@ const ACTION_ICON: Record<SearchAction, IconSvgElement> = {
   openUsage: Analytics01Icon,
   openArtifacts: DashboardSquare02Icon,
   openRoutines: RepeatIcon,
+  openMarketplace: Store01Icon,
   openSettings: Settings02Icon,
   showShortcuts: KeyboardIcon,
   toggleSidebar: SidebarLeftIcon,

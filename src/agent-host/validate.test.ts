@@ -37,6 +37,80 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it("checks the Marketplace's catalog refresh and search query", () => {
+    expect(posix['market.catalog'](undefined)).toEqual({})
+    expect(posix['market.catalog']({})).toEqual({})
+    expect(posix['market.catalog']({ refresh: true, other: 1 })).toEqual({ refresh: true })
+    rejects(() => posix['market.catalog']({ refresh: 'yes' }))
+    expect(posix['market.search']({ query: '  github  ' })).toEqual({ query: 'github' })
+    expect(posix['market.search']({ query: 'x'.repeat(100) })).toEqual({ query: 'x'.repeat(100) })
+    rejects(() => posix['market.search']({ query: ' gh ' }))
+    rejects(() => posix['market.search']({ query: 'x'.repeat(101) }))
+    rejects(() => posix['market.search']({ query: 'git\nhub' }))
+    rejects(() => posix['market.search']({ query: 42 }))
+    rejects(() => posix['market.search']({}))
+    expect(posix['market.keys'](undefined)).toBeUndefined()
+    rejects(() => posix['market.keys']({ serverId: 'x' }))
+  })
+
+  it('checks the plugin methods: ids that cannot pass for a flag, and a project for its scopes', () => {
+    const plugin = { agentId: 'claude-code', pluginId: 'commit-commands@claude-plugins-official' }
+    expect(posix['market.plugins']({ refresh: true })).toEqual({ refresh: true })
+    expect(posix['market.pluginDetails']({ ...plugin, other: 1 })).toEqual(plugin)
+    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: '--yes@x' }))
+    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'no-marketplace' }))
+    rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'a@b c' }))
+    expect(posix['market.installPlugin']({ ...plugin, scope: 'user' })).toEqual({
+      ...plugin,
+      scope: 'user',
+    })
+    expect(
+      posix['market.uninstallPlugin']({ ...plugin, scope: 'project', projectPath: '/repo' }),
+    ).toEqual({ ...plugin, scope: 'project', projectPath: '/repo' })
+    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'local' }))
+    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'user', projectPath: '/repo' }))
+    rejects(() =>
+      posix['market.installPlugin']({ ...plugin, scope: 'project', projectPath: 'repo' }),
+    )
+    rejects(() => posix['market.installPlugin']({ ...plugin, scope: 'global' }))
+    expect(posix['market.setPluginEnabled']({ ...plugin, scope: 'user', enabled: false })).toEqual({
+      ...plugin,
+      scope: 'user',
+      enabled: false,
+    })
+    rejects(() => posix['market.setPluginEnabled']({ ...plugin, scope: 'user' }))
+    expect(posix['market.addMarketplace']({ agentId: 'codex', source: ' owner/repo ' })).toEqual({
+      agentId: 'codex',
+      source: 'owner/repo',
+    })
+    rejects(() => posix['market.addMarketplace']({ agentId: 'codex', source: '--scope=user' }))
+    rejects(() => posix['market.addMarketplace']({ agentId: 'codex', source: 'a\nb' }))
+    expect(posix['market.removeMarketplace']({ agentId: 'codex', name: 'team-tools' })).toEqual({
+      agentId: 'codex',
+      name: 'team-tools',
+    })
+    rejects(() => posix['market.removeMarketplace']({ agentId: 'codex', name: '-rf' }))
+  })
+
+  it('checks where a skill to add comes from', () => {
+    expect(posix['market.skills'](undefined)).toEqual({})
+    const add = (source: unknown) => posix['market.addSkill']({ source })
+    expect(add({ kind: 'catalog', id: 'anthropics/skills:pdf' })).toEqual({
+      source: { kind: 'catalog', id: 'anthropics/skills:pdf' },
+    })
+    expect(add({ kind: 'github', url: 'https://github.com/a/b/tree/main/x' })).toEqual({
+      source: { kind: 'github', url: 'https://github.com/a/b/tree/main/x' },
+    })
+    expect(add({ kind: 'local', path: '/home/me/skill' })).toEqual({
+      source: { kind: 'local', path: '/home/me/skill' },
+    })
+    rejects(() => add({ kind: 'catalog', id: 'anthropics/skills:../x' }))
+    rejects(() => add({ kind: 'github', url: 'https://example.com/a/b' }))
+    rejects(() => add({ kind: 'local', path: 'relative/skill' }))
+    rejects(() => add({ kind: 'npm', id: 'x' }))
+    rejects(() => add('anthropics/skills:pdf'))
+  })
+
   it('validates provider actions without accepting unrelated credentials', () => {
     const base = { agentId: 'opencode', providerId: 'deepseek' }
     expect(posix['agents.providerAction']({ ...base, action: 'set-key', key: 'secret' })).toEqual({
