@@ -33,11 +33,11 @@
   --border-strong: rgb(0 0 0 / 16%);
   /* session: the thread and its header, in affectUI's stepped inks over the sheet. */
   --thread-ink: rgb(0 0 0 / 88%);
-  --thread-text: rgb(0 0 0 / 61%);
-  --thread-prose: rgb(0 0 0 / 70%);
-  --thread-quiet: rgb(0 0 0 / 55%);
-  --thread-muted: rgb(0 0 0 / 45%);
-  --thread-faint: rgb(0 0 0 / 27%);
+  --thread-text: rgb(0 0 0 / 64%);
+  --thread-prose: rgb(0 0 0 / 78%);
+  --thread-quiet: rgb(0 0 0 / 58%);
+  --thread-muted: rgb(0 0 0 / 52%);
+  --thread-faint: rgb(0 0 0 / 42%);
   --thread-chip: var(--bg-hover);
   --thread-hover: rgb(0 0 0 / 3%);
   --thread-line: var(--border-subtle);
@@ -57,10 +57,10 @@
   --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 30%);
 
   --text-primary: #1f1f1f;
-  --text-secondary: #636363;
+  --text-secondary: #5c5c5c;
   --text-tertiary: #686868;
   --text-placeholder: #686868;
-  --text-disabled: #b5b5b5;
+  --text-disabled: #949494;
   --icon-default: #636363;
 
   /* Waiting: the fox orange, darkened for text; the dot keeps the brand's own. */
@@ -331,7 +331,7 @@
   --terminal-selection-tint: rgb(242 88 27 / 22%);
   --pane-fox: var(--send);
   /* An icon at rest in a pane's head and the session's pane buttons, as affectUI's shell draws it. */
-  --pane-muted: rgb(0 0 0 / 45%);
+  --pane-muted: rgb(0 0 0 / 52%);
   --pane-live: #22a06b;
   --pane-modified: var(--ansi-yellow);
   --pane-added: var(--ansi-green);
@@ -345,9 +345,11 @@
   --shell-line-soft: rgb(0 0 0 / 4%);
   --shell-strong: #000000;
   --shell-ink: rgb(0 0 0 / 88%);
-  --shell-text: rgb(0 0 0 / 61%);
-  --shell-muted: rgb(0 0 0 / 45%);
-  --shell-faint: rgb(0 0 0 / 27%);
+  --shell-text: rgb(0 0 0 / 64%);
+  /* A sidebar row and its icon: a step darker than the shell's text. */
+  --shell-row: rgb(0 0 0 / 78%);
+  --shell-muted: rgb(0 0 0 / 52%);
+  --shell-faint: rgb(0 0 0 / 42%);
   --shell-chip: var(--bg-hover);
   --shell-chip-hover: rgb(0 0 0 / 6%);
   --shell-hover: rgb(0 0 0 / 3%);
@@ -439,9 +441,9 @@
      Picker), New session's list, and the meters' four levels by how much is used. */
   --composer-strong: #000000;
   --composer-ink: rgb(0 0 0 / 88%);
-  --composer-text: rgb(0 0 0 / 61%);
-  --composer-muted: rgb(0 0 0 / 45%);
-  --composer-faint: rgb(0 0 0 / 27%);
+  --composer-text: rgb(0 0 0 / 64%);
+  --composer-muted: rgb(0 0 0 / 52%);
+  --composer-faint: rgb(0 0 0 / 42%);
   --composer-line: var(--border-subtle);
   --composer-line-strong: rgb(0 0 0 / 10%);
   --composer-chip: var(--bg-hover);
@@ -513,11 +515,11 @@
     --border-strong: rgb(255 255 255 / 18%);
     /* session: the thread and its header. */
     --thread-ink: rgb(255 255 255 / 90%);
-    --thread-text: rgb(255 255 255 / 62%);
-    --thread-prose: rgb(255 255 255 / 74%);
-    --thread-quiet: rgb(255 255 255 / 56%);
-    --thread-muted: rgb(255 255 255 / 45%);
-    --thread-faint: rgb(255 255 255 / 28%);
+    --thread-text: rgb(255 255 255 / 66%);
+    --thread-prose: rgb(255 255 255 / 82%);
+    --thread-quiet: rgb(255 255 255 / 60%);
+    --thread-muted: rgb(255 255 255 / 54%);
+    --thread-faint: rgb(255 255 255 / 42%);
     --thread-chip: var(--bg-hover);
     --thread-hover: rgb(255 255 255 / 5%);
     --thread-line: var(--border-subtle);
@@ -534,10 +536,10 @@
     --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 
     --text-primary: #e6e6e7;
-    --text-secondary: #a5a5a7;
+    --text-secondary: #ababad;
     --text-tertiary: #98989b;
     --text-placeholder: #98989b;
-    --text-disabled: #55555a;
+    --text-disabled: #6e6e72;
     --icon-default: #a5a5a7;
 
     --attention: #fb8a55;
@@ -711,7 +713,7 @@
     /* panes */
     --terminal-selection-tint: rgb(242 88 27 / 22%);
     --pane-fox: var(--send);
-    --pane-muted: rgb(255 255 255 / 45%);
+    --pane-muted: rgb(255 255 255 / 54%);
     --pane-live: #22a06b;
     --pane-modified: var(--ansi-yellow);
     --pane-added: var(--ansi-green);
@@ -724,9 +726,10 @@
     --shell-line-soft: rgb(255 255 255 / 5%);
     --shell-strong: #ffffff;
     --shell-ink: rgb(255 255 255 / 90%);
-    --shell-text: rgb(255 255 255 / 62%);
-    --shell-muted: rgb(255 255 255 / 45%);
-    --shell-faint: rgb(255 255 255 / 28%);
+    --shell-text: rgb(255 255 255 / 66%);
+    --shell-row: rgb(255 255 255 / 80%);
+    --shell-muted: rgb(255 255 255 / 54%);
+    --shell-faint: rgb(255 255 255 / 42%);
     --shell-chip: var(--bg-hover);
     --shell-chip-hover: rgb(255 255 255 / 9%);
     --shell-hover: rgb(255 255 255 / 5%);
@@ -804,9 +807,9 @@
     /* composer: the composer's tray, popovers and menus, New session's list. */
     --composer-strong: #ffffff;
     --composer-ink: rgb(255 255 255 / 90%);
-    --composer-text: rgb(255 255 255 / 62%);
-    --composer-muted: rgb(255 255 255 / 45%);
-    --composer-faint: rgb(255 255 255 / 28%);
+    --composer-text: rgb(255 255 255 / 66%);
+    --composer-muted: rgb(255 255 255 / 54%);
+    --composer-faint: rgb(255 255 255 / 42%);
     --composer-line: var(--border-subtle);
     --composer-line-strong: rgb(255 255 255 / 14%);
     --composer-chip: var(--bg-hover);
@@ -863,11 +866,11 @@
   --border-strong: rgb(255 255 255 / 18%);
   /* session: the thread and its header. */
   --thread-ink: rgb(255 255 255 / 90%);
-  --thread-text: rgb(255 255 255 / 62%);
-  --thread-prose: rgb(255 255 255 / 74%);
-  --thread-quiet: rgb(255 255 255 / 56%);
-  --thread-muted: rgb(255 255 255 / 45%);
-  --thread-faint: rgb(255 255 255 / 28%);
+  --thread-text: rgb(255 255 255 / 66%);
+  --thread-prose: rgb(255 255 255 / 82%);
+  --thread-quiet: rgb(255 255 255 / 60%);
+  --thread-muted: rgb(255 255 255 / 54%);
+  --thread-faint: rgb(255 255 255 / 42%);
   --thread-chip: var(--bg-hover);
   --thread-hover: rgb(255 255 255 / 5%);
   --thread-line: var(--border-subtle);
@@ -884,10 +887,10 @@
   --thread-pill-shadow: 0 6px 16px -6px rgb(0 0 0 / 60%);
 
   --text-primary: #e6e6e7;
-  --text-secondary: #a5a5a7;
+  --text-secondary: #ababad;
   --text-tertiary: #98989b;
   --text-placeholder: #98989b;
-  --text-disabled: #55555a;
+  --text-disabled: #6e6e72;
   --icon-default: #a5a5a7;
 
   --attention: #fb8a55;
@@ -1060,7 +1063,7 @@
   /* panes */
   --terminal-selection-tint: rgb(242 88 27 / 22%);
   --pane-fox: var(--send);
-  --pane-muted: rgb(255 255 255 / 45%);
+  --pane-muted: rgb(255 255 255 / 54%);
   --pane-live: #22a06b;
   --pane-modified: var(--ansi-yellow);
   --pane-added: var(--ansi-green);
@@ -1073,9 +1076,10 @@
   --shell-line-soft: rgb(255 255 255 / 5%);
   --shell-strong: #ffffff;
   --shell-ink: rgb(255 255 255 / 90%);
-  --shell-text: rgb(255 255 255 / 62%);
-  --shell-muted: rgb(255 255 255 / 45%);
-  --shell-faint: rgb(255 255 255 / 28%);
+  --shell-text: rgb(255 255 255 / 66%);
+  --shell-row: rgb(255 255 255 / 80%);
+  --shell-muted: rgb(255 255 255 / 54%);
+  --shell-faint: rgb(255 255 255 / 42%);
   --shell-chip: var(--bg-hover);
   --shell-chip-hover: rgb(255 255 255 / 9%);
   --shell-hover: rgb(255 255 255 / 5%);
@@ -1153,9 +1157,9 @@
   /* composer: the composer's tray, popovers and menus, New session's list. */
   --composer-strong: #ffffff;
   --composer-ink: rgb(255 255 255 / 90%);
-  --composer-text: rgb(255 255 255 / 62%);
-  --composer-muted: rgb(255 255 255 / 45%);
-  --composer-faint: rgb(255 255 255 / 28%);
+  --composer-text: rgb(255 255 255 / 66%);
+  --composer-muted: rgb(255 255 255 / 54%);
+  --composer-faint: rgb(255 255 255 / 42%);
   --composer-line: var(--border-subtle);
   --composer-line-strong: rgb(255 255 255 / 14%);
   --composer-chip: var(--bg-hover);
@@ -1221,6 +1225,7 @@
   --shell-strong: var(--text-primary);
   --shell-ink: var(--text-primary);
   --shell-text: var(--text-secondary);
+  --shell-row: var(--text-secondary);
   --shell-muted: var(--text-tertiary);
   --shell-faint: var(--text-disabled);
   --shell-chip-hover: var(--bg-selected);
