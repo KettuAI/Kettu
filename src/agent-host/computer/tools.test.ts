@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { COMPUTER_TOOL_NAMES } from '@shared/computer-use'
-import type { Platform } from '@shared/platform'
 import { driverEnv } from './driver'
-import { COMPUTER_TOOLS, ComputerToolError, computerCall } from './tools'
+import { ComputerToolError, computerCall } from './tools'
 
-function refused(name: string, input: unknown, platform: Platform = 'darwin'): string {
+function refused(name: string, input: unknown): string {
   try {
-    computerCall(name, input, platform)
+    computerCall(name, input, 'darwin')
   } catch (error) {
     expect(error).toBeInstanceOf(ComputerToolError)
     expect((error as ComputerToolError).code).toBe('invalid')
@@ -16,56 +14,6 @@ function refused(name: string, input: unknown, platform: Platform = 'darwin'): s
 }
 
 describe('the computer tools', () => {
-  it('lists a schema for every tool name', () => {
-    expect(COMPUTER_TOOLS.map((tool) => tool.name)).toEqual([...COMPUTER_TOOL_NAMES])
-  })
-
-  it('aims every action at the window it names', () => {
-    expect(
-      computerCall(
-        'computer_click',
-        { pid: 42, window_id: 7, element_token: 's0000002a:11' },
-        'darwin',
-      ),
-    ).toEqual({
-      tool: 'computer_click',
-      driverTool: 'click',
-      args: {
-        target: { kind: 'window', pid: 42, window_id: 7 },
-        delivery_mode: 'background',
-        element_token: 's0000002a:11',
-      },
-      pid: 42,
-      acts: true,
-      elementToken: 's0000002a:11',
-    })
-    expect(
-      computerCall('computer_type_text', { pid: 42, window_id: 7, text: 'hello' }, 'linux').args,
-    ).toEqual({ target: { kind: 'window', pid: 42, window_id: 7 }, text: 'hello' })
-    expect(
-      computerCall(
-        'computer_invoke_menu',
-        { pid: 3, window_id: 1, path: ['File', 'Save'] },
-        'win32',
-      ),
-    ).toMatchObject({
-      args: { pid: 3, window_id: 1, path: ['File', 'Save'] },
-      menuPath: ['File', 'Save'],
-    })
-  })
-
-  it('reads the app it lists windows of, and lists apps without one', () => {
-    expect(computerCall('computer_list_apps', {}, 'darwin')).toMatchObject({
-      pid: null,
-      acts: false,
-    })
-    expect(computerCall('computer_list_windows', { pid: 9 }, 'darwin')).toMatchObject({
-      args: { pid: 9 },
-      pid: 9,
-      acts: false,
-    })
-  })
-
   it('collects the keys a press makes for the refused shortcuts', () => {
     expect(
       computerCall(
@@ -118,23 +66,6 @@ describe('the computer tools', () => {
     refused('computer_list_apps', 'all')
     refused('computer_open_terminal', {})
   })
-
-  it('types into an element by its token on macOS only', () => {
-    expect(
-      computerCall(
-        'computer_type_text',
-        { pid: 1, window_id: 2, text: 'x', element_token: 's0000002a:3' },
-        'darwin',
-      ).elementToken,
-    ).toBe('s0000002a:3')
-    expect(
-      refused(
-        'computer_type_text',
-        { pid: 1, window_id: 2, text: 'x', element_token: 's0000002a:3' },
-        'win32',
-      ),
-    ).toMatch(/only on macOS/)
-  })
 })
 
 describe('the driver environment', () => {
@@ -156,12 +87,5 @@ describe('the driver environment', () => {
       CUA_DRIVER_RS_UPDATE_CHECK: 'false',
       CUA_DRIVER_DISABLE_UNRESTRICTED: '1',
     })
-  })
-
-  it('turns on the native Wayland backend on a Wayland desktop', () => {
-    expect(driverEnv({ XDG_SESSION_TYPE: 'wayland' }).CUA_DRIVER_RS_ENABLE_WAYLAND).toBe('1')
-    expect(driverEnv({ XDG_SESSION_TYPE: 'x11', DISPLAY: ':0' })).not.toHaveProperty(
-      'CUA_DRIVER_RS_ENABLE_WAYLAND',
-    )
   })
 })

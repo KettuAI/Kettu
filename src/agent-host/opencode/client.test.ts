@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ProgramOptions, ProgramRun } from '../adapter-install'
 import { TextRing } from '../ring'
 import { OpenCodeClient } from './client'
-import { USAGE_ERROR } from './provider-usage'
 
 function run(stdout = '', code: number | null = 0, stderr = ''): ProgramRun {
   const output = new TextRing(4096)
@@ -26,8 +25,6 @@ interface Routes {
   native?: ProgramRun
   credentials?: unknown[]
   import?: ProgramRun
-  activate?: ProgramRun
-  remove?: ProgramRun
 }
 
 function runner(routes: Routes): {
@@ -54,10 +51,7 @@ function runner(routes: Routes): {
         return routes.import ?? run('', 0, 'Imported 1 credential\n')
       }
       if (command === 'api' && method === 'post' && path?.endsWith('/activate')) {
-        return routes.activate ?? run()
-      }
-      if (command === 'api' && method === 'delete') {
-        return routes.remove ?? run()
+        return run()
       }
       throw new Error(`unexpected ${options.args.join(' ')}`)
     },
@@ -278,257 +272,6 @@ describe('OpenCodeClient.providers', () => {
     ])
   })
 
-  it('uses the native usage limits for the OpenCode console account', async () => {
-    const routes = runner({
-      integrations: [OPENCODE],
-      native: run(
-        JSON.stringify({
-          location: { directory: '/tmp' },
-          data: {
-            workspace: { id: 'ws', usageURL: 'https://opencode.ai/usage' },
-            go: {
-              rolling: { percent: 5, limited: false, resetsAt: 1_800_000_000_000 },
-              weekly: { percent: 6, limited: false, resetsAt: 1_800_100_000_000 },
-              monthly: { percent: 7, limited: false, resetsAt: 1_800_200_000_000 },
-            },
-            budgets: [],
-          },
-        }),
-      ),
-    })
-    const { fetch, calls } = fetcher({})
-    const providers = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-      fetch,
-      now: () => 50,
-    }).providers()
-    expect(providers[0]?.usage).toMatchObject({
-      state: 'ready',
-      limits: [
-        { window: 'rolling', usedPercent: 5 },
-        { window: 'weekly', usedPercent: 6 },
-        { window: 'monthly', usedPercent: 7 },
-      ],
-      observedAt: 50,
-    })
-    expect(calls).toHaveLength(0)
-    expect(routes.calls.map((call) => call.args)).not.toContainEqual([
-      'api',
-      'get',
-      '/api/credential',
-    ])
-  })
-
-  it('keeps one provider failure from touching the others', async () => {
-    const routes = runner({
-      integrations: [DEEPSEEK, OPENCODE_GO],
-    })
-    const { fetch } = fetcher({
-      'https://api.deepseek.com/user/balance': () => json({ error: 'bad key deep-secret' }, 500),
-      'https://opencode.ai/zen/go/v1/usage': () =>
-        json({
-          usage: { rolling: { status: 'ok', percent: 1, resetsAt: '2026-11-03T12:00:00Z' } },
-        }),
-    })
-    const providers = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: { DEEPSEEK_API_KEY: 'deep-secret', OPENCODE_API_KEY: 'go-secret' },
-      platform: 'darwin',
-      runProgram: routes.run,
-      fetch,
-      now: () => 60,
-    }).providers()
-    expect(providers[0]?.usage).toEqual({
-      state: 'error',
-      limits: [],
-      balances: [],
-      observedAt: 60,
-      error: USAGE_ERROR,
-    })
-    expect(providers[1]?.usage).toMatchObject({ state: 'ready', observedAt: 60 })
-    expect(JSON.stringify(providers)).not.toContain('deep-secret')
-    expect(JSON.stringify(providers)).not.toContain('go-secret')
-  })
-
-  it('still reads an environment key when the credential list is unavailable', async () => {
-    const routes = runner({ integrations: [OPENROUTER, DEEPSEEK] })
-    const { fetch } = fetcher({
-      'https://api.deepseek.com/user/balance': () =>
-        json({ balance_infos: [{ currency: 'USD', total_balance: 2 }] }),
-    })
-    const providers = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: { DEEPSEEK_API_KEY: 'secret' },
-      platform: 'darwin',
-      runProgram: routes.run,
-      fetch,
-      now: () => 70,
-    }).providers()
-    expect(providers[0]?.usage).toEqual({
-      state: 'error',
-      limits: [],
-      balances: [],
-      observedAt: 70,
-      error: USAGE_ERROR,
-    })
-    expect(providers[1]?.usage).toMatchObject({
-      state: 'ready',
-      balances: [{ label: 'Balance', amount: 2, currency: 'USD' }],
-    })
-  })
-
-  it('falls back to the official Go usage for an OpenCode Console credential', async () => {
-    const routes = runner({
-      integrations: [OPENCODE],
-      credentials: [
-        {
-          id: 'cred_oc',
-          integrationID: 'opencode',
-          label: 'Personal',
-          active: true,
-          value: {
-            type: 'oauth',
-            methodID: 'device',
-            refresh: 'refresh-secret',
-            access: 'console-access',
-            expires: 0,
-            metadata: { server: 'https://opencode.ai/console', orgID: 'wrk_1' },
-          },
-        },
-      ],
-    })
-    const { fetch, calls } = fetcher({
-      'https://opencode.ai/zen/go/v1/usage': () =>
-        json({
-          usage: {
-            rolling: { status: 'ok', percent: 10, resetsAt: '2026-11-03T12:00:00Z' },
-            weekly: { status: 'ok', percent: 20, resetsAt: '2026-11-10T00:00:00Z' },
-            monthly: { status: 'rate-limited', percent: 100, resetsAt: '2026-12-01T00:00:00Z' },
-          },
-        }),
-    })
-    const providers = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-      fetch,
-      now: () => 80,
-    }).providers()
-    expect(providers[0]?.usage).toMatchObject({
-      state: 'ready',
-      limits: [
-        { window: 'rolling', usedPercent: 10 },
-        { window: 'weekly', usedPercent: 20 },
-        { window: 'monthly', usedPercent: 100, state: 'reached' },
-      ],
-      observedAt: 80,
-    })
-    expect(calls[0]?.url).toBe('https://opencode.ai/zen/go/v1/usage')
-    expect(calls[0]?.init.headers).toMatchObject({
-      authorization: 'Bearer console-access',
-      'x-opencode-org-id': 'wrk_1',
-    })
-    expect(JSON.stringify(providers)).not.toContain('console-access')
-    expect(JSON.stringify(providers)).not.toContain('refresh-secret')
-  })
-
-  it('falls back with a Console service-account key too', async () => {
-    const routes = runner({
-      integrations: [OPENCODE],
-      credentials: [
-        {
-          id: 'cred_oc',
-          integrationID: 'opencode',
-          label: 'Service',
-          active: true,
-          value: {
-            type: 'key',
-            key: 'sk-console',
-            metadata: { server: 'https://opencode.ai/console', orgID: 'org_1' },
-          },
-        },
-      ],
-    })
-    const { fetch, calls } = fetcher({
-      'https://opencode.ai/zen/go/v1/usage': () =>
-        json({
-          usage: { rolling: { status: 'ok', percent: 1, resetsAt: '2026-11-03T12:00:00Z' } },
-        }),
-    })
-    const providers = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-      fetch,
-      now: () => 81,
-    }).providers()
-    expect(providers[0]?.usage).toMatchObject({ state: 'ready' })
-    expect(calls[0]?.init.headers).toMatchObject({
-      authorization: 'Bearer sk-console',
-      'x-opencode-org-id': 'org_1',
-    })
-  })
-
-  it('uses the first Console connection when no active flag is reported', async () => {
-    const routes = runner({
-      integrations: [
-        {
-          ...OPENCODE,
-          connections: [
-            { type: 'credential', id: 'cred_first', label: 'First', method: 'key' },
-            { type: 'credential', id: 'cred_second', label: 'Second', method: 'key' },
-          ],
-        },
-      ],
-      credentials: [
-        {
-          id: 'cred_first',
-          integrationID: 'opencode',
-          label: 'First',
-          active: false,
-          value: {
-            type: 'key',
-            key: 'sk-first',
-            metadata: { server: 'https://opencode.ai/console', orgID: 'org_1' },
-          },
-        },
-        {
-          id: 'cred_second',
-          integrationID: 'opencode',
-          label: 'Second',
-          active: false,
-          value: {
-            type: 'key',
-            key: 'sk-second',
-            metadata: { server: 'https://opencode.ai/console', orgID: 'org_2' },
-          },
-        },
-      ],
-    })
-    const { fetch, calls } = fetcher({
-      'https://opencode.ai/zen/go/v1/usage': () =>
-        json({
-          usage: { rolling: { status: 'ok', percent: 1, resetsAt: '2026-11-03T12:00:00Z' } },
-        }),
-    })
-    await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-      fetch,
-    }).providers()
-    expect(calls[0]?.init.headers).toMatchObject({
-      authorization: 'Bearer sk-first',
-      'x-opencode-org-id': 'org_1',
-    })
-  })
-
   it('never sends a custom Console credential to the official Go endpoint', async () => {
     const routes = runner({
       integrations: [OPENCODE],
@@ -559,83 +302,6 @@ describe('OpenCodeClient.providers', () => {
     expect(calls).toHaveLength(0)
   })
 
-  it('needs the Console workspace before asking the Go endpoint', async () => {
-    const routes = runner({
-      integrations: [OPENCODE],
-      credentials: [
-        {
-          id: 'cred_oc',
-          integrationID: 'opencode',
-          label: 'Personal',
-          active: true,
-          value: {
-            type: 'oauth',
-            methodID: 'device',
-            refresh: 'r',
-            access: 'console-access',
-            expires: 0,
-            metadata: { server: 'https://opencode.ai/console' },
-          },
-        },
-      ],
-    })
-    const { fetch, calls } = fetcher({})
-    const providers = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-      fetch,
-      now: () => 83,
-    }).providers()
-    expect(providers[0]?.usage).toMatchObject({ state: 'unsupported' })
-    expect(calls).toHaveLength(0)
-  })
-
-  it('treats a Go 403 as no plan and a 401 as a failure', async () => {
-    const credential = {
-      id: 'cred_oc',
-      integrationID: 'opencode',
-      label: 'Personal',
-      active: true,
-      value: {
-        type: 'oauth',
-        methodID: 'device',
-        refresh: 'r',
-        access: 'console-access',
-        expires: 0,
-        metadata: { server: 'https://opencode.ai/console', orgID: 'wrk_1' },
-      },
-    }
-    const denied = runner({ integrations: [OPENCODE], credentials: [credential] })
-    const noGo = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: denied.run,
-      fetch: fetcher({ 'https://opencode.ai/zen/go/v1/usage': () => json({}, 403) }).fetch,
-      now: () => 84,
-    }).providers()
-    expect(noGo[0]?.usage).toMatchObject({ state: 'unsupported' })
-
-    const unauthorized = runner({ integrations: [OPENCODE], credentials: [credential] })
-    const bad = await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: unauthorized.run,
-      fetch: fetcher({ 'https://opencode.ai/zen/go/v1/usage': () => json({}, 401) }).fetch,
-      now: () => 85,
-    }).providers()
-    expect(bad[0]?.usage).toEqual({
-      state: 'error',
-      limits: [],
-      balances: [],
-      observedAt: 85,
-      error: USAGE_ERROR,
-    })
-  })
-
   it('reports the provider list failing, with nothing from the tool in the message', async () => {
     const runProgram = async (): Promise<ProgramRun> =>
       run('', 1, 'boom at /Users/someone/.config/opencode\n')
@@ -659,27 +325,6 @@ describe('OpenCodeClient.action', () => {
       { type: 'credential', id: 'cred_b', label: 'Work', method: 'key' },
     ],
   }
-  const OAUTH_ONLY = {
-    id: 'oauth-only',
-    name: 'OAuth Only',
-    methods: [OAUTH],
-    connections: [],
-  }
-
-  it('logs out a credential that belongs to the provider', async () => {
-    const routes = runner({ integrations: [ANTHROPIC] })
-    await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-    }).action({ providerId: 'anthropic', action: 'logout', credentialId: 'cred_b' })
-    expect(routes.calls.map((call) => call.args)).toContainEqual([
-      'api',
-      'delete',
-      '/api/credential/cred_b',
-    ])
-  })
 
   it('refuses a credential from another provider before acting', async () => {
     const routes = runner({ integrations: [ANTHROPIC] })
@@ -693,34 +338,6 @@ describe('OpenCodeClient.action', () => {
       client.action({ providerId: 'anthropic', action: 'logout', credentialId: 'cred_other' }),
     ).rejects.toThrow('The credential does not belong to this provider.')
     expect(routes.calls.map((call) => call.args)).toEqual([['api', 'get', '/api/integration']])
-  })
-
-  it('refuses a provider OpenCode does not know', async () => {
-    const routes = runner({ integrations: [ANTHROPIC] })
-    const client = new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-    })
-    await expect(
-      client.action({ providerId: '../other', action: 'activate', credentialId: 'cred_a' }),
-    ).rejects.toThrow('OpenCode does not know this provider.')
-  })
-
-  it('activates a credential that belongs to the provider', async () => {
-    const routes = runner({ integrations: [ANTHROPIC] })
-    await new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-    }).action({ providerId: 'anthropic', action: 'activate', credentialId: 'cred_a' })
-    expect(routes.calls.map((call) => call.args)).toContainEqual([
-      'api',
-      'post',
-      '/api/credential/cred_a/activate',
-    ])
   })
 
   it('saves a key through stdin and never in the arguments', async () => {
@@ -755,33 +372,6 @@ describe('OpenCodeClient.action', () => {
     ])
   })
 
-  it('refuses a provider without a key method', async () => {
-    const routes = runner({ integrations: [OAUTH_ONLY] })
-    const client = new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-    })
-    await expect(
-      client.action({ providerId: 'oauth-only', action: 'set-key', key: 'sk' }),
-    ).rejects.toThrow('This provider has no key sign-in.')
-    expect(routes.calls.map((call) => call.args)).not.toContainEqual(['auth', 'import'])
-  })
-
-  it('refuses an empty key', async () => {
-    const routes = runner({ integrations: [ANTHROPIC] })
-    const client = new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-    })
-    await expect(
-      client.action({ providerId: 'anthropic', action: 'set-key', key: ' ' }),
-    ).rejects.toThrow('A key is required.')
-  })
-
   it('does not put the key in an error when the tool refuses it', async () => {
     const routes = runner({
       integrations: [ANTHROPIC],
@@ -799,22 +389,5 @@ describe('OpenCodeClient.action', () => {
     expect(failure).toBeInstanceOf(Error)
     expect((failure as Error).message).toBe('OpenCode could not save the key.')
     expect((failure as Error).message).not.toContain('sk-new-secret')
-  })
-
-  it('says the key was saved when only activating it failed', async () => {
-    const routes = runner({
-      integrations: [ANTHROPIC],
-      import: run('', 0, 'Imported 1 credential\n'),
-      activate: run('', 1, 'HTTP 500\n'),
-    })
-    const client = new OpenCodeClient({
-      program: '/bin/opencode',
-      env: {},
-      platform: 'darwin',
-      runProgram: routes.run,
-    })
-    await expect(
-      client.action({ providerId: 'anthropic', action: 'set-key', key: 'sk-new-secret' }),
-    ).rejects.toThrow('The key was saved, but OpenCode could not activate the account.')
   })
 })

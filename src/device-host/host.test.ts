@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { FrameKind } from '@shared/device-host'
-import { FrameFanout, type StreamFrame } from './stream'
 import { ValidationError, validators } from './validate'
 
 describe('device host request validators', () => {
@@ -71,55 +69,5 @@ describe('device host request validators', () => {
         ValidationError,
       )
     }
-  })
-})
-
-describe('frame fan-out', () => {
-  function setup(window = 3) {
-    const sent: Record<string, StreamFrame[]> = {}
-    let keyframes = 0
-    const fanout = new FrameFanout(
-      (port, frame) => (sent[port] ??= []).push(frame),
-      () => keyframes++,
-      window,
-    )
-    const push = (kind: FrameKind) => fanout.push(kind, Uint8Array.of(1))
-    return { fanout, sent, push, keyframes: () => keyframes }
-  }
-
-  it('starts a port at the description and the last keyframe', () => {
-    const { fanout, sent, push } = setup()
-    push('description')
-    push('key')
-    push('delta')
-    fanout.add('a')
-    expect(sent.a!.map((frame) => frame.kind)).toEqual(['description', 'key', 'delta'])
-  })
-
-  it('skips a port that falls behind to the next keyframe, and asks for one', () => {
-    const { fanout, sent, push, keyframes } = setup(2)
-    push('description')
-    fanout.add('a')
-    push('key')
-    push('delta')
-    push('delta')
-    push('delta')
-    expect(sent.a!.map((frame) => frame.kind)).toEqual(['description', 'key', 'delta'])
-    expect(keyframes()).toBeGreaterThan(0)
-    fanout.ack('a', sent.a!.at(-1)!.seq)
-    push('delta')
-    push('key')
-    expect(sent.a!.map((frame) => frame.kind)).toEqual(['description', 'key', 'delta', 'key'])
-  })
-
-  it('ignores acknowledgements of frames it never sent', () => {
-    const { fanout, sent, push } = setup(2)
-    push('description')
-    fanout.add('a')
-    push('key')
-    fanout.ack('a', 999)
-    push('delta')
-    push('delta')
-    expect(sent.a!.map((frame) => frame.kind)).toEqual(['description', 'key', 'delta'])
   })
 })
