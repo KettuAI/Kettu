@@ -40,11 +40,14 @@
     "mcp": "MCP 服务器"
   },
   "row": {
-    "install": "安装 {{name}}",
-    "installing": "正在安装 {{name}}",
+    "install": "安装",
     "manage": "管理 {{name}}",
-    "installTitle": "安装",
-    "manageTitle": "已安装，点开管理"
+    "manageTitle": "已安装，点开管理",
+    "setUp": "设置",
+    "add": "添加",
+    "connect": "连接",
+    "connecting": "正在连接…",
+    "action": "{{action}} {{name}}"
   },
   "more": {
     "two": "{{first}}和{{second}}",
@@ -87,7 +90,10 @@
     "uninstalledFrom": "已从 {{agent}} 卸载 {{name}}",
     "marketplaceAdded": "已将 {{name}} 添加到 {{agent}}",
     "marketplaceRemoved": "已移除 {{name}}",
-    "skillFailed": "无法添加技能：{{error}}"
+    "skillFailed": "无法添加技能：{{error}}",
+    "connected": "已连接 {{name}}，所选的 Agent 都可以使用它",
+    "disconnected": "已断开与 {{name}} 的连接",
+    "disconnectFailed": "无法断开 {{name}}：{{error}}"
   },
   "listing": {
     "back": "Marketplace",
@@ -135,7 +141,10 @@
     "relatedFrom": "{{publisher}} 的更多服务器",
     "missingTitle": "找不到这个服务器",
     "missingText": "它可能已从 MCP Registry 下架，或者已被卸载。",
-    "backToDirectory": "返回 Marketplace"
+    "backToDirectory": "返回 Marketplace",
+    "signsIn": "在浏览器中登录 {{service}}",
+    "signsInDevice": "在 {{service}} 输入验证码连接",
+    "signsInNote": "登录信息由 Kettu 保管，Agent 看不到令牌"
   },
   "installed": {
     "builtIn": "内置",
@@ -279,6 +288,11 @@
       "urlHint": "一个仓库，或其中含有 SKILL.md 的文件夹。",
       "urlInvalid": "请输入 github.com 的地址。",
       "submit": "添加"
+    },
+    "remove": {
+      "title": "移除 {{name}}？",
+      "body": "新会话将不再带上它，Kettu 也会在这台电脑上退出它的登录。",
+      "confirm": "移除"
     }
   },
   "kind": {
@@ -352,6 +366,34 @@
       "path": "文件夹",
       "folder": "复制自"
     },
+    "remove": "移除…"
+  },
+  "connect": {
+    "title": "连接 {{name}}",
+    "browserNote": "你会在浏览器中登录 {{service}}。登录信息由 Kettu 保管，这些 Agent 通过 Kettu 访问这个服务器。",
+    "deviceNote": "你会在 {{service}} 输入一个验证码。登录信息由 Kettu 保管，这些 Agent 通过 Kettu 访问这个服务器。",
+    "submit": "连接",
+    "browserWaiting": "请在浏览器中完成登录",
+    "browserHint": "页面没有打开？复制链接到浏览器中打开。",
+    "copyLink": "复制链接",
+    "copyCode": "复制验证码",
+    "copied": "已复制",
+    "deviceTitle": "在 {{service}} 输入这个验证码",
+    "openService": "打开 {{service}}",
+    "deviceWaiting": "正在等待 {{service}}…",
+    "failed": "无法连接：{{error}}",
+    "timedOut": "登录超过五分钟仍未完成，Kettu 已停止等待。",
+    "notConnected": "登录没有完成。"
+  },
+  "connection": {
+    "connected": "已连接",
+    "connectedAs": "已以 {{account}} 连接",
+    "needsReconnect": "需要重新连接",
+    "error": "出错：{{message}}",
+    "disconnected": "未连接",
+    "connect": "连接",
+    "reconnect": "重新连接",
+    "disconnect": "断开连接",
     "remove": "移除…"
   }
 }

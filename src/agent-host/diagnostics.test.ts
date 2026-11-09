@@ -9,6 +9,38 @@ function recorded(message: unknown): string {
 }
 
 describe('Diagnostics traffic', () => {
+  it("masks the session's bearer of a server reached through Kettu's proxy", () => {
+    const proxied = {
+      type: 'http',
+      name: 'linear',
+      url: 'http://127.0.0.1:4567/proxy/0123456789abcdef01234567',
+      headers: [{ name: 'Authorization', value: 'Bearer proxy-session-token' }],
+    }
+    const acp = recorded({
+      id: 1,
+      method: 'session/new',
+      params: { cwd: '/r', mcpServers: [proxied] },
+    })
+    const codex = recorded({
+      id: 2,
+      method: 'thread/start',
+      params: {
+        config: {
+          mcp_servers: {
+            linear: {
+              url: proxied.url,
+              http_headers: { Authorization: 'Bearer proxy-session-token' },
+            },
+          },
+        },
+      },
+    })
+    for (const text of [acp, codex]) {
+      expect(text).not.toContain('proxy-session-token')
+      expect(text).toContain('/proxy/0123456789abcdef01234567')
+    }
+  })
+
   it("masks every header and environment value of ACP's MCP servers", () => {
     const text = recorded({
       jsonrpc: '2.0',

@@ -32,7 +32,7 @@ import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { DirectSettings, SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from '../main/log'
-import type { MarketKeyValues } from '../main/market-keys'
+import type { MarketKeysPush } from '../main/market-keys'
 import {
   hostSettings,
   reachesHost,
@@ -108,8 +108,10 @@ export interface HostsOptions {
   version: string
   systemLocale: Locale
   settings(): SettingsFile
-  /** The values of the Marketplace servers' inputs, which follow the agent host's init. */
-  marketKeys(): MarketKeyValues
+  /** The Marketplace's key store, values and OAuth sign-ins, which follows the agent host's init. */
+  marketKeys(): MarketKeysPush
+  /** The agent host asks to keep or clear a server's OAuth sign-in, checked against the settings. */
+  marketOAuth?(serverId: unknown, state: unknown): void
   /** The host's X25519 private key, in base64, for the remote host alone. */
   privateKey: string
   /** Replaces the host's identity with a new key, as resetting remote access does; its private key. */
@@ -203,7 +205,7 @@ export class Hosts {
         settings: hostSettings(options.settings(), options.systemLocale),
         socketPath: socketPath ?? undefined,
       }),
-      startMessages: () => [{ type: 'host:market-keys', values: options.marketKeys() }],
+      startMessages: () => [{ type: 'host:market-keys', ...options.marketKeys() }],
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
       stoppedType: 'host:stopped',
@@ -478,9 +480,9 @@ export class Hosts {
     this.remote.post({ type: 'remote-host:admin-event', event, deviceId })
   }
 
-  /** The values of the Marketplace servers' inputs changed; all of them go to the agent host. */
-  marketKeysChanged(values: MarketKeyValues): void {
-    this.agent.post({ type: 'host:market-keys', values })
+  /** The Marketplace's key store changed; all of it goes to the agent host. */
+  marketKeysChanged(contents: MarketKeysPush): void {
+    this.agent.post({ type: 'host:market-keys', ...contents })
   }
 
   /** Passes a change of the settings to the hosts that read it, as main does. */
@@ -866,6 +868,9 @@ export class Hosts {
           this.projects = message.paths
           this.terminal.post({ type: 'terminal-host:projects', paths: message.paths })
         }
+        break
+      case 'host:market-oauth':
+        this.options.marketOAuth?.(message.serverId, message.state)
         break
       case 'host:sessions-ended':
         if (isStringList(message.sessionIds)) {

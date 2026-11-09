@@ -230,6 +230,37 @@ describe('the Marketplace servers', () => {
     expect(spec?.type === 'http' && spec.headers[0]).toEqual({ ...header, prefix: 'Bearer ' })
   })
 
+  it('keeps how a remote server signs in with OAuth', () => {
+    for (const flow of ['browser', 'device'] as const) {
+      const patch = validateSettingsPatch(patchWith(withSpec({ oauth: { flow } })))
+      const spec = patch.marketplace?.mcp?.[0]?.spec
+      expect(spec?.type === 'http' && spec.oauth).toEqual({ flow })
+    }
+  })
+
+  it.each([
+    ['an unknown flow', withSpec({ oauth: { flow: 'password' } })],
+    ['an OAuth that is no object', withSpec({ oauth: 'browser' })],
+    ['an unknown OAuth key', withSpec({ oauth: { flow: 'browser', clientId: 'x' } })],
+    [
+      'OAuth on a local server',
+      changed({ ...structuredClone(local), spec: { ...local.spec, oauth: { flow: 'browser' } } }),
+    ],
+  ])('rejects %s', (_, server) => {
+    expect(() => validateSettingsPatch(patchWith(server))).toThrow()
+  })
+
+  it('reads a stored OAuth, without what a newer version adds to it', () => {
+    const stored = withSpec({ oauth: { flow: 'device', scopes: ['repo'] } })
+    const { settings, problems } = parseSettingsFile({
+      version: 1,
+      marketplace: { mcp: [stored] },
+    })
+    const spec = settings.marketplace.mcp[0]?.spec
+    expect(spec?.type === 'http' && spec.oauth).toEqual({ flow: 'device' })
+    expect(problems).toEqual([])
+  })
+
   it.each([
     ['a list that is no array', { marketplace: { mcp: github } }],
     ['an unknown key in the section', { marketplace: { mcp: [], other: 1 } }],

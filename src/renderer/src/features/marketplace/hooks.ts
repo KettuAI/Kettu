@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { InstalledPlugin, PluginHarness } from '@shared/marketplace'
+import type { InstalledPlugin, MarketConnection, PluginHarness } from '@shared/marketplace'
 import { menuAgents, useAgentsStore } from '@renderer/stores/agents'
 import { busyKey, useMarketplaceStore } from '@renderer/stores/marketplace'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -56,4 +56,30 @@ export function useInstallsLabel(): (installs: number | null) => string | null {
   const { t } = useTranslation('marketplace')
   return (installs) =>
     installs === null ? null : t('plugin.installs', { count: installs, value: count(installs) })
+}
+
+/** Where a kept OAuth server stands with its sign-in; null until the host said. */
+export function useConnection(serverId: string): MarketConnection | null {
+  return useMarketplaceStore((s) => s.connections?.[serverId] ?? null)
+}
+
+/** A Connect of the server under way or failed. */
+export function useConnectFlow(serverId: string) {
+  return useMarketplaceStore((s) => s.connecting[serverId] ?? null)
+}
+
+/** A connection in words, for a row's line. */
+export function useConnectionText(): (connection: MarketConnection | null) => string | null {
+  const { t } = useTranslation('marketplace')
+  return (connection) => {
+    if (!connection) return null
+    if (connection.state === 'connected') {
+      return connection.account
+        ? t('connection.connectedAs', { account: connection.account })
+        : t('connection.connected')
+    }
+    if (connection.state === 'needs-reconnect') return t('connection.needsReconnect')
+    if (connection.state === 'error') return t('connection.error', { message: connection.message })
+    return t('connection.disconnected')
+  }
 }

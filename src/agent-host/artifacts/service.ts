@@ -18,6 +18,7 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import { isComputerToolName } from '@shared/computer-use'
 import type { McpServer } from '../connection'
+import { PROXY_PREFIX } from '../marketplace/proxy'
 import { SERVICE_NAME } from '../service-name'
 import type { LogFn } from '../storage'
 import {
@@ -128,6 +129,10 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   devices?: Omit<DeviceToolDeps, 'sessionOf' | 'projectOf'>
   /** The computer use tools; without it the service lists none. */
   computer?: ComputerCalls
+  /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
+  proxy?: {
+    handle(req: http.IncomingMessage, res: http.ServerResponse, path: string): Promise<void>
+  }
 }
 
 /** A token for one session. */
@@ -135,6 +140,8 @@ interface SessionGrant {
   token: string
   project: string
   sessionId: string
+  /** Reaches Kettu's own server too, not only the proxy: Kettu's server is on for its agent. */
+  own: boolean
 }
 
 /** A token for one agent process and folder, whose calls name their session in `_meta`. */
@@ -144,6 +151,7 @@ interface FolderGrant {
   process: AgentProcess
   /** The sessions in memory that attached through it. */
   sessions: Set<string>
+  own: boolean
 }
 
 type Grant = SessionGrant | FolderGrant
@@ -327,14 +335,36 @@ export class ArtifactService {
   servers(sessionId: string, project: string): McpServer[] {
     const url = this.url
     if (!url) return []
+    return entry(url, this.sessionGrant(sessionId, project, true).token)
+  }
+
+  /**
+   * The bearer an attach of the session sends to the proxy, the same token as for the service
+   * itself; from `process` and its folder for an agent that keeps one server of a name per folder.
+   * A token made here alone reaches the proxy only. Null while the service is not running.
+   */
+  bearer(
+    sessionId: string,
+    project: string,
+    process: AgentProcess | null,
+  ): { origin: string; token: string } | null {
+    if (this.port === null) return null
+    const grant = process
+      ? this.folderGrant(process, project, sessionId, false)
+      : this.sessionGrant(sessionId, project, false)
+    return { origin: `http://127.0.0.1:${this.port}`, token: grant.token }
+  }
+
+  private sessionGrant(sessionId: string, project: string, own: boolean): SessionGrant {
     const held = this.sessions.get(sessionId)
     let grant = held === undefined ? undefined : this.grants.get(held)
     if (!grant || !('sessionId' in grant) || grant.project !== project) {
       this.revoke(sessionId)
-      grant = { token: newToken(), sessionId, project }
+      grant = { token: newToken(), sessionId, project, own }
       this.sessions.set(sessionId, this.add(grant))
     }
-    return entry(url, grant.token)
+    if (own) grant.own = true
+    return grant
   }
 
   /**
@@ -345,6 +375,15 @@ export class ArtifactService {
   folderServers(process: AgentProcess, folder: string, sessionId: string): McpServer[] {
     const url = this.url
     if (!url) return []
+    return entry(url, this.folderGrant(process, folder, sessionId, true).token)
+  }
+
+  private folderGrant(
+    process: AgentProcess,
+    folder: string,
+    sessionId: string,
+    own: boolean,
+  ): FolderGrant {
     let byFolder = this.folders.get(process)
     if (!byFolder) {
       byFolder = new Map()
@@ -355,7 +394,7 @@ export class ArtifactService {
     let key = byFolder.get(folder)
     let grant = key === undefined ? undefined : this.grants.get(key)
     if (key === undefined || !grant || 'sessionId' in grant) {
-      grant = { token: newToken(), project: folder, process, sessions: new Set() }
+      grant = { token: newToken(), project: folder, process, sessions: new Set(), own }
       key = this.add(grant)
       byFolder.set(folder, key)
     }
@@ -364,7 +403,8 @@ export class ArtifactService {
       grant.sessions.add(sessionId)
       this.sessions.set(sessionId, key)
     }
-    return entry(url, grant.token)
+    if (own) grant.own = true
+    return grant
   }
 
   /** The session left memory: it closed, was released or was deleted. */
@@ -444,6 +484,13 @@ export class ArtifactService {
     if (req.headers.host !== `127.0.0.1:${this.port}`) {
       return refuse(res, 403, 'Unknown host')
     }
+    const path = (req.url ?? '').split('?')[0]!
+    if (path.startsWith(PROXY_PREFIX) && this.deps.proxy) {
+      if (!this.grantOf(req.headers.authorization)) {
+        return refuse(res, 401, 'A session token is required', { 'WWW-Authenticate': 'Bearer' })
+      }
+      return this.deps.proxy.handle(req, res, path)
+    }
     if (req.url !== SERVICE_PATH) return refuse(res, 404, 'Not found')
     if (req.method !== 'POST') {
       // Plain JSON only: no event stream to open, and no session to end.
@@ -453,6 +500,7 @@ export class ArtifactService {
     if (!grant) {
       return refuse(res, 401, 'A session token is required', { 'WWW-Authenticate': 'Bearer' })
     }
+    if (!grant.own) return refuse(res, 403, "Kettu's own server is off for this agent")
     // A failed load is tried again with the next request rather than kept.
     this.sdk ??= loadSdk().catch((error: unknown) => {
       this.sdk = null

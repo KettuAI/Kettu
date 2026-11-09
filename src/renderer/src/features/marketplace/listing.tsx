@@ -8,6 +8,7 @@ import {
   Key01Icon,
   LinkSquare02Icon,
   MoreHorizontalIcon,
+  Shield01Icon,
   SlidersHorizontalIcon,
   Tick02Icon,
   UserMultiple02Icon,
@@ -32,14 +33,16 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installServer, setServerOn } from './actions'
 import { ServerTile } from './brand-marks'
+import { ConnectButton, ConnectionControls } from './connect'
 import { AgentsDialog, KeysDialog, UninstallDialog } from './dialogs'
-import { useChoosableAgents, useInstalling } from './hooks'
+import { useChoosableAgents, useConnectFlow, useConnectionText, useInstalling } from './hooks'
 import { InstallForm } from './install'
 import {
   asksFirst,
   catalogEntry,
   findListing,
   itemKey,
+  oauthFlow,
   parseItem,
   relatedServers,
   type Listing,
@@ -86,6 +89,7 @@ function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: 
   const listing = findListing(id, kept)
   const entry = catalogEntry(id)
   const server = kept.find((s) => s.id === id) ?? null
+  const installing = useConnectFlow(id)
 
   if (!listing) {
     return (
@@ -119,10 +123,20 @@ function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: 
           {listing.description && <span className="k-mkt-head__line">{listing.description}</span>}
         </span>
         <span className="k-mkt-head__act">
-          {server ? (
-            <KeptControls server={server} onUninstalled={back} />
+          {entry && oauthFlow(entry.spec) && (!server || installing?.fresh) ? (
+            <ConnectButton server={entry} big />
+          ) : server ? (
+            oauthFlow(server.spec) ? (
+              <ConnectionControls server={server} onRemoved={back} />
+            ) : (
+              <KeptControls server={server} onUninstalled={back} />
+            )
           ) : entry ? (
-            <InstallButton server={entry} />
+            oauthFlow(entry.spec) ? (
+              <ConnectButton server={entry} big />
+            ) : (
+              <InstallButton server={entry} />
+            )
           ) : null}
         </span>
       </header>
@@ -131,7 +145,11 @@ function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: 
 
       <div className="k-mkt-body">
         <div className="k-mkt-body__main">
-          <Runs spec={server?.spec ?? listing.spec} serverId={server?.id ?? null} />
+          <Runs
+            spec={server?.spec ?? listing.spec}
+            serverId={server?.id ?? null}
+            service={listing.title}
+          />
         </div>
         <Side listing={listing} />
       </div>
@@ -185,7 +203,7 @@ function InstallButton({ server }: { server: CatalogServer }) {
           else void installServer(server, 'all', {})
         }}
       >
-        {busy ? t('install.installing') : t('install.submit')}
+        {busy ? t('install.installing') : asks ? t('row.setUp') : t('row.install')}
       </Button>
       <Popover
         open={open}
@@ -324,9 +342,22 @@ function Facts({ listing, server }: { listing: Listing; server: MarketServer | n
   )
 }
 
-/** What the server runs or connects to, and each value it is given or asks for. */
-function Runs({ spec, serverId }: { spec: McpSpec; serverId: string | null }) {
+/** What the server runs or connects to, how it signs in, and each value it is given or asks for. */
+function Runs({
+  spec,
+  serverId,
+  service,
+}: {
+  spec: McpSpec
+  serverId: string | null
+  service: string
+}) {
   const { t } = useTranslation('marketplace')
+  const connection = useMarketplaceStore((s) =>
+    serverId ? (s.connections?.[serverId] ?? null) : null,
+  )
+  const connectionText = useConnectionText()
+  const oauth = oauthFlow(spec)
   const keys = useMarketplaceStore((s) => (serverId ? (s.keys?.[serverId] ?? null) : null))
   const keysKnown = useMarketplaceStore((s) => s.keys !== null)
   const values = spec.type === 'http' ? spec.headers : spec.env
@@ -353,6 +384,21 @@ function Runs({ spec, serverId }: { spec: McpSpec; serverId: string | null }) {
             </small>
           </span>
         </div>
+        {oauth && (
+          <div className="k-mkt-item">
+            <Icon icon={Shield01Icon} size={15} />
+            <span>
+              <b>
+                {oauth === 'device'
+                  ? t('listing.signsInDevice', { service })
+                  : t('listing.signsIn', { service })}
+              </b>
+              <small>
+                {[connectionText(connection), t('listing.signsInNote')].filter(Boolean).join(' · ')}
+              </small>
+            </span>
+          </div>
+        )}
         {values.map((value) => (
           <div key={value.name} className="k-mkt-item">
             <Icon

@@ -35,7 +35,7 @@ import {
   syncReferences,
   useGitStore,
 } from '@renderer/stores/git'
-import { marketKeysChanged } from '@renderer/stores/marketplace'
+import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -139,6 +139,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.keysChanged':
       marketKeysChanged()
+      break
+    case 'market.connectionChanged':
+      marketConnectionChanged(event)
       break
     case 'artifacts.changed':
       artifactsChanged()

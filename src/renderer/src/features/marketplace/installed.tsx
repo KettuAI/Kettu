@@ -31,7 +31,9 @@ import { useMarketplaceStore } from '@renderer/stores/marketplace'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openMarketplace } from '@renderer/stores/view'
 import { removeMarketplace, setServerOn } from './actions'
+import { ConnectionControls } from './connect'
 import { ConfirmDialog } from './dialogs'
+import { useConnection, useConnectionText } from './hooks'
 import {
   catalogEntry,
   catalogPlugin,
@@ -41,6 +43,7 @@ import {
   itemKey,
   matchesQuery,
   matchesText,
+  oauthFlow,
   pluginName,
   skillMatches,
   type Listing,
@@ -270,8 +273,12 @@ function listingOf(server: MarketServer): Listing {
 
 function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }) {
   const { t } = useTranslation('marketplace')
+  const oauth = oauthFlow(server.spec) !== null
+  const connection = useConnection(server.id)
+  const connectionText = useConnectionText()
   const agents = server.agents === 'all' ? null : server.agents
   const line = [
+    oauth ? connectionText(connection) : null,
     server.on ? null : t('installed.off'),
     agents ? t('installed.forAgents', { count: agents.length }) : null,
     listing.description ?? specRuns(server.spec),
@@ -288,11 +295,15 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
         openMarketplace({ item: itemKey({ kind: 'mcp', id: server.id }), tab: 'installed' })
       }
       end={
-        <SettingSwitch
-          label={t('listing.switch', { name: server.title })}
-          checked={server.on}
-          onChange={(on) => void setServerOn(server.id, on)}
-        />
+        oauth ? (
+          <ConnectionControls server={server} compact />
+        ) : (
+          <SettingSwitch
+            label={t('listing.switch', { name: server.title })}
+            checked={server.on}
+            onChange={(on) => void setServerOn(server.id, on)}
+          />
+        )
       }
     />
   )

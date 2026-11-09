@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { MarketServer } from '@shared/marketplace'
 import type { Logger } from './log'
-import { MarketKeys, MarketKeysError, marketKeysFile, type MarketKeyValues } from './market-keys'
+import { MarketKeys, MarketKeysError, marketKeysFile, type MarketKeysPush } from './market-keys'
 import type { IdentityCipher } from './remote-identity'
 
 const TOKEN = 'ghp_0123456789abcdefSECRET'
@@ -27,6 +27,28 @@ const github: MarketServer = {
   agents: 'all',
   on: true,
 }
+
+const linear: MarketServer = {
+  id: 'app.linear/linear',
+  name: 'linear',
+  title: 'Linear',
+  source: 'registry',
+  version: '1.0.0',
+  spec: {
+    type: 'http',
+    transport: 'streamable-http',
+    url: 'https://mcp.linear.app/mcp',
+    headers: [],
+    oauth: { flow: 'browser' },
+  },
+  agents: 'all',
+  on: true,
+}
+
+const SIGN_IN = JSON.stringify({
+  tokens: { access_token: 'at-SECRET-linear', refresh_token: 'rt-SECRET-linear' },
+  client: { client_id: 'kettu-client' },
+})
 
 const notes: MarketServer = {
   id: 'manual:0f8fad5b-d9cb-469f-a165-70867728950e',
@@ -73,11 +95,11 @@ const silent: Logger = { debug: () => {}, info: () => {}, warn: () => {}, error:
 
 let dir: string
 let servers: MarketServer[]
-let pushed: MarketKeyValues[]
+let pushed: MarketKeysPush[]
 
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'kettu-market-keys-'))
-  servers = [github, notes]
+  servers = [github, notes, linear]
   pushed = []
 })
 
@@ -93,7 +115,7 @@ function load(
     cipher: options.cipher ?? cipher(),
     plainTextAllowed: options.plainTextAllowed ?? false,
     servers: () => servers,
-    changed: (values) => pushed.push(values),
+    changed: (contents) => pushed.push(contents),
     log: silent,
   })
 }
@@ -124,7 +146,10 @@ describe('the Marketplace key store', () => {
     const keys = await load()
     await keys.set({ serverId: github.id, values: { Authorization: TOKEN } })
     await keys.set({ serverId: github.id, values: { Authorization: null } })
-    expect(pushed).toEqual([{ [github.id]: { Authorization: TOKEN } }, {}])
+    expect(pushed).toEqual([
+      { values: { [github.id]: { Authorization: TOKEN } }, oauth: {} },
+      { values: {}, oauth: {} },
+    ])
     expect(keys.state()).toEqual({})
   })
 
@@ -170,7 +195,7 @@ describe('the Marketplace key store', () => {
     keys.prune()
     await keys.flush()
     expect(keys.values()).toEqual({ [notes.id]: { NOTES_TOKEN: 'n0tes' } })
-    expect(pushed.at(-1)).toEqual({ [notes.id]: { NOTES_TOKEN: 'n0tes' } })
+    expect(pushed.at(-1)).toEqual({ values: { [notes.id]: { NOTES_TOKEN: 'n0tes' } }, oauth: {} })
     expect((await load()).values()).toEqual({ [notes.id]: { NOTES_TOKEN: 'n0tes' } })
   })
 
@@ -229,12 +254,118 @@ describe('the Marketplace key store', () => {
   })
 
   it('leaves a file from a newer version as it is and refuses to change it', async () => {
-    const text = '{"version":2,"encrypted":true,"values":"x"}'
+    const text = '{"version":3,"encrypted":true,"contents":"x"}'
     await writeFile(marketKeysFile(dir), text)
     const keys = await load()
     await expect(
       keys.set({ serverId: github.id, values: { Authorization: TOKEN } }),
     ).rejects.toMatchObject({ code: 'unavailable' })
     expect(await fileText()).toBe(text)
+  })
+})
+
+describe('OAuth sign-ins in the key store', () => {
+  const empty: MarketKeysPush = { values: {}, oauth: {} }
+
+  it('keeps a sign-in encrypted beside the keys and reads it back', async () => {
+    const keys = await load()
+    await keys.set({ serverId: github.id, values: { Authorization: TOKEN } })
+    expect(await keys.setOAuth(linear.id, SIGN_IN)).toBe(true)
+    const pushedLast: MarketKeysPush = {
+      values: { [github.id]: { Authorization: TOKEN } },
+      oauth: { [linear.id]: SIGN_IN },
+    }
+    expect(pushed.at(-1)).toEqual(pushedLast)
+    expect(await fileText()).not.toContain('SECRET')
+    expect((await load()).contentsForHost()).toEqual(pushedLast)
+  })
+
+  it('never tells a client anything of a sign-in', async () => {
+    const keys = await load()
+    await keys.setOAuth(linear.id, SIGN_IN)
+    expect(keys.state()).toEqual({})
+    await keys.set({ serverId: github.id, values: { Authorization: TOKEN } })
+    expect(keys.state()).toEqual({ [github.id]: ['Authorization'] })
+    expect(JSON.stringify(keys.state())).not.toContain('SECRET')
+  })
+
+  it.each([
+    ['a server not installed', 'app.example/other', SIGN_IN],
+    ['a remote server without OAuth', github.id, SIGN_IN],
+    ['a local server', notes.id, SIGN_IN],
+    ['a server id that is no string', 7, SIGN_IN],
+    ['a sign-in that is not JSON', linear.id, 'access_token=x'],
+    ['an empty sign-in', linear.id, ''],
+    ['a sign-in that is no string', linear.id, { access_token: 'x' }],
+    ['a sign-in over 64 KB', linear.id, JSON.stringify('a'.repeat(64 * 1024))],
+  ])('refuses %s, keeps nothing and sends the host what it holds', async (_, id, state) => {
+    const keys = await load()
+    expect(await keys.setOAuth(id, state)).toBe(false)
+    expect(keys.contentsForHost()).toEqual(empty)
+    expect(pushed).toEqual([empty])
+    await expect(stat(marketKeysFile(dir))).rejects.toThrow()
+  })
+
+  it('clears a sign-in with null', async () => {
+    const keys = await load()
+    await keys.setOAuth(linear.id, SIGN_IN)
+    expect(await keys.setOAuth(linear.id, null)).toBe(true)
+    expect(pushed.at(-1)).toEqual(empty)
+    await expect(stat(marketKeysFile(dir))).rejects.toThrow()
+  })
+
+  it('refuses to keep a sign-in where the system cannot encrypt it', async () => {
+    const keys = await load({ cipher: cipher(false) })
+    expect(await keys.setOAuth(linear.id, SIGN_IN)).toBe(false)
+    expect(pushed).toEqual([empty])
+    await expect(stat(marketKeysFile(dir))).rejects.toThrow()
+  })
+
+  it('drops the sign-in of a server that is uninstalled', async () => {
+    const keys = await load()
+    await keys.setOAuth(linear.id, SIGN_IN)
+    servers = [github, notes]
+    keys.prune()
+    await keys.flush()
+    expect(keys.contentsForHost()).toEqual(empty)
+    expect(pushed.at(-1)).toEqual(empty)
+    await expect(stat(marketKeysFile(dir))).rejects.toThrow()
+  })
+
+  it('drops the sign-in of a server that no longer signs in with OAuth', async () => {
+    const keys = await load()
+    await keys.setOAuth(linear.id, SIGN_IN)
+    const spec = { ...(linear.spec as Extract<MarketServer['spec'], { type: 'http' }>) }
+    delete spec.oauth
+    servers = [{ ...linear, spec }]
+    keys.prune()
+    await keys.flush()
+    expect(keys.contentsForHost().oauth).toEqual({})
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    "keeps a sign-in in the user's file alone under the daemon",
+    async () => {
+      const keys = await load({ cipher: NO_ENCRYPTION, plainTextAllowed: true })
+      expect(await keys.setOAuth(linear.id, SIGN_IN)).toBe(true)
+      expect((await stat(marketKeysFile(dir))).mode & 0o777).toBe(0o600)
+      const again = await load({ cipher: NO_ENCRYPTION, plainTextAllowed: true })
+      expect(again.contentsForHost().oauth).toEqual({ [linear.id]: SIGN_IN })
+    },
+  )
+
+  it('reads the keys of a file from before sign-ins and writes it anew', async () => {
+    const values = { [github.id]: { Authorization: TOKEN } }
+    const sealed = flip(Buffer.from(JSON.stringify(values), 'utf8')).toString('base64')
+    await writeFile(
+      marketKeysFile(dir),
+      JSON.stringify({ version: 1, encrypted: true, values: sealed }),
+    )
+    const keys = await load()
+    await keys.flush()
+    expect(keys.contentsForHost()).toEqual({ values, oauth: {} })
+    const stored = JSON.parse(await fileText()) as Record<string, unknown>
+    expect(stored.version).toBe(2)
+    expect((await load()).values()).toEqual(values)
   })
 })

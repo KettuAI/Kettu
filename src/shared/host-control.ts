@@ -79,7 +79,13 @@ export type MainToHost =
   | { type: 'host:settings'; settings: HostSettings }
   // The values of the Marketplace servers' inputs, by server id and input name, all of them each
   // time: right after host:init at every start, and whenever they change.
-  | { type: 'host:market-keys'; values: Record<string, Record<string, string>> }
+  // The key store, whole: input values by server id, then input name; and each OAuth server's
+  // sign-in, an opaque JSON text only the agent host reads, by server id.
+  | {
+      type: 'host:market-keys'
+      values: Record<string, Record<string, string>>
+      oauth?: Record<string, string>
+    }
   | { type: 'host:busy-request'; requestId: number }
   // A problem report's bundle, answered by host:report. The parent adds its own part; the host
   // reads the logs, its agents and sessions, and writes the zip under its data folder.
@@ -210,6 +216,9 @@ export interface AttentionFront {
 }
 
 export type HostToMain =
+  // Keep (or, with null, clear) a server's OAuth sign-in after the host connected, renewed or
+  // disconnected it; main stores the text as it stores keys and pushes host:market-keys again.
+  | { type: 'host:market-oauth'; serverId: string; state: string | null }
   | { type: 'host:ready' }
   | { type: 'host:agent-processes'; processes: AgentProcess[] }
   | { type: 'host:projects'; paths: string[] }

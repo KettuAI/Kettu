@@ -50,7 +50,7 @@ import { processControl, stopTrees, type ProcessId } from '../agent-host/process
 import { ContentCache } from './artifacts/content-cache'
 import { computerHostOptions } from './computer-use'
 import { GrantRequests } from './grant-requests'
-import type { MarketKeyValues } from './market-keys'
+import type { MarketKeysPush } from './market-keys'
 import { t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
@@ -59,8 +59,10 @@ const log = createLogger('agent-host')
 
 export interface AgentHostDeps {
   settings(): HostSettings
-  /** The values of the Marketplace servers' inputs, which follow init at each start. */
-  marketKeys(): MarketKeyValues
+  /** The Marketplace's key store, values and OAuth sign-ins, which follows init at each start. */
+  marketKeys(): MarketKeysPush
+  /** The host asks to keep or clear a server's OAuth sign-in; main checks it against the settings. */
+  onMarketOAuth?(serverId: unknown, state: unknown): void
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
   /** What waits for the user by session, and a session seen, for the devices' notifications. */
   onWaiting?(sessions: Record<string, string[]>): void
@@ -318,7 +320,7 @@ export class AgentHost {
         settings: deps.settings(),
         computer: computerHostOptions(),
       }),
-      startMessages: () => [{ type: 'host:market-keys', values: deps.marketKeys() }],
+      startMessages: () => [{ type: 'host:market-keys', ...deps.marketKeys() }],
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
@@ -370,9 +372,9 @@ export class AgentHost {
     this.host.post({ type: 'host:settings', settings })
   }
 
-  /** The values of the Marketplace servers' inputs, all of them; a host started later gets them too. */
-  pushMarketKeys(values: MarketKeyValues): void {
-    this.host.post({ type: 'host:market-keys', values })
+  /** The Marketplace's key store, whole; a host started later gets it too. */
+  pushMarketKeys(contents: MarketKeysPush): void {
+    this.host.post({ type: 'host:market-keys', ...contents })
   }
 
   /** Allow once from a request's notification, which the host answers as its own window would. */
@@ -639,6 +641,9 @@ export class AgentHost {
         break
       case 'host:projects':
         if (isStringList(message.paths)) this.deps.onProjects(message.paths)
+        break
+      case 'host:market-oauth':
+        this.deps.onMarketOAuth?.(message.serverId, message.state)
         break
       case 'host:artifacts-changed':
         this.contents.clear()

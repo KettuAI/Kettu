@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { MarketServer } from '@shared/marketplace'
 import { mcpServers as acpServers } from '../acp/connection'
+import type { Access } from './connections'
+import { proxyPath } from './proxy'
 import { ALL_TRANSPORTS, keyState, libraryServers, parseMarketKeys } from './servers'
 
 const github: MarketServer = {
@@ -55,6 +57,86 @@ const notion: MarketServer = {
 const keys = (values: Record<string, Record<string, string>>) => parseMarketKeys(values)!
 
 const posix = { platform: 'darwin' as const }
+
+describe('libraryServers with OAuth servers', () => {
+  const linear: MarketServer = {
+    id: 'app.linear/linear',
+    name: 'linear',
+    title: 'Linear',
+    source: 'registry',
+    version: '1.0.2',
+    spec: {
+      type: 'http',
+      transport: 'streamable-http',
+      url: 'https://mcp.linear.app/mcp',
+      headers: [{ name: 'X-Read-Only', value: 'true' }],
+      oauth: { flow: 'browser' },
+    },
+    agents: 'all',
+    on: true,
+  }
+  const legacy: MarketServer = {
+    ...linear,
+    id: 'com.example/sse',
+    name: 'legacy',
+    spec: {
+      type: 'http',
+      transport: 'sse',
+      url: 'https://x.example/sse',
+      headers: [],
+      oauth: { flow: 'browser' },
+    },
+  }
+  const oauth = (access: Access) => ({
+    access: () => access,
+    bearer: () => ({ origin: 'http://127.0.0.1:4567', token: 'session-token' }),
+  })
+
+  it("goes through the proxy with the session's bearer while connected, never on a command line", () => {
+    const servers = libraryServers([linear, legacy], new Map(), 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      oauth: oauth('proxy'),
+    })
+    expect(servers).toEqual([
+      {
+        type: 'http',
+        name: 'linear',
+        url: `http://127.0.0.1:4567${proxyPath(linear.id)}`,
+        headers: [{ name: 'Authorization', value: 'Bearer session-token' }],
+        secret: true,
+      },
+    ])
+    expect(JSON.stringify(servers)).not.toContain('mcp.linear.app')
+  })
+
+  it('goes directly when it needs no sign-in, and not at all when not connected', () => {
+    const open = libraryServers([linear], new Map(), 'codex', ALL_TRANSPORTS, {
+      platform: 'darwin',
+      oauth: oauth('open'),
+    })
+    expect(open).toEqual([
+      {
+        type: 'http',
+        name: 'linear',
+        url: 'https://mcp.linear.app/mcp',
+        headers: [{ name: 'X-Read-Only', value: 'true' }],
+      },
+    ])
+    for (const options of [
+      { platform: 'darwin' as const, oauth: oauth(null) },
+      { platform: 'darwin' as const },
+    ]) {
+      expect(libraryServers([linear], new Map(), 'codex', ALL_TRANSPORTS, options)).toEqual([])
+    }
+    const noHttp = { mcpHttp: false, mcpSse: true, mcpStdio: true }
+    expect(
+      libraryServers([linear], new Map(), 'codex', noHttp, {
+        platform: 'darwin',
+        oauth: oauth('proxy'),
+      }),
+    ).toEqual([])
+  })
+})
 
 describe('libraryServers', () => {
   it('fills each input from the keys, with its prefix, and marks the servers holding one', () => {

@@ -25,7 +25,7 @@ const BEARER = { Authorization: 'Bearer ' }
 
 /** The servers the app's own lists name, with what they add to the registry's entries. */
 export const LISTINGS: Readonly<Record<string, Listing>> = {
-  'io.github.github/github-mcp-server': { official: true, brand: 'github', prefixes: BEARER },
+  'io.github.github/github-mcp-server': { official: true, brand: 'github' },
   'io.github.microsoft/playwright-mcp': {
     official: true,
     brand: 'playwright',

@@ -20,8 +20,43 @@ export type McpValue =
 
 /** How an agent reaches a server: a URL, or a program it starts and talks to over stdio. */
 export type McpSpec =
-  | { type: 'http'; transport: 'streamable-http' | 'sse'; url: string; headers: McpValue[] }
+  | {
+      type: 'http'
+      transport: 'streamable-http' | 'sse'
+      url: string
+      headers: McpValue[]
+      // Signs in with OAuth: Kettu keeps the tokens and agents reach the server through its proxy.
+      oauth?: McpOAuth
+    }
   | { type: 'stdio'; command: string; args: string[]; env: McpValue[] }
+
+/** How Kettu signs in to a remote server with OAuth. */
+export interface McpOAuth {
+  // The device flow of an app Kettu registered with the service, for one that registers no
+  // clients (GitHub); otherwise the browser flow with dynamic client registration.
+  flow: 'browser' | 'device'
+}
+
+/** Where a server Kettu keeps stands with its sign-in, by server id. */
+export type MarketConnection =
+  | { state: 'connected'; account: string | null }
+  | { state: 'disconnected' } // never connected, or disconnected by the user
+  | { state: 'needs-reconnect'; reason: string } // the token expired and could not be renewed
+  | { state: 'error'; message: string }
+export type MarketConnections = Record<string, MarketConnection>
+
+/** What Connect starts: a page to open in the browser, or a code to enter at the service. */
+export type ConnectStart =
+  | { loginId: string; kind: 'browser'; url: string }
+  | {
+      loginId: string
+      kind: 'device'
+      userCode: string
+      verificationUri: string
+      expiresAt: number
+    }
+  // The server answered without a sign-in: it is connected already, and agents reach it directly.
+  | { loginId: string; kind: 'open' }
 
 /** A server Kettu keeps, stored in the host settings' `marketplace.mcp`. */
 export interface MarketServer {

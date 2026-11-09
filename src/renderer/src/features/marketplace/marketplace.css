@@ -276,6 +276,85 @@
   width: 100%;
 }
 
+/* Connect: the wait while the user signs in at the service, the device code, and why it failed */
+.k-mkt-connect {
+  display: grid;
+  gap: 10px;
+}
+.k-mkt-connect > b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-mkt-connect > small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.k-mkt-connect__wait {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text);
+}
+.k-mkt-connect__wait > .ui-as-spinner {
+  flex: none;
+}
+.k-mkt-connect__code {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--frame);
+  font-family: var(--code-face);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-align: center;
+  color: var(--ink);
+  user-select: all;
+}
+.k-mkt-connect__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.k-mkt-connect__error {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+/* A kept server's connection: green when connected, the attention orange when it needs you */
+.k-mkt-conn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+}
+.k-mkt-conn[data-state='connected'] > svg {
+  flex: none;
+  color: var(--success);
+}
+.k-mkt-conn[data-state='attention'] {
+  color: var(--attention);
+}
+.k-mkt-conn[data-state='error'] {
+  color: var(--danger);
+}
+.ui-buttonc.k-mkt-attention {
+  color: var(--attention);
+}
+
 /* A listing */
 .k-mkt-back {
   display: inline-flex;

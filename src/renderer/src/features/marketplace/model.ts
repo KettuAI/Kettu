@@ -268,6 +268,11 @@ export function asksFirst(spec: McpSpec): boolean {
   return specInputs(spec).length > 0
 }
 
+/** How a server signs in with OAuth, or null for one that takes keys or nothing. */
+export function oauthFlow(spec: McpSpec): 'browser' | 'device' | null {
+  return spec.type === 'http' && spec.oauth ? spec.oauth.flow : null
+}
+
 /**
  * A command line split into its words as a shell would split it: spaces separate them, quotes
  * keep spaces in one, and a backslash keeps the next character. Null while a quote is open.
