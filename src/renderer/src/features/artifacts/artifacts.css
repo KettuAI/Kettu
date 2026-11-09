@@ -90,6 +90,21 @@
     var(--artifact-card-shadow),
     0 0 0 2px var(--accent-soft);
 }
+/* A deleted card's dust is drawn over it from its own pixels (features/artifacts/card-dust.ts);
+   only its shadow, which lies outside what is read, fades while the sweep passes. */
+.k-art[data-dust] {
+  pointer-events: none;
+}
+.k-art[data-dust] .k-art__open {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  transition: box-shadow var(--duration-slower) var(--ease-standard);
+}
+.k-art[data-dust] .k-art__open > *,
+.k-art[data-dust] .k-art__more {
+  visibility: hidden;
+}
 /* Room on the right for the More button, which sits over the card rather than inside its button. */
 .k-art__head {
   display: grid;

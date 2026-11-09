@@ -301,7 +301,7 @@
 .ui-as-chat-row:has([data-subagent-badge]:hover) .kettu-row-end {
   opacity: 1;
 }
-/* A deleted row's dust is drawn over it from its own pixels (features/sidebar/row-dust.ts). */
+/* A deleted row's dust is drawn over it from its own pixels (lib/dust.ts). */
 li[data-row-exit='dust'] > * {
   visibility: hidden;
 }
