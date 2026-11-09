@@ -6,17 +6,21 @@ import { ProjectMcpAnswers } from './project-mcp'
 import { parseProjectMcpFile, projectMcpFile } from './storage'
 
 let dir: string
+const stores: ProjectMcpAnswers[] = []
 
 beforeEach(async () => {
   dir = await mkdtemp(path.join(tmpdir(), 'kettu-project-mcp-'))
 })
 
 afterEach(async () => {
+  // An answer's write may still be on its way to the folder.
+  await Promise.all(stores.splice(0).map((store) => store.flush()))
   await rm(dir, { recursive: true, force: true })
 })
 
 async function answers(): Promise<ProjectMcpAnswers> {
   const store = new ProjectMcpAnswers(projectMcpFile(dir, () => {}))
+  stores.push(store)
   await store.load()
   return store
 }
