@@ -406,6 +406,7 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     settings: () => settings.get(),
     marketKeys: () => marketKeys.contentsForHost(),
     marketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
+    firstStart: (harnesses) => settings.firstStart(harnesses),
     privateKey: identity.privateKey,
     newIdentity: async () => (await newHostKey(options.dataPath)).privateKey,
     relayKey: relayKey?.privateKey ?? null,

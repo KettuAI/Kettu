@@ -25,6 +25,7 @@ import type { Platform } from '@shared/platform'
 import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
 import {
   AUTO_AGENT_HARNESSES,
+  USER_PROGRAM_HARNESSES,
   harnessOf,
   type AgentId,
   type ConfigOption,
@@ -80,6 +81,7 @@ import {
   type CommandWords,
   type DetectContext,
   type Detection,
+  userProgramFound,
   type LaunchSpec,
 } from './catalog'
 import { OAUTH_ACCOUNT_LABEL } from './claude/reports'
@@ -702,6 +704,17 @@ export class AgentManager {
   async list(): Promise<AgentStatus[]> {
     await this.detectAll()
     return this.statuses()
+  }
+
+  /**
+   * The harnesses whose user program the last detection found, in the order their agents are
+   * added; call after `detectAll`.
+   */
+  userPrograms(): HarnessId[] {
+    return USER_PROGRAM_HARNESSES.filter((id) => {
+      const h = this.harnesses.get(id)
+      return !!h?.detection && userProgramFound(h.def, h.detection, this.deps.adaptersDir)
+    })
   }
 
   async check(agentId?: AgentId): Promise<AgentStatus[]> {

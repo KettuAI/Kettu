@@ -817,6 +817,7 @@ export function createValidators(platform: Platform): Validators {
       return o.agentId === undefined ? {} : { agentId: agentId(o) }
     },
     'agents.reloadEnvironment': none,
+    'agents.detectedPrograms': none,
     'agents.environment': none,
     'agents.authenticate': (params) => {
       const o = fields(params)

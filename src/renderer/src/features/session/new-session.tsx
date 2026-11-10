@@ -81,6 +81,8 @@ import {
   type GreetingPeriod,
 } from './new-session/greeting'
 import { pickupSessions, pickupState } from './new-session/picker'
+import { AgentGuide, AgentSetupNotice } from './new-session/agent-guide'
+import { useGuideStatuses } from './new-session/guide-statuses'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { ParentLink } from './session-header'
@@ -230,6 +232,18 @@ function DraftComposer({
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const status = useAgentsStore((s) => (agentId ? agentsOn(s, hostId).byId[agentId] : undefined))
   const limits = status?.limits
+  // A default agent that became usable after this page opened, such as the first start's, is what
+  // the page starts with.
+  const defaultAgent = useSettingsStore((s) => s.settings.general.defaultAgent)
+  const defaultUsable = useAgentsStore((s) => {
+    const candidate = defaultAgent ? s.byId[defaultAgent] : undefined
+    return !!candidate && candidate.registered !== false && !candidate.disabled
+  })
+  useEffect(() => {
+    if (paneId && !agentId && !parent && hostId === null && defaultAgent && defaultUsable) {
+      choosePaneAgent(paneId, defaultAgent)
+    }
+  }, [paneId, agentId, parent, hostId, defaultAgent, defaultUsable])
   const waitingForNode = useAgentsStore(
     useShallow((s) => {
       if (hostId === null ? !s.loaded : !(hostId in s.hosts)) return null
@@ -238,6 +252,11 @@ function DraftComposer({
       return usable.length === 0 ? [] : noAgentCanStart(usable)
     }),
   )
+  // This computer has no agent at all, not merely none that is on: the install guide shows.
+  const noAgent = useAgentsStore(
+    (s) => hostId === null && s.loaded && usableAgents(s.order, s.byId).length === 0,
+  )
+  const guide = useGuideStatuses()
   const now = useNow()
   const name = agentId ? agentName(agentId, hostId) : null
   // A sub-session of a session started with No project shares its parent's scratch folder.
@@ -362,6 +381,8 @@ function DraftComposer({
 
   return (
     <>
+      {noAgent && guide && <AgentGuide statuses={guide} />}
+      {hostId === null && !noAgent && <AgentSetupNotice />}
       <div className="ui-as-start__composer kettu-composer" data-variant="new">
         <ChatComposer
           field={
@@ -480,7 +501,9 @@ function DraftComposer({
           </p>
         )}
         {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
-        {waitingForNode && <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />}
+        {waitingForNode && !(noAgent && guide) && (
+          <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />
+        )}
       </div>
       {children}
     </>

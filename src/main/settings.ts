@@ -13,6 +13,7 @@ import {
   type SettingsSection,
   validateSettingsPatch,
   withAddedAgent,
+  withFirstStart,
   withAgentBinary,
   withAgentColor,
   withDirectPort,
@@ -123,6 +124,11 @@ export class SettingsStore {
       read.kind === 'ok'
         ? parseSettingsFile(read.value)
         : { ...parseSettingsFile(null), problems: [read.reason], readOnly: false }
+    // A file saved before the first start was recorded belongs to a host already set up by hand.
+    const recorded = read.kind === 'ok' && isRecord(read.value) && 'initialSetup' in read.value
+    if (!recorded) {
+      loaded.settings.initialSetup = { done: true, added: [], noticed: true }
+    }
     // A file that turns direct connections on by hand gets its port as a change would.
     const settings = withDirectPort(loaded.settings, randomDirectPort)
     if (loaded.readOnly) {
@@ -186,6 +192,11 @@ export class SettingsStore {
 
   addAgent(agent: AddedAgent): SettingsFile {
     return this.replace(withAddedAgent(this.current, agent))
+  }
+
+  /** The agent host's first start found the programs of these harnesses. */
+  firstStart(found: unknown): SettingsFile {
+    return this.replace(withFirstStart(this.current, found))
   }
 
   renameAgent(agentId: AgentId, name: string): SettingsFile {

@@ -836,8 +836,21 @@ export class AgentHost {
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
     host.agents.startLimitReads()
-    void host.agents.detectAll().then(() => host.agents.scheduleUpdateChecks())
+    void host.agents.detectAll().then(() => {
+      host.agents.scheduleUpdateChecks()
+      host.firstStart()
+    })
     return host
+  }
+
+  /**
+   * The first start of this host: names the programs it found for the settings' owner to add
+   * their agents. A host whose login shell could not be read waits for the next start, since
+   * the programs on its `PATH` may be missing.
+   */
+  private firstStart(): void {
+    if (this.settings.initialSetupDone || this.env.info().source === 'fallback') return
+    this.options.send({ type: 'host:first-start', harnesses: this.agents.userPrograms() })
   }
 
   private wireGit(git: GitServiceApi): void {
@@ -1521,6 +1534,10 @@ export class AgentHost {
         // A tool installed since the last probe shows up without a restart.
         if (this.git) await this.gitCall((g) => g.reloadTools())
         return result
+      },
+      'agents.detectedPrograms': async () => {
+        await agents.check()
+        return agents.userPrograms()
       },
       'agents.environment': () => this.env.info(),
       'agents.authenticate': ({ agentId, methodId }) => agents.authenticate(agentId, methodId),

@@ -13,6 +13,7 @@ export {
   AUTO_AGENT_HARNESSES,
   HARNESS_IDS,
   MULTI_AGENT_HARNESSES,
+  USER_PROGRAM_HARNESSES,
   addedAgentId,
   harnessOf,
   isAgentId,

@@ -388,6 +388,25 @@ export type Detection =
       cli?: InstalledCli
     }
 
+/**
+ * Whether detection found the user's own program: their CLI, the program an adapter runs, or a
+ * binary outside `kettuDir`, where Kettu keeps the programs it installs. One that is found but
+ * cannot run, such as a CLI too old, counts.
+ */
+export function userProgramFound(
+  def: AgentDefinition,
+  detection: Detection,
+  kettuDir: string,
+): boolean {
+  if (detection.cli) return true
+  if (detection.state !== 'available') return false
+  if (detection.requires) return true
+  const command = def.launch.kind === 'binary' ? detection.spec?.command : undefined
+  if (!command) return false
+  const relative = path.relative(kettuDir, command)
+  return relative === '' || relative.startsWith('..') || path.isAbsolute(relative)
+}
+
 /** `node <entry>`, or `node <router> node <entry>` for a per-session agent. */
 export function packageSpec(
   node: string,

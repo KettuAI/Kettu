@@ -14,7 +14,6 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentInstallMethod, AgentStatus, AgentTask } from '@shared/agent-host'
-import type { SettingsPatch } from '@shared/settings'
 import type { HarnessId } from '@shared/thread'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -54,6 +53,7 @@ import {
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import { ConfigFrame, DismissButton, Fact, Log, LogCopyButton, TaskLog } from './agent-parts'
+import { installKind, startInstall, type InstallKind, type SettingsHook } from './harness-install'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
 import {
   CommandLine,
@@ -102,47 +102,10 @@ async function checkForUpdates(agents: AgentsStoreHook): Promise<void> {
   if (error) throw new Error(error)
 }
 
-/** The harness's program is missing, so it installs by one of its vendor's routes. */
-function programMissing(status: AgentStatus): boolean {
-  return status.state === 'not-installed' && !status.cli?.installed
-}
-
 /** The way Kettu would install it now, or null when it cannot. */
 function installMethod(status: AgentStatus, picked?: string): AgentInstallMethod | null {
   const available = status.installMethods.filter((m) => m.available)
   return available.find((m) => m.id === picked) ?? available[0] ?? null
-}
-
-type InstallKind = 'program' | 'package' | 'setup'
-
-function installKind(status: AgentStatus): InstallKind | null {
-  if (programMissing(status) && status.installMethods.length > 0) return 'program'
-  if (status.package && !status.package.installed && status.state === 'available') return 'package'
-  if (['not-installed', 'node-missing', 'node-outdated'].includes(status.state)) return 'setup'
-  return null
-}
-
-type SettingsHook = { getState(): { update(patch: SettingsPatch): Promise<void> } }
-
-/** Installs again, first taking the harness back if it was uninstalled. */
-async function startInstall(
-  agents: AgentsStoreHook,
-  settings: SettingsHook,
-  harness: HarnessId,
-  method?: AgentInstallMethod['id'] | null,
-): Promise<void> {
-  await settings
-    .getState()
-    .update({ agents: { [harness]: { uninstalled: false } } })
-    .catch(() => {})
-  await agents.getState().check(harness)
-  const status = agents.getState().byId[harness]
-  // A harness whose program is still on the machine is back without installing anything.
-  if (!status || status.uninstalled || status.task?.state === 'running') return
-  const kind = installKind(status)
-  if (kind === 'program' || kind === 'package') {
-    void agents.getState().install(harness, method ?? undefined)
-  }
 }
 
 function startUpdate(agents: AgentsStoreHook, harness: HarnessId): void {
@@ -323,7 +286,7 @@ function StateDot({ label }: { label: string }) {
  * Installing the user's own program, such as Claude Code: the vendor's routes, the recommended
  * first, those whose tool is missing disabled, and the command that runs, which can be copied.
  */
-function InstallDialog({
+export function InstallDialog({
   status,
   open,
   onOpenChange,

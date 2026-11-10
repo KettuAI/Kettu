@@ -63,6 +63,8 @@ export interface AgentHostDeps {
   marketKeys(): MarketKeysPush
   /** The host asks to keep or clear a server's OAuth sign-in; main checks it against the settings. */
   onMarketOAuth?(serverId: unknown, state: unknown): void
+  /** The host's first start found the programs of these harnesses; main adds their agents. */
+  onFirstStart?(harnesses: unknown): void
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
   /** What waits for the user by session, and a session seen, for the devices' notifications. */
   onWaiting?(sessions: Record<string, string[]>): void
@@ -644,6 +646,9 @@ export class AgentHost {
         break
       case 'host:market-oauth':
         this.deps.onMarketOAuth?.(message.serverId, message.state)
+        break
+      case 'host:first-start':
+        this.deps.onFirstStart?.(message.harnesses)
         break
       case 'host:artifacts-changed':
         this.contents.clear()

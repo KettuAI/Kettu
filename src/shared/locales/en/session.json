@@ -503,7 +503,23 @@
       "signIn": "Waiting for sign-in",
       "finished": "Finished {{ago}}"
     },
-    "addAgent": "Add an agent…"
+    "addAgent": "Add an agent…",
+    "guide": {
+      "title": "No agent yet",
+      "hint": "Install one to start. A program you installed in a terminal shows up after Re-detect.",
+      "about": {
+        "claude-code": "From Anthropic. Sign in with a Claude plan or an API key.",
+        "codex": "From OpenAI. Sign in with ChatGPT or an API key.",
+        "opencode": "Open source. Bring any provider.",
+        "pi": "A small, extensible terminal agent."
+      },
+      "found": "Found on this computer",
+      "redetect": "Re-detect"
+    },
+    "setupNotice_one": "Added an agent for {{agents, list}}, found on this computer.",
+    "setupNotice_other": "Added agents for {{agents, list}}, found on this computer.",
+    "setupNoticeView": "View",
+    "setupNoticeDismiss": "Dismiss"
   },
   "signIn": {
     "title": "Sign in to {{agent}}",

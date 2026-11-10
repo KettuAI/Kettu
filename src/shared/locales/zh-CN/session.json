@@ -485,7 +485,22 @@
       "signIn": "等待登录",
       "finished": "{{ago}}完成"
     },
-    "addAgent": "添加 Agent…"
+    "addAgent": "添加 Agent…",
+    "guide": {
+      "title": "还没有 Agent",
+      "hint": "装一个就能开始；在终端里装好的，点重新检测。",
+      "about": {
+        "claude-code": "Anthropic 出品，用 Claude 订阅或 API key 登录。",
+        "codex": "OpenAI 出品，用 ChatGPT 或 API key 登录。",
+        "opencode": "开源，可以接任意模型服务商。",
+        "pi": "小巧、可扩展的终端 Agent。"
+      },
+      "found": "已在这台电脑上找到",
+      "redetect": "重新检测"
+    },
+    "setupNotice_other": "已为这台电脑上检测到的 {{agents, list(style: narrow)}} 添加了 Agent。",
+    "setupNoticeView": "查看",
+    "setupNoticeDismiss": "关闭"
   },
   "signIn": {
     "title": "登录 {{agent}}",

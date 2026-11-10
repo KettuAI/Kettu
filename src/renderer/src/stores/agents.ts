@@ -44,6 +44,8 @@ export interface AgentsStore extends HostAgents {
   refresh(): Promise<void>
   check(agentId?: AgentId): Promise<void>
   reloadEnvironment(): Promise<void>
+  /** Detects again and names the harnesses whose user program is found, in the order to add them. */
+  detectedPrograms(): Promise<HarnessId[]>
   loadDetails(agentId: AgentId): Promise<void>
   checkUpdates(): Promise<void>
   /** These four never reject: a failure shows as the agent's failed task or in `taskErrors`. */
@@ -111,6 +113,7 @@ export function createAgentsStore(request: HostRequest): AgentsStoreHook {
       const environment = await request('agents.environment', undefined)
       set((state) => ({ environment: laterEnvironment(state.environment, environment) }))
     },
+    detectedPrograms: () => request('agents.detectedPrograms', undefined),
     async loadDetails(agentId) {
       const details = await request('agents.details', { agentId })
       set((state) => ({ details: { ...state.details, [agentId]: details } }))

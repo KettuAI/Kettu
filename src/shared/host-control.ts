@@ -21,7 +21,7 @@ import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
 import type { RelayStatus } from './remote/relay-host'
 import type { DirectSettings, HostSettings, SettingsFile, TerminalSettings } from './settings'
-import type { AgentId } from './thread'
+import type { AgentId, HarnessId } from './thread'
 
 export type { ReportBuildResult }
 
@@ -221,6 +221,9 @@ export type HostToMain =
   // disconnected it; main stores the text as it stores keys and pushes host:market-keys again.
   | { type: 'host:market-oauth'; serverId: string; state: string | null }
   | { type: 'host:ready' }
+  // The harnesses whose user program the host's first start found, in the order to add them: the
+  // settings' owner adds their default agents and records the first start as done.
+  | { type: 'host:first-start'; harnesses: HarnessId[] }
   | { type: 'host:agent-processes'; processes: AgentProcess[] }
   | { type: 'host:projects'; paths: string[] }
   /** An artifact was made, changed, deleted or restored. */

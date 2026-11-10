@@ -500,6 +500,8 @@ export interface HostContract {
   'agents.list': { params: void; result: AgentStatus[] }
   'agents.check': { params: { agentId?: AgentId }; result: AgentStatus[] }
   'agents.reloadEnvironment': { params: void; result: AgentStatus[] }
+  // Detects again, then names the harnesses whose user program is found, in the order to add them.
+  'agents.detectedPrograms': { params: void; result: HarnessId[] }
   'agents.environment': { params: void; result: EnvironmentInfo }
   'agents.authenticate': { params: { agentId: AgentId; methodId: string }; result: void }
   'agents.logout': { params: { agentId: AgentId }; result: void }
@@ -1019,6 +1021,7 @@ export const HOST_METHODS = [
   'agents.list',
   'agents.check',
   'agents.reloadEnvironment',
+  'agents.detectedPrograms',
   'agents.environment',
   'agents.authenticate',
   'agents.logout',

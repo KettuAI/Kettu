@@ -41,6 +41,7 @@ import {
   isHarnessId,
   harnessOf,
   MULTI_AGENT_HARNESSES,
+  USER_PROGRAM_HARNESSES,
   type AgentId,
   type HarnessId,
 } from '@shared/thread'
@@ -834,6 +835,18 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
           problems.push(`Unknown setting "terminal.${key}"`)
         }
       }
+    } else if (section === 'initialSetup') {
+      if (!isRecord(value)) {
+        problems.push('"initialSetup" must be an object')
+        continue
+      }
+      for (const [key, fieldValue] of Object.entries(value)) {
+        const problem =
+          key === 'noticed'
+            ? isBoolean(fieldValue, 'initialSetup.noticed')
+            : `Unknown setting "initialSetup.${key}"`
+        if (problem) problems.push(problem)
+      }
     } else {
       problems.push(`Unknown setting "${section}"`)
     }
@@ -877,6 +890,9 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     next.marketplace.skills = structuredClone(patch.marketplace.skills)
   }
   if (patch.disabledAgents) next.disabledAgents = [...patch.disabledAgents]
+  if (patch.initialSetup?.noticed !== undefined) {
+    next.initialSetup.noticed = patch.initialSetup.noticed
+  }
   if (patch.startModes) {
     for (const [id, mode] of Object.entries(patch.startModes) as [AgentId, string | null][]) {
       if (mode === null) delete next.startModes[id]
@@ -966,6 +982,25 @@ export function withAddedAgent(current: SettingsFile, agent: AddedAgent): Settin
     name: agentName(agent.name),
     color: agent.color ?? nextAgentColor(current.addedAgents),
   })
+  return next
+}
+
+/**
+ * Adds the default agents of the harnesses a host's first start found, in the order the list
+ * of such harnesses has, and records the first start as done; it does nothing once it is. A
+ * harness that was added or removed before is left as it is. The first one added becomes the
+ * default agent when none is chosen, so New session can start at once.
+ */
+export function withFirstStart(current: SettingsFile, found: unknown): SettingsFile {
+  if (current.initialSetup.done) return current
+  const wanted = new Set<unknown>(Array.isArray(found) ? found : [])
+  const next = structuredClone(current)
+  const added = USER_PROGRAM_HARNESSES.filter(
+    (id) => wanted.has(id) && next.agents[id]?.enabled === undefined,
+  )
+  for (const id of added) next.agents[id] = { ...next.agents[id], enabled: true }
+  if (added.length > 0 && next.general.defaultAgent === null) next.general.defaultAgent = added[0]!
+  next.initialSetup = { done: true, added, noticed: added.length === 0 }
   return next
 }
 
@@ -1122,6 +1157,9 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
       }
     }
   }
+  if (raw.initialSetup !== undefined) {
+    settings.initialSetup = readInitialSetup(raw.initialSetup, problems)
+  }
   if (raw.addedAgents !== undefined) {
     if (!Array.isArray(raw.addedAgents)) problems.push('"addedAgents" must be an array')
     else settings.addedAgents = readAddedAgents(raw.addedAgents, problems)
@@ -1168,6 +1206,26 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
 }
 
 /** Reads the added agents, dropping each that is invalid or repeats an id or a folder. */
+function readInitialSetup(raw: unknown, problems: string[]): SettingsFile['initialSetup'] {
+  const setup: SettingsFile['initialSetup'] = { done: false, added: [], noticed: false }
+  if (!isRecord(raw)) {
+    problems.push('"initialSetup" must be an object')
+    return setup
+  }
+  for (const key of ['done', 'noticed'] as const) {
+    if (raw[key] === undefined) continue
+    const problem = isBoolean(raw[key], `initialSetup.${key}`)
+    if (problem) problems.push(problem)
+    else setup[key] = raw[key] as boolean
+  }
+  if (raw.added !== undefined) {
+    if (!Array.isArray(raw.added) || !raw.added.every(isHarnessId)) {
+      problems.push('"initialSetup.added" must be a list of harness ids')
+    } else setup.added = [...new Set(raw.added)]
+  }
+  return setup
+}
+
 function readAddedAgents(list: unknown[], problems: string[]): AddedAgent[] {
   const agents: AddedAgent[] = []
   for (const [index, entry] of list.entries()) {
@@ -1329,6 +1387,7 @@ function readStartModes(raw: unknown, problems: string[]): SettingsFile['startMo
 export function hostSettings(settings: SettingsFile, systemLocale: Locale): HostSettings {
   return {
     locale: resolveLocale(settings.general.language, systemLocale),
+    initialSetupDone: settings.initialSetup.done,
     agents: structuredClone(settings.agents),
     addedAgents: structuredClone(settings.addedAgents),
     disabledAgents: [...settings.disabledAgents],
@@ -1358,6 +1417,7 @@ export function withAllowedComputerApp(current: SettingsFile, app: unknown): Set
 
 // The sections `hostSettings` reads, besides the language.
 const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
+  'initialSetup',
   'agents',
   'addedAgents',
   'disabledAgents',
