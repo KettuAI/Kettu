@@ -12,12 +12,15 @@ import { agentName } from '@renderer/stores/agents'
  */
 export function DrivingPill({
   agent,
+  hostId = null,
   user,
   onTakeOver,
   onHandBack,
   className,
 }: {
   agent: AgentId | null
+  /** The host the agent is on, null for this computer. */
+  hostId?: string | null
   user: boolean
   onTakeOver: () => void
   onHandBack: () => void
@@ -26,7 +29,7 @@ export function DrivingPill({
   const { t } = useTranslation('browser')
   const label = user
     ? t('control.you')
-    : t('control.using', { agent: agent ? agentName(agent) : '' })
+    : t('control.using', { agent: agent ? agentName(agent, hostId) : '' })
   return (
     <div
       role="status"
@@ -38,7 +41,7 @@ export function DrivingPill({
       {user ? (
         <PaneIcon icon={Tick02Icon} size={14} />
       ) : (
-        agent && <AgentMark agent={agent} size={14} />
+        agent && <AgentMark agent={agent} size={14} hostId={hostId} />
       )}
       <span className="kp-drive__label">{label}</span>
       <button type="button" onClick={user ? onHandBack : onTakeOver} className="kp-btn kp-btn--sm">

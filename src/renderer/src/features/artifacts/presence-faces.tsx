@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import type { AgentId } from '@shared/thread'
 import { AgentCursorStyles, AgentFace } from '@renderer/components/affect/agent-cursors'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import type { CanvasAgent } from './canvas-editor'
 import type { Presence } from './use-artifact'
 
@@ -76,7 +77,7 @@ export function PresenceFaces({
           agent={{
             id: agent.sessionId,
             name: agent.name,
-            avatar: <AgentMark agent={agent.agentId} size={14} />,
+            avatar: <AgentMark agent={agent.agentId} size={14} hostId={agent.hostId} />,
           }}
           here
           following={following === agent.sessionId}
@@ -123,18 +124,28 @@ export function CardFaces({
   /** Shown when this window knows none of the sessions. */
   fallback: React.ReactNode
 }) {
-  const agents = useSessionsStore(
-    useShallow((s) => sessions.flatMap((id) => (s.byId[id] ? [s.byId[id].agentId] : []))),
+  // Flat values, so a running session's other changes do not render the card again.
+  const flat = useSessionsStore(
+    useShallow((s) =>
+      sessions.flatMap((id) => {
+        const summary = s.byId[id]
+        return summary ? [summary.agentId, hostOfSession(summary)] : []
+      }),
+    ),
   )
+  const agents = Array.from({ length: flat.length / 2 }, (_, i) => ({
+    agentId: flat[i * 2] as AgentId,
+    hostId: flat[i * 2 + 1] as string | null,
+  }))
   if (agents.length === 0) return fallback
   const more = agents.length - CARD_FACES
   return (
     <span className="ui-agc k-art-faces" aria-hidden>
       <AgentCursorStyles />
       {agents.slice(0, CARD_FACES).map((agent, i) => (
-        <span key={`${agent}-${i}`} className="ui-agc__face" data-here="">
+        <span key={`${agent.agentId}-${i}`} className="ui-agc__face" data-here="">
           <span className="ui-agc__face-mark">
-            <AgentMark agent={agent} size={11} />
+            <AgentMark agent={agent.agentId} size={11} hostId={agent.hostId} />
           </span>
         </span>
       ))}

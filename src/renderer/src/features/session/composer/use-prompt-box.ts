@@ -4,7 +4,6 @@ import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
 import { usePane } from '@renderer/features/split/pane-context'
 import { errorMessage } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
 import { useBrowserStore } from '@renderer/stores/browser'
 import {
   selectDraft,
@@ -46,12 +45,15 @@ export function usePromptBox({
   draft,
   sessionId,
   projectPath,
+  hostId,
   disabled,
   onActivity,
 }: {
   draft: string
   sessionId: string | null
   projectPath: string | null
+  /** The host the message goes to, null for this computer; a host without a project has one too. */
+  hostId: string | null
   disabled: boolean
   /** Typing, attaching or focusing the box, as New session's prepared session watches for. */
   onActivity?: () => void
@@ -94,7 +96,6 @@ export function usePromptBox({
 
   const limitError = (left: number) => setError(left > 0 ? t('attachments.limit') : null)
   // Another host's session takes files and images from this computer as uploads, and no folder.
-  const hostId = projectPath === null ? null : hostOfPath(projectPath)
   const remote = hostId !== null
 
   // A pick that is still open, or waiting for its grants, makes a second one a no-op.

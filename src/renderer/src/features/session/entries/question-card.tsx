@@ -10,6 +10,7 @@ import {
   type ExperimentMetric,
 } from '@renderer/components/affect/experiment-card'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { codeSpans, respondToPermission, respondToQuestions } from './helpers'
@@ -38,6 +39,7 @@ const plainName = (name: string): string =>
 function useChoiceCard(sessionId: string) {
   const { t } = useTranslation('session')
   const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
+  const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
   const labels = useMemo<Partial<ExperimentLabels>>(
     () => ({
       pickOne: t('question.hint.one'),
@@ -51,7 +53,7 @@ function useChoiceCard(sessionId: string) {
   return {
     kind: 'choice' as const,
     className: 'ks-question',
-    mark: agentId ? <AgentMark agent={agentId} size={16} /> : undefined,
+    mark: agentId ? <AgentMark agent={agentId} size={16} hostId={hostId} /> : undefined,
     status: { label: t('question.asksYou'), tone: 'amber' as const },
     lead: null,
     trigger: 'click' as const,

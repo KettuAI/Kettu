@@ -33,7 +33,7 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
 
   return (
     <div className="kp-towner">
-      <AgentMark agent={owner.agentId} size={14} />
+      <AgentMark agent={owner.agentId} size={14} hostId={hostId} />
       {/* One line, so the folder at its end is cut before who started it and when. */}
       <span className="kp-towner__text">
         {t('owner.startedBy', {

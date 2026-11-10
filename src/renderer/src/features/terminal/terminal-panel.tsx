@@ -417,6 +417,7 @@ export function TerminalTab({
             <AgentMark
               agent={owner.agentId}
               size={13}
+              hostId={hostOfPath(terminal.projectPath)}
               className="kp-tab__icon kp-tab__icon--mark"
             />
           )}

@@ -52,6 +52,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { Notice } from '@renderer/features/routines/kit'
 import { basename, longAgo } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMod, isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
@@ -254,6 +255,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       key={artifact.id}
       artifact={artifact}
       agent={agentOf(artifact.sessionId)}
+      agentHost={hostOfPath(sessions.get(artifact.sessionId)?.projectPath ?? '')}
       meta={meta}
       time={time}
       project={projectName(artifact)}
@@ -526,7 +528,12 @@ function SessionRow({ id, info, now }: { id: string; info: SessionInfo | undefin
       title={t('page.openSession')}
       onClick={() => openSession(id, info.projectPath)}
     >
-      <AgentMark agent={info.agentId} size={14} className="shrink-0" />
+      <AgentMark
+        agent={info.agentId}
+        size={14}
+        hostId={hostOfPath(info.projectPath)}
+        className="shrink-0"
+      />
       <span>{info.title ?? t('common:untitledSession')}</span>
       <small>{longAgo(info.updatedAt, now)}</small>
       <Icon icon={ArrowRight01Icon} size={13} />

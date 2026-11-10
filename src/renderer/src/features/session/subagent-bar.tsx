@@ -9,7 +9,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 
 /** In place of the composer: the agent drives a sub-agent, so you can only stop it or go back. */
@@ -27,6 +27,7 @@ export function SubagentBar({
   const running = summary.status === 'running' || summary.status === 'awaiting_permission'
   const canStop = running && !!session?.subagent?.canCancel
   const parentTitle = parent ? sessionTitle(parent) : ''
+  const agent = agentName(summary.agentId, hostOfSession(summary))
 
   const stop = async () => {
     setStopping(true)
@@ -55,7 +56,7 @@ export function SubagentBar({
             <Trans
               t={t}
               i18nKey="subagentBar.runsFor"
-              values={{ agent: agentName(summary.agentId) }}
+              values={{ agent }}
               components={{
                 parent: <b>{parentTitle}</b>,
               }}
@@ -64,7 +65,7 @@ export function SubagentBar({
             <Trans
               t={t}
               i18nKey="subagentBar.runsForParent"
-              values={{ agent: agentName(summary.agentId) }}
+              values={{ agent }}
               components={{ parent: <b /> }}
             />
           )}

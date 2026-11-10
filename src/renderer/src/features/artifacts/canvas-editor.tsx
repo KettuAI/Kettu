@@ -65,6 +65,8 @@ export interface CanvasAgent {
   sessionId: string
   name: string
   agentId: AgentId
+  /** The host the session is on, null for this computer. */
+  hostId: string | null
   doing: ArtifactDoing | null
   focus: ArtifactFocus | null
 }
@@ -1544,7 +1546,7 @@ export const CanvasEditor = memo(function CanvasEditor({
                       agent={{
                         id: agent.sessionId,
                         name: agent.name,
-                        avatar: <AgentMark agent={agent.agentId} size={12} />,
+                        avatar: <AgentMark agent={agent.agentId} size={12} hostId={agent.hostId} />,
                       }}
                       x={0}
                       y={0}
@@ -1655,7 +1657,12 @@ export const CanvasEditor = memo(function CanvasEditor({
         </aside>
       )}
       {following && followed && (
-        <FollowBanner name={followed.name} agentId={followed.agentId} onStop={onFollowDone} />
+        <FollowBanner
+          name={followed.name}
+          agentId={followed.agentId}
+          hostId={followed.hostId}
+          onStop={onFollowDone}
+        />
       )}
       {empty && !readOnly && (
         <div className="k-ce-empty">
@@ -1881,16 +1888,18 @@ function HandOffBar({ box, count, onHandOff }: { box: Box; count: number; onHand
 function FollowBanner({
   name,
   agentId,
+  hostId,
   onStop,
 }: {
   name: string
   agentId: AgentId
+  hostId: string | null
   onStop: () => void
 }) {
   const { t } = useTranslation('artifacts')
   return (
     <div className="k-ce-banner k-ce-float">
-      <AgentMark agent={agentId} size={14} />
+      <AgentMark agent={agentId} size={14} hostId={hostId} />
       <span>{t('board.agent.following', { agent: name })}</span>
       <button type="button" className="k-ce-tool" onClick={onStop}>
         {t('board.agent.stop')}

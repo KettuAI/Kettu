@@ -37,7 +37,7 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { formatShortcut, isMod } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { openNewSession } from '@renderer/stores/view'
 import { anchorLabel, commentsPrompt } from './anchors'
 
@@ -329,7 +329,9 @@ export function CommentsPanel({
               items={[
                 ...targets.map((session) => ({
                   label: name(session),
-                  logo: <AgentMark agent={session.agentId} size={14} />,
+                  logo: (
+                    <AgentMark agent={session.agentId} size={14} hostId={hostOfSession(session)} />
+                  ),
                   checked: session.id === target,
                   onSelect: () => setPicked(session.id),
                 })),
@@ -351,7 +353,11 @@ export function CommentsPanel({
                   className="ui-ss-select k-av-send__pick"
                 >
                   {pickedSession ? (
-                    <AgentMark agent={pickedSession.agentId} size={14} />
+                    <AgentMark
+                      agent={pickedSession.agentId}
+                      size={14}
+                      hostId={hostOfSession(pickedSession)}
+                    />
                   ) : (
                     <Icon icon={PlusSignIcon} size={14} />
                   )}
@@ -393,7 +399,7 @@ function Author({ comment }: { comment: ArtifactComment }) {
           <Icon icon={UserIcon} size={12} />
         </span>
       ) : session ? (
-        <AgentMark agent={session.agentId} size={16} />
+        <AgentMark agent={session.agentId} size={16} hostId={hostOfSession(session)} />
       ) : (
         <span className="k-av-author__you" />
       )}

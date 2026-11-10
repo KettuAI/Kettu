@@ -26,7 +26,7 @@ import { longAgo } from '@renderer/lib/format'
 import { fadeExit, glide } from '@renderer/lib/motion'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { openSessionWithArtifact } from '@renderer/stores/view'
 import { atMaxZoom, atMinZoom } from './camera'
 import { CanvasControls, useCanvasState } from './canvas-controls'
@@ -416,7 +416,11 @@ export function Presence({
                       />
                     }
                   >
-                    <AgentMark agent={summaries[session.sessionId].agentId} size={14} />
+                    <AgentMark
+                      agent={summaries[session.sessionId].agentId}
+                      size={14}
+                      hostId={hostOfSession(summaries[session.sessionId])}
+                    />
                   </TooltipTrigger>
                   <TooltipContent>
                     <span className="flex flex-col items-start">
@@ -443,7 +447,13 @@ export function Presence({
                   items={all.map((session) => ({
                     label: name(session.sessionId),
                     description: state(session.editing),
-                    logo: <AgentMark agent={summaries[session.sessionId].agentId} size={14} />,
+                    logo: (
+                      <AgentMark
+                        agent={summaries[session.sessionId].agentId}
+                        size={14}
+                        hostId={hostOfSession(summaries[session.sessionId])}
+                      />
+                    ),
                     onSelect: () => open(session.sessionId),
                   }))}
                   trigger={({ open: shownMenu, toggle }) => (

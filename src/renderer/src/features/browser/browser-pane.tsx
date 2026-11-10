@@ -18,6 +18,7 @@ import {
   PaneTabClose,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMac } from '@renderer/lib/platform'
 import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -39,6 +40,9 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   const still = useBrowserStore((s) => (sessionId ? s.stills[sessionId] : undefined))
   const hidden = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
   const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : null)) ?? null
+  const hostId = useSessionsStore((s) =>
+    sessionId ? hostOfPath(s.byId[sessionId]?.projectPath ?? '') : null,
+  )
   const overlayOpen = useOverlayOpen()
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   // The frame the page fills.
@@ -230,6 +234,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
               {(driving || userControl) && (
                 <DrivingPill
                   agent={agentId}
+                  hostId={hostId}
                   user={userControl}
                   onTakeOver={() => sessionId && void window.kettu.browser.stopDriving(sessionId)}
                   onHandBack={() => sessionId && void window.kettu.browser.handBack(sessionId)}
@@ -243,7 +248,8 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
               <OriginBar
                 request={state.originRequest}
                 agent={agentId}
-                agentName={agentId ? agentName(agentId) : ''}
+                hostId={hostId}
+                agentName={agentId ? agentName(agentId, hostId) : ''}
                 onAnswer={(decision) =>
                   void window.kettu.browser.answerOrigin(
                     sessionId,
@@ -265,7 +271,9 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
               title={sessionId ? t('empty.title') : t('empty.noSession')}
               text={
                 sessionId
-                  ? t('empty.hint', { agent: agentId ? agentName(agentId) : t('empty.agent') })
+                  ? t('empty.hint', {
+                      agent: agentId ? agentName(agentId, hostId) : t('empty.agent'),
+                    })
                   : t('empty.noSessionHint')
               }
             >

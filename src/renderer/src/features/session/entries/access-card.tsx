@@ -122,7 +122,7 @@ export function AccessCard({
         className="ks-permission"
         agent={{
           name: agentName,
-          avatar: agentId ? <AgentMark agent={agentId} size={14} /> : undefined,
+          avatar: agentId ? <AgentMark agent={agentId} size={14} hostId={hostId} /> : undefined,
         }}
         action={action}
         target={target}

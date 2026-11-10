@@ -22,7 +22,7 @@ import {
 import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { agentName } from '@renderer/stores/agents'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { replaceStale, restartTerminal, type TerminalState } from '@renderer/stores/terminals'
 import { useViewStore } from '@renderer/stores/view'
 import {
@@ -37,13 +37,17 @@ import {
 } from './xterm-registry'
 
 /** The agent of the session on screen, for "Ask Claude Code". */
-function useAsk(): { label: string; agentId: AgentId | null } {
+function useAsk(): { label: string; agentId: AgentId | null; hostId: string | null } {
   const { t } = useTranslation('terminal')
   const sessionId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
-  const agentId = useSessionsStore((s) => (sessionId ? s.byId[sessionId]?.agentId : undefined))
-  return agentId
-    ? { label: t('view.askAgent', { agent: agentName(agentId) }), agentId }
-    : { label: t('view.askGeneric'), agentId: null }
+  const summary = useSessionsStore((s) => (sessionId ? s.byId[sessionId] : undefined))
+  if (!summary) return { label: t('view.askGeneric'), agentId: null, hostId: null }
+  const hostId = hostOfSession(summary)
+  return {
+    label: t('view.askAgent', { agent: agentName(summary.agentId, hostId) }),
+    agentId: summary.agentId,
+    hostId,
+  }
 }
 
 /**
@@ -153,7 +157,7 @@ export function TerminalView({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => askAboutSelection(instance)}
             >
-              {ask.agentId && <AgentMark agent={ask.agentId} size={13} />}
+              {ask.agentId && <AgentMark agent={ask.agentId} size={13} hostId={ask.hostId} />}
               {ask.label}
               <kbd>{formatShortcut('Mod+L')}</kbd>
             </button>

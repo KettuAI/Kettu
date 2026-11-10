@@ -172,7 +172,7 @@ export function LinkConfirm({
           </RadioGroup>
           {summary && agent && (
             <div className="mt-3 flex items-center gap-1.75 text-hint text-tertiary">
-              <AgentMark agent={summary.agentId} />
+              <AgentMark agent={summary.agentId} hostId={hostOfSession(summary)} />
               <span className="min-w-0 truncate">
                 <Trans
                   t={t}

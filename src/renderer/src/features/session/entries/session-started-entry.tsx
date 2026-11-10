@@ -5,7 +5,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
 import type { EntryProps } from './basic'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -44,7 +44,7 @@ export const SessionStartedEntry = memo(function SessionStartedEntry({
     >
       <span className="grid size-3.5 shrink-0 place-items-center">
         {child ? (
-          <AgentMark agent={child.agentId} size={14} />
+          <AgentMark agent={child.agentId} size={14} hostId={hostOfSession(child)} />
         ) : (
           <HugeiconsIcon
             icon={AiChat02Icon}
