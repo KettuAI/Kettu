@@ -1,6 +1,12 @@
 import { useMemo } from 'react'
 import type { AgentId, ConfigOption } from '@shared/thread'
-import { optionsOn, useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
+import {
+  optionsOn,
+  preparedFor,
+  picksOf,
+  useAgentOptionsStore,
+  type OptionValues,
+} from '@renderer/stores/agent-options'
 import { preparedConfig, startConfig } from './start-options'
 
 /**
@@ -14,9 +20,9 @@ export function useStartConfig(
   hostId: string | null = null,
 ): ConfigOption[] | null {
   const entry = useAgentOptionsStore((s) => (agentId ? optionsOn(s, hostId)[agentId] : undefined))
-  const picks = useAgentOptionsStore((s) => (agentId ? s.picks[agentId] : undefined))
+  const picks = useAgentOptionsStore((s) => (agentId ? picksOf(s, hostId, agentId) : undefined))
   const prepared = useAgentOptionsStore((s) =>
-    agentId && s.prepared?.agentId === agentId ? s.prepared.summary?.prepared : undefined,
+    agentId ? preparedFor(s, hostId, agentId)?.summary?.prepared : undefined,
   )
   return useMemo(() => {
     const shown = values ?? picks

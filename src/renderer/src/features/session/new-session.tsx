@@ -27,7 +27,13 @@ import { isMod } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useAccountStore } from '@renderer/stores/account'
-import { optionsLoaded, optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
+import {
+  optionsLoaded,
+  optionsOn,
+  picksOf,
+  preparedFor,
+  useAgentOptionsStore,
+} from '@renderer/stores/agent-options'
 import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -259,15 +265,15 @@ function DraftComposer({
   // The session the first message will use opens while it is written, so the menu shows what the
   // agent reports for it and the send only adopts it.
   useEffect(() => {
-    prepareFor(agentId && ready && !signIn ? { agentId, projectPath, parentId } : null)
-  }, [agentId, ready, signIn, projectPath, parentId])
+    prepareFor(agentId && ready && !signIn ? { hostId, agentId, projectPath, parentId } : null)
+  }, [hostId, agentId, ready, signIn, projectPath, parentId])
 
   // Without a folder nothing is prepared, so an agent with no options cached reads them once, and
   // the menu lists its models before a project is chosen.
   const cacheLoaded = useAgentOptionsStore((s) => optionsLoaded(s, hostId))
   useEffect(() => {
     if (agentId && hostId === null && !ready && !signIn && cacheLoaded) {
-      void readFirstOptions(agentId)
+      void readFirstOptions(hostId, agentId)
     }
   }, [agentId, hostId, ready, signIn, cacheLoaded])
 
@@ -283,17 +289,18 @@ function DraftComposer({
     sending.current = true
     try {
       try {
-        await settleOptions(agentId)
+        await settleOptions(hostId, agentId)
       } catch (error) {
         box.setError(errorMessage(error))
         return
       }
       const optionsState = useAgentOptionsStore.getState()
-      const { picks, prepared } = optionsState
       const entry = optionsOn(optionsState, hostId)[agentId]
       // Without a prepared session, the values New session showed go with the create.
-      const options = entry ? startValues(entry, picks[agentId], { startMode: true }) : null
-      const preparedId = prepared?.agentId === agentId ? (prepared.summary?.id ?? null) : null
+      const options = entry
+        ? startValues(entry, picksOf(optionsState, hostId, agentId), { startMode: true })
+        : null
+      const preparedId = preparedFor(optionsState, hostId, agentId)?.summary?.id ?? null
       const content: UserContent[] = [
         ...(text.trim() ? [{ type: 'text' as const, text }] : []),
         ...attachmentContent(attachments),
@@ -319,7 +326,7 @@ function DraftComposer({
 
   // New session's picks only change what the session starts with, which the send reads.
   const pick = (optionId: string, value: string | boolean) => {
-    if (agentId) setOption(agentId, optionId, value)
+    if (agentId) setOption(hostId, agentId, optionId, value)
     return Promise.resolve(true)
   }
   const mode = config?.find((o): o is SelectOption => o.category === 'mode' && isSelect(o))
@@ -376,6 +383,7 @@ function DraftComposer({
             agentId && (
               <ModelMenu
                 agentId={agentId}
+                hostId={hostId}
                 agentName={name ?? ''}
                 config={config ?? []}
                 onSelect={pick}
@@ -386,7 +394,7 @@ function DraftComposer({
                       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
                     )
                   }
-                  if (status.state === 'ready') refreshOnMenu([agentId])
+                  if (status.state === 'ready') refreshOnMenu(hostId, [agentId])
                 }}
                 account={status?.account ?? null}
                 limits={limits ?? []}
@@ -461,10 +469,8 @@ const NO_NOTICES: StartNotice[] = []
 /** Each value the session will not start with as chosen, and why, before the first message. */
 function StartNotices({ agentId, hostId }: { agentId: AgentId; hostId: string | null }) {
   const { t } = useTranslation('session')
-  const all = useAgentOptionsStore((s) =>
-    s.prepared?.agentId === agentId
-      ? (s.prepared.summary?.prepared?.notices ?? NO_NOTICES)
-      : NO_NOTICES,
+  const all = useAgentOptionsStore(
+    (s) => preparedFor(s, hostId, agentId)?.summary?.prepared?.notices ?? NO_NOTICES,
   )
   // A switch meant to be off that the session lacks loses nothing.
   const notices = all.filter((n) => !(n.type === 'boolean' && n.actual === null && !n.wanted))

@@ -4,18 +4,23 @@
 
 import type { SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
-import { errorMessage, host } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
+import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import {
+  agentKey,
+  optionsLoaded,
+  optionsOn,
   pickOption,
+  picksOf,
   settlePick,
   useAgentOptionsStore,
   type FirstRead,
   type PreparedState,
 } from '@renderer/stores/agent-options'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 
 export interface PrepareTarget {
+  /** The host the session will be on, null for this computer. */
+  hostId: string | null
   agentId: AgentId
   projectPath: string | null // null: No project
   parentId: string | null
@@ -41,9 +46,11 @@ const latestSet = new Map<string, number>()
 const refused = new Map<string, string>()
 let nextSet = 0
 
-const setKey = (agentId: AgentId, optionId: string): string => `${agentId}\0${optionId}`
+const setKey = (hostId: string | null, agentId: AgentId, optionId: string): string =>
+  `${agentKey(hostId, agentId)}\0${optionId}`
 
-const keyOf = (t: PrepareTarget): string => JSON.stringify([t.agentId, t.projectPath, t.parentId])
+const keyOf = (t: PrepareTarget): string =>
+  JSON.stringify([t.hostId, t.agentId, t.projectPath, t.parentId])
 
 const setPrepared = (next: PreparedState | null): void =>
   useAgentOptionsStore.setState({ prepared: next })
@@ -67,12 +74,13 @@ export async function prepare(t: PrepareTarget, replace = false): Promise<void> 
   if (!replace && current?.key === key && (current.opening || current.summary)) return
   setPrepared({
     key,
+    hostId: t.hostId,
     agentId: t.agentId,
     summary: current?.key === key ? current.summary : null,
     opening: true,
     error: null,
   })
-  const picks = useAgentOptionsStore.getState().picks[t.agentId]
+  const picks = picksOf(useAgentOptionsStore.getState(), t.hostId, t.agentId)
   try {
     const summary = await host('sessions.prepare', {
       agentId: t.agentId,
@@ -86,12 +94,13 @@ export async function prepare(t: PrepareTarget, replace = false): Promise<void> 
       discard(summary.id)
       return
     }
-    setPrepared({ key, agentId: t.agentId, summary, opening: false, error: null })
+    setPrepared({ key, hostId: t.hostId, agentId: t.agentId, summary, opening: false, error: null })
     for (const [optionId, value] of Object.entries(picks ?? {}))
-      settlePick(t.agentId, optionId, value)
+      settlePick(t.hostId, t.agentId, optionId, value)
     // Picks made while it opened go to it now.
-    const later = useAgentOptionsStore.getState().picks[t.agentId] ?? {}
-    for (const [optionId, value] of Object.entries(later)) setOption(t.agentId, optionId, value)
+    const later = picksOf(useAgentOptionsStore.getState(), t.hostId, t.agentId) ?? {}
+    for (const [optionId, value] of Object.entries(later))
+      setOption(t.hostId, t.agentId, optionId, value)
   } catch (error) {
     const now = useAgentOptionsStore.getState().prepared
     if (now?.key !== key) return
@@ -117,12 +126,13 @@ export function discardPrepared(): void {
 function keepDraftOptions(current: PreparedState | null): void {
   const config = current?.summary?.prepared?.config
   if (!current || !config) return
+  const key = agentKey(current.hostId, current.agentId)
   useAgentOptionsStore.setState((s) => ({
     picks: {
       ...s.picks,
-      [current.agentId]: {
+      [key]: {
         ...Object.fromEntries(config.map((option) => [option.id, option.value])),
-        ...s.picks[current.agentId],
+        ...s.picks[key],
       },
     },
   }))
@@ -137,9 +147,10 @@ export function adoptedPrepared(sessionId: string): void {
  * A summary of a prepared session, which the host sends to this window alone: the one it holds,
  * changed, or the one that replaced it after the agent's settings changed.
  */
-export function receivePrepared(summary: SessionSummary): void {
+export function receivePrepared(summary: SessionSummary, hostId: string | null): void {
   const current = useAgentOptionsStore.getState().prepared
-  if (!current || current.agentId !== summary.agentId || summary.status !== 'ready') return
+  if (!current || current.hostId !== hostId || current.agentId !== summary.agentId) return
+  if (summary.status !== 'ready') return
   const held = current.summary
   if (
     held &&
@@ -165,11 +176,17 @@ export function preparedRemoved(sessionId: string): boolean {
 }
 
 /** Sets an option on the prepared session, showing it at once; it stays a pick until it opens. */
-export function setOption(agentId: AgentId, optionId: string, value: string | boolean): void {
-  pickOption(agentId, optionId, value)
-  const summary = useAgentOptionsStore.getState().prepared?.summary
-  if (!summary || summary.agentId !== agentId) return
-  const key = setKey(agentId, optionId)
+export function setOption(
+  hostId: string | null,
+  agentId: AgentId,
+  optionId: string,
+  value: string | boolean,
+): void {
+  pickOption(hostId, agentId, optionId, value)
+  const { prepared } = useAgentOptionsStore.getState()
+  const summary = prepared?.summary
+  if (!summary || prepared.hostId !== hostId || summary.agentId !== agentId) return
+  const key = setKey(hostId, agentId, optionId)
   const seq = ++nextSet
   latestSet.set(key, seq)
   const setting = host('sessions.setConfigOption', { sessionId: summary.id, optionId, value })
@@ -182,10 +199,10 @@ export function setOption(agentId: AgentId, optionId: string, value: string | bo
         console.warn(`Could not set ${optionId} on the prepared session: ${message}`)
         // A later answer owns the option now; only this one's refusal still matters.
         if (latestSet.get(key) !== seq) return
-        const picks = useAgentOptionsStore.getState().picks[agentId]
+        const picks = picksOf(useAgentOptionsStore.getState(), hostId, agentId)
         if (picks?.[optionId] !== value) return
         // Take the unapplied value back out, so the row shows the value the agent kept.
-        settlePick(agentId, optionId, value)
+        settlePick(hostId, agentId, optionId, value)
         refused.set(key, message)
       },
     )
@@ -195,7 +212,7 @@ export function setOption(agentId: AgentId, optionId: string, value: string | bo
         latestSet.get(key) === seq &&
         useAgentOptionsStore.getState().prepared?.summary?.id === summary.id
       ) {
-        settlePick(agentId, optionId, value)
+        settlePick(hostId, agentId, optionId, value)
       }
     })
   sets.add(setting)
@@ -205,9 +222,9 @@ export function setOption(agentId: AgentId, optionId: string, value: string | bo
  * Waits for the options being set, so the first message goes with them. Rejects with the agent's
  * reasons when it refused a value, so the send does not go on without one the user chose.
  */
-export async function settleOptions(agentId?: AgentId): Promise<void> {
+export async function settleOptions(hostId: string | null, agentId: AgentId): Promise<void> {
   await Promise.allSettled([...sets])
-  const prefix = agentId === undefined ? '' : `${agentId}\0`
+  const prefix = `${agentKey(hostId, agentId)}\0`
   const reasons = [...refused]
     .filter(([key]) => key.startsWith(prefix))
     .map(([, message]) => message)
@@ -251,19 +268,22 @@ export function noteActivity(): void {
   }
 }
 
-/** Opening the agent menu: a stale prepared session is replaced, and the other agents read again. */
-export function refreshOnMenu(runningAgents: readonly AgentId[]): void {
+/**
+ * Opening the agent menu of the host named: a stale prepared session is replaced, and the other
+ * agents of that host read again.
+ */
+export function refreshOnMenu(hostId: string | null, runningAgents: readonly AgentId[]): void {
   noteActivity()
   const current = useAgentOptionsStore.getState().prepared
   const openedAt = current?.summary?.prepared?.openedAt
   if (target && current && !current.opening && openedAt && Date.now() - openedAt > STALE_MS) {
     void prepare(target, true)
   }
+  const folder = target?.hostId === hostId ? (target?.projectPath ?? null) : null
   for (const agentId of runningAgents) {
-    if (agentId === target?.agentId) continue
-    host('agents.readOptions', { agentId, projectPath: target?.projectPath ?? null }).catch(
-      (error: unknown) =>
-        console.warn(`Could not read ${agentId}'s options: ${errorMessage(error)}`),
+    if (target?.hostId === hostId && agentId === target.agentId) continue
+    hostAt(hostId, 'agents.readOptions', { agentId, projectPath: folder }).catch((error: unknown) =>
+      console.warn(`Could not read ${agentId}'s options: ${errorMessage(error)}`),
     )
   }
 }
@@ -271,8 +291,7 @@ export function refreshOnMenu(runningAgents: readonly AgentId[]): void {
 /** The host came back: what it held went with it, so New session in front prepares again. */
 export function hostRestarted(hostId: string | null = null): void {
   // Only the host New session's folder is on lost the prepared session.
-  const on = target?.projectPath ? hostOfPath(target.projectPath) : null
-  if (on !== hostId) return
+  if ((target?.hostId ?? null) !== hostId) return
   keepDraftOptions(useAgentOptionsStore.getState().prepared)
   setPrepared(null)
   discarded.clear()
@@ -284,11 +303,12 @@ export function retryPrepare(): void {
   if (target) void prepare(target, true)
 }
 
-const setFirstRead = (agentId: AgentId, read: FirstRead | null): void =>
+const setFirstRead = (hostId: string | null, agentId: AgentId, read: FirstRead | null): void =>
   useAgentOptionsStore.setState((s) => {
     const firstReads = { ...s.firstReads }
-    if (read) firstReads[agentId] = read
-    else delete firstReads[agentId]
+    const key = agentKey(hostId, agentId)
+    if (read) firstReads[key] = read
+    else delete firstReads[key]
     return { firstReads }
   })
 
@@ -298,18 +318,23 @@ const setFirstRead = (agentId: AgentId, read: FirstRead | null): void =>
  * modes before it starts: once per agent, and after a failure only on a retry. The options reach
  * the cache as any the host sees do.
  */
-export async function readFirstOptions(agentId: AgentId, retry = false): Promise<void> {
-  const { loaded, byId, firstReads } = useAgentOptionsStore.getState()
-  const current = firstReads[agentId]
-  const known = byId[agentId] && !byId[agentId].provisional
-  if (!loaded || known || current?.reading || (current && !retry)) return
-  setFirstRead(agentId, { reading: true, error: null })
+export async function readFirstOptions(
+  hostId: string | null,
+  agentId: AgentId,
+  retry = false,
+): Promise<void> {
+  const state = useAgentOptionsStore.getState()
+  const current = state.firstReads[agentKey(hostId, agentId)]
+  const cached = optionsOn(state, hostId)[agentId]
+  const known = cached && !cached.provisional
+  if (!optionsLoaded(state, hostId) || known || current?.reading || (current && !retry)) return
+  setFirstRead(hostId, agentId, { reading: true, error: null })
   try {
-    await host('agents.readFirstOptions', { agentId })
+    await hostAt(hostId, 'agents.readFirstOptions', { agentId })
     // An agent that turned out to need signing in read nothing, so it reads once signed in.
-    const signIn = useAgentsStore.getState().byId[agentId]?.signIn === 'required'
-    setFirstRead(agentId, signIn ? null : { reading: false, error: null })
+    const signIn = agentsOn(useAgentsStore.getState(), hostId).byId[agentId]?.signIn === 'required'
+    setFirstRead(hostId, agentId, signIn ? null : { reading: false, error: null })
   } catch (error) {
-    setFirstRead(agentId, { reading: false, error: errorMessage(error) })
+    setFirstRead(hostId, agentId, { reading: false, error: errorMessage(error) })
   }
 }

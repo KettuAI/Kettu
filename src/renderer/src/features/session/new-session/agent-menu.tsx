@@ -39,8 +39,11 @@ import { LIMIT_TEXT, limitLevel, type LimitLevel } from '@renderer/lib/plan-limi
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
+  agentKey,
   optionsLoaded,
   optionsOn,
+  picksOf,
+  preparedFor,
   useAgentOptionsStore,
   type OptionValues,
 } from '@renderer/stores/agent-options'
@@ -121,8 +124,10 @@ export function AgentMenu({
   const prepared = useAgentOptionsStore((s) => s.prepared)
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<AgentId | null>(agentId)
-  const shownPrepared = shown && prepared?.agentId === shown ? prepared : null
-  const firstRead = useAgentOptionsStore((s) => (shown ? s.firstReads[shown] : undefined))
+  const shownPrepared = shown ? preparedFor({ prepared }, hostId, shown) : null
+  const firstRead = useAgentOptionsStore((s) =>
+    shown ? s.firstReads[agentKey(hostId, shown)] : undefined,
+  )
   const [query, setQuery] = useState('')
   // The agent whose older models the list shows.
   const [expanded, setExpanded] = useState<AgentId | null>(null)
@@ -135,13 +140,13 @@ export function AgentMenu({
     const map = new Map<AgentId, ConfigOption[]>()
     for (const status of statuses) {
       const entry = entries[status.id]
-      const live = prepared?.agentId === status.id ? prepared.summary?.prepared : undefined
-      const own = values && status.id === agentId ? values : picks[status.id]
+      const live = preparedFor({ prepared }, hostId, status.id)?.summary?.prepared
+      const own = values && status.id === agentId ? values : picksOf({ picks }, hostId, status.id)
       if (live) map.set(status.id, preparedConfig(live.config, entry?.levels ?? {}, own))
       else if (entry) map.set(status.id, startConfig(entry, own))
     }
     return map
-  }, [statuses, entries, picks, prepared, values, agentId])
+  }, [statuses, entries, picks, prepared, values, agentId, hostId])
   const agents: MenuAgent[] = statuses.map((status) => {
     const model = configs.get(status.id)?.find((o) => o.category === 'model')
     return {
@@ -194,7 +199,7 @@ export function AgentMenu({
     // Only this computer's agents are read without a folder.
     if (!open || !folderless || hostId !== null || !shown || !loaded) return
     if (shownNeed === 'sign-in' || shownNeed === 'failed') return
-    void readFirstOptions(shown)
+    void readFirstOptions(hostId, shown)
   }, [open, folderless, hostId, shown, loaded, shownNeed])
 
   const label = (key: string) => {
@@ -224,7 +229,10 @@ export function AgentMenu({
         console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
       )
     }
-    refreshOnMenu(statuses.filter((s) => s.state === 'ready').map((s) => s.id))
+    refreshOnMenu(
+      hostId,
+      statuses.filter((s) => s.state === 'ready').map((s) => s.id),
+    )
   }
 
   // The rail and the pane keep the sizes they had while a search narrows them, so nothing jumps.
@@ -248,7 +256,7 @@ export function AgentMenu({
   // changes are only a look at it until one of its models is chosen.
   const pickOption = (id: AgentId, optionId: string, value: string | boolean) => {
     if (onValues && id === agentId) onValues(optionId, value)
-    else setOption(id, optionId, value)
+    else setOption(hostId, id, optionId, value)
   }
 
   return (
@@ -374,7 +382,7 @@ export function AgentMenu({
                     onRetry={
                       shownPrepared || !shown
                         ? retryPrepare
-                        : () => void readFirstOptions(shown, true)
+                        : () => void readFirstOptions(hostId, shown, true)
                     }
                     searching={searching}
                     expanded={expanded}

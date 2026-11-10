@@ -78,7 +78,7 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       return
     case 'session.summary':
       // A prepared session is New session's alone until its first message.
-      if (event.summary.prepared) receivePrepared(event.summary)
+      if (event.summary.prepared) receivePrepared(event.summary, hostId)
       else useSessionsStore.getState().upsert(event.summary)
       return
     case 'session.removed':
