@@ -48,8 +48,9 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t
  * The prompts waiting for the running turn, tucked behind the composer: the next one in front, the
  * next two peeking above. Pointing at it, or focusing it, fans them out as layers, each further
  * back narrower, fainter and tucked under the one in front, each offering Send now while a turn
- * runs, Edit in the composer and Remove. Past three, scrolling moves the list like a periscope,
- * following the wheel and settling on a whole row. A paused queue says so and offers to go on.
+ * runs, Edit in the composer and Remove. A single message shows these at once, in place of the
+ * count. Past three, scrolling moves the list like a periscope, following the wheel and settling
+ * on a whole row. A paused queue says so and offers to go on.
  */
 export function QueueStack({
   session,
@@ -254,6 +255,7 @@ export function QueueStack({
       role="region"
       className="kettu-queue"
       data-open={open || undefined}
+      data-single={n === 1 || undefined}
       data-scrolling={scrolling || undefined}
       style={{ '--shown': Math.min(n, SHOWN) } as CSSProperties}
       aria-label={t('queue.label', { count: n })}

@@ -4710,11 +4710,14 @@ li[data-row-exit='dust'] > * {
   background: var(--composer-hover-fill);
   color: var(--composer-ink);
 }
+/* A single message has no count to show, so its actions are always there. */
+.kettu-queue[data-single] .kettu-queue__actions,
 .kettu-queue[data-open]:not([data-scrolling])
   .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
   .kettu-queue__actions {
   display: flex;
 }
+.kettu-queue[data-single] .kettu-queue__count,
 .kettu-queue[data-open]:not([data-scrolling])
   .kettu-queue__card:is(:hover, :focus-visible, :focus-within)
   .kettu-queue__count {
