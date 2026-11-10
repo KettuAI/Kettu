@@ -103,7 +103,13 @@ describe('mayUse', () => {
     for (const channel of ['settings:get', 'remote:status', 'agent-host:connect', 'tray:open']) {
       expect(mayUse(eventFrom(contents), channel)).toBe(true)
     }
-    for (const channel of ['settings:update', 'terminal-host:connect', 'app:get-info']) {
+    for (const channel of [
+      'settings:update',
+      'terminal-host:connect',
+      'app:get-info',
+      'remote:discovery-answer',
+      'hosts:pair-discovered',
+    ]) {
       expect(mayUse(eventFrom(contents), channel)).toBe(false)
     }
   })

@@ -20,6 +20,7 @@ import {
   type HostsStatus,
 } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
+import { isRelayHostId } from '@shared/remote/relay'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
@@ -735,6 +736,11 @@ export function registerIpcHandlers({
     const owned = ownCode(event.sender, codeId)
     if (owned !== null) remoteHost.answerPairing(owned, add, add ? deviceName(name) : '')
   })
+  handle('remote:discovery-pending', 0, () => remoteHost.pendingDiscovery)
+  handle('remote:discovery-answer', 3, (_, requestId, add, name) => {
+    if (typeof add !== 'boolean') throw new Error('"remote:discovery-answer" takes whether to add')
+    remoteHost.answerDiscovery(pairingCode(requestId), add, add ? deviceName(name) : '')
+  })
   handle('remote:rename-device', 2, async (_, id, name) =>
     (await remoteHost.renameDevice(deviceIdArg(id), deviceName(name))) ? null : 'not_renamed',
   )
@@ -782,6 +788,17 @@ export function registerIpcHandlers({
     if (!target) return { kind: 'invalid' }
     const model = await computerModel()
     return pairFor(event.sender, (listener) => remoteHost.addSshHost(target, model, listener))
+  })
+  handle('hosts:discover', 0, () => remoteHost.discover())
+  handle('hosts:pair-discovered', 1, async ({ event }, relayId): Promise<HostPairStart> => {
+    if (!isRelayHostId(relayId)) return { kind: 'invalid' }
+    const model = await computerModel()
+    return pairFor(event.sender, (listener) => remoteHost.pairDiscovered(relayId, model, listener))
+  })
+  handle('hosts:pair-match', 2, ({ event }, value, match) => {
+    if (typeof match !== 'boolean') throw new Error('"hosts:pair-match" takes whether they match')
+    const pairId = pairingCode(value)
+    if (pairOwners.get(pairId) === event.sender) remoteHost.matchHostPairing(pairId, match)
   })
   handle('hosts:pair-close', 1, ({ event }, value) => {
     const pairId = pairingCode(value)

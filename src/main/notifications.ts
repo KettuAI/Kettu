@@ -1,5 +1,6 @@
 import { BrowserWindow, Notification } from 'electron'
 import type { HostToMain } from '@shared/host-control'
+import type { DiscoveryRequestEvent } from '@shared/remote/discovery'
 import { ATTENTION_SETTING, attentionTarget, attentionText } from '@shared/attention'
 import type { SettingsFile } from '@shared/settings'
 import { sendCommand } from './events'
@@ -81,6 +82,47 @@ function validAnswer(value: unknown): { requestId: string; optionId: string } | 
     optionId.length <= 200
     ? { requestId, optionId }
     : null
+}
+
+let discovery: { requestId: number; notification: Notification } | null = null
+
+/**
+ * A device of the account asks to be added: an OS notification while no window is focused, whose
+ * click shows the window that asks the owner. It goes once the request ends.
+ */
+export function notifyDiscovery(
+  event: DiscoveryRequestEvent,
+  settings: SettingsFile,
+  show: () => void,
+): void {
+  if (event.request.state !== 'confirm') {
+    if (discovery?.requestId === event.requestId) {
+      discovery.notification.close()
+      discovery = null
+    }
+    return
+  }
+  if (BrowserWindow.getFocusedWindow() || !Notification.isSupported()) return
+  discovery?.notification.close()
+  const notification = new Notification({
+    title: t('notifications.discoveryTitle'),
+    body: t('notifications.discoveryBody', { name: event.request.device.name }),
+    silent: !settings.notifications.sound,
+  })
+  const forget = (): void => {
+    if (discovery?.notification === notification) discovery = null
+  }
+  notification.on('click', () => {
+    forget()
+    show()
+  })
+  notification.on('close', forget)
+  notification.on('failed', (_, error) => {
+    forget()
+    log.warn(`Notification failed: ${error}`)
+  })
+  discovery = { requestId: event.requestId, notification }
+  notification.show()
 }
 
 /** A sample from Settings › Notifications, shown even while a window is focused. */

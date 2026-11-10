@@ -47,7 +47,7 @@ import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
 import { installMenu } from './menu'
 import { isOpenedAtLogin, startMode, syncLoginItem } from './login-item'
-import { notifyAttention } from './notifications'
+import { notifyAttention, notifyDiscovery } from './notifications'
 import { RoutinesAwake } from './power-save'
 import { sessionProxy } from './proxy'
 import { Sharing } from './sharing'
@@ -535,6 +535,11 @@ async function start(): Promise<void> {
     relayUrl,
     pushUrl,
     relay: () => settings.get().remote.relay,
+    discoverable: () => settings.get().remote.discoverable,
+    discoveryChanged: (event) => {
+      broadcast('remote:discovery', event)
+      notifyDiscovery(event, settings.get(), () => void showMainWindow())
+    },
     relayTokenReady: () => relayToken.ready(),
     deviceKey: () => loadDeviceKey(userDataPath, identityCipher),
     devicePlatform: systemReleaseForRun,
@@ -755,6 +760,7 @@ async function start(): Promise<void> {
       remoteHost.directChanged()
       remoteHost.terminalChanged()
       remoteHost.relayChanged()
+      remoteHost.discoverableChanged()
       relayToken.update()
       void remoteHost.setEnabled(next.remote.enabled)
       remoteHost.setHostName(hostName())

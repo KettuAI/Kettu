@@ -87,7 +87,9 @@
     "testTitle": "Kettu",
     "testBody": "通知已开启。Agent 需要你时，会这样提醒你。",
     "allowOnce": "允许一次",
-    "open": "打开"
+    "open": "打开",
+    "discoveryTitle": "有设备请求添加",
+    "discoveryBody": "{{name}} 登录了你的 Kettu 账号，请求添加为这台电脑的设备。"
   },
   "attachments": {
     "hostDown": "Agent 后台进程没有运行，请等它重启后再试。"
