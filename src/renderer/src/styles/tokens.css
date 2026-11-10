@@ -270,6 +270,36 @@
   --brand-figma-violet: #a259ff;
   --brand-figma-blue: #1abcfe;
   --brand-figma-green: #0acf83;
+  --brand-chrome: #4285f4;
+  --brand-gitlab: #fc6d26;
+  --brand-clickhouse: #ffcc01;
+  --brand-clickhouse-tile: #151515;
+  --brand-airtable: #18bfff;
+  --brand-zapier: #ff4f00;
+  --brand-todoist: #e44332;
+  --brand-miro: #050038;
+  --brand-miro-tile: #ffd02f;
+  --brand-webflow: #146ef5;
+  --brand-canva: #00c4cc;
+  --brand-slack: #4a154b;
+  --brand-asana: #f06a6a;
+  --brand-firebase: #dd2c00;
+  --brand-mongodb: #47a248;
+  --brand-discord: #5865f2;
+  /* The Marketplace's tiles for what has no mark of its own: a white glyph on one of these. */
+  --tile-ink: #ffffff;
+  --tile-pdf: #e5484d;
+  --tile-word: #2b579a;
+  --tile-excel: #217346;
+  --tile-powerpoint: #d24726;
+  --tile-teal: #14b8a6;
+  --tile-violet: #8b5cf6;
+  --tile-emerald: #059669;
+  --tile-slate: #64748b;
+  --tile-cyan: #06b6d4;
+  --tile-sky: #0ea5e9;
+  --tile-amber: #f59e0b;
+  --tile-pink: #ec4899;
 
   /* Artifact kinds: each one's color, as file type icons carry it, and its tint, used only on the
      kind's icon and on the ground of its tile and thumbnail. */

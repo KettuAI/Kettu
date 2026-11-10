@@ -32,7 +32,6 @@ import { useMarketplaceStore } from '@renderer/stores/marketplace'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installServer, setServerOn } from './actions'
-import { ServerTile } from './brand-marks'
 import { ConnectButton, ConnectionControls } from './connect'
 import { AgentsDialog, KeysDialog, UninstallDialog } from './dialogs'
 import { useChoosableAgents, useConnectFlow, useConnectionText, useInstalling } from './hooks'
@@ -51,6 +50,8 @@ import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { PluginListing } from './plugins'
 import { AddButton, ItemRow, OfficialBadge } from './rows'
 import { SkillListing } from './skills'
+import { serverSubject } from './tile-art'
+import { ItemTile } from './tiles'
 
 /** Who publishes it: the catalog's maker, the user for a server added by hand, else unknown. */
 function publisherOf(listing: Listing): string | null {
@@ -103,7 +104,7 @@ function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: 
   return (
     <ListingFrame back={back} rise>
       <header className="k-mkt-head">
-        <ServerTile brand={listing.brand} name={listing.title} big />
+        <ItemTile subject={serverSubject(listing)} size="big" />
         <span className="k-mkt-head__title">
           <span className="k-mkt-head__name">
             <h1>{listing.title}</h1>
@@ -177,7 +178,7 @@ function RelatedRow({ server, tab }: { server: CatalogServer; tab: MarketplaceTa
   return (
     <ItemRow
       title={server.title}
-      brand={server.brand}
+      subject={serverSubject(server)}
       official={server.official}
       line={server.description || null}
       onOpen={open}

@@ -65,6 +65,7 @@ import {
   SkeletonSection,
 } from './rows'
 import { SkillRow } from './skills'
+import { pluginSubject, serverSubject, skillSubject, type TileSubject } from './tile-art'
 
 const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'installed']
 
@@ -86,9 +87,9 @@ const featuredRank = (name: string): number => {
 }
 
 type Entry =
-  | { kind: 'mcp'; key: string; title: string; brand: string | null; server: CatalogServer }
-  | { kind: 'plugin'; key: string; title: string; brand: string | null; plugin: CatalogPlugin }
-  | { kind: 'skill'; key: string; title: string; brand: string | null; skill: CatalogSkill }
+  | { kind: 'mcp'; key: string; title: string; subject: TileSubject; server: CatalogServer }
+  | { kind: 'plugin'; key: string; title: string; subject: TileSubject; plugin: CatalogPlugin }
+  | { kind: 'skill'; key: string; title: string; subject: TileSubject; skill: CatalogSkill }
 
 interface Section {
   id: string
@@ -103,21 +104,21 @@ const mcpEntry = (server: CatalogServer): Entry => ({
   kind: 'mcp',
   key: itemKey({ kind: 'mcp', id: server.id }),
   title: server.title,
-  brand: server.brand,
+  subject: serverSubject(server),
   server,
 })
 const pluginEntry = (plugin: CatalogPlugin): Entry => ({
   kind: 'plugin',
   key: itemKey({ kind: 'plugin', harness: plugin.harness, id: plugin.id }),
   title: plugin.title,
-  brand: plugin.name,
+  subject: pluginSubject(plugin),
   plugin,
 })
 const skillEntry = (skill: CatalogSkill): Entry => ({
   kind: 'skill',
   key: itemKey({ kind: 'skill', id: skill.id }),
   title: displayTitle(skill.name),
-  brand: null,
+  subject: skillSubject(skill.name),
   skill,
 })
 
@@ -547,7 +548,7 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
   return (
     <ItemRow
       title={server.title}
-      brand={server.brand}
+      subject={serverSubject(server)}
       official={server.official}
       tag={showKind ? <KindTag kind="mcp" /> : undefined}
       line={server.description || null}

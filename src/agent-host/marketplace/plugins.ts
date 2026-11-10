@@ -9,6 +9,7 @@ import type {
   MarketPlugins,
   PluginDetails,
   PluginHarness,
+  PluginLogo,
   PluginMarketplace,
   PluginScope,
 } from '@shared/marketplace'
@@ -20,6 +21,8 @@ import type { Env } from '../find-command'
 import { JsonFile, type LogFn } from '../storage'
 import * as claude from './claude-plugins'
 import * as codex from './codex-plugins'
+import type { PluginLogoPaths } from './codex-plugins'
+import { readLogo } from './plugin-logo'
 
 const HOUR_MS = 60 * 60_000
 
@@ -31,6 +34,8 @@ interface AgentPlugins {
   marketplaces: PluginMarketplace[]
   /** Codex's marketplace file for each plugin, by id. */
   paths: Record<string, string>
+  /** The logo files of Codex's plugins, by id. */
+  logos: Record<string, PluginLogoPaths>
 }
 
 export interface PluginsFile {
@@ -54,6 +59,7 @@ export function parsePluginsFile(data: Record<string, unknown>): PluginsFile | s
       Array.isArray(entry.installed) &&
       Array.isArray(entry.marketplaces) &&
       isRecord(entry.paths) &&
+      isRecord(entry.logos) &&
       entry.catalog.every((item) => isRecord(item) && typeof item.id === 'string') &&
       entry.installed.every((item) => isRecord(item) && typeof item.id === 'string')
     ) {
@@ -134,6 +140,20 @@ export class MarketPluginsService {
       out.marketplaces.push(...entry.marketplaces)
     })
     return out
+  }
+
+  /** A plugin's own logo, from the files its package ships, as any agent's kept list names them. */
+  async logo(id: string): Promise<PluginLogo> {
+    const kept = await this.load()
+    const paths = Object.values(kept.agents)
+      .map((entry) => entry.logos[id])
+      .find((found) => found !== undefined)
+    if (!paths) return { light: null, dark: null }
+    const [light, dark] = await Promise.all([
+      readLogo(paths.light),
+      paths.dark ? readLogo(paths.dark) : null,
+    ])
+    return { light, dark }
   }
 
   async details(agentId: AgentId, id: string): Promise<PluginDetails> {
@@ -280,7 +300,7 @@ export class MarketPluginsService {
     const harness = this.harness(agentId)
     const list =
       harness === 'claude-code'
-        ? { ...(await claude.listPlugins(await this.cli(agentId))), paths: {} }
+        ? { ...(await claude.listPlugins(await this.cli(agentId))), paths: {}, logos: {} }
         : await codex.listCodexPlugins(await this.deps.appServer(agentId), agentId)
     const entry: AgentPlugins = { at: this.now(), ...list }
     const kept = await this.load()

@@ -149,8 +149,6 @@
   "installed": {
     "builtIn": "Built in",
     "kept": "MCP servers",
-    "emptyTitle": "Nothing installed yet",
-    "emptyText": "Install servers from All, or add your own with Add.",
     "noMatch": "Nothing installed matches “{{query}}”.",
     "off": "Off",
     "forAgents_one": "For {{count}} agent",
@@ -163,9 +161,12 @@
     "removeMarketplace": "Remove {{name}}",
     "skills": "Skills",
     "noSkills": "Kettu keeps no skills yet. Install one from Skills.",
-    "ownSkills": "Each agent’s own skills",
-    "ownSkillsNote": "The skills each agent keeps itself. Kettu shows them; change them in the agent.",
-    "fromPlugin": "from {{plugin}}"
+    "noServers": "Kettu keeps no MCP servers yet. Install one from MCP servers.",
+    "own": "From your agents",
+    "ownNote": "The skills and MCP servers each agent keeps itself. Kettu shows them; change them in the agent.",
+    "mcpConfig": "MCP configuration",
+    "offIn": "Off in {{agents}}",
+    "notCreated": "{{path}} · not created yet"
   },
   "kettu": {
     "note": "Artifacts, sessions and the browser reach every agent through Kettu’s own server.",
@@ -179,15 +180,17 @@
     "readFailed": "Couldn’t read the MCP servers",
     "agent": {
       "switch": "Kettu’s tools in {{name}}",
-      "on": "Adds these tools to its sessions.",
-      "off": "Its sessions start without these tools.",
       "takesNone": "{{name}} takes no MCP servers over HTTP.",
       "nextStart": "Takes effect from {{name}}’s next start."
-    }
+    },
+    "agents_one": "{{count}} agent",
+    "agents_other": "{{count}} agents",
+    "agentsSome_one": "{{on}} of {{count}} agent",
+    "agentsSome_other": "{{on}} of {{count}} agents",
+    "agentsTitle": "Kettu’s tools in each agent",
+    "agentsLabel": "Choose which agents get Kettu’s tools"
   },
   "own": {
-    "title": "In each agent’s own configuration",
-    "note": "Each agent also connects to the servers it keeps itself. Kettu shows where; change them in the agent.",
     "withCommand": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project.",
     "withCommandFrom": "Its own servers too, from {{path}}. Type {{command}} in a session to see them, or add {{file}} to a project.",
     "withCommandMissing": "Its own servers too. Type {{command}} in a session to see them, or add {{file}} to a project. {{path}} is not created yet.",

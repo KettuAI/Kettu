@@ -31,6 +31,7 @@ import type {
   MarketSkill,
   MarketSkills,
   PluginDetails,
+  PluginLogo,
   PluginMarketplace,
   PluginScope,
   SkillSource,
@@ -567,6 +568,7 @@ export interface HostContract {
   // adds Claude's official marketplace to an agent that has none, as Claude Code does on first start.
   'market.plugins': { params: { refresh?: boolean }; result: MarketPlugins }
   'market.pluginDetails': { params: { agentId: AgentId; pluginId: string }; result: PluginDetails }
+  'market.pluginLogo': { params: { pluginId: string }; result: PluginLogo }
   // Installs, removes or switches a plugin through the agent's own harness, in its configuration.
   'market.installPlugin': {
     params: { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string }
@@ -1051,6 +1053,7 @@ export const HOST_METHODS = [
   'market.connections',
   'market.plugins',
   'market.pluginDetails',
+  'market.pluginLogo',
   'market.installPlugin',
   'market.uninstallPlugin',
   'market.setPluginEnabled',

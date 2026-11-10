@@ -16,8 +16,10 @@ import {
   type McpSpec,
   type PluginHarness,
 } from '@shared/marketplace'
+import type { TFunction } from 'i18next'
 import { harnessOf } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
+import { basename } from '@renderer/lib/format'
 import { useMarketplaceStore } from '@renderer/stores/marketplace'
 import { useSettingsStore } from '@renderer/stores/settings'
 
@@ -84,6 +86,22 @@ export function fromKept(server: MarketServer): Listing {
     spec: server.spec,
     source: server.source,
   }
+}
+
+/**
+ * A path with the home folder as `~`, for showing only. The renderer is not told the home folder,
+ * so this knows the usual places of macOS, Linux and Windows.
+ */
+export function homeShort(path: string): string {
+  return path.replace(
+    /^(\/Users\/[^/]+|\/home\/[^/]+|\/root|[A-Za-z]:\\Users\\[^\\]+)(?=[\\/]|$)/,
+    '~',
+  )
+}
+
+/** The folder a file or folder is in, by either separator. */
+export function parentPath(path: string): string {
+  return path.slice(0, Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')))
 }
 
 /** The catalog's entry for a server, from its sections or the last search. */
@@ -326,4 +344,13 @@ const NO_SKILLS: readonly HarnessId[] = ['pi']
 /** Whether Kettu can hand an agent the skills it keeps. */
 export function takesSkills(agentId: AgentId): boolean {
   return !NO_SKILLS.includes(harnessOf(agentId))
+}
+
+/** Where a plugin is installed: every project, or the one project. */
+export function scopeLine(plugin: InstalledPlugin, t: TFunction<'marketplace'>): string {
+  return plugin.scope === 'user'
+    ? t('plugin.scopeUser')
+    : t(plugin.scope === 'local' ? 'plugin.scopeLocalIn' : 'plugin.scopeProjectIn', {
+        project: basename(plugin.projectPath ?? ''),
+      })
 }

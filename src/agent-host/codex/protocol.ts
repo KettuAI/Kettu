@@ -593,6 +593,9 @@ export interface PluginInterface {
   developerName: string | null
   category: string | null
   websiteUrl: string | null
+  /** Absolute paths into the installed plugin package; absent before Codex 0.16x. */
+  logo?: string | null
+  logoDark?: string | null
 }
 
 export interface PluginSummary {

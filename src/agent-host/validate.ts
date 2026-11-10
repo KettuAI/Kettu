@@ -926,6 +926,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { agentId: agentId(o), pluginId: pluginId(o) }
     },
+    'market.pluginLogo': (params) => ({ pluginId: pluginId(fields(params)) }),
     'market.installPlugin': (params) => pluginChange(fields(params), platform),
     'market.uninstallPlugin': (params) => pluginChange(fields(params), platform),
     'market.setPluginEnabled': (params) => {

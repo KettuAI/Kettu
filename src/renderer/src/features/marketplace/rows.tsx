@@ -10,11 +10,12 @@ import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { installServer } from './actions'
-import { ServerTile } from './brand-marks'
 import { ConnectButton } from './connect'
 import { useConnectFlow, useInstalling, useKept } from './hooks'
 import { InstallForm } from './install'
 import { asksFirst, oauthFlow } from './model'
+import type { TileSubject } from './tile-art'
+import { ItemTile } from './tiles'
 
 /** The official badge, for what the maker of the service or the harness publishes. */
 export function OfficialBadge() {
@@ -40,43 +41,63 @@ export function KindTag({ kind, harness }: { kind: ItemKind; harness?: PluginHar
   )
 }
 
-/** A row: its tile, name and line open its listing; `end` sits at the row's end. */
+/**
+ * A row: its tile, name and line open its listing, when it has one; `end` sits at the row's end.
+ * `icon` stands in for the item's tile, such as an agent's mark.
+ */
 export function ItemRow({
   title,
-  brand,
-  official,
+  subject,
+  icon,
+  quiet,
+  official = false,
   tag,
   line,
+  lineTitle,
   fresh,
   onOpen,
   end,
 }: {
   title: string
-  brand: string | null
-  official: boolean
+  subject?: TileSubject
+  icon?: ReactNode
+  /** For what an agent keeps itself. */
+  quiet?: boolean
+  official?: boolean
   tag?: ReactNode
   line: string | null
+  /** The line's tooltip when it says more than the line. */
+  lineTitle?: string
   fresh?: boolean
-  onOpen: () => void
-  end: ReactNode
+  onOpen?: () => void
+  end?: ReactNode
 }) {
+  const text = (
+    <>
+      <span className="ui-as-int-row__name">
+        <span className="ui-as-int-row__label" title={title}>
+          {title}
+        </span>
+        {official && <OfficialBadge />}
+        {tag}
+      </span>
+      {line && (
+        <span className="ui-as-int-row__desc" title={lineTitle ?? line}>
+          {line}
+        </span>
+      )}
+    </>
+  )
   return (
     <div className={fresh ? 'ui-as-int-row ui-as-rise' : 'ui-as-int-row'}>
-      <ServerTile brand={brand} name={title} />
-      <button type="button" className="ui-as-int-row__text k-mkt-open" onClick={onOpen}>
-        <span className="ui-as-int-row__name">
-          <span className="ui-as-int-row__label" title={title}>
-            {title}
-          </span>
-          {official && <OfficialBadge />}
-          {tag}
-        </span>
-        {line && (
-          <span className="ui-as-int-row__desc" title={line}>
-            {line}
-          </span>
-        )}
-      </button>
+      {icon ?? (subject && <ItemTile subject={subject} quiet={quiet} />)}
+      {onOpen ? (
+        <button type="button" className="ui-as-int-row__text k-mkt-open" onClick={onOpen}>
+          {text}
+        </button>
+      ) : (
+        <span className="ui-as-int-row__text">{text}</span>
+      )}
       {end}
     </div>
   )
@@ -199,16 +220,18 @@ export function MoreLabel({ names }: { names: string[] }) {
 /** The rows a section folds away, behind their first tiles and names. */
 export function MoreButton({
   items,
+  quiet,
   onClick,
 }: {
-  items: { key: string; title: string; brand: string | null }[]
+  items: { key: string; title: string; subject: TileSubject }[]
+  quiet?: boolean
   onClick: () => void
 }) {
   return (
     <button type="button" className="ui-as-int-more" onClick={onClick}>
       <span className="ui-as-int-more__logos" aria-hidden="true">
         {items.slice(0, 3).map((item) => (
-          <ServerTile key={item.key} brand={item.brand} name={item.title} />
+          <ItemTile key={item.key} subject={item.subject} size="small" quiet={quiet} />
         ))}
       </span>
       <MoreLabel names={items.map((item) => item.title)} />

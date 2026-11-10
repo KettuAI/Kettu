@@ -22,13 +22,14 @@ import { busyKey, useMarketplaceStore } from '@renderer/stores/marketplace'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installSkill, removeSkill, setSkillOn, type AgentChoice } from './actions'
-import { ServerTile } from './brand-marks'
 import { ConfirmDialog, SkillAgentsDialog } from './dialogs'
 import { useBusy, useChoosableAgents, useKeptSkill } from './hooks'
 import { AgentPicker } from './install'
 import { catalogSkill, itemKey } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { AddControl, ItemRow, KindTag, OfficialBadge } from './rows'
+import { skillSubject } from './tile-art'
+import { ItemTile } from './tiles'
 
 export function SkillRow({
   skill,
@@ -48,7 +49,7 @@ export function SkillRow({
   return (
     <ItemRow
       title={displayTitle(skill.name)}
-      brand={null}
+      subject={skillSubject(skill.name)}
       official={skill.official}
       tag={showKind ? <KindTag kind="skill" /> : undefined}
       line={skill.description}
@@ -144,7 +145,7 @@ export function SkillListing({
   return (
     <ListingFrame back={back} rise>
       <header className="k-mkt-head">
-        <ServerTile brand={null} name={name} big />
+        <ItemTile subject={skillSubject(name)} size="big" />
         <span className="k-mkt-head__title">
           <span className="k-mkt-head__name">
             <h1>{name}</h1>

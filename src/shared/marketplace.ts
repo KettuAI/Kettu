@@ -223,6 +223,12 @@ export interface MarketPlugins {
   errors: { agentId: AgentId; message: string }[]
 }
 
+/** A plugin's own logo as data URLs, read from its package on the host; null without one. */
+export interface PluginLogo {
+  light: string | null
+  dark: string | null
+}
+
 /** What a plugin adds, as its harness reports it. */
 export interface PluginDetails {
   id: string
