@@ -110,6 +110,26 @@ export const MULTI_AGENT_HARNESSES: readonly HarnessId[] = ['claude-code', 'code
 export const AUTO_AGENT_HARNESSES: readonly HarnessId[] = ['fake-agent']
 
 /**
+ * The harnesses that run the user's own program, in the order a host's first start adds their
+ * default agents for the ones it finds. The others are installed by Kettu, so none is found.
+ */
+export const USER_PROGRAM_HARNESSES: readonly HarnessId[] = [
+  'claude-code',
+  'codex',
+  'opencode',
+  'pi',
+  'cursor',
+  'kimi',
+  'amp',
+  'goose',
+  'kilo',
+  'omp',
+  'hermes',
+  'muse',
+  'codewhale',
+]
+
+/**
  * An agent: the default one is its harness's own id, so sessions and settings from before agents
  * keep theirs; an added one is `<harness>~<slug>`.
  */

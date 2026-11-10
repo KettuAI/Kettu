@@ -331,6 +331,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
       startModes: DEFAULT_SETTINGS.startModes,
       usage: { fromComputer: false },
       sessionTitles: true,
+      initialSetupDone: true,
       defaultAgent: null,
       computerUse: DEFAULT_SETTINGS.computerUse,
     },

@@ -112,6 +112,8 @@ export interface HostsOptions {
   marketKeys(): MarketKeysPush
   /** The agent host asks to keep or clear a server's OAuth sign-in, checked against the settings. */
   marketOAuth?(serverId: unknown, state: unknown): void
+  /** The agent host's first start found the programs of these harnesses; the daemon adds their agents. */
+  firstStart?(harnesses: unknown): void
   /** The host's X25519 private key, in base64, for the remote host alone. */
   privateKey: string
   /** Replaces the host's identity with a new key, as resetting remote access does; its private key. */
@@ -871,6 +873,9 @@ export class Hosts {
         break
       case 'host:market-oauth':
         this.options.marketOAuth?.(message.serverId, message.state)
+        break
+      case 'host:first-start':
+        this.options.firstStart?.(message.harnesses)
         break
       case 'host:sessions-ended':
         if (isStringList(message.sessionIds)) {

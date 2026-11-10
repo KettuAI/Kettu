@@ -5,9 +5,15 @@ import type { DirectAddress } from './remote/protocol'
 import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId, HarnessId } from './thread'
 
+/** Whether a host's first start has run, so it runs once. */
+export interface InitialSetup {
+  done: boolean
+}
+
 export interface SettingsFile {
   version: 1
   agentRegistrationVersion?: 1
+  initialSetup: InitialSetup
   general: {
     language: LanguageSetting
     defaultAgent: AgentId | null // null: pick one on the New session screen each time
@@ -163,6 +169,7 @@ export type ProxySettings =
 export const DEFAULT_SETTINGS: SettingsFile = {
   version: 1,
   agentRegistrationVersion: 1,
+  initialSetup: { done: false },
   general: {
     language: 'system',
     defaultAgent: null,
@@ -268,6 +275,7 @@ export interface SettingsPatch {
 /** The part of the settings the agent host receives. */
 export interface HostSettings {
   locale: Locale // the language of the text the host writes for the user
+  initialSetupDone: boolean // the first start has run, so the host does not offer it again
   agents: SettingsFile['agents']
   addedAgents: AddedAgent[]
   disabledAgents: AgentId[]

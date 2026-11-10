@@ -355,6 +355,7 @@ async function start(): Promise<void> {
     settings: () => hostSettings(settings.get(), systemLocale),
     marketKeys: () => marketKeys.contentsForHost(),
     onMarketOAuth: (serverId, state) => void marketKeys.setOAuth(serverId, state),
+    onFirstStart: (harnesses) => settings.firstStart(harnesses),
     onAttention: (message) => {
       notifyAttention(message, settings.get(), (sessionId, requestId, optionId) =>
         agentHost.answerPermission(sessionId, requestId, optionId),
