@@ -13,7 +13,10 @@ export function DiffBlock({
 }) {
   const { t } = useTranslation('session')
   return (
-    <div className="flex flex-col overflow-hidden rounded-code border border-subtle">
+    <div
+      data-diff-block=""
+      className="flex flex-col overflow-hidden rounded-code border border-subtle"
+    >
       <Clamp maxHeight={480} more={t('tool.showFullDiff')} buttonClassName="mx-2 my-1">
         <Diff
           path={relativePath(diff.path, projectPath)}

@@ -135,6 +135,8 @@ export function useToolCallLabels(): Partial<ToolCallLabels> {
       failedCount: (failed: number) => t('summary.failed', { failed }),
       announce: (name: string, status: ToolCallStatus) =>
         t(`toolCall.announce.${status}`, { name }),
+      copy: (what: string) => t('toolCall.copy', { what: what.toLowerCase() }),
+      copied: t('toolCall.copied'),
     }),
     [t],
   )

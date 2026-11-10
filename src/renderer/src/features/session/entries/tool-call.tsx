@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ThreadEntry } from '@shared/thread'
 import { ToolCallCard, type ToolCallLabels } from '@renderer/components/affect/tool-call-card'
+import { cn } from '@renderer/lib/utils'
 import { isFresh } from '@renderer/stores/threads'
 import { Markdown } from '../markdown'
 import { thoughtTitle, toolLabel } from './helpers'
@@ -56,7 +57,7 @@ export function StepCard({
   const { t } = useTranslation('session')
   // A step that arrived while shown draws its part of a run's timeline in (session.css).
   const [fresh] = useState(() => isFresh(sessionId, entry.id))
-  const [opened, onOpenChange] = useOpenedOnce(status)
+  const [opened, onOpenChange, opening] = useOpenedOnce(status)
   const facts = {
     status,
     startedAt,
@@ -65,7 +66,7 @@ export function StepCard({
     icon,
     labels,
     chevron: 'after' as const,
-    className: fresh ? 'ks-step-new' : undefined,
+    className: cn(fresh && 'ks-step-new', opening && 'ks-step-opening') || undefined,
     onOpenChange,
   }
   if (entry.kind === 'tool') {

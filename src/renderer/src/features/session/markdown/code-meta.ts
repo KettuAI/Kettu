@@ -21,6 +21,12 @@ export function fenceFileName(language: string, meta: string | undefined): strin
   return null
 }
 
+/** The line a fence's first line is, from `startLine=N` in its meta, as Streamdown reads it. */
+export function fenceStartLine(meta: string | undefined): number | undefined {
+  const match = meta ? /\bstartLine=(\d+)/.exec(meta) : null
+  return match ? Number(match[1]) : undefined
+}
+
 /** The fence's language without a file name glued to it. */
 export function fenceLanguage(language: string): string {
   const colon = language.indexOf(':')

@@ -206,9 +206,10 @@
 
 /* Tool calls on affectUI's Tool Call Card and Group, laid out as a timeline like its Agent
    Checkpoints without branches: a run's line over a rail with a dot per step, and each step a
-   30 px row with no card. A long run summary shortens instead of pushing the failed count, time and
-   chevron to the far edge; the thumbnails at a folded row's end give way once it opens, whose
-   details show the pictures. */
+   30 px row with no card until it opens, when it becomes the Tool Call Card's own white card with
+   its details as the card's sections. A long run summary shortens instead of pushing the failed
+   count, time and chevron to the far edge; the thumbnails at a folded row's end give way once it
+   opens, whose details show the pictures. */
 .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__trail,
 .ui-tcc-group[data-open] > .ui-tcc-group__top > .ui-tcc__trail {
   display: none;
@@ -253,31 +254,34 @@
   padding: 2px 0 0;
 }
 
-/* A step: a row with no card. On its own it starts at the column's edge, its hover well a little
-   further out; on a run's rail it starts under the run's tiles. */
+/* A step: a row with no card. On its own its tile starts at the column's edge; on a run's rail
+   under the run's tiles. Its hover well, and its card once open, start 10 px before the tile, at
+   --ks-card-x. */
 .ks-thread .ui-tcc {
+  --ks-card-x: -10px;
+  isolation: isolate;
   border-radius: 0;
   background: none;
   box-shadow: none;
 }
-.ks-thread .ui-tcc > .ui-tcc__top {
-  margin-left: -6px;
+.ks-thread .ui-tcc-group__list > .ui-tcc {
+  --ks-card-x: calc(var(--ks-gutter) - 10px);
 }
-.ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top {
+.ks-thread .ui-tcc > .ui-tcc__top {
   position: relative;
-  margin-left: calc(var(--ks-gutter) - 6px);
+  margin-left: var(--ks-card-x);
 }
 .ks-thread .ui-tcc__head,
 .ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head {
   gap: 8px;
   min-height: 30px;
-  padding: 0 6px;
-  border-radius: 7px;
+  padding: 0 10px;
+  border-radius: 10px;
 }
-.ks-thread .ui-tcc__head:hover,
-.ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head:not([data-bodyless]) {
+.ks-thread .ui-tcc__head:hover {
   background: var(--ui-tcc-wash);
 }
+.ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head,
 .ks-thread .ui-tcc__head[data-bodyless]:hover {
   background: none;
 }
@@ -350,21 +354,192 @@
   opacity: 1;
 }
 
-/* An open step's details, aligned with the tiles; on a run the rail passes beside them. */
-.ks-thread .ui-tcc__sections {
-  gap: 10px;
-  padding: 4px 0 10px;
-  border-top: 0;
+/* An open step is the Tool Call Card's own white card. Its ground lies under the row and the
+   details and starts where the row's hover well does, so the well lifts into the card as the step
+   opens and the card sinks back into the row as it closes. */
+.ks-thread .ui-tcc::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 6px var(--ks-card-x);
+  border-radius: 10px;
+  background: var(--ui-tcc-card);
+  box-shadow: var(--ui-tcc-shadow);
+  opacity: 0;
+  transform: scale(0.985);
+  transform-origin: 50% 0;
+  pointer-events: none;
+  transition:
+    opacity 180ms ease 80ms,
+    transform 260ms var(--ease-out-quint);
 }
-.ks-thread .ui-tcc-group__list > .ui-tcc .ui-tcc__sections {
-  padding-left: var(--ks-gutter);
+.ks-thread .ui-tcc[data-open]::after {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 200ms ease,
+    transform 320ms var(--ease-out-quint);
+}
+
+/* Its details are the card's sections under a hairline, starting at the row's tile, on the card
+   itself with no gray ground: a section's label and white buttons, then its content. */
+.ks-thread .ui-tcc__sections {
+  gap: 12px;
+  margin: 0 0 6px var(--ks-card-x);
+  padding: 10px 14px 14px 10px;
+  border-top: 0.5px solid var(--ui-tcc-line);
+}
+.ks-thread .ui-tcc__section {
+  gap: 4px;
+}
+.ks-thread .ui-tcc__section-head {
+  gap: 6px;
+  min-height: 24px;
+}
+.ks-thread .ui-tcc__copy {
+  width: 24px;
+  height: 24px;
+  & svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+.ks-shell {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.ks-shell pre {
+  margin: 0;
+  overflow-x: auto;
+  color: var(--ui-tcc-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-ligatures: none;
+  line-height: 20px;
+  white-space: pre;
+  scrollbar-width: thin;
+}
+.ks-shell .ks-shell-command {
+  color: var(--ui-tcc-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ks-shell-exit {
+  color: var(--ui-tcc-red);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium);
+  line-height: 16px;
+}
+.ks-shell-none {
+  margin: 0;
+  color: var(--ui-tcc-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+.ks-shell-earlier {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+  border-radius: var(--radius-sm);
+  color: var(--ui-tcc-faint);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-medium);
+  line-height: 20px;
+  outline: none;
+  transition: color var(--duration-fast) ease;
+  & svg {
+    width: 12px;
+    height: 12px;
+  }
+  &:hover {
+    color: var(--ui-tcc-text);
+  }
+  &:focus-visible {
+    outline: 1.5px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+}
+/* Earlier lines unfold above the tail when they are asked for. */
+.ks-fold-in {
+  display: grid;
+  grid-template-rows: 1fr;
+  animation: ks-fold-open 320ms var(--ease-out-quint) both;
+  & > * {
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+@keyframes ks-fold-open {
+  from {
+    grid-template-rows: 0fr;
+    opacity: 0;
+  }
+}
+/* A diff runs edge to edge on the card, which is its ground. */
+.ks-thread .ui-tcc__sections [data-diff-block] {
+  margin: 0 -14px 0 -10px;
+  border: 0;
+  border-radius: 0;
+  & .diff {
+    --diffs-light-bg: var(--ui-tcc-card);
+    --diffs-dark-bg: var(--ui-tcc-card);
+  }
+}
+/* Code in a result has no frame of its own either: no ground, ring or header, the section's Copy
+   standing in for the header's, and its line numbers from the section's edge. */
+.ks-thread .ui-tcc__sections .block-frame {
+  background: none;
+  border-radius: 0;
+  &::after {
+    content: none;
+  }
+  & .block-frame-header {
+    display: none;
+  }
+  & [data-streamdown='code-block-body'] {
+    padding: 0;
+    font-size: 12px;
+    line-height: 20px;
+  }
+  & [data-streamdown='code-block-body'] code > span {
+    padding: 0 0 0 calc(14px + max(18px, var(--code-digits, 2) * 1ch));
+  }
+  & [data-streamdown='code-block-body'] code > span::before {
+    left: 0;
+    color: var(--ui-tcc-faint);
+    text-align: right;
+  }
+  & .block-frame-more {
+    width: auto;
+    height: auto;
+    margin-top: 2px;
+    border-radius: var(--radius-sm);
+    box-shadow: none;
+    color: var(--ui-tcc-faint);
+    font-size: 11.5px;
+    font-weight: var(--font-weight-medium);
+    line-height: 20px;
+    &:hover {
+      background: none;
+      color: var(--ui-tcc-text);
+    }
+  }
+}
+.ks-thread .ui-tcc__sections .markdown > [data-block-frame]:first-child {
+  margin-top: 0;
+}
+.ks-thread .ui-tcc__sections .markdown > [data-block-frame]:last-child {
+  margin-bottom: 0;
 }
 
 /* The rail: a line from each dot to the next, and the dots ringed in the sheet's color so the
    line breaks around them. A failed step's dot is red, a cancelled one gray, and a running one
-   larger in the accent with a soft pulse. */
+   larger in the accent with a soft pulse. The dots hang off the row, whose rise animation makes it
+   their containing block, so they are placed from the row back across its margin. */
 .ks-thread .ui-tcc-group__list > .ui-tcc:not(:last-child)::before,
-.ks-thread .ui-tcc-group__list > .ui-tcc::after,
+.ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::after,
 .ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before {
   content: '';
   position: absolute;
@@ -380,36 +555,33 @@
   background: var(--thread-rail);
   transform-origin: top;
 }
-.ks-thread .ui-tcc-group__list > .ui-tcc::after {
+.ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::after {
   z-index: 2;
   top: 11px;
-  left: calc(var(--ks-rail-x) - 4px);
+  left: calc(var(--ks-rail-x) - 4px - var(--ks-card-x));
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--thread-rail);
   box-shadow: 0 0 0 2px var(--bg-app);
 }
-.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='error']::after {
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='error'] > .ui-tcc__top::after {
   background: var(--ui-tcc-red);
 }
-.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='cancelled']::after {
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='cancelled'] > .ui-tcc__top::after {
   background: var(--ui-tcc-faint);
 }
-.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running']::after,
+.ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::after,
 .ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before {
   top: 10px;
-  left: calc(var(--ks-rail-x) - 5px);
+  left: calc(var(--ks-rail-x) - 5px - var(--ks-card-x));
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background: var(--control-on);
 }
-/* The pulse hangs off the head, which the rise animation turns into its containing block, so it
-   is always placed from the head, back across the head's margin onto the dot. */
 .ks-thread .ui-tcc-group__list > .ui-tcc[data-status='running'] > .ui-tcc__top::before {
   z-index: 1;
-  left: calc(var(--ks-rail-x) - 5px - (var(--ks-gutter) - 6px));
   animation: ks-step-pulse 1.6s var(--ease-out-quint) infinite;
 }
 
@@ -417,11 +589,73 @@
 .ks-thread .ui-tcc-group__list > .ui-tcc:has(+ .ks-step-new)::before {
   animation: ks-step-draw var(--duration-slow) var(--ease-out-quint) both;
 }
-.ks-thread .ui-tcc-group__list > .ks-step-new::after {
+.ks-thread .ui-tcc-group__list > .ks-step-new > .ui-tcc__top::after {
   animation: ks-step-pop var(--duration-slow) var(--ease-out-quint) both;
 }
 .ks-thread .ui-tcc-group__list > .ks-step-new > .ui-tcc__top {
   animation: ks-step-rise var(--duration-slow) var(--ease-out-quint) both;
+}
+
+/* Opening a step or a run: the fold opens in 320 ms while what it holds rises out of a soft blur
+   one after another, as the thread's entrance does (thread-entrance.ts). Closing fades the
+   details first, then folds them. The opening classes are set only when someone opens it. */
+.ks-thread :is(.ui-tcc, .ui-tcc-group) > .ui-tcc__body {
+  transition:
+    grid-template-rows 260ms var(--ease-out-quint) 40ms,
+    opacity 120ms ease;
+}
+.ks-thread :is(.ui-tcc, .ui-tcc-group)[data-open] > .ui-tcc__body {
+  transition: grid-template-rows 320ms var(--ease-out-quint);
+}
+.ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
+.ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > * {
+  animation: ks-rise 320ms var(--ease-out-quint) backwards;
+}
+.ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > * {
+  animation-delay: 40ms;
+  &:nth-child(2) {
+    animation-delay: 60ms;
+  }
+  &:nth-child(3) {
+    animation-delay: 80ms;
+  }
+  &:nth-child(n + 4) {
+    animation-delay: 100ms;
+  }
+}
+/* Steps start 20 ms apart, the last within 160 ms however many there are. */
+.ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > * {
+  &:nth-child(2) {
+    animation-delay: 20ms;
+  }
+  &:nth-child(3) {
+    animation-delay: 40ms;
+  }
+  &:nth-child(4) {
+    animation-delay: 60ms;
+  }
+  &:nth-child(5) {
+    animation-delay: 80ms;
+  }
+  &:nth-child(6) {
+    animation-delay: 100ms;
+  }
+  &:nth-child(7) {
+    animation-delay: 120ms;
+  }
+  &:nth-child(8) {
+    animation-delay: 140ms;
+  }
+  &:nth-child(n + 9) {
+    animation-delay: 160ms;
+  }
+}
+@keyframes ks-rise {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(4px);
+  }
 }
 @keyframes ks-step-draw {
   from {
@@ -460,10 +694,17 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .ks-thread .ui-tcc-group__list > .ui-tcc::before,
-  .ks-thread .ui-tcc-group__list > .ui-tcc::after,
   .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top,
-  .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::before {
+  .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::before,
+  .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::after,
+  .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
+  .ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > *,
+  .ks-fold-in {
     animation: none;
+  }
+  .ks-thread .ui-tcc::after,
+  .ks-thread :is(.ui-tcc, .ui-tcc-group) > .ui-tcc__body {
+    transition: none;
   }
   .ks-thread .ui-tcc[data-status='running'] :is(.ui-tcc__name, .ui-tcc__summary) {
     background: none;
@@ -472,6 +713,17 @@
   }
   .ks-thread .ui-tcc[data-status='running'] .ui-tcc__summary * {
     color: inherit;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
+  & .ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > *,
+  & .ks-fold-in {
+    animation: none;
+  }
+  & .ks-thread .ui-tcc::after,
+  & .ks-thread :is(.ui-tcc, .ui-tcc-group) > .ui-tcc__body {
+    transition: none;
   }
 }
 

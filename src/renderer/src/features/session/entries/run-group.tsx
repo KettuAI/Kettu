@@ -69,7 +69,7 @@ export const RunGroup = memo(function RunGroup({
   )
   useDiffStats(diffs)
   const pictures = useMemo(() => runPictures(entries), [entries])
-  const [opened, onOpenChange] = useOpenedOnce()
+  const [opened, onOpenChange, opening] = useOpenedOnce()
   const card = (entry: ThreadEntry, folded: boolean) => {
     const facts = stepFacts(sessionId, entry)
     if (!facts) return null
@@ -143,7 +143,7 @@ export const RunGroup = memo(function RunGroup({
 
   return (
     <ToolCallGroup
-      className={cn('min-w-0', animation)}
+      className={cn('min-w-0', animation, opening && 'ks-run-opening')}
       label={label}
       runningLabel={label}
       chevron="before"

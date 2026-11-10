@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   type ComponentProps,
+  type CSSProperties,
   type ReactNode,
 } from 'react'
 import { TextWrapIcon } from '@hugeicons/core-free-icons'
@@ -12,7 +13,7 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { CodeBlock, useIsCodeFenceIncomplete, type ExtraProps } from 'streamdown'
 import { BlockAction, BlockCopy, BlockFrame, BlockSpacer } from './block-frame'
-import { fenceFileName, fenceLanguage, foldLines } from './code-meta'
+import { fenceFileName, fenceLanguage, fenceStartLine, foldLines } from './code-meta'
 import { LiveContext } from './live'
 import { SvgBlock } from './svg-block'
 
@@ -91,12 +92,19 @@ export function CodeFrame({
   const [folded, setFolded] = useState(() => !live)
   const lang = fenceLanguage(language)
   const file = fenceFileName(language, meta)
+  const startLine = fenceStartLine(meta)
   // A block still being written shows every line, so it never shrinks under the reader.
   const { shown, hidden } = foldLines(code, folded && !isIncomplete)
   const foldable = !isIncomplete && foldLines(code, true).hidden > 0
   return (
     <BlockFrame
       data-wrap={wrap || undefined}
+      // The number column fits the block's last line number.
+      style={
+        {
+          '--code-digits': String((startLine ?? 1) + code.split('\n').length - 1).length,
+        } as CSSProperties
+      }
       header={
         <>
           {lang && <span className="block-frame-lang">{lang}</span>}
@@ -114,7 +122,13 @@ export function CodeFrame({
         </>
       }
     >
-      <CodeBlock code={shown} language={lang} isIncomplete={isIncomplete} lineNumbers />
+      <CodeBlock
+        code={shown}
+        language={lang}
+        isIncomplete={isIncomplete}
+        lineNumbers
+        startLine={startLine}
+      />
       {foldable && (
         <button
           type="button"

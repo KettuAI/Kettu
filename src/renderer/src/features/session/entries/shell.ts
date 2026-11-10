@@ -7,9 +7,9 @@ import type { ToolEntry } from '@shared/thread'
 export const SHELL_TAIL = 12
 
 /** The output's last lines, and how many come before them. */
-export function shellTail(output: string, all: boolean): { shown: string; earlier: number } {
+export function shellTail(output: string): { shown: string; earlier: number } {
   const lines = output.replace(/\n$/, '').split('\n')
-  if (all || lines.length <= SHELL_TAIL) return { shown: lines.join('\n'), earlier: 0 }
+  if (lines.length <= SHELL_TAIL) return { shown: lines.join('\n'), earlier: 0 }
   return { shown: lines.slice(-SHELL_TAIL).join('\n'), earlier: lines.length - SHELL_TAIL }
 }
 

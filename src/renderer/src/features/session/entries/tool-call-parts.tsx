@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ToolEntry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
+import { ToolCallSection } from '@renderer/components/affect/tool-call-card'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -14,11 +15,16 @@ import { EntryIdContext, SessionIdContext } from '../media/grants'
 import { toolMedia } from '../media/named'
 import { useEntry } from '../use-thread'
 import { commandOutput, toolLabel } from './helpers'
+import { fenceBody, numberedRead } from './read-code'
 import { ShellBlock } from './shell-block'
+import { useToolCallLabels } from './tool-call-model'
 import { ContentBlock, ToolMedia } from './tool-parts'
 import { useDiffStats } from './use-diff-stats'
 
-/** A tool call's details: its command and what it printed, its content and its pictures. */
+/**
+ * A tool call's details, as sections of its step's card: its command and what it printed, its text
+ * result or the file it read, its changes, and its pictures.
+ */
 export const ToolBody = memo(function ToolBody({
   sessionId,
   entryId,
@@ -29,6 +35,7 @@ export const ToolBody = memo(function ToolBody({
   projectPath: string
 }) {
   const { t } = useTranslation('session')
+  const labels = useToolCallLabels()
   const entry = useEntry(sessionId, entryId, 'tool')
   const media = useMemo(() => (entry ? toolMedia(entry) : []), [entry])
   if (!entry) return null
@@ -37,6 +44,7 @@ export const ToolBody = memo(function ToolBody({
   // A command's output shows under it, in the same block, as a terminal prints it.
   const output = command ? commandOutput(entry.content) : null
   const content = output === null ? entry.content : entry.content.slice(1)
+  const path = entry.locations[0]?.path
   return (
     <>
       {command && (
@@ -62,16 +70,42 @@ export const ToolBody = memo(function ToolBody({
           </ContextMenuContent>
         </ContextMenu>
       )}
-      {content.map((c, i) => (
-        <ContentBlock
-          key={i}
-          sessionId={sessionId}
-          entryId={entryId}
-          index={output === null ? i : i + 1}
-          content={c}
-          projectPath={projectPath}
-        />
-      ))}
+      {content.map((c, i) => {
+        const block = (shown: typeof c) => (
+          <ContentBlock
+            key={i}
+            sessionId={sessionId}
+            entryId={entryId}
+            index={output === null ? i : i + 1}
+            content={shown}
+            projectPath={projectPath}
+          />
+        )
+        if (c.type === 'markdown') {
+          const read = entry.toolKind === 'read' ? numberedRead(c.markdown, path) : null
+          const markdown = read ?? c.markdown
+          return (
+            <ToolCallSection
+              key={i}
+              label={t(
+                entry.toolKind === 'read' ? 'toolCall.section.content' : 'toolCall.section.result',
+              )}
+              copy={fenceBody(markdown)}
+              labels={labels}
+            >
+              {block({ ...c, markdown })}
+            </ToolCallSection>
+          )
+        }
+        if (c.type === 'diff') {
+          return (
+            <ToolCallSection key={i} label={t('toolCall.section.changes')} labels={labels}>
+              {block(c)}
+            </ToolCallSection>
+          )
+        }
+        return block(c)
+      })}
       <ToolMedia sessionId={sessionId} entryId={entryId} media={media} />
     </>
   )
