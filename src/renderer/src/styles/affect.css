@@ -359,14 +359,17 @@ li[data-row-exit='dust'] > * {
   padding: 0;
   list-style: none;
 }
-/* A host's title over its projects, as a group's: its mark, name and state. */
+/* A host's title over its projects, as a group's: its mark, name and state; it folds them. */
 .kettu-host-label.ui-as-side__label {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
-.kettu-host-label h3 {
+.kettu-host-label.kettu-side-label {
+  width: 100%;
+}
+.kettu-host-label :is(h3, .kettu-host-label__name) {
   min-width: 0;
   margin: 0;
   overflow: hidden;

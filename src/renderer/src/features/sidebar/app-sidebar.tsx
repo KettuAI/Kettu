@@ -30,6 +30,7 @@ import { cn } from '@renderer/lib/utils'
 import { isAway, shownHosts, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
+  hostGroup,
   hostOfSession,
   inPinnedTree,
   noProjectGroup,
@@ -182,21 +183,33 @@ function HostSection({
       (x) => x.scratch && x.origin !== 'routine' && !x.archivedAt && hostOfSession(x) === hostId,
     ),
   )
+  const key = hostGroup(hostId)
+  const open = useViewStore((s) => !s.collapsedProjects[key])
   return (
     <section aria-label={useHostLabel(hostId)} className="ui-as-side__group">
-      <HostHeading hostId={hostId} />
-      {own.map((project) => (
-        <ProjectGroup
-          key={project.path}
-          project={project}
-          stop={stop}
-          onImport={onImport}
-          hostId={hostId}
-          away={away}
-        />
-      ))}
-      <ProjectGroup project={null} stop={stop} onImport={onImport} hostId={hostId} away={away} />
-      {own.length === 0 && !scratch && <HostEmpty />}
+      <HostHeading hostId={hostId} open={open} stop={stop} onToggle={() => toggleGroup(key)} />
+      {open && (
+        <>
+          {own.map((project) => (
+            <ProjectGroup
+              key={project.path}
+              project={project}
+              stop={stop}
+              onImport={onImport}
+              hostId={hostId}
+              away={away}
+            />
+          ))}
+          <ProjectGroup
+            project={null}
+            stop={stop}
+            onImport={onImport}
+            hostId={hostId}
+            away={away}
+          />
+          {own.length === 0 && !scratch && <HostEmpty />}
+        </>
+      )}
     </section>
   )
 }

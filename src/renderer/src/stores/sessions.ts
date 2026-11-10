@@ -3,7 +3,7 @@ import type { Project, SessionSummary } from '@shared/agent-host'
 import { host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
-import { NO_PROJECT_GROUP, PINNED_GROUP, type MainView } from './view'
+import { NO_PROJECT_GROUP, PINNED_GROUP, THIS_COMPUTER, type MainView } from './view'
 
 interface SessionsStore {
   byId: Record<string, SessionSummary>
@@ -257,6 +257,11 @@ export function noProjectGroup(hostId: string | null): string {
   return hostId === null ? NO_PROJECT_GROUP : `${NO_PROJECT_GROUP}:${hostId}`
 }
 
+/** The key of a host's heading in `collapsedProjects`; no folder's path can take it. */
+export function hostGroup(hostId: string | null): string {
+  return `host:${hostId ?? THIS_COMPUTER}`
+}
+
 /** The list's one Tab stop: a session's row, or a group's header by its key. */
 export type SidebarTabStop = { kind: 'session'; id: string } | { kind: 'group'; key: string }
 
@@ -280,14 +285,18 @@ export function visibleOrder(
     ...(view.collapsedProjects[PINNED_GROUP]
       ? []
       : flattenTree(pinnedTree(byId).filter(shown), expanded)),
-    ...hosts.flatMap((hostId) => [
-      ...projects
-        .filter((p) => hostOfPath(p.path) === hostId && !view.collapsedProjects[p.path])
-        .flatMap((p) => flattenTree(sessionTree(byId, p.path), expanded)),
-      ...(view.collapsedProjects[noProjectGroup(hostId)]
+    ...hosts.flatMap((hostId) =>
+      view.collapsedProjects[hostGroup(hostId)]
         ? []
-        : flattenTree(sessionTree(byId, null, hostId), expanded)),
-    ]),
+        : [
+            ...projects
+              .filter((p) => hostOfPath(p.path) === hostId && !view.collapsedProjects[p.path])
+              .flatMap((p) => flattenTree(sessionTree(byId, p.path), expanded)),
+            ...(view.collapsedProjects[noProjectGroup(hostId)]
+              ? []
+              : flattenTree(sessionTree(byId, null, hostId), expanded)),
+          ],
+    ),
   ]
   // A session Needs you lists is listed in its project as well; the keys visit it once.
   return [...new Set(order)]
@@ -310,6 +319,9 @@ export function sidebarTabStop(
   const shown = (node: SessionNode) => hosts.includes(hostOfSession(node.summary))
   if (pinnedTree(byId).some(shown)) return { kind: 'group', key: PINNED_GROUP }
   for (const hostId of hosts) {
+    if (view.hosts && view.collapsedProjects[hostGroup(hostId)]) {
+      return { kind: 'group', key: hostGroup(hostId) }
+    }
     const project = projects.find(
       (p) => hostOfPath(p.path) === hostId && sessionTree(byId, p.path).length > 0,
     )

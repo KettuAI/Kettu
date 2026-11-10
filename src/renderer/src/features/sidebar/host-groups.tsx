@@ -2,7 +2,7 @@
 // its projects, which says whether it is online.
 
 import { useMemo } from 'react'
-import { Alert02Icon, ComputerIcon, LaptopIcon } from '@hugeicons/core-free-icons'
+import { Alert02Icon, ArrowRight01Icon, ComputerIcon, LaptopIcon } from '@hugeicons/core-free-icons'
 import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
@@ -15,7 +15,13 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostsStore, useOtherHost, type OtherHost } from '@renderer/stores/hosts'
-import { hostOfSession, needsYouTree, useSessionsStore } from '@renderer/stores/sessions'
+import {
+  hostGroup,
+  hostOfSession,
+  needsYouTree,
+  useSessionsStore,
+  type SidebarTabStop,
+} from '@renderer/stores/sessions'
 import { useHostLabel } from './host-label'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
@@ -78,24 +84,51 @@ export function NeedsYouGroup({
   )
 }
 
-/** A host's heading over its projects: its name, and whether it is online and how it is reached. */
-export function HostHeading({ hostId }: { hostId: string | null }) {
+/**
+ * A host's heading over its projects: its name, and whether it is online and how it is reached.
+ * It folds the host's projects.
+ */
+export function HostHeading({
+  hostId,
+  open,
+  stop,
+  onToggle,
+}: {
+  hostId: string | null
+  open: boolean
+  stop: SidebarTabStop | null
+  onToggle: () => void
+}) {
   const host = useOtherHost(hostId)
   const name = useHostLabel(hostId)
   const model = useHostsStore((s) => s.status?.self.model ?? '')
   const laptop = deviceShape({ kind: 'desktop', model }) === 'laptop'
   const state = host ? <HostStateText host={host} /> : null
   return (
-    <div className="ui-as-side__label kettu-host-label">
+    <button
+      type="button"
+      data-sidebar-row=""
+      tabIndex={stop?.kind === 'group' && stop.key === hostGroup(hostId) ? 0 : -1}
+      aria-expanded={open}
+      onClick={onToggle}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowRight' && !open) onToggle()
+        else if (event.key === 'ArrowLeft' && open) onToggle()
+      }}
+      className="ui-as-side__label kettu-host-label kettu-side-label"
+    >
       {hostId === null ? (
         <Glyph icon={laptop ? LaptopIcon : ComputerIcon} size={13} className="shrink-0" />
       ) : (
         <HostIcon platform={host?.platform ?? 'linux'} className="size-[13px] shrink-0" />
       )}
-      <h3>{name}</h3>
+      <span className="kettu-host-label__name">{name}</span>
+      <span className="kettu-side-label__arrow" aria-hidden>
+        <Glyph icon={ArrowRight01Icon} size={12} />
+      </span>
       <span className="min-w-2 flex-1" />
       {state}
-    </div>
+    </button>
   )
 }
 
