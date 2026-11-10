@@ -178,7 +178,7 @@ export async function createSession(
     })
     if (preparedId) adoptedPrepared(summary.id)
     // The host now remembers what carries over; the rest starts afresh next time.
-    if (options) clearPicks(agentId)
+    if (options) clearPicks(projectPath === null ? null : hostOfPath(projectPath), agentId)
     useSessionsStore.getState().upsert(summary)
     // The session shows with its thread and renderer ready, so no skeleton flashes in between.
     await Promise.all([focusSession(summary.id), loadMarkdown().catch(() => {})])

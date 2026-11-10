@@ -55,7 +55,7 @@ import { TurnDots } from '@renderer/features/session/turn-dots'
 import { basename } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
-import { useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
+import { picksOf, useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
 import { useAgentsStore, agentName } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { loadRoutinePage, useRoutinesStore } from '@renderer/stores/routines'
@@ -352,7 +352,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
             const seed =
               agentId === routine.agentId
                 ? optionValues(routine.options)
-                : { ...(useAgentOptionsStore.getState().picks[agentId] ?? {}) }
+                : { ...(picksOf(useAgentOptionsStore.getState(), null, agentId) ?? {}) }
             const modelOption = entry?.config.find((option) => option.category === 'model')
             const next = { ...seed }
             if (modelOption) {
@@ -576,7 +576,7 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
           onChoose={(id, model) => {
             setAgentId(id)
             const entry = useAgentOptionsStore.getState().byId[id]
-            const next = { ...(useAgentOptionsStore.getState().picks[id] ?? {}) }
+            const next = { ...(picksOf(useAgentOptionsStore.getState(), null, id) ?? {}) }
             const modelOption = entry?.config.find((option) => option.category === 'model')
             if (modelOption) {
               if (model === null) delete next[modelOption.id]
@@ -797,7 +797,7 @@ function initialValues(agentId: AgentId | null): OptionValues {
   if (!agentId) return {}
   const store = useAgentOptionsStore.getState()
   const entry = store.byId[agentId]
-  return entry ? startValues(entry, store.picks[agentId]) : {}
+  return entry ? startValues(entry, picksOf(store, null, agentId)) : {}
 }
 
 /** Values for an agent whose options are not known yet; the run uses only known ids. */

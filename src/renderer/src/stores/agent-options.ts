@@ -5,10 +5,16 @@ import { host, hostAt } from '@renderer/lib/host'
 
 export type OptionValues = Record<string, string | boolean>
 
+/** An agent on a host as the maps below key it, since agent ids repeat across hosts. */
+export function agentKey(hostId: string | null, agentId: AgentId): string {
+  return `${hostId ?? ''}\0${agentId}`
+}
+
 /** The window's prepared session: the one New session's first message will use. */
 export interface PreparedState {
-  /** The agent, folder and parent it was asked for. */
+  /** The agent, host, folder and parent it was asked for. */
   key: string
+  hostId: string | null
   agentId: AgentId
   /** Its summary once its agent has answered; null while it opens. */
   summary: SessionSummary | null
@@ -35,10 +41,11 @@ interface AgentOptionsStore {
   hosts: Record<string, OptionsById>
   /** Why the last load failed; New session then starts each agent with its own defaults. */
   error: string | null
-  /** What New session set for each agent and the agent has not answered yet. */
-  picks: Partial<Record<AgentId, OptionValues>>
+  /** What New session set for each agent, by `agentKey`, and the agent has not answered yet. */
+  picks: Partial<Record<string, OptionValues>>
   prepared: PreparedState | null
-  firstReads: Partial<Record<AgentId, FirstRead>>
+  /** By `agentKey`. */
+  firstReads: Partial<Record<string, FirstRead>>
 }
 
 export const useAgentOptionsStore = create<AgentOptionsStore>()(() => ({
@@ -84,7 +91,10 @@ export function forgetHostAgentOptions(hostId: string): void {
     if (!(hostId in s.hosts)) return s
     const hosts = { ...s.hosts }
     delete hosts[hostId]
-    return { hosts }
+    const own = (key: string) => key.startsWith(`${hostId}\0`)
+    const picks = Object.fromEntries(Object.entries(s.picks).filter(([key]) => !own(key)))
+    const firstReads = Object.fromEntries(Object.entries(s.firstReads).filter(([key]) => !own(key)))
+    return { hosts, picks, firstReads }
   })
 }
 
@@ -106,6 +116,25 @@ export function optionsLoaded(
   return hostId === null ? s.loaded : hostId in s.hosts
 }
 
+/** What New session set for the agent on the host named, which the agent has not answered yet. */
+export function picksOf(
+  s: Pick<AgentOptionsStore, 'picks'>,
+  hostId: string | null,
+  agentId: AgentId,
+): OptionValues | undefined {
+  return s.picks[agentKey(hostId, agentId)]
+}
+
+/** The window's prepared session, when it is for the agent on the host named. */
+export function preparedFor(
+  s: Pick<AgentOptionsStore, 'prepared'>,
+  hostId: string | null,
+  agentId: AgentId,
+): PreparedState | null {
+  const { prepared } = s
+  return prepared && prepared.hostId === hostId && prepared.agentId === agentId ? prepared : null
+}
+
 export function receiveAgentOptions(options: AgentOptions, hostId: string | null = null): void {
   useAgentOptionsStore.setState((s) => {
     const own = hostId === null ? s.byId : s.hosts[hostId]
@@ -117,36 +146,50 @@ export function receiveAgentOptions(options: AgentOptions, hostId: string | null
     if (!before || before.startMode === options.startMode) return base
     // A new start mode replaces a mode the draft held, whether picked or kept from a prepared session.
     const modeId = options.config.find((o) => o.category === 'mode')?.id
-    const picks = s.picks[options.agentId]
+    const key = agentKey(hostId, options.agentId)
+    const picks = s.picks[key]
     if (modeId === undefined || picks?.[modeId] === undefined) return base
     const rest = { ...picks }
     delete rest[modeId]
-    return { ...base, picks: { ...s.picks, [options.agentId]: rest } }
+    return { ...base, picks: { ...s.picks, [key]: rest } }
   })
 }
 
-export function pickOption(agentId: AgentId, optionId: string, value: string | boolean): void {
+export function pickOption(
+  hostId: string | null,
+  agentId: AgentId,
+  optionId: string,
+  value: string | boolean,
+): void {
+  const key = agentKey(hostId, agentId)
   useAgentOptionsStore.setState((s) => ({
-    picks: { ...s.picks, [agentId]: { ...s.picks[agentId], [optionId]: value } },
+    picks: { ...s.picks, [key]: { ...s.picks[key], [optionId]: value } },
   }))
 }
 
 /** The agent answered a pick, so its own value shows from now on. */
-export function settlePick(agentId: AgentId, optionId: string, value: string | boolean): void {
+export function settlePick(
+  hostId: string | null,
+  agentId: AgentId,
+  optionId: string,
+  value: string | boolean,
+): void {
+  const key = agentKey(hostId, agentId)
   useAgentOptionsStore.setState((s) => {
-    const picks = s.picks[agentId]
+    const picks = s.picks[key]
     if (picks?.[optionId] !== value) return s
     const rest = { ...picks }
     delete rest[optionId]
-    return { picks: { ...s.picks, [agentId]: rest } }
+    return { picks: { ...s.picks, [key]: rest } }
   })
 }
 
 /** Once a session started with them, the picks are the agent's remembered values. */
-export function clearPicks(agentId: AgentId): void {
+export function clearPicks(hostId: string | null, agentId: AgentId): void {
+  const key = agentKey(hostId, agentId)
   useAgentOptionsStore.setState((s) => {
     const picks = { ...s.picks }
-    delete picks[agentId]
+    delete picks[key]
     return { picks }
   })
 }

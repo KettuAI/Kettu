@@ -36,6 +36,7 @@ const ULTRA_STOPS: [string, string, string] = ['currentColor', 'currentColor', '
  */
 export function ModelMenu({
   agentId,
+  hostId,
   agentName,
   config,
   running = false,
@@ -49,6 +50,8 @@ export function ModelMenu({
   actions,
 }: {
   agentId: AgentId
+  /** The host the agent is on, null for this computer. */
+  hostId: string | null
   agentName: string
   config: readonly ConfigOption[]
   running?: boolean
@@ -76,7 +79,7 @@ export function ModelMenu({
 
   const choices = model?.choices ?? []
   const checked = shownValue(choices, modelValue)
-  const mark = <AgentMark agent={agentId} size={16} />
+  const mark = <AgentMark agent={agentId} hostId={hostId} size={16} />
   const row = (choice: SelectOption['choices'][number], older?: boolean): PickerModel => {
     const rating = modelRating(choice, older)
     return {

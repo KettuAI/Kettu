@@ -13,13 +13,15 @@ import { isMac, isMod } from '@renderer/lib/platform'
 import { selectionPrompt } from '@renderer/features/artifacts/anchors'
 import { SelectionChip } from '@renderer/features/artifacts/selection-chip'
 import { usePane } from '@renderer/features/split/pane-context'
-import { useAgentOptionsStore } from '@renderer/stores/agent-options'
+import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import {
   setPendingSwitch,
   updatePendingSwitch,
   useAgentSwitchStore,
 } from '@renderer/stores/agent-switch'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { hostOfSession } from '@renderer/stores/sessions'
+import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { readFirstOptions } from '@renderer/features/session/new-session/prepared'
 import { startConfig } from '@renderer/features/session/new-session/start-options'
@@ -73,8 +75,14 @@ export function Composer({
   const sessionId = session.id
   // Another agent picked to take the session over with the next message, shown as its own.
   const pending = useAgentSwitchStore((s) => s.pending[sessionId] ?? null)
-  const pendingEntry = useAgentOptionsStore((s) => (pending ? s.byId[pending.agentId] : undefined))
-  const pendingName = useAgentsStore((s) => (pending ? s.byId[pending.agentId]?.name : undefined))
+  // Every agent here is one of the host the session is on.
+  const hostId = hostOfSession(session)
+  const pendingEntry = useAgentOptionsStore((s) =>
+    pending ? optionsOn(s, hostId)[pending.agentId] : undefined,
+  )
+  const pendingName = useAgentsStore((s) =>
+    pending ? agentsOn(s, hostId).byId[pending.agentId]?.name : undefined,
+  )
   const pendingConfig = useMemo(
     () =>
       pending
@@ -89,11 +97,11 @@ export function Composer({
   const pendingKnown = !!pendingEntry && !pendingEntry.provisional
   useEffect(() => {
     // Its modes come with its own defaults, which a session it only resumed did not report.
-    if (pendingAgent && !pendingKnown) void readFirstOptions(pendingAgent)
-  }, [pendingAgent, pendingKnown])
+    if (pendingAgent && !pendingKnown) void readFirstOptions(hostId, pendingAgent)
+  }, [hostId, pendingAgent, pendingKnown])
   const agentName = pendingName ?? ownName
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
-  const agent = useAgentsStore((s) => s.byId[session.agentId])
+  const agent = useAgentsStore((s) => agentsOn(s, hostId).byId[session.agentId])
   const limits = agent?.limits
   const steering = !!agent?.capabilities.steering
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
@@ -216,7 +224,7 @@ export function Composer({
       if (own && modelValue !== null && modelValue !== own.value) void set(own.id, modelValue)
       return
     }
-    const entry = useAgentOptionsStore.getState().byId[agentId]
+    const entry = optionsOn(useAgentOptionsStore.getState(), hostId)[agentId]
     const modelId = entry?.config.find((o) => o.category === 'model')?.id
     setPendingSwitch(sessionId, {
       agentId,
@@ -419,12 +427,14 @@ export function Composer({
               values={pending ? pending.values : valuesOf(session.config)}
               onValues={(optionId, value) => void set(optionId, value)}
               onChoose={chooseAgent}
+              hostId={hostId}
               defaultOpen={choosingAgent}
               onClose={() => setChoosingAgent(false)}
             />
           ) : (
             <ModelMenu
               agentId={session.agentId}
+              hostId={hostId}
               agentName={agent?.name ?? agentName}
               config={config}
               running={running}
@@ -472,19 +482,21 @@ export function Composer({
             )}
             <span className="kettu-tray__group kettu-tray__group--end">
               <CacheButton cache={timed} running={running} used={session.usage?.used ?? 0} />
-              <ContextButton
-                sessionId={sessionId}
-                agentId={session.agentId}
-                idle={!running && !starting}
-                reports={agent?.capabilities.context ?? false}
-                direct={agent?.capabilities.liveContext ?? false}
-                live={running && (agent?.capabilities.liveContext ?? false)}
-                usage={session.usage}
-                context={session.context}
-                limits={limits ?? []}
-                account={agent?.account ?? null}
-                model={modelName}
-              />
+              <AgentMarkHost.Provider value={hostId}>
+                <ContextButton
+                  sessionId={sessionId}
+                  agentId={session.agentId}
+                  idle={!running && !starting}
+                  reports={agent?.capabilities.context ?? false}
+                  direct={agent?.capabilities.liveContext ?? false}
+                  live={running && (agent?.capabilities.liveContext ?? false)}
+                  usage={session.usage}
+                  context={session.context}
+                  limits={limits ?? []}
+                  account={agent?.account ?? null}
+                  model={modelName}
+                />
+              </AgentMarkHost.Provider>
             </span>
           </div>
         }

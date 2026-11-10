@@ -75,7 +75,10 @@ export function AgentPicker({
         console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
       )
     }
-    refreshOnMenu(statuses.filter((s) => s.state === 'ready').map((s) => s.id))
+    refreshOnMenu(
+      hostId,
+      statuses.filter((s) => s.state === 'ready').map((s) => s.id),
+    )
   }
 
   return (
