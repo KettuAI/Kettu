@@ -30,7 +30,9 @@ function queuedAttachments(item: QueuedPrompt): Attachment[] {
   )
 }
 
-const STEP = 28 // how much of an open row shows above the one in front of it
+const TAB = 58 // a card's height as the tab, TUCK of it under the composer
+const ROW = 46 // a card's height as an open row
+const STEP = 34 // how much of an open row shows above the one in front of it
 const PEEK = 6 // how much of a folded card shows above the one in front of it
 const INSET = 12 // each layer back is this much narrower on each side
 const TUCK = 26 // how far the tab runs under the composer, .kettu-queue's negative bottom margin
@@ -46,8 +48,9 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t
  * The prompts waiting for the running turn, tucked behind the composer: the next one in front, the
  * next two peeking above. Pointing at it, or focusing it, fans them out as layers, each further
  * back narrower, fainter and tucked under the one in front, each offering Send now while a turn
- * runs, Edit in the composer and Remove. Past three, scrolling moves the list like a periscope,
- * following the wheel and settling on a whole row. A paused queue says so and offers to go on.
+ * runs, Edit in the composer and Remove. A single message shows these at once, in place of the
+ * count. Past three, scrolling moves the list like a periscope, following the wheel and settling
+ * on a whole row. A paused queue says so and offers to go on.
  */
 export function QueueStack({
   session,
@@ -218,7 +221,7 @@ export function QueueStack({
       // Scrolled past: slides down under the composer
       const d = -pos
       return {
-        y: d * 30,
+        y: d * STEP,
         depth: 0,
         shape: 0,
         content: clamp(1 - d * 1.4, 0, 1),
@@ -252,6 +255,7 @@ export function QueueStack({
       role="region"
       className="kettu-queue"
       data-open={open || undefined}
+      data-single={n === 1 || undefined}
       data-scrolling={scrolling || undefined}
       style={{ '--shown': Math.min(n, SHOWN) } as CSSProperties}
       aria-label={t('queue.label', { count: n })}
@@ -281,17 +285,17 @@ export function QueueStack({
                 transform: `translateY(${p.y}px)`,
                 left: p.depth * INSET,
                 right: p.depth * INSET,
-                height: 48 - 12 * p.shape,
+                height: lerp(TAB, ROW, p.shape),
                 // Centres the text on what shows: above the composer as a tab, above the next row
-                paddingBottom: lerp(TUCK, 48 - 12 - STEP, p.shape),
-                borderRadius: `${12 - 2 * p.shape}px ${12 - 2 * p.shape}px ${10 * p.shape}px ${10 * p.shape}px`,
+                paddingBottom: lerp(TUCK, ROW - STEP, p.shape),
+                borderRadius: `${14 - 2 * p.shape}px ${14 - 2 * p.shape}px ${12 * p.shape}px ${12 * p.shape}px`,
                 opacity: p.alpha,
                 zIndex: p.z,
                 '--c': p.content,
                 '--front': p.front,
                 // The count fades out before it folds, so no clipped digit shows while it narrows
                 '--count': clamp(p.front * 2 - 1, 0, 1),
-                '--mix': `${Math.max(2, 5 - p.depth)}%`,
+                '--mix': `${Math.min(p.depth, 3) * 20}%`,
               } as CSSProperties
             }
             tabIndex={p.content > 0.3 ? 0 : -1}
