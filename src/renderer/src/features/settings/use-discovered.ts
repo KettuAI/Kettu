@@ -10,7 +10,10 @@ const SIGNED_OUT: DiscoveredHosts = { state: 'signed_out' }
  * Signed out, there is nothing to ask.
  */
 export function useDiscoveredHosts(): DiscoveredHosts | null {
-  const hostIds = useHostsStore((s) => s.status?.hosts?.map((h) => h.id).join(' ') ?? '')
+  // A removed host stays listed under its id, and may be found and paired again.
+  const hostIds = useHostsStore(
+    (s) => s.status?.hosts?.map((h) => (h.removed ? `${h.id}-removed` : h.id)).join(' ') ?? '',
+  )
   const account = useAccountStore((s) =>
     s.status?.state === 'signed-in' ? s.status.account.id : (s.status?.state ?? ''),
   )
