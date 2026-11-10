@@ -12,6 +12,12 @@ import type { ChannelMessage } from '@shared/remote/channel'
 import { normalizeDeviceName, isDeviceModel } from '@shared/remote/device'
 import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
 import {
+  DISCOVER_PROLOGUE,
+  deviceDiscovery,
+  type DiscoveredHost,
+  type DiscoveredHosts,
+} from '@shared/remote/discovery'
+import {
   DEVICE_KEEPALIVE,
   Keepalive,
   KEEPALIVE_VERSION,
@@ -33,7 +39,17 @@ import {
 } from '@shared/remote/hosts'
 import type { KeyPair } from '@shared/remote/noise'
 import type { PairingPayload } from '@shared/remote/pairing'
-import { trustedRelay, type HostRelay } from '@shared/remote/relay'
+import {
+  HOSTS_FEATURE,
+  decodeRelayBytes,
+  hostsPath,
+  parseRelayHosts,
+  parseRelayInfo,
+  relayInfoPath,
+  relayList,
+  trustedRelay,
+  type HostRelay,
+} from '@shared/remote/relay'
 import { dialRelay } from '@shared/remote/relay-device'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import {
@@ -108,7 +124,18 @@ export interface RelayClient {
   /** This computer's access token now; null while it is signed in to no Kettu account. */
   token(): string | null
   openSocket(url: string): WebSocket
+  /**
+   * Reads JSON from a relay's URL, with the access token as a bearer token when given; rejects
+   * when the relay cannot be reached. Without it the account's hosts cannot be listed.
+   */
+  fetchJson?(url: string, token?: string): Promise<{ status: number; body: unknown }>
 }
+
+/** A host of the account that may be paired with, and the relays that listed it. */
+type AccountHost = DiscoveredHost & { relays: string[] }
+
+type AccountHosts =
+  { state: 'ok'; hosts: AccountHost[] } | Exclude<DiscoveredHosts, { state: 'ok' }>
 
 export interface HostClientOptions {
   /** The desktop app's own key as a device, separate from its key as a host. */
@@ -793,23 +820,11 @@ class Pairing {
     payload: PairingPayload,
     welcome: Welcome,
   ): Promise<void> {
-    // Its end until the link takes it is the link's to handle, as it reconnects.
-    session.handOver(IGNORED)
-    const host = await this.client.options.hosts.add({
-      publicKey,
-      name: welcome.host.name,
-      platform: welcome.host.platform,
-      version: welcome.host.version,
-      addresses: merged(session.via, welcome.addresses, payload.addresses),
-      deviceName: welcome.device.name,
-      ...((welcome.relay ?? payload.relay) ? { relay: welcome.relay ?? payload.relay } : {}),
+    const status = await keepHost(this.client, session, welcome, publicKey, {
+      addresses: payload.addresses,
+      relay: payload.relay,
     })
-    if (!host) {
-      this.client.options.log('warn', 'A host that welcomed this computer could not be kept')
-      session.close()
-      return this.fail('void')
-    }
-    const status = this.client.adopt(host, session)
+    if (!status) return this.fail('void')
     if (this.done) return
     this.done = true
     this.client.ended(this)
@@ -819,6 +834,182 @@ class Pairing {
   private fail(reason: HostPairingFailure): void {
     if (this.done) return
     this.done = true
+    this.session?.close()
+    this.client.ended(this)
+    this.say({ state: 'failed', reason })
+  }
+
+  private say(state: HostPairingState): void {
+    this.client.options.pairing(this.pairId, state)
+  }
+}
+
+/**
+ * Keeps a host that welcomed this computer after a pairing, as its link's connection; null when
+ * it could not be kept. `paired`: the addresses and relay the pairing knew it by.
+ */
+async function keepHost(
+  client: HostClient,
+  session: HostSession,
+  welcome: Welcome,
+  publicKey: string,
+  paired: { addresses: DirectAddress[]; relay: HostRelay | undefined },
+): Promise<HostStatus | null> {
+  // Its end until the link takes it is the link's to handle, as it reconnects.
+  session.handOver(IGNORED)
+  const relay = welcome.relay ?? paired.relay
+  const host = await client.options.hosts.add({
+    publicKey,
+    name: welcome.host.name,
+    platform: welcome.host.platform,
+    version: welcome.host.version,
+    addresses: merged(session.via, welcome.addresses, paired.addresses),
+    deviceName: welcome.device.name,
+    ...(relay ? { relay } : {}),
+  })
+  if (!host) {
+    client.options.log('warn', 'A host that welcomed this computer could not be kept')
+    session.close()
+    return null
+  }
+  return client.adopt(host, session)
+}
+
+/** Why pairing with a host of the account ended, from the host's closing reason. */
+function discoveryFailure(reason: ClosingReason | null): HostPairingFailure {
+  switch (reason) {
+    case 'rejected':
+    case 'busy':
+    case 'cooling_down':
+    case 'update_client':
+    case 'update_host':
+      return reason
+    case 'remote_off':
+    case 'stopping':
+    case 'unavailable':
+      return 'host_offline'
+    default:
+      return 'void'
+  }
+}
+
+/**
+ * Pairing with a host of the same Kettu account that the relay lists: the IK handshake with the
+ * discovery prologue to the listed key, the code both screens show, and then both the host's
+ * owner and this computer's user have to say yes.
+ */
+class DiscoveryPairing {
+  private readonly aborting = new AbortController()
+  private session: HostSession | null = null
+  private code: string | null = null
+  private matched = false
+  private done = false
+
+  constructor(
+    private readonly client: HostClient,
+    readonly pairId: number,
+  ) {}
+
+  async run(relayId: string, ownKey: string | null, model: string): Promise<void> {
+    const { options } = this.client
+    this.say({ state: 'connecting' })
+    // Listed again, so the key and relays are the relay's now and not a page's.
+    const listed = await this.client.accountHosts(ownKey)
+    if (this.done) return
+    if (listed.state !== 'ok') {
+      return this.fail(listed.state === 'signed_out' ? 'signed_out' : 'unreachable')
+    }
+    const found = listed.hosts.find((host) => host.relayId === relayId)
+    if (!found) return this.fail('host_offline')
+    const hostRelay: HostRelay = { id: relayId, urls: found.relays }
+    const relay = this.client.relayRoute(hostRelay, null)
+    if (typeof relay !== 'function') {
+      return this.fail(relay === 'signed_out' ? 'signed_out' : 'unreachable')
+    }
+    const result = await dial({
+      addresses: [],
+      connect: this.client.connect,
+      relay,
+      start: (transport) =>
+        startDeviceChannel({
+          transport,
+          hostKey: new Uint8Array(Buffer.from(found.publicKey, 'base64')),
+          key: options.key,
+          prologue: DISCOVER_PROLOGUE,
+          hello: null,
+        }),
+      timeoutMs: this.client.timeoutMs,
+      signal: this.aborting.signal,
+    })
+    if (result.kind === 'aborted') return
+    if (this.done) {
+      if (result.kind === 'open') result.channel.close()
+      return
+    }
+    // A host that drops the handshake no longer lets devices find it, or is not signed in.
+    if (result.kind === 'dropped') return this.fail('host_offline')
+    if (result.kind === 'unreachable') {
+      const problem = result.relay
+      if (problem === 'wrong_account' || problem === 'signed_out' || problem === 'host_offline') {
+        return this.fail(problem)
+      }
+      return this.fail('unreachable')
+    }
+    const exchange = await deviceDiscovery(result.channel)
+    if (this.done) return result.channel.close()
+    if (!('code' in exchange)) return this.fail(discoveryFailure(exchange.closing))
+    this.code = exchange.code
+    const session = new HostSession(exchange.channel, result.via, options.log, options.keepalive)
+    this.session = session
+    session.start(
+      {
+        welcomed: (welcome) => void this.added(session, found, welcome),
+        addresses: () => {},
+        renamed: () => {},
+        hostRenamed: () => {},
+        ended: ({ reason }) => this.fail(discoveryFailure(reason)),
+      },
+      null,
+    )
+    session.send(this.client.hello(model))
+    this.say({ state: 'compare', code: exchange.code, matched: false })
+  }
+
+  /** This computer's user saw the same code on both screens, or not, which ends the pairing. */
+  match(match: boolean): void {
+    if (this.done) return
+    if (!match) return this.fail('void')
+    if (!this.session || this.code === null || this.matched) return
+    this.matched = true
+    this.session.send({ type: 'pair-confirm' })
+    this.say({ state: 'compare', code: this.code, matched: true })
+  }
+
+  /** Add host closed: a pairing the host has not added ends, and the host's request with it. */
+  close(): void {
+    if (this.done) return
+    this.done = true
+    this.aborting.abort()
+    if (!this.session?.welcome) this.session?.close()
+    this.client.ended(this)
+  }
+
+  private async added(session: HostSession, found: AccountHost, welcome: Welcome): Promise<void> {
+    const status = await keepHost(this.client, session, welcome, found.publicKey, {
+      addresses: [],
+      relay: { id: found.relayId, urls: found.relays },
+    })
+    if (!status) return this.fail('void')
+    if (this.done) return
+    this.done = true
+    this.client.ended(this)
+    this.say({ state: 'added', host: status })
+  }
+
+  private fail(reason: HostPairingFailure): void {
+    if (this.done) return
+    this.done = true
+    this.aborting.abort()
     this.session?.close()
     this.client.ended(this)
     this.say({ state: 'failed', reason })
@@ -1026,7 +1217,7 @@ export class HostClient {
   readonly installScript: (version: string) => string
   readonly retryDelay: (failures: number) => number
   private readonly links = new Map<string, HostLink>()
-  private readonly pairings = new Map<number, Pairing | SshAdding>()
+  private readonly pairings = new Map<number, Pairing | SshAdding | DiscoveryPairing>()
   private stopped = false
 
   constructor(readonly options: HostClientOptions) {
@@ -1117,6 +1308,98 @@ export class HostClient {
 
   closePairing(pairId: number): void {
     this.pairings.get(pairId)?.close()
+  }
+
+  /**
+   * The hosts of this computer's Kettu account that every relay it knows lists, merged by id;
+   * those it is paired with, and this computer's own host by `ownKey`, left out.
+   */
+  async accountHosts(ownKey: string | null): Promise<AccountHosts> {
+    const client = this.options.relay
+    const fetchJson = client?.fetchJson
+    if (!client || !fetchJson) return { state: 'unavailable' }
+    const token = client.token()
+    if (!token) return { state: 'signed_out' }
+    let regions: Parameters<typeof relayList>[1] = []
+    try {
+      const { status, body } = await fetchJson(`${client.main}${relayInfoPath()}`)
+      const info = status === 200 ? parseRelayInfo(body) : null
+      if (info && !info.features.includes(HOSTS_FEATURE)) return { state: 'unavailable' }
+      if (info) regions = info.regions
+    } catch {
+      // The main relay alone is asked.
+    }
+    const relays = relayList(client.main, regions).map((region) => region.url)
+    const answers = await Promise.all(
+      relays.map(async (url) => {
+        try {
+          const { status, body } = await fetchJson(`${url}${hostsPath()}`, token)
+          if (status === 401) return 'unauthorized' as const
+          return status === 200 ? parseRelayHosts(body) : null
+        } catch {
+          return null
+        }
+      }),
+    )
+    if (!answers.some(Array.isArray)) {
+      return answers.includes('unauthorized') ? { state: 'signed_out' } : { state: 'unavailable' }
+    }
+    const paired = new Set(
+      this.options.hosts
+        .list()
+        .filter((host) => !host.removed)
+        .map((host) => host.publicKey),
+    )
+    const byId = new Map<string, AccountHost>()
+    answers.forEach((answer, i) => {
+      if (!Array.isArray(answer)) return
+      for (const listed of answer) {
+        const kept = byId.get(listed.id)
+        if (kept) {
+          if (!kept.relays.includes(relays[i]!)) kept.relays.push(relays[i]!)
+          continue
+        }
+        const publicKey = Buffer.from(decodeRelayBytes(listed.key)!).toString('base64')
+        if (publicKey === ownKey || paired.has(publicKey)) continue
+        byId.set(listed.id, {
+          relayId: listed.id,
+          publicKey,
+          name: listed.name,
+          platform: listed.platform as DiscoveredHost['platform'],
+          relays: [relays[i]!],
+        })
+      }
+    })
+    return { state: 'ok', hosts: [...byId.values()] }
+  }
+
+  /** The hosts of the account this computer may pair with. */
+  async discover(ownKey: string | null): Promise<DiscoveredHosts> {
+    const listed = await this.accountHosts(ownKey)
+    if (listed.state !== 'ok') return listed
+    return {
+      state: 'ok',
+      hosts: listed.hosts.map(({ relayId, publicKey, name, platform }) => ({
+        relayId,
+        publicKey,
+        name,
+        platform,
+      })),
+    }
+  }
+
+  /** Pairs with a host `discover` listed; its progress goes to `options.pairing` under `pairId`. */
+  pairDiscovered(pairId: number, relayId: string, ownKey: string | null, model: string): void {
+    if (this.stopped || this.pairings.has(pairId)) return
+    const pairing = new DiscoveryPairing(this, pairId)
+    this.pairings.set(pairId, pairing)
+    void pairing.run(relayId, ownKey, model)
+  }
+
+  /** Whether this computer's user saw the same code as the host's; false ends the pairing. */
+  matchPairing(pairId: number, match: boolean): void {
+    const pairing = this.pairings.get(pairId)
+    if (pairing instanceof DiscoveryPairing) pairing.match(match)
   }
 
   /** Runs the setup script on a machine: its run, and what it printed; null once aborted. */

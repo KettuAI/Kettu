@@ -20,7 +20,8 @@ import { importKeyPair } from '@shared/remote/noise'
 import { parseSshTarget } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { PUSH_URL } from '@shared/remote/push'
-import { importRelayKey, relayHostId } from '@shared/remote/relay'
+import type { DiscoveredHosts } from '@shared/remote/discovery'
+import { hostProfile, importRelayKey, isRelayHostId, relayHostId } from '@shared/remote/relay'
 import { RelayHost } from '@shared/remote/relay-host'
 import type { Transport } from '@shared/remote/transport'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
@@ -29,6 +30,7 @@ import type { LogFn } from '../agent-host/storage'
 import { ActivityLog } from './activity'
 import { HostClient } from './client'
 import { DeviceStore } from './devices'
+import { DiscoveryRequests } from './discovery'
 import { DirectListener } from './direct'
 import { HostStore, uniqueAddresses } from './hosts'
 import { LoopbackListener } from './loopback'
@@ -43,10 +45,26 @@ const ADMIN_TIMEOUT_MS = 60_000
 /** How long reading a relay's region list may take. */
 const RELAY_INFO_TIMEOUT_MS = 15_000
 
+/** How long each read of the account's hosts on a relay may take. */
+const RELAY_HOSTS_TIMEOUT_MS = 8_000
+
 async function fetchRelayInfo(url: string): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(RELAY_INFO_TIMEOUT_MS) })
   if (!response.ok) throw new Error(`it answered ${response.status}`)
   return response.json()
+}
+
+/** Reads JSON from a relay, with the access token as a bearer token when given. */
+async function fetchRelayJson(
+  url: string,
+  token?: string,
+): Promise<{ status: number; body: unknown }> {
+  const response = await fetch(url, {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+    signal: AbortSignal.timeout(RELAY_HOSTS_TIMEOUT_MS),
+  })
+  const body: unknown = await response.json().catch(() => null)
+  return { status: response.status, body }
 }
 
 const openSocket = (url: string): WebSocket => new WebSocket(url)
@@ -82,6 +100,8 @@ interface Serving {
   loopback: LoopbackListener | null
   /** The devices' notifications, with the host's key; null without one. */
   notifications: DeviceNotifications | null
+  /** Requests from devices of the account to be added. */
+  discovery: DiscoveryRequests
   /** Sends the first status and every change after it. */
   report(): void
 }
@@ -118,6 +138,8 @@ export function startRemoteHost(
   let pushUrl = PUSH_URL
   let waiting: Record<string, string[]> = {}
   let present: boolean | null = null
+  // Whether devices of the account find this host on the relay, while it is signed in to it.
+  let discoverable = false
   const adminCalls = new Map<number, (answer: AdminAnswer) => void>()
   let nextAdminCall = 1
 
@@ -159,6 +181,9 @@ export function startRemoteHost(
       relay && relayId && relayEnabled
         ? { id: relayId, urls: relay.relays.map((r) => r.url) }
         : null
+    const discovery = new DiscoveryRequests({
+      send: (event) => send({ type: 'remote-host:discovery', event }),
+    })
     const pairing = new PairingCodes({
       hostKey: staticKey.publicKey,
       addresses: () => server.addresses,
@@ -184,6 +209,7 @@ export function startRemoteHost(
       devices,
       activity,
       pairing,
+      discovery,
       host: { name: hostName, platform, version: appVersion },
       uploads,
       openAgentPort: (device) => deps.openAgentPort(device),
@@ -219,12 +245,17 @@ export function startRemoteHost(
             key: relayKey,
             openSocket,
             fetchInfo: fetchRelayInfo,
-            // Each device the relay joins is a connection like a direct one.
+            // Each device the relay joins is a connection like a direct one, which may also ask
+            // to be added as a device of the account.
             accepted: (socket) =>
               void webSocketTransport(socket, true).then(
-                (transport) => server.accept(transport),
+                (transport) => server.accept(transport, 'relay'),
                 () => {},
               ),
+            profile: () =>
+              discovery.on
+                ? hostProfile(staticKey.publicKey, server.options.host.name, platform)
+                : null,
             changed,
             log,
           })
@@ -244,7 +275,15 @@ export function startRemoteHost(
       ready = true
       changed()
     }
-    return { server, direct, relay, loopback, notifications, report }
+    const started: Serving = { server, direct, relay, loopback, notifications, discovery, report }
+    applyDiscovery(started)
+    return started
+  }
+
+  /** Takes discovery requests while discoverable, on the relay and signed in, and says so there. */
+  function applyDiscovery({ discovery, relay }: Serving): void {
+    discovery.setEnabled(discoverable && relay !== null && relayEnabled && relayToken !== null)
+    relay?.profileChanged()
   }
 
   async function stopServing(
@@ -253,6 +292,7 @@ export function startRemoteHost(
   ): Promise<null> {
     if (!current) return null
     current.notifications?.stop()
+    current.discovery.setEnabled(false)
     current.relay?.stop()
     current.direct.stop()
     current.loopback?.stop()
@@ -273,7 +313,16 @@ export function startRemoteHost(
       client: { kind: 'desktop', version: appVersion, platform: device.platform },
       name: () => hostName,
       openMainPort: deps.openMainPort,
-      ...(relayUrl ? { relay: { main: relayUrl, token: () => relayToken, openSocket } } : {}),
+      ...(relayUrl
+        ? {
+            relay: {
+              main: relayUrl,
+              token: () => relayToken,
+              openSocket,
+              fetchJson: fetchRelayJson,
+            },
+          }
+        : {}),
       changed: () => {
         if (ready) send({ type: 'remote-host:hosts', hosts: started.list() })
       },
@@ -295,6 +344,7 @@ export function startRemoteHost(
     if (typeof message.push === 'string') pushUrl = message.push
     waiting = parseWaiting(message.waiting) ?? {}
     if (typeof message.present === 'boolean') present = message.present
+    discoverable = message.discoverable === true
     if (message.relay && typeof message.relay.url === 'string') {
       relayUrl = message.relay.url
       relayEnabled = message.relay.enabled === true
@@ -344,6 +394,14 @@ export function startRemoteHost(
       if (client) return run(client)
       log('warn', 'A message for other hosts arrived while none can be connected')
     })
+  }
+
+  /** This computer's own key as a host while it serves devices, which listing leaves out. */
+  async function ownKey(): Promise<string | null> {
+    const current = await serving.catch(() => null)
+    return current
+      ? Buffer.from(current.server.options.staticKey.publicKey).toString('base64')
+      : null
   }
 
   process.on('unhandledRejection', (reason) => {
@@ -413,15 +471,34 @@ export function startRemoteHost(
         break
       case 'remote-host:relay':
         relayEnabled = message.enabled === true
-        withServing(({ relay, server: s }) => {
-          relay?.setToken(relayEnabled ? relayToken : null)
-          s.options.changed()
+        withServing((current) => {
+          current.relay?.setToken(relayEnabled ? relayToken : null)
+          applyDiscovery(current)
+          current.server.options.changed()
         })
+        break
+      case 'remote-host:discoverable':
+        discoverable = message.enabled === true
+        withServing(applyDiscovery)
+        break
+      case 'remote-host:discovery-answer':
+        if (Number.isSafeInteger(message.requestId)) {
+          withServing(({ discovery }) =>
+            discovery.answer(
+              message.requestId,
+              message.add === true,
+              typeof message.name === 'string' ? message.name : '',
+            ),
+          )
+        }
         break
       case 'remote-host:token': {
         const had = relayToken
         relayToken = typeof message.token === 'string' ? message.token : null
-        withServing(({ relay }) => relay?.setToken(relayEnabled ? relayToken : null))
+        withServing((current) => {
+          current.relay?.setToken(relayEnabled ? relayToken : null)
+          applyDiscovery(current)
+        })
         // Hosts not reached for want of a sign-in are tried now.
         if (!had && relayToken) withRunning(() => client?.resume())
         break
@@ -539,7 +616,10 @@ export function startRemoteHost(
       case 'remote-host:host-name':
         if (typeof message.name === 'string') {
           hostName = message.name
-          withServing(({ server: s }) => s.setHostName(message.name))
+          withServing(({ server: s, relay }) => {
+            s.setHostName(message.name)
+            relay?.profileChanged()
+          })
         }
         break
       case 'remote-host:reset': {
@@ -583,6 +663,38 @@ export function startRemoteHost(
         withClient((c) => c.addSsh(pairId, target, typeof model === 'string' ? model : ''))
         break
       }
+      case 'remote-host:discover': {
+        const { requestId } = message
+        if (!Number.isSafeInteger(requestId)) break
+        const answer = (result: DiscoveredHosts): void =>
+          send({ type: 'remote-host:discovered', requestId, result })
+        const started = withRunning(async () =>
+          answer(client ? await client.discover(await ownKey()) : { state: 'unavailable' }),
+        )
+        if (!started) answer({ state: 'unavailable' })
+        break
+      }
+      case 'remote-host:pair-discovered': {
+        const { pairId, relayId, model } = message
+        if (!Number.isSafeInteger(pairId)) break
+        if (!isRelayHostId(relayId)) {
+          send({
+            type: 'remote-host:host-pairing',
+            pairId,
+            pairing: { state: 'failed', reason: 'host_offline' },
+          })
+          break
+        }
+        withClient(async (c) =>
+          c.pairDiscovered(pairId, relayId, await ownKey(), typeof model === 'string' ? model : ''),
+        )
+        break
+      }
+      case 'remote-host:pair-match':
+        if (Number.isSafeInteger(message.pairId) && typeof message.match === 'boolean') {
+          withClient((c) => c.matchPairing(message.pairId, message.match))
+        }
+        break
       case 'remote-host:pair-host-close':
         if (Number.isSafeInteger(message.pairId)) withClient((c) => c.closePairing(message.pairId))
         break

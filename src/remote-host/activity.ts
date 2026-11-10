@@ -46,6 +46,7 @@ function parseEvent(value: unknown): DeviceActivity | null {
   if (!isTime(at)) return null
   switch (kind) {
     case 'paired':
+      return event.via === 'account' ? { at, kind, via: 'account' } : { at, kind }
     case 'connected':
       return { at, kind }
     case 'renamed': {

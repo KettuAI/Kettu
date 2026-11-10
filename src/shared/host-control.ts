@@ -13,6 +13,7 @@ import type { Platform } from './platform'
 import type { PortError } from './port-rpc'
 import type { DeviceActivity } from './remote/activity'
 import type { NewDevice, PairedDevice, PortDevice } from './remote/device'
+import type { DiscoveredHosts, DiscoveryRequestEvent } from './remote/discovery'
 import type { HostAdminEvent, HostAdminMethod } from './remote/host-admin'
 import type { HostPairingState, HostStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
@@ -391,6 +392,11 @@ export type MainToRemoteHost =
       /** What waits for the user and whether they are at the computer, as last told. */
       waiting?: Record<string, string[]>
       present?: boolean
+      /**
+       * Devices of the same Kettu account find this host on the relay and ask to be added;
+       * `remote-host:discoverable` says when it changes. Absent, as under the daemon, they do not.
+       */
+      discoverable?: boolean
     }
   // The answer to remote-host:open-port: the agent host's port travels in the transfer list, and
   // none comes while the agent host is not running. It answers remote-host:open-terminal-port the
@@ -420,6 +426,16 @@ export type MainToRemoteHost =
     }
   // Use the Kettu relay turned on or off.
   | { type: 'remote-host:relay'; enabled: boolean }
+  // Whether devices of the account find this host on the relay; off ends the open request.
+  | { type: 'remote-host:discoverable'; enabled: boolean }
+  // The owner's answer to a discovery request, with the name to add the device under.
+  | { type: 'remote-host:discovery-answer'; requestId: number; add: boolean; name: string }
+  // Lists the account's hosts this computer may pair with; answered by remote-host:discovered.
+  | { type: 'remote-host:discover'; requestId: number }
+  // Pairs with a host remote-host:discover listed, by its relay id, as remote-host:pair-host does.
+  | { type: 'remote-host:pair-discovered'; pairId: number; relayId: string; model: string }
+  // This computer's user saw the same code on both screens, or not, which ends the pairing.
+  | { type: 'remote-host:pair-match'; pairId: number; match: boolean }
   // A fresh access token of the account this computer is signed in to, or null once signed out,
   // which closes every relay socket. Never logged.
   | { type: 'remote-host:token'; token: string | null }
@@ -545,6 +561,9 @@ export type RemoteHostToMain =
   // desktop app and by remote-host:device-socket under Node.js.
   | { type: 'remote-host:open-device-port'; requestId: number; device: PortDevice }
   | { type: 'remote-host:pairing'; codeId: number; pairing: PairingState }
+  // A device of the account asks to be added, or that request ended.
+  | { type: 'remote-host:discovery'; event: DiscoveryRequestEvent }
+  | { type: 'remote-host:discovered'; requestId: number; result: DiscoveredHosts }
   // The known hosts and their connections, whenever they change.
   | { type: 'remote-host:hosts'; hosts: HostStatus[] }
   | { type: 'remote-host:host-pairing'; pairId: number; pairing: HostPairingState }
