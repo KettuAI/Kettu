@@ -67,10 +67,6 @@
   "stage": {
     "noModels": "Kettu 自己不跑模型",
     "noModelsHint": "它驱动你装的编码 Agent，用你自己的账号。",
-    "greeting": "你好，我是 Kettu",
-    "placeholder": "问点什么，或输入 / 使用命令",
-    "noProject": "无项目",
-    "manageAgents": "管理 Agent…",
     "phone": "iPhone",
     "phoneHint": "会话、通知",
     "browser": "任何浏览器",
@@ -82,27 +78,6 @@
     "encrypted": "端到端加密",
     "thisComputer": "这台电脑",
     "thisComputerHint": "这台电脑 · 你的 Agent 在这里运行",
-    "caption": "Kettu 只转交加密后的会话，读不到内容",
-    "site": {
-      "signIn": "登录 Kettu",
-      "signInHint": "在 {{computer}} 上使用 Kettu 云服务",
-      "email": "you@example.com",
-      "withEmail": "用邮箱继续",
-      "or": "或",
-      "github": "用 GitHub 继续",
-      "google": "用 Google 继续",
-      "apple": "用 Apple 继续",
-      "noPassword": "不用密码。第一次来会创建你的免费账号。",
-      "confirm": "在 {{computer}} 上登录？",
-      "confirmHint": "这台电脑上的 Kettu 会用你的账号使用 Kettu 云服务。",
-      "confirmButton": "登录",
-      "notMe": "不是我",
-      "never": "Kettu 看不到你的密码，浏览器也看不到你的会话。",
-      "full": "这个账号的设备都已登录满了",
-      "fullHint": "登出一台才能在 {{computer}} 上登录，或者升级到 Pro。",
-      "signOut": "登出",
-      "seePro": "了解 Pro",
-      "plans": "Free 和 Pro 只差设备数和存储。"
-    }
+    "caption": "Kettu 只转交加密后的会话，读不到内容"
   }
 }
