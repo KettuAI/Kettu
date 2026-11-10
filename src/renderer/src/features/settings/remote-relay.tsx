@@ -65,6 +65,23 @@ export function RelaySwitch({ label }: { label: string }) {
   )
 }
 
+/** Let devices on the account find this computer and ask to be added. */
+export function DiscoverableSwitch({ label }: { label: string }) {
+  const { useSettingsStore } = useHostScope()
+  const checked = useSettingsStore((s) => s.settings.remote.discoverable)
+  const [apply, error] = useApply()
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSwitch
+        label={label}
+        checked={checked}
+        onChange={(v) => apply({ remote: { discoverable: v } })}
+      />
+    </>
+  )
+}
+
 /** Each relay and how it is doing, while the host signs in to them. */
 export function RelayRegions() {
   const { useRemoteStore } = useHostScope()

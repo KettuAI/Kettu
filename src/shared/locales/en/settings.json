@@ -1200,6 +1200,45 @@
     "chip": {
       "label": "Host {{name}}, {{state}}",
       "tooltip": "{{name}} · {{state}}. Click to open it in Settings."
+    },
+    "account": {
+      "group": "Computers on your account",
+      "description": "Your other computers signed in to the same Kettu account, to connect to with one click.",
+      "keywords": "account discover find computers connect pair code relay",
+      "note": "Connecting shows a code on both computers. Once you check that it matches, add this computer on the other one.",
+      "connect": "Connect",
+      "connectTo": "Connect to {{name}}",
+      "refresh": "Refresh",
+      "or": "or connect with a link or over SSH",
+      "back": "Back",
+      "codeLabel": "Code {{code}}",
+      "empty": {
+        "title": "No other computers yet",
+        "body": "Your other computers show up here once they turn on remote access and sign in to the same Kettu account."
+      },
+      "signedOut": {
+        "title": "Not signed in",
+        "body": "Sign in to your Kettu account to see your other computers here."
+      },
+      "unavailable": {
+        "title": "Cannot reach the Kettu relay",
+        "body": "Your other computers show up here once the relay answers."
+      },
+      "pair": {
+        "title": "Connect to {{name}}",
+        "connecting": "Connecting…",
+        "waiting": "Waiting for {{name}}…",
+        "intro": "A code shows here and on {{name}} in a moment.",
+        "check": "Check that {{name}} shows the same code.",
+        "differs": "If it differs, cancel: another computer may be answering.",
+        "matched": "Codes match. Click Add on {{name}} to finish.",
+        "match": "Codes match"
+      },
+      "failed": {
+        "void": "The request ended before {{name}} added this computer: it expired or was closed there. Try again.",
+        "rejected": "{{name}} did not add this computer.",
+        "unreachable": "Could not reach {{name}} through the Kettu relay. Check that it is on and signed in, then try again."
+      }
     }
   },
   "remote": {
@@ -1479,6 +1518,24 @@
       },
       "signInHint": "Sign in to your Kettu account to reach this computer from anywhere. Direct connections still work.",
       "signInHint_web": "Sign in to a Kettu account on {{host}} to reach it from anywhere. Direct connections still work."
+    },
+    "discoverable": {
+      "name": "Let devices on your account find this computer",
+      "description": "Your devices signed in to the same Kettu account list this computer and can ask to connect. You still approve each one here.",
+      "description_web": "Your devices signed in to the same Kettu account list {{host}} and can ask to connect. You still approve each one on {{host}}.",
+      "keywords": "discover find account devices connect pair list"
+    },
+    "discovery": {
+      "title": "Add this device?",
+      "body": "{{name}} wants to connect to this computer. It is signed in to your Kettu account; add it only if you are setting it up yourself.",
+      "known": "Added before",
+      "check": "Check that the other computer shows the same code.",
+      "reject": "Don’t add",
+      "ended": {
+        "cancelled": "{{name}} stopped asking to connect",
+        "expired": "The request from {{name}} expired",
+        "stopped": "The request from {{name}} ended because remote access stopped"
+      }
     }
   },
   "usage": {

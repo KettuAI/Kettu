@@ -69,11 +69,13 @@ import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { GroupNote } from './rows'
 import { HostPage } from './host-page'
-import { hostLine, webHostLine } from './host-text'
+import { hostLine, platformName, webHostLine } from './host-text'
+import { AccountHostRow, AccountHostsActions, AccountHostsState } from './host-account'
+import { useDiscoveredHosts } from './use-discovered'
 import { AddHostButton, HostRow, HostsLoading, HostsNote, SelfRow } from './hosts-section'
 import { DevicePage } from './remote-device'
 import { DirectPortField, FoundAddresses, OwnAddresses } from './remote-direct'
-import { DirectSwitch, RelayRegions, RelaySwitch } from './remote-relay'
+import { DirectSwitch, DiscoverableSwitch, RelayRegions, RelaySwitch } from './remote-relay'
 import { relayInUse } from './relay-text'
 import {
   AddDeviceButton,
@@ -1144,6 +1146,7 @@ function useDesktopHostsSection(): SectionDef {
   const { t } = useTranslation('settings')
   const en = english()
   const status = useHostsStore((s) => s.status)
+  const discovered = useDiscoveredHosts()
   // Read when Settings opens: the computer's model is read only then.
   useEffect(() => {
     void loadHosts()
@@ -1199,6 +1202,33 @@ function useDesktopHostsSection(): SectionDef {
       render: () => <HostsLoading />,
     })
   }
+  const account = group('account-hosts', t('hosts.account.group'), {
+    actions: <AccountHostsActions signedOut={discovered?.state === 'signed_out'} />,
+    note: <GroupNote>{t('hosts.account.note')}</GroupNote>,
+  })
+  const found = discovered?.state === 'ok' ? discovered.hosts : []
+  rows.push(
+    {
+      id: 'account-hosts',
+      name: t('hosts.account.group'),
+      english: en('hosts.account.group'),
+      description: t('hosts.account.description'),
+      keywords: t('hosts.account.keywords'),
+      group: account,
+      layout: 'custom',
+      searchOnly: found.length > 0,
+      render: () => <AccountHostsState discovered={discovered} />,
+    },
+    ...found.map((host): RowDef => ({
+      id: `account-${host.relayId}`,
+      name: host.name,
+      description: platformName(host.platform),
+      keywords: t('hosts.account.keywords'),
+      group: account,
+      layout: 'custom',
+      render: () => <AccountHostRow host={host} />,
+    })),
+  )
   return {
     id: 'hosts',
     title: t('sections.hosts'),
@@ -1339,6 +1369,15 @@ export function useRemoteSection(): SectionDef {
       keywords: t('remote.terminal.keywords'),
       group: group('permissions', t('remote.groups.permissions')),
       render: () => <TerminalSwitch label={t('remote.terminal.name')} />,
+    },
+    {
+      id: 'discoverable',
+      name: t('remote.discoverable.name'),
+      english: en('remote.discoverable.name'),
+      description: t('remote.discoverable.description', onHost),
+      keywords: t('remote.discoverable.keywords'),
+      group: group('permissions', t('remote.groups.permissions')),
+      render: () => <DiscoverableSwitch label={t('remote.discoverable.name')} />,
     },
     {
       id: 'relay',

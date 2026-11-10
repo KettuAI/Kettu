@@ -23,8 +23,9 @@ import { useSidebarNav } from '@renderer/features/sidebar/sidebar-nav'
 import { ArchiveConfirmDialog } from '@renderer/features/sidebar/archive-confirm'
 import { SearchDialog } from '@renderer/features/search/search-dialog'
 import { ReportDialog } from '@renderer/features/report/report-dialog'
+import { DiscoveryRequestDialog } from '@renderer/features/settings/discovery-request'
 import { useReportNotices } from '@renderer/features/report/report-notices'
-import { formatShortcut, hasBand } from '@renderer/lib/platform'
+import { formatShortcut, hasBand, isWeb } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
 import { prefersReducedMotion } from '@renderer/stores/settings'
@@ -84,6 +85,8 @@ export function App() {
         <SearchDialog />
         <ArchiveConfirmDialog />
         <ReportDialog />
+        {/* Devices of the account ask the host's own windows; a browser is never asked. */}
+        {!isWeb && <DiscoveryRequestDialog />}
         {pathPicker && (
           <Suspense fallback={null}>
             <HostPathDialog />

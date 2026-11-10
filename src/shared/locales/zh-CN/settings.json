@@ -1192,6 +1192,45 @@
     "chip": {
       "label": "主机 {{name}}，{{state}}",
       "tooltip": "{{name}} · {{state}}，点击在设置里打开。"
+    },
+    "account": {
+      "group": "账号下的电脑",
+      "description": "登录同一个 Kettu 账号的其他电脑，点一下就能连接。",
+      "keywords": "账号 发现 电脑 连接 配对 验证码 中继 account discover",
+      "note": "连接时两台电脑会显示同一个验证码。确认一致后，在那台电脑上添加这台电脑。",
+      "connect": "连接",
+      "connectTo": "连接 {{name}}",
+      "refresh": "刷新",
+      "or": "或用配对链接、SSH 连接",
+      "back": "返回",
+      "codeLabel": "验证码 {{code}}",
+      "empty": {
+        "title": "还没有其他电脑",
+        "body": "其他电脑开启远程访问并登录同一个 Kettu 账号后，会显示在这里。"
+      },
+      "signedOut": {
+        "title": "未登录",
+        "body": "登录 Kettu 账号后，这里会列出你的其他电脑。"
+      },
+      "unavailable": {
+        "title": "连不上 Kettu 中继",
+        "body": "中继恢复后，你的其他电脑会显示在这里。"
+      },
+      "pair": {
+        "title": "连接 {{name}}",
+        "connecting": "正在连接…",
+        "waiting": "等待 {{name}}…",
+        "intro": "稍后这里和 {{name}} 上会显示一个验证码。",
+        "check": "确认 {{name}} 上显示的是同一个验证码。",
+        "differs": "不一致就取消：可能是别的电脑在应答。",
+        "matched": "验证码一致。在 {{name}} 上点添加即可完成。",
+        "match": "验证码一致"
+      },
+      "failed": {
+        "void": "{{name}} 添加之前请求就结束了：已过期，或在那边被关掉了。再试一次。",
+        "rejected": "{{name}} 没有添加这台电脑。",
+        "unreachable": "经 Kettu 中继连不上 {{name}}。确认它开着机并已登录，再试一次。"
+      }
     }
   },
   "remote": {
@@ -1464,6 +1503,24 @@
       },
       "signInHint": "登录 Kettu 账号后，在哪都连得上这台电脑。直连照样能用。",
       "signInHint_web": "在 {{host}} 上登录 Kettu 账号后，在哪都连得上它。直连照样能用。"
+    },
+    "discoverable": {
+      "name": "让账号下的设备找到这台电脑",
+      "description": "登录同一个 Kettu 账号的设备能看到这台电脑并请求连接，每一台仍要你在这里同意。",
+      "description_web": "登录同一个 Kettu 账号的设备能看到 {{host}} 并请求连接，每一台仍要在 {{host}} 上同意。",
+      "keywords": "发现 找到 账号 设备 连接 配对 discover"
+    },
+    "discovery": {
+      "title": "要添加这台设备吗？",
+      "body": "{{name}} 想连接这台电脑。它登录着你的 Kettu 账号，只有是你自己在设置它时才添加。",
+      "known": "添加过",
+      "check": "确认另一台电脑上显示的是同一个验证码。",
+      "reject": "不添加",
+      "ended": {
+        "cancelled": "{{name}} 取消了连接请求",
+        "expired": "{{name}} 的连接请求已过期",
+        "stopped": "远程访问已停止，{{name}} 的连接请求随之结束"
+      }
     }
   },
   "usage": {
