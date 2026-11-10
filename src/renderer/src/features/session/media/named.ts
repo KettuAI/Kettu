@@ -18,6 +18,15 @@ const DRIVE = /^[a-z]:[\\/]/i
 const FILE_URI = /^file:/i
 const PATH_START = /^(?:\/(?!\/)|~[\\/]|\.{1,2}[\\/]|[a-z]:[\\/]|file:)/i
 
+/** Whether text can be a local path at all: one line, no URL, and spaces only in an explicit path. */
+function localPath(value: string): boolean {
+  if (!value || value.includes('\n') || value.startsWith('#') || value.startsWith('//')) {
+    return false
+  }
+  if (SCHEME.test(value) && !DRIVE.test(value) && !FILE_URI.test(value)) return false
+  return !/\s/.test(value) || PATH_START.test(value)
+}
+
 /**
  * A file reference's text when it names a media file: a path relative to the session's folder,
  * absolute, `~/` or a `file:` URI, ending in a media file's extension. Text with a space counts
@@ -25,12 +34,45 @@ const PATH_START = /^(?:\/(?!\/)|~[\\/]|\.{1,2}[\\/]|[a-z]:[\\/]|file:)/i
  */
 export function mediaReference(text: string): string | null {
   const value = text.trim()
-  if (!value || value.includes('\n') || value.startsWith('#') || value.startsWith('//')) {
-    return null
+  return localPath(value) && mediaKindOfName(value) ? value : null
+}
+
+/** A file reference's text when it names a folder: a path that ends in a separator. */
+function folderReference(text: string): string | null {
+  const value = text.trim()
+  if (value.length < 2 || !/[\\/]$/.test(value) || FILE_URI.test(value)) return null
+  return localPath(value) ? value : null
+}
+
+/** Whether a media reference is a file's name alone, which says little of where the file is. */
+export const bareName = (path: string) => !/[\\/]/.test(path) && !FILE_URI.test(path)
+
+/**
+ * The media files a block names as it is read, in order, each once. A bare file name in inline
+ * code is read in the folder that inline code named before it in the block, as in "saved in
+ * `/tmp/shots/`: `a.png`, `b.png`".
+ */
+export function mediaCollector() {
+  const found: string[] = []
+  let folder: string | null = null
+  const add = (path: string | null) => {
+    if (path !== null && !found.includes(path)) found.push(path)
   }
-  if (SCHEME.test(value) && !DRIVE.test(value) && !FILE_URI.test(value)) return null
-  if (/\s/.test(value) && !PATH_START.test(value)) return null
-  return mediaKindOfName(value) ? value : null
+  return {
+    found,
+    code(text: string) {
+      const named = folderReference(text)
+      if (named !== null) {
+        folder = named
+        return
+      }
+      const path = mediaReference(text)
+      add(path !== null && folder !== null && bareName(path) ? folder + path : path)
+    },
+    link(target: string) {
+      add(mediaReference(target))
+    },
+  }
 }
 
 /** Blocks that show their own media, so a block above them leaves theirs alone. */
@@ -43,26 +85,23 @@ function textOf(node: HastNode): string {
 
 /** The media files a block's inline code and links name, in order, each once. */
 export function namedMedia(block: HastNode | undefined): string[] {
-  const found: string[] = []
-  const add = (path: string | null) => {
-    if (path !== null && !found.includes(path)) found.push(path)
-  }
+  const media = mediaCollector()
   const visit = (node: HastNode, top: boolean) => {
     if (node.type !== 'element') return
     if (!top && BLOCKS.has(node.tagName ?? '')) return
     if (node.tagName === 'code') {
-      add(mediaReference(textOf(node)))
+      media.code(textOf(node))
       return
     }
     if (node.tagName === 'a') {
       const href = node.properties?.href
       const local = typeof href === 'string' ? localTarget(href) : null
-      if (local !== null) add(mediaReference(local))
+      if (local !== null) media.link(local)
     }
     for (const child of node.children ?? []) visit(child, false)
   }
   if (block) visit(block, true)
-  return found
+  return media.found
 }
 
 /** A block's claim on the files it names. */

@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { AlertCircleIcon, ImageNotFound01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -24,7 +24,10 @@ export function MediaGrid({
   paths: readonly string[]
   images?: boolean
 }) {
-  const { tiles, more } = gridTiles(paths)
+  // The pictures that stay text, which leave the grid to the others.
+  const [text, setText] = useState<ReadonlySet<string>>(new Set())
+  const stays = useCallback((path: string) => setText((old) => new Set(old).add(path)), [])
+  const { tiles, more } = gridTiles(paths.filter((path) => !text.has(path)))
   const named = useContext(NamedMediaContext)
   const rest = paths.slice(tiles.length).join('\0')
   // No tile stands for the pictures the last one counts, so the grid marks them itself.
@@ -33,22 +36,45 @@ export function MediaGrid({
     const marks = rest.split('\0').map((path) => named.image(path))
     return () => marks.forEach((unmark) => unmark())
   }, [images, named, rest])
+  // Nothing at all, so the block around the grid is empty and hides.
+  if (tiles.length === 0) return null
   return (
     <div className="grid w-full max-w-[600px] grid-cols-3 gap-1.5">
       {tiles.map((path, i) => (
-        <LocalTile key={path} path={path} image={images} more={i === tiles.length - 1 ? more : 0} />
+        <LocalTile
+          key={path}
+          path={path}
+          image={images}
+          more={i === tiles.length - 1 ? more : 0}
+          onText={stays}
+        />
       ))}
     </div>
   )
 }
 
 /** One picture of a grid, cropped to its tile, as a button that opens the viewer. */
-function LocalTile({ path, image, more }: { path: string; image: boolean; more: number }) {
+function LocalTile({
+  path,
+  image,
+  more,
+  onText,
+}: {
+  path: string
+  image: boolean
+  more: number
+  /** The picture stays the text it was in the sentence, so it takes no tile. */
+  onText: (path: string) => void
+}) {
   const { t } = useTranslation('session')
   const near = useRef<HTMLSpanElement>(null)
   const media = useMediaFile(path, image, near)
   const { shown, name } = media
   const [loaded, setLoaded] = useState(false)
+  const text = shown.kind === 'text' && !image
+  useEffect(() => {
+    if (text) onText(path)
+  }, [text, onText, path])
 
   // Without a session nothing can be read, so the picture stays its name, as LocalMedia's does.
   if (!media.enabled) {
@@ -59,6 +85,7 @@ function LocalTile({ path, image, more }: { path: string; image: boolean; more: 
       </span>
     )
   }
+  if (text) return null
   if (shown.kind === 'asking') {
     return (
       <span ref={near} className={cn(TILE, 'block')}>
