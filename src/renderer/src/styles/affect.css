@@ -4570,9 +4570,9 @@ li[data-row-exit='dust'] > * {
 .kettu-queue {
   position: relative;
   z-index: 0;
-  height: 48px;
+  height: 58px;
   margin: 0 14px -26px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--composer-muted);
 }
 .kettu-queue[data-open]::before {
@@ -4581,7 +4581,7 @@ li[data-row-exit='dust'] > * {
   right: 0;
   bottom: 0;
   left: 0;
-  height: calc(var(--shown) * 28px + 40px);
+  height: calc(var(--shown) * 34px + 40px);
 }
 .kettu-queue__card {
   position: absolute;
@@ -4592,9 +4592,9 @@ li[data-row-exit='dust'] > * {
   align-items: center;
   gap: 8px;
   box-sizing: border-box;
-  height: 48px;
-  padding: 0 8px 26px 10px;
-  border-radius: 12px 12px 0 0;
+  height: 58px;
+  padding: 0 10px 26px 12px;
+  border-radius: 14px 14px 0 0;
   background: color-mix(in srgb, var(--composer-panel) var(--mix, 0%), var(--composer-queue));
   box-shadow: inset 0 0 0 0.5px var(--composer-line);
   outline: none;
@@ -4626,10 +4626,10 @@ li[data-row-exit='dust'] > * {
   display: grid;
   flex: none;
   place-items: center;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 6px;
   background: var(--composer-card);
   box-shadow: inset 0 0 0 0.5px var(--composer-line-strong);
   font-size: 11px;
@@ -4701,9 +4701,9 @@ li[data-row-exit='dust'] > * {
 .kettu-queue__actions button {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   color: var(--composer-muted);
 }
 .kettu-queue__actions button:hover {

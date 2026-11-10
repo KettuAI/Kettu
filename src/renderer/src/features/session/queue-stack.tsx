@@ -30,7 +30,9 @@ function queuedAttachments(item: QueuedPrompt): Attachment[] {
   )
 }
 
-const STEP = 28 // how much of an open row shows above the one in front of it
+const TAB = 58 // a card's height as the tab, TUCK of it under the composer
+const ROW = 46 // a card's height as an open row
+const STEP = 34 // how much of an open row shows above the one in front of it
 const PEEK = 6 // how much of a folded card shows above the one in front of it
 const INSET = 12 // each layer back is this much narrower on each side
 const TUCK = 26 // how far the tab runs under the composer, .kettu-queue's negative bottom margin
@@ -218,7 +220,7 @@ export function QueueStack({
       // Scrolled past: slides down under the composer
       const d = -pos
       return {
-        y: d * 30,
+        y: d * STEP,
         depth: 0,
         shape: 0,
         content: clamp(1 - d * 1.4, 0, 1),
@@ -281,10 +283,10 @@ export function QueueStack({
                 transform: `translateY(${p.y}px)`,
                 left: p.depth * INSET,
                 right: p.depth * INSET,
-                height: 48 - 12 * p.shape,
+                height: lerp(TAB, ROW, p.shape),
                 // Centres the text on what shows: above the composer as a tab, above the next row
-                paddingBottom: lerp(TUCK, 48 - 12 - STEP, p.shape),
-                borderRadius: `${12 - 2 * p.shape}px ${12 - 2 * p.shape}px ${10 * p.shape}px ${10 * p.shape}px`,
+                paddingBottom: lerp(TUCK, ROW - STEP, p.shape),
+                borderRadius: `${14 - 2 * p.shape}px ${14 - 2 * p.shape}px ${12 * p.shape}px ${12 * p.shape}px`,
                 opacity: p.alpha,
                 zIndex: p.z,
                 '--c': p.content,
