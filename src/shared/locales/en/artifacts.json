@@ -300,6 +300,11 @@
       "body": "Kettu publishes each new artifact privately to your Kettu account, so only you can open it when signed in. It uses your cloud storage. Pages on Kettu follow their artifact’s latest version, including pages you open to an access code or to everyone. You can change this in Settings › Sharing.",
       "continue": "Continue",
       "turnOff": "Turn off"
+    },
+    "selfHosted": {
+      "connect": "Publish to your own Cloudflare account. Connect it in Settings › Sharing.",
+      "openSettings": "Open Settings",
+      "published": "Kettu cloud is off on this computer. Unpublish this page at kettu.sh."
     }
   },
   "tools": {

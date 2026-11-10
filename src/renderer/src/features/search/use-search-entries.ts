@@ -5,6 +5,7 @@ import type { SessionSummary } from '@shared/agent-host'
 import { artifactKind, recency } from '@renderer/features/artifacts/model'
 import { scheduleWords } from '@renderer/features/routines/model'
 import { shortcutList, type ShortcutAction } from '@renderer/features/shell/shortcuts'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, dirname, shortAgo } from '@renderer/lib/format'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
@@ -233,9 +234,11 @@ function useActionEntries(): SearchEntry[] {
 
 function useSectionEntries(): SearchEntry[] {
   const { t } = useTranslation(['settings', 'usage'])
+  const cloudOff = useCloudOff()
   return useMemo(() => {
     const english = i18n.getFixedT('en', ['settings', 'usage'])
-    return SECTIONS.filter((id) => !(isWeb && id === 'account')).map((id): SearchEntry => {
+    const noAccount = isWeb || cloudOff
+    return SECTIONS.filter((id) => !(noAccount && id === 'account')).map((id): SearchEntry => {
       const usage = id === 'usage'
       const title = usage ? t('usage:settings.title') : t(`settings:sections.${id}`)
       const inEnglish = usage ? english('usage:settings.title') : english(`settings:sections.${id}`)
@@ -251,5 +254,5 @@ function useSectionEntries(): SearchEntry[] {
         section: id,
       }
     })
-  }, [t])
+  }, [t, cloudOff])
 }

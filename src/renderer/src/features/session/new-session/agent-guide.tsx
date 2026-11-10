@@ -28,7 +28,8 @@ const ABOUT = {
   pi: 'newSession.guide.about.pi',
 } as const satisfies Record<GuideHarness, string>
 
-export function AgentGuide({ statuses }: { statuses: AgentStatus[] }) {
+/** `bare` leaves out the card's own heading, where the page above already says what it is. */
+export function AgentGuide({ statuses, bare }: { statuses: AgentStatus[]; bare?: boolean }) {
   const { t } = useTranslation('session')
   const [detecting, setDetecting] = useState(false)
 
@@ -52,10 +53,12 @@ export function AgentGuide({ statuses }: { statuses: AgentStatus[] }) {
 
   return (
     <section className="kettu-guide" aria-label={t('newSession.guide.title')}>
-      <header className="kettu-guide__head">
-        <b>{t('newSession.guide.title')}</b>
-        <span>{t('newSession.guide.hint')}</span>
-      </header>
+      {!bare && (
+        <header className="kettu-guide__head">
+          <b>{t('newSession.guide.title')}</b>
+          <span>{t('newSession.guide.hint')}</span>
+        </header>
+      )}
       <ul className="kettu-guide__rows">
         {statuses.map((status) => (
           <GuideRow key={status.id} status={status} />

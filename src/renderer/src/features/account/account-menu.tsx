@@ -25,6 +25,7 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
 import { limitReaders } from '@renderer/features/sidebar/plan-usage'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { errorMessage } from '@renderer/lib/host'
 import { formatShortcut, isHosted, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
@@ -75,6 +76,9 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
   const choices: (string | null)[] = [THIS_COMPUTER, ...hosts.map((h) => h.id)]
   const status = useAccountStore((s) => s.status)
   const hidden = useSettingsStore((s) => s.settings.privacy.hideAccount)
+  const cloudOff = useCloudOff()
+  const selfName = useThisComputerName()
+  const info = useAppInfo()
   const hostItems = useHostItems(hosts, close)
   const planItems = usePlanItems(close, hostItems.length > 0)
   const help = useHelpItems(close)
@@ -98,7 +102,7 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
 
   const manageUrl = status?.state === 'signed-in' ? status.manageUrl : null
   const account: ProfileMenuItem[] =
-    (isWeb && !isHosted) || !status
+    (isWeb && !isHosted) || cloudOff || !status
       ? []
       : status.state === 'signed-in'
         ? [
@@ -168,12 +172,25 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
       ? t('account.signingIn')
       : t('account.signedOutLine')
 
+  // Self-hosted, the card names this computer and its system in place of the account.
+  const selfHosted = info
+    ? t('account.selfHostedLine', { system: systemName(info.system) })
+    : t('account.selfHosted')
+
   return (
     <div role="presentation" onKeyDown={onKeyDown} className="kettu-account">
       <ProfileMenu
         className="kettu-account__card"
-        name={!identity.name ? t('account.signedOut') : hidden ? '•'.repeat(8) : identity.name}
-        email={email}
+        name={
+          cloudOff
+            ? selfName
+            : !identity.name
+              ? t('account.signedOut')
+              : hidden
+                ? '•'.repeat(8)
+                : identity.name
+        }
+        email={cloudOff ? selfHosted : email}
         avatar={<Avatar identity={identity} hidden={hidden} />}
         items={items}
         labels={{ menu: t('account.menuLabel') }}

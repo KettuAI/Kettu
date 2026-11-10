@@ -257,6 +257,8 @@
     "menuLabel": "Account and hosts",
     "signedOut": "Not signed in",
     "signedOutLine": "Kettu account",
+    "selfHosted": "Local",
+    "selfHostedLine": "{{system}} · Local",
     "signingIn": "Finish signing in in your browser",
     "editProfile": "Edit profile",
     "remote_zero": "Remote access",

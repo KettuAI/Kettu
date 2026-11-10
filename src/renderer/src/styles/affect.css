@@ -2941,6 +2941,20 @@ li[data-row-exit='dust'] > * {
 :is(.kettu-settings, .kettu-sd) .k-account {
   min-height: 68px;
 }
+/* General > Kettu cloud: the mode's mark before the switch, lifted as the first run's pictures */
+:is(.kettu-settings, .kettu-sd) .k-cloud-mark {
+  filter: drop-shadow(0 2px 4px var(--onboarding-picture-shadow));
+}
+/* Self-hosted's mark: the hosts' glyph on a snow-tinted tile, beside the app icon. */
+.k-host-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border-radius: 23%;
+  color: var(--onboarding-snow-ink);
+  background: var(--onboarding-snow-tint);
+  box-shadow: inset 0 0 0 0.5px var(--onboarding-snow-line);
+}
 /* The hosted web client adds a third button, which wraps on a narrow page instead of overflowing. */
 :is(.kettu-settings, .kettu-sd) .k-account > .ui-sg-control {
   flex: 0 1 auto;

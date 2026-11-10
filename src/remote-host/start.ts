@@ -36,6 +36,7 @@ import { HostStore, uniqueAddresses } from './hosts'
 import { LoopbackListener } from './loopback'
 import { DeviceNotifications, parseAttention, parseWaiting } from './notifications'
 import { PairingCodes } from './pairing'
+import { RelaySwitch } from './relay-switch'
 import { RemoteServer } from './server'
 import { clearUploads } from './uploads'
 
@@ -94,8 +95,8 @@ export interface StartedRemoteHost {
 interface Serving {
   server: RemoteServer
   direct: DirectListener
-  /** The relay, with the host's key; null without one. */
-  relay: RelayHost | null
+  /** The relay while Use the Kettu relay is on and the host has its key. */
+  relay: RelaySwitch
   /** Under the daemon, the channels through SSH. */
   loopback: LoopbackListener | null
   /** The devices' notifications, with the host's key; null without one. */
@@ -177,10 +178,12 @@ export function startRemoteHost(
       : null
     const relayId = relayKey ? await relayHostId(relayKey.publicKey) : null
     // The host's relay while it uses it, for welcomes and pairing codes.
-    const onRelay = (): { id: string; urls: string[] } | null =>
-      relay && relayId && relayEnabled
-        ? { id: relayId, urls: relay.relays.map((r) => r.url) }
+    const onRelay = (): { id: string; urls: string[] } | null => {
+      const current = relay.current
+      return current && relayId && relayEnabled
+        ? { id: relayId, urls: current.relays.map((r) => r.url) }
         : null
+    }
     const discovery = new DiscoveryRequests({
       send: (event) => send({ type: 'remote-host:discovery', event }),
     })
@@ -198,7 +201,7 @@ export function startRemoteHost(
       refused: server.refused,
       direct: direct.status,
       ...(loopback ? { sshPort: loopback.port } : {}),
-      relays: relay && relayEnabled && relayToken ? relay.status : [],
+      relays: relay.current && relayEnabled && relayToken ? relay.current.status : [],
     })
     let ready = false
     const changed = (): void => {
@@ -237,7 +240,7 @@ export function startRemoteHost(
         : null
     notifications?.setWaiting(waiting)
     if (present !== null) notifications?.setPresent(present)
-    const relay =
+    const relay = new RelaySwitch(() =>
       relayKey && relayId && relayUrl
         ? new RelayHost({
             main: relayUrl,
@@ -259,7 +262,8 @@ export function startRemoteHost(
             changed,
             log,
           })
-        : null
+        : null,
+    )
     const direct = new DirectListener({ server, changed, log, webRoot: init!.webRoot ?? null })
     // Ready once direct connections listen or have failed, so the first status says which.
     await direct.apply(options.direct)
@@ -267,10 +271,7 @@ export function startRemoteHost(
     const loopback =
       sshPort === undefined ? null : await LoopbackListener.start(server, sshPort, log)
     server.startSweeping()
-    if (relay) {
-      relay.start()
-      relay.setToken(relayEnabled ? relayToken : null)
-    }
+    relay.set(relayEnabled, relayToken)
     const report = (): void => {
       ready = true
       changed()
@@ -282,8 +283,10 @@ export function startRemoteHost(
 
   /** Takes discovery requests while discoverable, on the relay and signed in, and says so there. */
   function applyDiscovery({ discovery, relay }: Serving): void {
-    discovery.setEnabled(discoverable && relay !== null && relayEnabled && relayToken !== null)
-    relay?.profileChanged()
+    discovery.setEnabled(
+      discoverable && relay.current !== null && relayEnabled && relayToken !== null,
+    )
+    relay.current?.profileChanged()
   }
 
   async function stopServing(
@@ -293,7 +296,7 @@ export function startRemoteHost(
     if (!current) return null
     current.notifications?.stop()
     current.discovery.setEnabled(false)
-    current.relay?.stop()
+    current.relay.stop()
     current.direct.stop()
     current.loopback?.stop()
     await current.server.stop(reason)
@@ -472,7 +475,7 @@ export function startRemoteHost(
       case 'remote-host:relay':
         relayEnabled = message.enabled === true
         withServing((current) => {
-          current.relay?.setToken(relayEnabled ? relayToken : null)
+          current.relay.set(relayEnabled, relayToken)
           applyDiscovery(current)
           current.server.options.changed()
         })
@@ -496,15 +499,17 @@ export function startRemoteHost(
         const had = relayToken
         relayToken = typeof message.token === 'string' ? message.token : null
         withServing((current) => {
-          current.relay?.setToken(relayEnabled ? relayToken : null)
+          current.relay.current?.setToken(relayEnabled ? relayToken : null)
           applyDiscovery(current)
         })
         // Hosts not reached for want of a sign-in are tried now.
         if (!had && relayToken) withRunning(() => client?.resume())
+        // Without a token the relay may not be used, so links through it end too.
+        if (had && !relayToken) withRunning(() => client?.leaveRelay())
         break
       }
       case 'remote-host:relay-retry':
-        withServing(({ relay }) => relay?.retry())
+        withServing(({ relay }) => relay.current?.retry())
         break
       case 'remote-host:terminal': {
         const allowed = message.allowed === true
@@ -618,7 +623,7 @@ export function startRemoteHost(
           hostName = message.name
           withServing(({ server: s, relay }) => {
             s.setHostName(message.name)
-            relay?.profileChanged()
+            relay.current?.profileChanged()
           })
         }
         break

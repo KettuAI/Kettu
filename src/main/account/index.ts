@@ -56,6 +56,8 @@ export interface AccountOptions {
   avatar: (url: string) => Promise<string | null>
   /** What the browser shows when the sign-in failed after it came back to Kettu. */
   failureText: () => string
+  /** Whether Kettu's services are on for this computer; while off, nothing here reaches them. */
+  cloud: () => boolean
   changed: (status: AccountStatus) => void
   log: Logger
   timeoutMs?: number
@@ -157,7 +159,7 @@ export class Account {
     call: (token: string) => Promise<T>,
     refused: (error: unknown) => boolean,
   ): Promise<T> {
-    if (!this.stored) throw new NotSignedIn()
+    if (!this.stored || !this.options.cloud()) throw new NotSignedIn()
     const token = await this.serviceToken(null)
     try {
       return await call(token)
@@ -190,7 +192,7 @@ export class Account {
    * when it shows. A sign-in the service ended signs out here and says why.
    */
   async check(): Promise<AccountStatus> {
-    if (!this.stored || this.signingIn) return this.status()
+    if (!this.stored || this.signingIn || !this.options.cloud()) return this.status()
     const generation = this.generation
     try {
       const me = await this.withToken((token) => this.options.api.me(token))
@@ -207,7 +209,7 @@ export class Account {
    * the loopback port later, and the status follows.
    */
   async signIn(): Promise<AccountStatus> {
-    if (this.signingIn || this.stored) return this.status()
+    if (this.signingIn || this.stored || !this.options.cloud()) return this.status()
     const pkce = newPkce()
     const state = newState()
     let loopback: Loopback
@@ -252,7 +254,10 @@ export class Account {
     this.emit()
   }
 
-  /** Signs out at the service, then forgets the sign-in here, even when the service is away. */
+  /**
+   * Signs out at the service, then forgets the sign-in here, even when the service is away; with
+   * Kettu's services off, here alone.
+   */
   async signOut(): Promise<AccountStatus> {
     if (this.signingIn) {
       this.cancelSignIn()
@@ -262,12 +267,14 @@ export class Account {
     await this.refreshing?.catch(() => undefined)
     const stored = this.stored
     if (!stored) return this.status()
-    try {
-      await this.options.api.revoke(this.client, await openToken(stored, this.options.cipher))
-    } catch (error) {
-      this.options.log.warn(
-        `Signed out here, but could not sign out at the account service: ${(error as Error).message}`,
-      )
+    if (this.options.cloud()) {
+      try {
+        await this.options.api.revoke(this.client, await openToken(stored, this.options.cipher))
+      } catch (error) {
+        this.options.log.warn(
+          `Signed out here, but could not sign out at the account service: ${(error as Error).message}`,
+        )
+      }
     }
     if (this.stored === stored) await this.forget(null)
     return this.status()
@@ -279,7 +286,7 @@ export class Account {
    * service ended signs out here, which `changed` reports.
    */
   async currentToken(): Promise<{ token: string; expiresAt: number } | null> {
-    if (!this.stored || this.signingIn) return null
+    if (!this.stored || this.signingIn || !this.options.cloud()) return null
     try {
       const token = await this.accessToken(null)
       const access = this.access
@@ -315,6 +322,11 @@ export class Account {
     verifier: string,
   ): Promise<void> {
     if (this.signingIn !== loopback) return
+    // Kettu's services were turned off while the browser had the sign-in page.
+    if (!this.options.cloud()) {
+      this.cancelSignIn()
+      return
+    }
     switch (result.kind) {
       case 'closed':
         return
@@ -424,7 +436,7 @@ export class Account {
   async submitReport(
     upload: ReportUpload,
   ): Promise<{ ok: true; id: string } | { ok: false; reason: ReportSubmitFailure }> {
-    if (!this.stored) return { ok: false, reason: 'signed_out' }
+    if (!this.stored || !this.options.cloud()) return { ok: false, reason: 'signed_out' }
     const submit = (token: string): Promise<string> => this.options.api.submitReport(token, upload)
     try {
       const token = await this.accessToken(null)
@@ -460,6 +472,8 @@ export class Account {
 
   /** The access token, refreshed when it expired or is the one the service just refused. */
   private accessToken(refused: string | null): Promise<string> {
+    // Not even a token held from before: it is sent only to Kettu's services.
+    if (!this.options.cloud()) return Promise.reject(new SignedOut())
     const access = this.access
     if (access && access.token !== refused && access.expiresAt > this.now()) {
       return Promise.resolve(access.token)
@@ -484,7 +498,9 @@ export class Account {
     }
     const tokens = await this.options.api.refresh(this.client, token)
     if (generation !== this.generation || !this.stored) {
-      void this.options.api.revoke(this.client, tokens.refreshToken).catch(() => undefined)
+      if (this.options.cloud()) {
+        void this.options.api.revoke(this.client, tokens.refreshToken).catch(() => undefined)
+      }
       throw new SignedOut()
     }
     const next = { ...this.stored, ...(await sealToken(tokens.refreshToken, this.options.cipher)) }
@@ -543,6 +559,7 @@ export class Account {
   }
 
   private loadAvatar(): void {
+    if (!this.options.cloud()) return
     const url = this.stored?.profile.avatarUrl ?? null
     if (!url) {
       this.avatar = null

@@ -10,6 +10,7 @@ import {
   nextAgentColor,
   isLinkSite,
   MAX_LINK_SITES,
+  ONBOARDING_STEPS,
   type AddedAgent,
   type HostSettings,
   type ProxySettings,
@@ -163,6 +164,8 @@ const SECTION_FIELDS = {
   diagnostics: { verboseUntil: isVerboseUntil },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
   computerUse: { enabled: isBoolean, allowedApps: isComputerApps },
+  cloud: { enabled: isBoolean },
+  onboarding: { done: isBoolean, step: oneOf(...ONBOARDING_STEPS) },
 } as const satisfies Record<string, Record<string, Check>>
 
 type FieldSection = keyof typeof SECTION_FIELDS

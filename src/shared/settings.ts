@@ -10,6 +10,16 @@ export interface InitialSetup {
   done: boolean
 }
 
+/** The first-run onboarding's steps, in order; Sign in only follows the Kettu account choice. */
+export const ONBOARDING_STEPS = ['welcome', 'choose', 'sign-in', 'agents'] as const
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number]
+
+/** Where the first-run onboarding stands: a fresh install starts it, an upgraded one skips it. */
+export interface OnboardingState {
+  done: boolean
+  step: OnboardingStep // where an unfinished onboarding resumes
+}
+
 export interface SettingsFile {
   version: 1
   agentRegistrationVersion?: 1
@@ -93,6 +103,10 @@ export interface SettingsFile {
   }
   // Agents using this computer's desktop apps; a paired device can neither see nor change it.
   computerUse: ComputerUseSettings
+  // Kettu's own services: the account, relay, push, sharing to Kettu and problem reports. Off is
+  // the self-hosted mode, in which no process of this computer reaches them.
+  cloud: { enabled: boolean }
+  onboarding: OnboardingState
 }
 
 /** Devices connecting over TCP on the same network or a VPN, without the relay. */
@@ -218,6 +232,8 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     discoverable: true,
   },
   computerUse: { enabled: false, allowedApps: [] },
+  cloud: { enabled: true },
+  onboarding: { done: false, step: 'welcome' },
 }
 
 /** The zoom one step in (1) or out (-1), held at the ends; 0 returns to the default. */
@@ -260,6 +276,8 @@ export interface SettingsPatch {
   privacy?: Partial<SettingsFile['privacy']>
   diagnostics?: Partial<SettingsFile['diagnostics']>
   computerUse?: Partial<SettingsFile['computerUse']> // allowedApps is replaced whole
+  cloud?: Partial<SettingsFile['cloud']>
+  onboarding?: Partial<OnboardingState>
   usage?: Partial<SettingsFile['usage']>
   remote?: {
     enabled?: boolean

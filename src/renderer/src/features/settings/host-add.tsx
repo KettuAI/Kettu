@@ -23,6 +23,7 @@ import {
 import { parsePairingLink } from '@shared/remote/pairing'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { Segmented, SetButton, Spin } from './controls'
 import { AccountHostsPicker, AccountPairFlow } from './host-account'
 import { Added } from './host-added'
@@ -139,6 +140,7 @@ function AddHostFlow({
 }) {
   // One of the account's hosts, once its Connect was chosen.
   const [account, setAccount] = useState<DiscoveredHost | null>(null)
+  const cloudOff = useCloudOff()
   const [tab, setTab] = useState<AddHostTab>(sshTarget ? 'ssh' : 'link')
   const [step, setStep] = useState<AddHostStep>({ kind: 'paste', invalid: false })
   const [draft, setDraft] = useState('')
@@ -284,7 +286,7 @@ function AddHostFlow({
     requestAnimationFrame(() => input.current?.focus())
   }
 
-  if (account) {
+  if (account && !cloudOff) {
     return (
       <SettingsDialogContent>
         <AccountPairFlow
@@ -301,7 +303,7 @@ function AddHostFlow({
   const choosing = tab === 'ssh' ? ssh.kind === 'enter' : step.kind === 'paste'
   const tabs = (
     <>
-      {choosing && (
+      {choosing && !cloudOff && (
         <AccountHostsPicker
           onConnect={(host) => {
             abandon()

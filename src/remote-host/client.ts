@@ -440,6 +440,20 @@ class HostLink {
     this.forwards.close(sessionId)
   }
 
+  /**
+   * The Kettu relay may no longer be used, as after signing out or turning Kettu cloud off: a
+   * session through it ends, as does a try that may be dialing it, and the host is tried again
+   * without it.
+   */
+  leaveRelay(): void {
+    if (this.closed) return
+    if (this.session && 'relay' in this.session.via) return this.session.close()
+    if (this.trying) {
+      this.cancel()
+      this.retry()
+    }
+  }
+
   /** Forgotten, or the client stops: the connection ends and is not tried again. */
   close(): void {
     this.closed = true
@@ -1443,6 +1457,11 @@ export class HostClient {
     const removed = await this.options.hosts.remove(id)
     if (removed) this.options.changed()
     return removed
+  }
+
+  /** The relay's token is gone: no host stays reached through the relay. */
+  leaveRelay(): void {
+    for (const link of this.links.values()) link.leaveRelay()
   }
 
   /** The computer woke, maybe on another network: the hosts not connected are tried now. */

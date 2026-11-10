@@ -25,6 +25,7 @@ import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { originLabel } from '@shared/browser'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
@@ -65,6 +66,8 @@ import {
   HarnessPage,
 } from './harness-section'
 import { ArchivedRow } from './archived-section'
+import { CloudSwitchRow, OtherConnections } from './cloud-section'
+import { useCloudOffHere } from './use-cloud-off-here'
 import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { GroupNote } from './rows'
@@ -166,6 +169,9 @@ export function useGeneralSection(): SectionDef {
   })
   const thread = group('thread', t('general.groups.thread'))
   const startup = group('startup', t('general.groups.startup'))
+  const cloud = group('cloud', t('general.groups.cloud'), {
+    note: <GroupNote>{t('general.cloud.note')}</GroupNote>,
+  })
   const loginItem = useLoginItemStatus()
   const openAtLoginDescription = loginItem
     ? !loginItem.available
@@ -276,6 +282,27 @@ export function useGeneralSection(): SectionDef {
         render: () => (
           <OpenAtLogin label={t('general.openAtLogin.name')} disabled={!loginItem?.available} />
         ),
+      },
+      {
+        id: 'cloud',
+        name: t('general.cloud.name'),
+        english: en('general.cloud.name'),
+        // Not the email, which search results would show past Hide account.
+        description: t('general.cloud.note'),
+        keywords: t('general.cloud.keywords'),
+        group: cloud,
+        layout: 'custom',
+        render: () => <CloudSwitchRow />,
+      },
+      {
+        id: 'other-connections',
+        name: t('general.others.name'),
+        english: en('general.others.name'),
+        description: t('general.others.description'),
+        keywords: t('general.others.keywords'),
+        group: cloud,
+        layout: 'block',
+        render: (text) => <OtherConnections text={text} />,
       },
     ],
   }
@@ -1147,6 +1174,7 @@ function useDesktopHostsSection(): SectionDef {
   const en = english()
   const status = useHostsStore((s) => s.status)
   const discovered = useDiscoveredHosts()
+  const cloudOff = useCloudOff()
   // Read when Settings opens: the computer's model is read only then.
   useEffect(() => {
     void loadHosts()
@@ -1207,28 +1235,31 @@ function useDesktopHostsSection(): SectionDef {
     note: <GroupNote>{t('hosts.account.note')}</GroupNote>,
   })
   const found = discovered?.state === 'ok' ? discovered.hosts : []
-  rows.push(
-    {
-      id: 'account-hosts',
-      name: t('hosts.account.group'),
-      english: en('hosts.account.group'),
-      description: t('hosts.account.description'),
-      keywords: t('hosts.account.keywords'),
-      group: account,
-      layout: 'custom',
-      searchOnly: found.length > 0,
-      render: () => <AccountHostsState discovered={discovered} />,
-    },
-    ...found.map((host): RowDef => ({
-      id: `account-${host.relayId}`,
-      name: host.name,
-      description: platformName(host.platform),
-      keywords: t('hosts.account.keywords'),
-      group: account,
-      layout: 'custom',
-      render: () => <AccountHostRow host={host} />,
-    })),
-  )
+  // The account's computers are found through the relay, which a self-hosted computer never uses.
+  if (!cloudOff) {
+    rows.push(
+      {
+        id: 'account-hosts',
+        name: t('hosts.account.group'),
+        english: en('hosts.account.group'),
+        description: t('hosts.account.description'),
+        keywords: t('hosts.account.keywords'),
+        group: account,
+        layout: 'custom',
+        searchOnly: found.length > 0,
+        render: () => <AccountHostsState discovered={discovered} />,
+      },
+      ...found.map((host): RowDef => ({
+        id: `account-${host.relayId}`,
+        name: host.name,
+        description: platformName(host.platform),
+        keywords: t('hosts.account.keywords'),
+        group: account,
+        layout: 'custom',
+        render: () => <AccountHostRow host={host} />,
+      })),
+    )
+  }
   return {
     id: 'hosts',
     title: t('sections.hosts'),
@@ -1248,6 +1279,8 @@ export function useRemoteSection(): SectionDef {
   const relayOn = useSettingsStore((s) => s.settings.remote.relay)
   const status = useRemoteStore((s) => s.status)
   const resettable = useHostHas('remoteReset')
+  // Finding this computer and the relay are the account's, so self-hosted it shows neither.
+  const cloudOff = useCloudOffHere()
   const state = group('status', t('remote.switch'), {
     unlabeled: true,
     note: enabled && <PlainKeyNote />,
@@ -1326,7 +1359,9 @@ export function useRemoteSection(): SectionDef {
       name: t('remote.direct.name'),
       english: en('remote.direct.name'),
       description: t(
-        relayInUse(status) ? 'remote.direct.descriptionFree' : 'remote.direct.description',
+        relayInUse(status) && !cloudOff
+          ? 'remote.direct.descriptionFree'
+          : 'remote.direct.description',
       ),
       keywords: t('remote.direct.keywords'),
       group: direct,
@@ -1370,25 +1405,29 @@ export function useRemoteSection(): SectionDef {
       group: group('permissions', t('remote.groups.permissions')),
       render: () => <TerminalSwitch label={t('remote.terminal.name')} />,
     },
-    {
-      id: 'discoverable',
-      name: t('remote.discoverable.name'),
-      english: en('remote.discoverable.name'),
-      description: t('remote.discoverable.description', onHost),
-      keywords: t('remote.discoverable.keywords'),
-      group: group('permissions', t('remote.groups.permissions')),
-      render: () => <DiscoverableSwitch label={t('remote.discoverable.name')} />,
-    },
-    {
-      id: 'relay',
-      name: t('remote.relay.name'),
-      english: en('remote.relay.name'),
-      description: t('remote.relay.description', onHost),
-      keywords: t('remote.relay.keywords'),
-      group: advanced,
-      render: () => <RelaySwitch label={t('remote.relay.name')} />,
-    },
-    ...(relayOn
+    ...(cloudOff
+      ? []
+      : [
+          {
+            id: 'discoverable',
+            name: t('remote.discoverable.name'),
+            english: en('remote.discoverable.name'),
+            description: t('remote.discoverable.description', onHost),
+            keywords: t('remote.discoverable.keywords'),
+            group: group('permissions', t('remote.groups.permissions')),
+            render: () => <DiscoverableSwitch label={t('remote.discoverable.name')} />,
+          } satisfies RowDef,
+          {
+            id: 'relay',
+            name: t('remote.relay.name'),
+            english: en('remote.relay.name'),
+            description: t('remote.relay.description', onHost),
+            keywords: t('remote.relay.keywords'),
+            group: advanced,
+            render: () => <RelaySwitch label={t('remote.relay.name')} />,
+          } satisfies RowDef,
+        ]),
+    ...(relayOn && !cloudOff
       ? [
           {
             id: 'relay-regions',
@@ -1444,6 +1483,7 @@ export function useSharingSection(): SectionDef {
   // Another host's artifacts are not listed here, so its pages go by their addresses.
   const titles = usePublishedTitles(hostId === null && pages.length > 0)
   const shares = useHostHas('sharing')
+  const cloudOff = useCloudOffHere()
   const base = {
     id: 'sharing' as const,
     title: t('sections.sharing'),
@@ -1468,48 +1508,53 @@ export function useSharingSection(): SectionDef {
       footer: shares === false ? <NoSharing /> : <SharingPending />,
     }
   }
-  const kettuGroup = group('kettu', t('sharing.groups.kettu'))
-  const rows: RowDef[] = [
-    {
-      id: 'kettu',
-      name: t('sharing.kettu.name'),
-      english: en('sharing.kettu.name'),
-      // Not the email, which search results would show past Hide account.
-      description: kettu ? undefined : t('sharing.kettu.signedOut'),
-      keywords: t('sharing.kettu.keywords'),
-      group: kettuGroup,
-      layout: 'custom',
-      render: () => <KettuSharingAccount />,
-    },
-  ]
-  const full = blocked.filter((entry) => entry.reason === 'storage_full').length
-  const large = blocked.length - full
-  rows.push({
-    id: 'auto',
-    name: t('sharing.auto.name'),
-    english: en('sharing.auto.name'),
-    description: [
-      t('sharing.auto.description'),
-      ...(full > 0 ? [t('sharing.auto.blockedFull', { count: full })] : []),
-      ...(large > 0 ? [t('sharing.auto.blockedLarge', { count: large })] : []),
-    ].join(' '),
-    keywords: t('sharing.auto.keywords'),
-    group: kettuGroup,
-    render: () => <AutoPublishSwitch />,
-  })
-  if (kettu) {
-    rows.push({
-      id: 'kettu-storage',
-      name: t('sharing.kettu.storage'),
-      english: en('sharing.kettu.storage'),
-      keywords: t('sharing.kettu.keywords'),
-      group: kettuGroup,
-      render: () => <KettuStorage />,
-    })
-  }
-  if (pages.length > 0) {
-    const published = group('published', t('sharing.groups.published'), { count: pages.length })
+  const rows: RowDef[] = []
+  // Self-hosted, nothing publishes to Kettu, so only the own Cloudflare account and the pages show.
+  if (!cloudOff) {
+    const kettuGroup = group('kettu', t('sharing.groups.kettu'))
+    const full = blocked.filter((entry) => entry.reason === 'storage_full').length
+    const large = blocked.length - full
     rows.push(
+      {
+        id: 'kettu',
+        name: t('sharing.kettu.name'),
+        english: en('sharing.kettu.name'),
+        // Not the email, which search results would show past Hide account.
+        description: kettu ? undefined : t('sharing.kettu.signedOut'),
+        keywords: t('sharing.kettu.keywords'),
+        group: kettuGroup,
+        layout: 'custom',
+        render: () => <KettuSharingAccount />,
+      },
+      {
+        id: 'auto',
+        name: t('sharing.auto.name'),
+        english: en('sharing.auto.name'),
+        description: [
+          t('sharing.auto.description'),
+          ...(full > 0 ? [t('sharing.auto.blockedFull', { count: full })] : []),
+          ...(large > 0 ? [t('sharing.auto.blockedLarge', { count: large })] : []),
+        ].join(' '),
+        keywords: t('sharing.auto.keywords'),
+        group: kettuGroup,
+        render: () => <AutoPublishSwitch />,
+      },
+    )
+    if (kettu) {
+      rows.push({
+        id: 'kettu-storage',
+        name: t('sharing.kettu.storage'),
+        english: en('sharing.kettu.storage'),
+        keywords: t('sharing.kettu.keywords'),
+        group: kettuGroup,
+        render: () => <KettuStorage />,
+      })
+    }
+  }
+  const published: RowDef[] = []
+  if (pages.length > 0) {
+    const list = group('published', t('sharing.groups.published'), { count: pages.length })
+    published.push(
       ...pages.map((page): RowDef => {
         const title = titles.get(page.id)
         return {
@@ -1522,7 +1567,7 @@ export function useSharingSection(): SectionDef {
                 ago: mediumAgo(page.publishedAt),
               }),
           keywords: t('sharing.published.keywords'),
-          group: published,
+          group: list,
           layout: 'custom',
           render: () => <PublishedRow page={page} title={title} />,
         }
@@ -1540,8 +1585,7 @@ export function useSharingSection(): SectionDef {
     render: () => <SharingAccount />,
   }
   if (pages.length === 0) {
-    // Between the Kettu account and Cloudflare, where the pages would be.
-    rows.push({
+    published.push({
       id: 'published-empty',
       name: t('sharing.groups.published'),
       keywords: t('sharing.published.keywords'),
@@ -1550,7 +1594,9 @@ export function useSharingSection(): SectionDef {
       render: () => <p className="ui-ss-empty">{t('sharing.published.empty')}</p>,
     })
   }
-  rows.push(cloudflare)
+  // The pages sit between the Kettu account and Cloudflare; self-hosted, they follow Cloudflare.
+  if (cloudOff) rows.push(cloudflare, ...published)
+  else rows.push(...published, cloudflare)
   return { ...base, rows }
 }
 
