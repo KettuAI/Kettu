@@ -3,6 +3,7 @@ import { Settings01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { Icon, type AppShellProps } from '@renderer/components/affect/app-shell'
 import { routeName } from '@renderer/features/settings/host-text'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { formatShortcut, isHosted, isWeb } from '@renderer/lib/platform'
 import { useAccountStore } from '@renderer/stores/account'
 import { otherHosts, useHostsStore, useOtherHost } from '@renderer/stores/hosts'
@@ -41,6 +42,7 @@ export function useAccountShell(): Pick<
   const line = useHostLine()
   const self = useThisComputerName()
   const attention = useSettingsAttention()
+  const cloudOff = useCloudOff()
   const settingsOpen = useViewStore((s) => s.settings.open)
   // Opening Settings is looking at what its dot pointed to.
   useEffect(() => {
@@ -48,20 +50,29 @@ export function useAccountShell(): Pick<
   }, [settingsOpen])
 
   // The served web client signs in to no account, so it names the host it shows; the hosted one
-  // names the account over the host.
+  // names the account over the host. Self-hosted, this computer stands in for the account.
   const plain = isWeb && !isHosted
-  const name = plain
-    ? self
-    : !identity.name
-      ? t('account.signedOut')
-      : hidden
-        ? MASK
-        : identity.name
-  const person = plain || !identity.name || hidden
+  const name =
+    plain || cloudOff
+      ? self
+      : !identity.name
+        ? t('account.signedOut')
+        : hidden
+          ? MASK
+          : identity.name
+  const person = plain || cloudOff || !identity.name || hidden
   return {
     user: {
       name,
-      meta: plain ? undefined : isHosted ? self : line,
+      meta: plain
+        ? undefined
+        : cloudOff
+          ? line === self
+            ? t('account.selfHosted')
+            : line
+          : isHosted
+            ? self
+            : line,
       avatar: !person && identity.avatar ? identity.avatar : undefined,
       mark: person ? (
         <span className="ui-as-user__initials">

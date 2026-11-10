@@ -20,6 +20,7 @@ import { css as modelsCss } from '@renderer/components/affect/settings-models'
 import { css as prefsCss } from '@renderer/components/affect/settings-preferences'
 import { css as securityCss } from '@renderer/components/affect/settings-security'
 import { Dialog, DialogPortal } from '@renderer/components/ui/dialog'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import {
   hostScope,
@@ -151,11 +152,13 @@ function SettingsStyles() {
  * carries `ui-as kettu-settings`, which give it the box and the shell's variables.
  */
 export function SettingsContent({ titleId }: { titleId?: string }) {
+  const cloudOff = useCloudOff()
+  const account = useAccountSection()
   const client = [
     useGeneralSection(),
     useAppearanceSection(),
     useNotificationsSection(),
-    useAccountSection(),
+    ...(cloudOff ? [] : [account]),
     useHostsSection(),
     useBrowserSection(),
     useDevicesSection(),

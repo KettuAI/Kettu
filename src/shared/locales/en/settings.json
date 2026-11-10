@@ -88,11 +88,49 @@
       "description": "A small model writes the outline when you open it.",
       "keywords": "outline titles summary model credits"
     },
+    "cloud": {
+      "name": "Use Kettu cloud",
+      "note": "The services Kettu runs, with a free Kettu account: the relay that reaches this computer from anywhere, iPhone notifications, the web app, sharing to Kettu and problem reports.",
+      "keywords": "kettu cloud account sign in relay anywhere push notifications web app sharing publish reports local self-hosted offline",
+      "signedIn": "Signed in as {{email}}.",
+      "signedOut": "Not signed in.",
+      "off": "Off. Nothing goes to Kettu’s servers: devices reach this computer over your own network, and artifacts publish to your own Cloudflare.",
+      "offTitle": "Turn off Kettu cloud?",
+      "offBody": "Everything on this computer keeps working.",
+      "offSignOut": "You’ll be signed out of {{email}} on this computer.",
+      "offDevices": "Your devices reach this computer only over your own network: Wi-Fi, Tailscale or SSH.",
+      "offSharing": "New artifacts stop publishing to Kettu. Pages you already published stay online until you unpublish them at kettu.sh.",
+      "offConfirm": "Turn off"
+    },
+    "others": {
+      "name": "Other connections",
+      "description": "Not part of Kettu cloud, with it on or off:",
+      "keywords": "network connections internet github npm google updates themes installs site icons providers",
+      "items": {
+        "updates": {
+          "name": "Updates and themes",
+          "source": "GitHub"
+        },
+        "installs": {
+          "name": "Agent and Marketplace installs",
+          "source": "npm and each publisher"
+        },
+        "siteIcons": {
+          "name": "Site icons beside links",
+          "source": "Google"
+        },
+        "agents": {
+          "name": "Your agents",
+          "source": "their own providers"
+        }
+      }
+    },
     "groups": {
       "input": "Language and input",
       "sessions": "Sessions",
       "thread": "Thread",
-      "startup": "Startup"
+      "startup": "Startup",
+      "cloud": "Kettu cloud"
     }
   },
   "appearance": {
@@ -1022,6 +1060,7 @@
       "otherKettu": "Published with {{email}}. Sign in with that account to change it.",
       "otherKettuUnnamed": "Published with another Kettu account. Sign in with that account to change it.",
       "signedOut": "Sign in to Kettu with the account that published it to change it.",
+      "cloudOff": "Kettu cloud is off on this computer. Unpublish this page at kettu.sh.",
       "otherAccountBadge": "Another account"
     },
     "none": {

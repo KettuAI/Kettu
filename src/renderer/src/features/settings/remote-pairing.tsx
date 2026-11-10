@@ -27,6 +27,7 @@ import { useHostContext } from '@renderer/lib/host-features'
 import { useSeconds } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { useCloudOffHere } from './use-cloud-off-here'
 import { Segmented, SetButton, SettingSelect, Spin } from './controls'
 import { closeRequest } from './pair-close'
 import { HOSTED_WEB_URL } from '@shared/remote/pairing'
@@ -222,7 +223,8 @@ export function CodeBody({ shown, link: appLink }: { shown: Shown; link: string 
   const [target, setTarget] = useState<'app' | 'browser'>('app')
   const [chosen, setChosen] = useState<string | null>(null)
   const own = useSettingsStore((s) => s.settings.remote.direct.addresses)
-  const browsers = browserLinks(appLink, own)
+  const cloudOff = useCloudOffHere()
+  const browsers = browserLinks(appLink, own, !cloudOff)
   const browser = browsers.find((b) => b.address === chosen) ?? browsers[0] ?? null
   const link = target === 'browser' ? (browser?.link ?? null) : appLink
   return (

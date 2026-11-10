@@ -442,6 +442,27 @@
   --settings-term-branch: #c79bf2;
   --settings-term-ok: #5bb98a;
 
+  /* onboarding: the first run's sky over the paper snow, the tints of its two choices (Kettu's
+     fox, self-hosted's snow), its connection lines and the shadows under its pictures. */
+  --onboarding-sky-top: #e3ecf8;
+  --onboarding-sky-mid: #edf2f9;
+  --onboarding-sky-low: #e6ebf2;
+  --onboarding-star: transparent;
+  --onboarding-fox-ink: #d9480f;
+  --onboarding-fox-tint: rgb(242 88 27 / 9%);
+  --onboarding-fox-line: rgb(242 88 27 / 14%);
+  --onboarding-snow-ink: #2d6bb0;
+  --onboarding-snow-tint: rgb(56 128 210 / 9%);
+  --onboarding-snow-line: rgb(56 128 210 / 15%);
+  --onboarding-picture-shadow: rgb(0 0 0 / 14%);
+  --onboarding-fox-shadow: rgb(120 50 10 / 16%);
+  --onboarding-glow-warm: rgb(242 88 27 / 13%);
+  --onboarding-glow-cool: rgb(0 96 226 / 4%);
+  --onboarding-wire: rgb(0 96 226 / 55%);
+  --onboarding-relay-ring: rgb(242 88 27 / 30%);
+  --onboarding-relay-glow: rgb(242 88 27 / 35%);
+  --onboarding-mask: #000000;
+
   /* pages: Routines, Usage and Artifacts on affectUI. A routine waiting for approval in amber:
      its text, its dot and halo, and its notice's tint and edge. */
   --tone-amber: #b45309;
@@ -818,6 +839,26 @@
     --settings-term-branch: #c79bf2;
     --settings-term-ok: #5bb98a;
 
+    /* onboarding */
+    --onboarding-sky-top: #0b1122;
+    --onboarding-sky-mid: #10141f;
+    --onboarding-sky-low: #13151b;
+    --onboarding-star: rgb(255 255 255 / 45%);
+    --onboarding-fox-ink: #ff8f5e;
+    --onboarding-fox-tint: rgb(255 122 69 / 13%);
+    --onboarding-fox-line: rgb(255 122 69 / 18%);
+    --onboarding-snow-ink: #8cb8ee;
+    --onboarding-snow-tint: rgb(120 170 240 / 12%);
+    --onboarding-snow-line: rgb(120 170 240 / 18%);
+    --onboarding-picture-shadow: rgb(0 0 0 / 40%);
+    --onboarding-fox-shadow: rgb(0 0 0 / 50%);
+    --onboarding-glow-warm: rgb(242 88 27 / 16%);
+    --onboarding-glow-cool: rgb(91 154 255 / 5%);
+    --onboarding-wire: rgb(91 154 255 / 60%);
+    --onboarding-relay-ring: rgb(255 122 69 / 32%);
+    --onboarding-relay-glow: rgb(255 122 69 / 30%);
+    --onboarding-mask: #000000;
+
     /* pages: Routines, Usage and Artifacts on affectUI. */
     --tone-amber: #fbbf24;
     --tone-amber-dot: #f59e0b;
@@ -1167,6 +1208,26 @@
   --settings-term-path: #7fa8e8;
   --settings-term-branch: #c79bf2;
   --settings-term-ok: #5bb98a;
+
+  /* onboarding */
+  --onboarding-sky-top: #0b1122;
+  --onboarding-sky-mid: #10141f;
+  --onboarding-sky-low: #13151b;
+  --onboarding-star: rgb(255 255 255 / 45%);
+  --onboarding-fox-ink: #ff8f5e;
+  --onboarding-fox-tint: rgb(255 122 69 / 13%);
+  --onboarding-fox-line: rgb(255 122 69 / 18%);
+  --onboarding-snow-ink: #8cb8ee;
+  --onboarding-snow-tint: rgb(120 170 240 / 12%);
+  --onboarding-snow-line: rgb(120 170 240 / 18%);
+  --onboarding-picture-shadow: rgb(0 0 0 / 40%);
+  --onboarding-fox-shadow: rgb(0 0 0 / 50%);
+  --onboarding-glow-warm: rgb(242 88 27 / 16%);
+  --onboarding-glow-cool: rgb(91 154 255 / 5%);
+  --onboarding-wire: rgb(91 154 255 / 60%);
+  --onboarding-relay-ring: rgb(255 122 69 / 32%);
+  --onboarding-relay-glow: rgb(255 122 69 / 30%);
+  --onboarding-mask: #000000;
 
   /* pages: Routines, Usage and Artifacts on affectUI. */
   --tone-amber: #fbbf24;

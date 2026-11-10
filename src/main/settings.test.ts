@@ -42,6 +42,46 @@ describe('the first start record on load', () => {
   })
 })
 
+describe('the onboarding and the cloud switch on load', () => {
+  it('starts the onboarding on a fresh install, with the cloud on until a choice', async () => {
+    const store = await SettingsStore.load(dir)
+    expect(store.get().onboarding).toEqual({ done: false, step: 'welcome' })
+    expect(store.get().cloud).toEqual({ enabled: true })
+  })
+
+  it('skips the onboarding for a file from before it, keeping the cloud on', async () => {
+    await save({ version: 1, initialSetup: { done: true }, general: { language: 'en' } })
+    const store = await SettingsStore.load(dir)
+    expect(store.get().onboarding.done).toBe(true)
+    expect(store.get().cloud.enabled).toBe(true)
+  })
+
+  it('skips it for an unreadable file too, since it has history', async () => {
+    await save('{ not json')
+    const store = await SettingsStore.load(dir)
+    expect(store.get().onboarding.done).toBe(true)
+  })
+
+  it('resumes an unfinished onboarding at its step and keeps a self-hosted choice', async () => {
+    await save({
+      version: 1,
+      initialSetup: { done: true },
+      onboarding: { done: false, step: 'agents' },
+      cloud: { enabled: false },
+    })
+    const store = await SettingsStore.load(dir)
+    expect(store.get().onboarding).toEqual({ done: false, step: 'agents' })
+    expect(store.get().cloud.enabled).toBe(false)
+  })
+
+  it('falls back to the defaults for values it does not know', async () => {
+    await save({ version: 1, onboarding: { done: 'no', step: 'nowhere' }, cloud: { enabled: 0 } })
+    const store = await SettingsStore.load(dir)
+    expect(store.get().onboarding).toEqual({ done: false, step: 'welcome' })
+    expect(store.get().cloud.enabled).toBe(true)
+  })
+})
+
 describe('adding the agents the first start found', () => {
   it('adds the default agents in the list order and records them once', async () => {
     const store = await SettingsStore.load(dir)

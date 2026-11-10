@@ -11,6 +11,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn } from '@renderer/stores/account'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { useCloudOffHere } from './use-cloud-off-here'
 import { ControlError, Pill, SetButton, SettingSwitch } from './controls'
 import { errorGroup, relayInUse } from './relay-text'
 import { useApply } from './use-apply'
@@ -135,7 +136,8 @@ function RegionPill({ relay }: { relay: RelayStatus }) {
 export function DirectSwitch({ label }: { label: string }) {
   const { useSettingsStore, useRemoteStore } = useHostScope()
   const enabled = useSettingsStore((s) => s.settings.remote.direct.enabled)
-  const free = useRemoteStore((s) => relayInUse(s.status))
+  const cloudOff = useCloudOffHere()
+  const free = useRemoteStore((s) => relayInUse(s.status)) && !cloudOff
   const [apply, error] = useApply()
   if (!free) return <SettingSwitch label={label} checked disabled onChange={() => {}} />
   return (

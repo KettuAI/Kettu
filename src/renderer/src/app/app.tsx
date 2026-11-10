@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { AppShell } from '@renderer/components/affect/app-shell'
 import { Toaster } from '@renderer/components/ui/toast'
@@ -28,7 +29,7 @@ import { useReportNotices } from '@renderer/features/report/report-notices'
 import { formatShortcut, hasBand, isWeb } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { cn } from '@renderer/lib/utils'
-import { prefersReducedMotion } from '@renderer/stores/settings'
+import { prefersReducedMotion, useSettingsStore } from '@renderer/stores/settings'
 import { showSearch, useViewStore } from '@renderer/stores/view'
 import { usePathRequest } from '@renderer/web/host-path-request'
 import { useKeyboardShortcuts } from './shortcuts'
@@ -38,9 +39,14 @@ const SettingsPage = lazy(() => import('@renderer/features/settings/settings-pag
 // The picker for a folder or a program on a host reached over the channel, in place of a system
 // dialog; loaded once first asked for.
 const HostPathDialog = lazy(() => import('@renderer/web/host-path-dialog'))
+// The first run on a fresh install, over the whole window until it is done.
+const Onboarding = lazy(() => import('@renderer/features/onboarding/onboarding'))
 
 export function App() {
   const settingsOpen = useViewStore((s) => s.settings.open)
+  // A browser shows another computer's host, whose own app ran its onboarding.
+  const onboarding = useSettingsStore((s) => !isWeb && s.loaded && !s.settings.onboarding.done)
+  const cloud = useSettingsStore((s) => s.settings.cloud.enabled)
   // Settings stays mounted once loaded, so it closes with its own exit.
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   if (settingsOpen && !settingsLoaded) setSettingsLoaded(true)
@@ -59,7 +65,7 @@ export function App() {
           <HostBanner />
           <div className="relative min-h-0 flex-1">
             {/* The workbench stays in view under Settings, which opens over it. */}
-            <div inert={settingsOpen} className="absolute inset-0">
+            <div inert={settingsOpen || onboarding} className="absolute inset-0">
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
               <SplitDragProvider>
@@ -73,20 +79,27 @@ export function App() {
             )}
           </div>
         </div>
+        <AnimatePresence>
+          {onboarding && (
+            <Suspense key="onboarding" fallback={null}>
+              <Onboarding />
+            </Suspense>
+          )}
+        </AnimatePresence>
         <LaunchCover />
         <QuitConfirm />
         <UpdateDialog />
         <DebugRestartDialog />
         <ArtifactDialogs />
         <ArtifactConsentDialog />
-        <AutoPublishNotice />
+        {cloud && <AutoPublishNotice />}
         <MediaViewer />
         <ShortcutsDialog />
         <SearchDialog />
         <ArchiveConfirmDialog />
         <ReportDialog />
         {/* Devices of the account ask the host's own windows; a browser is never asked. */}
-        {!isWeb && <DiscoveryRequestDialog />}
+        {!isWeb && cloud && <DiscoveryRequestDialog />}
         {pathPicker && (
           <Suspense fallback={null}>
             <HostPathDialog />

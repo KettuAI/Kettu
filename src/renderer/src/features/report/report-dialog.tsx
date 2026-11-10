@@ -30,6 +30,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
 import { recordAction } from '@renderer/lib/action-log'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { errorMessage } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
@@ -103,7 +104,9 @@ function ReportForm({ dialog }: { dialog: Opened }) {
   const local = dialog.hostId === null && !isWeb
   const signedIn = useAccountStore((s) => s.status?.state === 'signed-in')
   const signingIn = useAccountStore((s) => s.status?.state === 'signing-in')
-  const mustSignIn = local && !signedIn
+  // Self-hosted, reports are only saved here: nothing goes to Kettu.
+  const cloudOff = useCloudOff()
+  const mustSignIn = local && !signedIn && !cloudOff
   const latest = useRef<PreparedReport | null>(null)
   useEffect(() => {
     latest.current = prepared?.report ?? null
@@ -294,16 +297,18 @@ function ReportForm({ dialog }: { dialog: Opened }) {
           {t('viewContents')}
         </Button>
         <span className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          size="compact"
-          disabled={!ready || busy !== null || mustSignIn}
-          onClick={() => void run('submit')}
-        >
-          {busy === 'submit' && <Spinner data-icon="inline-start" />}
-          {t('submit')}
-        </Button>
+        {!cloudOff && (
+          <Button
+            type="button"
+            variant="outline"
+            size="compact"
+            disabled={!ready || busy !== null || mustSignIn}
+            onClick={() => void run('submit')}
+          >
+            {busy === 'submit' && <Spinner data-icon="inline-start" />}
+            {t('submit')}
+          </Button>
+        )}
         <Button type="submit" size="compact" disabled={!ready || busy !== null}>
           {busy === 'save' && <Spinner data-icon="inline-start" />}
           {t('save')}

@@ -54,6 +54,7 @@ import {
   SettingSwitch,
   Skel,
 } from './controls'
+import { useCloudOffHere } from './use-cloud-off-here'
 import { BlockLine, ItemLine, Notice, RowText, Thing } from './rows'
 
 type Failure = Extract<SharingResult, { failed: string }>
@@ -491,17 +492,22 @@ export function PublishedRow({ page, title }: { page: PublishedArtifact; title?:
   const { sharing } = useHostScope()
   const { t } = useTranslation(['settings', 'artifacts', 'common'])
   const status = sharing.useSharingStore((s) => s.status)
-  const changeable = status !== null && canChange(page, status)
+  const cloudOff = useCloudOffHere()
+  // Self-hosted, a page on Kettu is unpublished on kettu.sh, since nothing here reaches Kettu.
+  const changeable =
+    status !== null && canChange(page, status) && !(cloudOff && page.target === 'kettu')
   // Signed in or connected, but with another account than the page's.
   const owned = (page.target === 'kettu' ? status?.kettu.account : status?.cloudflare) != null
   const why =
     page.target === 'cloudflare'
       ? t('sharing.published.otherAccount')
-      : !owned
-        ? t('sharing.published.signedOut')
-        : page.accountEmail
-          ? t('sharing.published.otherKettu', { email: page.accountEmail })
-          : t('sharing.published.otherKettuUnnamed')
+      : cloudOff
+        ? t('sharing.published.cloudOff')
+        : !owned
+          ? t('sharing.published.signedOut')
+          : page.accountEmail
+            ? t('sharing.published.otherKettu', { email: page.accountEmail })
+            : t('sharing.published.otherKettuUnnamed')
   const now = useNow()
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)

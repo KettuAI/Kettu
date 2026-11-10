@@ -13,7 +13,8 @@ const LEFT_OUT: Partial<Record<SectionDef['id'], readonly string[] | 'all'>> = {
   // It drives the apps of the computer the desktop app runs on.
   'computer-use': 'all',
   ...(isHosted ? {} : { account: 'all' as const }),
-  general: ['confirm-quit', 'background', 'open-at-login'],
+  // Kettu's cloud is switched on the computer itself.
+  general: ['confirm-quit', 'background', 'open-at-login', 'cloud', 'other-connections'],
   appearance: ['zoom'],
   notifications: ['badge'],
 }

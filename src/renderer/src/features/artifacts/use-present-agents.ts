@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { sharedPageVisitors, useSharingStore } from '@renderer/stores/sharing'
 import type { CanvasAgent } from './canvas-editor'
@@ -60,11 +61,14 @@ const VISITORS_EVERY_MS = 30_000
  * is not published there or nobody can say.
  */
 export function useVisitors(id: string): number | null {
-  const onKettu = useSharingStore(
+  // Self-hosted, nothing asks Kettu's service.
+  const cloudOff = useCloudOff()
+  const published = useSharingStore(
     (s) =>
       s.status?.published.some((p) => p.id === id && p.target === 'kettu' && !p.otherAccount) ??
       false,
   )
+  const onKettu = published && !cloudOff
   const [counted, setCounted] = useState<{ id: string; count: number | null } | null>(null)
   useEffect(() => {
     if (!onKettu) return

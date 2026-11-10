@@ -87,11 +87,49 @@
       "description": "打开大纲时，由小模型撰写大纲。",
       "keywords": "大纲 标题 总结 模型 额度 outline titles summary"
     },
+    "cloud": {
+      "name": "使用 Kettu 云服务",
+      "note": "Kettu 运行的服务，用一个免费的 Kettu 账号：在任何地方连回这台电脑的中继、iPhone 通知、网页版、发布到 Kettu 和问题报告。",
+      "keywords": "Kettu 云服务 账号 登录 中继 推送 通知 网页版 分享 发布 问题报告 本地 自建 kettu cloud account relay push web sharing local self-hosted",
+      "signedIn": "已登录 {{email}}。",
+      "signedOut": "还没登录。",
+      "off": "已关闭：不连 Kettu 的服务器，设备经你自己的网络连这台电脑，artifact 发布到你自己的 Cloudflare。",
+      "offTitle": "关闭 Kettu 云服务？",
+      "offBody": "这台电脑上的功能都照常。",
+      "offSignOut": "会在这台电脑上退出 {{email}}。",
+      "offDevices": "设备只能经你自己的网络连这台电脑：Wi-Fi、Tailscale 或 SSH。",
+      "offSharing": "新的 artifact 不再发布到 Kettu，已经发布的页面留在线上，到 kettu.sh 取消发布。",
+      "offConfirm": "关闭"
+    },
+    "others": {
+      "name": "其他连接",
+      "description": "不归 Kettu 云服务管，开关都照常：",
+      "keywords": "网络 连接 更新 主题 安装 网站图标 服务商 network connections github npm google updates themes",
+      "items": {
+        "updates": {
+          "name": "更新和主题",
+          "source": "GitHub"
+        },
+        "installs": {
+          "name": "Agent 和 Marketplace 的安装",
+          "source": "npm 和各发布者"
+        },
+        "siteIcons": {
+          "name": "链接前的网站图标",
+          "source": "Google"
+        },
+        "agents": {
+          "name": "你的 Agent",
+          "source": "它们自己的服务商"
+        }
+      }
+    },
     "groups": {
       "input": "语言与输入",
       "sessions": "会话",
       "thread": "对话",
-      "startup": "启动"
+      "startup": "启动",
+      "cloud": "Kettu 云服务"
     }
   },
   "appearance": {
@@ -1014,6 +1052,7 @@
       "otherKettu": "用 {{email}} 发布。用该账号登录后才能修改。",
       "otherKettuUnnamed": "用另一个 Kettu 账号发布。用该账号登录后才能修改。",
       "signedOut": "用发布它的 Kettu 账号登录后才能修改。",
+      "cloudOff": "这台电脑关闭了 Kettu 云服务，到 kettu.sh 取消发布这个页面。",
       "otherAccountBadge": "其他账号"
     },
     "none": {

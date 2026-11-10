@@ -21,6 +21,7 @@ import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -176,9 +177,12 @@ export function NewSessionView({
 
 function WelcomeHeading() {
   const { t } = useTranslation('session')
-  const name = useAccountStore((s) =>
+  const cloudOff = useCloudOff()
+  const account = useAccountStore((s) =>
     s.status?.state === 'signed-in' ? s.status.account.name?.trim() || null : null,
   )
+  // Self-hosted, there is no account to name.
+  const name = cloudOff ? null : account
   const lastStarted = useSessionsStore((s) => (s.loaded ? lastStartedAt(s.byId) : undefined))
   // A primitive, so the heading re-renders only when the period or the moment changes.
   const key = useClock(

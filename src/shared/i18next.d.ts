@@ -13,6 +13,7 @@ import type git from './locales/en/git.json'
 import type host from './locales/en/host.json'
 import type main from './locales/en/main.json'
 import type marketplace from './locales/en/marketplace.json'
+import type onboarding from './locales/en/onboarding.json'
 import type report from './locales/en/report.json'
 import type routines from './locales/en/routines.json'
 import type session from './locales/en/session.json'
@@ -43,6 +44,7 @@ declare module 'i18next' {
       host: typeof host
       main: typeof main
       marketplace: typeof marketplace
+      onboarding: typeof onboarding
       report: typeof report
       routines: typeof routines
       session: typeof session

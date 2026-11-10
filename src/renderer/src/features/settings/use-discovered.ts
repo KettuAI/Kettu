@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import type { DiscoveredHosts } from '@shared/remote/discovery'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { useAccountStore } from '@renderer/stores/account'
 import { loadDiscovered, useHostsStore } from '@renderer/stores/hosts'
 
@@ -9,7 +10,7 @@ const SIGNED_OUT: DiscoveredHosts = { state: 'signed_out' }
 
 /**
  * Reads the account's hosts on mount, and again when the paired hosts or the account change.
- * Signed out, there is nothing to ask.
+ * Signed out, or with Kettu's cloud off, there is nothing to ask.
  */
 export function useDiscoveredHosts(): DiscoveredHosts | null {
   // A removed host stays listed under its id, and may be found and paired again.
@@ -19,7 +20,8 @@ export function useDiscoveredHosts(): DiscoveredHosts | null {
   const account = useAccountStore((s) =>
     s.status?.state === 'signed-in' ? s.status.account.id : (s.status?.state ?? ''),
   )
-  const signedOut = account === 'signed-out'
+  const cloudOff = useCloudOff()
+  const signedOut = account === 'signed-out' || cloudOff
   useEffect(() => {
     if (!signedOut) void loadDiscovered()
   }, [hostIds, account, signedOut])
@@ -32,7 +34,8 @@ export function useDiscoveredHosts(): DiscoveredHosts | null {
  * every 30 s. A host that goes offline or stops letting devices find it says nothing.
  */
 export function useRereadDiscovered(): void {
-  const signedOut = useAccountStore((s) => s.status?.state === 'signed-out')
+  const cloudOff = useCloudOff()
+  const signedOut = useAccountStore((s) => s.status?.state === 'signed-out') || cloudOff
   useEffect(() => {
     if (signedOut) return
     let timer: ReturnType<typeof setInterval> | undefined

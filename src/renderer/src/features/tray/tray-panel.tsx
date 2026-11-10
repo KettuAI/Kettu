@@ -20,6 +20,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { useCloudOff } from '@renderer/lib/cloud'
 import { relativePath } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { glide } from '@renderer/lib/motion'
@@ -603,10 +604,11 @@ function Limits() {
   )
 }
 
-function remoteLine(remote: RemoteStatus | null): { text: string; dot: string } {
+/** The footer's remote access line; self-hosted, it says nothing of the relay. */
+function remoteLine(remote: RemoteStatus | null, cloudOff: boolean): { text: string; dot: string } {
   switch (remote?.state ?? 'off') {
     case 'on': {
-      const relay = relaySummary(remote!.relay)
+      const relay = cloudOff ? null : relaySummary(remote!.relay)
       if (relay === 'failed' || relay === 'conflict') {
         const key = relay === 'failed' ? 'tray:remote.relayFailed' : 'tray:remote.relayConflict'
         return { text: i18n.t(key), dot: 'bg-warning' }
@@ -633,7 +635,8 @@ function Footer() {
   const remote = useTrayPanelStore((s) => s.remote)
   const connection = useTrayPanelStore((s) => s.connection)
   const down = connection === 'failed'
-  const line = remoteLine(remote)
+  const cloudOff = useCloudOff()
+  const line = remoteLine(remote, cloudOff)
   return (
     <div className="flex items-center gap-2 bg-[color-mix(in_srgb,var(--bg-subtle)_60%,transparent)] px-3 py-2 text-small leading-[normal] text-secondary shadow-[inset_0_1px_0_var(--border-subtle)]">
       <span

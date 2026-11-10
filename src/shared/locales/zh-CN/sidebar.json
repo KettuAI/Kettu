@@ -240,6 +240,8 @@
     "menuLabel": "账号与主机",
     "signedOut": "未登录",
     "signedOutLine": "Kettu 账号",
+    "selfHosted": "本地",
+    "selfHostedLine": "{{system}} · 本地",
     "signingIn": "请在浏览器里完成登录",
     "editProfile": "编辑个人资料",
     "remote_zero": "远程访问",

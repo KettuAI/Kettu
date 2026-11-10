@@ -129,6 +129,10 @@ export class SettingsStore {
     if (!recorded) {
       loaded.settings.initialSetup = { done: true }
     }
+    // Likewise a file from before the onboarding belongs to someone who already uses Kettu.
+    if (!(read.kind === 'ok' && isRecord(read.value) && 'onboarding' in read.value)) {
+      loaded.settings.onboarding = { done: true, step: 'welcome' }
+    }
     // A file that turns direct connections on by hand gets its port as a change would.
     const settings = withDirectPort(loaded.settings, randomDirectPort)
     if (loaded.readOnly) {

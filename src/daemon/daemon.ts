@@ -347,6 +347,8 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       bringToFront: () => {},
       avatar: async () => null,
       failureText: () => '',
+      // The daemon has no switch for Kettu's services.
+      cloud: () => true,
       changed: () => {
         relayToken?.update()
         hosts?.settingsChanged(new Set(['remote']))

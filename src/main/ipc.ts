@@ -789,7 +789,10 @@ export function registerIpcHandlers({
     const model = await computerModel()
     return pairFor(event.sender, (listener) => remoteHost.addSshHost(target, model, listener))
   })
-  handle('hosts:discover', 0, () => remoteHost.discover())
+  // With Kettu's services off there is no relay to list the account's hosts.
+  handle('hosts:discover', 0, () =>
+    settings.get().cloud.enabled ? remoteHost.discover() : { state: 'signed_out' as const },
+  )
   handle('hosts:pair-discovered', 1, async ({ event }, relayId): Promise<HostPairStart> => {
     if (!isRelayHostId(relayId)) return { kind: 'invalid' }
     const model = await computerModel()

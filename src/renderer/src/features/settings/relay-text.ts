@@ -4,13 +4,17 @@ import { useTranslation } from 'react-i18next'
 import type { RelayStatus } from '@shared/remote/relay-host'
 import { relaySummary, type RemoteStatus } from '@shared/remote/status'
 import { useHostContext } from '@renderer/lib/host-features'
+import { useCloudOffHere } from './use-cloud-off-here'
 
 /** Whether devices reach the host through the relay now: on, and signed in. */
 export function relayInUse(status: RemoteStatus | null): boolean {
   return status?.relay?.state === 'on'
 }
 
-/** What the status line says of the relay, or null when it adds nothing. */
+/**
+ * What the status line says of the relay, or null when it adds nothing, as on this computer while
+ * Kettu's cloud is off.
+ */
 export function useRelayLine(status: RemoteStatus | null): {
   part: string | null
   problem: { text: string; hint: string; conflict: boolean } | null
@@ -19,7 +23,8 @@ export function useRelayLine(status: RemoteStatus | null): {
 } {
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
-  const summary = relaySummary(status?.relay)
+  const cloudOff = useCloudOffHere()
+  const summary = cloudOff ? null : relaySummary(status?.relay)
   const failed = summary === 'failed' || summary === 'conflict'
   const error = failed && status?.relay?.state === 'on' ? firstError(status.relay.relays) : null
   return {

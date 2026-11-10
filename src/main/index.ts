@@ -12,6 +12,7 @@ import {
 } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { BROWSER_PARTITION } from '@shared/browser'
+import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
@@ -200,19 +201,25 @@ async function start(): Promise<void> {
     await avatarsProxy
     return avatarsSession.fetch(url, init) as unknown as Promise<Response>
   })
-  // The Kettu account's requests and avatars, on a session of their own for the same reasons.
-  const accountSession = session.fromPartition('kettu-account')
-  let accountProxy = accountSession.setProxy(sessionProxy(settings.get().proxy))
-  const accountFetch = async (url: string, init: RequestInit): Promise<Response> => {
-    await accountProxy
-    return accountSession.fetch(url, init) as unknown as Promise<Response>
-  }
+  // Off, nothing of this computer reaches Kettu's services: the account, relay, push and sharing.
+  const cloudOn = (): boolean => settings.get().cloud.enabled
   let accountBase = ACCOUNT_URL
   try {
     accountBase = accountBaseUrl(process.env)
   } catch (error) {
     log.error(`Signing in to ${ACCOUNT_URL} instead`, error)
   }
+  // The Kettu account's requests and avatars, on a session of their own for the same reasons.
+  const accountSession = session.fromPartition('kettu-account')
+  let accountProxy = accountSession.setProxy(sessionProxy(settings.get().proxy))
+  const accountFetch = guardKettuFetch(
+    async (url, init) => {
+      await accountProxy
+      return accountSession.fetch(url, init) as unknown as Promise<Response>
+    },
+    cloudOn,
+    [accountBase],
+  )
   const accountAvatars = new Avatars(accountFetch, (url) =>
     accountAvatarRequestUrl(url, accountBase),
   )
@@ -445,6 +452,7 @@ async function start(): Promise<void> {
     },
     avatar: (url) => accountAvatars.load(url),
     failureText: () => t('account.browserFailed'),
+    cloud: cloudOn,
     changed: (status) => {
       broadcast('account:changed', status)
       sharingKettuChanged?.()
@@ -453,9 +461,12 @@ async function start(): Promise<void> {
     log: createLogger('account'),
   })
   const signedIn = (): boolean => account.status().state === 'signed-in'
+  // What the relay, push and the account's hosts go by: a sign-in with Kettu's services on.
+  const accountInUse = (): boolean => cloudOn() && signedIn()
+  const relayOn = (): boolean => settings.get().remote.relay && cloudOn()
   const relayToken = new RelayToken({
     current: () => account.currentToken(),
-    signedIn,
+    signedIn: accountInUse,
     needed: () =>
       settings.get().remote.enabled ||
       remoteHost.pairingHosts ||
@@ -478,7 +489,7 @@ async function start(): Promise<void> {
       online: status?.online ?? [],
       plainTextKey: status?.plainTextKey ?? false,
       direct: status?.direct ?? { state: 'off' },
-      relay: !settings.get().remote.relay
+      relay: !relayOn()
         ? { state: 'off' }
         : !signedIn()
           ? { state: 'signed_out' }
@@ -535,7 +546,7 @@ async function start(): Promise<void> {
     newRelayKey: () => newRelayKey(userDataPath, identityCipher),
     relayUrl,
     pushUrl,
-    relay: () => settings.get().remote.relay,
+    relay: relayOn,
     discoverable: () => settings.get().remote.discoverable,
     discoveryChanged: (event) => {
       broadcast('remote:discovery', event)
@@ -551,7 +562,7 @@ async function start(): Promise<void> {
     },
     hostName,
     devices: () => loadStoredDevices(userDataPath, (level, message) => remoteLog[level](message)),
-    direct: () => effectiveDirect(settings.get(), signedIn()),
+    direct: () => effectiveDirect(settings.get(), accountInUse()),
     terminal: () => settings.get().remote.terminal,
     openPort: (device) => agentHost.connectDevice(device),
     openTerminalPort: (device) => terminalHost.connectDevice(device),
@@ -590,7 +601,7 @@ async function start(): Promise<void> {
     },
     kettu: {
       base: accountBase,
-      account: () => account.signedIn(),
+      account: () => (cloudOn() ? account.signedIn() : null),
       withToken: (call) =>
         account.withAccessToken(call, (error) => error instanceof KettuUnauthorized),
     },
@@ -604,7 +615,12 @@ async function start(): Promise<void> {
     encryptionAvailable: () => safeStorage.isAsyncEncryptionAvailable(),
     plainText: () =>
       process.platform === 'linux' && safeStorage.getSelectedStorageBackend() === 'basic_text',
-    fetch: (url, init) => sharingSession.fetch(url, init) as unknown as Promise<Response>,
+    // Kettu's hosts alone: the same session publishes to the user's own Cloudflare account.
+    fetch: guardKettuFetch(
+      (url, init) => sharingSession.fetch(url, init) as unknown as Promise<Response>,
+      cloudOn,
+      [accountBase],
+    ),
     changed: (status) => {
       broadcast('sharing:changed', status)
       hostAdmin?.sharingChanged(status)
@@ -768,6 +784,15 @@ async function start(): Promise<void> {
       remoteChanged()
       hostsChanged()
     }
+    if (changed.has('cloud')) {
+      // The window signs out first, while the service can still be told; this forgets it here.
+      if (!next.cloud.enabled && account.status().state !== 'signed-out') void account.signOut()
+      relayToken.update()
+      remoteHost.relayChanged()
+      remoteHost.directChanged()
+      sharing.kettuChanged()
+      remoteChanged()
+    }
     // After the remote host, so devices hear why their terminals close; it reads `remote.terminal`.
     if (changed.has('terminal') || changed.has('remote')) {
       terminalHost.pushSettings(terminalSettings(next))
@@ -855,6 +880,8 @@ async function start(): Promise<void> {
   })
 
   agentHost.start()
+  // A sign-in left from before Kettu cloud was turned off is forgotten here, without the service.
+  if (!cloudOn() && account.status().state !== 'signed-out') void account.signOut()
   relayToken.update()
   void remoteHost.setEnabled(settings.get().remote.enabled)
   watchPresence((present) => remoteHost.setPresent(present))
