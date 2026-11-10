@@ -437,7 +437,7 @@
   --duration-breath: 2400ms;
 
   /* Type. */
-  --prose-size: 15px;
+  --prose-size: 16px;
   /* Font files load only when text uses their face. */
   --face-system:
     system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
@@ -519,10 +519,10 @@
 }
 
 :root[data-text-size='small'] {
-  --prose-size: 14px;
+  --prose-size: 15px;
 }
 :root[data-text-size='large'] {
-  --prose-size: 16px;
+  --prose-size: 17px;
 }
 
 @layer base {
