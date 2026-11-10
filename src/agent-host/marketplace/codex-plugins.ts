@@ -26,6 +26,13 @@ export interface CodexPluginList {
   marketplaces: PluginMarketplace[]
   /** Where each plugin's marketplace file is, by plugin id, which reading and installing need. */
   paths: Record<string, string>
+  /** The logo files each plugin's package ships, by plugin id, as Codex resolved them. */
+  logos: Record<string, PluginLogoPaths>
+}
+
+export interface PluginLogoPaths {
+  light: string
+  dark: string | null
 }
 
 /** OpenAI's own marketplaces, such as `openai-curated`. */
@@ -41,7 +48,13 @@ function https(value: string | null | undefined): string | null {
 /** `plugin/list` as the Marketplace lists it; a marketplace only the remote service has is left out. */
 export function codexPlugins(response: PluginListResponse, agentId: AgentId): CodexPluginList {
   const featured = new Set(response.featuredPluginIds)
-  const out: CodexPluginList = { catalog: [], installed: [], marketplaces: [], paths: {} }
+  const out: CodexPluginList = {
+    catalog: [],
+    installed: [],
+    marketplaces: [],
+    paths: {},
+    logos: {},
+  }
   for (const marketplace of response.marketplaces) {
     if (marketplace.path === null) continue
     out.marketplaces.push({
@@ -54,6 +67,8 @@ export function codexPlugins(response: PluginListResponse, agentId: AgentId): Co
     for (const plugin of marketplace.plugins) {
       if (plugin.source.type === 'remote') continue
       out.paths[plugin.id] = marketplace.path
+      const light = plugin.interface?.logo ?? null
+      if (light) out.logos[plugin.id] = { light, dark: plugin.interface?.logoDark ?? null }
       const version = plugin.localVersion ?? plugin.version
       if (plugin.installed) {
         out.installed.push({

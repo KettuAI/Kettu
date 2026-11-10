@@ -13,7 +13,6 @@ import {
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
-import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import type {
   CatalogPlugin,
@@ -32,7 +31,6 @@ import { agentName, AGENT_NAMES } from '@renderer/stores/agents'
 import { busyKey, detailsKey, useMarketplaceStore } from '@renderer/stores/marketplace'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installPlugin, setPluginEnabled, uninstallPlugin } from './actions'
-import { ServerTile } from './brand-marks'
 import { ConfirmDialog } from './dialogs'
 import {
   useBusy,
@@ -42,8 +40,10 @@ import {
   usePluginInstalls,
 } from './hooks'
 import { ListingFrame, ListingSkeleton, Missing, ExternalLink } from './parts'
-import { byInstalls, catalogPlugin, itemKey, pluginName } from './model'
+import { byInstalls, catalogPlugin, itemKey, pluginName, scopeLine } from './model'
 import { AddControl, ItemRow, KindTag, OfficialBadge } from './rows'
+import { pluginSubject } from './tile-art'
+import { ItemTile } from './tiles'
 
 export function PluginRow({
   plugin,
@@ -65,7 +65,7 @@ export function PluginRow({
   return (
     <ItemRow
       title={plugin.title}
-      brand={plugin.name}
+      subject={pluginSubject(plugin)}
       official={plugin.official}
       tag={showKind ? <KindTag kind="plugin" harness={plugin.harness} /> : undefined}
       line={[installsLabel(plugin.installs), plugin.description].filter(Boolean).join(' · ')}
@@ -252,7 +252,7 @@ export function PluginListing({
   return (
     <ListingFrame back={back} rise>
       <header className="k-mkt-head">
-        <ServerTile brand={plugin?.name ?? pluginName(id)} name={title} big />
+        <ItemTile subject={pluginSubject({ harness, id, category: plugin?.category })} size="big" />
         <span className="k-mkt-head__title">
           <span className="k-mkt-head__name">
             <h1>{title}</h1>
@@ -423,54 +423,20 @@ function Installs({ installs, title }: { installs: InstalledPlugin[]; title: str
   )
 }
 
-/** Where a plugin is installed: every project, or the one project. */
-function scopeLine(plugin: InstalledPlugin, t: TFunction<'marketplace'>): string {
-  return plugin.scope === 'user'
-    ? t('plugin.scopeUser')
-    : t(plugin.scope === 'local' ? 'plugin.scopeLocalIn' : 'plugin.scopeProjectIn', {
-        project: basename(plugin.projectPath ?? ''),
-      })
-}
-
 /** One agent's install: the agent, where, its version, its switch and Uninstall. */
-export function InstallRow({
-  plugin,
-  title,
-  showTitle,
-  onOpen,
-}: {
-  plugin: InstalledPlugin
-  title: string
-  showTitle?: boolean
-  onOpen?: () => void
-}) {
+export function InstallRow({ plugin, title }: { plugin: InstalledPlugin; title: string }) {
   const { t } = useTranslation('marketplace')
   const [confirming, setConfirming] = useState(false)
   const busy = useBusy(busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`))
-  const line = [
-    showTitle ? agentName(plugin.agentId) : null,
-    scopeLine(plugin, t),
-    plugin.version,
-    plugin.enabled ? null : t('installed.off'),
-  ]
+  const line = [scopeLine(plugin, t), plugin.version, plugin.enabled ? null : t('installed.off')]
     .filter(Boolean)
     .join(' · ')
   return (
     <div className="ui-sg-row">
       <span className="k-mkt-thing">
-        {showTitle ? (
-          <ServerTile brand={pluginName(plugin.id)} name={title} />
-        ) : (
-          <AgentMark agent={plugin.agentId} size={20} />
-        )}
+        <AgentMark agent={plugin.agentId} size={20} />
         <span className="ui-sg-label">
-          {showTitle && onOpen ? (
-            <button type="button" className="k-mkt-thing__link" onClick={onOpen}>
-              {title}
-            </button>
-          ) : (
-            <b className="k-mkt-thing__name">{agentName(plugin.agentId)}</b>
-          )}
+          <b className="k-mkt-thing__name">{agentName(plugin.agentId)}</b>
           <small>{line}</small>
         </span>
       </span>

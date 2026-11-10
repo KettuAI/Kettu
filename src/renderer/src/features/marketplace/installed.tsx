@@ -1,9 +1,9 @@
-// Marketplace › Installed: Kettu's own server with a switch per agent; the plugins and plugin
-// marketplaces each agent has; the MCP servers and skills Kettu keeps; then the skills and MCP
-// servers each agent keeps itself, which Kettu only shows.
+// Marketplace › Installed, in the directory's rows: Kettu's own server, the MCP servers and skills
+// Kettu keeps, the plugins each agent has, then what the agents keep themselves, which Kettu only
+// shows, and the plugin marketplaces they read.
 
-import { useEffect, useState, type CSSProperties } from 'react'
-import { Delete02Icon, RefreshIcon } from '@hugeicons/core-free-icons'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { Delete02Icon, RefreshIcon, Store01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { McpStatus } from '@shared/agent-host'
@@ -17,61 +17,136 @@ import {
   type PluginMarketplace,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
-import { EmptyState, Icon } from '@renderer/components/affect/app-shell'
+import { EmptyState, Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
-import { AgentTile } from '@renderer/components/agents/agent-mark'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
-import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { errorMessage } from '@renderer/lib/host'
 import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { busyKey, useMarketplaceStore } from '@renderer/stores/marketplace'
 import { useMcpStore } from '@renderer/stores/mcp'
-import { useMarketplaceStore } from '@renderer/stores/marketplace'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openMarketplace } from '@renderer/stores/view'
-import { removeMarketplace, setServerOn } from './actions'
+import { removeMarketplace, setPluginEnabled, setServerOn, setSkillOn } from './actions'
 import { ConnectionControls } from './connect'
 import { ConfirmDialog } from './dialogs'
-import { useConnection, useConnectionText } from './hooks'
+import { useBusy, useConnection, useConnectionText } from './hooks'
 import {
   catalogEntry,
   catalogPlugin,
   catalogSkill,
   fromCatalog,
   fromKept,
+  homeShort,
   itemKey,
   matchesQuery,
   matchesText,
   oauthFlow,
+  parentPath,
   pluginName,
+  scopeLine,
   skillMatches,
   type Listing,
 } from './model'
-import { InstallRow } from './plugins'
-import { ItemRow, QuietNote } from './rows'
-import { KeptSkillControls } from './skills'
+import { ItemRow, MoreButton, QuietNote, SkeletonRows } from './rows'
+import { pluginSubject, serverSubject, skillSubject } from './tile-art'
+import { PlainTile } from './tiles'
+
+/** Rows a group of the agents' own skills shows before "and N more". */
+const GROUP_ROWS = 6
 
 export function InstalledView({ query }: { query: string }) {
+  const { t } = useTranslation('marketplace')
   const load = useMcpStore((s) => s.load)
   // Read each time the tab shows, as an agent's file may have been created since.
   useEffect(() => {
     void load()
   }, [load])
+  usePluginsRead()
+  useSkillsRead()
+  const servers = useKeptServers(query)
+  const skills = useKeptSkills(query)
+  const plugins = useInstalledPlugins(query)
+  const own = useOwn(query)
+  const markets = useMarketplaces(query)
+  const searching = query.trim() !== ''
+  const nothing =
+    searching &&
+    !matchesText(['Kettu'], query) &&
+    servers.length + skills.length + (plugins?.length ?? 0) === 0 &&
+    own.folders.length + own.places.length + markets.length === 0
+  if (nothing) {
+    return (
+      <section className="ui-as-int-section">
+        <EmptyState title={t('search.noneTitle')} text={t('installed.noMatch', { query })} />
+      </section>
+    )
+  }
   return (
     <>
-      <KettuSection />
-      <PluginsSection query={query} />
-      <KeptSection query={query} />
-      <SkillsSection query={query} />
-      <MarketplacesSection />
-      <OwnSkillsSection query={query} />
-      <OwnSection />
+      {(!searching || matchesText(['Kettu'], query)) && <KettuSection />}
+      <Section title={t('installed.kept')} count={servers.length} index={1} hide={searching}>
+        {servers.length === 0 ? (
+          <p className="k-mkt-section-note">{t('installed.noServers')}</p>
+        ) : (
+          <div className="ui-as-int-grid">
+            {servers.map(({ server, listing }) => (
+              <KeptRow key={server.id} server={server} listing={listing} />
+            ))}
+          </div>
+        )}
+      </Section>
+      <Section title={t('installed.skills')} count={skills.length} index={2} hide={searching}>
+        {skills.length === 0 ? (
+          <p className="k-mkt-section-note">{t('installed.noSkills')}</p>
+        ) : (
+          <div className="ui-as-int-grid">
+            {skills.map((skill) => (
+              <KeptSkillRow key={skill.id} skill={skill} />
+            ))}
+          </div>
+        )}
+      </Section>
+      <PluginsSection plugins={plugins} searching={searching} />
+      <OwnSection own={own} searching={searching} />
+      <MarketplacesSection markets={markets} />
     </>
   )
 }
 
-/** Kettu's own server: built in, whether it runs, and whose sessions get it. */
+/** A section's title with its count; while searching, a section with nothing found is left out. */
+function Section({
+  title,
+  count,
+  index,
+  hide,
+  note,
+  children,
+}: {
+  title: string
+  count: number | null
+  index: number
+  /** Leave the section out when it has nothing. */
+  hide?: boolean
+  note?: string
+  children: ReactNode
+}) {
+  if (hide && count === 0) return null
+  return (
+    <section className="ui-as-int-section ui-as-rise" style={{ '--i': index } as CSSProperties}>
+      <h2 className="ui-as-int-section__title">
+        {title}
+        {count !== null && count > 0 && <span className="k-mkt-count">{count}</span>}
+      </h2>
+      {note && <p className="k-mkt-section-note">{note}</p>}
+      {children}
+    </section>
+  )
+}
+
+/** Kettu's own server: one row, whether it runs, and whose sessions get it from a popover. */
 function KettuSection() {
   const { t } = useTranslation('marketplace')
   const status = useMcpStore((s) => s.status)
@@ -80,69 +155,58 @@ function KettuSection() {
   return (
     <section className="ui-as-int-section ui-as-rise" aria-label={t('installed.builtIn')}>
       <h2 className="ui-as-int-section__title">{t('installed.builtIn')}</h2>
-      <p className="k-mkt-section-note">{t('kettu.note')}</p>
-      <div className="ui-sg-card k-mkt-card">
-        {server ? (
-          <>
-            <div className="ui-sg-row">
-              <span className="k-mkt-thing">
-                <BrandIcon size={30} className="k-mkt-thing__icon" />
-                <span className="ui-sg-label">
-                  <b className="k-mkt-thing__name">
-                    {server.title}
-                    <Pill>{t('kettu.builtIn')}</Pill>
-                  </b>
-                  <small>{t('kettu.tools', { count: server.tools.length })}</small>
-                </span>
-              </span>
-              {server.running ? (
-                <Pill tone="success">{t('kettu.running')}</Pill>
-              ) : (
-                <span className="ui-ss-badge k-mkt-danger-badge">{t('kettu.notRunning')}</span>
-              )}
-            </div>
-            {!server.running && <NotRunning error={server.error} />}
-            <AgentSwitches />
-          </>
-        ) : error ? (
-          <ReadFailed error={error} />
-        ) : (
-          <LoadingRows rows={3} />
-        )}
-      </div>
+      {server ? (
+        <>
+          <div className="ui-as-int-grid">
+            <ItemRow
+              title={server.title}
+              icon={<BrandIcon size={30} className="k-mkt-kettu-tile" />}
+              tag={<Pill>{t('kettu.builtIn')}</Pill>}
+              line={[
+                server.running ? t('kettu.running') : t('kettu.notRunning'),
+                t('kettu.tools', { count: server.tools.length }),
+              ].join(' · ')}
+              lineTitle={t('kettu.note')}
+              end={<AgentsButton />}
+            />
+          </div>
+          {!server.running && (
+            <ProblemNote
+              title={t('kettu.notRunningTitle')}
+              body={t('kettu.notRunningBody')}
+              error={server.error}
+            />
+          )}
+        </>
+      ) : error ? (
+        <ProblemNote title={t('kettu.readFailed')} error={error} />
+      ) : (
+        <SkeletonRows rows={1} />
+      )}
     </section>
   )
 }
 
-/** Why Kettu's server does not listen, with Retry at the end. */
-function NotRunning({ error }: { error: string | null }) {
-  const { t } = useTranslation('marketplace')
+/** Why Kettu's server does not listen, or why its status could not be read, with Retry. */
+function ProblemNote({
+  title,
+  body,
+  error,
+}: {
+  title: string
+  body?: string
+  error: string | null
+}) {
   return (
-    <div className="ui-sg-row k-mkt-problem" role="alert">
-      <span className="ui-sg-label">
-        <b>{t('kettu.notRunningTitle')}</b>
-        <small>{t('kettu.notRunningBody')}</small>
+    <div className="k-mkt-problem-note" role="alert">
+      <span>
+        <b>{title}</b>
+        {body && <small>{body}</small>}
         {error && (
           <small className="k-mkt-mono k-mkt-error" data-selectable="">
             {error}
           </small>
         )}
-      </span>
-      <RetryButton />
-    </div>
-  )
-}
-
-/** In place of the rows when the status could not be read. */
-function ReadFailed({ error }: { error: string }) {
-  const { t } = useTranslation('marketplace')
-  return (
-    <div className="ui-sg-row k-mkt-problem" role="alert">
-      <span className="ui-sg-label">
-        <b>{t('kettu.readFailed')}</b>
-        <small className="k-mkt-mono k-mkt-error" data-selectable="">
-          {error}
-        </small>
       </span>
       <RetryButton />
     </div>
@@ -169,13 +233,16 @@ function RetryButton() {
   )
 }
 
-/** A switch per agent in catalog order: whether its sessions get Kettu's tools. */
-function AgentSwitches() {
+/** "5 agents", or "3 of 5 agents", opening a switch per agent: whether it gets Kettu's tools. */
+function AgentsButton() {
+  const { t } = useTranslation('marketplace')
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const off = useSettingsStore((s) => s.settings.mcp.kettu.off)
+  const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const set = (agentId: AgentId, on: boolean) => {
-    const next = on ? off.filter((id) => id !== agentId) : [...off, agentId]
+  const on = agents.filter((agent) => !off.includes(agent.id)).length
+  const set = (agentId: AgentId, enabled: boolean) => {
+    const next = enabled ? off.filter((id) => id !== agentId) : [...off, agentId]
     setError(null)
     useSettingsStore
       .getState()
@@ -183,16 +250,45 @@ function AgentSwitches() {
       .catch((e: unknown) => setError(errorMessage(e)))
   }
   return (
-    <>
-      {error && (
-        <p role="alert" className="ui-sg-row k-mkt-error">
-          {error}
-        </p>
-      )}
-      {agents.map((agent) => (
-        <AgentSwitchRow key={agent.id} agentId={agent.id} off={off.includes(agent.id)} set={set} />
-      ))}
-    </>
+    <span className="ui-as-anchor">
+      <Button
+        size="sm"
+        variant="secondary"
+        aria-expanded={open}
+        aria-label={t('kettu.agentsLabel')}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {on === agents.length
+          ? t('kettu.agents', { count: agents.length })
+          : t('kettu.agentsSome', { on, count: agents.length })}
+      </Button>
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        align="end"
+        className="ui-as-menu k-mkt-install-pop"
+      >
+        <div className="k-mkt-install">
+          <b>{t('kettu.agentsTitle')}</b>
+          <span>{t('kettu.note')}</span>
+          {error && (
+            <p role="alert" className="k-mkt-error">
+              {error}
+            </p>
+          )}
+          <div className="k-mkt-switches">
+            {agents.map((agent) => (
+              <AgentSwitchRow
+                key={agent.id}
+                agentId={agent.id}
+                off={off.includes(agent.id)}
+                set={set}
+              />
+            ))}
+          </div>
+        </div>
+      </Popover>
+    </span>
   )
 }
 
@@ -211,21 +307,17 @@ function AgentSwitchRow({
   const active = status?.kettuServer.active ?? null
   const runs = status?.kettuServer.runs ?? !off
   const takesNone = status?.capabilities.mcpHttp === false
+  const note = takesNone
+    ? t('kettu.agent.takesNone', { name })
+    : active !== null && active !== runs
+      ? t('kettu.agent.nextStart', { name })
+      : null
   return (
-    <div className="ui-sg-row">
-      <span className="k-mkt-thing">
-        <AgentTile agent={agentId} size={24} />
-        <span className="ui-sg-label">
-          <b className="k-mkt-thing__name">{name}</b>
-          <small>
-            {takesNone
-              ? t('kettu.agent.takesNone', { name })
-              : t(off ? 'kettu.agent.off' : 'kettu.agent.on')}
-          </small>
-          {!takesNone && active !== null && active !== runs && (
-            <small>{t('kettu.agent.nextStart', { name })}</small>
-          )}
-        </span>
+    <div className="k-mkt-switch-row" data-disabled={takesNone || undefined}>
+      <AgentMark agent={agentId} size={16} dot={null} />
+      <span className="k-mkt-switch-row__text">
+        <span className="k-mkt-agents__name">{name}</span>
+        {note && <small>{note}</small>}
       </span>
       {!takesNone && (
         <SettingSwitch
@@ -238,32 +330,15 @@ function AgentSwitchRow({
   )
 }
 
-/** The servers Kettu keeps, from the registry or added by hand, each with its switch. */
-function KeptSection({ query }: { query: string }) {
-  const { t } = useTranslation('marketplace')
+/** The servers Kettu keeps, from the registry or added by hand, matching the search. */
+function useKeptServers(query: string): { server: MarketServer; listing: Listing }[] {
   const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
   // The catalog gives a kept server its mark, badge and line once it has answered.
   useMarketplaceStore((s) => s.catalog)
   const needle = query.trim().toLocaleLowerCase()
-  const rows = kept
+  return kept
     .map((server) => ({ server, listing: listingOf(server) }))
     .filter(({ listing, server }) => matchesQuery(listing, query) || server.name.includes(needle))
-  return (
-    <section className="ui-as-int-section ui-as-rise" style={{ '--i': 2 } as CSSProperties}>
-      <h2 className="ui-as-int-section__title">{t('installed.kept')}</h2>
-      {kept.length === 0 ? (
-        <EmptyState title={t('installed.emptyTitle')} text={t('installed.emptyText')} />
-      ) : rows.length === 0 ? (
-        <EmptyState title={t('search.noneTitle')} text={t('installed.noMatch', { query })} />
-      ) : (
-        <div className="ui-as-int-grid">
-          {rows.map(({ server, listing }) => (
-            <KeptRow key={server.id} server={server} listing={listing} />
-          ))}
-        </div>
-      )}
-    </section>
-  )
 }
 
 function listingOf(server: MarketServer): Listing {
@@ -288,7 +363,7 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
   return (
     <ItemRow
       title={listing.title}
-      brand={listing.brand}
+      subject={serverSubject(listing)}
       official={listing.official}
       line={line}
       onOpen={() =>
@@ -309,275 +384,10 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
   )
 }
 
-/** Each agent's own configuration, read only, as the agent finds it. */
-function OwnSection() {
-  const { t } = useTranslation('marketplace')
-  const status = useMcpStore((s) => s.status)
-  const error = useMcpStore((s) => s.error)
-  // A failed read shows once, in the built-in section above.
-  if (error && !status) return null
-  const places = status?.places ?? null
-  if (places && places.length === 0) return null
-  return (
-    <section className="ui-as-int-section ui-as-rise" style={{ '--i': 6 } as CSSProperties}>
-      <h2 className="ui-as-int-section__title">{t('own.title')}</h2>
-      <p className="k-mkt-section-note">{t('own.note')}</p>
-      <div className="ui-sg-card k-mkt-card">
-        {places ? (
-          places.map((place) => <PlaceRow key={place.agentId} place={place} />)
-        ) : (
-          <LoadingRows rows={3} />
-        )}
-      </div>
-    </section>
-  )
-}
-
-/**
- * One agent's own configuration: its tile and name, then where its servers come from, saying so
- * when the file is not there yet, with Show in Finder or Copy path at the end while it is.
- */
-function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
-  const { t } = useTranslation(['marketplace', 'settings'])
-  const agent = useAgentsStore((s) => s.byId[place.agentId])
-  const name = agent?.name ?? place.agentId
-  const note = place.chosen
-    ? t('settings:agents.chosenInKettu')
-    : place.env && t('settings:agents.setByLine', { env: place.env })
-  const values = {
-    path: note ? t('own.pathNote', { path: place.path, note }) : place.path,
-    command: place.listCommand,
-    file: place.project,
-  }
-  // Where a command lists the servers, the line names the file only when it is missing or moved.
-  const line = place.listCommand
-    ? t(
-        !place.exists ? 'own.withCommandMissing' : note ? 'own.withCommandFrom' : 'own.withCommand',
-        values,
-      )
-    : t(place.exists ? 'own.from' : 'own.fromMissing', values)
-  return (
-    <div className="ui-sg-row">
-      <span className="k-mkt-thing">
-        <AgentTile agent={place.agentId} size={24} />
-        <span className="ui-sg-label">
-          <b className="k-mkt-thing__name">{name}</b>
-          <small className="k-mkt-clamp" title={line} data-selectable="">
-            {line}
-          </small>
-        </span>
-      </span>
-      {place.exists && <PlaceAction path={place.path} icon />}
-    </div>
-  )
-}
-
-/** Skeleton rows while the first status is on its way. */
-function LoadingRows({ rows }: { rows: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="ui-sg-row" aria-hidden>
-          <span className="k-mkt-thing">
-            <Skeleton className="k-mkt-skeleton__mark" />
-            <span className="ui-sg-label k-mkt-skeleton__lines">
-              <Skeleton className="k-mkt-skeleton__name" />
-              <Skeleton className="k-mkt-skeleton__line" />
-            </span>
-          </span>
-        </div>
-      ))}
-    </>
-  )
-}
-
-/** Groups by agent, in the order the agents come first. */
-function byAgent<T extends { agentId: AgentId }>(items: T[]): [AgentId, T[]][] {
-  const groups = new Map<AgentId, T[]>()
-  for (const item of items) groups.set(item.agentId, [...(groups.get(item.agentId) ?? []), item])
-  return [...groups]
-}
-
-/** Read the first time the tab needs them; the host lists plugins slowly. */
-function usePluginsRead(): void {
-  useEffect(() => {
-    const store = useMarketplaceStore.getState()
-    if (!store.plugins && !store.pluginsLoading) void store.loadPlugins()
-  }, [])
-}
-
-function useSkillsRead(): void {
-  useEffect(() => {
-    const store = useMarketplaceStore.getState()
-    if (!store.skills && !store.skillsLoading) void store.loadSkills()
-  }, [])
-}
-
-/** The plugins each Claude Code and Codex agent has, with a switch and Uninstall each. */
-function PluginsSection({ query }: { query: string }) {
-  const { t } = useTranslation('marketplace')
-  usePluginsRead()
-  const plugins = useMarketplaceStore((s) => s.plugins)
-  const failure = useMarketplaceStore((s) => s.pluginsError)
-  const titleOf = (plugin: InstalledPlugin) =>
-    catalogPlugin(plugin.harness, plugin.id)?.title ?? pluginName(plugin.id)
-  const installed = (plugins?.installed ?? []).filter((p) =>
-    matchesText([titleOf(p), p.id, agentName(p.agentId)], query),
-  )
-  return (
-    <section className="ui-as-int-section ui-as-rise" style={{ '--i': 1 } as CSSProperties}>
-      <h2 className="ui-as-int-section__title">{t('installed.plugins')}</h2>
-      {failure && !plugins && <PluginsFailed error={failure} />}
-      {plugins?.errors.map((error) => (
-        <QuietNote key={error.agentId}>
-          {t('notes.agentPlugins', { agent: agentName(error.agentId), error: error.message })}
-        </QuietNote>
-      ))}
-      {!plugins && !failure ? (
-        <div className="ui-sg-card k-mkt-card">
-          <LoadingRows rows={2} />
-        </div>
-      ) : plugins && installed.length === 0 ? (
-        <p className="k-mkt-section-note">
-          {query ? t('installed.noMatch', { query }) : t('installed.noPlugins')}
-        </p>
-      ) : (
-        byAgent(installed).map(([agentId, list]) => (
-          <div key={agentId} className="k-mkt-group">
-            <span className="k-mkt-group__head">
-              <AgentTile agent={agentId} size={18} />
-              {agentName(agentId)}
-            </span>
-            <div className="ui-sg-card k-mkt-card">
-              {list.map((plugin) => (
-                <InstallRow
-                  key={`${plugin.id}|${plugin.scope}|${plugin.projectPath ?? ''}`}
-                  plugin={plugin}
-                  title={titleOf(plugin)}
-                  showTitle
-                  onOpen={() =>
-                    openMarketplace({
-                      item: itemKey({ kind: 'plugin', harness: plugin.harness, id: plugin.id }),
-                      tab: 'installed',
-                    })
-                  }
-                />
-              ))}
-            </div>
-          </div>
-        ))
-      )}
-    </section>
-  )
-}
-
-function PluginsFailed({ error }: { error: string }) {
-  const { t } = useTranslation(['marketplace', 'common'])
-  return (
-    <QuietNote
-      action={
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<Icon icon={RefreshIcon} size={14} />}
-          onClick={() => void useMarketplaceStore.getState().loadPlugins(true)}
-        >
-          {t('common:actions.retry')}
-        </Button>
-      }
-    >
-      {t('notes.plugins', { error })}
-    </QuietNote>
-  )
-}
-
-/** The plugin marketplaces each agent reads; the harness maker's own stays. */
-function MarketplacesSection() {
-  const { t } = useTranslation('marketplace')
-  const markets = useMarketplaceStore((s) => s.plugins?.marketplaces ?? null)
-  if (!markets || markets.length === 0) return null
-  return (
-    <section className="ui-as-int-section ui-as-rise" style={{ '--i': 4 } as CSSProperties}>
-      <h2 className="ui-as-int-section__title">{t('installed.marketplaces')}</h2>
-      <p className="k-mkt-section-note">{t('installed.marketplacesNote')}</p>
-      {byAgent(markets).map(([agentId, list]) => (
-        <div key={agentId} className="k-mkt-group">
-          <span className="k-mkt-group__head">
-            <AgentTile agent={agentId} size={18} />
-            {agentName(agentId)}
-          </span>
-          <div className="ui-sg-card k-mkt-card">
-            {list.map((market) => (
-              <MarketplaceRow key={market.name} market={market} />
-            ))}
-          </div>
-        </div>
-      ))}
-    </section>
-  )
-}
-
-function MarketplaceRow({ market }: { market: PluginMarketplace }) {
-  const { t } = useTranslation('marketplace')
-  const [confirming, setConfirming] = useState(false)
-  return (
-    <div className="ui-sg-row">
-      <span className="ui-sg-label">
-        <b className="k-mkt-thing__name">
-          {market.name}
-          {market.official && <Pill>{t('listing.official')}</Pill>}
-        </b>
-        <small className="k-mkt-mono" data-selectable="">
-          {market.source}
-        </small>
-      </span>
-      {market.official ? (
-        <small className="k-mkt-quiet">{t('installed.marketplaceKept')}</small>
-      ) : (
-        <button
-          type="button"
-          className="k-mkt-icon-btn"
-          aria-label={t('installed.removeMarketplace', { name: market.name })}
-          title={t('installed.removeMarketplace', { name: market.name })}
-          onClick={() => setConfirming(true)}
-        >
-          <Icon icon={Delete02Icon} size={15} />
-        </button>
-      )}
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={t('dialogs.removeMarketplace.title', { name: market.name })}
-        body={t('dialogs.removeMarketplace.body', { agent: agentName(market.agentId) })}
-        confirm={t('dialogs.removeMarketplace.confirm')}
-        action={() => removeMarketplace(market)}
-      />
-    </div>
-  )
-}
-
-/** The skills Kettu keeps, with a switch and a menu each. */
-function SkillsSection({ query }: { query: string }) {
-  const { t } = useTranslation('marketplace')
-  useSkillsRead()
+/** The skills Kettu keeps, matching the search. */
+function useKeptSkills(query: string): MarketSkill[] {
   const kept = useSettingsStore((s) => s.settings.marketplace.skills)
-  const rows = kept.filter((skill) => skillMatches(skill, query))
-  return (
-    <section className="ui-as-int-section ui-as-rise" style={{ '--i': 3 } as CSSProperties}>
-      <h2 className="ui-as-int-section__title">{t('installed.skills')}</h2>
-      {rows.length === 0 ? (
-        <p className="k-mkt-section-note">
-          {query ? t('installed.noMatch', { query }) : t('installed.noSkills')}
-        </p>
-      ) : (
-        <div className="ui-as-int-grid">
-          {rows.map((skill) => (
-            <KeptSkillRow key={skill.id} skill={skill} />
-          ))}
-        </div>
-      )}
-    </section>
-  )
+  return kept.filter((skill) => skillMatches(skill, query))
 }
 
 function KeptSkillRow({ skill }: { skill: MarketSkill }) {
@@ -595,35 +405,220 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
   return (
     <ItemRow
       title={displayTitle(skill.name)}
-      brand={null}
+      subject={skillSubject(skill.name)}
       official={entry?.official ?? false}
       line={line}
       onOpen={() =>
         openMarketplace({ item: itemKey({ kind: 'skill', id: skill.id }), tab: 'installed' })
       }
       end={
-        <span className="k-mkt-row-end">
-          <KeptSkillControls skill={skill} compact />
-        </span>
+        <SettingSwitch
+          label={t('listing.switch', { name: skill.name })}
+          checked={skill.on}
+          onChange={(on) => void setSkillOn(skill.id, on)}
+        />
       }
     />
   )
 }
 
-/** The skills each agent has of its own, read only. */
-function OwnSkillsSection({ query }: { query: string }) {
+/** Read the first time the tab needs them; the host lists plugins slowly. */
+function usePluginsRead(): void {
+  useEffect(() => {
+    const store = useMarketplaceStore.getState()
+    if (!store.plugins && !store.pluginsLoading) void store.loadPlugins()
+  }, [])
+}
+
+function useSkillsRead(): void {
+  useEffect(() => {
+    const store = useMarketplaceStore.getState()
+    if (!store.skills && !store.skillsLoading) void store.loadSkills()
+  }, [])
+}
+
+const pluginTitle = (plugin: InstalledPlugin): string =>
+  catalogPlugin(plugin.harness, plugin.id)?.title ?? displayTitle(pluginName(plugin.id))
+
+/** The plugins every agent has, matching the search; null until the host has listed them. */
+function useInstalledPlugins(query: string): InstalledPlugin[] | null {
+  const plugins = useMarketplaceStore((s) => s.plugins)
+  if (!plugins) return null
+  return plugins.installed.filter((p) =>
+    matchesText([pluginTitle(p), p.id, agentName(p.agentId)], query),
+  )
+}
+
+function PluginsSection({
+  plugins,
+  searching,
+}: {
+  plugins: InstalledPlugin[] | null
+  searching: boolean
+}) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const failure = useMarketplaceStore((s) => s.pluginsError)
+  const errors = useMarketplaceStore((s) => s.plugins?.errors ?? null)
+  if (searching && !plugins?.length) return null
+  return (
+    <Section title={t('installed.plugins')} count={plugins?.length ?? null} index={3}>
+      {failure && !plugins && (
+        <QuietNote
+          action={
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Icon icon={RefreshIcon} size={14} />}
+              onClick={() => void useMarketplaceStore.getState().loadPlugins(true)}
+            >
+              {t('common:actions.retry')}
+            </Button>
+          }
+        >
+          {t('notes.plugins', { error: failure })}
+        </QuietNote>
+      )}
+      {errors?.map((error) => (
+        <QuietNote key={error.agentId}>
+          {t('notes.agentPlugins', { agent: agentName(error.agentId), error: error.message })}
+        </QuietNote>
+      ))}
+      {!plugins ? (
+        !failure && <SkeletonRows rows={2} />
+      ) : plugins.length === 0 ? (
+        <p className="k-mkt-section-note">{t('installed.noPlugins')}</p>
+      ) : (
+        <div className="ui-as-int-grid">
+          {plugins.map((plugin) => (
+            <PluginRow
+              key={`${plugin.agentId}|${plugin.id}|${plugin.scope}|${plugin.projectPath ?? ''}`}
+              plugin={plugin}
+            />
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
+
+function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
+  const { t } = useTranslation('marketplace')
+  const entry = catalogPlugin(plugin.harness, plugin.id)
+  const title = pluginTitle(plugin)
+  const busy = useBusy(busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`))
+  const line = [
+    agentName(plugin.agentId),
+    plugin.scope === 'user' ? null : scopeLine(plugin, t),
+    plugin.version,
+    plugin.enabled ? null : t('installed.off'),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <ItemRow
+      title={title}
+      subject={pluginSubject({ ...plugin, category: entry?.category })}
+      official={entry?.official ?? false}
+      line={line}
+      onOpen={() =>
+        openMarketplace({
+          item: itemKey({ kind: 'plugin', harness: plugin.harness, id: plugin.id }),
+          tab: 'installed',
+        })
+      }
+      end={
+        <SettingSwitch
+          label={t('plugin.switch', { name: title, agent: agentName(plugin.agentId) })}
+          checked={plugin.enabled}
+          disabled={busy}
+          onChange={(on) => void setPluginEnabled(plugin, title, on)}
+        />
+      }
+    />
+  )
+}
+
+/** One skill folder an agent reads, with the skills in it, each once. */
+interface SkillFolder {
+  folder: string
+  agents: AgentId[]
+  skills: OwnSkill[]
+}
+
+interface OwnSkill {
+  path: string
+  name: string
+  description: string | null
+  /** The agents that turned it off; it is on for the others. */
+  offIn: AgentId[]
+}
+
+/**
+ * The agents' own skills by the folder they are in, so a folder several agents read shows once.
+ * A plugin's skills come with the plugin and are left out.
+ */
+function skillFolders(own: AgentOwnSkill[]): SkillFolder[] {
+  const folders = new Map<string, SkillFolder>()
+  const skills = new Map<string, OwnSkill>()
+  for (const skill of own) {
+    if (skill.plugin) continue
+    const folder = parentPath(parentPath(skill.path))
+    let group = folders.get(folder)
+    if (!group) folders.set(folder, (group = { folder, agents: [], skills: [] }))
+    if (!group.agents.includes(skill.agentId)) group.agents.push(skill.agentId)
+    let item = skills.get(skill.path)
+    if (!item) {
+      item = { path: skill.path, name: skill.name, description: skill.description, offIn: [] }
+      skills.set(skill.path, item)
+      group.skills.push(item)
+    }
+    if (!skill.enabled) item.offIn.push(skill.agentId)
+  }
+  return [...folders.values()]
+}
+
+interface Own {
+  folders: SkillFolder[]
+  places: McpStatus['places']
+  loading: boolean
+  failure: string | null
+}
+
+function useOwn(query: string): Own {
   const skills = useMarketplaceStore((s) => s.skills)
   const failure = useMarketplaceStore((s) => s.skillsError)
-  const own = (skills?.own ?? []).filter((skill) =>
-    matchesText([skill.name, skill.description, agentName(skill.agentId)], query),
+  const status = useMcpStore((s) => s.status)
+  const folders = skillFolders(skills?.own ?? [])
+    .map((group) => ({
+      ...group,
+      skills: group.skills.filter((skill) =>
+        matchesText(
+          [skill.name, skill.description, ...group.agents.map((id) => agentName(id))],
+          query,
+        ),
+      ),
+    }))
+    .filter((group) => group.skills.length > 0)
+  const places = (status?.places ?? []).filter((place) =>
+    matchesText([agentName(place.agentId), place.path], query),
   )
-  if (skills && own.length === 0) return null
+  return { folders, places, loading: !skills || !status, failure: skills ? null : failure }
+}
+
+/** What each agent keeps itself, read only: its skills by folder, then its MCP configuration. */
+function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
+  const { t } = useTranslation(['marketplace', 'common'])
+  const count = own.folders.reduce((n, group) => n + group.skills.length, 0)
+  if (searching && count + own.places.length === 0) return null
+  if (!own.loading && count + own.places.length === 0 && !own.failure) return null
   return (
-    <section className="ui-as-int-section ui-as-rise" style={{ '--i': 5 } as CSSProperties}>
-      <h2 className="ui-as-int-section__title">{t('installed.ownSkills')}</h2>
-      <p className="k-mkt-section-note">{t('installed.ownSkillsNote')}</p>
-      {failure && !skills ? (
+    <Section
+      title={t('installed.own')}
+      count={own.loading ? null : count}
+      index={4}
+      note={t('installed.ownNote')}
+    >
+      {own.failure && (
         <QuietNote
           action={
             <Button
@@ -636,52 +631,186 @@ function OwnSkillsSection({ query }: { query: string }) {
             </Button>
           }
         >
-          {t('notes.skills', { error: failure })}
+          {t('notes.skills', { error: own.failure })}
         </QuietNote>
-      ) : !skills ? (
-        <div className="ui-sg-card k-mkt-card">
-          <LoadingRows rows={2} />
-        </div>
-      ) : (
-        byAgent(own).map(([agentId, list]) => (
-          <div key={agentId} className="k-mkt-group">
-            <span className="k-mkt-group__head">
-              <AgentTile agent={agentId} size={18} />
-              {agentName(agentId)}
-            </span>
-            <div className="ui-sg-card k-mkt-card">
-              {list.map((skill) => (
-                <OwnSkillRow key={skill.path} skill={skill} />
-              ))}
-            </div>
-          </div>
-        ))
       )}
-    </section>
+      {own.loading && !own.failure && <SkeletonRows rows={4} />}
+      {own.folders.map((group) => (
+        <FolderGroup key={group.folder} group={group} searching={searching} />
+      ))}
+      {own.places.length > 0 && (
+        <div className="k-mkt-group">
+          <h3 className="k-mkt-group__head">{t('installed.mcpConfig')}</h3>
+          <div className="ui-as-int-grid">
+            {own.places.map((place) => (
+              <PlaceRow key={place.agentId} place={place} />
+            ))}
+          </div>
+        </div>
+      )}
+    </Section>
   )
 }
 
-function OwnSkillRow({ skill }: { skill: AgentOwnSkill }) {
-  const { t } = useTranslation('marketplace')
-  const note = [
-    skill.enabled ? null : t('installed.off'),
-    skill.plugin ? t('installed.fromPlugin', { plugin: pluginName(skill.plugin) }) : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+/** A folder's path and the agents that read it, over its skills: six, then "and N more". */
+function FolderGroup({ group, searching }: { group: SkillFolder; searching: boolean }) {
+  const [open, setOpen] = useState(false)
+  const shown = open || searching ? group.skills : group.skills.slice(0, GROUP_ROWS)
+  const rest = group.skills.slice(shown.length)
   return (
-    <div className="ui-sg-row">
-      <span className="ui-sg-label">
-        <b className="k-mkt-thing__name">
-          {displayTitle(skill.name)}
-          {note && <span className="k-mkt-quiet">{note}</span>}
-        </b>
-        {skill.description && <small className="k-mkt-clamp">{skill.description}</small>}
-        <small className="k-mkt-mono k-mkt-path" title={skill.path} data-selectable="">
-          {skill.path}
-        </small>
-      </span>
-      <PlaceAction path={skill.path} icon />
+    <div className="k-mkt-group">
+      <h3 className="k-mkt-group__head" title={group.folder}>
+        <span className="k-mkt-mono k-mkt-path">{homeShort(group.folder)}</span>
+        <span className="k-mkt-group__agents">
+          {group.agents.map((agentId) => (
+            <span key={agentId} className="k-mkt-group__agent">
+              <AgentMark agent={agentId} size={13} dot={null} />
+              {agentName(agentId)}
+            </span>
+          ))}
+        </span>
+      </h3>
+      <div className="ui-as-int-grid">
+        {shown.map((skill, i) => (
+          <OwnSkillRow key={skill.path} skill={skill} fresh={open && i >= GROUP_ROWS} />
+        ))}
+      </div>
+      {rest.length > 0 && (
+        <MoreButton
+          items={rest.map((skill) => ({
+            key: skill.path,
+            title: displayTitle(skill.name),
+            subject: skillSubject(skill.name),
+          }))}
+          quiet
+          onClick={() => setOpen(true)}
+        />
+      )}
     </div>
+  )
+}
+
+function OwnSkillRow({ skill, fresh }: { skill: OwnSkill; fresh: boolean }) {
+  const { t } = useTranslation('marketplace')
+  const off = skill.offIn.length
+    ? t('installed.offIn', { agents: skill.offIn.map((id) => agentName(id)).join(', ') })
+    : null
+  const line = [off, skill.description].filter(Boolean).join(' · ') || null
+  return (
+    <ItemRow
+      title={displayTitle(skill.name)}
+      subject={skillSubject(skill.name)}
+      quiet
+      line={line}
+      lineTitle={[skill.description, skill.path].filter(Boolean).join('\n')}
+      fresh={fresh}
+      end={<PlaceAction path={skill.path} icon />}
+    />
+  )
+}
+
+/** Where one agent keeps its own MCP servers: the file, or that it is not created yet. */
+function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
+  const { t } = useTranslation(['marketplace', 'settings'])
+  const agent = useAgentsStore((s) => s.byId[place.agentId])
+  const name = agent?.name ?? place.agentId
+  const note = place.chosen
+    ? t('settings:agents.chosenInKettu')
+    : place.env && t('settings:agents.setByLine', { env: place.env })
+  const values = {
+    path: note ? t('own.pathNote', { path: place.path, note }) : place.path,
+    command: place.listCommand,
+    file: place.project,
+  }
+  // The full account goes to the tooltip; the row names only the file.
+  const about = place.listCommand
+    ? t(
+        !place.exists ? 'own.withCommandMissing' : note ? 'own.withCommandFrom' : 'own.withCommand',
+        values,
+      )
+    : t(place.exists ? 'own.from' : 'own.fromMissing', values)
+  const path = homeShort(place.path)
+  return (
+    <ItemRow
+      title={name}
+      icon={
+        <PlainTile>
+          <AgentMark agent={place.agentId} size={18} dot={null} />
+        </PlainTile>
+      }
+      line={place.exists ? path : t('installed.notCreated', { path })}
+      lineTitle={about}
+      end={place.exists ? <PlaceAction path={place.path} icon /> : undefined}
+    />
+  )
+}
+
+/** The plugin marketplaces the agents read, matching the search. */
+function useMarketplaces(query: string): PluginMarketplace[] {
+  const markets = useMarketplaceStore((s) => s.plugins?.marketplaces ?? null)
+  return (markets ?? []).filter((market) =>
+    matchesText([market.name, market.source, agentName(market.agentId)], query),
+  )
+}
+
+function MarketplacesSection({ markets }: { markets: PluginMarketplace[] }) {
+  const { t } = useTranslation('marketplace')
+  if (markets.length === 0) return null
+  return (
+    <Section
+      title={t('installed.marketplaces')}
+      count={markets.length}
+      index={5}
+      note={t('installed.marketplacesNote')}
+    >
+      <div className="ui-as-int-grid">
+        {markets.map((market) => (
+          <MarketplaceRow key={`${market.agentId}|${market.name}`} market={market} />
+        ))}
+      </div>
+    </Section>
+  )
+}
+
+function MarketplaceRow({ market }: { market: PluginMarketplace }) {
+  const { t } = useTranslation('marketplace')
+  const [confirming, setConfirming] = useState(false)
+  return (
+    <>
+      <ItemRow
+        title={market.name}
+        icon={
+          <PlainTile>
+            <Icon icon={Store01Icon} />
+          </PlainTile>
+        }
+        official={market.official}
+        line={[agentName(market.agentId), homeShort(market.source)].join(' · ')}
+        lineTitle={market.source}
+        end={
+          market.official ? (
+            <small className="k-mkt-quiet">{t('installed.marketplaceKept')}</small>
+          ) : (
+            <button
+              type="button"
+              className="k-mkt-icon-btn"
+              aria-label={t('installed.removeMarketplace', { name: market.name })}
+              title={t('installed.removeMarketplace', { name: market.name })}
+              onClick={() => setConfirming(true)}
+            >
+              <Icon icon={Delete02Icon} size={15} />
+            </button>
+          )
+        }
+      />
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t('dialogs.removeMarketplace.title', { name: market.name })}
+        body={t('dialogs.removeMarketplace.body', { agent: agentName(market.agentId) })}
+        confirm={t('dialogs.removeMarketplace.confirm')}
+        action={() => removeMarketplace(market)}
+      />
+    </>
   )
 }

@@ -77,6 +77,10 @@ describe('createValidators', () => {
     rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: '--yes@x' }))
     rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'no-marketplace' }))
     rejects(() => posix['market.pluginDetails']({ ...plugin, pluginId: 'a@b c' }))
+    expect(posix['market.pluginLogo']({ pluginId: 'pdf@openai-primary-runtime', x: 1 })).toEqual({
+      pluginId: 'pdf@openai-primary-runtime',
+    })
+    rejects(() => posix['market.pluginLogo']({ pluginId: '../../.ssh/id_rsa' }))
     expect(posix['market.installPlugin']({ ...plugin, scope: 'user' })).toEqual({
       ...plugin,
       scope: 'user',

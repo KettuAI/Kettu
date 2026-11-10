@@ -1567,6 +1567,7 @@ export class AgentHost {
       'market.plugins': ({ refresh }) => this.marketPlugins.plugins(refresh === true),
       'market.pluginDetails': ({ agentId, pluginId }) =>
         this.marketPlugins.details(agentId, pluginId),
+      'market.pluginLogo': ({ pluginId }) => this.marketPlugins.logo(pluginId),
       'market.installPlugin': ({ agentId, pluginId, scope, projectPath }) =>
         this.marketPlugins.install(agentId, pluginId, scope, projectPath ?? null),
       'market.uninstallPlugin': ({ agentId, pluginId, scope, projectPath }) =>

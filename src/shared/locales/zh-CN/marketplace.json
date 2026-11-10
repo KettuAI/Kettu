@@ -149,8 +149,6 @@
   "installed": {
     "builtIn": "内置",
     "kept": "MCP 服务器",
-    "emptyTitle": "还没有安装任何服务器",
-    "emptyText": "可以从“全部”里安装，或用“添加”加入你自己的服务器。",
     "noMatch": "已安装的服务器中没有匹配“{{query}}”的。",
     "off": "已关闭",
     "forAgents_one": "用于 {{count}} 个 Agent",
@@ -163,9 +161,12 @@
     "removeMarketplace": "移除 {{name}}",
     "skills": "技能",
     "noSkills": "Kettu 还没有保存任何技能。可以在“技能”中安装。",
-    "ownSkills": "各 Agent 自己的技能",
-    "ownSkillsNote": "每个 Agent 自己保存的技能。Kettu 只显示它们，要修改请在 Agent 中进行。",
-    "fromPlugin": "来自 {{plugin}}"
+    "noServers": "Kettu 还没有保存任何 MCP 服务器。可以在“MCP 服务器”中安装。",
+    "own": "Agent 自己的",
+    "ownNote": "每个 Agent 自己保存的技能和 MCP 服务器。Kettu 只显示它们，要修改请在 Agent 中进行。",
+    "mcpConfig": "MCP 配置",
+    "offIn": "在 {{agents}} 中已关闭",
+    "notCreated": "{{path}} · 尚未创建"
   },
   "kettu": {
     "note": "Artifacts、会话和浏览器都通过 Kettu 自带的服务器提供给每个 Agent。",
@@ -179,15 +180,17 @@
     "readFailed": "无法读取 MCP 服务器",
     "agent": {
       "switch": "在 {{name}} 中使用 Kettu 的工具",
-      "on": "在它的会话中加入这些工具。",
-      "off": "它的会话启动时不带这些工具。",
       "takesNone": "{{name}} 不支持通过 HTTP 连接的 MCP 服务器。",
       "nextStart": "将在 {{name}} 下次启动时生效。"
-    }
+    },
+    "agents_one": "{{count}} 个 Agent",
+    "agents_other": "{{count}} 个 Agent",
+    "agentsSome_one": "{{on}}/{{count}} 个 Agent",
+    "agentsSome_other": "{{on}}/{{count}} 个 Agent",
+    "agentsTitle": "在各 Agent 中使用 Kettu 的工具",
+    "agentsLabel": "选择哪些 Agent 使用 Kettu 的工具"
   },
   "own": {
-    "title": "各 Agent 自己的配置",
-    "note": "每个 Agent 也会连接它自己配置的服务器。Kettu 只显示它们在哪里，要修改请在 Agent 中进行。",
     "withCommand": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
     "withCommandFrom": "它自己的服务器也会连接，来自 {{path}}。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。",
     "withCommandMissing": "它自己的服务器也会连接。在会话中输入 {{command}} 可以查看，或在项目里添加 {{file}}。{{path}} 尚未创建。",

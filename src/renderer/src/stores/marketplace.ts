@@ -11,6 +11,7 @@ import type {
   MarketSearch,
   MarketSkills,
   PluginDetails,
+  PluginLogo,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { errorMessage, host, type HostRequest } from '@renderer/lib/host'
@@ -65,6 +66,8 @@ export interface MarketplaceStore {
   pluginsLoading: boolean
   /** By `detailsKey`. */
   details: Record<string, DetailsState>
+  /** Codex plugins' own logos, by plugin id. */
+  logos: Record<string, PluginLogo | 'loading'>
   /** The skills catalog and the agents' own skills; null until the host answers. */
   skills: MarketSkills | null
   skillsError: string | null
@@ -83,6 +86,7 @@ export interface MarketplaceStore {
   loadConnections(): Promise<void>
   loadPlugins(refresh?: boolean): Promise<void>
   loadDetails(agentId: AgentId, pluginId: string): Promise<void>
+  loadLogo(pluginId: string): Promise<void>
   loadSkills(refresh?: boolean): Promise<void>
 }
 
@@ -119,6 +123,7 @@ export function createMarketplaceStore(
     pluginsError: null,
     pluginsLoading: false,
     details: {},
+    logos: {},
     skills: null,
     skillsError: null,
     skillsLoading: false,
@@ -198,6 +203,19 @@ export function createMarketplaceStore(
           details: { ...s.details, [key]: { details: null, error: errorMessage(e) } },
         }))
       }
+    },
+    async loadLogo(pluginId) {
+      if (get().logos[pluginId]) return
+      set((s) => ({ logos: { ...s.logos, [pluginId]: 'loading' } }))
+      let logo: PluginLogo
+      try {
+        logo = await request('market.pluginLogo', { pluginId })
+      } catch (e) {
+        // The tile falls back to the plugin's glyph; the reason goes to the console.
+        console.warn(`Could not read the logo of ${pluginId}: ${errorMessage(e)}`)
+        logo = { light: null, dark: null }
+      }
+      set((s) => ({ logos: { ...s.logos, [pluginId]: logo } }))
     },
     async loadSkills(refresh = false) {
       const id = ++skillsRead
