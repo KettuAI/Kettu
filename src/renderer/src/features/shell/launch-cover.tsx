@@ -27,7 +27,7 @@ export function LaunchCover() {
           transition={{ duration: SLOW, ease: EASE }}
           className="fixed inset-0 z-50 flex items-center justify-center bg-sidebar pb-10 app-region-drag"
         >
-          {/* The icon's fox drawn flat in its cool white, in the tones for the theme's ground. */}
+          {/* The flat fox the New session greeting shows, in the tones for the theme's ground. */}
           <BrandFox className="size-14 animate-breathe" />
           <span className="sr-only">{t('launch.starting')}</span>
         </motion.div>
