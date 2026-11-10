@@ -32,6 +32,7 @@ function queuedAttachments(item: QueuedPrompt): Attachment[] {
 const STEP = 28 // how much of an open row shows above the one in front of it
 const PEEK = 6 // how much of a folded card shows above the one in front of it
 const INSET = 12 // each layer back is this much narrower on each side
+const TUCK = 26 // how far the tab runs under the composer, .kettu-queue's negative bottom margin
 const SHOWN = 3 // rows in view while open
 const FADE = [1, 0.74, 0.54] // text of the rows in view, front to back
 const TRAVEL = 44 // trackpad travel, in px, that moves the list one row
@@ -277,7 +278,8 @@ export function QueueStack({
                 left: p.depth * INSET,
                 right: p.depth * INSET,
                 height: 48 - 12 * p.shape,
-                paddingBottom: 18 - 10 * p.shape,
+                // Centres the text on what shows: above the composer as a tab, above the next row
+                paddingBottom: lerp(TUCK, 48 - 12 - STEP, p.shape),
                 borderRadius: `${12 - 2 * p.shape}px ${12 - 2 * p.shape}px ${10 * p.shape}px ${10 * p.shape}px`,
                 opacity: p.alpha,
                 zIndex: p.z,
