@@ -610,8 +610,10 @@
         "all": "All models",
         "sameAsAll": "Same as all models",
         "add": "Add a model",
-        "addPlaceholder": "Model id, such as claude-sonnet-5-5",
-        "invalidModel": "A model id is one word without spaces."
+        "choose": "Choose or type a model",
+        "search": "Search, or type a model id",
+        "addCustom": "Add “{{id}}”",
+        "noMatch": "No match. A model id is one word without spaces."
       },
       "cache": {
         "name": "Prompt cache",

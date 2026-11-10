@@ -2,19 +2,31 @@
 // for each model, and the prompt cache duration, read from and saved to its settings file on the
 // agent's host.
 
-import { useCallback, useEffect, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox'
+import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentStatus, ClaudeCompactRow, ClaudeSettings } from '@shared/agent-host'
 import {
   AUTO_COMPACT_STEPS,
   canonicalClaudeModel,
+  KNOWN_CLAUDE_MODELS,
   PROMPT_CACHE_TTLS,
   type PromptCacheTtl,
 } from '@shared/agents'
+import { Icon } from '@renderer/components/affect/app-shell'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@renderer/components/ui/combobox'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useAction } from './agent-helpers'
-import { SetButton, SetInput, SettingSelect, Skel } from './controls'
+import { SettingSelect, Skel } from './controls'
 import { BlockLine, RowLine, RowShell, RowText } from './rows'
 
 const AUTO = 'auto'
@@ -25,8 +37,15 @@ type Read =
   | { state: 'failed'; error: string }
   | { state: 'ready'; settings: ClaudeSettings }
 
-const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
-  event.nativeEvent.isComposing || event.keyCode === 229
+/** A model the add menu offers: a known one, or what the user typed. */
+interface ModelChoice {
+  id: string
+  name: string | null
+  custom?: true
+}
+
+const knownName = (id: string): string | null =>
+  KNOWN_CLAUDE_MODELS.find((model) => model.id === id)?.name ?? null
 
 /** A window as the select writes it: 200K, 750K, 1M. */
 function windowLabel(tokens: number): string {
@@ -56,8 +75,8 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
   const [read, setRead] = useState<Read>({ state: 'loading' })
   // Models typed in, kept as rows until the file holds a window for them.
   const [added, setAdded] = useState<string[]>([])
-  const [draft, setDraft] = useState('')
-  const [draftInvalid, setDraftInvalid] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const [saveCompact, compactBusy, compactError] = useAction()
   const [saveCache, cacheBusy, cacheError] = useAction()
   const load = useCallback(
@@ -100,18 +119,29 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
       await load()
     })
 
-  const addModel = (): void => {
-    const model = draft.trim()
-    if (model.length === 0) return
-    if (model.length > MAX_MODEL_CHARS || /\s/.test(model)) {
-      setDraftInvalid(true)
-      return
-    }
+  const addModel = (model: string): void => {
     const id = canonicalClaudeModel(model)
     setAdded((current) => (current.includes(id) ? current : [...current, id]))
-    setDraft('')
-    setDraftInvalid(false)
+    setMenuOpen(false)
   }
+
+  // Known models not shown yet that match the text, and the text itself when it could be an id.
+  const text = query.trim()
+  const shownIds = new Set(rows.map((row) => row.model))
+  const suggestions: ModelChoice[] = KNOWN_CLAUDE_MODELS.filter(
+    (model) =>
+      !shownIds.has(model.id) &&
+      `${model.name} ${model.id}`.toLowerCase().includes(text.toLowerCase()),
+  ).map((model) => ({ id: model.id, name: model.name }))
+  const typed = canonicalClaudeModel(text)
+  const choices: ModelChoice[] =
+    text !== '' &&
+    text.length <= MAX_MODEL_CHARS &&
+    !/\s/.test(text) &&
+    !shownIds.has(typed) &&
+    !suggestions.some((choice) => choice.id === typed)
+      ? [...suggestions, { id: text, name: null, custom: true }]
+      : suggestions
 
   return (
     <>
@@ -143,7 +173,7 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
           )}
           {settings &&
             rows.map((row) => {
-              const name = row.name ?? row.model
+              const name = row.name ?? knownName(row.model) ?? row.model
               return (
                 <BlockLine key={row.model} text={<RowText name={name} />}>
                   <SettingSelect
@@ -162,32 +192,75 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
               )
             })}
           {settings && (
-            <BlockLine
-              text={
-                <SetInput
-                  value={draft}
-                  placeholder={t('agents.claudeSettings.compact.addPlaceholder')}
-                  aria-label={t('agents.claudeSettings.compact.add')}
-                  aria-invalid={draftInvalid || undefined}
-                  spellCheck={false}
-                  onChange={(event) => {
-                    setDraft(event.target.value)
-                    setDraftInvalid(false)
-                  }}
-                  onKeyDown={(event) => event.key === 'Enter' && !isComposing(event) && addModel()}
-                  className="k-input--wide"
-                />
-              }
-            >
-              <SetButton variant="ghost" disabled={draft.trim().length === 0} onClick={addModel}>
-                {t('agents.claudeSettings.compact.add')}
-              </SetButton>
+            <BlockLine text={<RowText name={t('agents.claudeSettings.compact.add')} />}>
+              <Combobox<ModelChoice>
+                items={choices}
+                filteredItems={choices}
+                value={null}
+                open={menuOpen}
+                onOpenChange={(next) => {
+                  setMenuOpen(next)
+                  if (!next) setQuery('')
+                }}
+                inputValue={query}
+                onInputValueChange={setQuery}
+                onValueChange={(choice) => choice && addModel(choice.id)}
+                itemToStringLabel={(choice) => choice.id}
+                isItemEqualToValue={(a, b) => a.id === b.id}
+                autoHighlight
+              >
+                <ComboboxPrimitive.Trigger
+                  render={
+                    <button
+                      type="button"
+                      className="ui-ss-select k-select"
+                      aria-label={t('agents.claudeSettings.compact.add')}
+                      disabled={compactBusy}
+                    />
+                  }
+                >
+                  <span className="k-select__value">
+                    {t('agents.claudeSettings.compact.choose')}
+                  </span>
+                  <Icon icon={ArrowDown01Icon} size={14} />
+                </ComboboxPrimitive.Trigger>
+                <ComboboxContent align="end" sideOffset={6} className="flex w-72 flex-col">
+                  <ComboboxInput
+                    showTrigger={false}
+                    placeholder={t('agents.claudeSettings.compact.search')}
+                    aria-label={t('agents.claudeSettings.compact.search')}
+                    spellCheck={false}
+                    className="h-10.5! px-2"
+                  />
+                  <ComboboxList className="px-1.5 pt-0.5 pb-1.5">
+                    {(choice: ModelChoice) => (
+                      <ComboboxItem
+                        key={choice.id}
+                        value={choice}
+                        className="h-9 gap-2.5 rounded-lg py-1 pr-2 pl-2 data-highlighted:bg-hover [&>span.absolute]:hidden"
+                      >
+                        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                          <span className="truncate text-menu text-primary">
+                            {choice.custom
+                              ? t('agents.claudeSettings.compact.addCustom', { id: choice.id })
+                              : choice.name}
+                          </span>
+                          {!choice.custom && (
+                            <span className="truncate text-small text-tertiary">{choice.id}</span>
+                          )}
+                        </span>
+                      </ComboboxItem>
+                    )}
+                  </ComboboxList>
+                  <ComboboxEmpty>{t('agents.claudeSettings.compact.noMatch')}</ComboboxEmpty>
+                </ComboboxContent>
+              </Combobox>
             </BlockLine>
           )}
         </div>
-        {(compactNote || draftInvalid) && (
+        {compactNote && (
           <p role="status" className="k-row-note k-error" data-wrap="">
-            {compactNote ?? t('agents.claudeSettings.compact.invalidModel')}
+            {compactNote}
           </p>
         )}
       </RowShell>

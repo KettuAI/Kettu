@@ -607,8 +607,10 @@
         "all": "所有模型",
         "sameAsAll": "跟随所有模型",
         "add": "添加模型",
-        "addPlaceholder": "模型名，例如 claude-sonnet-5-5",
-        "invalidModel": "模型名是一个词，不能有空格。"
+        "choose": "选择或输入模型",
+        "search": "搜索，或输入模型名",
+        "addCustom": "添加“{{id}}”",
+        "noMatch": "没有匹配的模型。模型名是一个词，不能有空格。"
       },
       "cache": {
         "name": "Prompt cache 时长",
