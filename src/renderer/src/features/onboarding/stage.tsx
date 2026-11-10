@@ -109,7 +109,7 @@ function Chip({
   )
 }
 
-/** Welcome: the fox waves, among the marks of the agents Kettu works with. */
+/** Welcome: the fox waves, among the marks of some of the agents Kettu works with. */
 export function FoxStage() {
   const { t } = useTranslation('onboarding')
   return (
@@ -119,6 +119,8 @@ export function FoxStage() {
         {t('welcome.hello')}
       </span>
       <Chip agent="claude-code" left={92} top={150} turn={-8} />
+      <Chip agent="gemini" left={226} top={62} turn={6} />
+      <Chip agent="copilot" left={632} top={88} turn={-5} />
       <Chip agent="codex" left={584} top={268} turn={7} />
       <Chip agent="opencode" left={66} top={392} turn={5} />
       <Chip agent="pi" left={600} top={452} turn={-6} />
