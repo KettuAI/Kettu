@@ -38,7 +38,7 @@ import {
 import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { refreshLimits } from '@renderer/stores/usage'
 import {
@@ -367,6 +367,7 @@ function DraftComposer({
             <PromptBox
               box={box}
               agentId={agentId}
+              hostId={hostId}
               agentName={name ?? tc('attachments.theAgent')}
               commands={NO_COMMANDS}
               placeholder={
@@ -654,7 +655,12 @@ function PickUp({ hidden }: { hidden: boolean }) {
           onClick={() => openSession(session.id, session.projectPath)}
           className="kettu-pickup__row"
         >
-          <AgentMark agent={session.agentId} size={16} className="shrink-0" />
+          <AgentMark
+            agent={session.agentId}
+            size={16}
+            className="shrink-0"
+            hostId={hostOfSession(session)}
+          />
           <span className="kettu-pickup__title">{sessionTitle(session)}</span>
           <PickupStatus session={session} now={now} />
           <span className="kettu-pickup__project">

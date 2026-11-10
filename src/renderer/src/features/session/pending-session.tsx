@@ -14,8 +14,8 @@ import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
-import { hostOfPath } from '@renderer/lib/host-paths'
-import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { routeOf } from '@renderer/lib/host'
+import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { newSessionPanel } from '@renderer/stores/view'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
@@ -30,8 +30,15 @@ import { SignIn } from './sign-in'
 /** A session being created: the agent starts, asks you to sign in, or fails. */
 export function PendingSessionView({ pending }: { pending: PendingSession }) {
   const { t } = useTranslation('session')
-  const name = agentName(pending.agentId)
-  const installing = useAgentsStore((s) => s.byId[pending.agentId]?.state === 'installing')
+  // The host the create goes to.
+  const hostId = routeOf('sessions.create', {
+    projectPath: pending.projectPath,
+    parentId: pending.parentId,
+  })
+  const name = agentName(pending.agentId, hostId)
+  const installing = useAgentsStore(
+    (s) => agentsOn(s, hostId).byId[pending.agentId]?.state === 'installing',
+  )
   const parent = useSessionsStore((s) => (pending.parentId ? s.byId[pending.parentId] : undefined))
   const retry = useCallback(() => retryPendingSession(), [])
   const gutter = useScrollbarGutter()
@@ -43,6 +50,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
       <ColumnScroller className="flex items-center justify-center">
         <SignIn
           agentId={pending.agentId}
+          hostId={hostId}
           panel={pending.projectPath ? newSessionPanel(pending.projectPath) : null}
           onRetry={retry}
         />
@@ -57,7 +65,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
             message={error.message}
             onRetry={retry}
             report={{
-              hostId: pending.projectPath ? hostOfPath(pending.projectPath) : null,
+              hostId,
               agentId: pending.agentId,
             }}
           />
@@ -65,11 +73,11 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
       </ColumnScroller>
     )
   } else if (pending.prompt) {
-    body = <FirstMessage agentId={pending.agentId} content={pending.prompt} />
+    body = <FirstMessage agentId={pending.agentId} hostId={hostId} content={pending.prompt} />
   } else {
     body = (
       <ColumnScroller className="flex flex-col">
-        <StartingAgent agentId={pending.agentId} />
+        <StartingAgent agentId={pending.agentId} hostId={hostId} />
         <ThreadSkeleton className="opacity-70" />
       </ColumnScroller>
     )
@@ -95,7 +103,7 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
               : t('newSession.title')}
           </span>
           <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-            <AgentMark agent={pending.agentId} size={12} />
+            <AgentMark agent={pending.agentId} size={12} hostId={hostId} />
             {name}
           </span>
         </NoDrag>

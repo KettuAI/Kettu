@@ -17,41 +17,52 @@ import {
 } from '@renderer/components/ui/empty'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { CopyButton } from '@renderer/features/git/branch-popover'
-import { errorMessage, host } from '@renderer/lib/host'
-import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { errorMessage, hostAt } from '@renderer/lib/host'
+import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 
 const NO_METHODS: AgentAuthMethod[] = []
 
 /** The agent's sign-in methods, in place of a session that cannot start without them. */
 export function SignIn({
   agentId,
+  hostId,
   panel,
   onRetry,
 }: {
   agentId: AgentId
+  /** The host the agent is on, null for this computer. */
+  hostId: string | null
   /** The side panel Sign in in terminal opens in; null before a No project session has a folder. */
   panel: string | null
   onRetry: () => void
 }) {
   const { t } = useTranslation(['session', 'common'])
-  const methods = useAgentsStore((s) => s.byId[agentId]?.authMethods ?? NO_METHODS)
-  const name = agentName(agentId)
+  const methods = useAgentsStore(
+    (s) => agentsOn(s, hostId).byId[agentId]?.authMethods ?? NO_METHODS,
+  )
+  const name = agentName(agentId, hostId)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(
     () =>
       onAppEvent((event) => {
-        if (event.kind === 'sign-in-finished' && event.agentId === agentId) onRetry()
+        if (
+          event.kind === 'sign-in-finished' &&
+          event.agentId === agentId &&
+          event.hostId === hostId
+        ) {
+          onRetry()
+        }
       }),
-    [agentId, onRetry],
+    [agentId, hostId, onRetry],
   )
 
   const authenticate = async (method: AgentAuthMethod) => {
     setBusy(method.id)
     setError(null)
     try {
-      await host('agents.authenticate', { agentId, methodId: method.id })
+      await hostAt(hostId, 'agents.authenticate', { agentId, methodId: method.id })
       onRetry()
     } catch (e) {
       setError(errorMessage(e))
@@ -64,7 +75,7 @@ export function SignIn({
     <Empty className="animate-in fade-in animation-duration-(--duration-slow)">
       <EmptyHeader>
         <EmptyMedia>
-          <AgentTile agent={agentId} />
+          <AgentTile agent={agentId} hostId={hostId} />
         </EmptyMedia>
         <EmptyTitle>{t('signIn.title', { agent: name })}</EmptyTitle>
         <EmptyDescription>{t('signIn.description', { agent: name })}</EmptyDescription>

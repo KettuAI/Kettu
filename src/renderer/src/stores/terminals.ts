@@ -4,6 +4,7 @@ import type { PortConnectionState } from '@shared/port-rpc'
 import type { TerminalCommand, TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
 import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { newSessionPanel, panelSession, toggleTerminal } from '@renderer/stores/view'
 
 // The terminals the renderer knows, this computer's and other hosts' alike, each in the side panel
@@ -52,7 +53,7 @@ const sinks = new Map<string, Sink>()
 const replays = new Map<string, Sink>()
 
 /** Terminals started to sign in an agent; when their command returns, the session retries. */
-const signIns = new Map<string, { agentId: string; sawBusy: boolean }>()
+const signIns = new Map<string, { agentId: string; hostId: string | null; sawBusy: boolean }>()
 
 /** The end of each terminal's last output, so an address split across two chunks is found. */
 const urlTails = new Map<string, string>()
@@ -126,7 +127,7 @@ function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
     if (info.busy) signIn.sawBusy = true
     else if (signIn.sawBusy || info.exitCode !== null) {
       signIns.delete(info.id)
-      emitAppEvent({ kind: 'sign-in-finished', agentId: signIn.agentId })
+      emitAppEvent({ kind: 'sign-in-finished', agentId: signIn.agentId, hostId: signIn.hostId })
     }
   }
 }
@@ -379,7 +380,13 @@ async function startTerminal(
         ? { command: { text: options.text, run: options.run ?? false } }
         : {}),
     })
-    if (options?.signInAgent) signIns.set(info.id, { agentId: options.signInAgent, sawBusy: false })
+    if (options?.signInAgent) {
+      signIns.set(info.id, {
+        agentId: options.signInAgent,
+        hostId: hostOfPath(projectPath),
+        sawBusy: false,
+      })
+    }
     upsert(info, options?.owner ?? null)
     return info
   } catch (error) {

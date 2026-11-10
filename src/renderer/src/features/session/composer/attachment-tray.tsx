@@ -6,7 +6,7 @@ import type { AgentId } from '@shared/thread'
 import { bytes } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import {
   selectDraft,
   useAttachmentsStore,
@@ -29,6 +29,7 @@ export function AttachmentTray({
   draft,
   sessionId,
   agentId,
+  hostId,
   agentName,
   projectPath,
   onOpen,
@@ -42,6 +43,8 @@ export function AttachmentTray({
   /** The session whose thread's pictures the viewer steps through with the draft's. */
   sessionId: string | null
   agentId: AgentId | null
+  /** The host the agent is on, null for this computer. */
+  hostId: string | null
   agentName: string
   /** The session's folder, whose files open in the Files pane. */
   projectPath: string | null
@@ -60,10 +63,12 @@ export function AttachmentTray({
   const all = useAttachmentsStore(selectDraft(draft))
   const items = hidden?.size ? all.filter((item) => !hidden.has(item.key)) : all
   const takesImages = useAgentsStore((s) =>
-    agentId ? (s.byId[agentId]?.capabilities.prompt?.image ?? null) : null,
+    agentId ? (agentsOn(s, hostId).byId[agentId]?.capabilities.prompt?.image ?? null) : null,
   )
   const takesText = useAgentsStore((s) =>
-    agentId ? (s.byId[agentId]?.capabilities.prompt?.embeddedContext ?? null) : null,
+    agentId
+      ? (agentsOn(s, hostId).byId[agentId]?.capabilities.prompt?.embeddedContext ?? null)
+      : null,
   )
   const reduceMotion = useReducedMotion()
   const row = useRef<HTMLDivElement>(null)

@@ -69,11 +69,11 @@ import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
 import { fileManagerName, formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
-import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { clearSelection } from '@renderer/stores/session-selection'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
   allPanes,
   canSplit,
@@ -195,13 +195,18 @@ export function SessionMenuItems({
   onDelete: () => void
 }) {
   const { t } = useTranslation(['sidebar', 'common'])
-  // The agents that can run one now; More options opens New session with every agent.
+  // The agents of the session's host that can run one now; More options opens New session with
+  // every agent.
+  const hostId = hostOfSession(summary)
   const agents = useAgentsStore(
-    useShallow((s) =>
-      usableAgents(s.order, s.byId).filter((a) => isInstalled(a) && !a.hidden && !a.disabled),
-    ),
+    useShallow((s) => {
+      const { order, byId } = agentsOn(s, hostId)
+      return usableAgents(order, byId).filter((a) => isInstalled(a) && !a.hidden && !a.disabled)
+    }),
   )
-  const canFork = useAgentsStore((s) => !!s.byId[summary.agentId]?.capabilities?.forkSession)
+  const canFork = useAgentsStore(
+    (s) => !!agentsOn(s, hostId).byId[summary.agentId]?.capabilities?.forkSession,
+  )
   const inFront = useInFront(summary.id)
   // A session a pane shows already, in view or folded, has no Open in split view.
   const inSplit = useViewStore((s) => !!paneWithSession(s.layout, summary.id))
@@ -309,7 +314,7 @@ export function SessionMenuItems({
                       openNewSubSession(summary, agent.id)
                     }}
                   >
-                    <AgentMark agent={agent.id} size={15} />
+                    <AgentMark agent={agent.id} size={15} hostId={hostId} />
                     <span className="min-w-0 flex-1 truncate">{agent.harnessName}</span>
                     {agent.name !== agent.harnessName && (
                       <span className="max-w-24 shrink-0 truncate pl-4 text-hint text-tertiary">
@@ -503,7 +508,8 @@ export function SessionMenuHeader({
   session: SessionView | undefined
 }) {
   const { t } = useTranslation('sidebar')
-  const agent = useAgentsStore((s) => s.byId[summary.agentId])
+  const hostId = hostOfSession(summary)
+  const agent = useAgentsStore((s) => agentsOn(s, hostId).byId[summary.agentId])
   const harness = agent?.harnessName ?? agent?.name ?? ''
   const name =
     agent && agent.name !== agent.harnessName
@@ -520,7 +526,7 @@ export function SessionMenuHeader({
   return (
     <>
       <div className="flex gap-2.5 px-2 pt-2 pb-2.5">
-        <AgentMark agent={summary.agentId} size={28} />
+        <AgentMark agent={summary.agentId} size={28} hostId={hostId} />
         <div className="min-w-0">
           <div className="truncate text-ui font-semibold text-primary">{name}</div>
           {detail && <div className="mt-0.5 truncate text-meta text-tertiary">{detail}</div>}

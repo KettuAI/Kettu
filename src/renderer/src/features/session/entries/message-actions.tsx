@@ -11,7 +11,8 @@ import { longAgo, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { hostOfSession } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
 import { useEntry, useEntryAnimation, useSessionView } from '../use-thread'
@@ -119,7 +120,12 @@ export const ReplyFooter = memo(
     })
     const session = useSessionView(sessionId)
     const forkAt = useAgentsStore((s) =>
-      session ? forkEntry({ latest, agentIds }, s.byId[session.agentId]?.capabilities) : null,
+      session
+        ? forkEntry(
+            { latest, agentIds },
+            agentsOn(s, hostOfSession(session)).byId[session.agentId]?.capabilities,
+          )
+        : null,
     )
     const [forking, setForking] = useState(false)
     const [error, setError] = useState<string | null>(null)

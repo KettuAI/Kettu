@@ -3,20 +3,21 @@ import { AlertCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
+import type { AgentId } from '@shared/thread'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
-import { hostOfPath } from '@renderer/lib/host-paths'
 import { isMac } from '@renderer/lib/platform'
-import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
-import { sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
-import { openAgentSettings, openSettings } from '@renderer/stores/view'
+import { openAgentSettings } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
@@ -54,11 +55,16 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const empty = useThreadsStore((s) => (s.replicas[sessionId]?.state?.order.length ?? 0) === 0)
   const session = useSessionView(sessionId)
   const renderersReady = useRenderersReady()
-  const name = agentName(summary.agentId)
-  const agentRemoved = useAgentsStore((s) => s.byId[summary.agentId]?.registered === false)
-  const agentOff = useAgentsStore((s) => s.byId[summary.agentId]?.disabled === true)
+  const hostId = hostOfSession(summary)
+  const name = agentName(summary.agentId, hostId)
+  const agentRemoved = useAgentsStore(
+    (s) => agentsOn(s, hostId).byId[summary.agentId]?.registered === false,
+  )
+  const agentOff = useAgentsStore(
+    (s) => agentsOn(s, hostId).byId[summary.agentId]?.disabled === true,
+  )
   const archived = useSessionsStore((s) => sessionArchived(s.byId, sessionId))
-  const otherHost = useOtherHost(hostOfPath(summary.projectPath))
+  const otherHost = useOtherHost(hostId)
   // Its host is offline: what the thread showed stays, and nothing goes to it.
   const away = otherHost && isAway(otherHost.connection) ? otherHost : null
   // It holds the computer: the column glows and the composer carries the label.
@@ -79,6 +85,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const status = session?.status ?? summary.status
   const running = status === 'running' || status === 'awaiting_permission'
   const fail = useCallback((e: unknown) => setActionError(errorMessage(e)), [])
+  // Settings › Agents of the host the agent is on.
+  const openAgents = (agentId: AgentId | null) => {
+    openHostSettings(hostId)
+    openAgentSettings(agentId)
+  }
   const retry = () => {
     setActionError(null)
     host('sessions.retry', { sessionId }).catch(fail)
@@ -123,13 +134,13 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   } else if (status === 'auth_required' && empty) {
     body = (
       <ColumnScroller className="flex items-center justify-center">
-        <SignIn agentId={summary.agentId} panel={summary.id} onRetry={retry} />
+        <SignIn agentId={summary.agentId} hostId={hostId} panel={summary.id} onRetry={retry} />
       </ColumnScroller>
     )
   } else if (status === 'starting' && empty) {
     body = (
       <ColumnScroller className="flex flex-col">
-        <StartingAgent agentId={summary.agentId} />
+        <StartingAgent agentId={summary.agentId} hostId={hostId} />
         <ThreadSkeleton className="opacity-70" />
       </ColumnScroller>
     )
@@ -190,7 +201,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                   <Button size="xs" variant="outline" onClick={retry}>
                     {t('common:actions.retry')}
                   </Button>
-                  <Button size="xs" onClick={() => openSettings('agents')}>
+                  <Button size="xs" onClick={() => openAgents(null)}>
                     {t('view.signIn')}
                   </Button>
                 </AlertAction>
@@ -202,7 +213,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 <AlertTitle>{t('view.agentRemoved', { agent: name })}</AlertTitle>
                 <AlertDescription>{t('view.agentRemovedBody')}</AlertDescription>
                 <AlertAction>
-                  <Button size="xs" variant="outline" onClick={() => openSettings('agents')}>
+                  <Button size="xs" variant="outline" onClick={() => openAgents(null)}>
                     {t('view.openAgents')}
                   </Button>
                 </AlertAction>
@@ -214,11 +225,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                 <AlertTitle>{t('view.agentTurnedOff', { agent: name })}</AlertTitle>
                 <AlertDescription>{t('view.agentTurnedOffBody')}</AlertDescription>
                 <AlertAction>
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() => openAgentSettings(summary.agentId)}
-                  >
+                  <Button size="xs" variant="outline" onClick={() => openAgents(summary.agentId)}>
                     {t('view.openAgent')}
                   </Button>
                 </AlertAction>
@@ -258,7 +265,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                   />
                 </div>
               ) : (
-                <ComposerPlaceholder agentId={summary.agentId} />
+                <ComposerPlaceholder agentId={summary.agentId} hostId={hostId} />
               )}
             </div>
           </div>
