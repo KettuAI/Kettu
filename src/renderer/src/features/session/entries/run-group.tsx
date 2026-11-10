@@ -85,6 +85,7 @@ export const RunGroup = memo(function RunGroup({
         entry={entry}
         projectPath={projectPath}
         labels={labels}
+        rail={shown.length > 1}
       />
     )
   }

@@ -255,7 +255,7 @@
 }
 
 /* A step: a row with no card. Its hover well, and its card once open, start at --ks-card-x. On its
-   own its tile starts at the column's edge and its well 10 px before it; open, its card lies on
+   own its chevron starts at the column's edge and its well 10 px before it; open, its card lies on
    the column's edge in line with the cards around it, so the row moves 10 px in. On a run's rail
    the tile starts under the run's tiles and the well and card 10 px before it, open or not: the
    run's rule comes after the open one so it wins. */
@@ -365,6 +365,28 @@
 .ks-thread .ui-tcc__head:is(:hover, :focus-visible) .ui-tcc__chevron,
 .ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head .ui-tcc__chevron {
   opacity: 1;
+}
+
+/* A step on its own leads with its chevron, as the runs around it do: the chevron always shows,
+   its tile starts under a run's tiles and its time follows its words. */
+.ks-thread .ui-tcc__head[data-chevron='before'] {
+  & .ui-tcc__chevron {
+    margin-right: 2px;
+    opacity: 1;
+  }
+  & :is(.ui-tcc__main, .ui-tcc__summary) {
+    flex: 0 1 auto;
+  }
+}
+.ks-thread
+  .ui-tcc:not([data-status='error'], [data-status='running'])
+  > .ui-tcc__top
+  > .ui-tcc__head[data-chevron='before']
+  .ui-tcc__time {
+  color: var(--ui-tcc-faint);
+  &:not(:empty)::before {
+    content: '· ';
+  }
 }
 
 /* An open step is the Tool Call Card's own white card. Its ground lies under the row and the

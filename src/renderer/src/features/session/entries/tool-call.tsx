@@ -33,7 +33,8 @@ export function StepStub(props: Omit<StepFacts, 'glyph'> & { icon: ReactNode }):
  * compaction. Its facts come as props of their own (tool-call-model.ts), which a group reads.
  * `note` follows a tool call's target; a call a routine allowed says so by default. Its content
  * renders once the card first opens; until then the body is null, since false would leave the card
- * without one.
+ * without one. A step on its own leads with its chevron, as the runs around it do; on a run's
+ * `rail` the chevron closes the row.
  */
 export function StepCard({
   sessionId,
@@ -41,6 +42,7 @@ export function StepCard({
   projectPath,
   labels,
   note,
+  rail = false,
   status,
   startedAt,
   duration,
@@ -52,6 +54,7 @@ export function StepCard({
   projectPath: string
   labels: Partial<ToolCallLabels>
   note?: string
+  rail?: boolean
   icon: ReactNode
 }) {
   const { t } = useTranslation('session')
@@ -65,7 +68,7 @@ export function StepCard({
     time,
     icon,
     labels,
-    chevron: 'after' as const,
+    chevron: rail ? ('after' as const) : ('before' as const),
     className: cn(fresh && 'ks-step-new', opening && 'ks-step-opening') || undefined,
     onOpenChange,
   }

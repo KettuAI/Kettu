@@ -64,6 +64,7 @@ export const ToolGroup = memo(function ToolGroup({
             entry={entry}
             projectPath={projectPath}
             labels={labels}
+            rail
           />
         )
       })}
