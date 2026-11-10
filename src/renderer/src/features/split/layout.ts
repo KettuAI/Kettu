@@ -6,12 +6,15 @@ import { isAgentId, type AgentId } from '@shared/thread'
 
 export type PaneView =
   | { kind: 'session'; sessionId: string; projectPath: string }
-  // A New session screen: its agent, project and parent follow it out of focus.
+  // A New session screen: its agent, host, project and parent follow it out of focus. `hostId` is
+  // the host chosen before a project: another host's id, null for this computer, and unset until
+  // one is chosen, when the project decides.
   | {
       kind: 'new'
       agentId: AgentId | null
       projectPath: string | null
       noProject: boolean
+      hostId?: string | null
       parentId?: string
     }
 
@@ -746,6 +749,9 @@ function readView(view: unknown): PaneView | null {
       agentId: isAgentId(value.agentId) ? value.agentId : null,
       projectPath: typeof value.projectPath === 'string' ? value.projectPath : null,
       noProject: value.noProject === true,
+      ...(typeof value.hostId === 'string' || value.hostId === null
+        ? { hostId: value.hostId }
+        : {}),
       ...(typeof value.parentId === 'string' ? { parentId: value.parentId } : {}),
     }
   }

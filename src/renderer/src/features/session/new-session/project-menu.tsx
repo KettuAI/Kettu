@@ -50,8 +50,30 @@ interface ProjectGroup {
   items: string[]
 }
 
-/** The groups of the menu: No project, the projects, by host once there are others, and Open. */
-function projectGroups(projects: readonly Project[], hosts: readonly OtherHost[]): ProjectGroup[] {
+/**
+ * The groups of the menu: No project, the projects, by host once there are others, and Open. With
+ * `scope`, one host's projects alone (null being this computer), and No project only on this one.
+ */
+function projectGroups(
+  projects: readonly Project[],
+  hosts: readonly OtherHost[],
+  scope?: string | null,
+): ProjectGroup[] {
+  if (scope !== undefined) {
+    const online = hosts.some((h) => h.id === scope && h.connection.state === 'online')
+    const scoped: ProjectGroup[] = [
+      ...(scope === null ? [{ value: 'none' as const, items: [NO_PROJECT] }] : []),
+      {
+        value: 'recent',
+        items: projects.filter((p) => hostOfPath(p.path) === scope).map((p) => p.path),
+      },
+      {
+        value: 'open',
+        items: scope === null ? [OPEN_PROJECT] : online ? [`${OPEN_ON}${scope}`] : [],
+      },
+    ]
+    return scoped.filter((group) => group.items.length > 0)
+  }
   if (hosts.length === 0) {
     return [
       { value: 'none', items: [NO_PROJECT] },
@@ -90,13 +112,16 @@ export function ProjectMenu({
   onError,
   onChoose,
   chip = false,
+  host,
 }: {
   project: Project | null
   noProject: boolean
   onError: (message: string | null) => void
   onChoose?: (projectPath: string | null) => void
-  /** As New session's composer shows it: a link on its tray, beside the agent's. */
+  /** As New session's composer shows it: a link on its tray, beside the host's and the agent's. */
   chip?: boolean
+  /** Lists only this host's projects, null being this computer, as the chosen host's. */
+  host?: string | null
 }) {
   const { t } = useTranslation('session')
   const choose = onChoose ?? chooseNewSessionProject
@@ -117,7 +142,18 @@ export function ProjectMenu({
     }
     return hosted
   }, [projects])
-  const groups = useMemo(() => projectGroups(projects, hosts), [projects, hosts])
+  const groups = useMemo(() => projectGroups(projects, hosts, host), [projects, hosts, host])
+  const listed = useMemo(
+    () => (host === undefined ? projects : projects.filter((p) => hostOfPath(p.path) === host)),
+    [projects, host],
+  )
+  const scopeAway =
+    host !== undefined && isAway(hosts.find((h) => h.id === host)?.connection ?? null)
+  // A host not connected yet, with no project of its own to list, leaves the menu nothing to show.
+  const waiting =
+    !!host &&
+    listed.length === 0 &&
+    !hosts.some((h) => h.id === host && h.connection.state === 'online')
   const Trigger = chip ? ComboboxPrimitive.Trigger : ComboboxTrigger
   const [browsing, setBrowsing] = useState<{ hostId: string; open: boolean } | null>(null)
   const hostName = (hostId: string | null) =>
@@ -129,9 +165,15 @@ export function ProjectMenu({
     value === NO_PROJECT
       ? t('newSession.noProject')
       : value === OPEN_PROJECT
-        ? t(hosts.length > 0 ? 'newSession.openProjectHere' : 'newSession.openProject')
+        ? t(
+            hosts.length > 0 && host === undefined
+              ? 'newSession.openProjectHere'
+              : 'newSession.openProject',
+          )
         : value.startsWith(OPEN_ON)
-          ? t('newSession.openProjectOn', { host: hostName(value.slice(OPEN_ON.length)) })
+          ? host === undefined
+            ? t('newSession.openProjectOn', { host: hostName(value.slice(OPEN_ON.length)) })
+            : t('newSession.openProject')
           : (byPath.get(value)?.name ?? value)
   const add = async () => {
     onError(null)
@@ -206,7 +248,7 @@ export function ProjectMenu({
             ? t('newSession.noProject')
             : (project?.name ?? t('newSession.chooseProjectShort'))}
         </span>
-        {!noProject && projectHost && (
+        {!chip && !noProject && projectHost && (
           <span className="min-w-0 shrink-5 truncate text-muted-foreground">
             {hostName(projectHost)}
           </span>
@@ -226,6 +268,11 @@ export function ProjectMenu({
             <Glyph icon={Search01Icon} size={14} />
           </InputGroupAddon>
         </ComboboxInput>
+        {waiting && (
+          <p className="px-3.5 py-3 text-ui text-muted-foreground">
+            {t('newSession.hostNotConnected', { host: hostName(host) })}
+          </p>
+        )}
         <ComboboxList className="max-h-none overflow-y-visible">
           {(group: ProjectGroup, index: number) =>
             group.value === 'none' ? (
@@ -252,7 +299,12 @@ export function ProjectMenu({
                       const p = byPath.get(path)
                       return (
                         p && (
-                          <ComboboxItem key={path} value={path} disabled={p.missing} title={path}>
+                          <ComboboxItem
+                            key={path}
+                            value={path}
+                            disabled={p.missing || scopeAway}
+                            title={hostPath(path)}
+                          >
                             <span className="kettu-menu-mark">
                               <FolderClosedMark />
                             </span>
@@ -274,7 +326,7 @@ export function ProjectMenu({
                 {index > 0 ? (
                   <ComboboxSeparator />
                 ) : (
-                  projects.length > 0 && (
+                  listed.length > 0 && (
                     <div className="flex min-h-row items-center px-2 text-ui text-muted-foreground">
                       {t('newSession.noMatchingProjects')}
                     </div>
@@ -299,7 +351,7 @@ export function ProjectMenu({
         </ComboboxList>
         {/* Sized by every project, so the menu keeps its width while the list filters. */}
         <div aria-hidden className="invisible h-0 overflow-hidden px-1.5">
-          {projects.map((p) => (
+          {listed.map((p) => (
             <div key={p.path} className="flex gap-2 pr-8 pl-2 text-ui whitespace-nowrap">
               <ProjectName name={p.name} hint={hints.get(p.path)} />
             </div>

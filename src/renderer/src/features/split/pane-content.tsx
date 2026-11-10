@@ -2,6 +2,7 @@ import { usePendingSession } from '@renderer/app/actions'
 import { NewSessionView } from '@renderer/features/session/new-session'
 import { PendingSessionView } from '@renderer/features/session/pending-session'
 import { SessionView } from '@renderer/features/session/session-view'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useViewStore } from '@renderer/stores/view'
 import { findPane } from './layout'
@@ -19,19 +20,24 @@ export function PaneContent({ paneId }: { paneId: string }) {
   if (view.kind === 'session') {
     return <SessionView key={`${paneId}:${view.sessionId}`} sessionId={view.sessionId} />
   }
-  // New session with no project of its own starts in the one selected, as the main area had it.
-  const path = view.noProject ? null : (view.projectPath ?? selected)
+  // New session with no project of its own starts in the one selected, as the main area had it;
+  // with a host chosen, in a project on that host.
+  const onHost = (path: string) => view.hostId === undefined || hostOfPath(path) === view.hostId
+  const path = view.noProject
+    ? null
+    : ([view.projectPath, selected].find((p) => p && onHost(p)) ?? null)
   const project = path
     ? (projects.find((p) => p.path === path) ?? null)
     : view.noProject
       ? null
-      : (projects[0] ?? null)
+      : (projects.find((p) => onHost(p.path)) ?? null)
   return (
     <NewSessionView
       key={`${paneId}:new`}
       paneId={paneId}
       project={project}
       noProject={view.noProject}
+      hostId={view.hostId ?? null}
       parentId={view.parentId ?? null}
     />
   )
