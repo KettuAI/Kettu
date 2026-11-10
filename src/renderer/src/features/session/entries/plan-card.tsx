@@ -1,4 +1,4 @@
-import { useRef, useState, type Ref } from 'react'
+import { useState } from 'react'
 import {
   ArrowDown01Icon,
   ArrowRight02Icon,
@@ -10,24 +10,13 @@ import {
 } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import type { ToolEntry } from '@shared/thread'
-import { emitAppEvent } from '@renderer/app/events'
 import { Icon } from '@renderer/components/affect/app-shell'
-import { ApprovalCard } from '@renderer/components/affect/approval-card'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { toast } from '@renderer/components/ui/toast'
-import { cn } from '@renderer/lib/utils'
 import { Clamp } from '../clamp'
+import { BUILD_MODES } from '../decisions/plan'
 import { Markdown } from '../markdown'
-import { respondToPermission } from './helpers'
 import { planDiff } from './plan-diff'
-import { useAnswering } from './use-answering'
-
-/** The Claude Code options that build in a mode, by the mode each sets. */
-const BUILD_MODES: Record<string, string> = {
-  'exit-plan-auto': 'auto',
-  'exit-plan-accept-edits': 'acceptEdits',
-  'exit-plan-default': 'default',
-}
 
 /** The plan the entry holds: the request's, or once answered, the entry's own text. */
 function planMarkdown(entry: ToolEntry): string {
@@ -99,163 +88,43 @@ function PlanChanges({ previous, markdown }: { previous: string; markdown: strin
 }
 
 /**
- * A plan waiting for the user, on affectUI's Approval Card: the plan, the mode Claude Code builds
- * in on a Segmented Control (Codex's choices to implement it), and a note for keeping on planning.
- * Approve starts building; Deny keeps planning, with the note when there is one.
+ * A plan waiting for the user's approval, which the Decision Card above the composer asks: the
+ * plan as a document, and once revised, what changed since the one sent back.
  */
-export function PlanCard({
-  ref,
-  sessionId,
-  entry,
-  agentName,
-  className,
-}: {
-  ref: Ref<HTMLDivElement>
-  sessionId: string
-  entry: ToolEntry
-  agentName: string
-  className?: string
-}) {
+export function PlanWaiting({ entry }: { entry: ToolEntry }) {
   const { t } = useTranslation('session')
-  const permission = entry.permission!
-  const plan = permission.plan!
-  const options = permission.options
-  const keepOption =
-    options.find((o) => o.note) ??
-    options.find((o) => o.kind === 'reject_once' || o.kind === 'reject_always') ??
-    null
-  const choices = options.filter((o) => o !== keepOption)
-  const modes = choices.filter((o) => Object.hasOwn(BUILD_MODES, o.id))
-  const [chosen, setChosen] = useState<string>(
-    () => (choices.find((o) => o.preferred) ?? choices[0])?.id ?? '',
-  )
-  const [note, setNote] = useState('')
+  const plan = entry.permission!.plan!
   const [view, setView] = useState<'plan' | 'changes'>(plan.previous ? 'changes' : 'plan')
-  const { answering, error, away, send } = useAnswering(sessionId)
-  const root = useRef<HTMLDivElement>(null)
   const version = entry.planVersion ?? 1
-  const option = choices.find((o) => o.id === chosen)
-
-  const answer = async (id: string | undefined, text?: string): Promise<boolean> => {
-    if (!id || away || answering !== null) return false
-    const focused = !!root.current?.contains(document.activeElement)
-    const sent = await send(id, () =>
-      respondToPermission(sessionId, permission.requestId, id, text || undefined),
-    )
-    // Keeping on planning without a note goes on in the composer, where the user says what.
-    if (sent && (focused || (id === keepOption?.id && !text))) {
-      emitAppEvent({ kind: 'focus-composer' })
-    }
-    return sent
-  }
-
-  const approve = async () => {
-    // A rejection keeps the card waiting, with the reason under it.
-    if (!(await answer(option?.id))) throw new Error('not sent')
-  }
-  const keepPlanning = () => void answer(keepOption?.id, keepOption?.note ? note.trim() : '')
-
   return (
-    <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
-      <div ref={root} className="min-w-0">
-        <ApprovalCard
-          className="ks-plan"
-          title={version > 1 ? t('planCard.version', { version }) : t('planCard.label')}
-          description={t(
-            modes.length > 0 ? 'planCard.finishedBuild' : 'planCard.finishedImplement',
-            {
-              agent: agentName,
-            },
-          )}
-          icon={<Icon icon={FileEditIcon} size={15} />}
-          label={t('question.asksYou')}
-          approveLabel={modes.length > 0 ? t('planCard.startBuilding') : t('planCard.implement')}
-          denyLabel={note.trim() ? t('planCard.sendNote') : t('planCard.keepPlanningButton')}
-          allowAlways={false}
-          shortcuts
-          status="pending"
-          onApprove={approve}
-          onDeny={keepPlanning}
-          preview={
-            <div className="ks-plan__preview">
-              {plan.previous && (
-                <SegmentedControl
-                  aria-label={t('planCard.show')}
-                  variant="tray"
-                  size="sm"
-                  value={view}
-                  onChange={setView}
-                  options={[
-                    { value: 'plan', label: t('planCard.plan') },
-                    { value: 'changes', label: t('planCard.changes') },
-                  ]}
-                />
-              )}
-              {view === 'changes' && plan.previous ? (
-                <PlanChanges previous={plan.previous} markdown={plan.markdown} />
-              ) : (
-                <PlanBody markdown={plan.markdown} />
-              )}
-              {(modes.length > 0 || choices.length > 1) && (
-                <>
-                  <span className="ks-plan__label">
-                    {modes.length > 0 ? t('planCard.buildIn') : t('planCard.implementAsk')}
-                  </span>
-                  <SegmentedControl
-                    aria-label={
-                      modes.length > 0 ? t('planCard.buildIn') : t('planCard.implementAsk')
-                    }
-                    variant="tray"
-                    size="lg"
-                    fullWidth
-                    value={chosen}
-                    onChange={setChosen}
-                    options={(modes.length > 0 ? modes : choices).map((o) => ({
-                      value: o.id,
-                      label: o.name,
-                    }))}
-                  />
-                </>
-              )}
-              {keepOption?.note && (
-                <input
-                  type="text"
-                  className="ks-plan__note"
-                  autoComplete="off"
-                  value={note}
-                  placeholder={t('planCard.keepPlanning', { agent: agentName })}
-                  aria-label={keepOption.name}
-                  onChange={(event) => setNote(event.target.value)}
-                  onKeyDown={(event) => {
-                    // Esc leaves the field rather than sending a half-written note.
-                    if (event.key === 'Escape') {
-                      event.stopPropagation()
-                      event.currentTarget.blur()
-                      return
-                    }
-                    if (
-                      event.key !== 'Enter' ||
-                      event.metaKey ||
-                      event.ctrlKey ||
-                      event.nativeEvent.isComposing ||
-                      event.keyCode === 229
-                    ) {
-                      return
-                    }
-                    event.preventDefault()
-                    if (note.trim()) keepPlanning()
-                  }}
-                />
-              )}
-            </div>
-          }
-        />
+    <div data-entry-id={entry.id} className="ks-answered" data-kind="other">
+      <div className="ks-answered__head">
+        <Icon icon={FileEditIcon} size={16} />
+        <span className="ks-answered__title">
+          {version > 1 ? t('planCard.version', { version }) : t('planCard.label')}
+        </span>
+        <span className="ks-answered__device">· {t('decision.planWaiting')}</span>
       </div>
-      {error && (
-        <p role="alert" className="ks-card-error">
-          {error}
-        </p>
-      )}
+      <div className="ks-answered__plan ks-plan__preview">
+        {plan.previous && (
+          <SegmentedControl
+            aria-label={t('planCard.show')}
+            variant="tray"
+            size="sm"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'plan', label: t('planCard.plan') },
+              { value: 'changes', label: t('planCard.changes') },
+            ]}
+          />
+        )}
+        {view === 'changes' && plan.previous ? (
+          <PlanChanges previous={plan.previous} markdown={plan.markdown} />
+        ) : (
+          <PlanBody markdown={plan.markdown} />
+        )}
+      </div>
     </div>
   )
 }

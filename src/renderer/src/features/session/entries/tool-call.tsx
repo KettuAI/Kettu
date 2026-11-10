@@ -46,6 +46,7 @@ export function StepCard({
   duration,
   time,
   icon,
+  defaultOpen = false,
 }: Omit<StepFacts, 'glyph'> & {
   sessionId: string
   entry: ThreadEntry
@@ -53,11 +54,13 @@ export function StepCard({
   labels: Partial<ToolCallLabels>
   note?: string
   icon: ReactNode
+  /** Opens it from the start, as a call waiting for permission does. */
+  defaultOpen?: boolean
 }) {
   const { t } = useTranslation('session')
   // A step that arrived while shown draws its part of a run's timeline in (session.css).
   const [fresh] = useState(() => isFresh(sessionId, entry.id))
-  const [opened, onOpenChange, opening] = useOpenedOnce(status)
+  const [opened, onOpenChange, opening] = useOpenedOnce(status, defaultOpen)
   const facts = {
     status,
     startedAt,
@@ -66,6 +69,7 @@ export function StepCard({
     icon,
     labels,
     chevron: 'after' as const,
+    defaultOpen,
     className: cn(fresh && 'ks-step-new', opening && 'ks-step-opening') || undefined,
     onOpenChange,
   }

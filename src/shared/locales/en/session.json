@@ -823,5 +823,43 @@
     "session": "This session",
     "project": "This project",
     "always": "Always"
+  },
+  "decision": {
+    "needsYou": "Needs you",
+    "later": "Later",
+    "show": "Show",
+    "recommended": "Recommended",
+    "approve": "Approve",
+    "decline": "Decline",
+    "own": "Something else…",
+    "send": "Send",
+    "answered": "Answered",
+    "previous": "Previous request",
+    "next": "Next request",
+    "allDone": "Nothing else is waiting",
+    "waiting_one": "{{count}} request waiting",
+    "waiting_other": "{{count}} requests waiting",
+    "of": "{{index}} of {{count}}",
+    "allow": "Allow {{agent}} to {{action}}?",
+    "tellInstead": "No, tell {{agent}} what to do instead…",
+    "waitingStep": "Waiting for you",
+    "planWaiting": "Waiting for your approval",
+    "startBuilding": "Start building?",
+    "form": "{{server}} needs a few details",
+    "link": "{{server}} asks you to open a page",
+    "fact": {
+      "command": "Command",
+      "file": "File",
+      "folder": "Folder",
+      "why": "Why",
+      "site": "Site",
+      "address": "Address",
+      "app": "App",
+      "device": "Device",
+      "servers": "Servers",
+      "tool": "Tool",
+      "routine": "Routine",
+      "note": "Note"
+    }
   }
 }

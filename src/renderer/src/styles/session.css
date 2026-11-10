@@ -787,61 +787,45 @@
 .ks-permission .ui-prc__more-body {
   padding: 10px 14px 0;
 }
-/* What an always answer allows, when the agent spells it out: its own line under the answer. */
-.ks-permission__allows {
-  flex-basis: 100%;
-  order: 1;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--thread-muted);
-  overflow-wrap: anywhere;
-}
-.ks-permission__command {
-  min-width: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--bg-code-block);
-  font: 12px/18px var(--font-mono);
-  color: var(--thread-ink);
-}
-.ks-permission__command pre {
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.ks-permission__command pre > span {
-  color: var(--thread-faint);
-}
-.ks-permission__cwd {
-  display: block;
-  margin-top: 4px;
-  overflow: hidden;
-  font-family: var(--font-sans);
-  font-size: 11.5px;
-  color: var(--thread-muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.ks-permission__note {
-  font-size: 12px;
-  color: var(--thread-muted);
-}
 .ks-card-error {
   margin-top: 6px;
   font-size: 12px;
   color: var(--danger);
+}
+
+/* What waits for the user, on Decision Card just above the composer: the gap under it folds away
+   with the card after the last answer. */
+.ks-decisions .ui-dc {
+  margin-bottom: 8px;
+  transition: margin-bottom 420ms var(--ease-out-quint);
+}
+.ks-decisions .ui-dc[data-mode='none'] {
+  margin-bottom: 0;
+}
+.ks-decisions > .ks-card-error {
+  margin: 0 4px 6px;
+}
+/* The card resets its buttons unlayered, which beats the utilities of a form's own controls. */
+.ui-dc__content button {
+  margin: revert-layer;
+  padding: revert-layer;
+  border: revert-layer;
+  background: revert-layer;
+  font: revert-layer;
+  color: revert-layer;
+  text-align: revert-layer;
+  cursor: revert-layer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ks-decisions .ui-dc {
+    transition: none;
+  }
 }
 .ks-add {
   color: var(--thread-add);
 }
 .ks-del {
   color: var(--thread-del);
-}
-
-/* An agent's questions on Experiment Card as a question, across the column. */
-.ks-thread .ui-xcc.ks-question {
-  max-width: none;
 }
 
 /* An ask once answered, in the folded permission card's look: what it came to, then each
@@ -940,15 +924,6 @@
   height: 10px;
 }
 
-/* A plan on Approval Card: its text, the mode it builds in and a note for keeping on planning. */
-.ks-thread .ui-apc.ks-plan {
-  max-width: none;
-}
-/* The plan clamps itself, so the card's own scroller would hide the mode and the note under it. */
-.ks-plan .ui-apc__preview {
-  max-height: none;
-  overflow: visible;
-}
 .ks-plan__preview {
   display: flex;
   flex-direction: column;
@@ -1023,24 +998,6 @@
 .ks-plan__changes li[data-kind='removed'] > span:first-child {
   color: var(--thread-del);
 }
-.ks-plan__note {
-  height: 34px;
-  min-width: 0;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: inset 0 0 0 1px var(--thread-line-strong);
-  font-size: 13px;
-  color: var(--thread-ink);
-  outline: none;
-  transition: box-shadow 140ms ease;
-}
-.ks-plan__note::placeholder {
-  color: var(--thread-muted);
-}
-.ks-plan__note:focus {
-  box-shadow: inset 0 0 0 1px var(--thread-muted);
-}
 .ks-plan__moved {
   display: flex;
   align-items: center;
@@ -1100,13 +1057,7 @@
   white-space: normal;
 }
 
-/* An MCP server's form or page on Approval Card. */
-.ks-form__message {
-  font-size: 14px;
-  font-weight: 500;
-  white-space: pre-wrap;
-  color: var(--thread-ink);
-}
+/* An MCP server's form, inside its Decision Card above the composer. */
 .ks-form {
   display: grid;
   grid-template-columns: 8.25rem minmax(0, 1fr);
@@ -1142,32 +1093,6 @@
 .ks-form__error {
   font-size: 12px;
   color: var(--danger);
-}
-.ks-link {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--bg-code-block);
-  color: var(--thread-text);
-}
-.ks-link__text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.ks-link__text b {
-  font-weight: 600;
-  color: var(--thread-ink);
-}
-.ks-link__text span {
-  overflow: hidden;
-  font: 12px/18px var(--font-mono);
-  color: var(--thread-muted);
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 .ks-answered__values {
   display: grid;

@@ -12,8 +12,9 @@ const ENTRANCE_MS = 600
  */
 export function useOpenedOnce(
   status?: ToolCallStatus,
+  open = false,
 ): [boolean, (open: boolean) => void, boolean] {
-  const [opened, setOpened] = useState(false)
+  const [opened, setOpened] = useState(open)
   const [opening, setOpening] = useState(false)
   const [seen, setSeen] = useState(status)
   const timer = useRef<number | undefined>(undefined)

@@ -24,6 +24,7 @@ import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
 import { ComputerGlow, ComputerLabel } from './computer-bar'
+import { DecisionTray } from './decisions/decision-tray'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import {
@@ -237,6 +238,14 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
               </p>
             )}
             <div className="flex flex-col" {...(computer ? { 'data-computer-using': '' } : {})}>
+              {session && !archived && !away && (
+                <DecisionTray
+                  key={sessionId}
+                  sessionId={sessionId}
+                  agentName={name}
+                  projectPath={summary.projectPath}
+                />
+              )}
               {/* Mounted only while something waits; its cards sit behind the composer. */}
               {session &&
                 !archived &&

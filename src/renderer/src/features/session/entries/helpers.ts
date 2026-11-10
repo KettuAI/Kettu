@@ -114,6 +114,12 @@ export function codeSpans(name: string): { text: string; code: boolean }[] {
   return parts.map((text, i) => ({ text, code: i % 2 === 1 })).filter((part) => part.text !== '')
 }
 
+/** An option's name as plain words, for a row or button that sets no code. */
+export const plainName = (name: string): string =>
+  codeSpans(name)
+    .map((part) => part.text)
+    .join('')
+
 const FENCED = /^(`{3,})[^\n`]*\n([\s\S]*?)\n?\1$/
 
 /**

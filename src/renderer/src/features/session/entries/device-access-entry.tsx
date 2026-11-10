@@ -1,17 +1,8 @@
 import { memo } from 'react'
-import { SmartPhone01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { DeviceAccessAnswer } from '@shared/device-agent'
-import { host } from '@renderer/lib/host'
+import { deviceAccessAsk } from '../decisions/access'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { AccessCard } from './access-card'
-
-const ANSWER_TEXT = {
-  session: 'deviceAccess.answer.session',
-  always: 'deviceAccess.answer.always',
-  deny: 'deviceAccess.answer.deny',
-  timeout: 'deviceAccess.answer.timeout',
-} as const satisfies Record<DeviceAccessAnswer, string>
 
 /** An agent asked to use a mobile device for the first time in its session. */
 export const DeviceAccessEntry = memo(function DeviceAccessEntry({
@@ -29,28 +20,13 @@ export const DeviceAccessEntry = memo(function DeviceAccessEntry({
   if (!entry) return null
   return (
     <AccessCard
+      {...deviceAccessAsk(t, sessionId, entry)}
       sessionId={sessionId}
       entryId={entryId}
       agentName={agentName}
       className={animation}
-      action={t('access.action.device')}
-      target={entry.deviceName}
-      glyph={SmartPhone01Icon}
-      reason={t('deviceAccess.where')}
       answer={entry.decision}
       device={entry.device}
-      words={{
-        scope: { session: t('access.session'), always: t('access.always') },
-        allow: {
-          session: t('deviceAccess.decision.session'),
-          always: t('deviceAccess.decision.always'),
-        },
-        deny: t('deviceAccess.decision.deny'),
-        answer: (a) => t(ANSWER_TEXT[a as DeviceAccessAnswer] ?? ANSWER_TEXT.deny),
-      }}
-      request={(decision) =>
-        host('devices.answerAccess', { sessionId, entryId: entry.id, decision })
-      }
     />
   )
 })

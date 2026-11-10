@@ -786,5 +786,42 @@
     "session": "本次会话",
     "project": "此项目",
     "always": "始终"
+  },
+  "decision": {
+    "needsYou": "等你处理",
+    "later": "稍后",
+    "show": "显示",
+    "recommended": "推荐",
+    "approve": "批准",
+    "decline": "拒绝",
+    "own": "其他回答…",
+    "send": "发送",
+    "answered": "已回答",
+    "previous": "上一个请求",
+    "next": "下一个请求",
+    "allDone": "没有别的事在等你了",
+    "waiting_other": "{{count}} 件事在等你",
+    "of": "{{index}} / {{count}}",
+    "allow": "允许 {{agent}} {{action}}吗？",
+    "tellInstead": "不，告诉 {{agent}} 该怎么做…",
+    "waitingStep": "等你处理",
+    "planWaiting": "等待你的批准",
+    "startBuilding": "开始构建吗？",
+    "form": "{{server}} 需要你填写一些信息",
+    "link": "{{server}} 请你打开一个网页",
+    "fact": {
+      "command": "命令",
+      "file": "文件",
+      "folder": "目录",
+      "why": "原因",
+      "site": "网站",
+      "address": "地址",
+      "app": "应用",
+      "device": "设备",
+      "servers": "服务器",
+      "tool": "工具",
+      "routine": "Routine",
+      "note": "说明"
+    }
   }
 }

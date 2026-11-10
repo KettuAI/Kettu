@@ -1,13 +1,12 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { cn } from '@renderer/lib/utils'
-import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
-import { ElicitationCard, ElicitationSettled } from './elicitation-card'
+import { ElicitationSettled } from './elicitation-card'
 import { PermissionEntry } from './permission-card'
-import { PlanCard, PlanSettled } from './plan-card'
-import { AnsweredAsk, OptionQuestionCard, QuestionCard } from './question-card'
+import { PlanSettled, PlanWaiting } from './plan-card'
+import { AnsweredAsk } from './question-card'
 import { StepCard } from './tool-call'
 import { stepFacts, useToolCallLabels } from './tool-call-model'
 
@@ -19,8 +18,10 @@ export interface ToolCardProps {
 }
 
 /**
- * A tool call on its own: a request waiting for the user as its card, an answered question, plan or
- * form as what it settled on, and anything else as its Tool Call Card.
+ * A tool call on its own: an answered question, plan or form as what it settled on, a request for
+ * permission as its call, and anything else as its Tool Call Card. The Decision Card above the
+ * composer asks what waits; of a question or form nothing shows here until it is answered, of a
+ * plan its document.
  */
 export const ToolCard = memo(function ToolCard({
   sessionId,
@@ -34,29 +35,19 @@ export const ToolCard = memo(function ToolCard({
   const labels = useToolCallLabels()
   const ref = useRef<HTMLDivElement>(null)
   const permission = entry?.permission ?? null
-  const media = useMemo(() => (entry ? toolMedia(entry) : []), [entry])
-
-  useEffect(() => {
-    if (permission) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [permission])
 
   if (!entry) return null
   const result = entry.permissionResult
   if (permission) {
-    // Each request gets a card of its own, so an agent's next question in the same entry starts
-    // unanswered rather than inheriting the last one's pending answer.
-    const props = {
-      ref,
-      sessionId,
-      entry,
-      agentName,
-      className: animation,
+    if (permission.plan) {
+      return (
+        <div ref={ref} className={cn('min-w-0', animation)}>
+          <PlanWaiting key={permission.requestId} entry={entry} />
+        </div>
+      )
     }
-    if (permission.plan) return <PlanCard key={permission.requestId} {...props} />
-    if (permission.elicitation) return <ElicitationCard key={permission.requestId} {...props} />
-    if (permission.questions) return <QuestionCard key={permission.requestId} {...props} />
-    if (entry.question !== undefined) {
-      return <OptionQuestionCard key={permission.requestId} {...props} />
+    if (permission.elicitation || permission.questions || entry.question !== undefined) {
+      return null
     }
   }
   if (entry.planVersion !== undefined) {
@@ -107,7 +98,6 @@ export const ToolCard = memo(function ToolCard({
         entry={entry}
         projectPath={projectPath}
         agentName={agentName}
-        media={media}
         className={animation}
       />
     )

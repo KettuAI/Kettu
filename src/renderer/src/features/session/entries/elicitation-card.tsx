@@ -1,18 +1,13 @@
-import { useRef, useState, type KeyboardEvent, type Ref } from 'react'
+import { useState, type KeyboardEvent } from 'react'
 import {
   ArrowDown01Icon,
   Calendar03Icon,
-  Globe02Icon,
   LinkSquare02Icon,
   Plug01Icon,
 } from '@hugeicons/core-free-icons'
-import type { TFunction } from 'i18next'
-import { getDomain } from 'tldts'
 import { useTranslation } from 'react-i18next'
-import type { FormField, FormValues, PendingElicitation, ToolEntry } from '@shared/thread'
-import { emitAppEvent } from '@renderer/app/events'
+import type { FormField, FormValues, ToolEntry } from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
-import { ApprovalCard } from '@renderer/components/affect/approval-card'
 import { SegmentedControl } from '@renderer/components/segmented-control'
 import { Calendar } from '@renderer/components/ui/calendar'
 import { Checkbox } from '@renderer/components/ui/checkbox'
@@ -23,8 +18,7 @@ import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { SettingSelect } from '@renderer/features/settings/controls'
 import { openLinkIn } from '../open-link'
-import { respondToPermission, respondWithValues } from './helpers'
-import { useAnswering } from './use-answering'
+import { DATE, fieldError, siteOf } from './elicitation-model'
 
 /** Up to this many choices sit side by side as segments; more go in a list. */
 const SEGMENTED_MAX = 5
@@ -35,95 +29,6 @@ function keepEscape(event: KeyboardEvent<HTMLDivElement>) {
   if (event.key !== 'Escape' || !target.closest('input, textarea, [role="combobox"]')) return
   event.stopPropagation()
   target.blur()
-}
-
-/** The address a link goes to, http and https only; null for anything else. */
-function webUrl(url: string): URL | null {
-  const parsed = URL.parse(url)
-  return parsed && (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed : null
-}
-
-/** The site a link names: its registrable domain, or its host where it has none. */
-function siteOf(url: string): string {
-  const parsed = webUrl(url)
-  if (!parsed) return url
-  return getDomain(parsed.hostname) ?? parsed.hostname
-}
-
-/** Each field's starting value: the server's default, or empty. */
-function startValues(fields: FormField[]): Partial<FormValues> {
-  const values: Partial<FormValues> = {}
-  for (const field of fields) {
-    if (field.default !== undefined) values[field.key] = field.default
-    else if (field.type === 'boolean') values[field.key] = false
-    else if (field.type === 'choices') values[field.key] = []
-  }
-  return values
-}
-
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const DATE = /^\d{4}-\d{2}-\d{2}$/
-
-/** Why a field's value cannot go, or null; the host checks the same again. */
-function fieldError(
-  field: FormField,
-  value: FormValues[string] | undefined,
-  t: TFunction<'session'>,
-): string | null {
-  const empty = value === undefined || value === '' || (Array.isArray(value) && value.length === 0)
-  if (empty) return field.required ? t('elicitation.required') : null
-  switch (field.type) {
-    case 'text': {
-      const text = String(value)
-      if (field.minLength !== undefined && text.length < field.minLength) {
-        return t('elicitation.tooShort', { count: field.minLength })
-      }
-      if (field.maxLength !== undefined && text.length > field.maxLength) {
-        return t('elicitation.tooLong', { count: field.maxLength })
-      }
-      if (field.format === 'email' && !EMAIL.test(text)) return t('elicitation.notEmail')
-      if (field.format === 'uri' && !webUrl(text)) return t('elicitation.notUrl')
-      if (field.format === 'date' && !DATE.test(text)) return t('elicitation.notDate')
-      return null
-    }
-    case 'number': {
-      const n = Number(value)
-      if (!Number.isFinite(n) || (field.integer && !Number.isInteger(n))) {
-        return t(field.integer ? 'elicitation.notInteger' : 'elicitation.notNumber')
-      }
-      if (field.minimum !== undefined && n < field.minimum) {
-        return t('elicitation.atLeast', { value: field.minimum })
-      }
-      if (field.maximum !== undefined && n > field.maximum) {
-        return t('elicitation.atMost', { value: field.maximum })
-      }
-      return null
-    }
-    case 'choices': {
-      const count = (value as string[]).length
-      if (field.minItems !== undefined && count < field.minItems) {
-        return t('elicitation.pickAtLeast', { count: field.minItems })
-      }
-      if (field.maxItems !== undefined && count > field.maxItems) {
-        return t('elicitation.pickAtMost', { count: field.maxItems })
-      }
-      return null
-    }
-    default:
-      return null
-  }
-}
-
-/** The values as the host takes them: numbers as numbers, empty optional fields left out. */
-function toValues(fields: FormField[], draft: Partial<FormValues>): FormValues {
-  const values: FormValues = {}
-  for (const field of fields) {
-    const value = draft[field.key]
-    if (value === undefined || value === '') continue
-    if (Array.isArray(value) && value.length === 0 && !field.required) continue
-    values[field.key] = field.type === 'number' ? Number(value) : value
-  }
-  return values
 }
 
 function DateField({
@@ -283,236 +188,48 @@ function FieldControl({
 }
 
 /**
- * An MCP server's request through the agent: a form to fill in, or a page to open. The answer
- * goes back to the server; nothing goes until the user confirms.
+ * A form's fields, one row each by type, which the Decision Card above the composer holds; errors
+ * show once the user changed the field.
  */
-export function ElicitationCard({
-  ref,
-  sessionId,
-  entry,
-  agentName,
-  className,
+export function ElicitationForm({
+  fields,
+  draft,
+  touched,
+  onChange,
 }: {
-  ref: Ref<HTMLDivElement>
-  sessionId: string
-  entry: ToolEntry
-  agentName: string
-  className?: string
-}) {
-  const permission = entry.permission!
-  const request = permission.elicitation!
-  return request.kind === 'form' ? (
-    <FormCard
-      ref={ref}
-      sessionId={sessionId}
-      entry={entry}
-      request={request}
-      agentName={agentName}
-      className={className}
-    />
-  ) : (
-    <LinkCard
-      ref={ref}
-      sessionId={sessionId}
-      entry={entry}
-      request={request}
-      agentName={agentName}
-      className={className}
-    />
-  )
-}
-
-function FormCard({
-  ref,
-  sessionId,
-  entry,
-  request,
-  agentName,
-  className,
-}: {
-  ref: Ref<HTMLDivElement>
-  sessionId: string
-  entry: ToolEntry
-  request: Extract<PendingElicitation, { kind: 'form' }>
-  agentName: string
-  className?: string
+  fields: FormField[]
+  draft: Partial<FormValues>
+  /** The fields the user changed, whose errors show. */
+  touched: Record<string, true>
+  onChange: (key: string, value: FormValues[string]) => void
 }) {
   const { t } = useTranslation('session')
-  const permission = entry.permission!
-  const [draft, setDraft] = useState(() => startValues(request.fields))
-  const [tried, setTried] = useState(false)
-  const { answering, error, away, send } = useAnswering(sessionId)
-  const body = useRef<HTMLDivElement>(null)
-  const busy = away || answering !== null
-  const decline = permission.options.find((o) => o.kind === 'reject_once')
-  const errors = request.fields.map((field) => fieldError(field, draft[field.key], t))
-  const ready = errors.every((e) => e === null)
-
-  const submit = async () => {
-    if (busy) return
-    setTried(true)
-    if (!ready) return
-    const focused = !!body.current?.contains(document.activeElement)
-    const sent = await send('submit', () =>
-      respondWithValues(sessionId, permission.requestId, toValues(request.fields, draft)),
-    )
-    if (sent && focused) emitAppEvent({ kind: 'focus-composer' })
-  }
-
-  const declineIt = () => {
-    if (!decline || busy) return
-    void send(decline.id, () => respondToPermission(sessionId, permission.requestId, decline.id))
-  }
-
   return (
-    <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
-      <div ref={body} className="min-w-0" onKeyDownCapture={keepEscape}>
-        <ApprovalCard
-          className="ks-plan"
-          title={request.server}
-          description={t('elicitation.inAgent', { agent: agentName })}
-          icon={<Icon icon={Plug01Icon} size={15} />}
-          label={t('question.asksYou')}
-          approveLabel={t('elicitation.submit')}
-          denyLabel={t('elicitation.decline')}
-          allowAlways={false}
-          shortcuts
-          status="pending"
-          onApprove={async () => {
-            await submit()
-            // A form that is not ready, or an answer that did not go, keeps the card waiting.
-            if (!ready) throw new Error('not ready')
-          }}
-          onDeny={declineIt}
-          preview={
-            <div className="ks-plan__preview">
-              {request.message && (
-                <p data-selectable="" className="ks-form__message">
-                  {request.message}
-                </p>
+    <div className="ks-form" onKeyDownCapture={keepEscape}>
+      {fields.map((field) => {
+        const shown = touched[field.key] ? fieldError(field, draft[field.key], t) : null
+        return (
+          <div key={field.key} className="contents">
+            <span className="ks-form__label">
+              {field.title}
+              {!field.required && field.type !== 'boolean' && (
+                <span>{t('elicitation.optional')}</span>
               )}
-              <div className="ks-form">
-                {request.fields.map((field, i) => {
-                  const shown = tried ? errors[i] : null
-                  return (
-                    <div key={field.key} className="contents">
-                      <span className="ks-form__label">
-                        {field.title}
-                        {!field.required && field.type !== 'boolean' && (
-                          <span>{t('elicitation.optional')}</span>
-                        )}
-                      </span>
-                      <div className="ks-form__field">
-                        <FieldControl
-                          field={field}
-                          value={draft[field.key]}
-                          disabled={busy}
-                          invalid={!!shown}
-                          onChange={(value) => setDraft((d) => ({ ...d, [field.key]: value }))}
-                        />
-                        {field.description && (
-                          <span className="ks-form__hint">{field.description}</span>
-                        )}
-                        {shown && <span className="ks-form__error">{shown}</span>}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-              <span className="ks-plan__label">
-                {t('elicitation.sentTo', { server: request.server })}
-              </span>
+            </span>
+            <div className="ks-form__field">
+              <FieldControl
+                field={field}
+                value={draft[field.key]}
+                disabled={false}
+                invalid={!!shown}
+                onChange={(value) => onChange(field.key, value)}
+              />
+              {field.description && <span className="ks-form__hint">{field.description}</span>}
+              {shown && <span className="ks-form__error">{shown}</span>}
             </div>
-          }
-        />
-      </div>
-      {error && (
-        <p role="alert" className="ks-card-error">
-          {error}
-        </p>
-      )}
-    </div>
-  )
-}
-
-function LinkCard({
-  ref,
-  sessionId,
-  entry,
-  request,
-  agentName,
-  className,
-}: {
-  ref: Ref<HTMLDivElement>
-  sessionId: string
-  entry: ToolEntry
-  request: Extract<PendingElicitation, { kind: 'url' }>
-  agentName: string
-  className?: string
-}) {
-  const { t } = useTranslation('session')
-  const permission = entry.permission!
-  const { answering, error, away, send } = useAnswering(sessionId)
-  const busy = away || answering !== null
-  const accept = permission.options.find((o) => o.kind === 'allow_once')
-  const decline = permission.options.find((o) => o.kind === 'reject_once')
-  const site = siteOf(request.url)
-  const usable = webUrl(request.url) !== null
-
-  const open = async () => {
-    if (busy || !accept || !usable) return
-    const sent = await send(accept.id, () =>
-      respondToPermission(sessionId, permission.requestId, accept.id),
-    )
-    if (sent) openLinkIn(request.url, 'browser', null)
-  }
-
-  return (
-    <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
-      <ApprovalCard
-        className="ks-plan"
-        title={request.server}
-        description={t('elicitation.inAgent', { agent: agentName })}
-        icon={<Icon icon={Plug01Icon} size={15} />}
-        label={t('question.asksYou')}
-        approveLabel={t('elicitation.open', { site })}
-        denyLabel={t('elicitation.decline')}
-        allowAlways={false}
-        shortcuts
-        status="pending"
-        onApprove={async () => {
-          await open()
-          if (!usable || !accept) throw new Error('not usable')
-        }}
-        onDeny={() => {
-          if (!decline || busy) return
-          void send(decline.id, () =>
-            respondToPermission(sessionId, permission.requestId, decline.id),
-          )
-        }}
-        preview={
-          <div className="ks-plan__preview">
-            {request.message && (
-              <p data-selectable="" className="ks-form__message">
-                {request.message}
-              </p>
-            )}
-            <div className="ks-link">
-              <Icon icon={Globe02Icon} size={16} />
-              <span className="ks-link__text">
-                <b>{site}</b>
-                <span data-selectable="">{request.url}</span>
-              </span>
-            </div>
-            <span className="ks-plan__label">{t('elicitation.opensInBrowser')}</span>
           </div>
-        }
-      />
-      {error && (
-        <p role="alert" className="ks-card-error">
-          {error}
-        </p>
-      )}
+        )
+      })}
     </div>
   )
 }

@@ -5145,55 +5145,6 @@ li[data-row-exit='dust'] > * {
   --ui-drpc-shadow-hover: 0 0 0 0.5px var(--border-default), var(--elevation-card);
   --ui-drpc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
 }
-[data-installed-theme] .ui-xcc {
-  --ui-xcc-card: var(--shell-card);
-  --ui-xcc-ink: var(--text-primary);
-  --ui-xcc-strong: var(--text-primary);
-  --ui-xcc-text: var(--text-secondary);
-  --ui-xcc-muted: var(--text-tertiary);
-  --ui-xcc-faint: var(--text-disabled);
-  --ui-xcc-icon: var(--icon-default);
-  --ui-xcc-line: var(--border-subtle);
-  --ui-xcc-fill: var(--bg-selected);
-  --ui-xcc-wash: var(--bg-hover);
-  --ui-xcc-track: var(--border-subtle);
-  --ui-xcc-pick: var(--control-on-tint);
-  --ui-xcc-pick-line: color-mix(in srgb, var(--control-on) 40%, transparent);
-  --ui-xcc-tile-line: var(--border-default);
-  --ui-xcc-primary: var(--primary-from);
-  --ui-xcc-on-primary: var(--primary-foreground);
-  --ui-xcc-c0: var(--border-strong);
-  --ui-xcc-c1: var(--context-1);
-  --ui-xcc-c2: var(--context-2);
-  --ui-xcc-c3: var(--context-3);
-  --ui-xcc-c4: var(--context-4);
-  --ui-xcc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
-  --ui-xcc-focus: var(--focus-ring-color);
-}
-[data-installed-theme] .ui-xcc [data-tone='red'] {
-  --ui-xcc-tag: var(--danger);
-  --ui-xcc-tag-bg: color-mix(in srgb, var(--danger) 10%, transparent);
-}
-[data-installed-theme] .ui-xcc [data-tone='amber'] {
-  --ui-xcc-tag: var(--warning);
-  --ui-xcc-tag-bg: color-mix(in srgb, var(--warning) 10%, transparent);
-}
-[data-installed-theme] .ui-xcc [data-tone='green'] {
-  --ui-xcc-tag: var(--success);
-  --ui-xcc-tag-bg: color-mix(in srgb, var(--success) 10%, transparent);
-}
-[data-installed-theme] .ui-xcc [data-tone='blue'] {
-  --ui-xcc-tag: var(--context-1);
-  --ui-xcc-tag-bg: color-mix(in srgb, var(--context-1) 10%, transparent);
-}
-[data-installed-theme] .ui-xcc [data-tone='violet'] {
-  --ui-xcc-tag: var(--merged);
-  --ui-xcc-tag-bg: color-mix(in srgb, var(--merged) 10%, transparent);
-}
-[data-installed-theme] .ui-xcc [data-tone='gray'] {
-  --ui-xcc-tag: var(--text-secondary);
-  --ui-xcc-tag-bg: color-mix(in srgb, var(--text-secondary) 10%, transparent);
-}
 [data-installed-theme] .ui-fmc {
   --ui-fmc-card: var(--shell-card);
   --ui-fmc-ink: var(--text-primary);
@@ -5271,6 +5222,25 @@ li[data-row-exit='dust'] > * {
   --ui-mdpc-focus: var(--focus-ring-color);
   --ui-mdpc-shadow-tile: 0 0 0 0.5px var(--border-default), var(--elevation-card);
   --ui-mdpc-shadow-pop: 0 0 0 0.5px var(--border-default), var(--elevation-popover);
+}
+[data-installed-theme] .ui-dc {
+  --ui-dc-tray: var(--bg-subtle);
+  --ui-dc-tray-pulse: var(--bg-selected);
+  --ui-dc-card: var(--shell-card);
+  --ui-dc-ink: var(--text-primary);
+  --ui-dc-text: var(--text-secondary);
+  --ui-dc-muted: var(--text-tertiary);
+  --ui-dc-faint: var(--text-disabled);
+  --ui-dc-line: var(--border-subtle);
+  --ui-dc-fill: var(--bg-selected);
+  --ui-dc-well: var(--bg-hover);
+  --ui-dc-wait-bg: color-mix(in srgb, var(--warning) 12%, transparent);
+  --ui-dc-wait-fg: var(--warning);
+  --ui-dc-focus: var(--focus-ring-color);
+  --ui-dc-solid: var(--primary-from);
+  --ui-dc-on-solid: var(--primary-foreground);
+  --ui-dc-placeholder: var(--text-disabled);
+  --ui-dc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
 }
 [data-installed-theme] .ui-prc {
   --ui-prc-card: var(--shell-card);
