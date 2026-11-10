@@ -41,7 +41,6 @@ export const ComputerAppEntry = memo(function ComputerAppEntry({
       answer={entry.decision}
       device={entry.device}
       words={{
-        scope: { session: t('access.session'), always: t('access.always') },
         allow: {
           session: t('computerApp.decision.session'),
           always: t('computerApp.decision.always', { app }),

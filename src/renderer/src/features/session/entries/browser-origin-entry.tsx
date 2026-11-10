@@ -45,7 +45,6 @@ export const BrowserOriginEntry = memo(function BrowserOriginEntry({
       answer={answer}
       device={entry.device}
       words={{
-        scope: { session: t('access.session'), always: t('access.project') },
         allow: {
           session: t('browserOrigin.decision.session'),
           always: t('browserOrigin.decision.project', { site }),

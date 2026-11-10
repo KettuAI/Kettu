@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import { useMemo, useRef, type ReactNode, type Ref } from 'react'
 import { File01Icon, FileEditIcon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import {
@@ -17,7 +17,6 @@ import {
   type PermissionPreviewItem,
   type PermissionScope,
 } from '@renderer/components/affect/permission-request'
-import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { basename, relativePath } from '@renderer/lib/format'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -52,8 +51,8 @@ const ANSWER_KEY = {
 } as const satisfies Record<PermissionKind, string>
 
 /**
- * The agent's options on the card: its allows as the how-long choice, in its order, its first
- * denial as Deny, and any other option as a button of its own before Deny.
+ * The agent's options on the card: its first denial as Deny, its allows as buttons after it, in
+ * its order with the one-time allow first, and any other option as a button of its own before Deny.
  */
 interface Answers {
   scopes: PermissionScope[]
@@ -178,7 +177,6 @@ export function PermissionEntry({
   const { answering, error, away, send } = useAnswering(sessionId)
   const toolLabels = useToolCallLabels()
   const root = useRef<HTMLDivElement>(null)
-  const [scope, setScope] = useState<PermissionScope | undefined>(undefined)
   useDiffStats(entry.content)
   const permission = entry.permission
   const result = entry.permissionResult
@@ -202,17 +200,11 @@ export function PermissionEntry({
     if (sent && (focused || !isAllow(option))) emitAppEvent({ kind: 'focus-composer' })
   }
 
-  const scopeWords = (s: PermissionScope): string => {
-    const option = answers.allows[s]
-    if (!option) return ''
-    const alike = answers.scopes.filter((x) => answers.allows[x]?.kind === option.kind).length
-    if (alike === 1 && option.kind === 'allow_once') return t('permission.card.once')
-    if (alike === 1 && option.kind === 'allow_always') return t('permission.card.always')
-    return plainName(option.name)
-  }
+  // Enter takes the allow that lasts shortest; the others follow it as buttons of their own.
+  const first =
+    answers.scopes.find((s) => answers.allows[s]?.kind === 'allow_once') ?? answers.scopes[0]
+  const rest = answers.scopes.filter((s) => s !== first)
 
-  // The Allow button's words. An agent may spell out everything an always answer allows, which
-  // reads under the choice instead, so the button keeps one line.
   const allowWords = (s: PermissionScope): string => {
     const option = answers.allows[s]
     if (!option) return ''
@@ -221,11 +213,13 @@ export function PermissionEntry({
     if (alike === 1 && option.kind === 'allow_always') return t('permission.card.allowAlways')
     return plainName(option.name)
   }
-  const allowNote = (s: PermissionScope): string | null => {
+  // An agent may spell out everything an always answer allows, which the button shows on hover so
+  // it keeps one line.
+  const allowNote = (s: PermissionScope): string | undefined => {
     const option = answers.allows[s]
-    if (!option) return null
+    if (!option) return undefined
     const name = plainName(option.name)
-    return name === allowWords(s) || name === scopeWords(s) ? null : name
+    return name === allowWords(s) ? option.description : name
   }
 
   const labels: Partial<PermissionLabels> = {
@@ -238,10 +232,8 @@ export function PermissionEntry({
       />
     ),
     risk: (risk) => t(`permission.card.${risk}`),
-    scope: (s) => scopeWords(s),
     allow: (s) => allowWords(s),
     deny: answers.deny ? t('permission.card.deny') : '',
-    howLong: t('permission.card.howLong'),
     more: (count) => t('permission.card.more', { count }),
     showLess: t('permission.card.showLess'),
     result: () => answeredWords(),
@@ -332,26 +324,7 @@ export function PermissionEntry({
           reason={entry.description}
           previewTitle={t('permission.card.touches')}
           preview={preview}
-          scopes={answers.scopes.length > 0 ? answers.scopes : ['once']}
-          scope={scope}
-          onScopeChange={setScope}
-          renderScopes={({ scopes, scope: shown, onChange }) => {
-            const note = allowNote(shown)
-            return (
-              <>
-                <SegmentedControl
-                  aria-label={t('permission.card.howLong')}
-                  variant="tray"
-                  size="lg"
-                  value={shown}
-                  onChange={onChange}
-                  disabled={busy}
-                  options={scopes.map((s) => ({ value: s, label: scopeWords(s) }))}
-                />
-                {note && <p className="ks-permission__allows">{note}</p>}
-              </>
-            )
-          }}
+          scopes={[first ?? 'once']}
           decision={decision}
           onDecisionChange={(next) => {
             if (!next) return
@@ -369,6 +342,18 @@ export function PermissionEntry({
               onClick={() => void respond(option)}
             >
               {plainName(option.name)}
+            </button>
+          ))}
+          trailingActions={rest.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className="ui-prc__btn"
+              disabled={busy}
+              title={allowNote(s)}
+              onClick={() => void respond(answers.allows[s])}
+            >
+              {allowWords(s)}
             </button>
           ))}
           labels={labels}
