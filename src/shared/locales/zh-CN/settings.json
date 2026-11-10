@@ -1189,10 +1189,6 @@
         "addDescription": "让这个浏览器和另一台登录这个账号的电脑配对。"
       }
     },
-    "chip": {
-      "label": "主机 {{name}}，{{state}}",
-      "tooltip": "{{name}} · {{state}}，点击在设置里打开。"
-    },
     "account": {
       "group": "账号下的电脑",
       "description": "登录同一个 Kettu 账号的其他电脑，点一下就能连接。",

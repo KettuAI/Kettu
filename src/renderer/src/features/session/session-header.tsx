@@ -12,7 +12,6 @@ import { usePane } from '@renderer/features/split/pane-context'
 import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
 import { PrBarChip } from '@renderer/features/git/pr-bar-chip'
 import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-tools'
-import { HostChip } from './host-chip'
 import { PlanChip } from './plan-chip'
 import { ViewersChip } from './viewers-chip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
@@ -124,7 +123,6 @@ export function SessionHeader({
             <AgentMark agent={summary.agentId} size={16} hostId={hostOfSession(summary)} />
           )}
         </span>
-        <HostChip projectPath={summary.projectPath} />
         {rename.renaming ? (
           <SessionTitleField
             summary={summary}
