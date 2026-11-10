@@ -449,7 +449,8 @@ export function ModelPicker({
   const shownMore = more.filter((m) => m.name.toLowerCase().includes(query.trim().toLowerCase()));
   const models = baseModels;
   const anyRated = models.some((m) => m.speed !== undefined || m.quality !== undefined || m.cost !== undefined);
-  const ownEffort = efforts !== EFFORTS;
+  // An empty list is an agent without levels: no row, and no level on the trigger
+  const ownEffort = efforts !== EFFORTS && efforts.length > 0;
   const [ownToggleOn, setToggleOn] = useState<Record<string, boolean>>(() =>
     Object.fromEntries((toggles ?? []).map((t) => [t.id, !!t.defaultOn])),
   );
