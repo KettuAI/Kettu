@@ -5,11 +5,9 @@ import type { DirectAddress } from './remote/protocol'
 import { BUILTIN_THEME_ID } from './themes'
 import type { AgentId, HarnessId } from './thread'
 
-/** What a host's first start did, kept so it runs once and its notice shows once. */
+/** Whether a host's first start has run, so it runs once. */
 export interface InitialSetup {
   done: boolean
-  added: HarnessId[] // the default agents it added, in order
-  noticed: boolean // New session has told the user about them
 }
 
 export interface SettingsFile {
@@ -171,7 +169,7 @@ export type ProxySettings =
 export const DEFAULT_SETTINGS: SettingsFile = {
   version: 1,
   agentRegistrationVersion: 1,
-  initialSetup: { done: false, added: [], noticed: false },
+  initialSetup: { done: false },
   general: {
     language: 'system',
     defaultAgent: null,
@@ -263,7 +261,6 @@ export interface SettingsPatch {
   diagnostics?: Partial<SettingsFile['diagnostics']>
   computerUse?: Partial<SettingsFile['computerUse']> // allowedApps is replaced whole
   usage?: Partial<SettingsFile['usage']>
-  initialSetup?: { noticed?: boolean } // the rest is the host's own record
   remote?: {
     enabled?: boolean
     name?: string | null

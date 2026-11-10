@@ -515,11 +515,7 @@
       },
       "found": "Found on this computer",
       "redetect": "Re-detect"
-    },
-    "setupNotice_one": "Added an agent for {{agents, list}}, found on this computer.",
-    "setupNotice_other": "Added agents for {{agents, list}}, found on this computer.",
-    "setupNoticeView": "View",
-    "setupNoticeDismiss": "Dismiss"
+    }
   },
   "signIn": {
     "title": "Sign in to {{agent}}",

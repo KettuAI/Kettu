@@ -127,7 +127,7 @@ export class SettingsStore {
     // A file saved before the first start was recorded belongs to a host already set up by hand.
     const recorded = read.kind === 'ok' && isRecord(read.value) && 'initialSetup' in read.value
     if (!recorded) {
-      loaded.settings.initialSetup = { done: true, added: [], noticed: true }
+      loaded.settings.initialSetup = { done: true }
     }
     // A file that turns direct connections on by hand gets its port as a change would.
     const settings = withDirectPort(loaded.settings, randomDirectPort)

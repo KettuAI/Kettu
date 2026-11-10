@@ -4734,7 +4734,7 @@ li[data-row-exit='dust'] > * {
   text-overflow: ellipsis;
   color: var(--danger);
 }
-/* New session without an agent: the install guide, and the line about what the first start added. */
+/* New session without an agent: the install guide. */
 .kettu-guide {
   display: flex;
   flex-direction: column;
@@ -4821,24 +4821,6 @@ li[data-row-exit='dust'] > * {
   margin-top: 6px;
   padding: 6px 8px 8px;
   border-top: 0.5px solid var(--composer-line);
-}
-.kettu-setup-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  box-sizing: border-box;
-  width: 100%;
-  margin: 14px 0 10px;
-  padding: 5px 6px 5px 12px;
-  border-radius: 12px;
-  background: var(--composer-panel);
-  box-shadow: inset 0 0 0 0.5px var(--composer-line);
-  font-size: 12.5px;
-  color: var(--composer-muted);
-}
-.kettu-setup-note > span {
-  flex: 1;
-  min-width: 0;
 }
 .kettu-pickup {
   display: flex;

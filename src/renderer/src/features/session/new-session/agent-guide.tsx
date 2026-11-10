@@ -1,8 +1,7 @@
-// New session while this computer has no agent: the main harnesses with Install, and the line
-// that tells what the first start added.
+// New session while this computer has no agent: the main harnesses with Install.
 
 import { useState } from 'react'
-import { Cancel01Icon, PlusSignIcon, RefreshIcon } from '@hugeicons/core-free-icons'
+import { PlusSignIcon, RefreshIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AgentStatus } from '@shared/agent-host'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -17,7 +16,7 @@ import {
   startInstall,
 } from '@renderer/features/settings/harness-install'
 import { errorMessage } from '@renderer/lib/host'
-import { AGENT_NAMES, hasProgram, useAgentsStore } from '@renderer/stores/agents'
+import { hasProgram, useAgentsStore } from '@renderer/stores/agents'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
 import type { GuideHarness } from './guide-statuses'
@@ -121,41 +120,5 @@ function GuideRow({ status }: { status: AgentStatus }) {
         <InstallDialog status={status} open={installing} onOpenChange={setInstalling} />
       )}
     </li>
-  )
-}
-
-/** Once, after the first start added agents: which, with the way to their settings. */
-export function AgentSetupNotice() {
-  const { t } = useTranslation('session')
-  const { done, added, noticed } = useSettingsStore((s) => s.settings.initialSetup)
-  if (!done || noticed || added.length === 0) return null
-  const dismiss = () => void useSettingsStore.getState().update({ initialSetup: { noticed: true } })
-  return (
-    <div className="kettu-setup-note" role="status">
-      <span>
-        {t('newSession.setupNotice', {
-          agents: added.map((id) => AGENT_NAMES[id]),
-          count: added.length,
-        })}
-      </span>
-      <Button
-        variant="ghost"
-        size="xs"
-        onClick={() => {
-          openAgentSettings(null)
-          dismiss()
-        }}
-      >
-        {t('newSession.setupNoticeView')}
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={t('newSession.setupNoticeDismiss')}
-        onClick={dismiss}
-      >
-        <Icon icon={Cancel01Icon} size={12} />
-      </Button>
-    </div>
   )
 }

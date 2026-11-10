@@ -81,7 +81,7 @@ import {
   type GreetingPeriod,
 } from './new-session/greeting'
 import { pickupSessions, pickupState } from './new-session/picker'
-import { AgentGuide, AgentSetupNotice } from './new-session/agent-guide'
+import { AgentGuide } from './new-session/agent-guide'
 import { useGuideStatuses } from './new-session/guide-statuses'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
@@ -382,7 +382,6 @@ function DraftComposer({
   return (
     <>
       {noAgent && guide && <AgentGuide statuses={guide} />}
-      {hostId === null && !noAgent && <AgentSetupNotice />}
       <div className="ui-as-start__composer kettu-composer" data-variant="new">
         <ChatComposer
           field={

@@ -497,10 +497,7 @@
       },
       "found": "已在这台电脑上找到",
       "redetect": "重新检测"
-    },
-    "setupNotice_other": "已为这台电脑上检测到的 {{agents, list(style: narrow)}} 添加了 Agent。",
-    "setupNoticeView": "查看",
-    "setupNoticeDismiss": "关闭"
+    }
   },
   "signIn": {
     "title": "登录 {{agent}}",

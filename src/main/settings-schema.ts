@@ -835,18 +835,6 @@ export function validateSettingsPatch(raw: unknown): SettingsPatch {
           problems.push(`Unknown setting "terminal.${key}"`)
         }
       }
-    } else if (section === 'initialSetup') {
-      if (!isRecord(value)) {
-        problems.push('"initialSetup" must be an object')
-        continue
-      }
-      for (const [key, fieldValue] of Object.entries(value)) {
-        const problem =
-          key === 'noticed'
-            ? isBoolean(fieldValue, 'initialSetup.noticed')
-            : `Unknown setting "initialSetup.${key}"`
-        if (problem) problems.push(problem)
-      }
     } else {
       problems.push(`Unknown setting "${section}"`)
     }
@@ -890,9 +878,6 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     next.marketplace.skills = structuredClone(patch.marketplace.skills)
   }
   if (patch.disabledAgents) next.disabledAgents = [...patch.disabledAgents]
-  if (patch.initialSetup?.noticed !== undefined) {
-    next.initialSetup.noticed = patch.initialSetup.noticed
-  }
   if (patch.startModes) {
     for (const [id, mode] of Object.entries(patch.startModes) as [AgentId, string | null][]) {
       if (mode === null) delete next.startModes[id]
@@ -1000,7 +985,7 @@ export function withFirstStart(current: SettingsFile, found: unknown): SettingsF
   )
   for (const id of added) next.agents[id] = { ...next.agents[id], enabled: true }
   if (added.length > 0 && next.general.defaultAgent === null) next.general.defaultAgent = added[0]!
-  next.initialSetup = { done: true, added, noticed: added.length === 0 }
+  next.initialSetup = { done: true }
   return next
 }
 
@@ -1207,21 +1192,15 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
 
 /** Reads the added agents, dropping each that is invalid or repeats an id or a folder. */
 function readInitialSetup(raw: unknown, problems: string[]): SettingsFile['initialSetup'] {
-  const setup: SettingsFile['initialSetup'] = { done: false, added: [], noticed: false }
+  const setup: SettingsFile['initialSetup'] = { done: false }
   if (!isRecord(raw)) {
     problems.push('"initialSetup" must be an object')
     return setup
   }
-  for (const key of ['done', 'noticed'] as const) {
-    if (raw[key] === undefined) continue
-    const problem = isBoolean(raw[key], `initialSetup.${key}`)
+  if (raw.done !== undefined) {
+    const problem = isBoolean(raw.done, 'initialSetup.done')
     if (problem) problems.push(problem)
-    else setup[key] = raw[key] as boolean
-  }
-  if (raw.added !== undefined) {
-    if (!Array.isArray(raw.added) || !raw.added.every(isHarnessId)) {
-      problems.push('"initialSetup.added" must be a list of harness ids')
-    } else setup.added = [...new Set(raw.added)]
+    else setup.done = raw.done as boolean
   }
   return setup
 }
