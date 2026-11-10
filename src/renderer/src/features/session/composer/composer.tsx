@@ -363,6 +363,7 @@ export function Composer({
           <PromptBox
             box={box}
             agentId={session.agentId}
+            hostId={hostId}
             agentName={agentName}
             commands={session.commands}
             placeholder={placeholder}

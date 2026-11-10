@@ -10,7 +10,7 @@ import {
 import { onAppEvent } from '@renderer/app/events'
 import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
-import { errorMessage, forgetSessionHost, host, sessionHost } from '@renderer/lib/host'
+import { errorMessage, forgetSessionHost, host, hostAt, sessionHost } from '@renderer/lib/host'
 import { whenHostHas } from '@renderer/lib/host-features'
 import { isHosted, isWeb, platform } from '@renderer/lib/platform'
 import { initAccount } from '@renderer/stores/account'
@@ -297,9 +297,11 @@ export function bootstrap(): Promise<unknown> {
   // including when the last attempt had marked it required.
   onAppEvent((event) => {
     if (event.kind !== 'sign-in-finished') return
-    void host('agents.refreshAccount', { agentId: event.agentId as AgentId, force: true }).catch(
-      (error: unknown) =>
-        console.warn(`Could not read the account after sign-in: ${errorMessage(error)}`),
+    void hostAt(event.hostId, 'agents.refreshAccount', {
+      agentId: event.agentId as AgentId,
+      force: true,
+    }).catch((error: unknown) =>
+      console.warn(`Could not read the account after sign-in: ${errorMessage(error)}`),
     )
   })
   // Before any composer shows, so each finds its draft's attachments.

@@ -2,7 +2,8 @@ import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { expiryOf, knownExpiry, type CachePhase, type KnownExpiry } from '@shared/prompt-cache'
 import { useCachePhase } from '@renderer/features/prompt-cache/cache-phase'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { hostOfSession } from '@renderer/stores/sessions'
 
 /**
  * What a row shows of its session's prompt cache: `none` when the session has no request on
@@ -11,7 +12,8 @@ import { useAgentsStore } from '@renderer/stores/agents'
 export type SessionCache = { state: 'none' } | { state: CachePhase; cache: KnownExpiry } | null
 
 export function useSessionCache(summary: SessionSummary): SessionCache {
-  const account = useAgentsStore((s) => s.byId[summary.agentId]?.account ?? null)
+  const hostId = hostOfSession(summary)
+  const account = useAgentsStore((s) => agentsOn(s, hostId).byId[summary.agentId]?.account ?? null)
   const quiet =
     summary.origin === 'subagent' ||
     summary.status === 'running' ||

@@ -34,6 +34,7 @@ const isMentionRow = (item: PopoverItem): item is MentionRow => 'positions' in i
 export function PromptBox({
   box,
   agentId,
+  hostId,
   agentName,
   commands,
   placeholder,
@@ -44,6 +45,8 @@ export function PromptBox({
 }: {
   box: PromptBoxState
   agentId: AgentId | null
+  /** The host the agent is on, null for this computer. */
+  hostId: string | null
   agentName: string
   commands: SlashCommand[]
   placeholder: string
@@ -248,6 +251,7 @@ export function PromptBox({
           draft={draft}
           sessionId={box.sessionId}
           agentId={agentId}
+          hostId={hostId}
           agentName={agentName}
           projectPath={projectPath}
           onOpen={setViewing}

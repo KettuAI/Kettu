@@ -9,7 +9,9 @@ import {
 } from '@renderer/components/ui/collapsible'
 import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marker'
 import { cn } from '@renderer/lib/utils'
-import { AGENT_NAMES, useAgentsStore } from '@renderer/stores/agents'
+import { hostOfPath } from '@renderer/lib/host-paths'
+import { AGENT_NAMES, agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { harnessOf } from '@shared/thread'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { PANEL } from './helpers'
@@ -23,8 +25,11 @@ export const TakeoverEntry = memo(function TakeoverEntry({ sessionId, entryId }:
   const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'takeover')
   const animation = useEntryAnimation(sessionId, entryId)
+  const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
   const name = useAgentsStore((s) =>
-    entry ? (s.byId[entry.agentId]?.name ?? AGENT_NAMES[harnessOf(entry.agentId)]) : '',
+    entry
+      ? (agentsOn(s, hostId).byId[entry.agentId]?.name ?? AGENT_NAMES[harnessOf(entry.agentId)])
+      : '',
   )
   const [open, setOpen] = useState(false)
   if (!entry) return null

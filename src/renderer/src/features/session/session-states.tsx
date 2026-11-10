@@ -19,7 +19,7 @@ import { connectionText } from '@renderer/features/settings/host-text'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import type { OtherHost } from '@renderer/stores/hosts'
 import { openReport } from '@renderer/stores/report'
 import { contentAttachments } from './composer/attachments'
@@ -81,17 +81,17 @@ export function ThreadSkeleton({ className }: { className?: string }) {
 const NO_LINES: string[] = []
 
 /** "Starting Codex…" with the latest lines the agent printed, or "Installing Codex…" with npm's. */
-export function StartingAgent({ agentId }: { agentId: AgentId }) {
+export function StartingAgent({ agentId, hostId }: { agentId: AgentId; hostId: string | null }) {
   const { t } = useTranslation('session')
-  const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
-  const state = useAgentsStore((s) => s.byId[agentId]?.state)
+  const progress = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.progress ?? NO_LINES)
+  const state = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.state)
   return (
     <div className="flex flex-col items-center gap-2 px-6 pt-6 pb-2 text-center" role="status">
       <span className="inline-flex items-center gap-2 text-ui text-muted-foreground">
         <Spinner className={cn('size-3.5', state === 'installing' && 'text-info')} />
         <span className="shimmer">
           {t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
-            agent: agentName(agentId),
+            agent: agentName(agentId, hostId),
           })}
         </span>
       </span>
@@ -116,15 +116,21 @@ export function StartingAgent({ agentId }: { agentId: AgentId }) {
  * "Starting Codex…", or "Loading the conversation…" once the agent runs, with the agent's latest
  * line under it. The composer takes its place without a shift.
  */
-export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
+export function ComposerPlaceholder({
+  agentId,
+  hostId,
+}: {
+  agentId: AgentId
+  hostId: string | null
+}) {
   const { t } = useTranslation('session')
-  const progress = useAgentsStore((s) => s.byId[agentId]?.progress.at(-1))
-  const state = useAgentsStore((s) => s.byId[agentId]?.state)
+  const progress = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.progress.at(-1))
+  const state = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.state)
   const text =
     state === 'ready'
       ? t('agentStart.loading')
       : t(state === 'installing' ? 'agentStart.installing' : 'agentStart.starting', {
-          agent: agentName(agentId),
+          agent: agentName(agentId, hostId),
         })
   return (
     <div className="flex flex-col">
@@ -172,10 +178,20 @@ export function ComposerPlaceholder({ agentId }: { agentId: AgentId }) {
  * The first message of a session being created, as its thread will show it, with what the session
  * waits for under it, so a send shows at once.
  */
-export function FirstMessage({ agentId, content }: { agentId: AgentId; content: UserContent[] }) {
+export function FirstMessage({
+  agentId,
+  hostId,
+  content,
+}: {
+  agentId: AgentId
+  hostId: string | null
+  content: UserContent[]
+}) {
   const { t } = useTranslation('session')
-  const progress = useAgentsStore((s) => s.byId[agentId]?.progress ?? NO_LINES)
-  const installing = useAgentsStore((s) => s.byId[agentId]?.state === 'installing')
+  const progress = useAgentsStore((s) => agentsOn(s, hostId).byId[agentId]?.progress ?? NO_LINES)
+  const installing = useAgentsStore(
+    (s) => agentsOn(s, hostId).byId[agentId]?.state === 'installing',
+  )
   const attachments = contentAttachments(content)
   const rest = content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
   return (
@@ -198,7 +214,7 @@ export function FirstMessage({ agentId, content }: { agentId: AgentId; content: 
           <p className="text-prose text-muted-foreground">
             <span className="shimmer">
               {t(installing ? 'agentStart.installing' : 'agentStart.starting', {
-                agent: agentName(agentId),
+                agent: agentName(agentId, hostId),
               })}
             </span>
           </p>

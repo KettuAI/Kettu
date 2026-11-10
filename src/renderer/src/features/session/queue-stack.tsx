@@ -12,7 +12,8 @@ import type { Attachment, QueuedPrompt, SessionView } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { errorMessage, host } from '@renderer/lib/host'
-import { useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { hostOfSession } from '@renderer/stores/sessions'
 import { restoreAttachments } from './composer/attachments'
 import { Glyph } from '@renderer/features/shell/glyph'
 
@@ -57,7 +58,10 @@ export function QueueStack({
   onError: (message: string | null) => void
 }) {
   const { t } = useTranslation('session')
-  const steering = useAgentsStore((s) => !!s.byId[session.agentId]?.capabilities.steering)
+  const hostId = hostOfSession(session)
+  const steering = useAgentsStore(
+    (s) => !!agentsOn(s, hostId).byId[session.agentId]?.capabilities.steering,
+  )
   const { queue, queuePaused, status } = session
   const running = status === 'running' || status === 'awaiting_permission'
   const sessionId = session.id
