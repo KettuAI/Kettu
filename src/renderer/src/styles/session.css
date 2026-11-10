@@ -254,9 +254,11 @@
   padding: 2px 0 0;
 }
 
-/* A step: a row with no card. On its own its tile starts at the column's edge; on a run's rail
-   under the run's tiles. Its hover well, and its card once open, start 10 px before the tile, at
-   --ks-card-x. */
+/* A step: a row with no card. Its hover well, and its card once open, start at --ks-card-x. On its
+   own its tile starts at the column's edge and its well 10 px before it; open, its card lies on
+   the column's edge in line with the cards around it, so the row moves 10 px in. On a run's rail
+   the tile starts under the run's tiles and the well and card 10 px before it, open or not: the
+   run's rule comes after the open one so it wins. */
 .ks-thread .ui-tcc {
   --ks-card-x: -10px;
   isolation: isolate;
@@ -264,12 +266,23 @@
   background: none;
   box-shadow: none;
 }
+.ks-thread .ui-tcc[data-open] {
+  --ks-card-x: 0px;
+}
 .ks-thread .ui-tcc-group__list > .ui-tcc {
   --ks-card-x: calc(var(--ks-gutter) - 10px);
 }
 .ks-thread .ui-tcc > .ui-tcc__top {
   position: relative;
   margin-left: var(--ks-card-x);
+}
+.ks-thread .ui-tcc > .ui-tcc__top,
+.ks-thread .ui-tcc > .ui-tcc__body .ui-tcc__sections {
+  transition: margin-left 260ms var(--ease-out-quint) 40ms;
+}
+.ks-thread .ui-tcc[data-open] > .ui-tcc__top,
+.ks-thread .ui-tcc[data-open] > .ui-tcc__body .ui-tcc__sections {
+  transition: margin-left 320ms var(--ease-out-quint);
 }
 .ks-thread .ui-tcc__head,
 .ks-thread .ui-tcc[data-open] > .ui-tcc__top > .ui-tcc__head {
@@ -371,14 +384,16 @@
   pointer-events: none;
   transition:
     opacity 180ms ease 80ms,
-    transform 260ms var(--ease-out-quint);
+    transform 260ms var(--ease-out-quint),
+    left 260ms var(--ease-out-quint) 40ms;
 }
 .ks-thread .ui-tcc[data-open]::after {
   opacity: 1;
   transform: none;
   transition:
     opacity 200ms ease,
-    transform 320ms var(--ease-out-quint);
+    transform 320ms var(--ease-out-quint),
+    left 320ms var(--ease-out-quint);
 }
 
 /* Its details are the card's sections under a hairline, starting at the row's tile, on the card
@@ -703,6 +718,10 @@
     animation: none;
   }
   .ks-thread .ui-tcc::after,
+  .ks-thread .ui-tcc > .ui-tcc__top,
+  .ks-thread .ui-tcc > .ui-tcc__body .ui-tcc__sections,
+  .ks-thread .ui-tcc[data-open] > .ui-tcc__top,
+  .ks-thread .ui-tcc[data-open] > .ui-tcc__body .ui-tcc__sections,
   .ks-thread :is(.ui-tcc, .ui-tcc-group) > .ui-tcc__body {
     transition: none;
   }
@@ -722,6 +741,8 @@
     animation: none;
   }
   & .ks-thread .ui-tcc::after,
+  & .ks-thread .ui-tcc > .ui-tcc__top,
+  & .ks-thread .ui-tcc > .ui-tcc__body .ui-tcc__sections,
   & .ks-thread :is(.ui-tcc, .ui-tcc-group) > .ui-tcc__body {
     transition: none;
   }
