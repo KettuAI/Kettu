@@ -1,22 +1,32 @@
-// A Claude Code agent's common settings on its page: each model's auto-compact window and the
-// prompt cache duration, read from and saved to its settings file on the agent's host.
+// A Claude Code agent's common settings on its page: the auto-compact window for all models and
+// for each model, and the prompt cache duration, read from and saved to its settings file on the
+// agent's host.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type KeyboardEvent } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { AgentStatus, ClaudeSettings } from '@shared/agent-host'
-import { AUTO_COMPACT_STEPS, PROMPT_CACHE_TTLS, type PromptCacheTtl } from '@shared/agents'
+import type { AgentStatus, ClaudeCompactRow, ClaudeSettings } from '@shared/agent-host'
+import {
+  AUTO_COMPACT_STEPS,
+  canonicalClaudeModel,
+  PROMPT_CACHE_TTLS,
+  type PromptCacheTtl,
+} from '@shared/agents'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useAction } from './agent-helpers'
-import { SettingSelect, Skel } from './controls'
+import { SetButton, SetInput, SettingSelect, Skel } from './controls'
 import { BlockLine, RowLine, RowShell, RowText } from './rows'
 
 const AUTO = 'auto'
+const MAX_MODEL_CHARS = 256
 
 type Read =
   | { state: 'loading' }
   | { state: 'failed'; error: string }
   | { state: 'ready'; settings: ClaudeSettings }
+
+const isComposing = (event: KeyboardEvent<HTMLInputElement>): boolean =>
+  event.nativeEvent.isComposing || event.keyCode === 229
 
 /** A window as the select writes it: 200K, 750K, 1M. */
 function windowLabel(tokens: number): string {
@@ -44,6 +54,10 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
   const { request } = useHostScope()
   const { t } = useTranslation('settings')
   const [read, setRead] = useState<Read>({ state: 'loading' })
+  // Models typed in, kept as rows until the file holds a window for them.
+  const [added, setAdded] = useState<string[]>([])
+  const [draft, setDraft] = useState('')
+  const [draftInvalid, setDraftInvalid] = useState(false)
   const [saveCompact, compactBusy, compactError] = useAction()
   const [saveCache, cacheBusy, cacheError] = useAction()
   const load = useCallback(
@@ -58,17 +72,47 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
     void load()
   }, [load])
 
-  const auto = t('agents.claudeSettings.auto')
   const settings = read.state === 'ready' ? read.settings : null
-  const compactNote =
-    compactError ??
-    (read.state === 'failed'
-      ? read.error
-      : settings && settings.compact.length === 0
-        ? t('agents.claudeSettings.unused')
-        : null)
-  const cacheNote = cacheError ?? (read.state === 'failed' ? read.error : null)
+  const rows: ClaudeCompactRow[] = settings
+    ? [
+        ...settings.compact,
+        ...added
+          .filter((model) => !settings.compact.some((row) => row.model === model))
+          .map((model) => ({ model, name: null, window: null })),
+      ]
+    : []
+  const auto = t('agents.claudeSettings.auto')
+  const compactName = t('agents.claudeSettings.compact.name')
   const cacheName = t('agents.claudeSettings.cache.name')
+  const compactNote = compactError ?? (read.state === 'failed' ? read.error : null)
+  const cacheNote = cacheError ?? (read.state === 'failed' ? read.error : null)
+
+  const saveWindow = (model: string | null, next: string): void =>
+    saveCompact(async () => {
+      await request('agents.setClaudeSetting', {
+        agentId: status.id,
+        change: {
+          setting: 'autoCompactWindow',
+          model,
+          value: next === AUTO ? null : Number(next),
+        },
+      })
+      await load()
+    })
+
+  const addModel = (): void => {
+    const model = draft.trim()
+    if (model.length === 0) return
+    if (model.length > MAX_MODEL_CHARS || /\s/.test(model)) {
+      setDraftInvalid(true)
+      return
+    }
+    const id = canonicalClaudeModel(model)
+    setAdded((current) => (current.includes(id) ? current : [...current, id]))
+    setDraft('')
+    setDraftInvalid(false)
+  }
+
   return (
     <>
       <RowShell>
@@ -76,7 +120,7 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
           <BlockLine
             text={
               <RowText
-                name={t('agents.claudeSettings.compact.name')}
+                name={compactName}
                 description={t('agents.claudeSettings.compact.description')}
               />
             }
@@ -86,42 +130,64 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
               <Skel width={210} className="k-skel--field" />
             </BlockLine>
           )}
-          {settings?.compact.map((row) => {
-            const name = row.name ?? row.model
-            return (
-              <BlockLine key={row.model} text={<RowText name={name} />}>
-                <SettingSelect
-                  label={`${t('agents.claudeSettings.compact.name')}: ${name}`}
-                  value={row.window === null ? AUTO : String(row.window)}
-                  disabled={compactBusy}
-                  options={windowOptions(row.window, auto)}
-                  onChange={(next) =>
-                    saveCompact(async () => {
-                      await request('agents.setClaudeSetting', {
-                        agentId: status.id,
-                        change: {
-                          setting: 'autoCompactWindow',
-                          model: row.model,
-                          value: next === AUTO ? null : Number(next),
-                        },
-                      })
-                      await load()
-                    })
-                  }
+          {settings && (
+            <BlockLine text={<RowText name={t('agents.claudeSettings.compact.all')} />}>
+              <SettingSelect
+                label={`${compactName}: ${t('agents.claudeSettings.compact.all')}`}
+                value={settings.defaultWindow === null ? AUTO : String(settings.defaultWindow)}
+                disabled={compactBusy}
+                options={windowOptions(settings.defaultWindow, auto)}
+                onChange={(next) => saveWindow(null, next)}
+              />
+            </BlockLine>
+          )}
+          {settings &&
+            rows.map((row) => {
+              const name = row.name ?? row.model
+              return (
+                <BlockLine key={row.model} text={<RowText name={name} />}>
+                  <SettingSelect
+                    label={`${compactName}: ${name}`}
+                    value={row.window === null ? AUTO : String(row.window)}
+                    disabled={compactBusy}
+                    options={windowOptions(
+                      row.window,
+                      settings.defaultWindow === null
+                        ? auto
+                        : t('agents.claudeSettings.compact.sameAsAll'),
+                    )}
+                    onChange={(next) => saveWindow(row.model, next)}
+                  />
+                </BlockLine>
+              )
+            })}
+          {settings && (
+            <BlockLine
+              text={
+                <SetInput
+                  value={draft}
+                  placeholder={t('agents.claudeSettings.compact.addPlaceholder')}
+                  aria-label={t('agents.claudeSettings.compact.add')}
+                  aria-invalid={draftInvalid || undefined}
+                  spellCheck={false}
+                  onChange={(event) => {
+                    setDraft(event.target.value)
+                    setDraftInvalid(false)
+                  }}
+                  onKeyDown={(event) => event.key === 'Enter' && !isComposing(event) && addModel()}
+                  className="k-input--wide"
                 />
-              </BlockLine>
-            )
-          })}
+              }
+            >
+              <SetButton variant="ghost" disabled={draft.trim().length === 0} onClick={addModel}>
+                {t('agents.claudeSettings.compact.add')}
+              </SetButton>
+            </BlockLine>
+          )}
         </div>
-        {compactNote && (
-          <p
-            role="status"
-            className={
-              compactError || read.state === 'failed' ? 'k-row-note k-error' : 'k-row-note'
-            }
-            data-wrap=""
-          >
-            {compactNote}
+        {(compactNote || draftInvalid) && (
+          <p role="status" className="k-row-note k-error" data-wrap="">
+            {compactNote ?? t('agents.claudeSettings.compact.invalidModel')}
           </p>
         )}
       </RowShell>
@@ -149,10 +215,7 @@ export function ClaudeSettingsRows({ status }: { status: AgentStatus }) {
                 saveCache(async () => {
                   await request('agents.setClaudeSetting', {
                     agentId: status.id,
-                    change: {
-                      setting: 'promptCacheTtl',
-                      value: isTtl(next) ? next : null,
-                    },
+                    change: { setting: 'promptCacheTtl', value: isTtl(next) ? next : null },
                   })
                   await load()
                 })

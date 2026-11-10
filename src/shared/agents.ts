@@ -217,6 +217,13 @@ export const AUTO_COMPACT_STEPS: readonly number[] = [
 export const PROMPT_CACHE_TTLS = ['5m', '1h'] as const
 export type PromptCacheTtl = (typeof PROMPT_CACHE_TTLS)[number]
 
+/** A model id without its context suffix or date, as Claude Code's `modelSettings` keys it. */
+export const canonicalClaudeModel = (id: string): string =>
+  id
+    .replace(/\[[^\]]*\]$/, '')
+    .replace(/-\d{8}$/, '')
+    .toLowerCase()
+
 /** Whether the agent's page edits Claude Code's common settings, which only its agents have. */
 export function takesClaudeSettings(id: AgentId): boolean {
   return harnessOf(id) === 'claude-code'

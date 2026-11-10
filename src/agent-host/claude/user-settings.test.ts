@@ -55,9 +55,33 @@ describe("a Claude Code agent's settings file", () => {
 
   it('reads a missing file as nothing saved', async () => {
     expect(await readClaudeSettings(file, [sonnet])).toEqual({
+      defaultWindow: null,
       compact: [{ model: sonnet.id, name: sonnet.name, window: null }],
       promptCacheTtl: null,
     })
+  })
+
+  it('reads and writes the window for all models, keeping the models own', async () => {
+    await put({
+      autoCompactWindow: 400000,
+      modelSettings: { [opus.id]: { autoCompactWindow: 200000 } },
+    })
+    expect((await readClaudeSettings(file, [sonnet, opus])).defaultWindow).toBe(400000)
+    await writeClaudeSetting(file, { setting: 'autoCompactWindow', model: null, value: 600000 })
+    expect(await saved()).toEqual({
+      autoCompactWindow: 600000,
+      modelSettings: { [opus.id]: { autoCompactWindow: 200000 } },
+    })
+    await writeClaudeSetting(file, { setting: 'autoCompactWindow', model: null, value: null })
+    expect(await saved()).toEqual({ modelSettings: { [opus.id]: { autoCompactWindow: 200000 } } })
+  })
+
+  it('creates the file for the window of all models and refuses one out of range', async () => {
+    await writeClaudeSetting(file, { setting: 'autoCompactWindow', model: null, value: 300000 })
+    expect(await saved()).toEqual({ autoCompactWindow: 300000 })
+    await expect(
+      writeClaudeSetting(file, { setting: 'autoCompactWindow', model: null, value: 5000 }),
+    ).rejects.toThrow('The window must be from')
   })
 
   it('writes a window and a duration and keeps everything else', async () => {

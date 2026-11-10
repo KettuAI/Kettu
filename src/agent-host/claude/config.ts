@@ -1,6 +1,7 @@
 // A Claude Code session's options: its permission mode, model, effort and fast mode, with the ids
 // and values the ACP adapter gave them, so the values a thread stored still apply.
 
+import { canonicalClaudeModel } from '@shared/agents'
 import type { ConfigOption } from '@shared/thread'
 import { t } from '../i18n'
 import type { ModelInfo, PermissionMode } from './sdk'
@@ -105,18 +106,13 @@ const MODEL_DEFAULT_EFFORT: [pattern: RegExp, level: string][] = [
 ]
 const DOCUMENTED_DEFAULT_EFFORT = 'high'
 
-/** A model id without its context suffix or date, as `modelSettings` keys it. */
-export const canonicalModel = (id: string): string =>
-  id
-    .replace(/\[[^\]]*\]$/, '')
-    .replace(/-\d{8}$/, '')
-    .toLowerCase()
-
 function savedEffort(modelSettings: unknown, model: ModelInfo): string | undefined {
   if (!modelSettings || typeof modelSettings !== 'object') return undefined
-  const wanted = new Set([model.value, model.resolvedModel ?? model.value].map(canonicalModel))
+  const wanted = new Set(
+    [model.value, model.resolvedModel ?? model.value].map(canonicalClaudeModel),
+  )
   for (const [key, entry] of Object.entries(modelSettings)) {
-    if (!wanted.has(canonicalModel(key)) || !entry || typeof entry !== 'object') continue
+    if (!wanted.has(canonicalClaudeModel(key)) || !entry || typeof entry !== 'object') continue
     const level = (entry as { effortLevel?: unknown }).effortLevel
     if (typeof level === 'string') return level
   }
@@ -133,7 +129,7 @@ export function effortInEffect(
   levels: readonly string[],
   inherited: InheritedEffort,
 ): string {
-  const resolved = canonicalModel(model.resolvedModel ?? model.value)
+  const resolved = canonicalClaudeModel(model.resolvedModel ?? model.value)
   const wanted =
     [inherited.env, savedEffort(inherited.modelSettings, model)].find(
       (level) => level !== undefined && EFFORT_ORDER.includes(level),

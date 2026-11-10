@@ -335,14 +335,16 @@ export interface ClaudeCompactRow {
 
 /** The two settings a Claude Code agent's page edits, as its user settings file holds them. */
 export interface ClaudeSettings {
+  /** The window the file saves for every model without a row of its own; null when it has none. */
+  defaultWindow: number | null
   compact: ClaudeCompactRow[]
   /** The file's `promptCacheTtl`; null when it has none. */
   promptCacheTtl: PromptCacheTtl | null
 }
 
-/** One change to those settings; a null value removes the key. */
+/** One change to those settings; a null value removes the key, and a null model means all. */
 export type ClaudeSettingChange =
-  | { setting: 'autoCompactWindow'; model: string; value: number | null }
+  | { setting: 'autoCompactWindow'; model: string | null; value: number | null }
   | { setting: 'promptCacheTtl'; value: PromptCacheTtl | null }
 
 /** A place the agent reads its own configuration from, in the order Settings lists them. */

@@ -49,6 +49,11 @@ describe('createValidators', () => {
     })
     const bad = (change: unknown): void =>
       rejects(() => posix['agents.setClaudeSetting']({ agentId: 'claude-code', change }))
+    const all = { setting: 'autoCompactWindow', model: null, value: 300000 }
+    expect(posix['agents.setClaudeSetting']({ agentId: 'claude-code', change: all })).toEqual({
+      agentId: 'claude-code',
+      change: all,
+    })
     bad({ setting: 'env', value: 'x' })
     bad({ setting: 'promptCacheTtl', value: '2h' })
     bad({ setting: 'autoCompactWindow', model: 'claude-sonnet-5-5', value: '200000' })

@@ -915,7 +915,11 @@ export function createValidators(platform: Platform): Validators {
       }
       return {
         agentId: agentId(o),
-        change: { setting: 'autoCompactWindow', model: string(change, 'model', 256), value },
+        change: {
+          setting: 'autoCompactWindow',
+          model: change.model === null ? null : string(change, 'model', 256),
+          value,
+        },
       }
     },
     'agents.refreshAccount': agentWithForce,

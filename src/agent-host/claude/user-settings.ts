@@ -1,17 +1,17 @@
-// The two settings a Claude Code agent's page edits in its user settings file: each model's
-// auto-compact window and the prompt cache duration. Nothing else in the file is read, and every
-// other key stays as the user left it.
+// The settings a Claude Code agent's page edits in its user settings file: the auto-compact window
+// for all models and for each model, and the prompt cache duration. Nothing else in the file is
+// read, and every other key stays as the user left it.
 
 import type { ClaudeCompactRow, ClaudeSettingChange, ClaudeSettings } from '@shared/agent-host'
 import {
   AUTO_COMPACT_MAX,
   AUTO_COMPACT_MIN,
+  canonicalClaudeModel as canonicalModel,
   PROMPT_CACHE_TTLS,
   type PromptCacheTtl,
 } from '@shared/agents'
 import type { ConfigOption } from '@shared/thread'
 import { isObject, readSettings, writeSettings } from '../settings-file'
-import { canonicalModel } from './config'
 
 /** A model the agent lists: its id as the settings key it, and the name it shows. */
 export interface ListedModel {
@@ -37,6 +37,7 @@ export function listedModels(config: readonly ConfigOption[] | undefined): Liste
   return models
 }
 
+/** The window in a settings object or a model's entry; null when it has none. */
 function windowOf(entry: unknown): number | null {
   if (!isObject(entry)) return null
   const value = entry.autoCompactWindow
@@ -67,6 +68,7 @@ export async function readClaudeSettings(
   }
   const ttl = settings.promptCacheTtl
   return {
+    defaultWindow: windowOf(settings),
     compact,
     promptCacheTtl: (PROMPT_CACHE_TTLS as readonly unknown[]).includes(ttl)
       ? (ttl as PromptCacheTtl)
@@ -82,8 +84,11 @@ export function checkClaudeSetting(change: ClaudeSettingChange): ClaudeSettingCh
     }
     return change
   }
-  const model = change.model.trim()
-  if (model.length === 0 || model.length > MAX_MODEL_CHARS || /\s/.test(model)) {
+  const model = change.model === null ? null : change.model.trim()
+  if (
+    model !== null &&
+    (model.length === 0 || model.length > MAX_MODEL_CHARS || /\s/.test(model))
+  ) {
     throw new Error('The model must be one word without spaces')
   }
   const { value } = change
@@ -139,6 +144,18 @@ function withWindow(
   return next
 }
 
+/** The settings with the window for all models set, or removed for null; null when nothing changes. */
+function withDefaultWindow(
+  settings: Record<string, unknown>,
+  value: number | null,
+): Record<string, unknown> | null {
+  if (settings.autoCompactWindow === (value ?? undefined)) return null
+  const next = { ...settings }
+  if (value === null) delete next.autoCompactWindow
+  else next.autoCompactWindow = value
+  return next
+}
+
 function withTtl(
   settings: Record<string, unknown>,
   value: PromptCacheTtl | null,
@@ -157,6 +174,8 @@ export async function writeClaudeSetting(file: string, input: ClaudeSettingChang
   const next =
     change.setting === 'promptCacheTtl'
       ? withTtl(settings, change.value)
-      : withWindow(file, settings, change.model, change.value)
+      : change.model === null
+        ? withDefaultWindow(settings, change.value)
+        : withWindow(file, settings, change.model, change.value)
   if (next) await writeSettings(file, next)
 }
