@@ -359,7 +359,11 @@ export function Composer({
             commands={session.commands}
             placeholder={placeholder}
             label={t('prompt.label', { agent: agentName })}
-            size={{ minHeight: '40px', padding: '0', lineHeight: '20px' }}
+            size={{
+              minHeight: 'calc(2 * var(--prose-size) + 14px)',
+              padding: '0',
+              lineHeight: 'calc(var(--prose-size) + 7px)',
+            }}
             onKeyDown={onKeyDown}
             top={
               <>

@@ -2299,6 +2299,11 @@ li[data-row-exit='dust'] > * {
   line-height: 20px;
   color: var(--text);
 }
+/* Text size's preview: the thread's prose, which the inset's type would otherwise fix at 13 px. */
+:is(.kettu-settings, .kettu-sd) .k-inset.markdown {
+  font-size: calc(var(--prose-size) * var(--prose-scale));
+  line-height: var(--text-prose--line-height);
+}
 :is(.kettu-settings, .kettu-sd) .k-block .k-inset {
   margin: 0;
 }
@@ -3946,12 +3951,12 @@ li[data-row-exit='dust'] > * {
 [data-computer-using] .kettu-composer .ui-ccc {
   --ui-ccc-shadow: var(--computer-composer-ring);
 }
-/* Kettu's editor in the Chat Composer's type: a size under the thread's prose, its caret blue. */
+/* Kettu's editor in the Chat Composer's type: the size of the message it sends, its caret blue. */
 .kettu-prompt .cm-editor {
   color: var(--ui-ccc-strong);
 }
 .kettu-prompt .cm-editor .cm-content {
-  font-size: calc(var(--prose-size) - 2px);
+  font-size: var(--prose-size);
   caret-color: var(--ui-ccc-accent);
 }
 .kettu-prompt .cm-editor .cm-placeholder {
