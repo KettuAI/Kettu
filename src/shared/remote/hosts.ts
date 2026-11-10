@@ -141,6 +141,12 @@ export type HostPairingFailure =
   | 'signed_out'
   | 'update_client'
   | 'update_host'
+  /** The host of the account is asking its owner about another device. */
+  | 'busy'
+  /** The host of the account turned down too many requests and takes none for a while. */
+  | 'cooling_down'
+  /** The host of the account is not on the relay, or no longer lets devices find it. */
+  | 'host_offline'
   | SshAddFailure
 
 /** Where adding a machine over SSH is, in order; installing or updating only when needed. */
@@ -157,6 +163,11 @@ export type HostPairingState =
   | { state: 'connecting' }
   /** The secret checked out; the host's owner decides. */
   | { state: 'confirm' }
+  /**
+   * Pairing with a host of the account: both screens show `code`; `matched` once this computer's
+   * user said it is the same, while the host's owner still decides.
+   */
+  | { state: 'compare'; code: string; matched: boolean }
   | ({ state: 'ssh' } & SshStep)
   | { state: 'added'; host: HostStatus }
   /** `detail`: output to show beside the reason, as the end of a failed install's. */
@@ -272,6 +283,9 @@ const FAILURES: readonly string[] = [
   'signed_out',
   'update_client',
   'update_host',
+  'busy',
+  'cooling_down',
+  'host_offline',
   'ssh_missing',
   'ssh_unreachable',
   'ssh_auth',
@@ -305,6 +319,12 @@ export function parseHostPairingState(value: unknown): HostPairingState | null {
   const fields = value as Record<string, unknown>
   const { state, host, reason, detail } = fields
   if (state === 'connecting' || state === 'confirm') return { state }
+  if (state === 'compare') {
+    const { code, matched } = fields
+    return typeof code === 'string' && /^\d{6}$/.test(code) && typeof matched === 'boolean'
+      ? { state, code, matched }
+      : null
+  }
   if (state === 'ssh') {
     const step = parseSshStep(fields)
     return step ? { state, ...step } : null

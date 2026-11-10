@@ -90,7 +90,9 @@
     "testTitle": "Kettu",
     "testBody": "Notifications are on. This is how an agent that needs you will reach you.",
     "allowOnce": "Allow once",
-    "open": "Open"
+    "open": "Open",
+    "discoveryTitle": "A device asks to be added",
+    "discoveryBody": "{{name}}, signed in to your Kettu account, asks to be added as a device of this computer."
   },
   "attachments": {
     "hostDown": "The agent host isn't running. Try again once it has restarted."

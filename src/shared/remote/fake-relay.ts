@@ -3,7 +3,9 @@
 // tokens as the relay does. Not for production.
 
 import {
+  HOSTS_FEATURE,
   MAX_DEVICE_CONNECTIONS,
+  MAX_LISTED_HOSTS,
   PING,
   PONG,
   RELAY_CLOSE,
@@ -16,6 +18,8 @@ import {
   relayOrigin,
   signInText,
   verifyRelaySignature,
+  type RelayHostProfile,
+  type RelayListedHost,
   type RelayRegion,
 } from './relay'
 
@@ -124,6 +128,7 @@ export class FakeSocket {
 interface Host {
   socket: FakeSocket
   account: string
+  profile: RelayHostProfile | null
 }
 
 interface Waiting {
@@ -137,6 +142,8 @@ export class FakeRelayServer {
   /** Whether `ping` gets its `pong`; off, as a relay that stopped answering. */
   pongs = true
   regions: RelayRegion[] = []
+  /** What `GET /v1` says the relay offers; without HOSTS_FEATURE it takes no profile. */
+  features: string[] = [HOSTS_FEATURE]
   /** Hosts signed in, by id. */
   readonly hosts = new Map<string, Host>()
   /** Every socket made, in order. */
@@ -152,7 +159,25 @@ export class FakeRelayServer {
   /** What `GET /v1` answers. */
   info(): unknown {
     if (this.mode !== 'up') throw new Error(`${this.origin} cannot be reached`)
-    return { relay: 'kettu', protocol: RELAY_PROTOCOL, regions: this.regions }
+    return {
+      relay: 'kettu',
+      protocol: RELAY_PROTOCOL,
+      regions: this.regions,
+      features: this.features,
+    }
+  }
+
+  /** What `GET /v1/hosts` answers a device with the access token `token`. */
+  listHosts(token: string | null): { status: number; body: unknown } {
+    if (this.mode !== 'up') throw new Error(`${this.origin} cannot be reached`)
+    if (!this.features.includes(HOSTS_FEATURE)) return { status: 404, body: { error: 'not_found' } }
+    const account = token === null ? undefined : this.accounts.get(token)
+    if (!account) return { status: 401, body: { error: 'unauthorized' } }
+    const hosts: RelayListedHost[] = []
+    for (const [id, host] of this.hosts) {
+      if (host.account === account && host.profile) hosts.push({ id, ...host.profile })
+    }
+    return { status: 200, body: { hosts: hosts.slice(0, MAX_LISTED_HOSTS) } }
   }
 
   /** Devices joined to a host now. */
@@ -199,6 +224,14 @@ export class FakeRelayServer {
       if (data === PING) return this.pongs ? socket.receive(PONG) : undefined
       const message = typeof data === 'string' ? parseHostToRelay(data) : null
       if (!message) return this.refuse(socket, RELAY_CLOSE.malformed)
+      if (message.type === 'profile') {
+        const host = this.hosts.get(id)
+        if (!signedIn || !this.features.includes(HOSTS_FEATURE) || host?.socket !== socket) {
+          return this.refuse(socket, RELAY_CLOSE.malformed)
+        }
+        host.profile = message.profile
+        return
+      }
       if (message.type === 'token') {
         if (!signedIn) return this.refuse(socket, RELAY_CLOSE.malformed)
         const account = this.accounts.get(message.token)
@@ -221,7 +254,7 @@ export class FakeRelayServer {
       }
       signedIn = true
       const before = this.hosts.get(id)
-      this.hosts.set(id, { socket, account })
+      this.hosts.set(id, { socket, account, profile: null })
       if (before) {
         before.socket.receive(JSON.stringify({ type: 'replaced' }))
         this.refuse(before.socket, RELAY_CLOSE.replaced)
@@ -324,4 +357,15 @@ export class FakeRelays {
 
   /** Reads `GET /v1` of a relay. */
   readonly fetchInfo = async (url: string): Promise<unknown> => this.relay(url).info()
+
+  /** Reads a relay's URL as a client's fetch does: `GET /v1`, or `/v1/hosts` with `token`. */
+  readonly fetchJson = async (
+    url: string,
+    token: string | null = null,
+  ): Promise<{ status: number; body: unknown }> => {
+    const path = new URL(url).pathname
+    if (path === '/v1/hosts') return this.relay(url).listHosts(token)
+    if (path === '/v1') return { status: 200, body: this.relay(url).info() }
+    return { status: 404, body: { error: 'not_found' } }
+  }
 }

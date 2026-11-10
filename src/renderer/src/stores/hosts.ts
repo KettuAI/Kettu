@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { useShallow } from 'zustand/react/shallow'
 import type { Platform } from '@shared/platform'
+import type { DiscoveredHost, DiscoveredHosts } from '@shared/remote/discovery'
 import type { HostConnection, HostsStatus, HostStatus, SshRoute } from '@shared/remote/hosts'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { isWeb } from '@renderer/lib/platform'
@@ -25,6 +26,10 @@ interface HostsStore {
   status: HostsStatus | null
   /** The other hosts as an earlier run left them, until the remote host reports its own. */
   kept: OtherHost[]
+  /** The account's hosts this computer may pair with; null until first read. */
+  discovered: DiscoveredHosts | null
+  /** The account's host Connect was chosen for, while its pairing dialog is open. */
+  connecting: DiscoveredHost | null
 }
 
 const KEPT_KEY = 'hosts.known'
@@ -49,7 +54,12 @@ function readKept(): OtherHost[] {
   )
 }
 
-export const useHostsStore = create<HostsStore>()(() => ({ status: null, kept: readKept() }))
+export const useHostsStore = create<HostsStore>()(() => ({
+  status: null,
+  kept: readKept(),
+  discovered: null,
+  connecting: null,
+}))
 
 /** The other hosts, sorted by name: as reported, or as kept until they are. */
 export function otherHosts(state: HostsStore): OtherHost[] {
@@ -167,4 +177,36 @@ export async function loadHosts(): Promise<void> {
   } catch (error) {
     console.error('Could not read the hosts', error)
   }
+}
+
+let discovering: Promise<void> | null = null
+// Asked again while a read was under way, which may have started before what changed.
+let rediscover = false
+
+/** Lists the account's hosts again. */
+export function loadDiscovered(): Promise<void> {
+  if (isWeb) return Promise.resolve()
+  if (discovering) {
+    rediscover = true
+    return discovering
+  }
+  discovering = window.kettu.hosts
+    .discover()
+    .catch((error: unknown): DiscoveredHosts => {
+      console.error('Could not list the account hosts', error)
+      return { state: 'unavailable' }
+    })
+    .then((discovered) => useHostsStore.setState({ discovered }))
+    .finally(() => {
+      discovering = null
+      if (!rediscover) return
+      rediscover = false
+      void loadDiscovered()
+    })
+  return discovering
+}
+
+/** Opens the pairing dialog for one of the account's hosts, or closes it with null. */
+export function connectTo(host: DiscoveredHost | null): void {
+  useHostsStore.setState({ connecting: host })
 }

@@ -706,7 +706,13 @@ function checkRemote(value: unknown, problems: string[]): void {
     return
   }
   for (const [key, fieldValue] of Object.entries(value)) {
-    if (key === 'enabled' || key === 'name' || key === 'terminal' || key === 'relay') {
+    if (
+      key === 'enabled' ||
+      key === 'name' ||
+      key === 'terminal' ||
+      key === 'relay' ||
+      key === 'discoverable'
+    ) {
       const problem = (key === 'name' ? isHostName : isBoolean)(fieldValue, `remote.${key}`)
       if (problem) problems.push(problem)
     } else if (key === 'direct') {
@@ -897,11 +903,12 @@ export function mergeSettings(current: SettingsFile, patch: SettingsPatch): Sett
     if (patch.terminal.shellPath === null) delete next.terminal.shellPath
   }
   if (patch.remote) {
-    const { enabled, name, direct, terminal, relay } = patch.remote
+    const { enabled, name, direct, terminal, relay, discoverable } = patch.remote
     if (enabled !== undefined) next.remote.enabled = enabled
     if (name !== undefined) next.remote.name = name
     if (terminal !== undefined) next.remote.terminal = terminal
     if (relay !== undefined) next.remote.relay = relay
+    if (discoverable !== undefined) next.remote.discoverable = discoverable
     if (direct?.enabled !== undefined) next.remote.direct.enabled = direct.enabled
     if (direct?.port !== undefined) next.remote.direct.port = direct.port
     if (direct?.addresses) {
@@ -1222,6 +1229,12 @@ function readRemote(raw: Record<string, unknown>, problems: string[]): SettingsF
     remote.terminal = raw.terminal as boolean
   })
   read(raw.relay, 'remote.relay', isBoolean, () => (remote.relay = raw.relay as boolean))
+  read(
+    raw.discoverable,
+    'remote.discoverable',
+    isBoolean,
+    () => (remote.discoverable = raw.discoverable as boolean),
+  )
   const direct = raw.direct
   if (direct === undefined) return remote
   if (!isRecord(direct)) {

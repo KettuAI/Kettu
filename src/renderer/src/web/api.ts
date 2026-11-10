@@ -337,6 +337,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       closePairing: (codeId) => done(admin('remote.closePairing', { codeId })),
       answerPairing: (codeId, add, name) =>
         done(admin('remote.answerPairing', { codeId, add, name })),
+      // Devices of the account ask the host's own windows; the web client is never asked.
+      pendingDiscovery: () => Promise.resolve(null),
+      answerDiscovery: () => unsupported('answer devices of the account'),
+      onDiscovery: never,
       renameDevice: (id, name) => admin('remote.renameDevice', { id, name }),
       removeDevice: (id) => admin('remote.removeDevice', { id }),
       activity: (id) => admin('remote.activity', { id }),
@@ -353,6 +357,9 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       pair: () => unsupported('connect to other hosts'),
       addSsh: () => unsupported('connect to other hosts'),
       closePairing: () => unsupported('connect to other hosts'),
+      discover: () => unsupported('connect to other hosts'),
+      pairDiscovered: () => unsupported('connect to other hosts'),
+      matchPairing: () => unsupported('connect to other hosts'),
       rename: () => unsupported('connect to other hosts'),
       setAddresses: () => unsupported('connect to other hosts'),
       remove: () => unsupported('connect to other hosts'),

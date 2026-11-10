@@ -27,6 +27,16 @@ import {
   type PortDevice,
 } from '@shared/remote/device'
 import {
+  DISCOVER_PROLOGUE,
+  discoveryNonce,
+  pairCode,
+  parsePairCommit,
+  parsePairConfirm,
+  parsePairReveal,
+  revealMatches,
+  type PairNonce,
+} from '@shared/remote/discovery'
+import {
   isHostAdminMethod,
   type HostAdminEvent,
   type HostAdminMethod,
@@ -77,11 +87,12 @@ import {
   type StreamCancel,
   type StreamRef,
 } from '@shared/remote/streams'
-import type { HostRelay } from '@shared/remote/relay'
+import { decodeRelayBytes, encodeRelayBytes, type HostRelay } from '@shared/remote/relay'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
 import { DeviceDevices, isDeviceMethod } from './device-devices'
+import type { DiscoveryRequests, DiscoverySlot } from './discovery'
 import { DeviceTerminal, isTerminalMethod, NOT_ALLOWED } from './device-terminal'
 import type { DeviceStore, RemovedDevice } from './devices'
 import { bytesSource, Downloads, fileSource } from './downloads'
@@ -132,6 +143,8 @@ export interface RemoteServerOptions {
   devices: DeviceStore
   activity: ActivityLog
   pairing: PairingCodes
+  /** Requests from devices of the host's Kettu account, which only the relay brings. */
+  discovery?: DiscoveryRequests
   host: Welcome['host']
   /** The folder uploads are assembled in, emptied before the server starts. */
   uploads: string
@@ -195,10 +208,13 @@ export class RemoteServer {
     this.terminalAllowed = options.terminal ?? false
   }
 
-  /** Takes a device's connection, which ends at its first message unless that names a device. */
-  accept(transport: Transport): void {
+  /**
+   * Takes a device's connection, which ends at its first message unless that names a device.
+   * Only one the relay joined, and so signed in to the host's account, may ask to be added.
+   */
+  accept(transport: Transport, via: 'direct' | 'relay' = 'direct'): void {
     if (this.stopped) return transport.close()
-    this.connections.add(new DeviceConnection(transport, this))
+    this.connections.add(new DeviceConnection(transport, this, via === 'relay'))
   }
 
   /** The welcome's relay, while the host uses it. */
@@ -252,10 +268,11 @@ export class RemoteServer {
     return [...ids]
   }
 
-  async addDevice(device: NewDevice): Promise<PairedDevice | null> {
+  /** `via`: added from a request of a device of the account rather than a code. */
+  async addDevice(device: NewDevice, via?: 'account'): Promise<PairedDevice | null> {
     const added = await this.options.devices.add(device)
     if (added) {
-      this.options.activity.record(added.id, { kind: 'paired' })
+      this.options.activity.record(added.id, via ? { kind: 'paired', via } : { kind: 'paired' })
       this.options.changed()
     }
     return added
@@ -337,6 +354,7 @@ export class RemoteServer {
   /** Removes every device, forgets the removed ones and voids the code, for a new identity. */
   async reset(): Promise<void> {
     this.options.pairing.stop()
+    this.options.discovery?.stop()
     for (const device of this.options.devices.list()) await this.removeDevice(device.id, 'reset')
     await this.options.devices.clearRemoved()
     await Promise.all([this.options.devices.flush(), this.options.activity.flush()])
@@ -350,6 +368,7 @@ export class RemoteServer {
     if (this.sweeper) clearInterval(this.sweeper)
     this.sweeper = null
     this.options.pairing.stop()
+    this.options.discovery?.stop()
     await Promise.all([
       ...[...this.connections].map((connection) => connection.close(reason)),
       ...[...this.sessions].map((session) => session.close(reason)),
@@ -459,7 +478,26 @@ export class RemoteServer {
 }
 
 type ConnectionState =
-  'handshake' | 'hello' | 'confirming' | 'opening' | 'session' | 'closing' | 'closed'
+  | 'handshake'
+  /** Pairing with a host of the account: the device's commit, then its reveal, before hello. */
+  | 'commit'
+  | 'reveal'
+  | 'hello'
+  | 'confirming'
+  | 'opening'
+  | 'session'
+  | 'closing'
+  | 'closed'
+
+/** A connection's request to be added as a device of the host's account, until it is added. */
+interface Discovery {
+  publicKey: Uint8Array
+  slot: DiscoverySlot
+  hash: Uint8Array | null
+  commit: string | null
+  hostNonce: Uint8Array | null
+  code: string | null
+}
 
 /** One connection of a device: its handshake and hello, then the session it opened or resumed. */
 class DeviceConnection {
@@ -478,10 +516,16 @@ class DeviceConnection {
   private pairing: { code: PairingCode; publicKey: Uint8Array } | null = null
   /** False once the first message named a key, so it was no attempt at the pairing code. */
   private mayPair = true
+  private discovery: Discovery | null = null
+  /** Why a discovery handshake is answered only to be closed: another request or a cooldown. */
+  private refusal: 'busy' | 'cooling_down' | null = null
+  /** The discovery messages before the welcome, each handled after the one before. */
+  private steps: Promise<void> = Promise.resolve()
 
   constructor(
     readonly transport: Transport,
     private readonly server: RemoteServer,
+    private readonly viaRelay: boolean,
   ) {
     const { options } = server
     this.timer = setTimeout(() => this.end(), options.helloTimeoutMs ?? HELLO_TIMEOUT_MS)
@@ -525,13 +569,17 @@ class DeviceConnection {
   }
 
   private async answer(message: Uint8Array): Promise<void> {
-    const responder = (await this.known(message)) ?? (await this.pair(message))
+    const known = await this.known(message)
+    const discovered = known ? null : await this.discover(message)
+    const responder =
+      known ?? (discovered === 'refused' ? null : (discovered ?? (await this.pair(message))))
     let reply: Uint8Array
     let ciphers: TransportCiphers
     try {
       if (!responder) throw new Error('Refused')
       reply = await responder.writeMessage()
       ciphers = await responder.split()
+      if (this.discovery) this.discovery.hash = responder.handshakeHash
     } catch {
       // An unknown key, or a first message that is not a handshake's: only counted, never logged
       // with the key or where it came from.
@@ -541,6 +589,7 @@ class DeviceConnection {
     if (this.state !== 'handshake') {
       // The connection ended while its handshake was read, after it claimed the code.
       if (this.pairing) this.server.options.pairing.release(this.pairing.code)
+      if (this.discovery) this.server.options.discovery?.release(this.discovery.slot)
       return
     }
     this.channel = new Channel(ciphers, {
@@ -548,8 +597,91 @@ class DeviceConnection {
       message: (channelMessage) => this.receive(channelMessage),
       end: () => this.end(),
     })
-    this.state = 'hello'
+    this.state = discovered && discovered !== 'refused' ? 'commit' : 'hello'
     this.transport.send(reply)
+    if (this.refusal) void this.sayClosing(this.refusal)
+  }
+
+  /**
+   * The first message as the Noise IK of a device of the host's account asking to be added: a
+   * handshake to answer, 'refused' when it is one the host does not take now, or null when it
+   * is none. One that decrypts as discovery is never an attempt at the pairing code.
+   */
+  private async discover(message: Uint8Array): Promise<Handshake | 'refused' | null> {
+    const { options } = this.server
+    let publicKey: Uint8Array | null = null
+    let responder: Handshake
+    try {
+      responder = await Handshake.create({
+        pattern: 'IK',
+        role: 'responder',
+        staticKey: options.staticKey,
+        prologue: DISCOVER_PROLOGUE,
+        accept: (key) => {
+          publicKey = key
+          return true
+        },
+      })
+      await responder.readMessage(message)
+    } catch {
+      // The device's key decrypted only under the discovery prologue.
+      return publicKey ? 'refused' : null
+    }
+    const requests = options.discovery
+    if (!publicKey || !this.viaRelay || !requests?.on || this.state !== 'handshake') {
+      return 'refused'
+    }
+    const claim = requests.claim()
+    if (typeof claim === 'string') this.refusal = claim
+    else {
+      this.discovery = {
+        publicKey,
+        slot: claim,
+        hash: null,
+        commit: null,
+        hostNonce: null,
+        code: null,
+      }
+    }
+    return responder
+  }
+
+  /** The device's commit, reveal and confirm around its hello, in order; anything else ends it. */
+  private async discoveryStep(value: unknown): Promise<void> {
+    const discovery = this.discovery
+    const requests = this.server.options.discovery
+    if (!discovery || !requests) return
+    switch (this.state) {
+      case 'commit': {
+        const commit = parsePairCommit(value)
+        if (!commit) return void this.close('invalid')
+        discovery.commit = commit.commit
+        discovery.hostNonce = discoveryNonce()
+        this.state = 'reveal'
+        const answer: PairNonce = {
+          type: 'pair-nonce',
+          nonce: encodeRelayBytes(discovery.hostNonce),
+        }
+        return this.channel?.send({ kind: 'json', value: answer }).catch(() => {})
+      }
+      case 'reveal': {
+        const reveal = parsePairReveal(value)
+        const nonce = reveal && decodeRelayBytes(reveal.nonce)
+        if (!nonce || !(await revealMatches(discovery.commit!, nonce))) {
+          return void this.close('invalid')
+        }
+        const code = await pairCode(discovery.hash!, discovery.hostNonce!, nonce)
+        if (this.state !== 'reveal') return
+        discovery.code = code
+        this.state = 'hello'
+        return
+      }
+      case 'hello':
+        return void this.hello(value)
+      case 'confirming':
+        if (parsePairConfirm(value)) return requests.confirm(discovery.slot)
+        return void this.close('invalid')
+    }
   }
 
   /** The first message as the Noise IK of a paired or a removed device, or null. */
@@ -618,6 +750,11 @@ class DeviceConnection {
     if (this.session) return this.session.receive(this, message)
     // A device has nothing to upload before its welcome.
     if (message.kind === 'bytes') return
+    if (this.discovery) {
+      const { value } = message
+      this.steps = this.steps.then(() => this.discoveryStep(value))
+      return
+    }
     if (this.state === 'hello') void this.hello(message.value)
     // Nothing but the hello comes before the welcome.
     else if (this.state === 'confirming' || this.state === 'opening') void this.close('invalid')
@@ -629,20 +766,23 @@ class DeviceConnection {
     clearTimeout(this.timer)
     const version = negotiate(hello.protocol)
     if (typeof version !== 'number') return this.failPairing(version)
+    const joining = this.pairing !== null || this.discovery !== null
     // The device may have been removed, or paired again, since its handshake.
     const known = this.device ?? this.removed
-    const device = this.pairing
-      ? await this.confirm(hello)
-      : known && this.server.options.devices.get(known.id)
+    const device = this.discovery
+      ? await this.confirmDiscovery(hello)
+      : this.pairing
+        ? await this.confirm(hello)
+        : known && this.server.options.devices.get(known.id)
     if (this.state !== 'hello' && this.state !== 'confirming') return
     if (!device) {
-      if (this.pairing) return this.close('invalid')
+      if (joining) return this.close('invalid')
       // By its id alone, never with the key or where it came from.
       this.server.options.log('info', `Told device ${known?.id} that it was removed`)
       return this.close('removed')
     }
     this.device = device
-    if (hello.resume && version >= RESUME_VERSION && !this.pairing) {
+    if (hello.resume && version >= RESUME_VERSION && !joining) {
       const kept = this.server.takeSession(hello.resume.token, device.id)
       if (kept?.resume(this, hello.resume.received)) {
         this.session = kept
@@ -708,6 +848,49 @@ class DeviceConnection {
     return added
   }
 
+  /**
+   * Asks the owner whether to add the device of the account, which is added once the owner said
+   * add and the device said the codes match; the device as added, or null when it was not.
+   */
+  private async confirmDiscovery(hello: Hello): Promise<PairedDevice | null> {
+    const { publicKey, slot, code } = this.discovery!
+    const { options } = this.server
+    const requests = options.discovery
+    if (!hello.device || !requests || code === null) {
+      void this.close('invalid')
+      return null
+    }
+    this.state = 'confirming'
+    const { name, model } = hello.device
+    const { kind, platform } = hello.client
+    const outcome = await requests.ask(
+      slot,
+      { name, model, kind, platform, known: options.devices.withKey(publicKey) !== null },
+      code,
+    )
+    if (this.state !== 'confirming') return null
+    if (!outcome.add) {
+      if (outcome.reason === 'rejected') void this.close('rejected')
+      else if (outcome.reason === 'stopped') void this.close('unavailable')
+      else this.end()
+      return null
+    }
+    const added = await this.server.addDevice(
+      {
+        publicKey: Buffer.from(publicKey).toString('base64'),
+        name: normalizeDeviceName(outcome.name) ?? name,
+        model,
+        kind,
+        platform,
+      },
+      'account',
+    )
+    if (!added || this.state !== 'confirming') return null
+    requests.added(slot)
+    this.discovery = null
+    return added
+  }
+
   /** Closes the connection; a pairing one also spends one of its code's attempts. */
   private failPairing(reason: ClosingReason): Promise<void> {
     const code = this.pairing?.code
@@ -744,6 +927,7 @@ class DeviceConnection {
     this.keepalive?.stop()
     this.transport.close()
     if (this.pairing) this.server.options.pairing.release(this.pairing.code)
+    if (this.discovery) this.server.options.discovery?.release(this.discovery.slot)
     if (this.session) this.session.detached(this)
     else this.server.connectionEnded(this)
   }

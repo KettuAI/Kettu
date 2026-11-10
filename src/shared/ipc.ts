@@ -16,6 +16,7 @@ import type { CarriedMedia } from './media'
 import type { Platform } from './platform'
 import type { DeviceActivity } from './remote/activity'
 import type { HostAdminMethod } from './remote/host-admin'
+import type { DiscoveredHosts, DiscoveryRequestEvent } from './remote/discovery'
 import type { HostPairingState, HostPairStart, HostsStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
@@ -353,6 +354,12 @@ export interface IpcInvokeContract {
   'remote:pair': { args: []; result: number | null }
   'remote:pair-close': { args: [codeId: number]; result: void }
   'remote:pair-answer': { args: [codeId: number, add: boolean, name: string]; result: void }
+  // The discovery request the owner is asked about now, for a window that opens after it came.
+  'remote:discovery-pending': { args: []; result: DiscoveryRequestEvent | null }
+  'remote:discovery-answer': {
+    args: [requestId: number, add: boolean, name: string]
+    result: void
+  }
   // Null once done, else a code the page words in the user's language.
   'remote:rename-device': { args: [id: string, name: string]; result: 'not_renamed' | null }
   'remote:remove-device': { args: [id: string]; result: 'not_removed' | null }
@@ -368,6 +375,13 @@ export interface IpcInvokeContract {
   // Adds the machine at an SSH address, its progress as `hosts:pairing` under the id.
   'hosts:add-ssh': { args: [target: string]; result: HostPairStart }
   'hosts:pair-close': { args: [pairId: number]; result: void }
+  // The account's hosts on the relay that this computer may pair with: paired ones and itself left
+  // out.
+  'hosts:discover': { args: []; result: DiscoveredHosts }
+  // Pairs with a host `hosts:discover` listed, its progress as `hosts:pairing` under the id.
+  'hosts:pair-discovered': { args: [relayId: string]; result: HostPairStart }
+  // This computer's user saw the same code on both screens, or not, which ends the pairing.
+  'hosts:pair-match': { args: [pairId: number, match: boolean]; result: void }
   // This computer's name on a connected host. Each change answers null once done, else a code
   // the page words in the user's language.
   'hosts:rename': { args: [id: string, name: string]; result: 'not_connected' | null }
@@ -441,6 +455,8 @@ export interface IpcEventContract {
   'remote:changed': RemoteStatus
   /** Sent only to the page that opened the code. */
   'remote:pairing': RemotePairingEvent
+  /** Sent to every window: a device of the account asks to be added, or that request ended. */
+  'remote:discovery': DiscoveryRequestEvent
   'hosts:changed': HostsStatus
   /** Sent only to the page that pasted the link. */
   'hosts:pairing': HostPairingEvent
@@ -655,6 +671,11 @@ export interface KettuApi {
     closePairing(codeId: number): Promise<void>
     /** Adds the device the code paired, under `name`, or rejects it. */
     answerPairing(codeId: number, add: boolean, name: string): Promise<void>
+    /** The discovery request waiting for the owner's answer, if any. */
+    pendingDiscovery(): Promise<DiscoveryRequestEvent | null>
+    /** Adds the device of a discovery request, under `name`, or turns it down. */
+    answerDiscovery(requestId: number, add: boolean, name: string): Promise<void>
+    onDiscovery(listener: (event: DiscoveryRequestEvent) => void): () => void
     /** Null once renamed, else why not. */
     renameDevice(id: string, name: string): Promise<'not_renamed' | null>
     /** Removes the device and ends its sessions at once; null once removed, else why not. */
@@ -679,6 +700,12 @@ export interface KettuApi {
     addSsh(target: string): Promise<HostPairStart>
     /** Add host closed: a pairing not yet added ends. */
     closePairing(pairId: number): Promise<void>
+    /** The account's hosts this computer may pair with. */
+    discover(): Promise<DiscoveredHosts>
+    /** Pairs with a host `discover` listed. */
+    pairDiscovered(relayId: string): Promise<HostPairStart>
+    /** Whether the code on both screens is the same; false ends the pairing. */
+    matchPairing(pairId: number, match: boolean): Promise<void>
     /** Renames this computer on a connected host; null once renamed, else why not. */
     rename(id: string, name: string): Promise<'not_connected' | null>
     setAddresses(id: string, addresses: DirectAddress[]): Promise<'unknown_host' | null>

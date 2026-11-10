@@ -8,14 +8,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { HostMethod } from '@shared/agent-host'
 import type { PortChannel } from '@shared/port-channel'
 import { deviceId } from '@shared/remote/device'
+import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
+import {
+  DISCOVER_PROLOGUE,
+  deviceDiscovery,
+  pairCommit,
+  type DiscoveryRequestEvent,
+} from '@shared/remote/discovery'
 import { isHostAdminEvent, type HostAdminEvent } from '@shared/remote/host-admin'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
 import { PROTOCOL_VERSION } from '@shared/remote/protocol'
-import { importRelayKey, newRelaySeed, relayHostId } from '@shared/remote/relay'
+import { encodeRelayBytes, importRelayKey, newRelaySeed, relayHostId } from '@shared/remote/relay'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
 import { DeviceStore } from './devices'
+import { DiscoveryRequests } from './discovery'
 import { DeviceNotifications } from './notifications'
 import { PairingCodes } from './pairing'
 import { RemoteServer, type RemoteServerOptions } from './server'
@@ -68,6 +76,9 @@ async function setup(
     send: (codeId, state) => heard.set(codeId, [...(heard.get(codeId) ?? []), state]),
     ...(options.ttlMs ? { ttlMs: options.ttlMs } : {}),
   })
+  const discoveryEvents: DiscoveryRequestEvent[] = []
+  const discovery = new DiscoveryRequests({ send: (event) => discoveryEvents.push(event) })
+  discovery.setEnabled(true)
   // What reached the agent host, and whether its port was closed.
   const forwarded: unknown[] = []
   const agentPorts: { closed: boolean }[] = []
@@ -92,6 +103,7 @@ async function setup(
     devices,
     activity,
     pairing,
+    discovery,
     host: { name: 'Studio', platform: process.platform, version: '0.0.0-test' },
     uploads: path.join(agent.dir, 'remote', 'uploads'),
     openAgentPort: async (device) => {
@@ -146,6 +158,19 @@ async function setup(
       },
       secret,
     )
+  /** A device of the account asking to be added: its channel once the host answered, or a refusal. */
+  const discover = async (key: KeyPair, via: 'relay' | 'direct' = 'relay') => {
+    const [deviceEnd, hostEnd] = memoryTransports()
+    server.accept(hostEnd, via)
+    const { opened } = await startDeviceChannel({
+      transport: deviceEnd,
+      hostKey: hostKey.publicKey,
+      key,
+      prologue: DISCOVER_PROLOGUE,
+      hello: null,
+    })
+    return opened
+  }
   const states = (codeId = 1) => (heard.get(codeId) ?? []).map((state) => state.state)
   const until = async (codeId: number, state: PairingState['state']) => {
     await expect.poll(() => states(codeId).at(-1)).toBe(state)
@@ -157,6 +182,9 @@ async function setup(
     devices,
     activity,
     pairing,
+    discovery,
+    discoveryEvents,
+    discover,
     phone,
     phoneKey,
     logs,
@@ -707,6 +735,131 @@ describe('pairing', () => {
       expect(await device.first).toEqual({ type: 'closing', reason: 'invalid' })
     }
     expect(await t.until(1, 'void')).toEqual({ state: 'void', reason: 'attempts' })
+  })
+})
+
+const LAPTOP_HELLO = {
+  type: 'hello',
+  protocol: { min: 1, max: 1 },
+  client: { kind: 'desktop', version: '1.0.0', platform: 'macOS 26.1' },
+  device: { name: 'Laptop', model: 'MacBook Air' },
+}
+
+/** The channel's JSON messages from here on, in order. */
+function heard(channel: DeviceChannel): unknown[] {
+  const messages: unknown[] = []
+  channel.onMessage((value) => messages.push(value))
+  return messages
+}
+
+describe('pairing with a device of the account', () => {
+  it('adds the device only once the owner said add and the device that the codes match', async () => {
+    const t = await setup()
+    const laptopKey = await generateKeyPair()
+    const exchange = await deviceDiscovery(await t.discover(laptopKey))
+    if (!('code' in exchange)) throw new Error('The host refused the exchange')
+    const messages = heard(exchange.channel)
+    await exchange.channel.send(LAPTOP_HELLO)
+    await expect.poll(() => t.discoveryEvents.length).toBe(1)
+    expect(t.discoveryEvents[0]).toMatchObject({
+      requestId: 1,
+      request: {
+        state: 'confirm',
+        code: exchange.code,
+        device: { name: 'Laptop', model: 'MacBook Air', kind: 'desktop', known: false },
+      },
+    })
+
+    t.discovery.answer(1, true, 'Desk laptop')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(messages).toEqual([])
+    expect(t.devices.list()).toHaveLength(1)
+
+    await exchange.channel.send({ type: 'pair-confirm' })
+    const id = await deviceId(laptopKey.publicKey)
+    await expect
+      .poll(() => messages[0])
+      .toMatchObject({
+        type: 'welcome',
+        device: { id, name: 'Desk laptop' },
+      })
+    expect(t.discoveryEvents.at(-1)).toEqual({
+      requestId: 1,
+      request: { state: 'closed', reason: 'added' },
+    })
+    expect(t.activity.list(id).at(-1)).toMatchObject({ kind: 'paired', via: 'account' })
+  })
+
+  it('takes it only through the relay and while it is on, never as an attempt at the code', async () => {
+    const t = await setup()
+    const secret = t.openCode()
+    for (let i = 0; i < 5; i++) {
+      await expect(t.discover(await generateKeyPair(), 'direct')).rejects.toThrow()
+    }
+    t.discovery.setEnabled(false)
+    await expect(t.discover(await generateKeyPair())).rejects.toThrow()
+    expect(t.server.refused).toBe(6)
+    expect(t.discoveryEvents).toEqual([])
+    // Six refusals, and the code still takes its device.
+    const pad = await t.pairWith(secret, await generateKeyPair())
+    await t.until(1, 'confirm')
+    pad.close()
+  })
+
+  it('closes a reveal that is not the nonce the commit named', async () => {
+    const t = await setup()
+    const channel = await t.discover(await generateKeyPair())
+    const messages = heard(channel)
+    const nonce = new Uint8Array(32).fill(7)
+    await channel.send({ type: 'pair-commit', commit: await pairCommit(nonce) })
+    await expect.poll(() => messages.length).toBe(1)
+    expect(messages[0]).toMatchObject({ type: 'pair-nonce' })
+    await channel.send({ type: 'pair-reveal', nonce: encodeRelayBytes(new Uint8Array(32)) })
+    await channel.closed
+    expect(messages.at(-1)).toEqual({ type: 'closing', reason: 'invalid' })
+    expect(t.discoveryEvents).toEqual([])
+  })
+
+  it('ends on a hello in place of the commit', async () => {
+    const t = await setup()
+    const channel = await t.discover(await generateKeyPair())
+    const messages = heard(channel)
+    await channel.send(LAPTOP_HELLO)
+    await channel.closed
+    expect(messages).toEqual([{ type: 'closing', reason: 'invalid' }])
+  })
+
+  it('turns away a second device while one is asked, saying why', async () => {
+    const t = await setup()
+    const first = await deviceDiscovery(await t.discover(await generateKeyPair()))
+    if (!('code' in first)) throw new Error('The host refused the exchange')
+    await first.channel.send(LAPTOP_HELLO)
+    await expect.poll(() => t.discoveryEvents.length).toBe(1)
+    const second = await deviceDiscovery(await t.discover(await generateKeyPair()))
+    expect(second).toEqual({ closing: 'busy' })
+
+    // The first device leaving ends its request.
+    first.channel.close()
+    await expect
+      .poll(() => t.discoveryEvents.at(-1)?.request)
+      .toEqual({
+        state: 'closed',
+        reason: 'cancelled',
+      })
+  })
+
+  it('closes the device the owner rejects, with the reason', async () => {
+    const t = await setup()
+    const exchange = await deviceDiscovery(await t.discover(await generateKeyPair()))
+    if (!('code' in exchange)) throw new Error('The host refused the exchange')
+    const messages = heard(exchange.channel)
+    await exchange.channel.send(LAPTOP_HELLO)
+    await exchange.channel.send({ type: 'pair-confirm' })
+    await expect.poll(() => t.discoveryEvents.length).toBe(1)
+    t.discovery.answer(1, false, '')
+    await exchange.channel.closed
+    expect(messages).toEqual([{ type: 'closing', reason: 'rejected' }])
+    expect(t.devices.list()).toHaveLength(1)
   })
 })
 

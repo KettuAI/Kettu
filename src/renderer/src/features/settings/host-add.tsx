@@ -4,14 +4,14 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
-  type FormEvent,
   type KeyboardEvent,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from 'react'
 import { Alert02Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
-import { DEVICE_NAME_CHARS } from '@shared/remote/device'
+import type { DiscoveredHost } from '@shared/remote/discovery'
 import {
   parseSshTarget,
   type HostPairingFailure,
@@ -23,11 +23,11 @@ import {
 import { parsePairingLink } from '@shared/remote/pairing'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
-import { changeHost, platformName, routeName } from './host-text'
 import { Segmented, SetButton, Spin } from './controls'
-import { DeviceTile, HostIcon } from './remote-parts'
+import { AccountHostsPicker, AccountPairFlow } from './host-account'
+import { Added } from './host-added'
+import { closeRequest } from './pair-close'
 import {
-  DIALOG_FIELD,
   DIALOG_MONO_FIELD,
   SettingsDialogBody,
   SettingsDialogContent,
@@ -98,16 +98,25 @@ export function AddHostDialog({
   // Each opening starts afresh.
   const [opened, setOpened] = useState(open)
   const [round, setRound] = useState(0)
+  // While pairing with one of the account's hosts, a click outside keeps the dialog.
+  const pairing = useRef(false)
   if (open !== opened) {
     setOpened(open)
     if (open) setRound((n) => n + 1)
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next, details) => {
+        if (!next && closeRequest(pairing.current, details.reason) === 'stay') return
+        onOpenChange(next)
+      }}
+    >
       <AddHostFlow
         key={round}
         open={open}
         ssh={ssh}
+        pairingRef={pairing}
         onDone={(host) => {
           onOpenChange(false)
           if (host) onAdded?.(host)
@@ -120,12 +129,16 @@ export function AddHostDialog({
 function AddHostFlow({
   open,
   ssh: sshTarget,
+  pairingRef,
   onDone,
 }: {
   open: boolean
   ssh?: string
+  pairingRef: RefObject<boolean>
   onDone: (added: HostStatus | null) => void
 }) {
+  // One of the account's hosts, once its Connect was chosen.
+  const [account, setAccount] = useState<DiscoveredHost | null>(null)
   const [tab, setTab] = useState<AddHostTab>(sshTarget ? 'ssh' : 'link')
   const [step, setStep] = useState<AddHostStep>({ kind: 'paste', invalid: false })
   const [draft, setDraft] = useState('')
@@ -271,7 +284,34 @@ function AddHostFlow({
     requestAnimationFrame(() => input.current?.focus())
   }
 
-  const tabs = <AddHostTabs tab={tab} onTab={setTab} />
+  if (account) {
+    return (
+      <SettingsDialogContent>
+        <AccountPairFlow
+          host={account}
+          open={open}
+          activeRef={pairingRef}
+          onDone={onDone}
+          onBack={() => setAccount(null)}
+        />
+      </SettingsDialogContent>
+    )
+  }
+
+  const choosing = tab === 'ssh' ? ssh.kind === 'enter' : step.kind === 'paste'
+  const tabs = (
+    <>
+      {choosing && (
+        <AccountHostsPicker
+          onConnect={(host) => {
+            abandon()
+            setAccount(host)
+          }}
+        />
+      )}
+      <AddHostTabs tab={tab} onTab={setTab} />
+    </>
+  )
   return (
     <SettingsDialogContent>
       {tab === 'ssh' || ssh.kind === 'added' ? (
@@ -689,76 +729,5 @@ function SshFailure({
         </pre>
       )}
     </div>
-  )
-}
-
-/** The host just added, and this computer's name on it, which changes on Done. */
-function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
-  const { t } = useTranslation('settings')
-  const [name, setName] = useState(host.deviceName)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const trimmed = name.trim()
-  const valid = trimmed.length > 0 && [...trimmed].length <= DEVICE_NAME_CHARS
-  const submit = async (event: FormEvent): Promise<void> => {
-    event.preventDefault()
-    if (!valid || busy) return
-    if (trimmed === host.deviceName) return onDone()
-    setBusy(true)
-    const failed = await changeHost(t, host, () => window.kettu.hosts.rename(host.id, trimmed))
-    if (!failed) return onDone()
-    setError(failed)
-    setBusy(false)
-  }
-  return (
-    <form className="contents" onSubmit={(event) => void submit(event)}>
-      <SettingsDialogHeader title={t('hosts.add.title')} />
-      <SettingsDialogBody>
-        <div className="kettu-sd__row">
-          <DeviceTile large icon={<HostIcon platform={host.platform} />} />
-          <span className="ui-sg-label">
-            <b>{t('hosts.add.added', { name: host.name })}</b>
-            <small>
-              {[
-                platformName(host.platform),
-                t('hosts.version', { version: host.version }),
-                routeName(t, host),
-              ].join(' · ')}
-            </small>
-          </span>
-        </div>
-        <SettingsField
-          label={t('hosts.add.nameLabel', { name: host.name })}
-          htmlFor="host-device-name"
-          hint={
-            error ? (
-              <span className="kettu-sd__error">{error}</span>
-            ) : (
-              t('hosts.add.nameHint', { name: host.name })
-            )
-          }
-        >
-          <input
-            id="host-device-name"
-            value={name}
-            autoFocus
-            autoComplete="off"
-            spellCheck={false}
-            className={DIALOG_FIELD}
-            aria-invalid={!valid || error !== null || undefined}
-            onFocus={(event) => event.currentTarget.select()}
-            onChange={(event) => {
-              setName(event.target.value)
-              setError(null)
-            }}
-          />
-        </SettingsField>
-      </SettingsDialogBody>
-      <SettingsDialogFooter>
-        <SetButton size="md" variant="primary" type="submit" loading={busy} disabled={!valid}>
-          {t('hosts.add.done')}
-        </SetButton>
-      </SettingsDialogFooter>
-    </form>
   )
 }
