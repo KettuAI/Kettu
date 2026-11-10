@@ -272,6 +272,10 @@ function createScope(hostId: string): OtherScope {
     closePairing: (codeId) => done(admin('remote.closePairing', { codeId })),
     answerPairing: (codeId, add, name) =>
       done(admin('remote.answerPairing', { codeId, add, name })),
+    // Another host asks its own windows about devices of the account, not its devices.
+    pendingDiscovery: () => Promise.resolve(null),
+    answerDiscovery: () => Promise.reject(new Error('Answered on the host itself')),
+    onDiscovery: () => () => {},
     renameDevice: (id, name) => admin('remote.renameDevice', { id, name }),
     removeDevice: (id) => admin('remote.removeDevice', { id }),
     activity: (id) => admin('remote.activity', { id }),

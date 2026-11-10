@@ -1125,7 +1125,10 @@
           "not_running": "Kettu is installed on {{target}}, but its daemon is not running. Run <code>kettu service install</code> there, or <code>kettu run</code>, and try again.",
           "failed": "Could not add {{target}}."
         }
-      }
+      },
+      "busy": "That computer is asking about another device. Try again in a moment.",
+      "cooling_down": "That computer turned down several requests and takes none for 10 minutes.",
+      "host_offline": "That computer is no longer on the relay, or no longer lets devices of the account find it."
     },
     "page": {
       "added": "Added {{date}}",

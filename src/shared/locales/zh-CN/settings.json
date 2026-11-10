@@ -1117,7 +1117,10 @@
           "not_running": "{{target}} 上装了 Kettu，但它的 daemon 没在运行。在那台机器上运行 <code>kettu service install</code> 或 <code>kettu run</code> 后再试。",
           "failed": "没能添加 {{target}}。"
         }
-      }
+      },
+      "busy": "那台电脑正在确认另一台设备，稍后再试。",
+      "cooling_down": "那台电脑拒绝了好几次请求，10 分钟内不再接受。",
+      "host_offline": "那台电脑已不在中继上，或不再让同一个账号的设备找到它。"
     },
     "page": {
       "added": "{{date}} 添加",
