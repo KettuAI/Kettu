@@ -30,6 +30,7 @@ import {
 } from '@renderer/features/split/layout'
 import type { RoutineExampleId } from '@renderer/features/routines/examples'
 import { NARROW_WINDOW } from '@renderer/features/shell/narrow'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 
@@ -38,9 +39,16 @@ type PageView =
   | { kind: 'launch' }
   | { kind: 'session'; sessionId: string }
   // The New session screen; the session is created on the first send. With `noProject`, in a
-  // scratch folder of its own rather than the selected project; with `parentId`, as a sub-session
-  // of that session, in its project.
-  | { kind: 'new'; agentId: AgentId | null; noProject: boolean; parentId?: string }
+  // scratch folder of its own rather than the selected project; with `hostId`, on the host chosen
+  // before a project (null being this computer); with `parentId`, as a sub-session of that
+  // session, in its project.
+  | {
+      kind: 'new'
+      agentId: AgentId | null
+      noProject: boolean
+      hostId?: string | null
+      parentId?: string
+    }
   | { kind: 'usage' } // the usage page, opened from the sidebar
   // The Routines page, opened from the sidebar; with a null routine id, New routine, which an
   // example on the empty Routines page fills in.
@@ -275,6 +283,7 @@ function mirror(s: ViewStore, layout: Layout): Pick<ViewStore, 'main' | 'project
       kind: 'new',
       agentId: view.agentId,
       noProject: view.noProject,
+      ...(view.hostId !== undefined ? { hostId: view.hostId } : {}),
       ...(view.parentId ? { parentId: view.parentId } : {}),
     },
     projectPath: view.projectPath ?? s.projectPath,
@@ -682,33 +691,51 @@ function newSessionView(
 ): PaneView {
   const draft =
     s.main.kind === 'new' ? { ...s.main, projectPath: s.projectPath } : s.newSessionDraft
+  const kept = noProject || (projectPath === null && !!draft?.noProject)
+  // An explicitly requested project decides the host; otherwise the draft's choice stays.
+  const hostId = projectPath === null && !kept ? draft?.hostId : undefined
   return {
     kind: 'new',
     agentId: draft ? draft.agentId : agentId,
-    noProject: noProject || (projectPath === null && !!draft?.noProject),
+    noProject: kept,
     projectPath: projectPath ?? draft?.projectPath ?? s.projectPath,
+    ...(hostId !== undefined ? { hostId } : {}),
   }
 }
 
-/** Chooses where New session starts: a project, or null for No project. */
-export function chooseNewSessionProject(projectPath: string | null): void {
+function chooseNewSession(change: {
+  hostId: string | null
+  noProject: boolean
+  projectPath: string | null
+}): void {
   useViewStore.setState((s) => {
     const pane = newSessionPane(s.layout)
     if (!pane || pane.view.kind !== 'new') return s
-    const view: PaneView = {
-      ...pane.view,
-      noProject: projectPath === null,
-      projectPath: projectPath ?? pane.view.projectPath,
-    }
+    const view: PaneView = { ...pane.view, ...change }
     const focused = pane.id === s.layout.focus
     return {
       ...withLayout(s, setPaneViewInLayout(s.layout, pane.id, view)),
       // The image of the focused pane keeps the selected project, as the main view had it.
       ...(focused && sessionsShown(s.main) && s.main.kind === 'new'
-        ? { projectPath: projectPath ?? s.projectPath }
+        ? { projectPath: change.projectPath ?? s.projectPath }
         : {}),
     }
   })
+}
+
+/** Chooses where New session starts: a project, or null for No project, on this computer. */
+export function chooseNewSessionProject(projectPath: string | null): void {
+  const pane = newSessionPane(useViewStore.getState().layout)
+  chooseNewSession({
+    hostId: projectPath === null ? null : hostOfPath(projectPath),
+    noProject: projectPath === null,
+    projectPath: projectPath ?? (pane?.view.kind === 'new' ? pane.view.projectPath : null),
+  })
+}
+
+/** Chooses the host New session starts on, with the project it starts in there, if it has one. */
+export function chooseNewSessionHost(hostId: string | null, projectPath: string | null): void {
+  chooseNewSession({ hostId, noProject: false, projectPath })
 }
 
 /** Without a section, shows the one shown last; with one, switches to it even when already open. */

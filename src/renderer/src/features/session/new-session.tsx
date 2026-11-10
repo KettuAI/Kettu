@@ -10,6 +10,7 @@ import { FolderMark } from '@renderer/components/affect/assistant-home'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { HostChip } from '@renderer/features/session/composer/host-chip'
 import { useModeControl } from '@renderer/features/session/composer/mode-control'
 import { isSelect } from '@renderer/features/session/composer/options'
 import { Glyph } from '@renderer/features/shell/glyph'
@@ -35,6 +36,7 @@ import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { refreshLimits } from '@renderer/stores/usage'
 import {
+  chooseNewSessionHost,
   choosePaneAgent,
   openAgentSettings,
   openHarnessSettings,
@@ -51,6 +53,7 @@ import { StartStyles, TrayStyles } from './composer/affect-styles'
 import { PromptBox } from './composer/prompt-box'
 import { usePromptBox } from './composer/use-prompt-box'
 import { AgentPicker } from './new-session/agent-picker'
+import { HostMenu } from './new-session/host-menu'
 import { ProjectMenu } from './new-session/project-menu'
 import {
   enterNewSession,
@@ -88,12 +91,15 @@ export function NewSessionView({
   paneId,
   project,
   noProject = false,
+  hostId: chosenHost = null,
   parentId = null,
 }: {
   /** The pane that shows it; New session's own controls change that pane's view. */
   paneId: string | null
   project: Project | null
   noProject?: boolean
+  /** The host chosen before a project, null for this computer; a project decides it once chosen. */
+  hostId?: string | null
   /** A sub-session of that session, in its project. */
   parentId?: string | null
 }) {
@@ -102,7 +108,7 @@ export function NewSessionView({
   const parent = useSessionsStore((s) => (parentId ? s.byId[parentId] : undefined))
   // The agents listed are those of the host the session will be on.
   const startPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
-  const hostId = startPath === null ? null : hostOfPath(startPath)
+  const hostId = startPath === null ? (noProject ? null : chosenHost) : hostOfPath(startPath)
   const installed = useAgentsStore((s) => {
     const status = chosenId ? agentsOn(s, hostId).byId[chosenId] : undefined
     return !!status && canStart(status)
@@ -317,6 +323,14 @@ function DraftComposer({
     requestAnimationFrame(() => editor.current?.focus())
   }
 
+  // The host's most recent project comes with it, as the first project does when none is chosen.
+  const projects = useProjectsStore((s) => s.projects)
+  const chooseHost = (next: string | null) => {
+    const first = projects.find((p) => hostOfPath(p.path) === next && !p.missing)
+    chooseNewSessionHost(next, first?.path ?? null)
+    requestAnimationFrame(() => editor.current?.focus())
+  }
+
   // New session's picks only change what the session starts with, which the send reads.
   const pick = (optionId: string, value: string | boolean) => {
     if (agentId) setOption(agentId, optionId, value)
@@ -421,14 +435,21 @@ function DraftComposer({
               <TrayStyles />
               <span className="kettu-tray__group">
                 {parent ? (
-                  <ParentProject project={project} scratch={parent.scratch} />
+                  <>
+                    <HostChip hostId={hostId} />
+                    <ParentProject project={project} scratch={parent.scratch} />
+                  </>
                 ) : (
-                  <ProjectMenu
-                    project={project}
-                    noProject={noProject}
-                    onError={setProjectError}
-                    chip
-                  />
+                  <>
+                    <HostMenu hostId={hostId} onChoose={chooseHost} />
+                    <ProjectMenu
+                      project={project}
+                      noProject={noProject}
+                      onError={setProjectError}
+                      chip
+                      host={hostId}
+                    />
+                  </>
                 )}
                 <AgentPicker agentId={agentId} onChoose={choose} hostId={hostId} />
                 {!inScratch && project && <BranchLabel projectPath={project.path} />}
