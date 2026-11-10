@@ -4,6 +4,11 @@
 .ks-session {
   --thread-column: calc(48 * var(--prose-size) + 8px);
 }
+/* The thread sets its prose, tables and code on its own size; the column keeps the composer's. */
+.ks-thread {
+  --prose-size: var(--thread-prose-size);
+  --text-prose: var(--thread-prose-size);
+}
 .ks-thread__column {
   max-width: calc(var(--thread-column) + 64px);
 }
