@@ -28,7 +28,12 @@ import {
   type DraftAttachment,
 } from '@renderer/stores/attachments'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { isScratchFolder, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
+import {
+  hostOfSession,
+  isScratchFolder,
+  sessionArchived,
+  useSessionsStore,
+} from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { allowsTerminal } from '@renderer/stores/hosts'
 import {
@@ -40,6 +45,7 @@ import {
 import { allPanes, isSplit, paneWithSession } from '@renderer/features/split/layout'
 import { focusSession, forgetSession } from '@renderer/stores/threads'
 import {
+  chooseNewSessionHost,
   closeLayoutSession,
   newSessionAt,
   openNewSession,
@@ -388,6 +394,23 @@ export async function removeEmptySessions(): Promise<void> {
 export function leaveSession(summary: SessionSummary | undefined): void {
   if (summary?.scratch) newSessionInPlace(null, true)
   else newSessionInPlace(summary?.projectPath ?? null)
+}
+
+/**
+ * After the window points at one host: leaves the shown session when it is on another host, for
+ * New session on that host; in a split its pane closes, as the main view follows the focus.
+ */
+export function leaveSessionOffHost(hostId: string | null): void {
+  const { main, layout } = useViewStore.getState()
+  if (main.kind !== 'session') return
+  const summary = useSessionsStore.getState().byId[main.sessionId]
+  if (!summary || hostOfSession(summary) === hostId) return
+  if (isSplit(layout) && paneWithSession(layout, main.sessionId)) {
+    closeLayoutSession(main.sessionId)
+    return
+  }
+  newSessionInPlace()
+  chooseNewSessionHost(hostId, null)
 }
 
 /**
