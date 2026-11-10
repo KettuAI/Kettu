@@ -13,12 +13,16 @@ export interface DeviceChannelOptions {
   key: KeyPair
   /** A pairing code's secret: the handshake is IKpsk1 with it, IK without. */
   psk?: Uint8Array
+  /** The handshake's prologue, as pairing with a host of the account gives its own. */
+  prologue?: Uint8Array
   /** The first message on the channel; null sends none, as a device that never says hello. */
   hello: unknown
 }
 
 /** The channel once the host answered the handshake. */
 export interface DeviceChannel {
+  /** The finished handshake's hash, which both sides share. */
+  readonly handshakeHash: Uint8Array
   /** Each JSON message from the host, in order; the ones before a listener is set wait for it. */
   onMessage(listener: (value: unknown) => void): void
   /** Each part of the host's byte streams, in order with the JSON; dropped without a listener. */
@@ -48,11 +52,12 @@ export class HandshakeDropped extends Error {
 export async function startDeviceChannel(
   options: DeviceChannelOptions,
 ): Promise<{ opened: Promise<DeviceChannel> }> {
-  const { transport, hostKey, key, psk } = options
+  const { transport, hostKey, key, psk, prologue } = options
   const handshake = await Handshake.create({
     role: 'initiator',
     staticKey: key,
     remoteStaticKey: hostKey,
+    ...(prologue ? { prologue } : {}),
     ...(psk ? { pattern: 'IKpsk1' as const, psk } : { pattern: 'IK' as const }),
   })
   let channel: Channel | null = null
@@ -75,6 +80,9 @@ export async function startDeviceChannel(
   }
 
   const api: DeviceChannel = {
+    get handshakeHash() {
+      return handshake.handshakeHash
+    },
     onMessage: (next) => {
       listener = next
       for (const value of waiting.splice(0)) next(value)

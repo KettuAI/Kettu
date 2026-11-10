@@ -14,7 +14,8 @@ export const ACTIVITY_TITLE_CHARS = 200
 export type ActivityActor = 'owner' | 'device'
 
 export type DeviceActivity =
-  | { at: number; kind: 'paired' }
+  /** `via`: added from a request of a device signed in to the same Kettu account, not a code. */
+  | { at: number; kind: 'paired'; via?: 'account' }
   | { at: number; kind: 'connected' }
   | { at: number; kind: 'renamed'; from: string; to: string; by: ActivityActor }
   /** `unseen`: 90 days without a connection; `reset`: remote access was reset. */

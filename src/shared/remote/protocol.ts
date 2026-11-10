@@ -200,6 +200,10 @@ export type ClosingReason =
   | 'stopping'
   /** The host cannot run sessions now, as while its agent host restarts; connect again. */
   | 'unavailable'
+  /** The host of the account is asking its owner about another device. */
+  | 'busy'
+  /** The host of the account turned down too many devices in a row and takes none for a while. */
+  | 'cooling_down'
 
 /** The host's last message on a connection, saying why it ends. */
 export interface Closing {
@@ -271,6 +275,8 @@ const CLOSING_REASONS: readonly string[] = [
   'remote_off',
   'stopping',
   'unavailable',
+  'busy',
+  'cooling_down',
 ]
 
 /** A closing as the device reads it, or null when the value is not one. */

@@ -121,6 +121,40 @@ export type RelayToHost =
 export type HostToRelay =
   | { type: 'sign-in'; publicKey: string; signature: string; token: string }
   | { type: 'token'; token: string }
+  /** Lists the host to its account's devices; null takes it off the list. Only once `ready`. */
+  | { type: 'profile'; profile: RelayHostProfile | null }
+
+/** How a relay with HOSTS_FEATURE lists a host to the devices of its account. */
+export interface RelayHostProfile {
+  /** The host's X25519 public key, the channel's, in base64url. */
+  key: string
+  /** 1 to MAX_PROFILE_NAME characters, trimmed, without control characters. */
+  name: string
+  /** As Node.js's `process.platform` names it. */
+  platform: string
+}
+
+/** A host of the account as `GET /v1/hosts` lists it. */
+export interface RelayListedHost extends RelayHostProfile {
+  id: string
+}
+
+/** The feature of a relay that takes hosts' profiles and lists them on `GET /v1/hosts`. */
+export const HOSTS_FEATURE = 'hosts'
+
+/** The longest name a profile carries. */
+export const MAX_PROFILE_NAME = 64
+
+/** The most hosts `GET /v1/hosts` lists. */
+export const MAX_LISTED_HOSTS = 64
+
+const PLATFORM = /^[a-z0-9_-]{1,32}$/
+// C0 and C1 control characters and DEL.
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/
+const X25519_KEY_BYTES = 32
+const MAX_FEATURES = 8
+const MAX_FEATURE = 32
 
 /** What a device sends first, and what the relay answers once the host accepted. */
 export type DeviceToRelay = { type: 'connect'; token: string }
@@ -137,6 +171,8 @@ export interface RelayInfo {
   relay: 'kettu'
   protocol: number
   regions: RelayRegion[]
+  /** What the relay offers beyond the protocol, as HOSTS_FEATURE; none from an older relay. */
+  features: string[]
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -225,6 +261,8 @@ export const hostSocketPath = (id: string): string => `/v1/hosts/${id}`
 export const connectSocketPath = (id: string): string => `/v1/hosts/${id}/connect`
 export const acceptSocketPath = (id: string, token: string): string =>
   `/v1/hosts/${id}/accept/${token}`
+/** Lists the account's hosts, with the account's access token as a bearer token. */
+export const hostsPath = (): string => '/v1/hosts'
 
 /**
  * Whether a relay named by a region list, a pairing code or a welcome is one the account's token
@@ -262,7 +300,7 @@ const REGION_ID = /^[a-z0-9][a-z0-9-]{0,31}$/
 /** What `GET /v1` answered, or null when it is not a Kettu relay of this protocol. */
 export function parseRelayInfo(value: unknown): RelayInfo | null {
   if (typeof value !== 'object' || value === null) return null
-  const { relay, protocol, regions } = value as Record<string, unknown>
+  const { relay, protocol, regions, features } = value as Record<string, unknown>
   if (relay !== 'kettu' || protocol !== RELAY_PROTOCOL || !Array.isArray(regions)) return null
   const kept: RelayRegion[] = []
   for (const region of regions.slice(0, MAX_REGIONS)) {
@@ -271,7 +309,67 @@ export function parseRelayInfo(value: unknown): RelayInfo | null {
     const origin = relayOrigin(url)
     if (origin) kept.push({ id, url: origin })
   }
-  return { relay, protocol, regions: kept }
+  const offered = Array.isArray(features)
+    ? features
+        .slice(0, MAX_FEATURES)
+        .filter(
+          (feature): feature is string =>
+            typeof feature === 'string' && feature.length > 0 && feature.length <= MAX_FEATURE,
+        )
+    : []
+  return { relay, protocol, regions: kept, features: offered }
+}
+
+const isProfileName = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= MAX_PROFILE_NAME &&
+  value.trim() === value &&
+  !CONTROL.test(value)
+
+const isProfileKey = (value: unknown): value is string =>
+  typeof value === 'string' && decodeRelayBytes(value)?.length === X25519_KEY_BYTES
+
+/**
+ * A host's profile: its key, and its name cut to what a profile carries without its control
+ * characters; null when nothing of the name is left or the platform is not one.
+ */
+export function hostProfile(
+  publicKey: Uint8Array,
+  name: string,
+  platform: string,
+): RelayHostProfile | null {
+  if (publicKey.length !== X25519_KEY_BYTES || !PLATFORM.test(platform)) return null
+  let kept = ''
+  for (const char of name.replace(new RegExp(CONTROL.source, 'g'), '').trim()) {
+    if (kept.length + char.length > MAX_PROFILE_NAME) break
+    kept += char
+  }
+  kept = kept.trim()
+  return kept ? { key: toBase64Url(publicKey), name: kept, platform } : null
+}
+
+function parseProfile(value: unknown): RelayHostProfile | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { key, name, platform } = value as Record<string, unknown>
+  if (!isProfileKey(key) || !isProfileName(name)) return null
+  if (typeof platform !== 'string' || !PLATFORM.test(platform)) return null
+  return { key, name, platform }
+}
+
+/** What `GET /v1/hosts` answered, or null when any of it is not what a relay lists. */
+export function parseRelayHosts(value: unknown): RelayListedHost[] | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { hosts } = value as Record<string, unknown>
+  if (!Array.isArray(hosts) || hosts.length > MAX_LISTED_HOSTS) return null
+  const listed: RelayListedHost[] = []
+  for (const entry of hosts) {
+    const profile = parseProfile(entry)
+    const id = (entry as { id?: unknown }).id
+    if (!profile || typeof id !== 'string' || !RELAY_HOST_ID.test(id)) return null
+    listed.push({ id, ...profile })
+  }
+  return listed
 }
 
 function parseJson(text: unknown): Record<string, unknown> | null {
@@ -315,6 +413,11 @@ export function parseHostToRelay(text: unknown): HostToRelay | null {
   if (!message) return null
   if (message.type === 'token') {
     return isAccessToken(message.token) ? { type: 'token', token: message.token } : null
+  }
+  if (message.type === 'profile') {
+    if (message.profile === null) return { type: 'profile', profile: null }
+    const profile = parseProfile(message.profile)
+    return profile ? { type: 'profile', profile } : null
   }
   if (message.type !== 'sign-in') return null
   const { publicKey, signature, token } = message

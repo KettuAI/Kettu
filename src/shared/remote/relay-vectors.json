@@ -30,7 +30,10 @@
   "hostMessages": {
     "valid": [
       "{\"type\":\"sign-in\",\"publicKey\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"signature\":\"Kh4t7ZzoJYxdfqY_Fonne3vGKXKi2SHEuuXdPsY7qgb7abNa3kjL5XZYqYr16Xx_VyGQlite2JSol2DSfHl9Ag\",\"token\":\"access-token\"}",
-      "{\"type\":\"token\",\"token\":\"another-access-token\"}"
+      "{\"type\":\"token\",\"token\":\"another-access-token\"}",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"name\":\"Studio\",\"platform\":\"darwin\"}}",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"name\":\"工作室 Mac\",\"platform\":\"darwin\"}}",
+      "{\"type\":\"profile\",\"profile\":null}"
     ],
     "invalid": [
       "{\"type\":\"sign-in\",\"publicKey\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\",\"signature\":\"Kh4t7Zzo\",\"token\":\"access-token\"}",
@@ -39,7 +42,14 @@
       "{\"type\":\"token\",\"token\":\"\"}",
       "{\"type\":\"ready\"}",
       "[\"sign-in\"]",
-      "not json"
+      "not json",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEB\",\"name\":\"Studio\",\"platform\":\"darwin\"}}",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"name\":\" Studio\",\"platform\":\"darwin\"}}",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"name\":\"Stu\\u0007dio\",\"platform\":\"darwin\"}}",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"name\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\",\"platform\":\"darwin\"}}",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"name\":\"\",\"platform\":\"darwin\"}}",
+      "{\"type\":\"profile\",\"profile\":{\"key\":\"AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE\",\"name\":\"Studio\",\"platform\":\"Darwin\"}}",
+      "{\"type\":\"profile\"}"
     ]
   },
   "relayMessages": {
@@ -65,13 +75,66 @@
       "relay": "kettu",
       "protocol": 1,
       "regions": [
-        { "id": "hk", "url": "https://hk.relay.kettu.sh" },
-        { "id": "us", "url": "https://relay.kettu.sh/" }
-      ]
+        {
+          "id": "hk",
+          "url": "https://hk.relay.kettu.sh"
+        },
+        {
+          "id": "us",
+          "url": "https://relay.kettu.sh/"
+        }
+      ],
+      "features": ["hosts"]
     },
     "list": [
-      { "id": "us", "url": "https://relay.kettu.sh" },
-      { "id": "hk", "url": "https://hk.relay.kettu.sh" }
+      {
+        "id": "us",
+        "url": "https://relay.kettu.sh"
+      },
+      {
+        "id": "hk",
+        "url": "https://hk.relay.kettu.sh"
+      }
+    ]
+  },
+  "hosts": {
+    "comment": "What GET /v1/hosts answers a device of the account",
+    "valid": {
+      "hosts": [
+        {
+          "id": "eh7ddx5bksrgcytl7bkai36se4",
+          "key": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+          "name": "Studio",
+          "platform": "darwin"
+        }
+      ]
+    },
+    "invalid": [
+      {
+        "hosts": [
+          {
+            "id": "eh7ddx5bksrgcytl7bkai36se4",
+            "key": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+            "name": "Studio"
+          }
+        ]
+      },
+      {
+        "hosts": [
+          {
+            "id": "NOT-AN-ID",
+            "key": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+            "name": "Studio",
+            "platform": "darwin"
+          }
+        ]
+      },
+      {
+        "hosts": "none"
+      },
+      {
+        "error": "unauthorized"
+      }
     ]
   }
 }

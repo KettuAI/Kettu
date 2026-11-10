@@ -5,6 +5,7 @@
 
 import {
   ACCEPT_TIMEOUT_MS,
+  HOSTS_FEATURE,
   MAX_REGIONS,
   PING,
   PONG,
@@ -20,6 +21,7 @@ import {
   relayRefusal,
   relaySocketUrl,
   signInMessage,
+  type RelayHostProfile,
   type RelayKey,
   type RelayRefusal,
   type RelayRegion,
@@ -86,6 +88,11 @@ export interface RelayHostOptions {
   fetchInfo(url: string): Promise<unknown>
   /** A device's socket, open and joined by the relay, to become a device connection. */
   accepted(socket: WebSocket, relay: string): void
+  /**
+   * How the host is listed to its account's devices, null for not at all; sent to each relay
+   * that has HOSTS_FEATURE once signed in. Without it the host sends no profile.
+   */
+  profile?(): RelayHostProfile | null
   /** A relay's state or the list changed. */
   changed(): void
   log(level: 'info' | 'warn' | 'error', message: string): void
@@ -106,6 +113,10 @@ class Control {
   private closed = false
   /** The device sockets this relay handed on, closed with it. */
   private readonly accepted = new Set<WebSocket>()
+  /** Whether this relay has HOSTS_FEATURE, once its `GET /v1` was read. */
+  private listsHosts: boolean | null = null
+  /** The profile the relay holds from this socket, as JSON; null for none. */
+  private sentProfile: string | null = null
 
   constructor(
     private readonly host: RelayHost,
@@ -165,6 +176,7 @@ class Control {
     this.stopPings()
     const socket = this.socket
     this.socket = null
+    this.sentProfile = null
     if (socket) closeSocket(socket, 1000)
   }
 
@@ -204,7 +216,8 @@ class Control {
           this.clearTimer()
           this.failures = 0
           this.set({ state: 'connected' })
-          return this.schedulePing()
+          this.schedulePing()
+          return void this.sendProfile()
         case 'incoming':
           if (ready) this.acceptDevice(message.token)
           return
@@ -215,11 +228,39 @@ class Control {
     socket.addEventListener('close', (event) => {
       if (this.socket !== socket) return
       this.socket = null
+      this.sentProfile = null
       this.clearTimer()
       this.stopPings()
       const code = (event as CloseEvent).code
       this.ended(opened ? (relayRefusal(code) ?? 'closed') : 'unreachable', code)
     })
+  }
+
+  /**
+   * Sends the host's profile when it changed since the socket's last, to a relay that takes it;
+   * null only to take back one sent on this socket, so a host never listed sends nothing.
+   */
+  async sendProfile(): Promise<void> {
+    const socket = this.socket
+    const { profile } = this.options
+    if (!socket || !profile || this.connection.state !== 'connected') return
+    if (profile() === null && this.sentProfile === null) return
+    if (this.listsHosts === null) {
+      try {
+        const url = `${this.region.url}${relayInfoPath()}`
+        const info = parseRelayInfo(await this.options.fetchInfo(url))
+        // Read again on the next change when the relay could not say.
+        if (info) this.listsHosts = info.features.includes(HOSTS_FEATURE)
+      } catch {
+        return
+      }
+    }
+    if (!this.listsHosts || this.socket !== socket || this.connection.state !== 'connected') return
+    const current = profile()
+    const sent = current && JSON.stringify(current)
+    if (sent === this.sentProfile) return
+    this.sentProfile = sent
+    this.sendJson({ type: 'profile', profile: current })
   }
 
   private async signIn(socket: WebSocket, nonce: string): Promise<void> {
@@ -304,6 +345,7 @@ class Control {
   private dropped(socket: WebSocket, error: RelayHostError): void {
     if (this.socket !== socket) return
     this.socket = null
+    this.sentProfile = null
     this.clearTimer()
     this.stopPings()
     closeSocket(socket, 1000)
@@ -405,6 +447,11 @@ export class RelayHost {
       if (had) control.renewed(token)
       else control.start()
     }
+  }
+
+  /** The profile changed, as when the host was renamed or no longer lets devices find it. */
+  profileChanged(): void {
+    for (const control of this.controls) void control.sendProfile()
   }
 
   /** Tries every relay now, as Retry does after a conflict or an error. */

@@ -8,12 +8,15 @@ import {
   connectSocketPath,
   decodeRelayBytes,
   encodeRelayBytes,
+  hostProfile,
   hostSocketPath,
+  hostsPath,
   importRelayKey,
   isJoined,
   newRelaySeed,
   parseDeviceToRelay,
   parseHostToRelay,
+  parseRelayHosts,
   parseRelayInfo,
   parseRelayToHost,
   relayHostId,
@@ -66,6 +69,7 @@ describe('the relay protocol', () => {
     expect(hostSocketPath(id)).toBe(vectors.paths.host)
     expect(connectSocketPath(id)).toBe(vectors.paths.connect)
     expect(acceptSocketPath(id, vectors.signIn.nonce)).toBe(vectors.paths.accept)
+    expect(hostsPath()).toBe('/v1/hosts')
   })
 
   it('maps each close code to a reason, and others to none', () => {
@@ -89,8 +93,38 @@ describe('the relay protocol', () => {
     expect(isJoined('pong')).toBe(false)
   })
 
+  it("reads the account's hosts as a relay lists them, and nothing of a list with one wrong", () => {
+    expect(parseRelayHosts(vectors.hosts.valid)).toEqual(vectors.hosts.valid.hosts)
+    for (const answer of vectors.hosts.invalid) expect(parseRelayHosts(answer)).toBeNull()
+  })
+
+  it("makes a host's profile from its key, a name cut to fit and its platform", () => {
+    const key = new Uint8Array(32).fill(1)
+    expect(hostProfile(key, 'Studio', 'darwin')).toEqual({
+      key: encodeRelayBytes(key),
+      name: 'Studio',
+      platform: 'darwin',
+    })
+    expect(hostProfile(key, ' Stu\u0007dio\n', 'linux')?.name).toBe('Studio')
+    const long = hostProfile(key, `${'x'.repeat(63)}\u{1F98A}`, 'win32')!.name
+    expect(long).toBe('x'.repeat(63))
+    expect(hostProfile(key, '\u0001 ', 'darwin')).toBeNull()
+    expect(hostProfile(key, 'Studio', 'Darwin')).toBeNull()
+    expect(hostProfile(key.subarray(1), 'Studio', 'darwin')).toBeNull()
+    const profile = hostProfile(key, 'x'.repeat(80), 'darwin')!
+    expect(parseHostToRelay(JSON.stringify({ type: 'profile', profile }))).toEqual({
+      type: 'profile',
+      profile,
+    })
+  })
+
   it('lists the main relay first, then the other regions', () => {
     const info = parseRelayInfo(vectors.info.answer)!
+    expect(info.features).toEqual(['hosts'])
+    expect(parseRelayInfo({ ...vectors.info.answer, features: undefined })?.features).toEqual([])
+    expect(
+      parseRelayInfo({ ...vectors.info.answer, features: ['hosts', 7, 'x'.repeat(33)] })?.features,
+    ).toEqual(['hosts'])
     expect(relayList('https://relay.kettu.sh', info.regions)).toEqual(vectors.info.list)
     expect(parseRelayInfo({ ...vectors.info.answer, protocol: 2 })).toBeNull()
     expect(relayList('http://localhost:8798', [])).toEqual([

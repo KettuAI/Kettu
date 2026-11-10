@@ -31,7 +31,7 @@ interface CommonOptions {
   staticKey: KeyPair
   /** The 32-byte pre-shared key, which IKpsk1 needs and IK takes none of. */
   psk?: Uint8Array
-  /** Only for test vectors: every connection uses `PROLOGUE`. */
+  /** `PROLOGUE` unless given, as a discovery handshake gives its own and test vectors theirs. */
   prologue?: Uint8Array
   /** Only for test vectors: a fixed ephemeral key gives up forward secrecy. */
   ephemeral?: KeyPair
