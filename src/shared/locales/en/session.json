@@ -104,12 +104,9 @@
       },
       "risky": "Risky",
       "destructive": "Destructive",
-      "once": "Just once",
-      "always": "Always",
       "allowOnce": "Allow once",
       "allowAlways": "Always allow",
       "deny": "Deny",
-      "howLong": "How long",
       "touches": "What it touches",
       "more": "{{count}} more",
       "showLess": "Show less",
@@ -168,10 +165,6 @@
   "projectMcp": {
     "where": "Declared in the project’s .mcp.json. Once used, they run on this computer as you.",
     "servers": "Servers",
-    "scope": {
-      "use": "These servers",
-      "all": "All of this project’s"
-    },
     "decision": {
       "use": "Use",
       "all": "Use all",
@@ -819,9 +812,6 @@
       "device": "use a device",
       "app": "use an app",
       "projectMcp": "start MCP servers"
-    },
-    "session": "This session",
-    "project": "This project",
-    "always": "Always"
+    }
   }
 }

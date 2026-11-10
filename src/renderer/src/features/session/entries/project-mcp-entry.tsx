@@ -60,7 +60,6 @@ export const ProjectMcpEntry = memo(function ProjectMcpEntry({
       answer={entry.decision === null ? null : SHOWN[entry.decision]}
       device={entry.device}
       words={{
-        scope: { session: t('projectMcp.scope.use'), always: t('projectMcp.scope.all') },
         allow: { session: t('projectMcp.decision.use'), always: t('projectMcp.decision.all') },
         deny: t('projectMcp.decision.skip'),
         answer: () => t(ANSWER_TEXT[entry.decision ?? 'skip']),

@@ -86,6 +86,8 @@ export type PermissionRequestProps = {
   revocable?: boolean;
   /** More buttons before Deny, e.g. the agent's other answers */
   actions?: ReactNode;
+  /** More buttons after Allow, e.g. the agent's longer-lasting allows */
+  trailingActions?: ReactNode;
   /** More of what will happen under the preview, e.g. a diff or the whole command */
   children?: ReactNode;
   /** Locks the buttons, e.g. while the answer is on its way */
@@ -331,6 +333,7 @@ export function PermissionRequest({
   now: nowIn,
   revocable = true,
   actions,
+  trailingActions,
   children,
   disabled = false,
   labels,
@@ -714,6 +717,7 @@ export function PermissionRequest({
                   </span>
                   <kbd className="ui-prc__kbd">↵</kbd>
                 </button>
+                {trailingActions}
               </div>
             </div>
           </div>

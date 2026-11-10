@@ -95,12 +95,9 @@
       },
       "risky": "有风险",
       "destructive": "破坏性",
-      "once": "仅这一次",
-      "always": "始终",
       "allowOnce": "允许一次",
       "allowAlways": "始终允许",
       "deny": "拒绝",
-      "howLong": "有效期",
       "touches": "涉及的内容",
       "more": "还有 {{count}} 项",
       "showLess": "收起",
@@ -159,10 +156,6 @@
   "projectMcp": {
     "where": "来自项目的 .mcp.json；使用后它们在这台电脑上以你的权限运行。",
     "servers": "服务器",
-    "scope": {
-      "use": "这几个",
-      "all": "这个项目的全部"
-    },
     "decision": {
       "use": "使用",
       "all": "全部使用",
@@ -782,9 +775,6 @@
       "device": "使用设备",
       "app": "使用应用",
       "projectMcp": "启动 MCP 服务器"
-    },
-    "session": "本次会话",
-    "project": "此项目",
-    "always": "始终"
+    }
   }
 }

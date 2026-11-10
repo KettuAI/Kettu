@@ -40,7 +40,6 @@ export const DeviceAccessEntry = memo(function DeviceAccessEntry({
       answer={entry.decision}
       device={entry.device}
       words={{
-        scope: { session: t('access.session'), always: t('access.always') },
         allow: {
           session: t('deviceAccess.decision.session'),
           always: t('deviceAccess.decision.always'),

@@ -781,8 +781,8 @@
 }
 
 /* A request for permission on Permission Request, across the column as the screen sets it: the
-   target in mono, what it touches two to a row, how long at the left of the answer and the
-   buttons at the right, which wrap under it when the agent offers more answers. */
+   target in mono, what it touches two to a row and the answers as buttons at the right, which
+   wrap when the agent offers more of them. */
 .ks-thread .ui-prc.ks-permission {
   max-width: none;
   --ui-prc-text: var(--thread-prose);
@@ -829,16 +829,6 @@
 }
 .ks-permission .ui-prc__more-body {
   padding: 10px 14px 0;
-}
-/* What an always answer allows, when the agent spells it out: its own line under the answer. */
-.ks-permission__allows {
-  flex-basis: 100%;
-  order: 1;
-  min-width: 0;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--thread-muted);
-  overflow-wrap: anywhere;
 }
 .ks-permission__command {
   min-width: 0;

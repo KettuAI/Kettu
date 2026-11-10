@@ -7,9 +7,7 @@ import {
   PermissionRequest,
   type PermissionDecision,
   type PermissionPreviewItem,
-  type PermissionScope,
 } from '@renderer/components/affect/permission-request'
-import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
@@ -23,14 +21,9 @@ import { answeredBy } from './helpers'
 /** How long an access the user allows holds: this session, or always. */
 export type AccessDecision = 'session' | 'always' | 'deny'
 
-const SCOPE: Record<Exclude<AccessDecision, 'deny'>, PermissionScope> = {
-  session: 'once',
-  always: 'always',
-}
-
 /**
  * A request to open a site, use a device or use an app, on Permission Request like an agent's
- * own: how long on its Segmented Control, then Deny or Allow. Every client that shows the session
+ * own: Deny, the allow for this session, then the allow that lasts. Every client that shows the session
  * answers it through the host and the first answer counts; once answered it folds to one line.
  */
 export function AccessCard({
@@ -65,7 +58,6 @@ export function AccessCard({
   answer: string | null
   device: FromDevice | undefined
   words: {
-    scope: Record<Exclude<AccessDecision, 'deny'>, string>
     allow: Record<Exclude<AccessDecision, 'deny'>, string>
     deny: string
     answer: (answer: string) => string
@@ -113,8 +105,6 @@ export function AccessCard({
     answer === null
       ? null
       : { allow: allowed, scope: answer === 'always' ? 'always' : 'once', at: 0 }
-  const scopeOf = (scope: PermissionScope): 'session' | 'always' =>
-    scope === 'always' ? 'always' : 'session'
 
   return (
     <div ref={card} data-entry-id={entryId} className={cn('min-w-0', className)}>
@@ -130,24 +120,23 @@ export function AccessCard({
         risk="safe"
         reason={reason}
         {...(preview ? { preview, previewTitle, previewLimit: preview.length } : {})}
-        scopes={[SCOPE.session, SCOPE.always]}
-        renderScopes={({ scopes, scope, onChange }) => (
-          <SegmentedControl
-            aria-label={t('permission.card.howLong')}
-            variant="tray"
-            size="lg"
-            value={scope}
-            onChange={onChange}
-            disabled={answering !== null}
-            options={scopes.map((s) => ({ value: s, label: words.scope[scopeOf(s)] }))}
-          />
-        )}
+        scopes={['once']}
         decision={decision}
         onDecisionChange={(next) => {
-          if (next) void send(next.allow ? scopeOf(next.scope) : 'deny')
+          if (next) void send(next.allow ? 'session' : 'deny')
         }}
         revocable={false}
         disabled={answering !== null}
+        trailingActions={
+          <button
+            type="button"
+            className="ui-prc__btn"
+            disabled={answering !== null}
+            onClick={() => void send('always')}
+          >
+            {words.allow.always}
+          </button>
+        }
         labels={{
           title: (name, what) => (
             <Trans
@@ -157,9 +146,8 @@ export function AccessCard({
               components={{ b: <b dir="auto" /> }}
             />
           ),
-          allow: (scope) => words.allow[scopeOf(scope)],
+          allow: () => words.allow.session,
           deny: words.deny,
-          howLong: t('permission.card.howLong'),
           result: () => {
             const headline = words.answer(answer ?? '')
             return {
