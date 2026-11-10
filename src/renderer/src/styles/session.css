@@ -1,21 +1,20 @@
 /* session: the thread and the session header, on affectUI's AI Chat screen (features/session).
-   The thread's prose follows the text size setting a step under the other prose, as the screen
-   sets its answers at 14 px. */
+   The thread's prose follows the text size setting a step under the other prose. */
 
 /* The session view: the thread's column, which the composer under it keeps to. */
 .ks-session {
-  --thread-prose-size: 14px;
+  --thread-prose-size: 15px;
   --thread-column: calc(48 * var(--thread-prose-size) + 8px);
 }
 :root[data-text-size='small'] .ks-session {
-  --thread-prose-size: 13px;
+  --thread-prose-size: 14px;
 }
 :root[data-text-size='large'] .ks-session {
-  --thread-prose-size: 15px;
+  --thread-prose-size: 16px;
 }
 .ks-thread {
-  --prose-size: var(--thread-prose-size, 14px);
-  --text-prose: var(--thread-prose-size, 14px);
+  --prose-size: var(--thread-prose-size, 15px);
+  --text-prose: var(--thread-prose-size, 15px);
 }
 .ks-thread__column {
   max-width: calc(var(--thread-column) + 64px);
