@@ -624,10 +624,7 @@
     "alt": "SVG image"
   },
   "block": {
-    "exit": "exit {{code}}",
     "openInTerminal": "Open in terminal",
-    "showEarlier_one": "Show {{count}} earlier line",
-    "showEarlier_other": "Show {{count}} earlier lines",
     "copy": "Copy",
     "wrap": "Wrap lines",
     "showMore_one": "Show {{count}} more line",
@@ -801,7 +798,20 @@
       "success": "{{name}} finished",
       "error": "{{name}} failed",
       "cancelled": "{{name}} cancelled"
-    }
+    },
+    "copy": "Copy {{what}}",
+    "copied": "Copied",
+    "section": {
+      "command": "Command",
+      "output": "Output",
+      "content": "Content",
+      "result": "Result",
+      "changes": "Changes"
+    },
+    "exitCode": "Exit code {{code}}",
+    "earlierLines_one": "{{count}} earlier line",
+    "earlierLines_other": "{{count}} earlier lines",
+    "noOutput": "No output"
   },
   "access": {
     "action": {

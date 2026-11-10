@@ -598,9 +598,7 @@
     "alt": "SVG 图片"
   },
   "block": {
-    "exit": "退出码 {{code}}",
     "openInTerminal": "在终端中打开",
-    "showEarlier_other": "显示前面的 {{count}} 行",
     "copy": "复制",
     "wrap": "自动换行",
     "showMore_other": "再显示 {{count}} 行",
@@ -764,7 +762,19 @@
       "success": "{{name}} 已完成",
       "error": "{{name}} 失败",
       "cancelled": "{{name}} 已取消"
-    }
+    },
+    "copy": "复制{{what}}",
+    "copied": "已复制",
+    "section": {
+      "command": "命令",
+      "output": "输出",
+      "content": "内容",
+      "result": "结果",
+      "changes": "更改"
+    },
+    "exitCode": "退出码 {{code}}",
+    "earlierLines_other": "前面 {{count}} 行",
+    "noOutput": "没有输出"
   },
   "access": {
     "action": {

@@ -1692,12 +1692,13 @@
 .block-frame [data-streamdown='code-block-body'] code > span {
   position: relative;
   display: block;
-  padding: 0 14px 0 46px;
+  padding: 0 14px 0 calc(28px + max(18px, var(--code-digits, 2) * 1ch));
 }
+/* The column grows with the block's last line number, set by the frame as --code-digits. */
 .block-frame [data-streamdown='code-block-body'] code > span::before {
   position: absolute;
   left: 14px;
-  width: 18px;
+  width: max(18px, var(--code-digits, 2) * 1ch);
   margin: 0;
   color: var(--syntax-comment);
   font-size: inherit;
@@ -1708,56 +1709,6 @@
   overflow-wrap: anywhere;
 }
 
-/* A shell block: the exit code as a small tinted badge, the output's last lines under the
-   header, and a quiet line that opens the earlier ones (shell-block.tsx). */
-.shell-exit {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 4px;
-  height: 20px;
-  padding: 0 6px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, currentColor 10%, transparent);
-  font-size: 11.5px;
-  font-weight: var(--font-weight-semibold);
-  & svg {
-    width: 11px;
-    height: 11px;
-  }
-}
-.shell-command,
-.shell-output {
-  margin: 0;
-  overflow-x: auto;
-  padding: 8px 14px 10px;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-variant-ligatures: none;
-  line-height: 1.65;
-  white-space: pre;
-}
-.shell-command {
-  box-shadow: inset 0 -1px 0 var(--border-subtle);
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.shell-earlier {
-  display: block;
-  padding: 6px 14px 0;
-  color: var(--syntax-comment);
-  font-size: 11.5px;
-  outline: none;
-  &:hover {
-    color: var(--text-secondary);
-  }
-  &:focus-visible {
-    border-radius: var(--radius-md);
-    outline: 1.5px solid var(--focus-ring-color);
-  }
-}
 /* Diffs keep the code surface while the library styles the changes. */
 .diff {
   --diffs-light-bg: var(--bg-code-block);

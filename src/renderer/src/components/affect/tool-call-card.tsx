@@ -402,6 +402,53 @@ export function ToolCallGroup({
 
 /* ---------- Pieces ---------- */
 
+/**
+ * A section of your own card content, drawn as the card's arguments and result are: a small
+ * uppercase label, anything beside it, and white buttons at its end, Copy among them when `copy`
+ * gives the text.
+ */
+export function ToolCallSection({
+  label,
+  extra,
+  actions,
+  copy,
+  labels,
+  children,
+  className,
+}: {
+  label: string;
+  extra?: ReactNode;
+  actions?: ReactNode;
+  copy?: string;
+  labels?: Partial<ToolCallLabels>;
+  children: ReactNode;
+  className?: string;
+}) {
+  const L = { ...LABELS, ...labels };
+  return (
+    <div className={["ui-tcc__section", className].filter(Boolean).join(" ")}>
+      <div className="ui-tcc__section-head">
+        <span className="ui-tcc__label">{label}</span>
+        {extra}
+        <span className="ui-tcc__section-actions">
+          {actions}
+          {copy !== undefined && <CopyButton text={copy} label={L.copy(label)} copiedLabel={L.copied} />}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** A white icon button beside a section's Copy, in the same look */
+export function ToolCallAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" className="ui-tcc__copy" aria-label={label} title={label} onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
 const OPEN_MAX = 640;
 
 function CodeSection({ label, value, cap, labels }: { label: string; value: unknown; cap: number; labels: ToolCallLabels }) {
@@ -839,6 +886,7 @@ const css = /* css */ `
   gap: 8px;
   min-height: 28px;
 }
+.ui-tcc__section-actions { display: flex; gap: 4px; margin-left: auto; }
 /* Tiny uppercase labels: "ARGUMENTS", "RESULT" */
 .ui-tcc__label {
   color: var(--ui-tcc-muted);
