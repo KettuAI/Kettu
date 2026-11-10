@@ -1,5 +1,6 @@
 import { create } from 'zustand'
-import { useViewStore } from './view'
+import { leaveSessionOffHost } from '@renderer/app/actions'
+import { THIS_COMPUTER, useViewStore } from './view'
 
 interface HostSwitchStore {
   /** The host the window just switched to, and the choice before it, while it connects. */
@@ -10,8 +11,8 @@ export const useHostSwitchStore = create<HostSwitchStore>()(() => ({ switching: 
 
 /**
  * Points the window at one host, `THIS_COMPUTER` or another's id, or at every host with null. The
- * sidebar swaps to that host's projects and sessions at once; another host still connecting
- * shows a bar until it is online.
+ * sidebar swaps to that host's projects and sessions at once, and a session shown from another
+ * host is left; another host still connecting shows a bar until it is online.
  */
 export function switchHost(choice: string | null, connecting: boolean): void {
   const from = useViewStore.getState().hostFilter
@@ -20,6 +21,7 @@ export function switchHost(choice: string | null, connecting: boolean): void {
   useHostSwitchStore.setState({
     switching: connecting && choice !== null ? { hostId: choice, from } : null,
   })
+  if (choice !== null) leaveSessionOffHost(choice === THIS_COMPUTER ? null : choice)
 }
 
 /** Goes back to the choice before the switch, as Esc on the connecting bar does. */
