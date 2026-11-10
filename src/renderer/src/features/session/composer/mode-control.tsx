@@ -28,7 +28,7 @@ export function useModeControl(option: SelectOption | undefined, onSelect: Selec
   return {
     approval: value,
     approvalModes,
-    approvalWidth: 336,
+    approvalWidth: 392,
     approvalHead: (
       <>
         <span className="kettu-mode-title">{t('controls.permissionMode')}</span>

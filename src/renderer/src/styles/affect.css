@@ -4039,6 +4039,10 @@ li[data-row-exit='dust'] > * {
   font-size: 11px;
   color: var(--ui-ccc-faint);
 }
+/* Every mode shows whole at once; only a frame too short for it scrolls the menu */
+.ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__menu-panel {
+  max-height: none;
+}
 .ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option {
   gap: calc(var(--spacing) * 2);
   padding-block: calc(var(--spacing) * 1.25);
@@ -4051,6 +4055,9 @@ li[data-row-exit='dust'] > * {
   color: var(--text-secondary);
   font-size: var(--text-small);
   line-height: var(--text-meta--line-height);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .ui-ccc__menu:has(.kettu-mode-title) .ui-ccc__option[data-checked] {
   background: var(--ui-ccc-wash);
