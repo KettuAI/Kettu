@@ -236,6 +236,17 @@ describe('createValidators', () => {
     ).toEqual({ agentId: 'codex', projectPath: '/p', cursor: '10' })
   })
 
+  it('takes a forced plan limits read only as a flag', () => {
+    const refresh = posix['agents.refreshLimits']
+    expect(refresh({ agentId: 'codex' })).toEqual({ agentId: 'codex' })
+    expect(refresh({ agentId: 'codex', force: true })).toEqual({ agentId: 'codex', force: true })
+    rejects(() => refresh({ agentId: 'codex', force: 'yes' }))
+    expect(refresh({ agentId: 'codex', force: true, extra: 1 })).toEqual({
+      agentId: 'codex',
+      force: true,
+    })
+  })
+
   it('checks a switch to another agent', () => {
     const switchAgent = posix['sessions.switchAgent']
     const content = [{ type: 'text', text: 'go on' }]

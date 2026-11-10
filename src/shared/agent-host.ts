@@ -538,7 +538,7 @@ export interface HostContract {
   // Reads the options of an agent none are cached for, starting it if need be, before New session
   // has a folder; rejects with the reason.
   'agents.readFirstOptions': { params: { agentId: AgentId }; result: void }
-  'agents.refreshLimits': { params: { agentId: AgentId }; result: void }
+  'agents.refreshLimits': { params: { agentId: AgentId; force?: boolean }; result: void }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
   'agents.refreshAccount': { params: { agentId: AgentId; force?: boolean }; result: void }
   'agents.listSessions': {

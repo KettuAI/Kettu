@@ -794,6 +794,11 @@ export function createValidators(platform: Platform): Validators {
     sessionId: sessionId(fields(params)),
   })
   const agent = (params: unknown): { agentId: AgentId } => ({ agentId: agentId(fields(params)) })
+  const agentWithForce = (params: unknown): { agentId: AgentId; force?: boolean } => {
+    const o = fields(params)
+    const force = optionalFlag(o, 'force')
+    return { agentId: agentId(o), ...(force !== undefined ? { force } : {}) }
+  }
   const artifact = (params: unknown): { id: string } => ({ id: artifactId(fields(params)) })
   const queueItem = (params: unknown): { sessionId: string; itemId: string } => {
     const o = fields(params)
@@ -887,13 +892,9 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'agents.readFirstOptions': agent,
-    'agents.refreshLimits': agent,
+    'agents.refreshLimits': agentWithForce,
     'agents.details': agent,
-    'agents.refreshAccount': (params) => {
-      const o = fields(params)
-      const force = optionalFlag(o, 'force')
-      return { agentId: agentId(o), ...(force !== undefined ? { force } : {}) }
-    },
+    'agents.refreshAccount': agentWithForce,
     'agents.options': none,
     'mcp.status': none,
     'mcp.retry': none,
