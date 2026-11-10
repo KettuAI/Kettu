@@ -2301,7 +2301,7 @@ li[data-row-exit='dust'] > * {
 }
 /* Text size's preview: the thread's prose, which the inset's type would otherwise fix at 13 px. */
 :is(.kettu-settings, .kettu-sd) .k-inset.markdown {
-  font-size: calc(var(--prose-size) * var(--prose-scale));
+  font-size: calc(var(--thread-prose-size) * var(--prose-scale));
   line-height: var(--text-prose--line-height);
 }
 :is(.kettu-settings, .kettu-sd) .k-block .k-inset {

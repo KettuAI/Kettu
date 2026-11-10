@@ -438,6 +438,8 @@
 
   /* Type. */
   --prose-size: 15px;
+  /* The thread's prose, a pixel under the composer's; Text size moves both. */
+  --thread-prose-size: calc(var(--prose-size) - 1px);
   /* Font files load only when text uses their face. */
   --face-system:
     system-ui, 'Platform Chinese', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;

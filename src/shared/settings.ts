@@ -28,7 +28,7 @@ export interface SettingsFile {
   appearance: {
     theme: 'system' | 'light' | 'dark' // the color mode, which picks a theme's variant
     colorTheme: string // an installed theme's id, or BUILTIN_THEME_ID
-    textSize: 'small' | 'default' | 'large' // thread prose and the composer: 14, 15 or 16 px
+    textSize: 'small' | 'default' | 'large' // the composer: 14, 15 or 16 px; thread prose a pixel less
     reduceMotion: 'system' | 'always'
     zoom: ZoomLevel // Chromium's page zoom of the whole window
   }
