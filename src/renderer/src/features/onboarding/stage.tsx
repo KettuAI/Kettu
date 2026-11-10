@@ -6,7 +6,6 @@ import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   AppleIcon,
-  ArrowDown01Icon,
   ArrowUp02Icon,
   BrowserIcon,
   Folder01Icon,
@@ -15,7 +14,6 @@ import {
   LaptopIcon,
   Link01Icon,
   SecurityCheckIcon,
-  Settings02Icon,
   SmartPhone01Icon,
   SquareLock02Icon,
   Tick02Icon,
@@ -31,7 +29,6 @@ import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { BrandFox, BrandIcon } from '@renderer/components/brand'
 import { useThisComputerName } from '@renderer/features/account/use-account'
-import { agentLine } from '@renderer/features/session/new-session/picker'
 
 const BOARD = { width: 720, height: 776 }
 // Where a fox picture's own contact shadow meets the drift's crest, on the board.
@@ -112,7 +109,7 @@ function Chip({
   )
 }
 
-/** Welcome: the fox waves, among the marks of the agents Kettu works with. */
+/** Welcome: the fox waves, among the marks of some of the agents Kettu works with. */
 export function FoxStage() {
   const { t } = useTranslation('onboarding')
   return (
@@ -122,6 +119,8 @@ export function FoxStage() {
         {t('welcome.hello')}
       </span>
       <Chip agent="claude-code" left={92} top={150} turn={-8} />
+      <Chip agent="gemini" left={226} top={62} turn={6} />
+      <Chip agent="copilot" left={632} top={88} turn={-5} />
       <Chip agent="codex" left={584} top={268} turn={7} />
       <Chip agent="opencode" left={66} top={392} turn={5} />
       <Chip agent="pi" left={600} top={452} turn={-6} />
@@ -147,160 +146,135 @@ export function NoAgentsStage() {
   )
 }
 
-/** New session as it will open, with the agent menu showing the agents found. */
+/** A line of words drawn as a bar: the pictures show a page's shape, never words to click. */
+function Line({ width, strong }: { width: number; strong?: boolean }) {
+  return <span className="kob-line" data-strong={strong ? '' : undefined} style={{ width }} />
+}
+
+const MENU_LINES = [96, 74, 86, 64]
+
+/** New session with its agent menu open on the agents found, drawn as a picture. */
 export function AgentsStage({ agents }: { agents: AgentStatus[] }) {
-  const { t } = useTranslation('onboarding')
-  const first = agents[0]
+  const shown = agents.slice(0, MENU_LINES.length)
   return (
     <Board>
-      <div className="kob-mock" style={at(70, 150, { width: 580 })}>
-        <div className="kob-mock__greet">
-          <BrandFox className="size-[1.15em]" />
-          <span>{t('stage.greeting')}</span>
+      <div
+        className="kob-pic kob-pic--session"
+        style={at(120, 262, { width: 480, rotate: '-2deg' })}
+      >
+        <div className="kob-pic__greet">
+          <BrandFox className="size-7" />
+          <Line width={180} strong />
         </div>
-        <div className="kob-mock__composer">
-          <div className="kob-mock__input">{t('stage.placeholder')}</div>
-          <div className="kob-mock__tray">
-            <span className="kob-mock__chip">
-              <Icon icon={Folder01Icon} size={14} />
-              {t('stage.noProject')}
+        <div className="kob-pic__box">
+          <Line width={230} />
+          <div className="kob-pic__tray">
+            <span className="kob-pic__chip">
+              <Icon icon={Folder01Icon} size={13} />
+              <Line width={40} />
             </span>
-            {first && (
-              <span className="kob-mock__chip" data-on="">
-                <AgentTile agent={first.id} size={16} />
-                {first.name}
-                <Icon icon={ArrowDown01Icon} size={12} />
+            {shown[0] && (
+              <span className="kob-pic__chip" data-on="">
+                <AgentTile agent={shown[0].id} size={15} />
+                <Line width={52} />
               </span>
             )}
             <span className="grow" />
-            <span className="kob-mock__send">
-              <Icon icon={ArrowUp02Icon} size={14} />
+            <span className="kob-pic__send">
+              <Icon icon={ArrowUp02Icon} size={13} />
             </span>
           </div>
         </div>
       </div>
-      {agents.length > 0 && (
-        <div className="kob-menu" style={at(165, 336, { width: 330 })}>
-          {agents.slice(0, 4).map((agent, i) => (
-            <div key={agent.id} className="kob-menu__row" data-on={i === 0 ? '' : undefined}>
+      {shown.length > 0 && (
+        <div className="kob-pic kob-pic--menu" style={at(244, 440, { width: 250, rotate: '3deg' })}>
+          {shown.map((agent, i) => (
+            <div key={agent.id} className="kob-pic__row" data-on={i === 0 ? '' : undefined}>
               <AgentTile agent={agent.id} size={18} />
-              <span className="grow">
-                <span>{agent.name}</span>
-                <small>{agentLine(agent)?.text}</small>
-              </span>
-              {i === 0 && <Icon icon={Tick02Icon} size={14} />}
+              <Line width={MENU_LINES[i]} strong={i === 0} />
+              {i === 0 && (
+                <span className="kob-pic__tick">
+                  <Icon icon={Tick02Icon} size={14} />
+                </span>
+              )}
             </div>
           ))}
-          <div className="kob-menu__sep" />
-          <div className="kob-menu__row">
-            <Icon icon={Settings02Icon} size={15} />
-            <span className="grow">{t('stage.manageAgents')}</span>
-          </div>
         </div>
       )}
     </Board>
   )
 }
 
-/** The website's page the browser shows while signing in. */
+const WAYS = [GithubIcon, GoogleIcon, AppleIcon]
+const DEVICES = [
+  [LaptopIcon, 116],
+  [SmartPhone01Icon, 92],
+  [BrowserIcon, 104],
+] as const
+
+/** The website's page the browser shows while signing in, drawn as a picture. */
 export function BrowserStage({ page }: { page: 'sign-in' | 'confirm' | 'devices' }) {
-  const { t } = useTranslation('onboarding')
-  const computer = useThisComputerName()
-  const url = {
-    'sign-in': 'www.kettu.sh/signin',
-    confirm: 'www.kettu.sh/signin/confirm',
-    devices: 'www.kettu.sh/signin/devices',
-  }[page]
   return (
     <Board>
-      <div className="kob-browser" style={at(100, 104, { width: 520 })}>
-        <div className="kob-browser__bar">
-          <span className="kob-browser__dots">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="kob-browser__url">
+      <div
+        className="kob-pic kob-pic--browser"
+        style={{ left: 160, bottom: 118, width: 400, rotate: '-3deg' }}
+      >
+        <div className="kob-pic__bar">
+          <i />
+          <i />
+          <i />
+          <span className="kob-pic__url">
             <Icon icon={SquareLock02Icon} size={11} />
-            {url}
+            kettu.sh
           </span>
         </div>
-        <div className="kob-site">
-          <img className="kob-site__logo" src={siteFox} alt="" draggable={false} />
+        <div className="kob-pic__page">
+          <img className="kob-pic__logo" src={siteFox} alt="" draggable={false} />
+          <Line width={164} strong />
+          <Line width={214} />
           {page === 'sign-in' && (
             <>
-              <h3>{t('stage.site.signIn')}</h3>
-              <p>{t('stage.site.signInHint', { computer })}</p>
-              <div className="kob-site__form">
-                <span className="kob-site__field">{t('stage.site.email')}</span>
-                <span className="kob-site__btn" data-primary="">
-                  {t('stage.site.withEmail')}
-                </span>
-                <span className="kob-site__or">{t('stage.site.or')}</span>
-                <span className="kob-site__btn">
-                  <Icon icon={GithubIcon} size={14} />
-                  {t('stage.site.github')}
-                </span>
-                <span className="kob-site__btn">
-                  <Icon icon={GoogleIcon} size={14} />
-                  {t('stage.site.google')}
-                </span>
-                <span className="kob-site__btn">
-                  <Icon icon={AppleIcon} size={14} />
-                  {t('stage.site.apple')}
-                </span>
-              </div>
-              <small>{t('stage.site.noPassword')}</small>
+              <span className="kob-pic__field">
+                <Line width={110} />
+              </span>
+              <span className="kob-pic__primary" />
+              <span className="kob-pic__ways">
+                {WAYS.map((icon, i) => (
+                  <span key={i} className="kob-pic__way">
+                    <Icon icon={icon} size={16} />
+                  </span>
+                ))}
+              </span>
             </>
           )}
           {page === 'confirm' && (
             <>
-              <h3>{t('stage.site.confirm', { computer })}</h3>
-              <p>{t('stage.site.confirmHint')}</p>
-              <div className="kob-site__form">
-                <div className="kob-site__card">
-                  <div className="kob-site__dev">
-                    <span className="kob-site__tile">
-                      <Icon icon={LaptopIcon} size={16} />
-                    </span>
-                    <span>
-                      <b>{computer}</b>
-                    </span>
-                  </div>
-                </div>
-                <span className="kob-site__btn" data-primary="">
-                  {t('stage.site.confirmButton')}
+              <span className="kob-pic__device" data-alone="">
+                <span className="kob-pic__tile">
+                  <Icon icon={LaptopIcon} size={16} />
                 </span>
-                <span className="kob-site__btn" data-quiet="">
-                  {t('stage.site.notMe')}
-                </span>
-              </div>
-              <small>{t('stage.site.never')}</small>
+                <Line width={120} strong />
+              </span>
+              <span className="kob-pic__primary">
+                <Icon icon={Tick02Icon} size={16} />
+              </span>
             </>
           )}
           {page === 'devices' && (
             <>
-              <h3>{t('stage.site.full')}</h3>
-              <p>{t('stage.site.fullHint', { computer })}</p>
-              <div className="kob-site__form" data-wide="">
-                <div className="kob-site__card">
-                  {[LaptopIcon, SmartPhone01Icon, BrowserIcon].map((icon, i) => (
-                    <div key={i} className="kob-site__dev">
-                      <span className="kob-site__tile">
-                        <Icon icon={icon} size={16} />
-                      </span>
-                      <span className="kob-site__skel" />
-                      <span className="kob-site__btn" data-small="">
-                        {t('stage.site.signOut')}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <span className="kob-site__btn" data-primary="">
-                  {t('stage.site.seePro')}
-                </span>
-              </div>
-              <small>{t('stage.site.plans')}</small>
+              <span className="kob-pic__list">
+                {DEVICES.map(([icon, width], i) => (
+                  <span key={i} className="kob-pic__device">
+                    <span className="kob-pic__tile">
+                      <Icon icon={icon} size={15} />
+                    </span>
+                    <Line width={width} />
+                    <span className="kob-pic__pill" />
+                  </span>
+                ))}
+              </span>
+              <span className="kob-pic__primary" />
             </>
           )}
         </div>

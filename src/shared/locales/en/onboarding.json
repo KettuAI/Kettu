@@ -67,10 +67,6 @@
   "stage": {
     "noModels": "Kettu doesn't run models itself",
     "noModelsHint": "It drives the coding agents you install, signed in with your own accounts.",
-    "greeting": "Hello, I'm Kettu",
-    "placeholder": "Ask anything, or type / for commands",
-    "noProject": "No project",
-    "manageAgents": "Manage agents…",
     "phone": "iPhone",
     "phoneHint": "Sessions, notifications",
     "browser": "Any browser",
@@ -82,27 +78,6 @@
     "encrypted": "End-to-end encrypted",
     "thisComputer": "This computer",
     "thisComputerHint": "This computer · your agents run here",
-    "caption": "Kettu passes your sessions along without being able to read them.",
-    "site": {
-      "signIn": "Sign in to Kettu",
-      "signInHint": "to use Kettu cloud on {{computer}}",
-      "email": "you@example.com",
-      "withEmail": "Continue with email",
-      "or": "or",
-      "github": "Continue with GitHub",
-      "google": "Continue with Google",
-      "apple": "Continue with Apple",
-      "noPassword": "No password. New here? This creates your free account.",
-      "confirm": "Sign in on {{computer}}?",
-      "confirmHint": "Kettu on this computer will use your account for Kettu cloud.",
-      "confirmButton": "Sign in",
-      "notMe": "Not me",
-      "never": "Kettu never sees your password, and the browser never sees your sessions.",
-      "full": "This account is signed in on all its devices",
-      "fullHint": "Sign one out to sign in on {{computer}}, or move to Pro.",
-      "signOut": "Sign out",
-      "seePro": "See Pro",
-      "plans": "Free and Pro differ only in devices and storage."
-    }
+    "caption": "Kettu passes your sessions along without being able to read them."
   }
 }

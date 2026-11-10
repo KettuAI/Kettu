@@ -616,249 +616,206 @@
   color: var(--shell-ink);
 }
 
-/* New session as it will open, and its agent menu */
-.kob-mock__greet {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4em;
-  font: 400 30px/1.2 var(--greeting-face);
-  color: var(--shell-ink);
-}
-.kob-mock__composer {
-  margin-top: 26px;
-  border-radius: 18px;
+/* Pictures of a page: its shapes in bars and blocks, so nobody takes one for the real thing */
+.kob-pic {
+  border-radius: 22px;
   background: var(--bg-surface);
-  box-shadow: var(--thread-card-shadow);
-}
-.kob-mock__input {
-  min-height: 66px;
-  padding: 16px 18px 6px;
-  font-size: 14px;
-  color: var(--shell-faint);
-}
-.kob-mock__tray {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 8px 10px 10px;
-}
-.kob-mock__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 9px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--shell-text);
-}
-.kob-mock__chip[data-on] {
-  color: var(--shell-ink);
-  background: var(--bg-selected);
-}
-.kob-mock__send {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  color: var(--shell-faint);
-  background: var(--bg-hover);
-}
-.kob-menu {
-  padding: 5px;
-  border-radius: 14px;
-  background: var(--bg-raised);
   box-shadow: var(--thread-float-shadow);
 }
-.kob-menu__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 9px;
-  border-radius: 9px;
-  font-size: 13.5px;
-  color: var(--shell-ink);
-}
-.kob-menu__row[data-on] {
-  background: var(--bg-selected);
-}
-.kob-menu__row small {
+.kob-line {
   display: block;
-  font-size: 12px;
-  color: var(--shell-muted);
-}
-.kob-menu__sep {
-  height: 0.5px;
-  margin: 5px 4px;
+  flex: none;
+  height: 8px;
+  border-radius: 999px;
   background: var(--border-default);
+}
+.kob-line[data-strong] {
+  height: 11px;
+  background: color-mix(in srgb, var(--shell-row) 24%, transparent);
 }
 
-/* The website in a browser window */
-.kob-browser {
-  overflow: hidden;
-  border-radius: 14px;
-  background: var(--bg-app);
-  box-shadow: var(--thread-float-shadow);
+/* New session and its agent menu */
+.kob-pic--session {
+  padding: 30px 26px 26px;
 }
-.kob-browser__bar {
+.kob-pic__greet {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 40px;
-  padding: 0 12px;
-  background: var(--bg-sidebar);
-  box-shadow: inset 0 -0.5px 0 var(--border-default);
-}
-.kob-browser__dots {
-  display: flex;
-  gap: 6px;
-}
-.kob-browser__dots i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--border-default);
-}
-.kob-browser__url {
-  display: flex;
-  flex: 1;
   align-items: center;
   justify-content: center;
+  gap: 12px;
+}
+.kob-pic__box {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  margin-top: 26px;
+  padding: 18px 14px 12px 18px;
+  border-radius: 18px;
+  background: var(--bg-subtle);
+}
+.kob-pic__tray {
+  display: flex;
+  align-items: center;
   gap: 6px;
-  height: 26px;
-  margin-right: 46px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  color: var(--shell-text);
-  background: var(--bg-app);
-  box-shadow: inset 0 0 0 0.5px var(--border-default);
 }
-.kob-site {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 40px 56px 32px;
-  text-align: center;
-}
-.kob-site__logo {
-  width: 34px;
-  height: 34px;
-}
-.kob-site h3 {
-  margin-top: 16px;
-  font: 600 21px/1.25 var(--face-manrope);
-  letter-spacing: -0.02em;
-  color: var(--shell-ink);
-}
-.kob-site p {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--shell-muted);
-}
-.kob-site small {
-  margin-top: 18px;
-  font-size: 11.5px;
-  color: var(--shell-faint);
-}
-.kob-site__form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  max-width: 320px;
-  margin-top: 22px;
-}
-.kob-site__form[data-wide] {
-  max-width: 380px;
-}
-.kob-site__field {
-  display: flex;
-  align-items: center;
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 10px;
-  font-size: 13.5px;
-  color: var(--shell-faint);
-  background: var(--bg-app);
-  box-shadow: var(--shell-card-shadow);
-}
-.kob-site__btn {
+.kob-pic__chip {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 38px;
-  border-radius: 10px;
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--shell-ink);
-  background: var(--bg-surface);
-  box-shadow: var(--shell-card-shadow);
-}
-.kob-site__btn[data-primary] {
-  color: var(--primary-foreground);
-  background-image: var(--primary-gradient);
-  box-shadow: var(--shadow-primary);
-}
-.kob-site__btn[data-quiet] {
-  color: var(--shell-text);
-  background: none;
-  box-shadow: none;
-}
-.kob-site__btn[data-small] {
-  flex: none;
-  height: 28px;
-  padding: 0 11px;
-  font-size: 12.5px;
-}
-.kob-site__or {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 6px 0;
-  font-size: 12px;
+  gap: 7px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
   color: var(--shell-faint);
 }
-.kob-site__or::before,
-.kob-site__or::after {
-  flex: 1;
-  height: 0.5px;
-  background: var(--border-default);
-  content: '';
+.kob-pic__chip[data-on] {
+  background: var(--bg-surface);
 }
-.kob-site__card {
-  overflow: hidden;
-  border-radius: 12px;
-  text-align: left;
-  box-shadow: var(--shell-card-shadow);
+.kob-pic__send {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--on-fill);
+  background: var(--send);
 }
-.kob-site__dev {
+.kob-pic--menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 18px;
+}
+.kob-pic__row {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 10px 12px;
-  font-size: 13px;
+  height: 38px;
+  padding: 0 11px;
+  border-radius: 11px;
 }
-.kob-site__dev + .kob-site__dev {
-  box-shadow: inset 0 0.5px 0 var(--border-subtle);
+.kob-pic__row[data-on] {
+  background: var(--onboarding-fox-tint);
 }
-.kob-site__tile {
+.kob-pic__tick {
+  display: flex;
+  margin-left: auto;
+  color: var(--onboarding-fox-ink);
+}
+
+/* The website in a browser window */
+.kob-pic--browser {
+  overflow: hidden;
+}
+.kob-pic__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  background: var(--bg-subtle);
+}
+.kob-pic__bar i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border-default);
+}
+.kob-pic__url {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  margin: 0 auto;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--shell-faint);
+  background: var(--bg-surface);
+  translate: -14px 0;
+}
+.kob-pic__page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 34px 44px 38px;
+}
+.kob-pic__logo {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 8px;
+}
+.kob-pic__field,
+.kob-pic__primary {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 30px;
+  border-radius: 999px;
+}
+.kob-pic__field {
+  margin-top: 18px;
+  padding: 0 16px;
+  background: var(--bg-subtle);
+}
+.kob-pic__primary {
+  justify-content: center;
+  margin-top: 4px;
+  color: var(--on-fill);
+  background: var(--send);
+}
+.kob-pic__ways {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+.kob-pic__way {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: var(--shell-row);
+  background: var(--bg-subtle);
+}
+.kob-pic__list {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 8px;
+  margin: 18px 0 6px;
+}
+.kob-pic__device {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 14px;
+  background: var(--bg-subtle);
+}
+.kob-pic__device[data-alone] {
+  margin: 18px 0 6px;
+  padding: 14px;
+}
+.kob-pic__tile {
   display: grid;
   flex: none;
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: 10px;
   color: var(--shell-row);
-  background: var(--bg-subtle);
+  background: var(--bg-surface);
 }
-.kob-site__skel {
-  flex: 1;
-  height: 9px;
-  border-radius: 5px;
-  background: var(--bg-hover);
+.kob-pic__pill {
+  width: 44px;
+  height: 22px;
+  margin-left: auto;
+  border-radius: 999px;
+  background: var(--bg-surface);
 }
 
 /* The way through Kettu cloud */
