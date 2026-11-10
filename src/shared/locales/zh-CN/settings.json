@@ -1206,7 +1206,7 @@
       "codeLabel": "验证码 {{code}}",
       "empty": {
         "title": "还没有其他电脑",
-        "body": "其他电脑开启远程访问并登录同一个 Kettu 账号后，会显示在这里。"
+        "body": "其他电脑登录同一个 Kettu 账号，并开启中继和“让账号下的设备找到这台电脑”后，会显示在这里。"
       },
       "signedOut": {
         "title": "未登录",
@@ -1404,6 +1404,7 @@
       "facts": "设备信息",
       "joined": "加入",
       "joinedScan": "{{date}}，扫码添加",
+      "joinedAccount": "{{date}}，通过 Kettu 账号添加",
       "joinedLink": "{{date}}，粘贴链接添加",
       "lastConnected": "上次连接",
       "onlineSince": "现在在线，{{time}} 连上",
@@ -1422,6 +1423,8 @@
         "paired_web": "扫码添加，加入 {{host}}",
         "pairedLink": "粘贴链接添加，加入这台电脑",
         "pairedLink_web": "粘贴链接添加，加入 {{host}}",
+        "pairedAccount": "通过 Kettu 账号添加，加入这台电脑",
+        "pairedAccount_web": "通过 Kettu 账号添加，加入 {{host}}",
         "connected": "连接",
         "renamed": "改名：{{from}} → {{to}}",
         "renamedOnDevice": "在设备上改名：{{from}} → {{to}}",
@@ -1516,6 +1519,7 @@
       "known": "添加过",
       "check": "确认另一台电脑上显示的是同一个验证码。",
       "reject": "不添加",
+      "waiting": "等 {{name}} 确认验证码…",
       "ended": {
         "cancelled": "{{name}} 取消了连接请求",
         "expired": "{{name}} 的连接请求已过期",

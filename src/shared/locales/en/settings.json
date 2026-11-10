@@ -1214,7 +1214,7 @@
       "codeLabel": "Code {{code}}",
       "empty": {
         "title": "No other computers yet",
-        "body": "Your other computers show up here once they turn on remote access and sign in to the same Kettu account."
+        "body": "Your other computers show up here once they sign in to the same Kettu account and turn on the relay and “Let devices on your account find this computer”."
       },
       "signedOut": {
         "title": "Not signed in",
@@ -1419,6 +1419,7 @@
       "facts": "Device",
       "joined": "Joined",
       "joinedScan": "{{date}}, from a scanned code",
+      "joinedAccount": "{{date}}, through your Kettu account",
       "joinedLink": "{{date}}, from a pasted link",
       "lastConnected": "Last connected",
       "onlineSince": "Online now, connected at {{time}}",
@@ -1437,6 +1438,8 @@
         "paired_web": "Added to {{host}} from a scanned code",
         "pairedLink": "Added to this computer from a pasted link",
         "pairedLink_web": "Added to {{host}} from a pasted link",
+        "pairedAccount": "Added to this computer through your Kettu account",
+        "pairedAccount_web": "Added to {{host}} through your Kettu account",
         "connected": "Connected",
         "renamed": "Renamed: {{from}} → {{to}}",
         "renamedOnDevice": "Renamed on the device: {{from}} → {{to}}",
@@ -1531,6 +1534,7 @@
       "known": "Added before",
       "check": "Check that the other computer shows the same code.",
       "reject": "Don’t add",
+      "waiting": "Waiting for {{name}} to confirm the code…",
       "ended": {
         "cancelled": "{{name}} stopped asking to connect",
         "expired": "The request from {{name}} expired",

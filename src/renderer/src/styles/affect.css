@@ -3899,6 +3899,8 @@ li[data-row-exit='dust'] > * {
   font-size: 32px;
   line-height: 40px;
   font-weight: 500;
+  /* The code face's own figures in every language, not the interface face's variants. */
+  font-feature-settings: normal;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
   color: var(--strong);

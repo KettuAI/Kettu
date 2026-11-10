@@ -16,7 +16,7 @@ import { Added } from './host-added'
 import { platformName } from './host-text'
 import { closeRequest } from './pair-close'
 import { DeviceTile, HostIcon } from './remote-parts'
-import { useDiscoveredHosts } from './use-discovered'
+import { useDiscoveredHosts, useRereadDiscovered } from './use-discovered'
 import { ItemLine, RowLine, RowText, Thing } from './rows'
 import {
   SettingsDialogBody,
@@ -116,6 +116,8 @@ export function AccountHostsState({ discovered }: { discovered: DiscoveredHosts 
 export function AccountHostsActions({ signedOut }: { signedOut: boolean }) {
   const { t } = useTranslation('settings')
   const refresh = useRefresh()
+  // Drawn only while Settings shows the list.
+  useRereadDiscovered()
   return (
     <>
       {!signedOut && (
@@ -138,6 +140,7 @@ export function AccountHostsActions({ signedOut }: { signedOut: boolean }) {
 export function AccountHostsPicker({ onConnect }: { onConnect: (host: DiscoveredHost) => void }) {
   const { t } = useTranslation('settings')
   const discovered = useDiscoveredHosts()
+  useRereadDiscovered()
   if (discovered?.state !== 'ok' || discovered.hosts.length === 0) return null
   return (
     <section aria-labelledby="account-hosts-label" className="kettu-sd__field">
@@ -170,6 +173,8 @@ export function AccountHostsPicker({ onConnect }: { onConnect: (host: Discovered
 function ConnectHostDialog() {
   const host = useHostsStore((s) => s.connecting)
   const active = useRef(false)
+  // The dialog itself takes focus, so no button shows a ring nor is pressed by a stray Enter.
+  const popup = useRef<HTMLDivElement>(null)
   // The host stays shown while the dialog closes; each opening starts afresh.
   const [shown, setShown] = useState(host)
   const [round, setRound] = useState(0)
@@ -185,7 +190,7 @@ function ConnectHostDialog() {
         connectTo(null)
       }}
     >
-      <SettingsDialogContent className="sm:max-w-110">
+      <SettingsDialogContent ref={popup} initialFocus={popup} className="sm:max-w-110">
         {shown && (
           <AccountPairFlow
             key={round}
@@ -345,7 +350,15 @@ export function AccountPairFlow({
     else onDone(null)
   }
 
-  if (step.kind === 'added') return <Added host={step.host} onDone={() => onDone(step.host)} />
+  if (step.kind === 'added') {
+    return (
+      <Added
+        host={step.host}
+        title={t('hosts.account.pair.title', { name })}
+        onDone={() => onDone(step.host)}
+      />
+    )
+  }
 
   const failure = step.kind === 'failed' ? step.reason : null
   const code = step.kind === 'compare' ? step.code : null

@@ -3,6 +3,8 @@ import type { DiscoveredHosts } from '@shared/remote/discovery'
 import { useAccountStore } from '@renderer/stores/account'
 import { loadDiscovered, useHostsStore } from '@renderer/stores/hosts'
 
+const REREAD_MS = 30_000
+
 const SIGNED_OUT: DiscoveredHosts = { state: 'signed_out' }
 
 /**
@@ -23,4 +25,36 @@ export function useDiscoveredHosts(): DiscoveredHosts | null {
   }, [hostIds, account, signedOut])
   const discovered = useHostsStore((s) => s.discovered)
   return signedOut ? SIGNED_OUT : discovered
+}
+
+/**
+ * Reads the account's hosts again while the list is on screen: when the window comes back, and
+ * every 30 s. A host that goes offline or stops letting devices find it says nothing.
+ */
+export function useRereadDiscovered(): void {
+  const signedOut = useAccountStore((s) => s.status?.state === 'signed-out')
+  useEffect(() => {
+    if (signedOut) return
+    let timer: ReturnType<typeof setInterval> | undefined
+    const stop = (): void => {
+      clearInterval(timer)
+      timer = undefined
+    }
+    const follow = (): void => {
+      if (document.visibilityState !== 'visible') return stop()
+      if (timer === undefined) timer = setInterval(() => void loadDiscovered(), REREAD_MS)
+    }
+    const back = (): void => {
+      if (document.visibilityState === 'visible') void loadDiscovered()
+      follow()
+    }
+    follow()
+    window.addEventListener('focus', back)
+    document.addEventListener('visibilitychange', back)
+    return () => {
+      stop()
+      window.removeEventListener('focus', back)
+      document.removeEventListener('visibilitychange', back)
+    }
+  }, [signedOut])
 }

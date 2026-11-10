@@ -14,7 +14,16 @@ import {
 } from './settings-dialog'
 
 /** The host just added, and this computer's name on it, which changes on Done. */
-export function Added({ host, onDone }: { host: HostStatus; onDone: () => void }) {
+export function Added({
+  host,
+  title,
+  onDone,
+}: {
+  host: HostStatus
+  /** The dialog's title, when it is not Add host. */
+  title?: string
+  onDone: () => void
+}) {
   const { t } = useTranslation('settings')
   const [name, setName] = useState(host.deviceName)
   const [busy, setBusy] = useState(false)
@@ -33,7 +42,7 @@ export function Added({ host, onDone }: { host: HostStatus; onDone: () => void }
   }
   return (
     <form className="contents" onSubmit={(event) => void submit(event)}>
-      <SettingsDialogHeader title={t('hosts.add.title')} />
+      <SettingsDialogHeader title={title ?? t('hosts.add.title')} />
       <SettingsDialogBody>
         <div className="kettu-sd__row">
           <DeviceTile large icon={<HostIcon platform={host.platform} />} />

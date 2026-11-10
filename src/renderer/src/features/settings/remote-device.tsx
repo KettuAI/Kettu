@@ -57,8 +57,15 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
   const { t } = useTranslation('settings')
   const onHost = useHostContext()
   const now = useNow()
+  const events = useActivity(device)
+  // The latest pairing, as the activity of the last 30 days still holds it.
+  const paired = events?.find((event) => event.kind === 'paired')
   const joined = t(
-    device.kind === 'desktop' ? 'remote.device.joinedLink' : 'remote.device.joinedScan',
+    paired?.via === 'account'
+      ? 'remote.device.joinedAccount'
+      : device.kind === 'desktop'
+        ? 'remote.device.joinedLink'
+        : 'remote.device.joinedScan',
     {
       date: monthDay(device.addedAt),
     },
@@ -89,7 +96,7 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
             <Fact name={t('remote.device.lastConnected')}>{last}</Fact>
           </RowGroup>
         </section>
-        <Activity device={device} />
+        <Activity device={device} events={events} />
         <section aria-label={t('remote.device.remove.name')} className="k-group">
           <RowGroup>
             <RowFrame
@@ -110,9 +117,8 @@ function DevicePageBody({ device, online }: { device: PairedDevice; online: bool
 }
 
 /** The device's activity of the last 30 days, read again when it connects or is renamed. */
-function Activity({ device }: { device: PairedDevice }) {
+function useActivity(device: PairedDevice): DeviceActivity[] | null {
   const { api } = useHostScope()
-  const { t } = useTranslation('settings')
   const [events, setEvents] = useState<DeviceActivity[] | null>(null)
   useEffect(() => {
     let live = true
@@ -124,6 +130,11 @@ function Activity({ device }: { device: PairedDevice }) {
       live = false
     }
   }, [device.id, device.lastConnectedAt, device.name, api])
+  return events
+}
+
+function Activity({ device, events }: { device: PairedDevice; events: DeviceActivity[] | null }) {
+  const { t } = useTranslation('settings')
   return (
     <section aria-label={t('remote.device.activity')} className="k-group">
       <GroupLabel
@@ -194,7 +205,11 @@ function eventText(
   switch (event.kind) {
     case 'paired':
       return t(
-        kind === 'desktop' ? 'remote.device.events.pairedLink' : 'remote.device.events.paired',
+        event.via === 'account'
+          ? 'remote.device.events.pairedAccount'
+          : kind === 'desktop'
+            ? 'remote.device.events.pairedLink'
+            : 'remote.device.events.paired',
         onHost,
       )
     case 'connected':

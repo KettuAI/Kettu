@@ -12,7 +12,7 @@ import { toast } from '@renderer/components/ui/toast'
 import { countdown } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useSeconds } from '@renderer/lib/use-now'
-import { SetButton } from './controls'
+import { SetButton, Spin } from './controls'
 import { PairCode } from './host-account'
 import { closeRequest } from './pair-close'
 import { DeviceIcon, DeviceTile } from './remote-parts'
@@ -46,6 +46,8 @@ export function DiscoveryRequestDialog() {
   const added = useRef<string | null>(null)
   const asker = useRef('')
   const answerRef = useRef<((add: boolean) => void) | null>(null)
+  // The dialog itself takes focus, so no button shows a ring nor is pressed by a stray Enter.
+  const popup = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let live = true
@@ -96,7 +98,7 @@ export function DiscoveryRequestDialog() {
         if (closeRequest(true, details.reason) === 'reject') answerRef.current?.(false)
       }}
     >
-      <SettingsDialogContent className="sm:max-w-110">
+      <SettingsDialogContent ref={popup} initialFocus={popup} className="sm:max-w-110">
         {/* Asked over any screen, so it brings the settings sheets its parts are drawn with. */}
         <style href="ui-settings-general" precedence="default">
           {generalCss}
@@ -210,7 +212,19 @@ function DiscoveryConfirm({
           />
         </SettingsField>
       </SettingsDialogBody>
-      <SettingsDialogFooter start={<ExpiresIn expiresAt={expiresAt} />}>
+      <SettingsDialogFooter
+        start={
+          answered === 'add' ? (
+            // The device's user may not have said the codes match yet.
+            <span role="status" className="kettu-sd__status">
+              <Spin />
+              {t('remote.discovery.waiting', { name: device.name })}
+            </span>
+          ) : (
+            <ExpiresIn expiresAt={expiresAt} />
+          )
+        }
+      >
         <SetButton
           size="md"
           type="button"
