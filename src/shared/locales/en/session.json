@@ -465,13 +465,20 @@
     "projectOnHost": "Project: {{name}} on {{host}}",
     "hostFolders": {
       "title": "Open project on {{host}}",
-      "description": "The folders on {{host}}. The project stays on {{host}} and is not copied to this computer; the agent reads and writes it there.",
+      "description": "The project stays on {{host}} and is not copied to this computer; the agent reads and writes it there.",
       "up": "Up one folder",
       "location": "Location",
       "list": "Folders in {{folder}}",
+      "folders": "Folders",
+      "goIn": "Go in",
+      "goUp": "Go up",
       "empty": "No folders here.",
+      "emptyHint": "You can still open this folder.",
+      "errorHint": "You can go up, or try again.",
+      "retry": "Try again",
       "repo": "Git repository",
-      "note": "Only folders are listed, with paths as {{host}} writes them:",
+      "note": "Only folders are listed, with paths as {{host}} writes them.",
+      "opens": "Opens",
       "open": "Open"
     },
     "picker": {

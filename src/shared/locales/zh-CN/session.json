@@ -447,13 +447,20 @@
     "projectOnHost": "项目：{{host}} 上的 {{name}}",
     "hostFolders": {
       "title": "在 {{host}} 上打开项目",
-      "description": "{{host}} 上的文件夹。项目留在 {{host}} 上，不会复制到这台电脑；Agent 在那里读写它。",
+      "description": "项目留在 {{host}} 上，不会复制到这台电脑；Agent 在那里读写它。",
       "up": "上一级",
       "location": "位置",
       "list": "{{folder}} 里的文件夹",
+      "folders": "文件夹",
+      "goIn": "进入",
+      "goUp": "上一级",
       "empty": "这里没有文件夹。",
+      "emptyHint": "仍可打开这个文件夹。",
+      "errorHint": "可以回到上一级，或重试。",
+      "retry": "重试",
       "repo": "Git 仓库",
-      "note": "只列文件夹。路径按 {{host}} 的格式：",
+      "note": "只列文件夹。路径按 {{host}} 的格式。",
+      "opens": "将打开",
       "open": "打开"
     },
     "picker": {
