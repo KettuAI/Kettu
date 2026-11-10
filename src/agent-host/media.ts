@@ -304,7 +304,7 @@ export class MediaService {
     let named: boolean | undefined
     const allowed = async (file: string) =>
       this.inside(root, file) ||
-      (sessionId !== null && (named ??= await this.deps.names(sessionId, written)))
+      (sessionId !== null && (named ??= await this.named(sessionId, written)))
     const candidates = this.candidates(root, written)
     let real: string | null = null
     let refused = candidates.length === 0
@@ -326,6 +326,22 @@ export class MediaService {
     const info = await stat(real)
     if (!info.isFile()) return { kind: 'not_found' }
     return { kind: 'found', real, info }
+  }
+
+  /**
+   * Whether the session's thread names `written`: in full, or as a folder, written with its
+   * closing separator, and the file's name apart, as in "saved in `/tmp/shots/`: `a.png`".
+   */
+  private async named(sessionId: string, written: string): Promise<boolean> {
+    if (await this.deps.names(sessionId, written)) return true
+    if (/^file:/i.test(written)) return false
+    const windows = this.deps.platform === 'win32'
+    const cut = Math.max(written.lastIndexOf('/'), windows ? written.lastIndexOf('\\') : -1) + 1
+    const folder = written.slice(0, cut)
+    const name = written.slice(cut)
+    // A lone separator is in every thread.
+    if (folder.length < 2 || name === '') return false
+    return (await this.deps.names(sessionId, folder)) && (await this.deps.names(sessionId, name))
   }
 
   /**

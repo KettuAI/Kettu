@@ -7,7 +7,7 @@ import type { Attachment, ContentRef, ThreadEntry, ThreadState, UserContent } fr
 import type { DraftAttachment } from '@renderer/stores/attachments'
 import { isLocalImage, spacedImages } from '../markdown/local-images'
 import { isLocalLink } from '../markdown/local-links'
-import { mediaReference, sameFile, toolMedia } from './named'
+import { mediaCollector, sameFile, toolMedia } from './named'
 
 const markdown = parser.configure(GFM)
 type SyntaxNode = ReturnType<typeof markdown.parse>['topNode']
@@ -116,22 +116,19 @@ export function markdownFiles(text: string): ShownFile[] {
   // The files a block's inline code and links name, as `namedMedia` reads the rendered block. A
   // tight list item's paragraphs render as its own text.
   const named = (block: SyntaxNode, paragraphs: boolean): string[] => {
-    const found: string[] = []
-    const add = (path: string | null) => {
-      if (path !== null && !found.includes(path)) found.push(path)
-    }
+    const media = mediaCollector()
     const visit = (node: SyntaxNode) => {
       if (NESTED.has(node.name)) return
       if (!paragraphs && (node.name === 'Paragraph' || node.name === 'Task')) return
-      if (node.name === 'InlineCode') return add(mediaReference(codeText(node)))
+      if (node.name === 'InlineCode') return media.code(codeText(node))
       if (node.name === 'Link') {
         const url = destination(node)
-        if (url !== null && isLocalLink(url)) add(mediaReference(url))
+        if (url !== null && isLocalLink(url)) media.link(url)
       }
       children(node).forEach(visit)
     }
     children(block).forEach(visit)
-    return found
+    return media.found
   }
   const walk = (node: SyntaxNode, tight: boolean): void => {
     if (SKIPPED.has(node.name)) return
