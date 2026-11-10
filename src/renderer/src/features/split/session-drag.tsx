@@ -10,7 +10,7 @@ import {
 import { BotIcon } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Glyph } from '@renderer/features/shell/glyph'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { dropViewAt } from '@renderer/stores/view'
 import {
   splitSize,
@@ -75,7 +75,7 @@ function SessionChip({ sessionId }: { sessionId: string | undefined }) {
       {summary.origin === 'subagent' ? (
         <Glyph icon={BotIcon} size={14} className="shrink-0 text-secondary" />
       ) : (
-        <AgentMark agent={summary.agentId} size={14} />
+        <AgentMark agent={summary.agentId} size={14} hostId={hostOfSession(summary)} />
       )}
       <span className="min-w-0 truncate">{sessionTitle(summary)}</span>
     </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { sharedPageVisitors, useSharingStore } from '@renderer/stores/sharing'
 import type { CanvasAgent } from './canvas-editor'
 import type { Presence } from './use-artifact'
@@ -29,6 +29,7 @@ export function usePresentAgents(presence: Presence | null, deleted: boolean): C
           sessionId: s.sessionId,
           name: summaries[s.sessionId]!.title ?? t('untitledSession'),
           agentId: summaries[s.sessionId]!.agentId,
+          hostId: hostOfSession(summaries[s.sessionId]!),
           doing: s.doing ?? (s.editing ? 'write' : 'read'),
           focus: s.focus ?? null,
         })),

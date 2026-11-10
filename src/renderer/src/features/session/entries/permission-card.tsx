@@ -20,6 +20,7 @@ import {
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { basename, relativePath } from '@renderer/lib/format'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { cn } from '@renderer/lib/utils'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -169,6 +170,7 @@ export function PermissionEntry({
 }) {
   const { t } = useTranslation(['session', 'routines'])
   const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
+  const hostId = useSessionsStore((s) => hostOfPath(s.byId[sessionId]?.projectPath ?? ''))
   const routine = useSessionsStore((s) => s.byId[sessionId]?.routine ?? null)
   const level = useRoutinesStore((s) =>
     routine ? (s.byId[routine.routineId]?.scope.level ?? null) : null,
@@ -321,7 +323,7 @@ export function PermissionEntry({
           className="ks-permission"
           agent={{
             name: agentName,
-            avatar: agentId ? <AgentMark agent={agentId} size={14} /> : undefined,
+            avatar: agentId ? <AgentMark agent={agentId} size={14} hostId={hostId} /> : undefined,
           }}
           action={action}
           target={target ?? undefined}

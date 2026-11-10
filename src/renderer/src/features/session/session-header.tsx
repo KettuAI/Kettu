@@ -138,7 +138,7 @@ export function SessionHeader({
             paneId={pane?.paneId ?? null}
             sessionId={summary.id}
             title={title}
-            description={agentName(summary.agentId)}
+            description={agentName(summary.agentId, hostOfSession(summary))}
             focused={pane?.focused ?? true}
             onRename={() => {
               measureTitle()

@@ -37,6 +37,7 @@ import {
   PaneSpinner,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import {
   closeDevice,
   devicesOf,
@@ -208,12 +209,16 @@ function Stage({ device }: { device: DeviceInfo }) {
   const agentId = useSessionsStore((s) =>
     operator?.sessionId ? (s.byId[operator.sessionId]?.agentId ?? null) : null,
   )
+  const hostId = useSessionsStore((s) =>
+    operator?.sessionId ? hostOfPath(s.byId[operator.sessionId]?.projectPath ?? '') : null,
+  )
   return (
     <div className="kp-stage">
       <DeviceScreen key={device.id} device={device} driven={!!operator && !operator.user} />
       {operator && (
         <DrivingPill
           agent={agentId}
+          hostId={hostId}
           user={operator.user}
           onTakeOver={() =>
             void window.kettu.devices.request('devices.stopAgent', { deviceId: device.id })

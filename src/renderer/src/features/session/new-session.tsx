@@ -247,6 +247,7 @@ function DraftComposer({
     draft: NEW_SESSION_DRAFT,
     sessionId: null,
     projectPath,
+    hostId,
     disabled: false,
     onActivity: noteActivity,
   })

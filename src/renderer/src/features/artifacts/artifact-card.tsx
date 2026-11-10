@@ -43,6 +43,7 @@ export interface CardTime {
 export const ArtifactCard = memo(function ArtifactCard({
   artifact,
   agent,
+  agentHost,
   meta,
   time,
   project,
@@ -52,6 +53,8 @@ export const ArtifactCard = memo(function ArtifactCard({
   artifact: ArtifactSummary
   /** The agent of the session it shows under; none when imported or that session is gone. */
   agent: AgentId | null
+  /** The host that session is on, null for this computer. */
+  agentHost: string | null
   /** The line after the mark: its kind and pages, the version when grouped; in Recently deleted,
    * the days left. */
   meta: string
@@ -103,7 +106,7 @@ export const ArtifactCard = memo(function ArtifactCard({
       <span className="k-art__head">
         <b className="k-art__name">{artifact.title}</b>
         <span className="ui-as-meta k-art__meta">
-          {agent && <AgentMark agent={agent} size={12} className="shrink-0" />}
+          {agent && <AgentMark agent={agent} size={12} hostId={agentHost} className="shrink-0" />}
           <span>
             {meta}
             {time && (

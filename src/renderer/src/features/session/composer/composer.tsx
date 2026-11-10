@@ -130,6 +130,7 @@ export function Composer({
     draft: sessionId,
     sessionId,
     projectPath: session.projectPath,
+    hostId,
     disabled: starting,
   })
   const { text, attachments, error, setError } = box

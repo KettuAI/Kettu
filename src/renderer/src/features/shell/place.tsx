@@ -8,7 +8,7 @@ import {
   Store01Icon,
 } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import type { HistoryPlace } from '@renderer/stores/view'
 import { Glyph } from './glyph'
 import { usePlaceTitle } from './place-title'
@@ -29,7 +29,7 @@ export function PlaceIcon({ place }: { place: HistoryPlace }) {
 function SessionMark({ sessionId }: { sessionId: string }) {
   const summary = useSessionsStore((s) => s.byId[sessionId])
   if (!summary || summary.origin === 'subagent') return <Glyph icon={BotIcon} size={15} />
-  return <AgentMark agent={summary.agentId} size={15} />
+  return <AgentMark agent={summary.agentId} size={15} hostId={hostOfSession(summary)} />
 }
 
 function PageIcon({ place }: { place: HistoryPlace }) {

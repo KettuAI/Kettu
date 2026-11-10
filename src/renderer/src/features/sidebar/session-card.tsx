@@ -22,7 +22,7 @@ export function SessionCard({ summary, cache }: { summary: SessionSummary; cache
   return (
     <div className="flex flex-col gap-2">
       <div className="flex min-w-0 items-center gap-2">
-        <AgentMark agent={summary.agentId} size={16} />
+        <AgentMark agent={summary.agentId} size={16} hostId={hostOfSession(summary)} />
         <span className="truncate text-[13.5px] font-semibold text-primary">
           {agentName(summary.agentId, hostOfSession(summary))}
         </span>

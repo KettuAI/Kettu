@@ -5,7 +5,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { SettingsStyles } from '@renderer/features/routines/kit'
 import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useAuthor } from './use-versions'
 
 /**
@@ -52,7 +52,7 @@ export function VersionHistory({
           <div className="ui-sg-card ui-sg-card--pad k-av-versions">
             {versions.map((v) => {
               const on = v.version === (shown ?? head)
-              const agent = v.author === null ? null : (sessions[v.author]?.agentId ?? null)
+              const session = v.author === null ? null : (sessions[v.author] ?? null)
               return (
                 <button
                   key={v.version}
@@ -68,7 +68,13 @@ export function VersionHistory({
                   <span className="k-av-ver__text">
                     <b>{v.note ?? author(v.author)}</b>
                     <small>
-                      {agent && <AgentMark agent={agent} size={12} />}
+                      {session && (
+                        <AgentMark
+                          agent={session.agentId}
+                          size={12}
+                          hostId={hostOfSession(session)}
+                        />
+                      )}
                       <span>{longAgo(v.createdAt, now)}</span>
                     </small>
                   </span>

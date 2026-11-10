@@ -13,11 +13,14 @@ import { PaneIcon, PaneSpinner } from '@renderer/features/shell/panel-button'
 export function OriginBar({
   request,
   agent,
+  hostId,
   agentName,
   onAnswer,
 }: {
   request: BrowserOriginRequest
   agent: AgentId | null
+  /** The host the agent is on, null for this computer. */
+  hostId: string | null
   agentName: string
   onAnswer: (decision: BrowserOriginDecision) => void
 }) {
@@ -53,7 +56,7 @@ export function OriginBar({
     <div role="alert" className="kp-origin" data-origin-bar="">
       {/* The agent's name gives way before the site does: the site is what the user judges. */}
       <span className="kp-origin__text">
-        {agent && <AgentMark agent={agent} size={14} />}
+        {agent && <AgentMark agent={agent} size={14} hostId={hostId} />}
         <span className="truncate">
           {t('origin.asks', { agent: agentName })} <b>{label}</b>
         </span>
