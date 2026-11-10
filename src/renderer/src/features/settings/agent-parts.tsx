@@ -265,7 +265,7 @@ export function UsageGroup({
           onClick={() => {
             setRefreshError(null)
             void refresh
-              .run(() => request('agents.refreshLimits', { agentId: status.id }))
+              .run(() => request('agents.refreshLimits', { agentId: status.id, force: true }))
               .catch((e: unknown) => setRefreshError(errorMessage(e)))
           }}
         />
@@ -314,7 +314,9 @@ export function UsageGroup({
             <ControlError error={error} />
             <SetButton
               loading={busy}
-              onClick={() => act(() => request('agents.refreshLimits', { agentId: status.id }))}
+              onClick={() =>
+                act(() => request('agents.refreshLimits', { agentId: status.id, force: true }))
+              }
             >
               {t('agents.checkLimits')}
             </SetButton>

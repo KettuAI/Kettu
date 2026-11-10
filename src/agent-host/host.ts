@@ -835,6 +835,7 @@ export class AgentHost {
     options.send({ type: 'host:service-port', port: host.artifactService.listeningPort })
     options.send({ type: 'host:ready' })
     void host.trees.stopLeftovers()
+    host.agents.startLimitReads()
     void host.agents.detectAll().then(() => host.agents.scheduleUpdateChecks())
     return host
   }
@@ -1552,7 +1553,7 @@ export class AgentHost {
         if (this.agentOptions.known(agentId)) return
         await agents.readFirstOptions(agentId)
       },
-      'agents.refreshLimits': ({ agentId }) => agents.refreshLimits(agentId),
+      'agents.refreshLimits': ({ agentId, force }) => agents.refreshLimits(agentId, { force }),
       'agents.details': ({ agentId }) => agents.details(agentId),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),

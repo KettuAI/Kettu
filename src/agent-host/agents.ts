@@ -147,6 +147,8 @@ export interface AgentTimings {
   progressMs: number
   /** The shortest gap between two `/usage` reports. */
   limitsMs: number
+  /** How often the plan limits of the agents with a live session are read in the background. */
+  limitsBackgroundMs: number
   /** How long the hidden `session/new` that reads an agent's options may take. */
   optionsMs: number
   /** How long one `npm view` of the update check may take. */
@@ -170,6 +172,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   maxFailures: 5,
   progressMs: 250,
   limitsMs: 60_000,
+  limitsBackgroundMs: 5 * 60_000,
   optionsMs: 30_000,
   updateViewMs: 20_000,
   updateDelayMs: 60_000,
@@ -445,6 +448,7 @@ export class AgentManager {
   private updateCheckAll = false
   private updateAbort: AbortController | null = null
   private updateTimer: ReturnType<typeof setTimeout> | null = null
+  private limitsTimer: ReturnType<typeof setInterval> | null = null
   private stopped = false
   private readonly cliVersions: CliVersions
   /** The update command for each harness's user program, and what it was worked out for. */
@@ -1489,6 +1493,25 @@ export class AgentManager {
   }
 
   /**
+   * Keeps the plan limits current while agents are in use, since rate-limit events rarely carry
+   * the used share: only agents already running with a live session, so none starts or stays up
+   * for it.
+   */
+  startLimitReads(): void {
+    if (this.limitsTimer || this.stopped) return
+    this.limitsTimer = setInterval(() => {
+      for (const slot of this.slots.values()) {
+        if (!slot.runtime || this.hooks.liveSessions(slot.id) === 0) continue
+        this.refreshLimits(slot.id).catch((error: unknown) => {
+          const message = (error as Error).message
+          this.deps.diagnostics.log('warn', `${slot.name}: the plan limits read failed: ${message}`)
+        })
+      }
+    }, this.timings.limitsBackgroundMs)
+    this.limitsTimer.unref?.()
+  }
+
+  /**
    * The harnesses a check can ask npm about: those with a package of Kettu's whose npm was found,
    * and those whose user's program is installed, whose versions npm publishes too.
    */
@@ -2211,6 +2234,8 @@ export class AgentManager {
     this.stopped = true
     if (this.updateTimer) clearTimeout(this.updateTimer)
     this.updateTimer = null
+    if (this.limitsTimer) clearInterval(this.limitsTimer)
+    this.limitsTimer = null
     this.updateAbort?.abort(QUIT_REASON)
     const slots = [...this.slots.values()]
     const harnesses = [...this.harnesses.values()]
