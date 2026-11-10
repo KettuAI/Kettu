@@ -602,6 +602,20 @@
       "unoffered": "{{mode}} (no longer offered)",
       "readFailed": "Couldn’t read this agent’s modes."
     },
+    "claudeSettings": {
+      "auto": "Auto",
+      "compact": {
+        "name": "Auto-compact window",
+        "description": "How many tokens of a conversation Claude Code lets build up before it compacts it, for each model. Auto lets Claude Code decide. A project’s own settings win in that project, and a change applies from the next session."
+      },
+      "cache": {
+        "name": "Prompt cache",
+        "description": "How long Claude Code keeps a conversation’s prompt cache warm. Auto is 1 hour on a subscription within its limits, and 5 minutes on an API key or a cloud provider; 1-hour cache writes cost more. A project’s own settings win in that project, and a change applies from the next session.",
+        "5m": "5 minutes",
+        "1h": "1 hour"
+      },
+      "unused": "Available once this agent has been used."
+    },
     "advanced": "Advanced",
     "readingAccount": "Reading the account…",
     "noAccount": "No account reported",

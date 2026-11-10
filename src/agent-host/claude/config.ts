@@ -106,7 +106,7 @@ const MODEL_DEFAULT_EFFORT: [pattern: RegExp, level: string][] = [
 const DOCUMENTED_DEFAULT_EFFORT = 'high'
 
 /** A model id without its context suffix or date, as `modelSettings` keys it. */
-const canonicalModel = (id: string): string =>
+export const canonicalModel = (id: string): string =>
   id
     .replace(/\[[^\]]*\]$/, '')
     .replace(/-\d{8}$/, '')
@@ -181,9 +181,12 @@ export function buildConfig(
           ? aliases.find((a) => a.value !== model.value && a.resolvedModel === model.resolvedModel)
           : undefined
       const older = aliases.length > 0 && model.resolvedModel === model.value
+      const modelId =
+        model.resolvedModel ?? (model.value === DEFAULT_MODEL ? undefined : model.value)
       return {
         value: model.value,
         name: model.displayName,
+        ...(modelId ? { modelId } : {}),
         ...(model.description ? { description: model.description } : {}),
         ...(same ? { shownAs: same.value } : {}),
         ...(older ? { older: true as const } : {}),

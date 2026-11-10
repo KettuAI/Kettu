@@ -37,6 +37,26 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it('takes only the two Claude Code settings, each with a value of its own kind', () => {
+    const window = { setting: 'autoCompactWindow', model: 'claude-sonnet-5-5', value: 200000 }
+    expect(
+      posix['agents.setClaudeSetting']({ agentId: 'claude-code', change: window, x: 1 }),
+    ).toEqual({ agentId: 'claude-code', change: window })
+    const ttl = { setting: 'promptCacheTtl', value: null }
+    expect(posix['agents.setClaudeSetting']({ agentId: 'claude-code', change: ttl })).toEqual({
+      agentId: 'claude-code',
+      change: ttl,
+    })
+    const bad = (change: unknown): void =>
+      rejects(() => posix['agents.setClaudeSetting']({ agentId: 'claude-code', change }))
+    bad({ setting: 'env', value: 'x' })
+    bad({ setting: 'promptCacheTtl', value: '2h' })
+    bad({ setting: 'autoCompactWindow', model: 'claude-sonnet-5-5', value: '200000' })
+    bad({ setting: 'autoCompactWindow', value: 200000 })
+    bad({ setting: 'autoCompactWindow', model: '', value: 200000 })
+    rejects(() => posix['agents.setClaudeSetting']({ agentId: 'claude-code' }))
+  })
+
   it('checks the connection methods: servers Kettu keeps and logins of Connect', () => {
     expect(posix['market.connect']({ serverId: 'app.linear/linear' })).toEqual({
       serverId: 'app.linear/linear',

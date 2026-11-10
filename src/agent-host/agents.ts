@@ -16,6 +16,8 @@ import type {
   AgentStatus,
   AgentTask,
   AgentUpdate,
+  ClaudeSettingChange,
+  ClaudeSettings,
   InstalledCli,
   McpStatus,
   PlanLimit,
@@ -67,6 +69,7 @@ import {
   type InstalledArchive,
 } from './archive-install'
 import { checkApiKey, clearClaudeKey, writeClaudeKey, type ApiKeyInput } from './api-key'
+import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
 import {
   installedFolder,
   installMethodOf,
@@ -2908,6 +2911,31 @@ export class AgentManager {
     this.deps.diagnostics.event(agentId, 'api key', 'cleared')
     slot.apiKey = false
     await this.credentialsChanged(slot)
+  }
+
+  // Claude Code's common settings.
+
+  /** A Claude Code agent's auto-compact windows and prompt cache duration, from its settings file. */
+  async claudeSettings(agentId: AgentId, listed: readonly ListedModel[]): Promise<ClaudeSettings> {
+    const slot = this.claudeSlot(agentId)
+    await this.detectAll()
+    return readClaudeSettings(this.settingsFile(slot), listed)
+  }
+
+  /** Writes one of them into the settings file; a session opened later reads it. */
+  async setClaudeSetting(agentId: AgentId, change: ClaudeSettingChange): Promise<void> {
+    const slot = this.claudeSlot(agentId)
+    await this.detectAll()
+    await writeClaudeSetting(this.settingsFile(slot), change)
+    this.deps.diagnostics.event(agentId, 'claude setting', change.setting)
+  }
+
+  private claudeSlot(agentId: AgentId): Slot {
+    const slot = this.registeredSlot(agentId)
+    if (slot.def.id !== 'claude-code') {
+      throw invalidParams(`${slot.def.name} has no settings Kettu edits`)
+    }
+    return slot
   }
 
   /** The agent's settings file, where Claude Code reads the variables of its `env`. */

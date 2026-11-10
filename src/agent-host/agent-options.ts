@@ -299,6 +299,7 @@ function optionOf(value: unknown): ConfigOption | null {
           ...(typeof c.group === 'string' ? { group: c.group } : {}),
           ...(c.older === true ? { older: true as const } : {}),
           ...(typeof c.shownAs === 'string' ? { shownAs: c.shownAs } : {}),
+          ...(typeof c.modelId === 'string' ? { modelId: c.modelId } : {}),
         },
       ]
     })

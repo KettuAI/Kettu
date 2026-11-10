@@ -137,6 +137,8 @@ export interface ConfigOption {
     older?: true
     /** The value of the choice this one is shown as, the same model under another name. */
     shownAs?: string
+    /** The model id the choice stands for, as Claude Code's settings key models. */
+    modelId?: string
   }[]
   idleOnly?: boolean // can change only while no turn runs
   /** A boolean's inherited value; null until the agent has resolved its settings. */

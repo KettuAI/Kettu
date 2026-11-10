@@ -205,6 +205,23 @@ export function isStartMode(id: AgentId, value: unknown): value is string {
   )
 }
 
+/** The range in tokens Claude Code accepts for a model's auto-compact window. */
+export const AUTO_COMPACT_MIN = 100_000
+export const AUTO_COMPACT_MAX = 1_000_000
+
+/** The windows Settings offers beside Auto. */
+export const AUTO_COMPACT_STEPS: readonly number[] = [
+  100_000, 200_000, 300_000, 400_000, 500_000, 750_000, 1_000_000,
+]
+
+export const PROMPT_CACHE_TTLS = ['5m', '1h'] as const
+export type PromptCacheTtl = (typeof PROMPT_CACHE_TTLS)[number]
+
+/** Whether the agent's page edits Claude Code's common settings, which only its agents have. */
+export function takesClaudeSettings(id: AgentId): boolean {
+  return harnessOf(id) === 'claude-code'
+}
+
 /** Agents in catalog order of their harness, each harness's default agent first. */
 export function sortAgentIds<T extends AgentId>(ids: Iterable<T>): T[] {
   const rank = (id: AgentId): number => HARNESS_IDS.indexOf(harnessOf(id))
