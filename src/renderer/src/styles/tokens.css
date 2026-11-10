@@ -523,7 +523,8 @@
   --composer-panel: var(--bg-app);
   --composer-pop-shadow:
     0 0 0 0.5px rgb(0 0 0 / 10%), 0 16px 36px -12px rgb(0 0 0 / 22%), 0 1px 2px rgb(0 0 0 / 5%);
-  --composer-queue-drop: rgb(0 0 0 / 28%);
+  /* The queued messages' tab: the composer tray's ground, so the two read as one shell. */
+  --composer-queue: #f5f5f5;
   --composer-thumb: #ffffff;
   --composer-thumb-shadow: 0 0 0 0.5px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 10%);
   --composer-meter-ok: #22a06b;
@@ -907,6 +908,7 @@
     --composer-hover-fill: rgb(255 255 255 / 5%);
     --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
     --composer-panel: var(--bg-app);
+    --composer-queue: #161618;
     --composer-pop-shadow:
       0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
       0 1px 2px rgb(0 0 0 / 5%);
@@ -1277,6 +1279,7 @@
   --composer-hover-fill: rgb(255 255 255 / 5%);
   --composer-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
   --composer-panel: var(--bg-app);
+  --composer-queue: #161618;
   --composer-pop-shadow:
     0 0 0 0.5px rgb(255 255 255 / 14%), 0 16px 36px -12px rgb(0 0 0 / 22%),
     0 1px 2px rgb(0 0 0 / 5%);
@@ -1402,6 +1405,7 @@
   --composer-muted: var(--text-tertiary);
   --composer-faint: var(--text-disabled);
   --composer-line-strong: var(--border-default);
+  --composer-queue: light-dark(var(--bg-subtle), var(--shell-subtle));
   --composer-chip-hover: var(--bg-selected);
   --composer-hover-fill: color-mix(in srgb, var(--bg-hover) 75%, transparent);
   --composer-pop-shadow: 0 0 0 0.5px var(--border-default), var(--elevation-popover);

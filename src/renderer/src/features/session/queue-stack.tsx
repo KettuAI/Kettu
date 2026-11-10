@@ -291,7 +291,7 @@ export function QueueStack({
                 '--front': p.front,
                 // The count fades out before it folds, so no clipped digit shows while it narrows
                 '--count': clamp(p.front * 2 - 1, 0, 1),
-                '--mix': `${Math.max(2, 5 - p.depth)}%`,
+                '--mix': `${Math.min(p.depth, 3) * 20}%`,
               } as CSSProperties
             }
             tabIndex={p.content > 0.3 ? 0 : -1}
