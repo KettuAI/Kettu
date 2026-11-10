@@ -82,6 +82,8 @@ export interface SettingsFile {
     direct: DirectSettings
     terminal: boolean // devices may use this computer's terminals, which run any command
     relay: boolean // Use the Kettu relay, while this computer is signed in to a Kettu account
+    // Devices of the same Kettu account find this computer on the relay and ask to be added.
+    discoverable: boolean
   }
   // Agents using this computer's desktop apps; a paired device can neither see nor change it.
   computerUse: ComputerUseSettings
@@ -206,6 +208,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     direct: { enabled: false, port: null, addresses: [] },
     terminal: false,
     relay: true,
+    discoverable: true,
   },
   computerUse: { enabled: false, allowedApps: [] },
 }
@@ -258,6 +261,7 @@ export interface SettingsPatch {
     direct?: { enabled?: boolean; port?: number; addresses?: DirectAddress[] }
     terminal?: boolean
     relay?: boolean
+    discoverable?: boolean
   }
 }
 
