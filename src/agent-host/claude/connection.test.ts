@@ -971,6 +971,34 @@ describe('a turn', () => {
     expect(s.sdk.last.calls.map((call) => call.method)).toContain('interrupt')
   })
 
+  it('ends a stopped turn at its result while background subagents keep Claude Code busy', async () => {
+    s.sdk.script = (query) => query.running()
+    // A stop spares background agents: the aborted result comes, the idle state does not.
+    s.sdk.onInterrupt = (query) =>
+      query.emit({
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        stop_reason: null,
+        terminal_reason: 'aborted_streaming',
+        total_cost_usd: 0,
+        usage: {},
+        modelUsage: {},
+        session_id: query.sessionId,
+      } as SdkMessage)
+    const turn = s.connection.prompt(sessionId, [{ type: 'text', text: 'long' }])
+    await settle()
+    await s.connection.cancel(sessionId)
+    await expect(turn).resolves.toMatchObject({ stopReason: 'cancelled' })
+    s.sdk.script = (query) => {
+      query.running()
+      query.finish()
+    }
+    await expect(
+      s.connection.prompt(sessionId, [{ type: 'text', text: 'next' }]),
+    ).resolves.toMatchObject({ stopReason: 'end_turn' })
+  })
+
   it('fails the running turn when Claude Code ends, and opens it again for the next', async () => {
     s.sdk.script = (query) => {
       query.running()

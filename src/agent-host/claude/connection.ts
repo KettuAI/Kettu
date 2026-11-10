@@ -1198,8 +1198,9 @@ export class ClaudeConnection implements AgentConnection {
     } else {
       turn.stopReason = 'end_turn'
     }
-    // A Claude Code that does not send its states ends the turn with its result.
-    if (!session.states) this.settle(session)
+    // A Claude Code that does not send its states ends the turn with its result. So does a stopped
+    // turn: background agents the stop spares keep Claude Code from going idle.
+    if (!session.states || turn.cancelled) this.settle(session)
   }
 
   private turnResult(turn: Turn, stopReason: PromptResult['stopReason']): PromptResult {
