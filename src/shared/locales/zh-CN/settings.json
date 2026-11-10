@@ -637,6 +637,26 @@
       "unoffered": "{{mode}}（已不再提供）",
       "readFailed": "读取这个 Agent 的模式失败。"
     },
+    "claudeSettings": {
+      "auto": "Auto",
+      "compact": {
+        "name": "自动压缩窗口",
+        "description": "对话累积到多少 token 时，Claude Code 开始压缩它。可以给所有模型设一个，也可以给某个模型另设。Auto 由 Claude Code 自己决定。项目自己的设置在该项目里优先，改动从下一个会话起生效。",
+        "all": "所有模型",
+        "sameAsAll": "跟随所有模型",
+        "add": "添加模型",
+        "choose": "选择或输入模型",
+        "search": "搜索，或输入模型名",
+        "addCustom": "添加“{{id}}”",
+        "noMatch": "没有匹配的模型。模型名是一个词，不能有空格。"
+      },
+      "cache": {
+        "name": "Prompt cache 时长",
+        "description": "Claude Code 让对话的 prompt cache 保持多久。Auto：订阅账号在限额内用 1 小时，API key 和云服务商用 5 分钟；1 小时的缓存写入收费更高。项目自己的设置在该项目里优先，改动从下一个会话起生效。",
+        "5m": "5 分钟",
+        "1h": "1 小时"
+      }
+    },
     "advanced": "高级",
     "readingAccount": "正在读取账号…",
     "noAccount": "未提供账号信息",

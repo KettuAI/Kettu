@@ -1,5 +1,6 @@
 // The contract between the renderer and the agent host, over the agent host port.
 
+import type { PromptCacheTtl } from './agents'
 import type { DeviceAccessDecision } from './device-agent'
 import type { ArtifactConsentAsk, ArtifactConsentRow, RuntimeAnswer } from './artifact-capabilities'
 import type { ArtifactContent, ArtifactSession, ArtifactSummary, VersionSummary } from './artifacts'
@@ -322,6 +323,30 @@ export interface AgentDetails {
   config: AgentConfigItem[]
 }
 
+/** One model's row of a Claude Code agent's auto-compact window setting. */
+export interface ClaudeCompactRow {
+  /** The model id as the settings file keys it, without a date or a context suffix. */
+  model: string
+  /** The name the agent lists it by; null for a model only the file names. */
+  name: string | null
+  /** The window in tokens the file saves for it; null when it saves none, so Claude Code picks. */
+  window: number | null
+}
+
+/** The two settings a Claude Code agent's page edits, as its user settings file holds them. */
+export interface ClaudeSettings {
+  /** The window the file saves for every model without a row of its own; null when it has none. */
+  defaultWindow: number | null
+  compact: ClaudeCompactRow[]
+  /** The file's `promptCacheTtl`; null when it has none. */
+  promptCacheTtl: PromptCacheTtl | null
+}
+
+/** One change to those settings; a null value removes the key, and a null model means all. */
+export type ClaudeSettingChange =
+  | { setting: 'autoCompactWindow'; model: string | null; value: number | null }
+  | { setting: 'promptCacheTtl'; value: PromptCacheTtl | null }
+
 /** A place the agent reads its own configuration from, in the order Settings lists them. */
 export interface AgentConfigItem {
   id: 'folder' | 'settings' | 'instructions'
@@ -542,6 +567,14 @@ export interface HostContract {
   'agents.readFirstOptions': { params: { agentId: AgentId }; result: void }
   'agents.refreshLimits': { params: { agentId: AgentId; force?: boolean }; result: void }
   'agents.details': { params: { agentId: AgentId }; result: AgentDetails }
+  // A Claude Code agent's auto-compact windows and prompt cache duration, read from its settings
+  // file; rejects with the reason when the file cannot be read.
+  'agents.claudeSettings': { params: { agentId: AgentId }; result: ClaudeSettings }
+  // Writes one of them into that file and nothing else in it.
+  'agents.setClaudeSetting': {
+    params: { agentId: AgentId; change: ClaudeSettingChange }
+    result: void
+  }
   'agents.refreshAccount': { params: { agentId: AgentId; force?: boolean }; result: void }
   'agents.listSessions': {
     params: { agentId: AgentId; projectPath: string; cursor?: string }
@@ -1042,6 +1075,8 @@ export const HOST_METHODS = [
   'agents.readFirstOptions',
   'agents.refreshLimits',
   'agents.details',
+  'agents.claudeSettings',
+  'agents.setClaudeSetting',
   'agents.refreshAccount',
   'agents.listSessions',
   'agents.options',

@@ -205,6 +205,39 @@ export function isStartMode(id: AgentId, value: unknown): value is string {
   )
 }
 
+/** The range in tokens Claude Code accepts for a model's auto-compact window. */
+export const AUTO_COMPACT_MIN = 100_000
+export const AUTO_COMPACT_MAX = 1_000_000
+
+/** The windows Settings offers beside Auto. */
+export const AUTO_COMPACT_STEPS: readonly number[] = [
+  100_000, 200_000, 300_000, 400_000, 500_000, 750_000, 1_000_000,
+]
+
+export const PROMPT_CACHE_TTLS = ['5m', '1h'] as const
+export type PromptCacheTtl = (typeof PROMPT_CACHE_TTLS)[number]
+
+/** Claude models Settings suggests when a model is added, as Anthropic names them. */
+export const KNOWN_CLAUDE_MODELS: readonly { id: string; name: string }[] = [
+  { id: 'claude-fable-5-2', name: 'Fable 5.2' },
+  { id: 'claude-opus-5-5', name: 'Opus 5.5' },
+  { id: 'claude-sonnet-5-5', name: 'Sonnet 5.5' },
+  { id: 'claude-haiku-5-5', name: 'Haiku 5.5' },
+  { id: 'claude-opus-4-7', name: 'Opus 4.7' },
+]
+
+/** A model id without its context suffix or date, as Claude Code's `modelSettings` keys it. */
+export const canonicalClaudeModel = (id: string): string =>
+  id
+    .replace(/\[[^\]]*\]$/, '')
+    .replace(/-\d{8}$/, '')
+    .toLowerCase()
+
+/** Whether the agent's page edits Claude Code's common settings, which only its agents have. */
+export function takesClaudeSettings(id: AgentId): boolean {
+  return harnessOf(id) === 'claude-code'
+}
+
 /** Agents in catalog order of their harness, each harness's default agent first. */
 export function sortAgentIds<T extends AgentId>(ids: Iterable<T>): T[] {
   const rank = (id: AgentId): number => HARNESS_IDS.indexOf(harnessOf(id))

@@ -40,6 +40,7 @@ import { serverFor, type MarketConnection, type MarketServer } from '@shared/mar
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import type { AgentId, FromDevice } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
+import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
 import { AgentTrees } from './agent-trees'
 import { readImport } from './artifacts/import'
@@ -1572,6 +1573,9 @@ export class AgentHost {
       },
       'agents.refreshLimits': ({ agentId, force }) => agents.refreshLimits(agentId, { force }),
       'agents.details': ({ agentId }) => agents.details(agentId),
+      'agents.claudeSettings': ({ agentId }) =>
+        agents.claudeSettings(agentId, listedModels(this.agentOptions.get(agentId)?.config)),
+      'agents.setClaudeSetting': ({ agentId, change }) => agents.setClaudeSetting(agentId, change),
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
       'mcp.status': () => this.mcpStatus(),

@@ -895,6 +895,33 @@ export function createValidators(platform: Platform): Validators {
     'agents.readFirstOptions': agent,
     'agents.refreshLimits': agentWithForce,
     'agents.details': agent,
+    'agents.claudeSettings': agent,
+    'agents.setClaudeSetting': (params) => {
+      const o = fields(params)
+      const change = fields(o.change)
+      if (change.setting === 'promptCacheTtl') {
+        const value = change.value
+        if (value !== null && value !== '5m' && value !== '1h') {
+          throw invalidParams('change.value must be 5m, 1h or null')
+        }
+        return { agentId: agentId(o), change: { setting: 'promptCacheTtl', value } }
+      }
+      if (change.setting !== 'autoCompactWindow') {
+        throw invalidParams('change.setting must be autoCompactWindow or promptCacheTtl')
+      }
+      const value = change.value
+      if (value !== null && typeof value !== 'number') {
+        throw invalidParams('change.value must be a number or null')
+      }
+      return {
+        agentId: agentId(o),
+        change: {
+          setting: 'autoCompactWindow',
+          model: change.model === null ? null : string(change, 'model', 256),
+          value,
+        },
+      }
+    },
     'agents.refreshAccount': agentWithForce,
     'agents.options': none,
     'mcp.status': none,

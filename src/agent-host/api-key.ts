@@ -2,8 +2,7 @@
 // Claude Code's settings.json in the agent's folder, or given to `codex login --with-api-key`.
 // Kettu keeps no copy and never reads one back; only the keys it writes are touched.
 
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import path from 'node:path'
+import { isObject, readSettings, writeSettings } from './settings-file'
 
 /** What the user typed; `baseUrl` and `model` only for Claude Code. */
 export interface ApiKeyInput {
@@ -52,41 +51,6 @@ export function checkApiKey(input: ApiKeyInput, allowProvider: boolean): ApiKeyI
   return checked
 }
 
-async function readSettings(file: string): Promise<Record<string, unknown>> {
-  let text: string
-  try {
-    text = await readFile(file, 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {}
-    throw error
-  }
-  if (text.trim() === '') return {}
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    // Rewriting a file Kettu cannot read would lose what the user wrote in it.
-    throw new Error(`${file} is not valid JSON; fix it or set the key there yourself`)
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error(`${file} does not hold a JSON object`)
-  }
-  return parsed as Record<string, unknown>
-}
-
-/** Writes beside the file and renames it over, so a crash never leaves half a settings file. */
-async function writeSettings(file: string, settings: Record<string, unknown>): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true })
-  const temp = `${file}.kettu-${process.pid}.tmp`
-  try {
-    await writeFile(temp, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 })
-    await rename(temp, file)
-  } catch (error) {
-    await rm(temp, { force: true })
-    throw error
-  }
-}
-
 /**
  * Sets Claude Code's variables in the settings file, keeping everything else in it. A key for
  * another provider's address goes in ANTHROPIC_AUTH_TOKEN, sent as a bearer token; Anthropic's own
@@ -117,8 +81,4 @@ export async function clearClaudeKey(file: string): Promise<void> {
   if (Object.keys(env).length > 0) next.env = env
   else delete next.env
   await writeSettings(file, next)
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

@@ -14,7 +14,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentAccount, AgentStatus } from '@shared/agent-host'
-import { takesStartMode } from '@shared/agents'
+import { takesClaudeSettings, takesStartMode } from '@shared/agents'
 import {
   AGENT_COLORS,
   AGENT_NAME_CHARS,
@@ -96,6 +96,7 @@ import {
   SettingSwitch,
   Skel,
 } from './controls'
+import { ClaudeSettingsRows } from './claude-settings-rows'
 import { PlaceRow } from './places'
 import {
   DIALOG_FIELD,
@@ -1161,6 +1162,7 @@ function ConfigurationGroup({ status }: { status: AgentStatus }) {
           </SetButton>
         </RowFrame>
         {takesStartMode(status.id) && <StartModeRow key={status.id} status={status} />}
+        {takesClaudeSettings(status.id) && <ClaudeSettingsRows key={status.id} status={status} />}
         {/* The Marketplace shows this computer's servers only. */}
         {hostId === null && (
           <RowFrame
