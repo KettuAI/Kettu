@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Cancel01Icon, Tick02Icon, TickDouble02Icon } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { FromDevice } from '@shared/thread'
@@ -130,10 +131,11 @@ export function AccessCard({
         trailingActions={
           <button
             type="button"
-            className="ui-prc__btn"
+            className="ui-prc__btn ks-permission__always"
             disabled={answering !== null}
             onClick={() => void send('always')}
           >
+            <Icon icon={TickDouble02Icon} size={14} />
             {words.allow.always}
           </button>
         }
@@ -146,8 +148,18 @@ export function AccessCard({
               components={{ b: <b dir="auto" /> }}
             />
           ),
-          allow: () => words.allow.session,
-          deny: words.deny,
+          allow: () => (
+            <>
+              <Icon icon={Tick02Icon} size={14} />
+              {words.allow.session}
+            </>
+          ),
+          deny: (
+            <>
+              <Icon icon={Cancel01Icon} size={14} />
+              {words.deny}
+            </>
+          ),
           result: () => {
             const headline = words.answer(answer ?? '')
             return {
