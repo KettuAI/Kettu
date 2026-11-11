@@ -625,6 +625,17 @@ export class TaskEngine implements TaskEngineApi {
     })
   }
 
+  costChanged(sessionId: string): void {
+    const run = this.latestRunOf(sessionId)
+    const task = run && this.data.tasks.find((t) => t.id === run.taskId)
+    if (!run || !task || run.kind !== 'agent') return
+    const before = run.costUsd
+    this.recordCost(task, run, this.rt.costSince(sessionId, run.fromTurn))
+    if (run.costUsd === before) return
+    this.runChanged(run)
+    this.changed(task)
+  }
+
   waiting(sessionId: string, waiting: boolean): void {
     const run = this.workingRunOfSession(sessionId)
     const task = run && this.data.tasks.find((t) => t.id === run.taskId)

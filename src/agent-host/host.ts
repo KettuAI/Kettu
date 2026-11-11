@@ -823,6 +823,7 @@ export class AgentHost {
     taskHooks.current = {
       isStage: (sessionId) => this.tasks.stageOf(sessionId) !== null,
       turnEnded: (sessionId) => this.tasks.turnEnded(sessionId),
+      costChanged: (sessionId) => this.tasks.costChanged(sessionId),
       waiting: (sessionId, waiting) => this.tasks.waiting(sessionId, waiting),
       sessionGone: (sessionId) => this.tasks.sessionGone(sessionId),
     }

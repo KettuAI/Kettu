@@ -104,6 +104,8 @@ export interface TaskRuntime {
   alive(sessionId: string): boolean
   evidence(sessionId: string, fromTurn: number): Promise<StageEvidence>
   turns(sessionId: string): number
+  /** The estimated cost of the session's recorded turns after the first `fromTurn`. */
+  costSince(sessionId: string, fromTurn: number): number
   /** Pushes the task's branch and opens a pull request; its URL. */
   handover(task: TaskRecord, summary: string): Promise<string>
   /** Tells the person: a task needs them, finished or was blocked. */
@@ -137,6 +139,8 @@ export interface TaskEngineApi {
   stageOf(sessionId: string): { taskId: string; runId: string; stageId: string } | null
   /** Session lifecycle the host reports for stage sessions. */
   turnEnded(sessionId: string): void
+  /** A task session recorded a turn's cost, which may end after its stage's result. */
+  costChanged(sessionId: string): void
   waiting(sessionId: string, waiting: boolean): void
   sessionGone(sessionId: string): void
   limitsChanged(agentId: AgentId): void
