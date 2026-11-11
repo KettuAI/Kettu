@@ -4,9 +4,11 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { readTextThumb } from '@shared/attachments'
 import type { Attachment, ContentRef, ThreadEntry, UserContent } from '@shared/thread'
+import { emitAppEvent } from '@renderer/app/events'
 import { basename, bytes } from '@renderer/lib/format'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { host } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { openViewer } from '@renderer/stores/viewer'
@@ -203,6 +205,38 @@ function ChipText({
   }
 
   const renderChip = (chip: Chip, raw: string) => {
+    // A filled chip inside the bubble reads as a box in a box, so the command is colored text.
+    // Clicked, it goes into the composer to be sent again.
+    if (chip.kind === 'command') {
+      const label = (
+        <>
+          <span className="text-control-on/55">/</span>
+          {chip.name}
+        </>
+      )
+      const look = 'font-medium text-control-on'
+      if (!sessionId) return <span className={look}>{label}</span>
+      return (
+        <>
+          <button
+            type="button"
+            aria-label={raw}
+            onClick={() =>
+              emitAppEvent({ kind: 'command-into-composer', sessionId, name: chip.name })
+            }
+            className={cn(
+              look,
+              'rounded-sm outline-none select-none hover:underline focus-visible:focus-ring',
+            )}
+          >
+            {label}
+          </button>
+          <span aria-hidden className="sr-only">
+            {raw}
+          </span>
+        </>
+      )
+    }
     const open = opener(chip)
     // A selection copies what was typed: the chip's look is left out of it, its text is not.
     return (

@@ -301,7 +301,7 @@ export function PromptBox({
                 'flex max-h-[min(var(--available-height),320px)] origin-(--transform-origin) flex-col overflow-hidden bg-popover text-popover-foreground shadow-menu animation-duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
                 'rounded-xl p-1.25',
                 showing === 'slash'
-                  ? 'w-[min(var(--anchor-width),470px)]'
+                  ? 'w-[min(var(--anchor-width),540px)]'
                   : 'w-85 max-w-(--available-width)',
               )}
             >
@@ -323,6 +323,9 @@ export function PromptBox({
                 aria-labelledby={`${listId}-label`}
                 className={cn(
                   'min-h-0 flex-1 scroll-fade-y overflow-y-auto overscroll-contain',
+                  // The names share a column, so every description starts on one line.
+                  showing === 'slash' &&
+                    'grid auto-rows-max grid-cols-[fit-content(42%)_minmax(0,1fr)] content-start',
                   rows.length === 0 && 'hidden',
                 )}
               >
@@ -359,7 +362,7 @@ export function PromptBox({
   )
 }
 
-/** A slash command's row: its name in code type, then what it does. */
+/** A slash command's row: its name as the box draws it, then what it does in the next column. */
 function SlashItem({
   id,
   command,
@@ -383,12 +386,13 @@ function SlashItem({
       onMouseDown={(event) => event.preventDefault()}
       onMouseMove={onHighlight}
       onClick={onChoose}
-      className="flex min-h-7.5 cursor-default items-center gap-2.5 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
+      className="col-span-2 grid h-8 cursor-default grid-cols-subgrid items-center gap-x-5 rounded-md px-2 text-menu outline-none select-none data-highlighted:bg-selected"
     >
-      <span className="shrink-0 font-mono text-hint">/{command.name}</span>
-      {command.description && (
-        <span className="min-w-0 truncate text-tertiary">{command.description}</span>
-      )}
+      <span className="truncate font-medium text-primary">
+        <span className="text-tertiary">/</span>
+        {command.name}
+      </span>
+      <span className="truncate text-hint text-tertiary">{command.description}</span>
     </div>
   )
 }
