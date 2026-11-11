@@ -4,6 +4,7 @@ import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
+import { hostOfSession } from '@renderer/stores/sessions'
 import { agentNeed } from './start-options'
 
 export type LineTone = 'muted' | 'attention' | 'danger'
@@ -45,15 +46,24 @@ export function agentLine(
 /** How many sessions Pick up where you left off lists. */
 export const PICKUP = 3
 
-/** The sessions to pick up: the user's own, outside the archive, the latest first. */
+/**
+ * The sessions to pick up: the user's own, outside the archive, the latest first; only those on
+ * the hosts the sidebar lists (this computer is null), or on any host with null.
+ */
 export function pickupSessions(
   byId: Readonly<Record<string, SessionSummary | undefined>>,
+  hosts: readonly (string | null)[] | null,
   count = PICKUP,
 ): SessionSummary[] {
   return Object.values(byId)
     .filter(
       (s): s is SessionSummary =>
-        !!s && s.origin === 'user' && s.parentId === null && s.archivedAt === null && !s.prepared,
+        !!s &&
+        s.origin === 'user' &&
+        s.parentId === null &&
+        s.archivedAt === null &&
+        !s.prepared &&
+        (!hosts || hosts.includes(hostOfSession(s))),
     )
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, count)
