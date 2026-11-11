@@ -203,6 +203,15 @@ function ChipText({
   }
 
   const renderChip = (chip: Chip, raw: string) => {
+    // A filled chip inside the bubble reads as a box in a box, so the command is colored text.
+    if (chip.kind === 'command') {
+      return (
+        <span data-chip="command" className="font-medium text-control-on">
+          <span className="text-control-on/55">/</span>
+          {chip.name}
+        </span>
+      )
+    }
     const open = opener(chip)
     // A selection copies what was typed: the chip's look is left out of it, its text is not.
     return (
