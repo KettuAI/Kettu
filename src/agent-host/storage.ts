@@ -245,6 +245,7 @@ export interface WorktreeRecord {
   base: string
   baseOid: string
   removed?: 'worktree' | 'branch'
+  pending?: true // its preparation has not finished, so a restart shows it as failed
 }
 
 export interface ProjectsFile {
@@ -286,6 +287,8 @@ export interface SessionRecord {
   carry?: PendingCarry
   /** The worktree it works in; absent when it works in its project's folder. */
   worktree?: WorktreeRecord
+  /** A worktree its agent made for a subagent, which Kettu shows and never removes. */
+  agentWorktree?: { path: string; branch: string | null }
 }
 
 /** What a session's new agent is to be given with its first turn, kept until that turn goes. */
@@ -684,6 +687,17 @@ function worktreeOf(value: unknown): { worktree?: WorktreeRecord } {
       base: value.base,
       baseOid: value.baseOid,
       ...(value.removed === undefined ? {} : { removed: value.removed }),
+      ...(value.pending === true ? { pending: true as const } : {}),
+    },
+  }
+}
+
+function agentWorktreeOf(value: unknown): { agentWorktree?: SessionRecord['agentWorktree'] } {
+  if (!isRecord(value) || !isString(value.path) || value.path === '') return {}
+  return {
+    agentWorktree: {
+      path: value.path,
+      branch: isString(value.branch) && value.branch !== '' ? value.branch : null,
     },
   }
 }
@@ -740,6 +754,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...earlierOf(item.earlier),
       ...carryOf(item.carry),
       ...worktreeOf(item.worktree),
+      ...agentWorktreeOf(item.agentWorktree),
     })
   }
   return {

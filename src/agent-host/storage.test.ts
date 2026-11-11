@@ -328,6 +328,8 @@ describe('the host files', () => {
     })
     const removed = { ...session, worktree: { ...worktree, removed: 'worktree' } }
     expect(parseSessionsFile({ sessions: [removed] })).toEqual({ version: 1, sessions: [removed] })
+    const pending = { ...session, worktree: { ...worktree, pending: true } }
+    expect(parseSessionsFile({ sessions: [pending] })).toEqual({ version: 1, sessions: [pending] })
     // An older record without the field works in its project's folder, as before.
     expect(parseSessionsFile({ sessions: [session] })).toEqual({ version: 1, sessions: [session] })
     const unreadable = {
@@ -347,6 +349,24 @@ describe('the host files', () => {
         sessions: [unreadable],
       })
     }
+  })
+
+  it('keeps the worktree an agent made for a subagent and drops one that does not read', () => {
+    const agentWorktree = { path: '/repo/.claude/worktrees/a', branch: 'worktree-a' }
+    expect(parseSessionsFile({ sessions: [{ ...session, agentWorktree }] })).toEqual({
+      version: 1,
+      sessions: [{ ...session, agentWorktree }],
+    })
+    expect(
+      parseSessionsFile({ sessions: [{ ...session, agentWorktree: { path: '/x', branch: 3 } }] }),
+    ).toEqual({
+      version: 1,
+      sessions: [{ ...session, agentWorktree: { path: '/x', branch: null } }],
+    })
+    expect(parseSessionsFile({ sessions: [{ ...session, agentWorktree: { path: '' } }] })).toEqual({
+      version: 1,
+      sessions: [session],
+    })
   })
 
   it("keeps a project's worktree settings key by key", () => {

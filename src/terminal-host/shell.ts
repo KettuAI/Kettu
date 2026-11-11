@@ -1,5 +1,6 @@
 import { access, constants, stat } from 'node:fs/promises'
 import { posix, win32 } from 'node:path'
+import { withLongPaths } from '@shared/git'
 import type { Platform } from '@shared/platform'
 
 export interface ShellSpec {
@@ -99,5 +100,5 @@ export function shellEnvironment(
   env.TERM_PROGRAM = 'Kettu'
   env.TERM_PROGRAM_VERSION = appVersion
   if (platform === 'darwin' && !env.LANG) env.LANG = 'en_US.UTF-8'
-  return env
+  return withLongPaths(env, platform)
 }

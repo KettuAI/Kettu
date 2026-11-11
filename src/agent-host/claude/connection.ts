@@ -103,6 +103,9 @@ import type {
   UserInput,
 } from './sdk'
 
+/** Claude Code's tools that move a session into another worktree mid-session. */
+export const WORKTREE_TOOLS = ['EnterWorktree', 'ExitWorktree'] as const
+
 export type LoadSdk = (entry: string) => Promise<ClaudeSdk>
 
 const CONFIG_DIR = 'CLAUDE_CONFIG_DIR'
@@ -905,6 +908,9 @@ export class ClaudeConnection implements AgentConnection {
       tools: bare ? [] : { type: 'preset', preset: 'claude_code' },
       ...(bare ? { strictMcpConfig: true } : {}),
       ...(allowedTools.length > 0 && !bare ? { allowedTools } : {}),
+      // Kettu keeps a session in its folder: the panels, the diffs and the permission scope follow
+      // that folder, and a worktree is Kettu's to make.
+      ...(bare ? {} : { disallowedTools: [...WORKTREE_TOOLS] }),
       permissionMode: mode,
       allowDangerouslySkipPermissions: allowBypass,
       canUseTool: (name, toolInput, permission) =>

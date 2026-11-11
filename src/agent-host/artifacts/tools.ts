@@ -207,6 +207,8 @@ export class ToolError extends Error {
 export interface Caller {
   sessionId: string
   project: string
+  /** The folder the session works in when it is not its project's, such as its worktree. */
+  folder?: string
   /** The call came from a subagent that runs under the session instead of being a session. */
   subagent?: boolean
 }
@@ -1454,7 +1456,12 @@ export class ArtifactTools {
   /** A file of the caller's working directory, as a write's source for `path`. */
   private async source(caller: Caller, path: string, source: string): Promise<Buffer> {
     try {
-      return await readSource(caller.project, source, DISK_FILE_BYTES, this.deps.platform)
+      return await readSource(
+        caller.folder ?? caller.project,
+        source,
+        DISK_FILE_BYTES,
+        this.deps.platform,
+      )
     } catch (error) {
       if (!(error instanceof SourceError)) throw error
       throw new ToolError(

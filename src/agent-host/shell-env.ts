@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto'
 import path from 'node:path'
 import type { EnvironmentInfo } from '@shared/agent-host'
 import type { NodeRuntime } from '@shared/host-control'
+import { withLongPaths } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import type { ProxySettings } from '@shared/settings'
 import type { AgentId } from '@shared/thread'
@@ -320,7 +321,8 @@ export class EnvironmentService {
   agentEnv(agentId?: AgentId): Env {
     const { platform } = this.deps
     const base = this.resolved?.env ?? withoutElectronVars(this.deps.baseEnv, platform)
-    const env = applyProxy(base, this.proxy, platform)
+    // Worktrees sit a level deeper than their projects, which passes MAX_PATH sooner on Windows.
+    const env = withLongPaths(applyProxy(base, this.proxy, platform), platform)
     return agentId ? applyConfigFolder(env, this.configFolders[agentId], platform) : env
   }
 

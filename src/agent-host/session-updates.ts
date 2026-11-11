@@ -17,6 +17,12 @@ import type {
 import type { PromptResult } from './connection'
 
 /** Per-turn bookkeeping the mapper needs to find "current" entries. */
+
+/** A worktree an agent made on its own, as it reported it. */
+export interface AgentWorktree {
+  path: string
+  branch: string | null
+}
 export interface TurnScope {
   planId: string | null
   /** Thought entries still streaming, with the time their first chunk arrived. */
@@ -63,6 +69,8 @@ export type MapperEffect =
       description?: string | null
       canCancel?: boolean
       state?: SubagentState
+      /** A worktree the agent made for the subagent itself, which Kettu only shows. */
+      worktree?: AgentWorktree
     }
   | { kind: 'limit'; limit: PlanLimit }
   | { kind: 'title'; title: string | null }

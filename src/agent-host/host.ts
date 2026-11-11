@@ -112,6 +112,8 @@ import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
 import { ScratchFolders } from './scratch'
+import { createWorktreeGit } from './worktrees/git'
+import { WorktreeManager } from './worktrees/manager'
 import { ComputerDriver, probePermissions } from './computer/driver'
 import { ComputerUse } from './computer/service'
 import { SessionManager, type SessionTimings } from './sessions'
@@ -255,6 +257,7 @@ export class AgentHost {
   readonly env: EnvironmentService
   readonly projects: Projects
   readonly scratch: ScratchFolders
+  private readonly worktrees: WorktreeManager
   readonly agents: AgentManager
   /** What the agents last reported about their accounts and plans, kept across runs. */
   private readonly remembered: JsonFile<AgentsFile>
@@ -507,6 +510,7 @@ export class AgentHost {
         allowAlways: (deviceId) => this.deviceAccess.add(deviceId),
       },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
+      sessionFolder: (sessionId) => this.sessions.sessionFolder(sessionId),
       ...(this.computer ? { computer: this.computer } : {}),
       proxy: this.mcpProxy,
       sessions: {
@@ -549,6 +553,7 @@ export class AgentHost {
         return this.env.agentEnv(agentId)
       },
       isScratch: (folder) => this.scratch.contains(folder),
+      worktreeProject: (folder) => this.sessions.worktreeProject(folder),
       log,
       changed: () => this.hub.broadcast({ type: 'usage.changed' }),
       status: (status) => this.hub.broadcast({ type: 'usage.status', status }),
@@ -588,11 +593,29 @@ export class AgentHost {
       launchEnv: (agentId, env) => this.marketSkills.launchEnv(agentId, env),
     })
     const routineHooks: RoutineSessionHooksRef = { current: null }
+    this.worktrees = new WorktreeManager({
+      git: createWorktreeGit({
+        exec: this.execRunner.exec,
+        platform,
+        homeDir: options.homeDir ?? os.homedir(),
+      }),
+      platform,
+      settings: (projectPath) => this.projects.worktreeSettings(projectPath),
+      root: () => this.settings.git.worktreeRoot,
+      env: async () => {
+        await this.env.ready()
+        return this.env.agentEnv() as NodeJS.ProcessEnv
+      },
+      takenByPullRequest: (projectPath, branch) =>
+        this.git?.branchPullRequests(projectPath).has(branch) ?? false,
+      log,
+    })
     this.sessions = new SessionManager({
       platform,
       agents: this.agents,
       projects: this.projects,
       scratch: this.scratch,
+      worktrees: this.worktrees,
       file: sessionsFile(options.userDataPath, log),
       returned: returnedFile(options.userDataPath, log),
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
@@ -672,7 +695,7 @@ export class AgentHost {
             return
           }
           this.hub.broadcast({ type: 'session.summary', summary })
-          if (summary.scratch) this.sendFolders()
+          if (summary.scratch || summary.worktree) this.sendFolders()
         },
         removed: (sessionId, portIds) => {
           if (portIds) {
@@ -831,6 +854,7 @@ export class AgentHost {
     host.routines.start()
     void host.marketSkills.sync()
     host.sendFolders()
+    void host.sessions.checkWorktrees()
     host.usage.start()
     host.artifacts.start()
     options.send({ type: 'host:service-port', port: host.artifactService.listeningPort })
@@ -873,9 +897,12 @@ export class AgentHost {
     ]
   }
 
-  /** The folders terminals may open in, sent when they change: the projects and scratch folders. */
+  /**
+   * The folders terminals may open in, sent when they change: the projects, scratch folders and
+   * sessions' worktrees.
+   */
   private sendFolders(): void {
-    const paths = [...this.projects.paths(), ...this.sessions.scratchFolders()]
+    const paths = [...this.projects.paths(), ...this.sessions.sessionFolders()]
     const key = paths.join('\n')
     if (key === this.sentFolders) return
     this.sentFolders = key
@@ -1488,11 +1515,20 @@ export class AgentHost {
     return this.gitCall((g) => run(g, canonical))
   }
 
-  /** A registered project or a scratch folder, canonical; git runs nowhere else. */
+  /**
+   * Refuses a canonical folder that is not a registered project, a scratch folder or a worktree a
+   * session works in: files, git and media are read nowhere else.
+   */
+  private assertOpenFolder(canonical: string): void {
+    if (this.scratch.contains(canonical) || this.sessions.isSessionWorktree(canonical)) return
+    this.projects.match(canonical)
+  }
+
+  /** A registered project, a scratch folder or a session's worktree, canonical; git runs nowhere else. */
   private async gitProject(projectPath: string): Promise<string> {
     this.requireGit()
     const canonical = await this.projects.resolveDirectory(projectPath)
-    if (!this.scratch.contains(canonical)) this.projects.match(canonical)
+    this.assertOpenFolder(canonical)
     return canonical
   }
 
@@ -1502,7 +1538,7 @@ export class AgentHost {
    */
   private async filesCall<T>(projectPath: string, run: (root: string) => Promise<T>): Promise<T> {
     const canonical = await this.projects.resolveDirectory(projectPath)
-    if (!this.scratch.contains(canonical)) this.projects.match(canonical)
+    this.assertOpenFolder(canonical)
     await this.env.ready()
     return run(canonical)
   }
@@ -1780,7 +1816,7 @@ export class AgentHost {
         this.filesCall(projectPath, (root) => this.files.write(root, path, text, version)),
       'media.open': async ({ projectPath, path, sessionId }) => {
         const root = await projects.resolveDirectory(projectPath)
-        if (!this.scratch.contains(root)) projects.match(root)
+        this.assertOpenFolder(root)
         return this.media.open(root, path, sessionId)
       },
       'media.authorize': async ({ projectPath, path, sessionId }, { device }) => {
@@ -1789,7 +1825,7 @@ export class AgentHost {
           throw new HostError('forbidden', 'Only a paired device may call "media.authorize"')
         }
         const root = await projects.resolveDirectory(projectPath)
-        if (!this.scratch.contains(root)) projects.match(root)
+        this.assertOpenFolder(root)
         return this.media.authorize(root, path, sessionId ?? null)
       },
       'usage.summary': ({ dayStarts, from, to, scope, clock }) =>

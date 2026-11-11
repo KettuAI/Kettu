@@ -51,6 +51,7 @@ import type {
   PullRequest,
   PullRequestState,
   RepositoryVisibility,
+  SessionWorktree,
 } from './git'
 import type { PortConnectionState } from './port-rpc'
 import type { PathCompletion } from './remote/host-admin'
@@ -452,6 +453,8 @@ export interface SessionSummary {
   archivedAt: number | null // when the user archived it; off the sidebar while set
   acpSessionId: string | null // the harness's own id for it, which its CLI resumes; null until known
   prepared?: PreparedInfo // a prepared session, outside the index until its first message
+  worktree?: SessionWorktree // the worktree it works in; absent when it works in projectPath
+  agentWorktree?: { path: string; branch: string | null } // one its agent made for this subagent
 }
 
 /**

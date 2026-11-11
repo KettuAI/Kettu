@@ -1,5 +1,7 @@
 // Repository status and pull requests, as the git service in the agent host reports them.
 
+import type { Platform } from './platform'
+
 export interface GitStatus {
   projectPath: string
   repo: { root: string; gitDir: string } | null // null: not a repository
@@ -301,4 +303,23 @@ export const DEFAULT_WORKTREE_SETTINGS: ProjectWorktreeSettings = {
   copy: [],
   setup: null,
   waitForSetup: true,
+}
+
+/**
+ * Turns on `core.longpaths` for every git a process starts on Windows, through git's environment
+ * variables after those already set, so no repository's config is changed.
+ */
+export function withLongPaths<E extends Record<string, string | undefined>>(
+  env: E,
+  platform: Platform,
+): E {
+  if (platform !== 'win32') return env
+  const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? '0', 10)
+  const index = Number.isInteger(count) && count >= 0 ? count : 0
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(index + 1),
+    [`GIT_CONFIG_KEY_${index}`]: 'core.longpaths',
+    [`GIT_CONFIG_VALUE_${index}`]: 'true',
+  }
 }

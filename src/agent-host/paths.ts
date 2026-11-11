@@ -64,6 +64,15 @@ export function samePath(a: string, b: string, platform: Platform): boolean {
   return pathKey(a, platform) === pathKey(b, platform)
 }
 
+/** Whether `value` is strictly inside `root`, both absolute, by the platform's path rules. */
+export function isInside(value: string, root: string, platform: Platform): boolean {
+  if (!isAbsolutePath(value, platform)) return false
+  const sep = platform === 'win32' ? '\\' : '/'
+  const key = pathKey(api(platform).resolve(value), platform)
+  const base = pathKey(root, platform)
+  return key !== base && key.startsWith(base.endsWith(sep) ? base : `${base}${sep}`)
+}
+
 /** The folder name, used as the project's default name. */
 export function folderName(value: string, platform: Platform): string {
   const p = api(platform)

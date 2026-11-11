@@ -3,7 +3,7 @@
 
 import type { DeviceAccessAnswer, DeviceAccessDecision } from '@shared/device-agent'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, realpath } from 'node:fs/promises'
+import { mkdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
@@ -131,9 +131,14 @@ import type { McpTransports } from './marketplace/servers'
 import { questionsResult } from './question-answers'
 import { HostError, invalidParams, notFound } from './errors'
 import { t } from './i18n'
-import { GITHUB_PULL_REQUEST_URL, githubReferenceOf } from '@shared/git'
+import {
+  GITHUB_PULL_REQUEST_URL,
+  githubReferenceOf,
+  type SessionWorktree,
+  type WorktreeFailure,
+} from '@shared/git'
 import type { GitEventDraft, GitServiceApi } from './git/api'
-import { canonicalizePath, pathKey, samePath } from './paths'
+import { canonicalizePath, isInside, pathKey, samePath } from './paths'
 import type { ProjectMcpAnswers } from './project-mcp'
 import { isOutOfCredit } from './out-of-credit'
 import { planRevision } from './plan-revision'
@@ -145,6 +150,8 @@ import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hoo
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
+import type { WorktreeInspection } from './worktrees/api'
+import type { PrepareState, WorktreeManager } from './worktrees/manager'
 import {
   carriedContext,
   threadTurns,
@@ -159,6 +166,7 @@ import {
   type ReturnedFile,
   type SessionRecord,
   type SessionsFile,
+  type WorktreeRecord,
 } from './storage'
 import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
 import { listedTitle, titleMessageText, writeSessionTitle } from './session-titles'
@@ -287,6 +295,8 @@ export interface SessionManagerDeps {
   agents: AgentManager
   projects: Projects
   scratch: ScratchFolders
+  /** Makes and prepares sessions' worktrees; without it no session gets one. */
+  worktrees?: WorktreeManager
   file: JsonFile<SessionsFile>
   /** Messages no session took, kept until a window takes them back. */
   returned: JsonFile<ReturnedFile>
@@ -478,6 +488,8 @@ interface Live {
     device?: FromDevice
     portId?: string
   } | null
+  /** A first message that waits for its worktree's preparation, which sends it. */
+  heldFirst: Live['first']
   /** Who queued each waiting prompt, by item id; apart from the queue, which every client sees. */
   queuedBy: Map<string, string>
   /** The message that gave the session its first title, for a written title, and its tries. */
@@ -569,6 +581,23 @@ export interface OriginTarget {
 }
 
 /** The first line of the first text, cut to 60 characters: the title until the agent sends one. */
+/**
+ * The folder a session works in: its worktree's when it has one, else its project's. A worktree
+ * that was removed or did not read is never swapped for the project's folder.
+ */
+export function workDir(record: Pick<SessionRecord, 'projectPath' | 'worktree'>): string {
+  return record.worktree ? record.worktree.path : record.projectPath
+}
+
+async function isFolder(value: string): Promise<boolean> {
+  if (value === '') return false
+  try {
+    return (await stat(value)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
 export function fallbackTitle(content: readonly UserContent[]): string | null {
   for (const item of content) {
     if (item.type !== 'text') continue
@@ -687,6 +716,10 @@ export class SessionManager {
     { sessionId: string; entryId: string; declinedBy: FromDevice | null }
   >()
   private readonly missing = new Set<string>()
+  /** Worktrees being prepared or whose preparation failed, by path key. */
+  private readonly preparing = new Map<string, Exclude<PrepareState, { state: 'ready' }>>()
+  /** Worktrees whose folder was found gone, by path key, until they are made again. */
+  private readonly missingWorktrees = new Set<string>()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
   private readonly contextRuns = new Map<string, Promise<ContextBreakdown | null>>()
@@ -919,7 +952,9 @@ export class SessionManager {
     const git = this.deps.git()
     const pr =
       record.branch && git
-        ? (git.branchPullRequests(record.projectPath).get(record.branch) ?? null)
+        ? (git.branchPullRequests(workDir(record)).get(record.branch) ??
+          git.branchPullRequests(record.projectPath).get(record.branch) ??
+          null)
         : null
     return {
       id: record.id,
@@ -945,6 +980,8 @@ export class SessionManager {
       pinnedAt: record.pinnedAt ?? null,
       archivedAt: record.archivedAt ?? null,
       acpSessionId: record.acpSessionId || null,
+      ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
+      ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared
         ? {
             prepared: {
@@ -973,18 +1010,57 @@ export class SessionManager {
     return out.sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
-  /** The scratch folders sessions run in, live or indexed, so terminals may open there. */
-  scratchFolders(): string[] {
+  /**
+   * The folders sessions work in outside the projects, live or indexed: scratch folders and
+   * worktrees, so files, git and terminals may open there.
+   */
+  sessionFolders(): string[] {
     const { platform, scratch } = this.deps
     const folders = new Map<string, string>()
     const records = [
       ...this.records.values(),
       ...[...this.live.values()].filter((l) => !l.prepared).map((l) => l.record),
     ]
-    for (const { projectPath } of records) {
+    for (const record of records) {
+      const { projectPath, worktree } = record
       if (scratch.contains(projectPath)) folders.set(pathKey(projectPath, platform), projectPath)
+      if (worktree && worktree.path !== '' && worktree.removed === undefined) {
+        folders.set(pathKey(worktree.path, platform), worktree.path)
+      }
     }
     return [...folders.values()]
+  }
+
+  /** The project of the session worktree at `folder`, or null when no session works there. */
+  worktreeProject(folder: string): string | null {
+    const key = pathKey(folder, this.deps.platform)
+    for (const { projectPath, worktree } of this.allRecords()) {
+      if (worktree && worktree.path !== '' && pathKey(worktree.path, this.deps.platform) === key) {
+        return projectPath
+      }
+    }
+    return null
+  }
+
+  /** Whether a canonical folder is a worktree a session record names. */
+  isSessionWorktree(canonical: string): boolean {
+    const key = pathKey(canonical, this.deps.platform)
+    for (const { worktree, agentWorktree } of this.allRecords()) {
+      for (const folder of [worktree?.path, agentWorktree?.path]) {
+        if (folder && pathKey(folder, this.deps.platform) === key) return true
+      }
+    }
+    return false
+  }
+
+  private allRecords(): SessionRecord[] {
+    return [...this.records.values(), ...[...this.live.values()].map((l) => l.record)]
+  }
+
+  /** The folder a session works in, for the tools that read its files; null when unknown. */
+  sessionFolder(sessionId: string): string | null {
+    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
+    return record ? workDir(record) : null
   }
 
   /** Sends the summary to every port if it changed, after the session's pending patches. */
@@ -1981,6 +2057,7 @@ export class SessionManager {
       checkpointTimer: null,
       used: false,
       first: null,
+      heldFirst: null,
       queuedBy: new Map(),
       titlePrompt: null,
       titleWriting: false,
@@ -2065,13 +2142,19 @@ export class SessionManager {
     }
   }
 
+  /**
+   * The key the user's answers about a folder's MCP servers are kept by: a session's worktree
+   * shares its project's, as switching branches in the project's folder would.
+   */
   private async folderKey(folder: string): Promise<string> {
     const platform = this.deps.platform
+    let canonical: string
     try {
-      return pathKey(await canonicalizePath(folder, platform, realpath), platform)
+      canonical = await canonicalizePath(folder, platform, realpath)
     } catch {
-      return pathKey(folder, platform)
+      canonical = folder
     }
+    return pathKey(this.worktreeProject(canonical) ?? canonical, platform)
   }
 
   /**
@@ -2250,7 +2333,8 @@ export class SessionManager {
   }
 
   private applyEffect(live: Live, effect: MapperEffect): void {
-    const { agentId, projectPath } = live.record
+    const { agentId } = live.record
+    const folder = workDir(live.record)
     switch (effect.kind) {
       case 'limit':
         this.deps.agents.setLimit(agentId, effect.limit)
@@ -2277,9 +2361,8 @@ export class SessionManager {
       case 'tool': {
         const git = this.deps.git()
         if (!git) break
-        if (effect.phase === 'started') git.toolCallStarted(projectPath, live.id, effect.toolCallId)
-        else
-          git.toolCallEnded(projectPath, live.id, effect.toolCallId, effect.toolKind, effect.output)
+        if (effect.phase === 'started') git.toolCallStarted(folder, live.id, effect.toolCallId)
+        else git.toolCallEnded(folder, live.id, effect.toolCallId, effect.toolKind, effect.output)
         break
       }
       case 'subagent':
@@ -2345,10 +2428,10 @@ export class SessionManager {
 
   /** Keeps the lifetime already known when the transcript names none. */
   private async readCacheTtl(live: Live): Promise<void> {
-    const { agentId, projectPath, acpSessionId } = live.record
+    const { agentId, acpSessionId } = live.record
     let ttl: number | null
     try {
-      ttl = (await this.deps.cacheTtl?.(agentId, projectPath, acpSessionId)) ?? null
+      ttl = (await this.deps.cacheTtl?.(agentId, workDir(live.record), acpSessionId)) ?? null
     } catch (error) {
       this.deps.diagnostics.log(
         'warn',
@@ -2384,6 +2467,7 @@ export class SessionManager {
         agentId,
         acpSessionId: effect.sessionId,
         projectPath: parent.record.projectPath,
+        ...(parent.record.worktree ? { worktree: { ...parent.record.worktree } } : {}),
         title: effect.title ?? null,
         createdAt: now,
         updatedAt: now,
@@ -2435,6 +2519,13 @@ export class SessionManager {
       child.record.description = effect.description
     }
     if (effect.canCancel !== undefined) nextInfo.canCancel = effect.canCancel
+    // The path is the agent's word: only one inside the folder it works in is kept.
+    if (
+      effect.worktree &&
+      isInside(effect.worktree.path, workDir(parent.record), this.deps.platform)
+    ) {
+      child.record.agentWorktree = { ...effect.worktree }
+    }
     if (effect.state) this.applySubagentState(child, effect.state, changes, nextInfo, now)
     changes.subagent = nextInfo
     this.update(child, changes)
@@ -2648,6 +2739,8 @@ export class SessionManager {
       device?: FromDevice
       /** Its title, when another session's agent starts it; the prompt's first line otherwise. */
       title?: string
+      /** A new worktree to work in, cut from `base`; a sub-session takes its parent's instead. */
+      worktree?: { base: string; branch?: string }
     },
     portId?: string,
   ): Promise<SessionSummary> {
@@ -2656,7 +2749,8 @@ export class SessionManager {
     agents.assertEnabled(params.agentId)
     // Before a prepared session is taken over, so a refused prompt leaves it prepared.
     const prompt = params.prompt && this.hydrate(params.prompt)
-    if (params.preparedId !== undefined) {
+    // A prepared session's agent already works in the project's folder, so a worktree starts anew.
+    if (params.preparedId !== undefined && params.worktree === undefined) {
       const adopted = await this.adopt({
         agentId: params.agentId,
         preparedId: params.preparedId,
@@ -2679,12 +2773,30 @@ export class SessionManager {
       }
     }
     if (!scratch.contains(projectPath)) await projects.add(projectPath)
+    let worktree: WorktreeRecord | undefined
+    let newWorktree = false
+    if (params.parentId !== undefined) {
+      const inherited = this.recordOf(params.parentId).worktree
+      if (inherited) worktree = { ...inherited }
+    } else if (params.worktree !== undefined) {
+      const manager = this.deps.worktrees
+      if (!manager || scratch.contains(projectPath)) {
+        throw invalidParams('A worktree needs a project in a Git repository')
+      }
+      worktree = await manager.create(projectPath, {
+        base: params.worktree.base,
+        ...(params.worktree.branch === undefined ? {} : { branch: params.worktree.branch }),
+        text: (prompt && fallbackTitle(prompt)) ?? '',
+      })
+      newWorktree = true
+    }
     const now = this.now()
     const record: SessionRecord = {
       id: randomUUID(),
       agentId: params.agentId,
       acpSessionId: '',
       projectPath,
+      ...(worktree ? { worktree } : {}),
       title: params.title ?? null,
       ...(params.title === undefined ? {} : { titleSource: 'agent' as const }),
       createdAt: now,
@@ -2712,6 +2824,7 @@ export class SessionManager {
       }
     }
     this.touch(live.id)
+    if (newWorktree && worktree) this.prepareWorktree(projectPath, worktree)
     try {
       live.startValues = options
       await this.startNew(live)
@@ -2733,6 +2846,10 @@ export class SessionManager {
         // A session closed or deleted while it started is already dropped.
         if (this.live.get(live.id) === live) this.dropLive(live)
         this.forget(live.id)
+        if (newWorktree && worktree) {
+          this.deps.worktrees?.stop(worktree.path)
+          void this.discardWorktree(projectPath, worktree)
+        }
         throw error
       }
     }
@@ -2952,7 +3069,7 @@ export class SessionManager {
     let setup
     try {
       setup = await runtime.connection.newSession(
-        live.record.projectPath,
+        workDir(live.record),
         this.attachOptions(live.id, live.record, runtime),
       )
     } catch (error) {
@@ -2964,7 +3081,7 @@ export class SessionManager {
     this.deps.prepared?.add({
       agentId,
       acpSessionId: setup.sessionId,
-      cwd: live.record.projectPath,
+      cwd: workDir(live.record),
     })
     if (gone()) {
       await this.removeUnlisted(live.id, runtime, setup.sessionId)
@@ -3012,7 +3129,7 @@ export class SessionManager {
   private watchPrepared(live: Live): void {
     const prepared = live.prepared
     const targets =
-      prepared && this.deps.settingsTargets?.(live.record.agentId, live.record.projectPath)
+      prepared && this.deps.settingsTargets?.(live.record.agentId, workDir(live.record))
     if (!prepared || !targets?.length) return
     prepared.unwatch = watchSettings(
       targets,
@@ -3129,7 +3246,7 @@ export class SessionManager {
     let setup
     try {
       setup = await runtime.connection.newSession(
-        live.record.projectPath,
+        await this.cwdOf(live),
         this.attachOptions(live.id, live.record, runtime),
       )
     } catch (error) {
@@ -3212,6 +3329,10 @@ export class SessionManager {
     const first = live.first
     live.first = null
     if (!first) return
+    if (this.waitsForWorktree(live)) {
+      live.heldFirst = first
+      return
+    }
     // The first message never goes out with a value the user did not choose.
     const wanted = Object.entries(live.startValues).flatMap(([id, value]): ConfigOption[] => {
       const option = config.find((o) => o.id === id) ?? own.find((o) => o.id === id)
@@ -3489,7 +3610,13 @@ export class SessionManager {
     }
     const caps = runtime.init.capabilities
     const { connection } = runtime
-    const { acpSessionId, projectPath } = live.record
+    const { acpSessionId } = live.record
+    let projectPath: string
+    try {
+      projectPath = await this.cwdOf(live)
+    } catch (error) {
+      throw this.failStart(live, error, { action: 'load' })
+    }
     const useLoad = caps.loadSession
     if (!useLoad && !caps.resumeSession) {
       throw this.failStart(
@@ -3982,8 +4109,9 @@ export class SessionManager {
     } else if (caps.resumeSession) {
       const attach = this.attachOptions(live.id, record, runtime)
       try {
-        config = (await connection.resumeSession(record.acpSessionId, record.projectPath, attach))
-          .config
+        config = (
+          await connection.resumeSession(record.acpSessionId, await this.cwdOf(live), attach)
+        ).config
       } catch (error) {
         if (carry) {
           // The session it had is gone, so it starts over with the whole conversation.
@@ -4182,7 +4310,7 @@ export class SessionManager {
     connection: AgentConnection,
     attach: SessionOptions,
   ): Promise<ConfigOption[]> {
-    const setup = await connection.newSession(live.record.projectPath, attach)
+    const setup = await connection.newSession(await this.cwdOf(live), attach)
     live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     live.rewrite = true
@@ -4217,7 +4345,7 @@ export class SessionManager {
     }
     connection.register(record.acpSessionId, quiet)
     try {
-      return await connection.loadSession(record.acpSessionId, record.projectPath, attach)
+      return await connection.loadSession(record.acpSessionId, workDir(record), attach)
     } finally {
       connection.unregister(record.acpSessionId, quiet)
       // Updates after the replay wait for the session, which attaches once its values are set.
@@ -4326,7 +4454,7 @@ export class SessionManager {
     let breakdown: ContextBreakdown | null
     if (connection.readContext) {
       try {
-        breakdown = await connection.readContext(record.acpSessionId, record.projectPath, {})
+        breakdown = await connection.readContext(record.acpSessionId, workDir(record), {})
       } catch (error) {
         throw agentError(error)
       }
@@ -4342,7 +4470,7 @@ export class SessionManager {
           runtime,
           async () =>
             (
-              await connection.forkSession(record.acpSessionId, record.projectPath, {
+              await connection.forkSession(record.acpSessionId, workDir(record), {
                 hidden: 'context',
               })
             ).sessionId,
@@ -4422,10 +4550,12 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
-    this.refuseIfArchived(sessionId)
+    this.refuseIfCannotSend(sessionId)
     const hydrated = this.hydrate(content)
     const live = await this.revive(sessionId)
-    if (!canSend(live.thread.session.status)) throw busyError(live.thread.session.status)
+    if (!canSend(live.thread.session.status) || this.waitsForWorktree(live)) {
+      throw busyError(live.thread.session.status)
+    }
     this.sendPrompt(live, hydrated, undefined, portId, device)
   }
 
@@ -4462,7 +4592,7 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
-    this.refuseIfArchived(sessionId)
+    this.refuseIfCannotSend(sessionId)
     if (!this.deps.agents.has(agentId)) throw invalidParams(`Unknown agent ${agentId}`)
     this.deps.agents.assertEnabled(agentId)
     const hydrated = this.hydrate(params.content)
@@ -4885,11 +5015,11 @@ export class SessionManager {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
-    this.refuseIfArchived(sessionId)
+    this.refuseIfCannotSend(sessionId)
     const content = this.hydrate(input)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
-    if (canSend(status) && (queue.length === 0 || queuePaused)) {
+    if (canSend(status) && (queue.length === 0 || queuePaused) && !this.waitsForWorktree(live)) {
       // At once: another prompt waiting on the same revive must see this turn running.
       this.sendPrompt(live, content, undefined, portId, device)
       return { itemId: null }
@@ -4997,7 +5127,7 @@ export class SessionManager {
 
   async resumeQueue(sessionId: string): Promise<void> {
     this.assertRegistered(sessionId)
-    this.refuseIfArchived(sessionId)
+    this.refuseIfCannotSend(sessionId)
     const live = await this.revive(sessionId)
     this.update(live, { queuePaused: false })
     this.drainQueue(live)
@@ -5018,7 +5148,7 @@ export class SessionManager {
     }
     const { status, queue, queuePaused } = live.thread.session
     const [next, ...rest] = queue
-    if (!next || (queuePaused && !chosen) || !canSend(status)) return
+    if (!next || (queuePaused && !chosen) || !canSend(status) || this.waitsForWorktree(live)) return
     this.update(live, { queue: rest, ...(rest.length === 0 ? { queuePaused: false } : {}) })
     const queuedBy = live.queuedBy.get(next.id)
     live.queuedBy.delete(next.id)
@@ -5187,7 +5317,15 @@ export class SessionManager {
    * of this thread until it is replayed on a later open. While a turn runs, the fork ends at the
    * reply before it, or at the one named, and the turn goes on in this session.
    */
-  async fork(sessionId: string, entryId?: string): Promise<SessionSummary> {
+  /**
+   * A fork of a session in a worktree gets a worktree of its own, cut from the source's branch,
+   * unless `worktree` is `same`: two sessions changing one folder would overwrite each other.
+   */
+  async fork(
+    sessionId: string,
+    entryId?: string,
+    worktree: 'new' | 'same' = 'new',
+  ): Promise<SessionSummary> {
     if (this.recordOf(sessionId).origin === 'subagent') {
       throw new HostError('restricted', t('session.subagent.noFork'))
     }
@@ -5246,16 +5384,18 @@ export class SessionManager {
       ),
     )
     const forkId = randomUUID()
+    const own = await this.forkWorktree(source.record, worktree)
     let setup
     try {
       setup = await runtime.connection.forkSession(
         source.record.acpSessionId,
-        source.record.projectPath,
+        own?.path ?? workDir(source.record),
         this.attachOptions(forkId, source.record, runtime),
         cut?.point,
       )
     } catch (error) {
       this.deps.mcp?.detached(forkId)
+      if (own) void this.discardWorktree(source.record.projectPath, own)
       throw agentError(error)
     }
     const blobs = (await reading).filter((blob) => blob !== null)
@@ -5275,6 +5415,7 @@ export class SessionManager {
       updatedAt: now,
       lastViewedAt: now,
       branch: null,
+      ...(own ? { worktree: own } : {}),
     }
     // A queued prompt, the attachments it holds, and the source's pin or archive stay with it.
     delete record.queue
@@ -5305,6 +5446,7 @@ export class SessionManager {
     })
     this.save(live)
     this.touch(live.id)
+    if (own) this.prepareWorktree(record.projectPath, own)
     // Not every agent carries the source's settings over to a fork, such as its model.
     const carried = source.thread.session.config
     const { connection } = runtime
@@ -5613,8 +5755,8 @@ export class SessionManager {
     if (live.thread.session.usage?.cache) this.scheduleCacheRead(live)
     const git = this.deps.git()
     if (git) {
-      git.turnEnded(live.record.projectPath, live.id)
-      live.record.branch = git.currentBranch(live.record.projectPath) ?? live.record.branch
+      git.turnEnded(workDir(live.record), live.id)
+      live.record.branch = git.currentBranch(workDir(live.record)) ?? live.record.branch
     }
     if (this.inFront(live.id)) live.record.lastViewedAt = now
     else live.unread = true
@@ -5709,7 +5851,8 @@ export class SessionManager {
   }
 
   private async readListedTitle(live: Live, retry: boolean): Promise<void> {
-    const { agentId, projectPath, acpSessionId } = live.record
+    const { agentId, acpSessionId } = live.record
+    const projectPath = workDir(live.record)
     const connection = live.connection
     if (!connection) return
     let title: string | null
@@ -5800,7 +5943,7 @@ export class SessionManager {
   /** The paths a turn's edits touched, relative to the project when they lie inside it. */
   private turnChanges(live: Live, turn: Turn): string[] {
     const api = this.deps.platform === 'win32' ? path.win32 : path.posix
-    const root = live.record.projectPath
+    const root = workDir(live.record)
     const paths = new Set<string>()
     for (const entry of this.turnEntries(live, turn)) {
       if (
@@ -6183,7 +6326,7 @@ export class SessionManager {
           live.id,
           'permission',
           this.titleOf(live),
-          requestText(tool, live.record.projectPath),
+          requestText(tool, workDir(live.record)),
           {
             id: requestId,
             ...(allow ? { allow: { optionId: allow.id, name: allow.name } } : {}),
@@ -6699,9 +6842,293 @@ export class SessionManager {
   }
 
   /** A message from the user does not bring an archived session back; restoring it does. */
-  private refuseIfArchived(sessionId: string): void {
-    if (this.isArchived(this.recordOf(sessionId))) {
-      throw new HostError('restricted', t('session.archived'))
+  private refuseIfCannotSend(sessionId: string): void {
+    const record = this.recordOf(sessionId)
+    if (this.isArchived(record)) throw new HostError('restricted', t('session.archived'))
+    if (record.worktree?.removed === 'branch') {
+      throw new HostError('restricted', t('session.worktreeGone'))
+    }
+  }
+
+  // Worktrees.
+
+  private worktreeSummary(worktree: NonNullable<SessionRecord['worktree']>): SessionWorktree {
+    const { path, branch, base, baseOid } = worktree
+    const key = pathKey(path, this.deps.platform)
+    const preparing = this.preparing.get(key)
+    let state: SessionWorktree['state'] = 'ready'
+    if (worktree.removed === 'branch') state = 'gone'
+    else if (worktree.removed === 'worktree') state = 'removed'
+    else if (preparing) state = preparing.state
+    else if (worktree.pending) state = 'setup-failed'
+    else if (this.missingWorktrees.has(key)) state = 'missing'
+    const failure: WorktreeFailure | undefined =
+      preparing?.state === 'setup-failed'
+        ? preparing.failure
+        : state === 'setup-failed'
+          ? { stage: 'setup', exitCode: null, message: t('session.worktreeInterrupted') }
+          : undefined
+    return { path, branch, base, baseOid, state, ...(failure ? { failure } : {}) }
+  }
+
+  /** Whether the session's first message, and what follows it, waits for its worktree. */
+  private waitsForWorktree(live: Live): boolean {
+    const { worktree } = live.record
+    if (!worktree || worktree.removed !== undefined) return false
+    const key = pathKey(worktree.path, this.deps.platform)
+    if (!this.preparing.has(key) && !worktree.pending) return false
+    return this.deps.worktrees?.settings(live.record.projectPath).waitForSetup ?? true
+  }
+
+  /**
+   * The folder to start or resume the session's agent in. A worktree Kettu removed, or one whose
+   * folder went away, is made again from its branch first; one whose branch is gone is refused.
+   */
+  private async cwdOf(live: Live): Promise<string> {
+    const { worktree } = live.record
+    if (!worktree) return live.record.projectPath
+    if (worktree.removed === 'branch') {
+      throw new HostError('restricted', t('session.worktreeGone'))
+    }
+    const key = pathKey(worktree.path, this.deps.platform)
+    const there = await isFolder(worktree.path)
+    if (worktree.removed === undefined && there) {
+      this.missingWorktrees.delete(key)
+      return worktree.path
+    }
+    const manager = this.deps.worktrees
+    if (!manager) throw new HostError('restricted', t('session.worktreeGone'))
+    try {
+      await manager.recreate(live.record.projectPath, worktree)
+    } catch (error) {
+      if (error instanceof HostError && error.code === 'not_found') {
+        this.markWorktree(worktree.path, (record) => {
+          record.removed = 'branch'
+        })
+        throw new HostError('restricted', t('session.worktreeGone'))
+      }
+      throw error
+    }
+    this.missingWorktrees.delete(key)
+    this.markWorktree(worktree.path, (record) => {
+      delete record.removed
+    })
+    return worktree.path
+  }
+
+  /** A new worktree for a fork of a session in one, cut from the source's branch; null to share. */
+  private async forkWorktree(
+    source: SessionRecord,
+    mode: 'new' | 'same',
+  ): Promise<WorktreeRecord | null> {
+    const { worktree } = source
+    if (!worktree || mode === 'same') return null
+    if (worktree.removed === 'branch') throw new HostError('restricted', t('session.worktreeGone'))
+    const manager = this.deps.worktrees
+    if (!manager) throw new HostError('restricted', t('session.worktreeGone'))
+    return manager.create(source.projectPath, {
+      base: `refs/heads/${worktree.branch}`,
+      text: source.customTitle ?? source.title ?? '',
+    })
+  }
+
+  /** Removes a worktree made for a session that never came to be, when nothing is in it yet. */
+  private async discardWorktree(projectPath: string, worktree: WorktreeRecord): Promise<void> {
+    const manager = this.deps.worktrees
+    if (!manager) return
+    try {
+      const state = await manager.inspect(projectPath, worktree)
+      if (state.uncommitted > 0 || state.head !== worktree.baseOid) return
+      await manager.remove(projectPath, worktree, { branch: 'delete', expected: state })
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not remove the unused worktree ${worktree.path}: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  /** Changes every session record that names the worktree, then saves and announces them. */
+  private markWorktree(
+    path: string,
+    change: (worktree: NonNullable<SessionRecord['worktree']>) => void,
+  ): void {
+    const key = pathKey(path, this.deps.platform)
+    const changed = new Set<string>()
+    for (const record of this.allRecords()) {
+      if (record.worktree && pathKey(record.worktree.path, this.deps.platform) === key) {
+        change(record.worktree)
+        changed.add(record.id)
+      }
+    }
+    for (const id of changed) {
+      const live = this.live.get(id)
+      if (live) this.persist(live)
+      else this.saveIndex()
+      this.touch(id)
+    }
+  }
+
+  /** The sessions working in a worktree, by path, live or indexed. */
+  worktreeUsers(path: string): SessionRecord[] {
+    const key = pathKey(path, this.deps.platform)
+    const seen = new Set<string>()
+    return this.allRecords().filter((record) => {
+      if (seen.has(record.id) || !record.worktree) return false
+      seen.add(record.id)
+      return pathKey(record.worktree.path, this.deps.platform) === key
+    })
+  }
+
+  /**
+   * Copies the project's local files into the worktree and runs its setup command, then sends the
+   * first messages that waited for it. Failure leaves them waiting for a retry or a skip.
+   */
+  private prepareWorktree(
+    projectPath: string,
+    worktree: NonNullable<SessionRecord['worktree']>,
+  ): void {
+    const manager = this.deps.worktrees
+    if (!manager) return
+    const key = pathKey(worktree.path, this.deps.platform)
+    this.markWorktree(worktree.path, (record) => {
+      record.pending = true
+    })
+    void manager.prepare(projectPath, worktree, (next) => {
+      if (next.state === 'ready') this.preparing.delete(key)
+      else this.preparing.set(key, next)
+      if (next.state === 'ready') {
+        this.markWorktree(worktree.path, (record) => {
+          delete record.pending
+        })
+        this.releaseWorktreeWaiters(worktree.path)
+        return
+      }
+      for (const record of this.worktreeUsers(worktree.path)) this.touch(record.id)
+    })
+  }
+
+  /** Sends what waited for the worktree: each session's first message, then its queue. */
+  private releaseWorktreeWaiters(path: string): void {
+    for (const record of this.worktreeUsers(path)) {
+      const live = this.live.get(record.id)
+      if (!live) continue
+      const first = live.heldFirst
+      live.heldFirst = null
+      if (first && canSend(live.thread.session.status)) {
+        this.startTurn(live, first.content, this.now(), first.entryId, first.portId)
+      } else {
+        this.drainQueue(live)
+      }
+      this.touch(live.id)
+    }
+  }
+
+  /**
+   * What removing the session's worktree would lose, and the other sessions that work in it and
+   * are not archived, which keep it in use.
+   */
+  async inspectWorktree(sessionId: string): Promise<WorktreeInspection & { others: string[] }> {
+    const record = this.recordOf(sessionId)
+    const { worktree } = record
+    const manager = this.deps.worktrees
+    if (!worktree || worktree.path === '' || !manager) {
+      throw notFound('This session has no worktree')
+    }
+    const state = await manager.inspect(record.projectPath, worktree)
+    const others = this.worktreeUsers(worktree.path)
+      .filter(
+        (user) => user.id !== sessionId && user.origin !== 'subagent' && !this.isArchived(user),
+      )
+      .filter((user) => this.topOf(user).id !== this.topOf(record).id)
+      .map((user) => user.id)
+    return { ...state, others }
+  }
+
+  /**
+   * Removes the session's worktree, and its branch when asked and safe, once its sessions' agents
+   * have stopped. `expected` is what the user was shown: anything changed since stops it.
+   */
+  async removeWorktree(
+    sessionId: string,
+    branch: 'keep' | 'delete',
+    expected: WorktreeInspection,
+  ): Promise<SessionSummary> {
+    const record = this.recordOf(sessionId)
+    const { worktree } = record
+    const manager = this.deps.worktrees
+    if (!worktree || worktree.path === '' || worktree.removed !== undefined || !manager) {
+      throw notFound('This session has no worktree to remove')
+    }
+    const users = this.worktreeUsers(worktree.path)
+    await this.closeAll(
+      users.filter((user) => this.live.has(user.id)),
+      true,
+    )
+    manager.stop(worktree.path)
+    const result = await manager.remove(record.projectPath, worktree, { branch, expected })
+    const key = pathKey(worktree.path, this.deps.platform)
+    this.preparing.delete(key)
+    this.missingWorktrees.delete(key)
+    this.markWorktree(worktree.path, (item) => {
+      item.removed = result.branchDeleted ? 'branch' : 'worktree'
+      delete item.pending
+    })
+    return this.summary(sessionId)
+  }
+
+  /** The top-level session of a sub-session's tree. */
+  private topOf(record: SessionRecord): SessionRecord {
+    let top = record
+    while (top.parentId !== null) {
+      const parent = this.live.get(top.parentId)?.record ?? this.records.get(top.parentId)
+      if (!parent) break
+      top = parent
+    }
+    return top
+  }
+
+  /** Runs a failed or interrupted preparation again. */
+  retryWorktreeSetup(sessionId: string): void {
+    const record = this.recordOf(sessionId)
+    const { worktree } = record
+    if (!worktree || worktree.removed !== undefined) throw notFound('This session has no worktree')
+    if (this.deps.worktrees?.isPreparing(worktree.path)) return
+    this.prepareWorktree(record.projectPath, worktree)
+  }
+
+  /** Goes on without the setup command: what waited for it is sent now. */
+  skipWorktreeSetup(sessionId: string): void {
+    const record = this.recordOf(sessionId)
+    const { worktree } = record
+    if (!worktree || worktree.removed !== undefined) throw notFound('This session has no worktree')
+    this.deps.worktrees?.stop(worktree.path)
+    this.preparing.delete(pathKey(worktree.path, this.deps.platform))
+    this.markWorktree(worktree.path, (item) => {
+      delete item.pending
+    })
+    this.releaseWorktreeWaiters(worktree.path)
+  }
+
+  /** The setup command's output in the session's worktree. */
+  worktreeSetupLog(sessionId: string): string {
+    const { worktree } = this.recordOf(sessionId)
+    return worktree ? (this.deps.worktrees?.setupLog(worktree.path) ?? '') : ''
+  }
+
+  /** Marks worktrees whose folders are gone, so their sessions say so; run at load. */
+  async checkWorktrees(): Promise<void> {
+    const seen = new Set<string>()
+    for (const record of this.allRecords()) {
+      const { worktree } = record
+      if (!worktree || worktree.path === '' || worktree.removed !== undefined) continue
+      const key = pathKey(worktree.path, this.deps.platform)
+      if (seen.has(key)) continue
+      seen.add(key)
+      if (await isFolder(worktree.path)) continue
+      this.missingWorktrees.add(key)
+      await this.deps.worktrees?.prune(record.projectPath).catch(() => {})
+      for (const user of this.worktreeUsers(worktree.path)) this.touch(user.id)
     }
   }
 

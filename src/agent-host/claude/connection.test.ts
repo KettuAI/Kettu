@@ -273,7 +273,7 @@ describe('the Claude Agent SDK driver', () => {
       extraArgs: { 'replay-user-messages': null },
     })
     expect(options.settings).toBeUndefined()
-    expect(options.disallowedTools).toBeUndefined()
+    expect(options.disallowedTools).toEqual(['EnterWorktree', 'ExitWorktree'])
     expect(options.env).toMatchObject({
       PATH: '/usr/bin',
       CLAUDE_CONFIG_DIR: '/home/ada/.claude-work',
@@ -2360,6 +2360,50 @@ describe('subagents', () => {
       sessionId: 'task-1',
       state: { kind: 'idle', stopReason: 'cancelled', error: null, tokens: null },
     })
+  })
+
+  it('reports the worktree Claude Code kept for a subagent that changed files', async () => {
+    const s = await setup()
+    const parent = new Target()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, parent)
+    s.sdk.script = (q) => {
+      q.running()
+      q.emit(
+        assistant(q, 'msg_1', [
+          {
+            type: 'tool_use',
+            id: 'toolu_w',
+            name: 'Agent',
+            input: { description: 'Fix it', prompt: 'Fix it', isolation: 'worktree' },
+          },
+        ]),
+        {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'toolu_w', content: 'Fixed.' }],
+          },
+          parent_tool_use_id: null,
+          tool_use_result: {
+            status: 'completed',
+            agentId: 'agent-w',
+            worktreePath: '/repo/.claude/worktrees/agent-w',
+            worktreeBranch: 'worktree-agent-w',
+          },
+          session_id: q.sessionId,
+        } as SdkMessage,
+      )
+      q.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    expect(parent.effects).toContainEqual(
+      expect.objectContaining({
+        kind: 'subagent',
+        sessionId: 'agent-w',
+        worktree: { path: '/repo/.claude/worktrees/agent-w', branch: 'worktree-agent-w' },
+      }),
+    )
   })
 
   it("replays a subagent's history into its session", async () => {

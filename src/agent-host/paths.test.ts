@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, realpath, rm, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { canonicalizePath, folderName, isAbsolutePath, pathKey, samePath } from './paths'
+import { canonicalizePath, folderName, isAbsolutePath, isInside, pathKey, samePath } from './paths'
 
 describe('canonicalizePath', () => {
   it('rejects relative paths before touching the file system', async () => {
@@ -93,5 +93,18 @@ describe('isAbsolutePath and folderName', () => {
     expect(folderName('C:\\Users\\me\\kettu', 'win32')).toBe('kettu')
     expect(folderName('C:\\', 'win32')).toBe('C:')
     expect(folderName('/', 'linux')).toBe('/')
+  })
+})
+
+describe('isInside', () => {
+  it("takes only paths strictly below the root, by each platform's rules", () => {
+    expect(isInside('/repo/.claude/worktrees/a', '/repo', 'darwin')).toBe(true)
+    expect(isInside('/repo', '/repo', 'darwin')).toBe(false)
+    expect(isInside('/repo-other/a', '/repo', 'darwin')).toBe(false)
+    expect(isInside('/repo/../etc', '/repo', 'linux')).toBe(false)
+    expect(isInside('relative/a', '/repo', 'linux')).toBe(false)
+    expect(isInside('/', '/repo', 'linux')).toBe(false)
+    expect(isInside('C:\\Repo\\.claude\\x', 'c:\\repo', 'win32')).toBe(true)
+    expect(isInside('C:\\Repo2\\x', 'c:\\repo', 'win32')).toBe(false)
   })
 })
