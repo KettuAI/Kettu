@@ -260,6 +260,22 @@ describe('a paired device', () => {
     ])
   })
 
+  it("changes a project's worktree setup command only with the terminal's leave", async () => {
+    const t = await setup()
+    const device = await t.connect()
+    await device.first
+    const settings = { branchTemplate: 'kettu/{slug}', copy: [], setup: 'make', waitForSetup: true }
+    const change = () =>
+      device.port.request('projects.setWorktreeSettings', { path: t.agent.project, settings })
+    await expect(change()).rejects.toMatchObject({ code: 'forbidden' })
+    expect(t.forwarded).toEqual([])
+    t.server.setTerminal(true)
+    await change().catch(() => {})
+    expect(t.forwarded).toContainEqual(
+      expect.objectContaining({ type: 'request', method: 'projects.setWorktreeSettings' }),
+    )
+  })
+
   it("opens an artifact's frame, whose token alone names its files to the direct port", async () => {
     const t = await setup()
     const device = await t.connect()

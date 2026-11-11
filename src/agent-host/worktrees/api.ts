@@ -1,6 +1,6 @@
 // The worktree service's interface, as sessions and the host use it.
 
-import type { ProjectWorktreeSettings } from '@shared/git'
+import type { ProjectWorktreeSettings, WorktreeInspection } from '@shared/git'
 import type { WorktreeRecord } from '../storage'
 
 /** What a new worktree is made from; every path canonical, every name unchecked. */
@@ -19,22 +19,6 @@ export interface WorktreeRequest {
   issue?: string
   /** Whether a pull request already uses the branch name, from what the git service knows. */
   takenByPullRequest?: (branch: string) => boolean
-}
-
-/** A worktree's state when the user is asked what to remove. */
-export interface WorktreeInspection {
-  /** The folder is there and git lists it as a worktree of the project. */
-  exists: boolean
-  /** The branch is still there. */
-  branchExists: boolean
-  /** The branch's tip, or null without a branch. */
-  head: string | null
-  /** Changed, staged and untracked files in the worktree; 0 when it is gone. */
-  uncommitted: number
-  /** Commits on the branch that no remote branch has. */
-  unpushed: number
-  /** Every change of the branch is already in its base, by ancestry or as a squash merge. */
-  merged: boolean
 }
 
 export interface SetupRun {
@@ -82,4 +66,4 @@ export interface WorktreeGit {
   prune(projectPath: string): Promise<void>
 }
 
-export type { ProjectWorktreeSettings }
+export type { ProjectWorktreeSettings, WorktreeInspection }

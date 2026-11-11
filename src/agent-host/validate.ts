@@ -21,6 +21,8 @@ import {
   GITHUB_PULL_REQUEST_URL,
   githubReferenceOf,
   isRepositoryName,
+  type ProjectWorktreeSettings,
+  type WorktreeInspection,
 } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import type { ClockRequest, ClockZone } from '@shared/usage'
@@ -52,6 +54,9 @@ import { FORM_FIELDS, FORM_KEY_CHARS } from './elicitation'
 import { invalidParams } from './errors'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
+import { MAX_WORKTREE_COPY_PATHS } from './storage'
+import { checkIncludeEntry } from './worktrees/copy'
+import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
 
 const ID_CHARS = 256
 const ACP_ID_CHARS = 1_024
@@ -274,6 +279,90 @@ function refName(o: Fields, key: string): string {
     throw invalidParams(`${key} is not a branch or remote name`)
   }
   return value
+}
+
+const MAX_SETUP_COMMAND = 8192
+const MAX_TEMPLATE = 200
+
+/** A ref to cut a worktree from: never an option, a pathspec or anything with control chars. */
+function baseRef(o: Fields, key: string): string {
+  const value = string(o, key, 250)
+  // eslint-disable-next-line no-control-regex
+  if (value.startsWith('-') || /[\s\x00-\x1f\x7f~^:?*[\\]/.test(value)) {
+    throw invalidParams(`${key} is not a branch or commit`)
+  }
+  return value
+}
+
+/** `sessions.create`'s new worktree: where it is cut from, and the user's branch name. */
+function worktreeRequest(value: unknown): { base: string; branch?: string } {
+  const o = fields(value)
+  const branch = o.branch === undefined ? undefined : checkWorktreeBranch(string(o, 'branch', 100))
+  return { base: baseRef(o, 'base'), ...(branch === undefined ? {} : { branch }) }
+}
+
+function count(o: Fields, key: string): number {
+  const value = o[key]
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw invalidParams(`${key} must be a whole number from 0`)
+  }
+  return value
+}
+
+/** The state the user was shown before removing a worktree. */
+function inspection(value: unknown): WorktreeInspection {
+  const o = fields(value)
+  const head = o.head === null ? null : objectId(o, 'head')
+  return {
+    exists: flag(o, 'exists'),
+    branchExists: flag(o, 'branchExists'),
+    head,
+    uncommitted: count(o, 'uncommitted'),
+    unpushed: count(o, 'unpushed'),
+    merged: flag(o, 'merged'),
+  }
+}
+
+/** A project's worktree settings, each checked as the host will use it. */
+function worktreeSettings(value: unknown, platform: Platform): ProjectWorktreeSettings {
+  const o = fields(value)
+  const template = o.branchTemplate
+  if (typeof template !== 'string' || template.length > MAX_TEMPLATE) {
+    throw invalidParams(`branchTemplate must be a string of at most ${MAX_TEMPLATE} characters`)
+  }
+  // A template must give a usable name with and without an issue.
+  for (const issue of ['', '1']) {
+    checkWorktreeBranch(branchFromTemplate(template, { slug: 'slug', type: 'feat', issue }))
+  }
+  if (!Array.isArray(o.copy) || o.copy.length > MAX_WORKTREE_COPY_PATHS) {
+    throw invalidParams(`copy must be a list of at most ${MAX_WORKTREE_COPY_PATHS} paths`)
+  }
+  const copy = o.copy.map((entry) => {
+    if (typeof entry !== 'string' || entry.length === 0 || entry.length > 1024) {
+      throw invalidParams('copy must list paths')
+    }
+    const checked = checkIncludeEntry(entry, platform)
+    if ('reason' in checked) throw invalidParams(`copy: ${entry} ${checked.reason}`)
+    return checked.path
+  })
+  const setup = o.setup
+  if (
+    setup !== null &&
+    (typeof setup !== 'string' ||
+      setup.trim() === '' ||
+      setup.length > MAX_SETUP_COMMAND ||
+      setup.includes('\0'))
+  ) {
+    throw invalidParams(
+      `setup must be null or a command of at most ${MAX_SETUP_COMMAND} characters`,
+    )
+  }
+  return {
+    branchTemplate: template,
+    copy: [...new Set(copy)],
+    setup,
+    waitForSetup: flag(o, 'waitForSetup'),
+  }
 }
 
 function position(o: Fields, key: string): number {
@@ -991,6 +1080,14 @@ export function createValidators(platform: Platform): Validators {
     'projects.add': folder,
     'projects.remove': folder,
     'projects.touch': folder,
+    'projects.worktreeSettings': folder,
+    'projects.setWorktreeSettings': (params) => {
+      const o = fields(params)
+      return {
+        path: absolutePath(o, 'path', platform),
+        settings: worktreeSettings(o.settings, platform),
+      }
+    },
     'paths.complete': (params) => {
       const value = string(fields(params), 'path', PATH_CHARS)
       if (value.includes('\0')) throw invalidParams('path contains a NUL character')
@@ -1018,6 +1115,7 @@ export function createValidators(platform: Platform): Validators {
         ...(options !== undefined ? { options } : {}),
         ...(o.prompt !== undefined ? { prompt: promptContent(o.prompt) } : {}),
         ...(preparedId !== undefined ? { preparedId } : {}),
+        ...(o.worktree !== undefined ? { worktree: worktreeRequest(o.worktree) } : {}),
       }
     },
     'sessions.prepare': (params) => {
@@ -1091,8 +1189,26 @@ export function createValidators(platform: Platform): Validators {
     'sessions.fork': (params) => {
       const o = fields(params)
       const entryId = optionalString(o, 'entryId', ACP_ID_CHARS)
-      return { sessionId: sessionId(o), ...(entryId === undefined ? {} : { entryId }) }
+      if (o.worktree !== undefined && o.worktree !== 'new' && o.worktree !== 'same') {
+        throw invalidParams('worktree must be "new" or "same"')
+      }
+      return {
+        sessionId: sessionId(o),
+        ...(entryId === undefined ? {} : { entryId }),
+        ...(o.worktree === undefined ? {} : { worktree: o.worktree }),
+      }
     },
+    'worktrees.inspect': session,
+    'worktrees.remove': (params) => {
+      const o = fields(params)
+      if (o.branch !== 'keep' && o.branch !== 'delete') {
+        throw invalidParams('branch must be "keep" or "delete"')
+      }
+      return { sessionId: sessionId(o), branch: o.branch, expected: inspection(o.expected) }
+    },
+    'worktrees.retrySetup': session,
+    'worktrees.skipSetup': session,
+    'worktrees.setupLog': session,
     'sessions.switchAgent': (params) => {
       const o = fields(params)
       if (o.summarize !== undefined && typeof o.summarize !== 'boolean') {

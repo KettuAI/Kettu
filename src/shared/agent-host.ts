@@ -50,8 +50,10 @@ import type {
   LogCommit,
   PullRequest,
   PullRequestState,
+  ProjectWorktreeSettings,
   RepositoryVisibility,
   SessionWorktree,
+  WorktreeInspection,
 } from './git'
 import type { PortConnectionState } from './port-rpc'
 import type { PathCompletion } from './remote/host-admin'
@@ -639,6 +641,13 @@ export interface HostContract {
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
   'projects.touch': { params: { path: string }; result: void }
+  // How the project names and prepares its sessions' worktrees.
+  'projects.worktreeSettings': { params: { path: string }; result: ProjectWorktreeSettings }
+  // A device needs the owner's leave to use the terminal to change these, as they run a command.
+  'projects.setWorktreeSettings': {
+    params: { path: string; settings: ProjectWorktreeSettings }
+    result: void
+  }
   // The entries of a folder on the host that start as `path`'s last part does, for a path being
   // typed: absolute, or `~` for the home folder. It only reads; a folder it cannot read lists none.
   'paths.complete': { params: { path: string }; result: PathCompletion }
@@ -655,6 +664,8 @@ export interface HostContract {
       options?: Record<string, string | boolean>
       prompt?: UserContent[]
       preparedId?: string
+      // A new worktree, cut from `base`, to work in; `branch` is the user's name for its branch.
+      worktree?: { base: string; branch?: string }
     }
     result: SessionSummary
   }
@@ -715,7 +726,26 @@ export interface HostContract {
   }
   'sessions.retry': { params: { sessionId: string }; result: void }
   // `entryId`: a reply's agent message, to fork the session up to its turn; see the session model.
-  'sessions.fork': { params: { sessionId: string; entryId?: string }; result: SessionSummary }
+  // A fork of a session in a worktree gets its own, from the source's branch, unless `same`.
+  'sessions.fork': {
+    params: { sessionId: string; entryId?: string; worktree?: 'new' | 'same' }
+    result: SessionSummary
+  }
+  // What removing the session's worktree would lose, and the other sessions still in it.
+  'worktrees.inspect': {
+    params: { sessionId: string }
+    result: WorktreeInspection & { others: string[] }
+  }
+  // Removes it, and its branch when `delete` and safe; refused with `conflict` when it changed
+  // since `expected` was read.
+  'worktrees.remove': {
+    params: { sessionId: string; branch: 'keep' | 'delete'; expected: WorktreeInspection }
+    result: SessionSummary
+  }
+  'worktrees.retrySetup': { params: { sessionId: string }; result: void }
+  // Goes on without the setup command; what waited for it is sent.
+  'worktrees.skipSetup': { params: { sessionId: string }; result: void }
+  'worktrees.setupLog': { params: { sessionId: string }; result: { log: string } }
   // Hands the session to another agent between turns and sends `content` as its first turn;
   // `options` are the values chosen for that agent, `summarize` asks it to summarize first.
   'sessions.switchAgent': {
@@ -1113,6 +1143,8 @@ export const HOST_METHODS = [
   'projects.add',
   'projects.remove',
   'projects.touch',
+  'projects.worktreeSettings',
+  'projects.setWorktreeSettings',
   'paths.complete',
   'sessions.list',
   'sessions.create',
@@ -1133,6 +1165,11 @@ export const HOST_METHODS = [
   'sessions.taskOutput',
   'sessions.retry',
   'sessions.fork',
+  'worktrees.inspect',
+  'worktrees.remove',
+  'worktrees.retrySetup',
+  'worktrees.skipSetup',
+  'worktrees.setupLog',
   'sessions.switchAgent',
   'sessions.context',
   'sessions.queue',

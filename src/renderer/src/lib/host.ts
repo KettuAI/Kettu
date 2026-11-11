@@ -214,7 +214,7 @@ export function toHost(method: string, params: unknown, depth: number): unknown 
 }
 
 function isProjectCall(method: string): boolean {
-  return method === 'projects.add' || method === 'projects.remove' || method === 'projects.touch'
+  return method.startsWith('projects.')
 }
 
 /** A host's result as the window names folders, with the sessions it lists learned. */
@@ -274,6 +274,17 @@ function qualify(hostId: string, value: unknown, depth: number): void {
     // A session's summary or view: its id, agent and folder.
     if (typeof record.id === 'string' && typeof record.agentId === 'string') {
       sessionHosts.set(record.id, hostId)
+    }
+  }
+  // A session's worktrees are folders of its host too, which its panels open.
+  for (const key of ['worktree', 'agentWorktree']) {
+    const folder = record[key] as { path?: unknown } | null | undefined
+    if (
+      typeof folder?.path === 'string' &&
+      folder.path !== '' &&
+      hostOfPath(folder.path) === null
+    ) {
+      folder.path = onHost(hostId, folder.path)
     }
   }
   for (const item of Object.values(record)) {

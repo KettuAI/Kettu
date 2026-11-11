@@ -1657,11 +1657,18 @@ export class AgentHost {
         this.options.send({ type: 'host:media-revoke', sessionId: null })
       },
       'projects.touch': ({ path }) => projects.touch(projects.match(path)),
+      'projects.worktreeSettings': ({ path }) =>
+        projects.worktreeSettings(projects.match(path).path),
+      'projects.setWorktreeSettings': ({ path, settings }) =>
+        projects.setWorktreeSettings(projects.match(path).path, settings),
       'paths.complete': ({ path }) =>
         completePath(path, this.options.platform, this.options.homeDir ?? os.homedir()),
       'sessions.list': ({ projectPath }) => sessions.list(projectPath),
-      'sessions.create': (params, { portId, device }) =>
-        sessions.create(device ? { ...params, device: fromDevice(device) } : params, portId),
+      'sessions.create': async (params, { portId, device }) => {
+        // A worktree is made with git, which is found as the agents find it.
+        if (params.worktree) await this.env.ready()
+        return sessions.create(device ? { ...params, device: fromDevice(device) } : params, portId)
+      },
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
       'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
@@ -1679,7 +1686,15 @@ export class AgentHost {
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
       'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
-      'sessions.fork': ({ sessionId, entryId }) => sessions.fork(sessionId, entryId),
+      'sessions.fork': ({ sessionId, entryId, worktree }) =>
+        sessions.fork(sessionId, entryId, worktree),
+      'worktrees.inspect': ({ sessionId }) =>
+        this.gitCall(() => sessions.inspectWorktree(sessionId)),
+      'worktrees.remove': ({ sessionId, branch, expected }) =>
+        this.gitCall(() => sessions.removeWorktree(sessionId, branch, expected)),
+      'worktrees.retrySetup': ({ sessionId }) => sessions.retryWorktreeSetup(sessionId),
+      'worktrees.skipSetup': ({ sessionId }) => sessions.skipWorktreeSetup(sessionId),
+      'worktrees.setupLog': ({ sessionId }) => ({ log: sessions.worktreeSetupLog(sessionId) }),
       'sessions.switchAgent': (params, { portId, device }) =>
         sessions.switchAgent(params, portId, fromDevice(device)),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),

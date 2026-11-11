@@ -288,6 +288,22 @@ export interface SessionWorktree {
   failure?: WorktreeFailure // with state 'setup-failed'
 }
 
+/** A worktree's state when the user is asked what to remove. */
+export interface WorktreeInspection {
+  /** The folder is there and git lists it as a worktree of the project. */
+  exists: boolean
+  /** The branch is still there. */
+  branchExists: boolean
+  /** The branch's tip, or null without a branch. */
+  head: string | null
+  /** Changed, staged and untracked files in the worktree; 0 when it is gone. */
+  uncommitted: number
+  /** Commits on the branch that no remote branch has. */
+  unpushed: number
+  /** Every change of the branch is already in its base, by ancestry or as a squash merge. */
+  merged: boolean
+}
+
 /** How a project prepares and names the worktrees of its sessions. */
 export interface ProjectWorktreeSettings {
   branchTemplate: string
