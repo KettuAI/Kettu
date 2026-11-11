@@ -108,6 +108,7 @@ import { confirmArchive } from './archive-confirm-model'
 import { dissolveRows } from './row-dust'
 import { markReturning } from './row-exit'
 import { sessionPullRequests } from './session-prs'
+import { sessionFolder } from '@renderer/lib/session-folder'
 
 /** An accelerator as the menu shows it: macOS's symbols, or the key names elsewhere. */
 function shortcutLabel(shortcut: string): string {
@@ -215,7 +216,7 @@ export function SessionMenuItems({
   const running = isRunning(summary)
   // Only this computer's folders open in its file manager and its editors.
   const local = !isWeb && hostOfPath(summary.projectPath) === null
-  const resume = resumeCommand(summary, hostPath(summary.projectPath))
+  const resume = resumeCommand(summary, hostPath(sessionFolder(summary)))
   const { id } = summary
 
   const item = (name: SessionMenuItem) => {
@@ -381,12 +382,12 @@ export function SessionMenuItems({
         )
       }
       case 'openInEditor':
-        return <OpenInEditor key={name} path={summary.projectPath} />
+        return <OpenInEditor key={name} path={sessionFolder(summary)} />
       case 'showInFolder':
         return (
           <DropdownMenuItem
             {...props}
-            onClick={() => void window.kettu.shell.showItem(summary.projectPath)}
+            onClick={() => void window.kettu.shell.showItem(sessionFolder(summary))}
           >
             <MenuGlyph icon={FolderOpenIcon} />
             {t('row.showIn', { name: fileManagerName() })}
@@ -945,7 +946,7 @@ async function deleteUnlessAtStake(
   summaries: readonly SessionSummary[],
   confirm: () => void,
 ): Promise<void> {
-  const paths = [...new Set(summaries.map((s) => s.projectPath))]
+  const paths = [...new Set(summaries.map((s) => sessionFolder(s)))]
   const stakes = await Promise.all(paths.map(readAtStake))
   const files = stakes.map((stake) => stake.files)
   const withChildren = summaries.some((s) => descendantCount(s.id) > 0)
@@ -987,7 +988,7 @@ export function DeleteSessionDialog({
   const several = targets.length > 1
   const count = open ? targets.reduce((sum, s) => sum + descendantCount(s.id), 0) : 0
   const stake = useAtStake(
-    targets.map((s) => s.projectPath),
+    targets.map((s) => sessionFolder(s)),
     open,
   )
   // Archive keeps what it archives; a sub-session goes with its parent.

@@ -34,6 +34,7 @@ import { openSession } from '@renderer/stores/view'
 import { runStep } from './steps'
 import { isBranchName, recentBranches, sameFolder } from './switcher-model'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { sessionFolder } from '@renderer/lib/session-folder'
 
 // The New branch item's value, which no branch name can take.
 const NEW_BRANCH = '\0new-branch'
@@ -256,7 +257,7 @@ function openWorktree(branch: BranchInfo, projectPath: string, t: TFunction<'git
       (s) =>
         s.archivedAt === null &&
         s.origin !== 'subagent' &&
-        sameFolder(s.projectPath, onHost(hostId, folder)),
+        sameFolder(sessionFolder(s), onHost(hostId, folder)),
     )
     .sort((a, b) => b.updatedAt - a.updatedAt)
   const session = sessions[0]

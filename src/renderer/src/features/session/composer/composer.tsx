@@ -52,6 +52,7 @@ import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
 import type { Select } from './use-pick'
 import { usePromptBox } from './use-prompt-box'
+import { sessionFolder } from '@renderer/lib/session-folder'
 
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
@@ -129,7 +130,7 @@ export function Composer({
   const box = usePromptBox({
     draft: sessionId,
     sessionId,
-    projectPath: session.projectPath,
+    projectPath: sessionFolder(session),
     hostId,
     disabled: starting,
   })
@@ -475,7 +476,7 @@ export function Composer({
             <TrayStyles />
             <span className="kettu-tray__group">
               <SessionPlace sessionId={sessionId} projectPath={session.projectPath} />
-              <BranchTrayLink projectPath={session.projectPath} />
+              <BranchTrayLink projectPath={sessionFolder(session)} />
             </span>
             {shownError && (
               <p className="kettu-tray__error" role="alert" title={shownError}>

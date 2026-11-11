@@ -39,6 +39,7 @@ import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
 import { useSessionView } from './use-thread'
+import { sessionFolder } from '@renderer/lib/session-folder'
 
 const BoardRail = lazy(() => import('@renderer/features/board/board-pane'))
 
@@ -80,7 +81,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   }, [sessionId])
 
   // File references in replies link to the project's files once their list is known.
-  useEffect(() => ensureFiles(summary.projectPath), [summary.projectPath])
+  const folder = sessionFolder(summary)
+  useEffect(() => ensureFiles(folder), [folder])
 
   const [actionError, setActionError] = useState<string | null>(null)
   // A queued message's failed action; the stack clears it with its next action or its last item.
@@ -163,14 +165,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       </ColumnScroller>
     )
   } else {
-    body = (
-      <Thread
-        sessionId={sessionId}
-        projectPath={summary.projectPath}
-        agentName={name}
-        working={running}
-      />
-    )
+    body = <Thread sessionId={sessionId} projectPath={folder} agentName={name} working={running} />
   }
 
   return (
@@ -178,7 +173,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       <SessionHeader summary={summary} session={session} />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ProjectPathContext value={summary.projectPath}>
+          <ProjectPathContext value={folder}>
             {/* The drop zone covers the thread and leaves the composer in view. */}
             <div className="relative flex min-h-0 flex-1 flex-col">
               {body}
