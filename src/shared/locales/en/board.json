@@ -1,0 +1,60 @@
+{
+  "title": "Board",
+  "summary": {
+    "idle": "Nothing running",
+    "running_one": "{{count}} running",
+    "running_other": "{{count}} running",
+    "needs_one": "{{count}} needs you",
+    "needs_other": "{{count}} need you"
+  },
+  "groups": {
+    "background": "Background",
+    "subagents": "Sub-agents",
+    "artifacts": "Artifacts"
+  },
+  "none": {
+    "background": "No background tasks.",
+    "subagents": "No sub-agents.",
+    "artifacts": "This session has not written an artifact."
+  },
+  "unsupported": "{{agent}} does not report background tasks.",
+  "empty": {
+    "title": "Nothing to show yet",
+    "text": "Background tasks, sub-agents and the artifacts this session writes appear here while the agent works."
+  },
+  "status": {
+    "running": "Running",
+    "needs": "Needs you",
+    "done": "Done",
+    "failed": "Failed",
+    "stopped": "Stopped"
+  },
+  "kind": {
+    "monitor": "Monitor",
+    "workflow": "Workflow"
+  },
+  "actions": {
+    "stop": "Stop",
+    "stopTitle": "Stop {{title}}",
+    "open": "Open",
+    "openTitle": "Open {{title}}",
+    "close": "Close"
+  },
+  "strip": {
+    "label": "A sub-agent needs your answer",
+    "waiting": "Waiting for your answer"
+  },
+  "detail": {
+    "command": "Command",
+    "watching": "Watching",
+    "output": "Output",
+    "noOutput": "No output yet.",
+    "readFailed": "Could not read the output: {{error}}",
+    "truncated": "Showing the last 8 KiB.",
+    "refreshed": "Refreshed while it runs.",
+    "exit": "Exit {{code}}"
+  },
+  "artifact": {
+    "version": "v{{version}}"
+  }
+}

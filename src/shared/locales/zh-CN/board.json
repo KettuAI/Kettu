@@ -1,0 +1,58 @@
+{
+  "title": "看板",
+  "summary": {
+    "idle": "没有运行中的任务",
+    "running_other": "{{count}} 个运行中",
+    "needs_other": "{{count}} 个等你处理"
+  },
+  "groups": {
+    "background": "后台",
+    "subagents": "子 Agent",
+    "artifacts": "Artifacts"
+  },
+  "none": {
+    "background": "没有后台任务。",
+    "subagents": "没有子 Agent。",
+    "artifacts": "这个会话还没有写过 Artifact。"
+  },
+  "unsupported": "{{agent}} 不会报告后台任务。",
+  "empty": {
+    "title": "这里还没有内容",
+    "text": "Agent 工作时，后台任务、子 Agent 和这个会话写下的 Artifacts 会出现在这里。"
+  },
+  "status": {
+    "running": "运行中",
+    "needs": "等你处理",
+    "done": "已完成",
+    "failed": "失败",
+    "stopped": "已停止"
+  },
+  "kind": {
+    "monitor": "监控",
+    "workflow": "工作流"
+  },
+  "actions": {
+    "stop": "停止",
+    "stopTitle": "停止 {{title}}",
+    "open": "打开",
+    "openTitle": "打开 {{title}}",
+    "close": "关闭"
+  },
+  "strip": {
+    "label": "有子 Agent 等你回答",
+    "waiting": "等你回答"
+  },
+  "detail": {
+    "command": "命令",
+    "watching": "监控对象",
+    "output": "输出",
+    "noOutput": "还没有输出。",
+    "readFailed": "无法读取输出：{{error}}",
+    "truncated": "仅显示最后 8 KiB。",
+    "refreshed": "运行时会自动刷新。",
+    "exit": "退出码 {{code}}"
+  },
+  "artifact": {
+    "version": "v{{version}}"
+  }
+}

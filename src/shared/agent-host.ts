@@ -703,6 +703,13 @@ export interface HostContract {
   'sessions.show': { params: { sessionIds: string[] }; result: void }
   'sessions.prompt': { params: { sessionId: string; content: UserContent[] }; result: void }
   'sessions.cancel': { params: { sessionId: string }; result: void }
+  // Stops one background task of the session, as the session board's Stop does.
+  'sessions.stopTask': { params: { sessionId: string; taskId: string }; result: void }
+  // The end of a background task's output, at most 8 KiB, for the session board.
+  'sessions.taskOutput': {
+    params: { sessionId: string; taskId: string }
+    result: { output: string; truncated: boolean }
+  }
   'sessions.retry': { params: { sessionId: string }; result: void }
   // `entryId`: a reply's agent message, to fork the session up to its turn; see the session model.
   'sessions.fork': { params: { sessionId: string; entryId?: string }; result: SessionSummary }
@@ -1119,6 +1126,8 @@ export const HOST_METHODS = [
   'sessions.show',
   'sessions.prompt',
   'sessions.cancel',
+  'sessions.stopTask',
+  'sessions.taskOutput',
   'sessions.retry',
   'sessions.fork',
   'sessions.switchAgent',

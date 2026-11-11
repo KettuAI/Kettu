@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -17,7 +17,7 @@ import { ensureFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
-import { openAgentSettings } from '@renderer/stores/view'
+import { openAgentSettings, useViewStore } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
@@ -39,6 +39,8 @@ import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
 import { useSessionView } from './use-thread'
+
+const BoardRail = lazy(() => import('@renderer/features/board/board-pane'))
 
 /** A session: its thread, and the composer or the subagent bar under it. */
 export function SessionView({ sessionId }: { sessionId: string }) {
@@ -69,6 +71,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const away = otherHost && isAway(otherHost.connection) ? otherHost : null
   // It holds the computer: the column glows and the composer carries the label.
   const computer = !!session?.computer && !archived && !away
+  // The board sits at the right of the thread and the composer; a sub-agent's page has none.
+  const board = useViewStore((s) => !!s.boardOpen[sessionId]) && summary.origin !== 'subagent'
 
   useEffect(() => {
     preloadRenderers()
@@ -172,104 +176,117 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   return (
     <div className="ks-session relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       <SessionHeader summary={summary} session={session} />
-      <ProjectPathContext value={summary.projectPath}>
-        {/* The drop zone covers the thread and leaves the composer in view. */}
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          {body}
-          <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
-        </div>
-      </ProjectPathContext>
-      {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
-      <div style={{ paddingRight: gutter }}>
-        <div className="px-8 pb-6">
-          <div className="mx-auto flex w-full max-w-(--thread-column) flex-col gap-2">
-            {session && status === 'failed' && (
-              <FailedState
-                title={t('view.stopped', { agent: name })}
-                message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
-                detail={session.error?.detail}
-                onRetry={retry}
-                report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
-              />
-            )}
-            {session && status === 'auth_required' && !empty && (
-              <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
-                <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
-                <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
-                <AlertDescription>{t('view.historyStays')}</AlertDescription>
-                <AlertAction className="flex gap-1.5">
-                  <Button size="xs" variant="outline" onClick={retry}>
-                    {t('common:actions.retry')}
-                  </Button>
-                  <Button size="xs" onClick={() => openAgents(null)}>
-                    {t('view.signIn')}
-                  </Button>
-                </AlertAction>
-              </Alert>
-            )}
-            {agentRemoved && (
-              <Alert variant="warning">
-                <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
-                <AlertTitle>{t('view.agentRemoved', { agent: name })}</AlertTitle>
-                <AlertDescription>{t('view.agentRemovedBody')}</AlertDescription>
-                <AlertAction>
-                  <Button size="xs" variant="outline" onClick={() => openAgents(null)}>
-                    {t('view.openAgents')}
-                  </Button>
-                </AlertAction>
-              </Alert>
-            )}
-            {agentOff && !agentRemoved && (
-              <Alert variant="warning">
-                <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
-                <AlertTitle>{t('view.agentTurnedOff', { agent: name })}</AlertTitle>
-                <AlertDescription>{t('view.agentTurnedOffBody')}</AlertDescription>
-                <AlertAction>
-                  <Button size="xs" variant="outline" onClick={() => openAgents(summary.agentId)}>
-                    {t('view.openAgent')}
-                  </Button>
-                </AlertAction>
-              </Alert>
-            )}
-            {(actionError || queueError) && (
-              <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
-                {actionError ?? queueError}
-              </p>
-            )}
-            <div className="flex flex-col" {...(computer ? { 'data-computer-using': '' } : {})}>
-              {/* Mounted only while something waits; its cards sit behind the composer. */}
-              {session &&
-                !archived &&
-                summary.origin !== 'subagent' &&
-                session.queue.length > 0 && (
-                  <QueueStack session={session} onError={setQueueError} />
-                )}
-              {computer && session && (
-                <ComputerLabel session={session} agentName={name} onError={setQueueError} />
-              )}
-              {away ? (
-                session && <HostAway host={away} inline />
-              ) : summary.origin === 'subagent' ? (
-                <SubagentBar summary={summary} session={session} />
-              ) : archived ? (
-                <ArchivedComposer sessionId={sessionId} />
-              ) : session ? (
-                // Its menus open inside it, so while one is open it rises over the computer label.
-                <div className="relative z-10 has-aria-expanded:z-20">
-                  {/* An agent removed or turned off: the session goes on with another one. */}
-                  <Composer
-                    key={sessionId}
-                    session={session}
-                    agentName={name}
-                    mustSwitch={agentRemoved || agentOff}
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <ProjectPathContext value={summary.projectPath}>
+            {/* The drop zone covers the thread and leaves the composer in view. */}
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {body}
+              <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
+            </div>
+          </ProjectPathContext>
+          {/* Leaves the width the column's scrollbar takes, so the composer centres on the column. */}
+          <div style={{ paddingRight: gutter }}>
+            <div className="px-8 pb-6">
+              <div className="mx-auto flex w-full max-w-(--thread-column) flex-col gap-2">
+                {session && status === 'failed' && (
+                  <FailedState
+                    title={t('view.stopped', { agent: name })}
+                    message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
+                    detail={session.error?.detail}
+                    onRetry={retry}
+                    report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
                   />
+                )}
+                {session && status === 'auth_required' && !empty && (
+                  <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
+                    <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
+                    <AlertTitle>{t('view.signInToContinue', { agent: name })}</AlertTitle>
+                    <AlertDescription>{t('view.historyStays')}</AlertDescription>
+                    <AlertAction className="flex gap-1.5">
+                      <Button size="xs" variant="outline" onClick={retry}>
+                        {t('common:actions.retry')}
+                      </Button>
+                      <Button size="xs" onClick={() => openAgents(null)}>
+                        {t('view.signIn')}
+                      </Button>
+                    </AlertAction>
+                  </Alert>
+                )}
+                {agentRemoved && (
+                  <Alert variant="warning">
+                    <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
+                    <AlertTitle>{t('view.agentRemoved', { agent: name })}</AlertTitle>
+                    <AlertDescription>{t('view.agentRemovedBody')}</AlertDescription>
+                    <AlertAction>
+                      <Button size="xs" variant="outline" onClick={() => openAgents(null)}>
+                        {t('view.openAgents')}
+                      </Button>
+                    </AlertAction>
+                  </Alert>
+                )}
+                {agentOff && !agentRemoved && (
+                  <Alert variant="warning">
+                    <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />
+                    <AlertTitle>{t('view.agentTurnedOff', { agent: name })}</AlertTitle>
+                    <AlertDescription>{t('view.agentTurnedOffBody')}</AlertDescription>
+                    <AlertAction>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => openAgents(summary.agentId)}
+                      >
+                        {t('view.openAgent')}
+                      </Button>
+                    </AlertAction>
+                  </Alert>
+                )}
+                {(actionError || queueError) && (
+                  <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
+                    {actionError ?? queueError}
+                  </p>
+                )}
+                <div className="flex flex-col" {...(computer ? { 'data-computer-using': '' } : {})}>
+                  {/* Mounted only while something waits; its cards sit behind the composer. */}
+                  {session &&
+                    !archived &&
+                    summary.origin !== 'subagent' &&
+                    session.queue.length > 0 && (
+                      <QueueStack session={session} onError={setQueueError} />
+                    )}
+                  {computer && session && (
+                    <ComputerLabel session={session} agentName={name} onError={setQueueError} />
+                  )}
+                  {away ? (
+                    session && <HostAway host={away} inline />
+                  ) : summary.origin === 'subagent' ? (
+                    <SubagentBar summary={summary} session={session} />
+                  ) : archived ? (
+                    <ArchivedComposer sessionId={sessionId} />
+                  ) : session ? (
+                    // Its menus open inside it, so while one is open it rises over the computer label.
+                    <div className="relative z-10 has-aria-expanded:z-20">
+                      {/* An agent removed or turned off: the session goes on with another one. */}
+                      <Composer
+                        key={sessionId}
+                        session={session}
+                        agentName={name}
+                        mustSwitch={agentRemoved || agentOff}
+                      />
+                    </div>
+                  ) : (
+                    <ComposerPlaceholder agentId={summary.agentId} hostId={hostId} />
+                  )}
                 </div>
-              ) : (
-                <ComposerPlaceholder agentId={summary.agentId} hostId={hostId} />
-              )}
+              </div>
             </div>
           </div>
         </div>
+        {board && (
+          <Suspense fallback={null}>
+            <BoardRail sessionId={sessionId} />
+          </Suspense>
+        )}
       </div>
       {computer && <ComputerGlow />}
       <Announcer summary={summary} name={name} />

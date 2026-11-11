@@ -2018,6 +2018,14 @@ export class SessionManager {
     }
     live.connection = connection
     connection.register(live.record.acpSessionId, live.target)
+    // An agent that reports background tasks says so with a list, empty until it has any.
+    if (
+      reportsTasks(connection) &&
+      live.record.origin !== 'subagent' &&
+      live.thread.session.background === undefined
+    ) {
+      this.update(live, { background: [] })
+    }
   }
 
   /**
@@ -2280,6 +2288,9 @@ export class SessionManager {
       case 'background':
         live.background = true
         this.refreshRelease(live)
+        break
+      case 'tasks':
+        this.update(live, { background: effect.tasks })
         break
       case 'agentTurn':
         this.agentTurn(live, effect)
@@ -3632,7 +3643,7 @@ export class SessionManager {
       const attaching = live.connection === null
       live.connection = null
       // Its background work ended with its process.
-      live.background = false
+      this.endBackground(live)
       live.agentTurn = false
       const status = live.thread.session.status
       if (!CONNECTED.has(status) || status === 'starting' || status === 'auth_required') continue
@@ -4545,6 +4556,8 @@ export class SessionManager {
       commands: [],
       // The totals stay the session's; the context is the new agent's, unknown until it reports.
       usage: usage ? { ...usage, used: 0, size: 0, cache: undefined } : null,
+      // The new agent says whether it reports background tasks once it attaches.
+      background: undefined,
       status: 'closed',
       error: null,
     })
@@ -4562,7 +4575,7 @@ export class SessionManager {
     if (live.contextTimer) clearTimeout(live.contextTimer)
     live.contextTimer = null
     this.contextRuns.delete(live.id)
-    live.background = false
+    this.endBackground(live)
     live.agentTurn = false
     if (!connection) return
     connection.unregister(acpSessionId, live.target)
@@ -5995,6 +6008,56 @@ export class SessionManager {
     }, this.timings.cancelFallbackMs)
   }
 
+  /** The agent's background work ended with its process: its tasks are gone from the list. */
+  private endBackground(live: Live): void {
+    live.background = false
+    if (live.thread.session.background?.length) this.update(live, { background: [] })
+  }
+
+  /** The live session, with its connection, when the agent lists `taskId` as a background task. */
+  private backgroundTask(
+    sessionId: string,
+    taskId: string,
+  ): { live: Live; connection: TaskConnection; running: boolean } {
+    const live = this.live.get(sessionId)
+    if (!live?.connection) throw new HostError('busy', t('session.openFirst'))
+    const { connection } = live
+    const tasks = live.thread.session.background
+    if (!reportsTasks(connection) || tasks === undefined) {
+      throw new HostError(
+        'restricted',
+        t('session.noBackgroundTasks', { agent: this.deps.agents.name(live.record.agentId) }),
+      )
+    }
+    const task = tasks.find((item) => item.id === taskId)
+    if (!task) throw new HostError('not_found', t('session.noBackgroundTask'))
+    return { live, connection, running: task.status === 'running' }
+  }
+
+  /** Stops a background task the session lists as running. */
+  async stopTask(sessionId: string, taskId: string): Promise<void> {
+    const { live, connection, running } = this.backgroundTask(sessionId, taskId)
+    if (!running) throw new HostError('conflict', t('session.backgroundTaskEnded'))
+    try {
+      await connection.stopTask(live.record.acpSessionId, taskId)
+    } catch (error) {
+      throw agentError(error)
+    }
+  }
+
+  /** The end of the output of a background task the session lists, running or ended. */
+  async taskOutput(
+    sessionId: string,
+    taskId: string,
+  ): Promise<{ output: string; truncated: boolean }> {
+    const { live, connection } = this.backgroundTask(sessionId, taskId)
+    try {
+      return await connection.taskOutput(live.record.acpSessionId, taskId)
+    } catch (error) {
+      throw agentError(error)
+    }
+  }
+
   // Permissions.
 
   /** The `allow_once` option the run's scope allows, or null when the request waits. */
@@ -7146,6 +7209,13 @@ function removedWhileStarting(): HostError {
 /** Whether a session in this status takes a prompt: an attached one that is free, or one to attach. */
 function canSend(status: SessionStatus): boolean {
   return status === 'ready' || status === 'closed'
+}
+
+/** A connection to an agent that reports background tasks and can stop and read them. */
+type TaskConnection = AgentConnection & Required<Pick<AgentConnection, 'stopTask' | 'taskOutput'>>
+
+function reportsTasks(connection: AgentConnection): connection is TaskConnection {
+  return connection.stopTask !== undefined && connection.taskOutput !== undefined
 }
 
 /** JSON-RPC's code for a session the agent does not have. */

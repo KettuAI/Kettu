@@ -27,16 +27,15 @@ import { ShareButton } from '@renderer/features/artifacts/share-popover'
 import { useThumbnail, type Thumbnail } from '@renderer/features/artifacts/thumbnails'
 import { useInView } from '@renderer/features/artifacts/use-in-view'
 import { longAgo } from '@renderer/lib/format'
-import {
-  artifactHost,
-  errorMessage,
-  host,
-  learnArtifactHost,
-  sessionHost,
-} from '@renderer/lib/host'
+import { errorMessage, host, learnArtifactHost, sessionHost } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
+import {
+  artifactListShown,
+  artifactStanding,
+  useArtifactsStore,
+  type ArtifactStanding,
+} from '@renderer/stores/artifacts'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { openArtifact, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -100,21 +99,14 @@ function DeletedLine({ entry, className }: { entry: Entry; className: string | u
 }
 
 /** Where the artifact stands now: the card dims once it is deleted. */
-type Standing = 'live' | 'deleted' | 'erased'
+type Standing = ArtifactStanding
 
 function useStanding(id: string): Standing {
   useEffect(() => {
     artifactListShown(true)
     return () => artifactListShown(false)
   }, [])
-  return useArtifactsStore((s) => {
-    if (s.list?.some((a) => a.id === id)) return 'live'
-    if (s.deleted?.some((a) => a.id === id)) return 'deleted'
-    // Until both lists of its host arrive, nothing says it is gone.
-    const hostId = artifactHost(id)
-    if (hostId !== null && !s.hostsRead.includes(hostId)) return 'live'
-    return s.list && s.deleted ? 'erased' : 'live'
-  })
+  return useArtifactsStore((s) => artifactStanding(s, id))
 }
 
 /** Each artifact's latest read of its versions, at the head it was read for, shared by its cards. */

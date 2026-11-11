@@ -9,7 +9,7 @@ import {
   type ArtifactKind,
   type OpenedTimes,
 } from '@renderer/features/artifacts/model'
-import { errorMessage, host, hostAt, learnArtifactHost } from '@renderer/lib/host'
+import { artifactHost, errorMessage, host, hostAt, learnArtifactHost } from '@renderer/lib/host'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
 const OPENED_KEY = 'artifacts.opened'
@@ -75,6 +75,21 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   dialog: null,
   paneSelection: null,
 }))
+
+/** Where an artifact stands in the lists read so far: shown, deleted, or gone for good. */
+export type ArtifactStanding = 'live' | 'deleted' | 'erased'
+
+export function artifactStanding(
+  s: Pick<ArtifactsStore, 'list' | 'deleted' | 'hostsRead'>,
+  id: string,
+): ArtifactStanding {
+  if (s.list?.some((a) => a.id === id)) return 'live'
+  if (s.deleted?.some((a) => a.id === id)) return 'deleted'
+  // Until both lists of its host arrive, nothing says it is gone.
+  const hostId = artifactHost(id)
+  if (hostId !== null && !s.hostsRead.includes(hostId)) return 'live'
+  return s.list && s.deleted ? 'erased' : 'live'
+}
 
 /** A host's two lists as last read; this computer's under null. */
 interface HostLists {

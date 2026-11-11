@@ -2433,6 +2433,266 @@ describe('subagents', () => {
   })
 })
 
+describe('background tasks', () => {
+  const system = (query: FakeQuery, fields: Record<string, unknown>): SdkMessage =>
+    ({ type: 'system', session_id: query.sessionId, ...fields }) as SdkMessage
+  const lists = (target: Target) =>
+    target.effects.flatMap((effect) => (effect.kind === 'tasks' ? [effect.tasks] : []))
+
+  async function open() {
+    const s = await setup()
+    const target = new Target()
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, target)
+    s.sdk.script = (q) => q.running()
+    const turn = s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    await settle()
+    return { s, target, sessionId, query: s.sdk.last, turn }
+  }
+
+  it('lists a command from its first report to its end, once', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      assistant(query, 'msg_b', [
+        {
+          type: 'tool_use',
+          id: 'toolu_b',
+          name: 'Bash',
+          input: { command: 'sleep 12', run_in_background: true },
+        },
+      ]),
+      // Claude Code reports a background command before it announces it.
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [
+          {
+            task_id: 'b1',
+            run_id: 'r1',
+            task_type: 'local_bash',
+            description: 'Sleep for 12 seconds in background',
+          },
+        ],
+      }),
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'b1',
+        run_id: 'r1',
+        tool_use_id: 'toolu_b',
+        description: 'Sleep for 12 seconds in background',
+        is_backgrounded: true,
+        task_type: 'local_bash',
+      }),
+    )
+    await settle()
+    // Its announcement names the call, which adds the command to the entry the report made.
+    expect(lists(target)).toMatchObject([
+      [{ id: 'b1', kind: 'shell', status: 'running', endedAt: null, summary: null }],
+      [{ id: 'b1', command: 'sleep 12' }],
+    ])
+    expect(lists(target)[0]![0]).not.toHaveProperty('command')
+    const started = lists(target)[0]![0]!.startedAt
+    query.emit(
+      system(query, {
+        subtype: 'task_updated',
+        task_id: 'b1',
+        patch: { status: 'completed', end_time: started + 10_000 },
+      }),
+      system(query, {
+        subtype: 'task_notification',
+        task_id: 'b1',
+        tool_use_id: 'toolu_b',
+        status: 'completed',
+        summary: 'Background command "Sleep" completed (exit code 0)',
+        output_file: '',
+      }),
+      system(query, { subtype: 'background_tasks_changed', tasks: [] }),
+    )
+    await settle()
+    expect(lists(target)).toHaveLength(4)
+    expect(lists(target).at(-1)).toEqual([
+      {
+        id: 'b1',
+        kind: 'shell',
+        title: 'Sleep for 12 seconds in background',
+        command: 'sleep 12',
+        status: 'completed',
+        startedAt: started,
+        endedAt: started + 10_000,
+        summary: 'Background command "Sleep" completed (exit code 0)',
+      },
+    ])
+    query.finish()
+    await turn
+  })
+
+  it('leaves out subagents, ambient tasks and commands that still block their call', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'agent-1',
+        description: 'Explore',
+        subagent_type: 'Explore',
+        task_type: 'local_agent',
+      }),
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'ambient-1',
+        description: 'Watch',
+        task_type: 'local_bash',
+        ambient: true,
+      }),
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'fg-1',
+        description: 'Build',
+        task_type: 'local_bash',
+        is_backgrounded: false,
+      }),
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [
+          { task_id: 'agent-1', task_type: 'local_agent', subagent_type: 'Explore' },
+          { task_id: 'ambient-1', task_type: 'local_bash', ambient: true },
+        ],
+      }),
+    )
+    await settle()
+    expect(lists(target)).toEqual([])
+    // The foreground command is backgrounded, as with Ctrl+B, and joins the list.
+    query.emit(
+      system(query, {
+        subtype: 'task_updated',
+        task_id: 'fg-1',
+        patch: { is_backgrounded: true },
+      }),
+    )
+    await settle()
+    expect(lists(target)).toMatchObject([[{ id: 'fg-1', title: 'Build', status: 'running' }]])
+    // A foreground command that ends first is never listed.
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'fg-2',
+        description: 'Quick',
+        task_type: 'local_bash',
+        is_backgrounded: false,
+      }),
+      system(query, {
+        subtype: 'task_notification',
+        task_id: 'fg-2',
+        status: 'completed',
+        summary: 'done',
+        output_file: '',
+      }),
+    )
+    await settle()
+    expect(lists(target)).toHaveLength(1)
+    query.finish()
+    await turn
+  })
+
+  it('reconciles with the set Claude Code reports', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'm1',
+        description: 'Watch the logs',
+        task_type: 'monitor_mcp',
+      }),
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [
+          { task_id: 'm1', task_type: 'monitor_mcp', description: 'Watch the logs' },
+          { task_id: 'w1', task_type: 'local_workflow', description: 'Release' },
+        ],
+      }),
+    )
+    await settle()
+    expect(lists(target).at(-1)).toMatchObject([
+      { id: 'm1', kind: 'monitor', status: 'running' },
+      { id: 'w1', kind: 'workflow', status: 'running' },
+    ])
+    // A task that left the set without a notification has ended.
+    query.emit(
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [{ task_id: 'w1', task_type: 'local_workflow', description: 'Release' }],
+      }),
+    )
+    await settle()
+    expect(lists(target).at(-1)).toMatchObject([
+      { id: 'm1', status: 'completed', summary: null },
+      { id: 'w1', status: 'running' },
+    ])
+    expect(lists(target).at(-1)![0]!.endedAt).not.toBeNull()
+    query.finish()
+    await turn
+  })
+
+  it('keeps every running task and the latest twenty that ended', async () => {
+    const { target, query, turn } = await open()
+    const tasks = Array.from({ length: 25 }, (_, i) => ({
+      task_id: `t${i}`,
+      task_type: 'local_bash',
+      description: `Job ${i}`,
+    }))
+    query.emit(system(query, { subtype: 'background_tasks_changed', tasks }))
+    for (let i = 0; i < 24; i++) {
+      query.emit(
+        system(query, {
+          subtype: 'task_notification',
+          task_id: `t${i}`,
+          status: i % 2 === 0 ? 'failed' : 'stopped',
+          summary: `ended ${i}`,
+          output_file: '',
+        }),
+      )
+    }
+    await settle()
+    const list = lists(target).at(-1)!
+    expect(list.filter((task) => task.status === 'running').map((task) => task.id)).toEqual(['t24'])
+    expect(list).toHaveLength(21)
+    expect(list.map((task) => task.id)).toEqual([
+      ...Array.from({ length: 20 }, (_, i) => `t${i + 4}`),
+      't24',
+    ])
+    expect(list[0]).toMatchObject({ id: 't4', status: 'failed', summary: 'ended 4' })
+    expect(list[1]).toMatchObject({ id: 't5', status: 'stopped' })
+    query.finish()
+    await turn
+  })
+
+  it('empties the list when its Claude Code ends', async () => {
+    const { s, target, sessionId, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [{ task_id: 'b1', task_type: 'local_bash', description: 'Serve' }],
+      }),
+    )
+    await settle()
+    expect(lists(target)).toHaveLength(1)
+    query.finish()
+    await turn
+    await s.connection.closeSession(sessionId)
+    expect(lists(target).at(-1)).toEqual([])
+  })
+
+  it('stops and reads the tasks of its own query', async () => {
+    const { s, sessionId, query, turn } = await open()
+    await s.connection.stopTask!(sessionId, 'b1')
+    expect(query.calls).toContainEqual({ method: 'stopTask', args: ['b1'] })
+    s.sdk.taskOutput = { output: 'x'.repeat(9000), total_bytes: 9000, truncated: false }
+    const read = await s.connection.taskOutput!(sessionId, 'b1')
+    expect(read).toEqual({ output: 'x'.repeat(8192), truncated: true })
+    expect(query.calls).toContainEqual({ method: 'getTaskOutput', args: ['b1'] })
+    query.finish()
+    await turn
+  })
+})
+
 describe('prompt content', () => {
   it('sends images as base64 and files as links, an embedded one with its text', () => {
     expect(

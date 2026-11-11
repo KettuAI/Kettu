@@ -1975,6 +1975,9 @@ li[data-row-exit='dust'] > * {
   background: var(--pane-fox);
   box-shadow: 0 0 0 2px var(--bg-app);
 }
+.kp-bar-dot--needs {
+  background: var(--warning);
+}
 
 /* The edge between the main area and a pane: no grip, a line fading at both ends while dragged. */
 .kp-resizer.kp-resizer {

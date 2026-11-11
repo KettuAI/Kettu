@@ -385,6 +385,12 @@ export interface Query extends AsyncIterable<SdkMessage> {
   getContextUsage(options?: { detail?: 'summary' | 'full' }): Promise<ContextUsageAnswer>
   accountInfo(): Promise<AccountInfo>
   stopTask(taskId: string): Promise<void>
+  /** Present in the SDK Kettu pins, though not in its published types. */
+  getTaskOutput?(taskId: string): Promise<{
+    output: string
+    total_bytes?: number
+    truncated?: boolean
+  }>
   /**
    * Replaces the servers the query added by itself, those of its `mcpServers` option among them,
    * over the control channel; the settings files' servers stay.

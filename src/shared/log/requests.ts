@@ -65,6 +65,7 @@ const READS = new Set([
   'snapshot',
   'status',
   'summary',
+  'taskOutput',
   'tools',
   'total',
   'unwatch',

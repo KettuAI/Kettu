@@ -37,6 +37,19 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it('takes a session and a bounded task id for a background task', () => {
+    for (const method of ['sessions.stopTask', 'sessions.taskOutput'] as const) {
+      expect(posix[method]({ sessionId: 's', taskId: 'b1', other: 1 })).toEqual({
+        sessionId: 's',
+        taskId: 'b1',
+      })
+      rejects(() => posix[method]({ sessionId: 's' }))
+      rejects(() => posix[method]({ sessionId: 's', taskId: '' }))
+      rejects(() => posix[method]({ sessionId: 's', taskId: 'x'.repeat(257) }))
+      rejects(() => posix[method]({ taskId: 'b1' }))
+    }
+  })
+
   it('takes only the two Claude Code settings, each with a value of its own kind', () => {
     const window = { setting: 'autoCompactWindow', model: 'claude-sonnet-5-5', value: 200000 }
     expect(
