@@ -115,8 +115,18 @@ export class WorktreeManager {
     return this.deps.git.remove(projectPath, record, options)
   }
 
-  recreate(projectPath: string, record: WorktreeRecord): Promise<void> {
-    return this.deps.git.recreate(projectPath, record)
+  /**
+   * Makes the worktree again from its branch, with the project's local files copied in as at its
+   * first start; the setup command is the user's to run again, since it may take long.
+   */
+  async recreate(projectPath: string, record: WorktreeRecord): Promise<void> {
+    await this.deps.git.recreate(projectPath, record)
+    const { copy } = this.settings(projectPath)
+    try {
+      await this.deps.git.copyLocalFiles(projectPath, record.path, copy)
+    } catch (error) {
+      this.deps.log('warn', `Worktree copy failed in ${record.path}: ${messageOf(error)}`)
+    }
   }
 
   prune(projectPath: string): Promise<void> {

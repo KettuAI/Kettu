@@ -1,6 +1,6 @@
 // The git and file system side of a session's worktree: creating it with its branch, inspecting
-// what removing it would lose, and removing or recreating it. Nothing here fetches, forces a
-// removal or changes the repository's config.
+// what removing it would lose, and removing or recreating it. Nothing here fetches, removes
+// changes the user was not shown, or changes the repository's config.
 
 import { createHash, randomBytes } from 'node:crypto'
 import { access, constants, lstat, mkdir, realpath, stat } from 'node:fs/promises'
@@ -309,9 +309,12 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
       if (!own || samePath(record.path, projectPath, platform)) {
         throw new HostError('conflict', 'The folder is not a worktree of this project')
       }
+      // Changed files go only when the user was shown them and they are still what was shown; a
+      // single --force still leaves a locked worktree alone.
+      const force = state.uncommitted > 0 ? ['--force'] : []
       const result = await git(
         projectPath,
-        [...longPaths, 'worktree', 'remove', '--', record.path],
+        [...longPaths, 'worktree', 'remove', ...force, '--', record.path],
         WORKTREE_REMOVE_TIMEOUT_MS,
       )
       if (!ok(result)) throw gitError('git worktree remove', result)

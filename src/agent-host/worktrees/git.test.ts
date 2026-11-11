@@ -106,7 +106,7 @@ describe('createWorktreeGit', () => {
     expect(git(project, 'branch', '--list', record.branch)).toBe('')
   })
 
-  it('refuses when the worktree changed and never forces a dirty one', async () => {
+  it('removes changed files only as they were shown, and never a locked worktree', async () => {
     const record = await create('dirty one')
     const clean = await worktrees.inspect(project, record)
     await writeFile(path.join(record.path, 'new.txt'), 'x')
@@ -114,12 +114,20 @@ describe('createWorktreeGit', () => {
     await expect(
       worktrees.remove(project, record, { branch: 'keep', expected: clean }),
     ).rejects.toMatchObject({ code: 'conflict' })
+    expect(await isThere(path.join(record.path, 'new.txt'))).toBe(true)
     const dirty = await worktrees.inspect(project, record)
     expect(dirty.uncommitted).toBe(2)
+    git(project, 'worktree', 'lock', record.path)
     await expect(
       worktrees.remove(project, record, { branch: 'keep', expected: dirty }),
     ).rejects.toMatchObject({ code: 'git_error' })
     expect(await isThere(path.join(record.path, 'new.txt'))).toBe(true)
+    git(project, 'worktree', 'unlock', record.path)
+    expect(await worktrees.remove(project, record, { branch: 'keep', expected: dirty })).toEqual({
+      branchDeleted: false,
+    })
+    expect(await isThere(record.path)).toBe(false)
+    expect(git(project, 'branch', '--list', record.branch)).not.toBe('')
   })
 
   it('counts unpushed commits and keeps an unmerged branch', async () => {
