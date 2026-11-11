@@ -16,18 +16,22 @@ import {
   type ExportedFile,
   isExportFormat,
 } from '@shared/artifact-types'
-import { ARTIFACT_ID, type ArtifactImportKind, type ArtifactImportResult } from '@shared/artifacts'
+import {
+  type ArtifactImportKind,
+  type ArtifactImportResult,
+  parseArtifactRef,
+} from '@shared/artifacts'
 import type { ArtifactContentFile, ArtifactContentResult } from '@shared/host-control'
 import { safeName } from '@shared/file-name'
 import { overviewOf } from './overview'
-import { isInside } from './protocol'
+import { isInside, isStored } from './protocol'
 
 const MAX_PROJECT_CHARS = 4_096
 const HTML_FILTER = { name: 'HTML', extensions: ['html', 'htm'] }
 
-/** An artifact id and a version number from the renderer, checked. */
+/** An artifact's reference and a version number from the renderer, checked. */
 export function parseVersion(id: unknown, version: unknown): { id: string; version: number } {
-  if (typeof id !== 'string' || !ARTIFACT_ID.test(id)) throw new Error('Not an artifact id')
+  if (typeof id !== 'string' || !parseArtifactRef(id)) throw new Error('Not an artifact id')
   if (!Number.isSafeInteger(version) || (version as number) < 1) throw new Error('Not a version')
   return { id, version: version as number }
 }
@@ -61,6 +65,8 @@ export interface ArtifactFilesDeps {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   /** `artifacts/content/` in the data folder, where the bytes of every file lie. */
   contentDir: string
+  /** Where the files main fetched from other hosts lie. */
+  remoteDir?: string
   /** Has the host make an artifact of a file or folder, in a project, or No project when null. */
   importFile(path: string, project: string | null): Promise<NonNullable<ArtifactImportResult>>
   /** Where the copies for the browser go. */
@@ -218,7 +224,7 @@ export class ArtifactFiles {
     if (
       found.kind === 'not_found' ||
       !found.files.some((file) => file.path === ARTIFACT_ENTRY || file.path === CANVAS_FILE) ||
-      !found.files.every((file) => isInside(this.deps.contentDir, file.file))
+      !found.files.every((file) => isStored(this.deps, wanted.id, file.file))
     ) {
       throw new Error('Not found')
     }

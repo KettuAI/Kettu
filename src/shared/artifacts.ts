@@ -5,6 +5,22 @@ import type { ArtifactTypeInfo, ArtifactTypeName } from './artifact-types'
 /** `art_` and a ULID: 26 characters of Crockford's base32, the first ten the creation time. */
 export const ARTIFACT_ID = /^art_[0-9A-HJKMNP-TV-Z]{26}$/
 
+/**
+ * How a window names an artifact to main: its id, or for an artifact of another host the host's id
+ * before it, so two hosts' artifacts never meet, even under one id.
+ */
+const ARTIFACT_REF = /^(?:([0-9a-f]{32}):)?(art_[0-9A-HJKMNP-TV-Z]{26})$/
+
+export function artifactRef(hostId: string | null, id: string): string {
+  return hostId === null ? id : `${hostId}:${id}`
+}
+
+/** The host and id a reference names, the host null for this computer's; null for anything else. */
+export function parseArtifactRef(ref: unknown): { hostId: string | null; id: string } | null {
+  const match = typeof ref === 'string' ? ARTIFACT_REF.exec(ref) : null
+  return match ? { hostId: match[1] ?? null, id: match[2]! } : null
+}
+
 export const ARTIFACT_TITLE_CHARS = 120
 
 /** The session id of an artifact the user imported, which no session created. */

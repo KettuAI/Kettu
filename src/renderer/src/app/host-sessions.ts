@@ -37,6 +37,8 @@ export interface HostSessionHandlers {
   event(hostId: string, event: HostEvent): void
   /** A new connection to the host opened, after its lists were read again. */
   opened(hostId: string): void
+  /** The connection to the host ended, or the host is no longer known here. */
+  closed(hostId: string): void
   /** The host dropped patches for this computer: what it shows of the host is read again. */
   resync(hostId: string): void
 }
@@ -141,6 +143,9 @@ export function initHostSessions(handlers: HostSessionHandlers): void {
         void readLists(hostId).then(() => handlers.opened(hostId))
         void reattachTerminals(hostId)
         break
+      case 'closed':
+        handlers.closed(hostId)
+        break
       case 'resync':
         handlers.resync(hostId)
         break
@@ -166,7 +171,10 @@ export function initHostSessions(handlers: HostSessionHandlers): void {
       ),
       ...Object.keys(useAgentsStore.getState().hosts),
     ])
-    for (const hostId of goneHosts([...listed], hosts)) forget(hostId)
+    for (const hostId of goneHosts([...listed], hosts)) {
+      forget(hostId)
+      handlers.closed(hostId)
+    }
   })
   useSessionsStore.subscribe((state, previous) => {
     if (state.byId !== previous.byId) scheduleSave()

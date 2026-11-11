@@ -11,7 +11,7 @@ import {
   type WebContents,
 } from 'electron'
 import type { SelectMessage } from '@shared/artifact-runtime/page-messages'
-import { ARTIFACT_ID, type ArtifactImportResult } from '@shared/artifacts'
+import { type ArtifactImportResult, parseArtifactRef } from '@shared/artifacts'
 import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import {
   type ArtifactExportFormat,
@@ -70,6 +70,8 @@ export function disableDnsPrefetching(): void {
 export interface ArtifactsDeps {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
   contentDir: string
+  /** Where the files main fetched from other hosts lie. */
+  remoteDir?: string
   thumbnailDir: string
   /** Has the host make an artifact of a file or folder, in a project, or No project when null. */
   importFile(path: string, project: string | null): Promise<NonNullable<ArtifactImportResult>>
@@ -104,6 +106,7 @@ export class Artifacts {
   constructor(private readonly deps: ArtifactsDeps) {
     this.source = {
       contentDir: deps.contentDir,
+      remoteDir: deps.remoteDir,
       artifactOf: (host) => this.origins.artifactOf(host),
       content: (id, version) => deps.content(id, version),
       selected: (host, message) => this.selected(host, message),
@@ -128,6 +131,7 @@ export class Artifacts {
     this.files = new ArtifactFiles({
       content: (id, version) => deps.content(id, version),
       contentDir: deps.contentDir,
+      remoteDir: deps.remoteDir,
       importFile: (path, project) => deps.importFile(path, project),
     })
   }
@@ -180,7 +184,7 @@ export class Artifacts {
 
   /** `artifact:open`: lets the window frame an artifact the host knows. */
   async open(contents: WebContents, id: unknown): Promise<ArtifactOpenResult> {
-    if (typeof id !== 'string' || !ARTIFACT_ID.test(id)) throw new Error('Not an artifact id')
+    if (typeof id !== 'string' || !parseArtifactRef(id)) throw new Error('Not an artifact id')
     const found = await this.deps.content(id, null)
     if (found.kind === 'not_found') return { failed: 'not_found' }
     if (found.kind === 'failed') return { failed: 'unavailable' }

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { CommentAnchor } from '@shared/artifact-comments'
 import type { ArtifactImportKind, ArtifactImportResult, ArtifactSummary } from '@shared/artifacts'
+import type { HostEvent } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import {
   parseOpened,
@@ -8,7 +9,7 @@ import {
   type ArtifactKind,
   type OpenedTimes,
 } from '@renderer/features/artifacts/model'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, host, hostAt, learnArtifactHost } from '@renderer/lib/host'
 import { readJson, writeJson } from '@renderer/lib/storage'
 
 const OPENED_KEY = 'artifacts.opened'
@@ -18,6 +19,11 @@ interface ArtifactsStore {
   list: ArtifactSummary[] | null
   /** Recently deleted, the latest deletion first; null until the first read. */
   deleted: ArtifactSummary[] | null
+  /**
+   * The other hosts whose artifacts are in the lists. Until a host's are, nothing says an artifact
+   * of its sessions is gone.
+   */
+  hostsRead: readonly string[]
   /** Why the last read failed, until a read succeeds. */
   error: string | null
   /** The page's filters, kept while the viewer shows so Back returns to the same list. */
@@ -57,6 +63,7 @@ export type ImportFailure = Extract<ArtifactImportResult, { failed: string }>['f
 export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   list: null,
   deleted: null,
+  hostsRead: [],
   error: null,
   filter: '',
   kindFilter: null,
@@ -69,51 +76,124 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   paneSelection: null,
 }))
 
-let shown = 0
-let stale = true
-let reading = false
-let readAgain = false
+/** A host's two lists as last read; this computer's under null. */
+interface HostLists {
+  list: ArtifactSummary[]
+  deleted: ArtifactSummary[]
+}
 
-function read(): void {
-  if (reading) {
-    readAgain = true
+let shown = 0
+const lists = new Map<string | null, HostLists>()
+/** This computer, and the other hosts whose session is open. */
+const hosts = new Set<string | null>([null])
+const stale = new Set<string | null>([null])
+const reading = new Set<string | null>()
+const readAgain = new Set<string | null>()
+
+/** Every host's artifacts in one list each, ordered as a host orders its own. */
+function publish(): void {
+  const own = lists.get(null)
+  if (!own) return
+  const others = [...lists].filter(([hostId]) => hostId !== null).map(([, value]) => value)
+  useArtifactsStore.setState({
+    list:
+      others.length === 0
+        ? own.list
+        : [own, ...others].flatMap((l) => l.list).sort((a, b) => b.updatedAt - a.updatedAt),
+    deleted:
+      others.length === 0
+        ? own.deleted
+        : [own, ...others]
+            .flatMap((l) => l.deleted)
+            .sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0)),
+    hostsRead: [...lists.keys()].filter((hostId) => hostId !== null),
+  })
+}
+
+function read(hostId: string | null): void {
+  if (!hosts.has(hostId)) return
+  if (reading.has(hostId)) {
+    readAgain.add(hostId)
     return
   }
-  reading = true
-  stale = false
-  Promise.all([host('artifacts.list', {}), host('artifacts.list', { deleted: true })])
+  reading.add(hostId)
+  stale.delete(hostId)
+  Promise.all([
+    hostAt(hostId, 'artifacts.list', {}),
+    hostAt(hostId, 'artifacts.list', { deleted: true }),
+  ])
     .then(
-      ([list, deleted]) => useArtifactsStore.setState({ list, deleted, error: null }),
+      ([list, deleted]) => {
+        if (!hosts.has(hostId)) return
+        if (hostId === null) for (const a of [...list, ...deleted]) learnArtifactHost(a.id, null)
+        lists.set(hostId, { list, deleted })
+        if (hostId === null) useArtifactsStore.setState({ error: null })
+        publish()
+      },
       (error: unknown) => {
-        stale = true
-        useArtifactsStore.setState({ error: errorMessage(error) })
+        stale.add(hostId)
+        // Another host that cannot be read shows nothing; only this computer's failure is told.
+        if (hostId === null) useArtifactsStore.setState({ error: errorMessage(error) })
+        else console.warn(`Could not read the artifacts of host ${hostId}`, error)
       },
     )
     .finally(() => {
-      reading = false
-      if (!readAgain) return
-      readAgain = false
-      read()
+      reading.delete(hostId)
+      if (readAgain.delete(hostId)) read(hostId)
     })
 }
 
 /**
  * A page, viewer or pane that shows artifacts came into view or left it; while one shows, the lists
- * follow the host's changes.
+ * follow the hosts' changes.
  */
 export function artifactListShown(on: boolean): void {
   shown += on ? 1 : -1
-  if (on && stale) read()
+  if (on) for (const hostId of [...stale]) read(hostId)
 }
 
-/** The host's list changed, or the host came back: read now if the page shows, else on its return. */
-export function artifactsChanged(): void {
-  if (shown > 0) read()
-  else stale = true
+/**
+ * A host's list changed, or the host came back: read now if a page shows, else on its return.
+ * `hostId` is null for this computer.
+ */
+export function artifactsChanged(hostId: string | null = null): void {
+  if (!hosts.has(hostId)) return
+  if (shown > 0) read(hostId)
+  else stale.add(hostId)
+}
+
+/** A session with another host opened: its artifacts join the lists. */
+export function artifactsHostOpened(hostId: string): void {
+  hosts.add(hostId)
+  artifactsChanged(hostId)
+}
+
+/** The session ended, or the host is forgotten: its artifacts leave the lists. */
+export function artifactsHostClosed(hostId: string): void {
+  hosts.delete(hostId)
+  stale.delete(hostId)
+  readAgain.delete(hostId)
+  if (lists.delete(hostId)) publish()
+}
+
+type ArtifactEvent = Extract<HostEvent, { type: `artifacts.${string}` }>
+type ArtifactEventListener = (event: ArtifactEvent, hostId: string | null) => void
+
+const eventListeners = new Set<ArtifactEventListener>()
+
+/** Each host's events about its artifacts, with the host, null for this computer. */
+export function onArtifactEvent(listener: ArtifactEventListener): () => void {
+  eventListeners.add(listener)
+  return () => eventListeners.delete(listener)
+}
+
+export function receiveArtifactEvent(event: HostEvent, hostId: string | null): void {
+  if (!event.type.startsWith('artifacts.')) return
+  for (const listener of [...eventListeners]) listener(event as ArtifactEvent, hostId)
 }
 
 export function retryArtifacts(): void {
-  read()
+  read(null)
 }
 
 export function setArtifactsFilter(filter: string): void {

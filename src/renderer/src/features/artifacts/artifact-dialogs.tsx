@@ -35,7 +35,7 @@ import {
   useArtifactsStore,
   type ArtifactDialog,
 } from '@renderer/stores/artifacts'
-import { unpublishArtifact } from '@renderer/stores/sharing'
+import { artifactSharing } from './artifact-host'
 import { removeCard } from './card-dust'
 
 /** Renaming and deleting permanently, asked from any artifact's menu. */
@@ -166,7 +166,7 @@ function DeleteDialog({
     setError(null)
     try {
       if (unpublish) {
-        const result = await unpublishArtifact(shown.id)
+        const result = await artifactSharing(shown.id).unpublish(shown.id)
         if ('failed' in result) {
           setError(t(`share.failures.${result.failed}`, { count: CLOUDFLARE_FREE_WORKERS }))
           return
@@ -235,7 +235,7 @@ function EraseDialog({
     setError(null)
     try {
       if (unpublish && shown.published) {
-        const result = await unpublishArtifact(shown.id)
+        const result = await artifactSharing(shown.id).unpublish(shown.id)
         if ('failed' in result) {
           setError(t(`share.failures.${result.failed}`, { count: CLOUDFLARE_FREE_WORKERS }))
           return

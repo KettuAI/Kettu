@@ -11,7 +11,7 @@ import {
   readDraft,
   writeDraft,
 } from '@renderer/features/session/composer/drafts'
-import { host } from '@renderer/lib/host'
+import { artifactRefOf, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { openNewSession } from '@renderer/stores/view'
 import { block, boundary } from './anchors'
@@ -63,7 +63,7 @@ async function pageWithNotes(
   pages: readonly CanvasPage[],
 ): Promise<string | null> {
   const image = await window.kettu.artifacts.pageImage(
-    artifactId,
+    artifactRefOf(artifactId),
     version,
     { group: 0, index: 1, file: page.file },
     { width: page.width, height: page.height },

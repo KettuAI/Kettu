@@ -5,7 +5,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { fitThumbnail, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH } from '@shared/artifacts'
 import type { ArtifactSummary } from '@shared/artifacts'
 import { CANVAS_FILE, parseCanvasDoc } from '@shared/canvas-doc'
-import { host } from '@renderer/lib/host'
+import { artifactRefOf, host } from '@renderer/lib/host'
 import { parseCanvas, thumbnailLayout } from './canvas'
 import { docThumbnailLayout } from './canvas-model'
 
@@ -65,7 +65,11 @@ async function render(artifact: ThumbnailOf): Promise<Thumbnail> {
       if (!layout) return { state: 'failed' }
     } else if (version === artifact.version) layout = thumbnailLayout(parseCanvas(html))
   }
-  const src = await window.kettu.artifacts.thumbnail(artifact.id, artifact.version, layout)
+  const src = await window.kettu.artifacts.thumbnail(
+    artifactRefOf(artifact.id),
+    artifact.version,
+    layout,
+  )
   if (!src) return { state: 'failed' }
   if (!layout) return { state: 'ready', src, pages: null }
   const fit = fitThumbnail(layout)

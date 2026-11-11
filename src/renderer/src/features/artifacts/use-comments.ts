@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { CommentThread } from '@shared/artifact-comments'
-import { errorMessage, host } from '@renderer/lib/host'
-import { useConnectionStore } from '@renderer/stores/connection'
+import { artifactHost, errorMessage, host } from '@renderer/lib/host'
+import { onArtifactEvent } from '@renderer/stores/artifacts'
+import { useArtifactHostConnected } from './artifact-host'
 
 /**
  * The artifact's comment threads, read again when they change and with each new version, which
@@ -13,7 +14,7 @@ export function useComments(id: string | null): {
 } {
   const [threads, setThreads] = useState<CommentThread[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const connected = useConnectionStore((s) => s.agentHost === 'connected')
+  const connected = useArtifactHostConnected(id)
 
   useEffect(() => {
     if (!connected || id === null) return
@@ -46,10 +47,11 @@ export function useComments(id: string | null): {
         })
     }
     read()
-    const off = window.kettu.agents.onEvent((event) => {
+    const off = onArtifactEvent((event, hostId) => {
       if (
         (event.type === 'artifacts.comments' || event.type === 'artifacts.version') &&
-        event.id === id
+        event.id === id &&
+        hostId === artifactHost(id)
       ) {
         read()
       }

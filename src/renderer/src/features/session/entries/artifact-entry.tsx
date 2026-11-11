@@ -19,6 +19,7 @@ import {
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { useArtifactPublished, useArtifactShares } from '@renderer/features/artifacts/artifact-host'
 import { ArtifactMenuItems } from '@renderer/features/artifacts/artifact-menu'
 import { KIND_ICON } from '@renderer/features/artifacts/kinds'
 import { artifactKind } from '@renderer/features/artifacts/model'
@@ -26,12 +27,16 @@ import { ShareButton } from '@renderer/features/artifacts/share-popover'
 import { useThumbnail, type Thumbnail } from '@renderer/features/artifacts/thumbnails'
 import { useInView } from '@renderer/features/artifacts/use-in-view'
 import { longAgo } from '@renderer/lib/format'
-import { errorMessage, host } from '@renderer/lib/host'
-import { useHostHas } from '@renderer/lib/host-features'
+import {
+  artifactHost,
+  errorMessage,
+  host,
+  learnArtifactHost,
+  sessionHost,
+} from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { artifactListShown, useArtifactsStore } from '@renderer/stores/artifacts'
-import { useSharingStore } from '@renderer/stores/sharing'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { openArtifact, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
 import { useEntry, useEntryAnimation } from '../use-thread'
@@ -49,6 +54,8 @@ export const ArtifactEntry = memo(function ArtifactEntry({
   entryId: string
 }) {
   const entry = useEntry(sessionId, entryId, 'artifact')
+  // A session's artifacts are kept where it runs, which every request for one goes by.
+  if (entry) learnArtifactHost(entry.artifactId, sessionHost(sessionId))
   const animation = useEntryAnimation(sessionId, entryId)
   const size = useThreadsStore((s) => {
     const state = s.replicas[sessionId]?.state
@@ -103,7 +110,9 @@ function useStanding(id: string): Standing {
   return useArtifactsStore((s) => {
     if (s.list?.some((a) => a.id === id)) return 'live'
     if (s.deleted?.some((a) => a.id === id)) return 'deleted'
-    // Until both lists arrive, nothing says it is gone.
+    // Until both lists of its host arrive, nothing says it is gone.
+    const hostId = artifactHost(id)
+    if (hostId !== null && !s.hostsRead.includes(hostId)) return 'live'
     return s.list && s.deleted ? 'erased' : 'live'
   })
 }
@@ -199,10 +208,8 @@ function ArtifactCard({
   const pressed = useViewStore(
     (s) => s.sidePane[sessionId] === 'artifact' && s.sideArtifact[sessionId] === entry.artifactId,
   )
-  const shares = useHostHas('sharing') === true
-  const published = useSharingStore((s) =>
-    s.status ? s.status.published.some((page) => page.id === entry.artifactId) : null,
-  )
+  const shares = useArtifactShares(entry.artifactId)
+  const published = useArtifactPublished(entry.artifactId)
   const now = useNow()
   const inView = useInView(card)
   const version = useEntryVersion(entry.artifactId, entry.version, summary?.version ?? null, inView)
