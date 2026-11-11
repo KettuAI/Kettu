@@ -1286,7 +1286,10 @@ class DeviceSession {
     }
     const refused =
       typeof method === 'string' &&
-      (forbiddenToDevices(method, params) || REMOTE_HOST_ONLY.has(method))
+      (forbiddenToDevices(method, params) ||
+        REMOTE_HOST_ONLY.has(method) ||
+        // A project's worktree setup is a command the host runs, so it needs the terminal's leave.
+        (method === 'projects.setWorktreeSettings' && !this.server.terminal))
     if (refused) {
       this.server.options.log(
         'warn',

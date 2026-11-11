@@ -42,6 +42,7 @@ import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
 import { refreshLimits } from '@renderer/stores/usage'
 import {
   chooseNewSessionHost,
@@ -87,6 +88,9 @@ import { AgentGuide } from './new-session/agent-guide'
 import { useGuideStatuses } from './new-session/guide-statuses'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
+import { WorktreeTrayTag } from './worktree/worktree-tag'
+import { branchNameInvalid, currentBase, useWorktreeStatus } from './new-session/worktree-base'
+import { WorktreeMenu, WorktreeNote } from './new-session/worktree-menu'
 import { ParentLink } from './session-header'
 import { ColumnScroller } from './session-states'
 import { TurnDots } from './turn-dots'
@@ -279,7 +283,17 @@ function DraftComposer({
   const ready = inScratch || (!!project && !project.missing)
   const held = attachmentsBlock(attachments, text)
   const holdsMessage = hasMessage(text, attachments)
-  const canSend = !!agentId && ready && holdsMessage && !held
+  // A sub-session works in its parent's worktree, so only a top-level session in a repository
+  // with a commit chooses one.
+  const gitStatus = useWorktreeStatus(!parent && !inScratch && project ? project.path : '')
+  const badBranch = useWorktreeChoice(
+    (s) =>
+      !!gitStatus &&
+      !!project &&
+      s.where[project.path] === 'worktree' &&
+      branchNameInvalid(s.branch),
+  )
+  const canSend = !!agentId && ready && holdsMessage && !held && !badBranch
   const tightest = limits ? tightestLimit(limits, now) : null
   const reached = tightest?.state === 'reached' ? tightest : null
   const sending = useRef(false)
@@ -336,7 +350,12 @@ function DraftComposer({
         ...(text.trim() ? [{ type: 'text' as const, text }] : []),
         ...attachmentContent(attachments),
       ]
-      void startNewSession(agentId, projectPath, content, options, preparedId)
+      // A worktree chosen before the project's status is read is still a worktree.
+      const worktree =
+        project && !inScratch
+          ? worktreeRequest(project.path, gitStatus ? currentBase(gitStatus) : null)
+          : null
+      void startNewSession(agentId, projectPath, content, options, preparedId, worktree)
     } finally {
       sending.current = false
     }
@@ -382,7 +401,9 @@ function DraftComposer({
       ? t('newSession.chooseProjectFirst')
       : project?.missing && !inScratch
         ? t('newSession.missingLine')
-        : (held?.message ?? null)
+        : badBranch
+          ? t('worktree.branchInvalid')
+          : (held?.message ?? null)
 
   return (
     <>
@@ -487,7 +508,13 @@ function DraftComposer({
                   </>
                 )}
                 <AgentPicker agentId={agentId} onChoose={choose} hostId={hostId} />
-                {!inScratch && project && <BranchLabel projectPath={project.path} />}
+                {gitStatus && project ? (
+                  <WorktreeMenu projectPath={project.path} status={gitStatus} />
+                ) : parent?.worktree ? (
+                  <WorktreeTrayTag worktree={parent.worktree} />
+                ) : (
+                  !inScratch && project && <BranchLabel projectPath={project.path} />
+                )}
               </span>
             </div>
           }
@@ -504,6 +531,7 @@ function DraftComposer({
             {box.error ?? held?.message}
           </p>
         )}
+        {gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />}
         {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
         {waitingForNode && !(noAgent && guide) && (
           <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />

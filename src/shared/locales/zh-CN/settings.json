@@ -280,9 +280,18 @@
       "name": "在后台抓取",
       "description": "每 5 分钟一次，让领先和落后的提交数保持最新。"
     },
+    "worktreeRoot": {
+      "name": "Worktree 存放位置",
+      "description": "这台主机上会话的新 worktree 放在哪里。",
+      "keywords": "worktree 文件夹 位置 分支",
+      "nextToProject": "放在每个项目旁边",
+      "choose": "选择…",
+      "reset": "重置"
+    },
     "groups": {
       "tools": "工具",
-      "sync": "同步"
+      "sync": "同步",
+      "worktrees": "Worktree"
     }
   },
   "notifications": {

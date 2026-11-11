@@ -56,6 +56,7 @@ import {
 } from '@renderer/stores/view'
 import { create } from 'zustand'
 import { emitAppEvent } from './events'
+import { writeBranch } from '@renderer/stores/worktree-choice'
 
 /** A session being created: shown in place of the thread until `session/new` answers. */
 export interface PendingSession {
@@ -155,6 +156,7 @@ export async function createSession(
   options: OptionValues | null = null,
   preparedId: string | null = null,
   paneId: string = newSessionAt() ?? '',
+  worktree: { base: string; branch?: string } | null = null,
 ): Promise<void> {
   usePendingSession.setState({
     pending: { paneId, agentId, projectPath, parentId, prompt, options, error: null },
@@ -181,8 +183,11 @@ export async function createSession(
       ...(options && Object.keys(options).length > 0 ? { options } : {}),
       ...(prompt !== null ? { prompt } : {}),
       ...(preparedId ? { preparedId } : {}),
+      ...(worktree ? { worktree } : {}),
     })
-    if (preparedId) adoptedPrepared(summary.id)
+    // A session in a new worktree starts its own agent; the prepared one stays the window's.
+    if (preparedId && !worktree) adoptedPrepared(summary.id)
+    if (worktree) writeBranch(null)
     // The host now remembers what carries over; the rest starts afresh next time.
     if (options) clearPicks(projectPath === null ? null : hostOfPath(projectPath), agentId)
     useSessionsStore.getState().upsert(summary)
@@ -272,6 +277,7 @@ export function startNewSession(
   prompt: UserContent[],
   options: OptionValues | null,
   preparedId: string | null = null,
+  worktree: { base: string; branch?: string } | null = null,
 ): Promise<void> {
   const { main } = useViewStore.getState()
   const parent =
@@ -280,17 +286,25 @@ export function startNewSession(
       : undefined
   return parent
     ? createSession(agentId, parent.projectPath, parent.id, prompt, options, preparedId)
-    : createSession(agentId, projectPath, null, prompt, options, preparedId)
+    : createSession(agentId, projectPath, null, prompt, options, preparedId, undefined, worktree)
 }
 
 /**
  * Forks the session into a new one in the same project and shows it; from `entryId`, a reply's
  * agent message, up to the end of that reply's turn.
  */
-export async function forkSession(sessionId: string, entryId?: string): Promise<void> {
+export async function forkSession(
+  sessionId: string,
+  entryId?: string,
+  worktree?: 'new' | 'same',
+): Promise<void> {
   let summary: SessionSummary
   try {
-    summary = await host('sessions.fork', entryId ? { sessionId, entryId } : { sessionId })
+    summary = await host('sessions.fork', {
+      sessionId,
+      ...(entryId ? { entryId } : {}),
+      ...(worktree ? { worktree } : {}),
+    })
   } catch (error) {
     // Deleted, or its project removed, while it started: nothing is left to show.
     if (removedWhileStarting(error)) return

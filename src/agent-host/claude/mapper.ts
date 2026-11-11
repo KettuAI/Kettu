@@ -596,7 +596,8 @@ export class ClaudeMapper {
     tool: Tool,
   ): void {
     const input = inputOf(tool.input)
-    const named = inputOf(structured).agentId
+    const result = inputOf(structured)
+    const named = result.agentId
     const taskId =
       typeof named === 'string' ? named : (AGENT_ID.exec(resultText(block))?.[1] ?? null)
     const failed = block.is_error === true
@@ -615,6 +616,15 @@ export class ClaudeMapper {
           error: failed ? { message: resultText(block) || t('session.subagent.failed') } : null,
           tokens: null,
         },
+        // Claude Code hands back a subagent's own worktree only when the subagent changed files.
+        ...(typeof result.worktreePath === 'string' && result.worktreePath !== ''
+          ? {
+              worktree: {
+                path: result.worktreePath,
+                branch: typeof result.worktreeBranch === 'string' ? result.worktreeBranch : null,
+              },
+            }
+          : {}),
       })
       return
     }

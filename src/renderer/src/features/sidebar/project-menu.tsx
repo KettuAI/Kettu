@@ -3,6 +3,7 @@ import {
   ComputerTerminal01Icon,
   Download04Icon,
   FolderOpenIcon,
+  GitBranchIcon,
   PencilEdit02Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -15,8 +16,10 @@ import {
   DropdownMenuShortcut,
 } from '@renderer/components/ui/dropdown-menu'
 import { MenuGlyph } from '@renderer/features/shell/glyph'
+import { openWorktreeSettings } from '@renderer/features/worktrees/worktree-settings-model'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, formatShortcut, isWeb } from '@renderer/lib/platform'
+import { useGitStore } from '@renderer/stores/git'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
 import { openSettings } from '@renderer/stores/view'
 import { openProjectTerminal } from './project-menu-model'
@@ -38,6 +41,8 @@ export function ProjectMenuItems({
   const gone = project.missing
   // Only this computer's folders open in its file manager.
   const revealable = !isWeb && hostOfPath(project.path) === null
+  // Left out once the project is known not to be a Git repository.
+  const git = useGitStore((s) => s.status[project.path]?.repo !== null)
 
   return (
     <>
@@ -70,6 +75,15 @@ export function ProjectMenuItems({
           </DropdownMenuItem>
         )}
       </DropdownMenuGroup>
+      {git && (
+        <DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={gone} onClick={() => openWorktreeSettings(project)}>
+            <MenuGlyph icon={GitBranchIcon} />
+            {t('project.menu.worktreeSettings')}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      )}
       <DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => openSettings('archived')}>

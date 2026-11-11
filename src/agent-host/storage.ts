@@ -3,7 +3,7 @@
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
-import { GITHUB_PULL_REQUEST_URL } from '@shared/git'
+import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/git'
 import {
   isAgentId,
   isUserContent,
@@ -232,6 +232,20 @@ export interface ProjectRecord {
   name: string
   addedAt: number
   lastOpenedAt: number
+  worktree?: Partial<ProjectWorktreeSettings> // only what differs from the defaults
+}
+
+/**
+ * The worktree Kettu made for a session. `removed`: Kettu removed the folder and kept the branch,
+ * or removed both; a record that does not read keeps the session read-only as `branch`.
+ */
+export interface WorktreeRecord {
+  path: string
+  branch: string
+  base: string
+  baseOid: string
+  removed?: 'worktree' | 'branch'
+  pending?: true // its preparation has not finished, so a restart shows it as failed
 }
 
 export interface ProjectsFile {
@@ -271,6 +285,10 @@ export interface SessionRecord {
   earlier?: EarlierAgent[]
   /** A takeover whose first turn has not gone to its agent yet. */
   carry?: PendingCarry
+  /** The worktree it works in; absent when it works in its project's folder. */
+  worktree?: WorktreeRecord
+  /** A worktree its agent made for a subagent, which Kettu shows and never removes. */
+  agentWorktree?: { path: string; branch: string | null }
 }
 
 /** What a session's new agent is to be given with its first turn, kept until that turn goes. */
@@ -503,6 +521,7 @@ export function parseProjectsFile(data: Record<string, unknown>): ProjectsFile |
       name: item.name,
       addedAt: item.addedAt,
       lastOpenedAt: item.lastOpenedAt,
+      ...projectWorktreeOf(item.worktree),
     })
   }
   return { version: 1, projects }
@@ -612,6 +631,77 @@ function carryOf(value: unknown): { carry?: PendingCarry } {
   }
 }
 
+export const MAX_WORKTREE_COPY_PATHS = 100
+const MAX_BRANCH_TEMPLATE = 200
+const MAX_SETUP_COMMAND = 8192
+const OBJECT_ID = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+
+/** A project's worktree settings, key by key; one that does not read is dropped alone. */
+function projectWorktreeOf(value: unknown): { worktree?: Partial<ProjectWorktreeSettings> } {
+  if (!isRecord(value)) return {}
+  const worktree: Partial<ProjectWorktreeSettings> = {}
+  const { branchTemplate, copy, setup, waitForSetup } = value
+  if (isString(branchTemplate) && branchTemplate.length <= MAX_BRANCH_TEMPLATE) {
+    worktree.branchTemplate = branchTemplate
+  }
+  if (Array.isArray(copy)) {
+    worktree.copy = copy
+      .filter((item): item is string => isString(item) && item !== '' && item.length <= 1024)
+      .slice(0, MAX_WORKTREE_COPY_PATHS)
+  }
+  if (setup === null || (isString(setup) && setup.length <= MAX_SETUP_COMMAND)) {
+    worktree.setup = setup
+  }
+  if (typeof waitForSetup === 'boolean') worktree.waitForSetup = waitForSetup
+  return Object.keys(worktree).length > 0 ? { worktree } : {}
+}
+
+// A worktree that does not read must never let the session fall back to its project's folder.
+const UNREADABLE_WORKTREE: WorktreeRecord = {
+  path: '',
+  branch: '',
+  base: '',
+  baseOid: '',
+  removed: 'branch',
+}
+
+function worktreeOf(value: unknown): { worktree?: WorktreeRecord } {
+  if (value === undefined) return {}
+  if (
+    !isRecord(value) ||
+    !isString(value.path) ||
+    value.path === '' ||
+    !isString(value.branch) ||
+    value.branch === '' ||
+    !isString(value.base) ||
+    !isString(value.baseOid) ||
+    !OBJECT_ID.test(value.baseOid) ||
+    (value.removed !== undefined && value.removed !== 'worktree' && value.removed !== 'branch')
+  ) {
+    return { worktree: { ...UNREADABLE_WORKTREE } }
+  }
+  return {
+    worktree: {
+      path: value.path,
+      branch: value.branch,
+      base: value.base,
+      baseOid: value.baseOid,
+      ...(value.removed === undefined ? {} : { removed: value.removed }),
+      ...(value.pending === true ? { pending: true as const } : {}),
+    },
+  }
+}
+
+function agentWorktreeOf(value: unknown): { agentWorktree?: SessionRecord['agentWorktree'] } {
+  if (!isRecord(value) || !isString(value.path) || value.path === '') return {}
+  return {
+    agentWorktree: {
+      path: value.path,
+      branch: isString(value.branch) && value.branch !== '' ? value.branch : null,
+    },
+  }
+}
+
 export function parseSessionsFile(data: Record<string, unknown>): SessionsFile | string {
   if (!Array.isArray(data.sessions)) return 'sessions is not a list'
   const sessions: SessionRecord[] = []
@@ -663,6 +753,8 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...pullRequestsOf(item.pullRequests),
       ...earlierOf(item.earlier),
       ...carryOf(item.carry),
+      ...worktreeOf(item.worktree),
+      ...agentWorktreeOf(item.agentWorktree),
     })
   }
   return {

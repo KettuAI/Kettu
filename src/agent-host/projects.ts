@@ -3,6 +3,7 @@
 import { realpath as fsRealpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { Project } from '@shared/agent-host'
+import { DEFAULT_WORKTREE_SETTINGS, type ProjectWorktreeSettings } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { invalidParams, notFound } from './errors'
 import { canonicalizePath, folderName, isAbsolutePath, pathKey } from './paths'
@@ -115,6 +116,27 @@ export class Projects {
     const record = this.find(api.resolve(value))
     if (!record) throw notFound(`No project at ${value}`)
     return record
+  }
+
+  /** How the project names and prepares its sessions' worktrees, with the defaults filled in. */
+  worktreeSettings(value: string): ProjectWorktreeSettings {
+    const stored = this.find(value)?.worktree ?? {}
+    return { ...DEFAULT_WORKTREE_SETTINGS, ...stored, copy: [...(stored.copy ?? [])] }
+  }
+
+  /** Stores only what differs from the defaults; a project that is not listed is refused. */
+  setWorktreeSettings(value: string, settings: ProjectWorktreeSettings): void {
+    const record = this.find(value)
+    if (!record) throw notFound(`No project at ${value}`)
+    const differs: Partial<ProjectWorktreeSettings> = {}
+    for (const key of Object.keys(DEFAULT_WORKTREE_SETTINGS) as (keyof ProjectWorktreeSettings)[]) {
+      if (JSON.stringify(settings[key]) !== JSON.stringify(DEFAULT_WORKTREE_SETTINGS[key])) {
+        Object.assign(differs, { [key]: settings[key] })
+      }
+    }
+    if (Object.keys(differs).length > 0) record.worktree = differs
+    else delete record.worktree
+    this.changed()
   }
 
   remove(record: ProjectRecord): void {

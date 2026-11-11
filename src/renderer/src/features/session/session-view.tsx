@@ -39,6 +39,8 @@ import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
 import { useSessionView } from './use-thread'
+import { sessionFolder } from '@renderer/lib/session-folder'
+import { WorktreeGoneComposer, WorktreeState } from './worktree/worktree-state'
 
 const BoardRail = lazy(() => import('@renderer/features/board/board-pane'))
 
@@ -80,7 +82,8 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   }, [sessionId])
 
   // File references in replies link to the project's files once their list is known.
-  useEffect(() => ensureFiles(summary.projectPath), [summary.projectPath])
+  const folder = sessionFolder(summary)
+  useEffect(() => ensureFiles(folder), [folder])
 
   const [actionError, setActionError] = useState<string | null>(null)
   // A queued message's failed action; the stack clears it with its next action or its last item.
@@ -163,14 +166,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       </ColumnScroller>
     )
   } else {
-    body = (
-      <Thread
-        sessionId={sessionId}
-        projectPath={summary.projectPath}
-        agentName={name}
-        working={running}
-      />
-    )
+    body = <Thread sessionId={sessionId} projectPath={folder} agentName={name} working={running} />
   }
 
   return (
@@ -178,7 +174,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
       <SessionHeader summary={summary} session={session} />
       <div className="flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <ProjectPathContext value={summary.projectPath}>
+          <ProjectPathContext value={folder}>
             {/* The drop zone covers the thread and leaves the composer in view. */}
             <div className="relative flex min-h-0 flex-1 flex-col">
               {body}
@@ -241,6 +237,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     </AlertAction>
                   </Alert>
                 )}
+                {summary.worktree && !archived && summary.origin !== 'subagent' && (
+                  <WorktreeState sessionId={sessionId} worktree={summary.worktree} />
+                )}
                 {(actionError || queueError) && (
                   <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
                     {actionError ?? queueError}
@@ -263,6 +262,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     <SubagentBar summary={summary} session={session} />
                   ) : archived ? (
                     <ArchivedComposer sessionId={sessionId} />
+                  ) : summary.worktree?.state === 'gone' ? (
+                    // Its history stays readable; nothing more can run without the branch.
+                    <WorktreeGoneComposer />
                   ) : session ? (
                     // Its menus open inside it, so while one is open it rises over the computer label.
                     <div className="relative z-10 has-aria-expanded:z-20">

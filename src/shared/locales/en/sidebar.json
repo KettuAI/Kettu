@@ -85,7 +85,8 @@
       "newSession": "New session",
       "openInTerminal": "Open in terminal",
       "showIn": "Show in {{name}}",
-      "showArchived": "Show archived"
+      "showArchived": "Show archived",
+      "worktreeSettings": "Worktree settings…"
     }
   },
   "prs": {
@@ -141,6 +142,9 @@
     "deleteCountTitle_other": "Delete {{count}} sessions?",
     "atStakeWorktree_one": "Its worktree <name>{{name}}</name> has <files>{{count}} uncommitted file</files>.",
     "atStakeWorktree_other": "Its worktree <name>{{name}}</name> has <files>{{count}} uncommitted files</files>.",
+    "atStakeWorktreeBranch_one": "Its worktree <name>{{name}}</name> on branch <name>{{branch}}</name> has <files>{{count}} uncommitted file</files>.",
+    "atStakeWorktreeBranch_other": "Its worktree <name>{{name}}</name> on branch <name>{{branch}}</name> has <files>{{count}} uncommitted files</files>.",
+    "inWorktree": "It works in the worktree <name>{{name}}</name> on branch <name>{{branch}}</name>. Deleting the session keeps the worktree unless you remove it.",
     "atStakeFolder_one": "Its folder <name>{{name}}</name> has <files>{{count}} uncommitted file</files>.",
     "atStakeFolder_other": "Its folder <name>{{name}}</name> has <files>{{count}} uncommitted files</files>.",
     "atStakeUnknown": "Kettu couldn’t check its folder <name>{{name}}</name> for uncommitted files.",
@@ -337,5 +341,51 @@
     "done": "Done",
     "failed": "Failed",
     "showFinished": "Show finished sub-agents"
+  },
+  "worktree": {
+    "menu": "Remove worktree…",
+    "forkNew": "Fork in a new worktree",
+    "forkSame": "Fork in the same worktree",
+    "removeTitle": "Remove the worktree?",
+    "afterArchive": "“{{title}}” is archived, and no other session works in its worktree. The conversation stays either way.",
+    "afterDelete": "No other session works in the worktree of “{{title}}”. The session is deleted either way.",
+    "keepsConversation": "The conversation stays. While the branch is kept, the next message makes the worktree again.",
+    "checking": "Checking the worktree…",
+    "inspectFailed": "Couldn’t check the worktree: {{error}}",
+    "others_one": "Another session still works in it:",
+    "others_other": "{{count}} other sessions still work in it:",
+    "stopOthers_one": "Stop it and remove the worktree anyway",
+    "stopOthers_other": "Stop them and remove the worktree anyway",
+    "uncommitted_one": "<files>{{count}} uncommitted file</files> will be lost.",
+    "uncommitted_other": "<files>{{count}} uncommitted files</files> will be lost.",
+    "unpushed_one": "<files>{{count}} commit</files> isn’t pushed. It stays on the branch, which is kept.",
+    "unpushed_other": "<files>{{count}} commits</files> aren’t pushed. They stay on the branch, which is kept.",
+    "merged": "Its changes are already in {{base}}.",
+    "notMerged": "Its changes aren’t in {{base}} yet, so the branch is kept.",
+    "conflict": "The worktree changed since you looked. Check again.",
+    "checkAgain": "Check again",
+    "gitRefused": "Git couldn’t remove it:",
+    "inUse": "If a program such as an editor or a dev server has a file in this folder open, close it and try again.",
+    "keep": "Keep",
+    "removeAll": "Remove worktree and branch",
+    "removeKeepBranch": "Remove worktree, keep branch",
+    "remove": "Remove worktree",
+    "removed": "Removed the worktree of “{{title}}”",
+    "removedWithBranch": "Removed the worktree and the branch {{branch}}",
+    "branchKept": "Removed the worktree. Kept the branch {{branch}}, since Git couldn’t confirm it was merged."
+  },
+  "worktreeSettings": {
+    "title": "Worktree settings for {{project}}",
+    "description": "How Kettu names and prepares the worktrees of new sessions in this project.",
+    "branch": "Branch name",
+    "branchHint": "{slug} is a few words from the first message, {type} the kind of change and {issue} an issue number. The default is kettu/{slug}.",
+    "copy": "Files to copy",
+    "copyHint": "Paths relative to the project, one per line, copied into each new worktree. The project’s .worktreeinclude is read too.",
+    "setup": "Setup command",
+    "setupHint": "Runs in each new worktree, such as to install dependencies. Leave it empty to run none.",
+    "wait": "First message waits for setup",
+    "waitHint": "The agent starts once the files are copied and the command has finished.",
+    "save": "Save",
+    "forbidden": "Only the owner of this host can change these from here, unless they let paired devices use its terminal."
   }
 }

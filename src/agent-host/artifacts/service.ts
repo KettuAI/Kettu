@@ -119,6 +119,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   browserSession?(sessionId: string): string | null
   /** The project whose always-allowed sites the page reads. */
   sessionProject?(sessionId: string): string | null
+  /** The folder the session works in, its worktree's or its project's, for the files it names. */
+  sessionFolder?(sessionId: string): string | null
   /** The artifacts' data, which the data tools read and write; without it they fail. */
   data?: ArtifactData
   /** Where the plan tool writes. */
@@ -249,7 +251,8 @@ export class ArtifactService {
       ? new DeviceTools({
           ...devices,
           sessionOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
-          projectOf: (sessionId) => deps.sessionProject?.(sessionId) ?? null,
+          projectOf: (sessionId) =>
+            deps.sessionFolder?.(sessionId) ?? deps.sessionProject?.(sessionId) ?? null,
         })
       : null
   }
@@ -456,12 +459,19 @@ export class ArtifactService {
 
   /** Who a call is from: the token's session, or the session a folder token's call names. */
   private callerOf(grant: Grant, meta: Record<string, unknown> | undefined): Caller | null {
-    if ('sessionId' in grant) return { sessionId: grant.sessionId, project: grant.project }
+    if ('sessionId' in grant)
+      return this.withFolder({ sessionId: grant.sessionId, project: grant.project })
     const id = meta?.[SESSION_META]
     const sessionId = typeof id === 'string' ? this.deps.sessionOf(grant.process, id) : null
     if (sessionId === null || !grant.sessions.has(sessionId)) return null
     const subagent = typeof id === 'string' && this.deps.subagentCall?.(grant.process, id) === true
-    return { sessionId, project: grant.project, ...(subagent ? { subagent } : {}) }
+    return this.withFolder({ sessionId, project: grant.project, ...(subagent ? { subagent } : {}) })
+  }
+
+  /** A caller in a worktree reads its sources there, while its artifacts stay its project's. */
+  private withFolder(caller: Caller): Caller {
+    const folder = this.deps.sessionFolder?.(caller.sessionId)
+    return folder && folder !== caller.project ? { ...caller, folder } : caller
   }
 
   private grantOf(header: string | undefined): Grant | null {

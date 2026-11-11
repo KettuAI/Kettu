@@ -1,5 +1,7 @@
 // Repository status and pull requests, as the git service in the agent host reports them.
 
+import type { Platform } from './platform'
+
 export interface GitStatus {
   projectPath: string
   repo: { root: string; gitDir: string } | null // null: not a repository
@@ -259,4 +261,81 @@ const REPOSITORY_NAME = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,99}$/
 /** Whether GitHub accepts `name` as a repository name. */
 export function isRepositoryName(name: string): boolean {
   return REPOSITORY_NAME.test(name) && name !== '.' && name !== '..'
+}
+
+/**
+ * Where a session's worktree stands. `removed`: Kettu removed its folder and kept the branch, so
+ * the next message recreates it; `missing`: the folder went away outside Kettu; `gone`: the
+ * branch is gone too, and the session is read-only.
+ */
+export type WorktreeState =
+  'creating' | 'setup' | 'setup-failed' | 'ready' | 'missing' | 'removed' | 'gone'
+
+/** Why a worktree's preparation stopped, for the session's failure note. */
+export interface WorktreeFailure {
+  stage: 'copy' | 'setup'
+  exitCode: number | null // null when the command did not exit on its own
+  message: string
+}
+
+/** The worktree a session works in, as its summary carries it. */
+export interface SessionWorktree {
+  path: string
+  branch: string
+  base: string // the ref it was cut from, as named when it was created
+  baseOid: string
+  state: WorktreeState
+  failure?: WorktreeFailure // with state 'setup-failed'
+}
+
+/** A worktree's state when the user is asked what to remove. */
+export interface WorktreeInspection {
+  /** The folder is there and git lists it as a worktree of the project. */
+  exists: boolean
+  /** The branch is still there. */
+  branchExists: boolean
+  /** The branch's tip, or null without a branch. */
+  head: string | null
+  /** Changed, staged and untracked files in the worktree; 0 when it is gone. */
+  uncommitted: number
+  /** Commits on the branch that no remote branch has. */
+  unpushed: number
+  /** Every change of the branch is already in its base, by ancestry or as a squash merge. */
+  merged: boolean
+}
+
+/** How a project prepares and names the worktrees of its sessions. */
+export interface ProjectWorktreeSettings {
+  branchTemplate: string
+  copy: string[] // literal paths relative to the project, besides its .worktreeinclude
+  setup: string | null // the command run in a new worktree
+  waitForSetup: boolean // the first message waits for the command
+}
+
+export const DEFAULT_BRANCH_TEMPLATE = 'kettu/{slug}'
+
+export const DEFAULT_WORKTREE_SETTINGS: ProjectWorktreeSettings = {
+  branchTemplate: DEFAULT_BRANCH_TEMPLATE,
+  copy: [],
+  setup: null,
+  waitForSetup: true,
+}
+
+/**
+ * Turns on `core.longpaths` for every git a process starts on Windows, through git's environment
+ * variables after those already set, so no repository's config is changed.
+ */
+export function withLongPaths<E extends Record<string, string | undefined>>(
+  env: E,
+  platform: Platform,
+): E {
+  if (platform !== 'win32') return env
+  const count = Number.parseInt(env.GIT_CONFIG_COUNT ?? '0', 10)
+  const index = Number.isInteger(count) && count >= 0 ? count : 0
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(index + 1),
+    [`GIT_CONFIG_KEY_${index}`]: 'core.longpaths',
+    [`GIT_CONFIG_VALUE_${index}`]: 'true',
+  }
 }

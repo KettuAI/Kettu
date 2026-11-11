@@ -7,13 +7,14 @@ import type { Platform } from '@shared/platform'
 import type { HostPathKind } from './host-path'
 
 /** What the picker is for, which names it and decides whether it takes folders or programs. */
-export type HostPathPurpose = 'project' | 'agentFolder' | 'shell' | 'agentProgram'
+export type HostPathPurpose = 'project' | 'agentFolder' | 'shell' | 'agentProgram' | 'worktreeRoot'
 
 export const PATH_KINDS: Record<HostPathPurpose, HostPathKind> = {
   project: 'folder',
   agentFolder: 'folder',
   shell: 'program',
   agentProgram: 'program',
+  worktreeRoot: 'folder',
 }
 
 export interface HostPathRequest {

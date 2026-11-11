@@ -14,6 +14,7 @@ import { PrBarChip } from '@renderer/features/git/pr-bar-chip'
 import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-tools'
 import { PlanChip } from './plan-chip'
 import { ViewersChip } from './viewers-chip'
+import { WorktreeBarChip } from './worktree/worktree-tag'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { SessionTitleField } from '@renderer/features/sidebar/session-menu'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
@@ -26,6 +27,7 @@ import {
   useSessionsStore,
 } from '@renderer/stores/sessions'
 import { openRoutine, openSession } from '@renderer/stores/view'
+import { sessionFolder } from '@renderer/lib/session-folder'
 
 /** A sub-session's parent at the start of the top bar, then a slash: back to the parent. */
 export function ParentLink({ parent }: { parent: SessionSummary }) {
@@ -156,7 +158,8 @@ export function SessionHeader({
           onNewSubSession={rename.menu.onLeave}
           menu={rename.menu}
         />
-        <PrBarChip projectPath={summary.projectPath} />
+        {summary.worktree && <WorktreeBarChip worktree={summary.worktree} />}
+        <PrBarChip projectPath={sessionFolder(summary)} />
         {session && !archived && summary.origin !== 'subagent' && (
           <PlanChip sessionId={summary.id} status={session.status} />
         )}

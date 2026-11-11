@@ -773,3 +773,102 @@ describe('computer use requests', () => {
     ).toHaveLength(100)
   })
 })
+
+describe('worktree requests', () => {
+  const settings = {
+    branchTemplate: '{type}/{issue}-{slug}',
+    copy: ['.env', '.claude/settings.local.json'],
+    setup: 'pnpm install',
+    waitForSetup: true,
+  }
+
+  it('takes a base and a branch for a new session, and refuses what git would read otherwise', () => {
+    const create = (worktree: unknown) =>
+      posix['sessions.create']({ agentId: 'codex', projectPath: '/repo', worktree })
+    expect(create({ base: 'main', branch: 'kettu/fix-login' })).toMatchObject({
+      worktree: { base: 'main', branch: 'kettu/fix-login' },
+    })
+    expect(create({ base: 'refs/heads/feat/x' })).toMatchObject({
+      worktree: { base: 'refs/heads/feat/x' },
+    })
+    for (const base of ['-x', '--all', 'main~1', 'a b', 'main\0', 'HEAD:path', '']) {
+      rejects(() => create({ base }))
+    }
+    for (const branch of ['-b', 'a..b', 'a@{1}', 'x.lock', 'a b', 'x'.repeat(101), 'HEAD']) {
+      rejects(() => create({ base: 'main', branch }))
+    }
+    rejects(() => create('main'))
+  })
+
+  it('forks into a new or the same worktree only', () => {
+    expect(posix['sessions.fork']({ sessionId: 's', worktree: 'same' })).toEqual({
+      sessionId: 's',
+      worktree: 'same',
+    })
+    rejects(() => posix['sessions.fork']({ sessionId: 's', worktree: 'other' }))
+  })
+
+  it('removes a worktree only against the state the user was shown', () => {
+    const expected = {
+      exists: true,
+      branchExists: true,
+      head: 'a'.repeat(40),
+      uncommitted: 0,
+      unpushed: 0,
+      merged: true,
+    }
+    expect(posix['worktrees.remove']({ sessionId: 's', branch: 'delete', expected })).toEqual({
+      sessionId: 's',
+      branch: 'delete',
+      expected,
+    })
+    rejects(() => posix['worktrees.remove']({ sessionId: 's', branch: 'force', expected }))
+    rejects(() => posix['worktrees.remove']({ sessionId: 's', branch: 'keep' }))
+    rejects(() =>
+      posix['worktrees.remove']({
+        sessionId: 's',
+        branch: 'keep',
+        expected: { ...expected, uncommitted: -1 },
+      }),
+    )
+    rejects(() =>
+      posix['worktrees.remove']({
+        sessionId: 's',
+        branch: 'keep',
+        expected: { ...expected, head: '--all' },
+      }),
+    )
+  })
+
+  it("checks a project's worktree settings as the host will use them", () => {
+    const set = (value: unknown, validators = posix) =>
+      validators['projects.setWorktreeSettings']({ path: '/repo', settings: value })
+    expect(set(settings)).toEqual({ path: '/repo', settings })
+    expect(set({ ...settings, copy: ['./.env', '.env'], setup: null })).toEqual({
+      path: '/repo',
+      settings: { ...settings, copy: ['.env'], setup: null },
+    })
+    for (const branchTemplate of ['{user}/{slug}', '-{slug}', '{slug}..x', 'x'.repeat(201)]) {
+      rejects(() => set({ ...settings, branchTemplate }))
+    }
+    for (const entry of [
+      '/etc/passwd',
+      '../secret',
+      'a/../../b',
+      '*.env',
+      '.git/config',
+      '.',
+      '',
+    ]) {
+      rejects(() => set({ ...settings, copy: [entry] }))
+    }
+    rejects(() => set({ ...settings, copy: ['C:\\secret'] }, windows))
+    rejects(() => set({ ...settings, copy: ['a:b'] }, windows))
+    rejects(() => set({ ...settings, copy: Array.from({ length: 101 }, (_, i) => `f${i}`) }))
+    for (const setup of ['', '   ', 'x'.repeat(8193), 'a\0b', 3]) {
+      rejects(() => set({ ...settings, setup }))
+    }
+    rejects(() => set({ ...settings, waitForSetup: 'yes' }))
+    rejects(() => posix['projects.setWorktreeSettings']({ path: 'repo', settings }))
+  })
+})

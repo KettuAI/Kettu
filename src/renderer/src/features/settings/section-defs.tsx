@@ -144,6 +144,7 @@ import {
   ShellPicker,
   WebNotificationsNote,
   TextSize,
+  WorktreeLocation,
   Zoom,
 } from './sections'
 import { useAllowedSites } from './allowed-sites'
@@ -806,6 +807,15 @@ export function useGitSection(): SectionDef {
         description: t('git.fetch.description'),
         group: group('sync', t('git.groups.sync')),
         render: () => <BackgroundFetch />,
+      },
+      {
+        id: 'worktree-root',
+        name: t('git.worktreeRoot.name'),
+        english: en('git.worktreeRoot.name'),
+        description: t('git.worktreeRoot.description'),
+        keywords: t('git.worktreeRoot.keywords'),
+        group: group('worktrees', t('git.groups.worktrees')),
+        render: () => <WorktreeLocation />,
       },
     ],
   }

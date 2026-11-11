@@ -53,6 +53,10 @@
       "title": "Choose agent program",
       "description": "Type the path of the agent's program on {{host}}."
     },
+    "worktreeRoot": {
+      "title": "Choose worktree location",
+      "description": "Type the path of the folder on {{host}} where new worktrees go."
+    },
     "label": "Path on {{host}}",
     "start": "Type a full path, or start with ~ for your home folder.",
     "keys": "Tab completes a name; ↑ and ↓ move through the list, and Enter takes the one picked.",

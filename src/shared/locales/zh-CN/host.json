@@ -35,6 +35,8 @@
     "otherConfigFolder": "这个会话是在配置目录 {{path}} 下开始的，它的 Agent 已不再使用这个目录，所以无法在这里继续。",
     "topLevelOnly": "只有顶层会话可以置顶或归档",
     "archived": "这个会话已归档",
+    "worktreeGone": "这个会话的 worktree 和分支都已删除，不能再继续对话。",
+    "worktreeInterrupted": "worktree 的准备被中断了。可以重新运行，或者跳过直接继续。",
     "untitled": "未命名会话",
     "subagent": {
       "noPrompt": "子 Agent 会话从父会话接收指令",

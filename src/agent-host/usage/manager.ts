@@ -11,6 +11,7 @@ import {
   type UsageScope,
   type UsageStatus,
   type UsageSummary,
+  type ProjectUsage,
   type UsageTotal,
 } from '@shared/usage'
 import type { LogFn } from '../storage'
@@ -39,6 +40,8 @@ export interface UsageManagerDeps {
   env(agentId: AgentId): Promise<Record<string, string | undefined>>
   /** Whether a folder is one of Kettu's No project folders. */
   isScratch(path: string): boolean
+  /** The project a session's worktree belongs to, so its usage counts there; null for others. */
+  worktreeProject?(path: string): string | null
   log: LogFn
   changed(): void
   status(status: UsageStatus): void
@@ -301,10 +304,13 @@ export class UsageManager {
       }
     }
     const summary = await store.summary(dayStarts, from, to, sources, clock)
-    const projects = summary.projects.map((p) => ({
-      ...p,
-      scratch: p.project !== null && this.deps.isScratch(p.project),
-    }))
+    const projects = mergeProjects(
+      summary.projects.map((p) => ({
+        ...p,
+        project: (p.project !== null && this.deps.worktreeProject?.(p.project)) || p.project,
+        scratch: p.project !== null && this.deps.isScratch(p.project),
+      })),
+    )
     return { ...summary, projects, sources, first, agents }
   }
 
@@ -379,4 +385,28 @@ export class UsageManager {
       unavailable: this.unavailable,
     }
   }
+}
+
+/** Sums the rows of an agent that now name the same project, as a worktree's do its project's. */
+function mergeProjects(rows: ProjectUsage[]): ProjectUsage[] {
+  const merged = new Map<string, ProjectUsage>()
+  for (const row of rows) {
+    const key = `${row.agentId}\0${row.project ?? ''}`
+    const known = merged.get(key)
+    if (!known) {
+      merged.set(key, { ...row })
+      continue
+    }
+    known.requests += row.requests
+    known.turns += row.turns
+    known.cost =
+      known.cost === null && row.cost === null ? null : (known.cost ?? 0) + (row.cost ?? 0)
+    known.unpricedTokens += row.unpricedTokens
+    known.input += row.input
+    known.output += row.output
+    known.reasoning += row.reasoning
+    known.cacheRead += row.cacheRead
+    known.cacheWrite += row.cacheWrite
+  }
+  return [...merged.values()]
 }

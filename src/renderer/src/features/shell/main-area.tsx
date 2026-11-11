@@ -7,7 +7,9 @@ import { focusedPane } from '@renderer/features/split/layout'
 import { cn } from '@renderer/lib/utils'
 import { showProjects } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { panelOf, shownProjects, useViewStore } from '@renderer/stores/view'
+import { panelOf, shownLayoutSessions, shownProjects, useViewStore } from '@renderer/stores/view'
+import { useSessionsStore } from '@renderer/stores/sessions'
+import { useSessionFolder } from '@renderer/lib/session-folder'
 
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
 const RoutinesPage = lazy(() => import('@renderer/features/routines/routines-page'))
@@ -27,11 +29,25 @@ export function MainArea() {
   const main = useViewStore((s) => s.main)
   const layout = useViewStore((s) => s.layout)
   const paths = useViewStore(shownProjects)
+  const shownSessions = useViewStore((s) => shownLayoutSessions(s).join('\n'))
+  // The worktrees the sessions in view work in, which their panels follow.
+  const worktrees = useSessionsStore((s) =>
+    shownSessions
+      .split('\n')
+      .flatMap((id) => {
+        const path = s.byId[id]?.worktree?.path
+        return path ? [path] : []
+      })
+      .join('\n'),
+  )
+  const focused = focusedPane(layout).view
+  const focusedFolder = useSessionFolder(focused.kind === 'session' ? focused.sessionId : null)
 
-  // Every project a pane in view works in keeps its git status live.
+  // Every project or worktree a pane in view works in keeps its git status live.
   useEffect(() => {
-    showProjects(paths ? paths.split('\n') : [])
-  }, [paths])
+    const folders = [paths, worktrees].filter(Boolean).join('\n')
+    showProjects(folders ? [...new Set(folders.split('\n'))] : [])
+  }, [paths, worktrees])
 
   if (main.kind === 'usage') {
     return (
@@ -101,9 +117,10 @@ export function MainArea() {
 
   // The side panel is the pane in focus's, and New session at No project has none. The area stays
   // around the split even then, so the panes do not mount again as the focus moves.
-  const view = focusedPane(layout).view
+  const view = focused
   const panel = panelOf(view)
-  const panelPath = view.projectPath || selected || projects[0]?.path || null
+  // A session's panel is its working folder's: its worktree's when it has one.
+  const panelPath = focusedFolder || view.projectPath || selected || projects[0]?.path || null
   if (!panelPath) {
     return (
       <PageSheet>

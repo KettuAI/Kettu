@@ -77,7 +77,8 @@ export interface SettingsFile {
     shellPath?: string // picked in a native dialog; the platform default when absent
     fontSize: 12 | 13 | 14
   }
-  git: { backgroundFetch: boolean }
+  // worktreeRoot: where sessions' worktrees go; null puts them beside each project.
+  git: { backgroundFetch: boolean; worktreeRoot: string | null }
   mcp: { kettu: { off: AgentId[] } } // the agents whose sessions get no Kettu MCP server
   // What the Marketplace installed that Kettu keeps and hands to agents; keys live apart.
   marketplace: { mcp: MarketServer[]; skills: MarketSkill[] }
@@ -215,7 +216,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   disabledAgents: [],
   proxy: { mode: 'environment' },
   terminal: { fontSize: 13 },
-  git: { backgroundFetch: false },
+  git: { backgroundFetch: false, worktreeRoot: null },
   mcp: { kettu: { off: [] } },
   marketplace: { mcp: [], skills: [] },
   startModes: {},

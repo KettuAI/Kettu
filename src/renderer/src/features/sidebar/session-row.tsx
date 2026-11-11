@@ -57,6 +57,7 @@ import {
   SessionTitleField,
 } from './session-menu'
 import { runSessionMenuAccelerator } from './session-menu-model'
+import { WorktreeRowMark } from '@renderer/features/session/worktree/worktree-tag'
 import { PrBadge } from './pr-badge'
 import { SubagentBadge } from './subagent-badge'
 import { useRenaming } from './use-renaming'
@@ -260,6 +261,9 @@ export const SessionRow = memo(function SessionRow({
           subagents={node.subagents}
           onEnter={() => setCardOpen(false)}
         />
+      )}
+      {summary.worktree && (
+        <WorktreeRowMark worktree={summary.worktree} onEnter={() => setCardOpen(false)} />
       )}
       <PrBadge summary={summary} onEnter={() => setCardOpen(false)} />
       {hasChildren && !expanded && (

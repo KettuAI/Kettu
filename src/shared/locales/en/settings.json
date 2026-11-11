@@ -281,9 +281,18 @@
       "name": "Fetch in the background",
       "description": "Every 5 minutes, so ahead and behind stay current."
     },
+    "worktreeRoot": {
+      "name": "Worktree location",
+      "description": "Where new worktrees of sessions go on this host.",
+      "keywords": "worktree folder location branch",
+      "nextToProject": "Next to each project",
+      "choose": "Choose…",
+      "reset": "Reset"
+    },
     "groups": {
       "tools": "Tools",
-      "sync": "Sync"
+      "sync": "Sync",
+      "worktrees": "Worktrees"
     }
   },
   "notifications": {
