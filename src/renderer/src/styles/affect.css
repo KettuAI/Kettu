@@ -4366,6 +4366,16 @@ li[data-row-exit='dust'] > * {
   background: none;
   box-shadow: none;
 }
+.kettu-ctx__window .ui-cwc__card {
+  padding: 12px 14px 6px;
+}
+.kettu-ctx__window .ui-cwc__figure {
+  margin-top: 6px;
+}
+.kettu-ctx__window .ui-cwc__big {
+  font-size: 20px;
+  line-height: 28px;
+}
 .kettu-ctx__window[data-busy] {
   opacity: 0.6;
 }
@@ -4376,17 +4386,17 @@ li[data-row-exit='dust'] > * {
 /* Denser rows than affectUI's 32px and items than its 28px; a touch screen keeps its own. */
 @media (pointer: fine) {
   .kettu-ctx__window :is(.ui-cwc__row, .ui-cwc__main) {
-    min-height: 28px;
-    height: 28px;
+    min-height: 26px;
+    height: 26px;
   }
   .kettu-ctx__window .ui-cwc__item {
-    height: 24px;
+    height: 22px;
   }
 }
 /* Nine rows at most: an open list scrolls inside them instead of growing the card. The inline
    padding keeps the rows' own -8px margins inside the scroller. */
 .kettu-ctx__window .ui-cwc__parts {
-  max-height: calc(9 * 28px);
+  max-height: calc(9 * 26px);
   margin-inline: -8px;
   padding-inline: 8px;
   overflow-y: auto;
@@ -4394,20 +4404,20 @@ li[data-row-exit='dust'] > * {
 }
 .kettu-ctx__note {
   margin: 0;
-  padding: 0 16px 10px;
+  padding: 0 14px 8px;
   font-size: 12px;
   color: var(--composer-muted);
 }
 .kettu-ctx__pad {
-  padding: 0 16px 12px;
+  padding: 0 14px 10px;
 }
 .kettu-ctx__session {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 40px;
-  padding: 0 16px;
+  height: 36px;
+  padding: 0 14px;
   border-top: 0.5px solid var(--composer-line);
   color: var(--composer-ink);
 }
@@ -4417,8 +4427,8 @@ li[data-row-exit='dust'] > * {
 .kettu-ctx__plan {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 16px 14px;
+  gap: 8px;
+  padding: 10px 14px 12px;
   border-top: 0.5px solid var(--composer-line);
 }
 .kettu-ctx__plan-head {

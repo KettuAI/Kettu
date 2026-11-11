@@ -93,7 +93,6 @@
       "error": "Couldn't break the context down: {{error}}",
       "betweenTurns": "What fills the context shows between turns",
       "stale": "Read before this turn",
-      "updating": "Updating the context breakdown",
       "refreshFailed": "Showing the last reading. The context will update automatically when it can be read again."
     },
     "limits": {

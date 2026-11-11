@@ -353,7 +353,7 @@ export function ContextButton({
         align="end"
         sideOffset={8}
         collisionAvoidance={{ fallbackAxisSide: 'none' }}
-        className="kettu-pop max-h-(--available-height) w-90 overflow-y-auto"
+        className="kettu-pop max-h-(--available-height) w-80 overflow-y-auto"
       >
         <div className="kettu-ctx">
           {shown && (
@@ -516,15 +516,10 @@ function ContextPart({
           }}
         />
       </div>
-      {view.kind === 'rows' && view.stale && (
+      {/* A refresh in progress adds no line: the card opens upward, so a passing line jolts it. */}
+      {view.kind === 'rows' && view.stale && (report?.error || (!live && !idle)) && (
         <p className="kettu-ctx__note">
-          {t(
-            report?.error
-              ? 'usage.breakdown.refreshFailed'
-              : live || idle
-                ? 'usage.breakdown.updating'
-                : 'usage.breakdown.stale',
-          )}
+          {t(report?.error ? 'usage.breakdown.refreshFailed' : 'usage.breakdown.stale')}
         </p>
       )}
       {view.kind === 'loading' && <BreakdownRows />}
