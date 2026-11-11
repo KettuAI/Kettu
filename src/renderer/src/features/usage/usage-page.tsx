@@ -20,20 +20,21 @@ import { DateRangePicker } from '@renderer/components/affect/date-range-picker'
 import { KpiChart } from '@renderer/components/affect/kpi-chart'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { useRefresh } from '@renderer/components/refresh'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { Notice } from '@renderer/features/routines/kit'
 import { useCornered } from '@renderer/features/shell/corner'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
+import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
 import { basename, bytes, count, longAgo, percent, tokens, usd } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext } from '@renderer/lib/host-features'
 import { currentLocale } from '@renderer/lib/i18n'
 import { isMac } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
-import { agentName } from '@renderer/stores/agents'
+import { HostScopeContext, useHostScope } from '@renderer/stores/host-scope'
 import { openReport } from '@renderer/stores/report'
-import { useSettingsStore } from '@renderer/stores/settings'
 import {
   loadUsagePage,
   setUsageFilters,
@@ -43,6 +44,13 @@ import {
   useUsageStore,
   type UsagePage as PageData,
 } from '@renderer/stores/usage'
+import {
+  useHostName,
+  useNamesHosts,
+  useWindowHost,
+  useWindowHostAway,
+  useWindowScope,
+} from '@renderer/stores/window-host'
 import { Activity } from './activity'
 import {
   addDays,
@@ -79,7 +87,7 @@ import {
   type TrendUnit,
 } from './model'
 import { PlanLimits } from './plan-limits'
-import { useAgentColor } from './series'
+import { useAgentColor, usageAgentName } from './series'
 import { TimeOfDay } from './time-of-day'
 import { Count, FigureValue } from './count'
 import { dayText, useHourText, useRangeText } from './text'
@@ -96,15 +104,33 @@ interface HourTotals {
   zoned: boolean
 }
 
-/** The usage page: a dashboard of the tokens the agents used, for a chosen agent and range. */
+/**
+ * The usage page: a dashboard of the tokens the agents used, for a chosen agent and range, on the
+ * window's host or every host added up. Its status, settings and plan limits are the window's
+ * host's, this computer's while every host is shown.
+ */
 export default function UsagePage() {
+  const scope = useWindowScope()
+  return (
+    <HostScopeContext.Provider value={scope}>
+      <AgentMarkHost.Provider value={scope.hostId}>
+        <Page />
+      </AgentMarkHost.Provider>
+    </HostScopeContext.Provider>
+  )
+}
+
+function Page() {
   const { t } = useTranslation('usage')
-  const unavailable = useUsageStore((s) => s.status?.unavailable ?? false)
-  const importing = useUsageStore((s) => (s.status?.scanning?.bytes ?? 0) >= IMPORT_SHOWN)
+  const { useUsageStore: useStatusStore } = useHostScope()
+  const unavailable = useStatusStore((s) => s.status?.unavailable ?? false)
+  const importing = useStatusStore((s) => (s.status?.scanning?.bytes ?? 0) >= IMPORT_SHOWN)
+  const fromComputer = useStatusStore((s) => !!s.status?.fromComputer)
   const page = useUsageStore((s) => s.page)
   const error = useUsageStore((s) => s.error)
   // Kettu only can be empty while the logs are not; the filters must stay to switch back.
-  const narrowed = useUsageStore((s) => s.filters.scope === 'kettu' && !!s.status?.fromComputer)
+  const narrowed = useUsageStore((s) => s.filters.scope === 'kettu') && fromComputer
+  const away = useWindowHostAway() !== null
 
   useEffect(() => {
     usagePageShown(true)
@@ -113,7 +139,19 @@ export default function UsagePage() {
 
   const empty = !!page && page.summary.first === null && !narrowed
   let body: ReactNode
-  if (unavailable) {
+  if (away) {
+    // What was last read from the host, greyed and read-only; nothing when it never answered.
+    body = page ? (
+      <Dashboard page={page} notice={null} away />
+    ) : (
+      <>
+        <Head page={null} used={NO_DAYS} bare />
+        <div className="k-u__alone">
+          <WindowHostAway read={false} />
+        </div>
+      </>
+    )
+  } else if (unavailable) {
     body = (
       <>
         <Head page={null} used={NO_DAYS} bare />
@@ -172,14 +210,18 @@ function Head({
   page,
   used,
   bare = false,
+  away = false,
 }: {
   page: PageData | null
   used: ReadonlySet<number>
   /** Only the title, with nothing to filter yet. */
   bare?: boolean
+  /** The figures are what was last read from a host that is away, so nothing can be chosen. */
+  away?: boolean
 }) {
   const { t } = useTranslation('usage')
   const cornered = useCornered()
+  const host = useHostText()
   const range = useUsageStore((s) => s.filters.range)
   const clockDay = useClock(dayOf)
   const today = page?.today ?? clockDay
@@ -207,62 +249,75 @@ function Head({
         <span aria-hidden className="k-u__title">
           {t('page.title')}
         </span>
+        {host && <span className="k-u__host">{host}</span>}
       </span>
       {!bare && (
-        <span className="k-u__actions">
-          <DateRangePicker
-            className="k-u__range"
-            align="end"
-            compare={false}
-            locale={currentLocale()}
-            weekStartsOn={firstDay === 0 ? 0 : 1}
-            today={new Date(today)}
-            max={new Date(today)}
-            min={first === null ? undefined : new Date(dayOf(first))}
-            presets={choices}
-            value={shown}
-            marked={(day) => used.has(day.getTime())}
-            labels={{
-              choose: t('picker.label'),
-              presets: t('picker.presetsLabel'),
-              custom: t('picker.custom'),
-              previousMonth: t('picker.previousMonth'),
-              nextMonth: t('picker.nextMonth'),
-              pickEnd: (start) => t('picker.pickEnd', { start }),
-              days: (n) => t('picker.days', { count: n }),
-              cancel: t('picker.cancel'),
-              apply: t('picker.apply'),
-            }}
-            onChange={(chosen) =>
-              setUsageFilters({
-                range: {
-                  kind: 'custom',
-                  from: dayOf(chosen.start.getTime()),
-                  to: dayOf(chosen.end.getTime()),
-                },
-              })
-            }
-          />
-          <SegmentedControl<RangeKind>
-            aria-label={t('page.range')}
-            variant="tray"
-            size="lg"
-            value={(custom ? '' : range.kind) as RangeKind}
-            onChange={(kind) => setUsageFilters({ range: { kind } })}
-            options={RANGE_KINDS.map((kind) => ({
-              value: kind,
-              label: (
-                <>
-                  <span aria-hidden>{t(`page.rangesShort.${kind}`)}</span>
-                  <span className="sr-only">{t(`page.ranges.${kind}`)}</span>
-                </>
-              ),
-            }))}
-          />
-        </span>
+        <AwayContent away={away}>
+          <span className="k-u__actions">
+            <DateRangePicker
+              className="k-u__range"
+              align="end"
+              compare={false}
+              locale={currentLocale()}
+              weekStartsOn={firstDay === 0 ? 0 : 1}
+              today={new Date(today)}
+              max={new Date(today)}
+              min={first === null ? undefined : new Date(dayOf(first))}
+              presets={choices}
+              value={shown}
+              marked={(day) => used.has(day.getTime())}
+              labels={{
+                choose: t('picker.label'),
+                presets: t('picker.presetsLabel'),
+                custom: t('picker.custom'),
+                previousMonth: t('picker.previousMonth'),
+                nextMonth: t('picker.nextMonth'),
+                pickEnd: (start) => t('picker.pickEnd', { start }),
+                days: (n) => t('picker.days', { count: n }),
+                cancel: t('picker.cancel'),
+                apply: t('picker.apply'),
+              }}
+              onChange={(chosen) =>
+                setUsageFilters({
+                  range: {
+                    kind: 'custom',
+                    from: dayOf(chosen.start.getTime()),
+                    to: dayOf(chosen.end.getTime()),
+                  },
+                })
+              }
+            />
+            <SegmentedControl<RangeKind>
+              aria-label={t('page.range')}
+              variant="tray"
+              size="lg"
+              value={(custom ? '' : range.kind) as RangeKind}
+              onChange={(kind) => setUsageFilters({ range: { kind } })}
+              options={RANGE_KINDS.map((kind) => ({
+                value: kind,
+                label: (
+                  <>
+                    <span aria-hidden>{t(`page.rangesShort.${kind}`)}</span>
+                    <span className="sr-only">{t(`page.ranges.${kind}`)}</span>
+                  </>
+                ),
+              }))}
+            />
+          </span>
+        </AwayContent>
       )}
     </header>
   )
+}
+
+/** The hosts the page counts, once another host is added: one's name, or All hosts. */
+function useHostText(): string | null {
+  const { t } = useTranslation('usage')
+  const names = useNamesHosts()
+  const host = useWindowHost()
+  const hostName = useHostName()
+  if (!names) return null
+  return host.kind === 'all' ? t('page.allHosts') : hostName(host.hostId)
 }
 
 /** A filter's button, as wide as its longest choice, so picking one never moves what follows. */
@@ -319,18 +374,19 @@ function Picker<T extends string>({
 function Filters({ page }: { page: PageData | null }) {
   const { t } = useTranslation('usage')
   const onHost = useHostContext()
+  const all = useWindowHost().kind === 'all'
+  const { useUsageStore: useStatusStore } = useHostScope()
   const filters = useUsageStore((s) => s.filters)
   // null until the status arrives, when the sync state shows nothing either.
-  const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? null)
+  const fromComputer = useStatusStore((s) => s.status?.fromComputer ?? null)
   const { agent, scope, metric } = filters
   const agents = page?.summary.agents ?? []
   // A chosen agent stays a choice once its usage is gone, as after clearing the record.
   const choices = agent === 'all' || agents.includes(agent) ? agents : [...agents, agent]
   // This computer is "This Mac" on a Mac, and the host's name on another host or in a browser.
-  const computer = t(
-    'page.scopes.computer',
-    onHost.context ? onHost : isMac ? { context: 'mac' } : {},
-  )
+  const computer = all
+    ? t('page.allHosts')
+    : t('page.scopes.computer', onHost.context ? onHost : isMac ? { context: 'mac' } : {})
   return (
     <div className="k-u__filters">
       {/* With usage from one agent only, All is the only choice. */}
@@ -342,7 +398,7 @@ function Filters({ page }: { page: PageData | null }) {
             { value: 'all', label: t('page.allAgents') },
             ...choices.map((id, i) => ({
               value: id,
-              label: agentName(id),
+              label: usageAgentName(id),
               logo: <AgentMark agent={id} size={16} />,
               divider: i === 0,
             })),
@@ -390,8 +446,9 @@ function Filters({ page }: { page: PageData | null }) {
 /** When the logs were last read, and Sync; or where the figures come from. */
 function SyncState() {
   const { t } = useTranslation('usage')
-  const fromComputer = useUsageStore((s) => s.status?.fromComputer ?? null)
-  const synced = useUsageStore(
+  const { hostId, useUsageStore: useStatusStore } = useHostScope()
+  const fromComputer = useStatusStore((s) => s.status?.fromComputer ?? null)
+  const synced = useStatusStore(
     (s) =>
       s.status?.logs.reduce<number | null>(
         (latest, log) =>
@@ -401,7 +458,7 @@ function SyncState() {
         null,
       ) ?? null,
   )
-  const reading = useUsageStore((s) => s.status?.scanning != null)
+  const reading = useStatusStore((s) => s.status?.scanning != null)
   const now = useNow()
   const refresh = useRefresh({ busy: reading })
   const [failed, setFailed] = useState<string | null>(null)
@@ -429,7 +486,9 @@ function SyncState() {
         icon={<Icon icon={RefreshIcon} size={14} />}
         onClick={() => {
           setFailed(null)
-          void refresh.run(syncUsage).catch((e: unknown) => setFailed(errorMessage(e)))
+          void refresh
+            .run(() => syncUsage(hostId))
+            .catch((e: unknown) => setFailed(errorMessage(e)))
         }}
       >
         {t('page.syncAction')}
@@ -487,8 +546,9 @@ function Unavailable() {
 /** A scan's progress: in place of the page on its first import, else above the figures. */
 function ImportProgress({ alone }: { alone: boolean }) {
   const { t } = useTranslation('usage')
-  const scanning = useUsageStore((s) => s.status?.scanning ?? null)
-  const logs = useUsageStore((s) => s.status?.logs ?? null)
+  const { useUsageStore: useStatusStore } = useHostScope()
+  const scanning = useStatusStore((s) => s.status?.scanning ?? null)
+  const logs = useStatusStore((s) => s.status?.logs ?? null)
   if (!scanning) return null
   const share = scanning.bytes > 0 ? scanning.doneBytes / scanning.bytes : 0
   const found = (logs ?? []).filter((log) => log.found === true || log.rows > 0)
@@ -499,7 +559,7 @@ function ImportProgress({ alone }: { alone: boolean }) {
   )
   const agents =
     found.length > 0
-      ? new Intl.ListFormat(currentLocale()).format(found.map((log) => agentName(log.agentId)))
+      ? new Intl.ListFormat(currentLocale()).format(found.map((log) => usageAgentName(log.agentId)))
       : null
   return (
     <div role="status" className="k-u-card k-u-import" data-alone={alone || undefined}>
@@ -569,6 +629,7 @@ function LoadingState() {
 function FirstRun() {
   const { t } = useTranslation('usage')
   const onHost = useHostContext()
+  const { useSettingsStore } = useHostScope()
   const fromComputer = useSettingsStore((s) => s.settings.usage.fromComputer)
   return (
     <div className="ui-as-empty" data-tall>
@@ -591,7 +652,16 @@ function FirstRun() {
   )
 }
 
-function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
+function Dashboard({
+  page,
+  notice,
+  away = false,
+}: {
+  page: PageData
+  notice: ReactNode
+  /** What was last read from the window's host while it is away. */
+  away?: boolean
+}) {
   const filters = useUsageStore((s) => s.filters)
   const { summary, starts, range } = page
   const { agent, metric, scope } = filters
@@ -640,62 +710,69 @@ function Dashboard({ page, notice }: { page: PageData; notice: ReactNode }) {
 
   return (
     <>
-      <Head page={page} used={used} />
-      <Filters page={page} />
-      <div className="k-u__content">
-        {notice}
-        <PlanLimits used={summary.agents} />
-        <Figures
-          facts={facts}
-          requestFacts={requestFacts}
-          hours={hours}
-          begun={begun}
-          kind={kind}
-          metric={metric}
-          scope={scope}
-          rangeLabel={rangeLabel}
-          bars={past(main.bars).map((bar) => bar.total)}
-          sideBars={past(side.bars).map((bar) => bar.total)}
-        />
-        <div className="k-u-row">
-          <Sources
-            kind={kind}
+      <Head page={page} used={used} away={away} />
+      {away && (
+        <div className="k-u__away">
+          <WindowHostAway read />
+        </div>
+      )}
+      <AwayContent away={away}>
+        <Filters page={page} />
+        <div className="k-u__content">
+          {notice}
+          <PlanLimits used={summary.agents} />
+          <Figures
             facts={facts}
-            tokenFacts={tokenFacts}
-            agent={agent}
-            rangeLabel={rangeLabel}
-            asOf={summary.pricesAsOf}
-          />
-          <Breakdown
-            summary={summary}
-            agent={agent}
-            metric={metric}
-            scope={scope}
+            requestFacts={requestFacts}
+            hours={hours}
+            begun={begun}
             kind={kind}
-            rangeLabel={rangeLabel}
-          />
-        </div>
-        <OverTime
-          unit={main.unit}
-          bars={main.bars}
-          begun={hours ? begun : null}
-          zoned={hours?.zoned ?? false}
-          kind={kind}
-          total={facts.total}
-          rangeLabel={rangeLabel}
-          tokensUsed={days.some((d) => d.total > 0)}
-        />
-        <div className="k-u-row k-u-row--tod">
-          <TimeOfDay
-            page={page}
-            agent={agent}
             metric={metric}
             scope={scope}
             rangeLabel={rangeLabel}
+            bars={past(main.bars).map((bar) => bar.total)}
+            sideBars={past(side.bars).map((bar) => bar.total)}
           />
-          <Activity days={days} page={page} metric={metric} scope={scope} />
+          <div className="k-u-row">
+            <Sources
+              kind={kind}
+              facts={facts}
+              tokenFacts={tokenFacts}
+              agent={agent}
+              rangeLabel={rangeLabel}
+              asOf={summary.pricesAsOf}
+            />
+            <Breakdown
+              summary={summary}
+              agent={agent}
+              metric={metric}
+              scope={scope}
+              kind={kind}
+              rangeLabel={rangeLabel}
+            />
+          </div>
+          <OverTime
+            unit={main.unit}
+            bars={main.bars}
+            begun={hours ? begun : null}
+            zoned={hours?.zoned ?? false}
+            kind={kind}
+            total={facts.total}
+            rangeLabel={rangeLabel}
+            tokensUsed={days.some((d) => d.total > 0)}
+          />
+          <div className="k-u-row k-u-row--tod">
+            <TimeOfDay
+              page={page}
+              agent={agent}
+              metric={metric}
+              scope={scope}
+              rangeLabel={rangeLabel}
+            />
+            <Activity days={days} page={page} metric={metric} scope={scope} />
+          </div>
         </div>
-      </div>
+      </AwayContent>
     </>
   )
 }
@@ -967,7 +1044,7 @@ function Sources({
       totalLabel={
         agent === 'all'
           ? t('cache.totalAll', { range: rangeLabel })
-          : t('cache.totalOne', { range: rangeLabel, agent: agentName(agent) })
+          : t('cache.totalOne', { range: rangeLabel, agent: usageAgentName(agent) })
       }
       footer={
         <span className="k-u-cb__foot">
@@ -1030,7 +1107,7 @@ function Breakdown({
     id: `${grouping}\n${row.key}`,
     label:
       grouping === 'agent'
-        ? agentName(row.key as AgentId)
+        ? usageAgentName(row.key as AgentId)
         : grouping === 'project'
           ? (row.name ?? t('breakdown.noProject'))
           : (row.name ?? t('breakdown.unknownModel')),
@@ -1162,7 +1239,7 @@ function OverTime({
   const shown = shownSeries(series, hidden)
   const later = (bar: TrendBar) => begun !== null && bar.from >= begun
   const lines = shown.map((id) => ({
-    label: agentName(id),
+    label: usageAgentName(id),
     color: color(id),
     values: bars.map((bar) => (later(bar) ? Number.NaN : (bar.byAgent[id] ?? 0))),
   }))
@@ -1183,7 +1260,7 @@ function OverTime({
         <span className="k-u-trend-foot">
           <span>
             {series.length === 1
-              ? t('trend.footerOne', { agent: agentName(series[0]!), range: rangeLabel })
+              ? t('trend.footerOne', { agent: usageAgentName(series[0]!), range: rangeLabel })
               : t('trend.footer', { range: rangeLabel })}
           </span>
           {series.length > 1 && (
@@ -1210,7 +1287,7 @@ function OverTime({
                     className="k-u-legend__item"
                   >
                     <i style={{ background: color(id) }} />
-                    {agentName(id)}
+                    {usageAgentName(id)}
                   </button>
                 )
               })}

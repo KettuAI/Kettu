@@ -42,6 +42,17 @@
   font-weight: 500;
   color: var(--ink);
 }
+.k-u__host {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-u__away {
+  padding: 4px 16px 8px;
+}
 .k-u__actions {
   display: flex;
   align-items: center;

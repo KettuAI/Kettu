@@ -2,6 +2,11 @@
   "page": {
     "title": "Marketplace",
     "description": "Plugins, skills and MCP servers for your agents, from the makers of the tools you use and from the community.",
+    "descriptionThisMac": "Plugins, skills and MCP servers for the agents on this Mac, from the makers of the tools you use and from the community.",
+    "descriptionThisComputer": "Plugins, skills and MCP servers for the agents on this computer, from the makers of the tools you use and from the community.",
+    "descriptionOn": "Plugins, skills and MCP servers for the agents on {{host}}, from the makers of the tools you use and from the community.",
+    "descriptionAllMac": "With all hosts shown, this page manages this Mac. Choose one host to manage its plugins, skills and MCP servers.",
+    "descriptionAllComputer": "With all hosts shown, this page manages this computer. Choose one host to manage its plugins, skills and MCP servers.",
     "search": "Search the Marketplace",
     "tabs": {
       "all": "All",
@@ -375,6 +380,7 @@
     "title": "Connect {{name}}",
     "browserNote": "You sign in with {{service}} in your browser. Kettu keeps the sign-in, and these agents reach the server through Kettu.",
     "deviceNote": "You enter a code at {{service}}. Kettu keeps the sign-in, and these agents reach the server through Kettu.",
+    "browserOnHost": "This service finishes its sign-in in a browser on the host itself, so connect it in Kettu on that host.",
     "submit": "Connect",
     "browserWaiting": "Finish signing in in your browser",
     "browserHint": "Didn’t the page open? Copy the link into your browser.",

@@ -17,9 +17,11 @@ import type { CatalogServer, MarketConnection, MarketServer } from '@shared/mark
 import { Dropdown, Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { SettingSwitch } from '@renderer/features/settings/controls'
+import { useHostScope } from '@renderer/stores/host-scope'
 import {
   cancelConnect,
   connectServer,
+  connectsHere,
   disconnectServer,
   dismissConnect,
   openPage,
@@ -66,6 +68,7 @@ function ConnectPanel({
   onClose: () => void
 }) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const scope = useHostScope()
   const flow = useConnectFlow(server.id)
   const [agents, setAgents] = useState<AgentChoice>(kept?.agents ?? 'all')
   // Whether this popover has seen a Connect, so that its end closes it.
@@ -76,15 +79,16 @@ function ConnectPanel({
 
   const name = server.title
   const device = oauthFlow(server.spec) === 'device'
+  const here = connectsHere(scope, server.spec)
   const start = () => {
     setSeen(true)
-    void connectServer(server, kept?.agents ?? agents)
+    void connectServer(scope, server, kept?.agents ?? agents)
   }
   const submit = (event: FormEvent) => {
     event.preventDefault()
     start()
   }
-  const cancel = () => void cancelConnect(server.id, name)
+  const cancel = () => void cancelConnect(scope, server.id, name)
 
   if (flow?.phase === 'waiting' && flow.start?.kind === 'browser') {
     const url = flow.start.url
@@ -143,9 +147,11 @@ function ConnectPanel({
           {t('connect.failed', { error: flow.error })}
         </span>
         <div className="k-mkt-connect__actions">
-          <Button size="sm" icon={<Icon icon={RefreshIcon} size={14} />} onClick={start}>
-            {t('common:actions.retry')}
-          </Button>
+          {here && (
+            <Button size="sm" icon={<Icon icon={RefreshIcon} size={14} />} onClick={start}>
+              {t('common:actions.retry')}
+            </Button>
+          )}
           <Button size="sm" variant="ghost" onClick={onClose}>
             {t('common:actions.close')}
           </Button>
@@ -157,11 +163,13 @@ function ConnectPanel({
     <form className="k-mkt-install" onSubmit={submit}>
       <b>{t('connect.title', { name })}</b>
       <span>
-        {device
-          ? t('connect.deviceNote', { service: name })
-          : t('connect.browserNote', { service: name })}
+        {!here
+          ? t('connect.browserOnHost')
+          : device
+            ? t('connect.deviceNote', { service: name })
+            : t('connect.browserNote', { service: name })}
       </span>
-      {!kept && (
+      {!kept && here && (
         <div className="k-mkt-install__field">
           <small>{t('install.useIn')}</small>
           <AgentPicker value={agents} onChange={setAgents} label={t('install.useIn')} />
@@ -170,6 +178,7 @@ function ConnectPanel({
       <Button
         size="sm"
         type="submit"
+        disabled={!here}
         // A server that needs no sign-in is connected as soon as the host's event arrives.
         loading={flow?.phase === 'starting' || flow?.start?.kind === 'open'}
       >
@@ -193,9 +202,10 @@ function ConnectPopover({
   setOpen: (open: boolean) => void
   children: ReactNode
 }) {
+  const scope = useHostScope()
   const close = () => {
     setOpen(false)
-    dismissConnect(server.id)
+    dismissConnect(scope, server.id)
   }
   return (
     <span className="ui-as-anchor">
@@ -279,6 +289,7 @@ export function ConnectionControls({
   onRemoved?: () => void
 }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const connection = useConnection(server.id)
   const flow = useConnectFlow(server.id)
   const [open, setOpen] = useState(false)
@@ -286,7 +297,7 @@ export function ConnectionControls({
   const busy = flow !== null && flow.phase !== 'failed'
   const connected = connection?.state === 'connected'
   const reconnect = () => {
-    void connectServer(server, server.agents)
+    void connectServer(scope, server, server.agents)
     setOpen(true)
   }
   const close = (next: boolean) => {
@@ -316,7 +327,7 @@ export function ConnectionControls({
       <SettingSwitch
         label={t('listing.switch', { name: server.title })}
         checked={server.on}
-        onChange={(on) => void setServerOn(server.id, on)}
+        onChange={(on) => void setServerOn(scope, server.id, on)}
       />
       <Dropdown
         align="end"
@@ -332,7 +343,7 @@ export function ConnectionControls({
                 {
                   label: t('connection.disconnect'),
                   icon: Unlink04Icon,
-                  onSelect: () => void disconnectServer(server),
+                  onSelect: () => void disconnectServer(scope, server),
                 },
               ]
             : []),

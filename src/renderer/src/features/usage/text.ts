@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next'
 import type { AgentId } from '@shared/thread'
 import { count, percent, usd } from '@renderer/lib/format'
 import { currentLocale } from '@renderer/lib/i18n'
-import { agentName } from '@renderer/stores/agents'
 import { addDays, type MetricKind } from './model'
+import { usageAgentName } from './series'
 
 /** "Sep 1 - Oct 22" for [from, to), or one day alone. */
 export function useRangeText(): (from: number, to: number) => string {
@@ -80,7 +80,7 @@ export function useMetricText(kind: MetricKind) {
             ? 'trend.agentCost'
             : 'trend.agentCount',
         {
-          agent: agentName(agent),
+          agent: usageAgentName(agent),
           tokens: count(value),
           cost: usd(value),
           value: unit(value),

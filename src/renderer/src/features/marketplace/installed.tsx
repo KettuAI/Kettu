@@ -24,15 +24,14 @@ import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { errorMessage } from '@renderer/lib/host'
-import { agentName, usableAgents, useAgentsStore } from '@renderer/stores/agents'
-import { busyKey, useMarketplaceStore } from '@renderer/stores/marketplace'
-import { useMcpStore } from '@renderer/stores/mcp'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { usableAgents } from '@renderer/stores/agents'
+import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
+import { busyKey } from '@renderer/stores/marketplace'
 import { openMarketplace } from '@renderer/stores/view'
 import { removeMarketplace, setPluginEnabled, setServerOn, setSkillOn } from './actions'
 import { ConnectionControls } from './connect'
 import { ConfirmDialog } from './dialogs'
-import { useBusy, useConnection, useConnectionText } from './hooks'
+import { useAgentName, useBusy, useConnection, useConnectionText } from './hooks'
 import {
   catalogEntry,
   catalogPlugin,
@@ -59,6 +58,7 @@ const GROUP_ROWS = 6
 
 export function InstalledView({ query }: { query: string }) {
   const { t } = useTranslation('marketplace')
+  const { useMcpStore } = useHostScope()
   const load = useMcpStore((s) => s.load)
   // Read each time the tab shows, as an agent's file may have been created since.
   useEffect(() => {
@@ -149,6 +149,7 @@ function Section({
 /** Kettu's own server: one row, whether it runs, and whose sessions get it from a popover. */
 function KettuSection() {
   const { t } = useTranslation('marketplace')
+  const { useMcpStore } = useHostScope()
   const status = useMcpStore((s) => s.status)
   const error = useMcpStore((s) => s.error)
   const server = status?.servers.find((s) => s.builtIn) ?? null
@@ -215,6 +216,7 @@ function ProblemNote({
 
 function RetryButton() {
   const { t } = useTranslation('common')
+  const { useMcpStore } = useHostScope()
   const retry = useMcpStore((s) => s.retry)
   const [busy, setBusy] = useState(false)
   return (
@@ -236,6 +238,7 @@ function RetryButton() {
 /** "5 agents", or "3 of 5 agents", opening a switch per agent: whether it gets Kettu's tools. */
 function AgentsButton() {
   const { t } = useTranslation('marketplace')
+  const { useAgentsStore, useSettingsStore } = useHostScope()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
   const off = useSettingsStore((s) => s.settings.mcp.kettu.off)
   const [open, setOpen] = useState(false)
@@ -302,6 +305,7 @@ function AgentSwitchRow({
   set: (agentId: AgentId, on: boolean) => void
 }) {
   const { t } = useTranslation('marketplace')
+  const { useAgentsStore } = useHostScope()
   const status = useAgentsStore((s) => s.byId[agentId])
   const name = status?.name ?? agentId
   const active = status?.kettuServer.active ?? null
@@ -332,22 +336,25 @@ function AgentSwitchRow({
 
 /** The servers Kettu keeps, from the registry or added by hand, matching the search. */
 function useKeptServers(query: string): { server: MarketServer; listing: Listing }[] {
+  const scope = useHostScope()
+  const { useSettingsStore, useMarketplaceStore } = scope
   const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
   // The catalog gives a kept server its mark, badge and line once it has answered.
   useMarketplaceStore((s) => s.catalog)
   const needle = query.trim().toLocaleLowerCase()
   return kept
-    .map((server) => ({ server, listing: listingOf(server) }))
+    .map((server) => ({ server, listing: listingOf(scope, server) }))
     .filter(({ listing, server }) => matchesQuery(listing, query) || server.name.includes(needle))
 }
 
-function listingOf(server: MarketServer): Listing {
-  const entry = server.source === 'registry' ? catalogEntry(server.id) : null
+function listingOf(scope: HostScope, server: MarketServer): Listing {
+  const entry = server.source === 'registry' ? catalogEntry(scope, server.id) : null
   return entry ? { ...fromCatalog(entry), title: server.title } : fromKept(server)
 }
 
 function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const oauth = oauthFlow(server.spec) !== null
   const connection = useConnection(server.id)
   const connectionText = useConnectionText()
@@ -376,7 +383,7 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
           <SettingSwitch
             label={t('listing.switch', { name: server.title })}
             checked={server.on}
-            onChange={(on) => void setServerOn(server.id, on)}
+            onChange={(on) => void setServerOn(scope, server.id, on)}
           />
         )
       }
@@ -386,15 +393,17 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
 
 /** The skills Kettu keeps, matching the search. */
 function useKeptSkills(query: string): MarketSkill[] {
+  const { useSettingsStore } = useHostScope()
   const kept = useSettingsStore((s) => s.settings.marketplace.skills)
   return kept.filter((skill) => skillMatches(skill, query))
 }
 
 function KeptSkillRow({ skill }: { skill: MarketSkill }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   // The catalog gives a kept skill its badge once it has answered.
-  useMarketplaceStore((s) => s.skills)
-  const entry = catalogSkill(skill.id)
+  scope.useMarketplaceStore((s) => s.skills)
+  const entry = catalogSkill(scope, skill.id)
   const line = [
     skill.on ? null : t('installed.off'),
     skill.agents === 'all' ? null : t('installed.forAgents', { count: skill.agents.length }),
@@ -415,7 +424,7 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
         <SettingSwitch
           label={t('listing.switch', { name: skill.name })}
           checked={skill.on}
-          onChange={(on) => void setSkillOn(skill.id, on)}
+          onChange={(on) => void setSkillOn(scope, skill.id, on)}
         />
       }
     />
@@ -424,28 +433,32 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
 
 /** Read the first time the tab needs them; the host lists plugins slowly. */
 function usePluginsRead(): void {
+  const { useMarketplaceStore } = useHostScope()
   useEffect(() => {
     const store = useMarketplaceStore.getState()
     if (!store.plugins && !store.pluginsLoading) void store.loadPlugins()
-  }, [])
+  }, [useMarketplaceStore])
 }
 
 function useSkillsRead(): void {
+  const { useMarketplaceStore } = useHostScope()
   useEffect(() => {
     const store = useMarketplaceStore.getState()
     if (!store.skills && !store.skillsLoading) void store.loadSkills()
-  }, [])
+  }, [useMarketplaceStore])
 }
 
-const pluginTitle = (plugin: InstalledPlugin): string =>
-  catalogPlugin(plugin.harness, plugin.id)?.title ?? displayTitle(pluginName(plugin.id))
+const pluginTitle = (scope: HostScope, plugin: InstalledPlugin): string =>
+  catalogPlugin(scope, plugin.harness, plugin.id)?.title ?? displayTitle(pluginName(plugin.id))
 
 /** The plugins every agent has, matching the search; null until the host has listed them. */
 function useInstalledPlugins(query: string): InstalledPlugin[] | null {
-  const plugins = useMarketplaceStore((s) => s.plugins)
+  const scope = useHostScope()
+  const agentName = useAgentName()
+  const plugins = scope.useMarketplaceStore((s) => s.plugins)
   if (!plugins) return null
   return plugins.installed.filter((p) =>
-    matchesText([pluginTitle(p), p.id, agentName(p.agentId)], query),
+    matchesText([pluginTitle(scope, p), p.id, agentName(p.agentId)], query),
   )
 }
 
@@ -457,6 +470,8 @@ function PluginsSection({
   searching: boolean
 }) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const { useMarketplaceStore } = useHostScope()
+  const agentName = useAgentName()
   const failure = useMarketplaceStore((s) => s.pluginsError)
   const errors = useMarketplaceStore((s) => s.plugins?.errors ?? null)
   if (searching && !plugins?.length) return null
@@ -503,8 +518,10 @@ function PluginsSection({
 
 function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
   const { t } = useTranslation('marketplace')
-  const entry = catalogPlugin(plugin.harness, plugin.id)
-  const title = pluginTitle(plugin)
+  const scope = useHostScope()
+  const agentName = useAgentName()
+  const entry = catalogPlugin(scope, plugin.harness, plugin.id)
+  const title = pluginTitle(scope, plugin)
   const busy = useBusy(busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`))
   const line = [
     agentName(plugin.agentId),
@@ -531,7 +548,7 @@ function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
           label={t('plugin.switch', { name: title, agent: agentName(plugin.agentId) })}
           checked={plugin.enabled}
           disabled={busy}
-          onChange={(on) => void setPluginEnabled(plugin, title, on)}
+          onChange={(on) => void setPluginEnabled(scope, plugin, title, on)}
         />
       }
     />
@@ -585,6 +602,8 @@ interface Own {
 }
 
 function useOwn(query: string): Own {
+  const { useMarketplaceStore, useMcpStore } = useHostScope()
+  const agentName = useAgentName()
   const skills = useMarketplaceStore((s) => s.skills)
   const failure = useMarketplaceStore((s) => s.skillsError)
   const status = useMcpStore((s) => s.status)
@@ -608,6 +627,7 @@ function useOwn(query: string): Own {
 /** What each agent keeps itself, read only: its skills by folder, then its MCP configuration. */
 function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const { useMarketplaceStore } = useHostScope()
   const count = own.folders.reduce((n, group) => n + group.skills.length, 0)
   if (searching && count + own.places.length === 0) return null
   if (!own.loading && count + own.places.length === 0 && !own.failure) return null
@@ -654,6 +674,7 @@ function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
 
 /** A folder's path and the agents that read it, over its skills: six, then "and N more". */
 function FolderGroup({ group, searching }: { group: SkillFolder; searching: boolean }) {
+  const agentName = useAgentName()
   const [open, setOpen] = useState(false)
   const shown = open || searching ? group.skills : group.skills.slice(0, GROUP_ROWS)
   const rest = group.skills.slice(shown.length)
@@ -692,6 +713,7 @@ function FolderGroup({ group, searching }: { group: SkillFolder; searching: bool
 
 function OwnSkillRow({ skill, fresh }: { skill: OwnSkill; fresh: boolean }) {
   const { t } = useTranslation('marketplace')
+  const agentName = useAgentName()
   const off = skill.offIn.length
     ? t('installed.offIn', { agents: skill.offIn.map((id) => agentName(id)).join(', ') })
     : null
@@ -712,6 +734,7 @@ function OwnSkillRow({ skill, fresh }: { skill: OwnSkill; fresh: boolean }) {
 /** Where one agent keeps its own MCP servers: the file, or that it is not created yet. */
 function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
   const { t } = useTranslation(['marketplace', 'settings'])
+  const { useAgentsStore } = useHostScope()
   const agent = useAgentsStore((s) => s.byId[place.agentId])
   const name = agent?.name ?? place.agentId
   const note = place.chosen
@@ -747,6 +770,8 @@ function PlaceRow({ place }: { place: McpStatus['places'][number] }) {
 
 /** The plugin marketplaces the agents read, matching the search. */
 function useMarketplaces(query: string): PluginMarketplace[] {
+  const { useMarketplaceStore } = useHostScope()
+  const agentName = useAgentName()
   const markets = useMarketplaceStore((s) => s.plugins?.marketplaces ?? null)
   return (markets ?? []).filter((market) =>
     matchesText([market.name, market.source, agentName(market.agentId)], query),
@@ -774,6 +799,8 @@ function MarketplacesSection({ markets }: { markets: PluginMarketplace[] }) {
 
 function MarketplaceRow({ market }: { market: PluginMarketplace }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
+  const agentName = useAgentName()
   const [confirming, setConfirming] = useState(false)
   return (
     <>
@@ -809,7 +836,7 @@ function MarketplaceRow({ market }: { market: PluginMarketplace }) {
         title={t('dialogs.removeMarketplace.title', { name: market.name })}
         body={t('dialogs.removeMarketplace.body', { agent: agentName(market.agentId) })}
         confirm={t('dialogs.removeMarketplace.confirm')}
-        action={() => removeMarketplace(market)}
+        action={() => removeMarketplace(scope, market)}
       />
     </>
   )

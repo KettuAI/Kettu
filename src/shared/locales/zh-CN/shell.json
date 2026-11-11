@@ -91,5 +91,13 @@
   "debugMode": {
     "label": "调试模式",
     "tooltip": "调试模式已打开 · 查看端口"
+  },
+  "windowHost": {
+    "thisMac": "这台 Mac",
+    "thisComputer": "这台电脑",
+    "unknown": "另一台主机",
+    "away": "{{name}} 没有连上：{{state}}",
+    "lastRead": "这里是上次从它读到的内容，主机回来后会自动更新。",
+    "nothingRead": "还没有从它读到过内容，主机回来后会显示在这里。"
   }
 }

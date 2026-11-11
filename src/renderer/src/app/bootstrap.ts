@@ -42,7 +42,7 @@ import {
 } from '@renderer/stores/git'
 import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useRoutinesStore } from '@renderer/stores/routines'
+import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { hostScopeEvent, hostScopeOpened } from '@renderer/stores/host-scope'
@@ -56,6 +56,7 @@ import { forgetViewers, receiveViewers } from '@renderer/stores/viewers'
 import { initUpdates } from '@renderer/stores/updates'
 import { initDebug } from '@renderer/stores/debug'
 import {
+  followUsageHosts,
   loadToday,
   loadUsageStatus,
   receiveUsageStatus,
@@ -126,10 +127,20 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'agent.options':
       receiveAgentOptions(event.options, hostId)
       return
+    case 'routine.changed':
+      useRoutinesStore.getState().receive(event.routine, hostId)
+      return
+    case 'routine.removed':
+      useRoutinesStore.getState().removed(event.routineId, hostId)
+      return
+    case 'routine.run':
+      useRoutinesStore.getState().receiveRun(event.run, hostId)
+      return
   }
   receiveArtifactEvent(event, hostId)
   if (event.type === 'artifacts.changed') artifactsChanged(hostId)
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
+  if (hostId !== null && event.type === 'usage.changed') usageChanged(hostId)
   if (hostId !== null) return hostScopeEvent(hostId, event)
   switch (event.type) {
     case 'environment.changed':
@@ -149,15 +160,6 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.connectionChanged':
       marketConnectionChanged(event)
-      break
-    case 'routine.changed':
-      useRoutinesStore.getState().receive(event.routine)
-      break
-    case 'routine.removed':
-      useRoutinesStore.getState().removed(event.routineId)
-      break
-    case 'routine.run':
-      useRoutinesStore.getState().receiveRun(event.run)
       break
   }
 }
@@ -261,6 +263,7 @@ export function bootstrap(): Promise<unknown> {
   })
   useViewStore.subscribe(() => showFront())
   followShownSession()
+  followUsageHosts()
   // A project list that fills after launch, as after a failed first read, leaves the launch view.
   useProjectsStore.subscribe((state, previous) => {
     if (launched && state.projects !== previous.projects) finishLaunch()
@@ -283,13 +286,17 @@ export function bootstrap(): Promise<unknown> {
       event: (hostId, event) => onHostEvent(event, hostId),
       opened: (hostId) => {
         artifactsHostOpened(hostId)
+        routinesHostOpened(hostId)
         hostScopeOpened(hostId)
         hostRestarted(hostId)
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
         showFront(true)
         rewatchGit(hostId)
       },
-      closed: (hostId) => artifactsHostClosed(hostId),
+      closed: (hostId) => {
+        artifactsHostClosed(hostId)
+        routinesHostClosed(hostId)
+      },
       resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
     })
     initBrowser()

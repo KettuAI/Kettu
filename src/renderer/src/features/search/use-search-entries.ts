@@ -10,12 +10,15 @@ import { basename, dirname, shortAgo } from '@renderer/lib/format'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
+import { useWindowArtifacts } from '@renderer/features/artifacts/window-artifacts'
+import { useShownRoutines } from '@renderer/features/routines/window-routines'
+import { artifactHost, routineHost } from '@renderer/lib/host'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useRoutinesStore } from '@renderer/stores/routines'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import type { SettingsSection } from '@renderer/stores/view'
+import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
 import { haystackOf, SEARCH_ACTIONS, type SearchAction, type SearchEntry } from './search-model'
 
 /** Settings sections in the order the page lists them. */
@@ -84,17 +87,18 @@ function useSessionEntries(): SearchEntry[] {
   const others = useOtherHosts()
   const thisComputer = t('hosts.thisComputer')
   const unknown = t('hosts.unknown')
+  const only = useOnlyHost()
 
   return useMemo(() => {
     const hostName = (id: string | null) =>
       id === null ? thisComputer : (others.find((host) => host.id === id)?.name ?? unknown)
     return Object.values(byId)
-      .filter(findable)
+      .filter((summary) => findable(summary) && onHost(only, hostOfSession(summary)))
       .map((summary): SearchEntry => {
         const hostId = hostOfSession(summary)
         const title = sessionTitle(summary)
         const project = projectName(summary.scratch ? null : summary.projectPath)
-        const host = others.length > 0 ? hostName(hostId) : null
+        const host = others.length > 0 && only === undefined ? hostName(hostId) : null
         const meta = [project, host, summary.branch].filter(Boolean).join(' · ')
         return {
           kind: 'session',
@@ -110,65 +114,71 @@ function useSessionEntries(): SearchEntry[] {
           hostId,
         }
       })
-  }, [byId, projectName, others, thisComputer, unknown])
+  }, [byId, projectName, others, thisComputer, unknown, only])
 }
 
 function useArtifactEntries(): SearchEntry[] {
   const { t } = useTranslation('artifacts')
-  const list = useArtifactsStore((s) => s.list)
+  // An away host's artifacts cannot be opened, so they are not offered.
+  const { list, away } = useWindowArtifacts()
   const openedAt = useArtifactsStore((s) => s.openedAt)
   const projectName = useProjectName()
+  const hostName = useHostName()
+  const namesHosts = useNamesHosts()
+  const only = useOnlyHost()
+  const named = namesHosts && only === undefined
 
   return useMemo(
     () =>
-      (list ?? []).map((artifact): SearchEntry => {
+      (away ? [] : (list ?? [])).map((artifact): SearchEntry => {
         const kind = artifactKind(artifact)
         const project = projectName(artifact.scratch ? null : artifact.project)
         const label = t(`page.kinds.${kind}`)
         const at = recency(artifact, openedAt)
+        const host = named ? hostName(artifactHost(artifact.id)) : null
         return {
           kind: 'artifact',
           key: `artifact:${artifact.id}`,
           title: artifact.title,
-          meta: `${project} · ${label} · v${artifact.version}`,
+          meta: [project, host, label, `v${artifact.version}`].filter(Boolean).join(' · '),
           trailing: shortAgo(at),
-          haystack: haystackOf(artifact.title, project, label),
+          haystack: haystackOf(artifact.title, project, label, host),
           at,
           artifactId: artifact.id,
           artifactKind: kind,
         }
       }),
-    [list, openedAt, projectName, t],
+    [list, away, openedAt, projectName, named, hostName, t],
   )
 }
 
 function useRoutineEntries(): SearchEntry[] {
   const { t } = useTranslation('routines')
-  const byId = useRoutinesStore((s) => s.byId)
-  const order = useRoutinesStore((s) => s.order)
+  const routines = useShownRoutines()
   const projectName = useProjectName()
+  const hostName = useHostName()
+  const namesHosts = useNamesHosts()
+  const only = useOnlyHost()
+  const named = namesHosts && only === undefined
 
   return useMemo(
     () =>
-      order.flatMap((id): SearchEntry[] => {
-        const routine = byId[id]
-        if (!routine) return []
+      routines.map((routine): SearchEntry => {
         const schedule = scheduleWords(routine.trigger.schedule)
         const project = projectName(routine.projectPath)
-        return [
-          {
-            kind: 'routine',
-            key: `routine:${routine.id}`,
-            title: routine.name,
-            meta: schedule,
-            trailing: t(`state.${routine.state}`),
-            haystack: haystackOf(routine.name, schedule, project),
-            at: routine.activeRun?.startedAt ?? routine.lastRun?.startedAt ?? routine.updatedAt,
-            routineId: routine.id,
-          },
-        ]
+        const host = named ? hostName(routineHost(routine.id)) : null
+        return {
+          kind: 'routine',
+          key: `routine:${routine.id}`,
+          title: routine.name,
+          meta: host ? `${host} · ${schedule}` : schedule,
+          trailing: t(`state.${routine.state}`),
+          haystack: haystackOf(routine.name, schedule, project, host),
+          at: routine.activeRun?.startedAt ?? routine.lastRun?.startedAt ?? routine.updatedAt,
+          routineId: routine.id,
+        }
       }),
-    [byId, order, projectName, t],
+    [routines, projectName, named, hostName, t],
   )
 }
 
@@ -178,6 +188,7 @@ function useProjectEntries(): SearchEntry[] {
   const byId = useSessionsStore((s) => s.byId)
   const others = useOtherHosts()
   const unknown = t('hosts.unknown')
+  const only = useOnlyHost()
 
   return useMemo(() => {
     const counts = new Map<string, number>()
@@ -187,7 +198,7 @@ function useProjectEntries(): SearchEntry[] {
       }
     }
     return projects
-      .filter((project) => !project.missing)
+      .filter((project) => !project.missing && onHost(only, hostOfPath(project.path)))
       .map((project): SearchEntry => {
         const hostId = hostOfPath(project.path)
         const folder = dirname(hostPath(project.path))
@@ -204,7 +215,17 @@ function useProjectEntries(): SearchEntry[] {
           path: project.path,
         }
       })
-  }, [projects, byId, others, unknown, t])
+  }, [projects, byId, others, unknown, t, only])
+}
+
+/** The one host the window is narrowed to, null being this computer; undefined for every host. */
+function useOnlyHost(): string | null | undefined {
+  const host = useWindowHost()
+  return host.kind === 'one' ? host.hostId : undefined
+}
+
+function onHost(only: string | null | undefined, hostId: string | null): boolean {
+  return only === undefined || hostId === only
 }
 
 function useActionEntries(): SearchEntry[] {

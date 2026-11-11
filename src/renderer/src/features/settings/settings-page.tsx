@@ -167,8 +167,6 @@ export function SettingsContent({ titleId }: { titleId?: string }) {
   const about = useAboutSection()
   const hostId = useShownHost()
   const scope = useMemo(() => (hostId === null ? LOCAL_SCOPE : hostScope(hostId)), [hostId])
-  // Opened again, Settings starts at this computer, as every way into it means this computer.
-  useEffect(() => () => useSettingsHostStore.setState({ hostId: null }), [])
   return (
     <HostScopeContext.Provider value={scope}>
       <AgentMarkHost.Provider value={scope.hostId}>

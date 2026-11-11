@@ -31,11 +31,12 @@ import { formatShortcut, isHosted, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useNow } from '@renderer/lib/use-now'
 import { cancelSignIn, signIn, signOut, useAccountStore } from '@renderer/stores/account'
-import { useAgentsStore } from '@renderer/stores/agents'
+import type { HostScope } from '@renderer/stores/host-scope'
 import { switchHost } from '@renderer/stores/host-switch'
 import { isAway, useHostsStore, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { refreshLimits } from '@renderer/stores/usage'
+import { useWindowScope } from '@renderer/stores/window-host'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import {
   openSettings,
@@ -51,10 +52,10 @@ import { useThisComputerName } from './use-account'
 const DOCS_URL = 'https://github.com/KettuAI/Kettu#readme'
 
 /** Reads the plan limits the menu lists again; the host asks each agent at most once a minute. */
-function readLimits(): void {
-  const { order, byId } = useAgentsStore.getState()
+function readLimits(scope: HostScope): void {
+  const { order, byId } = scope.useAgentsStore.getState()
   for (const agentId of limitReaders(order.flatMap((id) => byId[id] ?? []))) {
-    refreshLimits(agentId).catch((error: unknown) =>
+    refreshLimits(agentId, scope.hostId).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
   }
@@ -82,7 +83,8 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
   const hostItems = useHostItems(hosts, close)
   const planItems = usePlanItems(close, hostItems.length > 0)
   const help = useHelpItems(close)
-  useEffect(readLimits, [])
+  const scope = useWindowScope()
+  useEffect(() => readLimits(scope), [scope])
 
   const then = (run: () => void) => () => {
     close()
@@ -408,8 +410,12 @@ function usePlanItems(close: () => void, divided: boolean): ProfileMenuItem[] {
   ]
 }
 
+/**
+ * The window's host's agents; this computer's while every host shows, as an account's limits are
+ * the same on each host.
+ */
 function useAgentsWithLimits(): AgentStatus[] {
-  return useAgentsStore(
+  return useWindowScope().useAgentsStore(
     useShallow((s) =>
       s.order
         .map((id) => s.byId[id])

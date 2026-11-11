@@ -13,7 +13,9 @@ import { limitLabel, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
-import { isInstalled, useAgentsStore } from '@renderer/stores/agents'
+import { isInstalled } from '@renderer/stores/agents'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { useWindowHostAway } from '@renderer/stores/window-host'
 import { refreshLimits } from '@renderer/stores/usage'
 import { limitsToRead, resetForm } from './model'
 import {
@@ -30,11 +32,20 @@ const RINGS = 72
 /**
  * The plans as they stand, across the page: a card per account that reports limits, as many to
  * a row as leave the last row fullest, then one line for the agents with usage that report none.
- * Past two full rows the rest folds away, so the page's own figures stay in view.
+ * Past two full rows the rest folds away, so the page's own figures stay in view. They are the
+ * page's host's; with every host shown, this computer's, since an account's limits are the same
+ * on each.
  */
 export function PlanLimits({ used }: { used: readonly AgentId[] }) {
+  const { hostId } = useHostScope()
+  // Each host reads its own agents' limits afresh.
+  return <HostPlanLimits key={hostId ?? ''} used={used} />
+}
+
+function HostPlanLimits({ used }: { used: readonly AgentId[] }) {
   const { t } = useTranslation('usage')
   const now = useNow()
+  const { hostId, useAgentsStore } = useHostScope()
   const agents = useAgentsStore(
     useShallow((s) =>
       s.order
@@ -42,11 +53,15 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
         .filter((a): a is AgentStatus => !!a && a.registered !== false && !a.disabled),
     ),
   )
-  // Read afresh when the page opens; the host asks each agent at most once a minute.
+  const away = useWindowHostAway() !== null
+  // Read afresh when the page opens, unless the host is away; the host asks each agent at most
+  // once a minute.
   const [toRead] = useState(() =>
-    limitsToRead(
-      Object.values(useAgentsStore.getState().byId).filter((a): a is AgentStatus => !!a),
-    ),
+    away
+      ? []
+      : limitsToRead(
+          Object.values(useAgentsStore.getState().byId).filter((a): a is AgentStatus => !!a),
+        ),
   )
   const [reads, setReads] = useState<Partial<Record<AgentId, LimitRead>>>(() =>
     Object.fromEntries(toRead.map((agent) => [agent.id, 'reading' as const])),
@@ -54,7 +69,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     for (const agent of toRead) {
-      refreshLimits(agent.id).then(
+      refreshLimits(agent.id, hostId).then(
         () =>
           setReads((was) => {
             const next = { ...was }
@@ -67,7 +82,7 @@ export function PlanLimits({ used }: { used: readonly AgentId[] }) {
         },
       )
     }
-  }, [toRead])
+  }, [toRead, hostId])
   const { cards, unreported } = usageCards(agents, used, reads, now)
   const read = Math.max(0, ...cards.map((card) => card.readAt ?? 0))
   const names = new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
@@ -142,6 +157,7 @@ function useResetText(): (ring: CardRing, now: number) => string | null {
  */
 function PlanCard({ card, now }: { card: UsageCard; now: number }) {
   const { t } = useTranslation('usage')
+  const { useAgentsStore } = useHostScope()
   const installed = useAgentsStore((s) => {
     const agent = s.byId[card.agentId]
     return agent ? isInstalled(agent) : true

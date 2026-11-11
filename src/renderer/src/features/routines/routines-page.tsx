@@ -21,7 +21,6 @@ import {
   PlusSignIcon,
 } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
 import type { RoutineView } from '@shared/routines'
 import { Dropdown, Icon, SectionHead } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
@@ -34,13 +33,16 @@ import {
 import { RingSpinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { TurnDots } from '@renderer/features/session/turn-dots'
+import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
 import { basename, longAgo } from '@renderer/lib/format'
-import { errorMessage } from '@renderer/lib/host'
+import { errorMessage, routineHost } from '@renderer/lib/host'
+import { isMac } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { agentName } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { openRoutine } from '@renderer/stores/view'
+import { useHostName, useNamesHosts } from '@renderer/stores/window-host'
 import { openActiveRun } from './actions'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
 import { ROUTINE_EXAMPLES, routineExample, type RoutineExampleId } from './examples'
@@ -62,17 +64,17 @@ import {
 import { routineMenu } from './menu-items'
 import { RoutineMenuItems } from './routine-menu'
 import { RunAnnouncements } from './run-history'
+import { useWindowRoutines } from './window-routines'
 
 export default function RoutinesPage() {
   const { t } = useTranslation('routines')
-  const routines = useRoutinesStore(
-    useShallow((s) =>
-      s.order.map((id) => s.byId[id]).filter((routine): routine is RoutineView => !!routine),
-    ),
-  )
-  const loaded = useRoutinesStore((s) => s.loaded)
-  const problem = useRoutinesStore((s) => s.problem)
-  const loadError = useRoutinesStore((s) => s.error)
+  const { routines, read, hostId, away } = useWindowRoutines()
+  const namesHosts = useNamesHosts()
+  const hostName = useHostName()
+  // An away host's list is what was last read; why its reads fail is the notice above it.
+  const loaded = read.loaded || away
+  const problem = away ? null : read.problem
+  const loadError = away ? null : read.error
   const [error, setError] = useState<string | null>(null)
   const [active, setActive] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -81,13 +83,16 @@ export default function RoutinesPage() {
     if (!useRoutinesStore.getState().loaded) void useRoutinesStore.getState().load()
   }, [])
 
+  const rowHost = (routine: RoutineView): string | null =>
+    namesHosts && hostId === undefined ? hostName(routineHost(routine.id)) : null
+
   // On first, those that need the user leading, then Off, which the rows' dimming tells apart.
   const on = useMemo(() => onRoutines(routines), [routines])
   const off = useMemo(() => offRoutines(routines), [routines])
   const all = useMemo(() => [...on, ...off], [on, off])
   const tabStop = active && all.some((routine) => routine.id === active) ? active : all[0]?.id
   // With nothing to list, the empty state holds the one New routine; with a notice, the header.
-  const empty = loaded && all.length === 0 && !problem && !loadError
+  const empty = loaded && all.length === 0 && !problem && !loadError && !away
 
   const target = useRoutinesStore((s) => (deleting ? s.byId[deleting] : undefined))
 
@@ -125,7 +130,7 @@ export default function RoutinesPage() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => void useRoutinesStore.getState().load()}
+            onClick={() => void useRoutinesStore.getState().load(hostId ?? null)}
           >
             {t('page.retry')}
           </Button>
@@ -149,6 +154,7 @@ export default function RoutinesPage() {
         <RoutineRow
           key={routine.id}
           routine={routine}
+          host={rowHost(routine)}
           tabbable={routine.id === tabStop}
           onFocus={() => setActive(routine.id)}
           onRunNow={() => runNow(routine)}
@@ -182,9 +188,17 @@ export default function RoutinesPage() {
         <header className="k-rpage__head">
           <span>
             <h1 className="ui-as-page-title">{t('page.title')}</h1>
-            <p className="ui-as-page-sub">{t('page.description')}</p>
+            <p className="ui-as-page-sub">
+              {!namesHosts
+                ? t('page.description')
+                : hostId === undefined
+                  ? t('page.descriptionAll')
+                  : hostId === null
+                    ? t(isMac ? 'page.descriptionThisMac' : 'page.descriptionThisComputer')
+                    : t('page.descriptionOn', { host: hostName(hostId) })}
+            </p>
           </span>
-          {!empty && (
+          {!empty && !away && (
             <Button
               size="sm"
               icon={<Icon icon={PlusSignIcon} size={15} />}
@@ -194,11 +208,14 @@ export default function RoutinesPage() {
             </Button>
           )}
         </header>
+        <WindowHostAway read={read.read} className="mt-4" />
         {notices.length > 0 && <div className="k-rpage__notices">{notices}</div>}
-        {body}
-        {loaded && all.length > 0 && (
-          <p className="ui-sg-hint k-rpage__foot">{t('page.footnote')}</p>
-        )}
+        <AwayContent away={away}>
+          {body}
+          {loaded && all.length > 0 && (
+            <p className="ui-sg-hint k-rpage__foot">{t('page.footnote')}</p>
+          )}
+        </AwayContent>
       </div>
       {target && (
         <DeleteRoutineDialog
@@ -249,6 +266,7 @@ function RoutineGroup({
 
 function RoutineRow({
   routine,
+  host,
   tabbable,
   onFocus,
   onRunNow,
@@ -256,6 +274,8 @@ function RoutineRow({
   onError,
 }: {
   routine: RoutineView
+  /** The routine's host by name, while the page lists every host's. */
+  host: string | null
   tabbable: boolean
   onFocus: () => void
   onRunNow: () => void
@@ -263,6 +283,7 @@ function RoutineRow({
   onError: (message: string) => void
 }) {
   const { t } = useTranslation('routines')
+  const routineOn = routineHost(routine.id)
   const projects = useProjectsStore((s) => s.projects)
   const id = useId()
   const more = useRef<HTMLSpanElement>(null)
@@ -270,7 +291,7 @@ function RoutineRow({
   const project = routineProject(routine, projects)
   const name = routine.name
   const schedule = scheduleWords(routine.trigger.schedule)
-  const agent = agentName(routine.agentId)
+  const agent = agentName(routine.agentId, routineOn)
   const projectName =
     project?.name ??
     (routine.projectPath === null ? t('routine.noProject') : basename(routine.projectPath))
@@ -315,9 +336,14 @@ function RoutineRow({
         <span className="k-rrow__name">
           <b>{name}</b>
           <small id={`${id}-line`}>
-            <span className="k-rrow__wide">{rowDescription(routine, projectName)}</span>
+            <span className="k-rrow__wide">
+              {host === null
+                ? rowDescription(routine, projectName)
+                : t('row.onHost', { host, line: rowDescription(routine, projectName) })}
+            </span>
             <span aria-hidden className="k-rrow__narrow">
               {schedule} · {agent}
+              {host !== null && ` · ${host}`}
             </span>
           </small>
         </span>
@@ -325,7 +351,7 @@ function RoutineRow({
           {schedule}
         </span>
         <span className="k-rrow__cell k-rrow__agent">
-          <AgentMark agent={routine.agentId} size={14} />
+          <AgentMark agent={routine.agentId} size={14} hostId={routineOn} />
           <span id={`${id}-agent`}>{agent}</span>
         </span>
         <span id={`${id}-status`} className="k-rrow__cell">
@@ -442,10 +468,16 @@ function StatusCell({
           <TooltipTrigger render={<span className="k-rs" data-tone="muted" data-tip="" />}>
             <Icon icon={Clock01Icon} size={13} />
             <span className="k-rs__text">{text}</span>
-            {cell.pause && <span className="sr-only">{pauseNotice(cell.pause, now)}</span>}
+            {cell.pause && (
+              <span className="sr-only">
+                {pauseNotice(cell.pause, now, routineHost(routine.id))}
+              </span>
+            )}
           </TooltipTrigger>
           {cell.pause && (
-            <TooltipContent className="max-w-80">{pauseNotice(cell.pause, now)}</TooltipContent>
+            <TooltipContent className="max-w-80">
+              {pauseNotice(cell.pause, now, routineHost(routine.id))}
+            </TooltipContent>
           )}
         </Tooltip>
       )

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { artifactHost, artifactRefOf, forgetHostSessions, learnArtifactHost, routeOf } from './host'
+import {
+  artifactHost,
+  artifactRefOf,
+  forgetHostSessions,
+  learnArtifactHost,
+  learnRoutineHost,
+  routeOf,
+  routineHost,
+} from './host'
+import { onHost } from './host-paths'
 
 const HOST_A = 'a'.repeat(32)
 const HOST_B = 'b'.repeat(32)
@@ -44,5 +53,38 @@ describe('the host an artifact request goes to', () => {
     forgetHostSessions(HOST_A)
     expect(artifactHost(id(5))).toBeNull()
     expect(artifactHost(id(6))).toBe(HOST_B)
+  })
+})
+
+const routine = (n: number): string => `r-00000000000${n}`
+
+describe('the host a routine request goes to', () => {
+  it('is this computer for a routine no other host has named', () => {
+    expect(routeOf('routines.runNow', { routineId: routine(0) })).toBeNull()
+  })
+
+  it('is the host that keeps the routine, for every request that names it', () => {
+    learnRoutineHost(routine(1), HOST_A)
+    expect(routeOf('routines.runNow', { routineId: routine(1) })).toBe(HOST_A)
+    expect(routeOf('routines.delete', { routineId: routine(1) })).toBe(HOST_A)
+    expect(routeOf('routines.update', { routineId: routine(1), changes: {} })).toBe(HOST_A)
+  })
+
+  it('creates a routine on the host of its project', () => {
+    expect(routeOf('routines.create', { projectPath: onHost(HOST_A, '/work/app') })).toBe(HOST_A)
+  })
+
+  it('never leaves this computer for a routine it keeps, whatever another host claims', () => {
+    learnRoutineHost(routine(2), null)
+    expect(learnRoutineHost(routine(2), HOST_A)).toBe(false)
+    expect(routeOf('routines.runNow', { routineId: routine(2) })).toBeNull()
+  })
+
+  it('forgets the routines of a host this computer no longer connects to, and no others', () => {
+    learnRoutineHost(routine(3), HOST_A)
+    learnRoutineHost(routine(4), HOST_B)
+    forgetHostSessions(HOST_A)
+    expect(routineHost(routine(3))).toBeNull()
+    expect(routineHost(routine(4))).toBe(HOST_B)
   })
 })

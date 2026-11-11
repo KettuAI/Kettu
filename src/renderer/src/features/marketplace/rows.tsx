@@ -9,6 +9,7 @@ import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { installServer } from './actions'
 import { ConnectButton } from './connect'
 import { useConnectFlow, useInstalling, useKept } from './hooks'
@@ -179,6 +180,7 @@ export function AddControl({
 export function AddButton({ server, onOpen }: { server: CatalogServer; onOpen: () => void }) {
   const { t } = useTranslation('marketplace')
   const kept = useKept(server.id)
+  const scope = useHostScope()
   const busy = useInstalling(server.id)
   const flow = useConnectFlow(server.id)
   // A Connect that installs it keeps its button, and the popover with it, until it ends.
@@ -190,7 +192,7 @@ export function AddButton({ server, onOpen }: { server: CatalogServer; onOpen: (
       label={asksFirst(server.spec) ? t('row.setUp') : t('row.install')}
       state={busy ? 'busy' : 'off'}
       onOpen={onOpen}
-      onAdd={() => void installServer(server, 'all', {})}
+      onAdd={() => void installServer(scope, server, 'all', {})}
       form={
         asksFirst(server.spec)
           ? (close) => (
@@ -198,7 +200,7 @@ export function AddButton({ server, onOpen }: { server: CatalogServer; onOpen: (
                 server={server}
                 onDone={(agents, values) => {
                   close()
-                  void installServer(server, agents, values)
+                  void installServer(scope, server, agents, values)
                 }}
               />
             )

@@ -7,12 +7,10 @@ import {
   Store01Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
-import type { RoutineView } from '@shared/routines'
 import { newSession } from '@renderer/app/actions'
 import type { AppShellProps, ShellNavItem } from '@renderer/components/affect/app-shell'
 import { strongestSignal, signalText } from '@renderer/features/routines/model'
-import { useRoutinesStore } from '@renderer/stores/routines'
+import { useShownRoutines } from '@renderer/features/routines/window-routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
@@ -81,14 +79,10 @@ function useRoutineRunShown(): boolean {
   return useSessionsStore((s) => (id ? s.byId[id]?.origin === 'routine' : false))
 }
 
-/** The Routines row's end: the strongest signal among the routines' runs, and its name. */
+/** The Routines row's end: the strongest signal of the shown hosts' routines, and its name. */
 function useRoutinesRow(): { end: ReactNode; name: string | undefined } {
   const { t: tr } = useTranslation('routines')
-  const routines = useRoutinesStore(
-    useShallow((s) =>
-      s.order.map((id) => s.byId[id]).filter((routine): routine is RoutineView => !!routine),
-    ),
-  )
+  const routines = useShownRoutines()
   const signal = strongestSignal(routines)
   if (!signal) return { end: undefined, name: undefined }
   return {

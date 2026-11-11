@@ -31,6 +31,14 @@ import { askHostPath, type HostPathPurpose } from '@renderer/web/host-path-reque
 import { createAgentsStore, useAgentsStore, type AgentsStoreHook } from './agents'
 import { loadGitTools, useGitStore } from './git'
 import { otherHosts, useHostsStore } from './hosts'
+import {
+  createMarketplaceStore,
+  marketConnectionChanged,
+  marketKeysChanged,
+  useMarketplaceStore,
+  type MarketplaceStoreHook,
+} from './marketplace'
+import { createMcpStore, useMcpStore, type McpStoreHook } from './mcp'
 import { useRemoteStore, type RemoteStore } from './remote'
 import { useSettingsStore, type SettingsStore } from './settings'
 import { createSharing, localSharing, type Sharing } from './sharing'
@@ -41,7 +49,10 @@ import { useWebHostStore } from './web-host'
 export interface ScopeApi {
   settings: Pick<KettuApi['settings'], 'addAgent' | 'renameAgent' | 'setAgentColor' | 'removeAgent'>
   remote: KettuApi['remote']
-  dialogs: Pick<KettuApi['dialogs'], 'chooseAgentFolder' | 'chooseAgentBinary' | 'chooseShell'>
+  dialogs: Pick<
+    KettuApi['dialogs'],
+    'chooseAgentFolder' | 'chooseAgentBinary' | 'chooseShell' | 'openProject'
+  >
   /** Shows a file of the host in this computer's file manager, or copies a path it cannot show. */
   showItem(path: string): Promise<void>
   getInfo(): Promise<AppInfo>
@@ -65,6 +76,10 @@ export interface HostScope {
   loadGitTools(): Promise<void>
   /** What the host offers beyond its sessions, as it said; null until it has. */
   useInfoStore: ReadStore<{ info: HostInfo | null }>
+  /** The Marketplace's reads of the host and what it is changing there. */
+  useMarketplaceStore: MarketplaceStoreHook
+  /** The host's MCP servers, Kettu's own among them, as Marketplace › Installed shows them. */
+  useMcpStore: McpStoreHook
 }
 
 /** This computer's own, which the rest of the window shows too. */
@@ -94,6 +109,8 @@ export const LOCAL_SCOPE: HostScope = {
   useGitStore,
   loadGitTools,
   useInfoStore: useWebHostStore,
+  useMarketplaceStore,
+  useMcpStore,
 }
 
 export const HostScopeContext = createContext<HostScope>(LOCAL_SCOPE)
@@ -147,6 +164,12 @@ export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent
       break
     case 'usage.status':
       other.usage.setState({ status: event.status })
+      break
+    case 'market.keysChanged':
+      marketKeysChanged(other.scope.useMarketplaceStore)
+      break
+    case 'market.connectionChanged':
+      marketConnectionChanged(event, other.scope.useMarketplaceStore)
       break
   }
 }
@@ -317,6 +340,7 @@ function createScope(hostId: string): OtherScope {
       remote: remoteApi,
       dialogs: {
         chooseAgentFolder: () => askPath('agentFolder', null),
+        openProject: () => askPath('project', null),
         chooseAgentBinary: (harnessId: HarnessId) =>
           askPath(
             'agentProgram',
@@ -351,6 +375,10 @@ function createScope(hostId: string): OtherScope {
       }
     },
     useInfoStore: info,
+    useMarketplaceStore: createMarketplaceStore(request, (patch) =>
+      admin('marketplace.setKeys', { patch }),
+    ),
+    useMcpStore: createMcpStore(request),
   }
   return { scope, part, remote, usage, git, info, adminListeners }
 }

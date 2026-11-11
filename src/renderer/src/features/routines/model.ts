@@ -16,7 +16,8 @@ import { startConfig, startValues } from '@renderer/features/session/new-session
 import { limitLabel, shortDuration } from '@renderer/lib/format'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
 import type { OptionValues } from '@renderer/stores/agent-options'
-import { agentName, useAgentsStore } from '@renderer/stores/agents'
+import { routineHost } from '@renderer/lib/host'
+import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { nextRuns, scheduleWords as sharedScheduleWords, validateSchedule } from '@shared/schedule'
 
 const MINUTE = 60_000
@@ -386,7 +387,7 @@ export function stateText(routine: RoutineView, now = Date.now()): string {
     case 'done':
       return i18n.t('routines:state.done')
     case 'paused':
-      return pausedText(state.pause, now)
+      return pausedText(state.pause, now, routineHost(routine.id))
     case 'next':
       return nextText(state.at, now)
     case 'on':
@@ -405,9 +406,9 @@ function nextText(at: number, now: number): string {
 }
 
 /** "Paused until 2:30 PM: Claude Code's 5-hour limit is 92% used", under a routine's name. */
-function pausedText(pause: RoutinePause | null, now: number): string {
+function pausedText(pause: RoutinePause | null, now: number, hostId: string | null): string {
   if (!pause) return i18n.t('routines:state.paused')
-  const reason = pauseReason(pause)
+  const reason = pauseReason(pause, hostId)
   if (pause.resetsAt === null) return i18n.t('routines:state.pausedFor', { reason })
   const { day, time } = pauseEnd(pause.resetsAt, now)
   return day === null
@@ -415,17 +416,21 @@ function pausedText(pause: RoutinePause | null, now: number): string {
     : i18n.t('routines:state.pausedUntilDay', { day, time, reason })
 }
 
-function pauseReason(pause: RoutinePause): string {
-  const agent = agentName(pause.agentId)
-  const limit = pauseWindow(pause)
+function pauseReason(pause: RoutinePause, hostId: string | null): string {
+  const agent = agentName(pause.agentId, hostId)
+  const limit = pauseWindow(pause, hostId)
   return pause.usedPercent === null
     ? i18n.t('routines:pause.reached', { agent, limit })
     : i18n.t('routines:pause.used', { agent, limit, percent: Math.round(pause.usedPercent) })
 }
 
-/** A pause's notice: the window, its use, and when the routines resume. */
-export function pauseNotice(pause: RoutinePause, now = Date.now()): string {
-  const limit = pauseWindow(pause)
+/** A pause's notice: the window, its use, and when the routines resume; `hostId` is the routine's. */
+export function pauseNotice(
+  pause: RoutinePause,
+  now = Date.now(),
+  hostId: string | null = null,
+): string {
+  const limit = pauseWindow(pause, hostId)
   const use =
     pause.usedPercent === null
       ? i18n.t('routines:pause.limitReached', { limit })
@@ -440,10 +445,10 @@ export function pauseNotice(pause: RoutinePause, now = Date.now()): string {
 }
 
 /** The window a pause names, by the label the agent's limits give it. */
-function pauseWindow(pause: RoutinePause): string {
-  const limit = useAgentsStore
-    .getState()
-    .byId[pause.agentId]?.limits.find((known) => known.window === pause.window)
+function pauseWindow(pause: RoutinePause, hostId: string | null): string {
+  const limit = agentsOn(useAgentsStore.getState(), hostId).byId[pause.agentId]?.limits.find(
+    (known) => known.window === pause.window,
+  )
   return limitLabel(limit ?? { window: pause.window, label: pause.window })
 }
 

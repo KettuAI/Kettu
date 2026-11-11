@@ -30,17 +30,15 @@ import {
 } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { mediumAgo } from '@renderer/lib/format'
-import { isWeb } from '@renderer/lib/platform'
-import { agentName } from '@renderer/stores/agents'
-import {
-  SEARCH_MAX,
-  SEARCH_MIN,
-  useMarketplaceStore,
-  type MarketSearchState,
-} from '@renderer/stores/marketplace'
+import { isMac, isWeb } from '@renderer/lib/platform'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { SEARCH_MAX, SEARCH_MIN, type MarketSearchState } from '@renderer/stores/marketplace'
 import { openMarketplace, setMarketplaceTab, type MarketplaceTab } from '@renderer/stores/view'
+import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
 import { installSkill } from './actions'
 import { AddMarketplaceDialog, AddServerDialog, AddSkillDialog } from './dialogs'
+import { useAgentName } from './hooks'
+import { MarketAway } from './parts'
 import { InstalledView } from './installed'
 import {
   byInstalls,
@@ -142,6 +140,7 @@ interface Sources {
 }
 
 function useSources(): Sources {
+  const { useMarketplaceStore } = useHostScope()
   const catalog = useMarketplaceStore((s) => s.catalog)
   const catalogPending = useMarketplaceStore((s) => !s.catalog && !s.catalogError)
   const plugins = useMarketplaceStore((s) => s.plugins)
@@ -338,8 +337,13 @@ function foundSections(
 
 export function Directory({ tab }: { tab: MarketplaceTab }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
+  const { useMarketplaceStore } = scope
   const query = useMarketplaceStore((s) => s.query)
   const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | null>(null)
+  const namesHosts = useNamesHosts()
+  const windowHost = useWindowHost()
+  const hostName = useHostName()
   const labels: Record<MarketplaceTab, string> = {
     all: t('page.tabs.all'),
     plugins: t('page.tabs.plugins'),
@@ -363,100 +367,112 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     const store = useMarketplaceStore.getState()
     if (registry === null) store.clearSearch()
     else void store.find(registry)
-  }, [registry])
+  }, [registry, useMarketplaceStore])
 
   const addFolder = async () => {
-    const path = await window.kettu.dialogs.openProject()
-    if (path) void installSkill({ kind: 'local', path }, 'all', `local:${path}`)
+    const path = await scope.api.dialogs.openProject()
+    if (path) void installSkill(scope, { kind: 'local', path }, 'all', `local:${path}`)
   }
 
   return (
     <div className="ui-as-integrations k-mkt">
       <h1 className="ui-as-page-title">{t('page.title')}</h1>
-      <p className="ui-as-page-sub">{t('page.description')}</p>
-      <div className="ui-as-toolbar ui-as-integrations__bar">
-        <Tabs
-          items={TABS.map((id) => labels[id])}
-          value={labels[tab]}
-          onChange={(label) => setMarketplaceTab(TABS.find((id) => labels[id] === label) ?? 'all')}
+      <p className="ui-as-page-sub">
+        {!namesHosts
+          ? t('page.description')
+          : windowHost.kind === 'all'
+            ? t(isMac ? 'page.descriptionAllMac' : 'page.descriptionAllComputer')
+            : scope.hostId === null
+              ? t(isMac ? 'page.descriptionThisMac' : 'page.descriptionThisComputer')
+              : t('page.descriptionOn', { host: hostName(scope.hostId) })}
+      </p>
+      <MarketAway>
+        <div className="ui-as-toolbar ui-as-integrations__bar">
+          <Tabs
+            items={TABS.map((id) => labels[id])}
+            value={labels[tab]}
+            onChange={(label) =>
+              setMarketplaceTab(TABS.find((id) => labels[id] === label) ?? 'all')
+            }
+          />
+          <div className="ui-as-toolbar__right">
+            <SearchField
+              placeholder={t('page.search')}
+              width={230}
+              value={query}
+              onChange={(next) => useMarketplaceStore.setState({ query: next })}
+            />
+            <Dropdown
+              align="end"
+              className="k-mkt-add"
+              items={[
+                { label: t('add.heading'), heading: true },
+                {
+                  label: t('add.marketplace'),
+                  description: t('add.marketplaceLine'),
+                  icon: Store01Icon,
+                  onSelect: () => setDialog('marketplace'),
+                },
+                {
+                  label: t('add.skillGithub'),
+                  description: t('add.skillGithubLine'),
+                  icon: GithubIcon,
+                  onSelect: () => setDialog('skill'),
+                },
+                ...(isWeb
+                  ? []
+                  : [
+                      {
+                        label: t('add.skillFolder'),
+                        description: t('add.skillFolderLine'),
+                        icon: Folder01Icon,
+                        onSelect: () => void addFolder(),
+                      },
+                    ]),
+                {
+                  label: t('add.mcp'),
+                  description: t('add.mcpLine'),
+                  icon: PlugSocketIcon,
+                  onSelect: () => setDialog('mcp'),
+                },
+              ]}
+              trigger={({ open, toggle }) => (
+                <Button
+                  size="sm"
+                  icon={<Icon icon={Add01Icon} size={15} />}
+                  aria-expanded={open}
+                  aria-haspopup="menu"
+                  onClick={toggle}
+                >
+                  {t('add.button')}
+                </Button>
+              )}
+            />
+          </div>
+        </div>
+        {tab === 'installed' ? (
+          <div key="installed">
+            <InstalledView query={filter} />
+          </div>
+        ) : (
+          <div key={`${tab}|${filter}`}>
+            <Sections tab={tab} query={filter} registry={registry} />
+          </div>
+        )}
+        <AddServerDialog
+          open={dialog === 'mcp'}
+          onOpenChange={(open) => setDialog(open ? 'mcp' : null)}
+          onAdded={() => setMarketplaceTab('installed')}
         />
-        <div className="ui-as-toolbar__right">
-          <SearchField
-            placeholder={t('page.search')}
-            width={230}
-            value={query}
-            onChange={(next) => useMarketplaceStore.setState({ query: next })}
-          />
-          <Dropdown
-            align="end"
-            className="k-mkt-add"
-            items={[
-              { label: t('add.heading'), heading: true },
-              {
-                label: t('add.marketplace'),
-                description: t('add.marketplaceLine'),
-                icon: Store01Icon,
-                onSelect: () => setDialog('marketplace'),
-              },
-              {
-                label: t('add.skillGithub'),
-                description: t('add.skillGithubLine'),
-                icon: GithubIcon,
-                onSelect: () => setDialog('skill'),
-              },
-              ...(isWeb
-                ? []
-                : [
-                    {
-                      label: t('add.skillFolder'),
-                      description: t('add.skillFolderLine'),
-                      icon: Folder01Icon,
-                      onSelect: () => void addFolder(),
-                    },
-                  ]),
-              {
-                label: t('add.mcp'),
-                description: t('add.mcpLine'),
-                icon: PlugSocketIcon,
-                onSelect: () => setDialog('mcp'),
-              },
-            ]}
-            trigger={({ open, toggle }) => (
-              <Button
-                size="sm"
-                icon={<Icon icon={Add01Icon} size={15} />}
-                aria-expanded={open}
-                aria-haspopup="menu"
-                onClick={toggle}
-              >
-                {t('add.button')}
-              </Button>
-            )}
-          />
-        </div>
-      </div>
-      {tab === 'installed' ? (
-        <div key="installed">
-          <InstalledView query={filter} />
-        </div>
-      ) : (
-        <div key={`${tab}|${filter}`}>
-          <Sections tab={tab} query={filter} registry={registry} />
-        </div>
-      )}
-      <AddServerDialog
-        open={dialog === 'mcp'}
-        onOpenChange={(open) => setDialog(open ? 'mcp' : null)}
-        onAdded={() => setMarketplaceTab('installed')}
-      />
-      <AddMarketplaceDialog
-        open={dialog === 'marketplace'}
-        onOpenChange={(open) => setDialog(open ? 'marketplace' : null)}
-      />
-      <AddSkillDialog
-        open={dialog === 'skill'}
-        onOpenChange={(open) => setDialog(open ? 'skill' : null)}
-      />
+        <AddMarketplaceDialog
+          open={dialog === 'marketplace'}
+          onOpenChange={(open) => setDialog(open ? 'marketplace' : null)}
+        />
+        <AddSkillDialog
+          open={dialog === 'skill'}
+          onOpenChange={(open) => setDialog(open ? 'skill' : null)}
+        />
+      </MarketAway>
     </div>
   )
 }
@@ -506,6 +522,7 @@ function SectionView({
   index: number
 }) {
   const key = `${tab}:${section.id}`
+  const { useMarketplaceStore } = useHostScope()
   const extra = useMarketplaceStore((s) => s.more[key] ?? 0)
   if (section.title === null) return <SkeletonSection rows={section.pending} />
   const visible = SECTION_ROWS + extra
@@ -563,6 +580,8 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
 function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null }) {
   const { t } = useTranslation('marketplace')
   const src = useSources()
+  const { useMarketplaceStore } = useHostScope()
+  const agentName = useAgentName()
   const catalogError = useMarketplaceStore((s) => s.catalogError)
   const pluginsError = useMarketplaceStore((s) => s.pluginsError)
   const skillsError = useMarketplaceStore((s) => s.skillsError)

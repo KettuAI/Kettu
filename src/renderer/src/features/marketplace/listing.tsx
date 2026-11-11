@@ -27,14 +27,18 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SettingSwitch } from '@renderer/features/settings/controls'
 import { mediumAgo } from '@renderer/lib/format'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
-import { agentName } from '@renderer/stores/agents'
-import { useMarketplaceStore } from '@renderer/stores/marketplace'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installServer, setServerOn } from './actions'
 import { ConnectButton, ConnectionControls } from './connect'
 import { AgentsDialog, KeysDialog, UninstallDialog } from './dialogs'
-import { useChoosableAgents, useConnectFlow, useConnectionText, useInstalling } from './hooks'
+import {
+  useAgentName,
+  useChoosableAgents,
+  useConnectFlow,
+  useConnectionText,
+  useInstalling,
+} from './hooks'
 import { InstallForm } from './install'
 import {
   asksFirst,
@@ -82,13 +86,15 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
 
 function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: () => void }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
+  const { useMarketplaceStore, useSettingsStore } = scope
   const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
   // Read again whenever the catalog or a search answers, since either may hold the entry.
   const catalog = useMarketplaceStore((s) => s.catalog)
   useMarketplaceStore((s) => s.search)
   const loading = useMarketplaceStore((s) => s.catalogLoading || (!s.catalog && !s.catalogError))
-  const listing = findListing(id, kept)
-  const entry = catalogEntry(id)
+  const listing = findListing(scope, id, kept)
+  const entry = catalogEntry(scope, id)
   const server = kept.find((s) => s.id === id) ?? null
   const installing = useConnectFlow(id)
 
@@ -190,6 +196,7 @@ function RelatedRow({ server, tab }: { server: CatalogServer; tab: MarketplaceTa
 /** Install, at once or through the install form when the server asks for values. */
 function InstallButton({ server }: { server: CatalogServer }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const [open, setOpen] = useState(false)
   const busy = useInstalling(server.id)
   const asks = asksFirst(server.spec)
@@ -201,7 +208,7 @@ function InstallButton({ server }: { server: CatalogServer }) {
         onClick={() => {
           if (busy) return
           if (asks) setOpen((o) => !o)
-          else void installServer(server, 'all', {})
+          else void installServer(scope, server, 'all', {})
         }}
       >
         {busy ? t('install.installing') : asks ? t('row.setUp') : t('row.install')}
@@ -216,7 +223,7 @@ function InstallButton({ server }: { server: CatalogServer }) {
           server={server}
           onDone={(agents, values) => {
             setOpen(false)
-            void installServer(server, agents, values)
+            void installServer(scope, server, agents, values)
           }}
         />
       </Popover>
@@ -233,6 +240,7 @@ function KeptControls({
   onUninstalled: () => void
 }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const [dialog, setDialog] = useState<'keys' | 'agents' | 'uninstall' | null>(null)
   const inputs = specInputs(server.spec)
   const close = (open: boolean) => {
@@ -247,7 +255,7 @@ function KeptControls({
       <SettingSwitch
         label={t('listing.switch', { name: server.title })}
         checked={server.on}
-        onChange={(on) => void setServerOn(server.id, on)}
+        onChange={(on) => void setServerOn(scope, server.id, on)}
       />
       <Dropdown
         align="end"
@@ -303,6 +311,7 @@ function KeptControls({
 function Facts({ listing, server }: { listing: Listing; server: MarketServer | null }) {
   const { t } = useTranslation('marketplace')
   const agents = useChoosableAgents()
+  const agentName = useAgentName()
   const chosen = server && server.agents !== 'all' ? server.agents : null
   const marks = chosen ?? agents.map((agent) => agent.id)
   const updated = listing.updated ? Date.parse(listing.updated) : NaN
@@ -354,6 +363,7 @@ function Runs({
   service: string
 }) {
   const { t } = useTranslation('marketplace')
+  const { useMarketplaceStore } = useHostScope()
   const connection = useMarketplaceStore((s) =>
     serverId ? (s.connections?.[serverId] ?? null) : null,
   )

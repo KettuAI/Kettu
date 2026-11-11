@@ -2,6 +2,11 @@
   "page": {
     "title": "Marketplace",
     "description": "给你的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
+    "descriptionThisMac": "给这台 Mac 上的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
+    "descriptionThisComputer": "给这台电脑上的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
+    "descriptionOn": "给 {{host}} 上的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
+    "descriptionAllMac": "显示全部主机时，这里管理的是这台 Mac。选择某一台主机，就能管理它的插件、技能和 MCP 服务器。",
+    "descriptionAllComputer": "显示全部主机时，这里管理的是这台电脑。选择某一台主机，就能管理它的插件、技能和 MCP 服务器。",
     "search": "搜索 Marketplace",
     "tabs": {
       "all": "全部",
@@ -375,6 +380,7 @@
     "title": "连接 {{name}}",
     "browserNote": "你会在浏览器中登录 {{service}}。登录信息由 Kettu 保管，这些 Agent 通过 Kettu 访问这个服务器。",
     "deviceNote": "你会在 {{service}} 输入一个验证码。登录信息由 Kettu 保管，这些 Agent 通过 Kettu 访问这个服务器。",
+    "browserOnHost": "这个服务只能在主机自己的浏览器里完成登录，请在那台主机上的 Kettu 里连接。",
     "submit": "连接",
     "browserWaiting": "请在浏览器中完成登录",
     "browserHint": "页面没有打开？复制链接到浏览器中打开。",

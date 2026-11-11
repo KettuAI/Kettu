@@ -2,6 +2,10 @@
   "page": {
     "title": "Routines",
     "description": "Agent tasks that run on a schedule, inside the permissions you give them.",
+    "descriptionOn": "Agent tasks on {{host}} that run on a schedule, inside the permissions you give them.",
+    "descriptionThisMac": "Agent tasks on this Mac that run on a schedule, inside the permissions you give them.",
+    "descriptionThisComputer": "Agent tasks on this computer that run on a schedule, inside the permissions you give them.",
+    "descriptionAll": "Agent tasks on every host that run on a schedule, inside the permissions you give them.",
     "new": "New routine",
     "emptyTitle": "No routines yet",
     "emptyDescription": "A routine sends a prompt to an agent on a schedule, each run in a session of its own, while Kettu is open.",
@@ -72,7 +76,8 @@
     "skippedAt": "Skipped · {{when}}",
     "nextAt": "{{when}} · {{away}}",
     "never": "Never run",
-    "nextAtRich": "{{when}} · <away>{{away}}</away>"
+    "nextAtRich": "{{when}} · <away>{{away}}</away>",
+    "onHost": "{{host}} · {{line}}"
   },
   "signal": {
     "name": "Routines, {{signal}}",
@@ -239,6 +244,7 @@
     "createMissingPrompt": "Write the prompt first.",
     "createMissingProject": "Choose a project first.",
     "createMissingAgent": "Choose an agent first.",
+    "createHostAway": "The host is offline. Create the routine once it is back.",
     "saveFailed": "The change could not be saved: {{error}}",
     "runFailed": "The run could not start: {{error}}",
     "deleted": "This routine was deleted.",

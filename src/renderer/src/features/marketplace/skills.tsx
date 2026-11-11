@@ -17,13 +17,12 @@ import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SettingSwitch } from '@renderer/features/settings/controls'
 import { currentLocale } from '@renderer/lib/i18n'
-import { agentName } from '@renderer/stores/agents'
-import { busyKey, useMarketplaceStore } from '@renderer/stores/marketplace'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { busyKey } from '@renderer/stores/marketplace'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installSkill, removeSkill, setSkillOn, type AgentChoice } from './actions'
 import { ConfirmDialog, SkillAgentsDialog } from './dialogs'
-import { useBusy, useChoosableAgents, useKeptSkill } from './hooks'
+import { useAgentName, useBusy, useChoosableAgents, useKeptSkill } from './hooks'
 import { AgentPicker } from './install'
 import { catalogSkill, itemKey } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
@@ -71,11 +70,12 @@ export function SkillRow({
 /** Install: all agents or some; the host copies the skill's files, then Kettu keeps it. */
 function SkillInstallForm({ skill, onDone }: { skill: CatalogSkill; onDone: () => void }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const [agents, setAgents] = useState<AgentChoice>('all')
   const submit = (event: FormEvent) => {
     event.preventDefault()
     onDone()
-    void installSkill({ kind: 'catalog', id: skill.id }, agents, skill.id)
+    void installSkill(scope, { kind: 'catalog', id: skill.id }, agents, skill.id)
   }
   return (
     <form className="k-mkt-install" onSubmit={submit}>
@@ -95,6 +95,7 @@ function SkillInstallForm({ skill, onDone }: { skill: CatalogSkill; onDone: () =
 /** Who a skill goes to, as a list of names, or every agent. */
 function useAgentsLine(agents: AgentChoice): string {
   const { t } = useTranslation('marketplace')
+  const agentName = useAgentName()
   if (agents === 'all') return t('listing.everyAgent')
   return new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
     agents.map((id) => agentName(id)),
@@ -112,10 +113,12 @@ export function SkillListing({
   back: () => void
 }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
+  const { useMarketplaceStore, useSettingsStore } = scope
   const loaded = useMarketplaceStore((s) => s.skills)
   const loading = useMarketplaceStore((s) => s.skillsLoading)
   const kept = useSettingsStore((s) => s.settings.marketplace.skills.find((x) => x.id === id))
-  const entry = loaded ? catalogSkill(id) : null
+  const entry = loaded ? catalogSkill(scope, id) : null
   const allAgents = useChoosableAgents()
   const agentsLine = useAgentsLine(kept?.agents ?? 'all')
 
@@ -290,6 +293,7 @@ export function KeptSkillControls({
   compact?: boolean
 }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const [dialog, setDialog] = useState<'agents' | 'remove' | null>(null)
   return (
     <>
@@ -302,7 +306,7 @@ export function KeptSkillControls({
       <SettingSwitch
         label={t('listing.switch', { name: skill.name })}
         checked={skill.on}
-        onChange={(on) => void setSkillOn(skill.id, on)}
+        onChange={(on) => void setSkillOn(scope, skill.id, on)}
       />
       <Dropdown
         align="end"
@@ -345,7 +349,7 @@ export function KeptSkillControls({
         body={t('dialogs.removeSkill.body')}
         confirm={t('dialogs.removeSkill.confirm')}
         action={async () => {
-          await removeSkill(skill.id)
+          await removeSkill(scope, skill.id)
           onRemoved?.()
         }}
       />

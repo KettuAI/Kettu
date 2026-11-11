@@ -2,6 +2,10 @@
   "page": {
     "title": "例程",
     "description": "按计划运行的 Agent 任务，只在你给的权限内行事。",
+    "descriptionOn": "在 {{host}} 上按计划运行的 Agent 任务，只在你给的权限内行事。",
+    "descriptionThisMac": "在这台 Mac 上按计划运行的 Agent 任务，只在你给的权限内行事。",
+    "descriptionThisComputer": "在这台电脑上按计划运行的 Agent 任务，只在你给的权限内行事。",
+    "descriptionAll": "在所有主机上按计划运行的 Agent 任务，只在你给的权限内行事。",
     "new": "新建例程",
     "emptyTitle": "还没有例程",
     "emptyDescription": "例程在 Kettu 打开时按计划把提示词发给 Agent，每次运行都在一个单独的会话里。",
@@ -72,7 +76,8 @@
     "skippedAt": "已跳过 · {{when}}",
     "nextAt": "{{when}} · {{away}}",
     "never": "尚未运行",
-    "nextAtRich": "{{when}} · <away>{{away}}</away>"
+    "nextAtRich": "{{when}} · <away>{{away}}</away>",
+    "onHost": "{{host}} · {{line}}"
   },
   "signal": {
     "name": "例程，{{signal}}",
@@ -238,6 +243,7 @@
     "createMissingPrompt": "先写提示词。",
     "createMissingProject": "先选择项目。",
     "createMissingAgent": "先选择 Agent。",
+    "createHostAway": "这台主机离线，等它重新连上后再创建。",
     "saveFailed": "无法保存更改：{{error}}",
     "runFailed": "无法开始运行：{{error}}",
     "deleted": "这个例程已被删除。",

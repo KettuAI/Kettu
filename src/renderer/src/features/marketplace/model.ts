@@ -20,8 +20,7 @@ import type { TFunction } from 'i18next'
 import { harnessOf } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
-import { useMarketplaceStore } from '@renderer/stores/marketplace'
-import { useSettingsStore } from '@renderer/stores/settings'
+import type { HostScope } from '@renderer/stores/host-scope'
 
 /** A server as its listing shows it; what only the catalog knows is null for one added by hand. */
 export interface Listing {
@@ -105,8 +104,8 @@ export function parentPath(path: string): string {
 }
 
 /** The catalog's entry for a server, from its sections or the last search. */
-export function catalogEntry(id: string): CatalogServer | null {
-  const { catalog, search } = useMarketplaceStore.getState()
+export function catalogEntry(scope: HostScope, id: string): CatalogServer | null {
+  const { catalog, search } = scope.useMarketplaceStore.getState()
   return (
     catalogServers(catalog).find((item) => item.id === id) ??
     search?.result?.items.find((item) => item.id === id) ??
@@ -115,8 +114,8 @@ export function catalogEntry(id: string): CatalogServer | null {
 }
 
 /** The listing of `id`: the catalog's entry where there is one, else the server Kettu keeps. */
-export function findListing(id: string, kept: MarketServer[]): Listing | null {
-  const entry = catalogEntry(id)
+export function findListing(scope: HostScope, id: string, kept: MarketServer[]): Listing | null {
+  const entry = catalogEntry(scope, id)
   if (entry) return fromCatalog(entry)
   const server = kept.find((s) => s.id === id)
   return server ? fromKept(server) : null
@@ -147,19 +146,23 @@ export function parseItem(key: string): ItemRef | null {
 }
 
 /** A listing's name for the history, where the stores know it. */
-export function listingTitle(key: string): string | null {
+export function listingTitle(scope: HostScope, key: string): string | null {
   const ref = parseItem(key)
   if (!ref) return null
-  const { mcp, skills } = useSettingsStore.getState().settings.marketplace
-  if (ref.kind === 'mcp') return findListing(ref.id, mcp)?.title ?? null
-  if (ref.kind === 'plugin') return catalogPlugin(ref.harness, ref.id)?.title ?? null
-  const name = catalogSkill(ref.id)?.name ?? skills.find((s) => s.id === ref.id)?.name
+  const { mcp, skills } = scope.useSettingsStore.getState().settings.marketplace
+  if (ref.kind === 'mcp') return findListing(scope, ref.id, mcp)?.title ?? null
+  if (ref.kind === 'plugin') return catalogPlugin(scope, ref.harness, ref.id)?.title ?? null
+  const name = catalogSkill(scope, ref.id)?.name ?? skills.find((s) => s.id === ref.id)?.name
   return name ? displayTitle(name) : null
 }
 
 /** A plugin of the harnesses' marketplaces, as the host last listed them. */
-export function catalogPlugin(harness: PluginHarness, id: string): CatalogPlugin | null {
-  const plugins = useMarketplaceStore.getState().plugins
+export function catalogPlugin(
+  scope: HostScope,
+  harness: PluginHarness,
+  id: string,
+): CatalogPlugin | null {
+  const plugins = scope.useMarketplaceStore.getState().plugins
   return plugins?.catalog.find((p) => p.harness === harness && p.id === id) ?? null
 }
 
@@ -172,8 +175,8 @@ export function pluginInstalls(
   return (installed ?? []).filter((p) => p.harness === harness && p.id === id)
 }
 
-export function catalogSkill(id: string): CatalogSkill | null {
-  return useMarketplaceStore.getState().skills?.catalog.find((s) => s.id === id) ?? null
+export function catalogSkill(scope: HostScope, id: string): CatalogSkill | null {
+  return scope.useMarketplaceStore.getState().skills?.catalog.find((s) => s.id === id) ?? null
 }
 
 /** A plugin's name before the marketplace it comes from: `review@market` is `review`. */
