@@ -526,5 +526,38 @@
   },
   "artifacts": {
     "formatUpgraded": "Moved to version {{format}} of its type’s format"
+  },
+  "tasks": {
+    "needsYou": "Needs you",
+    "done": "Done",
+    "doneWithPullRequest": "Done · pull request opened",
+    "blocked": "Blocked",
+    "noGit": "Git is not available on this host",
+    "noWorktrees": "Worktrees are not available on this host",
+    "noDefaultBranch": "Could not find the project's default branch",
+    "noWorktree": "This task has no worktree to hand over",
+    "noPushTarget": "The task's branch has no remote to push to",
+    "reason": {
+      "timeLimit": "The \"{{stage}}\" stage reached its time limit of {{minutes}} minutes.",
+      "paused": "Paused",
+      "pausedByPerson": "Paused by the person",
+      "cancelledByPerson": "Cancelled by the person",
+      "remindFailed": "Could not remind the \"{{stage}}\" stage's agent: {{error}}",
+      "stalled": "The \"{{stage}}\" stage stalled: its agent ended a turn twice without a result.",
+      "waitingPermission": "Waiting for a permission request",
+      "sessionClosed": "The \"{{stage}}\" stage's session was closed.",
+      "pullRequestFailed": "Could not open the pull request: {{error}}",
+      "agentNearLimit": "{{agent}} is near its plan limit.",
+      "sendFailed": "Could not send to the \"{{stage}}\" stage's session: {{error}}",
+      "tierNearLimit": "No agent available for the {{tier}} tier: plan limits are near.",
+      "tierEmpty": "No agent can run the {{tier}} tier: add an enabled Claude Code or Codex agent to it.",
+      "openFailed": "Could not open the \"{{stage}}\" stage's session: {{error}}",
+      "overBudget": "The task went over its budget of ${{budget}}.",
+      "tiers": {
+        "deep": "deep",
+        "standard": "standard",
+        "fast": "fast"
+      }
+    }
   }
 }

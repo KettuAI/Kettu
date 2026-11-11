@@ -1,0 +1,206 @@
+# Kettu's official workflow for a change to a project's code, from the requirement to a pull
+# request. Every stage ends with the submit_stage tool; Kettu checks the result before moving on.
+format: 1
+id: development
+name: Development
+description: Review the requirement, plan, build, verify, review on another agent, integrate, then a person accepts it before Kettu opens a pull request.
+kind: development
+version: '1.0.0'
+worktree: true
+start: review-requirement
+limits:
+  rounds: 3
+  stageMinutes: 60
+  budgetUsd: null
+stages:
+  - id: review-requirement
+    name: Review the requirement
+    kind: agent
+    tier: deep
+    scope: { level: read, web: false }
+    session: new
+    gate: agent
+    evidence: [no-file-changes]
+    prompt: |
+      Review the requirement before anyone works on it. Read the parts of the project it touches,
+      but change nothing.
+
+      Decide:
+      - its size: S (a small, local change), M (several files in one area) or L (several areas,
+        a new concept or a migration);
+      - whether it is risky: it touches security, stored data, public interfaces or anything hard
+        to undo;
+      - what is unclear, and whether it should be split into smaller requirements.
+
+      Finish by calling the submit_stage tool with the fields below. Submit `pass` when the
+      requirement is clear enough to plan. Submit `blocked`, with the reason in the summary, when it
+      is not worth doing, cannot be done as written, or needs the person to answer questions first.
+    next: plan
+    contract:
+      - name: size
+        type: size
+        description: S, M or L.
+      - name: risk
+        type: risk
+        description: true when the change is risky.
+      - name: questions
+        type: list
+        required: false
+        description: What is unclear in the requirement, one question per item.
+      - name: split
+        type: list
+        required: false
+        description: Smaller requirements it should be split into, if any.
+
+  - id: plan
+    name: Write the plan
+    kind: agent
+    tier: deep
+    scope: { level: read, web: false }
+    session: resume
+    gate: contract
+    evidence: [no-file-changes]
+    prompt: |
+      Write the plan for the requirement. Read the code it touches, then say how you will build
+      it: the approach, the files to change or add, the tests that cover the core of the change,
+      and how the result can be checked. Do not change any file yet.
+
+      If you are given notes from an earlier round, revise the plan to address every one of them.
+
+      Finish by calling the submit_stage tool with `pass` and the fields below.
+    next: confirm-plan
+    contract:
+      - name: plan
+        type: text
+        description: The plan, in Markdown.
+      - name: files
+        type: list
+        description: The files to change or add, one path per item, relative to the project.
+
+  - id: confirm-plan
+    name: Confirm the plan
+    kind: human
+    when: { size: [L], risk: true }
+    prompt: Read the plan. Approve it to start building, or send it back with what to change.
+    sendBack: [plan]
+    next: build
+
+  - id: build
+    name: Build
+    kind: agent
+    tier: { S: standard, M: standard, L: deep, default: standard }
+    scope: { level: commands, web: false }
+    session: resume
+    gate: contract
+    evidence: [changed-files]
+    prompt: |
+      Build the change as the plan says, in this worktree. Keep to what the requirement and the
+      plan need. Add or update tests for the core of the change. Commit your work on the current
+      branch with clear commit messages. Do not push, and do not open a pull request.
+
+      If you are given notes from a review or a person, address every one of them.
+
+      Finish by calling the submit_stage tool with `pass` and the fields below.
+    next: verify
+    contract:
+      - name: changes
+        type: text
+        description: What you changed and why, in a few sentences.
+      - name: deviations
+        type: list
+        required: false
+        description: Where you departed from the plan, and why.
+
+  - id: verify
+    name: Verify
+    kind: agent
+    tier: standard
+    scope: { level: commands, web: false }
+    session: new
+    gate: contract
+    evidence: [ran-command, reported-commands-ran]
+    rework: { to: build }
+    prompt: |
+      Verify the change in this worktree. Find how this project is checked: its README,
+      CONTRIBUTING, AGENTS.md, package scripts, Makefile or CI configuration. Run its formatter
+      check, linter, type checker and tests. When something fails, fix it and run it again until
+      it passes. Commit your fixes on the current branch.
+
+      Finish by calling the submit_stage tool. Submit `pass` when every check passes. Submit
+      `changes`, with what is wrong in the summary, when the failures need the change itself to be
+      redone. List every command you ran, exactly as you ran it.
+    next: cross-review
+    contract:
+      - name: commands
+        type: list
+        description: Every check command you ran, exactly as run.
+      - name: result
+        type: text
+        description: What passed, what failed and what you fixed.
+
+  - id: cross-review
+    name: Cross review
+    kind: agent
+    tier: deep
+    requires: { otherHarnessThan: build }
+    scope: { level: read, web: false }
+    session: new
+    gate: agent
+    evidence: [no-file-changes]
+    rework: { to: build }
+    prompt: |
+      Review the change on this branch against its requirement and plan. Read the diff from the
+      base branch and the code around it. Look for bugs, missing cases, security problems, missing
+      tests for the core, and code that does more than the requirement needs. Do not change any
+      file.
+
+      Finish by calling the submit_stage tool. Submit `pass` when the change can be accepted as it
+      is. Submit `changes` when something must be fixed, with each problem in `findings`.
+    next: integrate
+    contract:
+      - name: findings
+        type: list
+        required: false
+        description: Each problem found, with its file and what to do about it.
+
+  - id: integrate
+    name: Integrate
+    kind: agent
+    tier: standard
+    scope: { level: commands, web: false }
+    session: new
+    gate: contract
+    evidence: [ran-command, reported-commands-ran]
+    rework: { to: build }
+    prompt: |
+      Bring the branch up to date and prepare it for acceptance. Fetch, then rebase the branch onto
+      the latest base branch and resolve any conflicts. Run the project's full checks again: its
+      formatter check, linter, type checker, tests and build. Do not push.
+
+      Then write the acceptance notes for the person: what changed, how to try it, and anything
+      they should look at closely.
+
+      Finish by calling the submit_stage tool. Submit `pass` when the branch is rebased and every
+      check passes. Submit `changes` when the conflicts or failures need the change to be redone.
+      List every command you ran, exactly as you ran it.
+    next: accept
+    contract:
+      - name: commands
+        type: list
+        description: Every command you ran, exactly as run.
+      - name: notes
+        type: text
+        description: The acceptance notes, in Markdown.
+
+  - id: accept
+    name: Accept
+    kind: human
+    prompt: Read the acceptance notes and try the change. Approve it to open a pull request, or send it back.
+    sendBack: [build, plan]
+    next: pull-request
+
+  - id: pull-request
+    name: Open a pull request
+    kind: handover
+    action: pull-request
+    next: null

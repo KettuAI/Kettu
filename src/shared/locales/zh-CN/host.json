@@ -523,5 +523,38 @@
   },
   "artifacts": {
     "formatUpgraded": "已迁移到其类型格式的第 {{format}} 版"
+  },
+  "tasks": {
+    "needsYou": "需要你处理",
+    "done": "已完成",
+    "doneWithPullRequest": "已完成 · 已创建 pull request",
+    "blocked": "受阻",
+    "noGit": "这台主机上没有可用的 Git",
+    "noWorktrees": "这台主机上不能使用 worktree",
+    "noDefaultBranch": "找不到项目的默认分支",
+    "noWorktree": "这个任务没有可以交付的 worktree",
+    "noPushTarget": "任务的分支没有可以推送到的远程仓库",
+    "reason": {
+      "timeLimit": "「{{stage}}」阶段已到 {{minutes}} 分钟的时间上限。",
+      "paused": "已暂停",
+      "pausedByPerson": "由你暂停",
+      "cancelledByPerson": "由你取消",
+      "remindFailed": "没能提醒「{{stage}}」阶段的 Agent：{{error}}",
+      "stalled": "「{{stage}}」阶段卡住了：它的 Agent 两次结束回合都没有提交结果。",
+      "waitingPermission": "正在等待权限请求",
+      "sessionClosed": "「{{stage}}」阶段的会话已关闭。",
+      "pullRequestFailed": "没能创建 pull request：{{error}}",
+      "agentNearLimit": "{{agent}} 快到套餐用量上限了。",
+      "sendFailed": "没能发送到「{{stage}}」阶段的会话：{{error}}",
+      "tierNearLimit": "{{tier}}档没有可用的 Agent：套餐用量快到上限了。",
+      "tierEmpty": "没有 Agent 能跑{{tier}}档：请给这一档加一个已启用的 Claude Code 或 Codex Agent。",
+      "openFailed": "没能打开「{{stage}}」阶段的会话：{{error}}",
+      "overBudget": "任务超出了 ${{budget}} 的预算。",
+      "tiers": {
+        "deep": "深度",
+        "standard": "标准",
+        "fast": "快速"
+      }
+    }
   }
 }

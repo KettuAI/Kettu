@@ -1,0 +1,119 @@
+{
+  "workflow": {
+    "label": "工作流",
+    "justChat": "直接对话",
+    "justChatNote": "用你选的 Agent 开一个会话",
+    "source": {
+      "official": "官方",
+      "project": "本仓库",
+      "library": "库"
+    },
+    "loading": "正在读取工作流…",
+    "none": "这个项目没有工作流。",
+    "failed": "无法读取工作流：{{error}}",
+    "needsProject": "选择一个项目才能运行工作流",
+    "byTier": "Agent：按档位",
+    "byTierTooltip": "每个阶段的 Agent 和模型取自 设置 › 任务",
+    "noAttachments": "任务暂不支持附件。移除附件后才能开始任务。",
+    "start": "开始任务",
+    "describe": "描述这个需求",
+    "chooseProjectFirst": "先选择一个项目"
+  },
+  "state": {
+    "backlog": "待办",
+    "queued": "排队中",
+    "running": "进行中",
+    "waiting": "等待中",
+    "blocked": "受阻",
+    "paused": "已暂停",
+    "done": "已完成",
+    "cancelled": "已取消"
+  },
+  "runState": {
+    "running": "进行中",
+    "waiting": "等待中",
+    "passed": "通过",
+    "changes": "已退回",
+    "blocked": "受阻",
+    "skipped": "已跳过",
+    "interrupted": "已中断"
+  },
+  "row": {
+    "stageSession": "{{stage}} · {{agent}}",
+    "more": "更多",
+    "moreFor": "{{title}} 的更多操作",
+    "expand": "显示阶段会话",
+    "collapse": "隐藏阶段会话",
+    "stageSessions_other": "{{count}} 个阶段会话"
+  },
+  "menu": {
+    "start": "开始",
+    "pause": "暂停",
+    "resume": "继续",
+    "cancel": "取消任务…"
+  },
+  "cancel": {
+    "title": "取消“{{title}}”？",
+    "description": "正在进行的阶段会停止。worktree 和它的分支会保留。",
+    "confirm": "取消任务",
+    "keep": "保留"
+  },
+  "page": {
+    "back": "返回",
+    "gone": "这个任务已不在",
+    "goneDescription": "它已被移除，或它的主机不再列出它。",
+    "failed": "无法读取这个任务：{{error}}",
+    "retry": "重试",
+    "workflow": "{{name}} v{{version}}",
+    "requirement": "需求",
+    "showMore": "展开",
+    "showLess": "收起",
+    "stages": "阶段",
+    "stage": {
+      "done": "{{stage}}：已完成",
+      "current": "{{stage}}：当前",
+      "skipped": "{{stage}}：已跳过",
+      "upcoming": "{{stage}}：未开始"
+    },
+    "needsYou": "需要你处理",
+    "waitingOn": "{{stage}} 在等你",
+    "blocked": "任务受阻",
+    "approve": "通过",
+    "sendBack": "退回",
+    "sendBackTo": "退回到",
+    "note": "备注",
+    "notePlaceholder": "需要改什么（可选）",
+    "runs": "阶段记录",
+    "noRuns": "还没有阶段运行过。",
+    "round": "第 {{round}} 轮",
+    "commands": "运行过的命令",
+    "changedFiles_other": "改动了 {{count}} 个文件",
+    "openSession": "打开 {{agent}} 的会话",
+    "pullRequest": "Pull Request",
+    "start": "开始",
+    "pause": "暂停",
+    "resume": "继续",
+    "cancel": "取消任务"
+  },
+  "settings": {
+    "intro": "工作流只为每个阶段指定档位，不指定 Agent。下面的列表为每个档位选择 Agent 和模型：排在前面且可用的那个会运行。",
+    "tier": {
+      "deep": "深度",
+      "standard": "标准",
+      "fast": "快速"
+    },
+    "tierNote": {
+      "deep": "规划、评审和难题。",
+      "standard": "大部分工作。",
+      "fast": "简单、快速的阶段。"
+    },
+    "add": "添加 Agent",
+    "remove": "移除 {{agent}}",
+    "moveUp": "上移 {{agent}}",
+    "moveDown": "下移 {{agent}}",
+    "empty": "未选择：Kettu 会从你的 Agent 中挑选。",
+    "onlyStageAgents": "只有 Claude Code 和 Codex 的 Agent 能运行阶段。",
+    "noStageAgent": "添加一个 Claude Code 或 Codex 的 Agent 才能运行任务。",
+    "loadFailed": "无法读取档位：{{error}}"
+  }
+}

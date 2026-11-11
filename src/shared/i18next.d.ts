@@ -21,6 +21,7 @@ import type session from './locales/en/session.json'
 import type settings from './locales/en/settings.json'
 import type shell from './locales/en/shell.json'
 import type sidebar from './locales/en/sidebar.json'
+import type tasks from './locales/en/tasks.json'
 import type terminal from './locales/en/terminal.json'
 import type tray from './locales/en/tray.json'
 import type updates from './locales/en/updates.json'
@@ -53,6 +54,7 @@ declare module 'i18next' {
       settings: typeof settings
       shell: typeof shell
       sidebar: typeof sidebar
+      tasks: typeof tasks
       terminal: typeof terminal
       tray: typeof tray
       updates: typeof updates

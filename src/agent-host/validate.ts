@@ -43,6 +43,16 @@ import {
 } from '@shared/routines'
 import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@shared/attachments'
 import {
+  NOTE_CHARS as TASK_NOTE_CHARS,
+  REQUIREMENT_CHARS,
+  TITLE_CHARS,
+  type TaskDecision,
+  type TaskDraft,
+  type TaskPriority,
+  type TierSettings,
+  type WorkflowSource,
+} from '@shared/tasks'
+import {
   isAgentId,
   type AgentId,
   type ContentRef,
@@ -55,6 +65,8 @@ import { invalidParams } from './errors'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
+import { TASK_ID } from './tasks/store'
+import { parseTierSettings } from './tasks/tiers'
 import { checkIncludeEntry } from './worktrees/copy'
 import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
 
@@ -452,6 +464,90 @@ function routineId(o: Fields, key = 'routineId'): string {
   const value = string(o, key, ID_CHARS)
   if (!ROUTINE_ID.test(value)) throw invalidParams(`${key} is not a routine id`)
   return value
+}
+
+// Workflow and stage ids are kebab-case, as workflow files must write them.
+const WORKFLOW_ID = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
+const WORKFLOW_ID_CHARS = 40
+const WORKFLOW_SOURCES: readonly WorkflowSource[] = ['official', 'project', 'library']
+const TASK_PRIORITIES: readonly TaskPriority[] = ['low', 'normal', 'high']
+const TASK_AFTER = 50
+
+function taskId(o: Fields, key = 'taskId'): string {
+  const value = string(o, key, ID_CHARS)
+  if (!TASK_ID.test(value)) throw invalidParams(`${key} is not a task id`)
+  return value
+}
+
+function workflowId(o: Fields, key: string): string {
+  const value = string(o, key, WORKFLOW_ID_CHARS)
+  if (!WORKFLOW_ID.test(value)) throw invalidParams(`${key} must be a kebab-case id`)
+  return value
+}
+
+/** Text that holds something besides white space, up to `max` characters. */
+function text(o: Fields, key: string, max: number): string {
+  const value = o[key]
+  if (typeof value !== 'string' || value.trim() === '' || value.length > max) {
+    throw invalidParams(`${key} must be 1 to ${max} characters`)
+  }
+  return value
+}
+
+function taskDraft(value: unknown, platform: Platform): TaskDraft {
+  const o = fields(value)
+  const workflow = fields(o.workflow)
+  if (!WORKFLOW_SOURCES.includes(workflow.source as WorkflowSource)) {
+    throw invalidParams('workflow.source must be official, project or library')
+  }
+  if (typeof o.start !== 'boolean') throw invalidParams('start must be a boolean')
+  if (o.priority !== undefined && !TASK_PRIORITIES.includes(o.priority as TaskPriority)) {
+    throw invalidParams('priority must be low, normal or high')
+  }
+  let after: string[] | undefined
+  if (o.after !== undefined) {
+    if (!Array.isArray(o.after) || o.after.length > TASK_AFTER) {
+      throw invalidParams(`after must be a list of at most ${TASK_AFTER} tasks`)
+    }
+    after = o.after.map((item: unknown, index) =>
+      taskId({ [`after[${index}]`]: item }, `after[${index}]`),
+    )
+    if (new Set(after).size !== after.length) throw invalidParams('after names a task twice')
+  }
+  return {
+    requirement: text(o, 'requirement', REQUIREMENT_CHARS),
+    ...(o.title === undefined ? {} : { title: text(o, 'title', TITLE_CHARS) }),
+    projectPath: absolutePath(o, 'projectPath', platform),
+    workflow: {
+      source: workflow.source as WorkflowSource,
+      id: workflowId(workflow, 'id'),
+    },
+    start: o.start,
+    ...(o.priority === undefined ? {} : { priority: o.priority as TaskPriority }),
+    ...(after === undefined ? {} : { after }),
+  }
+}
+
+function taskDecision(value: unknown): TaskDecision {
+  const o = fields(value)
+  if (o.decision !== 'approve' && o.decision !== 'send-back') {
+    throw invalidParams('decision must be approve or send-back')
+  }
+  if (o.note !== undefined && (typeof o.note !== 'string' || o.note.length > TASK_NOTE_CHARS)) {
+    throw invalidParams(`note must be at most ${TASK_NOTE_CHARS} characters`)
+  }
+  return {
+    taskId: taskId(o),
+    decision: o.decision,
+    ...(o.to === undefined ? {} : { to: workflowId(o, 'to') }),
+    ...(o.note === undefined ? {} : { note: o.note as string }),
+  }
+}
+
+function tierSettings(value: unknown): TierSettings {
+  const tiers = parseTierSettings(value)
+  if (typeof tiers === 'string') throw invalidParams(tiers)
+  return tiers
 }
 
 /** A routine's option values, by id. */
@@ -1302,6 +1398,23 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
+    'tasks.list': none,
+    'tasks.get': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.create': (params) => taskDraft(params, platform),
+    'tasks.start': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.pause': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.resume': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.cancel': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.decide': (params) => taskDecision(params),
+    'tasks.markSeen': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.workflows': (params) => {
+      const o = fields(params)
+      return {
+        projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
+      }
+    },
+    'tasks.tiers': none,
+    'tasks.setTiers': (params) => tierSettings(params),
     'permissions.respond': (params) => {
       const o = fields(params)
       const base = { sessionId: sessionId(o), requestId: string(o, 'requestId', ID_CHARS) }

@@ -1,0 +1,121 @@
+{
+  "workflow": {
+    "label": "Workflow",
+    "justChat": "Just chat",
+    "justChatNote": "A session with the agent you choose",
+    "source": {
+      "official": "official",
+      "project": "this repo",
+      "library": "library"
+    },
+    "loading": "Reading workflows…",
+    "none": "This project has no workflows.",
+    "failed": "Could not read the workflows: {{error}}",
+    "needsProject": "Choose a project to run a workflow",
+    "byTier": "Agent: by tier",
+    "byTierTooltip": "Each stage takes its agent and model from Settings › Tasks",
+    "noAttachments": "Tasks don’t take attachments yet. Remove them to start the task.",
+    "start": "Start task",
+    "describe": "Describe the requirement",
+    "chooseProjectFirst": "Choose a project first"
+  },
+  "state": {
+    "backlog": "Backlog",
+    "queued": "Queued",
+    "running": "Running",
+    "waiting": "Waiting",
+    "blocked": "Blocked",
+    "paused": "Paused",
+    "done": "Done",
+    "cancelled": "Cancelled"
+  },
+  "runState": {
+    "running": "Running",
+    "waiting": "Waiting",
+    "passed": "Passed",
+    "changes": "Sent back",
+    "blocked": "Blocked",
+    "skipped": "Skipped",
+    "interrupted": "Interrupted"
+  },
+  "row": {
+    "stageSession": "{{stage}} · {{agent}}",
+    "more": "More",
+    "moreFor": "More for {{title}}",
+    "expand": "Show stage sessions",
+    "collapse": "Hide stage sessions",
+    "stageSessions_one": "{{count}} stage session",
+    "stageSessions_other": "{{count}} stage sessions"
+  },
+  "menu": {
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel task…"
+  },
+  "cancel": {
+    "title": "Cancel “{{title}}”?",
+    "description": "Its working stage stops. The worktree and its branch stay.",
+    "confirm": "Cancel task",
+    "keep": "Keep it"
+  },
+  "page": {
+    "back": "Back",
+    "gone": "This task is gone",
+    "goneDescription": "It was removed, or its host no longer lists it.",
+    "failed": "Could not read this task: {{error}}",
+    "retry": "Try again",
+    "workflow": "{{name}} v{{version}}",
+    "requirement": "Requirement",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "stages": "Stages",
+    "stage": {
+      "done": "{{stage}}: done",
+      "current": "{{stage}}: current",
+      "skipped": "{{stage}}: skipped",
+      "upcoming": "{{stage}}: upcoming"
+    },
+    "needsYou": "Needs you",
+    "waitingOn": "{{stage}} waits for you",
+    "blocked": "The task is blocked",
+    "approve": "Approve",
+    "sendBack": "Send back",
+    "sendBackTo": "Send back to",
+    "note": "Note",
+    "notePlaceholder": "What should change (optional)",
+    "runs": "Stage runs",
+    "noRuns": "No stage has run yet.",
+    "round": "Round {{round}}",
+    "commands": "Commands it ran",
+    "changedFiles_one": "{{count}} file changed",
+    "changedFiles_other": "{{count}} files changed",
+    "openSession": "Open {{agent}}’s session",
+    "pullRequest": "Pull request",
+    "start": "Start",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel task"
+  },
+  "settings": {
+    "intro": "Workflows name a tier for each stage, never an agent. These lists pick the agent and model for each tier: the first one that is available runs.",
+    "tier": {
+      "deep": "Deep",
+      "standard": "Standard",
+      "fast": "Fast"
+    },
+    "tierNote": {
+      "deep": "Planning, review and hard problems.",
+      "standard": "Most of the work.",
+      "fast": "Quick, simple stages."
+    },
+    "add": "Add agent",
+    "remove": "Remove {{agent}}",
+    "moveUp": "Move {{agent}} up",
+    "moveDown": "Move {{agent}} down",
+    "empty": "None chosen: Kettu picks from your agents.",
+    "onlyStageAgents": "Only Claude Code and Codex agents run stages.",
+    "noStageAgent": "Add a Claude Code or Codex agent to run tasks.",
+    "loadFailed": "Could not read the tiers: {{error}}"
+  }
+}

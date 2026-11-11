@@ -74,6 +74,7 @@
       "rejectOnce": "已拒绝",
       "rejectAlways": "已始终拒绝",
       "allowedByRoutine": "由例程允许",
+      "allowedByTask": "由任务允许",
       "cancelled": "已取消",
       "withdrawn": "已不再需要",
       "onDevice": "{{answer}} · {{device}}"

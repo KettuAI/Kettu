@@ -76,8 +76,12 @@ export function StepCard({
     const label = toolLabel(entry, projectPath, entry.status === 'completed')
     const pictures = entryPictures(entry)
     const result = entry.permissionResult
-    if (note === undefined && typeof result === 'object' && result?.by === 'routine') {
-      note = t('permission.answer.allowedByRoutine')
+    if (note === undefined && typeof result === 'object' && result?.by) {
+      note = t(
+        result.by === 'task'
+          ? 'permission.answer.allowedByTask'
+          : 'permission.answer.allowedByRoutine',
+      )
     }
     return (
       <ToolCallCard

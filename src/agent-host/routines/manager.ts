@@ -1122,7 +1122,7 @@ const ASKING_MODES: Partial<Record<AgentId, Record<PermissionScope['level'], str
 }
 
 /** The mode each level names for the agent, from the observed table. */
-function askingMode(agentId: AgentId, level: PermissionScope['level']): string | null {
+export function askingMode(agentId: AgentId, level: PermissionScope['level']): string | null {
   return ASKING_MODES[agentId]?.[level] ?? null
 }
 

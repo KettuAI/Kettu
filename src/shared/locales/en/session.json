@@ -83,6 +83,7 @@
       "rejectOnce": "Denied",
       "rejectAlways": "Always denied",
       "allowedByRoutine": "Allowed by the routine",
+      "allowedByTask": "Allowed by the task",
       "cancelled": "Cancelled",
       "withdrawn": "No longer needed",
       "onDevice": "{{answer}} · {{device}}"

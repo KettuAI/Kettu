@@ -254,6 +254,49 @@ describe('the host files', () => {
     expect(parseSessionsFile({ sessions: {} })).toBe('sessions is not a list')
   })
 
+  it("keeps a task stage's ref and scope, and drops a ref that does not read", () => {
+    const task = { taskId: 't-0123456789ab', runId: 'sr-0123456789ab', stageId: 'build' }
+    const stage: SessionRecord = {
+      ...session,
+      origin: 'task',
+      task: {
+        ...task,
+        scope: { level: 'edit', web: false },
+        turns: 3,
+        costs: [
+          [1, 0.5],
+          [3, 0.01],
+        ],
+      },
+    }
+    expect(parseSessionsFile({ sessions: [stage] })).toEqual({ version: 1, sessions: [stage] })
+    const bad = (ref: unknown) =>
+      parseSessionsFile({ sessions: [{ ...session, origin: 'task', task: ref }] })
+    const bare = { version: 1, sessions: [{ ...session, origin: 'task' }] }
+    expect(bad({ ...task, scope: { level: 'all', web: false } })).toEqual(bare)
+    expect(bad({ ...task, scope: { level: 'read' } })).toEqual(bare)
+    expect(bad({ ...task, taskId: '', scope: { level: 'read', web: false } })).toEqual(bare)
+    expect(bad('t-1')).toEqual(bare)
+    expect(
+      bad({
+        ...task,
+        scope: { level: 'read', web: true },
+        turns: -1,
+        costs: [[0, 1], [2, -1], 'x'],
+      }),
+    ).toEqual({
+      version: 1,
+      sessions: [
+        { ...session, origin: 'task', task: { ...task, scope: { level: 'read', web: true } } },
+      ],
+    })
+    // Only a task session carries one.
+    expect(parseSessionsFile({ sessions: [{ ...session, task: stage.task }] })).toEqual({
+      version: 1,
+      sessions: [session],
+    })
+  })
+
   it("keeps a session's opened pull requests and drops addresses that are not one", () => {
     const pullRequests = [
       'https://github.com/KettuAI/Kettu/pull/1',

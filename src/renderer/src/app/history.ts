@@ -3,6 +3,7 @@ import { isMac } from '@renderer/lib/platform'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { useTasksStore } from '@renderer/stores/tasks'
 import {
   goBack,
   goForward,
@@ -36,6 +37,11 @@ export function canShow(view: HistoryView): boolean {
   if (view.kind === 'routine') {
     const { byId, loaded } = useRoutinesStore.getState()
     return view.routineId === null || !loaded || view.routineId in byId
+  }
+  if (view.kind === 'task') {
+    const { byId, reads } = useTasksStore.getState()
+    // Until this computer's tasks are read, one is not known to be gone.
+    return view.taskId in byId || !reads['']?.loaded
   }
   if (view.kind === 'artifact') {
     const { list, deleted } = useArtifactsStore.getState()

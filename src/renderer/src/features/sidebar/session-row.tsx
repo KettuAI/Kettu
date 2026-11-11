@@ -76,6 +76,7 @@ export const SessionRow = memo(function SessionRow({
   showHost = false,
   indent = false,
   branch,
+  label,
 }: {
   node: SessionNode
   /** The id of the list's one Tab stop, which the row it names takes. */
@@ -86,6 +87,8 @@ export const SessionRow = memo(function SessionRow({
   indent?: boolean
   /** A sub-session's place under its parent, which the tree line follows. */
   branch?: 'middle' | 'last'
+  /** Shown in place of the title, as a task's stage session names its stage and agent. */
+  label?: string
 }) {
   const { t } = useTranslation('sidebar')
   const { summary, children } = node
@@ -154,7 +157,7 @@ export const SessionRow = memo(function SessionRow({
   const expiring = cache?.state === 'ending' ? cache.cache : null
   // Collapsed, a parent speaks for its sub-sessions: their count and the loudest status.
   const status = rowStatus(node, hasChildren && !expanded)
-  const title = sessionTitle(summary)
+  const title = label ?? sessionTitle(summary)
 
   // Mod-click and Shift-click pick rows for a menu that acts on all of them; a plain click opens
   // the session and lets go of the picked ones.

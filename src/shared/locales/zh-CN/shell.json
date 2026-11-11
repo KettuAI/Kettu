@@ -85,7 +85,8 @@
       "marketplace": "Marketplace",
       "marketplaceItem": "Marketplace › {{item}}",
       "settings": "设置 › {{section}}",
-      "settingsItem": "设置 › {{section}} › {{item}}"
+      "settingsItem": "设置 › {{section}} › {{item}}",
+      "task": "任务"
     }
   },
   "debugMode": {
