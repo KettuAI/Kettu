@@ -162,6 +162,10 @@ export function createTaskRuntime(deps: TaskRuntimeDeps): TaskRuntime {
       return deps.sessions.has(sessionId) ? deps.sessions.turnsOf(sessionId) : 0
     },
 
+    costSince(sessionId, fromTurn) {
+      return deps.sessions.taskCostSince(sessionId, fromTurn)
+    },
+
     async handover(task, summary) {
       const worktree = task.worktree
       if (!worktree || worktree.removed !== undefined) {

@@ -162,6 +162,9 @@ class FakeRuntime implements TaskRuntime {
   turns(sessionId: string) {
     return this.sessions.get(sessionId)?.turns ?? 0
   }
+  costSince(sessionId: string) {
+    return this.sessions.get(sessionId)?.cost ?? 0
+  }
   async handover() {
     this.handovers++
     if (this.handoverError) throw this.handoverError
@@ -641,6 +644,19 @@ describe('task engine', () => {
     expect(view.state).toBe('blocked')
     expect(view.costUsd).toBe(1.5)
     expect(view.reason).toContain('budget')
+  })
+
+  it('counts the cost of the turn a stage submitted in, once that turn ends', async () => {
+    const { engine, runtime } = await setup()
+    const task = await createTask(engine)
+    const review = runtime.opened[0]!.sessionId
+    await passReview(engine, runtime)
+    runtime.sessions.get(review)!.cost = 0.4
+    engine.costChanged(review)
+    await engine.idle()
+    const { task: view, runs } = engine.get(task.id)
+    expect(runs.find((run) => run.stageId === 'review')!.costUsd).toBe(0.4)
+    expect(view.costUsd).toBe(0.4)
   })
 
   it('pauses and resumes, carrying the round on in its session', async () => {

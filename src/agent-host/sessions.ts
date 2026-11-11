@@ -6057,6 +6057,7 @@ export class SessionManager {
       )
     }
     this.persist(live)
+    this.deps.task?.current?.costChanged(live.id)
     if (this.isStage(live)) this.deps.task?.current?.turnEnded(live.id)
   }
 

@@ -8,6 +8,8 @@ export interface TaskSessionHooks {
   /** Whether the session works for a task's current stage, so its scope and silence apply. */
   isStage(sessionId: string): boolean
   turnEnded(sessionId: string): void
+  /** Any task session recorded a turn's cost, its stage current or not. */
+  costChanged(sessionId: string): void
   /** A request waits for the person in the session, or the last one was answered. */
   waiting(sessionId: string, waiting: boolean): void
   /** The session left the index. */
