@@ -32,6 +32,12 @@
   line-height: 1.55;
   color: var(--thread-ink);
 }
+.markdown-user {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
 .ks-user__note {
   max-width: 80%;
   overflow: hidden;

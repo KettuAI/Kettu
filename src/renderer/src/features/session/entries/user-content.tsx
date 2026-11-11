@@ -1,4 +1,4 @@
-import { Fragment, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useContext, useEffect, useMemo, useState } from 'react'
 import { File01Icon, Link01Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -7,7 +7,6 @@ import type { Attachment, ContentRef, ThreadEntry, UserContent } from '@shared/t
 import { basename, bytes } from '@renderer/lib/format'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { host } from '@renderer/lib/host'
-import { cn } from '@renderer/lib/utils'
 import { ensureFiles, openFile, useFilesStore } from '@renderer/stores/files'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { openViewer } from '@renderer/stores/viewer'
@@ -17,13 +16,14 @@ import { TextDialog, type TextDialogTarget } from '../attachments/text-dialog'
 import { replayThumb } from '../attachments/thumb'
 import { Clamp } from '../clamp'
 import { ChipView } from '../composer/chip-view'
-import { findChips, mentioned, mentionResolver, type Chip } from '../composer/chips'
+import { mentioned, mentionResolver, type Chip } from '../composer/chips'
 import { useLinkOpener } from '../composer/link-opener'
 import { projectOf } from '../composer/prompt-chips'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { attachmentKey } from '../media/viewer-items'
-import { splitQuote } from './reply-quote'
+
+const SentMarkdown = lazy(() => import('./sent-markdown'))
 
 /** Taller than this, a message collapses behind a fade and Show more. */
 const COLLAPSED_HEIGHT = 300
@@ -44,26 +44,13 @@ export function UserContentView({
   entryId?: string
 }) {
   const text = textOf(content)
-  const quoted = splitQuote(text)
-  const body = quoted ? quoted.rest : text
   const refs = content.flatMap((c) => (c.type === 'ref' ? [c.ref] : []))
   return (
     <div className="flex flex-col gap-2">
       {text && (
         <div className="flex flex-col gap-1">
           <Clamp maxHeight={COLLAPSED_HEIGHT} buttonClassName="-mx-1.5 -mb-0.5">
-            {quoted && (
-              <blockquote
-                data-selectable=""
-                className={cn(
-                  'border-l-2 border-strong pl-2.5 whitespace-pre-wrap text-secondary',
-                  body && 'mb-2',
-                )}
-              >
-                {quoted.quote}
-              </blockquote>
-            )}
-            {body && <ChipText text={body} sessionId={sessionId} entryId={entryId} />}
+            <ChipText text={text} sessionId={sessionId} entryId={entryId} />
           </Clamp>
         </div>
       )}
@@ -192,9 +179,9 @@ function ChipText({
   const commands = useThreadsStore((s) =>
     sessionId ? s.replicas[sessionId]?.state?.session.commands : undefined,
   )
-  const chips = useMemo(
-    () => findChips(text, { commands: commands?.map((c) => c.name) ?? [], resolve }),
-    [text, commands, resolve],
+  const context = useMemo(
+    () => ({ commands: commands?.map((c) => c.name) ?? [], resolve }),
+    [commands, resolve],
   )
   const links = useLinkOpener(sessionId)
   const opener = (chip: Chip): ((from: HTMLElement) => void) | null => {
@@ -215,15 +202,11 @@ function ChipText({
     return () => openFile(projectPath, path, line)
   }
 
-  const parts: ReactNode[] = []
-  let at = 0
-  for (const chip of chips) {
-    if (chip.from > at) parts.push(text.slice(at, chip.from))
+  const renderChip = (chip: Chip, raw: string) => {
     const open = opener(chip)
     // A selection copies what was typed: the chip's look is left out of it, its text is not.
-    const raw = text.slice(chip.from, chip.to)
-    parts.push(
-      <Fragment key={chip.from}>
+    return (
+      <>
         {open ? (
           <button
             type="button"
@@ -242,17 +225,14 @@ function ChipText({
         <span aria-hidden={open ? true : undefined} className="sr-only">
           {raw}
         </span>
-      </Fragment>,
+      </>
     )
-    at = chip.to
   }
-  if (at < text.length) parts.push(text.slice(at))
   return (
-    <div
-      className={cn('whitespace-pre-wrap', chips.length > 0 && 'leading-7.5')}
-      data-selectable=""
-    >
-      {parts}
+    <div data-selectable="">
+      <Suspense fallback={<div className="whitespace-pre-wrap">{text}</div>}>
+        <SentMarkdown text={text} context={context} renderChip={renderChip} />
+      </Suspense>
       {links.dialog}
     </div>
   )
