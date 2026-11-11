@@ -49,6 +49,13 @@ export function App() {
   // A browser shows another computer's host, whose own app ran its onboarding.
   const onboarding = useSettingsStore((s) => !isWeb && s.loaded && !s.settings.onboarding.done)
   const cloud = useSettingsStore((s) => s.settings.cloud.enabled)
+  // The window rises in under the onboarding that lifts away; a launch past it shows it at rest.
+  const [arriving, setArriving] = useState(false)
+  const [wasOnboarding, setWasOnboarding] = useState(onboarding)
+  if (wasOnboarding !== onboarding) {
+    setWasOnboarding(onboarding)
+    if (!onboarding && !prefersReducedMotion()) setArriving(true)
+  }
   // Settings stays mounted once loaded, so it closes with its own exit.
   const [settingsLoaded, setSettingsLoaded] = useState(false)
   if (settingsOpen && !settingsLoaded) setSettingsLoaded(true)
@@ -67,7 +74,15 @@ export function App() {
           <HostBanner />
           <div className="relative min-h-0 flex-1">
             {/* The workbench stays in view under Settings, which opens over it. */}
-            <div inert={settingsOpen || onboarding} className="absolute inset-0">
+            <div
+              inert={settingsOpen || onboarding}
+              data-arriving={arriving ? '' : undefined}
+              // The main area is the last to settle.
+              onAnimationEnd={(event) => {
+                if (event.animationName === 'kettu-arrive-main') setArriving(false)
+              }}
+              className="absolute inset-0"
+            >
               {/* One drag scope for the sidebar and the main area: a session's row drags into
                   the split. */}
               <SplitDragProvider>

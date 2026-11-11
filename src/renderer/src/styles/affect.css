@@ -80,6 +80,28 @@
   pointer-events: none;
   -webkit-app-region: drag;
 }
+/* Leaving the onboarding: the sidebar, then the main area, rise out of a soft blur as it lifts. */
+[data-arriving] .kettu-frame.ui-as-app > .ui-as-side {
+  animation: kettu-arrive 460ms var(--ease-out-quint) 80ms backwards;
+}
+[data-arriving] .kettu-frame.ui-as-app > .ui-as-main {
+  animation: kettu-arrive-main 460ms var(--ease-out-quint) 140ms backwards;
+}
+@keyframes kettu-arrive {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(10px);
+  }
+}
+/* The same rise under its own name, which tells the window when the last part has settled. */
+@keyframes kettu-arrive-main {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(10px);
+  }
+}
 /* The sidebar's head keeps the corner controls' room however long the list grows; the list
    scrolls instead of squeezing it. */
 .kettu-frame.ui-as-app > .ui-as-side > .ui-as-side__head {

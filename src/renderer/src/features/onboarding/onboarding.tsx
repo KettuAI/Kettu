@@ -55,8 +55,8 @@ import { AgentsStage, BrowserStage, CloudDiagram, FoxStage, NoAgentsStage } from
 
 type Choice = 'account' | 'self-hosted'
 
-// --duration-slow and --ease-out-quart, as the launch cover fades.
-const SLOW = 0.3
+// --ease-out-quart, as the launch cover fades, a little slower for the whole page lifting off.
+const LIFT = 0.36
 const EASE = [0.165, 0.84, 0.44, 1] as const
 // The blur rise a session's blocks enter with.
 const RISE = {
@@ -97,8 +97,9 @@ export default function Onboarding() {
       role="dialog"
       aria-modal="true"
       aria-label={t('label')}
-      exit={{ opacity: 0 }}
-      transition={{ duration: SLOW, ease: EASE }}
+      // Lifts off the window, which rises in beneath it (kettu-arrive in styles/affect.css).
+      exit={{ opacity: 0, scale: 1.03, filter: 'blur(8px)' }}
+      transition={{ duration: LIFT, ease: EASE }}
     >
       {/* The steps cross: the next rises in while the last fades, so none waits on the other. */}
       <AnimatePresence initial={false}>
