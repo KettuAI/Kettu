@@ -57,12 +57,14 @@ import type {
 } from './git'
 import type { PortConnectionState } from './port-rpc'
 import type {
-  StageRunView,
+  NodeRunView,
+  SopSummary,
   TaskDecision,
   TaskDraft,
+  TaskRetry,
   TaskView,
   TierSettings,
-  WorkflowSummary,
+  TierState,
 } from './tasks'
 import type { PathCompletion } from './remote/host-admin'
 import type {
@@ -452,7 +454,7 @@ export interface SessionSummary {
   parentId: string | null
   origin: 'user' | 'subagent' | 'routine' | 'task'
   routine: RoutineRef | null // a routine's run, listed under its routine rather than its project
-  task?: { taskId: string; stageId: string } // a task stage's session, listed under its task
+  task?: { taskId: string; nodeId: string } // a task node's session, listed under its task
   description: string | null // a subagent's purpose, as its parent described it
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
@@ -693,23 +695,29 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
-  // Tasks: requirements run through workflows of stages. See tasks.
+  // Tasks: requirements run through an SOP's nodes. See tasks.
   'tasks.list': { params: void; result: TaskView[] }
-  'tasks.get': { params: { taskId: string }; result: { task: TaskView; runs: StageRunView[] } }
+  'tasks.get': { params: { taskId: string }; result: { task: TaskView; runs: NodeRunView[] } }
+  // Creates the task and starts its first node.
   'tasks.create': { params: TaskDraft; result: TaskView }
-  // Moves a backlog task into the queue.
-  'tasks.start': { params: { taskId: string }; result: TaskView }
-  'tasks.pause': { params: { taskId: string }; result: TaskView }
-  'tasks.resume': { params: { taskId: string }; result: TaskView }
-  // Stops its working stage; the worktree and branch stay.
+  // Stops its working nodes; the worktree and branch stay.
   'tasks.cancel': { params: { taskId: string }; result: TaskView }
-  // The person's answer to a human stage or a blocked task.
+  // Removes an ended task; its sessions stay as plain sessions.
+  'tasks.remove': { params: { taskId: string }; result: void }
+  // The person's answer at their own node.
   'tasks.decide': { params: TaskDecision; result: TaskView }
+  // The person lets a stuck node try again.
+  'tasks.retry': { params: TaskRetry; result: TaskView }
   'tasks.markSeen': { params: { taskId: string }; result: void }
-  // Every workflow the project can use: official, its own from the default branch, the library.
-  'tasks.workflows': { params: { projectPath: string | null }; result: WorkflowSummary[] }
-  'tasks.tiers': { params: void; result: TierSettings }
-  'tasks.setTiers': { params: TierSettings; result: TierSettings }
+  // The Markdown a node run handed in; null for none.
+  'tasks.document': { params: { runId: string }; result: string | null }
+  'tasks.tiers': { params: void; result: TierState }
+  'tasks.setTiers': { params: TierSettings; result: TierState }
+  // Every SOP: the ones shipped with Kettu and the user's library, pending ones included.
+  'sops.list': { params: void; result: SopSummary[] }
+  // The person approves a library SOP as the file with this hash.
+  'sops.approve': { params: { id: string; hash: string }; result: SopSummary }
+  'sops.remove': { params: { id: string }; result: void }
   // The window's prepared session for New session; `replace` opens a new one even when it holds one.
   'sessions.prepare': {
     params: {
@@ -1226,15 +1234,17 @@ export const HOST_METHODS = [
   'tasks.list',
   'tasks.get',
   'tasks.create',
-  'tasks.start',
-  'tasks.pause',
-  'tasks.resume',
   'tasks.cancel',
+  'tasks.remove',
   'tasks.decide',
+  'tasks.retry',
   'tasks.markSeen',
-  'tasks.workflows',
+  'tasks.document',
   'tasks.tiers',
   'tasks.setTiers',
+  'sops.list',
+  'sops.approve',
+  'sops.remove',
   'permissions.respond',
   'git.status',
   'git.unwatch',
@@ -1370,9 +1380,10 @@ export type HostEvent =
   // What Settings › Artifacts lists changed.
   | { type: 'artifacts.consentsChanged' }
   | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
-  | { type: 'task.changed'; task: TaskView } // a task, its stage or its state
+  | { type: 'task.changed'; task: TaskView } // a task or its state
   | { type: 'task.removed'; taskId: string }
-  | { type: 'task.run'; run: StageRunView } // a stage run started or changed
+  | { type: 'task.run'; run: NodeRunView } // a node run started or changed
+  | { type: 'sops.changed' } // the SOP list is to be read again
   | { type: 'routine.removed'; routineId: string }
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's

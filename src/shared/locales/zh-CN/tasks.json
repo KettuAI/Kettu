@@ -1,61 +1,102 @@
 {
-  "workflow": {
-    "label": "工作流",
+  "sop": {
+    "label": "SOP",
     "justChat": "直接对话",
     "justChatNote": "用你选的 Agent 开一个会话",
-    "source": {
-      "official": "官方",
-      "project": "本仓库",
-      "library": "库"
+    "origin": {
+      "kettu": "Kettu",
+      "yours": "你的",
+      "agent": "Agent 创建"
     },
-    "loading": "正在读取工作流…",
-    "none": "这个项目没有工作流。",
-    "failed": "无法读取工作流：{{error}}",
-    "needsProject": "选择一个项目才能运行工作流",
+    "loading": "正在读取 SOP…",
+    "none": "还没有 SOP。",
+    "failed": "无法读取 SOP：{{error}}",
+    "needsProject": "选择一个项目才能运行 SOP",
+    "pending": "等你在设置里确认",
     "byTier": "Agent：按档位",
-    "byTierTooltip": "每个阶段的 Agent 和模型取自 设置 › 任务",
+    "byTierTooltip": "每个节点的 Agent 和模型取自 设置 › SOP",
     "noAttachments": "任务暂不支持附件。移除附件后才能开始任务。",
     "start": "开始任务",
-    "describe": "描述这个需求",
-    "chooseProjectFirst": "先选择一个项目"
+    "describe": "描述这个需求"
   },
   "state": {
-    "backlog": "待办",
-    "queued": "排队中",
     "running": "进行中",
-    "waiting": "等待中",
-    "blocked": "受阻",
-    "paused": "已暂停",
+    "needsYou": "需要你",
     "done": "已完成",
+    "dropped": "已放弃",
     "cancelled": "已取消"
   },
-  "runState": {
-    "running": "进行中",
-    "waiting": "等待中",
-    "passed": "通过",
-    "changes": "已退回",
-    "blocked": "受阻",
-    "skipped": "已跳过",
-    "interrupted": "已中断"
+  "node": {
+    "you": "你",
+    "handIn": {
+      "document": "要交：一份文档",
+      "verdict": "要交：一个结论",
+      "note": "要交：一段说明"
+    },
+    "state": {
+      "todo": "未开始",
+      "queued": "排队中",
+      "working": "进行中，{{time}}",
+      "needsYou": "需要你",
+      "joining": "等其他分支做完",
+      "done": "已完成",
+      "stopped": "已停止",
+      "skipped": "已跳过"
+    },
+    "round": "第 {{round}} 轮"
+  },
+  "flow": {
+    "label": "流程图",
+    "end": {
+      "done": "完成",
+      "dropped": "放弃"
+    }
+  },
+  "run": {
+    "state": {
+      "queued": "排队中",
+      "running": "进行中",
+      "waiting": "需要你",
+      "done": "已完成",
+      "stopped": "已停止"
+    },
+    "outcome": "结果：{{outcome}}",
+    "sentBack": "{{node}} 已退回",
+    "document": "交出的文档",
+    "documentLoading": "正在读取文档…",
+    "documentFailed": "无法读取文档：{{error}}",
+    "documentNone": "文档已不在。",
+    "openSession": "打开会话",
+    "person": "{{node}} 由你决定",
+    "request": "它的会话在问你。",
+    "stuck": "它卡住了",
+    "retry": "重试",
+    "note": "备注",
+    "notePlaceholder": "备注（可选）",
+    "retryPlaceholder": "想告诉它什么（可选）"
   },
   "row": {
-    "stageSession": "{{stage}} · {{agent}}",
+    "nodeSession": "{{node}} · {{agent}}",
     "more": "更多",
     "moreFor": "{{title}} 的更多操作",
-    "expand": "显示阶段会话",
-    "collapse": "隐藏阶段会话",
-    "stageSessions_other": "{{count}} 个阶段会话"
+    "expand": "显示节点会话",
+    "collapse": "隐藏节点会话",
+    "nodeSessions_other": "{{count}} 个节点会话"
   },
   "menu": {
-    "start": "开始",
-    "pause": "暂停",
-    "resume": "继续",
-    "cancel": "取消任务…"
+    "cancel": "取消任务…",
+    "remove": "移除任务…"
   },
   "cancel": {
     "title": "取消“{{title}}”？",
-    "description": "正在进行的阶段会停止。worktree 和它的分支会保留。",
+    "description": "正在进行的节点会停止。worktree 和它的分支会保留。",
     "confirm": "取消任务",
+    "keep": "保留"
+  },
+  "remove": {
+    "title": "移除“{{title}}”？",
+    "description": "任务和各节点交出的东西会被移除。它的会话会保留为普通会话。",
+    "confirm": "移除任务",
     "keep": "保留"
   },
   "page": {
@@ -64,39 +105,36 @@
     "goneDescription": "它已被移除，或它的主机不再列出它。",
     "failed": "无法读取这个任务：{{error}}",
     "retry": "重试",
-    "workflow": "{{name}} v{{version}}",
+    "sop": "SOP：{{name}}",
     "requirement": "需求",
     "showMore": "展开",
     "showLess": "收起",
-    "stages": "阶段",
-    "stage": {
-      "done": "{{stage}}：已完成",
-      "current": "{{stage}}：当前",
-      "skipped": "{{stage}}：已跳过",
-      "upcoming": "{{stage}}：未开始"
-    },
-    "needsYou": "需要你处理",
-    "waitingOn": "{{stage}} 在等你",
-    "blocked": "任务受阻",
-    "approve": "通过",
-    "sendBack": "退回",
-    "sendBackTo": "退回到",
-    "note": "备注",
-    "notePlaceholder": "需要改什么（可选）",
-    "runs": "阶段记录",
-    "noRuns": "还没有阶段运行过。",
-    "round": "第 {{round}} 轮",
-    "commands": "运行过的命令",
-    "changedFiles_other": "改动了 {{count}} 个文件",
-    "openSession": "打开 {{agent}} 的会话",
-    "pullRequest": "Pull Request",
-    "start": "开始",
-    "pause": "暂停",
-    "resume": "继续",
-    "cancel": "取消任务"
+    "noRuns": "这个节点还没有运行过。",
+    "cancel": "取消任务",
+    "remove": "移除任务"
   },
   "settings": {
-    "intro": "工作流只为每个阶段指定档位，不指定 Agent。下面的列表为每个档位选择 Agent 和模型：排在前面且可用的那个会运行。",
+    "sops": {
+      "group": "SOP",
+      "description": "任务可以走的流程：Kettu 自带的、你自己的，以及 Agent 创建的。",
+      "loading": "正在读取 SOP…",
+      "empty": "还没有 SOP。",
+      "failed": "无法读取 SOP：{{error}}",
+      "retry": "重试",
+      "showFlow": "显示流程图",
+      "hideFlow": "隐藏流程图",
+      "approve": "确认",
+      "pendingAgent": "这个 SOP 由 Agent 创建或修改过。你确认之后才会被使用。",
+      "pendingChanged": "这个 SOP 是新的或修改过。你确认之后才会被使用。",
+      "broken": "无法读取：{{problem}}",
+      "remove": "移除",
+      "removeTitle": "移除“{{name}}”？",
+      "removeDescription": "它的文件会从你的库里删除。已经在用它的任务会继续运行。",
+      "removeConfirm": "移除 SOP",
+      "keep": "保留"
+    },
+    "tiers": "档位",
+    "intro": "SOP 只为每个节点指定档位，不指定 Agent。在这里选择每个档位代表的 Agent 和模型。",
     "tier": {
       "deep": "深度",
       "standard": "标准",
@@ -105,15 +143,12 @@
     "tierNote": {
       "deep": "规划、评审和难题。",
       "standard": "大部分工作。",
-      "fast": "简单、快速的阶段。"
+      "fast": "简单、快速的节点。"
     },
-    "add": "添加 Agent",
-    "remove": "移除 {{agent}}",
-    "moveUp": "上移 {{agent}}",
-    "moveDown": "下移 {{agent}}",
-    "empty": "未选择：Kettu 会从你的 Agent 中挑选。",
-    "onlyStageAgents": "只有 Claude Code 和 Codex 的 Agent 能运行阶段。",
-    "noStageAgent": "添加一个 Claude Code 或 Codex 的 Agent 才能运行任务。",
+    "automaticPick": "自动：{{agent}}",
+    "automaticNone": "自动：没有能运行节点的 Agent",
+    "useAutomatic": "改回自动",
+    "onlyNodeAgents": "只有 Claude Code 和 Codex 的 Agent 能运行节点。",
     "loadFailed": "无法读取档位：{{error}}"
   }
 }

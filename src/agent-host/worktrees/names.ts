@@ -9,7 +9,7 @@ import { invalidParams } from '../errors'
 import { pathKey } from '../paths'
 
 export const MAX_BRANCH_LENGTH = 100
-const MAX_SLUG_LENGTH = 40
+export const MAX_SLUG_LENGTH = 40
 const MAX_FOLDER_PREFIX = 24
 
 /** The leading ASCII words of `text` as a slug, or '' when none is usable. */

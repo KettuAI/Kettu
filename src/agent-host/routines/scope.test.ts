@@ -23,7 +23,7 @@ describe('withinScope relative to a worktree', () => {
     expect(edit('/repo-worktrees/feat-1/.git/config')).toBe(false)
   })
 
-  it('keeps a read-only stage to reads', () => {
+  it('keeps a read scope to reads', () => {
     expect(
       withinScope(read, worktree, { toolKind: 'read', locations: ['src/a.ts'] }, 'darwin'),
     ).toBe(true)

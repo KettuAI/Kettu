@@ -270,7 +270,7 @@ export interface SessionRecord {
   parentId: string | null
   origin: 'user' | 'subagent' | 'routine' | 'task'
   routine?: RoutineRef // a routine's run, when origin is 'routine'
-  task?: SessionTaskRef // a task's stage, when origin is 'task'
+  task?: SessionTaskRef // a task's node, when origin is 'task'
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
@@ -294,23 +294,18 @@ export interface SessionRecord {
 }
 
 /**
- * The task stage a session works for: the run that opened it and the scope its permission
- * requests are answered in on every turn. Absent on a task session whose ref did not read, which
- * then answers nothing by itself.
+ * The task node a session works for: the run that opened it and the scope its permission
+ * requests are answered in while that run is open. Absent on a task session whose ref did not
+ * read, which then answers nothing by itself.
  */
 export interface SessionTaskRef {
   taskId: string
   runId: string
-  stageId: string
+  nodeId: string
   scope: PermissionScope
-  /** Its turns as its last one ended, for a round that starts while it is closed. */
+  /** Its turns as its last one ended. */
   turns?: number
-  /** The estimated cost in dollars of its latest priced turns, as [turn, dollars], oldest first. */
-  costs?: [number, number][]
 }
-
-/** The turn costs a task session keeps, enough for any round's budget. */
-export const MAX_TASK_TURN_COSTS = 200
 
 /** What a session's new agent is to be given with its first turn, kept until that turn goes. */
 export interface PendingCarry {
@@ -609,7 +604,7 @@ function taskRefOf(value: unknown): { task?: SessionTaskRef } {
     !isRecord(value) ||
     !id(value.taskId) ||
     !id(value.runId) ||
-    !id(value.stageId) ||
+    !id(value.nodeId) ||
     !isPermissionScope(value.scope)
   ) {
     return {}
@@ -618,33 +613,13 @@ function taskRefOf(value: unknown): { task?: SessionTaskRef } {
     task: {
       taskId: value.taskId,
       runId: value.runId,
-      stageId: value.stageId,
+      nodeId: value.nodeId,
       scope: { level: value.scope.level, web: value.scope.web },
       ...(Number.isSafeInteger(value.turns) && (value.turns as number) >= 0
         ? { turns: value.turns as number }
         : {}),
-      ...turnCostsOf(value.costs),
     },
   }
-}
-
-/** A task session's turn costs; a pair that does not read is dropped. */
-function turnCostsOf(value: unknown): { costs?: [number, number][] } {
-  if (!Array.isArray(value)) return {}
-  const costs = value
-    .filter(
-      (item): item is [number, number] =>
-        Array.isArray(item) &&
-        item.length === 2 &&
-        Number.isSafeInteger(item[0]) &&
-        item[0] > 0 &&
-        typeof item[1] === 'number' &&
-        Number.isFinite(item[1]) &&
-        item[1] >= 0,
-    )
-    .slice(-MAX_TASK_TURN_COSTS)
-    .map(([turn, usd]): [number, number] => [turn, usd])
-  return costs.length > 0 ? { costs } : {}
 }
 
 /** The earlier agents a session lists; one that does not read is dropped, not the session. */

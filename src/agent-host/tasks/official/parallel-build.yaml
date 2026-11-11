@@ -1,0 +1,88 @@
+# A change built by two agents at once from one design: the code and its tests, each in its own
+# branch, joined and verified together.
+format: 1
+id: parallel-build
+name: { en: Parallel build, zh-CN: 并行开发 }
+description:
+  en: Write the design, then build the code and write its tests at the same time, and verify them together.
+  zh-CN: 先写设计方案，然后开发和编写测试同时进行，最后合在一起验证。
+nodes:
+  - id: design
+    name: { en: Design, zh-CN: 设计方案 }
+    by: deep
+    hand-in: document
+    prompt: |
+      Write the design for this requirement. Read the code it touches first, and change none of
+      it.
+
+      Two agents will work from your document at the same time without seeing each other's work:
+      one builds the code, the other writes the tests. So be exact about everything they must
+      agree on: the behavior in each case, the names, the interfaces and data that are added or
+      changed, and where the code and the tests go. Cover the approach and why, the parts of the
+      project that change, the edge cases and errors, and what is left out.
+
+      Hand in the whole document. Write it and your note in the language of the requirement.
+    outcomes:
+      - id: ready
+        name: { en: Ready to build, zh-CN: 可以开发 }
+        to: [build, write-tests]
+
+  - id: build
+    name: { en: Build, zh-CN: 开发 }
+    by: standard
+    hand-in: note
+    prompt: |
+      Build what the design describes, following it and the project's conventions. Another agent
+      is writing the tests from the same design at the same time, so keep exactly to the names,
+      interfaces and behavior the design gives, and do not write those tests yourself. Run the
+      project's own checks until they pass.
+
+      If you were sent back here, the verification failed: fix what it found. When a test is
+      wrong rather than the code, correct the test to match the design.
+
+      In your note, say what you changed, what you ran to check it and anywhere you had to depart
+      from the design. Write the note in the language of the requirement.
+    outcomes:
+      - id: built
+        name: { en: Built, zh-CN: 开发完成 }
+        to: verify
+
+  - id: write-tests
+    name: { en: Write tests, zh-CN: 编写测试 }
+    by: standard
+    hand-in: note
+    prompt: |
+      Write the tests for what the design describes, in the way the project writes its tests.
+      Another agent is building the code at the same time and you cannot see it: test the behavior
+      the design promises through the names and interfaces it gives, the edge cases and errors
+      included, and do not write the code under test yourself. The tests are expected to fail
+      until the two pieces of work are joined.
+
+      In your note, say what the tests cover, what they leave out and how to run them. Write the
+      note in the language of the requirement.
+    outcomes:
+      - id: written
+        name: { en: Written, zh-CN: 已写好 }
+        to: verify
+
+  - id: verify
+    name: { en: Verify, zh-CN: 验证 }
+    by: standard
+    hand-in: verdict
+    prompt: |
+      The code and its tests were written apart and are now joined. Verify them together: run the
+      new tests and the project's other tests and checks, and compare what was built with the
+      design. Fix nothing yourself.
+
+      Report a pass only when the tests pass and the design is met. Otherwise report a fail, which
+      sends the work back to Build: name what fails, and for each failing test say whether the code
+      or the test departs from the design.
+
+      Write in the language of the requirement.
+    outcomes:
+      - id: pass
+        name: { en: Passed, zh-CN: 通过 }
+        end: done
+      - id: fail
+        name: { en: Failed, zh-CN: 未通过 }
+        to: build

@@ -77,7 +77,7 @@ import { buildCatalog, configFolders, type AgentDefinition } from './catalog'
 import { answerOf, BROWSER_GONE, browserTarget, DeviceBrowserCalls } from './device-browser'
 import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
-import { setLocale, t } from './i18n'
+import { currentLocale, setLocale, t } from './i18n'
 import { FilesService } from './files'
 import { MediaService } from './media'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
@@ -111,9 +111,10 @@ import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
-import type { TaskEngineApi, TaskRuntime } from './tasks/api'
+import type { SopLibraryApi, TaskEngineApi } from './tasks/api'
 import { createTaskEngine } from './tasks/engine'
 import type { TaskSessionHooksRef } from './tasks/hooks'
+import { createSopLibrary } from './tasks/library'
 import { createTaskRuntime } from './tasks/runtime'
 import { tasksFile } from './tasks/store'
 import { ScratchFolders } from './scratch'
@@ -277,9 +278,10 @@ export class AgentHost {
   readonly sessions: SessionManager
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
-  /** Tasks: requirements run through workflows of stages, each stage in a session of its own. */
+  /** Tasks: requirements run through an SOP's nodes, each node in a session of its own. */
   readonly tasks: TaskEngineApi
-  private readonly taskRuntime: TaskRuntime
+  /** The SOPs a task may start with: the shipped ones and the user's library. */
+  readonly sops: SopLibraryApi
   /** The attachments of drafts and queued prompts, until sent or removed. */
   readonly attachments: Attachments
   /** Every session's thread, read a page at a time, in a worker of its own. */
@@ -506,9 +508,10 @@ export class AgentHost {
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
       subagentCall: (process, id) => this.sessions.isSubagentCall(process, id),
       plan: { set: (sessionId, items) => this.sessions.planSet(sessionId, items) },
-      submit: {
-        stageOf: (sessionId) => this.tasks.stageOf(sessionId),
-        submit: (sessionId, submission) => this.tasks.submit(sessionId, submission),
+      tasks: {
+        nodeOf: (sessionId) => this.tasks.nodeOf(sessionId),
+        report: (sessionId, report) => this.tasks.report(sessionId, report),
+        createSop: (yaml) => this.sops.add(yaml, 'agent'),
       },
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request) => this.browserCall(request),
@@ -595,7 +598,6 @@ export class AgentHost {
       status: (status) => {
         this.hub.broadcast({ type: 'agent.status', status })
         this.routines.limitsChanged(status.id)
-        this.tasks.limitsChanged(status.id)
       },
       removed: (agentId) => this.hub.broadcast({ type: 'agent.removed', agentId }),
       processes: (processes) => this.reportProcesses(processes),
@@ -790,14 +792,20 @@ export class AgentHost {
       },
     })
     routineHooks.current = this.routines.hooks
-    this.taskRuntime = createTaskRuntime({
-      platform,
+    this.sops = createSopLibrary({
+      libraryDir: path.join(options.userDataPath, 'sops'),
+      // Beside the other stores, where no agent's SOP file can stand in for it.
+      approvalsPath: path.join(options.userDataPath, 'state', 'sop-approvals.json'),
+      language: currentLocale,
+      changed: () => this.broadcast({ type: 'sops.changed' }),
+      log,
+    })
+    const taskRuntime = createTaskRuntime({
       sessions: this.sessions,
       agents: this.agents,
       worktrees: this.worktrees,
-      git: () => this.git,
       exec: this.execRunner.exec,
-      libraryDir: path.join(options.userDataPath, 'workflows'),
+      library: this.sops,
       resolveProject: (value) => this.projects.resolveDirectory(value),
       attention: (kind, sessionId, title, body) =>
         options.send({
@@ -809,11 +817,12 @@ export class AgentHost {
           front: this.front(sessionId),
         }),
       engine: () => this.tasks,
+      log,
     })
     this.tasks = createTaskEngine({
       file: tasksFile(options.userDataPath, log),
       log,
-      runtime: this.taskRuntime,
+      runtime: taskRuntime,
       events: {
         changed: (task) => this.broadcast({ type: 'task.changed', task }),
         removed: (taskId) => this.broadcast({ type: 'task.removed', taskId }),
@@ -821,9 +830,8 @@ export class AgentHost {
       },
     })
     taskHooks.current = {
-      isStage: (sessionId) => this.tasks.stageOf(sessionId) !== null,
+      isNode: (sessionId) => this.tasks.nodeOf(sessionId) !== null,
       turnEnded: (sessionId) => this.tasks.turnEnded(sessionId),
-      costChanged: (sessionId) => this.tasks.costChanged(sessionId),
       waiting: (sessionId, waiting) => this.tasks.waiting(sessionId, waiting),
       sessionGone: (sessionId) => this.tasks.sessionGone(sessionId),
     }
@@ -904,7 +912,7 @@ export class AgentHost {
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
     host.routines.start()
-    // After the sessions it carries on in and the agents' limits it picks by.
+    // After the sessions it carries on in and the agents its tiers stand for.
     await host.tasks.load()
     void host.marketSkills.sync()
     host.sendFolders()
@@ -1007,8 +1015,11 @@ export class AgentHost {
   async updateSettings(next: HostSettings): Promise<void> {
     const previous = this.settings
     this.settings = next
-    if (setLocale(next.locale))
+    if (setLocale(next.locale)) {
       this.broadcast({ type: 'environment.changed', info: this.env.info() })
+      // An SOP's names are read in the host's language.
+      this.broadcast({ type: 'sops.changed' })
+    }
     if (JSON.stringify(previous.proxy) !== JSON.stringify(next.proxy)) {
       this.env.setProxy(next.proxy)
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
@@ -1179,7 +1190,6 @@ export class AgentHost {
   /** The computer slept or woke, so the routines' timer starts over from the wall clock. */
   power(state: 'suspend' | 'resume'): void {
     this.routines.power(state)
-    this.tasks.power(state)
   }
 
   busy(requestId: number): void {
@@ -1787,15 +1797,17 @@ export class AgentHost {
       'tasks.list': () => this.tasks.list(),
       'tasks.get': ({ taskId }) => this.tasks.get(taskId),
       'tasks.create': (draft) => this.tasks.create(draft, 'user'),
-      'tasks.start': ({ taskId }) => this.tasks.start(taskId),
-      'tasks.pause': ({ taskId }) => this.tasks.pause(taskId),
-      'tasks.resume': ({ taskId }) => this.tasks.resume(taskId),
       'tasks.cancel': ({ taskId }) => this.tasks.cancel(taskId),
+      'tasks.remove': ({ taskId }) => this.tasks.remove(taskId),
       'tasks.decide': (decision) => this.tasks.decide(decision),
+      'tasks.retry': (retry) => this.tasks.retry(retry),
       'tasks.markSeen': ({ taskId }) => this.tasks.markSeen(taskId),
-      'tasks.workflows': ({ projectPath }) => this.taskRuntime.workflows(projectPath),
+      'tasks.document': ({ runId }) => this.tasks.document(runId),
       'tasks.tiers': () => this.tasks.tiers(),
       'tasks.setTiers': (tiers) => this.tasks.setTiers(tiers),
+      'sops.list': () => this.sops.list(),
+      'sops.approve': ({ id, hash }) => this.sops.approve(id, hash),
+      'sops.remove': ({ id }) => this.sops.remove(id),
       'sessions.removeAll': async () => {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })

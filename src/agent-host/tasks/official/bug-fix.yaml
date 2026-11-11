@@ -1,0 +1,72 @@
+# A bug from the report to a checked fix: reproduce it, fix its cause, verify the fix.
+format: 1
+id: bug-fix
+name: { en: Bug fix, zh-CN: 修复缺陷 }
+description:
+  en: Reproduce the bug, fix its cause, then verify that it is gone.
+  zh-CN: 先复现缺陷，再修复原因，最后验证已经修好。
+nodes:
+  - id: reproduce
+    name: { en: Reproduce, zh-CN: 复现 }
+    by: standard
+    hand-in: verdict
+    prompt: |
+      Reproduce the bug the requirement describes, and change none of the project's code.
+
+      Find the shortest steps that show it, and what happens against what should happen. Where the
+      project has tests, a failing test that shows the bug is the best proof; leave it in place
+      for the fix. Look for where it goes wrong, but do not fix it.
+
+      Report that it is reproduced, with the steps and where you think the cause is. Report that
+      you cannot reproduce it only after trying the ways the report could be read: say what you
+      tried and what the person would need to add.
+
+      Write in the language of the requirement.
+    outcomes:
+      - id: reproduced
+        name: { en: Reproduced, zh-CN: 已复现 }
+        to: fix
+      - id: cannot-reproduce
+        name: { en: Cannot reproduce, zh-CN: 无法复现 }
+        end: dropped
+
+  - id: fix
+    name: { en: Fix, zh-CN: 修复 }
+    by: standard
+    hand-in: note
+    prompt: |
+      Fix the cause of the bug, not only what shows. Start from the steps that reproduce it, find
+      why it happens, and make the smallest change that removes the cause. Add or keep a test that
+      fails without the fix where the project has tests, and run the project's own checks until
+      they pass. Leave unrelated code alone.
+
+      If you were sent back here, the fix did not hold: read why before changing anything.
+
+      In your note, say what the cause was, what you changed and what you ran to check it. Write
+      the note in the language of the requirement.
+    outcomes:
+      - id: fixed
+        name: { en: Fixed, zh-CN: 已修复 }
+        to: verify
+
+  - id: verify
+    name: { en: Verify, zh-CN: 验证 }
+    by: deep
+    hand-in: verdict
+    prompt: |
+      Verify the fix as someone who did not write it. Follow the steps that reproduced the bug and
+      see that it is gone, run the project's tests and checks, and read the change for anything
+      it breaks nearby or a cause it leaves in place. Fix nothing yourself.
+
+      Report that it is fixed only when the bug is gone and nothing else broke. Otherwise report
+      that it is not fixed, which sends the work back to Fix: say what you did, what still goes
+      wrong and where.
+
+      Write in the language of the requirement.
+    outcomes:
+      - id: fixed
+        name: { en: Fixed, zh-CN: 已修复 }
+        end: done
+      - id: not-fixed
+        name: { en: Not fixed, zh-CN: 未修复 }
+        to: fix

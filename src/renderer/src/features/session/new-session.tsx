@@ -3,7 +3,7 @@ import { Alert02Icon, GitBranchIcon, GitCommitIcon } from '@hugeicons/core-free-
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
-import type { WorkflowSummary } from '@shared/tasks'
+import type { SopSummary } from '@shared/tasks'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { startNewSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -44,7 +44,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { useTasksStore } from '@renderer/stores/tasks'
-import { ByTierChip, WorkflowMenu } from '@renderer/features/tasks/workflow-menu'
+import { ByTierChip, SopMenu } from '@renderer/features/tasks/sop-menu'
 import { useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
 import { refreshLimits } from '@renderer/stores/usage'
 import {
@@ -243,10 +243,8 @@ function DraftComposer({
   const { t: tc } = useTranslation('composer')
   const { t: tt } = useTranslation('tasks')
   const [projectError, setProjectError] = useState<string | null>(null)
-  // A workflow chosen for the project shown; any other project starts again at Just chat.
-  const [picked, setPicked] = useState<{ projectPath: string; workflow: WorkflowSummary } | null>(
-    null,
-  )
+  // An SOP chosen for the project shown; any other project starts again at Just chat.
+  const [picked, setPicked] = useState<{ projectPath: string; sop: SopSummary } | null>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const status = useAgentsStore((s) => (agentId ? agentsOn(s, hostId).byId[agentId] : undefined))
   const limits = status?.limits
@@ -280,9 +278,9 @@ function DraftComposer({
   // A sub-session of a session started with No project shares its parent's scratch folder.
   const inScratch = noProject || !!parent?.scratch
   const projectPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
-  // With a workflow the send creates a task, whose stages pick their own agents and worktree.
-  const workflow =
-    picked && !parent && !inScratch && picked.projectPath === projectPath ? picked.workflow : null
+  // With an SOP the send creates a task, whose nodes pick their own agents and worktree.
+  const sop =
+    picked && !parent && !inScratch && picked.projectPath === projectPath ? picked.sop : null
   const box = usePromptBox({
     draft: NEW_SESSION_DRAFT,
     sessionId: null,
@@ -305,8 +303,8 @@ function DraftComposer({
       s.where[project.path] === 'worktree' &&
       branchNameInvalid(s.branch),
   )
-  const taskAttachments = !!workflow && attachments.length > 0
-  const canSend = workflow
+  const taskAttachments = !!sop && attachments.length > 0
+  const canSend = sop
     ? ready && !!text.trim() && !taskAttachments
     : !!agentId && ready && holdsMessage && !held && !badBranch
   const tightest = limits ? tightestLimit(limits, now) : null
@@ -326,9 +324,9 @@ function DraftComposer({
   // agent reports for it and the send only adopts it.
   useEffect(() => {
     prepareFor(
-      agentId && ready && !signIn && !workflow ? { hostId, agentId, projectPath, parentId } : null,
+      agentId && ready && !signIn && !sop ? { hostId, agentId, projectPath, parentId } : null,
     )
-  }, [hostId, agentId, ready, signIn, projectPath, parentId, workflow])
+  }, [hostId, agentId, ready, signIn, projectPath, parentId, sop])
 
   // Without a folder nothing is prepared, so an agent with no options cached reads them once, and
   // the menu lists its models before a project is chosen.
@@ -346,15 +344,14 @@ function DraftComposer({
   useEffect(() => onInput(holdsMessage), [holdsMessage, onInput])
 
   // A task takes the text as its requirement; it opens its page once created.
-  const startTask = async (chosen: WorkflowSummary, path: string) => {
+  const startTask = async (chosen: SopSummary, path: string) => {
     sending.current = true
     const taken = box.take()
     try {
       const task = await useTasksStore.getState().create({
         requirement: taken.prompt,
         projectPath: path,
-        workflow: { source: chosen.source, id: chosen.id },
-        start: true,
+        sop: { source: chosen.source, id: chosen.id },
       })
       openTask(task.id)
     } catch (error) {
@@ -367,7 +364,7 @@ function DraftComposer({
   // The message leaves the draft with the request and comes back to it if the start fails.
   const send = async () => {
     if (!canSend || sending.current) return
-    if (workflow && projectPath) return startTask(workflow, projectPath)
+    if (sop && projectPath) return startTask(sop, projectPath)
     if (!agentId) return
     sending.current = true
     try {
@@ -433,9 +430,9 @@ function DraftComposer({
       (o) => o.type === 'boolean' || o.category === 'model' || o.category === 'thought_level',
     )
 
-  const blocked = workflow
+  const blocked = sop
     ? taskAttachments
-      ? tt('workflow.noAttachments')
+      ? tt('sop.noAttachments')
       : project?.missing
         ? t('newSession.missingLine')
         : null
@@ -467,8 +464,8 @@ function DraftComposer({
                       limit: limitLabel(reached),
                       time: resetTime(reached.resetsAt),
                     })
-                  : workflow
-                    ? tt('workflow.describe')
+                  : sop
+                    ? tt('sop.describe')
                     : t('newSession.describeTask')
               }
               label={name ? t('newSession.messageAgent', { agent: name }) : t('newSession.message')}
@@ -484,10 +481,11 @@ function DraftComposer({
           addSections={add.sections}
           onAttach={add.onAttach}
           addDisabled={add.disabled}
-          {...(workflow ? {} : modeControl)}
+          // A task's nodes take no permission mode; an empty list hides the composer's own modes.
+          {...(sop ? { approvalModes: [] } : modeControl)}
           models={[]}
           modelSlot={
-            !workflow &&
+            !sop &&
             hasModelMenu &&
             agentId && (
               <ModelMenu
@@ -517,12 +515,12 @@ function DraftComposer({
               <TooltipTrigger render={<span className="kettu-send-wrap" />}>
                 <SendButton
                   disabled={!canSend}
-                  label={workflow ? tt('workflow.start') : t('newSession.send')}
+                  label={sop ? tt('sop.start') : t('newSession.send')}
                   onClick={() => void send()}
                 />
               </TooltipTrigger>
               <TooltipContent>
-                {blocked ?? (workflow ? tt('workflow.start') : t('newSession.send'))}
+                {blocked ?? (sop ? tt('sop.start') : t('newSession.send'))}
               </TooltipContent>
             </Tooltip>
           }
@@ -554,22 +552,22 @@ function DraftComposer({
                       chip
                       host={hostId}
                     />
-                    <WorkflowMenu
+                    <SopMenu
                       projectPath={inScratch ? null : projectPath}
-                      workflow={workflow}
+                      sop={sop}
                       onChoose={(next) => {
-                        setPicked(next && projectPath ? { projectPath, workflow: next } : null)
+                        setPicked(next && projectPath ? { projectPath, sop: next } : null)
                         requestAnimationFrame(() => editor.current?.focus())
                       }}
                     />
                   </>
                 )}
-                {workflow ? (
+                {sop ? (
                   <ByTierChip />
                 ) : (
                   <AgentPicker agentId={agentId} onChoose={choose} hostId={hostId} />
                 )}
-                {workflow ? null : gitStatus && project ? (
+                {sop ? null : gitStatus && project ? (
                   <WorktreeMenu projectPath={project.path} status={gitStatus} />
                 ) : parent?.worktree ? (
                   <WorktreeTrayTag worktree={parent.worktree} />
@@ -589,7 +587,7 @@ function DraftComposer({
         )}
         {taskAttachments && (
           <p className="kettu-start__error" role="alert">
-            {tt('workflow.noAttachments')}
+            {tt('sop.noAttachments')}
           </p>
         )}
         {(box.error || held?.notice) && (
@@ -597,10 +595,10 @@ function DraftComposer({
             {box.error ?? held?.message}
           </p>
         )}
-        {!workflow && gitStatus && project && (
+        {!sop && gitStatus && project && (
           <WorktreeNote projectPath={project.path} status={gitStatus} />
         )}
-        {!workflow && agentId && <StartNotices agentId={agentId} hostId={hostId} />}
+        {!sop && agentId && <StartNotices agentId={agentId} hostId={hostId} />}
         {waitingForNode && !(noAgent && guide) && (
           <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />
         )}

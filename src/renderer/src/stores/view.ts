@@ -135,7 +135,7 @@ export type SettingsSection =
   | 'browser'
   | 'devices'
   | 'computer-use'
-  | 'tasks'
+  | 'sops'
   | 'advanced'
   | 'about'
 

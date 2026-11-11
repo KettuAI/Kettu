@@ -1,5 +1,5 @@
 // Whether a permission request is inside a scope, by the platform's path rules: a routine's,
-// relative to its project, or a task stage's, relative to the task's worktree.
+// relative to its project, or a task node's, relative to the worktree it works in.
 
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
@@ -122,10 +122,10 @@ const GH_PR_ACTIONS = new Set(['create', 'merge', 'ready'])
 
 /**
  * Whether a command could push the task's branch, open, merge or ready a pull request, or make a
- * release: work that leaves the worktree, which the task's handover does once the person agreed.
- * Also whether it could move refs every worktree shares, such as the default branch the task
- * started from and its workflows are read from. A command whose text cannot be read word by word
- * counts when it names git with one of these, or gh with pr or release, anywhere.
+ * release: work that leaves the worktree, which only the person lets a task do. Also whether it
+ * could move refs every worktree shares, such as the default branch the task started from. A
+ * command whose text cannot be read word by word counts when it names git with one of these, or
+ * gh with pr or release, anywhere.
  */
 export function leavesWorktree(command: string): boolean {
   return leavesWith(command, 0)

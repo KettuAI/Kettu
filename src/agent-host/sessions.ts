@@ -148,7 +148,7 @@ import type { CacheTtlReader } from './prompt-cache'
 import { cutReply, type ToolSession } from './session-tools'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import { leavesWorktree, scopeAnswer } from './routines/scope'
-import type { TaskSessionHooksRef, TaskStageStart } from './tasks/hooks'
+import type { TaskNodeStart, TaskSessionHooksRef } from './tasks/hooks'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { WorktreeInspection } from './worktrees/api'
@@ -161,7 +161,6 @@ import {
 } from './carried-context'
 import {
   MAX_SESSION_PULL_REQUESTS,
-  MAX_TASK_TURN_COSTS,
   type EarlierAgent,
   type JsonFile,
   type PendingCarry,
@@ -203,7 +202,6 @@ import {
 import type { ThreadStore } from './threads/store'
 import type { UsageRow } from './usage/model'
 import { recordRows } from './usage/record'
-import { costSince, turnCostUsd } from './tasks/evidence'
 
 export interface SessionTimings {
   /** Patches of a session are flushed at most this often. */
@@ -340,7 +338,7 @@ export interface SessionManagerDeps {
   settings: () => HostSettings
   /** What a routine's run hears of its session; set once the routines manager exists. */
   routine?: RoutineSessionHooksRef
-  /** What a task's stage hears of its session; set once the task engine exists. */
+  /** What a task's node hears of its session; set once the task engine exists. */
   task?: TaskSessionHooksRef
   timings?: Partial<SessionTimings>
   now?: () => number
@@ -975,9 +973,7 @@ export class SessionManager {
       parentId: record.parentId,
       origin: record.origin,
       routine: record.routine ?? null,
-      ...(record.task
-        ? { task: { taskId: record.task.taskId, stageId: record.task.stageId } }
-        : {}),
+      ...(record.task ? { task: { taskId: record.task.taskId, nodeId: record.task.nodeId } } : {}),
       description: record.description,
       missing: this.missing.has(record.id),
       branch: record.branch,
@@ -2129,8 +2125,6 @@ export class SessionManager {
       mcpServers: this.mcpServers(sessionId, record, runtime),
       ...skills,
       ...(projectMcp ? { projectMcp } : {}),
-      // A read-only stage cannot write, however its requests would be answered.
-      ...(record.task?.scope.level === 'read' ? { readOnly: true } : {}),
     }
   }
 
@@ -2918,11 +2912,11 @@ export class SessionManager {
   }
 
   /**
-   * A task stage's session: top-level with `origin: 'task'`, in the task's worktree, which every
-   * stage of the task shares, or in its project, in the mode its scope names, with the stage's
+   * A task node's session: top-level with `origin: 'task'`, in the worktree its run works in, the
+   * task's or a branch's own, or in its project, in the mode its scope names, with the node's
    * prompt as its first message. The worktree is the task's: removing a session never removes it.
    */
-  async createStage(params: TaskStageStart): Promise<SessionSummary> {
+  async createNode(params: TaskNodeStart): Promise<SessionSummary> {
     const { agents, projects, scratch } = this.deps
     if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
     agents.assertEnabled(params.agentId)
@@ -2932,7 +2926,7 @@ export class SessionManager {
     const worktree = params.worktree ? { ...params.worktree } : undefined
     if (worktree) {
       delete worktree.pending
-      // Another stage may be preparing it still, which holds this one's first message too.
+      // Another node may be preparing it still, which holds this one's first message too.
       const shared = this.worktreeUsers(worktree.path)[0]?.worktree
       if (shared?.pending) worktree.pending = true
     }
@@ -2990,31 +2984,33 @@ export class SessionManager {
     return count
   }
 
-  /** The estimated cost in dollars of a task session's turns after the first `fromTurn`. */
-  taskCostSince(sessionId: string, fromTurn: number): number {
-    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
-    return costSince(record?.task?.costs ?? [], fromTurn)
-  }
-
-  /** A session's thread entries in order, from memory or as stored; null for none. */
-  async threadEntries(sessionId: string): Promise<ThreadEntry[] | null> {
+  /** Whether the session is in a turn, or holds a first message that is yet to start one. */
+  isWorking(sessionId: string): boolean {
     const live = this.live.get(sessionId)
-    if (live) {
-      return live.thread.order.flatMap((id) => {
-        const entry = live.thread.byId[id]
-        return entry ? [entry] : []
-      })
-    }
-    const record = this.records.get(sessionId)
-    if (!record) return null
-    const stored = await this.readThread(record)
-    return stored ? stored.entries.map((item) => item.entry) : null
+    if (!live) return false
+    return (
+      (live.turn !== null && !live.turn.ended) || live.first !== null || live.heldFirst !== null
+    )
   }
 
-  /** The folder a session works in, or null for one Kettu does not have. */
-  workFolder(sessionId: string): string | null {
-    const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
-    return record ? workDir(record) : null
+  /** Stops the agents of the sessions in a task's worktree before it is removed; they stay. */
+  async closeWorktreeUsers(path: string): Promise<void> {
+    await this.closeAll(
+      this.worktreeUsers(path).filter((user) => this.live.has(user.id)),
+      true,
+    )
+    this.deps.worktrees?.stop(path)
+  }
+
+  /** A task's worktree was removed, with or without its branch: its sessions say so. */
+  worktreeRemoved(path: string, branchDeleted: boolean): void {
+    const key = pathKey(path, this.deps.platform)
+    this.preparing.delete(key)
+    this.missingWorktrees.delete(key)
+    this.markWorktree(path, (item) => {
+      item.removed = branchDeleted ? 'branch' : 'worktree'
+      delete item.pending
+    })
   }
 
   /**
@@ -5850,21 +5846,21 @@ export class SessionManager {
         ...(cache ? { cache } : {}),
       }
     }
-    const rows =
-      turnEntryId && (this.deps.usage || live.record.task)
-        ? recordRows({
-            sessionId: live.id,
-            acpSessionId: live.record.acpSessionId,
-            agentId: live.record.agentId,
-            project: live.record.projectPath,
-            turnEntryId,
-            at: now,
-            tokens,
-            models,
-            model: modelOf(live.thread.session.config),
-          })
-        : []
-    if (turnEntryId && this.deps.usage) this.deps.usage.record(rows)
+    if (turnEntryId && this.deps.usage) {
+      this.deps.usage.record(
+        recordRows({
+          sessionId: live.id,
+          acpSessionId: live.record.acpSessionId,
+          agentId: live.record.agentId,
+          project: live.record.projectPath,
+          turnEntryId,
+          at: now,
+          tokens,
+          models,
+          model: modelOf(live.thread.session.config),
+        }),
+      )
+    }
     this.update(live, changes)
     if (live.thread.session.usage?.cache) this.scheduleCacheRead(live)
     const git = this.deps.git()
@@ -5882,10 +5878,10 @@ export class SessionManager {
       usage: turnTokens ?? null,
       turn,
     })
-    const stageTurn = this.isStage(live)
-    // A run's end notifies as the routine's, once, and a stage's as its task's, so its session
+    const nodeTurn = this.isNode(live)
+    // A run's end notifies as the routine's, once, and a node's as its task's, so its session
     // sends nothing here.
-    if (!routineTurn && !stageTurn) {
+    if (!routineTurn && !nodeTurn) {
       const reply = stopReason === 'end_turn' ? replySummary(live.thread) : null
       const changed = stopReason === 'end_turn' ? changedFiles(live.thread) : 0
       const text = reply ?? turnEndText(stopReason)
@@ -5905,7 +5901,7 @@ export class SessionManager {
     this.maybeReadListedTitle(live, this.userMessages(live) === 1)
     this.checkpoint(live)
     this.refreshContext(live)
-    this.reportStage(live, rows)
+    this.reportNode(live)
   }
 
   /** Coalesces activity reads; a change during a read is followed by another read. */
@@ -6037,38 +6033,28 @@ export class SessionManager {
     return true
   }
 
-  /** Whether the session works for a task's current stage. */
-  private isStage(live: Live): boolean {
-    return live.record.origin === 'task' && (this.deps.task?.current?.isStage(live.id) ?? false)
+  /** Whether the session works for a task's node that has not reported. */
+  private isNode(live: Live): boolean {
+    return live.record.origin === 'task' && (this.deps.task?.current?.isNode(live.id) ?? false)
   }
 
-  /**
-   * Keeps a task session's turn count and the turn's estimated cost with its record, then tells
-   * the engine a turn ended.
-   */
-  private reportStage(live: Live, rows: readonly UsageRow[] = []): void {
+  /** Keeps a task session's turn count with its record, then tells the engine a turn ended. */
+  private reportNode(live: Live): void {
     const task = live.record.task
     if (live.record.origin !== 'task' || !task) return
     task.turns = this.turnsOf(live.id)
-    const usd = turnCostUsd(rows)
-    if (usd !== null && task.turns > 0) {
-      task.costs = [...(task.costs ?? []), [task.turns, usd] as [number, number]].slice(
-        -MAX_TASK_TURN_COSTS,
-      )
-    }
     this.persist(live)
-    this.deps.task?.current?.costChanged(live.id)
-    if (this.isStage(live)) this.deps.task?.current?.turnEnded(live.id)
+    if (this.isNode(live)) this.deps.task?.current?.turnEnded(live.id)
   }
 
   /**
-   * The stage a session's permission requests are answered for: its own, or for a sub-session
-   * the stage session it runs under; null outside a current stage.
+   * The node a session's permission requests are answered for: its own, or for a sub-session
+   * the node session it runs under; null once the node reported.
    */
-  private stageOfTree(live: Live): { top: SessionRecord; scope: PermissionScope } | null {
+  private nodeOfTree(live: Live): { top: SessionRecord; scope: PermissionScope } | null {
     const top = this.topOf(live.record)
     if (top.origin !== 'task' || !top.task) return null
-    if (!this.deps.task?.current?.isStage(top.id)) return null
+    if (!this.deps.task?.current?.isNode(top.id)) return null
     return { top, scope: top.task.scope }
   }
 
@@ -6200,13 +6186,13 @@ export class SessionManager {
       usage: null,
       turn,
     })
-    if (!routineTurn && !this.isStage(live)) {
+    if (!routineTurn && !this.isNode(live)) {
       this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
     }
     this.followAgentTurn(live)
     this.checkpoint(live)
     this.refreshContext(live)
-    this.reportStage(live)
+    this.reportNode(live)
   }
 
   /**
@@ -6379,13 +6365,13 @@ export class SessionManager {
   }
 
   /**
-   * The `allow_once` option a task stage's scope allows, relative to the session's worktree, or
+   * The `allow_once` option a task node's scope allows, relative to the session's worktree, or
    * null when the request waits for the person. A command that leaves the worktree or moves shared
    * refs always waits, whatever the scope.
    */
-  private stageAnswer(
+  private nodeAnswer(
     live: Live,
-    stage: { top: SessionRecord; scope: PermissionScope },
+    node: { top: SessionRecord; scope: PermissionScope },
     request: PermissionRequest,
   ): string | null {
     if (request.plan !== undefined || request.elicitation || request.questions) return null
@@ -6393,8 +6379,8 @@ export class SessionManager {
     if (entry?.kind !== 'tool') return null
     if (entry.toolKind === 'execute' && leavesWorktree(entry.rawInput ?? entry.title)) return null
     return scopeAnswer(
-      stage.scope,
-      workDir(stage.top),
+      node.scope,
+      workDir(node.top),
       {
         toolKind: entry.toolKind,
         locations: entry.locations.map((location) => location.path),
@@ -6430,10 +6416,10 @@ export class SessionManager {
         return Promise.resolve({ optionId })
       }
     }
-    // A task stage answers inside its scope on every turn; anything else waits for the person.
-    const stage = this.stageOfTree(live)
-    if (stage) {
-      const optionId = this.stageAnswer(live, stage, request)
+    // A task node answers inside its scope on every turn; anything else waits for the person.
+    const node = this.nodeOfTree(live)
+    if (node) {
+      const optionId = this.nodeAnswer(live, node, request)
       if (optionId !== null) {
         this.emit(live, [
           {
@@ -6510,7 +6496,7 @@ export class SessionManager {
       this.updateBadge()
       const entry = live.thread.byId[request.toolEntryId]
       const tool = entry?.kind === 'tool' ? entry : undefined
-      if (stage) this.deps.task?.current?.waiting(stage.top.id, true)
+      if (node) this.deps.task?.current?.waiting(node.top.id, true)
       if (live.record.origin === 'routine' && !live.routineTurnEnded) {
         this.deps.routine?.current?.waiting(
           live.id,
@@ -6559,10 +6545,10 @@ export class SessionManager {
       this.deps.routine?.current?.waiting(live.id, false)
     }
     if (live.permissions.size === 0) {
-      const stage = this.stageOfTree(live)
-      const tree = stage ? [stage.top, ...this.descendants(stage.top.id)] : []
-      if (stage && !tree.some((item) => (this.live.get(item.id)?.permissions.size ?? 0) > 0)) {
-        this.deps.task?.current?.waiting(stage.top.id, false)
+      const node = this.nodeOfTree(live)
+      const tree = node ? [node.top, ...this.descendants(node.top.id)] : []
+      if (node && !tree.some((item) => (this.live.get(item.id)?.permissions.size ?? 0) > 0)) {
+        this.deps.task?.current?.waiting(node.top.id, false)
       }
     }
     this.updateBadge()

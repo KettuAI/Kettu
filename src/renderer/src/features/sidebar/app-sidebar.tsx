@@ -44,7 +44,7 @@ import {
   type SidebarTabStop,
   useSessionsStore,
 } from '@renderer/stores/sessions'
-import { taskListed, useTasksStore } from '@renderer/stores/tasks'
+import { sessionTaskGone, taskListed, useTasksStore } from '@renderer/stores/tasks'
 import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
@@ -80,7 +80,15 @@ export function SidebarList() {
       ),
     ]),
   )
-  const shownProjects = visibleProjects(projects, sessionsById, taskProjects)
+  // Node sessions whose task was removed are plain sessions again.
+  const taskGone = useTasksStore(
+    useShallow((s) =>
+      Object.values(sessionsById)
+        .filter((session) => sessionTaskGone(s, session))
+        .map((session) => session.id),
+    ),
+  )
+  const shownProjects = visibleProjects(projects, sessionsById, taskProjects, new Set(taskGone))
   const main = useViewStore((s) => s.main)
   const collapsedProjects = useViewStore((s) => s.collapsedProjects)
   const expandedParents = useViewStore((s) => s.expandedParents)
@@ -261,9 +269,18 @@ function ProjectGroup({
     ),
   )
   const projectPath = project?.path ?? null
+  const taskGone = useTasksStore(
+    useShallow((s) => summaries.filter((x) => sessionTaskGone(s, x)).map((x) => x.id)),
+  )
   const tree = useMemo(
-    () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath, hostId),
-    [summaries, projectPath, hostId],
+    () =>
+      sessionTree(
+        Object.fromEntries(summaries.map((x) => [x.id, x])),
+        projectPath,
+        hostId,
+        new Set(taskGone),
+      ),
+    [summaries, projectPath, hostId, taskGone],
   )
   // A project's tasks share its list with its sessions, by when each last changed.
   const tasks = useTasksStore(
@@ -440,10 +457,7 @@ function withTasks(tree: readonly SessionNode[], tasks: readonly TaskView[]): Gr
 /** A task stays in sight past the first few rows while it needs the person or is in front. */
 function taskInSight(task: TaskView, shownTask: string | null): boolean {
   return (
-    task.id === shownTask ||
-    task.state === 'waiting' ||
-    task.state === 'blocked' ||
-    task.state === 'running'
+    task.id === shownTask || task.needsYou || task.state === 'waiting' || task.state === 'running'
   )
 }
 

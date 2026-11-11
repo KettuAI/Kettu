@@ -79,13 +79,16 @@ export function hostOfSession(summary: Pick<SessionSummary, 'projectPath'>): str
 
 /**
  * Whether the session has a row of its own in the lists: a routine's run is listed under its
- * routine, and a task's stage session under its task.
+ * routine, and a task's node session under its task, unless it is one of `taskGone`, whose task
+ * was removed.
  */
-export function listedAlone(s: SessionSummary): boolean {
-  return s.origin !== 'routine' && s.origin !== 'task' && !s.task
+export function listedAlone(s: SessionSummary, taskGone?: ReadonlySet<string>): boolean {
+  if (s.origin === 'routine') return false
+  if (s.origin === 'task' || s.task) return !!taskGone?.has(s.id)
+  return true
 }
 
-/** A task's stage sessions as rows under its own, in the order they started. */
+/** A task's node sessions as rows under its own, in the order they started. */
 export function taskSessionNodes(
   byId: Record<string, SessionSummary>,
   taskId: string,
@@ -101,17 +104,18 @@ export function taskSessionNodes(
  * The project's sessions as a tree, newest first, with attention summed up from descendants;
  * null for the sessions started with No project on `hostId`, across their scratch folders. Pinned
  * and archived sessions are listed elsewhere, with their sub-sessions. Routine runs keep their own
- * lists.
+ * lists, and node sessions their task's, except those of `taskGone`.
  */
 export function sessionTree(
   byId: Record<string, SessionSummary>,
   projectPath: string | null,
   hostId: string | null = null,
+  taskGone?: ReadonlySet<string>,
 ): SessionNode[] {
   return buildTree(
     byId,
     (s) =>
-      listedAlone(s) &&
+      listedAlone(s, taskGone) &&
       (projectPath === null
         ? s.scratch && hostOfSession(s) === hostId
         : s.projectPath === projectPath),

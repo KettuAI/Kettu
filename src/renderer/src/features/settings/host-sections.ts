@@ -8,7 +8,7 @@ export const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'harnesses',
   'usage',
   'git',
-  'tasks',
+  'sops',
   'archived',
   'artifacts',
   'sharing',

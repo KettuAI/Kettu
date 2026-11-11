@@ -874,71 +874,92 @@ describe('worktree requests', () => {
 
   it('checks every task method strictly', () => {
     const id = 't-0123456789ab'
+    const runId = 'nr-0123456789ab'
     const draft = {
       requirement: 'Add a dark mode',
       projectPath: '/repo',
-      workflow: { source: 'official', id: 'development' },
-      start: true,
+      sop: { source: 'official', id: 'development' },
     }
-    expect(posix['tasks.create']({ ...draft, extra: 1 })).toEqual(draft)
-    const full = { ...draft, title: 'Dark mode', priority: 'high', after: [id] }
+    expect(posix['tasks.create']({ ...draft, extra: 1, sop: { ...draft.sop, hash: 'x' } })).toEqual(
+      draft,
+    )
+    const full = { ...draft, title: 'Dark mode' }
     expect(posix['tasks.create'](full)).toEqual(full)
     for (const bad of [
       { ...draft, requirement: '  ' },
       { ...draft, requirement: 'x'.repeat(100_001) },
       { ...draft, title: 'x'.repeat(201) },
+      { ...draft, title: ' ' },
       { ...draft, projectPath: 'repo' },
-      { ...draft, workflow: { source: 'web', id: 'development' } },
-      { ...draft, workflow: { source: 'library', id: '../x' } },
-      { ...draft, workflow: { source: 'library', id: 'x'.repeat(41) } },
-      { ...draft, start: 'yes' },
-      { ...draft, priority: 'urgent' },
-      { ...draft, after: ['t-1'] },
-      { ...draft, after: [id, id] },
-      {
-        ...draft,
-        after: Array.from({ length: 51 }, (_, i) => `t-${i.toString(16).padStart(12, '0')}`),
-      },
+      { ...draft, sop: undefined },
+      { ...draft, sop: 'development' },
+      { ...draft, sop: { source: 'project', id: 'development' } },
+      { ...draft, sop: { source: 'library', id: '../x' } },
+      { ...draft, sop: { source: 'library', id: 'a/b' } },
+      { ...draft, sop: { source: 'library', id: 'Development' } },
+      { ...draft, sop: { source: 'library', id: 'nul' } },
+      { ...draft, sop: { source: 'library', id: 'x'.repeat(41) } },
     ]) {
       rejects(() => posix['tasks.create'](bad))
     }
-    for (const method of [
-      'tasks.get',
-      'tasks.start',
-      'tasks.pause',
-      'tasks.resume',
-      'tasks.cancel',
-      'tasks.markSeen',
-    ] as const) {
+    for (const method of ['tasks.get', 'tasks.cancel', 'tasks.remove', 'tasks.markSeen'] as const) {
       expect(posix[method]({ taskId: id, x: 1 })).toEqual({ taskId: id })
       rejects(() => posix[method]({ taskId: 'r-0123456789ab' }))
+      rejects(() => posix[method]({ taskId: `${id}0` }))
       rejects(() => posix[method]({}))
     }
-    const decision = { taskId: id, decision: 'send-back', to: 'build', note: 'Fix the tests' }
+    const decision = { taskId: id, runId, outcome: 'approve', note: 'Go on' }
     expect(posix['tasks.decide']({ ...decision, x: 1 })).toEqual(decision)
-    expect(posix['tasks.decide']({ taskId: id, decision: 'approve' })).toEqual({
+    expect(posix['tasks.decide']({ taskId: id, runId, outcome: 'approve' })).toEqual({
       taskId: id,
-      decision: 'approve',
+      runId,
+      outcome: 'approve',
     })
-    rejects(() => posix['tasks.decide']({ ...decision, decision: 'merge' }))
-    rejects(() => posix['tasks.decide']({ ...decision, to: 'Build Stage' }))
+    rejects(() => posix['tasks.decide']({ taskId: id, runId }))
+    rejects(() => posix['tasks.decide']({ ...decision, outcome: 'Send back' }))
+    rejects(() => posix['tasks.decide']({ ...decision, runId: 'sr-0123456789ab' }))
+    rejects(() => posix['tasks.decide']({ ...decision, taskId: runId }))
+    rejects(() => posix['tasks.decide']({ ...decision, note: 3 }))
     rejects(() => posix['tasks.decide']({ ...decision, note: 'x'.repeat(20_001) }))
-    expect(posix['tasks.workflows']({ projectPath: null })).toEqual({ projectPath: null })
-    expect(posix['tasks.workflows']({ projectPath: '/repo' })).toEqual({ projectPath: '/repo' })
-    rejects(() => posix['tasks.workflows']({ projectPath: 'repo' }))
-    rejects(() => posix['tasks.workflows']({}))
+    const retry = { taskId: id, runId, note: 'Try the other way' }
+    expect(posix['tasks.retry']({ ...retry, outcome: 'pass' })).toEqual(retry)
+    expect(posix['tasks.retry']({ taskId: id, runId })).toEqual({ taskId: id, runId })
+    rejects(() => posix['tasks.retry']({ taskId: id }))
+    rejects(() => posix['tasks.retry']({ ...retry, runId: id }))
+    rejects(() => posix['tasks.retry']({ ...retry, note: 'x'.repeat(20_001) }))
+    expect(posix['tasks.document']({ runId, x: 1 })).toEqual({ runId })
+    rejects(() => posix['tasks.document']({ runId: id }))
+    rejects(() => posix['tasks.document']({}))
     const tiers = {
-      deep: [{ agentId: 'claude-code', options: [{ id: 'model', value: 'opus' }] }],
-      standard: [],
-      fast: [{ agentId: 'codex', options: [] }],
+      deep: { agentId: 'claude-code', options: [{ id: 'model', value: 'opus' }] },
+      standard: null,
+      fast: { agentId: 'codex', options: [] },
     }
-    expect(posix['tasks.setTiers'](tiers)).toEqual(tiers)
+    expect(posix['tasks.setTiers']({ ...tiers, extra: null })).toEqual(tiers)
+    rejects(() => posix['tasks.setTiers'](null))
     rejects(() => posix['tasks.setTiers']({ ...tiers, fast: undefined }))
-    rejects(() => posix['tasks.setTiers']({ ...tiers, deep: [{ agentId: 'nope', options: [] }] }))
+    rejects(() => posix['tasks.setTiers']({ ...tiers, standard: [] }))
+    rejects(() => posix['tasks.setTiers']({ ...tiers, deep: { agentId: 'nope', options: [] } }))
+    rejects(() => posix['tasks.setTiers']({ ...tiers, deep: { agentId: 'codex' } }))
     rejects(() =>
-      posix['tasks.setTiers']({ ...tiers, deep: [{ agentId: 'codex', options: [{ id: 1 }] }] }),
+      posix['tasks.setTiers']({ ...tiers, deep: { agentId: 'codex', options: [{ id: 1 }] } }),
     )
     expect(posix['tasks.tiers'](undefined)).toBeUndefined()
     rejects(() => posix['tasks.list']({ x: 1 }))
+  })
+
+  it('checks every SOP method strictly', () => {
+    const hash = 'a'.repeat(64)
+    expect(posix['sops.list'](undefined)).toBeUndefined()
+    rejects(() => posix['sops.list']({ x: 1 }))
+    expect(posix['sops.approve']({ id: 'my-flow', hash, x: 1 })).toEqual({ id: 'my-flow', hash })
+    rejects(() => posix['sops.approve']({ id: 'my-flow' }))
+    rejects(() => posix['sops.approve']({ id: 'my-flow', hash: hash.slice(1) }))
+    rejects(() => posix['sops.approve']({ id: 'my-flow', hash: hash.toUpperCase() }))
+    rejects(() => posix['sops.approve']({ id: '../my-flow', hash }))
+    expect(posix['sops.remove']({ id: 'my-flow', x: 1 })).toEqual({ id: 'my-flow' })
+    for (const id of ['', '..', 'a/b', 'a\\b', 'My-Flow', 'my flow', 'con', 'x'.repeat(41), 3]) {
+      rejects(() => posix['sops.remove']({ id }))
+    }
   })
 })

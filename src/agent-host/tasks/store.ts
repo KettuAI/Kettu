@@ -1,54 +1,53 @@
-// The tasks file: tasks, their stage runs and the user's tiers, in <userData>/state/tasks.json.
-// A record that does not read is dropped alone, so one bad task never loses the others.
+// The tasks file: tasks with their tokens, their node runs and the user's tiers, in
+// <userData>/state/tasks.json. A record that does not read is dropped alone, so one bad task
+// never loses the others.
 
 import path from 'node:path'
 import { isAgentId } from '@shared/agents'
-import { isPermissionScope } from '@shared/routines'
 import {
+  SOP_FORMAT,
   TASK_TIERS,
-  type StageRunState,
-  type TaskPriority,
+  type NodeRunState,
+  type NodeWaiting,
+  type Sop,
+  type SopNode,
+  type SopOutcome,
   type TaskState,
-  type Workflow,
-  type WorkflowStage,
 } from '@shared/tasks'
 import { JsonFile, type LogFn, type Migration, type WorktreeRecord } from '../storage'
-import type { StageRunRecord, TaskRecord, TasksFile } from './api'
-import { parseTierSettings } from './tiers'
+import type { NodeRunRecord, TaskRecord, TasksFile, TokenRecord } from './api'
+import { emptyTiers, parseTierSettings } from './tiers'
 
-export const TASKS_VERSION = 1
-// No older formats exist yet; each future version adds its step here, with a test.
-export const TASKS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const TASKS_VERSION = 2
+// Version 1 held tasks of a model that was never released; nothing of it carries over.
+export const TASKS_MIGRATIONS: Readonly<Record<number, Migration>> = {
+  1: () => ({ tasks: [], runs: [], tiers: emptyTiers() }),
+}
 
 /** What the engine needs of the file, so tests can hand it one in memory. */
 export type TasksStore = Pick<JsonFile<TasksFile>, 'load' | 'save' | 'flush'>
 
 export const TASK_ID = /^t-[0-9a-f]{12}$/
-export const RUN_ID = /^sr-[0-9a-f]{12}$/
+export const RUN_ID = /^nr-[0-9a-f]{12}$/
+const TOKEN_ID = /^tk-[0-9a-f]{12}$/
 
 const TASK_STATES: ReadonlySet<unknown> = new Set<TaskState>([
-  'backlog',
+  'running',
+  'waiting',
+  'done',
+  'dropped',
+  'cancelled',
+])
+const RUN_STATES: ReadonlySet<unknown> = new Set<NodeRunState>([
   'queued',
   'running',
   'waiting',
-  'blocked',
-  'paused',
   'done',
-  'cancelled',
+  'stopped',
 ])
-const RUN_STATES: ReadonlySet<unknown> = new Set<StageRunState>([
-  'running',
-  'waiting',
-  'passed',
-  'changes',
-  'blocked',
-  'skipped',
-  'interrupted',
-])
-const PRIORITIES: ReadonlySet<unknown> = new Set<TaskPriority>(['low', 'normal', 'high'])
-const SOURCES: ReadonlySet<unknown> = new Set(['official', 'project', 'library'])
-const STAGE_KINDS: ReadonlySet<unknown> = new Set(['agent', 'human', 'handover'])
-const SIZES: ReadonlySet<unknown> = new Set(['S', 'M', 'L'])
+const WAITING: ReadonlySet<unknown> = new Set<NodeWaiting>(['person', 'request', 'stuck'])
+const SOURCES: ReadonlySet<unknown> = new Set(['official', 'library'])
+const HAND_INS: ReadonlySet<unknown> = new Set(['document', 'verdict', 'note'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -56,50 +55,59 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const isString = (value: unknown): value is string => typeof value === 'string'
 const isTime = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0
+const isCount = (value: unknown): value is number => isTime(value) && Number.isInteger(value)
 const isNullableTime = (value: unknown): value is number | null => value === null || isTime(value)
 const isNullableString = (value: unknown): value is string | null =>
   value === null || typeof value === 'string'
 const isStringList = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(isString)
 
-// The snapshot was validated when the task was made; this only guards what the engine reads.
-function isStage(value: unknown): value is WorkflowStage {
-  if (!isRecord(value) || !isString(value.id) || !isString(value.name)) return false
-  if (!STAGE_KINDS.has(value.kind) || !isNullableString(value.next)) return false
-  if (value.kind === 'agent') {
-    return (
-      isString(value.prompt) &&
-      (TASK_TIERS.includes(value.tier as never) || isRecord(value.tier)) &&
-      isPermissionScope(value.scope) &&
-      (value.session === 'resume' || value.session === 'new') &&
-      Array.isArray(value.contract) &&
-      value.contract.every((field) => isRecord(field) && isString(field.name)) &&
-      isStringList(value.evidence) &&
-      (value.gate === 'contract' || value.gate === 'agent')
-    )
-  }
-  if (value.kind === 'human') return isString(value.prompt) && isStringList(value.sendBack)
-  return value.action === 'pull-request'
-}
-
-export function isWorkflowSnapshot(value: unknown): value is Workflow {
-  if (!isRecord(value) || !isString(value.id) || !isString(value.name)) return false
-  if (!isString(value.start) || typeof value.worktree !== 'boolean') return false
-  if (!Array.isArray(value.stages) || value.stages.length === 0 || !value.stages.every(isStage)) {
-    return false
-  }
-  const limits = value.limits
+function isOutcome(value: unknown): value is SopOutcome {
   return (
-    isRecord(limits) &&
-    isTime(limits.rounds) &&
-    isTime(limits.stageMinutes) &&
-    (limits.budgetUsd === null || isTime(limits.budgetUsd)) &&
-    value.stages.some((stage) => (stage as WorkflowStage).id === value.start)
+    isRecord(value) &&
+    isString(value.id) &&
+    isString(value.name) &&
+    isStringList(value.to) &&
+    (value.to.length > 0
+      ? value.end === undefined
+      : value.end === 'done' || value.end === 'dropped') &&
+    (value.rounds === undefined || isCount(value.rounds))
   )
 }
 
-function worktreeOf(value: unknown): WorktreeRecord | null | undefined {
-  if (value === null) return null
+function isNode(value: unknown): value is SopNode {
+  if (!isRecord(value) || !isString(value.id) || !isString(value.name)) return false
+  const by = value.by
+  return (
+    isString(value.prompt) &&
+    isRecord(by) &&
+    (by.kind === 'person' || (by.kind === 'agent' && TASK_TIERS.includes(by.tier as never))) &&
+    HAND_INS.has(value.handIn) &&
+    Array.isArray(value.outcomes) &&
+    value.outcomes.length > 0 &&
+    value.outcomes.every(isOutcome)
+  )
+}
+
+// The snapshot was validated when the task was made; this only guards what the engine reads.
+export function isSopSnapshot(value: unknown): value is Sop {
+  if (!isRecord(value) || value.format !== SOP_FORMAT) return false
+  if (!isString(value.id) || !isString(value.name) || !isString(value.description)) return false
+  if (!isString(value.start) || !isCount(value.rounds)) return false
+  if (!Array.isArray(value.nodes) || value.nodes.length === 0 || !value.nodes.every(isNode)) {
+    return false
+  }
+  const ids = new Set(value.nodes.map((node) => (node as SopNode).id))
+  return (
+    ids.size === value.nodes.length &&
+    ids.has(value.start) &&
+    value.nodes.every((node) =>
+      (node as SopNode).outcomes.every((outcome) => outcome.to.every((to) => ids.has(to))),
+    )
+  )
+}
+
+function worktreeOf(value: unknown): WorktreeRecord | undefined {
   if (
     !isRecord(value) ||
     !isString(value.path) ||
@@ -120,167 +128,199 @@ function worktreeOf(value: unknown): WorktreeRecord | null | undefined {
   return record
 }
 
+function nullableWorktreeOf(value: unknown): WorktreeRecord | null | undefined {
+  return value === null ? null : worktreeOf(value)
+}
+
+function worktreesOf(value: unknown): WorktreeRecord[] | null {
+  if (!Array.isArray(value)) return null
+  const list: WorktreeRecord[] = []
+  for (const item of value) {
+    const worktree = worktreeOf(item)
+    if (!worktree) return null
+    list.push(worktree)
+  }
+  return list
+}
+
+function tokenOf(value: unknown, snapshot: Sop): TokenRecord | null {
+  if (!isRecord(value) || !isString(value.id) || !TOKEN_ID.test(value.id)) return null
+  const lanes = worktreesOf(value.lanes)
+  const from = value.from
+  if (
+    !isString(value.nodeId) ||
+    !snapshot.nodes.some((node) => node.id === value.nodeId) ||
+    !isNullableString(value.runId) ||
+    lanes === null ||
+    !(
+      from === null ||
+      (isRecord(from) &&
+        isString(from.nodeId) &&
+        isString(from.outcome) &&
+        isString(from.note) &&
+        typeof from.back === 'boolean')
+    )
+  ) {
+    return null
+  }
+  return {
+    id: value.id,
+    nodeId: value.nodeId,
+    runId: value.runId,
+    lanes,
+    from: from && {
+      nodeId: from.nodeId as string,
+      outcome: from.outcome as string,
+      note: from.note as string,
+      back: from.back as boolean,
+    },
+  }
+}
+
 function roundsOf(value: unknown): Record<string, number> | null {
   if (!isRecord(value)) return null
   const rounds: Record<string, number> = {}
   for (const [key, count] of Object.entries(value)) {
-    if (!isTime(count) || !Number.isInteger(count)) return null
+    if (!isCount(count)) return null
     rounds[key] = count
   }
   return rounds
 }
 
+function spentOf(value: unknown): TaskRecord['spent'] | null {
+  if (!Array.isArray(value)) return null
+  const spent: TaskRecord['spent'] = []
+  for (const item of value) {
+    const worktree = isRecord(item) ? worktreeOf(item.worktree) : undefined
+    if (!worktree || typeof (item as Record<string, unknown>).merged !== 'boolean') return null
+    spent.push({ worktree, merged: (item as { merged: boolean }).merged })
+  }
+  return spent
+}
+
 /** Reads a task, or null when a field is missing or out of range. */
 export function taskOf(value: unknown): TaskRecord | null {
   if (!isRecord(value)) return null
-  const workflow = value.workflow
-  const worktree = worktreeOf(value.worktree)
+  const sop = value.sop
+  const worktree = nullableWorktreeOf(value.worktree)
   const rounds = roundsOf(value.rounds)
+  const spent = spentOf(value.spent)
   if (
     !isString(value.id) ||
     !TASK_ID.test(value.id) ||
     !isString(value.title) ||
     !isString(value.requirement) ||
     !isString(value.projectPath) ||
-    !isRecord(workflow) ||
-    !SOURCES.has(workflow.source) ||
-    !isString(workflow.id) ||
-    !isString(workflow.version) ||
-    !isString(workflow.hash) ||
-    !isString(workflow.name) ||
-    !isWorkflowSnapshot(value.snapshot) ||
+    !isRecord(sop) ||
+    !SOURCES.has(sop.source) ||
+    !isString(sop.id) ||
+    !isString(sop.name) ||
+    !isString(sop.hash) ||
+    !isSopSnapshot(value.snapshot) ||
     !TASK_STATES.has(value.state) ||
-    !isNullableString(value.reason) ||
-    !isNullableString(value.stageId) ||
-    !PRIORITIES.has(value.priority) ||
-    !isStringList(value.after) ||
-    !(value.size === null || SIZES.has(value.size)) ||
-    typeof value.risk !== 'boolean' ||
     worktree === undefined ||
-    !isNullableString(value.pullRequest) ||
-    !isTime(value.costUsd) ||
+    !Array.isArray(value.tokens) ||
+    rounds === null ||
+    spent === null ||
     !(value.createdBy === 'user' || value.createdBy === 'agent') ||
     !isTime(value.createdAt) ||
     !isTime(value.updatedAt) ||
-    !isNullableTime(value.startedAt) ||
     !isNullableTime(value.endedAt) ||
-    !isNullableTime(value.lastViewedAt) ||
-    rounds === null ||
-    typeof value.pausedByUser !== 'boolean' ||
-    !(value.notes === undefined || isNullableString(value.notes))
+    !isNullableTime(value.lastViewedAt)
   ) {
     return null
+  }
+  const tokens: TokenRecord[] = []
+  for (const item of value.tokens) {
+    const token = tokenOf(item, value.snapshot)
+    if (!token) return null
+    tokens.push(token)
   }
   return {
     id: value.id,
     title: value.title,
     requirement: value.requirement,
     projectPath: value.projectPath,
-    workflow: {
-      source: workflow.source as TaskRecord['workflow']['source'],
-      id: workflow.id,
-      version: workflow.version,
-      hash: workflow.hash,
-      name: workflow.name,
+    sop: {
+      source: sop.source as TaskRecord['sop']['source'],
+      id: sop.id,
+      name: sop.name,
+      hash: sop.hash,
     },
     snapshot: value.snapshot,
     state: value.state as TaskState,
-    reason: value.reason,
-    stageId: value.stageId,
-    priority: value.priority as TaskPriority,
-    after: [...value.after],
-    size: value.size as TaskRecord['size'],
-    risk: value.risk,
     worktree,
-    pullRequest: value.pullRequest,
-    costUsd: value.costUsd,
+    tokens,
+    rounds,
+    spent,
     createdBy: value.createdBy,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
-    startedAt: value.startedAt,
     endedAt: value.endedAt,
     lastViewedAt: value.lastViewedAt,
-    rounds,
-    pausedByUser: value.pausedByUser,
-    notes: (value.notes as string | null | undefined) ?? null,
   }
 }
 
-function fieldsOf(value: unknown): StageRunRecord['fields'] | null {
+/** Reads a node run, or null when a field is missing or out of range. */
+export function runOf(value: unknown): NodeRunRecord | null {
   if (!isRecord(value)) return null
-  const fields: StageRunRecord['fields'] = {}
-  for (const [key, field] of Object.entries(value)) {
-    if (!(isString(field) || typeof field === 'boolean' || isStringList(field))) return null
-    fields[key] = Array.isArray(field) ? [...field] : field
-  }
-  return fields
-}
-
-function evidenceOf(value: unknown): StageRunRecord['evidence'] | undefined {
-  if (value === null) return null
-  if (!isRecord(value) || !isStringList(value.commands) || !isStringList(value.changedFiles)) {
-    return undefined
-  }
-  return { commands: [...value.commands], changedFiles: [...value.changedFiles] }
-}
-
-/** Reads a stage run, or null when a field is missing or out of range. */
-export function runOf(value: unknown): StageRunRecord | null {
-  if (!isRecord(value)) return null
-  const fields = fieldsOf(value.fields)
-  const evidence = evidenceOf(value.evidence)
+  const worktree = nullableWorktreeOf(value.worktree)
+  const toMerge = worktreesOf(value.toMerge)
+  const sentBack = value.sentBack
   if (
     !isString(value.id) ||
     !RUN_ID.test(value.id) ||
     !isString(value.taskId) ||
-    !isString(value.stageId) ||
-    typeof value.round !== 'number' ||
-    !Number.isInteger(value.round) ||
+    !isString(value.nodeId) ||
+    !isCount(value.round) ||
     value.round < 1 ||
-    !STAGE_KINDS.has(value.kind) ||
+    !(value.by === 'agent' || value.by === 'person') ||
     !RUN_STATES.has(value.state) ||
+    !(value.waiting === null || WAITING.has(value.waiting)) ||
+    (value.state === 'waiting') !== (value.waiting !== null) ||
+    !isNullableString(value.reason) ||
     !isNullableString(value.sessionId) ||
     !(value.agentId === null || isAgentId(value.agentId)) ||
     !isNullableString(value.model) ||
     !(value.tier === null || TASK_TIERS.includes(value.tier as never)) ||
-    !isNullableString(value.summary) ||
-    fields === null ||
-    evidence === undefined ||
+    !isNullableString(value.outcome) ||
     !isNullableString(value.note) ||
-    !isTime(value.costUsd) ||
+    !isNullableString(value.document) ||
+    !(
+      sentBack === null ||
+      (isRecord(sentBack) && isString(sentBack.from) && isString(sentBack.note))
+    ) ||
+    worktree === undefined ||
+    toMerge === null ||
     !isTime(value.startedAt) ||
     !isNullableTime(value.endedAt) ||
-    !isTime(value.fromTurn) ||
-    typeof value.nudged !== 'boolean' ||
-    !isTime(value.workedMs) ||
-    !(value.escalate === undefined || typeof value.escalate === 'boolean')
+    typeof value.reminded !== 'boolean'
   ) {
     return null
   }
-  const run: StageRunRecord = {
+  return {
     id: value.id,
     taskId: value.taskId,
-    stageId: value.stageId,
+    nodeId: value.nodeId,
     round: value.round,
-    kind: value.kind as StageRunRecord['kind'],
-    state: value.state as StageRunState,
+    by: value.by,
+    state: value.state as NodeRunState,
+    waiting: value.waiting as NodeWaiting | null,
+    reason: value.reason,
     sessionId: value.sessionId,
-    agentId: value.agentId as StageRunRecord['agentId'],
+    agentId: value.agentId as NodeRunRecord['agentId'],
     model: value.model,
-    tier: value.tier as StageRunRecord['tier'],
-    summary: value.summary,
-    fields,
-    evidence,
+    tier: value.tier as NodeRunRecord['tier'],
+    outcome: value.outcome,
     note: value.note,
-    costUsd: value.costUsd,
+    sentBack: sentBack && { from: sentBack.from as string, note: sentBack.note as string },
     startedAt: value.startedAt,
     endedAt: value.endedAt,
-    fromTurn: value.fromTurn,
-    nudged: value.nudged,
-    workedMs: value.workedMs,
+    document: value.document,
+    worktree,
+    reminded: value.reminded,
+    toMerge,
   }
-  if (value.escalate === true) run.escalate = true
-  return run
 }
 
 /**
@@ -301,28 +341,28 @@ export function parseTasksFile(data: Record<string, unknown>, log?: LogFn): Task
     ids.add(task.id)
     tasks.push(task)
   }
-  const runs: StageRunRecord[] = []
+  const runs: NodeRunRecord[] = []
   const runIds = new Set<string>()
   for (const [index, item] of data.runs.entries()) {
     const run = runOf(item)
     if (!run || runIds.has(run.id) || !ids.has(run.taskId)) {
-      log?.('warn', `tasks.json: stage run ${index} is malformed or orphaned and was dropped`)
+      log?.('warn', `tasks.json: node run ${index} is malformed or orphaned and was dropped`)
       continue
     }
     runIds.add(run.id)
     runs.push(run)
   }
-  let tiers: TasksFile['tiers'] = null
+  let tiers = emptyTiers()
   if (data.tiers !== null && data.tiers !== undefined) {
     const parsed = parseTierSettings(data.tiers)
     if (typeof parsed === 'string') log?.('warn', `tasks.json: tiers dropped (${parsed})`)
     else tiers = parsed
   }
-  return { version: 1, tasks, runs, tiers }
+  return { version: TASKS_VERSION, tasks, runs, tiers }
 }
 
 export function emptyTasksFile(): TasksFile {
-  return { version: 1, tasks: [], runs: [], tiers: null }
+  return { version: TASKS_VERSION, tasks: [], runs: [], tiers: emptyTiers() }
 }
 
 export function tasksFile(userDataPath: string, log: LogFn): JsonFile<TasksFile> {

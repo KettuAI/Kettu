@@ -1,62 +1,103 @@
 {
-  "workflow": {
-    "label": "Workflow",
+  "sop": {
+    "label": "SOP",
     "justChat": "Just chat",
     "justChatNote": "A session with the agent you choose",
-    "source": {
-      "official": "official",
-      "project": "this repo",
-      "library": "library"
+    "origin": {
+      "kettu": "Kettu",
+      "yours": "Yours",
+      "agent": "Made by an agent"
     },
-    "loading": "Reading workflows…",
-    "none": "This project has no workflows.",
-    "failed": "Could not read the workflows: {{error}}",
-    "needsProject": "Choose a project to run a workflow",
+    "loading": "Reading SOPs…",
+    "none": "There are no SOPs.",
+    "failed": "Could not read the SOPs: {{error}}",
+    "needsProject": "Choose a project to run an SOP",
+    "pending": "Waiting for your approval in Settings",
     "byTier": "Agent: by tier",
-    "byTierTooltip": "Each stage takes its agent and model from Settings › Tasks",
+    "byTierTooltip": "Each node takes its agent and model from Settings › SOPs",
     "noAttachments": "Tasks don’t take attachments yet. Remove them to start the task.",
     "start": "Start task",
-    "describe": "Describe the requirement",
-    "chooseProjectFirst": "Choose a project first"
+    "describe": "Describe the requirement"
   },
   "state": {
-    "backlog": "Backlog",
-    "queued": "Queued",
     "running": "Running",
-    "waiting": "Waiting",
-    "blocked": "Blocked",
-    "paused": "Paused",
+    "needsYou": "Needs you",
     "done": "Done",
+    "dropped": "Dropped",
     "cancelled": "Cancelled"
   },
-  "runState": {
-    "running": "Running",
-    "waiting": "Waiting",
-    "passed": "Passed",
-    "changes": "Sent back",
-    "blocked": "Blocked",
-    "skipped": "Skipped",
-    "interrupted": "Interrupted"
+  "node": {
+    "you": "You",
+    "handIn": {
+      "document": "Hands in: a document",
+      "verdict": "Hands in: a verdict",
+      "note": "Hands in: a note"
+    },
+    "state": {
+      "todo": "Not started",
+      "queued": "Queued",
+      "working": "Working, {{time}}",
+      "needsYou": "Needs you",
+      "joining": "Waiting for the other branches",
+      "done": "Done",
+      "stopped": "Stopped",
+      "skipped": "Skipped"
+    },
+    "round": "Round {{round}}"
+  },
+  "flow": {
+    "label": "Flowchart",
+    "end": {
+      "done": "Done",
+      "dropped": "Dropped"
+    }
+  },
+  "run": {
+    "state": {
+      "queued": "Queued",
+      "running": "Working",
+      "waiting": "Needs you",
+      "done": "Done",
+      "stopped": "Stopped"
+    },
+    "outcome": "Outcome: {{outcome}}",
+    "sentBack": "Sent back by {{node}}",
+    "document": "Document handed in",
+    "documentLoading": "Reading the document…",
+    "documentFailed": "Could not read the document: {{error}}",
+    "documentNone": "The document is gone.",
+    "openSession": "Open session",
+    "person": "{{node}} is yours to decide",
+    "request": "Its session is asking you something.",
+    "stuck": "It is stuck",
+    "retry": "Try again",
+    "note": "Note",
+    "notePlaceholder": "Note (optional)",
+    "retryPlaceholder": "What to tell it (optional)"
   },
   "row": {
-    "stageSession": "{{stage}} · {{agent}}",
+    "nodeSession": "{{node}} · {{agent}}",
     "more": "More",
     "moreFor": "More for {{title}}",
-    "expand": "Show stage sessions",
-    "collapse": "Hide stage sessions",
-    "stageSessions_one": "{{count}} stage session",
-    "stageSessions_other": "{{count}} stage sessions"
+    "expand": "Show node sessions",
+    "collapse": "Hide node sessions",
+    "nodeSessions_one": "{{count}} node session",
+    "nodeSessions_other": "{{count}} node sessions"
   },
   "menu": {
-    "start": "Start",
-    "pause": "Pause",
-    "resume": "Resume",
-    "cancel": "Cancel task…"
+    "cancel": "Cancel task…",
+    "remove": "Remove task…"
   },
   "cancel": {
     "title": "Cancel “{{title}}”?",
-    "description": "Its working stage stops. The worktree and its branch stay.",
+    "description": "Its working nodes stop. The worktree and its branch stay.",
     "confirm": "Cancel task",
+    "keep": "Keep it"
+  },
+  "remove": {
+    "title": "Remove “{{title}}”?",
+    "description": "The task and what its nodes handed in are removed. Its sessions stay as plain sessions.",
+    "confirm": "Remove task",
     "keep": "Keep it"
   },
   "page": {
@@ -65,40 +106,36 @@
     "goneDescription": "It was removed, or its host no longer lists it.",
     "failed": "Could not read this task: {{error}}",
     "retry": "Try again",
-    "workflow": "{{name}} v{{version}}",
+    "sop": "SOP: {{name}}",
     "requirement": "Requirement",
     "showMore": "Show more",
     "showLess": "Show less",
-    "stages": "Stages",
-    "stage": {
-      "done": "{{stage}}: done",
-      "current": "{{stage}}: current",
-      "skipped": "{{stage}}: skipped",
-      "upcoming": "{{stage}}: upcoming"
-    },
-    "needsYou": "Needs you",
-    "waitingOn": "{{stage}} waits for you",
-    "blocked": "The task is blocked",
-    "approve": "Approve",
-    "sendBack": "Send back",
-    "sendBackTo": "Send back to",
-    "note": "Note",
-    "notePlaceholder": "What should change (optional)",
-    "runs": "Stage runs",
-    "noRuns": "No stage has run yet.",
-    "round": "Round {{round}}",
-    "commands": "Commands it ran",
-    "changedFiles_one": "{{count}} file changed",
-    "changedFiles_other": "{{count}} files changed",
-    "openSession": "Open {{agent}}’s session",
-    "pullRequest": "Pull request",
-    "start": "Start",
-    "pause": "Pause",
-    "resume": "Resume",
-    "cancel": "Cancel task"
+    "noRuns": "This node has not run yet.",
+    "cancel": "Cancel task",
+    "remove": "Remove task"
   },
   "settings": {
-    "intro": "Workflows name a tier for each stage, never an agent. These lists pick the agent and model for each tier: the first one that is available runs.",
+    "sops": {
+      "group": "SOPs",
+      "description": "The flows a task can follow: the ones Kettu ships, your own, and the ones an agent made.",
+      "loading": "Reading SOPs…",
+      "empty": "There are no SOPs.",
+      "failed": "Could not read the SOPs: {{error}}",
+      "retry": "Try again",
+      "showFlow": "Show flowchart",
+      "hideFlow": "Hide flowchart",
+      "approve": "Approve",
+      "pendingAgent": "An agent made or changed this SOP. It is used only after you approve it.",
+      "pendingChanged": "This SOP is new or changed. It is used only after you approve it.",
+      "broken": "Could not be read: {{problem}}",
+      "remove": "Remove",
+      "removeTitle": "Remove “{{name}}”?",
+      "removeDescription": "Its file is deleted from your library. Tasks that already run with it keep going.",
+      "removeConfirm": "Remove SOP",
+      "keep": "Keep it"
+    },
+    "tiers": "Tiers",
+    "intro": "SOPs name a tier for each node, never an agent. Choose the agent and model each tier stands for.",
     "tier": {
       "deep": "Deep",
       "standard": "Standard",
@@ -107,15 +144,12 @@
     "tierNote": {
       "deep": "Planning, review and hard problems.",
       "standard": "Most of the work.",
-      "fast": "Quick, simple stages."
+      "fast": "Quick, simple nodes."
     },
-    "add": "Add agent",
-    "remove": "Remove {{agent}}",
-    "moveUp": "Move {{agent}} up",
-    "moveDown": "Move {{agent}} down",
-    "empty": "None chosen: Kettu picks from your agents.",
-    "onlyStageAgents": "Only Claude Code and Codex agents run stages.",
-    "noStageAgent": "Add a Claude Code or Codex agent to run tasks.",
+    "automaticPick": "Automatic: {{agent}}",
+    "automaticNone": "Automatic: no agent can run nodes",
+    "useAutomatic": "Use automatic",
+    "onlyNodeAgents": "Only Claude Code and Codex agents run nodes.",
     "loadFailed": "Could not read the tiers: {{error}}"
   }
 }

@@ -244,8 +244,6 @@ export interface SessionOptions {
   hidden?: HiddenPurpose
   /** The user's answers about the MCP servers the folder declares itself; without it none start. */
   projectMcp?: ProjectMcpGate
-  /** It may only read, as a read-only task stage: an agent that can drop its write tools does. */
-  readOnly?: boolean
 }
 
 /** Decides which of the MCP servers a session's folder declares itself may start. */

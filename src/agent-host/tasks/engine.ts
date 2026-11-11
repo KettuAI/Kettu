@@ -1,74 +1,68 @@
-// The task engine: the only thing that moves a task between its workflow's stages. A pull
-// scheduler fills free stage-session slots; agents only submit results, which the engine checks
-// against the stage's contract and evidence before its gate decides where the task goes.
+// The task engine: the only thing that moves a task along its SOP. A task holds tokens, lines of
+// work that sit at nodes; a node's run starts once no other token can still reach it, an agent or
+// the person reports one of the node's outcomes, and the engine follows that outcome's arrow.
 
 import { randomBytes } from 'node:crypto'
 import path from 'node:path'
-import { harnessOf } from '@shared/agents'
 import { markdownFirstLine } from '@shared/markdown-line'
+import { sopGraph, type SopGraph } from '@shared/sop-graph'
 import {
+  DOCUMENT_CHARS,
   MAX_TASK_SESSIONS,
   NOTE_CHARS,
   REQUIREMENT_CHARS,
   TITLE_CHARS,
-  type AgentStage,
-  type HandoverStage,
-  type HumanStage,
-  type StageCondition,
-  type StageRunState,
-  type StageRunView,
+  type NodeRunState,
+  type NodeRunView,
+  type SopNode,
   type TaskDecision,
   type TaskDraft,
-  type TaskPriority,
-  type TaskTier,
+  type TaskRetry,
+  type TaskState,
   type TaskView,
   type TierSettings,
-  type WorkflowStage,
+  type TierState,
 } from '@shared/tasks'
 import { HostError, invalidParams, notFound } from '../errors'
 import { t } from '../i18n'
-import { SYSTEM_CLOCK, type RoutineClock } from '../routines/scheduler'
-import type { LogFn } from '../storage'
+import type { LogFn, WorktreeRecord } from '../storage'
 import type {
-  StageRunRecord,
-  StageSubmission,
-  SubmitAnswer,
+  NodeReport,
+  NodeRunRecord,
+  ReportAnswer,
   TaskEngineApi,
   TaskEvents,
   TaskRecord,
   TaskRuntime,
   TasksFile,
+  TokenRecord,
 } from './api'
-import { checkSubmission } from './checks'
 import {
-  handoverSummary,
-  notesFromResult,
-  recoveryMessage,
+  firstMessage,
+  laterMessage,
   reminderMessage,
-  reworkMessage,
-  stageMessage,
-  type EarlierResult,
+  REPORT_TOOL,
+  type HandedIn,
+  type NodeMessage,
 } from './prompts'
-import { emptyTasksFile, TASK_ID, type TasksStore } from './store'
-import { defaultTiers, nearLimit, parseTierSettings, pickCandidate, stepUp } from './tiers'
+import { outlineOf } from './sop'
+import { emptyTasksFile, type TasksStore } from './store'
+import { parseTierSettings, tierAgent, tierState } from './tiers'
 
-/** How often working time, stage time limits and plan-limit pauses are looked at. */
-export const TICK_MS = 30_000
 export const TITLE_FROM_REQUIREMENT = 80
-const MAX_AFTER = 50
-const PRIORITY_RANK: Record<TaskPriority, number> = { high: 0, normal: 1, low: 2 }
-const PRIORITIES: ReadonlySet<unknown> = new Set(['low', 'normal', 'high'])
-/** Rounds that ran to a result; an interrupted round is carried on, not counted. */
-const COMPLETED: ReadonlySet<StageRunState> = new Set(['passed', 'changes', 'blocked'])
-const RESTART_NOTE = 'Kettu stopped while the stage ran'
+
+const STOP = 'Your work on this node is finished: stop working in this session and end your turn.'
+const NOT_OPEN: ReportAnswer = {
+  ok: false,
+  error: `This session has no SOP node waiting for a report now, so there is nothing to report. Do not call \`${REPORT_TOOL}\` again.`,
+}
 
 export interface TaskEngineDeps {
   runtime: TaskRuntime
   file: TasksStore
   events: TaskEvents
   log: LogFn
-  timers?: Pick<RoutineClock, 'setTimeout' | 'clearTimeout'>
-  /** Stage sessions working at once; MAX_TASK_SESSIONS by default. */
+  /** Node sessions working at once; MAX_TASK_SESSIONS by default. */
   maxSessions?: number
 }
 
@@ -80,70 +74,102 @@ function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function isWorking(run: StageRunRecord): boolean {
-  return run.kind === 'agent' && (run.state === 'running' || run.state === 'waiting')
+function refuse(error: string): ReportAnswer {
+  return { ok: false, error }
 }
 
-/** Any one key that matches runs the stage; a condition without keys always holds. */
-function conditionHolds(when: StageCondition, task: TaskRecord): boolean {
-  if (when.size === undefined && when.risk === undefined) return true
-  if (when.size && task.size !== null && when.size.includes(task.size)) return true
-  return when.risk !== undefined && when.risk === task.risk
+function isLive(task: TaskRecord): boolean {
+  return task.state === 'running' || task.state === 'waiting'
 }
 
-export function taskView(task: TaskRecord): TaskView {
+function isOpen(run: NodeRunRecord): boolean {
+  return run.state === 'queued' || run.state === 'running' || run.state === 'waiting'
+}
+
+/** An agent's run that may still report: working, or waiting for the person without an outcome. */
+function awaitsReport(run: NodeRunRecord): boolean {
+  return (
+    run.by === 'agent' &&
+    run.outcome === null &&
+    (run.state === 'running' || run.state === 'waiting')
+  )
+}
+
+/** A run whose session holds one of the slots. */
+function holdsSlot(run: NodeRunRecord): boolean {
+  return (
+    run.by === 'agent' &&
+    (run.state === 'running' || (run.state === 'waiting' && run.waiting === 'request'))
+  )
+}
+
+function samePath(a: WorktreeRecord | null | undefined, b: WorktreeRecord | null | undefined) {
+  return (a?.path ?? null) === (b?.path ?? null)
+}
+
+/** The lanes every token came through alike, outermost first. */
+function commonLanes(tokens: readonly TokenRecord[]): WorktreeRecord[] {
+  const first = tokens[0]?.lanes ?? []
+  let length = first.length
+  for (const token of tokens) {
+    let at = 0
+    while (at < length && at < token.lanes.length && samePath(token.lanes[at], first[at])) at++
+    length = at
+  }
+  return first.slice(0, length)
+}
+
+function viewState(task: TaskRecord, runs: readonly NodeRunRecord[]): TaskState {
+  if (!isLive(task)) return task.state
+  if (runs.some((run) => run.state === 'queued' || run.state === 'running')) return 'running'
+  // With no open run at all the engine is between two nodes.
+  return runs.some((run) => run.state === 'waiting') ? 'waiting' : 'running'
+}
+
+/** The task as clients see it; `runs` are the task's own. */
+export function taskView(task: TaskRecord, runs: readonly NodeRunRecord[]): TaskView {
   return {
     id: task.id,
     title: task.title,
     requirement: task.requirement,
     projectPath: task.projectPath,
-    workflow: { ...task.workflow },
-    stages: task.snapshot.stages.map((stage) => ({
-      id: stage.id,
-      name: stage.name,
-      kind: stage.kind,
-      ...(stage.kind === 'human' ? { sendBack: [...stage.sendBack] } : {}),
-    })),
-    state: task.state,
-    reason: task.reason,
-    stageId: task.stageId,
-    priority: task.priority,
-    after: [...task.after],
-    size: task.size,
-    risk: task.risk,
+    sop: { ...task.sop },
+    outline: outlineOf(task.snapshot),
+    state: viewState(task, runs),
+    needsYou: isLive(task) && runs.some((run) => run.state === 'waiting'),
+    arrived: [
+      ...new Set(task.tokens.filter((token) => token.runId === null).map((token) => token.nodeId)),
+    ],
     worktree: task.worktree
       ? { path: task.worktree.path, branch: task.worktree.branch, base: task.worktree.base }
       : null,
-    pullRequest: task.pullRequest,
-    costUsd: task.costUsd,
     createdBy: task.createdBy,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
-    startedAt: task.startedAt,
     endedAt: task.endedAt,
     lastViewedAt: task.lastViewedAt,
   }
 }
 
-export function runView(run: StageRunRecord): StageRunView {
+export function runView(run: NodeRunRecord): NodeRunView {
   return {
     id: run.id,
     taskId: run.taskId,
-    stageId: run.stageId,
+    nodeId: run.nodeId,
     round: run.round,
-    kind: run.kind,
+    by: run.by,
     state: run.state,
+    waiting: run.waiting,
+    reason: run.reason,
     sessionId: run.sessionId,
     agentId: run.agentId,
     model: run.model,
     tier: run.tier,
-    summary: run.summary,
-    fields: structuredClone(run.fields),
-    evidence: run.evidence
-      ? { commands: [...run.evidence.commands], changedFiles: [...run.evidence.changedFiles] }
-      : null,
+    outcome: run.outcome,
     note: run.note,
-    costUsd: run.costUsd,
+    hasDocument: run.document !== null,
+    sentBack: run.sentBack && { ...run.sentBack },
+    worktree: run.worktree && { path: run.worktree.path, branch: run.worktree.branch },
     startedAt: run.startedAt,
     endedAt: run.endedAt,
   }
@@ -152,14 +178,15 @@ export function runView(run: StageRunRecord): StageRunView {
 export class TaskEngine implements TaskEngineApi {
   private data: TasksFile = emptyTasksFile()
   private loaded = false
-  /** Each task's async work in turn, so a dispatch, a submission and a turn's end never race. */
+  /** Each task's work in turn, so a start, a report and a turn's end never interleave. */
   private readonly locks = new Map<string, Promise<void>>()
-  private passing: Promise<void> | null = null
-  private again = false
-  /** Working runs being timed, from when. */
-  private readonly active = new Map<string, number>()
-  private suspended = false
-  private timer: unknown = null
+  private readonly graphs = new Map<string, SopGraph>()
+  /** Whether each task needed the person when clients were last told, to notify on the change. */
+  private readonly needed = new Map<string, boolean>()
+  /** Sessions sent a new round mid-turn: the end of that turn says nothing about the round. */
+  private readonly lateTurns = new Set<string>()
+  /** What the person wants a retried run told, by run, until it starts. */
+  private readonly notes = new Map<string, string>()
 
   constructor(private readonly deps: TaskEngineDeps) {}
 
@@ -179,105 +206,98 @@ export class TaskEngine implements TaskEngineApi {
 
   async load(): Promise<void> {
     this.data = await this.deps.file.load()
-    for (const run of this.data.runs) {
-      if (run.state !== 'running' && run.state !== 'waiting') continue
-      const task = this.data.tasks.find((t) => t.id === run.taskId)
-      if (!task || run.kind === 'human') continue
-      // A round cut off by a shutdown is carried on in its session; a second cut blocks it.
-      const before = this.runsOf(task.id, run.stageId).filter((r) => r !== run)
-      const twice = before.at(-1)?.state === 'interrupted' && before.at(-1)?.note === RESTART_NOTE
-      this.endRun(run, 'interrupted', RESTART_NOTE)
-      if (task.state === 'cancelled' || task.state === 'done') continue
-      if (twice) {
-        const stage = this.stageIn(task, run.stageId)
-        this.block(task, `The "${stage?.name ?? run.stageId}" stage was interrupted twice.`)
-      } else if (!task.pausedByUser) {
-        task.state = 'queued'
-        task.reason = null
+    for (const task of this.data.tasks) {
+      this.needed.set(task.id, this.view(task).needsYou)
+      if (isLive(task)) this.queue(task.id, () => this.recover(task))
+      else if (task.state !== 'cancelled' && task.spent.length > 0) {
+        this.queue(task.id, () => this.sweep(task))
       }
     }
-    // A task left running with no round to show for it starts its stage again.
-    for (const task of this.data.tasks) {
-      if (task.state !== 'running' && task.state !== 'waiting') continue
-      if (this.data.runs.some((r) => r.taskId === task.id && r.state === 'waiting')) continue
-      task.state = 'queued'
-      task.reason = null
-    }
     this.loaded = true
-    this.save()
-    this.arm()
-    this.schedule()
+    this.pump()
   }
 
-  /** Stops the timer; for tests and shutdown. */
-  dispose(): void {
-    if (this.timer !== null) (this.deps.timers ?? SYSTEM_CLOCK).clearTimeout(this.timer)
-    this.timer = null
-  }
-
-  private arm(): void {
-    const timers = this.deps.timers ?? SYSTEM_CLOCK
-    this.timer = timers.setTimeout(() => {
-      this.timer = null
-      this.tick()
-      this.arm()
-    }, TICK_MS)
-  }
-
-  /** Adds up working time, stops stages over their time limit and retries plan-limit pauses. */
-  tick(): void {
-    for (const run of this.data.runs) {
-      if (run.kind !== 'agent' || run.state !== 'running') continue
-      this.accrue(run)
-      const task = this.data.tasks.find((t) => t.id === run.taskId)
-      if (!task) continue
-      if (run.workedMs < task.snapshot.limits.stageMinutes * 60_000) continue
-      void this.withTask(task.id, async () => {
-        if (!isWorking(run)) return
-        const stage = this.stageIn(task, run.stageId)
-        const reason = t('tasks.reason.timeLimit', {
-          stage: stage?.name ?? run.stageId,
-          minutes: task.snapshot.limits.stageMinutes,
-        })
-        this.endRun(run, 'blocked', reason)
-        this.block(task, reason)
-        if (run.sessionId) await this.stopSession(run.sessionId)
-      })
+  /** Brings a task back after a restart: what was cut off is carried on or handed to the person. */
+  private async recover(task: TaskRecord): Promise<void> {
+    const changed: NodeRunRecord[] = []
+    for (const token of task.tokens) {
+      const run = token.runId === null ? undefined : this.runOf(token.runId)
+      if (token.runId !== null && !(run && isOpen(run))) token.runId = null
     }
-    this.save()
-    this.schedule()
+    for (const run of this.runsOf(task.id).filter(isOpen)) {
+      if (!task.tokens.some((token) => token.runId === run.id)) {
+        this.stopRun(task, run, null)
+        changed.push(run)
+      }
+    }
+    this.emit(task, ...changed)
+    for (const run of this.runsOf(task.id).filter(isOpen)) {
+      if (run.waiting === 'stuck' || run.state === 'queued') continue
+      // The report was taken and the move cut off.
+      if (run.outcome !== null) {
+        await this.follow(task, run, run.by === 'person', null)
+        continue
+      }
+      if (run.by === 'person') {
+        if (run.toMerge.length > 0) await this.mergeForPerson(task, run)
+        continue
+      }
+      if (run.sessionId === null) {
+        this.set(run, 'queued')
+        this.emit(task, run)
+        continue
+      }
+      if (!this.rt.alive(run.sessionId)) {
+        this.stuck(task, run, t('tasks.reason.sessionClosed', { node: this.nameOf(task, run) }))
+        continue
+      }
+      if (run.state === 'waiting') {
+        this.set(run, 'running')
+        this.emit(task, run)
+      }
+      if (!this.rt.working(run.sessionId)) await this.silent(task, run)
+    }
+    this.settle(task)
   }
 
-  /** Resolves once no pass or task work is in flight; for tests. */
+  /** Resolves once no task work is in flight; for tests. */
   async idle(): Promise<void> {
     for (let i = 0; i < 1000; i++) {
-      await Promise.all([this.passing, ...this.locks.values()])
+      await Promise.all(this.locks.values())
       await new Promise((resolve) => setImmediate(resolve))
-      if (!this.passing && this.locks.size === 0) return
+      if (this.locks.size === 0) return
     }
   }
 
   // Reads.
 
   list(): TaskView[] {
-    return this.data.tasks.map(taskView)
+    const runs = new Map<string, NodeRunRecord[]>()
+    for (const run of this.data.runs) {
+      const list = runs.get(run.taskId)
+      if (list) list.push(run)
+      else runs.set(run.taskId, [run])
+    }
+    return this.data.tasks.map((task) => taskView(task, runs.get(task.id) ?? []))
   }
 
-  get(taskId: string): { task: TaskView; runs: StageRunView[] } {
+  get(taskId: string): { task: TaskView; runs: NodeRunView[] } {
     const task = this.taskOf(taskId)
-    return { task: taskView(task), runs: this.runsOf(taskId).map(runView) }
+    const runs = this.runsOf(taskId)
+    return { task: taskView(task, runs), runs: runs.map(runView) }
   }
 
-  tiers(): TierSettings {
-    return this.data.tiers ?? defaultTiers(this.rt.agents())
+  document(runId: string): string | null {
+    return this.runOf(runId)?.document ?? null
   }
 
-  /** The stage a session is working on now; null once its round ended, so its scope lapses. */
-  stageOf(sessionId: string): { taskId: string; runId: string; stageId: string } | null {
-    const run = this.latestRunOf(sessionId)
-    return run && isWorking(run)
-      ? { taskId: run.taskId, runId: run.id, stageId: run.stageId }
-      : null
+  tiers(): TierState {
+    return tierState(this.data.tiers, this.rt.agents())
+  }
+
+  nodeOf(sessionId: string): { taskId: string; runId: string; nodeId: string } | null {
+    const run = this.reportingRun(sessionId)
+    return run ? { taskId: run.taskId, runId: run.id, nodeId: run.nodeId } : null
   }
 
   // The person's actions.
@@ -296,186 +316,142 @@ export class TaskEngine implements TaskEngineApi {
     if (typeof draft.projectPath !== 'string' || !path.isAbsolute(draft.projectPath)) {
       throw invalidParams('The project path must be absolute.')
     }
-    const priority = draft.priority ?? 'normal'
-    if (!PRIORITIES.has(priority)) throw invalidParams('The priority is not low, normal or high.')
-    const after = draft.after ?? []
-    if (
-      !Array.isArray(after) ||
-      after.length > MAX_AFTER ||
-      new Set(after).size !== after.length ||
-      !after.every((id) => typeof id === 'string' && TASK_ID.test(id))
-    ) {
-      throw invalidParams('The tasks to wait for are malformed.')
+    if (typeof draft.sop?.id !== 'string' || typeof draft.sop.source !== 'string') {
+      throw invalidParams('The SOP is missing.')
     }
-    for (const id of after) {
-      if (!this.data.tasks.some((t) => t.id === id)) throw notFound(`No task ${id} to wait for.`)
-    }
-    if (typeof draft.workflow?.id !== 'string' || typeof draft.workflow.source !== 'string') {
-      throw invalidParams('The workflow is missing.')
-    }
-    const { workflow, hash } = await this.rt.workflow(
-      draft.projectPath,
-      draft.workflow.source,
-      draft.workflow.id,
-    )
-    // A task an agent made waits in the backlog for the person to start it.
-    const start = draft.start === true && by === 'user'
+    const { sop, hash } = await this.rt.sop(draft.sop.source, draft.sop.id)
     const now = this.now()
-    const title =
-      written ||
-      (markdownFirstLine(requirement) || requirement.split('\n')[0]!.trim()).slice(
-        0,
-        TITLE_FROM_REQUIREMENT,
-      )
     const task: TaskRecord = {
       id: newId('t'),
-      title,
+      title:
+        written ||
+        (markdownFirstLine(requirement) || requirement.split('\n')[0]!.trim()).slice(
+          0,
+          TITLE_FROM_REQUIREMENT,
+        ),
       requirement,
       projectPath: draft.projectPath,
-      workflow: {
-        source: draft.workflow.source,
-        id: workflow.id,
-        version: workflow.version,
-        hash,
-        name: workflow.name,
-      },
-      snapshot: workflow,
-      state: start ? 'queued' : 'backlog',
-      reason: null,
-      stageId: start ? workflow.start : null,
-      priority,
-      after: [...after],
-      size: null,
-      risk: false,
+      sop: { source: draft.sop.source, id: sop.id, name: sop.name, hash },
+      snapshot: sop,
+      state: 'running',
       worktree: null,
-      pullRequest: null,
-      costUsd: 0,
+      tokens: [],
+      rounds: {},
+      spent: [],
       createdBy: by,
       createdAt: now,
       updatedAt: now,
-      startedAt: null,
       endedAt: null,
       lastViewedAt: null,
-      rounds: {},
-      pausedByUser: false,
-      notes: null,
     }
+    task.worktree = await this.rt.createWorktree(task)
+    task.tokens.push({
+      id: newId('tk'),
+      nodeId: sop.start,
+      runId: null,
+      lanes: task.worktree ? [task.worktree] : [],
+      from: null,
+    })
     this.data.tasks.push(task)
-    this.changed(task)
-    this.deps.log('info', `Task ${task.id} created (${workflow.id}, ${task.state})`)
-    this.schedule()
-    return taskView(task)
+    this.emit(task)
+    this.deps.log('info', `Task ${task.id} created (${sop.id})`)
+    await this.withTask(task.id, async () => this.settle(task))
+    return this.view(task)
   }
 
-  start(taskId: string): TaskView {
-    const task = this.taskOf(taskId)
-    if (task.state === 'queued') return taskView(task)
-    if (task.state !== 'backlog') throw new HostError('conflict', 'Only a backlog task can start.')
-    task.state = 'queued'
-    task.reason = null
-    task.stageId ??= task.snapshot.start
-    this.changed(task)
-    this.schedule()
-    return taskView(task)
-  }
-
-  pause(taskId: string): TaskView {
-    const task = this.taskOf(taskId)
-    if (task.state === 'paused' && task.pausedByUser) return taskView(task)
-    if (!['queued', 'running', 'waiting', 'paused'].includes(task.state)) {
-      throw new HostError('conflict', `A ${task.state} task cannot be paused.`)
-    }
-    const run = this.workingRunOf(task)
-    if (run) {
-      this.endRun(run, 'interrupted', t('tasks.reason.pausedByPerson'))
-      if (run.sessionId) void this.stopSession(run.sessionId)
-    }
-    task.state = 'paused'
-    task.pausedByUser = true
-    task.reason = t('tasks.reason.paused')
-    this.changed(task)
-    return taskView(task)
-  }
-
-  resume(taskId: string): TaskView {
-    const task = this.taskOf(taskId)
-    if (task.state !== 'paused') throw new HostError('conflict', 'The task is not paused.')
-    task.pausedByUser = false
-    const human = this.waitingHumanRun(task)
-    if (human) {
-      task.state = 'waiting'
-      task.reason = (this.stageIn(task, human.stageId) as HumanStage | undefined)?.prompt ?? null
-    } else {
-      task.state = 'queued'
-      task.reason = null
-    }
-    this.changed(task)
-    this.schedule()
-    return taskView(task)
-  }
-
-  cancel(taskId: string): Promise<TaskView> {
+  async cancel(taskId: string): Promise<TaskView> {
     this.taskOf(taskId)
     return this.withTask(taskId, async () => {
       const task = this.taskOf(taskId)
-      if (task.state === 'done' || task.state === 'cancelled') return taskView(task)
-      const run = this.runsOf(taskId).find((r) => r.state === 'running' || r.state === 'waiting')
-      if (run) this.endRun(run, 'interrupted', t('tasks.reason.cancelledByPerson'))
+      if (!isLive(task)) return this.view(task)
+      const stopped = this.runsOf(taskId).filter(isOpen)
+      for (const run of stopped) this.stopRun(task, run, t('tasks.reason.cancelled'))
+      task.tokens = []
       task.state = 'cancelled'
-      task.reason = null
       task.endedAt = this.now()
-      this.changed(task)
-      if (run?.sessionId && run.kind === 'agent') await this.stopSession(run.sessionId)
-      this.schedule()
-      return taskView(task)
+      this.emit(task, ...stopped)
+      this.pump()
+      return this.view(task)
     })
   }
 
-  decide(decision: TaskDecision): Promise<TaskView> {
+  async remove(taskId: string): Promise<void> {
+    this.taskOf(taskId)
+    return this.withTask(taskId, async () => {
+      const task = this.taskOf(taskId)
+      if (isLive(task)) {
+        throw new HostError('conflict', 'Only a task that ended can be removed; cancel it first.')
+      }
+      for (const run of this.runsOf(taskId)) this.notes.delete(run.id)
+      this.data.tasks = this.data.tasks.filter((other) => other !== task)
+      this.data.runs = this.data.runs.filter((run) => run.taskId !== taskId)
+      this.graphs.delete(taskId)
+      this.needed.delete(taskId)
+      this.save()
+      this.deps.events.removed(taskId)
+    })
+  }
+
+  async decide(decision: TaskDecision): Promise<TaskView> {
     this.taskOf(decision.taskId)
-    if (decision.note !== undefined && typeof decision.note !== 'string') {
-      throw invalidParams('The note must be text.')
-    }
-    const note = decision.note?.trim() || null
-    if (note && note.length > NOTE_CHARS) {
-      throw invalidParams(`The note is longer than ${NOTE_CHARS} characters.`)
-    }
+    const note = this.personNote(decision.note)
     return this.withTask(decision.taskId, async () => {
       const task = this.taskOf(decision.taskId)
-      const human = this.waitingHumanRun(task)
-      if (task.state === 'waiting' && human) {
-        const stage = this.stageIn(task, human.stageId) as HumanStage
-        if (decision.decision === 'approve') {
-          this.endRun(human, 'passed', note)
-          this.moveOn(task, stage)
-        } else {
-          if (!decision.to || !stage.sendBack.includes(decision.to)) {
-            throw invalidParams(`"${stage.name}" can send the task back only to its listed stages.`)
-          }
-          this.endRun(human, 'changes', note)
-          task.rounds[stage.id] = (task.rounds[stage.id] ?? 0) + 1
-          this.sendBack(task, decision.to, note && `From the person at "${stage.name}": ${note}`)
-        }
-        return taskView(task)
+      const run = this.runOf(decision.runId)
+      if (
+        !isLive(task) ||
+        run?.taskId !== task.id ||
+        run.by !== 'person' ||
+        run.waiting !== 'person' ||
+        run.outcome !== null
+      ) {
+        throw new HostError('conflict', 'The node is not waiting for a decision.')
       }
-      if (task.state !== 'blocked') {
-        throw new HostError('conflict', 'The task is not waiting for a decision.')
+      const node = this.nodeIn(task, run.nodeId)
+      const outcome = node.outcomes.find((o) => o.id === decision.outcome)
+      if (!outcome) {
+        throw invalidParams(
+          `"${node.name}" has no outcome ${String(decision.outcome)}; its outcomes are ${node.outcomes.map((o) => o.id).join(', ')}.`,
+        )
       }
-      // The person grants the blocked stage a fresh set of rework rounds.
-      if (task.stageId) task.rounds[task.stageId] = 0
-      const personNote = note && `From the person: ${note}`
-      if (decision.decision === 'approve') {
-        this.sendBack(task, task.stageId ?? task.snapshot.start, personNote)
+      // The nodes that start at once begin from the last commit, and nobody is here to make it.
+      if (outcome.to.length > 1 && run.worktree && !(await this.rt.clean(run.worktree))) {
+        throw new HostError(
+          'conflict',
+          `Commit the changes in ${run.worktree.path} first: the nodes that start at once begin from its last commit.`,
+        )
+      }
+      run.outcome = outcome.id
+      run.note = note
+      await this.follow(task, run, true, null)
+      return this.view(task)
+    })
+  }
+
+  async retry(retry: TaskRetry): Promise<TaskView> {
+    this.taskOf(retry.taskId)
+    const note = this.personNote(retry.note)
+    return this.withTask(retry.taskId, async () => {
+      const task = this.taskOf(retry.taskId)
+      const run = this.runOf(retry.runId)
+      if (!isLive(task) || run?.taskId !== task.id || run.waiting !== 'stuck') {
+        throw new HostError('conflict', 'The node is not stuck.')
+      }
+      if (run.outcome !== null) {
+        await this.follow(task, run, true, note)
+      } else if (run.by === 'person') {
+        run.waiting = 'person'
+        run.reason = null
+        this.emit(task, run)
+        await this.mergeForPerson(task, run)
       } else {
-        const to = decision.to ? this.stageIn(task, decision.to) : undefined
-        const current = task.stageId ? this.stageIn(task, task.stageId) : undefined
-        const allowed =
-          to !== undefined &&
-          (to.kind === 'agent' || (current?.kind === 'human' && current.sendBack.includes(to.id)))
-        if (!allowed) throw invalidParams('A blocked task goes back only to an agent stage.')
-        this.sendBack(task, to.id, personNote)
+        if (note) this.notes.set(run.id, note)
+        this.set(run, 'queued')
+        run.reminded = false
+        this.emit(task, run)
+        this.pump()
       }
-      return taskView(task)
+      return this.view(task)
     })
   }
 
@@ -483,648 +459,742 @@ export class TaskEngine implements TaskEngineApi {
     const task = this.taskOf(taskId)
     task.lastViewedAt = this.now()
     this.save()
-    this.deps.events.changed(taskView(task))
+    this.deps.events.changed(this.view(task))
   }
 
-  setTiers(tiers: TierSettings): TierSettings {
+  setTiers(tiers: TierSettings): TierState {
     const parsed = parseTierSettings(tiers)
     if (typeof parsed === 'string') throw invalidParams(parsed)
     this.data.tiers = parsed
     this.save()
-    this.schedule()
-    return parsed
+    return this.tiers()
   }
 
   flush(): Promise<void> {
     return this.deps.file.flush()
   }
 
-  // What the host reports of stage sessions.
+  // What the host reports of node sessions.
 
-  submit(sessionId: string, submission: StageSubmission): Promise<SubmitAnswer> {
-    const known = this.latestRunOf(sessionId)
+  async report(sessionId: string, report: NodeReport): Promise<ReportAnswer> {
+    let known = this.reportingRun(sessionId)
     if (!known) {
-      return Promise.resolve({ ok: false, error: 'This session is not a task stage.' })
+      // The session may report before the engine has heard which session it opened.
+      await Promise.all(this.locks.values())
+      known = this.reportingRun(sessionId)
     }
-    return this.withTask(known.taskId, async (): Promise<SubmitAnswer> => {
-      const closed: SubmitAnswer = {
-        ok: false,
-        error: 'This stage is not open for a result now; there is nothing to submit.',
+    if (!known) return NOT_OPEN
+    return this.withTask(known.taskId, async (): Promise<ReportAnswer> => {
+      const run = this.reportingRun(sessionId)
+      const task = run && this.data.tasks.find((other) => other.id === run.taskId)
+      const token = task?.tokens.find((other) => other.runId === run?.id)
+      if (!run || !task || !token || !isLive(task)) return NOT_OPEN
+      const node = this.nodeIn(task, run.nodeId)
+      const outcome = node.outcomes.find((o) => o.id === report.outcome)
+      if (!outcome) {
+        return refuse(
+          `"${String(report.outcome)}" is not an outcome of the "${node.name}" node. Report one of: ${node.outcomes.map((o) => `\`${o.id}\` (${o.name})`).join(', ')}.`,
+        )
       }
-      const run = this.workingRunOfSession(sessionId)
-      const task = run && this.data.tasks.find((t) => t.id === run.taskId)
-      if (!run || !task || task.stageId !== run.stageId) return closed
-      if (task.state !== 'running' && task.state !== 'waiting') return closed
-      const stage = this.stageIn(task, run.stageId)
-      if (stage?.kind !== 'agent') return closed
-      let evidence
-      try {
-        evidence = await this.rt.evidence(sessionId, run.fromTurn)
-      } catch (error) {
-        return {
-          ok: false,
-          error: `Kettu could not read this session's tool calls (${message(error)}). Try again.`,
-        }
+      const note = typeof report.note === 'string' ? report.note.trim() : ''
+      if (note === '') {
+        return refuse('The note is empty. Say what you did, or the reason for the outcome.')
       }
-      if (!isWorking(run)) return closed
-      this.recordCost(task, run, evidence.costUsd)
-      const check = checkSubmission(stage, submission, evidence)
-      if (!check.ok) {
-        this.runChanged(run)
-        return check
+      if (note.length > NOTE_CHARS) {
+        return refuse(`The note is longer than ${NOTE_CHARS} characters. Shorten it.`)
       }
-      run.summary = submission.summary.trim()
-      run.fields = check.fields
-      run.evidence = { commands: [...evidence.commands], changedFiles: [...evidence.changedFiles] }
-      if (submission.escalate === true) run.escalate = true
-      for (const field of stage.contract) {
-        const value = check.fields[field.name]
-        if (field.type === 'size' && (value === 'S' || value === 'M' || value === 'L')) {
-          task.size = value
-        }
-        if (field.type === 'risk' && typeof value === 'boolean') task.risk = value
+      const document =
+        typeof report.document === 'string' && report.document.trim() !== ''
+          ? report.document
+          : null
+      if (node.handIn === 'document' && document === null) {
+        return refuse(
+          `The "${node.name}" node hands in a document and none was given. Pass it whole as \`document\`, in Markdown.`,
+        )
       }
-      const done = ' Your work on this stage is finished; end your turn.'
-      if (submission.verdict === 'blocked') {
-        this.endRun(run, 'blocked', run.summary)
-        this.block(task, run.summary)
-        return { ok: true, next: `Accepted. The task waits for the person.${done}` }
+      if (document !== null && document.length > DOCUMENT_CHARS) {
+        return refuse(`The document is longer than ${DOCUMENT_CHARS} characters. Shorten it.`)
       }
-      if (submission.verdict === 'changes') {
-        const edge = stage.rework!
-        const used = task.rounds[stage.id] ?? 0
-        this.endRun(run, 'changes', run.summary)
-        if (used >= edge.rounds) {
-          this.block(
-            task,
-            `The rework limit of ${edge.rounds} rounds was reached at "${stage.name}".`,
-          )
-          return {
-            ok: true,
-            next: `Accepted. The rework limit is reached, so the task waits for the person.${done}`,
+      const worktree = run.worktree
+      if (worktree) {
+        try {
+          for (const lane of run.toMerge) {
+            let merged: boolean
+            try {
+              merged = await this.rt.merged(worktree, lane)
+            } catch (error) {
+              // It rejects for a branch that is gone.
+              return refuse(
+                `Kettu could not check the branch \`${lane.branch}\`, which must be merged into your working folder before you report (${message(error)}).`,
+              )
+            }
+            if (merged) continue
+            return refuse(
+              `The branch \`${lane.branch}\` is not merged into your working folder yet. Finish the merge under way if there is one, run \`git merge ${lane.branch}\`, resolve the conflicts and commit, then report again.`,
+            )
           }
-        }
-        task.rounds[stage.id] = used + 1
-        if (this.overBudget(task)) return this.budgetBlock(task, done)
-        this.sendBack(task, edge.to, notesFromResult(stage, run))
-        const target = this.stageIn(task, edge.to)
-        return {
-          ok: true,
-          next: `Accepted. The task goes back to "${target?.name ?? edge.to}".${done}`,
+          const why =
+            run.toMerge.length > 0
+              ? 'A merge is not finished or changes are not committed.'
+              : token.lanes.length > 1
+                ? 'This node works in a branch of its own, which is merged from its last commit.'
+                : outcome.to.length > 1
+                  ? 'The nodes this outcome starts each begin from your last commit.'
+                  : null
+          if (why !== null && !(await this.rt.clean(worktree))) {
+            return refuse(`${why} Commit your changes first, then report again.`)
+          }
+        } catch (error) {
+          return refuse(`Kettu could not check your working folder (${message(error)}). Try again.`)
         }
       }
-      this.endRun(run, 'passed', null)
-      if (this.overBudget(task)) return this.budgetBlock(task, done)
-      const next = stage.next ? this.stageIn(task, stage.next) : undefined
-      this.moveOn(task, stage)
-      return {
-        ok: true,
-        next: next
-          ? `Accepted. The task moves on to "${next.name}".${done}`
-          : `Accepted. The task is done.${done}`,
-      }
+      if (!awaitsReport(run) || !isLive(task)) return NOT_OPEN
+      for (const lane of run.toMerge) this.spend(task, lane, true)
+      run.toMerge = []
+      run.outcome = outcome.id
+      run.note = note
+      run.document = document
+      this.lateTurns.delete(sessionId)
+      const next = await this.follow(task, run, false, null)
+      return { ok: true, next: `Taken. ${next} ${STOP}` }
     })
   }
 
   turnEnded(sessionId: string): void {
-    const known = this.workingRunOfSession(sessionId)
+    // A run that takes this session only later is not what the turn was for.
+    const known = this.reportingRun(sessionId)
     if (!known) return
-    void this.withTask(known.taskId, async () => {
-      const run = this.workingRunOfSession(sessionId)
-      const task = run && this.data.tasks.find((t) => t.id === run.taskId)
-      if (!run || !task) return
-      // A turn that began before this round, ending late, says nothing about the round.
-      if (this.rt.turns(sessionId) <= run.fromTurn) return
-      const stage = this.stageIn(task, run.stageId) as AgentStage
-      const evidence = await this.rt.evidence(sessionId, run.fromTurn).catch(() => null)
-      if (!isWorking(run)) return
-      if (evidence) this.recordCost(task, run, evidence.costUsd)
-      if (this.overBudget(task)) {
-        this.budgetBlock(task, '')
-        return
+    this.queue(known.taskId, async () => {
+      const run = this.reportingRun(sessionId)
+      const task = run && this.data.tasks.find((other) => other.id === run.taskId)
+      if (!run || !task || run.id !== known.id) return
+      if (this.lateTurns.delete(sessionId)) return
+      if (run.waiting === 'stuck') return
+      if (run.state === 'waiting') {
+        this.set(run, 'running')
+        this.emit(task, run)
       }
-      if (!run.nudged) {
-        run.nudged = true
-        this.runChanged(run)
-        try {
-          await this.rt.send(sessionId, reminderMessage(stage))
-        } catch (error) {
-          if (!isWorking(run)) return
-          const reason = t('tasks.reason.remindFailed', {
-            stage: stage.name,
-            error: message(error),
-          })
-          this.endRun(run, 'interrupted', reason)
-          this.block(task, reason)
-        }
-        return
-      }
-      const reason = t('tasks.reason.stalled', { stage: stage.name })
-      this.endRun(run, 'blocked', reason)
-      this.block(task, reason)
+      await this.silent(task, run)
     })
-  }
-
-  costChanged(sessionId: string): void {
-    const run = this.latestRunOf(sessionId)
-    const task = run && this.data.tasks.find((t) => t.id === run.taskId)
-    if (!run || !task || run.kind !== 'agent') return
-    const before = run.costUsd
-    this.recordCost(task, run, this.rt.costSince(sessionId, run.fromTurn))
-    if (run.costUsd === before) return
-    this.runChanged(run)
-    this.changed(task)
   }
 
   waiting(sessionId: string, waiting: boolean): void {
-    const run = this.workingRunOfSession(sessionId)
-    const task = run && this.data.tasks.find((t) => t.id === run.taskId)
+    const run = this.reportingRun(sessionId)
+    const task = run && this.data.tasks.find((other) => other.id === run.taskId)
     if (!run || !task) return
     if (waiting && run.state === 'running') {
-      this.accrue(run)
-      this.active.delete(run.id)
-      run.state = 'waiting'
-      this.runChanged(run)
-      if (task.state === 'running') {
-        task.state = 'waiting'
-        task.reason = t('tasks.reason.waitingPermission')
-        this.changed(task)
-      }
-    } else if (!waiting && run.state === 'waiting') {
-      run.state = 'running'
-      this.activate(run)
-      this.runChanged(run)
-      if (task.state === 'waiting') {
-        task.state = 'running'
-        task.reason = null
-        this.changed(task)
-      }
+      this.set(run, 'waiting', 'request')
+    } else if (!waiting && run.waiting === 'request') {
+      this.set(run, 'running')
+    } else {
+      return
     }
+    this.emit(task, run)
   }
 
   sessionGone(sessionId: string): void {
-    const run = this.workingRunOfSession(sessionId)
-    const task = run && this.data.tasks.find((t) => t.id === run.taskId)
-    if (!run || !task) return
-    const stage = this.stageIn(task, run.stageId)
-    const reason = t('tasks.reason.sessionClosed', { stage: stage?.name ?? run.stageId })
-    this.endRun(run, 'interrupted', reason)
-    this.block(task, reason)
-    this.schedule()
-  }
-
-  /** Any agent's limits may free a candidate, since tiers list several agents. */
-  limitsChanged(): void {
-    this.schedule()
-  }
-
-  power(state: 'suspend' | 'resume'): void {
-    if (state === 'suspend') {
-      for (const run of this.data.runs) if (this.active.has(run.id)) this.accrue(run)
-      this.active.clear()
-      this.suspended = true
-      this.save()
-      return
-    }
-    this.suspended = false
-    for (const run of this.data.runs) {
-      if (run.kind === 'agent' && run.state === 'running') this.activate(run)
-    }
-    this.schedule()
-  }
-
-  // The scheduler.
-
-  private schedule(): void {
-    if (!this.loaded) return
-    this.again = true
-    if (this.passing) return
-    this.passing = (async () => {
-      while (this.again) {
-        this.again = false
-        await this.pass()
-      }
-    })()
-      .catch((error: unknown) =>
-        this.deps.log('error', `Task scheduling failed: ${message(error)}`),
-      )
-      .finally(() => {
-        this.passing = null
-        if (this.again) this.schedule()
-      })
-  }
-
-  /** Moves every task that can move: in-progress tasks first, then by priority, then age. */
-  private async pass(): Promise<void> {
-    const ready = this.data.tasks
-      .filter((task) => this.dispatchable(task) && this.afterDone(task))
-      .sort(
-        (a, b) =>
-          Number(a.startedAt === null) - Number(b.startedAt === null) ||
-          PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] ||
-          a.createdAt - b.createdAt,
-      )
-    for (const task of ready) {
-      await this.withTask(task.id, async () => {
-        try {
-          await this.advance(task)
-        } catch (error) {
-          this.deps.log('error', `Task ${task.id} could not move on: ${message(error)}`)
-          if (this.dispatchable(task)) this.block(task, `Kettu could not go on: ${message(error)}`)
-        }
-      })
-    }
-  }
-
-  private dispatchable(task: TaskRecord): boolean {
-    return task.state === 'queued' || (task.state === 'paused' && !task.pausedByUser)
-  }
-
-  private afterDone(task: TaskRecord): boolean {
-    return task.after.every((id) => this.data.tasks.find((t) => t.id === id)?.state === 'done')
-  }
-
-  private busy(): number {
-    return this.data.runs.filter(isWorking).length
-  }
-
-  private async advance(task: TaskRecord): Promise<void> {
-    for (let guard = 0; guard <= task.snapshot.stages.length * 2; guard++) {
-      if (!this.dispatchable(task) || !this.afterDone(task)) return
-      task.stageId ??= task.snapshot.start
-      const stage = this.stageIn(task, task.stageId)
-      if (!stage) {
-        this.block(task, `The workflow has no stage "${task.stageId}".`)
-        return
-      }
-      if (stage.when && !conditionHolds(stage.when, task)) {
-        const run = this.newRun(task, stage, this.roundOf(task, stage.id), { state: 'skipped' })
-        run.endedAt = run.startedAt
-        this.runChanged(run)
-        this.moveOn(task, stage)
-        continue
-      }
-      if (stage.kind === 'human') {
-        const run = this.newRun(task, stage, this.roundOf(task, stage.id), { state: 'waiting' })
-        this.runChanged(run)
-        task.startedAt ??= this.now()
-        task.state = 'waiting'
-        task.reason = stage.prompt
-        task.pausedByUser = false
-        this.changed(task)
-        this.rt.notify(taskView(task), 'needs-you')
-        return
-      }
-      if (stage.kind === 'handover') {
-        await this.handover(task, stage)
-        continue
-      }
-      if (this.busy() >= this.maxSessions) return
-      await this.dispatch(task, stage)
-      return
-    }
-  }
-
-  private async handover(task: TaskRecord, stage: HandoverStage): Promise<void> {
-    const run = this.newRun(task, stage, this.roundOf(task, stage.id), {})
-    task.state = 'running'
-    task.reason = null
-    this.changed(task)
-    this.runChanged(run)
-    let url: string
-    try {
-      url = await this.rt.handover(task, handoverSummary(task, this.earlierResults(task, stage.id)))
-    } catch (error) {
-      if (run.state !== 'running') return
-      const reason = t('tasks.reason.pullRequestFailed', { error: message(error) })
-      this.endRun(run, 'blocked', reason)
-      this.block(task, reason)
-      return
-    }
-    if (run.state !== 'running') return
-    task.pullRequest = url
-    run.summary = url
-    this.endRun(run, 'passed', null)
-    this.moveOn(task, stage)
-  }
-
-  private async dispatch(task: TaskRecord, stage: AgentStage): Promise<void> {
-    if (task.snapshot.worktree && !task.worktree) {
-      try {
-        task.worktree = await this.rt.createWorktree(task, null)
-      } catch (error) {
-        if (this.dispatchable(task)) {
-          this.block(task, `Could not create the task's worktree: ${message(error)}`)
-        }
-        return
-      }
-      this.changed(task)
-      if (!this.dispatchable(task)) return
-    }
-    const prior = this.runsOf(task.id, stage.id).filter((r) => r.state !== 'skipped')
-    const last = prior.at(-1)
-    const round = prior.filter((r) => COMPLETED.has(r.state)).length + 1
-    const now = this.now()
-    const resume =
-      last?.sessionId &&
-      last.agentId &&
-      (stage.session === 'resume' || last.state === 'interrupted') &&
-      this.rt.alive(last.sessionId)
-        ? { sessionId: last.sessionId, agentId: last.agentId }
-        : null
-    const resumeAgent = resume && this.rt.agents().find((a) => a.agentId === resume.agentId)
-    if (resume && resumeAgent?.enabled && resumeAgent.canRunStages) {
-      if (nearLimit(resumeAgent.limits, now)) {
-        this.limitPause(task, t('tasks.reason.agentNearLimit', { agent: resume.agentId }))
-        return
-      }
-      const run = this.newRun(task, stage, round, {
-        sessionId: resume.sessionId,
-        agentId: resume.agentId,
-        model: last!.model,
-        tier: last!.tier,
-        fromTurn: this.rt.turns(resume.sessionId),
-      })
-      const notes = task.notes
-      this.begin(task, run)
-      const text =
-        last!.state === 'interrupted' && !notes
-          ? recoveryMessage(stage)
-          : reworkMessage(stage, notes, round)
-      try {
-        await this.rt.send(resume.sessionId, text)
-      } catch (error) {
-        if (!isWorking(run)) return
-        const reason = t('tasks.reason.sendFailed', { stage: stage.name, error: message(error) })
-        this.endRun(run, 'interrupted', reason)
-        this.block(task, reason)
-      }
-      return
-    }
-    const tier = this.tierFor(task, stage, round)
-    const pick = pickCandidate(
-      this.tiers(),
-      tier,
-      this.rt.agents(),
-      this.avoidHarness(task, stage),
-      now,
-    )
-    if (pick.kind === 'limit') {
-      this.limitPause(
-        task,
-        t('tasks.reason.tierNearLimit', { tier: t(`tasks.reason.tiers.${tier}`) }),
-      )
-      return
-    }
-    if (pick.kind === 'none') {
-      this.block(task, t('tasks.reason.tierEmpty', { tier: t(`tasks.reason.tiers.${tier}`) }))
-      return
-    }
-    const run = this.newRun(task, stage, round, { agentId: pick.agent.agentId, tier })
-    const notes = task.notes
-    this.begin(task, run)
-    const prompt = stageMessage({
-      task,
-      stage,
-      earlier: this.earlierResults(task, stage.id),
-      notes,
-      round,
+    this.lateTurns.delete(sessionId)
+    const known = this.reportingRun(sessionId)
+    if (!known) return
+    this.queue(known.taskId, async () => {
+      const run = this.reportingRun(sessionId)
+      const task = run && this.data.tasks.find((other) => other.id === run.taskId)
+      if (!run || !task || run.id !== known.id || run.waiting === 'stuck') return
+      this.stuck(task, run, t('tasks.reason.sessionClosed', { node: this.nameOf(task, run) }))
     })
-    try {
-      const opened = await this.rt.openSession({
+  }
+
+  // Starting nodes.
+
+  /** Starts every node whose waiting tokens no other token can still reach. */
+  private settle(task: TaskRecord): void {
+    if (!isLive(task)) return
+    const { reach } = this.graph(task)
+    for (;;) {
+      const waiting = task.tokens.filter((token) => token.runId === null)
+      const nodeId = waiting
+        .map((token) => token.nodeId)
+        .find(
+          (id) =>
+            !task.tokens.some(
+              (token) => token.nodeId !== id && (reach[token.nodeId] ?? []).includes(id),
+            ),
+        )
+      if (nodeId === undefined) break
+      this.startRun(
         task,
-        run,
-        agentId: pick.agent.agentId,
-        options: Object.fromEntries(pick.candidate.options.map((o) => [o.id, o.value])),
-        prompt,
-        scope: stage.scope,
-        title: `${task.title} · ${stage.name}`,
-      })
-      run.sessionId = opened.sessionId
-      run.model = opened.model
-      this.runChanged(run)
-      // Cancelled or paused while the session opened.
-      if (!isWorking(run)) await this.stopSession(opened.sessionId)
-    } catch (error) {
-      if (!isWorking(run)) return
-      const reason = t('tasks.reason.openFailed', { stage: stage.name, error: message(error) })
-      this.endRun(run, 'interrupted', reason)
-      this.block(task, reason)
+        nodeId,
+        waiting.filter((token) => token.nodeId === nodeId),
+      )
     }
+    this.pump()
   }
 
-  private begin(task: TaskRecord, run: StageRunRecord): void {
-    task.startedAt ??= this.now()
-    task.state = 'running'
-    task.reason = null
-    task.notes = null
-    this.activate(run)
-    this.changed(task)
-    this.runChanged(run)
-  }
-
-  /** The stage's tier for this round: by size, one step up per earlier round and if asked. */
-  private tierFor(task: TaskRecord, stage: AgentStage, round: number): TaskTier {
-    const base =
-      typeof stage.tier === 'string'
-        ? stage.tier
-        : ((task.size ? stage.tier[task.size] : undefined) ?? stage.tier.default)
-    const ended = this.runsOf(task.id).filter((r) => r.endedAt !== null && r.state !== 'skipped')
-    const asked = ended.at(-1)?.escalate === true ? 1 : 0
-    return stepUp(base, round - 1 + asked)
-  }
-
-  private avoidHarness(task: TaskRecord, stage: AgentStage): string | null {
-    const other = stage.requires?.otherHarnessThan
-    if (!other) return null
-    const runs = this.runsOf(task.id, other).filter((r) => r.agentId !== null)
-    const run = runs.findLast((r) => r.state === 'passed') ?? runs.at(-1)
-    return run?.agentId ? harnessOf(run.agentId) : null
-  }
-
-  // Moving a task.
-
-  private moveOn(task: TaskRecord, stage: WorkflowStage): void {
-    if (stage.next === null) {
-      task.state = 'done'
-      task.stageId = null
-      task.reason = null
-      task.endedAt = this.now()
-      this.changed(task)
-      this.rt.notify(taskView(task), 'done')
-      return
+  /** Joins the tokens waiting at a node into one run of it. */
+  private startRun(task: TaskRecord, nodeId: string, tokens: TokenRecord[]): void {
+    const node = this.nodeIn(task, nodeId)
+    const lanes = commonLanes(tokens)
+    const into = lanes.at(-1) ?? null
+    const toMerge: WorktreeRecord[] = []
+    for (const token of tokens) {
+      const last = token.lanes.at(-1)
+      if (last && !samePath(last, into) && !toMerge.some((lane) => samePath(lane, last))) {
+        toMerge.push(last)
+      }
     }
-    task.stageId = stage.next
-    task.state = 'queued'
-    task.reason = null
-    this.changed(task)
-    this.schedule()
-  }
-
-  private sendBack(task: TaskRecord, to: string, notes: string | null): void {
-    task.stageId = to
-    task.notes = notes
-    task.state = 'queued'
-    task.reason = null
-    this.changed(task)
-    this.schedule()
-  }
-
-  private block(task: TaskRecord, reason: string): void {
-    task.state = 'blocked'
-    task.reason = reason
-    this.changed(task)
-    this.rt.notify(taskView(task), 'blocked')
-  }
-
-  private limitPause(task: TaskRecord, reason: string): void {
-    if (task.state === 'paused' && task.reason === reason) return
-    task.state = 'paused'
-    task.pausedByUser = false
-    task.reason = reason
-    this.changed(task)
-  }
-
-  private overBudget(task: TaskRecord): boolean {
-    const budget = task.snapshot.limits.budgetUsd
-    return budget !== null && task.costUsd > budget
-  }
-
-  private budgetBlock(task: TaskRecord, done: string): SubmitAnswer {
-    const run = this.workingRunOf(task)
-    const reason = t('tasks.reason.overBudget', { budget: task.snapshot.limits.budgetUsd ?? 0 })
-    if (run) {
-      this.endRun(run, 'blocked', reason)
-      if (run.sessionId) void this.stopSession(run.sessionId)
-    }
-    this.block(task, reason)
-    return {
-      ok: true,
-      next: `Accepted. The task is over its budget and waits for the person.${done}`,
-    }
-  }
-
-  private recordCost(task: TaskRecord, run: StageRunRecord, costUsd: number | undefined): void {
-    if (costUsd === undefined || !Number.isFinite(costUsd) || costUsd < 0) return
-    run.costUsd = costUsd
-    task.costUsd = this.runsOf(task.id).reduce((sum, r) => sum + r.costUsd, 0)
-  }
-
-  private earlierResults(task: TaskRecord, except: string): EarlierResult[] {
-    const latest = new Map<string, StageRunRecord>()
-    for (const run of this.runsOf(task.id)) {
-      if (run.state === 'passed' && run.stageId !== except) latest.set(run.stageId, run)
-    }
-    const results: EarlierResult[] = []
-    for (const run of this.runsOf(task.id)) {
-      const stage = this.stageIn(task, run.stageId)
-      if (stage && latest.get(run.stageId) === run) results.push({ stage, run })
-    }
-    return results
-  }
-
-  // Runs.
-
-  private newRun(
-    task: TaskRecord,
-    stage: WorkflowStage,
-    round: number,
-    init: Partial<StageRunRecord>,
-  ): StageRunRecord {
-    const run: StageRunRecord = {
-      id: newId('sr'),
+    const from = (tokens.find((token) => token.from?.back) ?? tokens[0])?.from ?? null
+    const person = node.by.kind === 'person'
+    const run: NodeRunRecord = {
+      id: newId('nr'),
       taskId: task.id,
-      stageId: stage.id,
-      round,
-      kind: stage.kind,
-      state: 'running',
+      nodeId,
+      round: this.runsOf(task.id).filter((other) => other.nodeId === nodeId).length + 1,
+      by: node.by.kind,
+      state: person ? 'waiting' : 'queued',
+      waiting: person ? 'person' : null,
+      reason: null,
       sessionId: null,
       agentId: null,
       model: null,
-      tier: null,
-      summary: null,
-      fields: {},
-      evidence: null,
+      tier: node.by.kind === 'agent' ? node.by.tier : null,
+      outcome: null,
       note: null,
-      costUsd: 0,
+      sentBack: from?.back ? { from: from.nodeId, note: from.note } : null,
       startedAt: this.now(),
       endedAt: null,
-      fromTurn: 0,
-      nudged: false,
-      workedMs: 0,
-      ...init,
+      document: null,
+      worktree: into,
+      reminded: false,
+      toMerge,
     }
     this.data.runs.push(run)
-    return run
+    task.tokens = task.tokens.filter((token) => !tokens.includes(token))
+    task.tokens.push({ id: newId('tk'), nodeId, runId: run.id, lanes, from })
+    // What lies between the common lane and a merged one is carried by the merged one.
+    for (const token of tokens) this.dropLanes(task, token.lanes.slice(0, -1))
+    this.emit(task, run)
+    if (person && toMerge.length > 0) this.queue(task.id, () => this.mergeForPerson(task, run))
   }
 
-  private roundOf(task: TaskRecord, stageId: string): number {
-    return this.runsOf(task.id, stageId).filter((r) => COMPLETED.has(r.state)).length + 1
+  /** Fills the free slots with the oldest queued runs. */
+  private pump(): void {
+    if (!this.loaded) return
+    let free = this.maxSessions - this.data.runs.filter(holdsSlot).length
+    if (free <= 0) return
+    const queued = this.data.runs
+      .filter((run) => run.state === 'queued')
+      .sort((a, b) => a.startedAt - b.startedAt)
+    for (const run of queued) {
+      if (free <= 0) break
+      const task = this.data.tasks.find((other) => other.id === run.taskId)
+      if (!task || !isLive(task)) continue
+      free--
+      this.set(run, 'running')
+      this.emit(task, run)
+      this.queue(task.id, () => this.begin(task, run))
+    }
   }
 
-  private endRun(run: StageRunRecord, state: StageRunState, note: string | null): void {
-    this.accrue(run)
-    this.active.delete(run.id)
-    run.state = state
-    run.note = note
-    run.endedAt = this.now()
-    this.runChanged(run)
-  }
-
-  private activate(run: StageRunRecord): void {
-    if (!this.suspended) this.active.set(run.id, this.now())
-  }
-
-  private accrue(run: StageRunRecord): void {
-    const since = this.active.get(run.id)
-    if (since === undefined) return
-    const now = this.now()
-    run.workedMs += Math.max(0, now - since)
-    this.active.set(run.id, now)
-  }
-
-  private async stopSession(sessionId: string): Promise<void> {
+  /** Merges what joins at the run, then hands the node to its session, a new one or its own. */
+  private async begin(task: TaskRecord, run: NodeRunRecord): Promise<void> {
+    if (run.state !== 'running' || run.outcome !== null || !isLive(task)) return
+    const node = this.nodeIn(task, run.nodeId)
     try {
-      await this.rt.stop(sessionId)
+      if (!(await this.mergePending(task, run))) return
+      const token = task.tokens.find((other) => other.runId === run.id)
+      const personNote = this.notes.get(run.id) ?? null
+      this.notes.delete(run.id)
+      const cameFrom = token?.from && !token.from.back ? token.from : null
+      const fromNode = cameFrom && this.nodeIn(task, cameFrom.nodeId)
+      const context: NodeMessage = {
+        task,
+        node,
+        round: run.round,
+        earlier: this.handedIn(task),
+        sentBack: run.sentBack && {
+          from: this.nodeIn(task, run.sentBack.from).name,
+          note: run.sentBack.note,
+        },
+        cameFrom: cameFrom &&
+          fromNode && {
+            from: fromNode.name,
+            outcome:
+              fromNode.outcomes.find((o) => o.id === cameFrom.outcome)?.name ?? cameFrom.outcome,
+            note: cameFrom.note,
+          },
+        personNote,
+        toMerge: run.toMerge,
+        worktree: run.worktree,
+        inBranch: (token?.lanes.length ?? 0) > 1,
+      }
+      const earlier = this.sessionFor(task, run)
+      if (earlier?.sessionId) {
+        const sessionId = earlier.sessionId
+        const midTurn = this.rt.working(sessionId)
+        try {
+          await this.rt.send(sessionId, laterMessage(context))
+        } catch (error) {
+          this.stuck(
+            task,
+            run,
+            t('tasks.reason.sendFailed', { node: node.name, error: message(error) }),
+          )
+          return
+        }
+        if (midTurn) this.lateTurns.add(sessionId)
+        run.sessionId = sessionId
+        run.agentId = earlier.agentId
+        run.model = earlier.model
+        this.emit(task, run)
+        return
+      }
+      const tier = node.by.kind === 'agent' ? node.by.tier : 'standard'
+      const choice = tierAgent(this.data.tiers, tier, this.rt.agents())
+      if (!choice) {
+        this.stuck(
+          task,
+          run,
+          t('tasks.reason.noAgent', { node: node.name, tier: t(`tasks.reason.tiers.${tier}`) }),
+        )
+        return
+      }
+      run.agentId = choice.agentId
+      run.sessionId = null
+      run.model = null
+      try {
+        const opened = await this.rt.openSession({
+          task,
+          run,
+          agentId: choice.agentId,
+          options: Object.fromEntries(choice.options.map((option) => [option.id, option.value])),
+          prompt: firstMessage(context),
+          title: `${task.title} · ${node.name}`,
+          worktree: run.worktree,
+        })
+        run.sessionId = opened.sessionId
+        run.model = opened.model
+        this.emit(task, run)
+      } catch (error) {
+        this.stuck(
+          task,
+          run,
+          t('tasks.reason.openFailed', { node: node.name, error: message(error) }),
+        )
+      }
     } catch (error) {
-      this.deps.log('warn', `Could not stop task session ${sessionId}: ${message(error)}`)
+      this.deps.log('error', `Task ${task.id} could not start ${run.nodeId}: ${message(error)}`)
+      this.stuck(task, run, t('tasks.reason.failed', { node: node.name, error: message(error) }))
+    }
+  }
+
+  /**
+   * Merges the lanes that join at the run into its worktree, one after another, and stops at the
+   * first that conflicts: that one and the rest stay in `toMerge` for the node's agent. False
+   * when a merge could not start, which leaves the run stuck.
+   */
+  private async mergePending(task: TaskRecord, run: NodeRunRecord): Promise<boolean> {
+    const into = run.worktree
+    if (!into) {
+      run.toMerge = []
+      return true
+    }
+    while (run.toMerge.length > 0) {
+      const lane = run.toMerge[0]!
+      try {
+        if (!(await this.rt.merged(into, lane))) {
+          // A merge under way or loose changes: the lanes left are the agent's to merge.
+          if (!(await this.rt.clean(into))) return true
+          if ((await this.rt.merge(into, lane, true)) === 'conflict') return true
+        }
+      } catch (error) {
+        this.stuck(
+          task,
+          run,
+          t('tasks.reason.mergeFailed', { branch: lane.branch, error: message(error) }),
+        )
+        return false
+      }
+      run.toMerge = run.toMerge.slice(1)
+      this.spend(task, lane, true)
+      this.save()
+    }
+    return true
+  }
+
+  /** A person's node works nowhere, so branches that will not merge are theirs to settle. */
+  private async mergeForPerson(task: TaskRecord, run: NodeRunRecord): Promise<void> {
+    if (!isLive(task) || run.waiting !== 'person' || run.outcome !== null) return
+    if (!(await this.mergePending(task, run))) return
+    const lane = run.toMerge[0]
+    if (lane && run.worktree) {
+      this.stuck(
+        task,
+        run,
+        t('tasks.reason.joinConflict', {
+          branch: lane.branch,
+          into: run.worktree.branch,
+          path: run.worktree.path,
+        }),
+      )
+    } else {
+      this.emit(task, run)
+    }
+  }
+
+  /** The session a round goes back to: the run's own, or the node's previous one. */
+  private sessionFor(task: TaskRecord, run: NodeRunRecord): NodeRunRecord | null {
+    if (run.sessionId !== null && this.rt.alive(run.sessionId)) return run
+    const previous = this.runsOf(task.id).findLast(
+      (other) =>
+        other !== run &&
+        other.nodeId === run.nodeId &&
+        other.by === 'agent' &&
+        other.sessionId !== null,
+    )
+    if (!previous?.sessionId || !previous.agentId || !this.rt.alive(previous.sessionId)) return null
+    if (!samePath(previous.worktree, run.worktree)) return null
+    if (this.data.runs.some((other) => other.sessionId === previous.sessionId && isOpen(other))) {
+      return null
+    }
+    const agent = this.rt.agents().find((other) => other.agentId === previous.agentId)
+    return agent?.enabled && agent.canRunNodes ? previous : null
+  }
+
+  /** The latest finished run of each node, in the order they finished. */
+  private handedIn(task: TaskRecord): HandedIn[] {
+    const latest = new Map<string, NodeRunRecord>()
+    for (const run of this.runsOf(task.id)) {
+      if (run.state !== 'done') continue
+      latest.delete(run.nodeId)
+      latest.set(run.nodeId, run)
+    }
+    return [...latest.values()]
+      .sort((a, b) => (a.endedAt ?? 0) - (b.endedAt ?? 0))
+      .map((run) => ({ node: this.nodeIn(task, run.nodeId), run }))
+  }
+
+  /** A turn ended without a report: the agent is reminded once, then the person decides. */
+  private async silent(task: TaskRecord, run: NodeRunRecord): Promise<void> {
+    const node = this.nodeIn(task, run.nodeId)
+    if (run.reminded || run.sessionId === null) {
+      this.stuck(task, run, t('tasks.reason.noReport', { node: node.name }))
+      return
+    }
+    run.reminded = true
+    this.emit(task, run)
+    try {
+      await this.rt.send(run.sessionId, reminderMessage(node))
+    } catch (error) {
+      if (!awaitsReport(run)) return
+      this.stuck(
+        task,
+        run,
+        t('tasks.reason.sendFailed', { node: node.name, error: message(error) }),
+      )
+    }
+  }
+
+  // Following an outcome.
+
+  /**
+   * Follows the outcome a run recorded and says, for the agent, what happens now. Everything
+   * that can fail comes first, so the tokens move in one step or the run is left stuck with its
+   * outcome kept, for a retry to follow again. `force` takes an arrow back past its limit.
+   */
+  private async follow(
+    task: TaskRecord,
+    run: NodeRunRecord,
+    force: boolean,
+    personNote: string | null,
+  ): Promise<string> {
+    const node = this.nodeIn(task, run.nodeId)
+    const stays = 'The person decides how the task goes on.'
+    try {
+      const outcome = node.outcomes.find((o) => o.id === run.outcome)
+      const token = task.tokens.find((other) => other.runId === run.id)
+      if (!outcome || !token) throw new Error('the run has lost its place in the SOP')
+      if (outcome.end) return await this.finish(task, run, token, outcome.end)
+      const edges = this.graph(task).edges.filter(
+        (edge) => edge.from === node.id && edge.outcome === outcome.id,
+      )
+      const back = edges.filter((edge) => edge.back)
+      const key = `${node.id}/${outcome.id}`
+      const limit = outcome.rounds ?? task.snapshot.rounds
+      if (back.length > 0 && !force && (task.rounds[key] ?? 0) >= limit) {
+        this.stuck(
+          task,
+          run,
+          t('tasks.reason.roundsLimit', {
+            node: node.name,
+            outcome: outcome.name,
+            to: back.map((edge) => this.nodeIn(task, edge.to).name).join(', '),
+            count: limit,
+          }),
+        )
+        return 'The way back was taken as often as the SOP allows, so the person decides whether it goes back again.'
+      }
+      const last = token.lanes.at(-1)
+      const forks: WorktreeRecord[] = []
+      if (outcome.to.length > 1 && last) {
+        for (const to of outcome.to) {
+          try {
+            // The id, not the name: a branch name is made of it.
+            forks.push(await this.rt.forkWorktree(task, last, to))
+          } catch (error) {
+            for (const fork of forks) this.spend(task, fork, false)
+            this.stuck(
+              task,
+              run,
+              t('tasks.reason.forkFailed', {
+                node: this.nodeIn(task, to).name,
+                error: message(error),
+              }),
+            )
+            return stays
+          }
+        }
+      }
+
+      if (back.length > 0) task.rounds[key] = (task.rounds[key] ?? 0) + 1
+      const changed = [run]
+      for (const edge of back) changed.push(...this.giveUp(task, token, edge.to))
+      const note = [run.note ?? '', personNote ? `From the person: ${personNote}` : '']
+        .filter(Boolean)
+        .join('\n\n')
+      task.tokens = task.tokens.filter((other) => other !== token)
+      for (const [at, to] of outcome.to.entries()) {
+        const fork = forks[at]
+        task.tokens.push({
+          id: newId('tk'),
+          nodeId: to,
+          runId: null,
+          lanes: fork ? [...token.lanes, fork] : [...token.lanes],
+          from: {
+            nodeId: node.id,
+            outcome: outcome.id,
+            note,
+            back: back.some((edge) => edge.to === to),
+          },
+        })
+      }
+      this.close(run, 'done', null)
+      this.emit(task, ...changed)
+      this.settle(task)
+      const names = outcome.to.map((to) => `"${this.nodeIn(task, to).name}"`)
+      if (names.length > 1) {
+        return `${names.slice(0, -1).join(', ')} and ${names.at(-1)} start at once.`
+      }
+      return back.length > 0
+        ? `The task goes back to ${names[0]}.`
+        : `The task goes on to ${names[0]}.`
+    } catch (error) {
+      this.deps.log('error', `Task ${task.id} could not move on: ${message(error)}`)
+      if (isOpen(run)) {
+        this.stuck(task, run, t('tasks.reason.failed', { node: node.name, error: message(error) }))
+      }
+      return stays
+    }
+  }
+
+  /** Ends the task by an outcome, once the reporting token's branch is in the task's worktree. */
+  private async finish(
+    task: TaskRecord,
+    run: NodeRunRecord,
+    token: TokenRecord,
+    end: 'done' | 'dropped',
+  ): Promise<string> {
+    const own = task.worktree
+    const last = token.lanes.at(-1)
+    if (own && last && !samePath(own, last)) {
+      let result: 'merged' | 'conflict'
+      try {
+        result = await this.rt.merge(own, last, false)
+      } catch (error) {
+        this.stuck(
+          task,
+          run,
+          t('tasks.reason.mergeFailed', { branch: last.branch, error: message(error) }),
+        )
+        return 'The person decides how the task goes on.'
+      }
+      if (result === 'conflict') {
+        this.stuck(
+          task,
+          run,
+          t('tasks.reason.endConflict', { branch: last.branch, into: own.branch }),
+        )
+        return "Your branch did not merge into the task's branch without conflicts, so the person decides how the task ends."
+      }
+      this.spend(task, last, true)
+    }
+    this.close(run, 'done', null)
+    const changed = [run]
+    for (const other of this.runsOf(task.id).filter(isOpen)) {
+      this.stopRun(task, other, t('tasks.reason.ended'))
+      changed.push(other)
+    }
+    const tokens = task.tokens
+    task.tokens = []
+    for (const other of tokens) this.dropLanes(task, other.lanes)
+    task.state = end
+    task.endedAt = this.now()
+    this.emit(task, ...changed)
+    this.rt.notify(this.view(task), 'done')
+    this.deps.log('info', `Task ${task.id} ended ${end}`)
+    // The cleanup takes its time, and the agent that reported need not wait for it.
+    this.queue(task.id, () => this.sweep(task))
+    this.pump()
+    return end === 'done' ? 'The task is done.' : 'The task ends here, dropped.'
+  }
+
+  /**
+   * Gives up every other token at a node the way back leads to again: what comes after `nodeId`
+   * is done again from it. Returns the runs it stopped.
+   */
+  private giveUp(task: TaskRecord, moving: TokenRecord, nodeId: string): NodeRunRecord[] {
+    const reach = this.graph(task).reach[nodeId] ?? []
+    const gone = task.tokens.filter((token) => token !== moving && reach.includes(token.nodeId))
+    if (gone.length === 0) return []
+    task.tokens = task.tokens.filter((token) => !gone.includes(token))
+    const reason = t('tasks.reason.givenUp', { node: this.nodeIn(task, nodeId).name })
+    const stopped: NodeRunRecord[] = []
+    for (const token of gone) {
+      const run = token.runId === null ? undefined : this.runOf(token.runId)
+      if (run && isOpen(run)) {
+        this.stopRun(task, run, reason)
+        stopped.push(run)
+      }
+      this.dropLanes(task, token.lanes)
+    }
+    return stopped
+  }
+
+  /** Removes the worktrees of branches that were merged or given up, once the task has ended. */
+  private async sweep(task: TaskRecord): Promise<void> {
+    const own = task.worktree
+    for (const entry of [...task.spent]) {
+      let merged = entry.merged
+      // A branch that was given up with nothing of its own on it leaves nothing to keep. The
+      // check rejects for a branch that is gone already.
+      if (!merged && own) merged = await this.rt.merged(own, entry.worktree).catch(() => false)
+      try {
+        await this.rt.removeWorktree(task, entry.worktree, merged)
+      } catch (error) {
+        this.deps.log('warn', `Could not remove ${entry.worktree.path}: ${message(error)}`)
+      }
+      task.spent = task.spent.filter((other) => other !== entry)
+      this.save()
+    }
+  }
+
+  // Runs and lanes.
+
+  private set(run: NodeRunRecord, state: 'queued' | 'running'): void
+  private set(run: NodeRunRecord, state: 'waiting', waiting: 'request' | 'person'): void
+  private set(run: NodeRunRecord, state: NodeRunState, waiting?: 'request' | 'person'): void {
+    run.state = state
+    run.waiting = waiting ?? null
+    run.reason = null
+  }
+
+  private close(run: NodeRunRecord, state: 'done' | 'stopped', reason: string | null): void {
+    run.state = state
+    run.waiting = null
+    run.reason = reason
+    run.endedAt = this.now()
+    this.notes.delete(run.id)
+  }
+
+  /** Leaves a run to the person, with why; its slot is free for another. */
+  private stuck(task: TaskRecord, run: NodeRunRecord, reason: string): void {
+    run.state = 'waiting'
+    run.waiting = 'stuck'
+    run.reason = reason
+    this.emit(task, run)
+    this.pump()
+  }
+
+  /** Ends a run without a report; the branches it was still to merge are given up with it. */
+  private stopRun(task: TaskRecord, run: NodeRunRecord, reason: string | null): void {
+    const inTurn = holdsSlot(run) && run.sessionId !== null
+    this.close(run, 'stopped', reason)
+    for (const lane of run.toMerge) this.spend(task, lane, false)
+    run.toMerge = []
+    if (inTurn && run.sessionId !== null) {
+      const sessionId = run.sessionId
+      this.lateTurns.delete(sessionId)
+      this.rt.stop(sessionId).catch((error: unknown) => {
+        this.deps.log('warn', `Could not stop task session ${sessionId}: ${message(error)}`)
+      })
+    }
+  }
+
+  private spend(task: TaskRecord, worktree: WorktreeRecord, merged: boolean): void {
+    const entry = task.spent.find((other) => samePath(other.worktree, worktree))
+    if (entry) entry.merged ||= merged
+    else task.spent.push({ worktree, merged })
+  }
+
+  /** Gives up the lanes no token works in or came through any more, the task's own excepted. */
+  private dropLanes(task: TaskRecord, lanes: readonly WorktreeRecord[]): void {
+    for (const lane of lanes) {
+      if (samePath(lane, task.worktree)) continue
+      if (task.tokens.some((token) => token.lanes.some((other) => samePath(other, lane)))) continue
+      this.spend(task, lane, false)
     }
   }
 
   // Lookups.
 
-  private stageIn(task: TaskRecord, stageId: string): WorkflowStage | undefined {
-    return task.snapshot.stages.find((stage) => stage.id === stageId)
+  private graph(task: TaskRecord): SopGraph {
+    let graph = this.graphs.get(task.id)
+    if (!graph) {
+      graph = sopGraph(task.snapshot)
+      this.graphs.set(task.id, graph)
+    }
+    return graph
+  }
+
+  private nodeIn(task: TaskRecord, nodeId: string): SopNode {
+    const node = task.snapshot.nodes.find((other) => other.id === nodeId)
+    if (!node) throw new Error(`the SOP has no node ${nodeId}`)
+    return node
+  }
+
+  private nameOf(task: TaskRecord, run: NodeRunRecord): string {
+    return task.snapshot.nodes.find((node) => node.id === run.nodeId)?.name ?? run.nodeId
   }
 
   private taskOf(taskId: string): TaskRecord {
-    const task = this.data.tasks.find((t) => t.id === taskId)
+    const task = this.data.tasks.find((other) => other.id === taskId)
     if (!task) throw notFound(`No task ${taskId}.`)
     return task
   }
 
-  private runsOf(taskId: string, stageId?: string): StageRunRecord[] {
-    return this.data.runs.filter(
-      (run) => run.taskId === taskId && (stageId === undefined || run.stageId === stageId),
-    )
+  private runOf(runId: string): NodeRunRecord | undefined {
+    return this.data.runs.find((run) => run.id === runId)
   }
 
-  private workingRunOf(task: TaskRecord): StageRunRecord | undefined {
-    return this.runsOf(task.id).find(isWorking)
+  private runsOf(taskId: string): NodeRunRecord[] {
+    return this.data.runs.filter((run) => run.taskId === taskId)
   }
 
-  private waitingHumanRun(task: TaskRecord): StageRunRecord | undefined {
-    return this.runsOf(task.id).find(
-      (run) => run.kind === 'human' && run.state === 'waiting' && run.stageId === task.stageId,
-    )
+  private reportingRun(sessionId: string): NodeRunRecord | undefined {
+    return this.data.runs.find((run) => run.sessionId === sessionId && awaitsReport(run))
   }
 
-  private workingRunOfSession(sessionId: string): StageRunRecord | undefined {
-    return this.data.runs.find((run) => run.sessionId === sessionId && isWorking(run))
+  private personNote(value: unknown): string | null {
+    if (value !== undefined && typeof value !== 'string')
+      throw invalidParams('The note is not text.')
+    const note = value?.trim() || null
+    if (note && note.length > NOTE_CHARS) {
+      throw invalidParams(`The note is longer than ${NOTE_CHARS} characters.`)
+    }
+    return note
   }
 
-  private latestRunOf(sessionId: string): StageRunRecord | undefined {
-    return this.data.runs.findLast((run) => run.sessionId === sessionId)
+  private view(task: TaskRecord): TaskView {
+    return taskView(task, this.runsOf(task.id))
   }
 
   // Persistence and events.
@@ -1143,19 +1213,27 @@ export class TaskEngine implements TaskEngineApi {
     return next
   }
 
+  /** Work nobody waits for, in the task's turn. */
+  private queue(taskId: string, work: () => Promise<void>): void {
+    this.withTask(taskId, work).catch((error: unknown) => {
+      this.deps.log('error', `Task ${taskId}: ${message(error)}`)
+    })
+  }
+
   private save(): void {
     this.deps.file.save(this.data)
   }
 
-  private changed(task: TaskRecord): void {
+  /** Stores and tells clients: the runs that changed, then their task, whose view follows them. */
+  private emit(task: TaskRecord, ...runs: NodeRunRecord[]): void {
     task.updatedAt = this.now()
     this.save()
-    this.deps.events.changed(taskView(task))
-  }
-
-  private runChanged(run: StageRunRecord): void {
-    this.save()
-    this.deps.events.run(runView(run))
+    for (const run of runs) this.deps.events.run(runView(run))
+    const view = this.view(task)
+    this.deps.events.changed(view)
+    const was = this.needed.get(task.id) ?? false
+    this.needed.set(task.id, view.needsYou)
+    if (view.needsYou && !was) this.rt.notify(view, 'needs-you')
   }
 }
 

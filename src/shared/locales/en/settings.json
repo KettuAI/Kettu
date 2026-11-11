@@ -18,7 +18,7 @@
     "hosts": "Hosts",
     "devices": "Mobile devices",
     "computer-use": "Computer use",
-    "tasks": "Tasks"
+    "sops": "SOPs"
   },
   "page": {
     "title": "Settings",
@@ -991,7 +991,7 @@
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it.",
     "devices": "Simulators and phones agents may use without asking.",
     "computer-use": "Lets agents read and drive the desktop apps of this computer, one app and one session at a time.",
-    "tasks": "Which agents and models run the stages of tasks."
+    "sops": "The flows a task can follow, and the agent each tier stands for."
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",

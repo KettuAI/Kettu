@@ -1,206 +1,128 @@
-# Kettu's official workflow for a change to a project's code, from the requirement to a pull
-# request. Every stage ends with the submit_stage tool; Kettu checks the result before moving on.
+# A change to a project from the requirement to tested code: whether it is worth doing, what it
+# must do, how it is built, the build and the test.
 format: 1
 id: development
-name: Development
-description: Review the requirement, plan, build, verify, review on another agent, integrate, then a person accepts it before Kettu opens a pull request.
-kind: development
-version: '1.0.0'
-worktree: true
-start: review-requirement
-limits:
-  rounds: 3
-  stageMinutes: 60
-  budgetUsd: null
-stages:
-  - id: review-requirement
-    name: Review the requirement
-    kind: agent
-    tier: deep
-    scope: { level: read, web: false }
-    session: new
-    gate: agent
-    evidence: [no-file-changes]
+name: { en: Development, zh-CN: 开发流程 }
+description:
+  en: Review whether the requirement is worth doing, write the requirements and the design, build it, then test it.
+  zh-CN: 先评审需求值不值得做，再写需求文档和设计方案，然后开发并测试。
+nodes:
+  - id: review
+    name: { en: Review, zh-CN: 评审 }
+    by: deep
+    hand-in: verdict
     prompt: |
-      Review the requirement before anyone works on it. Read the parts of the project it touches,
-      but change nothing.
+      Judge whether this requirement is worth doing at all, before anyone works on it. Read the
+      parts of the project it touches and change nothing.
 
-      Decide:
-      - its size: S (a small, local change), M (several files in one area) or L (several areas,
-        a new concept or a migration);
-      - whether it is risky: it touches security, stored data, public interfaces or anything hard
-        to undo;
-      - what is unclear, and whether it should be split into smaller requirements.
+      Weigh what it gives the people who use the project against what it costs to build and to
+      keep, whether the project already does it or part of it, and whether it fits where the
+      project is going. Report that it is worth doing, or that it is not. Either way give your
+      reasons: what you looked at and what decided it. A requirement too vague to judge is not
+      worth doing as written; say what is missing.
 
-      Finish by calling the submit_stage tool with the fields below. Submit `pass` when the
-      requirement is clear enough to plan. Submit `blocked`, with the reason in the summary, when it
-      is not worth doing, cannot be done as written, or needs the person to answer questions first.
-    next: plan
-    contract:
-      - name: size
-        type: size
-        description: S, M or L.
-      - name: risk
-        type: risk
-        description: true when the change is risky.
-      - name: questions
-        type: list
-        required: false
-        description: What is unclear in the requirement, one question per item.
-      - name: split
-        type: list
-        required: false
-        description: Smaller requirements it should be split into, if any.
+      Write in the language of the requirement.
+    outcomes:
+      - id: worth-doing
+        name: { en: Worth doing, zh-CN: 值得做 }
+        to: requirements
+      - id: not-worth-doing
+        name: { en: Not worth doing, zh-CN: 不值得做 }
+        end: dropped
 
-  - id: plan
-    name: Write the plan
-    kind: agent
-    tier: deep
-    scope: { level: read, web: false }
-    session: resume
-    gate: contract
-    evidence: [no-file-changes]
+  - id: requirements
+    name: { en: Requirements, zh-CN: 需求文档 }
+    by: standard
+    hand-in: document
     prompt: |
-      Write the plan for the requirement. Read the code it touches, then say how you will build
-      it: the approach, the files to change or add, the tests that cover the core of the change,
-      and how the result can be checked. Do not change any file yet.
+      Write the requirements document: what must be true when this is done, not how to build it.
+      Read the project first, and change none of its files.
 
-      If you are given notes from an earlier round, revise the plan to address every one of them.
+      Cover who it is for and what they can do afterwards, the behavior in each case that matters,
+      the edge cases and errors, what is deliberately left out, and how someone can check each
+      point. Number the points so later steps can refer to them. Where the requirement leaves a
+      choice open, make it and say why.
 
-      Finish by calling the submit_stage tool with `pass` and the fields below.
-    next: confirm-plan
-    contract:
-      - name: plan
-        type: text
-        description: The plan, in Markdown.
-      - name: files
-        type: list
-        description: The files to change or add, one path per item, relative to the project.
+      If you were sent back here, change the document to answer the problem you were given, and
+      say in your note what changed.
 
-  - id: confirm-plan
-    name: Confirm the plan
-    kind: human
-    when: { size: [L], risk: true }
-    prompt: Read the plan. Approve it to start building, or send it back with what to change.
-    sendBack: [plan]
-    next: build
+      Hand in the whole document. Write it and your note in the language of the requirement.
+    outcomes:
+      - id: written
+        name: { en: Written, zh-CN: 已写好 }
+        to: design
+
+  - id: design
+    name: { en: Design, zh-CN: 设计方案 }
+    by: deep
+    hand-in: document
+    prompt: |
+      Write the design: how the project will meet the requirements document. Read the code it
+      touches first, and change none of it.
+
+      Cover the approach and why it was chosen over the alternatives, the parts of the project that
+      change and how, the data and interfaces that are added or changed, what could go wrong, and
+      the order to build it in. Follow the project's own structure and conventions. Say how each
+      numbered requirement is met.
+
+      If the requirements cannot be designed as written, because they contradict each other,
+      contradict the project, or leave out a decision the design depends on, send the work back to
+      Requirements instead of guessing: hand in a document that lists each problem and what you
+      need decided.
+
+      If you were sent back here, change the design to answer the problem you were given.
+
+      Hand in the whole document. Write it and your note in the language of the requirement.
+    outcomes:
+      - id: ready
+        name: { en: Ready to build, zh-CN: 可以开发 }
+        to: build
+      - id: requirements-problem
+        name: { en: Requirements need work, zh-CN: 需求有问题 }
+        to: requirements
 
   - id: build
-    name: Build
-    kind: agent
-    tier: { S: standard, M: standard, L: deep, default: standard }
-    scope: { level: commands, web: false }
-    session: resume
-    gate: contract
-    evidence: [changed-files]
+    name: { en: Build, zh-CN: 开发 }
+    by: standard
+    hand-in: note
     prompt: |
-      Build the change as the plan says, in this worktree. Keep to what the requirement and the
-      plan need. Add or update tests for the core of the change. Commit your work on the current
-      branch with clear commit messages. Do not push, and do not open a pull request.
+      Build what the design describes, so that every point of the requirements document holds.
+      Follow the design and the project's conventions, add or change the tests the project expects
+      for such a change, and run the project's own checks until they pass.
 
-      If you are given notes from a review or a person, address every one of them.
+      If the design cannot work as written, report the design problem and send the work back to
+      Design instead of working around it: say what you tried and why it fails.
 
-      Finish by calling the submit_stage tool with `pass` and the fields below.
-    next: verify
-    contract:
-      - name: changes
-        type: text
-        description: What you changed and why, in a few sentences.
-      - name: deviations
-        type: list
-        required: false
-        description: Where you departed from the plan, and why.
+      If you were sent back here, fix what the test found before anything else.
 
-  - id: verify
-    name: Verify
-    kind: agent
-    tier: standard
-    scope: { level: commands, web: false }
-    session: new
-    gate: contract
-    evidence: [ran-command, reported-commands-ran]
-    rework: { to: build }
+      In your note, say what you changed, what you ran to check it and anything the design did
+      not cover. Write the note in the language of the requirement.
+    outcomes:
+      - id: built
+        name: { en: Built, zh-CN: 开发完成 }
+        to: test
+      - id: design-problem
+        name: { en: Design problem, zh-CN: 设计有问题 }
+        to: design
+
+  - id: test
+    name: { en: Test, zh-CN: 测试 }
+    by: standard
+    hand-in: verdict
     prompt: |
-      Verify the change in this worktree. Find how this project is checked: its README,
-      CONTRIBUTING, AGENTS.md, package scripts, Makefile or CI configuration. Run its formatter
-      check, linter, type checker and tests. When something fails, fix it and run it again until
-      it passes. Commit your fixes on the current branch.
+      Test what was built against the requirements document, as someone who did not build it.
+      Run the project's tests and checks, then try the change itself the way its users would,
+      point by point, the edge cases and errors included. Fix nothing yourself.
 
-      Finish by calling the submit_stage tool. Submit `pass` when every check passes. Submit
-      `changes`, with what is wrong in the summary, when the failures need the change itself to be
-      redone. List every command you ran, exactly as you ran it.
-    next: cross-review
-    contract:
-      - name: commands
-        type: list
-        description: Every check command you ran, exactly as run.
-      - name: result
-        type: text
-        description: What passed, what failed and what you fixed.
+      Report a pass only when every point holds and nothing else broke. Otherwise report a fail,
+      which sends the work back to Build: name each point that fails, what you did, what you
+      expected and what happened instead.
 
-  - id: cross-review
-    name: Cross review
-    kind: agent
-    tier: deep
-    requires: { otherHarnessThan: build }
-    scope: { level: read, web: false }
-    session: new
-    gate: agent
-    evidence: [no-file-changes]
-    rework: { to: build }
-    prompt: |
-      Review the change on this branch against its requirement and plan. Read the diff from the
-      base branch and the code around it. Look for bugs, missing cases, security problems, missing
-      tests for the core, and code that does more than the requirement needs. Do not change any
-      file.
-
-      Finish by calling the submit_stage tool. Submit `pass` when the change can be accepted as it
-      is. Submit `changes` when something must be fixed, with each problem in `findings`.
-    next: integrate
-    contract:
-      - name: findings
-        type: list
-        required: false
-        description: Each problem found, with its file and what to do about it.
-
-  - id: integrate
-    name: Integrate
-    kind: agent
-    tier: standard
-    scope: { level: commands, web: false }
-    session: new
-    gate: contract
-    evidence: [ran-command, reported-commands-ran]
-    rework: { to: build }
-    prompt: |
-      Bring the branch up to date and prepare it for acceptance. Fetch, then rebase the branch onto
-      the latest base branch and resolve any conflicts. Run the project's full checks again: its
-      formatter check, linter, type checker, tests and build. Do not push.
-
-      Then write the acceptance notes for the person: what changed, how to try it, and anything
-      they should look at closely.
-
-      Finish by calling the submit_stage tool. Submit `pass` when the branch is rebased and every
-      check passes. Submit `changes` when the conflicts or failures need the change to be redone.
-      List every command you ran, exactly as you ran it.
-    next: accept
-    contract:
-      - name: commands
-        type: list
-        description: Every command you ran, exactly as run.
-      - name: notes
-        type: text
-        description: The acceptance notes, in Markdown.
-
-  - id: accept
-    name: Accept
-    kind: human
-    prompt: Read the acceptance notes and try the change. Approve it to open a pull request, or send it back.
-    sendBack: [build, plan]
-    next: pull-request
-
-  - id: pull-request
-    name: Open a pull request
-    kind: handover
-    action: pull-request
-    next: null
+      Write in the language of the requirement.
+    outcomes:
+      - id: pass
+        name: { en: Passed, zh-CN: 通过 }
+        end: done
+      - id: fail
+        name: { en: Failed, zh-CN: 未通过 }
+        to: build

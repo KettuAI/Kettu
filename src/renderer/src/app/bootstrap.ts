@@ -146,6 +146,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'task.run':
       useTasksStore.getState().receiveRun(event.run)
       return
+    case 'sops.changed':
+      useTasksStore.getState().sopsChanged(hostId)
+      return
   }
   receiveArtifactEvent(event, hostId)
   if (event.type === 'artifacts.changed') artifactsChanged(hostId)

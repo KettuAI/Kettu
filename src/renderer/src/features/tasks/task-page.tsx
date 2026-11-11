@@ -1,39 +1,51 @@
-// A task's page: its bar with its state and actions, where it runs and what it cost, its stage
-// track, its requirement, what it needs from the person, and its stage runs, newest first.
+// A task's page: its bar with its state and actions, the SOP it runs and its branch, its
+// flowchart, the node chosen in it with its runs, newest first, and its requirement.
 
 import { useEffect, useState, type ReactNode } from 'react'
 import {
   Alert02Icon,
   ArrowLeft01Icon,
   Cancel01Icon,
+  Delete02Icon,
   GitBranchIcon,
-  PauseIcon,
-  PlayIcon,
   WorkflowSquare03Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { NOTE_CHARS, type StageRunView, type TaskView } from '@shared/tasks'
+import { NOTE_CHARS, type NodeRunView, type TaskView } from '@shared/tasks'
 import { back } from '@renderer/app/history'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Clamp } from '@renderer/features/session/clamp'
+import { Markdown } from '@renderer/features/session/markdown'
 import { TurnDots } from '@renderer/features/session/turn-dots'
-import { Head, Notice, Select, SettingsStyles } from '@renderer/features/routines/kit'
+import { Head, Notice, SettingsStyles } from '@renderer/features/routines/kit'
 import { useCornered } from '@renderer/features/shell/corner'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
-import { shortAgo, usd } from '@renderer/lib/format'
+import { shortAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
-import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
-import { agentName } from '@renderer/stores/agents'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { taskHost, useTasksStore } from '@renderer/stores/tasks'
 import { openSession } from '@renderer/stores/view'
-import { awaitsDecision, sendBackTargets, stageMarks, stageName, taskActions } from './model'
-import { CancelTaskDialog } from './task-menu'
+import {
+  defaultNode,
+  nodeName,
+  nodeOf,
+  outcomeName,
+  taskActions,
+  taskMark,
+  type OutlineNode,
+} from './model'
+import { SopFlow } from './sop-flow'
+import { CancelTaskDialog, RemoveTaskDialog } from './task-menu'
+import { useAgentLine } from './use-model-name'
 import './tasks.css'
+
+const NO_RUNS: NodeRunView[] = []
+const DOCUMENT_HEIGHT = 240
+const REQUIREMENT_HEIGHT = 100
 
 export default function TaskPage({ taskId }: { taskId: string }) {
   const { t } = useTranslation('tasks')
@@ -65,21 +77,7 @@ export default function TaskPage({ taskId }: { taskId: string }) {
           <PageSkeleton />
         ) : runs?.error ? (
           <div className="k-routine__body">
-            <Notice
-              tone="red"
-              mark={<Icon icon={Alert02Icon} size={16} />}
-              action={
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void useTasksStore.getState().loadTask(taskId)}
-                >
-                  {t('page.retry')}
-                </Button>
-              }
-            >
-              {t('page.failed', { error: runs.error })}
-            </Notice>
+            <LoadFailed taskId={taskId} error={runs.error} />
           </div>
         ) : (
           <div className="k-routine__body">
@@ -95,20 +93,38 @@ export default function TaskPage({ taskId }: { taskId: string }) {
   return <TaskBody task={task} />
 }
 
+function LoadFailed({ taskId, error }: { taskId: string; error: string }) {
+  const { t } = useTranslation('tasks')
+  return (
+    <Notice
+      tone="red"
+      mark={<Icon icon={Alert02Icon} size={16} />}
+      action={
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void useTasksStore.getState().loadTask(taskId)}
+        >
+          {t('page.retry')}
+        </Button>
+      }
+    >
+      {t('page.failed', { error })}
+    </Notice>
+  )
+}
+
 function TaskBody({ task }: { task: TaskView }) {
   const { t } = useTranslation('tasks')
   const runs = useTasksStore((s) => s.runs[task.id])
-  const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  // The node the person chose; until they choose, the one the task is at.
+  const [picked, setPicked] = useState<string | null>(null)
   const can = taskActions(task)
-  const store = useTasksStore.getState()
-  const act = (action: () => Promise<void>) => {
-    setError(null)
-    action().catch((failure: unknown) => setError(errorMessage(failure)))
-  }
-  const stage = stageName(task, task.stageId)
-  const items = runs?.value ?? []
-  const waitingRun = items.find((run) => run.state === 'waiting' && run.sessionId)
+  const mark = taskMark(task)
+  const items = runs?.value ?? NO_RUNS
+  const chosen = nodeOf(task.outline, picked) ?? nodeOf(task.outline, defaultNode(task, items))
 
   return (
     <TaskShell
@@ -120,49 +136,12 @@ function TaskBody({ task }: { task: TaskView }) {
               {task.title}
             </span>
           </span>
-          <span
-            className="k-routine__state"
-            data-tone={task.state === 'waiting' || task.state === 'blocked' ? 'amber' : undefined}
-          >
-            {task.state === 'waiting' && <span aria-hidden className="k-rs__dot" />}
-            {task.state === 'running' && <TurnDots phase="working" />}
-            <span>
-              {task.state === 'running' && stage
-                ? `${t('state.running')} · ${stage}`
-                : t(`state.${task.state}`)}
-            </span>
+          <span className="k-routine__state" data-tone={mark === 'needsYou' ? 'amber' : undefined}>
+            {mark === 'needsYou' && <span aria-hidden className="k-rs__dot" />}
+            {mark === 'running' && <TurnDots phase="working" />}
+            <span>{t(`state.${mark}`)}</span>
           </span>
           <span className="k-routine__acts">
-            {can.start && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Icon icon={PlayIcon} size={14} />}
-                onClick={() => act(() => store.start(task.id))}
-              >
-                {t('page.start')}
-              </Button>
-            )}
-            {can.pause && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Icon icon={PauseIcon} size={14} />}
-                onClick={() => act(() => store.pause(task.id))}
-              >
-                {t('page.pause')}
-              </Button>
-            )}
-            {can.resume && (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Icon icon={PlayIcon} size={14} />}
-                onClick={() => act(() => store.resume(task.id))}
-              >
-                {t('page.resume')}
-              </Button>
-            )}
             {can.cancel && (
               <Button
                 size="sm"
@@ -173,67 +152,64 @@ function TaskBody({ task }: { task: TaskView }) {
                 {t('page.cancel')}
               </Button>
             )}
+            {can.remove && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Icon icon={Delete02Icon} size={14} />}
+                onClick={() => setRemoving(true)}
+              >
+                {t('page.remove')}
+              </Button>
+            )}
           </span>
         </>
       }
     >
       <div className="k-routine__body">
-        {error && (
-          <Notice tone="red" mark={<Icon icon={Alert02Icon} size={16} />}>
-            {error}
-          </Notice>
-        )}
-        <Meta task={task} />
-        <StageTrack task={task} runs={items} />
-        {awaitsDecision(task) ? (
-          <DecideCard key={`${task.stageId ?? ''}:${task.state}`} task={task} />
-        ) : (
-          task.state === 'waiting' && (
-            <div className="mt-4">
-              <Notice
-                tone="amber"
-                mark={<span className="k-rs__dot" />}
-                title={t('page.needsYou')}
-                action={
-                  waitingRun?.sessionId && (
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      onClick={() => openRunSession(task, waitingRun.sessionId!)}
-                    >
-                      {t('page.openSession', {
-                        agent: waitingRun.agentId
-                          ? agentName(waitingRun.agentId, taskHost(task))
-                          : '',
-                      })}
-                    </Button>
-                  )
-                }
-              >
-                {task.reason ?? undefined}
-              </Notice>
-            </div>
-          )
-        )}
-        {task.state === 'paused' && task.reason && (
+        <div className="k-task__meta">
+          <span>{t('page.sop', { name: task.sop.name })}</span>
+          {task.worktree && (
+            <span className="inline-flex items-center gap-1" title={task.worktree.path}>
+              <Icon icon={GitBranchIcon} size={13} />
+              {task.worktree.branch}
+            </span>
+          )}
+        </div>
+        {runs?.error && (
           <div className="mt-4">
-            <Notice tone="amber" mark={<Icon icon={PauseIcon} size={16} />}>
-              {task.reason}
-            </Notice>
+            <LoadFailed taskId={task.id} error={runs.error} />
           </div>
+        )}
+        <div className="ui-sg-card k-flow-card mt-4">
+          <SopFlow
+            outline={task.outline}
+            hostId={taskHost(task)}
+            task={task}
+            runs={items}
+            selected={chosen?.id}
+            onSelect={setPicked}
+          />
+        </div>
+        {chosen && (
+          <NodeDetail
+            task={task}
+            node={chosen}
+            runs={items.filter((run) => run.nodeId === chosen.id)}
+            loading={!runs?.value && !runs?.error}
+          />
         )}
         <Head title={t('page.requirement')} />
         <div className="ui-sg-card">
-          <Clamp maxHeight={100} more={t('page.showMore')} less={t('page.showLess')}>
+          <Clamp maxHeight={REQUIREMENT_HEIGHT} more={t('page.showMore')} less={t('page.showLess')}>
             <div className="k-task__requirement" dir="auto">
               {task.requirement}
             </div>
           </Clamp>
         </div>
-        <Head title={t('page.runs')} />
-        <StageRuns task={task} runs={runs} />
       </div>
       <CancelTaskDialog task={task} open={cancelling} onOpenChange={setCancelling} />
+      <RemoveTaskDialog task={task} open={removing} onOpenChange={setRemoving} onRemoved={back} />
     </TaskShell>
   )
 }
@@ -265,135 +241,283 @@ function PageSkeleton() {
     <div className="k-routine__body" aria-busy>
       <div className="mt-4 flex flex-col gap-3">
         <Skeleton className="h-3 w-72" />
-        <Skeleton className="h-1.5 w-full" />
-        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-28 w-full" />
         <Skeleton className="h-32 w-full" />
       </div>
     </div>
   )
 }
 
-/** Where the task runs and what it cost: its workflow, its branch, its pull request. */
-function Meta({ task }: { task: TaskView }) {
+/** The node chosen in the flowchart: what it hands in, and its runs, newest first. */
+function NodeDetail({
+  task,
+  node,
+  runs,
+  loading,
+}: {
+  task: TaskView
+  node: OutlineNode
+  runs: NodeRunView[]
+  loading: boolean
+}) {
   const { t } = useTranslation('tasks')
   return (
-    <div className="k-task__meta">
-      <span>
-        {t('page.workflow', { name: task.workflow.name, version: task.workflow.version })}
-      </span>
-      {task.worktree && (
-        <span className="inline-flex items-center gap-1" title={task.worktree.path}>
-          <Icon icon={GitBranchIcon} size={13} />
-          {task.worktree.branch}
-        </span>
+    <>
+      <Head
+        title={node.name}
+        note={node.by.kind === 'agent' ? t(`node.handIn.${node.handIn}`) : t('node.you')}
+      />
+      {loading ? (
+        <div className="ui-sg-card" aria-busy>
+          <div className="k-srun">
+            <Skeleton className="h-3 w-40" />
+            <Skeleton className="h-3 w-64" />
+          </div>
+        </div>
+      ) : runs.length === 0 ? (
+        <p className="k-runs__empty">{t('page.noRuns')}</p>
+      ) : (
+        <div className="ui-sg-card k-sruns">
+          {runs.map((run) => (
+            <NodeRun key={run.id} task={task} node={node} run={run} />
+          ))}
+        </div>
       )}
-      <span>{usd(task.costUsd)}</span>
-      {task.pullRequest && (
-        <a href={task.pullRequest} target="_blank" rel="noreferrer">
-          {t('page.pullRequest')}
-        </a>
+    </>
+  )
+}
+
+function runTone(run: NodeRunView): 'ok' | 'wait' | 'fail' | undefined {
+  if (run.state === 'done') return 'ok'
+  if (run.state === 'waiting') return run.waiting === 'stuck' ? 'fail' : 'wait'
+  return undefined
+}
+
+function NodeRun({ task, node, run }: { task: TaskView; node: OutlineNode; run: NodeRunView }) {
+  const { t } = useTranslation('tasks')
+  const now = useNow()
+  const hostId = taskHost(task)
+  const agent = useAgentLine(run.agentId, run.model, hostId)
+  const sessionId = run.sessionId
+  return (
+    <div className="k-srun">
+      <div className="k-srun__top">
+        <b>{t('node.round', { round: run.round })}</b>
+        <span className="k-srun__state" data-tone={runTone(run)}>
+          {t(`run.state.${run.state}`)}
+        </span>
+        <span title={new Date(run.startedAt).toLocaleString()}>
+          {shortAgo(run.endedAt ?? run.startedAt, now)}
+        </span>
+        {run.worktree && (
+          <span className="inline-flex items-center gap-1" title={run.worktree.path}>
+            <Icon icon={GitBranchIcon} size={13} />
+            {run.worktree.branch}
+          </span>
+        )}
+        {run.by === 'person' ? (
+          <span className="ml-auto">{t('node.you')}</span>
+        ) : (
+          run.agentId && (
+            <button
+              type="button"
+              className="k-srun__agent"
+              disabled={!sessionId}
+              title={t('run.openSession')}
+              onClick={() => sessionId && openRunSession(task, sessionId)}
+            >
+              <AgentMark agent={run.agentId} size={13} hostId={hostId} />
+              <span>{agent}</span>
+            </button>
+          )
+        )}
+      </div>
+      {run.sentBack && (
+        <div className="k-srun__note">
+          <b>
+            {t('run.sentBack', { node: nodeName(task, run.sentBack.from) ?? run.sentBack.from })}
+          </b>
+          {run.sentBack.note && `: ${run.sentBack.note}`}
+        </div>
+      )}
+      {run.outcome !== null && (
+        <div className="k-srun__summary">
+          {t('run.outcome', { outcome: outcomeName(node, run.outcome) })}
+        </div>
+      )}
+      {run.note && (
+        <div className="k-srun__summary" dir="auto">
+          {run.note}
+        </div>
+      )}
+      {run.hasDocument && <RunDocument taskId={task.id} runId={run.id} />}
+      {run.state === 'waiting' && run.waiting === 'person' && (
+        <DecideBlock task={task} node={node} run={run} />
+      )}
+      {run.state === 'waiting' && run.waiting === 'stuck' && <StuckBlock task={task} run={run} />}
+      {run.state === 'waiting' && run.waiting === 'request' && (
+        <section className="k-decide">
+          <div className="k-decide__head">
+            <b>{t('run.request')}</b>
+          </div>
+          {sessionId && (
+            <div className="k-decide__acts">
+              <Button size="sm" variant="primary" onClick={() => openRunSession(task, sessionId)}>
+                {t('run.openSession')}
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
+      {sessionId && run.state !== 'waiting' && (
+        <div>
+          <Button size="sm" variant="secondary" onClick={() => openRunSession(task, sessionId)}>
+            {t('run.openSession')}
+          </Button>
+        </div>
       )}
     </div>
   )
 }
 
-/** One segment per stage: done, current, skipped hatched, upcoming. */
-function StageTrack({ task, runs }: { task: TaskView; runs: readonly StageRunView[] }) {
+type DocumentRead =
+  | { state: 'loading' }
+  | { state: 'read'; markdown: string | null }
+  | { state: 'failed'; error: string }
+
+/** The Markdown a run handed in, read when its run shows and cut short while long. */
+function RunDocument({ taskId, runId }: { taskId: string; runId: string }) {
   const { t } = useTranslation('tasks')
-  const marks = stageMarks(task, runs)
+  const [read, setRead] = useState<DocumentRead>({ state: 'loading' })
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    let live = true
+    useTasksStore
+      .getState()
+      .document(taskId, runId)
+      .then(
+        (markdown) => live && setRead({ state: 'read', markdown }),
+        (error: unknown) => live && setRead({ state: 'failed', error: errorMessage(error) }),
+      )
+    return () => {
+      live = false
+    }
+  }, [taskId, runId, attempt])
+
   return (
-    <ol className="k-track" aria-label={t('page.stages')}>
-      {task.stages.map((stage, i) => {
-        const mark = marks[i]!
-        return (
-          <li
-            key={stage.id}
-            className="k-track__stage"
-            data-mark={mark}
-            aria-current={mark === 'current' ? 'step' : undefined}
+    <div className="k-srun__document">
+      <span className="k-srun__note">{t('run.document')}</span>
+      {read.state === 'loading' && (
+        <span className="k-srun__note" aria-busy>
+          {t('run.documentLoading')}
+        </span>
+      )}
+      {read.state === 'failed' && (
+        <span role="alert" className="flex items-center gap-2 text-xs text-danger">
+          {t('run.documentFailed', { error: read.error })}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setRead({ state: 'loading' })
+              setAttempt((n) => n + 1)
+            }}
           >
-            <span aria-hidden className="k-track__bar" />
-            <span className="k-track__name" title={stage.name}>
-              <span className="sr-only">{t(`page.stage.${mark}`, { stage: stage.name })}</span>
-              <span aria-hidden>{stage.name}</span>
-            </span>
-          </li>
-        )
-      })}
-    </ol>
+            {t('page.retry')}
+          </Button>
+        </span>
+      )}
+      {read.state === 'read' &&
+        (read.markdown === null ? (
+          <span className="k-srun__note">{t('run.documentNone')}</span>
+        ) : (
+          <Clamp maxHeight={DOCUMENT_HEIGHT} more={t('page.showMore')} less={t('page.showLess')}>
+            <Markdown markdown={read.markdown} className="markdown-compact" />
+          </Clamp>
+        ))}
+    </div>
   )
 }
 
-/** The person's decision on a human stage or a blocked task: approve, or send it back. */
-function DecideCard({ task }: { task: TaskView }) {
+function NoteField({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string
+  placeholder: string
+  onChange: (value: string) => void
+}) {
   const { t } = useTranslation('tasks')
-  const targets = sendBackTargets(task)
-  const [to, setTo] = useState<string>(targets[0] ?? '')
-  const [note, setNote] = useState('')
+  return (
+    <textarea
+      className="ui-sg-textarea k-decide__note"
+      aria-label={t('run.note')}
+      placeholder={placeholder}
+      maxLength={NOTE_CHARS}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  )
+}
+
+/** Runs one of a block's requests, holding its buttons until it settles and showing why it failed. */
+function useRequest(): {
+  busy: boolean
+  error: string | null
+  run: (request: () => Promise<void>) => void
+} {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const blocked = task.state === 'blocked'
-  const stage = stageName(task, task.stageId) ?? ''
-
-  const decide = (decision: 'approve' | 'send-back') => {
+  const run = (request: () => Promise<void>) => {
     setBusy(true)
     setError(null)
-    const trimmed = note.trim()
-    useTasksStore
-      .getState()
-      .decide({
-        taskId: task.id,
-        decision,
-        ...(decision === 'send-back' ? { to } : {}),
-        ...(trimmed ? { note: trimmed } : {}),
-      })
+    request()
       .catch((failure: unknown) => setError(errorMessage(failure)))
       .finally(() => setBusy(false))
   }
+  return { busy, error, run }
+}
 
+/** The person's own node: one button for each of its outcomes, with a note if they like. */
+function DecideBlock({ task, node, run }: { task: TaskView; node: OutlineNode; run: NodeRunView }) {
+  const { t } = useTranslation('tasks')
+  const [note, setNote] = useState('')
+  const request = useRequest()
+  const decide = (outcome: string) => {
+    const trimmed = note.trim()
+    request.run(() =>
+      useTasksStore.getState().decide({
+        taskId: task.id,
+        runId: run.id,
+        outcome,
+        ...(trimmed ? { note: trimmed } : {}),
+      }),
+    )
+  }
   return (
-    <section
-      className="k-decide"
-      data-tone={blocked ? 'red' : undefined}
-      aria-label={t('page.needsYou')}
-    >
+    <section className="k-decide" aria-label={t('run.person', { node: node.name })}>
       <div className="k-decide__head">
-        <b>{blocked ? t('page.blocked') : t('page.waitingOn', { stage })}</b>
-        {task.reason && <small>{task.reason}</small>}
+        <b>{t('run.person', { node: node.name })}</b>
       </div>
-      <textarea
-        className="ui-sg-textarea k-decide__note"
-        aria-label={t('page.note')}
-        placeholder={t('page.notePlaceholder')}
-        maxLength={NOTE_CHARS}
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-      />
+      {node.question && <p className="k-decide__text">{node.question}</p>}
+      <NoteField value={note} placeholder={t('run.notePlaceholder')} onChange={setNote} />
       <div className="k-decide__acts">
-        <Button size="sm" variant="primary" disabled={busy} onClick={() => decide('approve')}>
-          {t('page.approve')}
-        </Button>
-        {targets.length > 0 && (
-          <span className="k-decide__back">
-            <Select
-              label={t('page.sendBackTo')}
-              value={to}
-              options={targets.map((id) => ({ value: id, label: stageName(task, id) ?? id }))}
-              onChange={setTo}
-            />
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={busy || !to}
-              onClick={() => decide('send-back')}
-            >
-              {t('page.sendBack')}
-            </Button>
-          </span>
-        )}
-        {error && (
+        {node.outcomes.map((outcome, i) => (
+          <Button
+            key={outcome.id}
+            size="sm"
+            variant={i === 0 ? 'primary' : 'secondary'}
+            disabled={request.busy}
+            onClick={() => decide(outcome.id)}
+          >
+            {outcome.name}
+          </Button>
+        ))}
+        {request.error && (
           <span role="alert" className="text-xs text-danger">
-            {error}
+            {request.error}
           </span>
         )}
       </div>
@@ -401,128 +525,44 @@ function DecideCard({ task }: { task: TaskView }) {
   )
 }
 
-function StageRuns({
-  task,
-  runs,
-}: {
-  task: TaskView
-  runs: ReturnType<typeof useTasksStore.getState>['runs'][string] | undefined
-}) {
+/** A stuck run: why, and another try with what the person wants it told. */
+function StuckBlock({ task, run }: { task: TaskView; run: NodeRunView }) {
   const { t } = useTranslation('tasks')
-  if (!runs?.value) {
-    if (runs?.error) {
-      return (
-        <Notice
-          tone="red"
-          mark={<Icon icon={Alert02Icon} size={16} />}
-          action={
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => void useTasksStore.getState().loadTask(task.id)}
-            >
-              {t('page.retry')}
-            </Button>
-          }
-        >
-          {t('page.failed', { error: runs.error })}
-        </Notice>
-      )
-    }
-    return (
-      <div className="ui-sg-card" aria-busy>
-        {[0, 1].map((i) => (
-          <div key={i} className="k-srun">
-            <Skeleton className="h-3 w-40" />
-            <Skeleton className="h-3 w-64" />
-          </div>
-        ))}
-      </div>
+  const [note, setNote] = useState('')
+  const request = useRequest()
+  const sessionId = run.sessionId
+  const retry = () => {
+    const trimmed = note.trim()
+    request.run(() =>
+      useTasksStore
+        .getState()
+        .retry({ taskId: task.id, runId: run.id, ...(trimmed ? { note: trimmed } : {}) }),
     )
   }
-  if (runs.value.length === 0) {
-    return <p className="k-runs__empty">{t('page.noRuns')}</p>
-  }
   return (
-    <div className="ui-sg-card k-sruns">
-      {runs.value.map((run) => (
-        <StageRun key={run.id} task={task} run={run} />
-      ))}
-    </div>
-  )
-}
-
-function runTone(state: StageRunView['state']): 'ok' | 'wait' | 'fail' | undefined {
-  if (state === 'passed') return 'ok'
-  if (state === 'waiting' || state === 'changes') return 'wait'
-  if (state === 'blocked' || state === 'interrupted') return 'fail'
-  return undefined
-}
-
-function StageRun({ task, run }: { task: TaskView; run: StageRunView }) {
-  const { t } = useTranslation('tasks')
-  const now = useNow()
-  const hostId = taskHost(task)
-  const model = useModelName(run, hostId)
-  const agent = run.agentId ? agentName(run.agentId, hostId) : null
-  return (
-    <div className="k-srun">
-      <div className="k-srun__top">
-        <b>{stageName(task, run.stageId) ?? run.stageId}</b>
-        {run.round > 1 && <span>{t('page.round', { round: run.round })}</span>}
-        <span className="k-srun__state" data-tone={runTone(run.state)}>
-          {t(`runState.${run.state}`)}
-        </span>
-        <span title={new Date(run.startedAt).toLocaleString()}>
-          {shortAgo(run.endedAt ?? run.startedAt, now)}
-        </span>
-        {run.costUsd > 0 && <span>{usd(run.costUsd)}</span>}
-        {run.agentId && (
-          <button
-            type="button"
-            className="k-srun__agent"
-            disabled={!run.sessionId}
-            title={agent ? t('page.openSession', { agent }) : undefined}
-            onClick={() => run.sessionId && openRunSession(task, run.sessionId)}
-          >
-            <AgentMark agent={run.agentId} size={13} hostId={hostId} />
-            <span>{model ? `${agent} · ${model}` : agent}</span>
-          </button>
+    <section className="k-decide" data-tone="red" aria-label={t('run.stuck')}>
+      <div className="k-decide__head">
+        <b>{t('run.stuck')}</b>
+        {run.reason && <small>{run.reason}</small>}
+      </div>
+      <NoteField value={note} placeholder={t('run.retryPlaceholder')} onChange={setNote} />
+      <div className="k-decide__acts">
+        <Button size="sm" variant="primary" disabled={request.busy} onClick={retry}>
+          {t('run.retry')}
+        </Button>
+        {sessionId && (
+          <Button size="sm" variant="secondary" onClick={() => openRunSession(task, sessionId)}>
+            {t('run.openSession')}
+          </Button>
+        )}
+        {request.error && (
+          <span role="alert" className="text-xs text-danger">
+            {request.error}
+          </span>
         )}
       </div>
-      {run.summary && <div className="k-srun__summary">{run.summary}</div>}
-      {run.evidence && run.evidence.commands.length > 0 && (
-        <>
-          <span className="k-srun__label">{t('page.commands')}</span>
-          <pre className="k-srun__commands">
-            {run.evidence.commands.map((command, i) => (
-              <code key={i} title={command}>
-                {command}
-              </code>
-            ))}
-          </pre>
-        </>
-      )}
-      {run.evidence && run.evidence.changedFiles.length > 0 && (
-        <span className="k-srun__label" title={run.evidence.changedFiles.join('\n')}>
-          {t('page.changedFiles', { count: run.evidence.changedFiles.length })}
-        </span>
-      )}
-      {run.note && <div className="k-srun__note">{run.note}</div>}
-    </div>
+    </section>
   )
-}
-
-/** The model a run used, by the name its agent's menu shows it under when known. */
-function useModelName(run: StageRunView, hostId: string | null): string | null {
-  const choices = useAgentOptionsStore((s) =>
-    run.agentId
-      ? optionsOn(s, hostId)[run.agentId]?.config.find((option) => option.category === 'model')
-          ?.choices
-      : undefined,
-  )
-  if (!run.model) return null
-  return choices?.find((choice) => choice.value === run.model)?.name ?? run.model
 }
 
 function openRunSession(task: TaskView, sessionId: string): void {

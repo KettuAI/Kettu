@@ -45,13 +45,13 @@ import {
 } from '../plan-tool'
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from '../computer/tools'
 import {
-  isSubmitToolName,
-  SubmitTools,
-  SUBMIT_INSTRUCTIONS,
-  SUBMIT_TOOL,
-  SUBMIT_TOOLS,
-  type SubmitToolsDeps,
-} from '../tasks/submit-tool'
+  isTaskToolName,
+  REPORT_TOOL,
+  TASK_INSTRUCTIONS,
+  TASK_TOOLS,
+  TaskTools,
+  type TaskToolsDeps,
+} from '../tasks/report-tool'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
 import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
@@ -133,8 +133,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   data?: ArtifactData
   /** Where the plan tool writes. */
   plan: PlanToolsDeps
-  /** The task engine behind the submit tool; without it the service lists no such tool. */
-  submit?: SubmitToolsDeps
+  /** The task engine and the SOP library behind the task tools; without them none is listed. */
+  tasks?: TaskToolsDeps
   /** Whether the agent's session `id` is a subagent that runs under a session of its own. */
   subagentCall?(process: AgentProcess, id: string): boolean
   /** The mobile devices behind the `device_*` tools; without them every call fails. */
@@ -181,8 +181,8 @@ function entry(url: string, token: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      // The submit tool refuses every session but a current task stage's.
-      autoAllow: [PLAN_TOOL, SUBMIT_TOOL],
+      // The report tool refuses every session but one that works on a task's node.
+      autoAllow: [PLAN_TOOL, REPORT_TOOL],
       prompt: PLAN_PROMPT,
       secret: true,
     },
@@ -225,7 +225,7 @@ export class ArtifactService {
   private readonly tools: ArtifactTools
   private readonly sessionTools: SessionTools
   private readonly planTools: PlanTools
-  private readonly submitTools: SubmitTools | null
+  private readonly taskTools: TaskTools | null
   private readonly browserTools: BrowserTools
   private readonly deviceTools: DeviceTools | null
   private readonly dataTools: DataTools | null
@@ -240,15 +240,15 @@ export class ArtifactService {
     this.dataTools = deps.data ? new DataTools({ data: deps.data }) : null
     this.sessionTools = new SessionTools(deps.sessions)
     this.planTools = new PlanTools(deps.plan)
-    this.submitTools = deps.submit ? new SubmitTools(deps.submit) : null
+    this.taskTools = deps.tasks ? new TaskTools(deps.tasks) : null
     this.serviceTools = [
       ...SERVICE_TOOLS,
-      ...(deps.submit ? SUBMIT_TOOLS : []),
+      ...(deps.tasks ? TASK_TOOLS : []),
       ...(deps.computer ? COMPUTER_TOOLS : []),
     ]
     this.instructions = [
       SERVICE_INSTRUCTIONS,
-      ...(deps.submit ? [SUBMIT_INSTRUCTIONS] : []),
+      ...(deps.tasks ? [TASK_INSTRUCTIONS] : []),
       ...(deps.computer ? [COMPUTER_INSTRUCTIONS] : []),
     ].join(' ')
     const browserCall = deps.browserCall
@@ -434,7 +434,7 @@ export class ArtifactService {
     this.tools.forget(sessionId)
     this.dataTools?.forget(sessionId)
     this.planTools.forget(sessionId)
-    this.submitTools?.forget(sessionId)
+    this.taskTools?.forget(sessionId)
     this.leave(sessionId)
   }
 
@@ -611,12 +611,12 @@ export class ArtifactService {
           )
         }
       }
-      if (isSubmitToolName(name)) {
-        if (!this.submitTools) {
+      if (isTaskToolName(name)) {
+        if (!this.taskTools) {
           throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
         }
         try {
-          return await this.submitTools.call(caller, name, input)
+          return await this.taskTools.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

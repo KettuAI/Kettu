@@ -87,7 +87,7 @@ export const SessionRow = memo(function SessionRow({
   indent?: boolean
   /** A sub-session's place under its parent, which the tree line follows. */
   branch?: 'middle' | 'last'
-  /** Shown in place of the title, as a task's stage session names its stage and agent. */
+  /** Shown in place of the title, as a task's node session names its node and agent. */
   label?: string
 }) {
   const { t } = useTranslation('sidebar')

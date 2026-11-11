@@ -1,15 +1,19 @@
-// Tasks and their stage runs, as each host reports them: this computer's and those of the other
-// hosts it connects to. A task's host is its project's, which its path names. The sidebar, the
-// task page, New session's workflow menu and Settings › Tasks read this store.
+// Tasks and their node runs, the SOPs and the tier state, as each host reports them: this
+// computer's and those of the other hosts it connects to. A task's host is its project's, which
+// its path names. The sidebar, the task page, New session's SOP menu and Settings › SOPs read
+// this store.
 
 import { create } from 'zustand'
+import type { SessionSummary } from '@shared/agent-host'
 import type {
-  StageRunView,
+  NodeRunView,
+  SopSummary,
   TaskDecision,
   TaskDraft,
+  TaskRetry,
   TaskView,
   TierSettings,
-  WorkflowSummary,
+  TierState,
 } from '@shared/tasks'
 import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -33,27 +37,32 @@ interface TasksStore {
   byId: Record<string, TaskView>
   /** Each host's last read, by `hostKey`. */
   reads: Record<string, TasksRead>
-  /** The stage runs of the tasks whose page was opened, newest first. */
-  runs: Record<string, Loadable<StageRunView[]>>
-  /** The workflows a project can use, by its path. */
-  workflows: Record<string, Loadable<WorkflowSummary[]>>
-  /** Each host's tier settings, by `hostKey`. */
-  tiers: Record<string, Loadable<TierSettings>>
+  /** The node runs of the tasks whose page was opened, newest first. */
+  runs: Record<string, Loadable<NodeRunView[]>>
+  /** Each host's SOPs, by `hostKey`. */
+  sops: Record<string, Loadable<SopSummary[]>>
+  /** Each host's tier settings and the agent each tier stands for, by `hostKey`. */
+  tiers: Record<string, Loadable<TierState>>
   load(hostId?: string | null): Promise<void>
   receive(task: TaskView): void
   removed(taskId: string, hostId?: string | null): void
-  receiveRun(run: StageRunView): void
+  receiveRun(run: NodeRunView): void
   loadTask(taskId: string): Promise<void>
-  loadWorkflows(projectPath: string): Promise<void>
+  loadSops(hostId: string | null): Promise<void>
+  /** The host's SOPs changed: read again when something has shown them. */
+  sopsChanged(hostId: string | null): void
+  approveSop(hostId: string | null, id: string, hash: string): Promise<void>
+  removeSop(hostId: string | null, id: string): Promise<void>
   loadTiers(hostId: string | null): Promise<void>
-  saveTiers(hostId: string | null, tiers: TierSettings): Promise<TierSettings>
+  saveTiers(hostId: string | null, tiers: TierSettings): Promise<TierState>
   create(draft: TaskDraft): Promise<TaskView>
-  start(taskId: string): Promise<void>
-  pause(taskId: string): Promise<void>
-  resume(taskId: string): Promise<void>
   cancel(taskId: string): Promise<void>
+  remove(taskId: string): Promise<void>
   decide(decision: TaskDecision): Promise<void>
+  retry(retry: TaskRetry): Promise<void>
   markSeen(taskId: string): Promise<void>
+  /** The Markdown a run handed in, null for none. */
+  document(taskId: string, runId: string): Promise<string | null>
 }
 
 /** A host's key in the store's per-host maps; this computer has none of its own. */
@@ -71,11 +80,15 @@ function hostOfTask(taskId: string): string | null {
   return task ? taskHost(task) : null
 }
 
+function newestFirst(runs: readonly NodeRunView[]): NodeRunView[] {
+  return [...runs].sort((a, b) => b.startedAt - a.startedAt || b.round - a.round)
+}
+
 export const useTasksStore = create<TasksStore>()((set, get) => ({
   byId: {},
   reads: {},
   runs: {},
-  workflows: {},
+  sops: {},
   tiers: {},
 
   async load(hostId = null) {
@@ -117,12 +130,9 @@ export const useTasksStore = create<TasksStore>()((set, get) => ({
     set((state) => {
       const shown = state.runs[run.taskId]
       if (!shown?.value) return state
-      const at = shown.value.findIndex((item) => item.id === run.id)
-      const items = [...shown.value]
-      if (at >= 0) items[at] = run
-      else items.unshift(run)
-      items.sort((a, b) => b.startedAt - a.startedAt)
-      return { runs: { ...state.runs, [run.taskId]: { ...shown, value: items } } }
+      const items = shown.value.filter((item) => item.id !== run.id)
+      items.push(run)
+      return { runs: { ...state.runs, [run.taskId]: { ...shown, value: newestFirst(items) } } }
     })
   },
 
@@ -139,11 +149,7 @@ export const useTasksStore = create<TasksStore>()((set, get) => ({
         byId: { ...state.byId, [task.id]: task },
         runs: {
           ...state.runs,
-          [taskId]: {
-            value: [...runs].sort((a, b) => b.startedAt - a.startedAt),
-            loading: false,
-            error: null,
-          },
+          [taskId]: { value: newestFirst(runs), loading: false, error: null },
         },
       }))
     } catch (error) {
@@ -160,33 +166,51 @@ export const useTasksStore = create<TasksStore>()((set, get) => ({
     }
   },
 
-  async loadWorkflows(projectPath) {
+  async loadSops(hostId) {
+    const key = hostKey(hostId)
     set((state) => ({
-      workflows: {
-        ...state.workflows,
-        [projectPath]: {
-          value: state.workflows[projectPath]?.value ?? null,
-          loading: true,
-          error: null,
-        },
+      sops: {
+        ...state.sops,
+        [key]: { value: state.sops[key]?.value ?? null, loading: true, error: null },
       },
     }))
     try {
-      const list = await host('tasks.workflows', { projectPath })
-      set((state) => ({
-        workflows: {
-          ...state.workflows,
-          [projectPath]: { value: list, loading: false, error: null },
-        },
-      }))
+      const list = await hostAt(hostId, 'sops.list', undefined)
+      set((state) => ({ sops: { ...state.sops, [key]: { ...UNREAD, value: list } } }))
     } catch (error) {
       set((state) => ({
-        workflows: {
-          ...state.workflows,
-          [projectPath]: { value: null, loading: false, error: errorMessage(error) },
+        sops: {
+          ...state.sops,
+          [key]: {
+            value: state.sops[key]?.value ?? null,
+            loading: false,
+            error: errorMessage(error),
+          },
         },
       }))
     }
+  },
+
+  sopsChanged(hostId) {
+    if (get().sops[hostKey(hostId)]) void get().loadSops(hostId)
+  },
+
+  async approveSop(hostId, id, hash) {
+    const approved = await hostAt(hostId, 'sops.approve', { id, hash })
+    const key = hostKey(hostId)
+    set((state) => {
+      const shown = state.sops[key]
+      if (!shown?.value) return state
+      const value = shown.value.map((sop) =>
+        sop.source === approved.source && sop.id === approved.id ? approved : sop,
+      )
+      return { sops: { ...state.sops, [key]: { ...shown, value } } }
+    })
+  },
+
+  async removeSop(hostId, id) {
+    await hostAt(hostId, 'sops.remove', { id })
+    await get().loadSops(hostId)
   },
 
   async loadTiers(hostId) {
@@ -226,24 +250,22 @@ export const useTasksStore = create<TasksStore>()((set, get) => ({
     return task
   },
 
-  async start(taskId) {
-    get().receive(await hostAt(hostOfTask(taskId), 'tasks.start', { taskId }))
-  },
-
-  async pause(taskId) {
-    get().receive(await hostAt(hostOfTask(taskId), 'tasks.pause', { taskId }))
-  },
-
-  async resume(taskId) {
-    get().receive(await hostAt(hostOfTask(taskId), 'tasks.resume', { taskId }))
-  },
-
   async cancel(taskId) {
     get().receive(await hostAt(hostOfTask(taskId), 'tasks.cancel', { taskId }))
   },
 
+  async remove(taskId) {
+    const hostId = hostOfTask(taskId)
+    await hostAt(hostId, 'tasks.remove', { taskId })
+    get().removed(taskId, hostId)
+  },
+
   async decide(decision) {
     get().receive(await hostAt(hostOfTask(decision.taskId), 'tasks.decide', decision))
+  },
+
+  async retry(retry) {
+    get().receive(await hostAt(hostOfTask(retry.taskId), 'tasks.retry', retry))
   },
 
   async markSeen(taskId) {
@@ -256,20 +278,44 @@ export const useTasksStore = create<TasksStore>()((set, get) => ({
       return { byId: { ...state.byId, [taskId]: { ...shown, lastViewedAt: Date.now() } } }
     })
   },
+
+  document(taskId, runId) {
+    return hostAt(hostOfTask(taskId), 'tasks.document', { runId })
+  },
 }))
 
-/** Done and cancelled tasks leave the sidebar this long after they ended, as archived sessions do. */
+/** Whether the task has ended: done, dropped or cancelled. */
+export function taskEnded(task: Pick<TaskView, 'state'>): boolean {
+  return task.state === 'done' || task.state === 'dropped' || task.state === 'cancelled'
+}
+
+/** Ended tasks leave the sidebar this long after they ended, as archived sessions do. */
 export const ENDED_TASK_SHOWN_MS = 3 * 24 * 60 * 60 * 1000
 
-/** Whether the sidebar lists the task: not done or cancelled more than three days ago. */
+/** Whether the sidebar lists the task: not ended more than three days ago. */
 export function taskListed(task: TaskView, now: number): boolean {
-  if (task.state !== 'done' && task.state !== 'cancelled') return true
+  if (!taskEnded(task)) return true
   return now - (task.endedAt ?? task.updatedAt) < ENDED_TASK_SHOWN_MS
 }
 
-/** A connection to another host opened: its tasks are read again. */
+/**
+ * Whether a node session's task is gone, so it is listed as a plain session: its host's tasks
+ * were read and hold no such task.
+ */
+export function sessionTaskGone(
+  state: Pick<TasksStore, 'byId' | 'reads'>,
+  session: Pick<SessionSummary, 'task' | 'origin' | 'projectPath'>,
+): boolean {
+  // A node session that names no task has none to be listed under.
+  if (!session.task) return session.origin === 'task'
+  const read = state.reads[hostKey(hostOfPath(session.projectPath))]
+  return !!read?.loaded && !read.error && !state.byId[session.task.taskId]
+}
+
+/** A connection to another host opened: its tasks are read again, and its SOPs if shown. */
 export function tasksHostOpened(hostId: string): void {
   void useTasksStore.getState().load(hostId)
+  useTasksStore.getState().sopsChanged(hostId)
 }
 
 /**
@@ -282,10 +328,13 @@ export function tasksHostClosed(hostId: string): void {
     const byId = Object.fromEntries(
       Object.entries(state.byId).filter(([, task]) => taskHost(task) !== hostId),
     )
+    const key = hostKey(hostId)
     const reads = { ...state.reads }
-    delete reads[hostKey(hostId)]
+    delete reads[key]
+    const sops = { ...state.sops }
+    delete sops[key]
     const tiers = { ...state.tiers }
-    delete tiers[hostKey(hostId)]
-    return { byId, reads, tiers }
+    delete tiers[key]
+    return { byId, reads, sops, tiers }
   })
 }

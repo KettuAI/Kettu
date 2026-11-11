@@ -41,7 +41,7 @@ import { HostPicker } from './host-picker'
 import { HOST_SECTIONS } from './host-sections'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
 import { GroupLabel, PageHeader, SectionBody } from './rows'
-import { useTasksSection } from '@renderer/features/tasks/tiers-section'
+import { useSopsSection } from '@renderer/features/tasks/sops-section'
 import { webClusters } from './web-sections'
 import {
   useAboutSection,
@@ -212,7 +212,7 @@ function SettingsLayout({
       useHarnessesSection(),
       useUsageSection(),
       useGitSection(),
-      useTasksSection(),
+      useSopsSection(),
     ],
     [useArchivedSection(), useArtifactsSection(), useSharingSection(), useTerminalSection()],
     [useRemoteSection(), useAdvancedSection()],

@@ -254,22 +254,14 @@ describe('the host files', () => {
     expect(parseSessionsFile({ sessions: {} })).toBe('sessions is not a list')
   })
 
-  it("keeps a task stage's ref and scope, and drops a ref that does not read", () => {
-    const task = { taskId: 't-0123456789ab', runId: 'sr-0123456789ab', stageId: 'build' }
-    const stage: SessionRecord = {
+  it("keeps a task node's ref and scope, and drops a ref that does not read", () => {
+    const task = { taskId: 't-0123456789ab', runId: 'nr-0123456789ab', nodeId: 'build' }
+    const node: SessionRecord = {
       ...session,
       origin: 'task',
-      task: {
-        ...task,
-        scope: { level: 'edit', web: false },
-        turns: 3,
-        costs: [
-          [1, 0.5],
-          [3, 0.01],
-        ],
-      },
+      task: { ...task, scope: { level: 'commands', web: false }, turns: 3 },
     }
-    expect(parseSessionsFile({ sessions: [stage] })).toEqual({ version: 1, sessions: [stage] })
+    expect(parseSessionsFile({ sessions: [node] })).toEqual({ version: 1, sessions: [node] })
     const bad = (ref: unknown) =>
       parseSessionsFile({ sessions: [{ ...session, origin: 'task', task: ref }] })
     const bare = { version: 1, sessions: [{ ...session, origin: 'task' }] }
@@ -277,13 +269,18 @@ describe('the host files', () => {
     expect(bad({ ...task, scope: { level: 'read' } })).toEqual(bare)
     expect(bad({ ...task, taskId: '', scope: { level: 'read', web: false } })).toEqual(bare)
     expect(bad('t-1')).toEqual(bare)
+    // A ref as it was stored before nodes names no node: the session stays, without it.
     expect(
       bad({
-        ...task,
-        scope: { level: 'read', web: true },
-        turns: -1,
-        costs: [[0, 1], [2, -1], 'x'],
+        taskId: task.taskId,
+        runId: 'sr-0123456789ab',
+        stageId: 'build',
+        scope: { level: 'edit', web: false },
+        costs: [[1, 0.5]],
       }),
+    ).toEqual(bare)
+    expect(
+      bad({ ...task, scope: { level: 'read', web: true }, turns: -1, costs: [[1, 0.5]] }),
     ).toEqual({
       version: 1,
       sessions: [
@@ -291,7 +288,7 @@ describe('the host files', () => {
       ],
     })
     // Only a task session carries one.
-    expect(parseSessionsFile({ sessions: [{ ...session, task: stage.task }] })).toEqual({
+    expect(parseSessionsFile({ sessions: [{ ...session, task: node.task }] })).toEqual({
       version: 1,
       sessions: [session],
     })

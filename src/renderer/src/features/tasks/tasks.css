@@ -1,5 +1,5 @@
-/* A task's page, on the routines page's bar and Settings' cards: its stage track, the card that
-   asks the person to decide, and its stage runs. Colors come from the shell's variables. */
+/* A task's page, on the routines page's bar and Settings' cards: its flowchart, the blocks that
+   ask the person to decide, and its node runs. Colors come from the shell's variables. */
 
 .k-task__meta {
   display: flex;
@@ -16,54 +16,118 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.k-task__meta a {
-  color: var(--accent);
-}
-.k-task__meta a:hover {
-  text-decoration: underline;
-}
 
-/* One segment per stage, its name under it. */
-.k-track {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  gap: 4px;
-  margin-top: 16px;
+/* The flowchart: node boxes placed over the arrows' drawing; it scrolls when wider than its card. */
+.k-flow {
+  overflow-x: auto;
 }
-.k-track__stage {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
+.k-flow__canvas {
+  position: relative;
 }
-.k-track__bar {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--line);
+.k-flow__arrows {
+  position: absolute;
+  inset: 0;
 }
-.k-track__stage[data-mark='done'] .k-track__bar {
-  background: var(--tone-green);
+.k-flow__line {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.25;
 }
-.k-track__stage[data-mark='current'] .k-track__bar {
-  background: var(--accent);
+.k-flow__tip {
+  fill: var(--line-strong);
 }
-.k-track__stage[data-mark='skipped'] .k-track__bar {
-  background: repeating-linear-gradient(-45deg, var(--line-strong) 0 3px, transparent 3px 6px);
+.k-flow__arrow[data-back] .k-flow__line {
+  stroke-dasharray: 4 3;
 }
-.k-track__name {
-  overflow: hidden;
+.k-flow__arrow[data-taken] .k-flow__line {
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+.k-flow__arrow[data-taken] .k-flow__tip {
+  fill: var(--ink);
+}
+/* The name sits on its line, which the card's color breaks around it. */
+.k-flow__label {
+  font-size: 11.5px;
+  fill: var(--muted);
+  stroke: var(--card);
+  stroke-width: 6px;
+  paint-order: stroke;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.k-flow__arrow[data-taken] .k-flow__label {
+  fill: var(--strong);
+}
+.k-flow__node {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--card);
   font-size: 12px;
-  line-height: 16px;
+  line-height: 17px;
   color: var(--muted);
+  text-align: start;
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.k-flow__node > * {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.k-track__stage[data-mark='current'] .k-track__name {
+.k-flow__name {
+  font-size: 13px;
   font-weight: 500;
   color: var(--strong);
 }
-.k-track__stage[data-mark='skipped'] .k-track__name {
+.k-flow__state {
+  color: var(--ink);
+}
+button.k-flow__node:hover {
+  background: var(--hover);
+}
+button.k-flow__node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.k-flow__node[aria-pressed='true'] {
+  box-shadow:
+    inset 0 0 0 1px var(--accent),
+    0 0 0 3px var(--accent-soft);
+}
+.k-flow__node[data-mark='working'] .k-flow__state {
+  color: var(--accent);
+}
+.k-flow__node[data-mark='needsYou'] .k-flow__state {
+  color: var(--tone-amber);
+}
+.k-flow__node[data-mark='done'] .k-flow__state {
+  color: var(--tone-green);
+}
+.k-flow__node:is([data-mark='skipped'], [data-mark='stopped']) > * {
   color: var(--faint);
+}
+.k-flow__end {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  font-size: 12px;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.k-flow__end[data-taken] {
+  color: var(--strong);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.k-flow__end[data-end='done'][data-taken] {
+  color: var(--tone-green);
+  box-shadow: inset 0 0 0 1px var(--tone-green);
 }
 
 .k-task__requirement {
@@ -75,7 +139,7 @@
   overflow-wrap: anywhere;
 }
 
-/* What the person decides: the reason, Approve, and Send back with its stage and note. */
+/* What the person decides: the reason, a note, and one button for each way on. */
 .k-decide {
   display: grid;
   gap: 12px;
@@ -106,15 +170,14 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.k-decide__back {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
 .k-decide__note {
   width: 100%;
   min-height: 56px;
+  margin-bottom: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
 }
 .k-decide__acts {
   display: flex;
@@ -123,7 +186,7 @@
   gap: 8px;
 }
 
-/* The stage runs, newest first. */
+/* A node's runs, newest first. */
 .k-sruns {
   display: grid;
 }
@@ -191,29 +254,8 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.k-srun__commands {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ink);
-  box-shadow: inset 0 0 0 0.5px var(--line);
-}
-.k-srun__commands code {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.k-srun__label {
-  font-size: 12px;
-  color: var(--muted);
-}
 
-/* A tier candidate's agent and model, framed as a routine's agent field. */
+/* A tier's agent and model, framed as a routine's agent field. */
 .k-tier-frame {
   display: inline-flex;
   flex: 1;
@@ -241,4 +283,21 @@
   flex: 1;
   min-width: 0;
   justify-content: flex-start;
+}
+
+.k-srun__document {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.k-srun .k-decide {
+  margin-top: 4px;
+}
+.k-flow-card {
+  padding: 4px;
+}
+.k-sop__flow {
+  padding: 0 12px 12px;
 }

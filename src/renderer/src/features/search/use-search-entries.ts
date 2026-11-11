@@ -33,7 +33,7 @@ const SECTIONS: readonly SettingsSection[] = [
   'harnesses',
   'usage',
   'git',
-  'tasks',
+  'sops',
   'archived',
   'artifacts',
   'sharing',

@@ -45,12 +45,13 @@ import { ATTACHMENT_BYTES, ATTACHMENT_LIMIT, PROMPT_BYTES, THUMB_CHARS } from '@
 import {
   NOTE_CHARS as TASK_NOTE_CHARS,
   REQUIREMENT_CHARS,
+  TASK_TIERS,
   TITLE_CHARS,
+  type SopSource,
   type TaskDecision,
   type TaskDraft,
-  type TaskPriority,
+  type TaskRetry,
   type TierSettings,
-  type WorkflowSource,
 } from '@shared/tasks'
 import {
   isAgentId,
@@ -65,7 +66,8 @@ import { invalidParams } from './errors'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
-import { TASK_ID } from './tasks/store'
+import { isSopId } from './tasks/sop'
+import { RUN_ID, TASK_ID } from './tasks/store'
 import { parseTierSettings } from './tasks/tiers'
 import { checkIncludeEntry } from './worktrees/copy'
 import { branchFromTemplate, checkWorktreeBranch } from './worktrees/names'
@@ -466,12 +468,8 @@ function routineId(o: Fields, key = 'routineId'): string {
   return value
 }
 
-// Workflow and stage ids are kebab-case, as workflow files must write them.
-const WORKFLOW_ID = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/
-const WORKFLOW_ID_CHARS = 40
-const WORKFLOW_SOURCES: readonly WorkflowSource[] = ['official', 'project', 'library']
-const TASK_PRIORITIES: readonly TaskPriority[] = ['low', 'normal', 'high']
-const TASK_AFTER = 50
+const SOP_SOURCES: readonly SopSource[] = ['official', 'library']
+const SOP_HASH = /^[0-9a-f]{64}$/
 
 function taskId(o: Fields, key = 'taskId'): string {
   const value = string(o, key, ID_CHARS)
@@ -479,9 +477,16 @@ function taskId(o: Fields, key = 'taskId'): string {
   return value
 }
 
-function workflowId(o: Fields, key: string): string {
-  const value = string(o, key, WORKFLOW_ID_CHARS)
-  if (!WORKFLOW_ID.test(value)) throw invalidParams(`${key} must be a kebab-case id`)
+function nodeRunId(o: Fields, key = 'runId'): string {
+  const value = string(o, key, ID_CHARS)
+  if (!RUN_ID.test(value)) throw invalidParams(`${key} is not a node run id`)
+  return value
+}
+
+/** The id of an SOP, or of a node or an outcome in one, which are written alike. */
+function sopId(o: Fields, key: string): string {
+  const value = o[key]
+  if (!isSopId(value)) throw invalidParams(`${key} must be lowercase letters, digits and dashes`)
   return value
 }
 
@@ -494,58 +499,49 @@ function text(o: Fields, key: string, max: number): string {
   return value
 }
 
+function taskNote(o: Fields): { note?: string } {
+  if (o.note === undefined) return {}
+  if (typeof o.note !== 'string' || o.note.length > TASK_NOTE_CHARS) {
+    throw invalidParams(`note must be at most ${TASK_NOTE_CHARS} characters`)
+  }
+  return { note: o.note }
+}
+
 function taskDraft(value: unknown, platform: Platform): TaskDraft {
   const o = fields(value)
-  const workflow = fields(o.workflow)
-  if (!WORKFLOW_SOURCES.includes(workflow.source as WorkflowSource)) {
-    throw invalidParams('workflow.source must be official, project or library')
-  }
-  if (typeof o.start !== 'boolean') throw invalidParams('start must be a boolean')
-  if (o.priority !== undefined && !TASK_PRIORITIES.includes(o.priority as TaskPriority)) {
-    throw invalidParams('priority must be low, normal or high')
-  }
-  let after: string[] | undefined
-  if (o.after !== undefined) {
-    if (!Array.isArray(o.after) || o.after.length > TASK_AFTER) {
-      throw invalidParams(`after must be a list of at most ${TASK_AFTER} tasks`)
-    }
-    after = o.after.map((item: unknown, index) =>
-      taskId({ [`after[${index}]`]: item }, `after[${index}]`),
-    )
-    if (new Set(after).size !== after.length) throw invalidParams('after names a task twice')
+  const sop = fields(o.sop)
+  if (!SOP_SOURCES.includes(sop.source as SopSource)) {
+    throw invalidParams('sop.source must be official or library')
   }
   return {
     requirement: text(o, 'requirement', REQUIREMENT_CHARS),
     ...(o.title === undefined ? {} : { title: text(o, 'title', TITLE_CHARS) }),
     projectPath: absolutePath(o, 'projectPath', platform),
-    workflow: {
-      source: workflow.source as WorkflowSource,
-      id: workflowId(workflow, 'id'),
-    },
-    start: o.start,
-    ...(o.priority === undefined ? {} : { priority: o.priority as TaskPriority }),
-    ...(after === undefined ? {} : { after }),
+    sop: { source: sop.source as SopSource, id: sopId(sop, 'id') },
   }
 }
 
 function taskDecision(value: unknown): TaskDecision {
   const o = fields(value)
-  if (o.decision !== 'approve' && o.decision !== 'send-back') {
-    throw invalidParams('decision must be approve or send-back')
-  }
-  if (o.note !== undefined && (typeof o.note !== 'string' || o.note.length > TASK_NOTE_CHARS)) {
-    throw invalidParams(`note must be at most ${TASK_NOTE_CHARS} characters`)
-  }
   return {
     taskId: taskId(o),
-    decision: o.decision,
-    ...(o.to === undefined ? {} : { to: workflowId(o, 'to') }),
-    ...(o.note === undefined ? {} : { note: o.note as string }),
+    runId: nodeRunId(o),
+    outcome: sopId(o, 'outcome'),
+    ...taskNote(o),
   }
 }
 
+function taskRetry(value: unknown): TaskRetry {
+  const o = fields(value)
+  return { taskId: taskId(o), runId: nodeRunId(o), ...taskNote(o) }
+}
+
+/** Every tier is named: null for the host's pick, or the agent chosen with its options. */
 function tierSettings(value: unknown): TierSettings {
-  const tiers = parseTierSettings(value)
+  const o = fields(value)
+  const missing = TASK_TIERS.find((tier) => o[tier] === undefined)
+  if (missing !== undefined) throw invalidParams(`${missing} must be null or an agent`)
+  const tiers = parseTierSettings(o)
   if (typeof tiers === 'string') throw invalidParams(tiers)
   return tiers
 }
@@ -1401,20 +1397,22 @@ export function createValidators(platform: Platform): Validators {
     'tasks.list': none,
     'tasks.get': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.create': (params) => taskDraft(params, platform),
-    'tasks.start': (params) => ({ taskId: taskId(fields(params)) }),
-    'tasks.pause': (params) => ({ taskId: taskId(fields(params)) }),
-    'tasks.resume': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.cancel': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.remove': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.decide': (params) => taskDecision(params),
+    'tasks.retry': (params) => taskRetry(params),
     'tasks.markSeen': (params) => ({ taskId: taskId(fields(params)) }),
-    'tasks.workflows': (params) => {
-      const o = fields(params)
-      return {
-        projectPath: o.projectPath === null ? null : absolutePath(o, 'projectPath', platform),
-      }
-    },
+    'tasks.document': (params) => ({ runId: nodeRunId(fields(params)) }),
     'tasks.tiers': none,
     'tasks.setTiers': (params) => tierSettings(params),
+    'sops.list': none,
+    'sops.approve': (params) => {
+      const o = fields(params)
+      const hash = string(o, 'hash', ID_CHARS)
+      if (!SOP_HASH.test(hash)) throw invalidParams('hash is not a SHA-256 in hex')
+      return { id: sopId(o, 'id'), hash }
+    },
+    'sops.remove': (params) => ({ id: sopId(fields(params), 'id') }),
     'permissions.respond': (params) => {
       const o = fields(params)
       const base = { sessionId: sessionId(o), requestId: string(o, 'requestId', ID_CHARS) }
