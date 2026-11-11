@@ -75,6 +75,7 @@
     "comeBackQuit": "Your sessions and drafts come back when you open Kettu again.",
     "restart": "Restart",
     "quit": "Quit",
+    "pressAgain": "Press ⌘Q again to quit",
     "titleClose": "Close the window?",
     "unsavedFiles": "These files have unsaved changes:",
     "unsaved": "Unsaved",

@@ -17,6 +17,8 @@ export interface ToastOptions {
   tone?: ToastTone
   /** The icon of a toast without a tone, such as an archive box for "Archived". */
   icon?: IconSvgElement
+  /** In ms; the default suits a message that is read once. */
+  duration?: number
 }
 
 // The toasts on screen, so the layer can tell the browser pane it is covered.
@@ -55,7 +57,7 @@ export function toast(
   action?: { label: string; onClick: () => void },
   options: ToastOptions = {},
 ) {
-  const { tone, icon } = options
+  const { tone, icon, duration } = options
   const show =
     tone === 'success' ? affectToast.success : tone === 'info' ? affectToast.info : affectToast
   const mark =
@@ -71,6 +73,7 @@ export function toast(
     ) : undefined
   track((settings) => show(title, settings), {
     icon: mark,
+    ...(duration !== undefined && { duration }),
     ...(action && { action: actionOf(action), duration: 6000 }),
   })
 }
