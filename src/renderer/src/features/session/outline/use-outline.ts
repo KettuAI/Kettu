@@ -27,7 +27,10 @@ export function useOutline(sessionId: string): {
   // A user message stays one, so the kinds are read when the order changes, not on every patch.
   const userIds = useMemo(() => {
     const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
-    return (order ?? []).filter((id) => byId?.[id]?.kind === 'user')
+    return (order ?? []).filter((id) => {
+      const entry = byId?.[id]
+      return entry?.kind === 'user' && !entry.from
+    })
   }, [sessionId, order])
   const [listed, setListed] = useState<OutlineEntry[] | null>(null)
   const latest = useRef(0)
@@ -59,7 +62,7 @@ export function useOutline(sessionId: string): {
     const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
     for (const id of userIds) {
       const entry = byId?.[id]
-      if (known.has(id) || entry?.kind !== 'user') continue
+      if (known.has(id) || entry?.kind !== 'user' || entry.from) continue
       out.push({
         entryId: id,
         pos: null,

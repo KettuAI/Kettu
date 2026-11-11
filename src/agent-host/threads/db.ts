@@ -369,7 +369,8 @@ function prepareAll(db: DatabaseSync) {
           FROM json_each(e.json, '$.content') AS part
           WHERE json_extract(part.value, '$.type') = 'ref') AS names
       FROM entries e LEFT JOIN outline_titles t ON t.session_id = e.session_id AND t.pos = e.pos
-      WHERE e.session_id = ?1 AND e.kind = 'user' ORDER BY e.pos`),
+      WHERE e.session_id = ?1 AND e.kind = 'user'
+        AND json_extract(e.json, '$.from') IS NULL ORDER BY e.pos`),
     titles: sql('SELECT pos, title FROM outline_titles WHERE session_id = ?'),
     userAt: sql("SELECT 1 FROM entries WHERE session_id = ? AND pos = ? AND kind = 'user'"),
     putTitle: sql(`

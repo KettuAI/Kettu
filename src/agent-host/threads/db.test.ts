@@ -253,6 +253,44 @@ describe('the thread database', () => {
     db.close()
   })
 
+  it('keeps only user input in the outline across a reopen', () => {
+    const file = tempFile()
+    const db = open(file)
+    const entries: ThreadEntry[] = [
+      user('u0'),
+      agent('a0'),
+      tool('t0'),
+      {
+        kind: 'user',
+        id: 'from-agent',
+        content: [{ type: 'text', text: 'Restart browser and check' }],
+        from: { sessionId: 'sender', title: 'Review' },
+      },
+      user('steer', true),
+      {
+        kind: 'user',
+        id: 'remote',
+        content: [{ type: 'text', text: 'Check the result' }],
+        device: { id: 'phone', name: 'Phone' },
+      },
+      { kind: 'session_message', id: 'sm', senderId: 'sender', content: [] },
+    ]
+    db.write('s1', { head, entries: entries.map((entry, pos) => ({ pos, entry })) })
+    db.setOutlineTitles('s1', [{ pos: 3, title: 'Restart browser' }])
+    const expected = [
+      { pos: 0, entryId: 'u0', text: 'u0', title: null },
+      { pos: 4, entryId: 'steer', text: 'steer', title: null },
+      { pos: 5, entryId: 'remote', text: 'Check the result', title: null },
+    ]
+    expect(db.outline('s1')!.entries).toEqual(expected)
+    expect(db.load('s1')!.entries.map(({ entry }) => entry)).toEqual(entries)
+    db.close()
+
+    const again = open(file)
+    expect(again.outline('s1')!.entries).toEqual(expected)
+    again.close()
+  })
+
   it('keeps large images apart, once per session, and puts them back when read', () => {
     const file = tempFile()
     const db = open(file)

@@ -1888,7 +1888,7 @@ export class SessionManager {
     for (const id of current.thread.order) {
       const entry = current.thread.byId[id]
       const pos = current.positions.get(id)
-      if (entry?.kind !== 'user' || pos === undefined) continue
+      if (entry?.kind !== 'user' || entry.from || pos === undefined) continue
       rows.push({
         pos,
         entryId: id,
