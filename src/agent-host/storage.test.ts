@@ -314,6 +314,66 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [session] })
   })
 
+  it("keeps a session's worktree and never lets an unreadable one fall back to the project", () => {
+    const worktree = {
+      path: '/repo-worktrees/kettu-fix-login-1a2b3c',
+      branch: 'kettu/fix-login',
+      base: 'main',
+      baseOid: 'a'.repeat(40),
+    }
+    const inWorktree = { ...session, worktree }
+    expect(parseSessionsFile({ sessions: [inWorktree] })).toEqual({
+      version: 1,
+      sessions: [inWorktree],
+    })
+    const removed = { ...session, worktree: { ...worktree, removed: 'worktree' } }
+    expect(parseSessionsFile({ sessions: [removed] })).toEqual({ version: 1, sessions: [removed] })
+    // An older record without the field works in its project's folder, as before.
+    expect(parseSessionsFile({ sessions: [session] })).toEqual({ version: 1, sessions: [session] })
+    const unreadable = {
+      ...session,
+      worktree: { path: '', branch: '', base: '', baseOid: '', removed: 'branch' },
+    }
+    for (const bad of [
+      'x',
+      null,
+      { ...worktree, path: '' },
+      { ...worktree, branch: 7 },
+      { ...worktree, baseOid: 'HEAD' },
+      { ...worktree, removed: 'all' },
+    ]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, worktree: bad }] })).toEqual({
+        version: 1,
+        sessions: [unreadable],
+      })
+    }
+  })
+
+  it("keeps a project's worktree settings key by key", () => {
+    const project = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
+    const worktree = {
+      branchTemplate: '{type}/{issue}-{slug}',
+      copy: ['.env', '.claude/settings.local.json'],
+      setup: 'pnpm install',
+      waitForSetup: false,
+    }
+    expect(parseProjectsFile({ projects: [{ ...project, worktree }] })).toEqual({
+      version: 1,
+      projects: [{ ...project, worktree }],
+    })
+    expect(
+      parseProjectsFile({
+        projects: [
+          { ...project, worktree: { branchTemplate: 3, copy: ['.env', 4, ''], setup: null } },
+        ],
+      }),
+    ).toEqual({ version: 1, projects: [{ ...project, worktree: { copy: ['.env'], setup: null } }] })
+    expect(parseProjectsFile({ projects: [{ ...project, worktree: 'x' }] })).toEqual({
+      version: 1,
+      projects: [project],
+    })
+  })
+
   it('round-trips the routines file', async () => {
     const routine = {
       id: 'r-0123456789ab',

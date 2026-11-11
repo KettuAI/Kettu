@@ -126,6 +126,17 @@ const isLinkSites: Check = (value, path) => {
   return null
 }
 
+/** Null, or an absolute path on this computer that has no NUL. */
+function isWorktreeRoot(value: unknown, path: string): string | null {
+  if (value === null) return null
+  return (
+    checkStoredPath(value, path) ??
+    (isAbsolutePath(value as string, process.platform)
+      ? null
+      : `"${path}" must be an absolute path`)
+  )
+}
+
 const SECTION_FIELDS = {
   general: {
     language: oneOf(...LANGUAGE_SETTINGS),
@@ -158,7 +169,7 @@ const SECTION_FIELDS = {
     sound: isBoolean,
     badge: isBoolean,
   },
-  git: { backgroundFetch: isBoolean },
+  git: { backgroundFetch: isBoolean, worktreeRoot: isWorktreeRoot },
   updates: { automatic: oneOf('download', 'restart', 'notify', 'off') },
   privacy: { hideAccount: isBoolean },
   diagnostics: { verboseUntil: isVerboseUntil },

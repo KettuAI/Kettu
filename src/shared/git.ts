@@ -260,3 +260,45 @@ const REPOSITORY_NAME = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,99}$/
 export function isRepositoryName(name: string): boolean {
   return REPOSITORY_NAME.test(name) && name !== '.' && name !== '..'
 }
+
+/**
+ * Where a session's worktree stands. `removed`: Kettu removed its folder and kept the branch, so
+ * the next message recreates it; `missing`: the folder went away outside Kettu; `gone`: the
+ * branch is gone too, and the session is read-only.
+ */
+export type WorktreeState =
+  'creating' | 'setup' | 'setup-failed' | 'ready' | 'missing' | 'removed' | 'gone'
+
+/** Why a worktree's preparation stopped, for the session's failure note. */
+export interface WorktreeFailure {
+  stage: 'copy' | 'setup'
+  exitCode: number | null // null when the command did not exit on its own
+  message: string
+}
+
+/** The worktree a session works in, as its summary carries it. */
+export interface SessionWorktree {
+  path: string
+  branch: string
+  base: string // the ref it was cut from, as named when it was created
+  baseOid: string
+  state: WorktreeState
+  failure?: WorktreeFailure // with state 'setup-failed'
+}
+
+/** How a project prepares and names the worktrees of its sessions. */
+export interface ProjectWorktreeSettings {
+  branchTemplate: string
+  copy: string[] // literal paths relative to the project, besides its .worktreeinclude
+  setup: string | null // the command run in a new worktree
+  waitForSetup: boolean // the first message waits for the command
+}
+
+export const DEFAULT_BRANCH_TEMPLATE = 'kettu/{slug}'
+
+export const DEFAULT_WORKTREE_SETTINGS: ProjectWorktreeSettings = {
+  branchTemplate: DEFAULT_BRANCH_TEMPLATE,
+  copy: [],
+  setup: null,
+  waitForSetup: true,
+}

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SettingsStore } from './settings'
+import { validateSettingsPatch } from './settings-schema'
 
 let dir: string
 
@@ -135,5 +136,38 @@ describe('adding the agents the first start found', () => {
     expect(next.agents['claude-code']).toEqual({ enabled: true })
     expect(next.agents.codex).toEqual({ enabled: false })
     await store.flush()
+  })
+})
+
+describe('where worktrees go', () => {
+  it('puts them beside each project until a folder is chosen', async () => {
+    const store = await SettingsStore.load(dir)
+    expect(store.get().git.worktreeRoot).toBeNull()
+  })
+
+  it('keeps an absolute folder and drops anything else on load', async () => {
+    const root = join(dir, 'worktrees')
+    await save({ version: 1, git: { backgroundFetch: true, worktreeRoot: root } })
+    expect((await SettingsStore.load(dir)).get().git).toEqual({
+      backgroundFetch: true,
+      worktreeRoot: root,
+    })
+    for (const bad of ['relative/worktrees', '', 7, `${root}\0x`]) {
+      await save({ version: 1, git: { worktreeRoot: bad } })
+      expect((await SettingsStore.load(dir)).get().git.worktreeRoot).toBeNull()
+    }
+  })
+
+  it('takes an absolute folder or null in a change and refuses the rest', () => {
+    const root = join(dir, 'worktrees')
+    expect(validateSettingsPatch({ git: { worktreeRoot: root } })).toEqual({
+      git: { worktreeRoot: root },
+    })
+    expect(validateSettingsPatch({ git: { worktreeRoot: null } })).toEqual({
+      git: { worktreeRoot: null },
+    })
+    for (const bad of ['relative', '', 3, `${root}\0x`]) {
+      expect(() => validateSettingsPatch({ git: { worktreeRoot: bad } })).toThrow()
+    }
   })
 })
