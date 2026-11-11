@@ -14,6 +14,7 @@ import { PrBarChip } from '@renderer/features/git/pr-bar-chip'
 import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-tools'
 import { PlanChip } from './plan-chip'
 import { ViewersChip } from './viewers-chip'
+import { WorktreeBarChip } from './worktree/worktree-tag'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { SessionTitleField } from '@renderer/features/sidebar/session-menu'
 import { useRenaming } from '@renderer/features/sidebar/use-renaming'
@@ -157,6 +158,7 @@ export function SessionHeader({
           onNewSubSession={rename.menu.onLeave}
           menu={rename.menu}
         />
+        {summary.worktree && <WorktreeBarChip worktree={summary.worktree} />}
         <PrBarChip projectPath={sessionFolder(summary)} />
         {session && !archived && summary.origin !== 'subagent' && (
           <PlanChip sessionId={summary.id} status={session.status} />

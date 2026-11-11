@@ -4,6 +4,7 @@ import {
   ArrowMoveDownRightIcon,
   CodeIcon,
   ComputerIcon,
+  FolderRemoveIcon,
   ComputerTerminal01Icon,
   Copy01Icon,
   Delete02Icon,
@@ -109,6 +110,12 @@ import { dissolveRows } from './row-dust'
 import { markReturning } from './row-exit'
 import { sessionPullRequests } from './session-prs'
 import { sessionFolder } from '@renderer/lib/session-folder'
+import {
+  askRemoveWorktree,
+  canRemoveWorktree,
+  hasLiveWorktree,
+  offerWorktreeRemoval,
+} from '@renderer/features/worktrees/remove-worktree-model'
 
 /** An accelerator as the menu shows it: macOS's symbols, or the key names elsewhere. */
 function shortcutLabel(shortcut: string): string {
@@ -142,6 +149,9 @@ function archiveWithUndo(ids: readonly string[], title: string): void {
 }
 
 function archiveNow(ids: readonly string[], title: string): void {
+  // Read before archiving: the question names the sessions as they were.
+  const { byId } = useSessionsStore.getState()
+  const before = ids.flatMap((id) => (byId[id] ? [byId[id]] : []))
   void settle(ids, archiveSession).then(({ done, errors }) => {
     const failure = errors.length > 0 ? errorMessage(errors[0]) : null
     if (done.length === 0) {
@@ -163,6 +173,10 @@ function archiveNow(ids: readonly string[], title: string): void {
         },
       },
       { icon: Archive01Icon },
+    )
+    void offerWorktreeRemoval(
+      before.filter((s) => done.includes(s.id)),
+      'archived',
     )
   })
 }
@@ -294,8 +308,33 @@ export function SessionMenuItems({
         return (
           <DropdownMenuItem {...props} onClick={() => void forkSession(id)}>
             <ForkIcon />
-            {place === 'more' ? t('row.forkFromHere') : t('row.fork')}
+            {summary.worktree && hasLiveWorktree(summary)
+              ? t('worktree.forkNew')
+              : place === 'more'
+                ? t('row.forkFromHere')
+                : t('row.fork')}
             {shortcut}
+          </DropdownMenuItem>
+        )
+      case 'forkSame':
+        return (
+          <DropdownMenuItem
+            {...props}
+            onClick={() =>
+              void forkSession(id, undefined, 'same').catch((error: unknown) =>
+                toast(errorMessage(error)),
+              )
+            }
+          >
+            <ForkIcon />
+            {t('worktree.forkSame')}
+          </DropdownMenuItem>
+        )
+      case 'removeWorktree':
+        return (
+          <DropdownMenuItem {...props} onClick={() => void askRemoveWorktree(summary)}>
+            <MenuGlyph icon={FolderRemoveIcon} />
+            {t('worktree.menu')}
           </DropdownMenuItem>
         )
       case 'newSubSession':
@@ -489,6 +528,8 @@ export function SessionMenuItems({
     terminal,
     resume: resume !== null,
     rename: onRename !== undefined,
+    worktree: hasLiveWorktree(summary),
+    removeWorktree: canRemoveWorktree(summary),
   }
   return sessionMenuGroups(summary, context).map((group, index) => (
     <DropdownMenuGroup key={group[0]}>
@@ -928,8 +969,17 @@ function useAtStake(paths: readonly string[], open: boolean): Map<string, AtStak
   return open && read?.key === key ? read.stake : null
 }
 
-/** Deletes one by one: their rows in sight turn to dust, and one whose delete fails comes back. */
+/**
+ * Deletes one by one: their rows in sight turn to dust, and one whose delete fails comes back.
+ * First asks about the worktrees no other session uses, since the host keeps them on delete and
+ * no session would be left to ask from.
+ */
 async function deleteAll(ids: readonly string[]): Promise<void> {
+  const { byId } = useSessionsStore.getState()
+  await offerWorktreeRemoval(
+    ids.flatMap((id) => (byId[id] ? [byId[id]] : [])),
+    'deleting',
+  )
   const dust = await dissolveRows(ids)
   for (const [i, id] of ids.entries()) {
     try {
@@ -941,12 +991,21 @@ async function deleteAll(ids: readonly string[]): Promise<void> {
   }
 }
 
+/**
+ * The folder whose uncommitted files a delete puts at stake: its worktree's while Kettu has not
+ * removed it, else its project's. A removed worktree leaves nothing on disk to lose.
+ */
+function stakeFolder(summary: SessionSummary): string | null {
+  if (!summary.worktree) return summary.projectPath
+  return hasLiveWorktree(summary) ? summary.worktree.path : null
+}
+
 /** The Delete item's second key or a Mod-click: deletes at once when nothing is at stake. */
 async function deleteUnlessAtStake(
   summaries: readonly SessionSummary[],
   confirm: () => void,
 ): Promise<void> {
-  const paths = [...new Set(summaries.map((s) => sessionFolder(s)))]
+  const paths = [...new Set(summaries.flatMap((s) => stakeFolder(s) ?? []))]
   const stakes = await Promise.all(paths.map(readAtStake))
   const files = stakes.map((stake) => stake.files)
   const withChildren = summaries.some((s) => descendantCount(s.id) > 0)
@@ -988,8 +1047,14 @@ export function DeleteSessionDialog({
   const several = targets.length > 1
   const count = open ? targets.reduce((sum, s) => sum + descendantCount(s.id), 0) : 0
   const stake = useAtStake(
-    targets.map((s) => sessionFolder(s)),
+    targets.flatMap((s) => stakeFolder(s) ?? []),
     open,
+  )
+  // The branch of each worktree Kettu made for them, which the note names with it.
+  const branches = new Map(
+    targets.flatMap((s) =>
+      s.worktree && hasLiveWorktree(s) ? [[s.worktree.path, s.worktree.branch] as const] : [],
+    ),
   )
   // Archive keeps what it archives; a sub-session goes with its parent.
   const canArchive = targets.length > 0 && targets.every((s) => s.parentId === null)
@@ -1016,7 +1081,7 @@ export function DeleteSessionDialog({
         </AlertDialogHeader>
         {stake &&
           [...stake.entries()]
-            .filter(([, { files }]) => files !== 0)
+            .filter(([path, { files }]) => files !== 0 || branches.has(path))
             .map(([path, { files, worktree }]) => (
               <div
                 key={path}
@@ -1034,12 +1099,16 @@ export function DeleteSessionDialog({
                     i18nKey={
                       files === null
                         ? 'row.atStakeUnknown'
-                        : worktree
-                          ? 'row.atStakeWorktree'
-                          : 'row.atStakeFolder'
+                        : branches.has(path)
+                          ? files === 0
+                            ? 'row.inWorktree'
+                            : 'row.atStakeWorktreeBranch'
+                          : worktree
+                            ? 'row.atStakeWorktree'
+                            : 'row.atStakeFolder'
                     }
                     count={files ?? undefined}
-                    values={{ name: basename(path) }}
+                    values={{ name: basename(hostPath(path)), branch: branches.get(path) ?? '' }}
                     components={{
                       name: <span className="font-mono text-xs text-primary" />,
                       files: <b className="font-semibold text-primary" />,

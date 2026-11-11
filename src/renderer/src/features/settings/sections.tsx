@@ -39,10 +39,13 @@ import { forgetSite } from '@renderer/features/session/link-open'
 import { errorMessage } from '@renderer/lib/host'
 import { systemLocale } from '@renderer/lib/i18n'
 import { basename } from '@renderer/lib/format'
-import { formatShortcut, isMac, isWeb, isWindows } from '@renderer/lib/platform'
+import { formatShortcut, hostPlatform, isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { isInstalled, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { useOtherHost } from '@renderer/stores/hosts'
+import { homeStart } from '@renderer/web/host-path'
+import { askHostPath } from '@renderer/web/host-path-request'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { openReport, useReportStore } from '@renderer/stores/report'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
@@ -550,6 +553,51 @@ export function BackgroundFetch() {
         checked={checked}
         onChange={(v) => apply({ git: { backgroundFetch: v } })}
       />
+    </>
+  )
+}
+
+/**
+ * Where the host puts new worktrees: next to each project, or a folder chosen on that host, with
+ * this computer's folder dialog or, for another host or the web client, the host's path picker.
+ */
+export function WorktreeLocation() {
+  const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
+  const other = useOtherHost(hostId)
+  const root = useSettings().git.worktreeRoot
+  const [apply, error] = useApply()
+  const [pickError, setPickError] = useState<string | null>(null)
+  const choose = async () => {
+    setPickError(null)
+    try {
+      let path: string | null
+      if (hostId === null && !isWeb) path = await window.kettu.dialogs.openProject()
+      else {
+        const platform = hostId === null ? hostPlatform() : (other?.platform ?? 'linux')
+        path = await askHostPath({
+          purpose: 'worktreeRoot',
+          initial: root ?? homeStart(platform),
+          ...(hostId === null ? {} : { on: { hostId, name: other?.name ?? '', platform } }),
+        })
+      }
+      if (path) apply({ git: { worktreeRoot: path } })
+    } catch (e) {
+      setPickError(errorMessage(e))
+    }
+  }
+  return (
+    <>
+      <ControlError error={error ?? pickError} />
+      <span title={root ?? undefined} className={root ? 'k-value k-mono' : 'k-value'}>
+        {root ?? t('git.worktreeRoot.nextToProject')}
+      </span>
+      <SetButton onClick={() => void choose()}>{t('git.worktreeRoot.choose')}</SetButton>
+      {root && (
+        <SetButton variant="ghost" onClick={() => apply({ git: { worktreeRoot: null } })}>
+          {t('git.worktreeRoot.reset')}
+        </SetButton>
+      )}
     </>
   )
 }

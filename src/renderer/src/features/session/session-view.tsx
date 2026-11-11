@@ -40,6 +40,7 @@ import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
 import { useSessionView } from './use-thread'
 import { sessionFolder } from '@renderer/lib/session-folder'
+import { WorktreeGoneComposer, WorktreeState } from './worktree/worktree-state'
 
 const BoardRail = lazy(() => import('@renderer/features/board/board-pane'))
 
@@ -236,6 +237,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     </AlertAction>
                   </Alert>
                 )}
+                {summary.worktree && !archived && summary.origin !== 'subagent' && (
+                  <WorktreeState sessionId={sessionId} worktree={summary.worktree} />
+                )}
                 {(actionError || queueError) && (
                   <p role="alert" className="animate-in px-1 text-xs text-danger fade-in">
                     {actionError ?? queueError}
@@ -258,6 +262,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     <SubagentBar summary={summary} session={session} />
                   ) : archived ? (
                     <ArchivedComposer sessionId={sessionId} />
+                  ) : summary.worktree?.state === 'gone' ? (
+                    // Its history stays readable; nothing more can run without the branch.
+                    <WorktreeGoneComposer />
                   ) : session ? (
                     // Its menus open inside it, so while one is open it rises over the computer label.
                     <div className="relative z-10 has-aria-expanded:z-20">

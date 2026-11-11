@@ -11,6 +11,7 @@ export type SessionMenuItem =
   | 'unread'
   | 'rename'
   | 'fork'
+  | 'forkSame'
   | 'newSubSession'
   | 'openInSplit'
   | 'pullRequest'
@@ -20,6 +21,7 @@ export type SessionMenuItem =
   | 'copyResume'
   | 'copySessionId'
   | 'showInParent'
+  | 'removeWorktree'
   | 'archive'
   | 'delete'
 
@@ -70,6 +72,10 @@ export interface SessionMenuContext {
   resume: boolean
   /** The menu's place has a title field to rename it in; true when left out. */
   rename?: boolean
+  /** It works in a worktree Kettu made that a fork can share. */
+  worktree?: boolean
+  /** Its worktree can be removed now. */
+  removeWorktree?: boolean
 }
 
 /**
@@ -87,6 +93,8 @@ export function sessionMenuGroups(
     terminal,
     resume,
     rename = true,
+    worktree = false,
+    removeWorktree = false,
   }: SessionMenuContext,
 ): SessionMenuItem[][] {
   const running = isRunning(summary)
@@ -98,6 +106,13 @@ export function sessionMenuGroups(
   }
   const topLevel = summary.parentId === null
   const { status } = summary
+  const forks: SessionMenuItem[] =
+    topLevel && canFork ? (worktree ? ['fork', 'forkSame'] : ['fork']) : []
+  const ending: SessionMenuItem[] = [
+    ...(removeWorktree ? (['removeWorktree'] as const) : []),
+    ...(topLevel ? (['archive'] as const) : []),
+    'delete',
+  ]
   const state: SessionMenuItem[] = running
     ? ['stop']
     : status === 'failed' || status === 'auth_required'
@@ -107,19 +122,15 @@ export function sessionMenuGroups(
     place === 'more'
       ? [
           state,
-          [
-            'rename',
-            ...(topLevel ? (['pin'] as const) : []),
-            ...(topLevel && canFork ? (['fork'] as const) : []),
-          ],
+          ['rename', ...(topLevel ? (['pin'] as const) : []), ...forks],
           ['openInEditor', 'showInFolder', 'openTerminal'],
           ['copyResume', 'copySessionId'],
-          topLevel ? ['archive', 'delete'] : ['delete'],
+          ending,
         ]
       : [
           state,
           topLevel ? ['pin', 'unread', 'rename'] : ['unread', 'rename'],
-          topLevel && canFork ? ['fork', 'newSubSession'] : ['newSubSession'],
+          [...forks, 'newSubSession'],
           [
             ...(shown ? [] : (['openInSplit'] as const)),
             ...((summary.prs?.length ?? (summary.pr ? 1 : 0)) > 0
@@ -128,7 +139,7 @@ export function sessionMenuGroups(
             'copyResume',
             'showInFolder',
           ],
-          topLevel ? ['archive', 'delete'] : ['delete'],
+          ending,
         ]
   const missing = new Set<SessionMenuItem>([
     ...(local ? [] : (['openInEditor', 'showInFolder'] as const)),

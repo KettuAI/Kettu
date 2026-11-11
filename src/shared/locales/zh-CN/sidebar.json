@@ -83,7 +83,8 @@
       "newSession": "新建会话",
       "openInTerminal": "在终端中打开",
       "showIn": "在{{name}}中显示",
-      "showArchived": "显示已归档"
+      "showArchived": "显示已归档",
+      "worktreeSettings": "Worktree 设置…"
     }
   },
   "prs": {
@@ -135,6 +136,8 @@
     "deleteBodyCount": "这些对话及其历史记录将无法恢复。归档会保留它们。",
     "deleteCountTitle_other": "删除 {{count}} 个会话？",
     "atStakeWorktree_other": "它的 worktree <name>{{name}}</name> 有 <files>{{count}} 个未提交的文件</files>。",
+    "atStakeWorktreeBranch_other": "它的 worktree <name>{{name}}</name>（分支 <name>{{branch}}</name>）有 <files>{{count}} 个未提交的文件</files>。",
+    "inWorktree": "它在 worktree <name>{{name}}</name>（分支 <name>{{branch}}</name>）里工作。删除会话不会删掉 worktree，除非你选择删除。",
     "atStakeFolder_other": "它的文件夹 <name>{{name}}</name> 有 <files>{{count}} 个未提交的文件</files>。",
     "atStakeUnknown": "Kettu 没能检查它的文件夹 <name>{{name}}</name> 里有没有未提交的文件。",
     "archiveInstead": "改为归档",
@@ -313,5 +316,47 @@
     "done": "完成",
     "failed": "失败",
     "showFinished": "显示已结束的子 Agent"
+  },
+  "worktree": {
+    "menu": "删除 worktree…",
+    "forkNew": "在新 worktree 中分叉",
+    "forkSame": "在同一个 worktree 中分叉",
+    "removeTitle": "删除这个 worktree？",
+    "afterArchive": "“{{title}}”已归档，没有别的会话在用它的 worktree。无论删不删，对话都会保留。",
+    "afterDelete": "没有别的会话在用“{{title}}”的 worktree。无论删不删，这个会话都会被删除。",
+    "keepsConversation": "对话会保留。只要分支还在，下一条消息会重新建出 worktree。",
+    "checking": "正在检查 worktree…",
+    "inspectFailed": "没能检查 worktree：{{error}}",
+    "others_other": "还有 {{count}} 个会话在用它：",
+    "stopOthers_other": "结束这些会话，仍然删除 worktree",
+    "uncommitted_other": "<files>{{count}} 个未提交的文件</files>会丢失。",
+    "unpushed_other": "<files>{{count}} 个提交</files>还没推送。它们留在分支上，分支会保留。",
+    "merged": "它的改动已经在 {{base}} 里了。",
+    "notMerged": "它的改动还没进 {{base}}，所以保留分支。",
+    "conflict": "你查看之后 worktree 有了变化，请重新检查。",
+    "checkAgain": "重新检查",
+    "gitRefused": "Git 没能删除它：",
+    "inUse": "如果有程序（比如编辑器或开发服务器）打开了这个文件夹里的文件，关掉它再试。",
+    "keep": "保留",
+    "removeAll": "删除 worktree 和分支",
+    "removeKeepBranch": "删除 worktree，保留分支",
+    "remove": "删除 worktree",
+    "removed": "已删除“{{title}}”的 worktree",
+    "removedWithBranch": "已删除 worktree 和分支 {{branch}}",
+    "branchKept": "已删除 worktree。Git 没能确认分支 {{branch}} 已合并，所以保留了它。"
+  },
+  "worktreeSettings": {
+    "title": "{{project}} 的 Worktree 设置",
+    "description": "Kettu 怎样为这个项目的新会话命名和准备 worktree。",
+    "branch": "分支名",
+    "branchHint": "{slug} 取自第一条消息开头的几个词，{type} 是改动的类型，{issue} 是 issue 号。默认是 kettu/{slug}。",
+    "copy": "要复制的文件",
+    "copyHint": "相对项目的路径，一行一个，会复制到每个新 worktree。项目里的 .worktreeinclude 也会读取。",
+    "setup": "初始化命令",
+    "setupHint": "在每个新 worktree 里运行，比如安装依赖。留空表示不运行。",
+    "wait": "第一条消息等准备完成",
+    "waitHint": "复制完文件、跑完命令后，Agent 才开始工作。",
+    "save": "保存",
+    "forbidden": "只有这台主机的主人能在这里改这些设置，除非主人允许已配对的设备使用终端。"
   }
 }

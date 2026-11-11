@@ -11,6 +11,7 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
+import { AgentWorktreeLine } from './worktree/worktree-tag'
 
 /** In place of the composer: the agent drives a sub-agent, so you can only stop it or go back. */
 export function SubagentBar({
@@ -113,6 +114,7 @@ export function SubagentBar({
         )}
       </div>
       <div className="flex min-h-9 flex-col">
+        {summary.agentWorktree && <AgentWorktreeLine worktree={summary.agentWorktree} />}
         {error && (
           <p role="alert" className="animate-in truncate px-2 pt-1 text-xs text-danger fade-in">
             {error}

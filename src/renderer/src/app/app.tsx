@@ -22,6 +22,8 @@ import { useAccountShell } from '@renderer/features/account/account-row'
 import { SidebarList, SidebarNotices } from '@renderer/features/sidebar/app-sidebar'
 import { useSidebarNav } from '@renderer/features/sidebar/sidebar-nav'
 import { ArchiveConfirmDialog } from '@renderer/features/sidebar/archive-confirm'
+import { RemoveWorktreeDialog } from '@renderer/features/worktrees/remove-worktree-dialog'
+import { WorktreeSettingsDialog } from '@renderer/features/worktrees/worktree-settings-dialog'
 import { SearchDialog } from '@renderer/features/search/search-dialog'
 import { ReportDialog } from '@renderer/features/report/report-dialog'
 import { DiscoveryRequestDialog } from '@renderer/features/settings/discovery-request'
@@ -97,6 +99,8 @@ export function App() {
         <ShortcutsDialog />
         <SearchDialog />
         <ArchiveConfirmDialog />
+        <RemoveWorktreeDialog />
+        <WorktreeSettingsDialog />
         <ReportDialog />
         {/* Devices of the account ask the host's own windows; a browser is never asked. */}
         {!isWeb && cloud && <DiscoveryRequestDialog />}

@@ -53,6 +53,10 @@
       "title": "选择 Agent 程序",
       "description": "输入 {{host}} 上 Agent 程序的路径。"
     },
+    "worktreeRoot": {
+      "title": "选择 worktree 的存放位置",
+      "description": "输入 {{host}} 上存放新 worktree 的文件夹路径。"
+    },
     "label": "{{host}} 上的路径",
     "start": "输入完整路径，或以 ~ 开头表示你的主目录。",
     "keys": "Tab 补全名字；↑ 和 ↓ 在列表里移动，Enter 选中当前那一项。",
