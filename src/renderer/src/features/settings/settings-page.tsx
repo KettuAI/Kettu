@@ -41,6 +41,7 @@ import { HostPicker } from './host-picker'
 import { HOST_SECTIONS } from './host-sections'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
 import { GroupLabel, PageHeader, SectionBody } from './rows'
+import { useTasksSection } from '@renderer/features/tasks/tiers-section'
 import { webClusters } from './web-sections'
 import {
   useAboutSection,
@@ -206,7 +207,13 @@ function SettingsLayout({
   // The list in clusters: what belongs to this client first, then the host's, then About.
   const all: SectionDef[][] = [
     client,
-    [useAgentsSection(), useHarnessesSection(), useUsageSection(), useGitSection()],
+    [
+      useAgentsSection(),
+      useHarnessesSection(),
+      useUsageSection(),
+      useGitSection(),
+      useTasksSection(),
+    ],
     [useArchivedSection(), useArtifactsSection(), useSharingSection(), useTerminalSection()],
     [useRemoteSection(), useAdvancedSection()],
     [about],

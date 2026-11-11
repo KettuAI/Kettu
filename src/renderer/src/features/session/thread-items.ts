@@ -41,9 +41,9 @@ function charOf(entry: ThreadEntry | undefined): string {
   }
   if (entry.permission) return 'w'
   // An answered request keeps its folded card, so it stands on its own as the request did; a
-  // routine's own answer is the routine's, and folds as work.
+  // routine's or a task's own answer is theirs, and folds as work.
   const result = entry.permissionResult
-  if (result && (typeof result !== 'object' || result.by !== 'routine')) return 'r'
+  if (result && (typeof result !== 'object' || result.by === undefined)) return 'r'
   if (
     entry.status === 'completed' &&
     (entry.toolKind === 'read' || entry.toolKind === 'search' || entry.toolKind === 'fetch')

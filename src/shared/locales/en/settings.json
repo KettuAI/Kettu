@@ -17,7 +17,8 @@
     "harnesses": "Harnesses",
     "hosts": "Hosts",
     "devices": "Mobile devices",
-    "computer-use": "Computer use"
+    "computer-use": "Computer use",
+    "tasks": "Tasks"
   },
   "page": {
     "title": "Settings",
@@ -989,7 +990,8 @@
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it.",
     "devices": "Simulators and phones agents may use without asking.",
-    "computer-use": "Lets agents read and drive the desktop apps of this computer, one app and one session at a time."
+    "computer-use": "Lets agents read and drive the desktop apps of this computer, one app and one session at a time.",
+    "tasks": "Which agents and models run the stages of tasks."
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",

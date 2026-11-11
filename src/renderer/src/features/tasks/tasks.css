@@ -1,0 +1,244 @@
+/* A task's page, on the routines page's bar and Settings' cards: its stage track, the card that
+   asks the person to decide, and its stage runs. Colors come from the shell's variables. */
+
+.k-task__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-task__meta > * {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-task__meta a {
+  color: var(--accent);
+}
+.k-task__meta a:hover {
+  text-decoration: underline;
+}
+
+/* One segment per stage, its name under it. */
+.k-track {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+  margin-top: 16px;
+}
+.k-track__stage {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.k-track__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.k-track__stage[data-mark='done'] .k-track__bar {
+  background: var(--tone-green);
+}
+.k-track__stage[data-mark='current'] .k-track__bar {
+  background: var(--accent);
+}
+.k-track__stage[data-mark='skipped'] .k-track__bar {
+  background: repeating-linear-gradient(-45deg, var(--line-strong) 0 3px, transparent 3px 6px);
+}
+.k-track__name {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-track__stage[data-mark='current'] .k-track__name {
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-track__stage[data-mark='skipped'] .k-track__name {
+  color: var(--faint);
+}
+
+.k-task__requirement {
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* What the person decides: the reason, Approve, and Send back with its stage and note. */
+.k-decide {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--tone-amber-fill);
+  box-shadow: inset 0 0 0 0.5px var(--tone-amber-edge);
+}
+.k-decide[data-tone='red'] {
+  background: var(--tone-red-fill);
+  box-shadow: inset 0 0 0 0.5px var(--tone-red-edge);
+}
+.k-decide__head {
+  display: grid;
+  gap: 2px;
+}
+.k-decide__head b {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-decide__head small {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.k-decide__back {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.k-decide__note {
+  width: 100%;
+  min-height: 56px;
+}
+.k-decide__acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The stage runs, newest first. */
+.k-sruns {
+  display: grid;
+}
+.k-srun {
+  display: grid;
+  gap: 6px;
+  padding: 12px 16px;
+}
+.k-srun + .k-srun {
+  border-top: 0.5px solid var(--line);
+}
+.k-srun__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-srun__top b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--strong);
+}
+.k-srun__state[data-tone='ok'] {
+  color: var(--tone-green);
+}
+.k-srun__state[data-tone='wait'] {
+  color: var(--tone-amber);
+}
+.k-srun__state[data-tone='fail'] {
+  color: var(--tone-red);
+}
+.k-srun__agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+}
+.k-srun__agent:not(:disabled):hover {
+  background: var(--hover);
+}
+.k-srun__agent:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.k-srun__summary {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.k-srun__note {
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.k-srun__commands {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+}
+.k-srun__commands code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-srun__label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A tier candidate's agent and model, framed as a routine's agent field. */
+.k-tier-frame {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    0 1px 1px var(--tray-edge);
+  transition: box-shadow 140ms ease;
+}
+.k-tier-frame:hover {
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    0 1px 2px var(--tray-edge);
+}
+.k-tier-frame:has([aria-expanded='true']) {
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    0 0 0 3px var(--accent-soft);
+}
+.k-tier-frame > * {
+  flex: 1;
+  min-width: 0;
+  justify-content: flex-start;
+}

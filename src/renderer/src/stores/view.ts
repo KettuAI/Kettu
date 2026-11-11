@@ -54,6 +54,8 @@ type PageView =
   // example on the empty Routines page fills in.
   | { kind: 'routines' }
   | { kind: 'routine'; routineId: string | null; example?: RoutineExampleId }
+  // A task's page, opened from its row in the sidebar.
+  | { kind: 'task'; taskId: string }
   // The Artifacts page, opened from the sidebar; with `deleted`, its Recently deleted view.
   | { kind: 'artifacts'; deleted?: true }
   // The Marketplace, opened from the sidebar: its directory on a tab, or with `item`, the listing
@@ -133,6 +135,7 @@ export type SettingsSection =
   | 'browser'
   | 'devices'
   | 'computer-use'
+  | 'tasks'
   | 'advanced'
   | 'about'
 
@@ -571,6 +574,14 @@ export function openRoutine(
   else open()
 }
 
+/** A task's page. */
+export function openTask(taskId: string): void {
+  useViewStore.setState((s) => ({
+    main: { kind: 'task', taskId },
+    settings: { ...s.settings, open: false },
+  }))
+}
+
 /**
  * The Marketplace: its directory on `tab`, All unless given, or the listing of `item`. A tab
  * changes the page shown in place, so Back leaves the Marketplace rather than its tabs.
@@ -919,6 +930,8 @@ export function viewKey(view: HistoryView): string {
       return `new:${view.parentId ?? ''}`
     case 'routine':
       return `routine:${view.routineId ?? view.example ?? ''}`
+    case 'task':
+      return `task:${view.taskId}`
     case 'artifacts':
       return view.deleted ? 'artifacts:deleted' : 'artifacts'
     case 'marketplace':

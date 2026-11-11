@@ -236,6 +236,18 @@ describe('the Claude Agent SDK driver', () => {
     expect(init).toMatchObject({ authMethods: [{ id: 'claude-login', args: [] }] })
   })
 
+  it('turns off the write tools of a read-only session', async () => {
+    const { sdk, connection } = await setup()
+    await connection.newSession('/repo', { readOnly: true })
+    expect(sdk.last.options.disallowedTools).toEqual([
+      'EnterWorktree',
+      'ExitWorktree',
+      'Edit',
+      'Write',
+      'NotebookEdit',
+    ])
+  })
+
   it('opens a session as a query with the agent environment and Claude Code spawned by the host', async () => {
     const { sdk, connection, spawned } = await setup({
       CLAUDE_CONFIG_DIR: '/home/ada/.claude-work',

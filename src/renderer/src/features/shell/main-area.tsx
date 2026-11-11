@@ -14,13 +14,14 @@ import { useSessionFolder } from '@renderer/lib/session-folder'
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
 const RoutinesPage = lazy(() => import('@renderer/features/routines/routines-page'))
 const RoutinePage = lazy(() => import('@renderer/features/routines/routine-page'))
+const TaskPage = lazy(() => import('@renderer/features/tasks/task-page'))
 const ArtifactsPage = lazy(() => import('@renderer/features/artifacts/artifacts-page'))
 const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
 const MarketplacePage = lazy(() => import('@renderer/features/marketplace/marketplace-page'))
 
 /**
  * What the main area shows: the split of sessions and New session, the usage page, the routines
- * pages, the Artifacts page, an artifact, or the Marketplace. A page shows alone, and the split
+ * pages, a task's page, the Artifacts page, an artifact, or the Marketplace. A page shows alone, and the split
  * waits as it was.
  */
 export function MainArea() {
@@ -76,6 +77,15 @@ export function MainArea() {
             routineId={main.routineId}
             example={main.example ?? null}
           />
+        </Suspense>
+      </PageSheet>
+    )
+  }
+  if (main.kind === 'task') {
+    return (
+      <PageSheet>
+        <Suspense fallback={null}>
+          <TaskPage key={main.taskId} taskId={main.taskId} />
         </Suspense>
       </PageSheet>
     )

@@ -871,4 +871,74 @@ describe('worktree requests', () => {
     rejects(() => set({ ...settings, waitForSetup: 'yes' }))
     rejects(() => posix['projects.setWorktreeSettings']({ path: 'repo', settings }))
   })
+
+  it('checks every task method strictly', () => {
+    const id = 't-0123456789ab'
+    const draft = {
+      requirement: 'Add a dark mode',
+      projectPath: '/repo',
+      workflow: { source: 'official', id: 'development' },
+      start: true,
+    }
+    expect(posix['tasks.create']({ ...draft, extra: 1 })).toEqual(draft)
+    const full = { ...draft, title: 'Dark mode', priority: 'high', after: [id] }
+    expect(posix['tasks.create'](full)).toEqual(full)
+    for (const bad of [
+      { ...draft, requirement: '  ' },
+      { ...draft, requirement: 'x'.repeat(100_001) },
+      { ...draft, title: 'x'.repeat(201) },
+      { ...draft, projectPath: 'repo' },
+      { ...draft, workflow: { source: 'web', id: 'development' } },
+      { ...draft, workflow: { source: 'library', id: '../x' } },
+      { ...draft, workflow: { source: 'library', id: 'x'.repeat(41) } },
+      { ...draft, start: 'yes' },
+      { ...draft, priority: 'urgent' },
+      { ...draft, after: ['t-1'] },
+      { ...draft, after: [id, id] },
+      {
+        ...draft,
+        after: Array.from({ length: 51 }, (_, i) => `t-${i.toString(16).padStart(12, '0')}`),
+      },
+    ]) {
+      rejects(() => posix['tasks.create'](bad))
+    }
+    for (const method of [
+      'tasks.get',
+      'tasks.start',
+      'tasks.pause',
+      'tasks.resume',
+      'tasks.cancel',
+      'tasks.markSeen',
+    ] as const) {
+      expect(posix[method]({ taskId: id, x: 1 })).toEqual({ taskId: id })
+      rejects(() => posix[method]({ taskId: 'r-0123456789ab' }))
+      rejects(() => posix[method]({}))
+    }
+    const decision = { taskId: id, decision: 'send-back', to: 'build', note: 'Fix the tests' }
+    expect(posix['tasks.decide']({ ...decision, x: 1 })).toEqual(decision)
+    expect(posix['tasks.decide']({ taskId: id, decision: 'approve' })).toEqual({
+      taskId: id,
+      decision: 'approve',
+    })
+    rejects(() => posix['tasks.decide']({ ...decision, decision: 'merge' }))
+    rejects(() => posix['tasks.decide']({ ...decision, to: 'Build Stage' }))
+    rejects(() => posix['tasks.decide']({ ...decision, note: 'x'.repeat(20_001) }))
+    expect(posix['tasks.workflows']({ projectPath: null })).toEqual({ projectPath: null })
+    expect(posix['tasks.workflows']({ projectPath: '/repo' })).toEqual({ projectPath: '/repo' })
+    rejects(() => posix['tasks.workflows']({ projectPath: 'repo' }))
+    rejects(() => posix['tasks.workflows']({}))
+    const tiers = {
+      deep: [{ agentId: 'claude-code', options: [{ id: 'model', value: 'opus' }] }],
+      standard: [],
+      fast: [{ agentId: 'codex', options: [] }],
+    }
+    expect(posix['tasks.setTiers'](tiers)).toEqual(tiers)
+    rejects(() => posix['tasks.setTiers']({ ...tiers, fast: undefined }))
+    rejects(() => posix['tasks.setTiers']({ ...tiers, deep: [{ agentId: 'nope', options: [] }] }))
+    rejects(() =>
+      posix['tasks.setTiers']({ ...tiers, deep: [{ agentId: 'codex', options: [{ id: 1 }] }] }),
+    )
+    expect(posix['tasks.tiers'](undefined)).toBeUndefined()
+    rejects(() => posix['tasks.list']({ x: 1 }))
+  })
 })

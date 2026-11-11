@@ -7,11 +7,11 @@ export const ROWS_SHOWN = 5
  * A group's rows: the first few, and past them any that must stay in sight, such as one waiting
  * for an answer or the one in front; every row once the group shows them all.
  */
-export function limitRows(
-  tree: readonly SessionNode[],
+export function limitRows<T>(
+  tree: readonly T[],
   all: boolean,
-  keep: (node: SessionNode) => boolean,
-): { rows: SessionNode[]; hidden: number } {
+  keep: (node: T) => boolean,
+): { rows: T[]; hidden: number } {
   if (all || tree.length <= ROWS_SHOWN) return { rows: [...tree], hidden: 0 }
   const rows = tree.filter((node, i) => i < ROWS_SHOWN || keep(node))
   return { rows, hidden: tree.length - rows.length }

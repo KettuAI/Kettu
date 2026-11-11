@@ -111,6 +111,11 @@ import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
+import type { TaskEngineApi, TaskRuntime } from './tasks/api'
+import { createTaskEngine } from './tasks/engine'
+import type { TaskSessionHooksRef } from './tasks/hooks'
+import { createTaskRuntime } from './tasks/runtime'
+import { tasksFile } from './tasks/store'
 import { ScratchFolders } from './scratch'
 import { createWorktreeGit } from './worktrees/git'
 import { WorktreeManager } from './worktrees/manager'
@@ -272,6 +277,9 @@ export class AgentHost {
   readonly sessions: SessionManager
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
+  /** Tasks: requirements run through workflows of stages, each stage in a session of its own. */
+  readonly tasks: TaskEngineApi
+  private readonly taskRuntime: TaskRuntime
   /** The attachments of drafts and queued prompts, until sent or removed. */
   readonly attachments: Attachments
   /** Every session's thread, read a page at a time, in a worker of its own. */
@@ -498,6 +506,10 @@ export class AgentHost {
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
       subagentCall: (process, id) => this.sessions.isSubagentCall(process, id),
       plan: { set: (sessionId, items) => this.sessions.planSet(sessionId, items) },
+      submit: {
+        stageOf: (sessionId) => this.tasks.stageOf(sessionId),
+        submit: (sessionId, submission) => this.tasks.submit(sessionId, submission),
+      },
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request) => this.browserCall(request),
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),
@@ -583,6 +595,7 @@ export class AgentHost {
       status: (status) => {
         this.hub.broadcast({ type: 'agent.status', status })
         this.routines.limitsChanged(status.id)
+        this.tasks.limitsChanged(status.id)
       },
       removed: (agentId) => this.hub.broadcast({ type: 'agent.removed', agentId }),
       processes: (processes) => this.reportProcesses(processes),
@@ -593,6 +606,7 @@ export class AgentHost {
       launchEnv: (agentId, env) => this.marketSkills.launchEnv(agentId, env),
     })
     const routineHooks: RoutineSessionHooksRef = { current: null }
+    const taskHooks: TaskSessionHooksRef = { current: null }
     this.worktrees = new WorktreeManager({
       git: createWorktreeGit({
         exec: this.execRunner.exec,
@@ -687,6 +701,7 @@ export class AgentHost {
           platform,
         ),
       routine: routineHooks,
+      task: taskHooks,
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
         summary: (summary, portIds) => {
@@ -775,6 +790,42 @@ export class AgentHost {
       },
     })
     routineHooks.current = this.routines.hooks
+    this.taskRuntime = createTaskRuntime({
+      platform,
+      sessions: this.sessions,
+      agents: this.agents,
+      worktrees: this.worktrees,
+      git: () => this.git,
+      exec: this.execRunner.exec,
+      libraryDir: path.join(options.userDataPath, 'workflows'),
+      resolveProject: (value) => this.projects.resolveDirectory(value),
+      attention: (kind, sessionId, title, body) =>
+        options.send({
+          type: 'host:attention',
+          sessionId,
+          kind,
+          title,
+          body,
+          front: this.front(sessionId),
+        }),
+      engine: () => this.tasks,
+    })
+    this.tasks = createTaskEngine({
+      file: tasksFile(options.userDataPath, log),
+      log,
+      runtime: this.taskRuntime,
+      events: {
+        changed: (task) => this.broadcast({ type: 'task.changed', task }),
+        removed: (taskId) => this.broadcast({ type: 'task.removed', taskId }),
+        run: (run) => this.broadcast({ type: 'task.run', run }),
+      },
+    })
+    taskHooks.current = {
+      isStage: (sessionId) => this.tasks.stageOf(sessionId) !== null,
+      turnEnded: (sessionId) => this.tasks.turnEnded(sessionId),
+      waiting: (sessionId, waiting) => this.tasks.waiting(sessionId, waiting),
+      sessionGone: (sessionId) => this.tasks.sessionGone(sessionId),
+    }
     this.consents = new ArtifactConsents({
       store: this.artifacts,
       isDevice: (portId) => this.hub.deviceOf(portId) !== null,
@@ -852,6 +903,8 @@ export class AgentHost {
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
     host.routines.start()
+    // After the sessions it carries on in and the agents' limits it picks by.
+    await host.tasks.load()
     void host.marketSkills.sync()
     host.sendFolders()
     void host.sessions.checkWorktrees()
@@ -1125,6 +1178,7 @@ export class AgentHost {
   /** The computer slept or woke, so the routines' timer starts over from the wall clock. */
   power(state: 'suspend' | 'resume'): void {
     this.routines.power(state)
+    this.tasks.power(state)
   }
 
   busy(requestId: number): void {
@@ -1425,6 +1479,7 @@ export class AgentHost {
   shutdown(): Promise<void> {
     this.stopping ??= (async () => {
       await this.routines.shutdown()
+      await this.tasks.flush()
       this.sessions.shutdown()
       this.usage.stop()
       this.artifacts.stop()
@@ -1728,6 +1783,18 @@ export class AgentHost {
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
+      'tasks.list': () => this.tasks.list(),
+      'tasks.get': ({ taskId }) => this.tasks.get(taskId),
+      'tasks.create': (draft) => this.tasks.create(draft, 'user'),
+      'tasks.start': ({ taskId }) => this.tasks.start(taskId),
+      'tasks.pause': ({ taskId }) => this.tasks.pause(taskId),
+      'tasks.resume': ({ taskId }) => this.tasks.resume(taskId),
+      'tasks.cancel': ({ taskId }) => this.tasks.cancel(taskId),
+      'tasks.decide': (decision) => this.tasks.decide(decision),
+      'tasks.markSeen': ({ taskId }) => this.tasks.markSeen(taskId),
+      'tasks.workflows': ({ projectPath }) => this.taskRuntime.workflows(projectPath),
+      'tasks.tiers': () => this.tasks.tiers(),
+      'tasks.setTiers': (tiers) => this.tasks.setTiers(tiers),
       'sessions.removeAll': async () => {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })

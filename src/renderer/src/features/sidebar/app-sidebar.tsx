@@ -4,6 +4,7 @@ import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
+import type { TaskView } from '@shared/tasks'
 import { newSession } from '@renderer/app/actions'
 import { FolderClosedMark } from '@renderer/components/affect/app-shell'
 import { FolderMark } from '@renderer/components/affect/assistant-home'
@@ -20,12 +21,14 @@ import {
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { HostSwitchBar } from '@renderer/features/account/host-switch'
+import { TaskRow } from '@renderer/features/tasks/task-row'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { UpdateCardView } from '@renderer/features/updates/update-card'
 import { NoticeCard } from '@renderer/features/updates/update-notice'
 import { useUpdates } from '@renderer/features/updates/use-updates'
 import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { isWeb } from '@renderer/lib/platform'
+import { clockTime } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { isAway, shownHosts, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -37,9 +40,11 @@ import {
   pinnedTree,
   sessionTree,
   sidebarTabStop,
+  type SessionNode,
   type SidebarTabStop,
   useSessionsStore,
 } from '@renderer/stores/sessions'
+import { taskListed, useTasksStore } from '@renderer/stores/tasks'
 import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
@@ -66,7 +71,16 @@ export function SidebarList() {
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
   const sessionsById = useSessionsStore((s) => s.byId)
-  const shownProjects = visibleProjects(projects, sessionsById)
+  const taskProjects = useTasksStore(
+    useShallow((s) => [
+      ...new Set(
+        Object.values(s.byId)
+          .filter((task) => taskListed(task, clockTime()))
+          .map((task) => task.projectPath),
+      ),
+    ]),
+  )
+  const shownProjects = visibleProjects(projects, sessionsById, taskProjects)
   const main = useViewStore((s) => s.main)
   const collapsedProjects = useViewStore((s) => s.collapsedProjects)
   const expandedParents = useViewStore((s) => s.expandedParents)
@@ -251,8 +265,22 @@ function ProjectGroup({
     () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath, hostId),
     [summaries, projectPath, hostId],
   )
-  if (!project && tree.length === 0) return null
-  const limited = limitRows(tree, allShown, (node) => keepInSight(node, shownId))
+  // A project's tasks share its list with its sessions, by when each last changed.
+  const tasks = useTasksStore(
+    useShallow((s) =>
+      projectPath === null
+        ? NO_TASKS
+        : Object.values(s.byId).filter(
+            (task) => task.projectPath === projectPath && taskListed(task, clockTime()),
+          ),
+    ),
+  )
+  const shownTask = useViewStore((s) => (s.main.kind === 'task' ? s.main.taskId : null))
+  const rows = useMemo(() => withTasks(tree, tasks), [tree, tasks])
+  if (!project && rows.length === 0) return null
+  const limited = limitRows(rows, allShown, (row) =>
+    row.kind === 'session' ? keepInSight(row.node, shownId) : taskInSight(row.task, shownTask),
+  )
   // Importing reads the agents' own lists, which only this computer's do.
   const local = hostId === null
 
@@ -356,16 +384,25 @@ function ProjectGroup({
           )}
         </span>
       </div>
-      {open && tree.length > 0 && (
+      {open && rows.length > 0 && (
         <ul className="ui-as-chat-folder__chats">
           <RenameScope value={key}>
             <AnimatePresence initial={false}>
-              {limited.rows.map((node) => (
-                <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} indent />
-              ))}
+              {limited.rows.map((row) =>
+                row.kind === 'session' ? (
+                  <SessionRow
+                    key={row.node.summary.id}
+                    node={row.node}
+                    tabStopId={tabStopId}
+                    indent
+                  />
+                ) : (
+                  <TaskRow key={row.task.id} task={row.task} indent />
+                ),
+              )}
             </AnimatePresence>
           </RenameScope>
-          {(limited.hidden > 0 || allShown) && tree.length > ROWS_SHOWN && (
+          {(limited.hidden > 0 || allShown) && rows.length > ROWS_SHOWN && (
             <li className="flex">
               <button
                 type="button"
@@ -384,6 +421,29 @@ function ProjectGroup({
         </ul>
       )}
     </>
+  )
+}
+
+const NO_TASKS: TaskView[] = []
+
+type GroupRow = { kind: 'session'; node: SessionNode } | { kind: 'task'; task: TaskView }
+
+/** A project's sessions and tasks in one list, the latest changed first. */
+function withTasks(tree: readonly SessionNode[], tasks: readonly TaskView[]): GroupRow[] {
+  const rows: (GroupRow & { at: number })[] = [
+    ...tree.map((node) => ({ kind: 'session' as const, node, at: node.summary.updatedAt })),
+    ...tasks.map((task) => ({ kind: 'task' as const, task, at: task.updatedAt })),
+  ]
+  return rows.sort((a, b) => b.at - a.at)
+}
+
+/** A task stays in sight past the first few rows while it needs the person or is in front. */
+function taskInSight(task: TaskView, shownTask: string | null): boolean {
+  return (
+    task.id === shownTask ||
+    task.state === 'waiting' ||
+    task.state === 'blocked' ||
+    task.state === 'running'
   )
 }
 

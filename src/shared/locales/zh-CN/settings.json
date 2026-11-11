@@ -17,7 +17,8 @@
     "harnesses": "Harness",
     "hosts": "主机",
     "devices": "移动设备",
-    "computer-use": "Computer use"
+    "computer-use": "Computer use",
+    "tasks": "任务"
   },
   "page": {
     "title": "设置",
@@ -983,7 +984,8 @@
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。",
     "devices": "Agent 不用先问就能使用的模拟器和手机。",
-    "computer-use": "让 Agent 读取并操作这台电脑上的桌面应用，同一时间只用一个应用、只给一个会话。"
+    "computer-use": "让 Agent 读取并操作这台电脑上的桌面应用，同一时间只用一个应用、只给一个会话。",
+    "tasks": "由哪些 Agent 和模型运行任务的各个阶段。"
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",

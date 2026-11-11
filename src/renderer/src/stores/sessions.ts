@@ -78,6 +78,26 @@ export function hostOfSession(summary: Pick<SessionSummary, 'projectPath'>): str
 }
 
 /**
+ * Whether the session has a row of its own in the lists: a routine's run is listed under its
+ * routine, and a task's stage session under its task.
+ */
+export function listedAlone(s: SessionSummary): boolean {
+  return s.origin !== 'routine' && s.origin !== 'task' && !s.task
+}
+
+/** A task's stage sessions as rows under its own, in the order they started. */
+export function taskSessionNodes(
+  byId: Record<string, SessionSummary>,
+  taskId: string,
+): SessionNode[] {
+  return buildTree(
+    byId,
+    (s) => s.task?.taskId === taskId,
+    () => true,
+  ).sort((a, b) => a.summary.createdAt - b.summary.createdAt)
+}
+
+/**
  * The project's sessions as a tree, newest first, with attention summed up from descendants;
  * null for the sessions started with No project on `hostId`, across their scratch folders. Pinned
  * and archived sessions are listed elsewhere, with their sub-sessions. Routine runs keep their own
@@ -91,7 +111,7 @@ export function sessionTree(
   return buildTree(
     byId,
     (s) =>
-      s.origin !== 'routine' &&
+      listedAlone(s) &&
       (projectPath === null
         ? s.scratch && hostOfSession(s) === hostId
         : s.projectPath === projectPath),
@@ -103,7 +123,7 @@ export function sessionTree(
 export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] {
   return buildTree(
     byId,
-    (s) => s.origin !== 'routine',
+    (s) => listedAlone(s),
     (s) => !!s.pinnedAt && !s.archivedAt,
   ).sort((a, b) => (a.summary.pinnedAt ?? 0) - (b.summary.pinnedAt ?? 0))
 }
@@ -116,7 +136,7 @@ export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[
   return (
     buildTree(
       byId,
-      (s) => s.origin !== 'routine',
+      (s) => listedAlone(s),
       (s) => !s.archivedAt,
     )
       .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
@@ -156,11 +176,7 @@ export function archivedSessions(
 ): SessionSummary[] {
   return Object.values(byId)
     .filter(
-      (s) =>
-        s.origin !== 'routine' &&
-        s.parentId === null &&
-        !!s.archivedAt &&
-        hostOfSession(s) === hostId,
+      (s) => listedAlone(s) && s.parentId === null && !!s.archivedAt && hostOfSession(s) === hostId,
     )
     .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
 }

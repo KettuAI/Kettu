@@ -99,7 +99,7 @@ export const ToolCard = memo(function ToolCard({
   }
   // A request waiting for the user, and once answered its folded card over the call: one element
   // throughout, so the card folds where it stands.
-  if (permission || (result && (typeof result !== 'object' || result.by !== 'routine'))) {
+  if (permission || (result && (typeof result !== 'object' || result.by === undefined))) {
     return (
       <PermissionEntry
         ref={ref}

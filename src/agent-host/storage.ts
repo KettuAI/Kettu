@@ -24,6 +24,7 @@ import {
   ROUTINE_OPTION_CHARS,
   ROUTINE_OPTION_LIMIT,
   PROMPT_CHARS,
+  type PermissionScope,
   type Routine,
   type RoutineRef,
 } from '@shared/routines'
@@ -267,8 +268,9 @@ export interface SessionRecord {
   updatedAt: number
   lastViewedAt: number | null
   parentId: string | null
-  origin: 'user' | 'subagent' | 'routine'
+  origin: 'user' | 'subagent' | 'routine' | 'task'
   routine?: RoutineRef // a routine's run, when origin is 'routine'
+  task?: SessionTaskRef // a task's stage, when origin is 'task'
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
@@ -290,6 +292,25 @@ export interface SessionRecord {
   /** A worktree its agent made for a subagent, which Kettu shows and never removes. */
   agentWorktree?: { path: string; branch: string | null }
 }
+
+/**
+ * The task stage a session works for: the run that opened it and the scope its permission
+ * requests are answered in on every turn. Absent on a task session whose ref did not read, which
+ * then answers nothing by itself.
+ */
+export interface SessionTaskRef {
+  taskId: string
+  runId: string
+  stageId: string
+  scope: PermissionScope
+  /** Its turns as its last one ended, for a round that starts while it is closed. */
+  turns?: number
+  /** The estimated cost in dollars of its latest priced turns, as [turn, dollars], oldest first. */
+  costs?: [number, number][]
+}
+
+/** The turn costs a task session keeps, enough for any round's budget. */
+export const MAX_TASK_TURN_COSTS = 200
 
 /** What a session's new agent is to be given with its first turn, kept until that turn goes. */
 export interface PendingCarry {
@@ -578,6 +599,54 @@ function routineRefOf(value: unknown): { routine?: RoutineRef } {
   }
 }
 
+const TASK_REF_CHARS = 256
+
+/** A task session's ref; one that does not read is dropped, not the session. */
+function taskRefOf(value: unknown): { task?: SessionTaskRef } {
+  const id = (item: unknown): item is string =>
+    isString(item) && item !== '' && item.length <= TASK_REF_CHARS
+  if (
+    !isRecord(value) ||
+    !id(value.taskId) ||
+    !id(value.runId) ||
+    !id(value.stageId) ||
+    !isPermissionScope(value.scope)
+  ) {
+    return {}
+  }
+  return {
+    task: {
+      taskId: value.taskId,
+      runId: value.runId,
+      stageId: value.stageId,
+      scope: { level: value.scope.level, web: value.scope.web },
+      ...(Number.isSafeInteger(value.turns) && (value.turns as number) >= 0
+        ? { turns: value.turns as number }
+        : {}),
+      ...turnCostsOf(value.costs),
+    },
+  }
+}
+
+/** A task session's turn costs; a pair that does not read is dropped. */
+function turnCostsOf(value: unknown): { costs?: [number, number][] } {
+  if (!Array.isArray(value)) return {}
+  const costs = value
+    .filter(
+      (item): item is [number, number] =>
+        Array.isArray(item) &&
+        item.length === 2 &&
+        Number.isSafeInteger(item[0]) &&
+        item[0] > 0 &&
+        typeof item[1] === 'number' &&
+        Number.isFinite(item[1]) &&
+        item[1] >= 0,
+    )
+    .slice(-MAX_TASK_TURN_COSTS)
+    .map(([turn, usd]): [number, number] => [turn, usd])
+  return costs.length > 0 ? { costs } : {}
+}
+
 /** The earlier agents a session lists; one that does not read is dropped, not the session. */
 function earlierOf(value: unknown): { earlier?: EarlierAgent[] } {
   if (!Array.isArray(value)) return {}
@@ -718,7 +787,10 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       !isTime(item.updatedAt) ||
       !isNullable(isTime)(item.lastViewedAt) ||
       !nullableString(item.parentId) ||
-      (item.origin !== 'user' && item.origin !== 'subagent' && item.origin !== 'routine') ||
+      (item.origin !== 'user' &&
+        item.origin !== 'subagent' &&
+        item.origin !== 'routine' &&
+        item.origin !== 'task') ||
       !nullableString(item.description) ||
       !nullableString(item.branch)
     ) {
@@ -739,6 +811,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       parentId: item.parentId,
       origin: item.origin,
       ...routineRefOf(item.routine),
+      ...(item.origin === 'task' ? taskRefOf(item.task) : {}),
       description: item.description,
       branch: item.branch,
       ...queueOf(item.queue),

@@ -1,0 +1,89 @@
+# Kettu's official workflow for a question to research, ending in a report a person accepts.
+format: 1
+id: research
+name: Research
+description: Pin down the question, gather sources, write a report, then a person accepts it.
+kind: research
+version: '1.0.0'
+worktree: false
+start: question
+limits:
+  rounds: 2
+  stageMinutes: 60
+  budgetUsd: null
+stages:
+  - id: question
+    name: Pin down the question
+    kind: agent
+    tier: standard
+    scope: { level: read, web: true }
+    session: new
+    gate: agent
+    evidence: [no-file-changes]
+    prompt: |
+      Turn the requirement into a research question that can be answered. Say what is in scope and
+      what is not, and what a good answer must cover. Read the project when the question is about
+      it. Do not change any file.
+
+      Finish by calling the submit_stage tool. Submit `pass` with the fields below, or `blocked`,
+      with the reason in the summary, when the person must clarify the requirement first.
+    next: sources
+    contract:
+      - name: question
+        type: text
+        description: The question to answer.
+      - name: scope
+        type: list
+        description: What the answer must cover, one item each.
+
+  - id: sources
+    name: Gather sources
+    kind: agent
+    tier: standard
+    scope: { level: read, web: true }
+    session: resume
+    gate: contract
+    evidence: [no-file-changes]
+    prompt: |
+      Gather the sources that answer the question: official documentation, source code, papers,
+      issues and reputable articles. Prefer primary sources, check that each one says what you
+      cite it for, and note where sources disagree. Do not change any file.
+
+      Finish by calling the submit_stage tool with `pass` and the fields below.
+    next: report
+    contract:
+      - name: sources
+        type: list
+        description: Each source, as its title and URL or path, with what it supports.
+      - name: findings
+        type: text
+        description: What the sources say about the question, with disagreements noted.
+
+  - id: report
+    name: Write the report
+    kind: agent
+    tier: deep
+    scope: { level: read, web: true }
+    session: resume
+    gate: contract
+    evidence: [no-file-changes]
+    prompt: |
+      Write the report: answer the question first, then the reasoning and the evidence for it,
+      citing the sources, then what remains uncertain. Keep it as short as the question allows.
+      Do not change any project file.
+
+      If you are given notes from the person, revise the report to address every one of them.
+
+      Finish by calling the submit_stage tool with `pass` and the fields below.
+    next: accept
+    contract:
+      - name: report
+        type: text
+        description: The report, in Markdown.
+
+  - id: accept
+    name: Accept
+    kind: human
+    prompt: Read the report. Approve it, or send it back with what is missing.
+    sendBack: [report, sources]
+    next: null
