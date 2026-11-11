@@ -229,9 +229,10 @@ export function SessionMenuItems({
         return (
           <DropdownMenuItem
             {...props}
+            variant="destructive"
             onClick={() => void host('sessions.cancel', { sessionId: id })}
           >
-            <MenuGlyph icon={StopCircleIcon} />
+            <Glyph icon={StopCircleIcon} size={15} />
             {t('row.stop')}
             {shortcut}
           </DropdownMenuItem>
@@ -669,9 +670,10 @@ export function MultiSessionMenuItems({
                 return (
                   <DropdownMenuItem
                     {...props}
+                    variant="destructive"
                     onClick={each((s) => host('sessions.cancel', { sessionId: s.id }))}
                   >
-                    <MenuGlyph icon={StopCircleIcon} />
+                    <Glyph icon={StopCircleIcon} size={15} />
                     {t('row.stopCount', { count })}
                     {shortcut(accelerator)}
                   </DropdownMenuItem>
