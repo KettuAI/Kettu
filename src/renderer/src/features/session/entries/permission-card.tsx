@@ -1,5 +1,11 @@
 import { useMemo, useRef, type ReactNode, type Ref } from 'react'
-import { File01Icon, FileEditIcon } from '@hugeicons/core-free-icons'
+import {
+  Cancel01Icon,
+  File01Icon,
+  FileEditIcon,
+  Tick02Icon,
+  TickDouble02Icon,
+} from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
 import {
   previewsCommand,
@@ -232,8 +238,20 @@ export function PermissionEntry({
       />
     ),
     risk: (risk) => t(`permission.card.${risk}`),
-    allow: (s) => allowWords(s),
-    deny: answers.deny ? t('permission.card.deny') : '',
+    allow: (s) => (
+      <>
+        <Icon icon={Tick02Icon} size={14} />
+        {allowWords(s)}
+      </>
+    ),
+    deny: answers.deny ? (
+      <>
+        <Icon icon={Cancel01Icon} size={14} />
+        {t('permission.card.deny')}
+      </>
+    ) : (
+      ''
+    ),
     more: (count) => t('permission.card.more', { count }),
     showLess: t('permission.card.showLess'),
     result: () => answeredWords(),
@@ -336,7 +354,7 @@ export function PermissionEntry({
             <button
               key={option.id}
               type="button"
-              className="ui-prc__btn"
+              className="ui-prc__btn ks-permission__other"
               disabled={busy}
               title={option.description}
               onClick={() => void respond(option)}
@@ -348,11 +366,12 @@ export function PermissionEntry({
             <button
               key={s}
               type="button"
-              className="ui-prc__btn"
+              className="ui-prc__btn ks-permission__always"
               disabled={busy}
               title={allowNote(s)}
               onClick={() => void respond(answers.allows[s])}
             >
+              <Icon icon={TickDouble02Icon} size={14} />
               {allowWords(s)}
             </button>
           ))}

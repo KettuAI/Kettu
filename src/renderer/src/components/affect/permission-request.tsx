@@ -103,7 +103,7 @@ export type PermissionLabels = {
   risk: (risk: Exclude<PermissionRisk, "safe">) => string;
   scope: (scope: PermissionScope, minutes: number) => ReactNode;
   allow: (scope: PermissionScope, minutes: number) => ReactNode;
-  deny: string;
+  deny: ReactNode;
   howLong: string;
   more: (count: number) => string;
   showLess: string;
@@ -702,7 +702,7 @@ export function PermissionRequest({
               )}
               <div className="ui-prc__buttons">
                 {actions}
-                <button type="button" className="ui-prc__btn" onClick={deny} disabled={disabled}>
+                <button type="button" className="ui-prc__btn ui-prc__btn--deny" onClick={deny} disabled={disabled}>
                   {labels?.deny ?? "Deny"}
                   <kbd className="ui-prc__kbd">Esc</kbd>
                 </button>
