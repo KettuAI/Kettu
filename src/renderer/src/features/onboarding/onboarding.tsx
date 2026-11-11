@@ -165,14 +165,16 @@ function Split({
 }) {
   return (
     <div className="kob-split">
+      {/* Before the content: drag regions apply in page order, and the stage's pictures reach
+          under the left column, where they would turn its buttons back into the drag region. */}
+      <aside className="kob-stage" aria-hidden>
+        {stage}
+      </aside>
       <section className="kob-left">
         <div className="kob-head">{head}</div>
         <div className="kob-body">{children}</div>
         <footer className="kob-foot">{foot}</footer>
       </section>
-      <aside className="kob-stage" aria-hidden>
-        {stage}
-      </aside>
     </div>
   )
 }
