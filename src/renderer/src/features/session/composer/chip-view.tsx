@@ -16,7 +16,7 @@ export type ChipState = 'default' | 'selected'
 
 /**
  * A chip as the composer and the thread draw it: 22 px high with 5 px corners and an icon that
- * says what it is. Only the command carries color, the control blue, and has no icon. `surface`
+ * says what it is. The command is no box: text in the control blue, without an icon. `surface`
  * is for a chip on a grey bubble, which it sets off in the card's white.
  */
 export function ChipView({
@@ -35,7 +35,7 @@ export function ChipView({
       className={cn(
         'relative -top-px mx-px inline-flex h-5.5 max-w-65 items-center gap-1.25 rounded-lg pr-1.5 pl-1.25 align-middle text-ui leading-none whitespace-nowrap text-primary transition-[background-color,box-shadow] duration-(--duration-fast)',
         chip.kind === 'command'
-          ? 'bg-control-on-tint font-medium text-control-on'
+          ? 'top-0 mx-0 h-auto px-0 font-medium text-control-on'
           : missing
             ? 'text-tertiary outline-1 -outline-offset-1 outline-border-strong outline-dashed'
             : state === 'selected'
