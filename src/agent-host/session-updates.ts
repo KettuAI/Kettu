@@ -3,6 +3,7 @@
 
 import type { PlanLimit } from '@shared/agent-host'
 import type {
+  BackgroundTaskView,
   ConfigOption,
   Patch,
   StopReason,
@@ -76,6 +77,8 @@ export type MapperEffect =
     }
   // Work the agent runs on after its tool call ended, such as a command in the background.
   | { kind: 'background' }
+  // The commands and monitors the agent has running or has ended since, replacing the last list.
+  | { kind: 'tasks'; tasks: BackgroundTaskView[] }
   // A turn the agent started between the host's own, as when such a command ended. A prompt that
   // crossed it joins it, and the prompt's answer ends both.
   | { kind: 'agentTurn'; phase: 'started' }

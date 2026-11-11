@@ -1,5 +1,6 @@
 {
   "headerTools": {
+    "board": "Board",
     "files": "Files",
     "terminal": "Terminal",
     "browser": "Browser",

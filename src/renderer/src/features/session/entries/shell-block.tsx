@@ -21,7 +21,7 @@ const TONE = {
 // Past this the row cuts a command short, so its section shows it whole.
 const LONG_COMMAND = 60
 
-function Printed({ text }: { text: string }) {
+export function Printed({ text }: { text: string }) {
   return ansiRuns(text).map((run, i) =>
     run.tone ? (
       <span key={i} className={TONE[run.tone]}>

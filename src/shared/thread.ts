@@ -58,6 +58,26 @@ export interface SessionView {
   queuePaused: boolean // after Stop, a failed turn or a restart, until the user resumes it
   /** Ephemeral: set while the session holds the computer, with the app it last used. */
   computer?: ComputerUseView | null
+  /**
+   * Ephemeral: the commands and monitors the agent left running, and those that ended since,
+   * oldest first. Absent for an agent that reports none.
+   */
+  background?: BackgroundTaskView[]
+}
+
+/** A command or monitor an agent runs beside its turn, as the session board lists it. */
+export interface BackgroundTaskView {
+  id: string
+  kind: 'shell' | 'monitor' | 'workflow' | 'other'
+  /** What the agent said it does, or its command. */
+  title: string
+  /** The shell command, for a command task whose tool call is known. */
+  command?: string
+  status: 'running' | 'completed' | 'failed' | 'stopped'
+  startedAt: number
+  endedAt: number | null
+  /** How it ended, as the agent reported it; null while it runs. */
+  summary: string | null
 }
 
 /** A session's hold on the computer, which the label on its composer shows. */

@@ -183,6 +183,8 @@ interface ViewStore {
   /** The artifact each panel's artifact pane shows. */
   sideArtifact: Record<string, string>
   sidePaneMaximized: boolean
+  /** The sessions whose board is open at the right of their thread. */
+  boardOpen: Record<string, true>
   /** How the Artifacts page groups and sorts, for the whole app. */
   artifactsView: { group: ArtifactGrouping; sort: ArtifactSort }
 }
@@ -197,6 +199,7 @@ interface Persisted {
   showFinishedSubagents?: boolean
   /** Per panel; the per-project `sidePane` of earlier versions is not read. */
   sidePanes?: Record<string, SidePane>
+  boardOpen?: Record<string, true>
   /** One pane per column, the pane in focus; read back as the split a restart opens. */
   layout?: unknown
   /** Under a new name since the page went flat: every run saved the old grouping as it was. */
@@ -232,6 +235,7 @@ export const useViewStore = create<ViewStore>()(() => ({
   sidePane: saved.sidePanes ?? {},
   sideArtifact: {},
   sidePaneMaximized: false,
+  boardOpen: saved.boardOpen ?? {},
   artifactsView: {
     group: oneOf(GROUPINGS, saved.artifactsDisplay?.group, 'none'),
     sort: oneOf(SORTS, saved.artifactsDisplay?.sort, 'recent'),
@@ -260,6 +264,7 @@ useViewStore.subscribe((state) => {
           .filter(([, pane]) => pane !== 'artifact')
           .slice(-REMEMBERED_PANELS),
       ),
+      boardOpen: Object.fromEntries(Object.entries(state.boardOpen).slice(-REMEMBERED_PANELS)),
       layout: saveLayout(state.layout),
       artifactsDisplay: state.artifactsView,
     }
@@ -834,6 +839,18 @@ export function toggleSidePane(panel: string, pane: SidePane, open?: boolean): v
     const shown = s.sidePane[panel] === pane
     if ((open ?? !shown) === shown) return s
     return { sidePane: withPane(s.sidePane, panel, shown ? null : pane), sidePaneMaximized: false }
+  })
+}
+
+/** Opens or closes a session's board, which sits at the right of its thread. */
+export function toggleBoard(sessionId: string, open?: boolean): void {
+  useViewStore.setState((s) => {
+    const shown = !!s.boardOpen[sessionId]
+    if ((open ?? !shown) === shown) return s
+    const next = { ...s.boardOpen }
+    if (shown) delete next[sessionId]
+    else next[sessionId] = true
+    return { boardOpen: next }
   })
 }
 

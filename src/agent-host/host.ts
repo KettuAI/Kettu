@@ -1640,6 +1640,8 @@ export class AgentHost {
       'sessions.prompt': ({ sessionId, content }, { portId, device }) =>
         sessions.prompt(sessionId, content, portId, fromDevice(device)),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
+      'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
+      'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
       'sessions.fork': ({ sessionId, entryId }) => sessions.fork(sessionId, entryId),
       'sessions.switchAgent': (params, { portId, device }) =>

@@ -3,6 +3,7 @@ import type { IconSvgElement } from '@hugeicons/react'
 import {
   Cancel01Icon,
   ComputerTerminal01Icon,
+  DashboardSquare02Icon,
   File01Icon,
   Globe02Icon,
   MoreHorizontalIcon,
@@ -19,6 +20,8 @@ import {
 } from '@renderer/components/ui/dropdown-menu'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { summaryParts } from '@renderer/features/board/board-model'
+import { useBoardActivity } from '@renderer/features/board/use-board-activity'
 import { usePane } from '@renderer/features/split/pane-context'
 import {
   DeleteSessionDialog,
@@ -30,12 +33,13 @@ import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { useDevicesStore } from '@renderer/stores/devices'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
-import { sessionTitle } from '@renderer/stores/sessions'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
   closeSplitPane,
   focusPane,
   panelSession,
   shownPanel,
+  toggleBoard,
   toggleSidePane,
   useViewStore,
   type SidePane,
@@ -91,6 +95,12 @@ export function HeaderTools({
   const pane = usePane()
   const terminal = useTerminalAllowed(projectPath)
   const sessionId = panelSession(panel)
+  // A session has a board; New session has no session yet, and a sub-agent's page shows its
+  // parent's work.
+  const board = useSessionsStore((s) => {
+    const origin = sessionId ? s.byId[sessionId]?.origin : undefined
+    return origin !== undefined && origin !== 'subagent'
+  })
   // An agent opened the session's page while another pane showed: a dot says to look.
   const dot = useBrowserStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
   const deviceDot = useDevicesStore((s) => (sessionId ? !!s.unseen[sessionId] : false))
@@ -122,6 +132,7 @@ export function HeaderTools({
           menu={menu}
         />
       )}
+      {board && sessionId && <BoardToggle sessionId={sessionId} />}
       {/* Another host's terminal opens only while its owner allows devices it. */}
       {terminal && (
         <PaneToggle
@@ -198,6 +209,40 @@ function BarButton({
         {shortcut && <Kbd>{formatShortcut(shortcut)}</Kbd>}
       </TooltipContent>
     </Tooltip>
+  )
+}
+
+/** The board at the right of the session's thread, with a dot while something runs in it. */
+function BoardToggle({ sessionId }: { sessionId: string }) {
+  const { t } = useTranslation('shell')
+  const { t: tb } = useTranslation('board')
+  const context = usePane()
+  const open = useViewStore((s) => !!s.boardOpen[sessionId])
+  const activity = useBoardActivity(sessionId)
+  const parts = summaryParts(tb, activity)
+  const label = [t('headerTools.board'), parts.running, parts.needs].filter(Boolean).join(' · ')
+  return (
+    <BarButton
+      label={label}
+      pressed={open}
+      onClick={() => {
+        // In a pane out of focus the toggle shows the board there and never closes it.
+        if (context && !context.focused) {
+          focusPane(context.paneId)
+          toggleBoard(sessionId, true)
+          return
+        }
+        toggleBoard(sessionId)
+      }}
+    >
+      <PaneIcon icon={DashboardSquare02Icon} size={16} />
+      {!open && activity.running + activity.needs > 0 && (
+        <span
+          aria-hidden
+          className={activity.needs > 0 ? 'kp-bar-dot kp-bar-dot--needs' : 'kp-bar-dot'}
+        />
+      )}
+    </BarButton>
   )
 }
 

@@ -2,7 +2,13 @@
 // patches and effects the ACP mapper produces. A message of a subagent goes to the subagent's
 // session, which Kettu shows as a session of its own; everything else to the session it came on.
 
-import type { PlanItem, SlashCommand, ToolEntry, UserContent } from '@shared/thread'
+import type {
+  BackgroundTaskView,
+  PlanItem,
+  SlashCommand,
+  ToolEntry,
+  UserContent,
+} from '@shared/thread'
 import { t } from '../i18n'
 import {
   appendContent,
@@ -142,6 +148,26 @@ export interface ReplayedSubagent {
 
 const AGENT_ID = /agentId:\s*([\w-]+)/
 
+/** The ended background tasks the list keeps, besides every running one. */
+const ENDED_TASKS_KEPT = 20
+const TASK_TITLE_LIMIT = 300
+const TASK_SUMMARY_LIMIT = 1000
+const TASK_COMMAND_LIMIT = 2000
+
+/** The board's kind for a Claude Code task type, or null for a subagent, which is a session. */
+function backgroundKind(taskType: unknown): BackgroundTaskView['kind'] | null {
+  const type = typeof taskType === 'string' ? taskType.toLowerCase() : ''
+  if (type === 'local_agent' || type === 'subagent') return null
+  if (type.includes('bash') || type.includes('shell')) return 'shell'
+  if (type.includes('monitor')) return 'monitor'
+  if (type.includes('workflow')) return 'workflow'
+  return 'other'
+}
+
+function clip(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit - 1)}\u2026` : text
+}
+
 /** One open session's mapping state, across its turns. */
 export class ClaudeMapper {
   /** The API message each lane streams now; the main thread's lane is ''. */
@@ -155,6 +181,10 @@ export class ClaudeMapper {
   private readonly running = new Map<string, string>()
   private readonly tasks = new Map<string, Task>()
   private readonly taskInputs = new Map<string, Record<string, unknown>>()
+  /** The commands and monitors the agent left running and those that ended since, oldest first. */
+  private readonly background = new Map<string, BackgroundTaskView>()
+  /** Commands still blocking their tool call, which join `background` once they move there. */
+  private readonly foreground = new Map<string, BackgroundTaskView>()
   private compacting: string | null = null
   /** In a replay: the subagents its history started, whose own histories follow. */
   readonly replayed: ReplayedSubagent[] = []
@@ -828,8 +858,9 @@ export class ClaudeMapper {
         return this.taskNotification(message)
       case 'task_updated':
         return this.taskUpdated(message)
-      case 'task_progress':
       case 'background_tasks_changed':
+        return this.backgroundChanged(message)
+      case 'task_progress':
       case 'commands_changed':
         return []
       default:
@@ -848,6 +879,7 @@ export class ClaudeMapper {
           sessionId: this.sessionId,
           map: () => ({ patches: [], effects: [{ kind: 'background' }] }),
         },
+        ...this.backgroundStarted(message, taskId),
       ]
     }
     const toolUseId = typeof message.tool_use_id === 'string' ? message.tool_use_id : null
@@ -901,13 +933,20 @@ export class ClaudeMapper {
     const taskId = typeof message.task_id === 'string' ? message.task_id : null
     if (!taskId) return []
     const summary = typeof message.summary === 'string' ? message.summary : ''
+    const usage = inputOf(message.usage)
+    const board = this.backgroundEnded(
+      taskId,
+      message.status === 'completed' || message.status === 'stopped' ? message.status : 'failed',
+      summary,
+      typeof usage.duration_ms === 'number' ? usage.duration_ms : null,
+    )
     switch (message.status) {
       case 'completed':
-        return this.end(taskId, 'end_turn')
+        return [...this.end(taskId, 'end_turn'), ...board]
       case 'stopped':
-        return this.end(taskId, 'cancelled')
+        return [...this.end(taskId, 'cancelled'), ...board]
       default:
-        return this.end(taskId, 'error', summary)
+        return [...this.end(taskId, 'error', summary), ...board]
     }
   }
 
@@ -916,16 +955,193 @@ export class ClaudeMapper {
     const taskId = typeof message.task_id === 'string' ? message.task_id : null
     const patch = inputOf(message.patch)
     if (!taskId) return []
+    const endTime = typeof patch.end_time === 'number' ? patch.end_time : null
+    const backgrounded = patch.is_backgrounded === true ? this.backgroundMoved(taskId) : []
     switch (patch.status) {
       case 'completed':
-        return this.end(taskId, 'end_turn')
+        return [
+          ...backgrounded,
+          ...this.end(taskId, 'end_turn'),
+          ...this.backgroundEnded(taskId, 'completed', '', null, endTime),
+        ]
       case 'killed':
-        return this.end(taskId, 'cancelled')
-      case 'failed':
-        return this.end(taskId, 'error', typeof patch.error === 'string' ? patch.error : '')
+        return [
+          ...backgrounded,
+          ...this.end(taskId, 'cancelled'),
+          ...this.backgroundEnded(taskId, 'stopped', '', null, endTime),
+        ]
+      case 'failed': {
+        const error = typeof patch.error === 'string' ? patch.error : ''
+        return [
+          ...backgrounded,
+          ...this.end(taskId, 'error', error),
+          ...this.backgroundEnded(taskId, 'failed', error, null, endTime),
+        ]
+      }
       default:
-        return []
+        return backgrounded
     }
+  }
+
+  /** A command or monitor Claude Code started: listed unless it still blocks its tool call. */
+  private backgroundStarted(message: SystemMessage, taskId: string): Delivery[] {
+    const kind = backgroundKind(message.task_type)
+    if (kind === null || message.ambient === true || message.skip_transcript === true) return []
+    const tool =
+      typeof message.tool_use_id === 'string' ? this.tools.get(message.tool_use_id) : null
+    const title = taskTitle(
+      message.description,
+      inputOf(tool?.input).command,
+      message.workflow_name,
+    )
+    const command = this.taskCommand(kind, message.tool_use_id)
+    const known = this.background.get(taskId)
+    if (known?.status === 'running') {
+      // The report that listed it first may have come without its description or its call.
+      const next = {
+        ...known,
+        ...(title !== '' ? { title } : {}),
+        ...(command !== undefined ? { command } : {}),
+      }
+      if (next.title === known.title && next.command === known.command) return []
+      this.background.set(taskId, next)
+      return this.backgroundDelivery()
+    }
+    const view: BackgroundTaskView = {
+      id: taskId,
+      kind,
+      title,
+      ...(command !== undefined ? { command } : {}),
+      status: 'running',
+      startedAt: Date.now(),
+      endedAt: null,
+      summary: null,
+    }
+    if (message.is_backgrounded === false) {
+      this.foreground.set(taskId, view)
+      return []
+    }
+    this.background.delete(taskId)
+    this.background.set(taskId, view)
+    return this.backgroundDelivery()
+  }
+
+  /** The command of the Bash call that started a shell task, when that call is known. */
+  private taskCommand(kind: BackgroundTaskView['kind'], toolUseId: unknown): string | undefined {
+    if (kind !== 'shell' || typeof toolUseId !== 'string') return undefined
+    const command = inputOf(this.tools.get(toolUseId)?.input).command
+    return typeof command === 'string' && command !== ''
+      ? clip(command, TASK_COMMAND_LIMIT)
+      : undefined
+  }
+
+  /** A command that blocked its tool call has moved to the background: it joins the list. */
+  private backgroundMoved(taskId: string): Delivery[] {
+    const view = this.foreground.get(taskId)
+    if (!view) return []
+    this.foreground.delete(taskId)
+    this.background.set(taskId, view)
+    return this.backgroundDelivery()
+  }
+
+  /**
+   * Claude Code's whole set of live background tasks, which replaces what the list believes: a
+   * task it has not seen starts as running, and a running one missing from the set has ended.
+   */
+  private backgroundChanged(message: SystemMessage): Delivery[] {
+    if (!Array.isArray(message.tasks)) return []
+    const live = new Set<string>()
+    let changed = false
+    for (const item of message.tasks) {
+      const entry = inputOf(item)
+      const id = typeof entry.task_id === 'string' ? entry.task_id : null
+      if (id === null) continue
+      live.add(id)
+      if (entry.ambient === true) {
+        changed = this.background.delete(id) || changed
+        this.foreground.delete(id)
+        continue
+      }
+      const kind = typeof entry.subagent_type === 'string' ? null : backgroundKind(entry.task_type)
+      if (kind === null || this.background.has(id)) continue
+      const held = this.foreground.get(id)
+      this.foreground.delete(id)
+      const command = this.taskCommand(kind, entry.tool_use_id)
+      this.background.set(
+        id,
+        held ?? {
+          id,
+          kind,
+          title: taskTitle(entry.description),
+          ...(command !== undefined ? { command } : {}),
+          status: 'running',
+          startedAt: Date.now(),
+          endedAt: null,
+          summary: null,
+        },
+      )
+      changed = true
+    }
+    const now = Date.now()
+    for (const [id, task] of this.background) {
+      if (task.status !== 'running' || live.has(id)) continue
+      this.background.set(id, { ...task, status: 'completed', endedAt: now })
+      changed = true
+    }
+    return changed ? this.backgroundDelivery() : []
+  }
+
+  /** A listed task ended; one that ended already only learns how, from a later report. */
+  private backgroundEnded(
+    taskId: string,
+    status: 'completed' | 'failed' | 'stopped',
+    summary: string,
+    duration: number | null,
+    endTime: number | null = null,
+  ): Delivery[] {
+    if (this.foreground.delete(taskId)) return []
+    const task = this.background.get(taskId)
+    if (!task) return []
+    const how = summary.trim() === '' ? null : clip(summary.trim(), TASK_SUMMARY_LIMIT)
+    if (task.status !== 'running') {
+      if (task.summary !== null || how === null) return []
+      this.background.set(taskId, { ...task, summary: how })
+      return this.backgroundDelivery()
+    }
+    const endedAt = endTime ?? Date.now()
+    this.background.set(taskId, {
+      ...task,
+      status,
+      endedAt,
+      startedAt: duration === null ? task.startedAt : Math.min(task.startedAt, endedAt - duration),
+      summary: how,
+    })
+    return this.backgroundDelivery()
+  }
+
+  /** The list as the host shows it: every running task and the latest ones that ended. */
+  private backgroundDelivery(): Delivery[] {
+    // Tasks that ended in the same millisecond drop the one that started first.
+    const ended = [...this.background.values()]
+      .map((task, index) => ({ task, index }))
+      .filter(({ task }) => task.status !== 'running')
+      .sort((a, b) => (b.task.endedAt ?? 0) - (a.task.endedAt ?? 0) || b.index - a.index)
+    for (const { task } of ended.slice(ENDED_TASKS_KEPT)) this.background.delete(task.id)
+    const tasks = [...this.background.values()].map((task) => ({ ...task }))
+    return [
+      {
+        sessionId: this.sessionId,
+        map: () => ({ patches: [], effects: [{ kind: 'tasks', tasks }] }),
+      },
+    ]
+  }
+
+  /** The query that ran the tasks ended, and its Claude Code process with them. */
+  endBackground(): Delivery[] {
+    this.foreground.clear()
+    if (this.background.size === 0) return []
+    this.background.clear()
+    return this.backgroundDelivery()
   }
 
   /** Ends a running subagent, once: its first terminal message says how. */
@@ -991,6 +1207,16 @@ export class ClaudeMapper {
     }
     return deliveries.filter((delivery) => delivery.sessionId === this.sessionId)
   }
+}
+
+/** What a task is called: its description, else the command or workflow it runs. */
+function taskTitle(...candidates: unknown[]): string {
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue
+    const line = candidate.split('\n').find((text) => text.trim() !== '')
+    if (line) return clip(line.trim(), TASK_TITLE_LIMIT)
+  }
+  return ''
 }
 
 function inputOf(value: unknown): Record<string, unknown> {

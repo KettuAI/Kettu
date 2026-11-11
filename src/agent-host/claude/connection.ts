@@ -118,6 +118,8 @@ const TITLE_CONTEXT = 1000
 const TITLE_MINIMUM = 10
 /** How long a stop waits for Claude Code to exit before it goes on. */
 const EXIT_WAIT_MS = 5_000
+/** The most of a task's output the board reads, which is the tail Claude Code itself answers. */
+const TASK_OUTPUT_LIMIT = 8 * 1024
 const AUTH_STATUS_MS = 10_000
 /** JSON-RPC's code for a session the agent does not have, which the host reads. */
 const RESOURCE_NOT_FOUND = -32002
@@ -1035,6 +1037,7 @@ export class ClaudeConnection implements AgentConnection {
     input?.close()
     query?.close()
     for (const delivery of session.mapper.endAll('cancelled')) this.deliver(delivery)
+    for (const delivery of session.mapper.endBackground()) this.deliver(delivery)
     for (const [task, root] of this.children) if (root === session.id) this.children.delete(task)
     if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
     return new Promise((resolve) => {
@@ -1069,6 +1072,7 @@ export class ClaudeConnection implements AgentConnection {
       session.input = null
       session.stale = true
       for (const delivery of session.mapper.endAll('error')) this.deliver(delivery)
+      for (const delivery of session.mapper.endBackground()) this.deliver(delivery)
     }
     const turn = session.turn
     if (!turn) return
@@ -1587,6 +1591,31 @@ export class ClaudeConnection implements AgentConnection {
     session.turn.cancelled = true
     this.context.hooks.traffic('out', { method: 'interrupt', sessionId })
     await session.query.interrupt()
+  }
+
+  async stopTask(sessionId: string, taskId: string): Promise<void> {
+    const query = this.sessions.get(sessionId)?.query
+    if (!query) throw new AgentRequestError('agent_error', 'Claude Code is not running')
+    this.context.hooks.traffic('out', { method: 'stopTask', sessionId, taskId })
+    await query.stopTask(taskId)
+  }
+
+  async taskOutput(
+    sessionId: string,
+    taskId: string,
+  ): Promise<{ output: string; truncated: boolean }> {
+    const query = this.sessions.get(sessionId)?.query
+    if (!query) throw new AgentRequestError('agent_error', 'Claude Code is not running')
+    if (!query.getTaskOutput) {
+      throw new AgentRequestError('agent_error', 'This Claude Code cannot read task output')
+    }
+    const read = await query.getTaskOutput(taskId)
+    const output = typeof read.output === 'string' ? read.output : ''
+    const cut = output.length > TASK_OUTPUT_LIMIT
+    return {
+      output: cut ? output.slice(-TASK_OUTPUT_LIMIT) : output,
+      truncated: cut || read.truncated === true,
+    }
   }
 
   // Options.

@@ -184,6 +184,11 @@ export class FakeQuery implements Query {
     this.record('stopTask', taskId)
   }
 
+  async getTaskOutput(taskId: string) {
+    this.record('getTaskOutput', taskId)
+    return this.sdk.taskOutput
+  }
+
   async setMcpServers(servers: Record<string, McpServerConfig>): Promise<McpSetServersResult> {
     this.record('setMcpServers', servers)
     return { added: Object.keys(servers), removed: [], errors: {} }
@@ -245,6 +250,8 @@ export class FakeClaudeSdk implements ClaudeSdk {
   settingsError: Error | null = null
   settings: Record<string, unknown> = {}
   generatedTitle: string | null = null
+  /** What a query's `getTaskOutput` answers. */
+  taskOutput = { output: '', total_bytes: 0, truncated: false }
   context: ContextUsageAnswer = {
     categories: [
       { name: 'System prompt', tokens: 3000 },

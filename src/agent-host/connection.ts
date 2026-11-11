@@ -311,6 +311,10 @@ export interface AgentConnection {
    */
   steer(sessionId: string, prompt: readonly PromptBlock[]): Promise<'injected' | 'promptRequired'>
   cancel(sessionId: string): Promise<void>
+  /** Stops one of the session's background tasks. Absent where the agent reports none. */
+  stopTask?(sessionId: string, taskId: string): Promise<void>
+  /** The end of a background task's output, at most 8 KiB. */
+  taskOutput?(sessionId: string, taskId: string): Promise<{ output: string; truncated: boolean }>
   /**
    * Adds earlier messages to the history the session's model sees, ahead of its next turn. False
    * where this agent's version takes none, and the host sends them with the prompt instead.
