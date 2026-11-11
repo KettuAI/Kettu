@@ -38,6 +38,7 @@ import {
 } from '@renderer/stores/agent-options'
 import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
+import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
@@ -655,13 +656,18 @@ function BranchLabel({ projectPath }: { projectPath: string }) {
 }
 
 /**
- * The sessions changed last, each with what it is doing and its project, to open again; with none,
- * nothing shows. Hidden while a message is written, as the draft is the work at hand.
+ * The sessions changed last on the hosts the sidebar lists, each with what it is doing and its
+ * project, to open again; with none, nothing shows. Hidden while a message is written, as the draft is the work at hand.
  */
 function PickUp({ hidden }: { hidden: boolean }) {
   const { t } = useTranslation('session')
   const byId = useSessionsStore((s) => s.byId)
-  const sessions = useMemo(() => pickupSessions(byId), [byId])
+  const others = useOtherHosts()
+  const hostFilter = useViewStore((s) => s.hostFilter)
+  const sessions = useMemo(
+    () => pickupSessions(byId, others.length > 0 ? shownHosts(others, hostFilter) : null),
+    [byId, others, hostFilter],
+  )
   const projects = useProjectsStore((s) => s.projects)
   const now = useNow()
   if (sessions.length === 0) return null
