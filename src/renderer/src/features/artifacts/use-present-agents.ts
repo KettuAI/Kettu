@@ -4,7 +4,8 @@ import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
-import { sharedPageVisitors, useSharingStore } from '@renderer/stores/sharing'
+import { artifactHost } from '@renderer/lib/host'
+import { artifactSharing } from './artifact-host'
 import type { CanvasAgent } from './canvas-editor'
 import type { Presence } from './use-artifact'
 
@@ -62,8 +63,8 @@ const VISITORS_EVERY_MS = 30_000
  */
 export function useVisitors(id: string): number | null {
   // Self-hosted, nothing asks Kettu's service.
-  const cloudOff = useCloudOff()
-  const published = useSharingStore(
+  const cloudOff = useCloudOff() && artifactHost(id) === null
+  const published = artifactSharing(id).useSharingStore(
     (s) =>
       s.status?.published.some((p) => p.id === id && p.target === 'kettu' && !p.otherAccount) ??
       false,
@@ -74,9 +75,11 @@ export function useVisitors(id: string): number | null {
     if (!onKettu) return
     let live = true
     const ask = () =>
-      void sharedPageVisitors(id).then((count) => {
-        if (live) setCounted({ id, count })
-      })
+      void artifactSharing(id)
+        .visitors(id)
+        .then((count) => {
+          if (live) setCounted({ id, count })
+        })
     ask()
     const timer = setInterval(ask, VISITORS_EVERY_MS)
     return () => {

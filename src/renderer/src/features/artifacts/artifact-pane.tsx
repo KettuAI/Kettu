@@ -16,7 +16,8 @@ import {
   PanelButton,
   PaneSheet,
 } from '@renderer/features/shell/panel-button'
-import { host } from '@renderer/lib/host'
+import { host, learnArtifactHost } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { restoreArtifact, setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { openArtifact } from '@renderer/stores/view'
 import { anchorOf, pinsOf } from './anchors'
@@ -56,8 +57,11 @@ export default function ArtifactPane({
 }) {
   const { t } = useTranslation('artifacts')
   const [since] = useState(() => performance.now())
+  // A session's pane shows the artifacts of the host it runs on.
+  const onHost = hostOfPath(projectPath)
+  if (onHost !== null) learnArtifactHost(id, onHost)
   const artifact = useArtifact(id, null)
-  const listsRead = useListsRead()
+  const listsRead = useListsRead(id)
   const states = useArtifactStates(artifact, listsRead)
   const controls = useMemo(() => new CanvasControls(), [])
   const { summary, shown, url } = artifact

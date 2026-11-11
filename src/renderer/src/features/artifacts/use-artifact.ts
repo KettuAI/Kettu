@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { versionUrlPath } from '@shared/artifact-page'
 import type { SessionViewer } from '@shared/agent-host'
 import type { ArtifactSession, ArtifactSummary } from '@shared/artifacts'
-import { errorCode, host } from '@renderer/lib/host'
+import { artifactHost, artifactRefOf, errorCode, host } from '@renderer/lib/host'
 import {
   artifactListShown,
   markArtifactOpened,
+  onArtifactEvent,
   useArtifactsStore,
 } from '@renderer/stores/artifacts'
-import { useConnectionStore } from '@renderer/stores/connection'
+import { useArtifactHostConnected } from './artifact-host'
 import { CANVAS_FILE, parseCanvasDoc, type CanvasDoc } from '@shared/canvas-doc'
 import { layoutCanvas, parseCanvas, type CanvasLayout } from './canvas'
 
@@ -74,7 +75,7 @@ export function useArtifact(id: string, version: number | null) {
   const [reloads, setReloads] = useState(0)
   const [announced, setAnnounced] = useState(0)
   const lastRead = useRef<number | null>(null)
-  const connected = useConnectionStore((s) => s.agentHost === 'connected')
+  const connected = useArtifactHostConnected(id)
   const summary = useSummary(id)
 
   useEffect(() => {
@@ -87,7 +88,7 @@ export function useArtifact(id: string, version: number | null) {
   useEffect(() => {
     let live = true
     let opened: string | null = null
-    window.kettu.artifacts.open(id).then(
+    window.kettu.artifacts.open(artifactRefOf(id)).then(
       (result) => {
         if ('failed' in result) {
           if (live) setOpenError(OPEN_ERRORS[result.failed])
@@ -163,7 +164,8 @@ export function useArtifact(id: string, version: number | null) {
   useEffect(() => {
     if (!connected) return
     void host('artifacts.watch', { id }).catch(() => {})
-    const off = window.kettu.agents.onEvent((event) => {
+    const off = onArtifactEvent((event, hostId) => {
+      if (hostId !== artifactHost(id)) return
       if (event.type === 'artifacts.activity' && event.id === id) {
         setPresence({ viewers: event.viewers, sessions: event.sessions, clients: event.clients })
       } else if (event.type === 'artifacts.version' && event.id === id) {
@@ -233,9 +235,13 @@ function useSummary(id: string): ArtifactSummary | null {
   )
 }
 
-/** Whether both lists are in, so an artifact in neither is gone. */
-export function useListsRead(): boolean {
-  return useArtifactsStore((s) => s.list !== null && s.deleted !== null)
+/** Whether both lists of the artifact's host are in, so an artifact in neither is gone. */
+export function useListsRead(id: string): boolean {
+  return useArtifactsStore((s) => {
+    const hostId = artifactHost(id)
+    if (hostId !== null && !s.hostsRead.includes(hostId)) return false
+    return s.list !== null && s.deleted !== null
+  })
 }
 
 /**
@@ -255,7 +261,7 @@ export function pageUrl(
 function readFailure(reason: unknown): ViewerError {
   const code = errorCode(reason)
   if (code === 'not_found') return 'notFound'
-  if (code === 'host_restarted') return 'unavailable'
+  if (code === 'host_restarted' || code === 'host_offline') return 'unavailable'
   console.error('Could not read the artifact', reason)
   return 'failed'
 }

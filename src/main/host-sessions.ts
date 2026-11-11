@@ -79,6 +79,11 @@ export interface HostSessionsOptions {
   originDecided?(hostId: string, event: unknown): void
   /** The host's session ended. */
   ended?(hostId: string): void
+  /**
+   * A host's event about its artifacts, for main's copy of them. An `artifacts.runtime` event is
+   * main's alone, since only main opens streams there; the windows hear the others too.
+   */
+  artifactEvent?(hostId: string, event: { type: string }): void
   media?: HostMediaGrants
 }
 
@@ -392,6 +397,14 @@ export class HostSessions {
     if (message.type === 'event' && event?.type === 'browser.originDecided') {
       this.options.originDecided?.(hostId, event)
       return
+    }
+    if (
+      message.type === 'event' &&
+      typeof event?.type === 'string' &&
+      event.type.startsWith('artifacts.')
+    ) {
+      this.options.artifactEvent?.(hostId, event as { type: string })
+      if (event.type === 'artifacts.runtime') return
     }
     for (const window of this.windows) {
       this.post(window, { kind: 'message', hostId, message: message as HostSessionMessage })

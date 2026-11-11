@@ -6,8 +6,9 @@ import {
   type CanvasObject,
   type CanvasOp,
 } from '@shared/canvas-doc'
-import { host } from '@renderer/lib/host'
-import { useConnectionStore } from '@renderer/stores/connection'
+import { artifactHost, host } from '@renderer/lib/host'
+import { onArtifactEvent } from '@renderer/stores/artifacts'
+import { useArtifactHostConnected } from './artifact-host'
 
 /** How many of this client's changes undo can step back through. */
 const UNDO_DEPTH = 200
@@ -101,7 +102,7 @@ export function inverseOps(doc: CanvasDoc, ops: readonly CanvasOp[]): CanvasOp[]
  * this client's own.
  */
 export function useCanvasDoc(id: string, enabled: boolean) {
-  const connected = useConnectionStore((s) => s.agentHost === 'connected')
+  const connected = useArtifactHostConnected(id)
   const client = useMemo(() => `c${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`, [])
   const [state, setState] = useState<CanvasState | null>(null)
   const confirmed = useRef<CanvasDoc | null>(null)
@@ -133,8 +134,9 @@ export function useCanvasDoc(id: string, enabled: boolean) {
         if (live) setFailed(true)
       },
     )
-    const off = window.kettu.agents.onEvent((event) => {
+    const off = onArtifactEvent((event, hostId) => {
       if (event.type !== 'artifacts.canvas' || event.id !== id) return
+      if (hostId !== artifactHost(id)) return
       if (event.doc) {
         confirmed.current = event.doc
         setState((s) => ({

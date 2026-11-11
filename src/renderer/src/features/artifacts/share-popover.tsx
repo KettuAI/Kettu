@@ -37,26 +37,18 @@ import {
 } from '@renderer/components/ui/alert-dialog'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { useCloudOff } from '@renderer/lib/cloud'
 import { longAgo, storageBytes } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
+import { useCloudOffHere } from '@renderer/features/settings/use-cloud-off-here'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { isWeb } from '@renderer/lib/platform'
 import { readJson, writeJson } from '@renderer/lib/storage'
 import { useNow } from '@renderer/lib/use-now'
 import { signIn, useAccountStore } from '@renderer/stores/account'
-import {
-  canChange,
-  newSharedCode,
-  publishArtifact,
-  refreshSharing,
-  setSharedAccess,
-  sharedPageLink,
-  unpublishArtifact,
-  updateSharedArtifact,
-  useSharingStore,
-} from '@renderer/stores/sharing'
+import { canChange } from '@renderer/stores/sharing'
 import { openSettings } from '@renderer/stores/view'
 import './viewer.css'
+import { ArtifactHostScope } from './artifact-host-scope'
 
 /** The warning shown before the first publish, once per device. */
 const NOTICE_KEY = 'sharing.firstPublishSeen'
@@ -105,7 +97,8 @@ function AccessChoice({
 /** The used and total storage, as "1.2 MB of 2 GB cloud storage used". */
 function StorageLine() {
   const { t } = useTranslation('artifacts')
-  const storage = useSharingStore((s) => s.status?.kettu.storage ?? null)
+  const { sharing } = useHostScope()
+  const storage = sharing.useSharingStore((s) => s.status?.kettu.storage ?? null)
   if (!storage) return null
   return (
     <p className="k-share__meta">
@@ -118,8 +111,10 @@ function StorageLine() {
 function SignInButton() {
   const { t } = useTranslation('artifacts')
   const signingIn = useAccountStore((s) => s.status?.state === 'signing-in')
-  const cloudOff = useCloudOff()
-  if (isWeb || cloudOff) return null
+  const { hostId } = useHostScope()
+  const cloudOff = useCloudOffHere()
+  // Another host signs in on its own computer.
+  if (isWeb || cloudOff || hostId !== null) return null
   return (
     <Button variant="secondary" size="sm" loading={signingIn} onClick={() => void signIn()}>
       {t('share.signIn')}
@@ -127,13 +122,7 @@ function SignInButton() {
   )
 }
 
-export function ShareButton({
-  id,
-  title,
-  shown,
-  head,
-  iconOnly = false,
-}: {
+interface ShareButtonProps {
   id: string
   /** The artifact's title, which Unpublish asks about. */
   title: string
@@ -143,10 +132,22 @@ export function ShareButton({
   head: number
   /** A quiet icon button with no label, as on a reply's artifact card. */
   iconOnly?: boolean
-}) {
+}
+
+/** Publishing happens on the artifact's host, with that host's accounts. */
+export function ShareButton(props: ShareButtonProps) {
+  return (
+    <ArtifactHostScope id={props.id}>
+      <ShareButtonBody {...props} />
+    </ArtifactHostScope>
+  )
+}
+
+function ShareButtonBody({ id, title, shown, head, iconOnly = false }: ShareButtonProps) {
   const { t } = useTranslation('artifacts')
   const onHost = useHostContext()
-  const status = useSharingStore((s) => s.status)
+  const { sharing } = useHostScope()
+  const status = sharing.useSharingStore((s) => s.status)
   const account = status?.cloudflare ?? null
   const kettu = status?.kettu.account ?? null
   const loaded = status !== null
@@ -156,7 +157,7 @@ export function ShareButton({
   const now = useNow()
   const [open, setOpen] = useState(false)
   const [chosen, setChosen] = useState<SharingTarget>('kettu')
-  const cloudOff = useCloudOff()
+  const cloudOff = useCloudOffHere()
   // Without a Cloudflare account there is no choice: pages go to Kettu. Self-hosted, they go only
   // to the own Cloudflare account.
   const target: SharingTarget = cloudOff ? 'cloudflare' : account ? chosen : 'kettu'
@@ -183,8 +184,8 @@ export function ShareButton({
 
   // The addresses and the storage as the service has them now, each time the panel opens.
   useEffect(() => {
-    if (open && signedIn && !cloudOff) void refreshSharing()
-  }, [open, signedIn, cloudOff])
+    if (open && signedIn && !cloudOff) void sharing.refresh()
+  }, [open, signedIn, cloudOff, sharing])
 
   const run = (action: () => Promise<SharingResult>): void => {
     retry.current = () => run(action)
@@ -202,7 +203,7 @@ export function ShareButton({
       setNoticeSeen(true)
     }
     // Cloudflare has no levels: whoever has a Worker's address opens it.
-    run(() => publishArtifact(id, shown, target, target === 'kettu' ? access : 'public'))
+    run(() => sharing.publish(id, shown, target, target === 'kettu' ? access : 'public'))
   }
 
   const copy = (): void => {
@@ -232,7 +233,7 @@ export function ShareButton({
     if (isWeb || !published || published.access === 'public' || !canManage) return
     event.preventDefault()
     const fallback = published.url
-    void sharedPageLink(id).then((result) => {
+    void sharing.openLink(id).then((result) => {
       window.open('url' in result ? result.url : fallback, '_blank', 'noreferrer')
     })
   }
@@ -253,7 +254,7 @@ export function ShareButton({
   const unpublish = (): void => {
     setUnpublishing(true)
     setUnpublishFailure(null)
-    void unpublishArtifact(id).then((result) => {
+    void sharing.unpublish(id).then((result) => {
       setUnpublishing(false)
       if ('failed' in result) setUnpublishFailure(result)
       else setConfirming(false)
@@ -317,7 +318,7 @@ export function ShareButton({
           <AccessChoice
             value={published.access}
             disabled={busy}
-            onChange={(next) => run(() => setSharedAccess(id, next))}
+            onChange={(next) => run(() => sharing.setAccess(id, next))}
           />
         )}
         {published.target === 'kettu' && !canManage && !cloudOff && (
@@ -353,7 +354,7 @@ export function ShareButton({
                       size="sm"
                       className="k-share__code-new"
                       disabled={busy}
-                      onClick={() => run(() => newSharedCode(id))}
+                      onClick={() => run(() => sharing.newCode(id))}
                     />
                   }
                 >
@@ -410,7 +411,7 @@ export function ShareButton({
             size="sm"
             loading={busy}
             className="k-share__wide"
-            onClick={() => run(() => updateSharedArtifact(id, head))}
+            onClick={() => run(() => sharing.update(id, head))}
           >
             {t('share.update', { version: head })}
           </Button>

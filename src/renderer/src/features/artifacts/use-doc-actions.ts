@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactSummary } from '@shared/artifacts'
 import { toast } from '@renderer/components/ui/toast'
-import { errorMessage } from '@renderer/lib/host'
+import { artifactRefOf, errorMessage } from '@renderer/lib/host'
 import { useHostHas } from '@renderer/lib/host-features'
 import type { CanvasAgent, DocPageActions } from './canvas-editor'
 import { docLayout } from './canvas-model'
@@ -49,7 +49,7 @@ export function useDocActions({
               const index = indexOf(page.id)
               window.kettu.artifacts
                 .png(
-                  id,
+                  artifactRefOf(id),
                   shown.version,
                   { group: 0, index: Math.max(0, index) + 1, file: page.file },
                   clampSize(page.width, page.height),

@@ -23,7 +23,12 @@ import {
   receivePrepared,
 } from '@renderer/features/session/new-session/prepared'
 import { hostAgentChanged, hostAgentRemoved, useAgentsStore } from '@renderer/stores/agents'
-import { artifactsChanged } from '@renderer/stores/artifacts'
+import {
+  artifactsChanged,
+  artifactsHostClosed,
+  artifactsHostOpened,
+  receiveArtifactEvent,
+} from '@renderer/stores/artifacts'
 import { useConnectionStore } from '@renderer/stores/connection'
 import {
   loadGitTools,
@@ -122,6 +127,8 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       receiveAgentOptions(event.options, hostId)
       return
   }
+  receiveArtifactEvent(event, hostId)
+  if (event.type === 'artifacts.changed') artifactsChanged(hostId)
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
   if (hostId !== null) return hostScopeEvent(hostId, event)
   switch (event.type) {
@@ -142,9 +149,6 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.connectionChanged':
       marketConnectionChanged(event)
-      break
-    case 'artifacts.changed':
-      artifactsChanged()
       break
     case 'routine.changed':
       useRoutinesStore.getState().receive(event.routine)
@@ -278,12 +282,14 @@ export function bootstrap(): Promise<unknown> {
     initHostSessions({
       event: (hostId, event) => onHostEvent(event, hostId),
       opened: (hostId) => {
+        artifactsHostOpened(hostId)
         hostScopeOpened(hostId)
         hostRestarted(hostId)
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
         showFront(true)
         rewatchGit(hostId)
       },
+      closed: (hostId) => artifactsHostClosed(hostId),
       resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
     })
     initBrowser()

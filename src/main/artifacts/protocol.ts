@@ -16,6 +16,7 @@ import {
   type SelectMessage,
 } from '@shared/artifact-runtime/page-messages'
 import { VIEWER_PREFIX, viewerBase, viewerPage } from '@shared/artifact-types'
+import { parseArtifactRef } from '@shared/artifacts'
 import type { ArtifactContentResult } from '@shared/host-control'
 import type { Locale } from '@shared/locale'
 import { createLogger } from '../log'
@@ -32,6 +33,9 @@ const log = createLogger('artifacts')
  */
 export const CONTENT_WAIT_MS = 2_000
 
+/** The same wait for an artifact of another host, whose files main fetches before it names them. */
+export const REMOTE_CONTENT_WAIT_MS = 30_000
+
 /** A standard scheme gives each host its own origin and storage. */
 export const artifactScheme: CustomScheme = {
   scheme: ARTIFACT_SCHEME,
@@ -47,6 +51,8 @@ export const artifactScheme: CustomScheme = {
 export interface ArtifactSource {
   /** `artifacts/content/` in the data folder, where the bytes of every file lie. */
   contentDir: string
+  /** Where the files main fetched from other hosts lie, when it shows their artifacts. */
+  remoteDir?: string
   /** The artifact on this origin id, when it was opened in this run. */
   artifactOf(host: string): string | undefined
   content(id: string, version: number | null): Promise<ArtifactContentResult>
@@ -95,13 +101,29 @@ function answer(status: number): Response {
   return new Response(status === 404 ? 'Not found' : null, { status, headers })
 }
 
-function withinWait(content: Promise<ArtifactContentResult>): Promise<ArtifactContentResult> {
+/**
+ * Whether `file` lies where the files of the artifact `id` are kept: this computer's in the
+ * content folder, another host's in the folder main fetched them into.
+ */
+export function isStored(
+  source: Pick<ArtifactSource, 'contentDir' | 'remoteDir'>,
+  id: string,
+  file: string,
+): boolean {
+  if (parseArtifactRef(id)?.hostId == null) return isInside(source.contentDir, file)
+  return source.remoteDir !== undefined && isInside(source.remoteDir, file)
+}
+
+function withinWait(
+  content: Promise<ArtifactContentResult>,
+  ms: number,
+): Promise<ArtifactContentResult> {
   let timer: NodeJS.Timeout | undefined
   const late = new Promise<ArtifactContentResult>((resolve) => {
     timer = setTimeout(() => {
-      log.warn(`The agent host named no files within ${CONTENT_WAIT_MS} ms`)
+      log.warn(`The host named no files within ${ms} ms`)
       resolve({ kind: 'failed' })
-    }, CONTENT_WAIT_MS)
+    }, ms)
   })
   return Promise.race([content, late]).finally(() => clearTimeout(timer))
 }
@@ -146,7 +168,11 @@ export async function respond(request: Request, source: ArtifactSource): Promise
   if (request.method !== 'GET') return answer(405)
   const wanted = parseRequest(request.url, (host) => source.artifactOf(host))
   if (!wanted) return answer(404)
-  const found = await withinWait(source.content(wanted.id, wanted.version))
+  const remote = parseArtifactRef(wanted.id)?.hostId != null
+  const found = await withinWait(
+    source.content(wanted.id, wanted.version),
+    remote ? REMOTE_CONTENT_WAIT_MS : CONTENT_WAIT_MS,
+  )
   if (found.kind === 'not_found') return answer(404)
   if (found.kind === 'failed') return answer(503)
   if (found.type) {
@@ -171,7 +197,7 @@ export async function respond(request: Request, source: ArtifactSource): Promise
   }
   const file = found.files.find((f) => f.path === wanted.path)
   if (!file) return answer(404)
-  if (!isInside(source.contentDir, file.file)) {
+  if (!isStored(source, wanted.id, file.file)) {
     log.error(`Refused ${wanted.id}'s file outside the content folder: ${file.file}`)
     return answer(404)
   }

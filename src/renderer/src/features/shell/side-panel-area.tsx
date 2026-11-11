@@ -96,11 +96,11 @@ export function SidePanelArea({
 }) {
   const remote = hostOfPath(projectPath) !== null
   const terminal = useTerminalAllowed(projectPath)
-  // Another host's project has its files and this computer's browser through its connection, and
-  // its terminal while the host allows it.
+  // Another host's project has its files, its artifacts and this computer's browser through its
+  // connection, and its terminal while the host allows it.
   const pane = useViewStore((s) => {
     const shown = panel ? s.sidePane[panel] : undefined
-    if (!remote || shown === 'files' || shown === 'browser') return shown
+    if (!remote || shown === 'files' || shown === 'browser' || shown === 'artifact') return shown
     return shown === 'terminal' && terminal ? shown : undefined
   })
   const artifactId = useViewStore((s) => (panel ? s.sideArtifact[panel] : undefined))

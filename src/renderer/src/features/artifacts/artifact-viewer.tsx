@@ -16,13 +16,14 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
-import { errorMessage, host } from '@renderer/lib/host'
+import { artifactRefOf, errorMessage, host } from '@renderer/lib/host'
 import { useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
 import { restoreArtifact, restoreVersion } from '@renderer/stores/artifacts'
 import { closeArtifact, useViewStore } from '@renderer/stores/view'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { anchorOf, pinsOf } from './anchors'
+import { useArtifactShares } from './artifact-host'
 import { CanvasEditor } from './canvas-editor'
 import { PresenceFaces } from './presence-faces'
 import { noteAuthor, usePresentAgents, useVisitors } from './use-present-agents'
@@ -85,7 +86,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   const area = useRef<HTMLDivElement>(null)
   const [since] = useState(() => performance.now())
   const artifact = useArtifact(id, picked)
-  const listsRead = useListsRead()
+  const listsRead = useListsRead(id)
   const controls = useMemo(() => new CanvasControls(), [])
   const { summary, shown, url } = artifact
   const head = summary?.version ?? null
@@ -97,7 +98,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   const earlier = picked !== null && head !== null && picked < head ? picked : null
   const title = summary?.title ?? shown?.title ?? ''
   // Publishing takes the account the host keeps, which the daemon has none of.
-  const shares = useHostHas('sharing') === true
+  const shares = useArtifactShares(id)
   // Only a desktop host renders a page apart from the window.
   const renders = useHostHas('thumbnails') === true
   const editor = useMemo(() => (url ? new ArtifactEditor(url.slice(0, -1)) : null), [url])
@@ -160,7 +161,13 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         : clampSize(rect?.width ?? 1280, rect?.height ?? 800)
       const name = page && pageName ? `${title} - ${pageName(index!)}` : title
       window.kettu.artifacts
-        .png(id, shown.version, page ? { group: page.group, index: page.index } : null, size, name)
+        .png(
+          artifactRefOf(id),
+          shown.version,
+          page ? { group: page.group, index: page.index } : null,
+          size,
+          name,
+        )
         .catch((error: unknown) =>
           toast(t('canvas.pngFailed', { error: errorMessage(error) }), undefined, {
             tone: 'warning',
@@ -519,7 +526,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
                 icon={LinkSquare02Icon}
                 onClick={() =>
                   void window.kettu.artifacts
-                    .openExternal(id, shown.version)
+                    .openExternal(artifactRefOf(id), shown.version)
                     .catch((error: unknown) => console.error(`Could not open ${id}`, error))
                 }
               />

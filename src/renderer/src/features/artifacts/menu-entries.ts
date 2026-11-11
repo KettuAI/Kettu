@@ -13,13 +13,14 @@ import {
 import { useTranslation } from 'react-i18next'
 import { NO_SESSION } from '@shared/artifacts'
 import { EXPORT_FORMATS, type ArtifactTypeName } from '@shared/artifact-types'
+import { artifactRefOf } from '@renderer/lib/host'
 import type { MenuItem } from '@renderer/components/affect/app-shell'
 import { askArtifactDialog, deleteArtifact, restoreArtifact } from '@renderer/stores/artifacts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useHostHas } from '@renderer/lib/host-features'
 import { isWeb } from '@renderer/lib/platform'
-import { isPublished, useSharingStore } from '@renderer/stores/sharing'
 import { openSessionWithArtifact } from '@renderer/stores/view'
+import { useArtifactPublished } from './artifact-host'
 import { removeCard } from './card-dust'
 
 /** Whether this browser can save a folder, which exporting a version of several files needs. */
@@ -86,9 +87,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
     target.sessionId === NO_SESSION ? null : (s.byId[target.sessionId] ?? null),
   )
   // Deleting a published artifact asks first, so the link can be taken down with it.
-  const asks = useSharingStore(
-    (s) => s.status?.published.some((page) => page.id === target.id) ?? false,
-  )
+  const asks = useArtifactPublished(target.id) ?? false
   // A PDF is printed by a desktop app, also for the web client it serves.
   const prints = useHostHas('thumbnails')
   const failed = (what: string) => (error: unknown) =>
@@ -116,7 +115,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
             id: target.id,
             title: target.title,
             versions: target.versions,
-            published: isPublished(target.id),
+            published: asks,
           }),
       },
     ]
@@ -137,7 +136,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
             disabled: blocked,
             run: () =>
               void window.kettu.artifacts
-                .exportAs(target.id, target.version, format)
+                .exportAs(artifactRefOf(target.id), target.version, format)
                 .catch(failed(`export as ${format}`)),
           }
         })
@@ -149,7 +148,9 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
           icon: Download04Icon,
           disabled: noFolder,
           run: () =>
-            void window.kettu.artifacts.export(target.id, target.version).catch(failed('export')),
+            void window.kettu.artifacts
+              .export(artifactRefOf(target.id), target.version)
+              .catch(failed('export')),
         },
       ]
   const entries: Entry[] = []
@@ -165,7 +166,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
       icon: LinkSquare02Icon,
       run: () =>
         void window.kettu.artifacts
-          .openExternal(target.id, target.version)
+          .openExternal(artifactRefOf(target.id), target.version)
           .catch(failed('open in the browser')),
     })
   }
@@ -218,7 +219,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
     danger: true,
     divider: true,
     run: () => {
-      if (isPublished(target.id)) {
+      if (asks) {
         askArtifactDialog({ kind: 'delete', id: target.id, title: target.title, onDeleted })
         return
       }

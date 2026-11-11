@@ -11,6 +11,7 @@ import {
   webContents,
 } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { ARTIFACT_ID, parseArtifactRef } from '@shared/artifacts'
 import { BROWSER_PARTITION } from '@shared/browser'
 import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
@@ -27,6 +28,7 @@ import { AgentFolders } from './agent-folders'
 import { AgentHost } from './agent-host'
 import { Artifacts, disableDnsPrefetching } from './artifacts'
 import { artifactScheme } from './artifacts/protocol'
+import { RemoteArtifacts } from './artifacts/remote'
 import { AppStateStore } from './app-state'
 import { accountAvatarRequestUrl, Avatars } from './avatars'
 import { applyBadgeTo, setBadgeCount, setBadgeEnabled } from './badge'
@@ -520,9 +522,37 @@ async function start(): Promise<void> {
   const hostSessions: HostSessions = new HostSessions({
     browserCall: (hostId, call) => void remoteBrowser.call(hostId, call),
     originDecided: (hostId, event) => remoteBrowser.originDecided(hostId, event),
-    ended: (hostId) => remoteBrowser.hostClosed(hostId),
+    ended: (hostId) => {
+      remoteBrowser.hostClosed(hostId)
+      remoteArtifacts.ended(hostId)
+    },
+    artifactEvent: (hostId, event) => {
+      if (event.type === 'artifacts.runtime') remoteArtifacts.streamed(hostId, event)
+      else if (event.type === 'artifacts.changed' || event.type === 'artifacts.version') {
+        remoteArtifacts.changed()
+      }
+    },
     media: hostMedia,
   })
+  const remoteArtifactsDir = join(userDataPath, 'artifacts', 'remote')
+  const remoteArtifacts = new RemoteArtifacts({
+    call: (hostId, method, params) => hostSessions.call(hostId, method, params),
+    dir: remoteArtifactsDir,
+  })
+  await remoteArtifacts.clear().catch((error: unknown) => {
+    log.warn(`Could not remove the files fetched from other hosts: ${String(error)}`)
+  })
+  /** An artifact a window names, on this computer or on another host. */
+  const artifactOn = (ref: string): { hostId: string | null; id: string } => {
+    const parsed = parseArtifactRef(ref)
+    if (!parsed) throw new Error('Not an artifact id')
+    return parsed
+  }
+  /** An id a paired device names, which is this computer's alone: never another host's. */
+  const ownArtifact = (id: unknown): unknown => {
+    if (typeof id !== 'string' || !ARTIFACT_ID.test(id)) throw new Error('Not an artifact id')
+    return id
+  }
   const hostsChanged = (): void => {
     hostSessions.connections(remoteHost.hosts)
     broadcast('hosts:changed', hostsStatus())
@@ -577,13 +607,29 @@ async function start(): Promise<void> {
     hostClosed: (hostId, port) => hostSessions.closed(hostId, port),
   })
   const artifacts = new Artifacts({
-    content: (id, version) => agentHost.artifactContent(id, version),
+    content: (ref, version) => {
+      const { hostId, id } = artifactOn(ref)
+      return hostId === null
+        ? agentHost.artifactContent(id, version)
+        : remoteArtifacts.content(hostId, id, version)
+    },
     contentDir: join(userDataPath, 'artifacts', 'content'),
+    remoteDir: remoteArtifactsDir,
     thumbnailDir: join(userDataPath, 'artifacts', 'thumbnails'),
     importFile: (path, project) => agentHost.artifactImport(path, project),
-    runtime: (id, message, answer) => agentHost.artifactRuntime(id, message, answer),
+    runtime: (ref, message, answer) => {
+      const { hostId, id } = artifactOn(ref)
+      return hostId === null
+        ? agentHost.artifactRuntime(id, message, answer)
+        : remoteArtifacts.runtime(hostId, id, message, answer)
+    },
     viewersDir: join(__dirname, '../viewers'),
-    exportVersion: (id, version, format) => agentHost.artifactExport(id, version, format),
+    exportVersion: (ref, version, format) => {
+      const { hostId, id } = artifactOn(ref)
+      return hostId === null
+        ? agentHost.artifactExport(id, version, format)
+        : remoteArtifacts.exportVersion(hostId, id, version, format)
+    },
   })
   await artifacts.install(session.defaultSession)
   // The window's page only: the menu bar panel's shows no media.
@@ -732,9 +778,9 @@ async function start(): Promise<void> {
     updates: updater,
     themes,
     marketKeys,
-    thumbnail: (id, version, layout) => artifacts.thumbnail(id, version, layout),
-    png: (id, version, page, size) => artifacts.png(id, version, page, size),
-    printPdf: (id, version) => artifacts.printPdf(id, version),
+    thumbnail: (id, version, layout) => artifacts.thumbnail(ownArtifact(id), version, layout),
+    png: (id, version, page, size) => artifacts.png(ownArtifact(id), version, page, size),
+    printPdf: (id, version) => artifacts.printPdf(ownArtifact(id), version),
     report: (request) => reports.forDevice(request),
     submitReport: (ref) => reports.submit(ref),
     send: (event, deviceId) => remoteHost.adminEvent(event, deviceId),

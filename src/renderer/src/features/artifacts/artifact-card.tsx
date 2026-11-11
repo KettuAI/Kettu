@@ -14,8 +14,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { longAgo, shortAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
-import { useSharingStore } from '@renderer/stores/sharing'
 import { openArtifact } from '@renderer/stores/view'
+import { useArtifactPublished } from './artifact-host'
 import { ArtifactMenuItems } from './artifact-menu'
 import { useArtifactMenu } from './menu-entries'
 import { artifactKind, type ArtifactKind } from './model'
@@ -68,9 +68,7 @@ export const ArtifactCard = memo(function ArtifactCard({
   const more = useRef<HTMLButtonElement>(null)
   const thumbnail = useThumbnail(artifact, useInView(card))
   const [contextOpen, setContextOpen] = useState(false)
-  const shared = useSharingStore(
-    (s) => s.status?.published.some((page) => page.id === artifact.id) ?? false,
-  )
+  const shared = useArtifactPublished(artifact.id) ?? false
   const kind = artifactKind(artifact)
   const target = {
     id: artifact.id,

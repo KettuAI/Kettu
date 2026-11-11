@@ -768,6 +768,8 @@ function ImportMenu({
 }) {
   const { t } = useTranslation('artifacts')
   const projects = useProjectsStore((s) => s.projects)
+  // A file is read by the host it lies on, so it goes into a project of this computer's.
+  const own = useMemo(() => projects.filter((p) => hostOfPath(p.path) === null), [projects])
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -796,7 +798,7 @@ function ImportMenu({
               <DropdownMenuSubContent className="w-58 max-w-(--available-width)">
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>{t('page.importInto')}</DropdownMenuLabel>
-                  {projects.map((project) => (
+                  {own.map((project) => (
                     <DropdownMenuItem
                       key={project.path}
                       onClick={() => void importArtifact(project.path, kind)}
@@ -805,7 +807,7 @@ function ImportMenu({
                       <span className="truncate">{project.name}</span>
                     </DropdownMenuItem>
                   ))}
-                  {projects.length > 0 && <DropdownMenuSeparator />}
+                  {own.length > 0 && <DropdownMenuSeparator />}
                   <DropdownMenuItem onClick={() => void importArtifact(null, kind)}>
                     {t('page.noProject')}
                   </DropdownMenuItem>
