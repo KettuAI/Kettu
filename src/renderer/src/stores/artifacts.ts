@@ -24,6 +24,8 @@ interface ArtifactsStore {
    * of its sessions is gone.
    */
   hostsRead: readonly string[]
+  /** The lists last read from each other host that is away now, for a window narrowed to it. */
+  awayLists: Readonly<Record<string, ArtifactSummary[]>>
   /** Why the last read failed, until a read succeeds. */
   error: string | null
   /** The page's filters, kept while the viewer shows so Back returns to the same list. */
@@ -64,6 +66,7 @@ export const useArtifactsStore = create<ArtifactsStore>()(() => ({
   list: null,
   deleted: null,
   hostsRead: [],
+  awayLists: {},
   error: null,
   filter: '',
   kindFilter: null,
@@ -143,6 +146,7 @@ function read(hostId: string | null): void {
         if (hostId === null) for (const a of [...list, ...deleted]) learnArtifactHost(a.id, null)
         lists.set(hostId, { list, deleted })
         if (hostId === null) useArtifactsStore.setState({ error: null })
+        else forgetAway(hostId)
         publish()
       },
       (error: unknown) => {
@@ -183,12 +187,28 @@ export function artifactsHostOpened(hostId: string): void {
   artifactsChanged(hostId)
 }
 
-/** The session ended, or the host is forgotten: its artifacts leave the lists. */
+/**
+ * The session ended, or the host is forgotten: its artifacts leave the lists, and what was read
+ * stays aside for a window narrowed to that host.
+ */
 export function artifactsHostClosed(hostId: string): void {
   hosts.delete(hostId)
   stale.delete(hostId)
   readAgain.delete(hostId)
-  if (lists.delete(hostId)) publish()
+  const last = lists.get(hostId)
+  if (!last) return
+  lists.delete(hostId)
+  useArtifactsStore.setState((s) => ({ awayLists: { ...s.awayLists, [hostId]: last.list } }))
+  publish()
+}
+
+function forgetAway(hostId: string): void {
+  if (!(hostId in useArtifactsStore.getState().awayLists)) return
+  useArtifactsStore.setState((s) => {
+    const awayLists = { ...s.awayLists }
+    delete awayLists[hostId]
+    return { awayLists }
+  })
 }
 
 type ArtifactEvent = Extract<HostEvent, { type: `artifacts.${string}` }>

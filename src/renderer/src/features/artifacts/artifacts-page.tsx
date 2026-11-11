@@ -53,7 +53,11 @@ import { Notice } from '@renderer/features/routines/kit'
 import { basename, longAgo } from '@renderer/lib/format'
 import { useHostContext } from '@renderer/lib/host-features'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { isMod, isWeb } from '@renderer/lib/platform'
+import { artifactHost } from '@renderer/lib/host'
+import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
+import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
+import { useWindowArtifacts } from './window-artifacts'
+import { isMac, isMod, isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { agentName, useAgentsStore } from '@renderer/stores/agents'
 import {
@@ -119,8 +123,13 @@ function leaveRecentlyDeleted(): void {
  */
 export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const { t, i18n } = useTranslation(['artifacts', 'common'])
-  const list = useArtifactsStore((s) => s.list)
-  const trash = useArtifactsStore((s) => s.deleted)
+  const { list, deleted: trash, away, read } = useWindowArtifacts()
+  const windowHost = useWindowHost()
+  const namesHosts = useNamesHosts()
+  const hostName = useHostName()
+  // Every host side by side: each card says which one it is on.
+  const hostOf = (id: string): string | null =>
+    namesHosts && windowHost.kind === 'all' ? hostName(artifactHost(id)) : null
   const error = useArtifactsStore((s) => s.error)
   const filter = useArtifactsStore((s) => s.filter)
   const kindFilter = useArtifactsStore((s) => s.kindFilter)
@@ -256,7 +265,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
       artifact={artifact}
       agent={agentOf(artifact.sessionId)}
       agentHost={hostOfPath(sessions.get(artifact.sessionId)?.projectPath ?? '')}
-      meta={meta}
+      meta={[meta, hostOf(artifact.id)].filter(Boolean).join(' · ')}
       time={time}
       project={projectName(artifact)}
       session={sessionName(artifact.sessionId)}
@@ -312,9 +321,10 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   } else {
     const cards = groups.flatMap((g) => g.sections.flatMap((s) => s.artifacts))
     const tabbable = cards.some((a) => a.id === active) ? active : (cards[0]?.id ?? null)
-    if (list === null && error) body = <ListError error={error} />
+    if (away && !read) body = null
+    else if (list === null && error) body = <ListError error={error} />
     else if (list === null) body = <LoadingList />
-    else if (list.length === 0) body = <NoArtifacts />
+    else if (list.length === 0) body = away ? null : <NoArtifacts />
     else if (groups.length === 0) body = <NoMatch query={filter} onClear={clearFilters} />
     else {
       body = (
@@ -383,7 +393,15 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
         ) : (
           <>
             <h1 className="ui-as-page-title">{t('page.title')}</h1>
-            <p className="ui-as-page-sub">{t('page.description')}</p>
+            <p className="ui-as-page-sub">
+              {!namesHosts
+                ? t('page.description')
+                : windowHost.kind === 'all'
+                  ? t('page.descriptionAll')
+                  : windowHost.hostId === null
+                    ? t(isMac ? 'page.descriptionThisMac' : 'page.descriptionThisComputer')
+                    : t('page.descriptionOn', { host: hostName(windowHost.hostId) })}
+            </p>
             {any && (
               <SectionHead
                 title={t('page.title')}
@@ -442,7 +460,8 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
           </>
         )}
         {!deleted && importFailed && <ImportError failure={importFailed} />}
-        {body}
+        <WindowHostAway read={read} className="mt-4" />
+        <AwayContent away={away}>{body}</AwayContent>
         {!deleted && list !== null && trash !== null && trash.length > 0 && (
           <button type="button" className="k-arts__bin" onClick={() => openRecentlyDeleted(true)}>
             <Icon icon={Delete02Icon} size={14} />
@@ -770,6 +789,8 @@ function ImportMenu({
   const projects = useProjectsStore((s) => s.projects)
   // A file is read by the host it lies on, so it goes into a project of this computer's.
   const own = useMemo(() => projects.filter((p) => hostOfPath(p.path) === null), [projects])
+  const host = useWindowHost()
+  if (host.kind === 'one' && host.hostId !== null) return null
   return (
     <DropdownMenu>
       <DropdownMenuTrigger

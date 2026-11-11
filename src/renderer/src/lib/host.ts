@@ -57,6 +57,12 @@ function saveArtifactHosts(): void {
 /** The artifacts this computer keeps, which no other host may claim. */
 const ownArtifacts = new Set<string>()
 
+/** The other host a routine is kept on, learned from that host's lists and events. */
+const routineHosts = new Map<string, string>()
+
+/** The routines this computer keeps, which no other host may claim. */
+const ownRoutines = new Set<string>()
+
 /** The other hosts that last heard which of their sessions the window shows. */
 let showing = new Set<string>()
 
@@ -95,6 +101,7 @@ export function forgetHostSessions(hostId: string): void {
   for (const [id, on] of artifactHosts) {
     if (on === hostId && artifactHosts.delete(id)) saveArtifactHosts()
   }
+  for (const [id, on] of routineHosts) if (on === hostId) routineHosts.delete(id)
   showing.delete(hostId)
 }
 
@@ -122,18 +129,44 @@ export function learnArtifactHost(id: string, hostId: string | null): void {
   }
 }
 
+/** The other host a routine is kept on, or null for this computer's and the unknown. */
+export function routineHost(id: string): string | null {
+  return routineHosts.get(id) ?? null
+}
+
+/**
+ * Remembers where a routine is kept: on this computer when `hostId` is null. False when another
+ * host claims one of this computer's, whose claim is ignored so its requests stay here.
+ */
+export function learnRoutineHost(id: string, hostId: string | null): boolean {
+  if (hostId === null) {
+    ownRoutines.add(id)
+    routineHosts.delete(id)
+    return true
+  }
+  if (ownRoutines.has(id)) return false
+  routineHosts.set(id, hostId)
+  return true
+}
+
 /** How main names the artifact: its id, with its host before it when another host keeps it. */
 export function artifactRefOf(id: string): string {
   return artifactRef(artifactHost(id), id)
 }
 
-/** The host a request is for: its artifact's, its session's, its project's, or this computer. */
+/**
+ * The host a request is for: its artifact's, its routine's, its session's, its project's, or this
+ * computer.
+ */
 export function routeOf(method: string, params: unknown): string | null {
   if (typeof params !== 'object' || params === null) return null
   const fields = params as Record<string, unknown>
   if (method.startsWith('artifacts.')) {
     const id = typeof fields.id === 'string' ? fields.id : fields.artifactId
     if (typeof id === 'string') return artifactHost(id)
+  }
+  if (method.startsWith('routines.') && typeof fields.routineId === 'string') {
+    return routineHost(fields.routineId)
   }
   if (typeof fields.sessionId === 'string') return sessionHost(fields.sessionId)
   if (method.startsWith('attachments.') && typeof fields.id === 'string') {

@@ -52,16 +52,25 @@ import { useCornered } from '@renderer/features/shell/corner'
 import { CornerControlsSpace } from '@renderer/features/shell/top-bar'
 import { canStart, startValues } from '@renderer/features/session/new-session/start-options'
 import { TurnDots } from '@renderer/features/session/turn-dots'
+import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
 import { basename } from '@renderer/lib/format'
-import { errorMessage } from '@renderer/lib/host'
+import { errorMessage, routineHost } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
-import { picksOf, useAgentOptionsStore, type OptionValues } from '@renderer/stores/agent-options'
-import { useAgentsStore, agentName } from '@renderer/stores/agents'
+import { cn } from '@renderer/lib/utils'
+import {
+  optionsOn,
+  picksOf,
+  useAgentOptionsStore,
+  type OptionValues,
+} from '@renderer/stores/agent-options'
+import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { loadRoutinePage, useRoutinesStore } from '@renderer/stores/routines'
+import { loadRoutinePage, routinesRead, useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { openRoutine, openRoutines, useViewStore } from '@renderer/stores/view'
+import { useWindowHost, useWindowHostAway } from '@renderer/stores/window-host'
 import { openActiveRun } from './actions'
 import { DeleteRoutineDialog } from './delete-routine-dialog'
 import { routineExample, type RoutineExampleId } from './examples'
@@ -98,7 +107,10 @@ export default function RoutinePage({
 function ExistingRoutine({ routineId }: { routineId: string }) {
   const { t } = useTranslation('routines')
   const routine = useRoutinesStore((s) => s.byId[routineId])
-  const loaded = useRoutinesStore((s) => s.loaded)
+  // Until every host's routines are read, a routine of one not read yet is not known to be gone.
+  const loaded = useRoutinesStore(
+    (s) => s.loaded && Object.values(s.others).every((other) => other.loaded),
+  )
   const loadError = useRoutinesStore((s) => s.error)
   const unseen = routine?.unseen.ended ?? 0
 
@@ -145,6 +157,9 @@ function ExistingRoutine({ routineId }: { routineId: string }) {
 
 function RoutineBody({ routine }: { routine: RoutineView }) {
   const { t } = useTranslation('routines')
+  const hostId = routineHost(routine.id)
+  const away = useWindowHostAway()?.id === hostId && hostId !== null
+  const read = useRoutinesStore((s) => routinesRead(s, hostId).read)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [name, setName] = useState(routine.name)
@@ -246,9 +261,9 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
         key="paused"
         tone="amber"
         mark={<Icon icon={PauseIcon} size={16} />}
-        title={t('pause.title', { agent: agentName(state.pause.agentId) })}
+        title={t('pause.title', { agent: agentName(state.pause.agentId, hostId) })}
       >
-        {pauseNotice(state.pause, now)}
+        {pauseNotice(state.pause, now, hostId)}
       </Notice>,
     )
   }
@@ -264,8 +279,8 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
     <RoutineShell
       bar={
         <>
-          <span className="k-routine__title">
-            <RoutineMark agent={routine.agentId} />
+          <span inert={away} className={cn('k-routine__title', away && 'opacity-50')}>
+            <RoutineMark agent={routine.agentId} hostId={hostId} />
             <input
               className="k-routine__name"
               value={name}
@@ -296,7 +311,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
             {state.kind === 'running' && state.status === 'running' && <TurnDots phase="working" />}
             <span>{stateText(routine, now)}</span>
           </span>
-          <span className="k-routine__acts">
+          <span inert={away} className={cn('k-routine__acts', away && 'opacity-50')}>
             <Button
               size="sm"
               variant="secondary"
@@ -335,58 +350,63 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
       }
     >
       <RunAnnouncements />
+      {away && <WindowHostAway read={read} />}
       {notices}
-      <div className="k-routine__grid">
-        <RoutineFields
-          prompt={prompt}
-          onPrompt={setPrompt}
-          onPromptBlur={savePrompt}
-          projectPath={routine.projectPath}
-          noProject={routine.projectPath === null}
-          onProject={(projectPath) => save({ projectPath })}
-          onProjectError={setError}
-          agentId={routine.agentId}
-          values={optionValues(routine.options)}
-          onChoose={(agentId, model) => {
-            const entry = useAgentOptionsStore.getState().byId[agentId]
-            const seed =
-              agentId === routine.agentId
-                ? optionValues(routine.options)
-                : { ...(picksOf(useAgentOptionsStore.getState(), null, agentId) ?? {}) }
-            const modelOption = entry?.config.find((option) => option.category === 'model')
-            const next = { ...seed }
-            if (modelOption) {
-              if (model === null) delete next[modelOption.id]
-              else next[modelOption.id] = model
-            }
-            save({
-              agentId,
-              options: entry ? routineOptions(entry, next) : optionsFrom(next),
-            })
-          }}
-          onValues={(optionId, value) => {
-            const entry = useAgentOptionsStore.getState().byId[routine.agentId]
-            if (!entry) return
-            save({
-              options: routineOptions(entry, {
-                ...optionValues(routine.options),
-                [optionId]: value,
-              }),
-            })
-          }}
-          timeLimit={routine.timeLimitMinutes}
-          onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
-          kept={routine.keptRunSessions}
-          onKept={saveKept}
-          scope={routine.scope}
-          onScope={(scope) => save({ scope })}
-          schedule={routine.trigger.schedule}
-          savedSchedule={routine.trigger.schedule}
-          done={routine.state === 'done'}
-          onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
-        />
-        <RunHistory routine={routine} />
-      </div>
+      <AwayContent away={away}>
+        <div className="k-routine__grid">
+          <RoutineFields
+            hostId={hostId}
+            projectHost={hostId}
+            prompt={prompt}
+            onPrompt={setPrompt}
+            onPromptBlur={savePrompt}
+            projectPath={routine.projectPath}
+            noProject={routine.projectPath === null}
+            onProject={(projectPath) => save({ projectPath })}
+            onProjectError={setError}
+            agentId={routine.agentId}
+            values={optionValues(routine.options)}
+            onChoose={(agentId, model) => {
+              const entry = optionsOn(useAgentOptionsStore.getState(), hostId)[agentId]
+              const seed =
+                agentId === routine.agentId
+                  ? optionValues(routine.options)
+                  : { ...(picksOf(useAgentOptionsStore.getState(), hostId, agentId) ?? {}) }
+              const modelOption = entry?.config.find((option) => option.category === 'model')
+              const next = { ...seed }
+              if (modelOption) {
+                if (model === null) delete next[modelOption.id]
+                else next[modelOption.id] = model
+              }
+              save({
+                agentId,
+                options: entry ? routineOptions(entry, next) : optionsFrom(next),
+              })
+            }}
+            onValues={(optionId, value) => {
+              const entry = optionsOn(useAgentOptionsStore.getState(), hostId)[routine.agentId]
+              if (!entry) return
+              save({
+                options: routineOptions(entry, {
+                  ...optionValues(routine.options),
+                  [optionId]: value,
+                }),
+              })
+            }}
+            timeLimit={routine.timeLimitMinutes}
+            onTimeLimit={(timeLimitMinutes) => save({ timeLimitMinutes })}
+            kept={routine.keptRunSessions}
+            onKept={saveKept}
+            scope={routine.scope}
+            onScope={(scope) => save({ scope })}
+            schedule={routine.trigger.schedule}
+            savedSchedule={routine.trigger.schedule}
+            done={routine.state === 'done'}
+            onSchedule={(schedule) => save({ trigger: { kind: 'schedule', schedule } })}
+          />
+          <RunHistory routine={routine} />
+        </div>
+      </AwayContent>
 
       {deleting && (
         <DeleteRoutineDialog
@@ -437,6 +457,11 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
   const { t } = useTranslation('routines')
   const projects = useProjectsStore((s) => s.projects)
   const defaultAgent = useSettingsStore((s) => s.settings.general.defaultAgent)
+  const windowHost = useWindowHost()
+  // The host the window is narrowed to, whose projects and agents the routine takes; with every
+  // host shown, the chosen project's.
+  const fixedHost = windowHost.kind === 'one' ? windowHost.hostId : undefined
+  const away = useWindowHostAway() !== null
   const [seed] = useState(() => (example ? routineExample(example) : null))
   const [name, setName] = useState(seed?.name ?? '')
   const [prompt, setPrompt] = useState(seed?.prompt ?? '')
@@ -450,16 +475,24 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
         ? useSessionsStore.getState().byId[view.main.sessionId]
         : undefined
     const inProject = (path: string | null | undefined): path is string =>
-      !!path && projects.some((project) => project.path === path)
+      !!path &&
+      (fixedHost === undefined || hostOfPath(path) === fixedHost) &&
+      projects.some((project) => project.path === path)
     if (shown && !shown.scratch && inProject(shown.projectPath)) return shown.projectPath
     return inProject(view.projectPath) ? view.projectPath : null
   })
   const [projectChosen, setProjectChosen] = useState(projectPath !== null)
-  const [agentId, setAgentId] = useState<AgentId | null>(() => {
-    const status = defaultAgent ? useAgentsStore.getState().byId[defaultAgent] : undefined
+  const hostOf = (path: string | null): string | null =>
+    fixedHost !== undefined ? fixedHost : path === null ? null : hostOfPath(path)
+  const hostId = hostOf(projectPath)
+  const startAgent = (on: string | null): AgentId | null => {
+    const status = defaultAgent
+      ? agentsOn(useAgentsStore.getState(), on).byId[defaultAgent]
+      : undefined
     return defaultAgent && status && canStart(status) ? defaultAgent : null
-  })
-  const [values, setValues] = useState<OptionValues>(() => initialValues(agentId))
+  }
+  const [agentId, setAgentId] = useState<AgentId | null>(() => startAgent(hostId))
+  const [values, setValues] = useState<OptionValues>(() => initialValues(agentId, hostId))
   const [timeLimit, setTimeLimit] = useState<TimeLimitMinutes>(DEFAULT_TIME_LIMIT)
   const [kept, setKept] = useState<KeptRunSessions>(DEFAULT_KEPT_RUN_SESSIONS)
   const [scope, setScope] = useState<PermissionScope>(seed?.scope ?? DEFAULT_SCOPE)
@@ -475,33 +508,38 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
     field.setSelectionRange(field.value.length, field.value.length)
   }, [])
 
-  const missing = !prompt.trim()
-    ? t('routine.createMissingPrompt')
-    : !projectChosen
-      ? t('routine.createMissingProject')
-      : !agentId
-        ? t('routine.createMissingAgent')
-        : scheduleProblem
-          ? t('routine.createMissingSchedule')
-          : null
+  const missing = away
+    ? t('routine.createHostAway')
+    : !prompt.trim()
+      ? t('routine.createMissingPrompt')
+      : !projectChosen
+        ? t('routine.createMissingProject')
+        : !agentId
+          ? t('routine.createMissingAgent')
+          : scheduleProblem
+            ? t('routine.createMissingSchedule')
+            : null
 
   const create = async () => {
     if (missing || !agentId || creating) return
     setCreating(true)
     setError(null)
     try {
-      const entry = useAgentOptionsStore.getState().byId[agentId]
-      const routine = await useRoutinesStore.getState().create({
-        name: name.trim(),
-        prompt,
-        agentId,
-        projectPath,
-        options: entry ? routineOptions(entry, values) : optionsFrom(values),
-        trigger: { kind: 'schedule', schedule },
-        scope,
-        timeLimitMinutes: timeLimit,
-        keptRunSessions: kept,
-      })
+      const entry = optionsOn(useAgentOptionsStore.getState(), hostId)[agentId]
+      const routine = await useRoutinesStore.getState().create(
+        {
+          name: name.trim(),
+          prompt,
+          agentId,
+          projectPath,
+          options: entry ? routineOptions(entry, values) : optionsFrom(values),
+          trigger: { kind: 'schedule', schedule },
+          scope,
+          timeLimitMinutes: timeLimit,
+          keptRunSessions: kept,
+        },
+        hostId,
+      )
       openRoutine(routine.id, { replace: true })
     } catch (failure) {
       setError(errorMessage(failure))
@@ -515,7 +553,7 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
       bar={
         <>
           <span className="k-routine__title">
-            <RoutineMark agent={agentId} />
+            <RoutineMark agent={agentId} hostId={hostId} />
             <input
               className="k-routine__name"
               value={name}
@@ -554,54 +592,66 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
         </>
       }
     >
+      {away && <WindowHostAway read />}
       {error && (
         <Notice tone="red" mark={<Icon icon={Alert02Icon} size={16} />}>
           {error}
         </Notice>
       )}
-      <div className="k-routine__grid">
-        <RoutineFields
-          prompt={prompt}
-          onPrompt={setPrompt}
-          promptField={promptField}
-          projectPath={projectPath}
-          noProject={projectChosen && projectPath === null}
-          onProject={(path) => {
-            setProjectPath(path)
-            setProjectChosen(true)
-          }}
-          onProjectError={setError}
-          agentId={agentId}
-          values={values}
-          onChoose={(id, model) => {
-            setAgentId(id)
-            const entry = useAgentOptionsStore.getState().byId[id]
-            const next = { ...(picksOf(useAgentOptionsStore.getState(), null, id) ?? {}) }
-            const modelOption = entry?.config.find((option) => option.category === 'model')
-            if (modelOption) {
-              if (model === null) delete next[modelOption.id]
-              else next[modelOption.id] = model
+      <AwayContent away={away}>
+        <div className="k-routine__grid">
+          <RoutineFields
+            hostId={hostId}
+            projectHost={fixedHost}
+            prompt={prompt}
+            onPrompt={setPrompt}
+            promptField={promptField}
+            projectPath={projectPath}
+            noProject={projectChosen && projectPath === null}
+            onProject={(path) => {
+              setProjectPath(path)
+              setProjectChosen(true)
+              const on = hostOf(path)
+              // Another host's agents are its own: the choice starts again from its default.
+              if (on !== hostId) {
+                const start = startAgent(on)
+                setAgentId(start)
+                setValues(initialValues(start, on))
+              }
+            }}
+            onProjectError={setError}
+            agentId={agentId}
+            values={values}
+            onChoose={(id, model) => {
+              setAgentId(id)
+              const entry = optionsOn(useAgentOptionsStore.getState(), hostId)[id]
+              const next = { ...(picksOf(useAgentOptionsStore.getState(), hostId, id) ?? {}) }
+              const modelOption = entry?.config.find((option) => option.category === 'model')
+              if (modelOption) {
+                if (model === null) delete next[modelOption.id]
+                else next[modelOption.id] = model
+              }
+              setValues(entry ? startValues(entry, next) : next)
+            }}
+            onValues={(optionId, value) =>
+              setValues((current) => ({ ...current, [optionId]: value }))
             }
-            setValues(entry ? startValues(entry, next) : next)
-          }}
-          onValues={(optionId, value) =>
-            setValues((current) => ({ ...current, [optionId]: value }))
-          }
-          timeLimit={timeLimit}
-          onTimeLimit={setTimeLimit}
-          kept={kept}
-          onKept={setKept}
-          scope={scope}
-          onScope={setScope}
-          schedule={schedule}
-          savedSchedule={null}
-          onSchedule={setSchedule}
-          onScheduleProblem={setScheduleProblem}
-        />
-        <RunsCard>
-          <RunsEmpty hint={firstRunHint(schedule, now)} />
-        </RunsCard>
-      </div>
+            timeLimit={timeLimit}
+            onTimeLimit={setTimeLimit}
+            kept={kept}
+            onKept={setKept}
+            scope={scope}
+            onScope={setScope}
+            schedule={schedule}
+            savedSchedule={null}
+            onSchedule={setSchedule}
+            onScheduleProblem={setScheduleProblem}
+          />
+          <RunsCard>
+            <RunsEmpty hint={firstRunHint(schedule, now)} />
+          </RunsCard>
+        </div>
+      </AwayContent>
     </RoutineShell>
   )
 }
@@ -630,11 +680,17 @@ function RoutineShell({ bar, children }: { bar: ReactNode; children: ReactNode }
 }
 
 /** The routine's agent before its name, or a calendar before New routine has an agent. */
-function RoutineMark({ agent }: { agent: AgentId | null }) {
-  return agent ? <AgentMark agent={agent} size={18} /> : <Icon icon={Calendar03Icon} size={16} />
+function RoutineMark({ agent, hostId }: { agent: AgentId | null; hostId: string | null }) {
+  return agent ? (
+    <AgentMark agent={agent} size={18} hostId={hostId} />
+  ) : (
+    <Icon icon={Calendar03Icon} size={16} />
+  )
 }
 
 function RoutineFields({
+  hostId,
+  projectHost,
   prompt,
   onPrompt,
   onPromptBlur,
@@ -659,6 +715,10 @@ function RoutineFields({
   onSchedule,
   onScheduleProblem,
 }: {
+  /** The host the routine is on, whose agents it runs, null being this computer. */
+  hostId: string | null
+  /** The host whose projects the menu lists; undefined lists every host's. */
+  projectHost: string | null | undefined
   prompt: string
   onPrompt: (prompt: string) => void
   onPromptBlur?: () => void
@@ -730,12 +790,19 @@ function RoutineFields({
               noProject={noProject}
               onError={onProjectError}
               onChoose={onProject}
+              {...(projectHost !== undefined ? { host: projectHost } : {})}
             />
           </span>
         </Row>
         <Row title={t('routine.agent')} note={t('routine.agentDescription')}>
           <span className="k-frame">
-            <AgentMenu agentId={agentId} values={values} onChoose={onChoose} onValues={onValues} />
+            <AgentMenu
+              agentId={agentId}
+              values={values}
+              onChoose={onChoose}
+              onValues={onValues}
+              hostId={hostId}
+            />
           </span>
         </Row>
       </div>
@@ -793,11 +860,11 @@ function useBackOnEscape(): void {
   }, [])
 }
 
-function initialValues(agentId: AgentId | null): OptionValues {
+function initialValues(agentId: AgentId | null, hostId: string | null): OptionValues {
   if (!agentId) return {}
   const store = useAgentOptionsStore.getState()
-  const entry = store.byId[agentId]
-  return entry ? startValues(entry, picksOf(store, null, agentId)) : {}
+  const entry = optionsOn(store, hostId)[agentId]
+  return entry ? startValues(entry, picksOf(store, hostId, agentId)) : {}
 }
 
 /** Values for an agent whose options are not known yet; the run uses only known ids. */

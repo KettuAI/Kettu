@@ -91,5 +91,13 @@
   "debugMode": {
     "label": "Debug mode",
     "tooltip": "Debug mode is on · Show the ports"
+  },
+  "windowHost": {
+    "thisMac": "This Mac",
+    "thisComputer": "This computer",
+    "unknown": "Another host",
+    "away": "{{name}} is not connected: {{state}}",
+    "lastRead": "This is what Kettu last read from it. It updates once the host is back.",
+    "nothingRead": "Nothing has been read from it yet. It shows here once the host is back."
   }
 }

@@ -6,6 +6,27 @@ import { useTranslation } from 'react-i18next'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { AwayContent, WindowHostAway } from '@renderer/features/shell/window-host-away'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { useWindowHostAway } from '@renderer/stores/window-host'
+
+/**
+ * What the page shows of its host, greyed and out of reach while that host is offline, under the
+ * notice that says whether it is what was last read.
+ */
+export function MarketAway({ children }: { children: ReactNode }) {
+  const { useMarketplaceStore } = useHostScope()
+  const away = useWindowHostAway() !== null
+  const read = useMarketplaceStore(
+    (s) => s.catalog !== null || s.plugins !== null || s.skills !== null,
+  )
+  return (
+    <>
+      <WindowHostAway read={read} className="mb-4" />
+      <AwayContent away={away}>{children}</AwayContent>
+    </>
+  )
+}
 
 /** A listing's frame: the column, and Back to the directory. */
 export function ListingFrame({
@@ -28,7 +49,7 @@ export function ListingFrame({
         <Icon icon={ArrowLeft01Icon} size={15} />
         {t('listing.back')}
       </button>
-      {children}
+      <MarketAway>{children}</MarketAway>
     </div>
   )
 }

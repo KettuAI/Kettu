@@ -3,16 +3,17 @@
 import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useDark } from '@renderer/hooks/use-dark'
-import { useMarketplaceStore } from '@renderer/stores/marketplace'
+import { useHostScope } from '@renderer/stores/host-scope'
 import { tileArt, type TileSize, type TileSubject } from './tile-art'
 
 /** A Codex plugin's logo for the theme shown: undefined while it is read, null without one. */
 function usePluginLogo(pluginId: string | null): string | null | undefined {
   const dark = useDark()
+  const { useMarketplaceStore } = useHostScope()
   const logo = useMarketplaceStore((s) => (pluginId ? s.logos[pluginId] : undefined))
   useEffect(() => {
     if (pluginId) void useMarketplaceStore.getState().loadLogo(pluginId)
-  }, [pluginId])
+  }, [pluginId, useMarketplaceStore])
   if (!pluginId) return null
   if (logo === undefined || logo === 'loading') return undefined
   return (dark && logo.dark) || logo.light

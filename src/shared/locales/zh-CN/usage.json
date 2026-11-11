@@ -35,6 +35,7 @@
       "365": "1 年",
       "all": "全部"
     },
+    "allHosts": "全部主机",
     "scope": "来源",
     "scopes": {
       "computer": "本机",

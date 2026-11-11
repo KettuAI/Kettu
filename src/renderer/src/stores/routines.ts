@@ -1,4 +1,6 @@
-// Routines and their runs, as the host reports them; the pages read this store.
+// Routines and their runs, as each host reports them: this computer's, and those of the other
+// hosts it connects to, kept after a host's connection ends so its page shows what was last read.
+// The pages read this store.
 
 import { create } from 'zustand'
 import type { RoutineList } from '@shared/agent-host'
@@ -11,7 +13,8 @@ import {
   type RunView,
   type RoutinesProblem,
 } from '@shared/routines'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage, host, hostAt, learnRoutineHost, routineHost } from '@renderer/lib/host'
+import { otherHosts, useHostsStore } from './hosts'
 
 export interface RunsState {
   items: RunView[]
@@ -27,25 +30,78 @@ export interface RunEnding {
   name: string
 }
 
+/** What became of the last read of a host's routines. */
+export interface RoutinesRead {
+  /** A read finished, or failed. */
+  loaded: boolean
+  /** A read succeeded once, so the list holds what the host last said. */
+  read: boolean
+  problem: RoutinesProblem | null
+  error: string | null
+}
+
+interface OtherRoutines extends RoutinesRead {
+  /** The host's routines in the list, in its own order. */
+  ids: string[]
+}
+
 interface RoutinesStore {
+  /** Every host's routines, this computer's first. */
   byId: Record<string, RoutineView>
   order: string[]
+  /** This computer's read, as the rest of the window waits for it. */
   loaded: boolean
   /** Set when `routines.json` could not be read; the list is empty and a notice says so. */
   problem: RoutinesProblem | null
   error: string | null
+  /** Each other host's read, by its id. */
+  others: Record<string, OtherRoutines>
   runs: Record<string, RunsState>
   ending: RunEnding | null
-  load(): Promise<void>
-  receive(routine: RoutineView): void
-  removed(routineId: string): void
-  receiveRun(run: RoutineRun): void
+  /** Reads the routines of the host named, null being this computer. */
+  load(hostId?: string | null): Promise<void>
+  receive(routine: RoutineView, hostId?: string | null): void
+  removed(routineId: string, hostId?: string | null): void
+  receiveRun(run: RoutineRun, hostId?: string | null): void
   loadRuns(routineId: string, more?: boolean): Promise<void>
   runNow(routineId: string): Promise<RoutineRun>
-  create(draft: RoutineDraft): Promise<RoutineView>
+  /** Creates the routine on the host named, null being this computer. */
+  create(draft: RoutineDraft, hostId?: string | null): Promise<RoutineView>
   update(routineId: string, changes: RoutineChanges): Promise<RoutineView>
   remove(routineId: string): Promise<void>
   markSeen(routineId: string): Promise<void>
+}
+
+const UNREAD: OtherRoutines = { loaded: false, read: false, problem: null, error: null, ids: [] }
+
+type State = Pick<RoutinesStore, 'byId' | 'order' | 'others' | 'runs'>
+
+/** The ids of the host's routines in the list, null being this computer. */
+function idsOn(state: State, hostId: string | null): string[] {
+  if (hostId !== null) return state.others[hostId]?.ids ?? []
+  return state.order.filter((id) => routineHost(id) === null)
+}
+
+/** The list with the host's routines replaced by `routines`, this computer's kept first. */
+function withHostList(
+  state: State,
+  hostId: string | null,
+  routines: RoutineView[],
+): Pick<State, 'byId' | 'order' | 'runs'> & { ids: string[] } {
+  const before = new Set(idsOn(state, hostId))
+  const taken = routines.filter((routine) => learnRoutineHost(routine.id, hostId))
+  const ids = taken.map((routine) => routine.id)
+  const kept = new Set(ids)
+  const byId = { ...state.byId }
+  const runs = { ...state.runs }
+  for (const id of before) {
+    if (kept.has(id)) continue
+    delete byId[id]
+    delete runs[id]
+  }
+  for (const routine of taken) byId[routine.id] = routine
+  const rest = state.order.filter((id) => !before.has(id) && !kept.has(id))
+  return { byId, order: hostId === null ? [...ids, ...rest] : [...rest, ...ids], runs, ids }
 }
 
 export const useRoutinesStore = create<RoutinesStore>()((set, get) => ({
@@ -54,46 +110,81 @@ export const useRoutinesStore = create<RoutinesStore>()((set, get) => ({
   loaded: false,
   problem: null,
   error: null,
+  others: {},
   runs: {},
   ending: null,
 
-  async load() {
+  async load(hostId = null) {
     try {
-      const list: RoutineList = await host('routines.list', undefined)
-      set({
-        byId: Object.fromEntries(list.routines.map((routine) => [routine.id, routine])),
-        order: list.routines.map((routine) => routine.id),
-        loaded: true,
-        problem: list.problem,
-        error: null,
+      const list: RoutineList = await hostAt(hostId, 'routines.list', undefined)
+      set((state) => {
+        const { ids, ...lists } = withHostList(state, hostId, list.routines)
+        if (hostId === null) return { ...lists, loaded: true, problem: list.problem, error: null }
+        const read = { loaded: true, read: true, problem: list.problem, error: null, ids }
+        return { ...lists, others: { ...state.others, [hostId]: read } }
       })
     } catch (error) {
-      set({ loaded: true, error: errorMessage(error) })
+      const message = errorMessage(error)
+      if (hostId === null) set({ loaded: true, error: message })
+      else {
+        set((state) => ({
+          others: {
+            ...state.others,
+            [hostId]: { ...(state.others[hostId] ?? UNREAD), loaded: true, error: message },
+          },
+        }))
+      }
     }
   },
 
-  receive(routine) {
-    set((state) => ({
-      byId: { ...state.byId, [routine.id]: routine },
-      order: state.order.includes(routine.id) ? state.order : [...state.order, routine.id],
-    }))
+  receive(routine, hostId = null) {
+    if (!learnRoutineHost(routine.id, hostId)) return
+    set((state) => {
+      const known = state.order.includes(routine.id)
+      const others =
+        hostId === null || state.others[hostId]?.ids.includes(routine.id)
+          ? state.others
+          : {
+              ...state.others,
+              [hostId]: {
+                ...(state.others[hostId] ?? UNREAD),
+                ids: [...(state.others[hostId]?.ids ?? []), routine.id],
+              },
+            }
+      return {
+        byId: { ...state.byId, [routine.id]: routine },
+        order: known ? state.order : [...state.order, routine.id],
+        others,
+      }
+    })
   },
 
-  removed(routineId) {
+  removed(routineId, hostId = null) {
+    // A host removes only its own.
+    if (routineHost(routineId) !== hostId) return
     set((state) => {
       const byId = { ...state.byId }
       delete byId[routineId]
       const runs = { ...state.runs }
       delete runs[routineId]
+      const own = hostId === null ? undefined : state.others[hostId]
       return {
         byId,
         order: state.order.filter((id) => id !== routineId),
         runs,
+        others:
+          hostId === null || !own
+            ? state.others
+            : {
+                ...state.others,
+                [hostId]: { ...own, ids: own.ids.filter((id) => id !== routineId) },
+              },
       }
     })
   },
 
-  receiveRun(run) {
+  receiveRun(run, hostId = null) {
+    if (routineHost(run.routineId) !== hostId) return
     set((state) => {
       const routine = state.byId[run.routineId]
       if (!routine) return state
@@ -173,21 +264,21 @@ export const useRoutinesStore = create<RoutinesStore>()((set, get) => ({
     return run
   },
 
-  async create(draft) {
-    const routine = await host('routines.create', draft)
-    get().receive(routine)
+  async create(draft, hostId = null) {
+    const routine = await hostAt(hostId, 'routines.create', draft)
+    get().receive(routine, hostId)
     return routine
   },
 
   async update(routineId, changes) {
     const routine = await host('routines.update', { routineId, changes })
-    get().receive(routine)
+    get().receive(routine, routineHost(routineId))
     return routine
   },
 
   async remove(routineId) {
     await host('routines.delete', { routineId })
-    get().removed(routineId)
+    get().removed(routineId, routineHost(routineId))
   },
 
   async markSeen(routineId) {
@@ -224,4 +315,42 @@ export function loadRoutinePage(routineId: string): void {
   const store = useRoutinesStore.getState()
   if (!store.loaded) void store.load()
   void store.loadRuns(routineId)
+}
+
+const NOT_READ: RoutinesRead = { loaded: false, read: false, problem: null, error: null }
+
+/** The last read of the host's routines, null being this computer. */
+export function routinesRead(
+  state: Pick<RoutinesStore, 'loaded' | 'problem' | 'error' | 'others'>,
+  hostId: string | null,
+): RoutinesRead {
+  if (hostId !== null) return state.others[hostId] ?? NOT_READ
+  return { loaded: state.loaded, read: state.loaded, problem: state.problem, error: state.error }
+}
+
+/** A connection to another host opened: its routines are read again. */
+export function routinesHostOpened(hostId: string): void {
+  void useRoutinesStore.getState().load(hostId)
+}
+
+/**
+ * The connection to another host ended: its routines stay as last read while this computer still
+ * knows the host, and leave the list once it does not.
+ */
+export function routinesHostClosed(hostId: string): void {
+  if (otherHosts(useHostsStore.getState()).some((h) => h.id === hostId)) return
+  useRoutinesStore.setState((state) => {
+    const own = state.others[hostId]
+    if (!own) return state
+    const gone = new Set(own.ids)
+    const byId = { ...state.byId }
+    const runs = { ...state.runs }
+    for (const id of gone) {
+      delete byId[id]
+      delete runs[id]
+    }
+    const others = { ...state.others }
+    delete others[hostId]
+    return { byId, runs, others, order: state.order.filter((id) => !gone.has(id)) }
+  })
 }

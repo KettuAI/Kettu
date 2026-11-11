@@ -40,8 +40,7 @@ import {
   SettingsField,
 } from '@renderer/features/settings/settings-dialog'
 import { errorMessage } from '@renderer/lib/host'
-import { useMarketplaceStore } from '@renderer/stores/marketplace'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { useHostScope } from '@renderer/stores/host-scope'
 import {
   addMarketplace,
   addServer,
@@ -77,6 +76,7 @@ export function KeysDialog({
 function KeysForm({ server, onDone }: { server: MarketServer; onDone: () => void }) {
   const { t } = useTranslation(['marketplace', 'common'])
   const inputs = specInputs(server.spec)
+  const { useMarketplaceStore } = useHostScope()
   const set = useMarketplaceStore((s) => s.keys?.[server.id] ?? null)
   const [values, setValues] = useState<Record<string, string | null>>({})
   const [busy, setBusy] = useState(false)
@@ -172,13 +172,14 @@ export function AgentsDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const scope = useHostScope()
   return (
     <ChooseAgentsDialog
       name={server.title}
       value={server.agents}
       open={open}
       onOpenChange={onOpenChange}
-      save={(agents) => setServerAgents(server.id, agents)}
+      save={(agents) => setServerAgents(scope, server.id, agents)}
     />
   )
 }
@@ -193,13 +194,14 @@ export function SkillAgentsDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const scope = useHostScope()
   return (
     <ChooseAgentsDialog
       name={displayTitle(skill.name)}
       value={skill.agents}
       open={open}
       onOpenChange={onOpenChange}
-      save={(agents) => setSkillAgents(skill.id, agents)}
+      save={(agents) => setSkillAgents(scope, skill.id, agents)}
       forSkills
     />
   )
@@ -304,6 +306,7 @@ export function UninstallDialog({
   onUninstalled: () => void
 }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   return (
     <ConfirmDialog
       open={open}
@@ -316,7 +319,7 @@ export function UninstallDialog({
       body={oauth ? t('dialogs.remove.body') : t('dialogs.uninstall.body')}
       confirm={oauth ? t('dialogs.remove.confirm') : t('dialogs.uninstall.confirm')}
       action={async () => {
-        await uninstallServer(server.id)
+        await uninstallServer(scope, server.id)
         onUninstalled()
       }}
     />
@@ -403,6 +406,7 @@ export function AddMarketplaceDialog({
 
 function AddMarketplaceForm({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const scope = useHostScope()
   const claude = useHarnessAgents('claude-code')
   const codex = useHarnessAgents('codex')
   const agents = [...claude, ...codex]
@@ -418,7 +422,7 @@ function AddMarketplaceForm({ onDone }: { onDone: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await addMarketplace(agentId, source.trim())
+      await addMarketplace(scope, agentId, source.trim())
       onDone()
     } catch (e) {
       setError(errorMessage(e))
@@ -512,6 +516,7 @@ export function AddSkillDialog({
 
 function AddSkillForm({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const scope = useHostScope()
   const id = useId()
   const [url, setUrl] = useState('')
   const [agents, setAgents] = useState<AgentChoice>('all')
@@ -522,7 +527,12 @@ function AddSkillForm({ onDone }: { onDone: () => void }) {
     if (!ready) return
     setBusy(true)
     // A failure shows as a toast, so the dialog only closes once the skill is kept.
-    const added = await installSkill({ kind: 'github', url: url.trim() }, agents, `github:${url}`)
+    const added = await installSkill(
+      scope,
+      { kind: 'github', url: url.trim() },
+      agents,
+      `github:${url}`,
+    )
     setBusy(false)
     if (added) onDone()
   }
@@ -616,6 +626,8 @@ export function AddServerDialog({
 
 function AddServerForm({ onDone }: { onDone: () => void }) {
   const { t } = useTranslation(['marketplace', 'common'])
+  const scope = useHostScope()
+  const { useSettingsStore } = scope
   const kept = useSettingsStore((s) => s.settings.marketplace.mcp)
   const id = useId()
   const [name, setName] = useState('')
@@ -663,7 +675,7 @@ function AddServerForm({ onDone }: { onDone: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await addServer(name.trim(), spec, secrets)
+      await addServer(scope, name.trim(), spec, secrets)
       onDone()
     } catch (e) {
       setError(errorMessage(e))

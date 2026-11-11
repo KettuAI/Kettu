@@ -35,6 +35,7 @@
       "365": "1 y",
       "all": "All time"
     },
+    "allHosts": "All hosts",
     "scope": "Source",
     "scopes": {
       "computer": "This computer",

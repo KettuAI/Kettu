@@ -1,6 +1,7 @@
 // What the Marketplace changes: the servers and skills Kettu keeps, in the host settings'
 // `marketplace`, each list written whole; the servers' keys, which go to main apart from the
-// settings; and the plugins and marketplaces the harnesses keep, through the agent host.
+// settings; and the plugins and marketplaces the harnesses keep, through the agent host. Each works
+// on the host of the scope it is given.
 
 import type {
   CatalogPlugin,
@@ -16,7 +17,7 @@ import type {
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { toast } from '@renderer/components/ui/toast'
-import { errorMessage, host } from '@renderer/lib/host'
+import { errorMessage } from '@renderer/lib/host'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
 import { agentName } from '@renderer/stores/agents'
 import {
@@ -24,12 +25,11 @@ import {
   setBusy,
   setConnectFlow,
   updatePlugins,
-  useMarketplaceStore,
   waitForLogin,
   type ConnectFlow,
 } from '@renderer/stores/marketplace'
-import { useSettingsStore } from '@renderer/stores/settings'
-import { serverName } from './model'
+import type { HostScope } from '@renderer/stores/host-scope'
+import { oauthFlow, serverName } from './model'
 
 // Bound to the namespace only: each call reads the language shown at the time.
 const t = i18n.getFixedT(null, 'marketplace')
@@ -37,20 +37,20 @@ const t = i18n.getFixedT(null, 'marketplace')
 /** Which agents a server goes to. */
 export type AgentChoice = MarketServer['agents']
 
-export function keptServers(): MarketServer[] {
-  return useSettingsStore.getState().settings.marketplace.mcp
+export function keptServers(scope: HostScope): MarketServer[] {
+  return scope.useSettingsStore.getState().settings.marketplace.mcp
 }
 
-async function save(servers: MarketServer[]): Promise<void> {
-  await useSettingsStore.getState().update({ marketplace: { mcp: servers } })
+async function save(scope: HostScope, servers: MarketServer[]): Promise<void> {
+  await scope.useSettingsStore.getState().update({ marketplace: { mcp: servers } })
 }
 
-export function keptSkills(): MarketSkill[] {
-  return useSettingsStore.getState().settings.marketplace.skills
+export function keptSkills(scope: HostScope): MarketSkill[] {
+  return scope.useSettingsStore.getState().settings.marketplace.skills
 }
 
-async function saveSkills(skills: MarketSkill[]): Promise<void> {
-  await useSettingsStore.getState().update({ marketplace: { skills } })
+async function saveSkills(scope: HostScope, skills: MarketSkill[]): Promise<void> {
+  await scope.useSettingsStore.getState().update({ marketplace: { skills } })
 }
 
 function warn(text: string): void {
@@ -58,15 +58,15 @@ function warn(text: string): void {
 }
 
 /** "every agent", or the chosen agents' names as a list of the language shown. */
-function forWhom(agents: AgentChoice): string | null {
+function forWhom(scope: HostScope, agents: AgentChoice): string | null {
   if (agents === 'all') return null
   return new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
-    agents.map((id) => agentName(id)),
+    agents.map((id) => agentName(id, scope.hostId)),
   )
 }
 
-function readyToast(name: string, agents: AgentChoice): void {
-  const who = forWhom(agents)
+function readyToast(scope: HostScope, name: string, agents: AgentChoice): void {
+  const who = forWhom(scope, agents)
   toast(who ? t('toast.readyFor', { name, agents: who }) : t('toast.ready', { name }), undefined, {
     tone: 'success',
   })
@@ -74,6 +74,7 @@ function readyToast(name: string, agents: AgentChoice): void {
 
 /** Stores the values a user filled in; true when there were none or they were stored. */
 async function storeValues(
+  scope: HostScope,
   serverId: string,
   name: string,
   values: Record<string, string>,
@@ -81,7 +82,7 @@ async function storeValues(
   const filled = Object.fromEntries(Object.entries(values).filter(([, value]) => value !== ''))
   if (Object.keys(filled).length === 0) return true
   try {
-    await useMarketplaceStore.getState().setKeys({ serverId, values: filled })
+    await scope.useMarketplaceStore.getState().setKeys({ serverId, values: filled })
     return true
   } catch (e) {
     toast(t('toast.keysNotSaved', { name, error: errorMessage(e) }), undefined, {
@@ -96,15 +97,17 @@ async function storeValues(
  * then its values go to the key store. True once it is kept, even if its keys were not stored.
  */
 export async function installServer(
+  scope: HostScope,
   server: CatalogServer,
   agents: AgentChoice,
   values: Record<string, string>,
 ): Promise<boolean> {
   const busy = busyKey('mcp', server.id)
-  if (useMarketplaceStore.getState().busy.includes(busy)) return false
-  setBusy(busy, true)
+  const market = scope.useMarketplaceStore
+  if (market.getState().busy.includes(busy)) return false
+  setBusy(market, busy, true)
   try {
-    const kept = keptServers().filter((s) => s.id !== server.id)
+    const kept = keptServers(scope).filter((s) => s.id !== server.id)
     const entry: MarketServer = {
       id: server.id,
       name: serverName(server.id, kept),
@@ -116,22 +119,24 @@ export async function installServer(
       on: true,
     }
     try {
-      await save([...kept, entry])
+      await save(scope, [...kept, entry])
     } catch (e) {
       toast(t('toast.installFailed', { name: server.title, error: errorMessage(e) }), undefined, {
         tone: 'warning',
       })
       return false
     }
-    if (await storeValues(server.id, server.title, values)) readyToast(server.title, agents)
+    if (await storeValues(scope, server.id, server.title, values))
+      readyToast(scope, server.title, agents)
     return true
   } finally {
-    setBusy(busy, false)
+    setBusy(scope.useMarketplaceStore, busy, false)
   }
 }
 
 /** Adds a server by hand, its secret values to the key store. True once it is kept. */
 export async function addServer(
+  scope: HostScope,
   name: string,
   spec: McpSpec,
   secrets: Record<string, string>,
@@ -146,21 +151,25 @@ export async function addServer(
     agents: 'all',
     on: true,
   }
-  await save([...keptServers(), entry])
-  if (await storeValues(entry.id, name, secrets)) readyToast(name, 'all')
+  await save(scope, [...keptServers(scope), entry])
+  if (await storeValues(scope, entry.id, name, secrets)) readyToast(scope, name, 'all')
   return true
 }
 
 /** Changes one server Kettu keeps; a failure shows as a toast. */
 export async function changeServer(
+  scope: HostScope,
   id: string,
   change: (server: MarketServer) => MarketServer,
 ): Promise<void> {
-  const kept = keptServers()
+  const kept = keptServers(scope)
   const server = kept.find((s) => s.id === id)
   if (!server) return
   try {
-    await save(kept.map((s) => (s.id === id ? change(s) : s)))
+    await save(
+      scope,
+      kept.map((s) => (s.id === id ? change(s) : s)),
+    )
   } catch (e) {
     toast(t('toast.changeFailed', { name: server.title, error: errorMessage(e) }), undefined, {
       tone: 'warning',
@@ -168,20 +177,23 @@ export async function changeServer(
   }
 }
 
-export function setServerOn(id: string, on: boolean): Promise<void> {
-  return changeServer(id, (server) => ({ ...server, on }))
+export function setServerOn(scope: HostScope, id: string, on: boolean): Promise<void> {
+  return changeServer(scope, id, (server) => ({ ...server, on }))
 }
 
-export function setServerAgents(id: string, agents: AgentChoice): Promise<void> {
-  return changeServer(id, (server) => ({ ...server, agents }))
+export function setServerAgents(scope: HostScope, id: string, agents: AgentChoice): Promise<void> {
+  return changeServer(scope, id, (server) => ({ ...server, agents }))
 }
 
 /** Removes a server Kettu keeps; main clears its keys with it. Throws when it could not. */
-export async function uninstallServer(id: string): Promise<void> {
-  const kept = keptServers()
+export async function uninstallServer(scope: HostScope, id: string): Promise<void> {
+  const kept = keptServers(scope)
   const server = kept.find((s) => s.id === id)
   if (!server) return
-  await save(kept.filter((s) => s.id !== id))
+  await save(
+    scope,
+    kept.filter((s) => s.id !== id),
+  )
   toast(t('toast.uninstalled', { name: server.title }), undefined, { tone: 'success' })
 }
 
@@ -192,34 +204,40 @@ export function goesTo(agents: AgentChoice, agentId: AgentId): boolean {
 
 /** Installs a plugin into one agent's configuration through its harness. True once installed. */
 export async function installPlugin(
+  scope: HostScope,
   plugin: CatalogPlugin,
   agentId: AgentId,
-  scope: PluginScope,
+  pluginScope: PluginScope,
   projectPath: string | null,
 ): Promise<boolean> {
   const busy = busyKey('plugin', `${plugin.harness}/${plugin.id}`)
-  if (useMarketplaceStore.getState().busy.includes(busy)) return false
-  setBusy(busy, true)
+  const market = scope.useMarketplaceStore
+  if (market.getState().busy.includes(busy)) return false
+  setBusy(market, busy, true)
   try {
-    const installed = await host('market.installPlugin', {
+    const installed = await scope.request('market.installPlugin', {
       agentId,
       pluginId: plugin.id,
-      scope,
+      scope: pluginScope,
       ...(projectPath ? { projectPath } : {}),
     })
-    updatePlugins((p) => ({
+    updatePlugins(scope.useMarketplaceStore, (p) => ({
       ...p,
       installed: [...p.installed.filter((x) => !samePlace(x, installed)), installed],
     }))
-    toast(t('toast.pluginReady', { name: plugin.title, agent: agentName(agentId) }), undefined, {
-      tone: 'success',
-    })
+    toast(
+      t('toast.pluginReady', { name: plugin.title, agent: agentName(agentId, scope.hostId) }),
+      undefined,
+      {
+        tone: 'success',
+      },
+    )
     return true
   } catch (e) {
     warn(t('toast.installFailed', { name: plugin.title, error: errorMessage(e) }))
     return false
   } finally {
-    setBusy(busy, false)
+    setBusy(scope.useMarketplaceStore, busy, false)
   }
 }
 
@@ -244,61 +262,84 @@ function placeOf(plugin: InstalledPlugin) {
 
 /** Turns an installed plugin on or off in its agent's configuration; a failure shows as a toast. */
 export async function setPluginEnabled(
+  scope: HostScope,
   plugin: InstalledPlugin,
   title: string,
   enabled: boolean,
 ): Promise<void> {
   const busy = busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`)
-  setBusy(busy, true)
+  setBusy(scope.useMarketplaceStore, busy, true)
   try {
-    await host('market.setPluginEnabled', { ...placeOf(plugin), enabled })
-    updatePlugins((p) => ({
+    await scope.request('market.setPluginEnabled', { ...placeOf(plugin), enabled })
+    updatePlugins(scope.useMarketplaceStore, (p) => ({
       ...p,
       installed: p.installed.map((x) => (samePlace(x, plugin) ? { ...x, enabled } : x)),
     }))
   } catch (e) {
     warn(t('toast.changeFailed', { name: title, error: errorMessage(e) }))
   } finally {
-    setBusy(busy, false)
+    setBusy(scope.useMarketplaceStore, busy, false)
   }
 }
 
 /** Uninstalls a plugin from its agent's configuration. Throws when it could not. */
-export async function uninstallPlugin(plugin: InstalledPlugin, title: string): Promise<void> {
-  await host('market.uninstallPlugin', placeOf(plugin))
-  updatePlugins((p) => ({ ...p, installed: p.installed.filter((x) => !samePlace(x, plugin)) }))
-  toast(t('toast.uninstalledFrom', { name: title, agent: agentName(plugin.agentId) }), undefined, {
-    tone: 'success',
-  })
+export async function uninstallPlugin(
+  scope: HostScope,
+  plugin: InstalledPlugin,
+  title: string,
+): Promise<void> {
+  await scope.request('market.uninstallPlugin', placeOf(plugin))
+  updatePlugins(scope.useMarketplaceStore, (p) => ({
+    ...p,
+    installed: p.installed.filter((x) => !samePlace(x, plugin)),
+  }))
+  toast(
+    t('toast.uninstalledFrom', { name: title, agent: agentName(plugin.agentId, scope.hostId) }),
+    undefined,
+    {
+      tone: 'success',
+    },
+  )
 }
 
 /** Adds a plugin marketplace to an agent; its plugins come with the next read. Throws. */
-export async function addMarketplace(agentId: AgentId, source: string): Promise<void> {
-  const added = await host('market.addMarketplace', { agentId, source })
-  updatePlugins((p) => ({
+export async function addMarketplace(
+  scope: HostScope,
+  agentId: AgentId,
+  source: string,
+): Promise<void> {
+  const added = await scope.request('market.addMarketplace', { agentId, source })
+  updatePlugins(scope.useMarketplaceStore, (p) => ({
     ...p,
     marketplaces: [
       ...p.marketplaces.filter((m) => !(m.agentId === agentId && m.name === added.name)),
       added,
     ],
   }))
-  toast(t('toast.marketplaceAdded', { name: added.name, agent: agentName(agentId) }), undefined, {
-    tone: 'success',
-  })
-  void useMarketplaceStore.getState().loadPlugins(true)
+  toast(
+    t('toast.marketplaceAdded', { name: added.name, agent: agentName(agentId, scope.hostId) }),
+    undefined,
+    {
+      tone: 'success',
+    },
+  )
+  void scope.useMarketplaceStore.getState().loadPlugins(true)
 }
 
 /** Removes a plugin marketplace from its agent. Throws when it could not. */
-export async function removeMarketplace(market: PluginMarketplace): Promise<void> {
-  await host('market.removeMarketplace', { agentId: market.agentId, name: market.name })
-  updatePlugins((p) => ({
+export async function removeMarketplace(
+  scope: HostScope,
+  market: PluginMarketplace,
+): Promise<void> {
+  await scope.request('market.removeMarketplace', { agentId: market.agentId, name: market.name })
+  updatePlugins(scope.useMarketplaceStore, (p) => ({
     ...p,
     marketplaces: p.marketplaces.filter(
       (m) => !(m.agentId === market.agentId && m.name === market.name),
     ),
   }))
   toast(t('toast.marketplaceRemoved', { name: market.name }), undefined, { tone: 'success' })
-  void useMarketplaceStore.getState().loadPlugins(true)
+  void scope.useMarketplaceStore.getState().loadPlugins(true)
 }
 
 /**
@@ -306,61 +347,73 @@ export async function removeMarketplace(market: PluginMarketplace): Promise<void
  * row or listing that asked. True once it is kept.
  */
 export async function installSkill(
+  scope: HostScope,
   source: SkillSource,
   agents: AgentChoice,
   busyId: string,
 ): Promise<boolean> {
   const busy = busyKey('skill', busyId)
-  if (useMarketplaceStore.getState().busy.includes(busy)) return false
-  setBusy(busy, true)
+  const market = scope.useMarketplaceStore
+  if (market.getState().busy.includes(busy)) return false
+  setBusy(market, busy, true)
   try {
-    const skill = await host('market.addSkill', { source })
+    const skill = await scope.request('market.addSkill', { source })
     const entry: MarketSkill = { ...skill, agents, on: true }
-    await saveSkills([...keptSkills().filter((s) => s.id !== entry.id), entry])
-    readyToast(entry.name, agents)
+    await saveSkills(scope, [...keptSkills(scope).filter((s) => s.id !== entry.id), entry])
+    readyToast(scope, entry.name, agents)
     return true
   } catch (e) {
     warn(t('toast.skillFailed', { error: errorMessage(e) }))
     return false
   } finally {
-    setBusy(busy, false)
+    setBusy(scope.useMarketplaceStore, busy, false)
   }
 }
 
 /** Changes one skill Kettu keeps; a failure shows as a toast. */
-async function changeSkill(id: string, change: (skill: MarketSkill) => MarketSkill): Promise<void> {
-  const kept = keptSkills()
+async function changeSkill(
+  scope: HostScope,
+  id: string,
+  change: (skill: MarketSkill) => MarketSkill,
+): Promise<void> {
+  const kept = keptSkills(scope)
   const skill = kept.find((s) => s.id === id)
   if (!skill) return
   try {
-    await saveSkills(kept.map((s) => (s.id === id ? change(s) : s)))
+    await saveSkills(
+      scope,
+      kept.map((s) => (s.id === id ? change(s) : s)),
+    )
   } catch (e) {
     warn(t('toast.changeFailed', { name: skill.name, error: errorMessage(e) }))
   }
 }
 
-export function setSkillOn(id: string, on: boolean): Promise<void> {
-  return changeSkill(id, (skill) => ({ ...skill, on }))
+export function setSkillOn(scope: HostScope, id: string, on: boolean): Promise<void> {
+  return changeSkill(scope, id, (skill) => ({ ...skill, on }))
 }
 
-export function setSkillAgents(id: string, agents: AgentChoice): Promise<void> {
-  return changeSkill(id, (skill) => ({ ...skill, agents }))
+export function setSkillAgents(scope: HostScope, id: string, agents: AgentChoice): Promise<void> {
+  return changeSkill(scope, id, (skill) => ({ ...skill, agents }))
 }
 
 /** Removes a skill Kettu keeps. Throws when it could not. */
-export async function removeSkill(id: string): Promise<void> {
-  const kept = keptSkills()
+export async function removeSkill(scope: HostScope, id: string): Promise<void> {
+  const kept = keptSkills(scope)
   const skill = kept.find((s) => s.id === id)
   if (!skill) return
-  await saveSkills(kept.filter((s) => s.id !== id))
+  await saveSkills(
+    scope,
+    kept.filter((s) => s.id !== id),
+  )
   toast(t('toast.uninstalled', { name: skill.name }), undefined, { tone: 'success' })
 }
 
 /** How long a Connect waits for the sign-in at the service before it gives up. */
 const LOGIN_TIMEOUT_MS = 5 * 60_000
 
-function flowOf(serverId: string): ConnectFlow | null {
-  return useMarketplaceStore.getState().connecting[serverId] ?? null
+function flowOf(scope: HostScope, serverId: string): ConnectFlow | null {
+  return scope.useMarketplaceStore.getState().connecting[serverId] ?? null
 }
 
 /** An http(s) page in the system browser, as the app opens every outside link. */
@@ -376,20 +429,42 @@ export function connectionProblem(connection: MarketConnection): string | null {
 }
 
 /** Takes a server that a Connect added out of the settings again. */
-async function dropFresh(serverId: string, title: string): Promise<void> {
+async function dropFresh(scope: HostScope, serverId: string, title: string): Promise<void> {
   try {
-    await save(keptServers().filter((s) => s.id !== serverId))
+    await save(
+      scope,
+      keptServers(scope).filter((s) => s.id !== serverId),
+    )
   } catch (e) {
     warn(t('toast.changeFailed', { name: title, error: errorMessage(e) }))
   }
 }
 
 /** Ends a Connect as failed: the popover shows why, and a server it added goes again. */
-async function failConnect(serverId: string, title: string, error: string): Promise<void> {
-  const flow = flowOf(serverId)
+async function failConnect(
+  scope: HostScope,
+  serverId: string,
+  title: string,
+  error: string,
+): Promise<void> {
+  const flow = flowOf(scope, serverId)
   if (!flow) return
-  if (flow.fresh) await dropFresh(serverId, title)
-  setConnectFlow(serverId, { ...flow, fresh: false, phase: 'failed', start: null, error })
+  if (flow.fresh) await dropFresh(scope, serverId, title)
+  setConnectFlow(scope.useMarketplaceStore, serverId, {
+    ...flow,
+    fresh: false,
+    phase: 'failed',
+    start: null,
+    error,
+  })
+}
+
+/**
+ * Whether a Connect can finish from this window: a browser sign-in comes back to a loopback port
+ * of the host, which a browser on this device cannot reach when the host is another computer.
+ */
+export function connectsHere(scope: HostScope, spec: McpSpec): boolean {
+  return scope.hostId === null || oauthFlow(spec) !== 'browser'
 }
 
 /**
@@ -399,20 +474,40 @@ async function failConnect(serverId: string, title: string, error: string): Prom
  * five minutes takes a server it added out again.
  */
 export async function connectServer(
+  scope: HostScope,
   server: CatalogServer | MarketServer,
   agents: AgentChoice,
 ): Promise<void> {
   const serverId = server.id
-  const current = flowOf(serverId)
+  const current = flowOf(scope, serverId)
   if (current && current.phase !== 'failed') return
-  setConnectFlow(serverId, { serverId, fresh: false, phase: 'starting', start: null, error: null })
-  const kept = keptServers()
+  if (!connectsHere(scope, server.spec)) {
+    setConnectFlow(scope.useMarketplaceStore, serverId, {
+      serverId,
+      fresh: false,
+      phase: 'failed',
+      start: null,
+      error: t('connect.browserOnHost'),
+    })
+    return
+  }
+  setConnectFlow(scope.useMarketplaceStore, serverId, {
+    serverId,
+    fresh: false,
+    phase: 'starting',
+    start: null,
+    error: null,
+  })
+  const kept = keptServers(scope)
   if (!kept.some((s) => s.id === serverId) && 'publisher' in server) {
     // Marked before it is saved, so its Connect button stays while the server turns kept.
-    setConnectFlow(serverId, { ...flowOf(serverId)!, fresh: true })
+    setConnectFlow(scope.useMarketplaceStore, serverId, {
+      ...flowOf(scope, serverId)!,
+      fresh: true,
+    })
     const others = kept.filter((s) => s.id !== serverId)
     try {
-      await save([
+      await save(scope, [
         ...others,
         {
           id: serverId,
@@ -426,7 +521,7 @@ export async function connectServer(
         },
       ])
     } catch (e) {
-      setConnectFlow(serverId, {
+      setConnectFlow(scope.useMarketplaceStore, serverId, {
         serverId,
         fresh: false,
         phase: 'failed',
@@ -436,61 +531,66 @@ export async function connectServer(
       return
     }
     // Cancelled while it was saved: the cancel found nothing to take out yet.
-    if (!flowOf(serverId)) return dropFresh(serverId, server.title)
+    if (!flowOf(scope, serverId)) return dropFresh(scope, serverId, server.title)
   }
 
   let start
   try {
-    start = await host('market.connect', { serverId })
+    start = await scope.request('market.connect', { serverId })
   } catch (e) {
-    return failConnect(serverId, server.title, errorMessage(e))
+    return failConnect(scope, serverId, server.title, errorMessage(e))
   }
-  const flow = flowOf(serverId)
+  const flow = flowOf(scope, serverId)
   // Cancelled while the host was asked: the sign-in it began is let go at once.
-  if (!flow || flow.phase !== 'starting') return cancelLogin(start.loginId)
-  setConnectFlow(serverId, { ...flow, phase: 'waiting', start })
+  if (!flow || flow.phase !== 'starting') return cancelLogin(scope, start.loginId)
+  setConnectFlow(scope.useMarketplaceStore, serverId, { ...flow, phase: 'waiting', start })
   if (start.kind === 'browser') openPage(start.url)
 
   const end = await waitForLogin(start.loginId, LOGIN_TIMEOUT_MS)
   // Cancelled, or another Connect began meanwhile.
-  if (flowOf(serverId)?.start?.loginId !== start.loginId) return
+  if (flowOf(scope, serverId)?.start?.loginId !== start.loginId) return
   if (!end) {
-    cancelLogin(start.loginId)
-    return failConnect(serverId, server.title, t('connect.timedOut'))
+    cancelLogin(scope, start.loginId)
+    return failConnect(scope, serverId, server.title, t('connect.timedOut'))
   }
   if (end.connection.state !== 'connected') {
     const why = end.error ?? connectionProblem(end.connection) ?? t('connect.notConnected')
-    return failConnect(serverId, server.title, why)
+    return failConnect(scope, serverId, server.title, why)
   }
-  setConnectFlow(serverId, null)
+  setConnectFlow(scope.useMarketplaceStore, serverId, null)
   toast(t('toast.connected', { name: server.title }), undefined, { tone: 'success' })
 }
 
-function cancelLogin(loginId: string): void {
-  host('market.cancelConnect', { loginId }).catch((e: unknown) =>
-    console.warn(`Could not cancel a sign-in: ${errorMessage(e)}`),
-  )
+function cancelLogin(scope: HostScope, loginId: string): void {
+  scope
+    .request('market.cancelConnect', { loginId })
+    .catch((e: unknown) => console.warn(`Could not cancel a sign-in: ${errorMessage(e)}`))
 }
 
 /** Stops a Connect under way; a server it added goes again. */
-export async function cancelConnect(serverId: string, title: string): Promise<void> {
-  const flow = flowOf(serverId)
+export async function cancelConnect(
+  scope: HostScope,
+  serverId: string,
+  title: string,
+): Promise<void> {
+  const flow = flowOf(scope, serverId)
   if (!flow) return
-  setConnectFlow(serverId, null)
-  if (flow.start) cancelLogin(flow.start.loginId)
-  if (flow.fresh) await dropFresh(serverId, title)
+  setConnectFlow(scope.useMarketplaceStore, serverId, null)
+  if (flow.start) cancelLogin(scope, flow.start.loginId)
+  if (flow.fresh) await dropFresh(scope, serverId, title)
 }
 
 /** Forgets a Connect that failed, once its popover closes. */
-export function dismissConnect(serverId: string): void {
-  if (flowOf(serverId)?.phase === 'failed') setConnectFlow(serverId, null)
+export function dismissConnect(scope: HostScope, serverId: string): void {
+  if (flowOf(scope, serverId)?.phase === 'failed')
+    setConnectFlow(scope.useMarketplaceStore, serverId, null)
 }
 
 /** Clears a server's tokens and keeps the server; every agent loses it at once. */
-export async function disconnectServer(server: MarketServer): Promise<void> {
+export async function disconnectServer(scope: HostScope, server: MarketServer): Promise<void> {
   try {
-    await host('market.disconnect', { serverId: server.id })
-    useMarketplaceStore.setState((s) =>
+    await scope.request('market.disconnect', { serverId: server.id })
+    scope.useMarketplaceStore.setState((s) =>
       s.connections
         ? { connections: { ...s.connections, [server.id]: { state: 'disconnected' } } }
         : s,

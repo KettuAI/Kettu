@@ -27,16 +27,18 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Segmented, SettingSelect, SettingSwitch } from '@renderer/features/settings/controls'
 import { basename, count, tokens } from '@renderer/lib/format'
-import { agentName, AGENT_NAMES } from '@renderer/stores/agents'
-import { busyKey, detailsKey, useMarketplaceStore } from '@renderer/stores/marketplace'
+import { AGENT_NAMES } from '@renderer/stores/agents'
+import { useHostScope } from '@renderer/stores/host-scope'
+import { busyKey, detailsKey } from '@renderer/stores/marketplace'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installPlugin, setPluginEnabled, uninstallPlugin } from './actions'
 import { ConfirmDialog } from './dialogs'
 import {
+  useAgentName,
   useBusy,
   useHarnessAgents,
+  useHostProjects,
   useInstallsLabel,
-  useLocalProjects,
   usePluginInstalls,
 } from './hooks'
 import { ListingFrame, ListingSkeleton, Missing, ExternalLink } from './parts'
@@ -78,6 +80,7 @@ export function PluginRow({
 
 function PluginAddButton({ plugin, onOpen }: { plugin: CatalogPlugin; onOpen: () => void }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const installs = usePluginInstalls(plugin.harness, plugin.id)
   const busy = useBusy(busyKey('plugin', `${plugin.harness}/${plugin.id}`))
   return (
@@ -89,9 +92,9 @@ function PluginAddButton({ plugin, onOpen }: { plugin: CatalogPlugin; onOpen: ()
       form={(close) => (
         <PluginInstallForm
           plugin={plugin}
-          onDone={(agentId, scope, projectPath) => {
+          onDone={(agentId, pluginScope, projectPath) => {
             close()
-            void installPlugin(plugin, agentId, scope, projectPath)
+            void installPlugin(scope, plugin, agentId, pluginScope, projectPath)
           }}
         />
       )}
@@ -101,12 +104,13 @@ function PluginAddButton({ plugin, onOpen }: { plugin: CatalogPlugin; onOpen: ()
 
 /** What a plugin adds, as the chosen agent's harness reports it; null while it is read. */
 function useDetails(agentId: AgentId | null, pluginId: string) {
+  const { useMarketplaceStore } = useHostScope()
   const state = useMarketplaceStore((s) =>
     agentId ? (s.details[detailsKey(agentId, pluginId)] ?? null) : null,
   )
   useEffect(() => {
     if (agentId) void useMarketplaceStore.getState().loadDetails(agentId, pluginId)
-  }, [agentId, pluginId])
+  }, [agentId, pluginId, useMarketplaceStore])
   return state
 }
 
@@ -124,7 +128,7 @@ function PluginInstallForm({
   const { t } = useTranslation('marketplace')
   const agents = useHarnessAgents(plugin.harness)
   const installs = usePluginInstalls(plugin.harness, plugin.id)
-  const projects = useLocalProjects()
+  const projects = useHostProjects()
   const free = agents.filter((a) => !installs.some((p) => p.agentId === a.id))
   const [agentId, setAgentId] = useState<AgentId | null>(free[0]?.id ?? agents[0]?.id ?? null)
   const [scope, setScope] = useState<'user' | 'project'>('user')
@@ -224,10 +228,11 @@ export function PluginListing({
   back: () => void
 }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   // Read again whenever the host lists the plugins again.
-  const loaded = useMarketplaceStore((s) => s.plugins)
-  const loading = useMarketplaceStore((s) => s.pluginsLoading)
-  const plugin = loaded ? catalogPlugin(harness, id) : null
+  const loaded = scope.useMarketplaceStore((s) => s.plugins)
+  const loading = scope.useMarketplaceStore((s) => s.pluginsLoading)
+  const plugin = loaded ? catalogPlugin(scope, harness, id) : null
   const installs = usePluginInstalls(harness, id)
   const agents = useHarnessAgents(harness)
   const detailAgent = installs[0]?.agentId ?? agents[0]?.id ?? null
@@ -369,6 +374,7 @@ export function PluginListing({
 /** The listing's Install, for one more agent once installed for some. */
 function PluginInstallButton({ plugin }: { plugin: CatalogPlugin }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
   const [open, setOpen] = useState(false)
   const busy = useBusy(busyKey('plugin', `${plugin.harness}/${plugin.id}`))
   const installs = usePluginInstalls(plugin.harness, plugin.id)
@@ -394,9 +400,9 @@ function PluginInstallButton({ plugin }: { plugin: CatalogPlugin }) {
       >
         <PluginInstallForm
           plugin={plugin}
-          onDone={(agentId, scope, projectPath) => {
+          onDone={(agentId, pluginScope, projectPath) => {
             setOpen(false)
-            void installPlugin(plugin, agentId, scope, projectPath)
+            void installPlugin(scope, plugin, agentId, pluginScope, projectPath)
           }}
         />
       </Popover>
@@ -426,6 +432,8 @@ function Installs({ installs, title }: { installs: InstalledPlugin[]; title: str
 /** One agent's install: the agent, where, its version, its switch and Uninstall. */
 export function InstallRow({ plugin, title }: { plugin: InstalledPlugin; title: string }) {
   const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
+  const agentName = useAgentName()
   const [confirming, setConfirming] = useState(false)
   const busy = useBusy(busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`))
   const line = [scopeLine(plugin, t), plugin.version, plugin.enabled ? null : t('installed.off')]
@@ -445,7 +453,7 @@ export function InstallRow({ plugin, title }: { plugin: InstalledPlugin; title: 
           label={t('plugin.switch', { name: title, agent: agentName(plugin.agentId) })}
           checked={plugin.enabled}
           disabled={busy}
-          onChange={(on) => void setPluginEnabled(plugin, title, on)}
+          onChange={(on) => void setPluginEnabled(scope, plugin, title, on)}
         />
         <button
           type="button"
@@ -463,7 +471,7 @@ export function InstallRow({ plugin, title }: { plugin: InstalledPlugin; title: 
         title={t('dialogs.uninstallPlugin.title', { name: title })}
         body={t('dialogs.uninstallPlugin.body', { agent: agentName(plugin.agentId) })}
         confirm={t('dialogs.uninstall.confirm')}
-        action={() => uninstallPlugin(plugin, title)}
+        action={() => uninstallPlugin(scope, plugin, title)}
       />
     </div>
   )

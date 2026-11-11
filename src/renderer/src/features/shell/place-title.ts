@@ -5,12 +5,13 @@ import { i18n } from '@renderer/lib/i18n'
 import { AGENT_NAMES, agentName } from '@renderer/stores/agents'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { listingTitle } from '@renderer/features/marketplace/model'
-import { useMarketplaceStore } from '@renderer/stores/marketplace'
+import { hostScope, LOCAL_SCOPE } from '@renderer/stores/host-scope'
 import { otherHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import type { HistoryPlace, SettingsPlace } from '@renderer/stores/view'
+import { useWindowScope, windowHost } from '@renderer/stores/window-host'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
@@ -36,7 +37,11 @@ export function placeTitle(place: HistoryPlace): string {
     case 'artifacts':
       return place.deleted ? t('history.places.recentlyDeleted') : t('history.places.artifacts')
     case 'marketplace': {
-      const title = place.item ? listingTitle(place.item) : null
+      const shown = windowHost()
+      // The Marketplace works on the window's host, so its listings are named from that host's.
+      const scope =
+        shown.kind === 'one' && shown.hostId !== null ? hostScope(shown.hostId) : LOCAL_SCOPE
+      const title = place.item ? listingTitle(scope, place.item) : null
       return title
         ? t('history.places.marketplaceItem', { item: title })
         : t('history.places.marketplace')
@@ -66,7 +71,9 @@ export function usePlaceTitle(place: HistoryPlace): string {
     place.kind === 'routine' && place.routineId ? s.byId[place.routineId]?.name : null,
   )
   useArtifactsStore((s) => (place.kind === 'artifact' ? s.list : null))
-  useMarketplaceStore((s) => (place.kind === 'marketplace' && place.item ? s.catalog : null))
+  useWindowScope().useMarketplaceStore((s) =>
+    place.kind === 'marketplace' && place.item ? s.catalog : null,
+  )
   return placeTitle(place)
 }
 

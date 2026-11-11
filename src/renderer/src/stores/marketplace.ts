@@ -235,26 +235,33 @@ export const useMarketplaceStore = createMarketplaceStore(host, (patch) =>
 )
 
 /** Marks an install or change as under way, or done. */
-export function setBusy(key: string, busy: boolean): void {
-  useMarketplaceStore.setState((s) => ({
+export function setBusy(store: MarketplaceStoreHook, key: string, busy: boolean): void {
+  store.setState((s) => ({
     busy: busy ? [...s.busy.filter((x) => x !== key), key] : s.busy.filter((x) => x !== key),
   }))
 }
 
 /** The host says the keys changed: a page that read them reads them again. */
-export function marketKeysChanged(): void {
-  const store = useMarketplaceStore.getState()
-  if (store.keys !== null) void store.loadKeys()
+export function marketKeysChanged(store: MarketplaceStoreHook = useMarketplaceStore): void {
+  const state = store.getState()
+  if (state.keys !== null) void state.loadKeys()
 }
 
 /** Changes the plugins the host last listed, as an install, uninstall or switch answered. */
-export function updatePlugins(change: (plugins: MarketPlugins) => MarketPlugins): void {
-  useMarketplaceStore.setState((s) => (s.plugins ? { plugins: change(s.plugins) } : s))
+export function updatePlugins(
+  store: MarketplaceStoreHook,
+  change: (plugins: MarketPlugins) => MarketPlugins,
+): void {
+  store.setState((s) => (s.plugins ? { plugins: change(s.plugins) } : s))
 }
 
 /** Shows a Connect's progress; null ends it. */
-export function setConnectFlow(serverId: string, flow: ConnectFlow | null): void {
-  useMarketplaceStore.setState((s) => {
+export function setConnectFlow(
+  store: MarketplaceStoreHook,
+  serverId: string,
+  flow: ConnectFlow | null,
+): void {
+  store.setState((s) => {
     const connecting = { ...s.connecting }
     if (flow) connecting[serverId] = flow
     else delete connecting[serverId]
@@ -263,7 +270,7 @@ export function setConnectFlow(serverId: string, flow: ConnectFlow | null): void
 }
 
 // The Connects waiting for how their sign-in ends, by login id, and the ends that came before
-// their Connect learned its id.
+// their Connect learned its id. Login ids are random, so every host's share one map.
 const loginWaiters = new Map<string, (event: ConnectionEvent) => void>()
 const earlyEnds = new Map<string, ConnectionEvent>()
 const EARLY_ENDS_KEPT = 20
@@ -289,8 +296,11 @@ export function waitForLogin(loginId: string, timeoutMs: number): Promise<Connec
 }
 
 /** A server's sign-in changed: its state shows at once, and a Connect waiting for it ends. */
-export function marketConnectionChanged(event: ConnectionEvent): void {
-  useMarketplaceStore.setState((s) =>
+export function marketConnectionChanged(
+  event: ConnectionEvent,
+  store: MarketplaceStoreHook = useMarketplaceStore,
+): void {
+  store.setState((s) =>
     s.connections ? { connections: { ...s.connections, [event.serverId]: event.connection } } : s,
   )
   if (!event.loginId) return

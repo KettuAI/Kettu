@@ -13,8 +13,8 @@ import { limitLabel, tokens } from '@renderer/lib/format'
 import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
-import { useAgentsStore } from '@renderer/stores/agents'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
+import { useWindowScope } from '@renderer/stores/window-host'
 import { tightestLimit } from './plan-usage'
 import { costText } from './usage-row'
 
@@ -102,8 +102,10 @@ function tightestOf(
   return best
 }
 
+/** The window's host's tightest limit; this computer's with every host shown, as one account's. */
 export function TightestLimit() {
   const { t } = useTranslation('usage')
+  const { hostId, useAgentsStore } = useWindowScope()
   const agents = useAgentsStore(
     useShallow((s) =>
       s.order
@@ -126,7 +128,7 @@ export function TightestLimit() {
         level === 'ok' ? 'text-(--faint)' : LIMIT_TEXT[level],
       )}
     >
-      <AgentMark agent={agent.id} size={12} />
+      <AgentMark agent={agent.id} size={12} hostId={hostId} />
       <span aria-hidden className="truncate">
         {t('nav.limitShort', { limit: limitLabel(limit), percent })}
       </span>
