@@ -5,7 +5,7 @@
   display: flex;
   flex: none;
   flex-direction: column;
-  width: clamp(240px, 30%, 320px);
+  width: clamp(280px, 30%, 380px);
   min-height: 0;
   border-left: var(--hairline) solid var(--border-subtle);
 }
@@ -59,46 +59,6 @@
 .kb-head__needs {
   font-weight: 600;
   color: var(--attention);
-}
-
-/* A group: a heading that folds its rows, which slide away on grid rows, a disclosure being the
-   one layout animation allowed. */
-.kb-group + .kb-group {
-  margin-top: 6px;
-}
-.kb-group__title {
-  margin: 0;
-  font: inherit;
-}
-.kb-group__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 8px 4px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  outline: none;
-  transition: color var(--duration-fast) ease;
-}
-.kb-group__head:hover {
-  color: var(--text-primary);
-}
-.kb-group__head:focus-visible {
-  outline: 1.5px solid var(--focus-ring-color);
-  outline-offset: -1.5px;
-}
-.kb-group__n {
-  font-weight: 500;
-  color: var(--text-disabled);
-}
-.kb-chev {
-  transition: transform 200ms var(--ease-standard);
-}
-.kb-group__head[aria-expanded='false'] .kb-chev {
-  transform: rotate(-90deg);
 }
 .kb-fold {
   display: grid;
@@ -187,19 +147,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.kb-mono {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-variant-ligatures: none;
-}
-.kb-tag {
-  flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-  text-overflow: ellipsis;
-}
 .kb-row__detail {
   overflow: hidden;
   font-size: 12px;
@@ -243,14 +190,8 @@
   display: inline-flex;
   align-items: center;
 }
-.kb-chev-open {
-  transition: transform 250ms var(--ease-standard);
-}
-.kb-row[data-open] .kb-chev-open {
-  transform: rotate(90deg);
-}
 
-/* Small buttons and pills. */
+/* Small buttons. */
 .kb-mini {
   display: inline-flex;
   align-items: center;
@@ -277,78 +218,10 @@ button.kb-mini:disabled {
   opacity: 0.5;
   pointer-events: none;
 }
-.kb-mini--stop:hover {
-  color: var(--danger);
-}
-.kb-mini--solid {
-  background: var(--text-primary);
-  font-weight: 500;
-  color: var(--bg-surface);
-}
-.kb-pill {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: 99px;
-  font-size: 11px;
-  font-weight: 500;
-}
-.kb-pill--need {
-  background: color-mix(in srgb, var(--attention-dot) 9%, var(--bg-surface));
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--attention-dot) 24%, transparent);
-  color: var(--attention);
-}
-.kb-pill--fail {
-  background: var(--danger-tint);
-  color: var(--danger);
-}
 .kb-row-error {
-  margin: 0 8px 4px 36px;
+  margin: 4px 6px 0;
   font-size: 12px;
   color: var(--danger);
-}
-
-/* The mark in front of a row. */
-.kb-glyph {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 14px;
-  height: 14px;
-}
-.kb-glyph[data-state='running']::before {
-  content: '';
-  box-sizing: border-box;
-  width: 12px;
-  height: 12px;
-  border: 2px solid color-mix(in srgb, var(--thread-fox) 22%, transparent);
-  border-top-color: var(--thread-fox);
-  border-radius: 50%;
-  animation: kb-spin var(--duration-spin) linear infinite;
-}
-.kb-glyph[data-state='needs']::before {
-  content: '';
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--warning);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent);
-}
-.kb-glyph[data-state='done'] {
-  color: var(--success);
-}
-.kb-glyph[data-state='failed'] {
-  color: var(--danger);
-}
-.kb-glyph[data-state='stopped'] {
-  color: var(--text-disabled);
-}
-@keyframes kb-spin {
-  to {
-    rotate: 360deg;
-  }
 }
 .kb-tile {
   display: grid;
@@ -361,74 +234,9 @@ button.kb-mini:disabled {
   background: var(--bg-hover);
   color: var(--text-tertiary);
 }
-
-/* The strip above the groups: a sub-agent that waits for the user. */
-.kb-need {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 2px 0 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--attention-dot) 7%, var(--bg-surface));
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--attention-dot) 24%, transparent);
-  font-size: 12.5px;
-}
-.kb-need__text {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-}
-.kb-need__text > * {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kb-need__text b {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.kb-need__text span {
-  color: var(--text-secondary);
-}
-
-/* A task's card under its row: the Tool Call Card's white, sections labelled, no gray ground. It
-   unfolds on grid rows while its content rises out of a soft blur, as the thread's steps do. */
-.kb-row-fold {
-  display: grid;
-  grid-template-rows: 0fr;
-  margin-left: 28px;
-  visibility: hidden;
-  transition:
-    grid-template-rows 340ms var(--ease-out-quint),
-    visibility 0s 340ms;
-}
-.kb-row-fold[data-open='true'] {
-  grid-template-rows: 1fr;
-  visibility: visible;
-  transition:
-    grid-template-rows 340ms var(--ease-out-quint),
-    visibility 0s;
-}
-.kb-row-fold > div {
-  min-height: 0;
-  overflow: hidden;
-}
+/* A command's open card: what it runs and the end of its output, on the card's own white. */
 .kb-detail {
-  margin: 8px 1px 4px;
-  padding: 10px 12px 12px;
-  opacity: 0;
-  filter: blur(4px);
-  transform: translateY(4px);
-  transition:
-    opacity 340ms ease,
-    filter 340ms var(--ease-out-quint),
-    transform 340ms var(--ease-out-quint);
-}
-.kb-row-fold[data-open='true'] .kb-detail {
-  opacity: 1;
-  filter: none;
-  transform: none;
+  min-width: 0;
 }
 .kb-detail .ui-tcc__section {
   gap: 4px;
@@ -461,30 +269,191 @@ button.kb-mini:disabled {
   color: var(--ui-tcc-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .kb-glyph[data-state='running']::before {
-    animation: none;
+/* A section: its icon, name and count, with how many of it run at the end. */
+.kb-section {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0 12px;
+}
+.kb-section + .kb-section {
+  border-top: var(--hairline) solid var(--border-subtle);
+}
+.kb-section__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  & svg {
+    color: var(--pane-muted);
   }
+}
+.kb-section__n {
+  font-weight: 500;
+  color: var(--text-disabled);
+}
+.kb-section__run {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--attention);
+}
+.kb-section__body {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.kb-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  min-width: 0;
+}
+
+/* The sub-agents' tree, under the section's own heading: its bar of counts would repeat the
+   board's head and the section's, so it gives way to them. */
+.kb-tree {
+  &.ui-agtc {
+    padding: 0;
+    background: none;
+    box-shadow: none;
+  }
+  & .ui-agtc__bar {
+    display: none;
+  }
+}
+/* An ended sub-agent's Agent Monitor spans the board like the cards around it, folded or open:
+   its card is a fixed 340 px of its own, wider than a narrow board. Its name takes the room, its
+   time sits at the end, and the open card's line is drawn on the card's white, not gray. */
+.kb-stack .ui-agmc {
+  display: block;
+  width: 100%;
+}
+.kb-stack .ui-agmc__card,
+.kb-stack .ui-agmc__icon {
+  width: 100%;
+}
+.kb-stack .ui-agmc__icon {
+  display: flex;
+}
+.kb-stack .ui-agmc__icon-name {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+}
+.kb-stack .ui-agmc__well:not([data-status='waiting']) {
+  background: none;
+  box-shadow: inset 0 0 0 0.5px var(--border-subtle);
+}
+
+/* A command's Stop, at the end of its card, shown while the card is hovered or focused. */
+.kb-task {
+  min-width: 0;
+}
+/* A command's card leads with what it does, in the interface face as the thread's steps are,
+   across the room the card has. */
+.kb-task .ui-tcc__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  color: var(--ui-tcc-ink);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+}
+.kb-stop {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) ease,
+    color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease;
+}
+.kb-task:is(:hover, :focus-within) .kb-stop {
+  opacity: 1;
+}
+.kb-stop:hover {
+  background: var(--bg-hover);
+  color: var(--danger);
+}
+.kb-stop:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: -1.5px;
+}
+.kb-stop:disabled {
+  opacity: 0.5;
+}
+
+/* The ended items of a section, behind one line; they unfold on grid rows and rise out of a
+   soft blur, as the thread's steps do. */
+.kb-finished__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  outline: none;
+  transition:
+    color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease;
+}
+.kb-finished__head:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.kb-finished__head:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: -1.5px;
+}
+.kb-finished__failed {
+  color: var(--danger);
+}
+.kb-chev {
+  transition: transform 250ms var(--ease-standard);
+}
+.kb-finished__head[aria-expanded='true'] .kb-chev {
+  transform: rotate(90deg);
+}
+.kb-fold > div > * {
+  padding-top: 6px;
+  transition:
+    opacity 340ms ease,
+    filter 340ms var(--ease-out-quint),
+    transform 340ms var(--ease-out-quint);
+}
+.kb-fold[data-open='false'] > div > * {
+  opacity: 0;
+  filter: blur(4px);
+  transform: translateY(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
   .kb-fold,
-  .kb-row-fold,
-  .kb-chev,
-  .kb-chev-open,
-  .kb-detail {
+  .kb-fold > div > *,
+  .kb-chev {
     transition: none;
   }
-  .kb-detail {
+  .kb-fold[data-open='false'] > div > * {
     filter: none;
     transform: none;
   }
 }
 :root[data-reduce-motion='always'] {
-  & .kb-glyph[data-state='running']::before {
-    animation: none;
-  }
-  & :is(.kb-fold, .kb-row-fold, .kb-chev, .kb-chev-open, .kb-detail) {
+  & :is(.kb-fold, .kb-fold > div > *, .kb-chev) {
     transition: none;
   }
-  & .kb-detail {
+  & .kb-fold[data-open='false'] > div > * {
     filter: none;
     transform: none;
   }

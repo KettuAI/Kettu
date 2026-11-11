@@ -5417,6 +5417,49 @@ li[data-row-exit='dust'] > * {
   --ui-tcc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
   --ui-tcc-focus: var(--focus-ring-color);
 }
+[data-installed-theme] .ui-agtc {
+  --ui-agtc-card: var(--shell-card);
+  --ui-agtc-strong: var(--text-primary);
+  --ui-agtc-ink: var(--text-primary);
+  --ui-agtc-text: var(--text-secondary);
+  --ui-agtc-muted: var(--text-tertiary);
+  --ui-agtc-faint: var(--text-disabled);
+  --ui-agtc-line: var(--border-subtle);
+  --ui-agtc-fill: var(--bg-hover);
+  --ui-agtc-accent: var(--control-on);
+  --ui-agtc-ok-fg: var(--success);
+  --ui-agtc-ok-bg: color-mix(in srgb, var(--success) 10%, transparent);
+  --ui-agtc-warn-fg: var(--attention);
+  --ui-agtc-warn-bg: color-mix(in srgb, var(--attention) 14%, transparent);
+  --ui-agtc-danger-fg: var(--danger);
+  --ui-agtc-danger-bg: color-mix(in srgb, var(--danger) 9%, transparent);
+  --ui-agtc-focus: var(--focus-ring-color);
+  --ui-agtc-solid: var(--text-primary);
+  --ui-agtc-on-solid: var(--shell-card);
+  --ui-agtc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
+[data-installed-theme] .ui-agmc {
+  --ui-agmc-card: var(--shell-card);
+  --ui-agmc-strong: var(--text-primary);
+  --ui-agmc-ink: var(--text-primary);
+  --ui-agmc-text: var(--text-secondary);
+  --ui-agmc-muted: var(--text-tertiary);
+  --ui-agmc-faint: var(--text-disabled);
+  --ui-agmc-line: var(--border-subtle);
+  --ui-agmc-edge: var(--border-subtle);
+  --ui-agmc-lane: var(--bg-hover);
+  --ui-agmc-well: color-mix(in srgb, var(--bg-hover) 40%, transparent);
+  --ui-agmc-fill: var(--bg-hover);
+  --ui-agmc-accent: var(--control-on);
+  --ui-agmc-green: var(--success);
+  --ui-agmc-green-bg: color-mix(in srgb, var(--success) 9%, transparent);
+  --ui-agmc-red: var(--danger);
+  --ui-agmc-red-bg: color-mix(in srgb, var(--danger) 7%, transparent);
+  --ui-agmc-amber: var(--attention);
+  --ui-agmc-amber-bg: color-mix(in srgb, var(--attention) 13%, transparent);
+  --ui-agmc-focus: var(--focus-ring-color);
+  --ui-agmc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
+}
 /* What the components draw in fixed colors outside their variables. */
 [data-installed-theme] .ui-as-menu__item[data-danger],
 [data-installed-theme] .ui-as-menu__item[data-danger] > svg {

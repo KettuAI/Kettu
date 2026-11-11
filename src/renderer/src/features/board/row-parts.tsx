@@ -1,29 +1,10 @@
-import { useId, type ReactNode } from 'react'
-import { ArrowDown01Icon, Cancel01Icon, StopIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { useId, useState, type ReactNode } from 'react'
+import { ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { PaneIcon } from '@renderer/features/shell/panel-button'
-import { longAgo, shortDuration } from '@renderer/lib/format'
-import { useNow, useSeconds } from '@renderer/lib/use-now'
-
-export type RowState = 'running' | 'needs' | 'done' | 'failed' | 'stopped'
-
-/** A row's state as a mark: a turning ring, an amber dot, a check, a cross or a stop. */
-export function StatusGlyph({ state }: { state: RowState }) {
-  const { t } = useTranslation('board')
-  return (
-    <span role="img" aria-label={t(`status.${state}`)} className="kb-glyph" data-state={state}>
-      {state === 'done' && <PaneIcon icon={Tick02Icon} size={14} />}
-      {state === 'failed' && <PaneIcon icon={Cancel01Icon} size={14} />}
-      {state === 'stopped' && <PaneIcon icon={StopIcon} size={13} />}
-    </span>
-  )
-}
-
-/** How long something has run, counting on the one clock every ticking time shares. */
-export function Elapsed({ since }: { since: number }) {
-  const now = useSeconds()
-  return <span>{shortDuration(Math.max(0, now - since))}</span>
-}
+import { longAgo } from '@renderer/lib/format'
+import { useNow } from '@renderer/lib/use-now'
 
 export function Ago({ at }: { at: number }) {
   const now = useNow()
@@ -100,39 +81,67 @@ export function Row({
   )
 }
 
-/** A group of rows under a heading that folds them away. */
-export function Group({
+/** A section of the board: its icon, name and count, and how many of it run, over its content. */
+export function Section({
+  icon,
   title,
   count,
-  folded,
-  onToggle,
+  running,
   children,
 }: {
+  icon: IconSvgElement
   title: string
   count?: number
-  folded: boolean
-  onToggle: () => void
+  running?: string | null
   children: ReactNode
 }) {
-  const id = useId()
   return (
-    <section className="kb-group">
-      <h3 className="kb-group__title">
-        <button
-          type="button"
-          className="kb-group__head"
-          aria-expanded={!folded}
-          aria-controls={id}
-          onClick={onToggle}
-        >
-          <PaneIcon icon={ArrowDown01Icon} size={12} className="kb-chev" />
-          <span>{title}</span>
-          {count !== undefined && <span className="kb-group__n">{count}</span>}
-        </button>
+    <section className="kb-section" aria-label={title}>
+      <h3 className="kb-section__head">
+        <PaneIcon icon={icon} size={14} />
+        <span>{title}</span>
+        {count !== undefined && <span className="kb-section__n">{count}</span>}
+        {running && <span className="kb-section__run">{running}</span>}
       </h3>
-      <div id={id} className="kb-fold" data-open={!folded}>
+      <div className="kb-section__body">{children}</div>
+    </section>
+  )
+}
+
+/** The ended items of a section behind one line that counts them and their failures. */
+export function Finished({
+  count,
+  failed,
+  open: initial = false,
+  children,
+}: {
+  count: number
+  failed: number
+  /** Starts unfolded, as when nothing runs above it. */
+  open?: boolean
+  children: ReactNode
+}) {
+  const { t } = useTranslation('board')
+  const id = useId()
+  const [open, setOpen] = useState(initial)
+  return (
+    <div className="kb-finished">
+      <button
+        type="button"
+        className="kb-finished__head"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen(!open)}
+      >
+        <PaneIcon icon={ArrowRight01Icon} size={12} className="kb-chev" />
+        <span>{t('finished.label', { count })}</span>
+        {failed > 0 && (
+          <span className="kb-finished__failed">{t('finished.failed', { count: failed })}</span>
+        )}
+      </button>
+      <div id={id} className="kb-fold" data-open={open}>
         <div>{children}</div>
       </div>
-    </section>
+    </div>
   )
 }

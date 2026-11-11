@@ -7,31 +7,101 @@
     "needs_one": "{{count}} needs you",
     "needs_other": "{{count}} need you"
   },
-  "groups": {
-    "background": "Background",
+  "sections": {
     "subagents": "Sub-agents",
-    "artifacts": "Artifacts"
+    "background": "Background commands",
+    "artifacts": "Artifacts",
+    "running_one": "{{count}} running",
+    "running_other": "{{count}} running"
   },
   "none": {
-    "background": "No background tasks.",
+    "background": "No background commands.",
     "subagents": "No sub-agents.",
     "artifacts": "This session has not written an artifact."
   },
-  "unsupported": "{{agent}} does not report background tasks.",
+  "unsupported": "{{agent}} does not report background commands.",
   "empty": {
     "title": "Nothing to show yet",
-    "text": "Background tasks, sub-agents and the artifacts this session writes appear here while the agent works."
+    "text": "Sub-agents, background commands and the artifacts this session writes appear here while the agent works."
   },
   "status": {
+    "queued": "Queued",
     "running": "Running",
     "needs": "Needs you",
     "done": "Done",
     "failed": "Failed",
     "stopped": "Stopped"
   },
-  "kind": {
-    "monitor": "Monitor",
-    "workflow": "Workflow"
+  "step": {
+    "starting": "Starting",
+    "waiting": "Waiting for your answer"
+  },
+  "tokens": "{{tokens}} tokens",
+  "finished": {
+    "label_one": "Finished {{count}}",
+    "label_other": "Finished {{count}}",
+    "failed_one": "{{count}} failed",
+    "failed_other": "{{count}} failed"
+  },
+  "tree": {
+    "agents_one": "{{count}} agent",
+    "agents_other": "{{count}} agents",
+    "needsYou_one": "{{count}} needs you",
+    "needsYou_other": "{{count}} need you",
+    "waitingDialog": "Sub-agents that need you",
+    "failedDialog": "Sub-agents that failed",
+    "branchCost": "With its sub-agents",
+    "showSub": "Show {{count}} sub-agents of {{name}}",
+    "foldSub": "Fold the sub-agents of {{name}}",
+    "beside": "beside {{name}}",
+    "dismiss": "Dismiss",
+    "retry": "Retry"
+  },
+  "monitor": {
+    "agent": "Agent",
+    "states": {
+      "idle": "Idle",
+      "running": "Running",
+      "waiting": "Needs you",
+      "paused": "Paused",
+      "finished": "Finished",
+      "failed": "Failed",
+      "cancelled": "Cancelled"
+    },
+    "kinds": {
+      "read": "Read",
+      "search": "Search",
+      "edit": "Edit",
+      "run": "Terminal",
+      "think": "Thinking",
+      "web": "Web"
+    },
+    "waitingOnYou": "Waiting on you",
+    "finishedIn": "Finished in {{time}}",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "errorFallback": "Something went wrong",
+    "cancelledAfter": "Cancelled after {{time}}",
+    "noTask": "No task yet",
+    "costSoFar": "Cost so far {{cost}}",
+    "foldAway": "Fold away",
+    "runningFor": "Running for {{time}}",
+    "finishedSteps": "Finished steps",
+    "details": "{{step}}: details",
+    "started": "Started",
+    "took": "Took",
+    "share": "Share",
+    "state": "State",
+    "decline": "Decline",
+    "allow": "Allow",
+    "retry": "Try again",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "log": "Log",
+    "said": "{{name}}: {{state}}",
+    "saidDetail": "{{name}}: {{state}}, {{detail}}",
+    "open": "Open {{said}}"
   },
   "actions": {
     "stop": "Stop",
@@ -39,10 +109,6 @@
     "open": "Open",
     "openTitle": "Open {{title}}",
     "close": "Close"
-  },
-  "strip": {
-    "label": "A sub-agent needs your answer",
-    "waiting": "Waiting for your answer"
   },
   "detail": {
     "command": "Command",

@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Cancel01Icon, DashboardSquare02Icon } from '@hugeicons/core-free-icons'
+import { useEffect, type ReactNode } from 'react'
+import { Cancel01Icon, DashboardSquare02Icon, ShapesIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { ToolCallCard } from '@renderer/components/affect/tool-call-card'
+import { harnessOf } from '@shared/agents'
+import type { BackgroundTaskView } from '@shared/thread'
 import { PaneEmpty, PaneIcon } from '@renderer/features/shell/panel-button'
 import { agentName } from '@renderer/stores/agents'
 import { artifactListShown, artifactStanding, useArtifactsStore } from '@renderer/stores/artifacts'
@@ -10,35 +11,30 @@ import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { toggleBoard } from '@renderer/stores/view'
 import { ArtifactRow } from './artifact-row'
-import { BackgroundRow } from './background-row'
-import {
-  backgroundOrder,
-  boardSubagents,
-  subagentWaiting,
-  summaryParts,
-  threadArtifacts,
-  type BoardArtifact,
-} from './board-model'
-import { Group } from './row-parts'
-import { NeedsStrip, SubagentRow } from './subagent-rows'
+import { BackgroundSection } from './background-section'
+import { boardSubagents, summaryParts, threadArtifacts, type BoardArtifact } from './board-model'
+import { Section } from './row-parts'
+import { SubagentSection } from './subagent-section'
 import { useBoardActivity } from './use-board-activity'
 import './board.css'
 
-type GroupKey = 'background' | 'subagents' | 'artifacts'
-
 const NO_ARTIFACTS: BoardArtifact[] = []
+const NO_TASKS: BackgroundTaskView[] = []
 
 /**
  * The session's board: what it runs and makes beside its thread, at the right of the thread and
- * the composer on the same sheet. The commands and monitors its agent left running, the
- * sub-agents it started and the artifacts it wrote, in three groups that fold, with the
- * sub-agents waiting for the user's answer above them.
+ * the composer on the same sheet. The sub-agents it started, the commands and monitors its agent
+ * left running and the artifacts it wrote, each in a section of its own.
  */
 export default function BoardRail({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('board')
   const summary = useSessionsStore((s) => s.byId[sessionId])
   const loaded = useThreadsStore((s) => !!s.replicas[sessionId]?.state)
-  const tasks = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.background)
+  const listed = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.background)
+  // The host keeps the list only while the agent's process runs; a Claude Code session waiting
+  // for its process has none yet, yet its agent does report them.
+  const tasks =
+    listed ?? (summary && harnessOf(summary.agentId) === 'claude-code' ? NO_TASKS : undefined)
   const children = useSessionsStore(
     useShallow((s) =>
       Object.values(s.byId).filter(
@@ -54,25 +50,14 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
     useShallow((s) => written.filter((a) => artifactStanding(s, a.artifactId) === 'live')),
   )
   const activity = useBoardActivity(sessionId)
-  const [folded, setFolded] = useState<Partial<Record<GroupKey, true>>>({})
 
   useEffect(() => {
     artifactListShown(true)
     return () => artifactListShown(false)
   }, [])
 
-  const toggle = (key: GroupKey) =>
-    setFolded((prev) => {
-      const next = { ...prev }
-      if (next[key]) delete next[key]
-      else next[key] = true
-      return next
-    })
-
   const subagents = boardSubagents(children)
-  const waiting = subagents.filter(subagentWaiting)
-  const ordered = tasks ? backgroundOrder(tasks) : []
-  const empty = ordered.length === 0 && subagents.length === 0 && artifacts.length === 0
+  const empty = (tasks?.length ?? 0) === 0 && subagents.length === 0 && artifacts.length === 0
   const parts = summaryParts(t, activity)
   const agent = summary ? agentName(summary.agentId, hostOfSession(summary)) : ''
 
@@ -88,50 +73,9 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
   } else {
     body = (
       <div className="kb-scroll">
-        {waiting.map((child) => (
-          <NeedsStrip key={child.id} child={child} />
-        ))}
-        {loaded && (
-          <Group
-            title={t('groups.background')}
-            count={tasks ? ordered.length : undefined}
-            folded={!!folded.background}
-            onToggle={() => toggle('background')}
-          >
-            {!tasks ? (
-              <p className="kb-note">{t('unsupported', { agent })}</p>
-            ) : ordered.length === 0 ? (
-              <p className="kb-note">{t('none.background')}</p>
-            ) : (
-              ordered.map((task) => (
-                <BackgroundRow
-                  key={task.id}
-                  sessionId={sessionId}
-                  task={task}
-                  shown={!folded.background}
-                />
-              ))
-            )}
-          </Group>
-        )}
-        <Group
-          title={t('groups.subagents')}
-          count={subagents.length}
-          folded={!!folded.subagents}
-          onToggle={() => toggle('subagents')}
-        >
-          {subagents.length === 0 ? (
-            <p className="kb-note">{t('none.subagents')}</p>
-          ) : (
-            subagents.map((child) => <SubagentRow key={child.id} child={child} />)
-          )}
-        </Group>
-        <Group
-          title={t('groups.artifacts')}
-          count={artifacts.length}
-          folded={!!folded.artifacts}
-          onToggle={() => toggle('artifacts')}
-        >
+        {summary && <SubagentSection session={summary} subagents={subagents} />}
+        {loaded && <BackgroundSection sessionId={sessionId} tasks={tasks} agent={agent} />}
+        <Section icon={ShapesIcon} title={t('sections.artifacts')} count={artifacts.length}>
           {artifacts.length === 0 ? (
             <p className="kb-note">{t('none.artifacts')}</p>
           ) : (
@@ -144,7 +88,7 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
               />
             ))
           )}
-        </Group>
+        </Section>
       </div>
     )
   }
@@ -175,21 +119,6 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
         </button>
       </div>
       <div className="kb-body">{body}</div>
-      <CardStyles />
     </aside>
-  )
-}
-
-/**
- * The Tool Call Card adds its styles to the page when the first one renders, and a task's card
- * here uses them before the thread may have drawn one.
- */
-function CardStyles() {
-  return (
-    <div hidden>
-      <ToolCallCard name="" status="success" time={false}>
-        {false}
-      </ToolCallCard>
-    </div>
   )
 }
