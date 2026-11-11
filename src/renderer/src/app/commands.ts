@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { toast } from '@renderer/components/ui/toast'
+import { i18n } from '@renderer/lib/i18n'
 import { recordAction, watchNavigation } from '@renderer/lib/action-log'
 import { confirmDebugRestart } from '@renderer/stores/debug'
 import { openReport } from '@renderer/stores/report'
@@ -61,6 +63,9 @@ export function useAppCommands(): void {
             break
           case 'close':
             if (!closeCurrent(command.browser)) window.kettu.app.closeWindow()
+            break
+          case 'quit-hint':
+            toast(i18n.t('updates:quit.pressAgain'), undefined, { tone: 'info', duration: 2000 })
             break
           case 'confirm-debug-restart':
             confirmDebugRestart()

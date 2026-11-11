@@ -130,6 +130,8 @@ export type AppCommand =
   | { kind: 'go-back' }
   | { kind: 'go-forward' }
   | { kind: 'show-history' }
+  /** The first Cmd+Q: say a second one quits. */
+  | { kind: 'quit-hint' }
   /** Cmd+W: the page closes the part used last, else the shown session, else the window. */
   | { kind: 'close'; browser?: true }
   /** Report a problem, from the Help menu or the end of a recording, with its span then. */

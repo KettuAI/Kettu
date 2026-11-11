@@ -75,6 +75,7 @@
     "comeBackQuit": "再次打开 Kettu 时，会话和草稿都会恢复。",
     "restart": "重启",
     "quit": "退出",
+    "pressAgain": "再按一次 ⌘Q 退出",
     "titleClose": "要关闭窗口吗？",
     "unsavedFiles": "以下文件有未保存的更改：",
     "unsaved": "未保存",
