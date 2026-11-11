@@ -74,9 +74,11 @@
     grid-template-rows 300ms var(--ease-standard),
     visibility 0s 300ms;
 }
+/* Clipped for the fold's motion, with room for the cards' ring and shadow. */
 .kb-fold > div {
   min-height: 0;
-  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 12px;
 }
 .kb-note {
   margin: 2px 8px 6px;
@@ -309,7 +311,7 @@ button.kb-mini:disabled {
 .kb-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 
