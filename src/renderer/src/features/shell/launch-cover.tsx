@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { BrandFox } from '@renderer/components/brand'
+import { preloadWhenIdle } from '@renderer/features/session/markdown/preload'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useViewStore } from '@renderer/stores/view'
 
@@ -17,9 +19,11 @@ export function LaunchCover() {
   const { t } = useTranslation('shell')
   const launching = useViewStore((s) => s.main.kind === 'launch')
   const failed = useProjectsStore((s) => s.error !== null)
+  const shown = launching && !failed
+  useLifted(shown)
   return (
     <AnimatePresence>
-      {launching && !failed && (
+      {shown && (
         <motion.div
           key="launch-cover"
           role="status"
@@ -34,4 +38,18 @@ export function LaunchCover() {
       )}
     </AnimatePresence>
   )
+}
+
+/**
+ * Once the cover first lifts: tells main, for the launch budget, on the frame that shows the
+ * shell, then loads the thread's renderers while the window is idle.
+ */
+function useLifted(shown: boolean) {
+  const lifted = useRef(false)
+  useEffect(() => {
+    if (shown || lifted.current) return
+    lifted.current = true
+    requestAnimationFrame(() => requestAnimationFrame(() => window.kettu.app.reportInteractive()))
+    preloadWhenIdle()
+  }, [shown])
 }

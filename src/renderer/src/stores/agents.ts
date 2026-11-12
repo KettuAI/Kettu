@@ -14,6 +14,7 @@ import {
   type HarnessId,
 } from '@shared/thread'
 import { errorMessage, host, hostAt, type HostRequest } from '@renderer/lib/host'
+import { useSettingsStore } from '@renderer/stores/settings'
 
 /** One host's agents, in the order the menus list them. */
 export interface HostAgents {
@@ -265,8 +266,15 @@ async function taskRequest(
 export function agentName(agentId: AgentId, hostId: string | null = null): string {
   return (
     agentsOn(useAgentsStore.getState(), hostId).byId[agentId]?.name ??
+    // This computer's added agents are in the settings, which load before their statuses.
+    (hostId === null ? addedAgentName(agentId) : undefined) ??
     AGENT_NAMES[harnessOf(agentId)]
   )
+}
+
+function addedAgentName(agentId: AgentId): string | undefined {
+  return useSettingsStore.getState().settings.addedAgents.find((agent) => agent.id === agentId)
+    ?.name
 }
 
 export const AGENT_NAMES: Record<HarnessId, string> = {

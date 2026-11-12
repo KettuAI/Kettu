@@ -40,6 +40,21 @@ export function preloadRenderers(): void {
   loadMarkdown().catch(() => {})
 }
 
+/**
+ * Loads the Markdown renderer, its highlighter and the sent messages' Markdown once nothing else
+ * wants the main thread.
+ */
+export function preloadWhenIdle(): void {
+  const load = (): void => {
+    preloadRenderers()
+    // A sent message shows its raw text until this loads; on a failure the thread imports it again.
+    import('../entries/sent-markdown').catch(() => {})
+  }
+  // Safari, where the web client may run, has no idle callbacks.
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(load)
+  else setTimeout(load, 1)
+}
+
 function subscribe(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

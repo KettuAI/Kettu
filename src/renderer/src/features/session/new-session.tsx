@@ -125,6 +125,8 @@ export function NewSessionView({
   const startPath = parent?.projectPath ?? (noProject ? null : (project?.path ?? null))
   const hostId = startPath === null ? (noProject ? null : chosenHost) : hostOfPath(startPath)
   const installed = useAgentsStore((s) => {
+    // This computer's agents are read after launch; until then the chosen agent stands.
+    if (hostId === null && !s.loaded) return !!chosenId
     const status = chosenId ? agentsOn(s, hostId).byId[chosenId] : undefined
     return !!status && canStart(status)
   })
@@ -245,7 +247,12 @@ function DraftComposer({
   // A default agent that became usable after this page opened, such as the first start's, is what
   // the page starts with.
   const defaultAgent = useSettingsStore((s) => s.settings.general.defaultAgent)
+  const defaultOff = useSettingsStore(
+    (s) => !!defaultAgent && s.settings.disabledAgents.includes(defaultAgent),
+  )
   const defaultUsable = useAgentsStore((s) => {
+    // Until this computer's agents are read after launch, the settings say whether it is off.
+    if (!s.loaded) return !!defaultAgent && !defaultOff
     const candidate = defaultAgent ? s.byId[defaultAgent] : undefined
     return !!candidate && candidate.registered !== false && !candidate.disabled
   })
@@ -298,7 +305,9 @@ function DraftComposer({
   const tightest = limits ? tightestLimit(limits, now) : null
   const reached = tightest?.state === 'reached' ? tightest : null
   const sending = useRef(false)
-  // An agent that must sign in first opens no session until it has.
+  // An agent that must sign in first opens no session until it has, which is known once this
+  // computer's agents are read after launch.
+  const agentsRead = useAgentsStore((s) => hostId !== null || s.loaded)
   const signIn = !!status && agentNeed(status) === 'sign-in'
   const parentId = parent?.id ?? null
   const config = useStartConfig(agentId, undefined, hostId)
@@ -311,17 +320,19 @@ function DraftComposer({
   // The session the first message will use opens while it is written, so the menu shows what the
   // agent reports for it and the send only adopts it.
   useEffect(() => {
-    prepareFor(agentId && ready && !signIn ? { hostId, agentId, projectPath, parentId } : null)
-  }, [hostId, agentId, ready, signIn, projectPath, parentId])
+    prepareFor(
+      agentId && ready && agentsRead && !signIn ? { hostId, agentId, projectPath, parentId } : null,
+    )
+  }, [hostId, agentId, ready, agentsRead, signIn, projectPath, parentId])
 
   // Without a folder nothing is prepared, so an agent with no options cached reads them once, and
   // the menu lists its models before a project is chosen.
   const cacheLoaded = useAgentOptionsStore((s) => optionsLoaded(s, hostId))
   useEffect(() => {
-    if (agentId && hostId === null && !ready && !signIn && cacheLoaded) {
+    if (agentId && hostId === null && !ready && agentsRead && !signIn && cacheLoaded) {
       void readFirstOptions(hostId, agentId)
     }
-  }, [agentId, hostId, ready, signIn, cacheLoaded])
+  }, [agentId, hostId, ready, agentsRead, signIn, cacheLoaded])
 
   useEffect(() => {
     editor.current?.focus()

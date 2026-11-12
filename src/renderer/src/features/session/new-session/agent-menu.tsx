@@ -118,12 +118,18 @@ export function AgentMenu({
       return modelOnly ? listed.filter((status) => status.id === agentId) : listed
     }),
   )
+  // This computer's agents are read after launch: until then the list is loading, not empty.
+  const agentsRead = useAgentsStore((s) => hostId !== null || s.loaded)
   const entries = useAgentOptionsStore((s) => optionsOn(s, hostId))
   const picks = useAgentOptionsStore((s) => s.picks)
   const loaded = useAgentOptionsStore((s) => optionsLoaded(s, hostId))
   const prepared = useAgentOptionsStore((s) => s.prepared)
   const [open, setOpen] = useState(false)
   const [shown, setShown] = useState<AgentId | null>(agentId)
+  // Opened before the agents were read, it shows one once they are.
+  if (open && shown === null && agentsRead && statuses.length > 0) {
+    setShown(firstShown(statuses, agentId))
+  }
   const shownPrepared = shown ? preparedFor({ prepared }, hostId, shown) : null
   const firstRead = useAgentOptionsStore((s) =>
     shown ? s.firstReads[agentKey(hostId, shown)] : undefined,
@@ -217,11 +223,7 @@ export function AgentMenu({
       onClose?.()
       return
     }
-    setShown(
-      statuses.some((s) => s.id === agentId)
-        ? agentId
-        : ((statuses.find(listedInstalled) ?? statuses[0])?.id ?? null),
-    )
+    setShown(agentsRead ? firstShown(statuses, agentId) : null)
     setExpanded(chosenChoice?.older ? agentId : null)
     for (const status of statuses) {
       if (status.state !== 'ready' || !status.capabilities.reports) continue
@@ -328,7 +330,26 @@ export function AgentMenu({
               <Glyph icon={Search01Icon} className="size-3.5" />
             </InputGroupAddon>
           </ComboboxInput>
-          {statuses.length === 0 ? (
+          {!agentsRead ? (
+            // The rail and the pane at their own sizes, so nothing moves when the agents come.
+            <div className="flex min-h-0 flex-1 p-1.5" aria-hidden>
+              {!modelOnly && (
+                <>
+                  <div className="flex min-w-49 shrink-0 flex-col gap-1 pr-1.5">
+                    {[0, 1, 2].map((i) => (
+                      <Skeleton key={i} className="h-row w-full rounded-md" />
+                    ))}
+                  </div>
+                  <Separator orientation="vertical" className="bg-border-soft" />
+                </>
+              )}
+              <div className={cn('flex w-80 min-w-0 flex-col gap-1', !modelOnly && 'ml-1.5')}>
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-row w-full rounded-md" />
+                ))}
+              </div>
+            </div>
+          ) : statuses.length === 0 ? (
             <p className="flex-1 px-3.5 py-3 text-ui text-muted-foreground">
               {hostId === null
                 ? t('newSession.noAgent')
@@ -418,6 +439,13 @@ export function AgentMenu({
       </Combobox>
     </AgentMarkHost.Provider>
   )
+}
+
+/** The agent the menu shows as it opens: its own, else the first installed one. */
+function firstShown(statuses: AgentStatus[], agentId: AgentId | null): AgentId | null {
+  return statuses.some((s) => s.id === agentId)
+    ? agentId
+    : ((statuses.find(listedInstalled) ?? statuses[0])?.id ?? null)
 }
 
 /** What the composer's button shows: the agent, the model it starts with and the level. */

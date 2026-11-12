@@ -126,7 +126,6 @@ export function App() {
         )}
         <GitDialogsHost />
         <Toaster />
-        <ReportInteractive />
       </div>
     </TooltipProvider>
   )
@@ -255,14 +254,3 @@ function MainFrame() {
 
 // App Shell's own width for a narrow window, where the sidebar becomes a drawer.
 const NARROW_FRAME = 900
-
-/** Tells main when the first frame of the shell is on screen, for the launch budget. */
-function ReportInteractive() {
-  const sent = useRef(false)
-  useEffect(() => {
-    if (sent.current) return
-    sent.current = true
-    requestAnimationFrame(() => requestAnimationFrame(() => window.kettu.app.reportInteractive()))
-  }, [])
-  return null
-}
