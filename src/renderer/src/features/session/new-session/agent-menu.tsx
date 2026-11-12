@@ -95,8 +95,8 @@ export function AgentMenu({
   modelOnly?: boolean
   /** Opens as it mounts, for a menu another control opened in its place. */
   defaultOpen?: boolean
-  /** It closed, chosen or not. */
-  onClose?: () => void
+  /** It closed, chosen or not, for Base UI's reason, or none when it closed itself. */
+  onClose?: (reason?: string) => void
   /**
    * The option values of the menu's own agent, when the caller keeps them itself, as a routine
    * does; without them the menu shows and sets New session's picks.
@@ -209,12 +209,12 @@ export function AgentMenu({
     return choice ? `${agentName(id, hostId)} ${choice.name}` : agentName(id, hostId)
   }
 
-  const onOpenChange = (next: boolean) => {
+  const onOpenChange = (next: boolean, details?: { reason: string }) => {
     setOpen(next)
     if (!next) {
       setQuery('')
       setSize(null)
-      onClose?.()
+      onClose?.(details?.reason)
       return
     }
     setShown(

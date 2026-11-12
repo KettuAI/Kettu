@@ -23,7 +23,12 @@ import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { formatShortcut, isMac } from '@renderer/lib/platform'
 import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
-import { replaceStale, restartTerminal, type TerminalState } from '@renderer/stores/terminals'
+import {
+  replaceStale,
+  restartTerminal,
+  useTerminalsStore,
+  type TerminalState,
+} from '@renderer/stores/terminals'
 import { useViewStore } from '@renderer/stores/view'
 import {
   askAboutSelection,
@@ -52,7 +57,7 @@ function useAsk(): { label: string; agentId: AgentId | null; hostId: string | nu
 
 /**
  * A terminal's screen. Two show at once while the panel is split; only the focused one takes the
- * keyboard when it shows.
+ * keyboard, and only when the user opened, started or picked it.
  */
 export function TerminalView({
   terminal,
@@ -83,9 +88,12 @@ export function TerminalView({
     }
   }, [terminal.id])
 
+  const wanted = useTerminalsStore((s) => s.focusing === terminal.id)
   useEffect(() => {
-    if (instance && focused) instance.term.focus()
-  }, [instance, focused])
+    if (!instance || !focused || !wanted) return
+    instance.term.focus()
+    useTerminalsStore.setState({ focusing: null })
+  }, [instance, focused, wanted])
 
   // Fit while the panel is resized, at most every 50 ms.
   useEffect(() => {

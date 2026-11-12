@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type Ref } from 'react'
+import { useEffect, useMemo, useRef, useState, type Ref } from 'react'
 import { Cancel01Icon, CheckmarkCircle02Icon, LockIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { AnsweredQuestion, PendingQuestion, PermissionOption, ToolEntry } from '@shared/thread'
@@ -114,6 +114,24 @@ export function QuestionCard({
     if (sent && focused) emitAppEvent({ kind: 'focus-composer' })
   }
 
+  // The card changes steps in place. Focus inside it stays there, or, when the control it was on
+  // goes, such as Next on a step with nothing chosen yet, moves to the new step's first answer.
+  const refocus = useRef(false)
+  const step = (next: QuestionState | ((s: QuestionState) => QuestionState)) => {
+    refocus.current = !!root.current?.contains(document.activeElement)
+    setState(next)
+  }
+  useEffect(() => {
+    if (!refocus.current) return
+    refocus.current = false
+    const card = root.current
+    if (!card || card.contains(document.activeElement)) return
+    const to =
+      card.querySelector<HTMLElement>('.ui-xcc__rows > button') ??
+      card.querySelector<HTMLElement>('.ui-xcc__switch [aria-checked="true"]')
+    to?.focus()
+  }, [state.step])
+
   const steps: ExperimentMetric[] = questions.map((asked, i) => ({
     id: String(i),
     label: asked.header || t('question.step', { number: i + 1 }),
@@ -121,7 +139,7 @@ export function QuestionCard({
   const switching = {
     metrics: steps,
     metric: String(state.step),
-    onMetricChange: (id: string) => setState((s) => goTo(s, Number(id))),
+    onMetricChange: (id: string) => step((s) => goTo(s, Number(id))),
     switchLabel: t('question.steps'),
   }
 
@@ -137,7 +155,6 @@ export function QuestionCard({
     <div ref={ref} data-entry-id={entry.id} className={cn('min-w-0', className)}>
       <div ref={root} className="min-w-0">
         <ExperimentCard
-          key={state.step}
           {...shared}
           {...switching}
           title={question.question}
@@ -212,7 +229,7 @@ export function QuestionCard({
                   onClick: () => {
                     setOwnOpen(null)
                     if (last) void submit(cleared)
-                    else setState(goTo(cleared, state.step + 1))
+                    else step(goTo(cleared, state.step + 1))
                   },
                 }
           }
@@ -221,7 +238,7 @@ export function QuestionCard({
             label: !last
               ? t('question.next')
               : t(given > 0 || count === 1 ? 'question.submit' : 'question.skipAll'),
-            onClick: () => (last ? void submit(state) : setState((s) => goTo(s, s.step + 1))),
+            onClick: () => (last ? void submit(state) : step((s) => goTo(s, s.step + 1))),
           }}
         />
       </div>

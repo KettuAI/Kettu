@@ -122,7 +122,15 @@ export function useKeyboardShortcuts(): void {
           return
         }
       }
-      if (key === 'u' && !event.shiftKey && view.main.kind === 'session' && !view.settings.open) {
+      // The Files pane's editor keeps Mod+U and Mod+Shift+[ and ], as it does Mod+/ above.
+      const editing = inCodeEditor(event.target)
+      if (
+        key === 'u' &&
+        !event.shiftKey &&
+        !editing &&
+        sessionsShown(view.main) &&
+        !view.settings.open
+      ) {
         return run(event, () => emitAppEvent({ kind: 'add-attachments' }))
       }
       if (key === 'l' && !event.shiftKey) {
@@ -130,7 +138,11 @@ export function useKeyboardShortcuts(): void {
           emitAppEvent({ kind: inTerminal ? 'ask-selection' : 'focus-composer' }),
         )
       }
-      if (event.shiftKey && (event.code === 'BracketLeft' || event.code === 'BracketRight')) {
+      if (
+        event.shiftKey &&
+        !editing &&
+        (event.code === 'BracketLeft' || event.code === 'BracketRight')
+      ) {
         return run(event, () => stepSession(event.code === 'BracketLeft' ? -1 : 1))
       }
     }

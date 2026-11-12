@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
+import { emitAppEvent } from '@renderer/app/events'
 import { Button } from '@renderer/components/ui/button'
 import { Popover, PopoverContent } from '@renderer/components/ui/popover'
 import { Textarea } from '@renderer/components/ui/textarea'
@@ -70,16 +71,41 @@ export function ReplyToSelection({
   const passageRef = useRef<Passage | null>(null)
   // The text of a selection the user closed with Esc, which stays closed until the selection changes.
   const dismissed = useRef('')
+  // The passage the written answer is for, which the box shows again when it opens on it.
+  const answerFor = useRef('')
+  // What had the focus when the box took it, which gets it back as the box closes.
+  const opener = useRef<HTMLElement | null>(null)
+  const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
     writingRef.current = writing
     passageRef.current = passage
   }, [writing, passage])
 
-  const close = () => {
+  const close = (keepAnswer = false) => {
     setOpen(false)
     setWriting(false)
-    setAnswer('')
+    if (!keepAnswer) setAnswer('')
     setError(null)
+  }
+
+  const startWriting = () => {
+    if (!passage) return
+    if (answerFor.current !== passage.text) setAnswer('')
+    answerFor.current = passage.text
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setWriting(true)
+  }
+
+  // The box hands the focus back to what had it, or else to the composer, never to nothing; a
+  // focus the user moved elsewhere stays there, and the Reply button alone never took it.
+  const returnFocus = () => {
+    const back = opener.current
+    opener.current = null
+    const at = document.activeElement
+    if (!back || (at && at !== document.body && !box.current?.contains(at))) return false
+    if (back.isConnected && back !== document.body) return back
+    emitAppEvent({ kind: 'focus-composer' })
+    return false
   }
 
   // A selection settles when the pointer is released or a key is, and goes with any change of it.
@@ -183,22 +209,23 @@ export function ReplyToSelection({
       open={open && (writing || visible)}
       onOpenChange={(next, details) => {
         if (next) return
-        // A click elsewhere must not lose what was typed.
+        // A click elsewhere must not lose what was typed, and Esc keeps it for the same passage.
         const away = details.reason === 'outside-press' || details.reason === 'focus-out'
         if (writing && answer.trim() && away) {
           details.cancel()
           return
         }
-        close()
+        close(writing && details.reason === 'escape-key')
       }}
     >
       <PopoverContent
+        ref={box}
         anchor={anchor}
         side="top"
         align="center"
         sideOffset={6}
         initialFocus={false}
-        finalFocus={false}
+        finalFocus={returnFocus}
         className={cn(
           writing ? 'w-80 gap-2 p-3' : 'ks-reply-pop w-auto',
           writing && !visible && 'invisible',
@@ -242,7 +269,7 @@ export function ReplyToSelection({
             className="ks-reply-pill"
             // The click must not take focus, which would drop the selection it quotes.
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => setWriting(true)}
+            onClick={startWriting}
           >
             {t('reply.button')}
           </Button>

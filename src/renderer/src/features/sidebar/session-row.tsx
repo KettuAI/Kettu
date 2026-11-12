@@ -227,7 +227,11 @@ export const SessionRow = memo(function SessionRow({
       onClick={(event) => pick(event) || openSession(summary.id, summary.projectPath)}
       onDoubleClick={rename.start}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') clearSelection()
+        if (event.key === 'Escape') {
+          // Esc that lets go of picked rows stops here, before it reaches the session.
+          if (useSessionSelection.getState().ids.length > 0) event.preventDefault()
+          clearSelection()
+        }
         // The context menu key opens the More menu, the row's menu for the keyboard.
         if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
           event.preventDefault()

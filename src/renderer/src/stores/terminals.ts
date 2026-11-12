@@ -33,6 +33,9 @@ interface TerminalsStore {
   order: Record<string, string[]> // panel → tab order the user dragged into
   split: Record<string, string | null> // panel → terminal shown on the right
   focusedSide: Record<string, TerminalSide> // panel → side a selected tab shows in
+  // The terminal that takes the keyboard once it shows, as one the user opened, started or picked
+  // does; one that shows on its own, such as on switching sessions, leaves the focus where it is.
+  focusing: string | null
   connection: PortConnectionState
   error: string | null
 }
@@ -43,6 +46,7 @@ export const useTerminalsStore = create<TerminalsStore>()(() => ({
   order: {},
   split: {},
   focusedSide: {},
+  focusing: null,
   connection: 'connected',
   error: null,
 }))
@@ -186,7 +190,15 @@ export function finishTerminalLoad(
   options: { explicitOpen: boolean; stale: boolean; loaded: boolean },
 ): void {
   if (!options.loaded || options.stale || createInFlight(panel)) return
-  if (terminalsOf(useTerminalsStore.getState().byId, panel).length > 0) return
+  if (terminalsOf(useTerminalsStore.getState().byId, panel).length > 0) {
+    if (options.explicitOpen) {
+      useTerminalsStore.setState((s) => ({
+        focusing:
+          (s.focusedSide[panel] === 'right' ? s.split[panel] : s.active[panel]) ?? s.focusing,
+      }))
+    }
+    return
+  }
   if (options.explicitOpen) {
     void createTerminal(projectPath, panel)
     return
@@ -438,19 +450,20 @@ export function busyTerminalsOf(sessionIds: readonly string[]): TerminalState[] 
 }
 
 /**
- * Shows a terminal. While split, a tab already on one side focuses that side, and any other
- * takes the place of the focused side's.
+ * Shows a terminal the user picked or started, which takes the keyboard. While split, a tab already
+ * on one side focuses that side, and any other takes the place of the focused side's.
  */
 export function showTerminal(panel: string, id: string): void {
   useTerminalsStore.setState((s) => {
     const t = s.byId[id]
     const byId = t?.activity ? { ...s.byId, [id]: { ...t, activity: false } } : s.byId
     const right = s.split[panel]
-    if (!right) return { active: { ...s.active, [panel]: id }, byId }
+    if (!right) return { active: { ...s.active, [panel]: id }, byId, focusing: id }
     const side: TerminalSide =
       id === right ? 'right' : id === s.active[panel] ? 'left' : (s.focusedSide[panel] ?? 'left')
     return {
       byId,
+      focusing: id,
       focusedSide: { ...s.focusedSide, [panel]: side },
       ...(side === 'right'
         ? { split: { ...s.split, [panel]: id } }
@@ -475,11 +488,12 @@ export async function toggleSplit(projectPath: string, panel: string): Promise<v
     if (!s.byId[info.id] || s.split[panel]) return s
     // Nothing was shown to split from: the new terminal shows alone.
     if (!left || left === info.id || !s.byId[left]) {
-      return { active: { ...s.active, [panel]: info.id } }
+      return { active: { ...s.active, [panel]: info.id }, focusing: info.id }
     }
     return {
       split: { ...s.split, [panel]: info.id },
       focusedSide: { ...s.focusedSide, [panel]: 'right' },
+      focusing: info.id,
     }
   })
 }
@@ -651,6 +665,7 @@ function inheritTab(oldId: string, newId: string): void {
     return {
       byId: { ...s.byId, [newId]: { ...created, name: old.name } },
       order: { ...s.order, [panel]: ids },
+      focusing: newId,
       ...(right
         ? { split: { ...s.split, [panel]: newId } }
         : { active: { ...s.active, [panel]: newId } }),
