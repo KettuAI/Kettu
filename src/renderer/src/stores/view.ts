@@ -910,6 +910,17 @@ type Direction = 'back' | 'forward'
 // Off while a change must not record a step: a step itself, or a view shown in place of another.
 let recording = true
 
+// The views the last Back or Forward showed again, by `viewKey`, until the history records a step.
+let returned = new Set<string>()
+
+/**
+ * Whether the last Back or Forward showed this view again, rather than a change opening it, so it
+ * can return to where the user was in it.
+ */
+export function returnedTo(view: HistoryView): boolean {
+  return returned.has(viewKey(view))
+}
+
 /** A view's identity in the history: what it shows, not how. */
 export function viewKey(view: HistoryView): string {
   switch (view.kind) {
@@ -995,6 +1006,7 @@ useViewStore.subscribe((state, previous) => {
   if (settings !== null && settings === settingsKey(previous.settings)) return
   const step = stepBetween(previous, state, Date.now())
   if (!step) return
+  returned = new Set()
   useViewStore.setState({
     history: { back: [...state.history.back, step].slice(-HISTORY_LIMIT), forward: [] },
   })
@@ -1071,8 +1083,19 @@ function stepped(
 }
 
 function move(direction: Direction, canShow: CanShow): void {
-  const result = stepped(useViewStore.getState(), direction, canShow, Date.now())
-  if (result) inPlace(() => useViewStore.setState(result.changes))
+  const s = useViewStore.getState()
+  const result = stepped(s, direction, canShow, Date.now())
+  if (result) showAgain(s, result.changes, result.shown !== null)
+}
+
+/** Applies the changes of Back or Forward; with `shown`, what they show counts as returned to. */
+function showAgain(s: ViewStore, changes: Partial<ViewStore>, shown: boolean): void {
+  if (shown) {
+    const next = { ...s, ...changes }
+    const page = pageOf(next.main)
+    returned = new Set(page ? [viewKey(page)] : allPanes(next.layout).map((p) => viewKey(p.view)))
+  }
+  inPlace(() => useViewStore.setState(changes))
 }
 
 /**
@@ -1094,8 +1117,9 @@ export function goForward(canShow: CanShow): void {
  * no longer in the list or can no longer show.
  */
 export function goTo(direction: Direction, target: Step, canShow: CanShow): boolean {
-  let s = useViewStore.getState()
-  if (!s.history[direction].includes(target) || !stepShows(target, canShow)) return false
+  const before = useViewStore.getState()
+  if (!before.history[direction].includes(target) || !stepShows(target, canShow)) return false
+  let s = before
   let changes: Partial<ViewStore> = {}
   let leftAt = Date.now()
   for (;;) {
@@ -1106,7 +1130,7 @@ export function goTo(direction: Direction, target: Step, canShow: CanShow): bool
     if (result.shown === target) break
     if (result.shown) leftAt = result.shown.at
   }
-  inPlace(() => useViewStore.setState(changes))
+  showAgain(before, changes, true)
   return true
 }
 

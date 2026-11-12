@@ -17,7 +17,7 @@ import { cn } from '@renderer/lib/utils'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useWebHostStore } from '@renderer/stores/web-host'
-import { answeredBy } from './helpers'
+import { answeredBy, revealWaiting } from './helpers'
 
 /** How long an access the user allows holds: this session, or always. */
 export type AccessDecision = 'session' | 'always' | 'deny'
@@ -79,7 +79,7 @@ export function AccessCard({
   const waiting = answer === null
 
   useEffect(() => {
-    if (waiting) card.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    if (waiting) revealWaiting(card.current)
   }, [waiting])
 
   const send = async (decision: AccessDecision) => {

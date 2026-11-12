@@ -16,6 +16,17 @@ import { errorCode, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { nameHints } from '../project-names'
 
+/**
+ * Brings a card that waits for the user into view while its thread follows the end. A reader
+ * further up stays where they are, and the jump-to-latest button shows the wait instead.
+ */
+export function revealWaiting(card: HTMLElement | null): void {
+  const viewport = card?.closest('[data-slot="message-scroller-viewport"]')
+  // MessageScroller leaves `end` out while it follows the end or is there.
+  if (viewport?.getAttribute('data-scrollable')?.split(' ').includes('end')) return
+  card?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+}
+
 /** A Collapsible panel animating its height, the one layout animation the design allows. */
 export const PANEL =
   'h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-(--duration-base) ease-out-expo data-ending-style:h-0 data-starting-style:h-0'

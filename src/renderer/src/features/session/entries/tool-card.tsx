@@ -5,6 +5,7 @@ import { cn } from '@renderer/lib/utils'
 import { toolMedia } from '../media/named'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { ElicitationCard, ElicitationSettled } from './elicitation-card'
+import { revealWaiting } from './helpers'
 import { PermissionEntry } from './permission-card'
 import { PlanCard, PlanSettled } from './plan-card'
 import { AnsweredAsk, OptionQuestionCard, QuestionCard } from './question-card'
@@ -37,7 +38,7 @@ export const ToolCard = memo(function ToolCard({
   const media = useMemo(() => (entry ? toolMedia(entry) : []), [entry])
 
   useEffect(() => {
-    if (permission) ref.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    if (permission) revealWaiting(ref.current)
   }, [permission])
 
   if (!entry) return null
