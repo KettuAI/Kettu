@@ -5,7 +5,9 @@ import {
   coalescePatches,
   entryMessageId,
   isThreadEntry,
+  outOfCreditTurn,
   prependEntries,
+  retryableTurn,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -257,6 +259,15 @@ describe('isThreadEntry', () => {
       after: 'm:1',
     },
     { kind: 'notice', id: 'e:7', severity: 'info', title: 'x', after: null },
+    {
+      kind: 'notice',
+      id: 'e:11',
+      severity: 'error',
+      title: 'The turn failed',
+      description: 'Overloaded',
+      cause: 'turn_failed',
+      after: 'm:1',
+    },
     { kind: 'compaction', id: 'c:1', status: 'completed', summary: '' },
     { kind: 'turn_end', id: 'e:4', stopReason: 'end_turn', durationMs: 5 },
     { kind: 'turn_end', id: 'e:8', stopReason: 'cancelled', durationMs: 5, after: 't:1' },
@@ -423,6 +434,52 @@ describe('isThreadEntry', () => {
     expect(
       isThreadEntry({ kind: 'notice', id: 'n', severity: 'warning', title: 'x', model: 1 }),
     ).toBe(false)
+  })
+})
+
+describe('retryableTurn', () => {
+  const failed: ThreadEntry = {
+    kind: 'notice',
+    id: 'e:9',
+    severity: 'error',
+    title: 'The turn failed',
+    cause: 'turn_failed',
+  }
+  const unpaid: ThreadEntry = {
+    kind: 'notice',
+    id: 'e:9',
+    severity: 'warning',
+    title: 'Out of credit',
+    cause: 'out_of_credit',
+  }
+  const done: ThreadEntry = {
+    kind: 'agent',
+    id: 'm:1',
+    markdown: 'Hi',
+    attachments: [],
+    streaming: false,
+  }
+
+  it("gives a failed turn's notice and prompt, past the work it did", () => {
+    const turn = retryableTurn(state([user, done, failed]))
+    expect(turn?.notice.id).toBe('e:9')
+    expect(turn?.prompt.id).toBe('e:1')
+  })
+
+  it('gives a turn refused for want of credit too', () => {
+    expect(retryableTurn(state([user, unpaid]))?.notice.cause).toBe('out_of_credit')
+  })
+
+  it('gives nothing once work follows the notice or the turn ended otherwise', () => {
+    expect(retryableTurn(state([user, failed, done]))).toBeNull()
+    expect(retryableTurn(state([user, done]))).toBeNull()
+    const stopped: ThreadEntry = { ...failed, cause: 'agent_stopped' }
+    expect(retryableTurn(state([user, stopped]))).toBeNull()
+  })
+
+  it('leaves the out-of-credit turn to a notice of its own', () => {
+    expect(outOfCreditTurn(state([user, failed]))).toBeNull()
+    expect(outOfCreditTurn(state([user, unpaid]))?.prompt.id).toBe('e:1')
   })
 })
 

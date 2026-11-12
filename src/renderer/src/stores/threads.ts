@@ -24,6 +24,11 @@ export interface Replica {
   /** The cursor for the page before the loaded ones, or null once the thread's start is loaded. */
   older: number | null
   loadingOlder: boolean
+  /**
+   * The last older page's failure, until a page arrives: its error, how many failed in a row, and
+   * when scrolling may ask again (`performance.now()` time).
+   */
+  olderFailure: { message: string; count: number; retryAt: number } | null
   /** The latest plan when it lies before the loaded pages. */
   plan: PlanEntry | null
 }
@@ -34,8 +39,13 @@ const EMPTY: Omit<Replica, 'status'> = {
   error: null,
   older: null,
   loadingOlder: false,
+  olderFailure: null,
   plan: null,
 }
+
+// Scrolling asks again for an older page that failed only after 2 s, doubling to a minute.
+const OLDER_RETRY_MS = 2000
+const OLDER_RETRY_MAX_MS = 60_000
 
 interface ThreadsStore {
   replicas: Record<string, Replica>
@@ -125,6 +135,7 @@ function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
     error: null,
     older: snapshot.older,
     loadingOlder: false,
+    olderFailure: null,
     plan: snapshot.plan,
   })
 }
@@ -187,15 +198,17 @@ export function receiveBatch(batch: PatchBatch): void {
 }
 
 /**
- * Loads the page before the loaded ones, for a thread scrolled back toward them. The host sends
- * a session's patches before the page, so they apply first and the page has what they changed.
+ * Loads the page before the loaded ones, for a thread scrolled back toward them, or `now` for
+ * Retry; after a failure, scrolling asks again only once its wait is over. The host sends a
+ * session's patches before the page, so they apply first and the page has what they changed.
  */
-export function loadOlder(sessionId: string): Promise<boolean> | undefined {
+export function loadOlder(sessionId: string, now = false): Promise<boolean> | undefined {
   const pending = pagesInFlight.get(sessionId)
   if (pending) return pending
   const replica = useThreadsStore.getState().replicas[sessionId]
   if (!replica?.state || replica.older === null || replica.loadingOlder) return
   if (snapshotsInFlight.has(sessionId)) return
+  if (!now && replica.olderFailure && performance.now() < replica.olderFailure.retryAt) return
   return requestPage(sessionId, replica, replica.older)
 }
 
@@ -234,9 +247,18 @@ function requestPage(
       return true
     })
     .catch((error: unknown) => {
-      console.warn(`Could not load older entries of ${sessionId}: ${errorMessage(error)}`)
+      const message = errorMessage(error)
+      console.warn(`Could not load older entries of ${sessionId}: ${message}`)
       const current = useThreadsStore.getState().replicas[sessionId]
-      if (current?.loadingOlder) setReplica(sessionId, { ...current, loadingOlder: false })
+      if (current?.loadingOlder) {
+        const count = (current.olderFailure?.count ?? 0) + 1
+        const wait = Math.min(OLDER_RETRY_MS * 2 ** (count - 1), OLDER_RETRY_MAX_MS)
+        setReplica(sessionId, {
+          ...current,
+          loadingOlder: false,
+          olderFailure: { message, count, retryAt: performance.now() + wait },
+        })
+      }
       return false
     })
     .finally(() => pagesInFlight.delete(sessionId))
@@ -257,6 +279,7 @@ function receivePage(sessionId: string, before: number, page: OlderPage): void {
     state: prependEntries(replica.state, page.entries),
     older: page.older,
     loadingOlder: false,
+    olderFailure: null,
   })
 }
 

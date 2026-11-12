@@ -18,6 +18,7 @@ import {
   useMessageScrollerScrollable,
   MessageScrollerViewport,
 } from '@renderer/components/ui/message-scroller'
+import { Button } from '@renderer/components/ui/button'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { cn } from '@renderer/lib/utils'
 import { loadOlder, useThreadsStore } from '@renderer/stores/threads'
@@ -142,6 +143,29 @@ function OlderLoading({ sessionId }: { sessionId: string }) {
   )
 }
 
+/** At the top when the page before failed to load: what failed, and Retry. */
+function OlderFailed({ sessionId }: { sessionId: string }) {
+  const { t } = useTranslation(['session', 'common'])
+  const failure = useThreadsStore((s) => {
+    const replica = s.replicas[sessionId]
+    return replica && !replica.loadingOlder ? (replica.olderFailure?.message ?? null) : null
+  })
+  if (failure === null) return null
+  return (
+    <div
+      role="alert"
+      className="flex animate-in items-center justify-center gap-2 pb-4 text-small text-muted-foreground fade-in animation-duration-(--duration-base)"
+    >
+      <span className="min-w-0 truncate" title={failure}>
+        {t('thread.olderFailed')}
+      </span>
+      <Button size="xs" variant="outline" onClick={() => void loadOlder(sessionId, true)}>
+        {t('common:actions.retry')}
+      </Button>
+    </div>
+  )
+}
+
 const isSent = (item: Item): boolean =>
   item.type === 'entry' && (item.char === 'u' || item.char === 's')
 
@@ -261,6 +285,7 @@ export const Thread = memo(function Thread({
             onPointerLeave={() => hoverReply(null)}
           >
             {shownFrom === 0 && !hasOlder && <SubSessionStart sessionId={sessionId} />}
+            {shownFrom === 0 && hasOlder && <OlderFailed sessionId={sessionId} />}
             {items.slice(shownFrom).map((item, shownIndex) => {
               const index = shownFrom + shownIndex
               return (

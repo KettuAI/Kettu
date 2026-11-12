@@ -60,6 +60,7 @@ import { hasMessage, NEW_SESSION_DRAFT, readDraft, readDraftAttachments } from '
 import { useAddMenu } from './composer/add-menu'
 import { StartStyles, TrayStyles } from './composer/affect-styles'
 import { PromptBox } from './composer/prompt-box'
+import { useBlockedEnter } from './composer/use-blocked-enter'
 import { usePromptBox } from './composer/use-prompt-box'
 import { AgentPicker } from './new-session/agent-picker'
 import { HostMenu } from './new-session/host-menu'
@@ -361,12 +362,33 @@ function DraftComposer({
     }
   }
 
+  const blocked = !agentId
+    ? t('newSession.chooseAgentFirst')
+    : !inScratch && !project
+      ? t('newSession.chooseProjectFirst')
+      : project?.missing && !inScratch
+        ? t('newSession.missingLine')
+        : badBranch
+          ? t('worktree.branchInvalid')
+          : (held?.message ?? null)
+  const blockedEnter = useBlockedEnter({
+    // A missing folder is said under the box already.
+    reason: project?.missing && !inScratch ? null : blocked,
+    waiting: blocked !== null && blocked === held?.message && held.adding,
+    text,
+    attachments,
+    send: () => void send(),
+  })
+  const shownError =
+    box.error ?? (held && !held.adding ? held.message : null) ?? blockedEnter.refused
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter') return
     const sends = sendKey === 'enter' ? !event.shiftKey : isMod(event)
     if (!sends) return
     event.preventDefault()
-    void send()
+    if (canSend) void send()
+    else if (holdsMessage) blockedEnter.enter()
   }
 
   const choose = (id: AgentId) => {
@@ -394,16 +416,6 @@ function DraftComposer({
     !!config?.some(
       (o) => o.type === 'boolean' || o.category === 'model' || o.category === 'thought_level',
     )
-
-  const blocked = !agentId
-    ? t('newSession.chooseAgentFirst')
-    : !inScratch && !project
-      ? t('newSession.chooseProjectFirst')
-      : project?.missing && !inScratch
-        ? t('newSession.missingLine')
-        : badBranch
-          ? t('worktree.branchInvalid')
-          : (held?.message ?? null)
 
   return (
     <>
@@ -526,9 +538,9 @@ function DraftComposer({
             {projectError ?? t('newSession.missingLine')}
           </p>
         )}
-        {(box.error || held?.notice) && (
+        {shownError && (
           <p className="kettu-start__error" role="alert">
-            {box.error ?? held?.message}
+            {shownError}
           </p>
         )}
         {gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />}

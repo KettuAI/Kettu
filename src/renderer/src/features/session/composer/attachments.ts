@@ -491,8 +491,11 @@ function removeRecord(item: DraftAttachment): void {
 
 export interface AttachmentsBlock {
   message: string
-  /** Said in the line under the box too, not only in the send button's tooltip. */
-  notice: boolean
+  /**
+   * Some are still being added, so the message goes once they are; any other reason is said in
+   * the line under the box too, not only in the send button's tooltip.
+   */
+  adding: boolean
 }
 
 /** Why the attachments keep a message from being sent, or null when they do not. */
@@ -501,12 +504,12 @@ export function attachmentsBlock(
   text: string,
 ): AttachmentsBlock | null {
   if (items.length === 0) return null
-  // What could not be added is left out of the message, unless it is all the message holds.
-  if (!text.trim() && items.every((item) => item.status === 'failed')) {
-    return { message: i18n.t('composer:attachments.removeFailed'), notice: false }
+  // What could not be added, or is gone since, stays until removed rather than leaving it out.
+  if (items.some((item) => item.status === 'failed')) {
+    return { message: i18n.t('composer:attachments.removeFailed'), adding: false }
   }
   if (items.some((item) => item.status === 'adding')) {
-    return { message: i18n.t('composer:attachments.adding'), notice: false }
+    return { message: i18n.t('composer:attachments.adding'), adding: true }
   }
   // Counted as the host counts it, so a message it would refuse never leaves.
   const bytes = items.reduce(
@@ -514,7 +517,7 @@ export function attachmentsBlock(
     new TextEncoder().encode(text).byteLength,
   )
   if (bytes > PROMPT_BYTES) {
-    return { message: i18n.t('composer:attachments.tooLarge'), notice: true }
+    return { message: i18n.t('composer:attachments.tooLarge'), adding: false }
   }
   return null
 }
@@ -567,6 +570,17 @@ export function restoreAttachments(draft: string, content: readonly UserContent[
   const left = restored.slice(room)
   for (const item of left) removeRecord(item)
   return left.length
+}
+
+/**
+ * Empties a draft whose message goes again from the thread: the records of what the thread already
+ * sent go, the others stay for the turn to read.
+ */
+export function releaseResent(draft: string, content: readonly UserContent[]): void {
+  const sent = new Set(contentAttachments(content).flatMap((a) => (a.sent ? [a.id] : [])))
+  const items = draftAttachments(draft)
+  setDraftAttachments(draft, [])
+  for (const item of items) if (item.attachment && sent.has(item.attachment.id)) removeRecord(item)
 }
 
 /** Drops a composer's attachments with their records, as when its session is deleted. */

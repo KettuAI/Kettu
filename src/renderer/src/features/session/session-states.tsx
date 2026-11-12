@@ -247,7 +247,6 @@ export function FailedState({
   /** What the report carries of where it failed, and the host it failed on. */
   report?: { hostId: string | null; sessionId?: string; agentId?: AgentId }
 }) {
-  const { t } = useTranslation(['session', 'common'])
   return (
     <div
       className="flex animate-in flex-col gap-2.5 rounded-xl bg-card px-3.5 py-3 shadow-card fade-in animation-duration-(--duration-base)"
@@ -275,34 +274,63 @@ export function FailedState({
           {detail}
         </pre>
       )}
-      <div className="flex flex-wrap items-center gap-1.5 pl-6">
-        <Button size="compact" onClick={onRetry}>
+      <FailedActions
+        className="pl-6"
+        onRetry={onRetry}
+        report={report}
+        error={detail ? `${message}\n${detail}` : message}
+      />
+    </div>
+  )
+}
+
+/** A failure's next steps: Retry, and Report a problem with the error and where it happened. */
+export function FailedActions({
+  onRetry,
+  retrying = false,
+  report,
+  error,
+  className,
+}: {
+  onRetry: () => void
+  retrying?: boolean
+  report?: { hostId: string | null; sessionId?: string; agentId?: AgentId }
+  error: string
+  className?: string
+}) {
+  const { t } = useTranslation(['session', 'common'])
+  return (
+    <div className={cn('flex flex-wrap items-center gap-1.5', className)}>
+      <Button size="compact" disabled={retrying} onClick={onRetry}>
+        {retrying ? (
+          <Spinner data-icon="inline-start" />
+        ) : (
           <HugeiconsIcon
             icon={RefreshIcon}
             strokeWidth={1.9}
             aria-hidden
             data-icon="inline-start"
           />
-          {t('common:actions.retry')}
-        </Button>
-        <Button
-          variant="outline"
-          size="compact"
-          onClick={() =>
-            void openReport({
-              hostId: report?.hostId ?? null,
-              context: {
-                sessionId: report?.sessionId ?? null,
-                agentId: report?.agentId ?? null,
-                error: detail ? `${message}\n${detail}` : message,
-              },
-            })
-          }
-        >
-          <HugeiconsIcon icon={Bug01Icon} strokeWidth={1.9} aria-hidden data-icon="inline-start" />
-          {t('failed.reportProblem')}
-        </Button>
-      </div>
+        )}
+        {t('common:actions.retry')}
+      </Button>
+      <Button
+        variant="outline"
+        size="compact"
+        onClick={() =>
+          void openReport({
+            hostId: report?.hostId ?? null,
+            context: {
+              sessionId: report?.sessionId ?? null,
+              agentId: report?.agentId ?? null,
+              error,
+            },
+          })
+        }
+      >
+        <HugeiconsIcon icon={Bug01Icon} strokeWidth={1.9} aria-hidden data-icon="inline-start" />
+        {t('failed.reportProblem')}
+      </Button>
     </div>
   )
 }

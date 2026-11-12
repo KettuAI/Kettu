@@ -40,6 +40,7 @@ import { TurnDots } from '../turn-dots'
 import { writingId } from '../turn-phase'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { CutTurnEnd } from './cut-turn'
+import { FailedTurnActions } from './failed-turn'
 import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
@@ -275,6 +276,13 @@ export const NoticeEntry = memo(function NoticeEntry({ sessionId, entryId }: Ent
             part.type === 'link' ? <ConfirmedLink key={i} url={part.url} /> : part.text,
           )}
         </AlertDescription>
+      )}
+      {entry.cause === 'turn_failed' && (
+        <FailedTurnActions
+          sessionId={sessionId}
+          entryId={entryId}
+          error={entry.description ? `${entry.title}\n${entry.description}` : entry.title}
+        />
       )}
     </Alert>
   )

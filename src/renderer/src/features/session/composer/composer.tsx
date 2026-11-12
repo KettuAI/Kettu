@@ -51,6 +51,7 @@ import { SwitchStrip } from './switch-strip'
 import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
 import type { Select } from './use-pick'
+import { useBlockedEnter } from './use-blocked-enter'
 import { usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 
@@ -72,7 +73,7 @@ export function Composer({
   agentName: string
   mustSwitch?: boolean
 }) {
-  const { t } = useTranslation('composer')
+  const { t } = useTranslation(['composer', 'session'])
   const sessionId = session.id
   // Another agent picked to take the session over with the next message, shown as its own.
   const pending = useAgentSwitchStore((s) => s.pending[sessionId] ?? null)
@@ -141,6 +142,13 @@ export function Composer({
   const canSend = idle && holdsMessage && !blocked && (!mustSwitch || pending !== null)
   // During a turn the send key queues the message and the steer key sends it into the turn.
   const canQueue = running && holdsMessage && !blocked && pending === null && !mustSwitch
+  // Why the send key does nothing now, for the line under the box.
+  const unsendable =
+    mustSwitch && !pending
+      ? t('session:newSession.chooseAgentFirst')
+      : starting
+        ? t('prompt.waitForStart', { agent: agentName })
+        : (blocked?.message ?? null)
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
   const reached = limits?.find((l) => l.state === 'reached')
@@ -187,6 +195,13 @@ export function Composer({
     if (pending && canSend) handOver()
     else if (canSend || canQueue) queue(false)
   }
+  const blockedEnter = useBlockedEnter({
+    reason: unsendable,
+    waiting: unsendable !== null && unsendable === blocked?.message && blocked.adding,
+    text,
+    attachments,
+    send,
+  })
 
   const takeContent = () => {
     const taken = box.take()
@@ -309,7 +324,8 @@ export function Composer({
     }
     if (!sends) return
     event.preventDefault()
-    send()
+    if (canSend || canQueue) send()
+    else if (holdsMessage) blockedEnter.enter()
   }
 
   const placeholder = starting
@@ -357,7 +373,11 @@ export function Composer({
   ) : (
     <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={send} />
   )
-  const shownError = error ?? (blocked?.notice ? blocked.message : null) ?? configError
+  const shownError =
+    error ??
+    (blocked && !blocked.adding ? blocked.message : null) ??
+    blockedEnter.refused ??
+    configError
 
   return (
     <div data-composer="" className="kettu-composer" data-starting={starting || undefined}>

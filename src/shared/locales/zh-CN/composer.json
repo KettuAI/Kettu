@@ -14,6 +14,7 @@
     "stop": "停止",
     "send": "发送",
     "historyFailed": "无法加载更早的输入，按 ↑ 重试。",
+    "waitForStart": "等 {{agent}} 启动后再发送",
     "stopTooltip": "停止 <shortcut>{{shortcut}}</shortcut>",
     "stopHoldTooltip": "停止 <shortcut>{{shortcut}}</shortcut> · 按住可排队或立即发送",
     "queueIt": "加入队列",
