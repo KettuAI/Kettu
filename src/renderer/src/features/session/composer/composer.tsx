@@ -297,7 +297,7 @@ export function Composer({
       return
     }
     if (event.key !== 'Enter') return
-    const sends = sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event)
+    const sends = sendKey === 'enter' ? !event.shiftKey : isMod(event)
     const steers =
       running &&
       steering &&

@@ -172,7 +172,7 @@ export function ReplyToSelection({
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== 'Enter' || event.nativeEvent.isComposing || event.keyCode === 229) return
-    const sends = sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event)
+    const sends = sendKey === 'enter' ? !event.shiftKey : isMod(event)
     if (!sends) return
     event.preventDefault()
     send()
