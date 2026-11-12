@@ -234,6 +234,7 @@
       "hermes": "Install Hermes Agent in Settings › Harnesses on macOS or Linux. On Windows, follow the official guide for WSL2.",
       "muse": "Install Muse Code from dev.meta.ai, or choose its binary in Settings › Harnesses.",
       "codewhale": "Install CodeWhale with the installer at codewhale.net, or choose its binary in Settings › Harnesses.",
+      "deepseek": "Kettu installs DeepSeek Harness from npm on its first use, on Node.js 24.9 or later.",
       "harn": "Install Harn, or choose its binary in Settings › Harnesses.",
       "kimchi": "Install Kimchi, or choose its binary in Settings › Harnesses.",
       "archive": "Install it in Settings › Harnesses.",
@@ -510,6 +511,56 @@
       "stillStarting": "Some MCP servers are still starting. Run `/mcp` again later to see their status.",
       "unknownError": "unknown MCP startup error",
       "unnamed": "(unnamed)"
+    }
+  },
+  "dsh": {
+    "tool": {
+      "read": "Read file",
+      "write": "Write file '{{path}}'",
+      "editFile": "Edit file '{{path}}'",
+      "edit": "Edit file",
+      "fetch": "Open page",
+      "ask": "Ask a question",
+      "plan": "Plan"
+    },
+    "notice": {
+      "retry": "The model request failed; retrying ({{retry}} of {{max}})"
+    },
+    "permission": {
+      "reject": "Deny"
+    },
+    "plan": {
+      "approve": "Approve and leave plan mode"
+    },
+    "subagent": {
+      "failed": "The subagent ended: {{reason}}"
+    },
+    "auth": {
+      "account": "DeepSeek account",
+      "accountDescription": "Run `dsh web` and sign in to DeepSeek in its page"
+    },
+    "account": {
+      "account": "DeepSeek account",
+      "apiKey": "DeepSeek API key"
+    },
+    "mode": {
+      "name": "Mode",
+      "plan": "Plan",
+      "planDescription": "Plan before making changes",
+      "readOnly": "Read only",
+      "readOnlyDescription": "Reads files; asks before changing anything",
+      "workspaceWrite": "Workspace write",
+      "workspaceWriteDescription": "Changes files in the project; asks before going outside it",
+      "fullAccess": "Full access",
+      "fullAccessDescription": "Runs anything without asking"
+    },
+    "model": "Model",
+    "effort": {
+      "name": "Reasoning",
+      "off": "Off",
+      "low": "Low",
+      "high": "High",
+      "max": "Max"
     }
   },
   "question": {

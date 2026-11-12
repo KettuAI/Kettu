@@ -34,6 +34,7 @@ export type HarnessId =
   | 'hermes'
   | 'muse'
   | 'codewhale'
+  | 'deepseek'
   | 'harn'
   | 'kimchi'
   | 'antigravity'
@@ -83,6 +84,7 @@ export const HARNESS_IDS: readonly HarnessId[] = [
   'hermes',
   'muse',
   'codewhale',
+  'deepseek',
   'harn',
   'kimchi',
   'antigravity',
@@ -101,7 +103,7 @@ export const HARNESS_IDS: readonly HarnessId[] = [
 ]
 
 /** The harnesses that carry agents besides their default one: a variable moves their folder. */
-export const MULTI_AGENT_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex']
+export const MULTI_AGENT_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex', 'deepseek']
 
 /**
  * Harnesses whose default agent is registered without being added. Only the fake agent, which
@@ -174,7 +176,7 @@ export function addedAgentId(harness: HarnessId, name: string, taken: readonly s
 }
 
 /** The harnesses whose agents take a start mode: the permission mode new sessions start in. */
-export const START_MODE_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex']
+export const START_MODE_HARNESSES: readonly HarnessId[] = ['claude-code', 'codex', 'deepseek']
 
 /** The permission modes that never ask, which no setting may start a session in. */
 export const FULL_ACCESS_MODES: readonly string[] = [

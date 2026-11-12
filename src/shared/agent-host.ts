@@ -256,6 +256,8 @@ export interface AgentStatus {
   account: AgentAccount | null // what the agent reports through `_auth/status_update`
   providers?: AgentProvider[]
   providersError?: string | null
+  /** A harness's balance at its vendor, read on its own: DeepSeek Harness on an API key. */
+  balance?: AgentProvider['usage']
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   installUrl: string | null

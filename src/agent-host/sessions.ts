@@ -109,6 +109,7 @@ import {
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import { OPTION_IDS as CLAUDE_OPTION_IDS } from './claude/config'
 import { MODE_ID as CODEX_MODE_ID } from './codex/config'
+import { CONFIG as DSH_CONFIG } from './dsh/options'
 import { carryMode, lostValues, lostValuesNotice, type LostValue } from './config-notice'
 import {
   AgentRequestError,
@@ -7860,6 +7861,8 @@ function modeOptionId(agentId: AgentId): string | null {
       return CLAUDE_OPTION_IDS.mode
     case 'codex':
       return CODEX_MODE_ID
+    case 'deepseek':
+      return DSH_CONFIG.mode
     default:
       return null
   }

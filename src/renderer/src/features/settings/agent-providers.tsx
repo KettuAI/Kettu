@@ -421,7 +421,7 @@ function ProviderUsageNotes({
 }
 
 /** The providers' remaining balances, each with the provider it belongs to. */
-function ProviderBalances({ providers }: { providers: readonly AgentProvider[] }) {
+export function ProviderBalances({ providers }: { providers: readonly AgentProvider[] }) {
   const { t } = useTranslation('settings')
   const now = useNow()
   const withBalances = providers.filter((provider) => (provider.usage?.balances.length ?? 0) > 0)

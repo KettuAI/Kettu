@@ -302,6 +302,7 @@ export const AGENT_NAMES: Record<HarnessId, string> = {
   hermes: 'Hermes Agent',
   muse: 'Muse Code',
   codewhale: 'CodeWhale',
+  deepseek: 'DeepSeek Harness',
   harn: 'Harn',
   kimchi: 'Kimchi',
   antigravity: 'Google Antigravity',

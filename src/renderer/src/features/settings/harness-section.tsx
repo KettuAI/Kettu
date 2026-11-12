@@ -574,7 +574,7 @@ function HarnessPageLine({ status }: { status: AgentStatus }) {
   const vendor = VENDORS[status.harnessId]
   const adapter = status.package?.name.split('/').at(-1)
   const connection = vendor
-    ? status.package?.isSdk || status.harnessId === 'codex'
+    ? status.package?.isSdk || status.harnessId === 'codex' || status.harnessId === 'deepseek'
       ? t('agents.ownInterface', { vendor })
       : adapter
         ? t('agents.via', { vendor, adapter })
@@ -1265,7 +1265,9 @@ function PackageGroup({ status }: { status: AgentStatus }) {
       <p className="ui-sg-hint">
         {pkg.isSdk
           ? t('harnesses.sdkNote', { name: status.harnessName, range })
-          : t('harnesses.adapterNote', { name: status.harnessName })}
+          : status.harnessId === 'deepseek'
+            ? t('harnesses.programNote', { name: status.harnessName })
+            : t('harnesses.adapterNote', { name: status.harnessName })}
       </p>
     </section>
   )

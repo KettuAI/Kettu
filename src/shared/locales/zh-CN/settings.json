@@ -640,7 +640,8 @@
       "description": "新会话一开始使用的权限模式，不论项目自己的设置怎么写。这里不能选“完全访问”。",
       "follow": {
         "claude-code": "跟随 Claude Code",
-        "codex": "跟随 Codex（自动审查）"
+        "codex": "跟随 Codex（自动审查）",
+        "deepseek": "跟随 DeepSeek Harness"
       },
       "unused": "这个 Agent 用过之后才能选择。",
       "unoffered": "{{mode}}（已不再提供）",
@@ -812,6 +813,7 @@
       "loginKey": "使用 API key",
       "loginKeyHint": "你自己的 key 和服务商。",
       "loginKeyHintOpenAi": "OpenAI 的 API key。",
+      "loginKeyHintDeepSeek": "DeepSeek 的 API key。",
       "submit": "添加 Agent"
     },
     "key": {
@@ -819,6 +821,7 @@
       "set": "已设置，{{name}} 把它保存在自己的配置文件夹里。",
       "notSet": "用你自己的 key 和服务商，代替登录。",
       "notSetOpenAi": "用 OpenAI 的 API key 代替登录。",
+      "notSetDeepSeek": "用 DeepSeek 的 API key 代替登录。",
       "setButton": "设置…",
       "replace": "重新填写…",
       "clear": "清除",
@@ -1640,6 +1643,7 @@
     "adapterLine": "{{version}} · 装在 Kettu 的数据目录",
     "sdkNote": "Kettu 不带 {{name}}，只装驱动它的 SDK；更新只在 {{range}} 之内。",
     "adapterNote": "Kettu 经这个适配器运行 {{name}}，用你的 Node.js。",
+    "programNote": "就是 {{name}} 本身，Kettu 用你的 Node.js 运行它。",
     "usedBy": "在用它的",
     "listSeparator": "、",
     "manageAgents": "在 Agent 里管理",

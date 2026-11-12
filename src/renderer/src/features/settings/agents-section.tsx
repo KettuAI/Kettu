@@ -73,7 +73,7 @@ import {
   useViewStore,
 } from '@renderer/stores/view'
 import { Fact, ListMeter, SignInNotice, SpendGroup, UsageGroup } from './agent-parts'
-import { AgentProviders } from './agent-providers'
+import { AgentProviders, ProviderBalances } from './agent-providers'
 import {
   currentLimits,
   FOLLOW_AGENT,
@@ -83,6 +83,7 @@ import {
   useAction,
   useAgentReads,
   useHasOtherAgents,
+  VENDORS,
 } from './agent-helpers'
 import {
   CONFIRM,
@@ -579,7 +580,11 @@ function AddAgentDialog({
                     checked={login === 'api-key'}
                     title={t('agents.add.loginKey')}
                     description={t(
-                      providers ? 'agents.add.loginKeyHint' : 'agents.add.loginKeyHintOpenAi',
+                      providers
+                        ? 'agents.add.loginKeyHint'
+                        : chosen?.harnessId === 'deepseek'
+                          ? 'agents.add.loginKeyHintDeepSeek'
+                          : 'agents.add.loginKeyHintOpenAi',
                     )}
                     extra={
                       login === 'api-key' &&
@@ -939,6 +944,21 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
           </section>
         )}
 
+        {status.balance && !status.disabled && (
+          <ProviderBalances
+            providers={[
+              {
+                id: status.harnessId,
+                name: VENDORS[status.harnessId] ?? status.harnessName,
+                methods: [],
+                accounts: [],
+                loginCommand: '',
+                usage: status.balance,
+              },
+            ]}
+          />
+        )}
+
         {status.disabled ? null : providerMode ? (
           <SpendGroup status={status} providers />
         ) : status.account?.kind === 'api_key' ? (
@@ -1046,7 +1066,13 @@ function ApiKeyRow({ status }: { status: AgentStatus }) {
           description={
             set
               ? t('agents.key.set', { name: status.harnessName })
-              : t(status.apiKey?.providers ? 'agents.key.notSet' : 'agents.key.notSetOpenAi')
+              : t(
+                  status.apiKey?.providers
+                    ? 'agents.key.notSet'
+                    : status.harnessId === 'deepseek'
+                      ? 'agents.key.notSetDeepSeek'
+                      : 'agents.key.notSetOpenAi',
+                )
           }
         />
       }
@@ -1241,7 +1267,7 @@ function StartModeRow({ status }: { status: AgentStatus }) {
               {
                 value: FOLLOW_AGENT,
                 label: t(
-                  `agents.startMode.follow.${status.harnessId === 'codex' ? 'codex' : 'claude-code'}`,
+                  `agents.startMode.follow.${status.harnessId === 'codex' || status.harnessId === 'deepseek' ? status.harnessId : 'claude-code'}`,
                 ),
               },
               ...view.choices.map((choice) => ({

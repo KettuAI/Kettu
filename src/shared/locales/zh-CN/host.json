@@ -232,6 +232,7 @@
       "hermes": "在 macOS 或 Linux 上，请在「设置 › Harness」中安装 Hermes Agent；在 Windows 上，请按官方指南通过 WSL2 安装。",
       "muse": "请从 dev.meta.ai 安装 Muse Code，或在「设置 › Harness」中选择它的程序。",
       "codewhale": "请用 codewhale.net 上的安装程序安装 CodeWhale，或在「设置 › Harness」中选择它的程序。",
+      "deepseek": "Kettu 第一次使用 DeepSeek Harness 时从 npm 安装它，需要 Node.js 24.9 或更高版本。",
       "harn": "请安装 Harn，或在「设置 › Harness」中选择它的程序。",
       "kimchi": "请安装 Kimchi，或在「设置 › Harness」中选择它的程序。",
       "archive": "请在「设置 › Harness」中安装。",
@@ -507,6 +508,56 @@
       "stillStarting": "有些 MCP 服务器还在启动。稍后再运行 `/mcp` 查看它们的状态。",
       "unknownError": "未知的 MCP 启动错误",
       "unnamed": "（未命名）"
+    }
+  },
+  "dsh": {
+    "tool": {
+      "read": "读取文件",
+      "write": "写入文件 '{{path}}'",
+      "editFile": "修改文件 '{{path}}'",
+      "edit": "修改文件",
+      "fetch": "打开网页",
+      "ask": "提问",
+      "plan": "计划"
+    },
+    "notice": {
+      "retry": "模型请求失败，正在重试（第 {{retry}} 次，共 {{max}} 次）"
+    },
+    "permission": {
+      "reject": "拒绝"
+    },
+    "plan": {
+      "approve": "批准并退出计划模式"
+    },
+    "subagent": {
+      "failed": "子 Agent 结束：{{reason}}"
+    },
+    "auth": {
+      "account": "DeepSeek 账号",
+      "accountDescription": "运行 `dsh web`，在它的网页里登录 DeepSeek"
+    },
+    "account": {
+      "account": "DeepSeek 账号",
+      "apiKey": "DeepSeek API key"
+    },
+    "mode": {
+      "name": "模式",
+      "plan": "计划",
+      "planDescription": "先做计划再改动",
+      "readOnly": "只读",
+      "readOnlyDescription": "能读文件，改动前先问",
+      "workspaceWrite": "工作区可写",
+      "workspaceWriteDescription": "能改项目里的文件，越出项目前先问",
+      "fullAccess": "完全访问",
+      "fullAccessDescription": "什么都不问直接运行"
+    },
+    "model": "模型",
+    "effort": {
+      "name": "推理强度",
+      "off": "关",
+      "low": "低",
+      "high": "高",
+      "max": "最高"
     }
   },
   "question": {
