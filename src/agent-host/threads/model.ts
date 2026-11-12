@@ -1,6 +1,7 @@
 // The stored form of a session's thread: what is kept beside the entries, where turns start,
 // and the content refs that large images are moved out of.
 
+import type { ContextBreakdown } from '@shared/context'
 import type {
   AgentId,
   ConfigOption,
@@ -27,7 +28,10 @@ export interface ThreadHead {
 export type StoredSession = Pick<
   SessionView,
   'title' | 'config' | 'commands' | 'usage' | 'subagent'
->
+> & {
+  /** The last context breakdown read, so a closed session shows it without asking its agent. */
+  context: ContextBreakdown | null
+}
 
 export const EMPTY_SESSION: StoredSession = {
   title: null,
@@ -35,11 +39,12 @@ export const EMPTY_SESSION: StoredSession = {
   commands: [],
   usage: null,
   subagent: null,
+  context: null,
 }
 
 export function storedSession(view: SessionView): StoredSession {
   const { title, config, commands, usage, subagent } = view
-  return { title, config, commands, usage, subagent }
+  return { title, config, commands, usage, subagent, context: view.context?.breakdown ?? null }
 }
 
 /** Whether a `session.update` changes what is stored of the session. */
@@ -49,7 +54,9 @@ export function changesStored(changes: Partial<SessionView>): boolean {
     'config' in changes ||
     'commands' in changes ||
     'usage' in changes ||
-    'subagent' in changes
+    'subagent' in changes ||
+    // A read that starts or fails keeps the breakdown it had.
+    ('context' in changes && !changes.context?.loading && !changes.context?.error)
   )
 }
 
@@ -65,6 +72,27 @@ const isOption = (value: unknown): value is ConfigOption =>
 
 const isCommand = (value: unknown): value is SlashCommand =>
   isRecord(value) && typeof value.name === 'string' && typeof value.description === 'string'
+
+const isBreakdown = (value: unknown): value is ContextBreakdown =>
+  isRecord(value) &&
+  (value.model === null || typeof value.model === 'string') &&
+  typeof value.used === 'number' &&
+  typeof value.size === 'number' &&
+  typeof value.observedAt === 'number' &&
+  Array.isArray(value.categories) &&
+  value.categories.every(
+    (c) => isRecord(c) && typeof c.name === 'string' && typeof c.tokens === 'number',
+  ) &&
+  Array.isArray(value.lists) &&
+  value.lists.every(
+    (l) =>
+      isRecord(l) &&
+      typeof l.name === 'string' &&
+      Array.isArray(l.items) &&
+      l.items.every(
+        (i) => isRecord(i) && typeof i.name === 'string' && typeof i.tokens === 'string',
+      ),
+  )
 
 export function parseStoredSession(value: unknown): StoredSession | null {
   if (
@@ -85,6 +113,8 @@ export function parseStoredSession(value: unknown): StoredSession | null {
     commands: value.commands,
     usage: value.usage as SessionUsage | null,
     subagent: value.subagent as SubagentInfo | null,
+    // Absent from sessions stored before it was kept; only a cache, so a damaged one is dropped.
+    context: isBreakdown(value.context) ? value.context : null,
   }
 }
 

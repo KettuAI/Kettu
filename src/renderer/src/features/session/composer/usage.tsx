@@ -244,6 +244,7 @@ export function ContextButton({
   sessionId,
   agentId,
   idle,
+  closed,
   reports,
   direct,
   live,
@@ -257,6 +258,8 @@ export function ContextButton({
   agentId: AgentId
   /** No turn runs. */
   idle: boolean
+  /** The session is not attached to its agent, so nothing refreshes its context. */
+  closed: boolean
   /** Whether the agent breaks its context down at all. */
   reports: boolean
   /** Whether the agent reads its context through its connection, without a fork. */
@@ -277,12 +280,15 @@ export function ContextButton({
   // An account of another kind has no plan; an unknown one shows the limits the agent reports.
   const subscribed = account ? account.kind === 'account' : limits.length > 0
   const cached = useUsageStore((s) => s.context[sessionId])
-  const read = context ?? cached
+  // A closed session's own report is the one stored with it: only the host pushes newer ones.
+  const pushed = closed ? undefined : context
+  const read = pushed ?? (closed ? closedReport(context, cached) : cached)
   const shown = shownUsage(usage, read?.breakdown ?? null)
-  // Older hosts answer on demand; current hosts push every direct snapshot with the session.
+  // Older hosts answer on demand; current hosts push every direct snapshot with the session. A
+  // closed session's agent is asked only from the popover, since a read starts it.
   const key = usage && usage.size > 0 ? `${usage.used}/${usage.size}` : null
   const waiting = !!key && (!read || (!read.loading && read.key !== key))
-  const readNow = direct && !context && key !== null && !read?.error && waiting
+  const readNow = direct && !closed && !context && key !== null && !read?.error && waiting
   useEffect(() => {
     if (readNow && key) loadContext(sessionId, key)
   }, [readNow, sessionId, key])
@@ -295,11 +301,10 @@ export function ContextButton({
     refreshLimits(agentId).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
+    const own = closed ? read : context
     const stale =
-      !context?.breakdown ||
-      context.error ||
-      Date.now() - context.breakdown.observedAt >= CONTEXT_REFRESH_MS
-    if (reports && (idle || live) && usage && (!context || (!context.loading && stale))) {
+      !own?.breakdown || own.error || Date.now() - own.breakdown.observedAt >= CONTEXT_REFRESH_MS
+    if (reports && (idle || live) && usage && (!own || (!own.loading && stale))) {
       loadContext(sessionId, `${usage.used}/${usage.size}`, direct)
     }
   }
@@ -357,7 +362,7 @@ export function ContextButton({
               reports={reports}
               live={live}
               report={read}
-              managed={context !== undefined && direct}
+              managed={pushed !== undefined && direct}
               model={model}
             />
           )}
@@ -367,6 +372,19 @@ export function ContextButton({
       </PopoverContent>
     </Popover>
   )
+}
+
+/**
+ * A closed session's report: the one stored with it, until a read from the popover brings a newer
+ * breakdown; a read that runs or failed shows on the stored rows.
+ */
+function closedReport(
+  stored: ContextReport | undefined,
+  read: ContextReport | undefined,
+): ContextReport | undefined {
+  if (!read || !stored?.breakdown) return read ?? stored
+  if (read.breakdown && read.breakdown.observedAt >= stored.breakdown.observedAt) return read
+  return { ...stored, loading: read.loading, error: read.error }
 }
 
 /** The tray's ring: a pie on a disc tinted in the level's color, 14 px. */

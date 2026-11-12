@@ -11,15 +11,19 @@ import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ThreadEntry } from '@shared/thread'
+import type { ContextBreakdown } from '@shared/context'
+import type { SessionView, ThreadEntry } from '@shared/thread'
 import { contentHash, contentPath } from '../artifacts/content'
 import { schemaAt, SCHEMA_VERSION, ThreadDb, ThreadDbError } from './db'
 import {
+  changesStored,
   EMPTY_SESSION,
   INLINE_MEDIA_LIMIT,
   PAGE_ENTRIES,
   PAGE_LIMIT,
+  storedSession,
   type PositionedEntry,
+  type StoredSession,
   type ThreadHead,
 } from './model'
 
@@ -90,6 +94,42 @@ function turns(count: number, tools: number): PositionedEntry[] {
 }
 
 const ids = (entries: readonly ThreadEntry[]): string[] => entries.map((e) => e.id)
+
+const breakdown: ContextBreakdown = {
+  model: 'claude-opus-4-5',
+  used: 42_000,
+  size: 200_000,
+  categories: [
+    { name: 'Messages', tokens: 30_000, share: 0.15 },
+    { name: 'Free space', tokens: 158_000, share: 0.79 },
+  ],
+  lists: [{ name: 'Memory Files', items: [{ name: 'CLAUDE.md', detail: null, tokens: '1.2k' }] }],
+  observedAt: 1_700_000_000_000,
+}
+
+const view = (changes: Partial<SessionView>): SessionView => ({
+  id: 's1',
+  agentId: 'claude-code',
+  projectPath: '/p',
+  acpSessionId: 'acp-1',
+  status: 'closed',
+  title: null,
+  config: [],
+  commands: [],
+  usage: null,
+  error: null,
+  turnStartedAt: null,
+  turnStartUsed: null,
+  createdAt: 0,
+  updatedAt: 0,
+  parentId: null,
+  origin: 'user',
+  subagent: null,
+  routine: null,
+  queue: [],
+  queuePaused: false,
+  ...changes,
+})
 
 describe('the thread database', () => {
   it('creates its schema once and keeps threads across a reopen', () => {
@@ -241,6 +281,38 @@ describe('the thread database', () => {
     db.write('s1', { head, entries: [{ pos: 0, entry: user('u0') }] })
     expect(db.page('s1', null)!.session).toEqual(session)
     db.close()
+  })
+
+  it('keeps the last context breakdown with the session view across a reopen', () => {
+    const file = tempFile()
+    const db = open(file)
+    db.write('s1', { head, session: { ...EMPTY_SESSION, context: breakdown }, entries: [] })
+    db.close()
+    const again = open(file)
+    expect(again.page('s1', null)!.session.context).toEqual(breakdown)
+    again.close()
+  })
+
+  it('reads a session view stored without a context, or with one that does not parse', () => {
+    const db = open()
+    const before = { title: 'Old', config: [], commands: [], usage: null, subagent: null }
+    db.write('s1', { head, session: before as unknown as StoredSession, entries: [] })
+    expect(db.page('s1', null)!.session).toEqual({ ...EMPTY_SESSION, title: 'Old' })
+    const damaged = { ...EMPTY_SESSION, title: 'Damaged', context: { used: 'many' } }
+    db.write('s2', { head, session: damaged as unknown as StoredSession, entries: [] })
+    expect(db.page('s2', null)!.session).toEqual({ ...EMPTY_SESSION, title: 'Damaged' })
+    expect(logs).toEqual([])
+    db.close()
+  })
+
+  it('stores the breakdown a context read brings, not the state of a read', () => {
+    const report = { key: '42000/200000', breakdown, loading: false, error: null }
+    expect(changesStored({ context: report })).toBe(true)
+    expect(changesStored({ context: { ...report, loading: true } })).toBe(false)
+    expect(changesStored({ context: { ...report, error: 'failed' } })).toBe(false)
+    expect(changesStored({ context: undefined })).toBe(true)
+    expect(storedSession(view({ context: { ...report, error: 'failed' } })).context).toBe(breakdown)
+    expect(storedSession(view({})).context).toBeNull()
   })
 
   it('reads everything from a position with tail', () => {
