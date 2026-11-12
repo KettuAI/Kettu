@@ -6,99 +6,34 @@
     "needs_other": "{{count}} 个等你处理"
   },
   "sections": {
+    "now": "进行中",
+    "earlier": "已结束",
+    "artifacts": "Artifacts"
+  },
+  "earlier": {
     "subagents": "子 Agent",
-    "background": "后台命令",
-    "artifacts": "Artifacts",
-    "running_other": "{{count}} 个运行中"
+    "commands": "命令",
+    "failed_other": "{{count}} 个失败"
   },
-  "none": {
-    "background": "没有后台命令。",
-    "subagents": "没有子 Agent。",
-    "artifacts": "这个会话还没有写过 Artifact。"
-  },
-  "unsupported": "{{agent}} 不会报告后台命令。",
   "empty": {
     "title": "这里还没有内容",
-    "text": "Agent 工作时，子 Agent、后台命令和这个会话写下的 Artifacts 会出现在这里。"
+    "text": "子 Agent、后台命令和这个会话写下的 Artifacts 会出现在这里。"
   },
   "status": {
-    "queued": "排队中",
-    "running": "运行中",
-    "needs": "等你处理",
-    "done": "已完成",
     "failed": "失败",
-    "stopped": "已停止"
+    "stopped": "已停止",
+    "cancelled": "已取消"
   },
   "step": {
     "starting": "正在开始",
     "waiting": "等你回答"
   },
-  "tokens": "{{tokens}} tokens",
-  "finished": {
-    "label_other": "已完成 {{count}}",
-    "failed_other": "{{count}} 个失败"
-  },
-  "tree": {
-    "agents_other": "{{count}} 个 Agent",
-    "needsYou_other": "{{count}} 个等你处理",
-    "waitingDialog": "等你处理的子 Agent",
-    "failedDialog": "失败的子 Agent",
-    "branchCost": "含它的子 Agent",
-    "showSub": "显示 {{name}} 的 {{count}} 个子 Agent",
-    "foldSub": "收起 {{name}} 的子 Agent",
-    "beside": "在 {{name}} 旁边",
-    "dismiss": "忽略",
-    "retry": "重试"
-  },
-  "monitor": {
-    "agent": "Agent",
-    "states": {
-      "idle": "空闲",
-      "running": "运行中",
-      "waiting": "等你处理",
-      "paused": "已暂停",
-      "finished": "已完成",
-      "failed": "失败",
-      "cancelled": "已取消"
-    },
-    "kinds": {
-      "read": "读取",
-      "search": "搜索",
-      "edit": "编辑",
-      "run": "终端",
-      "think": "思考",
-      "web": "网页"
-    },
-    "waitingOnYou": "等你处理",
-    "finishedIn": "用时 {{time}} 完成",
-    "files_other": "{{count}} 个文件",
-    "errorFallback": "出了点问题",
-    "cancelledAfter": "运行 {{time}} 后取消",
-    "noTask": "还没有任务",
-    "costSoFar": "目前花费 {{cost}}",
-    "foldAway": "收起",
-    "runningFor": "已运行 {{time}}",
-    "finishedSteps": "已完成的步骤",
-    "details": "{{step}}：详情",
-    "started": "开始",
-    "took": "用时",
-    "share": "占比",
-    "state": "状态",
-    "decline": "拒绝",
-    "allow": "允许",
-    "retry": "重试",
-    "pause": "暂停",
-    "resume": "继续",
-    "cancel": "取消",
-    "log": "日志",
-    "said": "{{name}}：{{state}}",
-    "saidDetail": "{{name}}：{{state}}，{{detail}}",
-    "open": "打开 {{said}}"
-  },
   "actions": {
+    "review": "查看",
     "stop": "停止",
     "stopTitle": "停止 {{title}}",
-    "open": "打开",
+    "copy": "复制",
+    "copied": "已复制",
     "openTitle": "打开 {{title}}",
     "close": "关闭"
   },

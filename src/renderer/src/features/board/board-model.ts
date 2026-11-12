@@ -2,6 +2,7 @@ import type { TFunction } from 'i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { BackgroundTaskView, ThreadState } from '@shared/thread'
 import { toolLabel } from '@renderer/features/session/entries/helpers'
+import { ansiRuns } from '@renderer/features/session/entries/shell'
 import type { SubagentDigest, SubagentStep } from '@renderer/features/session/subagent/progress'
 import { listedSubagents } from '@renderer/features/sidebar/subagents'
 
@@ -34,6 +35,19 @@ export function subagentFailed(child: Pick<SessionSummary, 'status' | 'attention
 export function boardSubagents(children: readonly SessionSummary[]): SessionSummary[] {
   const listed = listedSubagents(children, true)
   return [...listed.filter(subagentWaiting), ...listed.filter((child) => !subagentWaiting(child))]
+}
+
+/** The last line a command printed that says something; a progress bar's last redraw counts. */
+export function lastLine(output: string): string | null {
+  const plain = ansiRuns(output)
+    .map((run) => run.text)
+    .join('')
+  const lines = plain.split(/\r\n|\r|\n/)
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i]!.trim()
+    if (line) return line
+  }
+  return null
 }
 
 /** How an ended task finished in a few words: the exit code its agent reported, else why it failed. */

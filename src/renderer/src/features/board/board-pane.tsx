@@ -1,40 +1,47 @@
-import { useEffect, type ReactNode } from 'react'
-import { Cancel01Icon, DashboardSquare02Icon, ShapesIcon } from '@hugeicons/core-free-icons'
+import { useEffect, useMemo, type ReactNode } from 'react'
+import {
+  Cancel01Icon,
+  ComputerTerminal01Icon,
+  DashboardSquare02Icon,
+  UserMultiple02Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { harnessOf } from '@shared/agents'
 import type { BackgroundTaskView } from '@shared/thread'
+import { subagentRunning, useSubagentDigests } from '@renderer/features/session/subagent/progress'
 import { PaneEmpty, PaneIcon } from '@renderer/features/shell/panel-button'
-import { agentName } from '@renderer/stores/agents'
 import { artifactListShown, artifactStanding, useArtifactsStore } from '@renderer/stores/artifacts'
-import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { toggleBoard } from '@renderer/stores/view'
 import { ArtifactRow } from './artifact-row'
-import { BackgroundSection } from './background-section'
-import { boardSubagents, summaryParts, threadArtifacts, type BoardArtifact } from './board-model'
-import { Section } from './row-parts'
-import { SubagentSection } from './subagent-section'
+import {
+  backgroundOrder,
+  boardSubagents,
+  subagentFailed,
+  summaryParts,
+  threadArtifacts,
+  type BoardArtifact,
+} from './board-model'
+import { EndedAgent, EndedGroup, EndedTask } from './earlier'
+import { AgentLive, TaskLive } from './live-rows'
 import { useBoardActivity } from './use-board-activity'
 import './board.css'
 
 const NO_ARTIFACTS: BoardArtifact[] = []
 const NO_TASKS: BackgroundTaskView[] = []
+// Past this many live rows, those that do not wait for the user keep one line.
+const ROOMY = 6
 
 /**
- * The session's board: what it runs and makes beside its thread, at the right of the thread and
- * the composer on the same sheet. The sub-agents it started, the commands and monitors its agent
- * left running and the artifacts it wrote, each in a section of its own.
+ * The session's board, at the right of its thread and composer on the same sheet. It answers
+ * what the session has going: Now is one card of what is live, those waiting for the user first,
+ * then sub-agents, then commands; Earlier counts what ended, a line a kind; Artifacts is what
+ * the session wrote.
  */
 export default function BoardRail({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('board')
-  const summary = useSessionsStore((s) => s.byId[sessionId])
-  const loaded = useThreadsStore((s) => !!s.replicas[sessionId]?.state)
-  const listed = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.background)
-  // The host keeps the list only while the agent's process runs; a Claude Code session waiting
-  // for its process has none yet, yet its agent does report them.
-  const tasks =
-    listed ?? (summary && harnessOf(summary.agentId) === 'claude-code' ? NO_TASKS : undefined)
+  const tasks = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.background ?? NO_TASKS)
   const children = useSessionsStore(
     useShallow((s) =>
       Object.values(s.byId).filter(
@@ -57,9 +64,24 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
   }, [])
 
   const subagents = boardSubagents(children)
-  const empty = (tasks?.length ?? 0) === 0 && subagents.length === 0 && artifacts.length === 0
+  const idKey = subagents.map((child) => child.id).join(' ')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key stands for the ids
+  const ids = useMemo(() => subagents.map((child) => child.id), [idKey])
+  const digests = useSubagentDigests(ids)
+
+  const liveAgents = subagents.filter(subagentRunning)
+  const endedAgents = subagents.filter((child) => !subagentRunning(child))
+  const ordered = backgroundOrder(tasks)
+  const liveTasks = ordered.filter((task) => task.status === 'running')
+  const endedTasks = ordered.filter((task) => task.status !== 'running')
+  const live = liveAgents.length + liveTasks.length
+  const compact = live > ROOMY
+  const empty = subagents.length === 0 && tasks.length === 0 && artifacts.length === 0
   const parts = summaryParts(t, activity)
-  const agent = summary ? agentName(summary.agentId, hostOfSession(summary)) : ''
+  const failedFirst = <T,>(items: T[], failed: (item: T) => boolean) => [
+    ...items.filter(failed),
+    ...items.filter((item) => !failed(item)),
+  ]
 
   let body: ReactNode
   if (empty) {
@@ -73,22 +95,73 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
   } else {
     body = (
       <div className="kb-scroll">
-        {summary && <SubagentSection session={summary} subagents={subagents} />}
-        {loaded && <BackgroundSection sessionId={sessionId} tasks={tasks} agent={agent} />}
-        <Section icon={ShapesIcon} title={t('sections.artifacts')} count={artifacts.length}>
-          {artifacts.length === 0 ? (
-            <p className="kb-note">{t('none.artifacts')}</p>
-          ) : (
-            artifacts.map((artifact) => (
+        {live > 0 && (
+          <section aria-label={t('sections.now')}>
+            <h3 className="kb-label">{t('sections.now')}</h3>
+            <div className="kb-now">
+              {liveAgents.map((child) => (
+                <AgentLive
+                  key={child.id}
+                  child={child}
+                  digest={digests[child.id]?.digest ?? null}
+                  compact={compact}
+                />
+              ))}
+              {liveTasks.map((task) => (
+                <TaskLive key={task.id} sessionId={sessionId} task={task} compact={compact} />
+              ))}
+            </div>
+          </section>
+        )}
+        {(endedAgents.length > 0 || endedTasks.length > 0) && (
+          <section aria-label={t('sections.earlier')}>
+            <h3 className="kb-label">{t('sections.earlier')}</h3>
+            {endedAgents.length > 0 && (
+              <EndedGroup
+                // Opened by itself once nothing is live, when it is all there is to read.
+                key={live === 0 ? 'idle' : 'busy'}
+                icon={UserMultiple02Icon}
+                name={t('earlier.subagents')}
+                count={endedAgents.length}
+                failed={endedAgents.filter(subagentFailed).length}
+                open={live === 0}
+              >
+                {failedFirst(endedAgents, subagentFailed).map((child) => (
+                  <EndedAgent
+                    key={child.id}
+                    child={child}
+                    digest={digests[child.id]?.digest ?? null}
+                  />
+                ))}
+              </EndedGroup>
+            )}
+            {endedTasks.length > 0 && (
+              <EndedGroup
+                icon={ComputerTerminal01Icon}
+                name={t('earlier.commands')}
+                count={endedTasks.length}
+                failed={endedTasks.filter((task) => task.status === 'failed').length}
+              >
+                {failedFirst(endedTasks, (task) => task.status === 'failed').map((task) => (
+                  <EndedTask key={task.id} sessionId={sessionId} task={task} />
+                ))}
+              </EndedGroup>
+            )}
+          </section>
+        )}
+        {artifacts.length > 0 && (
+          <section aria-label={t('sections.artifacts')}>
+            <h3 className="kb-label">{t('sections.artifacts')}</h3>
+            {artifacts.map((artifact) => (
               <ArtifactRow
                 key={artifact.artifactId}
                 sessionId={sessionId}
                 entryId={artifact.entryId}
                 artifactId={artifact.artifactId}
               />
-            ))
-          )}
-        </Section>
+            ))}
+          </section>
+        )}
       </div>
     )
   }

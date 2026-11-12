@@ -14,13 +14,13 @@ export interface TaskOutput {
 const UNREAD: TaskOutput = { text: null, truncated: false, error: null }
 
 /**
- * A background task's output while `enabled`: read at once, then every 2 s while `live`, and once
- * more when the task ends. A row nobody opened never reads.
+ * A background task's output while `enabled`: read at once, then every `every` ms while `live`
+ * (2 s unless given), and once more when the task ends.
  */
 export function useTaskOutput(
   sessionId: string,
   taskId: string,
-  { enabled, live }: { enabled: boolean; live: boolean },
+  { enabled, live, every = POLL_MS }: { enabled: boolean; live: boolean; every?: number },
 ): TaskOutput {
   const [output, setOutput] = useState<TaskOutput>(UNREAD)
 
@@ -48,12 +48,12 @@ export function useTaskOutput(
         })
     }
     read()
-    const timer = live ? setInterval(read, POLL_MS) : undefined
+    const timer = live ? setInterval(read, every) : undefined
     return () => {
       current = false
       clearInterval(timer)
     }
-  }, [sessionId, taskId, enabled, live])
+  }, [sessionId, taskId, enabled, live, every])
 
   return output
 }
