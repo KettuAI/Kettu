@@ -13,7 +13,7 @@ import type {
 } from '@shared/thread'
 import { fenced } from '../codex/mapper'
 import { t } from '../i18n'
-import { isClaudePlanCall } from '../plan-tool'
+import { isClaudeRowlessCall } from '../plan-tool'
 import {
   addEntry,
   commandDescription,
@@ -30,7 +30,7 @@ const OUTPUT_LIMIT = 64 * 1024
 const SHELL_TOOLS = new Set(['bash', 'pwsh'])
 /** Tools whose call the thread shows another way, as the plan: dsh's own and Kettu's. */
 function hidden(name: string): boolean {
-  return name === 'todo_write' || isClaudePlanCall(name)
+  return name === 'todo_write' || isClaudeRowlessCall(name)
 }
 
 /** Calls that start a subagent, which shows as a session of its own instead of a row. */

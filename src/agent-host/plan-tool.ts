@@ -6,6 +6,7 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { longer } from '@shared/artifacts'
 import type { PlanItem } from '@shared/thread'
 import type { Caller } from './artifacts/tools'
+import { REPORT_TOOL } from './report-tool'
 import { SERVICE_NAME } from './service-name'
 
 export const PLAN_TOOL = 'set_plan'
@@ -87,14 +88,18 @@ export function isPlanToolName(name: string): boolean {
   return name === PLAN_TOOL
 }
 
-/** Claude Code's name for the tool in its calls, which show no row: the plan is their display. */
-export function isClaudePlanCall(name: string): boolean {
-  return name === `mcp__${SERVICE_NAME}__${PLAN_TOOL}`
+/** Kettu's tools whose calls show no row: the plan and the drafted report are their display. */
+const ROWLESS_TOOLS: ReadonlySet<string> = new Set([PLAN_TOOL, REPORT_TOOL])
+
+/** A call of one of those tools, by Claude Code's name for it. */
+export function isClaudeRowlessCall(name: string): boolean {
+  const prefix = `mcp__${SERVICE_NAME}__`
+  return name.startsWith(prefix) && ROWLESS_TOOLS.has(name.slice(prefix.length))
 }
 
-/** An MCP tool call of Codex, named by its server and tool. */
-export function isCodexPlanCall(server: string, tool: string): boolean {
-  return server === SERVICE_NAME && tool === PLAN_TOOL
+/** A call of one of those tools, as Codex names its MCP calls by server and tool. */
+export function isCodexRowlessCall(server: string, tool: string): boolean {
+  return server === SERVICE_NAME && ROWLESS_TOOLS.has(tool)
 }
 
 export interface PlanToolsDeps {

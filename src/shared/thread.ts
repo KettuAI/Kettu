@@ -259,6 +259,7 @@ export type ThreadEntry =
   | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
   | ComputerSetupEntry // Kettu's own record of the setup a first call waited on, and its end
   | ProjectMcpEntry // Kettu's own record of a folder's MCP servers held for the user, and the answer
+  | ProblemReportEntry // Kettu's own record of a problem report an agent drafted, and its outcome
 
 /**
  * Where another agent took the session over: from here on its turns are that agent's. `turns` of
@@ -414,6 +415,29 @@ export interface ProjectMcpEntry {
   id: string
   servers: DeclaredMcpServer[]
   decision: ProjectMcpAnswer | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** What became of a drafted problem report: submitted with its id, saved as a zip, or not sent. */
+export type ProblemReportOutcome =
+  { kind: 'sent'; reportId: string } | { kind: 'saved' } | { kind: 'skipped' }
+
+/**
+ * A problem report the agent drafted for Kettu, which waits for the user to send it: nothing leaves
+ * the computer before they do. `outcome` is null until they answer.
+ */
+export interface ProblemReportEntry {
+  kind: 'problem_report'
+  id: string
+  title: string
+  details: string
+  error: string | null
+  /** When the agent drafted it, in Unix milliseconds, for the daily limit. */
+  at: number
+  outcome: ProblemReportOutcome | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
@@ -893,6 +917,12 @@ function isToolContent(value: unknown): value is ToolContent {
   }
 }
 
+function isProblemReportOutcome(value: unknown): value is ProblemReportOutcome {
+  if (!isRecord(value)) return false
+  if (value.kind === 'sent') return typeof value.reportId === 'string'
+  return value.kind === 'saved' || value.kind === 'skipped'
+}
+
 const isListOf = <T>(value: unknown, guard: (item: unknown) => item is T): value is T[] =>
   Array.isArray(value) && value.every(guard)
 
@@ -1009,6 +1039,15 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.decision === 'always' ||
           value.decision === 'deny' ||
           value.decision === 'timeout') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'problem_report':
+      return (
+        typeof value.title === 'string' &&
+        typeof value.details === 'string' &&
+        (value.error === null || typeof value.error === 'string') &&
+        typeof value.at === 'number' &&
+        (value.outcome === null || isProblemReportOutcome(value.outcome)) &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'computer_setup':

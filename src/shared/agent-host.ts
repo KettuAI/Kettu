@@ -77,6 +77,7 @@ import type {
   PatchBatch,
   PromptCache,
   ProjectMcpDecision,
+  ProblemReportOutcome,
   QuestionAnswer,
   FormValues,
   SessionSnapshot,
@@ -1072,6 +1073,12 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: ProjectMcpDecision }
     result: void
   }
+  // What became of a problem report the agent drafted, from the window or device that sent, saved
+  // or dropped it; the first answer counts.
+  'sessions.answerReport': {
+    params: { sessionId: string; entryId: string; outcome: ProblemReportOutcome }
+    result: void
+  }
   // The label's Stop using: the session stops using the computer for the rest of its turn.
   'computer.stop': {
     params: { sessionId: string }
@@ -1275,6 +1282,7 @@ export const HOST_METHODS = [
   'devices.forget',
   'computer.answerApp',
   'sessions.answerProjectMcp',
+  'sessions.answerReport',
   'computer.stop',
   'computer.declineSetup',
 ] as const satisfies readonly HostMethod[]

@@ -42,6 +42,7 @@ export function AccessCard({
   device,
   words,
   request,
+  trailing,
 }: {
   sessionId: string
   entryId: string
@@ -64,6 +65,8 @@ export function AccessCard({
     answer: (answer: string) => string
   }
   request: (decision: AccessDecision) => Promise<void>
+  /** Another action in place of the lasting allow, which answers nothing by itself. */
+  trailing?: { glyph: IconSvgElement; label: string; onClick: () => void }
 }) {
   const { t } = useTranslation('session')
   const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
@@ -129,15 +132,27 @@ export function AccessCard({
         revocable={false}
         disabled={answering !== null}
         trailingActions={
-          <button
-            type="button"
-            className="ui-prc__btn ks-permission__always"
-            disabled={answering !== null}
-            onClick={() => void send('always')}
-          >
-            <Icon icon={TickDouble02Icon} size={14} />
-            {words.allow.always}
-          </button>
+          trailing ? (
+            <button
+              type="button"
+              className="ui-prc__btn"
+              disabled={answering !== null}
+              onClick={trailing.onClick}
+            >
+              <Icon icon={trailing.glyph} size={14} />
+              {trailing.label}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ui-prc__btn ks-permission__always"
+              disabled={answering !== null}
+              onClick={() => void send('always')}
+            >
+              <Icon icon={TickDouble02Icon} size={14} />
+              {words.allow.always}
+            </button>
+          )
         }
         labels={{
           title: (name, what) => (

@@ -58,6 +58,8 @@ import {
   type PendingQuestion,
   type PermissionOption,
   type PlanEntry,
+  type ProblemReportEntry,
+  type ProblemReportOutcome,
   type PlanItem,
   type QuestionAnswer,
   type SessionSnapshot,
@@ -141,6 +143,7 @@ import {
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { canonicalizePath, isInside, pathKey, samePath } from './paths'
 import type { ProjectMcpAnswers } from './project-mcp'
+import { REPORTS_PER_DAY, type ReportDraft } from './report-tool'
 import { isOutOfCredit } from './out-of-credit'
 import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
@@ -1161,6 +1164,56 @@ export class SessionManager {
     live.scope.planId = id
     this.emit(live, [{ op: 'entry.add', entry: { kind: 'plan', id, items } }])
     return true
+  }
+
+  /**
+   * A problem report the agent drafted waits in its thread for the user to send. It does not mark
+   * the session as waiting: the agent carries on, and nothing is sent until the user answers.
+   */
+  reportDrafted(sessionId: string, draft: ReportDraft): 'added' | 'none' | 'open' | 'daily' {
+    const live = this.live.get(sessionId)
+    if (!live) return 'none'
+    const now = Date.now()
+    const midnight = new Date(now).setHours(0, 0, 0, 0)
+    let today = 0
+    for (const id of live.thread.order) {
+      const entry = live.thread.byId[id]
+      if (entry?.kind !== 'problem_report') continue
+      if (entry.outcome === null) return 'open'
+      if (entry.at >= midnight) today++
+    }
+    if (today >= REPORTS_PER_DAY) return 'daily'
+    const entry: ProblemReportEntry = {
+      kind: 'problem_report',
+      id: this.nextId(live),
+      ...draft,
+      at: now,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    return 'added'
+  }
+
+  /** What became of a drafted problem report, from the window or device that answered it first. */
+  answerReport(
+    sessionId: string,
+    entryId: string,
+    outcome: ProblemReportOutcome,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'problem_report') throw notFound(`No report waits in ${entryId}`)
+    if (entry.outcome !== null) {
+      throw new HostError('not_found', `The report ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    const changes = { outcome, ...(device ? { device } : {}) }
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes }])
   }
 
   /** A write to the artifacts service by the session, or by a subagent of it, goes in its thread. */

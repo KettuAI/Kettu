@@ -7,6 +7,12 @@ import {
   type ReportRange,
 } from '@shared/report'
 
+/** A report an agent drafted, which the dialog answers once it is sent or saved. */
+export interface ReportEntryRef {
+  sessionId: string
+  entryId: string
+}
+
 /** The report dialog as opened: for which host, from where, with what chosen already. */
 export interface ReportDialog {
   /** The other host the report is about; null for this computer, or the web client's host. */
@@ -14,6 +20,10 @@ export interface ReportDialog {
   context: ReportContext | null
   range: ReportRange
   extras: ReportExtra[]
+  /** The description it starts with, such as an agent's draft. */
+  description?: string
+  /** The agent's drafted report it was opened from, which sending or saving answers. */
+  entry?: ReportEntryRef
   /** Starts the dialog afresh each time it opens. */
   key: number
 }
@@ -42,6 +52,8 @@ export async function openReport(options: Partial<Omit<ReportDialog, 'key'>> = {
         : null,
       range: options.range ?? { kind: 'hour' },
       extras: options.extras ?? [],
+      ...(options.description !== undefined ? { description: options.description } : {}),
+      ...(options.entry ? { entry: options.entry } : {}),
       key: Date.now(),
     },
   })

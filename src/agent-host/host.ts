@@ -498,6 +498,7 @@ export class AgentHost {
       sessionOf: (process, id) => this.sessions.sessionOf(process, id),
       subagentCall: (process, id) => this.sessions.isSubagentCall(process, id),
       plan: { set: (sessionId, items) => this.sessions.planSet(sessionId, items) },
+      report: { add: (sessionId, draft) => this.sessions.reportDrafted(sessionId, draft) },
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request) => this.browserCall(request),
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),
@@ -1990,6 +1991,9 @@ export class AgentHost {
       },
       'sessions.answerProjectMcp': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerProjectMcp(sessionId, entryId, decision, fromDevice(device))
+      },
+      'sessions.answerReport': ({ sessionId, entryId, outcome }, { device }) => {
+        sessions.answerReport(sessionId, entryId, outcome, fromDevice(device))
       },
       'computer.stop': ({ sessionId }) => {
         this.computer?.stop(sessionId)

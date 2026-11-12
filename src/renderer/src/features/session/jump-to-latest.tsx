@@ -25,6 +25,7 @@ const AFTER_END = new Set([
   'computer_app',
   'computer_setup',
   'project_mcp',
+  'problem_report',
   'session_started',
 ])
 
