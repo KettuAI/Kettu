@@ -8,7 +8,7 @@ import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
-import { countdown } from '@renderer/features/sidebar/plan-usage'
+import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -17,7 +17,7 @@ import { isInstalled } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useWindowHostAway } from '@renderer/stores/window-host'
 import { refreshLimits } from '@renderer/stores/usage'
-import { limitsToRead, resetForm } from './model'
+import { limitsToRead } from './model'
 import {
   planColumns,
   ringStroke,
@@ -139,18 +139,6 @@ function HostPlanLimits({ used }: { used: readonly AgentId[] }) {
   )
 }
 
-/** When a window resets, as its line and hover card say it. */
-function useResetText(): (ring: CardRing, now: number) => string | null {
-  const { t } = useTranslation('usage')
-  return (ring, now) => {
-    const at = ring.limit.resetsAt
-    if (at === null) return null
-    return resetForm(at, now) === 'in' && at > now
-      ? t('limits.resetsIn', { time: countdown(at - now)! })
-      : t('limits.resetsAt', { time: resetWhen(at, now) })
-  }
-}
-
 /**
  * An account's card: its mark, name and tier, then a ring per window beside a line per window,
  * the longest outside and first. Hovered or focused, it lists when each window resets.
@@ -162,7 +150,6 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
     const agent = s.byId[card.agentId]
     return agent ? isInstalled(agent) : true
   })
-  const resetText = useResetText()
   const failed = card.state === 'failed'
   const shortName = useShortWindow()
   const face = (
@@ -207,7 +194,8 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
           <div className="k-u-plan__lines">
             {card.rings.map((ring) => {
               const name = limitLabel(ring.limit)
-              const reset = resetText(ring, now)
+              const reset =
+                ring.limit.resetsAt === null ? null : planReset(ring.limit.resetsAt, now)
               return (
                 <span key={ring.limit.window} className="k-u-plan__line">
                   <span aria-hidden className="k-u-plan__win">
@@ -275,7 +263,7 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
                 {ring.percent}%
               </span>
               <span className="text-right whitespace-nowrap text-secondary">
-                {resetText(ring, now) ?? ''}
+                {ring.limit.resetsAt === null ? '' : planReset(ring.limit.resetsAt, now)}
               </span>
             </span>
           ))}
@@ -306,16 +294,4 @@ function useShortWindow(): (limit: CardRing['limit']) => string {
     }
     return limitLabel(limit)
   }
-}
-
-/** When a window resets: its time today, its day and time within six days, its date beyond. */
-function resetWhen(at: number, now: number): string {
-  const day = (time: number) => new Date(time).setHours(0, 0, 0, 0)
-  // Rounded, since a day across a change of the clocks is not 24 hours.
-  const days = Math.round((day(at) - day(now)) / 86_400_000)
-  const format: Intl.DateTimeFormatOptions =
-    days < 0 || days > 6
-      ? { month: 'short', day: 'numeric' }
-      : { ...(days > 0 && { weekday: 'short' }), hour: 'numeric', minute: '2-digit' }
-  return new Intl.DateTimeFormat(currentLocale(), format).format(at)
 }

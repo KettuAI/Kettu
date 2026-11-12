@@ -101,7 +101,6 @@
       "resets": "Resets {{time}}",
       "updated": "Updated {{ago}}",
       "planOf": "Plan · {{plan}}",
-      "resetsShort": "resets {{time}}",
       "title": "Plan limits"
     },
     "cache": {

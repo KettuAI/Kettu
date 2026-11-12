@@ -705,12 +705,6 @@ export function limitsToRead<
   )
 }
 
-/** How a plan window's reset reads: the time left when it is within a day, else when it is. */
-export function resetForm(resetsAt: number, now: number): 'in' | 'at' {
-  const left = resetsAt - now
-  return left > 0 && left < 86_400_000 ? 'in' : 'at'
-}
-
 /** The series colors, in the order the agents are listed. */
 const SERIES = [
   'var(--series-1)',
