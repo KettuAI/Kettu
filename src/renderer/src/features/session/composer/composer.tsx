@@ -55,6 +55,7 @@ import { useBlockedEnter } from './use-blocked-enter'
 import { usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 import { firstWaiting, pressWaitingCard } from '../waiting-card'
+import { sessionLimits } from '@renderer/features/sidebar/plan-usage'
 
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
@@ -162,7 +163,6 @@ export function Composer({
         : (blocked?.message ?? null)
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
-  const reached = limits?.find((l) => l.state === 'reached')
   const add = useAddMenu({ box, agentName, commands: session.commands })
 
   // An agent that is gone takes no settings; the one picked to carry on shows its own.
@@ -170,6 +170,9 @@ export function Composer({
   const mode = config.find((o): o is SelectOption => o.category === 'mode' && isSelect(o))
   const model = config.find((o): o is SelectOption => o.category === 'model' && isSelect(o))
   const effort = config.find((o) => o.category === 'thought_level' && isSelect(o))
+  // A used-up window of another model does not hold this session back.
+  const modelLimits = sessionLimits(limits ?? [], model)
+  const reached = modelLimits.find((l) => l.state === 'reached')
   const switches = config.filter((o) => o.type === 'boolean')
   const others = config.filter(
     (o): o is SelectOption => isSelect(o) && o !== mode && o !== model && o !== effort,
@@ -553,6 +556,7 @@ export function Composer({
                   usage={session.usage}
                   context={session.context}
                   limits={limits ?? []}
+                  holding={modelLimits}
                   account={agent?.account ?? null}
                   model={modelName}
                 />
