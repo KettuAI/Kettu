@@ -161,6 +161,18 @@ function cuaDriverNotice(root: string): Notice | null {
   return { name: 'cua-driver', version, license: 'MIT', files, lines: [] }
 }
 
+/** The licenses of the adapted SVG marks shipped by the renderer. */
+export function agentMarkNotice(root: string): Notice {
+  const file = 'src/renderer/src/components/agents/marks/LICENSES.txt'
+  return {
+    name: 'Harness artwork',
+    version: '',
+    license: 'Apache-2.0 AND MIT',
+    files: [{ name: file, text: readFileSync(path.join(root, file), 'utf8').trim() }],
+    lines: [],
+  }
+}
+
 /** The notices for the bundled packages, the packed ones and Electron, each package once. */
 export function collectNotices(root: string, bundled: Iterable<string>): Notice[] {
   const dirs = new Set([...bundled].map((dir) => realpathSync(dir)))
@@ -182,7 +194,7 @@ export function collectNotices(root: string, bundled: Iterable<string>): Notice[
   notice.lines.push(
     'Chromium and the libraries it uses: see LICENSES.chromium.html, installed with Kettu.',
   )
-  notices.push(notice)
+  notices.push(notice, agentMarkNotice(root))
   return notices
 }
 
@@ -264,7 +276,11 @@ export function thirdPartyNotices(root: string): () => Plugin {
  * The plugin for a build that ships outside the app, as in the daemon's package: it writes
  * third-party-notices.txt into the build's own folder.
  */
-export function standaloneThirdPartyNotices(root: string, external: string[] = []): Plugin {
+export function standaloneThirdPartyNotices(
+  root: string,
+  external: string[] = [],
+  extra: Notice[] = [],
+): Plugin {
   const bundled = new Set<string>()
   let outDir = ''
   return {
@@ -279,7 +295,7 @@ export function standaloneThirdPartyNotices(root: string, external: string[] = [
     closeBundle() {
       writeFileSync(
         path.join(outDir, 'third-party-notices.txt'),
-        renderNotices(standaloneNotices(root, bundled, external)),
+        renderNotices([...standaloneNotices(root, bundled, external), ...extra]),
       )
     },
   }

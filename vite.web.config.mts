@@ -12,7 +12,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { cn } from 'cn/vite'
 import { pageRuntime } from './tools/build/page-runtime'
 import { integrity } from './tools/build/integrity'
-import { standaloneThirdPartyNotices } from './tools/build/third-party-notices'
+import { agentMarkNotice, standaloneThirdPartyNotices } from './tools/build/third-party-notices'
 
 const source = (file: string): string => fileURLToPath(new URL(file, import.meta.url))
 
@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       cn({ full: true, out: 'src/lib/cn-tables.ts', cwd: source('src/renderer') }),
       // The daemon's package ships the web client too.
-      standaloneThirdPartyNotices(source('.')),
+      standaloneThirdPartyNotices(source('.'), [], [agentMarkNotice(source('.'))]),
       pageRuntime(source('src/shared/artifact-runtime/runtime.ts')),
       ...(hosted ? [integrity()] : []),
     ],

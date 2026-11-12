@@ -1,4 +1,7 @@
+import type { MarkBodyProps } from './index'
+
 // Mistral Vibe mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
+// Brand colors: https://mistral.ai/.
 const PARTS = [
   'M8.8147 5.35803H5.35791V8.46914H8.8147V5.35803Z',
   'M22.6419 5.35803H19.1851V8.46914H22.6419V5.35803Z',
@@ -14,12 +17,13 @@ const PARTS = [
 
 export const viewBox = '0 0 28 28'
 
-/** The mark in `currentColor`, at every size. */
-export function Body() {
+const BANDS = [1, 1, 4, 4, 4, 2, 5, 5, 3, 2] as const
+
+export function Body({ mono }: MarkBodyProps) {
   return (
-    <g fill="currentColor">
-      {PARTS.map((d) => (
-        <path key={d} d={d} />
+    <g>
+      {PARTS.map((d, index) => (
+        <path key={d} d={d} fill={mono ? 'currentColor' : `var(--brand-mistral-${BANDS[index]})`} />
       ))}
     </g>
   )
