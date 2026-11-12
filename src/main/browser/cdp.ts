@@ -462,6 +462,8 @@ function failure(error: unknown): ToolFailure {
 
 export class BrowserCdp {
   private readonly pages = new Map<string, PageState>()
+  /** Each session's calls in flight, by the function that fails one at once. */
+  private readonly running = new Map<string, Set<(failure: ToolFailure) => void>>()
 
   constructor(private readonly deps: BrowserCdpDeps) {}
 
@@ -542,13 +544,32 @@ export class BrowserCdp {
     if (tool !== 'browser_navigate') this.pageOf(sessionId)
     const control = this.deps.control
     control.begin(sessionId)
+    let stop!: (failure: ToolFailure) => void
+    const stopped = new Promise<never>((_, reject) => (stop = reject))
+    const running = this.running.get(sessionId) ?? new Set()
+    this.running.set(sessionId, running)
+    running.add(stop)
     try {
-      return await this.dispatch(sessionId, tool, args)
+      return await Promise.race([this.dispatch(sessionId, tool, args), stopped])
     } catch (error) {
       throw failure(error)
     } finally {
+      running.delete(stop)
+      if (running.size === 0 && this.running.get(sessionId) === running) {
+        this.running.delete(sessionId)
+      }
       control.end(sessionId)
     }
+  }
+
+  /**
+   * The session's page crashed or stopped responding: its calls in flight fail now, as a command
+   * sent to it may never answer and would only end at the call's time limit.
+   */
+  pageFailed(sessionId: string, kind: 'crashed' | 'unresponsive', message: string): void {
+    const code = kind === 'crashed' ? 'no_page' : 'timeout'
+    const text = `${message} Reload it with browser_reload, or open another with browser_navigate.`
+    for (const stop of this.running.get(sessionId) ?? []) stop(new ToolFailure(code, text))
   }
 
   private async dispatch(
@@ -606,6 +627,12 @@ export class BrowserCdp {
       throw new ToolFailure(
         'no_page',
         'This session has no page yet. Use browser_navigate to open one.',
+      )
+    }
+    if (contents.isCrashed()) {
+      throw new ToolFailure(
+        'no_page',
+        'The page crashed. Reload it with browser_reload, or open another with browser_navigate.',
       )
     }
     return contents

@@ -13,8 +13,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { NO_SESSION } from '@shared/artifacts'
 import { EXPORT_FORMATS, type ArtifactTypeName } from '@shared/artifact-types'
-import { artifactRefOf } from '@renderer/lib/host'
+import { artifactRefOf, errorMessage } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import type { MenuItem } from '@renderer/components/affect/app-shell'
+import { progressToast, toast } from '@renderer/components/ui/toast'
 import { askArtifactDialog, deleteArtifact, restoreArtifact } from '@renderer/stores/artifacts'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useHostHas } from '@renderer/lib/host-features'
@@ -29,6 +31,30 @@ function canSaveFolders(): boolean {
     !isWeb ||
     typeof (window as { showDirectoryPicker?: unknown }).showDirectoryPicker === 'function'
   )
+}
+
+/** Saves a copy where the user chooses, saying how it went; `save` is false when cancelled. */
+function exportWith(title: string, save: () => Promise<boolean>): void {
+  const shown = progressToast(i18n.t('artifacts:menu.exporting', { title }))
+  save().then(
+    (saved) => (saved ? shown.done(i18n.t('artifacts:menu.exported', { title })) : shown.close()),
+    (error: unknown) =>
+      shown.failed(i18n.t('artifacts:menu.exportFailed', { title, error: errorMessage(error) }), {
+        label: i18n.t('common:actions.retry'),
+        onClick: () => exportWith(title, save),
+      }),
+  )
+}
+
+/** Confirms a delete, whose card or viewer is gone: Undo brings it back from Recently deleted. */
+export function deletedToast(id: string, title: string): void {
+  toast(i18n.t('artifacts:menu.deleted', { title }), {
+    label: i18n.t('artifacts:menu.undo'),
+    onClick: () =>
+      void restoreArtifact(id).catch((error: unknown) =>
+        toast(errorMessage(error), undefined, { tone: 'warning' }),
+      ),
+  })
 }
 
 /** What an artifact's menu acts on. */
@@ -90,8 +116,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
   const asks = useArtifactPublished(target.id) ?? false
   // A PDF is printed by a desktop app, also for the web client it serves.
   const prints = useHostHas('thumbnails')
-  const failed = (what: string) => (error: unknown) =>
-    console.error(`Could not ${what} ${target.id}`, error)
+  const failed = (error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' })
   const typed = target.type ?? null
   const { onOpen, onReload, onVersionHistory, historyOpen, onDeleted, onDownloadPng } = options
 
@@ -101,7 +126,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
         key: 'restore',
         label: t('menu.restore'),
         icon: RotateLeft01Icon,
-        run: () => void restoreArtifact(target.id).catch(failed('restore')),
+        run: () => void restoreArtifact(target.id).catch(failed),
       },
       {
         key: 'erase',
@@ -135,9 +160,9 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
             icon: Download04Icon,
             disabled: blocked,
             run: () =>
-              void window.kettu.artifacts
-                .exportAs(artifactRefOf(target.id), target.version, format)
-                .catch(failed(`export as ${format}`)),
+              exportWith(target.title, () =>
+                window.kettu.artifacts.exportAs(artifactRefOf(target.id), target.version, format),
+              ),
           }
         })
     : [
@@ -148,9 +173,9 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
           icon: Download04Icon,
           disabled: noFolder,
           run: () =>
-            void window.kettu.artifacts
-              .export(artifactRefOf(target.id), target.version)
-              .catch(failed('export')),
+            exportWith(target.title, () =>
+              window.kettu.artifacts.export(artifactRefOf(target.id), target.version),
+            ),
         },
       ]
   const entries: Entry[] = []
@@ -167,7 +192,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
       run: () =>
         void window.kettu.artifacts
           .openExternal(artifactRefOf(target.id), target.version)
-          .catch(failed('open in the browser')),
+          .catch(failed),
     })
   }
   entries.push(
@@ -223,7 +248,10 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
         askArtifactDialog({ kind: 'delete', id: target.id, title: target.title, onDeleted })
         return
       }
-      removeCard(target.id, () => deleteArtifact(target.id)).then(onDeleted, failed('delete'))
+      removeCard(target.id, () => deleteArtifact(target.id)).then(() => {
+        deletedToast(target.id, target.title)
+        onDeleted?.()
+      }, failed)
     },
   })
   return entries

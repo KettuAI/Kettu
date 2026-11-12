@@ -49,8 +49,8 @@ function avcCodec(description: Uint8Array): string {
   return `avc1.${hex(description[1] ?? 0x42)}${hex(description[2] ?? 0xe0)}${hex(description[3] ?? 0x1e)}`
 }
 
-function send(deviceId: string, input: DeviceInput): void {
-  void window.kettu.devices.request('devices.input', { deviceId, input }).catch(() => undefined)
+function send(deviceId: string, input: DeviceInput, failed: (reason: unknown) => void): void {
+  void window.kettu.devices.request('devices.input', { deviceId, input }).catch(failed)
 }
 
 /**
@@ -61,8 +61,12 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
   const { t } = useTranslation('devices')
   const canvas = useRef<HTMLCanvasElement>(null)
   const field = useRef<HTMLTextAreaElement>(null)
-  const [state, setState] = useState<StreamState>('starting')
-  const [error, setError] = useState<string | null>(null)
+  const [stream, setStream] = useState<{ state: StreamState; error: string | null }>({
+    state: 'starting',
+    error: null,
+  })
+  // Counts Reconnect presses, each of which watches the device again.
+  const [attempt, setAttempt] = useState(0)
   const [drawn, setDrawn] = useState(false)
   const [focused, setFocused] = useState(false)
   const pointer = useRef<{ id: number; pinch: boolean } | null>(null)
@@ -160,7 +164,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
           }
         },
         error: (reason) => {
-          setError(reason.message)
+          setStream((now) => ({ ...now, error: reason.message }))
           waitingKey = true
           configure()
         },
@@ -182,8 +186,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
         setOrientation(event.screen.orientation)
         if (changed && description) configure()
       } else if (event.type === 'device.stream') {
-        setState(event.state)
-        setError(event.error ?? null)
+        setStream({ state: event.state, error: event.error ?? null })
       } else if (event.type === 'device.frame') {
         const data = new Uint8Array(event.data)
         if (event.kind === 'seed') {
@@ -219,7 +222,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
         } catch {
           waitingKey = true
         }
-        setState('live')
+        setStream((now) => (now.state === 'live' ? now : { ...now, state: 'live' }))
         ack(event.seq)
       }
     })
@@ -263,8 +266,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
           loadFrame()
         })
         .catch((reason: unknown) => {
-          setState('error')
-          setError(errorMessage(reason))
+          setStream({ state: 'error', error: errorMessage(reason) })
         })
     }
     watch()
@@ -293,7 +295,13 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
       decoder?.close()
       void window.kettu.devices.request('devices.unwatch', { deviceId: id }).catch(() => undefined)
     }
-  }, [id])
+  }, [id, attempt])
+
+  // Input the host refuses means the stream is gone, even before the host says so.
+  const inputFailed = (reason: unknown): void =>
+    setStream((now) =>
+      now.state === 'live' ? { state: 'error', error: errorMessage(reason) } : now,
+    )
 
   const point = (event: PointerEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -308,9 +316,11 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
 
   const touch = (event: PointerEvent<HTMLCanvasElement>, phase: 'begin' | 'move' | 'end'): void => {
     const { x, y } = point(event)
-    send(id, { type: 'touch', phase, x, y, finger: 0 })
+    send(id, { type: 'touch', phase, x, y, finger: 0 }, inputFailed)
     // Option and a drag pinch: a second finger mirrored around the screen's center.
-    if (pointer.current?.pinch) send(id, { type: 'touch', phase, x: 1 - x, y: 1 - y, finger: 1 })
+    if (pointer.current?.pinch) {
+      send(id, { type: 'touch', phase, x: 1 - x, y: 1 - y, finger: 1 }, inputFailed)
+    }
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
@@ -318,29 +328,40 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
     if (event.metaKey || event.ctrlKey) return
     if (KEY_CODES.has(event.code)) {
       event.preventDefault()
-      send(id, { type: 'key', phase: 'down', code: event.code })
+      send(id, { type: 'key', phase: 'down', code: event.code }, inputFailed)
     }
   }
 
   const onKeyUp = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.nativeEvent.isComposing || event.metaKey || event.ctrlKey) return
-    if (KEY_CODES.has(event.code)) send(id, { type: 'key', phase: 'up', code: event.code })
+    if (KEY_CODES.has(event.code))
+      send(id, { type: 'key', phase: 'up', code: event.code }, inputFailed)
   }
 
   const flushText = (): void => {
     const element = field.current
     if (!element || !element.value) return
-    send(id, { type: 'text', text: element.value })
+    send(id, { type: 'text', text: element.value }, inputFailed)
     element.value = ''
   }
 
-  // A simulator's frame can take seconds the first time its model's pictures are drawn.
+  const reconnect = (): void => {
+    setStream({ state: 'starting', error: null })
+    setAttempt((n) => n + 1)
+  }
+  // A simulator's frame can take seconds the first time its model's pictures are drawn. A stream
+  // that ended says so over its last picture, which stays; a reconnect waits over it too.
   const status =
-    drawn && ready ? null : state === 'error' ? (
-      <span className="max-w-60 px-4">{error ?? t('screen.error')}</span>
-    ) : state === 'stopped' ? (
-      <span>{t('screen.stopped')}</span>
-    ) : (
+    stream.state === 'stopped' || stream.state === 'error' ? (
+      <>
+        <span className="max-w-60 px-4">
+          {stream.state === 'error' ? (stream.error ?? t('screen.error')) : t('screen.stopped')}
+        </span>
+        <button type="button" className="kp-btn" onClick={reconnect}>
+          {t('actions.reconnect')}
+        </button>
+      </>
+    ) : drawn && ready && !(attempt > 0 && stream.state === 'starting') ? null : (
       <>
         <PaneSpinner />
         <span>{t('screen.starting')}</span>
@@ -366,7 +387,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
           room={room ?? NO_ROOM}
           focused={focused}
           glow={driven}
-          onButton={(name, phase) => send(id, { type: 'frameButton', name, phase })}
+          onButton={(name, phase) => send(id, { type: 'frameButton', name, phase }, inputFailed)}
         >
           <canvas
             ref={canvas}
@@ -398,11 +419,15 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
             }}
             onWheel={(event) => {
               const { x, y } = point(event)
-              send(id, { type: 'scroll', x, y, dx: event.deltaX, dy: event.deltaY })
+              send(id, { type: 'scroll', x, y, dx: event.deltaX, dy: event.deltaY }, inputFailed)
             }}
           />
           {ready && status && (
-            <div className="kp-device-screen__status" data-on-screen="">
+            <div
+              className="kp-device-screen__status"
+              data-on-screen=""
+              data-over-picture={drawn || undefined}
+            >
               {status}
             </div>
           )}
@@ -433,7 +458,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
         onPaste={(event) => {
           event.preventDefault()
           const text = event.clipboardData.getData('text/plain')
-          if (text) send(id, { type: 'text', text })
+          if (text) send(id, { type: 'text', text }, inputFailed)
         }}
       />
     </div>

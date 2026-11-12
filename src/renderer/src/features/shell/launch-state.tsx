@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { loadHostState } from '@renderer/app/bootstrap'
+import { retryHostState } from '@renderer/app/bootstrap'
 import { FailedState } from '@renderer/features/session/session-states'
 import { useProjectsStore } from '@renderer/stores/projects'
 
@@ -15,7 +15,7 @@ export function LaunchState() {
         <FailedState
           title={t('launch.loadFailed')}
           message={error}
-          onRetry={() => void loadHostState()}
+          onRetry={() => void retryHostState()}
           report={{ hostId: null }}
         />
       </div>

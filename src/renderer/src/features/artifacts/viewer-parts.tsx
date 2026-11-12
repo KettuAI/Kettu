@@ -547,11 +547,14 @@ export function StatusBar({
   lead,
   rest,
   action,
+  busy = false,
   onAction,
 }: {
   lead: string
   rest: ReactNode
   action: string
+  /** The action runs, so it waits instead of running again. */
+  busy?: boolean
   onAction: () => void
 }) {
   return (
@@ -564,6 +567,7 @@ export function StatusBar({
         variant="secondary"
         size="sm"
         icon={<Icon icon={RotateLeft01Icon} size={14} />}
+        loading={busy}
         onClick={onAction}
       >
         {action}

@@ -26,7 +26,13 @@ import { CanvasControls } from './canvas-controls'
 import { CommentBox } from './comments'
 import { ArtifactEditor, useEditorState } from './editor'
 import { Waiting } from './page-frame'
-import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
+import {
+  canvasPageName,
+  reportMissing,
+  useArtifact,
+  useArtifactStates,
+  useListsRead,
+} from './use-artifact'
 import { useComments } from './use-comments'
 import { AgentCursorStyles } from '@renderer/components/affect/agent-cursors'
 import { CanvasEditor } from './canvas-editor'
@@ -140,6 +146,28 @@ export default function ArtifactPane({
   let body: React.ReactNode
   if (states.error === 'previewOnly') {
     body = <PreviewOnly summary={summary ?? null} />
+  } else if (states.error === 'missing') {
+    // Trying again reads the same missing files; an earlier version may still have its own.
+    body = (
+      <PaneEmpty
+        icon={<Icon icon={AlertCircleIcon} size={20} />}
+        title={t('viewer.missingTitle')}
+        text={t('viewer.error.missing')}
+      >
+        <span className="mt-3 flex flex-wrap justify-center gap-1.5">
+          <button
+            type="button"
+            className="kp-btn"
+            onClick={() => openArtifact(id, { history: true })}
+          >
+            {t('menu.versionHistory')}
+          </button>
+          <button type="button" className="kp-btn" onClick={() => reportMissing(id, null)}>
+            {t('viewer.reportProblem')}
+          </button>
+        </span>
+      </PaneEmpty>
+    )
   } else if (states.error) {
     body = (
       <PaneEmpty

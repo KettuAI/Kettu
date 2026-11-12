@@ -196,6 +196,19 @@ export async function loadHostState(): Promise<void> {
   ])
 }
 
+/**
+ * Loads it all again after it failed. A host that stopped for good refuses every request until it
+ * is restarted, and its return reads it all again.
+ */
+export async function retryHostState(): Promise<void> {
+  if (useConnectionStore.getState().agentHost !== 'failed') return loadHostState()
+  try {
+    await window.kettu.agents.restart()
+  } catch (error) {
+    useProjectsStore.setState({ error: errorMessage(error) })
+  }
+}
+
 let launched = false
 
 /**

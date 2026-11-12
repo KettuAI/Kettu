@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Project, SessionSummary } from '@shared/agent-host'
-import { host } from '@renderer/lib/host'
+import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
 import { NO_PROJECT_GROUP, PINNED_GROUP, THIS_COMPUTER, type MainView } from './view'
@@ -9,6 +9,8 @@ interface SessionsStore {
   byId: Record<string, SessionSummary>
   /** Whether this computer's list came; another host's sessions come with its connection. */
   loaded: boolean
+  /** Why this computer's list could not be read, until it is. */
+  error: string | null
   /** Replaces the sessions of one host, null being this computer, and leaves the others'. */
   setAll(summaries: SessionSummary[], hostId?: string | null): void
   upsert(summary: SessionSummary): void
@@ -19,6 +21,7 @@ interface SessionsStore {
 export const useSessionsStore = create<SessionsStore>()((set) => ({
   byId: {},
   loaded: false,
+  error: null,
   setAll(summaries, hostId = null) {
     // The list leaves out a routine's run sessions; one that is open stays for its view, which
     // the host still knows, and its removal comes as a session.removed event.
@@ -31,6 +34,7 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
         ...Object.fromEntries(summaries.map((summary) => [summary.id, summary])),
       },
       loaded: hostId === null ? true : state.loaded,
+      error: hostId === null ? null : state.error,
     }))
   },
   upsert(summary) {
@@ -45,7 +49,13 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
     })
   },
   async refresh() {
-    const summaries = await host('sessions.list', {})
+    let summaries: SessionSummary[]
+    try {
+      summaries = await host('sessions.list', {})
+    } catch (error) {
+      set({ error: errorMessage(error) })
+      throw error
+    }
     useSessionsStore.getState().setAll(summaries)
   },
 }))

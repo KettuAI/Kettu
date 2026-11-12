@@ -77,6 +77,12 @@ export function longer(text: string, max: number): boolean {
 /** How long a deleted artifact stays in Recently deleted before the purge removes it. */
 export const ARTIFACT_KEEP_DELETED_MS = 30 * 24 * 60 * 60 * 1000
 
+/**
+ * The `reason` in the data of an error for a version whose stored files are gone from the host,
+ * which reading again cannot bring back.
+ */
+export const CONTENT_MISSING = 'content_missing'
+
 export interface ArtifactSummary {
   id: string
   title: string

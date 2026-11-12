@@ -4,6 +4,7 @@
     "addDevice": "Add device",
     "closeDevice": "Close device",
     "boot": "Start",
+    "reconnect": "Reconnect",
     "maximize": "Maximize",
     "restore": "Restore",
     "close": "Close"

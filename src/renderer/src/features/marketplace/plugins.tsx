@@ -136,7 +136,9 @@ function PluginInstallForm({
   const details = useDetails(agentId, plugin.id)
   const scoped = plugin.harness === 'claude-code'
   const harness = AGENT_NAMES[plugin.harness]
-  const ready = agentId !== null && (scope === 'user' || project !== '')
+  // Hooks are called out before Install, so it waits for the check to answer or fail.
+  const checked = !!details && (details.details !== null || details.error !== null)
+  const ready = agentId !== null && checked && (scope === 'user' || project !== '')
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!ready) return
@@ -201,11 +203,22 @@ function PluginInstallForm({
   )
 }
 
-/** While the details are read, a line's room; then, if it has hooks, the warning. */
+/**
+ * While the details are read, a line's room; then, if it has hooks, the warning, or that it could
+ * not be checked for them.
+ */
 function DetailsNote({ state }: { state: ReturnType<typeof useDetails> }) {
   const { t } = useTranslation('marketplace')
   if (!state) return null
   if (!state.details && !state.error) return <Skeleton className="k-mkt-skeleton__line" />
+  if (state.error) {
+    return (
+      <em className="k-mkt-warn">
+        <Icon icon={Alert02Icon} size={13} />
+        {t('plugin.hooksUnchecked', { error: state.error })}
+      </em>
+    )
+  }
   if (!state.details?.hooks.length) return null
   return (
     <em className="k-mkt-warn">

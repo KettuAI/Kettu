@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { versionUrlPath } from '@shared/artifact-page'
 import type { SessionViewer } from '@shared/agent-host'
-import type { ArtifactSession, ArtifactSummary } from '@shared/artifacts'
+import { CONTENT_MISSING, type ArtifactSession, type ArtifactSummary } from '@shared/artifacts'
 import { artifactHost, artifactRefOf, errorCode, host } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import {
   artifactListShown,
   markArtifactOpened,
   onArtifactEvent,
   useArtifactsStore,
 } from '@renderer/stores/artifacts'
+import { openReport } from '@renderer/stores/report'
 import { useArtifactHostConnected } from './artifact-host'
 import { CANVAS_FILE, parseCanvasDoc, type CanvasDoc } from '@shared/canvas-doc'
 import { layoutCanvas, parseCanvas, type CanvasLayout } from './canvas'
 
-export type ViewerError = 'notFound' | 'unavailable' | 'failed' | 'previewOnly'
+/** Why an artifact cannot show; `missing`: the host has its record but not its version's files. */
+export type ViewerError = 'notFound' | 'unavailable' | 'failed' | 'previewOnly' | 'missing'
 
 /** The version on screen, its pages found as the format reads them. */
 export interface ShownVersion {
@@ -261,9 +264,25 @@ export function pageUrl(
 function readFailure(reason: unknown): ViewerError {
   const code = errorCode(reason)
   if (code === 'not_found') return 'notFound'
+  if ((reason as { data?: { reason?: unknown } } | null)?.data?.reason === CONTENT_MISSING) {
+    return 'missing'
+  }
   if (code === 'host_restarted' || code === 'host_offline') return 'unavailable'
   console.error('Could not read the artifact', reason)
   return 'failed'
+}
+
+/** Opens a problem report about a version of the artifact whose files are missing. */
+export function reportMissing(id: string, version: number | null): void {
+  const which = version === null ? id : `${id} v${version}`
+  void openReport({
+    hostId: artifactHost(id),
+    context: {
+      sessionId: null,
+      agentId: null,
+      error: `${i18n.t('artifacts:viewer.error.missing')} (${which})`,
+    },
+  })
 }
 
 /**

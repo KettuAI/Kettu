@@ -13,10 +13,14 @@ export interface BrowserBounds {
 
 /**
  * Something the pane says under its header: a download it refused, a page it lost to make room,
- * or a page that did not load.
+ * a page that did not load, or one whose renderer crashed or stopped responding.
  */
 export type BrowserNotice =
-  { kind: 'download-blocked' } | { kind: 'evicted' } | { kind: 'load-failed'; description: string }
+  | { kind: 'download-blocked' }
+  | { kind: 'evicted' }
+  | { kind: 'load-failed'; description: string }
+  | { kind: 'crashed' }
+  | { kind: 'unresponsive' }
 
 /** Who drives a page: nobody, an agent's running call, or the user until they hand back. */
 export type BrowserControlState =

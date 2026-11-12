@@ -8,6 +8,7 @@
     "marketplace": "Marketplace",
     "sessions": "Sessions",
     "unavailable": "Projects are unavailable right now.",
+    "sessionsUnavailable": "Sessions are unavailable right now.",
     "empty": "Sessions appear here.",
     "searchField": "Search…",
     "projects": "Projects",

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project } from '@shared/agent-host'
 import { newSession } from '@renderer/app/actions'
+import { retryHostState } from '@renderer/app/bootstrap'
 import { FolderClosedMark } from '@renderer/components/affect/app-shell'
 import { FolderMark } from '@renderer/components/affect/assistant-home'
 import {
@@ -17,6 +18,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { Button } from '@renderer/components/ui/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { HostSwitchBar } from '@renderer/features/account/host-switch'
@@ -59,12 +61,13 @@ import { SessionRow } from './session-row'
  * under its heading.
  */
 export function SidebarList() {
-  const { t } = useTranslation('sidebar')
+  const { t } = useTranslation(['sidebar', 'common'])
   const projects = useProjectsStore((s) => s.projects)
   const projectsLoaded = useProjectsStore((s) => s.loaded)
   const sessionsLoaded = useSessionsStore((s) => s.loaded)
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
+  const sessionsError = useSessionsStore((s) => s.error)
   const sessionsById = useSessionsStore((s) => s.byId)
   const shownProjects = visibleProjects(projects, sessionsById)
   const main = useViewStore((s) => s.main)
@@ -103,8 +106,13 @@ export function SidebarList() {
             'motion-safe:animate-in motion-safe:fade-in motion-safe:animation-duration-(--duration-base)',
         )}
       >
-        {!loaded && loadError ? (
-          <p className="ui-as-side__empty mt-4">{t('nav.unavailable')}</p>
+        {!loaded && (loadError || sessionsError) ? (
+          <div className="ui-as-side__empty mt-4 flex flex-col items-start gap-2">
+            <p>{loadError ? t('nav.unavailable') : t('nav.sessionsUnavailable')}</p>
+            <Button variant="outline" size="xs" onClick={() => void retryHostState()}>
+              {t('common:actions.retry')}
+            </Button>
+          </div>
         ) : !loaded ? (
           // A group's label and its rows at their real sizes, so nothing moves as they arrive.
           <div className="ui-as-side__group">

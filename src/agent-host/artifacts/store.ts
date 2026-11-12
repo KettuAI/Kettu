@@ -10,6 +10,7 @@ import { ARTIFACT_ENTRY, DISK_FILE_BYTES, isHtmlPath } from '@shared/artifact-fi
 import { findAnchor, startTagAt } from '@shared/artifact-source'
 import {
   ARTIFACT_KEEP_DELETED_MS,
+  CONTENT_MISSING,
   type ArtifactDoing,
   type ArtifactFocus,
   type ArtifactSession,
@@ -268,10 +269,11 @@ export class ArtifactStore {
     try {
       return await readFile(contentPath(this.deps.contentDir, file.hash))
     } catch (error) {
-      throw new Error(
-        `${file.path} of ${found.artifact.id} version ${found.version.version} cannot be read: ${(error as Error).message}`,
-        { cause: error },
-      )
+      const message = `${file.path} of ${found.artifact.id} version ${found.version.version} cannot be read: ${(error as Error).message}`
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new HostError('internal', message, { reason: CONTENT_MISSING })
+      }
+      throw new Error(message, { cause: error })
     }
   }
 

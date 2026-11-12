@@ -300,7 +300,7 @@ function SiteMark({ url }: { url: string }) {
   return <PaneIcon icon={Globe02Icon} size={14} className="kp-tab__icon" />
 }
 
-/** A blocked download, a page lost to make room, or a page that did not load. */
+/** A blocked download, a page lost to make room, or a page that did not load, crashed or hangs. */
 function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: string | null }) {
   const { t } = useTranslation('browser')
   const open = () => {
@@ -313,6 +313,8 @@ function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: strin
           {notice.kind === 'download-blocked' && t('notice.downloadBlocked')}
           {notice.kind === 'evicted' && t('notice.evicted')}
           {notice.kind === 'load-failed' && t('notice.loadFailed', { error: notice.description })}
+          {notice.kind === 'crashed' && t('notice.crashed')}
+          {notice.kind === 'unresponsive' && t('notice.unresponsive')}
         </span>
       </span>
       {notice.kind === 'download-blocked' && (
@@ -326,7 +328,7 @@ function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: strin
           onClick={() => void window.kettu.browser.reload(sessionId)}
           className="kp-link"
         >
-          {notice.kind === 'evicted' ? t('actions.reload') : t('actions.tryAgain')}
+          {notice.kind === 'load-failed' ? t('actions.tryAgain') : t('actions.reload')}
         </button>
       )}
     </div>

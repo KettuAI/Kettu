@@ -308,6 +308,7 @@ async function start(): Promise<void> {
     control: (sessionId) => browserTools?.control.state(sessionId) ?? { kind: 'none' },
     created: (sessionId, contents) => browserTools?.watch(sessionId, contents),
     closed: (sessionId) => browserTools?.forget(sessionId),
+    failed: (sessionId, kind, message) => browserTools?.pageFailed(sessionId, kind, message),
     origins: browserOrigins,
     originAsked: (request) => {
       if (!remoteBrowser.originAsked(request)) hostRef.current?.originAsked(request)

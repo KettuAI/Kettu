@@ -107,6 +107,8 @@ export interface BrowserViewsDeps {
   created?(sessionId: string, contents: WebContents): void
   /** A page's web contents is gone: its next one starts afresh. */
   closed?(sessionId: string): void
+  /** A page's renderer crashed or stopped responding: a call waiting on it fails with `message`. */
+  failed?(sessionId: string, kind: 'crashed' | 'unresponsive', message: string): void
   /** An agent's call started or ended, so a hidden page keeps or gives up rendering. */
   driving?(sessionId: string, driving: boolean): void
   /** The projects' always-allowed origins, which the pages ask for before opening a site. */
@@ -726,6 +728,29 @@ export class BrowserViews {
       emit()
       if (page.asking) return
       this.endNavigation(page, { ok: false, error: description })
+    })
+    // A crashed or hung page shows as it was; the pane says so, with Reload.
+    const fail = (kind: 'crashed' | 'unresponsive', message: string): void => {
+      page.notice = { kind }
+      page.loading = false
+      emit()
+      this.endNavigation(page, { ok: false, error: message })
+      this.deps.failed?.(page.sessionId, kind, message)
+    }
+    contents.on('render-process-gone', (_event, details) => {
+      // A page closed on purpose is gone before its renderer.
+      if (page.view?.webContents !== contents) return
+      log.warn(`A page's renderer is gone: ${details.reason} (${details.exitCode})`)
+      fail('crashed', 'The page crashed.')
+    })
+    contents.on('unresponsive', () => {
+      log.warn('A page stopped responding')
+      fail('unresponsive', 'The page stopped responding.')
+    })
+    contents.on('responsive', () => {
+      if (page.notice?.kind !== 'unresponsive') return
+      page.notice = null
+      emit()
     })
     contents.on('will-navigate', (event, url) => {
       if (!isAllowedNavigation(url)) {
