@@ -1,11 +1,11 @@
-/* The board: what a session runs and makes, at the right of its thread. Colors and motion come
-   from the theme's tokens. */
+/* The board: what a session has going, at the right of its thread. Colors and motion come from
+   the theme's tokens. */
 
 .kb-rail {
   display: flex;
   flex: none;
   flex-direction: column;
-  width: clamp(240px, 30%, 320px);
+  width: clamp(280px, 30%, 380px);
   min-height: 0;
   border-left: var(--hairline) solid var(--border-subtle);
 }
@@ -14,12 +14,11 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 0 8px;
 }
 .kb-scroll {
   flex: 1;
   min-height: 0;
-  padding: 2px 0 12px;
+  padding: 0 12px 24px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -32,7 +31,7 @@
   gap: 8px;
   min-width: 0;
   height: 44px;
-  padding: 0 8px 0 14px;
+  padding: 0 8px 0 16px;
 }
 .kb-head__close {
   margin-left: auto;
@@ -44,7 +43,7 @@
 .kb-head__title {
   flex: none;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .kb-head__sum {
@@ -57,49 +56,374 @@
   white-space: nowrap;
 }
 .kb-head__needs {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--attention);
 }
 
-/* A group: a heading that folds its rows, which slide away on grid rows, a disclosure being the
-   one layout animation allowed. */
-.kb-group + .kb-group {
-  margin-top: 6px;
-}
-.kb-group__title {
-  margin: 0;
-  font: inherit;
-}
-.kb-group__head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 6px 8px 4px;
-  border-radius: 8px;
+.kb-label {
+  margin: 18px 4px 8px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 16px;
   color: var(--text-tertiary);
+}
+.kb-scroll > section:first-child > .kb-label {
+  margin-top: 4px;
+}
+
+/* A row's mark: the agent's logo, a command's terminal or an artifact's kind, on a small tile. */
+.kb-mark {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
+}
+.kb-mark__badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--attention-dot);
+  box-shadow: 0 0 0 2px var(--shell-card);
+}
+.kb-clock {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Now: the one card on the board. Each live row is a line of the card, parted from the next by a
+   hairline that starts under the words. */
+.kb-now {
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--shell-card);
+  box-shadow:
+    0 0 0 0.5px var(--border-subtle),
+    var(--elevation-card);
+}
+.kb-item {
+  position: relative;
+}
+.kb-item + .kb-item::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 44px;
+  height: var(--hairline);
+  background: var(--border-subtle);
+  content: '';
+}
+.kb-item[data-wait] {
+  background: color-mix(in srgb, var(--attention-dot) 7%, transparent);
+}
+.kb-item[data-wait] + .kb-item::before,
+.kb-item[data-wait]::before {
+  left: 0;
+  background: color-mix(in srgb, var(--attention-dot) 16%, var(--border-subtle));
+}
+/* A button covers the row, so the whole row takes the click while the buttons of its own stay
+   above it; the row's words are not interactive. */
+.kb-live {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 1px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  transition: background-color var(--duration-fast) ease;
+}
+.kb-live:hover {
+  background: var(--bg-hover);
+}
+.kb-live[data-one] {
+  padding-block: 7px;
+}
+.kb-hit {
+  position: absolute;
+  inset: 0;
   outline: none;
-  transition: color var(--duration-fast) ease;
 }
-.kb-group__head:hover {
-  color: var(--text-primary);
-}
-.kb-group__head:focus-visible {
+.kb-hit:focus-visible {
   outline: 1.5px solid var(--focus-ring-color);
   outline-offset: -1.5px;
 }
-.kb-group__n {
+.kb-live > :not(.kb-hit) {
+  pointer-events: none;
+}
+.kb-live .kb-live__act {
+  position: relative;
+  pointer-events: auto;
+}
+.kb-live .kb-mark {
+  grid-row: 1 / span 2;
+  align-self: start;
+  margin-top: 1px;
+}
+.kb-live[data-one] .kb-mark {
+  grid-row: 1;
+  margin-top: 0;
+}
+.kb-live__name {
+  grid-row: 1;
+  grid-column: 2;
+  overflow: hidden;
+  font-size: 13px;
   font-weight: 500;
-  color: var(--text-disabled);
+  line-height: 18px;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.kb-chev {
-  transition: transform 200ms var(--ease-standard);
+.kb-live__end {
+  display: flex;
+  grid-row: 1;
+  grid-column: 3;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-tertiary);
 }
-.kb-group__head[aria-expanded='false'] .kb-chev {
-  transform: rotate(-90deg);
+/* Review stands where the clock does; its own look is the button's. */
+.kb-live__review {
+  grid-row: 1;
+  grid-column: 3;
 }
+.kb-live__what {
+  grid-row: 2;
+  grid-column: 2 / -1;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-live__what--mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-ligatures: none;
+  color: var(--text-tertiary);
+}
+.kb-live__type {
+  color: var(--text-tertiary);
+}
+.kb-stop {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition:
+    opacity var(--duration-fast) ease,
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+.kb-live:hover .kb-stop,
+.kb-live:focus-within .kb-stop {
+  opacity: 1;
+}
+.kb-stop:hover {
+  background: var(--bg-hover);
+  color: var(--danger);
+}
+.kb-stop:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+}
+.kb-item__error {
+  margin: 0;
+  padding: 0 12px 8px 44px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--danger);
+}
+
+/* A task opened: what it printed straight on the surface under it, no ground of its own. */
+.kb-detail {
+  display: grid;
+  min-width: 0;
+  padding: 0 12px 12px 44px;
+}
+.kb-detail__label {
+  margin: 2px 0 3px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+  color: var(--text-tertiary);
+}
+.kb-detail pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-ligatures: none;
+  line-height: 17px;
+  color: var(--text-secondary);
+}
+.kb-detail__command {
+  margin-bottom: 8px !important;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.kb-detail__output {
+  max-height: 170px;
+  overflow: auto;
+  white-space: pre;
+  scrollbar-width: thin;
+}
+.kb-detail__none,
+.kb-detail__note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-tertiary);
+}
+.kb-detail__note {
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+.kb-detail__error {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--danger);
+}
+.kb-detail__acts {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Earlier and Artifacts: flat rows on the board itself, their marks in the card's column. */
+.kb-sum,
+.kb-end,
+.kb-art {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  padding: 0 12px;
+  border-radius: 9px;
+  text-align: left;
+  outline: none;
+  transition: background-color var(--duration-fast) ease;
+}
+.kb-sum:hover,
+.kb-end:hover,
+.kb-art:hover {
+  background: var(--bg-hover);
+}
+.kb-sum:focus-visible,
+.kb-end:focus-visible,
+.kb-art:focus-visible {
+  outline: 1.5px solid var(--focus-ring-color);
+  outline-offset: -1.5px;
+}
+.kb-sum {
+  height: 34px;
+  padding-right: 9px;
+}
+.kb-sum__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  color: var(--text-tertiary);
+}
+.kb-sum__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kb-sum__failed {
+  font-size: 12px;
+  color: var(--danger);
+}
+.kb-sum__n {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.kb-sum__chev {
+  flex: none;
+  color: var(--text-tertiary);
+  transition: transform 260ms var(--ease-out-quint);
+}
+.kb-group[data-open] .kb-sum__chev {
+  transform: rotate(90deg);
+}
+.kb-ended {
+  display: grid;
+  padding-bottom: 4px;
+}
+.kb-end {
+  height: 30px;
+}
+.kb-end__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  color: var(--success);
+}
+.kb-end[data-state='failed'] .kb-end__mark,
+.kb-end[data-state='failed'] .kb-end__took {
+  color: var(--danger);
+}
+.kb-end[data-state='stopped'] .kb-end__mark {
+  color: var(--text-tertiary);
+}
+.kb-end__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-end__took {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-end-item .kb-detail {
+  padding-top: 2px;
+}
+.kb-art {
+  height: 36px;
+}
+.kb-art__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-art__meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A fold: its height first, the content rising out of a soft blur as the thread's folds do. */
 .kb-fold {
   display: grid;
   grid-template-rows: 1fr;
@@ -118,374 +442,29 @@
   min-height: 0;
   overflow: hidden;
 }
-.kb-note {
-  margin: 2px 8px 6px;
-  padding: 8px 10px;
-  border-radius: 9px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  box-shadow: inset 0 0 0 0.5px var(--border-default);
-}
-
-/* A row: the mark, two lines of words and the time. A button covers the row, so none of the
-   row's words takes a click; the buttons of its own sit above that one. */
-.kb-row {
-  position: relative;
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  column-gap: 10px;
-  align-items: start;
-  padding: 7px 8px;
-  border-radius: 9px;
-  transition: background-color var(--duration-fast) ease;
-}
-.kb-row[data-tile] {
-  grid-template-columns: 26px minmax(0, 1fr) auto;
-}
-.kb-row:hover {
-  background: var(--bg-hover);
-}
-.kb-row__hit {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  outline: none;
-}
-.kb-row__hit:focus-visible {
-  outline: 1.5px solid var(--focus-ring-color);
-  outline-offset: -1.5px;
-}
-.kb-row__lead,
-.kb-row__text,
-.kb-row__side {
-  pointer-events: none;
-}
-.kb-row__lead {
-  display: grid;
-  margin-top: 3px;
-}
-.kb-row[data-tile] .kb-row__lead {
-  margin-top: 1px;
-}
-.kb-row__text {
-  display: grid;
-  min-width: 0;
-}
-.kb-row__head {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-.kb-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.kb-mono {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-variant-ligatures: none;
-}
-.kb-tag {
-  flex: none;
-  max-width: 45%;
-  overflow: hidden;
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-  text-overflow: ellipsis;
-}
-.kb-row__detail {
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--text-tertiary);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kb-row__detail[data-mono] {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-variant-ligatures: none;
-}
-.kb-row__side {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  /* Wide enough for Stop and the chevron, so the words do not shift when they replace the time. */
-  min-width: 76px;
-  min-height: 20px;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-.kb-row__acts {
-  display: none;
-  align-items: center;
-  gap: 2px;
-}
-.kb-row:is(:hover, :has(:focus-visible)) .kb-row__acts {
-  display: inline-flex;
-}
-.kb-row:is(:hover, :has(:focus-visible)) .kb-row__when {
-  display: none;
-}
-.kb-row__acts button {
-  pointer-events: auto;
-}
-.kb-row__hint {
-  display: inline-flex;
-  align-items: center;
-}
-.kb-chev-open {
-  transition: transform 250ms var(--ease-standard);
-}
-.kb-row[data-open] .kb-chev-open {
-  transform: rotate(90deg);
-}
-
-/* Small buttons and pills. */
-.kb-mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 7px;
-  border-radius: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  outline: none;
-}
-button.kb-mini {
-  position: relative;
-}
-button.kb-mini:hover {
-  background: var(--bg-selected);
-  color: var(--text-primary);
-}
-button.kb-mini:focus-visible {
-  outline: 1.5px solid var(--focus-ring-color);
-  outline-offset: 1px;
-}
-button.kb-mini:disabled {
-  opacity: 0.5;
-  pointer-events: none;
-}
-.kb-mini--stop:hover {
-  color: var(--danger);
-}
-.kb-mini--solid {
-  background: var(--text-primary);
-  font-weight: 500;
-  color: var(--bg-surface);
-}
-.kb-pill {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: 99px;
-  font-size: 11px;
-  font-weight: 500;
-}
-.kb-pill--need {
-  background: color-mix(in srgb, var(--attention-dot) 9%, var(--bg-surface));
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--attention-dot) 24%, transparent);
-  color: var(--attention);
-}
-.kb-pill--fail {
-  background: var(--danger-tint);
-  color: var(--danger);
-}
-.kb-row-error {
-  margin: 0 8px 4px 36px;
-  font-size: 12px;
-  color: var(--danger);
-}
-
-/* The mark in front of a row. */
-.kb-glyph {
-  display: grid;
-  place-items: center;
-  flex: none;
-  width: 14px;
-  height: 14px;
-}
-.kb-glyph[data-state='running']::before {
-  content: '';
-  box-sizing: border-box;
-  width: 12px;
-  height: 12px;
-  border: 2px solid color-mix(in srgb, var(--thread-fox) 22%, transparent);
-  border-top-color: var(--thread-fox);
-  border-radius: 50%;
-  animation: kb-spin var(--duration-spin) linear infinite;
-}
-.kb-glyph[data-state='needs']::before {
-  content: '';
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--warning);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 20%, transparent);
-}
-.kb-glyph[data-state='done'] {
-  color: var(--success);
-}
-.kb-glyph[data-state='failed'] {
-  color: var(--danger);
-}
-.kb-glyph[data-state='stopped'] {
-  color: var(--text-disabled);
-}
-@keyframes kb-spin {
-  to {
-    rotate: 360deg;
-  }
-}
-.kb-tile {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-}
-.kb-tile--plain {
-  background: var(--bg-hover);
-  color: var(--text-tertiary);
-}
-
-/* The strip above the groups: a sub-agent that waits for the user. */
-.kb-need {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 2px 0 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--attention-dot) 7%, var(--bg-surface));
-  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--attention-dot) 24%, transparent);
-  font-size: 12.5px;
-}
-.kb-need__text {
-  display: grid;
-  flex: 1;
-  min-width: 0;
-}
-.kb-need__text > * {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kb-need__text b {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.kb-need__text span {
-  color: var(--text-secondary);
-}
-
-/* A task's card under its row: the Tool Call Card's white, sections labelled, no gray ground. It
-   unfolds on grid rows while its content rises out of a soft blur, as the thread's steps do. */
-.kb-row-fold {
-  display: grid;
-  grid-template-rows: 0fr;
-  margin-left: 28px;
-  visibility: hidden;
+.kb-fold > div > div {
   transition:
-    grid-template-rows 340ms var(--ease-out-quint),
-    visibility 0s 340ms;
+    opacity 320ms ease,
+    filter 320ms var(--ease-out-quint),
+    transform 320ms var(--ease-out-quint);
 }
-.kb-row-fold[data-open='true'] {
-  grid-template-rows: 1fr;
-  visibility: visible;
-  transition:
-    grid-template-rows 340ms var(--ease-out-quint),
-    visibility 0s;
-}
-.kb-row-fold > div {
-  min-height: 0;
-  overflow: hidden;
-}
-.kb-detail {
-  margin: 8px 1px 4px;
-  padding: 10px 12px 12px;
+.kb-fold[data-open='false'] > div > div {
   opacity: 0;
   filter: blur(4px);
   transform: translateY(4px);
-  transition:
-    opacity 340ms ease,
-    filter 340ms var(--ease-out-quint),
-    transform 340ms var(--ease-out-quint);
-}
-.kb-row-fold[data-open='true'] .kb-detail {
-  opacity: 1;
-  filter: none;
-  transform: none;
-}
-.kb-detail .ui-tcc__section {
-  gap: 4px;
-}
-.kb-detail .ui-tcc__section-head {
-  gap: 6px;
-  min-height: 24px;
-}
-.kb-detail .ui-tcc__copy {
-  width: 24px;
-  height: 24px;
-  & svg {
-    width: 13px;
-    height: 13px;
-  }
-}
-.kb-output {
-  max-height: 160px;
-  overflow-y: auto;
-}
-.kb-detail__error {
-  margin: 0;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ui-tcc-red);
-}
-.kb-detail__note {
-  margin: 8px 0 0;
-  font-size: 11.5px;
-  color: var(--ui-tcc-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .kb-glyph[data-state='running']::before {
-    animation: none;
-  }
   .kb-fold,
-  .kb-row-fold,
-  .kb-chev,
-  .kb-chev-open,
-  .kb-detail {
+  .kb-fold > div > div,
+  .kb-sum__chev {
     transition: none;
-  }
-  .kb-detail {
-    filter: none;
-    transform: none;
   }
 }
 :root[data-reduce-motion='always'] {
-  & .kb-glyph[data-state='running']::before {
-    animation: none;
-  }
-  & :is(.kb-fold, .kb-row-fold, .kb-chev, .kb-chev-open, .kb-detail) {
+  & .kb-fold,
+  & .kb-fold > div > div,
+  & .kb-sum__chev {
     transition: none;
-  }
-  & .kb-detail {
-    filter: none;
-    transform: none;
   }
 }

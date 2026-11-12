@@ -8,7 +8,7 @@ import { learnArtifactHost, sessionHost } from '@renderer/lib/host'
 import { useEntry } from '@renderer/features/session/use-thread'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { toggleArtifactPane } from '@renderer/stores/view'
-import { Ago, Row } from './row-parts'
+import { Ago } from './row-parts'
 
 /** An artifact the session wrote. A click shows it beside the thread, as its card there does. */
 export function ArtifactRow({
@@ -21,7 +21,6 @@ export function ArtifactRow({
   artifactId: string
 }) {
   const { t } = useTranslation('board')
-  const { t: ta } = useTranslation('artifacts')
   // A session's artifacts are kept where it runs, which every request for one goes by.
   learnArtifactHost(artifactId, sessionHost(sessionId))
   const entry = useEntry(sessionId, entryId, 'artifact')
@@ -30,32 +29,23 @@ export function ArtifactRow({
   const look = kind ? KIND_LOOK[kind] : null
   const title = summary?.title ?? entry?.title ?? ''
   const version = summary?.version ?? entry?.version ?? null
-  const meta = [
-    kind && ta(`page.kinds.${kind}`),
-    version !== null && t('artifact.version', { version }),
-  ]
-    .filter(Boolean)
-    .join(' · ')
 
   return (
-    <div className="kb-item">
-      <Row
-        label={t('actions.openTitle', { title })}
-        onClick={() => toggleArtifactPane(sessionId, artifactId, true)}
-        tile={
-          <span className={cn('kb-tile', look ? [look.color, look.tint] : 'kb-tile--plain')}>
-            {look ? (
-              <look.icon className="size-[15px]" />
-            ) : (
-              <PaneIcon icon={ShapesIcon} size={15} />
-            )}
-          </span>
-        }
-        head={<span className="kb-title">{title}</span>}
-        detail={meta}
-        when={summary ? <Ago at={summary.updatedAt} /> : null}
-        hint={<span className="kb-mini">{t('actions.open')}</span>}
-      />
-    </div>
+    <button
+      type="button"
+      className="kb-art"
+      aria-label={t('actions.openTitle', { title })}
+      onClick={() => toggleArtifactPane(sessionId, artifactId, true)}
+    >
+      <span className={cn('kb-mark', look ? [look.color, look.tint] : null)}>
+        {look ? <look.icon className="size-[14px]" /> : <PaneIcon icon={ShapesIcon} size={14} />}
+      </span>
+      <span className="kb-art__name">{title}</span>
+      <span className="kb-art__meta">
+        {version !== null && t('artifact.version', { version })}
+        {version !== null && summary && ' · '}
+        {summary && <Ago at={summary.updatedAt} />}
+      </span>
+    </button>
   )
 }

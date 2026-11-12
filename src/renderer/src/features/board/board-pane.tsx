@@ -1,44 +1,47 @@
-import { useEffect, useState, type ReactNode } from 'react'
-import { Cancel01Icon, DashboardSquare02Icon } from '@hugeicons/core-free-icons'
+import { useEffect, useMemo, type ReactNode } from 'react'
+import {
+  Cancel01Icon,
+  ComputerTerminal01Icon,
+  DashboardSquare02Icon,
+  UserMultiple02Icon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { ToolCallCard } from '@renderer/components/affect/tool-call-card'
+import type { BackgroundTaskView } from '@shared/thread'
+import { subagentRunning, useSubagentDigests } from '@renderer/features/session/subagent/progress'
 import { PaneEmpty, PaneIcon } from '@renderer/features/shell/panel-button'
-import { agentName } from '@renderer/stores/agents'
 import { artifactListShown, artifactStanding, useArtifactsStore } from '@renderer/stores/artifacts'
-import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { toggleBoard } from '@renderer/stores/view'
 import { ArtifactRow } from './artifact-row'
-import { BackgroundRow } from './background-row'
 import {
   backgroundOrder,
   boardSubagents,
-  subagentWaiting,
+  subagentFailed,
   summaryParts,
   threadArtifacts,
   type BoardArtifact,
 } from './board-model'
-import { Group } from './row-parts'
-import { NeedsStrip, SubagentRow } from './subagent-rows'
+import { EndedAgent, EndedGroup, EndedTask } from './earlier'
+import { AgentLive, TaskLive } from './live-rows'
 import { useBoardActivity } from './use-board-activity'
 import './board.css'
 
-type GroupKey = 'background' | 'subagents' | 'artifacts'
-
 const NO_ARTIFACTS: BoardArtifact[] = []
+const NO_TASKS: BackgroundTaskView[] = []
+// Past this many live rows, those that do not wait for the user keep one line.
+const ROOMY = 6
 
 /**
- * The session's board: what it runs and makes beside its thread, at the right of the thread and
- * the composer on the same sheet. The commands and monitors its agent left running, the
- * sub-agents it started and the artifacts it wrote, in three groups that fold, with the
- * sub-agents waiting for the user's answer above them.
+ * The session's board, at the right of its thread and composer on the same sheet. It answers
+ * what the session has going: Now is one card of what is live, those waiting for the user first,
+ * then sub-agents, then commands; Earlier counts what ended, a line a kind; Artifacts is what
+ * the session wrote.
  */
 export default function BoardRail({ sessionId }: { sessionId: string }) {
   const { t } = useTranslation('board')
-  const summary = useSessionsStore((s) => s.byId[sessionId])
-  const loaded = useThreadsStore((s) => !!s.replicas[sessionId]?.state)
-  const tasks = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.background)
+  const tasks = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.background ?? NO_TASKS)
   const children = useSessionsStore(
     useShallow((s) =>
       Object.values(s.byId).filter(
@@ -54,27 +57,31 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
     useShallow((s) => written.filter((a) => artifactStanding(s, a.artifactId) === 'live')),
   )
   const activity = useBoardActivity(sessionId)
-  const [folded, setFolded] = useState<Partial<Record<GroupKey, true>>>({})
 
   useEffect(() => {
     artifactListShown(true)
     return () => artifactListShown(false)
   }, [])
 
-  const toggle = (key: GroupKey) =>
-    setFolded((prev) => {
-      const next = { ...prev }
-      if (next[key]) delete next[key]
-      else next[key] = true
-      return next
-    })
-
   const subagents = boardSubagents(children)
-  const waiting = subagents.filter(subagentWaiting)
-  const ordered = tasks ? backgroundOrder(tasks) : []
-  const empty = ordered.length === 0 && subagents.length === 0 && artifacts.length === 0
+  const idKey = subagents.map((child) => child.id).join(' ')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the key stands for the ids
+  const ids = useMemo(() => subagents.map((child) => child.id), [idKey])
+  const digests = useSubagentDigests(ids)
+
+  const liveAgents = subagents.filter(subagentRunning)
+  const endedAgents = subagents.filter((child) => !subagentRunning(child))
+  const ordered = backgroundOrder(tasks)
+  const liveTasks = ordered.filter((task) => task.status === 'running')
+  const endedTasks = ordered.filter((task) => task.status !== 'running')
+  const live = liveAgents.length + liveTasks.length
+  const compact = live > ROOMY
+  const empty = subagents.length === 0 && tasks.length === 0 && artifacts.length === 0
   const parts = summaryParts(t, activity)
-  const agent = summary ? agentName(summary.agentId, hostOfSession(summary)) : ''
+  const failedFirst = <T,>(items: T[], failed: (item: T) => boolean) => [
+    ...items.filter(failed),
+    ...items.filter((item) => !failed(item)),
+  ]
 
   let body: ReactNode
   if (empty) {
@@ -88,63 +95,73 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
   } else {
     body = (
       <div className="kb-scroll">
-        {waiting.map((child) => (
-          <NeedsStrip key={child.id} child={child} />
-        ))}
-        {loaded && (
-          <Group
-            title={t('groups.background')}
-            count={tasks ? ordered.length : undefined}
-            folded={!!folded.background}
-            onToggle={() => toggle('background')}
-          >
-            {!tasks ? (
-              <p className="kb-note">{t('unsupported', { agent })}</p>
-            ) : ordered.length === 0 ? (
-              <p className="kb-note">{t('none.background')}</p>
-            ) : (
-              ordered.map((task) => (
-                <BackgroundRow
-                  key={task.id}
-                  sessionId={sessionId}
-                  task={task}
-                  shown={!folded.background}
+        {live > 0 && (
+          <section aria-label={t('sections.now')}>
+            <h3 className="kb-label">{t('sections.now')}</h3>
+            <div className="kb-now">
+              {liveAgents.map((child) => (
+                <AgentLive
+                  key={child.id}
+                  child={child}
+                  digest={digests[child.id]?.digest ?? null}
+                  compact={compact}
                 />
-              ))
-            )}
-          </Group>
+              ))}
+              {liveTasks.map((task) => (
+                <TaskLive key={task.id} sessionId={sessionId} task={task} compact={compact} />
+              ))}
+            </div>
+          </section>
         )}
-        <Group
-          title={t('groups.subagents')}
-          count={subagents.length}
-          folded={!!folded.subagents}
-          onToggle={() => toggle('subagents')}
-        >
-          {subagents.length === 0 ? (
-            <p className="kb-note">{t('none.subagents')}</p>
-          ) : (
-            subagents.map((child) => <SubagentRow key={child.id} child={child} />)
-          )}
-        </Group>
-        <Group
-          title={t('groups.artifacts')}
-          count={artifacts.length}
-          folded={!!folded.artifacts}
-          onToggle={() => toggle('artifacts')}
-        >
-          {artifacts.length === 0 ? (
-            <p className="kb-note">{t('none.artifacts')}</p>
-          ) : (
-            artifacts.map((artifact) => (
+        {(endedAgents.length > 0 || endedTasks.length > 0) && (
+          <section aria-label={t('sections.earlier')}>
+            <h3 className="kb-label">{t('sections.earlier')}</h3>
+            {endedAgents.length > 0 && (
+              <EndedGroup
+                // Opened by itself once nothing is live, when it is all there is to read.
+                key={live === 0 ? 'idle' : 'busy'}
+                icon={UserMultiple02Icon}
+                name={t('earlier.subagents')}
+                count={endedAgents.length}
+                failed={endedAgents.filter(subagentFailed).length}
+                open={live === 0}
+              >
+                {failedFirst(endedAgents, subagentFailed).map((child) => (
+                  <EndedAgent
+                    key={child.id}
+                    child={child}
+                    digest={digests[child.id]?.digest ?? null}
+                  />
+                ))}
+              </EndedGroup>
+            )}
+            {endedTasks.length > 0 && (
+              <EndedGroup
+                icon={ComputerTerminal01Icon}
+                name={t('earlier.commands')}
+                count={endedTasks.length}
+                failed={endedTasks.filter((task) => task.status === 'failed').length}
+              >
+                {failedFirst(endedTasks, (task) => task.status === 'failed').map((task) => (
+                  <EndedTask key={task.id} sessionId={sessionId} task={task} />
+                ))}
+              </EndedGroup>
+            )}
+          </section>
+        )}
+        {artifacts.length > 0 && (
+          <section aria-label={t('sections.artifacts')}>
+            <h3 className="kb-label">{t('sections.artifacts')}</h3>
+            {artifacts.map((artifact) => (
               <ArtifactRow
                 key={artifact.artifactId}
                 sessionId={sessionId}
                 entryId={artifact.entryId}
                 artifactId={artifact.artifactId}
               />
-            ))
-          )}
-        </Group>
+            ))}
+          </section>
+        )}
       </div>
     )
   }
@@ -175,21 +192,6 @@ export default function BoardRail({ sessionId }: { sessionId: string }) {
         </button>
       </div>
       <div className="kb-body">{body}</div>
-      <CardStyles />
     </aside>
-  )
-}
-
-/**
- * The Tool Call Card adds its styles to the page when the first one renders, and a task's card
- * here uses them before the thread may have drawn one.
- */
-function CardStyles() {
-  return (
-    <div hidden>
-      <ToolCallCard name="" status="success" time={false}>
-        {false}
-      </ToolCallCard>
-    </div>
   )
 }

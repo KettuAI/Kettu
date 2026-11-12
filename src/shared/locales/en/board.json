@@ -7,42 +7,38 @@
     "needs_one": "{{count}} needs you",
     "needs_other": "{{count}} need you"
   },
-  "groups": {
-    "background": "Background",
-    "subagents": "Sub-agents",
+  "sections": {
+    "now": "Now",
+    "earlier": "Earlier",
     "artifacts": "Artifacts"
   },
-  "none": {
-    "background": "No background tasks.",
-    "subagents": "No sub-agents.",
-    "artifacts": "This session has not written an artifact."
+  "earlier": {
+    "subagents": "Sub-agents",
+    "commands": "Commands",
+    "failed_one": "{{count}} failed",
+    "failed_other": "{{count}} failed"
   },
-  "unsupported": "{{agent}} does not report background tasks.",
   "empty": {
-    "title": "Nothing to show yet",
-    "text": "Background tasks, sub-agents and the artifacts this session writes appear here while the agent works."
+    "title": "Nothing here yet",
+    "text": "Sub-agents, background commands and the artifacts this session writes show up here."
   },
   "status": {
-    "running": "Running",
-    "needs": "Needs you",
-    "done": "Done",
     "failed": "Failed",
-    "stopped": "Stopped"
+    "stopped": "Stopped",
+    "cancelled": "Cancelled"
   },
-  "kind": {
-    "monitor": "Monitor",
-    "workflow": "Workflow"
+  "step": {
+    "starting": "Starting",
+    "waiting": "Waiting for your answer"
   },
   "actions": {
+    "review": "Review",
     "stop": "Stop",
     "stopTitle": "Stop {{title}}",
-    "open": "Open",
+    "copy": "Copy",
+    "copied": "Copied",
     "openTitle": "Open {{title}}",
     "close": "Close"
-  },
-  "strip": {
-    "label": "A sub-agent needs your answer",
-    "waiting": "Waiting for your answer"
   },
   "detail": {
     "command": "Command",

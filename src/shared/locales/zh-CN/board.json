@@ -5,42 +5,37 @@
     "running_other": "{{count}} 个运行中",
     "needs_other": "{{count}} 个等你处理"
   },
-  "groups": {
-    "background": "后台",
-    "subagents": "子 Agent",
+  "sections": {
+    "now": "进行中",
+    "earlier": "已结束",
     "artifacts": "Artifacts"
   },
-  "none": {
-    "background": "没有后台任务。",
-    "subagents": "没有子 Agent。",
-    "artifacts": "这个会话还没有写过 Artifact。"
+  "earlier": {
+    "subagents": "子 Agent",
+    "commands": "命令",
+    "failed_other": "{{count}} 个失败"
   },
-  "unsupported": "{{agent}} 不会报告后台任务。",
   "empty": {
     "title": "这里还没有内容",
-    "text": "Agent 工作时，后台任务、子 Agent 和这个会话写下的 Artifacts 会出现在这里。"
+    "text": "子 Agent、后台命令和这个会话写下的 Artifacts 会出现在这里。"
   },
   "status": {
-    "running": "运行中",
-    "needs": "等你处理",
-    "done": "已完成",
     "failed": "失败",
-    "stopped": "已停止"
+    "stopped": "已停止",
+    "cancelled": "已取消"
   },
-  "kind": {
-    "monitor": "监控",
-    "workflow": "工作流"
+  "step": {
+    "starting": "正在开始",
+    "waiting": "等你回答"
   },
   "actions": {
+    "review": "查看",
     "stop": "停止",
     "stopTitle": "停止 {{title}}",
-    "open": "打开",
+    "copy": "复制",
+    "copied": "已复制",
     "openTitle": "打开 {{title}}",
     "close": "关闭"
-  },
-  "strip": {
-    "label": "有子 Agent 等你回答",
-    "waiting": "等你回答"
   },
   "detail": {
     "command": "命令",

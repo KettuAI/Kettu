@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import type { SessionSummary } from '@shared/agent-host'
 import type { StopReason, ThreadEntry, ToolEntry } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -99,6 +100,8 @@ const READS_KEPT = 100
 const reads = new Map<string, Read>()
 const reading = new Map<string, Promise<void>>()
 const listeners = new Set<() => void>()
+// Counts the reads kept, so a hook watching several sub-agents sees a new one land.
+let readsVersion = 0
 
 function subscribeReads(listener: () => void): () => void {
   listeners.add(listener)
@@ -132,6 +135,7 @@ export function readSubagent(
         if (reads.size <= READS_KEPT) break
         reads.delete(id)
       }
+      readsVersion++
       for (const listener of listeners) listener()
     })
     .catch((error: unknown) => {
@@ -159,6 +163,45 @@ export function useSubagentDigest(childId: string | undefined): SubagentDigest |
     }
     return read?.digest ?? null
   }, [replica, read])
+}
+
+const digestsOfState = new WeakMap<object, SubagentDigest>()
+
+/** A sub-agent's digest and its token total, as `useSubagentDigests` gives them. */
+export interface SubagentDigestOf {
+  digest: SubagentDigest | null
+  /** Its session's token total while its thread is loaded and the agent reports one. */
+  tokens: number | null
+}
+
+/** `useSubagentDigest` for several sub-agents at once, by id. */
+export function useSubagentDigests(ids: readonly string[]): Record<string, SubagentDigestOf> {
+  const replicas = useThreadsStore(useShallow((s) => ids.map((id) => s.replicas[id])))
+  const version = useSyncExternalStore(subscribeReads, () => readsVersion)
+  return useMemo(() => {
+    const out: Record<string, SubagentDigestOf> = {}
+    ids.forEach((id, i) => {
+      const replica = replicas[i]
+      const state = replica?.state
+      if (!state) {
+        out[id] = { digest: reads.get(id)?.digest ?? null, tokens: null }
+        return
+      }
+      let digest = digestsOfState.get(state)
+      if (!digest) {
+        digest = digestOf(
+          state.order.map((entryId) => state.byId[entryId]),
+          replica.older === null,
+          state.session.subagent?.canCancel ?? false,
+        )
+        digestsOfState.set(state, digest)
+      }
+      out[id] = { digest, tokens: state.session.usage?.tokens?.total ?? null }
+    })
+    return out
+    // The version stands for the reads kept, which the map itself does not change identity for.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids, replicas, version])
 }
 
 const noSubscribe = () => () => {}
