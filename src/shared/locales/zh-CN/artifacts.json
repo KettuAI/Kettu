@@ -128,7 +128,12 @@
     "restore": "恢复",
     "erase": "永久删除…",
     "exportNoFolders": "这个浏览器不能保存含多个文件的文件夹",
-    "exportTo": "导出"
+    "exportTo": "导出",
+    "exporting": "正在导出“{{title}}”…",
+    "exported": "已导出“{{title}}”",
+    "exportFailed": "无法导出“{{title}}”：{{error}}",
+    "deleted": "已将“{{title}}”移到最近删除",
+    "undo": "撤销"
   },
   "dialog": {
     "renameTitle": "重命名 artifact",
@@ -156,12 +161,15 @@
     "stoppedTitle": "页面已停止",
     "stoppedDescription": "它的进程已结束。重新加载即可再次显示。",
     "errorTitle": "无法打开此 Artifact",
+    "missingTitle": "这个版本的文件不见了",
+    "reportProblem": "报告问题",
     "retry": "重试",
     "more": "更多",
     "error": {
       "notFound": "它已不在 Kettu 中。",
       "unavailable": "Agent host 暂时无法显示它，请稍后再试。",
-      "failed": "出了点问题，请重试。"
+      "failed": "出了点问题，请重试。",
+      "missing": "Kettu 找不到这个版本保存时的文件，较早的版本可能还能打开。"
     },
     "earlierLead": "版本 {{version}} / {{head}}",
     "restoreVersion": "恢复这个版本",

@@ -91,6 +91,11 @@ export class BrowserTools {
     this.cdp.dialogOpened(sessionId, type, accepted)
   }
 
+  /** The session's page crashed or stopped responding: its call in flight fails now. */
+  pageFailed(sessionId: string, kind: 'crashed' | 'unresponsive', message: string): void {
+    this.cdp.pageFailed(sessionId, kind, message)
+  }
+
   /** The session's page is gone: nothing more drives it. */
   forget(sessionId: string): void {
     this.control.forget(sessionId)

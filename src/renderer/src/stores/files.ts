@@ -25,6 +25,8 @@ export interface OpenFile {
   preview: boolean
   content: FileContent | null
   error: string | null
+  /** The last read failed because the file is no longer on disk; read only with `error`. */
+  missing: boolean
   /** The editor holds edits that are not saved. */
   dirty: boolean
   /** The file on disk is not the one the edits started from, and the user has not chosen yet. */
@@ -164,6 +166,7 @@ function fresh(path: string, line: number | null, content: FileContent | null): 
     preview: false,
     content,
     error: null,
+    missing: false,
     dirty: false,
     changedOnDisk: false,
     diskVersion: null,
@@ -375,14 +378,22 @@ async function readOpenFile(projectPath: string, path: string, renew = false): P
         return { content, error: null }
       }
       // Back from the picture, the source shows, and the bar says if it changed.
-      const shown = now.content?.kind === 'media' ? { content } : {}
+      const shown = now.content?.kind === 'media' ? { content, error: null } : { error: null }
       const version = content.kind === 'text' ? content.version : null
       if (version === buffer.version || (version !== null && version === now.kept)) return shown
       return { ...shown, changedOnDisk: true, diskVersion: version, error: null }
     })
   } catch (error) {
-    update(projectPath, path, { error: errorMessage(error) })
+    update(projectPath, path, {
+      error: errorMessage(error),
+      missing: errorCode(error) === 'not_found',
+    })
   }
+}
+
+/** Reads an open file again after a read failed. */
+export function readAgain(projectPath: string, path: string): void {
+  void readOpenFile(projectPath, path)
 }
 
 /** Shows every SVG as its source, or as its picture, until changed; open ones are read again. */

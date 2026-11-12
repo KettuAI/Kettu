@@ -1454,6 +1454,9 @@ li[data-row-exit='dust'] > * {
 .kp-device-screen__status[data-on-screen] {
   color: var(--media-control);
 }
+.kp-device-screen__status[data-over-picture] {
+  background: var(--media-overlay);
+}
 .kp-device-screen__note {
   position: absolute;
   top: 0;

@@ -47,6 +47,7 @@ import { ChangeBadge } from './change-badge'
 import { useFileChanges, type FileChanges, type ProjectChange } from './changes'
 import { DiffPreview } from './diff-preview'
 import { FilePreview } from './file-preview'
+import { openInEditor } from './open-in-editor'
 import { FileTabs } from './file-tabs'
 import { FileTypeIcon } from './file-type-icon'
 import { UnsavedPrompt } from './unsaved-prompt'
@@ -68,14 +69,6 @@ const SEARCH_DELAY_MS = 250
 const PREVIEW = { preview: true }
 // A change's row: its name, its folder under it.
 const CHANGE_ROW = 40
-
-/** Opens the project in the editor used last, else the first one found, else asks for an app. */
-async function openInEditor(path: string): Promise<void> {
-  const { editors, last } = await window.kettu.editors.list()
-  const editor = editors.find((candidate) => candidate.id === last) ?? editors[0]
-  if (editor) await window.kettu.editors.open(editor.id, path)
-  else await window.kettu.editors.choose(path)
-}
 
 /**
  * The side panel's Files pane: the changes or the project's files, beside the open files. Its head

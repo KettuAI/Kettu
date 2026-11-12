@@ -19,7 +19,9 @@ import {
   restoreAttachments,
 } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
+import { toast } from '@renderer/components/ui/toast'
 import { errorCode, errorMessage, host, hostAt } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { adoptedPrepared } from '@renderer/features/session/new-session/prepared'
 import { clearPicks, type OptionValues } from '@renderer/stores/agent-options'
@@ -85,8 +87,17 @@ export async function addProjectFromDialog(): Promise<string | null> {
   return project.path
 }
 
+/** Open project from the menu, the keyboard or search, which have no place to show a failure. */
 export async function openProjectDialog(): Promise<void> {
-  const path = await addProjectFromDialog()
+  let path: string | null
+  try {
+    path = await addProjectFromDialog()
+  } catch (error) {
+    toast(i18n.t('shell:openProjectFailed', { error: errorMessage(error) }), undefined, {
+      tone: 'warning',
+    })
+    return
+  }
   if (path) newSession(path)
 }
 

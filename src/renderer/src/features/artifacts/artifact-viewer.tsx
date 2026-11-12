@@ -42,7 +42,13 @@ import { Waiting } from './page-frame'
 import { Presenter } from './present'
 import { clampSize, useDocActions } from './use-doc-actions'
 import { PreviewOnly } from './preview-only'
-import { canvasPageName, useArtifact, useArtifactStates, useListsRead } from './use-artifact'
+import {
+  canvasPageName,
+  reportMissing,
+  useArtifact,
+  useArtifactStates,
+  useListsRead,
+} from './use-artifact'
 import { useComments } from './use-comments'
 import { useVersions } from './use-versions'
 import { VersionHistory } from './version-history'
@@ -208,7 +214,15 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [editor, latest])
 
-  const failed = (error: unknown): void => console.error(`Could not change ${id}`, error)
+  // One restore at a time: a second click would restore over the version the first one wrote.
+  const [restoring, setRestoring] = useState(false)
+  const restore = (run: () => Promise<unknown>): void => {
+    if (restoring) return
+    setRestoring(true)
+    run()
+      .catch((error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' }))
+      .finally(() => setRestoring(false))
+  }
 
   let bar: React.ReactNode = null
   if (shown && earlier !== null && head !== null) {
@@ -218,7 +232,10 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         lead={t('viewer.earlierLead', { version: earlier, head })}
         rest={record ? <EarlierDetails createdAt={record.createdAt} note={record.note} /> : null}
         action={t('viewer.restoreVersion')}
-        onAction={() => restoreVersion(id, earlier, head).then(() => setPicked(null), failed)}
+        busy={restoring}
+        onAction={() =>
+          restore(() => restoreVersion(id, earlier, head).then(() => setPicked(null)))
+        }
       />
     )
   } else if (states.inTrash && summary?.deletedAt != null) {
@@ -227,7 +244,8 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         lead={t('viewer.inTrash')}
         rest={<DaysLeft deletedAt={summary.deletedAt} />}
         action={t('menu.restore')}
-        onAction={() => void restoreArtifact(id).catch(failed)}
+        busy={restoring}
+        onAction={() => restore(() => restoreArtifact(id))}
       />
     )
   }
@@ -235,6 +253,23 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
   let body: React.ReactNode
   if (states.error === 'previewOnly') {
     body = <PreviewOnly summary={summary ?? null} />
+  } else if (states.error === 'missing') {
+    // Trying again reads the same missing files; an earlier version may still have its own.
+    body = (
+      <ViewerEmpty
+        icon={AlertCircleIcon}
+        danger
+        title={t('viewer.missingTitle')}
+        text={t('viewer.error.missing')}
+      >
+        <Button variant="secondary" size="sm" onClick={() => setHistoryOpen(true)}>
+          {t('menu.versionHistory')}
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => reportMissing(id, picked)}>
+          {t('viewer.reportProblem')}
+        </Button>
+      </ViewerEmpty>
+    )
   } else if (states.error) {
     body = (
       <ViewerEmpty
@@ -263,7 +298,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
         >
           {t('viewer.back')}
         </Button>
-        <Button size="sm" onClick={() => void restoreArtifact(id).catch(failed)}>
+        <Button size="sm" loading={restoring} onClick={() => restore(() => restoreArtifact(id))}>
           {t('menu.restore')}
         </Button>
       </ViewerEmpty>

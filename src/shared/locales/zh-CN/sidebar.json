@@ -8,6 +8,7 @@
     "marketplace": "Marketplace",
     "sessions": "会话",
     "unavailable": "暂时无法加载项目。",
+    "sessionsUnavailable": "暂时无法加载会话。",
     "empty": "会话会显示在这里。",
     "searchField": "搜索…",
     "projects": "项目",

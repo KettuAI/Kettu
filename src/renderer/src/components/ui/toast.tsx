@@ -92,6 +92,34 @@ export function lastingToast(title: string, action: { label: string; onClick: ()
 }
 
 /**
+ * A toast that spins while work goes on and turns into its outcome in place: `done`, or `failed`
+ * with an action such as Retry; `close` takes it away, as when the work was cancelled.
+ */
+export function progressToast(title: string) {
+  const id = track((options) => affectToast.loading(title, options), { duration: Infinity })
+  return {
+    // Undefined in place of the spinner's Infinity: the toaster's own time on screen.
+    done: (next: string) => affectToast.success(next, { id, duration: undefined, onDismiss }),
+    failed: (next: string, action: { label: string; onClick: () => void }) =>
+      affectToast(next, {
+        id,
+        icon: (
+          <HugeiconsIcon
+            icon={Alert02Icon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.75 text-warning"
+          />
+        ),
+        action: actionOf(action),
+        duration: 6000,
+        onDismiss,
+      }),
+    close: () => affectToast.dismiss(id),
+  }
+}
+
+/**
  * A warning that stays until it is closed or its action is chosen, such as the notice of an
  * unexpected quit; `onClose` runs either way, once.
  */

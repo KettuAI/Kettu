@@ -37,6 +37,7 @@ import {
 } from '@renderer/stores/artifacts'
 import { artifactSharing } from './artifact-host'
 import { removeCard } from './card-dust'
+import { deletedToast } from './menu-entries'
 
 /** Renaming and deleting permanently, asked from any artifact's menu. */
 export function ArtifactDialogs() {
@@ -182,6 +183,7 @@ function DeleteDialog({
     onClose()
     try {
       await removeCard(shown.id, () => deleteArtifact(shown.id))
+      deletedToast(shown.id, shown.title)
       shown.onDeleted?.()
     } catch (failure) {
       toast(errorMessage(failure))

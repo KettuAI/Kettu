@@ -217,6 +217,22 @@ function ConnectPopover({
   )
 }
 
+/**
+ * Why the last Connect failed, beside its button while the popover is closed: one that failed
+ * after the popover went shows here, and opening it gives Retry.
+ */
+function ConnectFailure({ serverId }: { serverId: string }) {
+  const { t } = useTranslation('marketplace')
+  const flow = useConnectFlow(serverId)
+  if (flow?.phase !== 'failed') return null
+  const text = t('connect.failed', { error: flow.error })
+  return (
+    <span className="k-mkt-conn" data-state="error" title={text}>
+      <span className="truncate">{text}</span>
+    </span>
+  )
+}
+
 /** Connect for a server not kept yet: in a row, or as the listing's main button. */
 export function ConnectButton({ server, big = false }: { server: CatalogServer; big?: boolean }) {
   const { t } = useTranslation('marketplace')
@@ -224,18 +240,21 @@ export function ConnectButton({ server, big = false }: { server: CatalogServer; 
   const flow = useConnectFlow(server.id)
   const busy = flow !== null && flow.phase !== 'failed'
   return (
-    <ConnectPopover server={server} kept={null} open={open} setOpen={setOpen}>
-      <Button
-        size={big ? 'md' : 'sm'}
-        variant={big ? 'primary' : 'secondary'}
-        aria-label={t('row.action', { action: t('row.connect'), name: server.title })}
-        aria-expanded={open}
-        icon={busy ? <span className="ui-as-spinner" aria-hidden /> : undefined}
-        onClick={() => setOpen(!open)}
-      >
-        {busy ? t('row.connecting') : t('row.connect')}
-      </Button>
-    </ConnectPopover>
+    <span className="k-mkt-row-end">
+      {!open && <ConnectFailure serverId={server.id} />}
+      <ConnectPopover server={server} kept={null} open={open} setOpen={setOpen}>
+        <Button
+          size={big ? 'md' : 'sm'}
+          variant={big ? 'primary' : 'secondary'}
+          aria-label={t('row.action', { action: t('row.connect'), name: server.title })}
+          aria-expanded={open}
+          icon={busy ? <span className="ui-as-spinner" aria-hidden /> : undefined}
+          onClick={() => setOpen(!open)}
+        >
+          {busy ? t('row.connecting') : t('row.connect')}
+        </Button>
+      </ConnectPopover>
+    </span>
   )
 }
 
@@ -305,7 +324,11 @@ export function ConnectionControls({
   }
   return (
     <span className="k-mkt-row-end">
-      {!compact && <ConnectionLabel connection={connection} />}
+      {flow?.phase === 'failed' && !open ? (
+        <ConnectFailure serverId={server.id} />
+      ) : (
+        !compact && <ConnectionLabel connection={connection} />
+      )}
       <ConnectPopover server={server} kept={server} open={open} setOpen={setOpen}>
         {(busy || (connection && !connected)) && (
           <Button

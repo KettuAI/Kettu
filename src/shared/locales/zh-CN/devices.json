@@ -4,6 +4,7 @@
     "addDevice": "添加设备",
     "closeDevice": "关闭设备",
     "boot": "启动",
+    "reconnect": "重新连接",
     "maximize": "最大化",
     "restore": "还原",
     "close": "关闭"

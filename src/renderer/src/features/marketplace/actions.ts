@@ -57,6 +57,11 @@ function warn(text: string): void {
   toast(text, undefined, { tone: 'warning' })
 }
 
+/** A failed install, whose form is gone: the toast offers it again. */
+function warnRetry(text: string, retry: () => void): void {
+  toast(text, { label: i18n.t('common:actions.retry'), onClick: retry }, { tone: 'warning' })
+}
+
 /** "every agent", or the chosen agents' names as a list of the language shown. */
 function forWhom(scope: HostScope, agents: AgentChoice): string | null {
   if (agents === 'all') return null
@@ -121,9 +126,10 @@ export async function installServer(
     try {
       await save(scope, [...kept, entry])
     } catch (e) {
-      toast(t('toast.installFailed', { name: server.title, error: errorMessage(e) }), undefined, {
-        tone: 'warning',
-      })
+      warnRetry(
+        t('toast.installFailed', { name: server.title, error: errorMessage(e) }),
+        () => void installServer(scope, server, agents, values),
+      )
       return false
     }
     if (await storeValues(scope, server.id, server.title, values))
@@ -234,7 +240,10 @@ export async function installPlugin(
     )
     return true
   } catch (e) {
-    warn(t('toast.installFailed', { name: plugin.title, error: errorMessage(e) }))
+    warnRetry(
+      t('toast.installFailed', { name: plugin.title, error: errorMessage(e) }),
+      () => void installPlugin(scope, plugin, agentId, pluginScope, projectPath),
+    )
     return false
   } finally {
     setBusy(scope.useMarketplaceStore, busy, false)
@@ -363,7 +372,10 @@ export async function installSkill(
     readyToast(scope, entry.name, agents)
     return true
   } catch (e) {
-    warn(t('toast.skillFailed', { error: errorMessage(e) }))
+    warnRetry(
+      t('toast.skillFailed', { error: errorMessage(e) }),
+      () => void installSkill(scope, source, agents, busyId),
+    )
     return false
   } finally {
     setBusy(scope.useMarketplaceStore, busy, false)

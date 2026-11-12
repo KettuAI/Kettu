@@ -6,7 +6,9 @@ import type { MediaGrant } from '@shared/media'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { PaneEmpty, PaneIcon, PanelButton } from '@renderer/features/shell/panel-button'
 import { bytes, clock } from '@renderer/lib/format'
-import { formatShortcut, isMod } from '@renderer/lib/platform'
+import { errorMessage } from '@renderer/lib/host'
+import { hostOfPath } from '@renderer/lib/host-paths'
+import { fileManagerName, formatShortcut, isMod, isWeb, isWindows } from '@renderer/lib/platform'
 import { cn } from '@renderer/lib/utils'
 import { Markdown } from '@renderer/features/session/markdown'
 import { playerFailure } from '@renderer/features/session/media/failure'
@@ -21,12 +23,15 @@ import { playOneAtATime } from '@renderer/features/session/media/playback'
 import { imageSurface } from '@renderer/features/session/media/surface'
 import { ZoomControls, type ZoomLevel } from '@renderer/features/session/media/zoom-controls'
 import type { Size } from '@renderer/features/session/media/zoom'
+import { toast } from '@renderer/components/ui/toast'
 import {
+  closeFile,
   discardEdits,
   getBuffer,
   isSvgFile,
   keepEdits,
   mediaVersion,
+  readAgain,
   renewOpenFile,
   saveFile,
   showMarkdownRendered,
@@ -36,6 +41,7 @@ import {
 } from '@renderer/stores/files'
 import { ChangeBadge } from './change-badge'
 import { DiffFileToggle, PathCopy, PreviewEditToggle } from './file-header'
+import { openInEditor } from './open-in-editor'
 import { nameOf } from './paths'
 
 const CodeEditor = lazy(() => import('./code-editor'))
@@ -156,6 +162,17 @@ function editedText(projectPath: string, file: OpenFile): string | null {
 /** Bars under the header for what the open file's edits need to know. */
 function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
   const { t } = useTranslation('files')
+  // A read that failed after the file showed: what shows is what it was.
+  if (file.error && file.content) {
+    return (
+      <Bar tone="error">
+        <span className="min-w-0 flex-1">
+          {file.missing ? t('preview.missing') : t('preview.readFailed', { message: file.error })}
+        </span>
+        <NextStep projectPath={projectPath} file={file} small />
+      </Bar>
+    )
+  }
   if (file.changedOnDisk) {
     return (
       <Bar tone="notice">
@@ -202,6 +219,44 @@ function Notes({ projectPath, file }: { projectPath: string; file: OpenFile }) {
   return null
 }
 
+/** A failed read's way on: a file gone from disk closes, any other read is tried again. */
+function NextStep({
+  projectPath,
+  file,
+  small = false,
+}: {
+  projectPath: string
+  file: OpenFile
+  small?: boolean
+}) {
+  const { t } = useTranslation(['files', 'common'])
+  return (
+    <button
+      type="button"
+      className={small ? 'kp-btn kp-btn--sm' : 'kp-btn'}
+      onClick={() =>
+        file.missing ? closeFile(projectPath, file.path) : readAgain(projectPath, file.path)
+      }
+    >
+      {file.missing ? t('preview.closeTab') : t('common:actions.retry')}
+    </button>
+  )
+}
+
+/** Editors and the file manager reach files on this computer only. */
+const isLocal = (projectPath: string): boolean => !isWeb && hostOfPath(projectPath) === null
+
+/** The file's own path on this computer, from its path in the project. */
+function pathOnDisk(projectPath: string, path: string): string {
+  const sep = isWindows ? '\\' : '/'
+  return `${projectPath.replace(/[\\/]+$/, '')}${sep}${path.split('/').join(sep)}`
+}
+
+/** Shows the file in the editor or the file manager; a failure says why in a toast. */
+function openOutside(open: (path: string) => Promise<void>, projectPath: string, path: string) {
+  open(pathOnDisk(projectPath, path)).catch((failure: unknown) => toast(errorMessage(failure)))
+}
+
 /** The bar goes once answered, and its button with it, so the text takes the focus back. */
 function backToEditor(from: HTMLElement): void {
   from.closest('[data-file-preview]')?.querySelector<HTMLElement>('.cm-content')?.focus()
@@ -227,14 +282,31 @@ function Body({
   const { t } = useTranslation('files')
   const source = useFilesStore((s) => s.markdownSource)
   const { content, error } = file
-  if (error && !content) return <Notice title={t('preview.openFailed')} description={error} />
+  const local = isLocal(projectPath)
+  if (error && !content) {
+    return (
+      <Notice title={t('preview.openFailed')} description={error}>
+        <NextStep projectPath={projectPath} file={file} />
+      </Notice>
+    )
+  }
   if (!content) return <Lines />
   if (content.kind === 'binary') {
     return (
       <Notice
         title={t('preview.binaryTitle')}
         description={t('preview.binaryDescription', { size: bytes(content.size) })}
-      />
+      >
+        {local && (
+          <button
+            type="button"
+            className="kp-btn"
+            onClick={() => openOutside(window.kettu.shell.showItem, projectPath, file.path)}
+          >
+            {t('preview.showIn', { name: fileManagerName() })}
+          </button>
+        )}
+      </Notice>
     )
   }
   if (content.kind === 'too-large') {
@@ -245,7 +317,17 @@ function Body({
           size: bytes(content.size),
           limit: bytes(content.limit),
         })}
-      />
+      >
+        {local && (
+          <button
+            type="button"
+            className="kp-btn"
+            onClick={() => openOutside(openInEditor, projectPath, file.path)}
+          >
+            {t('panel.openInEditor')}
+          </button>
+        )}
+      </Notice>
     )
   }
   if (content.kind === 'media') {
@@ -325,18 +407,21 @@ function FileMedia({
       renewOpenFile(projectPath, path)
     }
   }
-  if (failure?.message) {
-    return <Notice title={t('preview.openFailed')} description={failure.message} />
-  }
   if (failure || grant.tooLarge) {
     return (
       <PaneEmpty
         className="absolute inset-0"
         icon={<PaneIcon icon={FileNotFoundIcon} size={20} />}
         title={
-          grant.tooLarge ? t('preview.mediaTooLargeTitle') : <UnsupportedReason kind={grant.kind} />
+          failure?.message ? (
+            t('preview.openFailed')
+          ) : grant.tooLarge ? (
+            t('preview.mediaTooLargeTitle')
+          ) : (
+            <UnsupportedReason kind={grant.kind} />
+          )
         }
-        text={bytes(grant.size)}
+        text={failure?.message ?? bytes(grant.size)}
       >
         <span className="mt-3 flex flex-wrap justify-center gap-1.5">
           <PlayElsewhere url={grant.url} projectPath={projectPath} onError={setError} />
@@ -513,13 +598,24 @@ function PictureStage({
   )
 }
 
-export function Notice({ title, description }: { title: string; description: string }) {
+export function Notice({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  /** Its next step, a button. */
+  children?: ReactNode
+}) {
   return (
     <PaneEmpty
       className="absolute inset-0"
       icon={<PaneIcon icon={FileNotFoundIcon} size={20} />}
       title={title}
       text={description}
-    />
+    >
+      {children}
+    </PaneEmpty>
   )
 }

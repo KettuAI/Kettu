@@ -334,6 +334,7 @@
     "scopeProjectIn": "In {{project}}",
     "scopeLocalIn": "In {{project}}, for you only",
     "hooksWarning": "Has hooks: they run commands on this computer by themselves, outside the agent’s sandbox.",
+    "hooksUnchecked": "Couldn’t check it for hooks: {{error}}",
     "facts": {
       "installs": "Installs",
       "category": "Category"

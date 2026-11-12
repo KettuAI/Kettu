@@ -27,7 +27,9 @@
   "notice": {
     "downloadBlocked": "Downloads are blocked in Kettu's browser",
     "evicted": "This page was closed to save memory",
-    "loadFailed": "This page did not load: {{error}}"
+    "loadFailed": "This page did not load: {{error}}",
+    "crashed": "This page crashed",
+    "unresponsive": "This page stopped responding"
   },
   "control": {
     "using": "{{agent}} is driving",

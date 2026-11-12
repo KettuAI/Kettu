@@ -334,6 +334,7 @@
     "scopeProjectIn": "在 {{project}} 中",
     "scopeLocalIn": "在 {{project}} 中，仅自己可用",
     "hooksWarning": "包含 hook：它们会在这台电脑上自行运行命令，不受 Agent 沙盒限制。",
+    "hooksUnchecked": "无法检查它是否包含 hook：{{error}}",
     "facts": {
       "installs": "安装次数",
       "category": "类别"
