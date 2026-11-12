@@ -343,6 +343,7 @@ function SettingsLayout({
                   (hostPage ? `@${scope.hostId ?? ''}` : '')
                 }
                 className="ui-as-page ui-sg ui-ss ui-sm ui-spf kettu-settings__body"
+                data-section={!searching && !item ? page.id : undefined}
               >
                 {searching ? (
                   <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />

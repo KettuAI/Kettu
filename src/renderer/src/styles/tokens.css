@@ -253,6 +253,13 @@
   --brand-codewhale-1: #1e8fd8;
   --brand-codewhale-2: #0b48bb;
   --brand-deepseek: #4d6bfe;
+  --brand-antigravity-blue: #3186ff;
+  --brand-antigravity-yellow: #ffe432;
+  --brand-antigravity-red: #fc413d;
+  --brand-antigravity-green: #00b95c;
+  --brand-antigravity-amber: #fbbc04;
+  --brand-antigravity-violet: #749bff;
+  --brand-antigravity-pale-yellow: #ffee48;
   /* The marks of the services the Marketplace features, in Simple Icons' colors in both variants:
      a tile in the brand's color under a light mark, or the mark alone in its color. */
   --brand-tile-ink: #ffffff;
