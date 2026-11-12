@@ -37,9 +37,9 @@ import {
   commandDescription,
   firstUserMessage,
   lastEntry,
-  mapRateLimit,
   mergeConfig,
   messageEntryId,
+  rateLimitEffects,
   rawInputText,
   repeatsFirstMessage,
   SYNTHETIC_MODE_ID,
@@ -825,8 +825,7 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
         },
       })
       if (request) out.effects.push({ kind: 'request' })
-      const limit = mapRateLimit(rateLimit, ctx.now)
-      if (limit) out.effects.push({ kind: 'limit', limit })
+      out.effects.push(...rateLimitEffects(rateLimit, ctx.now))
       break
     }
     case 'notice':

@@ -30,7 +30,7 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
-import { mapRateLimit, rawInputText } from '../session-updates'
+import { allowedLimit, mapRateLimits, mergeReadLimit, rawInputText } from '../session-updates'
 
 const baseSession: SessionView = {
   id: 's1',
@@ -826,6 +826,7 @@ describe('session-level updates', () => {
           observedAt: 1400,
         },
       },
+      { kind: 'limits-allowed' },
     ])
   })
 
@@ -1149,26 +1150,125 @@ describe('extensions and helpers', () => {
   })
 
   it('reads rate limits defensively', () => {
-    expect(mapRateLimit({ status: 'rejected', rateLimitType: 'seven_day_opus' }, 5)).toEqual({
-      window: 'seven_day_opus',
-      label: 'Weekly · Opus',
-      usedPercent: null,
-      resetsAt: null,
-      state: 'reached',
-      observedAt: 5,
+    expect(mapRateLimits({ status: 'rejected', rateLimitType: 'seven_day_opus' }, 5)).toEqual({
+      allowed: false,
+      limits: [
+        {
+          window: 'seven_day_opus',
+          label: 'Weekly · Opus',
+          usedPercent: null,
+          resetsAt: null,
+          state: 'reached',
+          observedAt: 5,
+        },
+      ],
     })
     expect(
-      mapRateLimit(
+      mapRateLimits(
         { status: 'allowed', rateLimitType: 'seven_day_overage_included', utilization: 1.5 },
         5,
-      ),
-    ).toMatchObject({
-      label: 'Weekly overage included',
-      usedPercent: 100,
+      )?.limits,
+    ).toMatchObject([{ label: 'Weekly overage included', usedPercent: 100, state: 'ok' }])
+    expect(mapRateLimits({ status: 'allowed' }, 5)).toEqual({ allowed: true, limits: [] })
+    expect(mapRateLimits({ rateLimitType: 'five_hour' }, 5)).toBeNull()
+    expect(mapRateLimits('nope', 5)).toBeNull()
+  })
+
+  it('takes each window from its own reading, not the rejection of the plan', () => {
+    const event = {
+      status: 'rejected',
+      resetsAt: 1_794_661_200,
+      rateLimitType: 'seven_day',
+      unifiedWindows: {
+        five_hour: { utilization: 0.81, resetsAt: 1_794_489_000, status: 'allowed' },
+        seven_day: { utilization: 0.39, resetsAt: 1_794_661_200, status: 'allowed' },
+      },
+    }
+    expect(mapRateLimits(event, 5)).toEqual({
+      allowed: false,
+      limits: [
+        {
+          window: 'five_hour',
+          label: '5-hour',
+          usedPercent: 81,
+          resetsAt: 1_794_489_000_000,
+          state: 'ok',
+          observedAt: 5,
+        },
+        {
+          window: 'seven_day',
+          label: 'Weekly',
+          usedPercent: 39,
+          resetsAt: 1_794_661_200_000,
+          state: 'ok',
+          observedAt: 5,
+        },
+      ],
+    })
+    // A window the readings leave out comes from the event itself.
+    expect(
+      mapRateLimits(
+        {
+          status: 'rejected',
+          rateLimitType: 'seven_day_opus',
+          unifiedWindows: { five_hour: { utilization: 1, status: 'rejected' } },
+        },
+        5,
+      )?.limits.map((limit) => [limit.window, limit.state]),
+    ).toEqual([
+      ['five_hour', 'reached'],
+      ['seven_day_opus', 'reached'],
+    ])
+  })
+
+  it('does not take a rejection as reached when its window is not used up', () => {
+    expect(
+      mapRateLimits({ status: 'rejected', rateLimitType: 'seven_day', utilization: 0.39 }, 5)
+        ?.limits,
+    ).toMatchObject([{ window: 'seven_day', usedPercent: 39, state: 'ok' }])
+    expect(
+      mapRateLimits({ status: 'rejected', rateLimitType: 'seven_day', utilization: 1 }, 5)?.limits,
+    ).toMatchObject([{ window: 'seven_day', usedPercent: 100, state: 'reached' }])
+  })
+
+  it('lets a read below the full window replace a pushed reached state', () => {
+    const reached = {
+      window: 'seven_day',
+      label: 'Weekly',
+      usedPercent: null,
+      resetsAt: 2_000,
+      state: 'reached' as const,
+      observedAt: 1,
+    }
+    const read = { ...reached, usedPercent: 42, state: 'ok' as const, observedAt: 10 }
+    expect(mergeReadLimit(reached, read, 10)).toEqual(read)
+    // A read without its use keeps the block until the window resets.
+    const unknown = { ...read, usedPercent: null }
+    expect(mergeReadLimit(reached, unknown, 10)).toEqual({ ...unknown, state: 'reached' })
+    expect(mergeReadLimit(reached, unknown, 3_000)).toEqual(unknown)
+    const warning = { ...reached, usedPercent: 80, state: 'warning' as const }
+    expect(mergeReadLimit(warning, read, 10)).toEqual({ ...read, state: 'warning' })
+  })
+
+  it('clears a reached state once the plan is allowed again, unless the window is used up', () => {
+    const limit = {
+      window: 'seven_day',
+      label: 'Weekly',
+      usedPercent: 42,
+      resetsAt: 2_000,
+      state: 'reached' as const,
+      observedAt: 1,
+    }
+    expect(allowedLimit(limit)).toEqual({ ...limit, state: 'ok' })
+    expect(allowedLimit({ ...limit, usedPercent: null })).toEqual({
+      ...limit,
+      usedPercent: null,
       state: 'ok',
     })
-    expect(mapRateLimit({ status: 'allowed' }, 5)).toBeNull()
-    expect(mapRateLimit('nope', 5)).toBeNull()
+    const full = { ...limit, window: 'seven_day_fable', usedPercent: 100 }
+    expect(allowedLimit(full)).toBe(full)
+    const warning = { ...limit, state: 'warning' as const }
+    expect(allowedLimit(warning)).toBe(warning)
   })
 
   it('adds a turn to the token totals', () => {

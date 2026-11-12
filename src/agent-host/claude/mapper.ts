@@ -22,8 +22,8 @@ import {
 import {
   addEntry,
   commandDescription,
-  mapRateLimit,
   messageEntryId,
+  rateLimitEffects,
   rawInputText,
   toLf,
   toolEffects,
@@ -222,8 +222,7 @@ export class ClaudeMapper {
             sessionId: this.sessionId,
             map: (ctx) => {
               const out = output()
-              const limit = mapRateLimit(info, ctx.now)
-              if (limit) out.effects.push({ kind: 'limit', limit })
+              out.effects.push(...rateLimitEffects(info, ctx.now))
               return out
             },
           },

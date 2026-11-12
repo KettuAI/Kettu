@@ -73,6 +73,8 @@ export type MapperEffect =
       worktree?: AgentWorktree
     }
   | { kind: 'limit'; limit: PlanLimit }
+  // The plan accepts requests again, which ends a block a window showed.
+  | { kind: 'limits-allowed' }
   | { kind: 'title'; title: string | null }
   | { kind: 'ignored'; variant: string; detail: string }
   | {
@@ -324,15 +326,7 @@ function windowLabel(window: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
-/**
- * One `_claude/rateLimit` value from `usage_update._meta`. Claude Code reports
- * `utilization` as a fraction (0.42 is 42%) and `resetsAt` in Unix seconds.
- */
-export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
-  if (typeof value !== 'object' || value === null) return null
-  const info = value as Record<string, unknown>
-  const window = info.rateLimitType
-  if (typeof window !== 'string' || window === '') return null
+function windowLimit(window: string, info: Record<string, unknown>, now: number): PlanLimit {
   const utilization =
     typeof info.utilization === 'number' && Number.isFinite(info.utilization)
       ? info.utilization
@@ -340,6 +334,8 @@ export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
   const resets =
     typeof info.resetsAt === 'number' && Number.isFinite(info.resetsAt) ? info.resetsAt : null
   const status = info.status
+  // A rejection names one window even when another limit, or a plain 429, refused the request.
+  const reached = status === 'rejected' && (utilization === null || utilization >= 1)
   return {
     window,
     label: windowLabel(window),
@@ -347,7 +343,71 @@ export function mapRateLimit(value: unknown, now: number): PlanLimit | null {
       utilization === null ? null : Math.min(100, Math.max(0, Math.round(utilization * 1000) / 10)),
     // Seconds, as Claude Code sends; a value already in milliseconds is kept.
     resetsAt: resets === null ? null : resets < 1e12 ? resets * 1000 : resets,
-    state: status === 'allowed_warning' ? 'warning' : status === 'rejected' ? 'reached' : 'ok',
+    state: status === 'allowed_warning' ? 'warning' : reached ? 'reached' : 'ok',
     observedAt: now,
   }
+}
+
+/**
+ * One Claude Code rate limit event, or `_claude/rateLimit` from `usage_update._meta`. Its
+ * `status` is the whole plan's and `rateLimitType` only the window that stands for it;
+ * `unifiedWindows` has each window's own reading, which wins. `utilization` is a fraction
+ * (0.42 is 42%) and `resetsAt` in Unix seconds. `allowed` is false while the plan refuses
+ * requests.
+ */
+export function mapRateLimits(
+  value: unknown,
+  now: number,
+): { allowed: boolean; limits: PlanLimit[] } | null {
+  if (typeof value !== 'object' || value === null) return null
+  const info = value as Record<string, unknown>
+  if (typeof info.status !== 'string') return null
+  const limits: PlanLimit[] = []
+  const windows = info.unifiedWindows
+  if (typeof windows === 'object' && windows !== null) {
+    for (const [window, reading] of Object.entries(windows as Record<string, unknown>)) {
+      if (window === '' || typeof reading !== 'object' || reading === null) continue
+      limits.push(windowLimit(window, reading as Record<string, unknown>, now))
+    }
+  }
+  const window = info.rateLimitType
+  if (typeof window === 'string' && window !== '' && !limits.some((l) => l.window === window)) {
+    limits.push(windowLimit(window, info, now))
+  }
+  return { allowed: info.status !== 'rejected', limits }
+}
+
+/** What a rate limit event tells the agent's limits. */
+export function rateLimitEffects(value: unknown, now: number): MapperEffect[] {
+  const event = mapRateLimits(value, now)
+  if (!event) return []
+  const effects: MapperEffect[] = event.limits.map((limit) => ({ kind: 'limit', limit }))
+  if (event.allowed) effects.push({ kind: 'limits-allowed' })
+  return effects
+}
+
+/**
+ * A window once the plan accepts requests again: a block it showed is over, unless its use
+ * says it is full, as a per-model weekly window can be while another model answers.
+ */
+export function allowedLimit(limit: PlanLimit): PlanLimit {
+  if (limit.state !== 'reached' || (limit.usedPercent !== null && limit.usedPercent >= 100)) {
+    return limit
+  }
+  return { ...limit, state: 'ok' }
+}
+
+/**
+ * A window read from the agent's report over the one known before. A warning the agent pushed
+ * holds until its window resets, and so does a block, unless the read shows the window not full.
+ */
+export function mergeReadLimit(
+  before: PlanLimit | undefined,
+  read: PlanLimit,
+  now: number,
+): PlanLimit {
+  if (read.state !== 'ok' || !before || before.state === 'ok') return read
+  if ((before.resetsAt ?? 0) <= now) return read
+  if (before.state === 'reached' && read.usedPercent !== null) return read
+  return { ...read, state: before.state }
 }
