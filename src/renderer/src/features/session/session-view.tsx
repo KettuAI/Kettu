@@ -39,6 +39,7 @@ import { SignIn } from './sign-in'
 import { SubagentBar } from './subagent-bar'
 import { Thread } from './thread'
 import { useSessionView } from './use-thread'
+import { firstWaiting, pressWaitingCard } from './waiting-card'
 import { sessionFolder } from '@renderer/lib/session-folder'
 import { WorktreeGoneComposer, WorktreeState } from './worktree/worktree-state'
 
@@ -365,51 +366,19 @@ function usePermissionKeys(sessionId: string, focused: boolean): void {
       if (event.defaultPrevented || event.isComposing) return
       if (enter && handlesEnter(event.target)) return
       if (isEditable(event.target) || overlayOpen() || readDraft(sessionId).trim()) return
-      const id = firstWaiting(sessionId)
-      if (!id) return
-      // Through the card's own control, so a failure shows where the answer was given: Enter
-      // allows a request, Mod+Enter confirms any card, and a number picks that row.
-      const scope = `[data-entry-id="${CSS.escape(id)}"]`
-      const target = document.querySelector<HTMLElement>(
-        confirm
-          ? `${scope} :is(.ui-prc__btn--primary, .ui-xcc__action, .ui-apc__approve, [data-answer-enter])`
-          : enter
-            ? `${scope} :is(.ui-prc__btn--primary, [data-answer-enter], [data-answer-option][data-highlighted])`
-            : `${scope} :is([data-answer-option="${n}"], .ui-xcc__rows > .ui-xcc__row:nth-child(${n}))`,
-      )
-      if (!target || (target instanceof HTMLButtonElement && target.disabled)) return
-      event.preventDefault()
-      // The row of the user's own answer is a field to type in.
-      const field =
-        target instanceof HTMLInputElement
-          ? target
-          : target.querySelector<HTMLInputElement>('input')
-      if (field) field.focus()
-      else target.click()
+      if (pressWaitingCard(sessionId, confirm ? 'confirm' : enter ? 'enter' : n)) {
+        event.preventDefault()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [sessionId, focused])
 }
 
-/** The first card in the thread that waits for the user's answer. */
-function firstWaiting(sessionId: string): string | null {
-  const state = useThreadsStore.getState().replicas[sessionId]?.state
-  if (!state) return null
-  for (const id of state.order) {
-    const entry = state.byId[id]
-    const waiting =
-      (entry?.kind === 'tool' && !!entry.permission) ||
-      (entry?.kind === 'browser_origin' && entry.decision === null) ||
-      (entry?.kind === 'device_access' && entry.decision === null) ||
-      (entry?.kind === 'computer_app' && entry.decision === null) ||
-      (entry?.kind === 'computer_setup' && entry.outcome === null)
-    if (waiting) return id
-  }
-  return null
-}
-
-/** Esc cancels the running turn from anywhere in the session, unless something else takes it. */
+/**
+ * Esc cancels the running turn from anywhere in the session, unless something else takes it; while
+ * a card waits for the user it takes Esc as its Deny, as its button shows, and the turn goes on.
+ */
 function useEscapeToCancel(
   sessionId: string,
   running: boolean,
@@ -424,17 +393,9 @@ function useEscapeToCancel(
       const target = event.target
       // The composer handles its own Esc; other fields keep theirs.
       if (isEditable(target)) return
-      // A request or a plan waiting for the user takes Esc as its Deny, as its button shows.
-      const waiting = firstWaiting(sessionId)
-      const card = waiting
-        ? document.querySelector(`[data-entry-id="${CSS.escape(waiting)}"]`)
-        : null
-      const deny =
-        card?.querySelector('.ui-apc__deny') ??
-        card?.querySelector('.ui-prc__btn--primary')?.previousElementSibling
-      if (deny instanceof HTMLButtonElement) {
+      if (firstWaiting(sessionId)) {
         event.preventDefault()
-        if (!deny.disabled && deny.getAttribute('aria-disabled') !== 'true') deny.click()
+        pressWaitingCard(sessionId, 'escape')
         return
       }
       host('sessions.cancel', { sessionId }).catch(onError)

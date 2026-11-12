@@ -54,6 +54,7 @@ import type { Select } from './use-pick'
 import { useBlockedEnter } from './use-blocked-enter'
 import { usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
+import { firstWaiting, pressWaitingCard } from '../waiting-card'
 
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
@@ -95,6 +96,16 @@ export function Composer({
     [pending, pendingEntry],
   )
   const [choosingAgent, setChoosingAgent] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  // Switch agent opens the agent menu in the model menu's place. Closed back into the model menu,
+  // whose button went away with it, that button takes the focus, unless the user moved it away.
+  const closeAgentMenu = (reason?: string) => {
+    setChoosingAgent(false)
+    if (reason === 'outside-press' || reason === 'focus-out') return
+    requestAnimationFrame(() =>
+      root.current?.querySelector<HTMLElement>('.ui-mdpc__trigger')?.focus(),
+    )
+  }
   const pendingAgent = pending?.agentId ?? null
   const pendingKnown = !!pendingEntry && !pendingEntry.provisional
   useEffect(() => {
@@ -182,12 +193,14 @@ export function Composer({
   }
   const modeControl = useModeControl(mode, set)
 
-  // Starting a session focuses its composer, in the pane in focus only.
+  // A session shown, started or done with its turn focuses its composer, in the pane in focus
+  // only, when the focus is nowhere else, as after New session's composer gave way to it.
   const focused = usePane()?.focused ?? true
+  const ready = status === 'ready'
   useEffect(() => {
-    if (!focused) return
-    if (status === 'ready' && document.activeElement === document.body) box.editor.current?.focus()
-  }, [status, focused, box.editor])
+    if (!focused || starting) return
+    if (document.activeElement === document.body) box.editor.current?.focus()
+  }, [starting, ready, focused, box.editor])
 
   // Both go through the host's queue, which sends at once when the session is free; a message
   // that hands the session to another agent goes as that agent's first turn.
@@ -308,10 +321,25 @@ export function Composer({
     }
     if (event.key === 'Escape' && running) {
       event.preventDefault()
-      cancel()
+      // A card waiting for the user takes Esc as its Deny, as its button shows, and the turn goes on.
+      if (firstWaiting(sessionId)) pressWaitingCard(sessionId, 'escape')
+      else cancel()
       return
     }
     if (event.key !== 'Enter') return
+    // With nothing written, Enter and Mod+Enter answer the waiting card, as its buttons show.
+    const cardKey = isMod(event) ? 'confirm' : event.metaKey || event.ctrlKey ? null : 'enter'
+    if (
+      !holdsMessage &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.isComposing &&
+      cardKey &&
+      pressWaitingCard(sessionId, cardKey)
+    ) {
+      event.preventDefault()
+      return
+    }
     const sends = sendKey === 'enter' ? !event.shiftKey : isMod(event)
     const steers =
       running &&
@@ -380,7 +408,12 @@ export function Composer({
     configError
 
   return (
-    <div data-composer="" className="kettu-composer" data-starting={starting || undefined}>
+    <div
+      ref={root}
+      data-composer=""
+      className="kettu-composer"
+      data-starting={starting || undefined}
+    >
       <ChatComposer
         field={
           <PromptBox
@@ -453,7 +486,7 @@ export function Composer({
               onChoose={chooseAgent}
               hostId={hostId}
               defaultOpen={choosingAgent}
-              onClose={() => setChoosingAgent(false)}
+              onClose={closeAgentMenu}
             />
           ) : (
             <ModelMenu
