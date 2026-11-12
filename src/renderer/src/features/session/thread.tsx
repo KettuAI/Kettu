@@ -274,10 +274,13 @@ export const Thread = memo(function Thread({
                     '[overflow-clip-margin:10px]',
                     INTRINSIC_SIZE[estimateOf(item)],
                     index > 0 && spacing(item, items[index - 1]!),
+                    // 回复操作栏的提示浮在行外，避免历史消息的绘制隔离将其裁掉。
                     // The growing tail would flip between skipped and rendered on every chunk,
                     // recalculating its whole subtree each time. With the status last, the entry
                     // before it grows the same way.
-                    (index === items.length - 1 || (statusLast && index === items.length - 2)) &&
+                    (item.type === 'reply' ||
+                      index === items.length - 1 ||
+                      (statusLast && index === items.length - 2)) &&
                       '[content-visibility:visible]',
                   )}
                 >
