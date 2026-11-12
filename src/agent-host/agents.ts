@@ -116,6 +116,7 @@ import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import { hasContextReport, limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
+import { allowedLimit, mergeReadLimit } from './session-updates'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile, RememberedInit } from './storage'
 import { compareVersions } from './versions'
@@ -2378,6 +2379,20 @@ export class AgentManager {
     this.emit(slot)
   }
 
+  /** The plan accepts requests again: a window's block is over unless the window is full. */
+  allowLimits(agentId: AgentId): void {
+    const slot = this.slots.get(agentId)
+    if (!slot) return
+    let changed = false
+    for (const [window, limit] of slot.limits) {
+      const allowed = allowedLimit(limit)
+      if (allowed === limit) continue
+      slot.limits.set(window, allowed)
+      changed = true
+    }
+    if (changed) this.emit(slot)
+  }
+
   /**
    * Reads the current use of every plan limit from the agent's report (`/usage`, `/status`), at
    * most once a minute, starting the agent if needed; the windows arrive in its status. Rate-limit
@@ -2443,11 +2458,7 @@ export class AgentManager {
       return
     }
     for (const limit of limits) {
-      const before = slot.limits.get(limit.window)
-      // A warning or a block the agent pushed holds until its window resets.
-      const held =
-        limit.state === 'ok' && before && before.state !== 'ok' && (before.resetsAt ?? 0) > now
-      slot.limits.set(limit.window, held ? { ...limit, state: before.state } : limit)
+      slot.limits.set(limit.window, mergeReadLimit(slot.limits.get(limit.window), limit, now))
     }
     this.emit(slot)
   }
