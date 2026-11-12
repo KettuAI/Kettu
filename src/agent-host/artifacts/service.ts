@@ -43,6 +43,14 @@ import {
   PLAN_TOOLS,
   type PlanToolsDeps,
 } from '../plan-tool'
+import {
+  isReportToolName,
+  REPORT_INSTRUCTIONS,
+  REPORT_TOOL,
+  REPORT_TOOLS,
+  ReportTools,
+  type ReportToolsDeps,
+} from '../report-tool'
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from '../computer/tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
@@ -72,12 +80,13 @@ const SERVICE_TOOLS: Tool[] = [
   ...DATA_TOOLS,
   ...SESSION_TOOLS,
   ...PLAN_TOOLS,
+  ...REPORT_TOOLS,
   ...BROWSER_TOOLS,
   ...DEVICE_TOOLS,
 ]
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS}`
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS}`
 
 /** Serves the computer use tools, on a host that carries the driver. */
 export interface ComputerCalls {
@@ -125,6 +134,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   data?: ArtifactData
   /** Where the plan tool writes. */
   plan: PlanToolsDeps
+  /** Where the problem report tool adds its drafts. */
+  report: ReportToolsDeps
   /** Whether the agent's session `id` is a subagent that runs under a session of its own. */
   subagentCall?(process: AgentProcess, id: string): boolean
   /** The mobile devices behind the `device_*` tools; without them every call fails. */
@@ -171,7 +182,7 @@ function entry(url: string, token: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      autoAllow: [PLAN_TOOL],
+      autoAllow: [PLAN_TOOL, REPORT_TOOL],
       prompt: PLAN_PROMPT,
       secret: true,
     },
@@ -214,6 +225,7 @@ export class ArtifactService {
   private readonly tools: ArtifactTools
   private readonly sessionTools: SessionTools
   private readonly planTools: PlanTools
+  private readonly reportTools: ReportTools
   private readonly browserTools: BrowserTools
   private readonly deviceTools: DeviceTools | null
   private readonly dataTools: DataTools | null
@@ -228,6 +240,7 @@ export class ArtifactService {
     this.dataTools = deps.data ? new DataTools({ data: deps.data }) : null
     this.sessionTools = new SessionTools(deps.sessions)
     this.planTools = new PlanTools(deps.plan)
+    this.reportTools = new ReportTools(deps.report)
     this.serviceTools = deps.computer ? [...SERVICE_TOOLS, ...COMPUTER_TOOLS] : SERVICE_TOOLS
     this.instructions = deps.computer
       ? `${SERVICE_INSTRUCTIONS} ${COMPUTER_INSTRUCTIONS}`
@@ -588,6 +601,17 @@ export class ArtifactService {
           throw new McpError(
             ErrorCode.InternalError,
             `${PLAN_TOOL} failed: ${(error as Error).message}`,
+          )
+        }
+      }
+      if (isReportToolName(name)) {
+        try {
+          return this.reportTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${REPORT_TOOL} failed: ${(error as Error).message}`)
+          throw new McpError(
+            ErrorCode.InternalError,
+            `${REPORT_TOOL} failed: ${(error as Error).message}`,
           )
         }
       }

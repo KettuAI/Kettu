@@ -45,7 +45,7 @@ import type {
   ToolUseSummaryMessage,
   UserMessage,
 } from './sdk'
-import { isClaudePlanCall } from '../plan-tool'
+import { isClaudeRowlessCall } from '../plan-tool'
 import { PLAN_TOOLS, resultContent, startsBackgroundWork, SUBAGENT_TOOLS, toolView } from './tools'
 
 /** Output for one session, built against its thread when it is delivered. */
@@ -461,8 +461,8 @@ export class ClaudeMapper {
     const out = output()
     const { name } = block
     this.tools.set(block.id, { name, input: block.input, sessionId })
-    // The host wrote the plan from the call itself; a call that waits for an answer keeps its row.
-    if (isClaudePlanCall(name) && !asked) return out
+    // The host wrote the plan or the report from the call itself; a call that waits for an answer keeps its row.
+    if (isClaudeRowlessCall(name) && !asked) return out
     if (name === 'TodoWrite') {
       if (complete) this.todoPlan(ctx, out, block.input)
       return out

@@ -338,6 +338,27 @@ describe('isThreadEntry', () => {
       device: { id: 'phone', name: 'Phone' },
       after: null,
     },
+    {
+      kind: 'problem_report',
+      id: 'e:15',
+      title: 'create_artifact rejects an SVG sprite',
+      details: 'It fails every time.',
+      error: null,
+      at: 1_700_000_000_000,
+      outcome: null,
+      after: 't:1',
+    },
+    {
+      kind: 'problem_report',
+      id: 'e:16',
+      title: 'create_artifact rejects an SVG sprite',
+      details: 'It fails every time.',
+      error: 'invalid file entry',
+      at: 1_700_000_000_000,
+      outcome: { kind: 'sent', reportId: 'R-7K2F' },
+      device: { id: 'phone', name: 'Phone' },
+      after: null,
+    },
   ]
 
   it('accepts every kind of entry', () => {
@@ -374,6 +395,11 @@ describe('isThreadEntry', () => {
     expect(isThreadEntry({ ...app, appName: 7 })).toBe(false)
     expect(isThreadEntry({ ...app, decision: 'project' })).toBe(false)
     expect(isThreadEntry({ ...app, after: 1 })).toBe(false)
+    const report = valid.find((entry) => entry.kind === 'problem_report')!
+    expect(isThreadEntry({ ...report, details: undefined })).toBe(false)
+    expect(isThreadEntry({ ...report, at: '1700000000000' })).toBe(false)
+    expect(isThreadEntry({ ...report, outcome: { kind: 'sent' } })).toBe(false)
+    expect(isThreadEntry({ ...report, outcome: 'skipped' })).toBe(false)
     const setup = valid.find((entry) => entry.kind === 'computer_setup')!
     expect(isThreadEntry({ ...setup, requestId: 'five' })).toBe(false)
     expect(isThreadEntry({ ...setup, steps: ['enable', 'camera'] })).toBe(false)

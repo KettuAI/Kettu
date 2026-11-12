@@ -737,6 +737,28 @@ describe('computer use requests', () => {
     rejects(() => posix['sessions.answerProjectMcp']({ sessionId: 's', decision: 'use' }))
   })
 
+  it('takes what became of a drafted problem report', () => {
+    const sent = { kind: 'sent', reportId: 'R-7K2F' }
+    expect(
+      posix['sessions.answerReport']({ sessionId: 's', entryId: 'e:1', outcome: sent }),
+    ).toEqual({ sessionId: 's', entryId: 'e:1', outcome: sent })
+    for (const kind of ['saved', 'skipped']) {
+      expect(
+        posix['sessions.answerReport']({ sessionId: 's', entryId: 'e:1', outcome: { kind } }),
+      ).toEqual({ sessionId: 's', entryId: 'e:1', outcome: { kind } })
+    }
+    rejects(() =>
+      posix['sessions.answerReport']({ sessionId: 's', entryId: 'e:1', outcome: { kind: 'sent' } }),
+    )
+    rejects(() =>
+      posix['sessions.answerReport']({ sessionId: 's', entryId: 'e:1', outcome: 'skipped' }),
+    )
+    rejects(() =>
+      posix['sessions.answerReport']({ sessionId: 's', entryId: 'e:1', outcome: { kind: 'lost' } }),
+    )
+    rejects(() => posix['sessions.answerReport']({ entryId: 'e:1', outcome: { kind: 'saved' } }))
+  })
+
   it('reads issues only from github.com issue addresses', () => {
     const url = 'https://github.com/KettuAI/Kettu/issues/546'
     expect(posix['git.issue']({ url })).toEqual({ url })

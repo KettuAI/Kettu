@@ -167,6 +167,24 @@
       "timeout": "未回答"
     }
   },
+  "problemReport": {
+    "action": "把问题报告发给 Kettu",
+    "send": "提交给 Kettu",
+    "save": "存到本地",
+    "skip": "不提交",
+    "edit": "修改…",
+    "attached": {
+      "title": "一起带上",
+      "about": "Kettu 的版本和你的系统",
+      "logs": "最近 1 小时的日志和操作记录",
+      "ids": "这个会话和 Agent"
+    },
+    "answer": {
+      "sent": "已提交 · 报告 {{id}}",
+      "saved": "已存到本地",
+      "skipped": "未提交"
+    }
+  },
   "computerBar": {
     "using": "{{agent}} 正在使用你的电脑",
     "usingApp": "{{agent}} 正在使用 <app>{{app}}</app>",

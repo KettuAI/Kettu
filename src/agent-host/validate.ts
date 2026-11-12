@@ -47,6 +47,7 @@ import {
   type AgentId,
   type ContentRef,
   type FormValues,
+  type ProblemReportOutcome,
   type QuestionAnswer,
   type UserContent,
 } from '@shared/thread'
@@ -1796,6 +1797,23 @@ export function createValidators(platform: Platform): Validators {
         sessionId: sessionId(o),
         entryId: string(o, 'entryId', ID_CHARS),
         decision: o.decision,
+      }
+    },
+    'sessions.answerReport': (params) => {
+      const o = fields(params)
+      const outcome = fields(o.outcome)
+      let parsed: ProblemReportOutcome
+      if (outcome.kind === 'sent') {
+        parsed = { kind: 'sent', reportId: string(outcome, 'reportId', ID_CHARS) }
+      } else if (outcome.kind === 'saved' || outcome.kind === 'skipped') {
+        parsed = { kind: outcome.kind }
+      } else {
+        throw invalidParams('outcome.kind must be sent, saved or skipped')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        outcome: parsed,
       }
     },
     'computer.stop': (params) => ({ sessionId: sessionId(fields(params)) }),

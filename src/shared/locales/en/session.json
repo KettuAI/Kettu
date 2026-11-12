@@ -176,6 +176,24 @@
       "timeout": "Not answered"
     }
   },
+  "problemReport": {
+    "action": "send a problem report to Kettu",
+    "send": "Send to Kettu",
+    "save": "Save locally",
+    "skip": "Don’t send",
+    "edit": "Edit…",
+    "attached": {
+      "title": "Sent with it",
+      "about": "Kettu’s version and your system",
+      "logs": "Logs and steps of the last hour",
+      "ids": "This session and agent"
+    },
+    "answer": {
+      "sent": "Sent · report {{id}}",
+      "saved": "Saved locally",
+      "skipped": "Not sent"
+    }
+  },
   "computerBar": {
     "using": "{{agent}} is using your computer",
     "usingApp": "{{agent}} is using <app>{{app}}</app>",

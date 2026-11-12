@@ -8,18 +8,14 @@ import {
 } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
-import type { ReportPrepareResult } from '@shared/ipc'
-import type { HostAdminResult } from '@shared/remote/host-admin'
 import {
   REPORT_EXTRAS,
   reportIssueUrl,
-  reportSubmitResult,
   type PreparedReport,
   type ReportExtra,
   type ReportFileView,
   type ReportRange,
   type ReportRequest,
-  type ReportSubmitFailure,
   type ReportSubmitResult,
 } from '@shared/report'
 import { SegmentedControl } from '@renderer/components/segmented-control'
@@ -37,20 +33,11 @@ import { cn } from '@renderer/lib/utils'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { useOtherHost } from '@renderer/stores/hosts'
 import { closeReport, useReportStore, type ReportDialog as Opened } from '@renderer/stores/report'
+import { answerReportEntry, NOT_SUBMITTED, prepare, submit, type Bundle } from './report-flow'
 
 const SENSITIVE: ReadonlySet<ReportExtra> = new Set(['messages', 'verbose', 'dumps'])
 
-/** What the dialog says when a report was not submitted. */
-const NOT_SUBMITTED = {
-  too_large: 'notSubmitted.tooLarge',
-  rate_limited: 'notSubmitted.rateLimited',
-  unauthorized: 'notSubmitted.unauthorized',
-  signed_out: 'notSubmitted.signedOut',
-  network: 'notSubmitted.network',
-  failed: 'notSubmitted.failed',
-} as const satisfies Record<ReportSubmitFailure, string>
-
-type Prepared = { key: string; report: PreparedReport; ref: string | null }
+type Prepared = Bundle & { key: string }
 
 /** Report a problem: what happened, the range, the extras, a look at the files, then save. */
 export function ReportDialog() {
@@ -64,35 +51,10 @@ export function ReportDialog() {
   )
 }
 
-/**
- * A bundle for another host comes over its channel, and this computer's main keeps it the same;
- * `ref` is the bundle as that host keeps it, to submit with its sign-in.
- */
-async function prepare(
-  hostId: string | null,
-  request: ReportRequest,
-): Promise<{ result: ReportPrepareResult; ref: string | null }> {
-  if (hostId === null) return { result: await window.kettu.report.prepare(request), ref: null }
-  const answer = (await window.kettu.hosts.request(hostId, 'host.report', {
-    request,
-  })) as HostAdminResult<'host.report'>
-  if (!answer.ok) return { result: { ok: false, reason: answer.reason }, ref: null }
-  return { result: await window.kettu.report.adopt(answer.zip), ref: answer.ref }
-}
-
-/** Submits what was reviewed, with the sign-in of the host that built it. */
-async function submit(hostId: string | null, prepared: Prepared): Promise<ReportSubmitResult> {
-  if (hostId === null) return window.kettu.report.submit(prepared.report.id)
-  if (prepared.ref === null) return { ok: false, reason: 'failed' }
-  return reportSubmitResult(
-    await window.kettu.hosts.request(hostId, 'host.submitReport', { ref: prepared.ref }),
-  )
-}
-
 function ReportForm({ dialog }: { dialog: Opened }) {
   const { t } = useTranslation(['report', 'common'])
   const other = useOtherHost(dialog.hostId)
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(dialog.description ?? '')
   const [range, setRange] = useState<ReportRange>(dialog.range)
   const [extras, setExtras] = useState<ReadonlySet<ReportExtra>>(() => new Set(dialog.extras))
   const [prepared, setPrepared] = useState<Prepared | null>(null)
@@ -161,13 +123,16 @@ function ReportForm({ dialog }: { dialog: Opened }) {
       if (what === 'submit') {
         recordAction('report.submit', { files: report.files.length })
         const result = await submit(dialog.hostId, made)
-        if (result.ok) setSubmitted(result)
-        else setError(t(NOT_SUBMITTED[result.reason]))
+        if (result.ok) {
+          setSubmitted(result)
+          if (dialog.entry) answerReportEntry(dialog.entry, { kind: 'sent', reportId: result.id })
+        } else setError(t(NOT_SUBMITTED[result.reason]))
         return
       }
       recordAction('report.save', { files: report.files.length })
       const path = await window.kettu.report.save(report.id)
       if (path === null) return
+      if (dialog.entry) answerReportEntry(dialog.entry, { kind: 'saved' })
       closeReport()
       toast(
         t('saved'),
