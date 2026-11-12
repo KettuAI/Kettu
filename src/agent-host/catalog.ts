@@ -26,6 +26,7 @@ import { CORTEX_CODE } from './agents/cortex-code'
 import { CORUST_AGENT } from './agents/corust-agent'
 import { CROW_CLI } from './agents/crow-cli'
 import { DEEPAGENTS } from './agents/deepagents'
+import { DEEPSEEK } from './agents/deepseek'
 import { DEVIN } from './agents/devin'
 import { DIMCODE } from './agents/dimcode'
 import { DIRAC } from './agents/dirac'
@@ -96,7 +97,7 @@ export type LaunchKind =
   | { kind: 'node-script'; script: string }
 
 /** How Kettu talks to an agent; each protocol has its driver in `drivers.ts`. */
-export type AgentProtocol = 'acp' | 'claude-sdk' | 'codex-app-server'
+export type AgentProtocol = 'acp' | 'claude-sdk' | 'codex-app-server' | 'dsh-sdk'
 
 /** A program the adapter runs, which the user installs beside it. */
 export interface AgentRequires {
@@ -179,6 +180,7 @@ export {
   CORUST_AGENT,
   CROW_CLI,
   DEEPAGENTS,
+  DEEPSEEK,
   DEVIN,
   DIMCODE,
   DIRAC,
@@ -218,6 +220,7 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     CODEX,
     OPENCODE,
     PI,
+    DEEPSEEK,
     AUGGIE,
     CODEBUDDY,
     DEEPAGENTS,

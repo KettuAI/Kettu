@@ -245,13 +245,14 @@
   --brand-pi-coral: #f09082;
   --brand-pi-blue: #4d9abf;
   --brand-pi-yellow: #f1be58;
-  /* OMP, Muse Code, Hermes Agent and CodeWhale keep theirs in both variants too. */
+  /* OMP, Muse Code, Hermes Agent, CodeWhale and DeepSeek keep theirs in both variants too. */
   --brand-omp-1: #ed4abf;
   --brand-omp-2: #9b4dff;
   --brand-omp-3: #5ad8e6;
   --brand-muse: #5b45e0;
   --brand-codewhale-1: #1e8fd8;
   --brand-codewhale-2: #0b48bb;
+  --brand-deepseek: #4d6bfe;
   /* The marks of the services the Marketplace features, in Simple Icons' colors in both variants:
      a tile in the brand's color under a light mark, or the mark alone in its color. */
   --brand-tile-ink: #ffffff;
@@ -1500,6 +1501,7 @@
   --agent-omp: color-mix(in oklch, var(--brand-omp-2) 86%, var(--bg-surface));
   --agent-muse: color-mix(in oklch, var(--brand-muse) 86%, var(--bg-surface));
   --agent-codewhale: color-mix(in oklch, var(--brand-codewhale-1) 86%, var(--bg-surface));
+  --agent-deepseek: color-mix(in oklch, var(--brand-deepseek) 86%, var(--bg-surface));
   /* The further agents of a harness that can have several: a step, two, then one toward the card. */
   --agent-claude-code-2: oklch(from var(--agent-claude-code) calc(l + var(--agent-step)) c h);
   --agent-claude-code-3: oklch(from var(--agent-claude-code) calc(l + 2 * var(--agent-step)) c h);

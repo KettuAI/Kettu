@@ -206,6 +206,7 @@
   --color-agent-omp: var(--agent-omp);
   --color-agent-muse: var(--agent-muse);
   --color-agent-codewhale: var(--agent-codewhale);
+  --color-agent-deepseek: var(--agent-deepseek);
   --color-agent-other: var(--agent-other);
   --color-context-1: var(--context-1);
   --color-context-2: var(--context-2);

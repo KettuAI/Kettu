@@ -171,6 +171,7 @@ export const AGENT_NAME_CHARS = 40
 export const CONFIG_VARIABLES: Partial<Record<HarnessId, string>> = {
   'claude-code': 'CLAUDE_CONFIG_DIR',
   codex: 'CODEX_HOME',
+  deepseek: 'DSH_HOME',
 }
 
 /** Chrome's page zoom steps from 80% to 150%. */

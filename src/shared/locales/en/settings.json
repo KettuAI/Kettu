@@ -643,7 +643,8 @@
       "description": "The permission mode a new session starts in, whatever a project’s own settings say. Full access can’t be chosen here.",
       "follow": {
         "claude-code": "Follow Claude Code",
-        "codex": "Follow Codex (Auto review)"
+        "codex": "Follow Codex (Auto review)",
+        "deepseek": "Follow DeepSeek Harness"
       },
       "unused": "Available once this agent has been used.",
       "unoffered": "{{mode}} (no longer offered)",
@@ -818,6 +819,7 @@
       "loginKey": "With an API key",
       "loginKeyHint": "Your own key and provider.",
       "loginKeyHintOpenAi": "An OpenAI API key.",
+      "loginKeyHintDeepSeek": "A DeepSeek API key.",
       "submit": "Add agent"
     },
     "key": {
@@ -825,6 +827,7 @@
       "set": "Set. {{name}} keeps it in its own configuration folder.",
       "notSet": "Your own key and provider, in place of a sign-in.",
       "notSetOpenAi": "An OpenAI API key, in place of a sign-in.",
+      "notSetDeepSeek": "A DeepSeek API key, in place of a sign-in.",
       "setButton": "Set…",
       "replace": "Replace…",
       "clear": "Clear",
@@ -1656,6 +1659,7 @@
     "adapterLine": "{{version}} · in Kettu’s data folder",
     "sdkNote": "Kettu brings no {{name}}, only the SDK that drives it; updates stay within {{range}}.",
     "adapterNote": "The adapter Kettu runs {{name}} through, on your Node.js.",
+    "programNote": "{{name}} itself, which Kettu runs on your Node.js.",
     "usedBy": "Used by",
     "listSeparator": ", ",
     "manageAgents": "Manage in Agents",

@@ -5,12 +5,14 @@ import { ACP_DRIVER } from './acp/driver'
 import { CLAUDE_SDK_DRIVER } from './claude/driver'
 import { protocolOf, type AgentDefinition, type AgentProtocol } from './catalog'
 import { CODEX_DRIVER } from './codex/driver'
+import { DSH_DRIVER } from './dsh/driver'
 import type { AgentDriver } from './driver'
 
 export const DRIVERS: Readonly<Record<AgentProtocol, AgentDriver>> = {
   acp: ACP_DRIVER,
   'claude-sdk': CLAUDE_SDK_DRIVER,
   'codex-app-server': CODEX_DRIVER,
+  'dsh-sdk': DSH_DRIVER,
 }
 
 /** What replaces the catalog's protocols or the built-in drivers, as a test does. */

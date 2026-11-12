@@ -70,6 +70,23 @@ export function configLocations(
         'AGENTS.md',
       )
     }
+    case 'deepseek': {
+      const moved = chosen ?? variable('DSH_HOME')
+      const folder = moved ?? p.join(home, '.dsh')
+      // dsh reads AGENTS.md from the shared agents folder, not from its home.
+      const agents = variable('DSH_AGENTS_HOME') ?? p.join(home, '.agents')
+      return [
+        chosen !== null && folder === chosen
+          ? { id: 'folder', candidates: [folder], env: null, chosen: true }
+          : { id: 'folder', candidates: [folder], env: moved ? 'DSH_HOME' : null },
+        {
+          id: 'settings',
+          candidates: [p.join(folder, 'profiles', 'sdk', 'cordis.patch.yml')],
+          env: null,
+        },
+        { id: 'instructions', candidates: [p.join(agents, 'AGENTS.md')], env: null },
+      ]
+    }
     case 'opencode': {
       const xdg = variable('XDG_CONFIG_HOME')
       const folder = p.join(xdg ?? p.join(home, '.config'), 'opencode')

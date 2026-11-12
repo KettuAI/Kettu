@@ -11,6 +11,7 @@ import * as cline from './cline'
 import * as codebuddy from './codebuddy'
 import * as codewhale from './codewhale'
 import * as codex from './codex'
+import * as deepseek from './deepseek'
 import * as copilot from './copilot'
 import * as cursor from './cursor'
 import * as cortexCode from './cortex-code'
@@ -94,6 +95,7 @@ export const AGENT_MARKS: Record<HarnessId, AgentMarkModule> = {
   hermes,
   muse,
   codewhale,
+  deepseek,
   antigravity,
   devin,
   'cortex-code': cortexCode,

@@ -69,6 +69,12 @@ import {
   type InstalledArchive,
 } from './archive-install'
 import { checkApiKey, clearClaudeKey, writeClaudeKey, type ApiKeyInput } from './api-key'
+import {
+  clearApiKey as clearDshKey,
+  readApiKey as readDshKey,
+  readProvider as readDshProvider,
+  writeApiKey as writeDshKey,
+} from './dsh/credentials'
 import { readClaudeSettings, writeClaudeSetting, type ListedModel } from './claude/user-settings'
 import {
   installedFolder,
@@ -104,6 +110,7 @@ import { HostedRun, type HostedRunHooks } from './hosted-run'
 import { t } from './i18n'
 import { CliVersions, type CliProbe, type CliVersion } from './installed-cli'
 import { OpenCodeClient } from './opencode/client'
+import { readProviderUsage, type ProviderUsage } from './opencode/provider-usage'
 import { claudeJsonPath, readClaudeProfile } from './plan-tier'
 import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
@@ -334,6 +341,10 @@ class Slot {
   providersRun: Promise<void> | null = null
   providersReadAt = 0
   providerActionRun: Promise<void> | null = null
+  /** DeepSeek Harness's balance at DeepSeek, for an agent on an API key. */
+  balance: ProviderUsage | null = null
+  balanceRun: Promise<void> | null = null
+  balanceReadAt = 0
   limits = new Map<string, PlanLimit>()
   /** Kettu handed the harness an API key for this agent, which it never reads back. */
   apiKey = false
@@ -2376,6 +2387,7 @@ export class AgentManager {
     if (!this.has(agentId) || this.isDisabled(agentId)) return
     const slot = this.slot(agentId)
     if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
+    if (slot.def.id === 'deepseek') return this.refreshBalance(slot, options?.force === true)
     if (!this.hasLimits(agentId)) return
     await this.detectAll()
     const force = options?.force === true
@@ -2680,6 +2692,7 @@ export class AgentManager {
     const slot = this.registeredSlot(agentId)
     if (this.isDisabled(agentId)) return
     if (slot.def.id === 'opencode') return this.refreshProviders(slot, options?.force === true)
+    if (slot.def.id === 'deepseek') return this.refreshBalance(slot, options?.force === true)
     if (!slot.def.reportsAccount) return
     await this.detectAll()
     const force = options?.force === true
@@ -2772,6 +2785,39 @@ export class AgentManager {
     } finally {
       this.emit(slot)
     }
+  }
+
+  private async refreshBalance(slot: Slot, force: boolean): Promise<void> {
+    if (slot.balanceRun) return slot.balanceRun
+    if (!force && Date.now() - slot.balanceReadAt < this.timings.limitsMs) return
+    slot.balanceRun = this.readBalance(slot).finally(() => {
+      slot.balanceRun = null
+    })
+    return slot.balanceRun
+  }
+
+  /**
+   * Asks DeepSeek for the balance of the key the agent's dsh home holds. The key is read for this
+   * one request to DeepSeek's own endpoint and never kept; the account sign-in has no balance.
+   */
+  private async readBalance(slot: Slot): Promise<void> {
+    await this.detectAll()
+    const env = { ...this.deps.env.agentEnv(slot.id), DSH_HOME: this.dshFolder(slot) }
+    const key = (await readDshProvider(env)) === 'deepseek-official' ? await readDshKey(env) : null
+    const now = Date.now()
+    const previous = slot.balance
+    if (!key) {
+      slot.balance = null
+    } else {
+      const usage = await readProviderUsage({ providerId: 'deepseek', key, now })
+      // A failed read keeps the last balance, marked as old by its time.
+      slot.balance =
+        usage.state === 'error' && previous && previous.balances.length > 0
+          ? { ...usage, balances: previous.balances, observedAt: previous.observedAt }
+          : usage
+    }
+    slot.balanceReadAt = now
+    this.emit(slot)
   }
 
   async providerAction(input: AgentProviderAction): Promise<void> {
@@ -2882,7 +2928,8 @@ export class AgentManager {
 
   /**
    * Hands the harness an API key for this agent to keep: Claude Code's in its folder's
-   * settings.json, Codex's through `codex login --with-api-key`. A process that runs keeps its
+   * settings.json, Codex's through `codex login --with-api-key`, DeepSeek Harness's in its
+   * `.credentials.yaml`. A process that runs keeps its
    * credentials until it stops, so an idle one is stopped and the next start uses the key.
    */
   async setApiKey(agentId: AgentId, input: ApiKeyInput): Promise<void> {
@@ -2893,6 +2940,8 @@ export class AgentManager {
       await writeClaudeKey(this.settingsFile(slot), checked)
     } else if (slot.def.id === 'codex') {
       await this.runCodexLogin(slot, ['login', '--with-api-key'], checked.key)
+    } else if (slot.def.id === 'deepseek') {
+      await writeDshKey(this.dshFolder(slot), checked.key)
     } else {
       throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
     }
@@ -2907,6 +2956,7 @@ export class AgentManager {
     await this.detectAll()
     if (slot.def.id === 'claude-code') await clearClaudeKey(this.settingsFile(slot))
     else if (slot.def.id === 'codex') await this.runCodexLogin(slot, ['logout'])
+    else if (slot.def.id === 'deepseek') await clearDshKey(this.dshFolder(slot))
     else throw invalidParams(`${slot.def.name} takes no API key from Kettu`)
     this.deps.diagnostics.event(agentId, 'api key', 'cleared')
     slot.apiKey = false
@@ -2936,6 +2986,13 @@ export class AgentManager {
       throw invalidParams(`${slot.def.name} has no settings Kettu edits`)
     }
     return slot
+  }
+
+  /** The agent's dsh home, where its `.credentials.yaml` lives. */
+  private dshFolder(slot: Slot): string {
+    const folder = this.configFolder(slot.id)
+    if (!folder) throw new Error(`${slot.name} has no configuration folder`)
+    return folder
   }
 
   /** The agent's settings file, where Claude Code reads the variables of its `env`. */
@@ -3102,7 +3159,7 @@ export class AgentManager {
       disabled: this.isDisabled(agentId),
       ...(color ? { color } : {}),
       apiKey:
-        slot.def.id === 'claude-code' || slot.def.id === 'codex'
+        slot.def.id === 'claude-code' || slot.def.id === 'codex' || slot.def.id === 'deepseek'
           ? { set: slot.apiKey, providers: slot.def.id === 'claude-code' }
           : null,
       state: slot.state,
@@ -3130,6 +3187,7 @@ export class AgentManager {
             providersError: slot.providersError,
           }
         : {}),
+      ...(slot.def.id === 'deepseek' ? { balance: slot.balance } : {}),
       limits: [...slot.limits.values()],
       detail: slot.detail ?? h.adapterNote,
       installNotice: slot.def.install.notice ? t(slot.def.install.notice) : null,
