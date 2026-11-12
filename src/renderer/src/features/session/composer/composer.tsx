@@ -321,9 +321,11 @@ export function Composer({
     }
     if (event.key === 'Escape' && running) {
       event.preventDefault()
-      // A card waiting for the user takes Esc as its Deny, as its button shows, and the turn goes on.
-      if (firstWaiting(sessionId)) pressWaitingCard(sessionId, 'escape')
-      else cancel()
+      // A card waiting for the user takes Esc as its Deny, as its button shows, and the turn goes on;
+      // with a message being written, Esc answers nothing, as Enter and the number keys do.
+      if (firstWaiting(sessionId)) {
+        if (!holdsMessage) pressWaitingCard(sessionId, 'escape')
+      } else cancel()
       return
     }
     if (event.key !== 'Enter') return
