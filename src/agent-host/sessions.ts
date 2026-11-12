@@ -1845,6 +1845,7 @@ export class SessionManager {
             config: page.session.config,
             commands: page.session.commands,
             usage: page.session.usage,
+            ...storedContext(page.session.context),
           }
         : view,
       entries: page ? page.entries.map(settled) : [],
@@ -4109,13 +4110,14 @@ export class SessionManager {
       live.nextPos = Math.max(live.nextPos, pos + 1)
       live.counter = Math.max(live.counter, idNumber(entry.id))
     }
-    const { config, commands, usage } = stored.session
+    const { config, commands, usage, context } = stored.session
     live.thread = {
       session: {
         ...live.thread.session,
         config: this.deps.agents.restoreConfig(live.record.agentId, config, live.record),
         commands,
         usage,
+        ...storedContext(context),
       },
       order,
       byId,
@@ -4743,6 +4745,7 @@ export class SessionManager {
       commands: [],
       // The totals stay the session's; the context is the new agent's, unknown until it reports.
       usage: usage ? { ...usage, used: 0, size: 0, cache: undefined } : null,
+      context: undefined,
       // The new agent says whether it reports background tasks once it attaches.
       background: undefined,
       status: 'closed',
@@ -7708,6 +7711,13 @@ const RESOURCE_NOT_FOUND = -32002
 /** The agent does not have the session it was asked to resume. */
 export function unknownSession(error: AgentRequestError): boolean {
   return error.code === RESOURCE_NOT_FOUND
+}
+
+/** A breakdown stored with the session as its context report, until a read replaces it. */
+function storedContext(breakdown: ContextBreakdown | null): Pick<SessionView, 'context'> {
+  if (!breakdown) return {}
+  const key = `${breakdown.used}/${breakdown.size}`
+  return { context: { key, breakdown, loading: false, error: null } }
 }
 
 /** The number in an entry id such as `e:12`, which the session's new ids count on from. */

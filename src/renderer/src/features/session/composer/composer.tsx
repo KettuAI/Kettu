@@ -491,6 +491,7 @@ export function Composer({
                   sessionId={sessionId}
                   agentId={session.agentId}
                   idle={!running && !starting}
+                  closed={status === 'closed'}
                   reports={agent?.capabilities.context ?? false}
                   direct={agent?.capabilities.liveContext ?? false}
                   live={running && (agent?.capabilities.liveContext ?? false)}
