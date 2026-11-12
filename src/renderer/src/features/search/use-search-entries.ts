@@ -16,7 +16,12 @@ import { artifactHost, routineHost } from '@renderer/lib/host'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import {
+  hostOfSession,
+  sessionArchived,
+  sessionTitle,
+  useSessionsStore,
+} from '@renderer/stores/sessions'
 import type { SettingsSection } from '@renderer/stores/view'
 import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
 import { haystackOf, SEARCH_ACTIONS, type SearchAction, type SearchEntry } from './search-model'
@@ -50,9 +55,17 @@ const ACTION_SHORTCUT: Partial<Record<SearchAction, ShortcutAction>> = {
   toggleSidebar: 'toggleSidebar',
 }
 
-/** Sessions Search can find: not archived, not prepared, and not a subagent the replay never named. */
-function findable(summary: SessionSummary): boolean {
-  return !summary.archivedAt && !summary.prepared && !summary.missing
+/**
+ * Sessions Search can find, as the sidebar lists them: no subagents, no prepared or missing
+ * sessions, and nothing archived itself or under an archived parent.
+ */
+function findable(summary: SessionSummary, byId: Record<string, SessionSummary>): boolean {
+  return (
+    summary.origin !== 'subagent' &&
+    !summary.prepared &&
+    !summary.missing &&
+    !sessionArchived(byId, summary.id)
+  )
 }
 
 /** Everything Search can find, across the window's stores. */
@@ -93,7 +106,7 @@ function useSessionEntries(): SearchEntry[] {
     const hostName = (id: string | null) =>
       id === null ? thisComputer : (others.find((host) => host.id === id)?.name ?? unknown)
     return Object.values(byId)
-      .filter((summary) => findable(summary) && onHost(only, hostOfSession(summary)))
+      .filter((summary) => findable(summary, byId) && onHost(only, hostOfSession(summary)))
       .map((summary): SearchEntry => {
         const hostId = hostOfSession(summary)
         const title = sessionTitle(summary)
@@ -193,7 +206,7 @@ function useProjectEntries(): SearchEntry[] {
   return useMemo(() => {
     const counts = new Map<string, number>()
     for (const summary of Object.values(byId)) {
-      if (findable(summary)) {
+      if (findable(summary, byId)) {
         counts.set(summary.projectPath, (counts.get(summary.projectPath) ?? 0) + 1)
       }
     }
