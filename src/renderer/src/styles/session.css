@@ -383,6 +383,10 @@
   & :is(.ui-tcc__main, .ui-tcc__summary) {
     flex: 0 1 auto;
   }
+  & .ui-tcc__name {
+    flex-shrink: 0;
+    max-width: 100%;
+  }
 }
 .ks-thread
   .ui-tcc:not([data-status='error'], [data-status='running'])
