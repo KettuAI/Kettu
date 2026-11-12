@@ -80,6 +80,27 @@
   pointer-events: none;
   -webkit-app-region: drag;
 }
+/* Leaving the onboarding, whose stage drew this window: the main area grows into place and the
+   sidebar slides in beside it. The main area settles last, which ends it. */
+[data-arriving] .kettu-frame.ui-as-app > .ui-as-main {
+  animation: kettu-arrive-main 480ms var(--ease-out-quint) 80ms backwards;
+}
+[data-arriving] .kettu-frame.ui-as-app > .ui-as-side {
+  animation: kettu-arrive-side 400ms var(--ease-out-quint) 140ms backwards;
+}
+@keyframes kettu-arrive-main {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: scale(0.955);
+  }
+}
+@keyframes kettu-arrive-side {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+}
 /* The sidebar's head keeps the corner controls' room however long the list grows; the list
    scrolls instead of squeezing it. */
 .kettu-frame.ui-as-app > .ui-as-side > .ui-as-side__head {

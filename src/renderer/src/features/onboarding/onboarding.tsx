@@ -3,7 +3,7 @@
 
 import './onboarding.css'
 import { useState, type ReactNode } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { Radio } from '@base-ui/react/radio'
@@ -50,13 +50,14 @@ import { errorMessage } from '@renderer/lib/host'
 import { hasBand } from '@renderer/lib/platform'
 import { cancelSignIn, signIn, useAccountStore } from '@renderer/stores/account'
 import { menuAgents, useAgentsStore } from '@renderer/stores/agents'
-import { useSettingsStore } from '@renderer/stores/settings'
+import { prefersReducedMotion, useSettingsStore } from '@renderer/stores/settings'
 import { AgentsStage, BrowserStage, CloudDiagram, FoxStage, NoAgentsStage } from './stage'
 
 type Choice = 'account' | 'self-hosted'
 
 // --duration-slow and --ease-out-quart, as the launch cover fades.
 const SLOW = 0.3
+const LEAVE_DELAY = 0.14
 const EASE = [0.165, 0.84, 0.44, 1] as const
 // The blur rise a session's blocks enter with.
 const RISE = {
@@ -88,6 +89,7 @@ export default function Onboarding() {
   }
   const finish = () => save({ onboarding: { done: true } })
   const count = choice === 'self-hosted' ? 3 : 4
+  const present = useIsPresent()
 
   return (
     <motion.div
@@ -97,8 +99,12 @@ export default function Onboarding() {
       role="dialog"
       aria-modal="true"
       aria-label={t('label')}
+      // Leaving, the content steps aside and the stage's picture of New session grows toward the
+      // real one (onboarding.css), which grows in beneath (kettu-arrive in styles/affect.css); the
+      // page itself fades once they are under way.
+      data-leaving={present ? undefined : ''}
       exit={{ opacity: 0 }}
-      transition={{ duration: SLOW, ease: EASE }}
+      transition={{ duration: SLOW, ease: EASE, delay: prefersReducedMotion() ? 0 : LEAVE_DELAY }}
     >
       {/* The steps cross: the next rises in while the last fades, so none waits on the other. */}
       <AnimatePresence initial={false}>
