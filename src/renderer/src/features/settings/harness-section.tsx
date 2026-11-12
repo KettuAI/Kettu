@@ -463,7 +463,6 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
   )
   const r = readiness(status)
   const version = harnessVersion(status)
-  const installed = listedInstalled(status) || isInstalled(status)
   const kind = installKind(status)
   const summary: ReactNode =
     status.task?.state === 'running' ? (
@@ -492,8 +491,12 @@ export function HarnessListItem({ status }: { status: AgentStatus }) {
       item={status.harnessId}
       label={status.harnessName}
       onOpen={() => openHarnessSettings(status.harnessId)}
-      tile={<AgentTile agent={status.harnessId} mono={!installed} size={32} />}
-      name={<span className="k-name">{status.harnessName}</span>}
+      tile={<AgentTile agent={status.harnessId} size={32} />}
+      name={
+        <span className="k-name" title={status.harnessName}>
+          {status.harnessName}
+        </span>
+      }
       right={<HarnessState status={status} />}
     >
       {summary && <ItemLine>{summary}</ItemLine>}
@@ -555,13 +558,12 @@ export function HarnessPage({ harnessId }: { harnessId: HarnessId }) {
 
 function HarnessPageHeader({ status }: { status: AgentStatus | null }) {
   const { t } = useTranslation('settings')
-  const installed = !!status && (listedInstalled(status) || isInstalled(status))
   return (
     <ItemPageHeader
       back={t('sections.harnesses')}
       onBack={() => openHarnessSettings(null)}
       item={status?.harnessId ?? 'harness'}
-      icon={status && <AgentTile agent={status.harnessId} size={42} mono={!installed} />}
+      icon={status && <AgentTile agent={status.harnessId} size={42} />}
       title={status?.harnessName ?? null}
       subtitle={status && <HarnessPageLine status={status} />}
     />

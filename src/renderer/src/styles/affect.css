@@ -2230,6 +2230,28 @@ li[data-row-exit='dust'] > * {
   }
 }
 
+.kettu-settings .kettu-settings__body[data-section='harnesses'] {
+  max-width: 800px;
+}
+.kettu-settings [data-section='harnesses'] .ui-sg-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 12px;
+  background: none;
+  box-shadow: none;
+}
+.kettu-settings [data-section='harnesses'] .ui-sg-card > .k-row {
+  min-width: 0;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.kettu-settings [data-section='harnesses'] .k-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
 /* A page's title, then its groups: a head, a card of rows, a note under it */
 :is(.kettu-settings, .kettu-sd) .k-page-sub {
   text-wrap: pretty;
