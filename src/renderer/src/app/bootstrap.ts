@@ -170,14 +170,30 @@ function loadSessionState(): Promise<unknown> {
     useProjectsStore.getState().refresh(),
     useSessionsStore.getState().refresh(),
     useRoutinesStore.getState().load(),
-    useAgentsStore.getState().refresh(),
     loadAgentOptions(),
   ])
 }
 
+/**
+ * This computer's agents. The host answers once it has detected them, after the login shell and
+ * each harness's `--version`, so launch does not wait for them.
+ */
+function loadAgents(): Promise<void> {
+  return useAgentsStore
+    .getState()
+    .refresh()
+    .catch((error: unknown) => console.warn(`Could not read the agents: ${errorMessage(error)}`))
+}
+
 /** Loads everything the shell shows; also runs after the agent host comes back. */
 export async function loadHostState(): Promise<void> {
-  await Promise.allSettled([loadSessionState(), loadGitTools(), loadUsageStatus(), loadToday()])
+  await Promise.allSettled([
+    loadSessionState(),
+    loadAgents(),
+    loadGitTools(),
+    loadUsageStatus(),
+    loadToday(),
+  ])
 }
 
 let launched = false
@@ -323,9 +339,10 @@ export function bootstrap(): Promise<unknown> {
   // Asked first, so the host reads the threads before the ones the launch opens.
   void removeEmptySessions()
   const sessionState = loadSessionState()
+  void loadAgents()
   void loadGitTools()
-  // Leaving the launch view waits for the session list, not for git tools, whose
-  // `gh auth status` can take seconds on a slow network.
+  // Leaving the launch view waits for the session list, not for the agents or git tools, whose
+  // detection and `gh auth status` can take seconds.
   void Promise.allSettled([settingsReady, sessionState]).then(finishLaunch)
 
   window.addEventListener('focus', refreshShownProject)

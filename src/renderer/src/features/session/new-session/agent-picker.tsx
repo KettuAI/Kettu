@@ -18,6 +18,7 @@ import {
   useComboboxFilter,
 } from '@renderer/components/ui/combobox'
 import { InputGroupAddon } from '@renderer/components/ui/input-group'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { SettingsGlyph } from '@renderer/features/account/avatar'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { errorMessage } from '@renderer/lib/host'
@@ -61,6 +62,8 @@ export function AgentPicker({
       return menuAgents(usableAgents(order, byId))
     }),
   )
+  // This computer's agents are read after launch: until then the list is loading, not empty.
+  const agentsRead = useAgentsStore((s) => hostId !== null || s.loaded)
   const ids = useMemo(() => statuses.map((s) => s.id), [statuses])
   const byId = useMemo(() => new Map(statuses.map((s) => [s.id, s])), [statuses])
   const { contains } = useComboboxFilter()
@@ -135,7 +138,13 @@ export function AgentPicker({
               <Glyph icon={Search01Icon} size={14} />
             </InputGroupAddon>
           </ComboboxInput>
-          {statuses.length === 0 ? (
+          {!agentsRead ? (
+            <div className="flex flex-col gap-1 px-1.5 pt-0.5 pb-1.5" aria-hidden>
+              {[0, 1].map((i) => (
+                <Skeleton key={i} className="h-11 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : statuses.length === 0 ? (
             <p className="px-3.5 py-3 text-ui text-muted-foreground">
               {hostId === null
                 ? t('newSession.noAgent')
@@ -170,7 +179,7 @@ export function AgentPicker({
               }}
             </ComboboxList>
           )}
-          <ComboboxEmpty>{t('newSession.picker.noMatch')}</ComboboxEmpty>
+          {agentsRead && <ComboboxEmpty>{t('newSession.picker.noMatch')}</ComboboxEmpty>}
           {/* Settings set up this computer's agents, not another host's. */}
           {hostId === null && (
             <>
