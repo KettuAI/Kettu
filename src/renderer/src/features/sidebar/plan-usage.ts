@@ -1,5 +1,6 @@
 import type { AgentStatus, PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
+import { resetTime } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 
 const MINUTE = 60_000
@@ -72,4 +73,15 @@ export function countdown(ms: number): string | null {
   return hours
     ? i18n.t('sidebar:countdown.daysHours', { days, hours })
     : i18n.t('sidebar:countdown.days', { count: days })
+}
+
+/**
+ * When a plan window resets, worded the same on every surface: the time left within a day,
+ * "Resets in 3h 26m", else when, "Resets Sat 5:00 AM".
+ */
+export function planReset(at: number, now = Date.now()): string {
+  const left = at - now
+  return left > 0 && left < DAY
+    ? i18n.t('planReset.in', { time: countdown(left) })
+    : i18n.t('planReset.at', { time: resetTime(at, now) })
 }

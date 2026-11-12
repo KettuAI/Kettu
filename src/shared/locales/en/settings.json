@@ -684,8 +684,6 @@
     "ownInterface": "{{vendor}} · through its own interface",
     "usageUpdated": "Read {{ago}}",
     "refreshUsage": "Read plan usage again",
-    "resetsIn": "Resets in {{time}}",
-    "resetsAt": "Resets {{time}}",
     "versionGroup": "Version",
     "ownInstaller": "Updated by its own installer, not by Kettu.",
     "update": {

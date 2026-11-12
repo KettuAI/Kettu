@@ -13,7 +13,11 @@ const formatters = new Map<string, ReturnType<typeof makeFormatters>>()
 
 function makeFormatters(locale: string) {
   return {
-    weekday: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
+    weekdayClock: new Intl.DateTimeFormat(locale, {
+      weekday: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
     monthDay: new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric' }),
     clock: new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }),
     full: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }),
@@ -76,13 +80,13 @@ export function mediumAgo(at: number, now = Date.now()): string {
   return ago(at, now) ?? format().monthDay.format(at)
 }
 
-/** When a limit resets: the clock time today, the weekday within six days, the date beyond. */
+/** When a limit resets: the clock time today, the weekday and time within six days, the date beyond. */
 export function resetTime(at: number, now = Date.now()): string {
   const day = (t: number): number => new Date(t).setHours(0, 0, 0, 0)
   // Rounded, since a day across a DST change is not 24 hours.
   const days = Math.round((day(at) - day(now)) / DAY)
   if (days === 0) return format().clock.format(at)
-  return days <= 6 ? format().weekday.format(at) : format().monthDay.format(at)
+  return days > 0 && days <= 6 ? format().weekdayClock.format(at) : format().monthDay.format(at)
 }
 
 export function fullTime(at: number): string {

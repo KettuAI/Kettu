@@ -36,6 +36,10 @@
     "hostRestarted": "Kettu 的后台进程已重启，请重试。",
     "hostOffline": "这台主机没有连上，等它回来后再试。"
   },
+  "planReset": {
+    "in": "{{time}}后重置",
+    "at": "{{time}} 重置"
+  },
   "planWindow": {
     "five_hour": "5 小时",
     "seven_day": "每周",

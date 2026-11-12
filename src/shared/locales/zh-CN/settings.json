@@ -681,8 +681,6 @@
     "ownInterface": "{{vendor}} · 经它自己的接口连接",
     "usageUpdated": "{{ago}}读取",
     "refreshUsage": "重新读取套餐用量",
-    "resetsIn": "{{time}}后重置",
-    "resetsAt": "{{time}} 重置",
     "versionGroup": "版本",
     "ownInstaller": "由它自己的安装程序更新，不经过 Kettu。",
     "update": {

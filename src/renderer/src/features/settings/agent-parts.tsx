@@ -13,9 +13,9 @@ import { useTranslation } from 'react-i18next'
 import type { AgentStatus, AgentTask, PlanLimit } from '@shared/agent-host'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
-import { countdown } from '@renderer/features/sidebar/plan-usage'
+import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
-import { limitLabel, mediumAgo, money, resetTime } from '@renderer/lib/format'
+import { limitLabel, mediumAgo, money } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
@@ -278,20 +278,13 @@ export function UsageGroup({
         <RowGroup>
           {status.limits.map((limit) => {
             const level = limitLevel(limit)
-            const left = limit.resetsAt ? countdown(limit.resetsAt - now) : null
             return (
               <RowFrame
                 key={limit.window}
                 text={
                   <RowText
                     name={limitLabel(limit)}
-                    description={
-                      limit.resetsAt
-                        ? left
-                          ? t('agents.resetsIn', { time: left })
-                          : t('agents.resetsAt', { time: resetTime(limit.resetsAt, now) })
-                        : undefined
-                    }
+                    description={limit.resetsAt ? planReset(limit.resetsAt, now) : undefined}
                   />
                 }
               >

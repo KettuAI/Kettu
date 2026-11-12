@@ -32,7 +32,7 @@ import { levelsOf, splitName, type SelectOption } from '@renderer/features/sessi
 import { shownChoice, shownValue } from '@renderer/features/session/composer/model-list'
 import { listedInstalled } from '@renderer/features/agents/readiness'
 import { Ring } from '@renderer/features/session/composer/usage'
-import { countdown, tightestLimit } from '@renderer/features/sidebar/plan-usage'
+import { planReset, tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { LIMIT_TEXT, limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
@@ -568,12 +568,12 @@ function UsageNote({ limits, now }: { limits: AgentStatus['limits']; now: number
       </TooltipTrigger>
       <TooltipContent side="right" className="flex flex-col items-start gap-0.5">
         {current.map((l) => {
-          const left = l.resetsAt ? countdown(l.resetsAt - now) : null
+          const reset = l.resetsAt && l.resetsAt > now ? planReset(l.resetsAt, now) : null
           const used = l.usedPercent === null ? '—' : `${Math.round(l.usedPercent)}%`
           return (
             <span key={l.window} className="tabular">
-              {left
-                ? t('newSession.agentMenu.windowResets', { limit: limitLabel(l), used, left })
+              {reset
+                ? t('newSession.agentMenu.windowResets', { limit: limitLabel(l), used, reset })
                 : t('newSession.agentMenu.window', { limit: limitLabel(l), used })}
             </span>
           )

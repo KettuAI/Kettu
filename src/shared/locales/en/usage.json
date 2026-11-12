@@ -145,8 +145,6 @@
     "title": "Plan limits",
     "none": "No agent has reported plan limits yet. Accounts signed in with a Claude or ChatGPT subscription show here.",
     "read": "Read {{ago}}",
-    "resetsIn": "Resets in {{time}}",
-    "resetsAt": "Resets {{time}}",
     "notReported_one": "{{name}} doesn’t report plan usage.",
     "notReported_other": "{{name}} don’t report plan usage.",
     "notYet": "No plan usage reported yet.",

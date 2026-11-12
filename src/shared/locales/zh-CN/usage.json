@@ -142,8 +142,6 @@
     "title": "套餐限额",
     "none": "还没有 Agent 报告套餐限额。用 Claude 或 ChatGPT 订阅登录的账号会显示在这里。",
     "read": "{{ago}}读取",
-    "resetsIn": "{{time}}后重置",
-    "resetsAt": "{{time}} 重置",
     "notReported_other": "{{name}} 不提供套餐用量。",
     "notYet": "还没有报告套餐用量。",
     "accounts_other": "{{count}} 个账号",

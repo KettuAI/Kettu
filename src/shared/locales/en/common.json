@@ -37,6 +37,10 @@
     "hostRestarted": "A background process of Kettu restarted. Try again.",
     "hostOffline": "The host is not connected. Try again once it is back."
   },
+  "planReset": {
+    "in": "Resets in {{time}}",
+    "at": "Resets {{time}}"
+  },
   "planWindow": {
     "five_hour": "5-hour",
     "seven_day": "Weekly",

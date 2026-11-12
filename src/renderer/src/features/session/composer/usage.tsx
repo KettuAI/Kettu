@@ -29,16 +29,8 @@ import { useCacheLeft, useCachePhase } from '@renderer/features/prompt-cache/cac
 import { joinPlanTier } from '@renderer/features/account/model'
 import { breakdownView, shownUsage } from '@renderer/features/session/composer/context-bar'
 import { PANEL } from '@renderer/features/session/entries/helpers'
-import { usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
-import {
-  clockTime,
-  countdown,
-  fullTime,
-  limitLabel,
-  money,
-  resetTime,
-  tokens,
-} from '@renderer/lib/format'
+import { planReset, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
+import { clockTime, countdown, fullTime, limitLabel, money, tokens } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
@@ -604,7 +596,7 @@ function PlanLimits({ limits, account }: { limits: PlanLimit[]; account: AgentAc
               {limit.resetsAt && (
                 <Tooltip>
                   <TooltipTrigger render={<span className="kettu-limit__reset" />}>
-                    {t('usage.limits.resetsShort', { time: resetTime(limit.resetsAt, now) })}
+                    {planReset(limit.resetsAt, now)}
                   </TooltipTrigger>
                   <TooltipContent>
                     {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
@@ -719,7 +711,7 @@ export function PlanPart({
                       <span className="min-w-21 shrink-0 pl-3 text-right whitespace-nowrap text-tertiary" />
                     }
                   >
-                    {t('usage.limits.resetsShort', { time: resetTime(limit.resetsAt, now) })}
+                    {planReset(limit.resetsAt, now)}
                   </TooltipTrigger>
                   <TooltipContent>
                     {t('usage.limits.resets', { time: fullTime(limit.resetsAt) })}
