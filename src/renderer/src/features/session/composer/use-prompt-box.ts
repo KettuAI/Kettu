@@ -160,6 +160,22 @@ export function usePromptBox({
     [draft],
   )
 
+  /** Puts the command at the start of the text, unless it starts with it already. */
+  const addCommand = useCallback(
+    (name: string) => {
+      const current = editor.current?.text() ?? ''
+      const command = `/${name}`
+      const has = current.startsWith(command) && /^(\s|$)/.test(current.slice(command.length))
+      const next = has ? current : `${command} ${current.trimStart()}`
+      setText(next)
+      writeDraft(draft, next)
+      setCaret(null)
+      editor.current?.setText(next)
+      requestAnimationFrame(() => editor.current?.focus())
+    },
+    [draft],
+  )
+
   useEffect(
     () =>
       onAppEvent((event) => {
@@ -179,8 +195,12 @@ export function usePromptBox({
           closeHistory()
           addText(event.text)
         }
+        if (event.kind === 'command-into-composer' && event.sessionId === sessionId) {
+          closeHistory()
+          addCommand(event.name)
+        }
       }),
-    [draft, sessionId, closeHistory, addText],
+    [draft, sessionId, closeHistory, addText, addCommand],
   )
 
   /** Typing changed the text: its state, its draft, and a slash list Esc closed. */

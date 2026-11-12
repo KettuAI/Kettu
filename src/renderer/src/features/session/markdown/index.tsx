@@ -5,10 +5,12 @@ import { loadedMarkdown, loadMarkdown } from './preload'
 const MarkdownImpl = lazy(loadMarkdown)
 const DiffImpl = lazy(() => import('./diff-impl'))
 
-interface MarkdownProps {
+export interface MarkdownProps {
   markdown: string
   streaming?: boolean
   className?: string
+  components?: import('streamdown').Components
+  remarkPlugins?: import('streamdown').StreamdownProps['remarkPlugins']
 }
 
 /** Streamdown, loaded the first time a session shows prose; until then the plain text. */

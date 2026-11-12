@@ -287,57 +287,65 @@ const COMPACTION_KEY = {
   cancelled: 'cancelled',
 } as const
 
+/**
+ * A compaction divides the thread: rules on both sides of a pill, which opens the summary when
+ * there is one.
+ */
 export const CompactionEntry = memo(function CompactionEntry({ sessionId, entryId }: EntryProps) {
   const { t } = useTranslation('session')
   const entry = useEntry(sessionId, entryId, 'compaction')
   const animation = useEntryAnimation(sessionId, entryId)
   const [open, setOpen] = useState(false)
   if (!entry) return null
-  const text = t(`compaction.${COMPACTION_KEY[entry.status]}`)
-  const icon =
-    entry.status === 'in_progress' ? (
-      <Spinner className="size-3.5 text-info" />
-    ) : (
-      <HugeiconsIcon icon={Layers01Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
-    )
-  if (!entry.summary) {
-    return (
-      <Marker variant="separator" className={cn('text-xs', animation)}>
-        <MarkerIcon className="size-3.5">{icon}</MarkerIcon>
-        <MarkerContent className={cn(entry.status === 'in_progress' && 'shimmer')}>
-          {text}
-        </MarkerContent>
-      </Marker>
-    )
-  }
+  const running = entry.status === 'in_progress'
+  const expandable = !running && !!entry.summary
+  const label = (
+    <>
+      <MarkerIcon className="grid size-3.5 place-items-center">
+        {running ? (
+          <Spinner className="size-3.5 text-info" />
+        ) : (
+          <HugeiconsIcon icon={Layers01Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
+        )}
+      </MarkerIcon>
+      <MarkerContent className="ks-compaction-words">
+        <span aria-hidden={!running} className={cn(running && 'shimmer')}>
+          {t('compaction.inProgress')}
+        </span>
+        <span aria-hidden={running}>
+          {t(`compaction.${COMPACTION_KEY[running ? 'completed' : entry.status]}`)}
+        </span>
+      </MarkerContent>
+    </>
+  )
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={animation}>
-      <Marker
-        variant="separator"
-        className="text-xs"
-        render={<CollapsibleTrigger className="group/compaction outline-none" />}
-      >
-        <MarkerIcon className="size-3.5">{icon}</MarkerIcon>
-        <MarkerContent className="inline-flex items-center gap-1 group-hover/compaction:text-foreground">
-          {text}
-          <HugeiconsIcon
-            icon={ArrowRight01Icon}
-            strokeWidth={1.9}
-            aria-hidden
-            className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/compaction:rotate-90"
-          />
-        </MarkerContent>
+    <Collapsible open={expandable && open} onOpenChange={setOpen} className={animation}>
+      <Marker variant="separator" className="text-xs">
+        {/* One element in every state, so the wording swaps in place when the compaction ends. */}
+        <CollapsibleTrigger
+          disabled={!expandable}
+          className="group/compaction inline-flex h-7 flex-none items-center gap-1.5 rounded-full px-2.5 outline-none transition-colors duration-(--duration-fast) disabled:cursor-default enabled:pr-2 enabled:hover:bg-hover enabled:hover:text-foreground enabled:focus-visible:bg-hover enabled:focus-visible:text-foreground"
+        >
+          {label}
+          {expandable && (
+            <HugeiconsIcon
+              icon={ArrowRight01Icon}
+              strokeWidth={1.9}
+              aria-hidden
+              className="size-3 transition-transform duration-(--duration-fast) group-data-panel-open/compaction:rotate-90"
+            />
+          )}
+        </CollapsibleTrigger>
       </Marker>
       <CollapsibleContent className={PANEL}>
         <div
-          className="mt-2 rounded-xl bg-card px-3.5 py-2.5 text-muted-foreground shadow-card"
+          className="ks-compaction-summary mx-px mt-1.5 mb-px rounded-xl bg-card px-3.5 py-2.5 text-muted-foreground shadow-card"
           data-selectable=""
         >
-          <Markdown
-            markdown={entry.summary}
-            streaming={entry.status === 'in_progress'}
-            className="markdown-muted"
-          />
+          <div className="mb-1 text-[10px] leading-4 font-medium tracking-[0.5px] uppercase">
+            {t('compaction.summary')}
+          </div>
+          <Markdown markdown={entry.summary} className="markdown-muted" />
         </div>
       </CollapsibleContent>
     </Collapsible>

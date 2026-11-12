@@ -197,8 +197,11 @@ export interface DevicesApi {
   restart(): Promise<void>
 }
 
-/** Frames a client may have in flight before it acknowledges; behind that the host skips ahead. */
+/**
+ * Frames a client may have in flight before it acknowledges; behind that the host skips ahead.
+ * About a second of a moving screen, so a remote client's round trip is not taken for a slow one.
+ */
 export const DEVICE_FLOW = {
-  window: 8,
+  window: 60,
   maxTextBytes: 4096,
 } as const

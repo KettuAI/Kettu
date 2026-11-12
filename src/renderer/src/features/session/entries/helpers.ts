@@ -155,7 +155,6 @@ export type RunStep =
       /** The agent's own name for the work this call is part of. */
       label?: string
     }
-  | { kind: 'compaction'; running: boolean }
 
 /** A tool call as a step of a folded run. */
 export function toolStep(entry: ToolEntry): RunStep {
@@ -186,8 +185,7 @@ export interface SummaryPart {
 
 type FilePart = 'read' | 'create' | 'edit' | 'delete' | 'move'
 
-type RunPart =
-  FilePart | 'thought' | 'plan' | 'compaction' | 'execute' | 'search' | 'fetch' | 'other'
+type RunPart = FilePart | 'thought' | 'plan' | 'execute' | 'search' | 'fetch' | 'other'
 
 /** What a step adds to a part: an edit adds one unit per file it touched. */
 interface Unit {
@@ -265,8 +263,6 @@ function partsOf(part: RunPart, units: Unit[]): Omit<SummaryPart, 'kind'>[] {
     }
     case 'plan':
       return [{ text: i18n.t('session:summary.plan') }]
-    case 'compaction':
-      return [{ text: i18n.t('session:summary.compaction') }]
     case 'execute': {
       const only = units[0]?.step
       const description = n === 1 && only?.kind === 'tool' ? only.description : undefined
@@ -317,7 +313,6 @@ export function runSummary(steps: RunStep[]): {
     failed: steps.filter((s) => s.kind === 'tool' && s.status === 'failed').length,
     running: steps.some((s) => {
       if (s.kind === 'thought') return !!s.streaming
-      if (s.kind === 'compaction') return s.running
       return s.status === 'pending' || s.status === 'in_progress'
     }),
   }

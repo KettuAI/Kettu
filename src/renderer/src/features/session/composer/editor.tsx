@@ -89,21 +89,8 @@ const theme = EditorView.theme({
     whiteSpace: 'nowrap',
     color: 'var(--text-placeholder)',
   },
-  // The command chip as marks: the padding sits inline, so the caret still moves through it, and
-  // the chip is a file chip's size without growing its line.
-  '.cm-chip-command': {
-    position: 'relative',
-    top: '-1px',
-    background: 'var(--control-on-tint)',
-    color: 'var(--control-on)',
-    borderRadius: 'var(--radius)',
-    padding:
-      'calc(var(--spacing) * 0.875) calc(var(--spacing) * 1.5) calc(var(--spacing) * 0.875) calc(var(--spacing) * 1.25)',
-    margin: '0 calc(var(--spacing) * 0.25)',
-    fontSize: 'var(--text-ui)',
-    fontWeight: 'var(--font-weight-medium)',
-  },
-  // A color rather than opacity, which would fade the chip's fill behind the slash too.
+  // The command as marks, colored text as a sent message shows it, so the caret moves through it.
+  '.cm-chip-command': { color: 'var(--control-on)', fontWeight: 'var(--font-weight-medium)' },
   '.cm-chip-slash': { color: 'color-mix(in srgb, var(--control-on) 55%, transparent)' },
   // A selected chip shows its own fill, not the text selection behind its label.
   '.cm-chip::selection': { backgroundColor: 'transparent' },

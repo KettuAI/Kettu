@@ -17,7 +17,6 @@
     "thought": "Thought",
     "thoughtFor": "Thought for {{duration}}",
     "plan": "Updated the plan",
-    "compaction": "Compacted the context",
     "execute_one": "Ran a command",
     "execute_other": "Ran {{count}} commands",
     "search_one": "Searched once",
@@ -260,7 +259,8 @@
     "inProgress": "Compacting context…",
     "completed": "Context compacted",
     "failed": "Couldn't compact the context",
-    "cancelled": "Compaction cancelled"
+    "cancelled": "Compaction cancelled",
+    "summary": "Summary"
   },
   "gitEvent": {
     "committed": "Committed <id/> <subject/>",

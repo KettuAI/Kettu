@@ -52,6 +52,7 @@ import { remarkPlugins } from './remark'
 import { BlockCode } from './code-frame'
 import { MarkdownTable } from './markdown-table'
 import { LiveContext } from './live'
+import type { MarkdownProps } from './index'
 
 // KaTeX, its styles and fonts load with the first formula, not with every reply.
 const InlineMath = lazy(() => import('./math').then((m) => ({ default: m.InlineMath })))
@@ -102,7 +103,7 @@ function BareReference({ number, children }: { number: number; children: ReactNo
 }
 
 /** A link: a project file, or a web link with its site's icon. */
-function Link(props: ComponentProps<'a'> & ExtraProps) {
+export function Link(props: ComponentProps<'a'> & ExtraProps) {
   const raw = typeof props.href === 'string' ? props.href : ''
   const local = localTarget(raw)
   const href = local ?? raw
@@ -290,11 +291,9 @@ function MarkdownImpl({
   markdown,
   streaming = false,
   className,
-}: {
-  markdown: string
-  streaming?: boolean
-  className?: string
-}) {
+  components: customComponents,
+  remarkPlugins: customRemarkPlugins,
+}: MarkdownProps) {
   // Finishing re-renders every code block and table to enable their controls; deferring it lets
   // React split that work across frames instead of blocking one.
   const live = useDeferredValue(streaming)
@@ -305,7 +304,14 @@ function MarkdownImpl({
       <NamedMediaContext value={named}>
         {chunks.map((chunk, i) => (
           // By position: when the tail settles, the chunk in its place keeps its rendered blocks.
-          <Chunk key={i} markdown={chunk} live={live} reveal={live && i === chunks.length - 1} />
+          <Chunk
+            key={i}
+            markdown={chunk}
+            live={live}
+            reveal={live && i === chunks.length - 1}
+            components={customComponents}
+            remarkPlugins={customRemarkPlugins}
+          />
         ))}
       </NamedMediaContext>
     </div>
@@ -350,11 +356,21 @@ const Chunk = memo(function Chunk({
   markdown,
   live,
   reveal,
-}: {
+  components: customComponents,
+  remarkPlugins: customRemarkPlugins,
+}: Pick<MarkdownProps, 'components' | 'remarkPlugins'> & {
   markdown: string
   live: boolean
   reveal: boolean
 }) {
+  const mergedComponents = useMemo(
+    () => (customComponents ? { ...components, ...customComponents } : components),
+    [customComponents],
+  )
+  const mergedRemarkPlugins = useMemo(
+    () => (customRemarkPlugins ? [...remarkPlugins, ...customRemarkPlugins] : remarkPlugins),
+    [customRemarkPlugins],
+  )
   const source = useMemo(() => spacedImages(markdown), [markdown])
   const themes = useCodeThemes()
   const plugins = useMemo(() => pluginsFor(themes), [themes])
@@ -372,8 +388,8 @@ const Chunk = memo(function Chunk({
           BlockComponent={RevealBlock}
           skipHtml
           plugins={plugins}
-          remarkPlugins={remarkPlugins}
-          components={components}
+          remarkPlugins={mergedRemarkPlugins}
+          components={mergedComponents}
           linkSafety={linkSafety}
           controls={controls}
           codeBlockMaxHeight={0}

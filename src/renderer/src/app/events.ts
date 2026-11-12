@@ -7,6 +7,7 @@ export type AppEvent =
   | { kind: 'close-terminal' } // Mod+W with the terminal used last
   | { kind: 'close-browser' } // Mod+W with the browser used last
   | { kind: 'insert-into-composer'; sessionId: string | null; text: string }
+  | { kind: 'command-into-composer'; sessionId: string; name: string } // a sent command, clicked
   | { kind: 'draft-written'; draft: string } // written from outside its composer, which reloads it
   | { kind: 'add-attachments' } // Mod+U: the composer's Add files or photos…
   | { kind: 'drop-attachments'; draft: string; files: File[] } // a session's id, or New session's draft

@@ -32,6 +32,12 @@
   line-height: 1.55;
   color: var(--thread-ink);
 }
+.markdown-user {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
 .ks-user__note {
   max-width: 80%;
   overflow: hidden;
@@ -498,6 +504,31 @@
     outline-offset: 2px;
   }
 }
+/* A compaction's divider: its two wordings share one cell, and when it ends the one that leaves
+   blurs up and out as the other rises in, as streamed words do. Its summary rises the same way. */
+.ks-compaction-words {
+  display: grid;
+  & > span {
+    grid-area: 1 / 1;
+    justify-self: center;
+    white-space: nowrap;
+    transition:
+      opacity 320ms var(--ease-out-quint),
+      filter 320ms var(--ease-out-quint),
+      translate 320ms var(--ease-out-quint);
+  }
+  & > span[aria-hidden='true'] {
+    opacity: 0;
+    filter: blur(4px);
+    translate: 0 4px;
+  }
+  & > span[aria-hidden='true']:first-child {
+    translate: 0 -4px;
+  }
+}
+.ks-compaction-summary {
+  animation: ks-rise 320ms var(--ease-out-quint) backwards;
+}
 /* Earlier lines unfold above the tail when they are asked for. */
 .ks-fold-in {
   display: grid;
@@ -736,8 +767,12 @@
   .ks-thread .ui-tcc-group__list > .ui-tcc > .ui-tcc__top::after,
   .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
   .ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > *,
-  .ks-fold-in {
+  .ks-fold-in,
+  .ks-compaction-summary {
     animation: none;
+  }
+  .ks-compaction-words > span {
+    transition: none;
   }
   .ks-thread .ui-tcc::after,
   .ks-thread .ui-tcc > .ui-tcc__top,
@@ -759,8 +794,12 @@
 :root[data-reduce-motion='always'] {
   & .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
   & .ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > *,
-  & .ks-fold-in {
+  & .ks-fold-in,
+  & .ks-compaction-summary {
     animation: none;
+  }
+  & .ks-compaction-words > span {
+    transition: none;
   }
   & .ks-thread .ui-tcc::after,
   & .ks-thread .ui-tcc > .ui-tcc__top,

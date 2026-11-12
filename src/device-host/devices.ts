@@ -512,9 +512,11 @@ export class DeviceManager {
   private wantKeyframe(id: DeviceId): void {
     const live = this.live.get(id)
     if (!live || live.wanted) return
-    // Many ports falling behind at once ask the encoder once.
+    // Many ports falling behind at once ask the encoder once. A port that asked in the meantime
+    // and still waits is asked for again, or a still screen would leave it frozen.
     live.wanted = setTimeout(() => {
       live.wanted = null
+      if (this.live.get(id) === live && live.fanout.starved) this.wantKeyframe(id)
     }, 1_000)
     live.driver.requestKeyframe()
   }
