@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
+import { putBackDraft } from '@renderer/app/actions'
 import { onAppEvent, type AppEvent } from '@renderer/app/events'
 import { usePane } from '@renderer/features/split/pane-context'
 import { errorMessage } from '@renderer/lib/host'
@@ -232,16 +233,12 @@ export function usePromptBox({
     setError(null)
     return { prompt, held }
   }
-  /** A failed send's handler: its error, and its message back in the box unless it was refilled. */
+  /** A failed send's handler: its error, and its message back in the draft above what is there. */
   const restore =
     ({ prompt, held }: Taken) =>
     (e: unknown) => {
       setError(errorMessage(e))
-      if (!editor.current?.text()) {
-        setText(prompt)
-        editor.current?.setText(prompt)
-      }
-      if (held.length > 0) setDraftAttachments(draft, held)
+      putBackDraft(draft, prompt, held)
     }
 
   const onPaste = (event: ClipboardEvent): boolean => {

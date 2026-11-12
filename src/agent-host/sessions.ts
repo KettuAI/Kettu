@@ -42,7 +42,7 @@ import {
   coalescePatches,
   entryMessageId,
   harnessOf,
-  outOfCreditTurn,
+  retryableTurn,
   threadEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -3895,18 +3895,18 @@ export class SessionManager {
   }
 
   /**
-   * Re-runs what failed: the sign-in retry, a resume, a load after a failed resume, or a turn the
-   * model provider refused for want of credit.
+   * Re-runs what failed: the sign-in retry, a resume, a load after a failed resume, or the latest
+   * turn of a message, failed or refused by the model provider for want of credit.
    */
   async retry(sessionId: string, portId?: string): Promise<void> {
     this.assertRegistered(sessionId)
     let live = this.live.get(sessionId)
     if (!live) {
       const snapshot = await this.open(sessionId)
-      // A turn refused for want of credit is sent again after a restart too, from its stored thread.
+      // A failed turn is sent again after a restart too, from its stored thread.
       if (
         this.recordOf(sessionId).origin === 'subagent' ||
-        !outOfCreditTurn(threadFromSnapshot(snapshot))
+        !retryableTurn(threadFromSnapshot(snapshot))
       ) {
         return
       }
@@ -3916,11 +3916,11 @@ export class SessionManager {
     // A subagent recovers with its parent; its own failures are the agent's to retry.
     if (live.record.origin === 'subagent') return
     const status = live.thread.session.status
-    const unpaid = canSend(status) ? outOfCreditTurn(live.thread) : null
-    if (unpaid) {
+    const failed = canSend(status) ? retryableTurn(live.thread) : null
+    if (failed) {
       // The same prompt again, under its own entry; the turn attaches the session if it has to.
       live.used = true
-      this.startTurn(live, unpaid.prompt.content, this.now(), unpaid.prompt.id, portId)
+      this.startTurn(live, failed.prompt.content, this.now(), failed.prompt.id, portId)
       return
     }
     const failure = live.failure
@@ -6060,7 +6060,12 @@ export class SessionManager {
                     live.thread.session.config,
                     mapped.message,
                   )
-                : { title: t('notice.turnFailed'), description: mapped.message }),
+                : {
+                    title: t('notice.turnFailed'),
+                    description: mapped.message,
+                    // A turn of a message has Retry, which sends it again; the agent's own has none.
+                    ...(turn.byAgent ? {} : { cause: 'turn_failed' as const }),
+                  }),
           after: agentEntryBefore(live.thread),
         },
       },

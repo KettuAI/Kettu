@@ -565,6 +565,7 @@
   },
   "thread": {
     "label": "Thread",
+    "olderFailed": "Couldn't load earlier messages",
     "tokens_one": "{{tokens}} token",
     "tokens_other": "{{tokens}} tokens",
     "phase": {

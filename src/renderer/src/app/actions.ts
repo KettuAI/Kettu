@@ -15,6 +15,7 @@ import {
 import {
   contentAttachments,
   dropAttachments,
+  releaseResent,
   restoreAttachments,
 } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
@@ -142,6 +143,19 @@ function draftIsPrompt(prompt: readonly UserContent[]): boolean {
 const draftIsEmpty = (draft = NEW_SESSION_DRAFT) =>
   !readDraft(draft).trim() && draftAttachments(draft).length === 0
 
+/**
+ * Puts a message whose send failed back in its draft: its text above what was written since,
+ * after a blank line, and its attachments before the draft's own.
+ */
+export function putBackDraft(draft: string, text: string, held: readonly DraftAttachment[]): void {
+  const written = readDraft(draft)
+  const next = !text.trim() ? written : written.trim() ? `${text}\n\n${written}` : text
+  writeDraft(draft, next)
+  if (held.length > 0) setDraftAttachments(draft, [...held, ...draftAttachments(draft)])
+  flushDraft(draft)
+  emitAppEvent({ kind: 'draft-written', draft })
+}
+
 function removedWhileStarting(error: unknown): boolean {
   const data = (error as { data?: { reason?: unknown } } | null)?.data
   return errorCode(error) === 'not_found' && data?.reason === REMOVED_WHILE_STARTING
@@ -205,13 +219,14 @@ export async function createSession(
       }
     }
   } catch (error) {
-    // Back to New session's draft, unless something else was written there meanwhile, and stored
-    // at once, since a quit can close the window before a later write.
-    if (prompt !== null && draftIsEmpty()) {
+    // Back to New session's draft, above what was written there meanwhile, and stored at once,
+    // since a quit can close the window before a later write. The tiles it left with keep their
+    // pixel sizes; a retry that left a draft written since alone puts back only into an empty one.
+    if (prompt !== null && held) {
+      putBackDraft(NEW_SESSION_DRAFT, promptText(prompt), held)
+    } else if (prompt !== null && draftIsEmpty()) {
       writeDraft(NEW_SESSION_DRAFT, promptText(prompt))
-      // The tiles it left with keep their pixel sizes; a retry's are rebuilt from the message.
-      if (held) setDraftAttachments(NEW_SESSION_DRAFT, held)
-      else restoreAttachments(NEW_SESSION_DRAFT, prompt)
+      restoreAttachments(NEW_SESSION_DRAFT, prompt)
       flushDraft(NEW_SESSION_DRAFT)
     }
     // Deleted, or its project removed, while it started: nothing is left to show.
@@ -234,6 +249,21 @@ export async function createSession(
       },
     })
   }
+}
+
+/**
+ * Sends the session's failed turn again, from the thread. Its message, when the host gave it back
+ * to the draft and the draft still holds only that, leaves the draft, so it does not go twice.
+ */
+export async function retryTurn(sessionId: string, content: readonly UserContent[]): Promise<void> {
+  await host('sessions.retry', { sessionId })
+  const ids = new Set(contentAttachments(content).map((a) => a.id))
+  const items = draftAttachments(sessionId)
+  if (draftIsEmpty(sessionId) || readDraft(sessionId).trim() !== promptText(content).trim()) return
+  if (!items.every((item) => item.attachment && ids.has(item.attachment.id))) return
+  clearDraft(sessionId)
+  releaseResent(sessionId, content)
+  emitAppEvent({ kind: 'draft-written', draft: sessionId })
 }
 
 /**

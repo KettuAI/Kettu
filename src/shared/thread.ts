@@ -231,8 +231,9 @@ export type ThreadEntry =
       severity: 'info' | 'warning' | 'error'
       title: string
       description?: string
-      // The notice ends the turn: the agent exited mid-turn, or its model provider is out of credit.
-      cause?: 'agent_stopped' | 'out_of_credit'
+      // The notice ends the turn: the agent exited mid-turn, its model provider is out of credit,
+      // or the turn of a message failed otherwise.
+      cause?: 'agent_stopped' | 'out_of_credit' | 'turn_failed'
       model?: string // out_of_credit: the session's model when the turn failed
       // The agent's entry before it, to put it back after a replay: set on the notices Kettu
       // adds itself, never on an agent's, which its replay sends again.
@@ -694,22 +695,40 @@ export function threadEntries(state: ThreadState): ThreadEntry[] {
   return state.order.map((id) => state.byId[id]!)
 }
 
-/** The latest turn, when its model provider refused it for want of credit: its notice and prompt. */
-export function outOfCreditTurn(state: Pick<ThreadState, 'order' | 'byId'>): {
-  notice: Extract<ThreadEntry, { kind: 'notice' }>
+type Notice = Extract<ThreadEntry, { kind: 'notice' }>
+
+/** A turn that ended on a notice, with the message it was sent for. */
+export interface EndedTurn {
+  notice: Notice
   prompt: Extract<ThreadEntry, { kind: 'user' }>
-} | null {
-  let notice: Extract<ThreadEntry, { kind: 'notice' }> | null = null
+}
+
+/** The latest turn, when it ended on a notice of one of `causes`: that notice and its prompt. */
+function turnEndedOn(
+  state: Pick<ThreadState, 'order' | 'byId'>,
+  causes: readonly NonNullable<Notice['cause']>[],
+): EndedTurn | null {
+  let notice: Notice | null = null
   for (let i = state.order.length - 1; i >= 0; i--) {
     const entry = state.byId[state.order[i]!]
     if (!entry) continue
     if (entry.kind === 'user' && !entry.steered) return notice && { notice, prompt: entry }
     if (notice) continue
-    if (entry.kind === 'notice' && entry.cause === 'out_of_credit') notice = entry
+    if (entry.kind === 'notice' && entry.cause && causes.includes(entry.cause)) notice = entry
     // A retry runs under the same prompt, so work after the notice means it went through.
     else if (entry.kind !== 'notice' && entry.kind !== 'git') return null
   }
   return null
+}
+
+/** The latest turn, when its model provider refused it for want of credit: its notice and prompt. */
+export function outOfCreditTurn(state: Pick<ThreadState, 'order' | 'byId'>): EndedTurn | null {
+  return turnEndedOn(state, ['out_of_credit'])
+}
+
+/** The latest turn, when it failed so that Retry sends its message again: its notice and prompt. */
+export function retryableTurn(state: Pick<ThreadState, 'order' | 'byId'>): EndedTurn | null {
+  return turnEndedOn(state, ['out_of_credit', 'turn_failed'])
 }
 
 /** The id the agent gave a message, from its entry id (`m:<messageId>`); null when it gave none. */
@@ -970,7 +989,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         typeof value.title === 'string' &&
         (value.cause === undefined ||
           value.cause === 'agent_stopped' ||
-          value.cause === 'out_of_credit') &&
+          value.cause === 'out_of_credit' ||
+          value.cause === 'turn_failed') &&
         (value.model === undefined || typeof value.model === 'string') &&
         (value.after === undefined || value.after === null || typeof value.after === 'string')
       )

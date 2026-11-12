@@ -14,6 +14,7 @@
     "stop": "Stop",
     "send": "Send",
     "historyFailed": "Could not load earlier input. Press Up to try again.",
+    "waitForStart": "Wait for {{agent}} to start",
     "stopTooltip": "Stop <shortcut>{{shortcut}}</shortcut>",
     "stopHoldTooltip": "Stop <shortcut>{{shortcut}}</shortcut> · hold to queue or send now",
     "queueIt": "Queue it",

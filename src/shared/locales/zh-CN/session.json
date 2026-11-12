@@ -545,6 +545,7 @@
   },
   "thread": {
     "label": "对话",
+    "olderFailed": "无法加载更早的消息",
     "tokens_other": "{{tokens}} token",
     "phase": {
       "thinking": "正在思考",
