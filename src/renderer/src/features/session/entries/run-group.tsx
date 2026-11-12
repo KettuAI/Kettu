@@ -100,8 +100,6 @@ export const RunGroup = memo(function RunGroup({
       steps.push({ kind: 'thought', durationMs: entry.durationMs, streaming: entry.streaming })
     } else if (entry.kind === 'tool') {
       steps.push(toolStep(entry))
-    } else if (entry.kind === 'compaction') {
-      steps.push({ kind: 'compaction', running: entry.status === 'in_progress' })
     }
   }
   const summary = runSummary(steps)

@@ -17,7 +17,6 @@
     "thought": "思考",
     "thoughtFor": "思考了 {{duration}}",
     "plan": "更新了计划",
-    "compaction": "压缩了上下文",
     "execute_other": "运行了 {{count}} 条命令",
     "search_other": "搜索了 {{count}} 次",
     "fetch_other": "获取了 {{count}} 个网页",
@@ -250,7 +249,8 @@
     "inProgress": "正在压缩上下文…",
     "completed": "上下文已压缩",
     "failed": "无法压缩上下文",
-    "cancelled": "已取消压缩"
+    "cancelled": "已取消压缩",
+    "summary": "摘要"
   },
   "gitEvent": {
     "committed": "已提交 <id/> <subject/>",

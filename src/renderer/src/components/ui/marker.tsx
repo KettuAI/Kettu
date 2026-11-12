@@ -11,7 +11,8 @@ const markerVariants = cva(
       variant: {
         default: '',
         separator:
-          'before:mr-1 before:h-px before:min-w-0 before:flex-1 before:bg-border after:ml-1 after:h-px after:min-w-0 after:flex-1 after:bg-border',
+          // The rules fade out towards the edges, so the line reads as a pause, not a cut.
+          'before:mr-1 before:h-px before:min-w-0 before:flex-1 before:bg-linear-to-r before:from-transparent before:to-border before:to-60% after:ml-1 after:h-px after:min-w-0 after:flex-1 after:bg-linear-to-l after:from-transparent after:to-border after:to-60%',
         border: 'border-b border-border pb-2',
       },
     },
