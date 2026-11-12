@@ -363,7 +363,7 @@ function DraftComposer({
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter') return
-    const sends = sendKey === 'enter' ? !event.shiftKey && !isMod(event) : isMod(event)
+    const sends = sendKey === 'enter' ? !event.shiftKey : isMod(event)
     if (!sends) return
     event.preventDefault()
     void send()
