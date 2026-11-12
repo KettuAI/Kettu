@@ -22,6 +22,7 @@ import { useSettingsStore } from '@renderer/stores/settings'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { linuxLine } from '../../settings/computer-section'
 import { useEntry, useEntryAnimation } from '../use-thread'
+import { revealWaiting } from './helpers'
 
 /** A switch as the pictures draw it, on or off. */
 function MiniSwitch({ on }: { on: boolean }) {
@@ -169,7 +170,7 @@ export const ComputerSetupEntry = memo(function ComputerSetupEntry({
   const note = usePlatformNote(here && waiting && step === 'enable')
 
   useEffect(() => {
-    if (waiting) card.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    if (waiting) revealWaiting(card.current)
   }, [waiting])
 
   if (!entry) return null

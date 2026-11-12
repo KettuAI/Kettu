@@ -8,11 +8,24 @@ import { css as generalCss } from '@renderer/components/affect/settings-general'
 import { css as securityCss } from '@renderer/components/affect/settings-security'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { HostScopeContext } from '@renderer/stores/host-scope'
-import type { MarketplaceTab } from '@renderer/stores/view'
+import { returnedTo, type MarketplaceTab } from '@renderer/stores/view'
 import { useWindowHostAway, useWindowScope } from '@renderer/stores/window-host'
 import { Directory } from './directory'
 import { ListingPage } from './listing'
 import './marketplace.css'
+
+/** How many places of the directory keep their scroll; the most recently scrolled win. */
+const REMEMBERED = 50
+
+// The directory's scroll per host, tab and search, for Back to return to.
+const directoryScroll = new Map<string, number>()
+
+function rememberScroll(key: string, top: number): void {
+  directoryScroll.delete(key)
+  directoryScroll.set(key, top)
+  if (directoryScroll.size > REMEMBERED)
+    directoryScroll.delete(directoryScroll.keys().next().value!)
+}
 
 export default function MarketplacePage({
   item,
@@ -39,15 +52,36 @@ export default function MarketplacePage({
     void store.loadConnections()
   }, [useMarketplaceStore, away])
 
-  // A listing and the directory share the page's scroll, which starts at the top for each.
+  const directoryKey = (): string =>
+    `${scope.hostId ?? ''}|${tab}|${useMarketplaceStore.getState().query}`
+
+  // A listing and the directory share the page's scroll, which starts at the top for each. The
+  // directory reached by Back or Forward returns to where it was, without its entrance.
   useLayoutEffect(() => {
-    scroller.current?.scrollTo({ top: 0 })
+    const view = scroller.current
+    if (!view) return
+    const back = !item && returnedTo({ kind: 'marketplace' })
+    view.scrollTo({ top: back ? (directoryScroll.get(directoryKey()) ?? 0) : 0 })
+    if (!back) return
+    for (const animation of view.getAnimations({ subtree: true })) {
+      if (animation instanceof CSSAnimation && animation.animationName === 'ui-as-rise') {
+        animation.finish()
+      }
+    }
+    // The tab and search are read on arrival; changing them later moves no scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item, scope])
 
   return (
     <HostScopeContext.Provider value={scope}>
       <AgentMarkHost.Provider value={scope.hostId}>
-        <div ref={scroller} className="k-mkt-scroll">
+        <div
+          ref={scroller}
+          className="k-mkt-scroll"
+          onScroll={(event) => {
+            if (!item) rememberScroll(directoryKey(), event.currentTarget.scrollTop)
+          }}
+        >
           <style href="ui-screen-integrations" precedence="default">
             {integrationsCss}
           </style>

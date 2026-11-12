@@ -34,17 +34,54 @@ function MessageScroller({
   )
 }
 
+/**
+ * MessageScroller takes only a wheel, a touch or a scroll key as the reader taking over, so while
+ * it follows streaming output it pulls a dragged scrollbar back to the end, and moves the text from
+ * under a selection being made. A press on the viewport itself, its scrollbar included, takes over
+ * too, and so does a press in it that selects text. The scroller has no call for this, so it is
+ * told with the wheel event it reads as the reader taking over.
+ */
+function takeOver(viewport: HTMLElement): void {
+  viewport.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
+}
+
+function takeOverOnSelection(viewport: HTMLElement): void {
+  const selected = (): void => {
+    const selection = document.getSelection()
+    if (!selection || selection.isCollapsed || !viewport.contains(selection.anchorNode)) return
+    stop()
+    takeOver(viewport)
+  }
+  const stop = (): void => {
+    document.removeEventListener('selectionchange', selected)
+    window.removeEventListener('pointerup', stop, true)
+    window.removeEventListener('pointercancel', stop, true)
+  }
+  document.addEventListener('selectionchange', selected)
+  window.addEventListener('pointerup', stop, true)
+  window.addEventListener('pointercancel', stop, true)
+}
+
 function MessageScrollerViewport({
   className,
+  onPointerDown,
   ...props
 }: React.ComponentProps<typeof MessageScrollerPrimitive.Viewport>) {
   return (
     <MessageScrollerPrimitive.Viewport
       data-slot="message-scroller-viewport"
       className={cn(
-        'size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent data-pending-scroll:invisible',
+        'size-full min-h-0 min-w-0 scroll-fade-b scrollbar-thin scrollbar-gutter-stable overflow-y-auto overscroll-contain contain-content data-pending-scroll:invisible',
         className,
       )}
+      onPointerDown={(event) => {
+        if (event.button === 0) {
+          const viewport = event.currentTarget
+          if (event.target === viewport) takeOver(viewport)
+          else takeOverOnSelection(viewport)
+        }
+        onPointerDown?.(event)
+      }}
       {...props}
     />
   )
@@ -57,8 +94,8 @@ function MessageScrollerContent({
   return (
     <MessageScrollerPrimitive.Content
       data-slot="message-scroller-content"
-      // The viewport hides its scrollbar while it autoscrolls. scrollbar-color is inherited, so
-      // without its own value here every toggle would recalculate the style of the whole thread.
+      // scrollbar-color is inherited, so without its own value here a change of the viewport's
+      // would recalculate the style of the whole thread.
       className={cn(
         'flex h-max min-h-full flex-col gap-6 [scrollbar-color:var(--border-strong)_transparent]',
         className,

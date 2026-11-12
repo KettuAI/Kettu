@@ -790,10 +790,6 @@
 :root[data-platform='win32'] ::-webkit-scrollbar-thumb:hover {
   border-width: calc(var(--scrollbar-inset) - 1px);
 }
-/* MessageScroller hides its scrollbar while it follows output. */
-:root[data-platform='win32'] [data-autoscrolling]::-webkit-scrollbar-thumb {
-  background: transparent;
-}
 
 /* One sweep of light across a surface, as when the highest reasoning level is chosen. */
 @keyframes sheen {

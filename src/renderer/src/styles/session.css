@@ -78,8 +78,8 @@
 
 /* An agent's message on AI Answer: the thread's type, its label (nine dots, "Writing") under the
    text only while it writes, and no row of its own under it, since Stop sits in the composer and
-   the reply's actions follow. The label hangs on the card's bottom edge, outside the body that
-   clips while it glides to a new height, so a new line pushes it down instead of hiding it. */
+   the reply's actions follow. The label hangs on the card's bottom edge, so a new line pushes it
+   down. */
 .ks-answer .ui-ansc {
   max-width: none;
   font-family: inherit;
@@ -87,6 +87,12 @@
   --ui-ansc-ink: var(--thread-ink);
   --ui-ansc-strong: var(--thread-ink);
   --ui-ansc-text: var(--thread-muted);
+}
+/* A streaming reply grows at its own height: the height AI Answer writes and glides to would clip
+   its last line and lay out the thread on every frame. */
+.ks-answer .ui-ansc__body {
+  height: auto !important;
+  transition: none;
 }
 .ks-answer .ui-ansc__card {
   position: relative;
