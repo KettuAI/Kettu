@@ -1,8 +1,11 @@
+import type { MarkBodyProps } from './index'
+
 // Dirac mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
+// Brand color: https://dirac.run/static/images/dirac.svg.
 export const viewBox = '0 0 16 16'
 
-/** The mark in `currentColor`, as the registry draws it. */
-export function Body() {
+export function Body({ mono }: MarkBodyProps) {
+  const accent = mono ? 'currentColor' : 'var(--brand-dirac)'
   return (
     <>
       <g fill="currentColor">
@@ -27,16 +30,8 @@ export function Body() {
           strokeWidth="1"
           strokeLinecap="round"
         />
-        <line
-          x1="8"
-          y1="14"
-          x2="8"
-          y2="12"
-          stroke="currentColor"
-          strokeWidth="1"
-          strokeLinecap="round"
-        />
-        <circle cx="8" cy="11.5" r="0.7" fill="currentColor" />
+        <line x1="8" y1="14" x2="8" y2="12" stroke={accent} strokeWidth="1" strokeLinecap="round" />
+        <circle cx="8" cy="11.5" r="0.7" fill={accent} />
       </g>
     </>
   )

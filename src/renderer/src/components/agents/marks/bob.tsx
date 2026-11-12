@@ -1,4 +1,8 @@
+import { useId } from 'react'
+import type { MarkBodyProps } from './index'
+
 // Bob mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
+// Brand colors: https://bob.ibm.com/icon.svg?v=1.
 const BOB_1 =
   'M14.859 7.625C14.7861 6.19257 14.2645 4.81937 13.3679 3.69983C12.4714 2.58029 11.2454 1.77115 9.8635 1.387C9.83646 1.17687 9.73397 0.983728 9.57511 0.843545C9.41625 0.703362 9.21186 0.625692 9 0.625H7C6.5565 0.625 6.1925 0.9585 6.1365 1.387C4.75462 1.77115 3.52861 2.58029 2.63206 3.69983C1.73552 4.81937 1.21387 6.19257 1.141 7.625H0V8.375H16V7.625H14.859ZM6.125 2.1685V6.5H6.875V1.5C6.875 1.46685 6.88817 1.43505 6.91161 1.41161C6.93505 1.38817 6.96685 1.375 7 1.375H9C9.03315 1.375 9.06495 1.38817 9.08839 1.41161C9.11183 1.43505 9.125 1.46685 9.125 1.5V6.5H9.875V2.1685C11.0501 2.54253 12.084 3.26442 12.84 4.23871C13.596 5.213 14.0385 6.39381 14.109 7.625H1.891C1.96146 6.39381 2.40395 5.213 3.15996 4.23871C3.91597 3.26442 4.94989 2.54253 6.125 2.1685Z'
 
@@ -16,15 +20,23 @@ const BOB_5 =
 
 export const viewBox = '0 0 16 16'
 
-/** The mark in `currentColor`, as the ACP Registry ships it. */
-export function Body() {
+export function Body({ mono }: MarkBodyProps) {
+  const id = useId()
   return (
-    <>
-      <path fill="currentColor" d={BOB_1} />
-      <path fill="currentColor" d={BOB_2} />
-      <path fill="currentColor" d={BOB_3} />
-      <path fill="currentColor" d={BOB_4} />
-      <path fill="currentColor" d={BOB_5} />
-    </>
+    <g fill={mono ? 'currentColor' : 'var(--brand-bob-body)'}>
+      {!mono && (
+        <defs>
+          <linearGradient id={id} x1="0" y1="16" x2="16" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset=".1" stopColor="var(--brand-bob-violet)" />
+            <stop offset=".9" stopColor="var(--brand-bob-blue)" />
+          </linearGradient>
+        </defs>
+      )}
+      <path fill={mono ? 'currentColor' : `url(#${id})`} d={BOB_1} />
+      <path d={BOB_2} />
+      <path d={BOB_3} />
+      <path d={BOB_4} />
+      <path d={BOB_5} />
+    </g>
   )
 }

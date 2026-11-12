@@ -1,10 +1,37 @@
-// Harn mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
-const HARN =
-  'M11.2 1.4 14.6 4.8a1 1 0 0 1 0 1.4l-1.5 1.5-4.8-4.8 1.5-1.5a1 1 0 0 1 1.4 0ZM7.6 3.6l4.8 4.8-6.9 6.9a1 1 0 0 1-.5.27l-3.4.73a.6.6 0 0 1-.71-.71l.73-3.4a1 1 0 0 1 .27-.5l5.6-5.6Zm-4.5 8.1-.4 1.9 1.9-.4-1.5-1.5Z'
+import { useId } from 'react'
+import type { MarkBodyProps } from './index'
 
-export const viewBox = '0 0 16 16'
+// Harn mark: https://github.com/burin-labs/harn (Apache-2.0), Copyright 2026 Burin Labs, LLC.
+export const viewBox = '0 0 32 32'
 
-/** The mark in `currentColor`, as the ACP Registry ships it. */
-export function Body() {
-  return <path fill="currentColor" d={HARN} />
+export function Body({ mono }: MarkBodyProps) {
+  const id = useId()
+  return (
+    <>
+      {!mono && (
+        <defs>
+          <linearGradient id={id} gradientUnits="userSpaceOnUse" x1="8" y1="6" x2="24" y2="26">
+            <stop stopColor="var(--brand-harn-1)" />
+            <stop offset="17%" stopColor="var(--brand-harn-2)" />
+            <stop offset="33%" stopColor="var(--brand-harn-3)" />
+            <stop offset="50%" stopColor="var(--brand-harn-4)" />
+            <stop offset="67%" stopColor="var(--brand-harn-5)" />
+            <stop offset="83%" stopColor="var(--brand-harn-6)" />
+            <stop offset="100%" stopColor="var(--brand-harn-7)" />
+          </linearGradient>
+        </defs>
+      )}
+      <g
+        fill="none"
+        stroke={mono ? 'currentColor' : `url(#${id})`}
+        strokeWidth="2.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M9.5 6V25.5" />
+        <path d="M9.5 18Q9.5 12.4 16 12.4Q22.5 12.4 22.5 18V25.5" />
+      </g>
+      <circle cx="22.5" cy="25.5" r="2" fill={mono ? 'currentColor' : 'var(--brand-harn-7)'} />
+    </>
+  )
 }

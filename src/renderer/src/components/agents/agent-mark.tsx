@@ -9,7 +9,7 @@ import { AGENT_MARKS } from './marks'
 interface AgentMarkProps {
   agent: AgentId
   size?: number
-  /** One color, `currentColor`: an agent that is not installed. */
+  /** Draw the mark in `currentColor` instead of its brand colors. */
   mono?: boolean
   className?: string
   /** The host the agent is on, where the mark shows outside that host's scope, as a session's. */

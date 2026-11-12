@@ -1,9 +1,25 @@
-// Kimchi mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
-const KIMCHI = 'M3 1h2.5v5.5L9 1h3L8.5 6.5 12.5 13H9.5L6 8v5H3V1z'
+import type { MarkBodyProps } from './index'
 
-export const viewBox = '0 0 16 16'
+// Kimchi mark: https://github.com/getkimchi/kimchi (Apache-2.0).
+// Copyright 2024-2026 CAST AI Group, Inc.
+const PEPPER =
+  'M54.2327 19.7626C55.3562 19.1544 56.769 18.7914 58.2229 19.1864C58.4969 19.25 58.7393 19.3252 58.9788 19.413L60.1536 19.8437L59.8303 21.0526C59.7008 21.536 59.5857 21.9642 59.4563 22.4472L59.1438 23.6132L57.9475 23.4501C57.8596 23.4381 57.7808 23.432 57.6887 23.4315C57.2444 23.441 56.8536 23.6615 56.467 24.3056C56.1676 24.8046 55.9342 25.4712 55.7659 26.2313C59.3229 28.549 61.6788 32.5627 61.679 37.1298C61.679 39.2417 61.174 41.2394 60.2776 43.0058C56.6606 51.0239 42.9277 67.2532 18.593 62.5995C17.3367 62.3591 16.634 61.3379 16.5627 60.3144C16.4931 59.3093 17.0195 58.2239 18.1438 57.744C24.6182 54.981 28.1985 52.062 30.5833 48.5155C33.0054 44.9134 34.2776 40.5586 35.9163 34.6435C37.0773 28.6531 42.3475 24.1292 48.678 24.1288L49.0325 24.1337C49.4733 24.1456 49.9091 24.1803 50.3381 24.2353C50.6714 23.5542 51.0603 22.8863 51.5188 22.2362L51.6399 22.0595C52.2641 21.1789 53.1747 20.3354 54.2327 19.7626Z'
 
-/** The mark in `currentColor`, as the ACP Registry ships it. */
-export function Body() {
-  return <path fill="currentColor" d={KIMCHI} />
+export const viewBox = '0 0 82.402 82.402'
+
+export function Body({ mono }: MarkBodyProps) {
+  return (
+    <>
+      {!mono && (
+        <ellipse
+          cx="41.2008"
+          cy="41.2009"
+          rx="41.2008"
+          ry="41.2009"
+          fill="var(--brand-kimchi-tile)"
+        />
+      )}
+      <path d={PEPPER} fill={mono ? 'currentColor' : 'var(--brand-kimchi)'} />
+    </>
+  )
 }

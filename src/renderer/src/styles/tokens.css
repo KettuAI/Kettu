@@ -260,6 +260,40 @@
   --brand-antigravity-amber: #fbbc04;
   --brand-antigravity-violet: #749bff;
   --brand-antigravity-pale-yellow: #ffee48;
+  --brand-bob-violet: #a16efb;
+  --brand-bob-blue: #0e61fa;
+  --brand-bob-body: #001d6c;
+  --brand-codebuddy-green: #32e6b9;
+  --brand-codebuddy-violet: #6c4dff;
+  --brand-cortex: #29b5e8;
+  --brand-dimcode: #70c70e;
+  --brand-dirac: #f59e0b;
+  --brand-fast-agent: #ffb52e;
+  --brand-fast-agent-tile: #082c34;
+  --brand-gemini-1: #217bfe;
+  --brand-gemini-2: #078efb;
+  --brand-gemini-3: #ac87eb;
+  --brand-gemini-4: #ee4d5d;
+  --brand-gemini-tile: #1e1e2e;
+  --brand-harn-1: #14b8a6;
+  --brand-harn-2: #40bc8d;
+  --brand-harn-3: #6bbd6f;
+  --brand-harn-4: #92ba4d;
+  --brand-harn-5: #b8b325;
+  --brand-harn-6: #d9a900;
+  --brand-harn-7: #f59e0b;
+  --brand-junie: #48e054;
+  --brand-kilo-ink: #000000;
+  --brand-kilo-tile: #ffdd00;
+  --brand-kimchi: #18181a;
+  --brand-kimchi-tile: #ff521d;
+  --brand-mistral-1: #ffaf01;
+  --brand-mistral-2: #ff8204;
+  --brand-mistral-3: #fa500f;
+  --brand-mistral-4: #e51300;
+  --brand-mistral-5: #c4001d;
+  --brand-poolside: #4137ff;
+  --brand-qwen: #082dff;
   /* The marks of the services the Marketplace features, in Simple Icons' colors in both variants:
      a tile in the brand's color under a light mark, or the mark alone in its color. */
   --brand-tile-ink: #ffffff;
@@ -732,6 +766,9 @@
     --brand-opencode-frame: #ffffff;
     --brand-cloudflare: #f48120;
     --brand-opencode-fill: #5a5858;
+    --brand-bob-violet: #bc93fd;
+    --brand-bob-blue: #4587fd;
+    --brand-bob-body: #f4f4f4;
 
     --kind-web: #6cc0d2;
     --kind-web-tint: #1e3236;
@@ -1103,6 +1140,9 @@
   --brand-opencode-frame: #ffffff;
   --brand-cloudflare: #f48120;
   --brand-opencode-fill: #5a5858;
+  --brand-bob-violet: #bc93fd;
+  --brand-bob-blue: #4587fd;
+  --brand-bob-body: #f4f4f4;
 
   --kind-web: #6cc0d2;
   --kind-web-tint: #1e3236;
