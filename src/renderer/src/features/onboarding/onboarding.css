@@ -25,6 +25,31 @@
 .kob-step:not(:last-child) {
   pointer-events: none;
 }
+/* Leaving for the app: the content steps aside and the stage grows toward the window it drew. */
+.kob[data-leaving] .kob-left {
+  opacity: 0;
+  transform: translateX(-24px);
+  transition:
+    opacity 200ms ease,
+    transform 260ms var(--ease-out-quint);
+}
+.kob[data-leaving] .kob-stage {
+  opacity: 0;
+  filter: blur(6px);
+  transform: scale(1.14);
+  transition:
+    opacity 320ms ease 60ms,
+    filter 380ms ease,
+    transform 420ms var(--ease-out-quint);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kob[data-leaving] :is(.kob-left, .kob-stage) {
+    transition: none;
+  }
+}
+[data-reduce-motion='always'] .kob[data-leaving] :is(.kob-left, .kob-stage) {
+  transition: none;
+}
 .kob[data-band] .kob-stage {
   margin-top: var(--title-bar);
 }

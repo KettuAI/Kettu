@@ -49,7 +49,7 @@ export function App() {
   // A browser shows another computer's host, whose own app ran its onboarding.
   const onboarding = useSettingsStore((s) => !isWeb && s.loaded && !s.settings.onboarding.done)
   const cloud = useSettingsStore((s) => s.settings.cloud.enabled)
-  // The window rises in under the onboarding that lifts away; a launch past it shows it at rest.
+  // The window grows in under the onboarding as it leaves; a launch past it shows it at rest.
   const [arriving, setArriving] = useState(false)
   const [wasOnboarding, setWasOnboarding] = useState(onboarding)
   if (wasOnboarding !== onboarding) {
