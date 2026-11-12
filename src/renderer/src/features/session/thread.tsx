@@ -104,7 +104,6 @@ export interface ThreadJumps {
 
 // Each estimate as a class of its own, so Tailwind generates it; it replaces the item's default.
 const INTRINSIC_SIZE: Record<Estimate, string> = {
-  16: '[contain-intrinsic-size:auto_16px]',
   18: '[contain-intrinsic-size:auto_18px]',
   20: '[contain-intrinsic-size:auto_20px]',
   24: '[contain-intrinsic-size:auto_24px]',

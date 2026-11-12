@@ -11,7 +11,6 @@ import {
   File01Icon,
   FileEditIcon,
   Globe02Icon,
-  Layers01Icon,
   RepeatIcon,
   Search01Icon,
   Wrench01Icon,
@@ -47,13 +46,6 @@ export const toolCallStatus = (status: ToolEntry['status']): ToolCallStatus =>
         ? 'cancelled'
         : 'running'
 
-const COMPACTION_STATUS = {
-  in_progress: 'running',
-  completed: 'success',
-  failed: 'error',
-  cancelled: 'cancelled',
-} as const
-
 /** A step's card facts: its glyph, status and, when this window saw it, its time. */
 export interface StepFacts {
   glyph: IconSvgElement
@@ -83,9 +75,6 @@ export function stepFacts(sessionId: string, entry: ThreadEntry): StepFacts | nu
       duration: entry.durationMs,
       time: entry.durationMs !== undefined,
     }
-  }
-  if (entry.kind === 'compaction') {
-    return { glyph: Layers01Icon, status: COMPACTION_STATUS[entry.status], time: false }
   }
   return null
 }

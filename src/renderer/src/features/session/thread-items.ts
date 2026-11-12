@@ -58,11 +58,12 @@ const isWork = (char: string | undefined): boolean =>
   char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'r' || char === 'p'
 
 /**
- * Tool calls, compactions and thoughts fold into a run; a request for permission ends it, since
- * it waits for the user below the work before it, and keeps standing apart once answered.
+ * Tool calls and thoughts fold into a run. A request for permission ends it, since it waits for
+ * the user below the work before it, and keeps standing apart once answered; so does a
+ * compaction, which divides the thread.
  */
 const foldsIntoRun = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't' || char === 'p'
+  char === 'h' || char === 'g' || char === 't'
 
 /** A step on its own, or a run of completed lookups ("Read a.ts and 2 more"). */
 export type Step =
@@ -112,29 +113,20 @@ export function buildItems(order: string[], signature: string, live = false): It
       let end = i
       while (foldsIntoRun(signature[end + 1])) end++
       const ids = order.slice(i, end + 1)
-      // A lone tool call or thought folds too, so every piece of work reads as one quiet line; a
-      // compaction shows as it is.
-      const lone =
-        end === i && (signature[i] === 'g' || signature[i] === 't' || signature[i] === 'h')
-      if (end > i || lone) {
-        items.push({
-          key: `run:${ids[0]}`,
-          type: 'run',
-          ids,
-          signature: signature.slice(i, end + 1),
-        })
-      } else {
-        for (const step of stepItems(ids, signature.slice(i, end + 1))) {
-          items.push(
-            step.type === 'group' ? step : { ...step, turnStart: false, char: signature[i]! },
-          )
-        }
-      }
+      // A lone tool call or thought folds too, so every piece of work reads as one quiet line.
+      items.push({
+        key: `run:${ids[0]}`,
+        type: 'run',
+        ids,
+        signature: signature.slice(i, end + 1),
+      })
       i = end
       const closing = after.get(i)
       if (closing) items.push(closing)
       continue
     }
+    // Compactions in a row read as one divider: the latest stands for them all.
+    if (signature[i] === 'p' && signature[i + 1] === 'p') continue
     const id = order[i]!
     items.push({
       key: id,
@@ -182,7 +174,7 @@ function sentItem(item: Item | undefined): boolean {
 }
 
 /** An item's height in px before it renders: its kind's shortest rendered height. */
-export type Estimate = 16 | 18 | 20 | 24 | 28 | 69
+export type Estimate = 18 | 20 | 24 | 28 | 69
 
 /**
  * The height an item is laid out at until it renders: the shortest its kind renders at, at any
@@ -204,9 +196,9 @@ export function estimateOf(item: Item): Estimate {
     case 'w':
     case 'r':
       return 24
-    // A compaction on its own.
+    // A compaction's divider.
     case 'p':
-      return 16
+      return 28
     // A notice, a marker, a git event or a card.
     default:
       return 20

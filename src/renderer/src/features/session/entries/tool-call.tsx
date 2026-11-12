@@ -4,20 +4,12 @@ import type { ThreadEntry } from '@shared/thread'
 import { ToolCallCard, type ToolCallLabels } from '@renderer/components/affect/tool-call-card'
 import { cn } from '@renderer/lib/utils'
 import { isFresh } from '@renderer/stores/threads'
-import { Markdown } from '../markdown'
 import { thoughtTitle, toolLabel } from './helpers'
 import { entryPictures } from './row-pictures'
 import { RowThumbs } from './row-thumbs'
 import { ThoughtBody, ToolBody, ToolSummary } from './tool-call-parts'
 import { toolHasBody, type StepFacts } from './tool-call-model'
 import { useOpenedOnce } from './use-opened'
-
-const COMPACTION_KEY = {
-  in_progress: 'inProgress',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'cancelled',
-} as const
 
 /**
  * Stands in for a step's card while its group is folded. The group's line reads the icon, status
@@ -29,8 +21,7 @@ export function StepStub(props: Omit<StepFacts, 'glyph'> & { icon: ReactNode }):
 }
 
 /**
- * A step of the thread's work on affectUI's Tool Call Card: a tool call, a thought or a
- * compaction. Its facts come as props of their own (tool-call-model.ts), which a group reads.
+ * A step of the thread's work on affectUI's Tool Call Card: a tool call or a thought. Its facts come as props of their own (tool-call-model.ts), which a group reads.
  * `note` follows a tool call's target; a call a routine allowed says so by default. Its content
  * renders once the card first opens; until then the body is null, since false would leave the card
  * without one. A step on its own leads with its chevron, as the runs around it do; on a run's
@@ -114,25 +105,6 @@ export function StepCard({
         {entry.markdown.trim() ? (
           opened ? (
             <ThoughtBody sessionId={sessionId} entryId={entry.id} />
-          ) : null
-        ) : (
-          false
-        )}
-      </ToolCallCard>
-    )
-  }
-  if (entry.kind === 'compaction') {
-    return (
-      <ToolCallCard {...facts} name={t(`compaction.${COMPACTION_KEY[entry.status]}`)}>
-        {entry.summary ? (
-          opened ? (
-            <div data-selectable="" className="text-muted-foreground">
-              <Markdown
-                markdown={entry.summary}
-                streaming={entry.status === 'in_progress'}
-                className="markdown-muted"
-              />
-            </div>
           ) : null
         ) : (
           false

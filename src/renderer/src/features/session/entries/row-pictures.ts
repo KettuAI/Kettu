@@ -37,7 +37,7 @@ export function entryPictures(entry: ToolEntry): RowPicture[] {
   return [...carried, ...named]
 }
 
-/** The pictures of a row's steps in thread order; a thought or a compaction has none. */
+/** The pictures of a row's steps in thread order; a thought has none. */
 export function stepPictures(entries: readonly (ThreadEntry | undefined)[]): RowPicture[] {
   return entries.flatMap((entry) => (entry?.kind === 'tool' ? entryPictures(entry) : []))
 }
