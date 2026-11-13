@@ -1062,6 +1062,9 @@ export function useAboutSection(): SectionDef {
   }
 }
 
+/** More archived rows than a tall window shows, drawn in full as the page opens. */
+const ARCHIVED_EAGER = 30
+
 export function useArchivedSection(): SectionDef {
   const { t } = useTranslation(['settings', 'sidebar'])
   const { hostId } = useHostScope()
@@ -1079,7 +1082,7 @@ export function useArchivedSection(): SectionDef {
     title: t('sections.archived'),
     description: t('pages.archived'),
     icon: Archive01Icon,
-    rows: archived.map((summary) => ({
+    rows: archived.map((summary, i) => ({
       id: summary.id,
       name: sessionTitle(summary),
       description: where(summary),
@@ -1087,7 +1090,9 @@ export function useArchivedSection(): SectionDef {
       english: en('sections.archived'),
       group: list,
       layout: 'custom',
-      render: () => <ArchivedRow summary={summary} where={where(summary)} />,
+      render: () => (
+        <ArchivedRow summary={summary} where={where(summary)} eager={i < ARCHIVED_EAGER} />
+      ),
     })),
     footer: archived.length === 0 && (
       <div className="ui-as-empty">
