@@ -122,9 +122,10 @@ if (process.platform === 'linux') {
 
 // Set before anything reads the data folder and before the single-instance lock, which Electron
 // keys on it.
+const userDataSwitch = app.commandLine.getSwitchValue('user-data-dir')
 const devUserData = devUserDataPath({
   isPackaged: app.isPackaged,
-  switchValue: app.commandLine.getSwitchValue('user-data-dir'),
+  switchValue: userDataSwitch,
   appData: app.getPath('appData'),
   override: process.env['KETTU_USER_DATA'],
   cwd: process.cwd(),
@@ -133,7 +134,7 @@ if (devUserData) {
   app.setPath('userData', devUserData)
   log.info(`Development run: data in ${devUserData}`)
 }
-openAppLog(devUserData, isDebugRun())
+openAppLog(devUserData ?? (userDataSwitch.trim() ? app.getPath('userData') : null), isDebugRun())
 
 // Before the app is ready, and only once.
 protocol.registerSchemesAsPrivileged([artifactScheme, mediaScheme])
