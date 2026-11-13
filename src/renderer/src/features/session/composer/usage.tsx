@@ -31,7 +31,7 @@ import { breakdownView, shownUsage } from '@renderer/features/session/composer/c
 import { PANEL } from '@renderer/features/session/entries/helpers'
 import { planReset, usageTone, type UsageTone } from '@renderer/features/sidebar/plan-usage'
 import { clockTime, countdown, fullTime, limitLabel, money, tokens } from '@renderer/lib/format'
-import { errorMessage } from '@renderer/lib/host'
+import { errorMessage, sessionHost } from '@renderer/lib/host'
 import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -301,7 +301,7 @@ export function ContextButton({
   const percent = Math.round(share * 100)
   const onOpenChange = (open: boolean) => {
     if (!open) return
-    refreshLimits(agentId).catch((error: unknown) =>
+    refreshLimits(agentId, sessionHost(sessionId)).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
     const own = closed ? read : context
