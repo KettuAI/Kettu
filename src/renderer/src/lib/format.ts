@@ -170,6 +170,19 @@ export function limitLabel(limit: Pick<PlanLimit, 'window' | 'label'>): string {
   return weekly ? i18n.t('planWindow.weeklyOf', { model: weekly[1] }) : limit.label
 }
 
+/**
+ * A window's name inside a sentence: "Fable weekly", since "Weekly · Fable limit reached" reads as
+ * two windows.
+ */
+export function limitPhrase(limit: Pick<PlanLimit, 'window' | 'label'>): string {
+  const key = `planWindowInText.${limit.window}`
+  if (i18n.exists(key)) return i18n.t(key as 'planWindowInText.seven_day_opus')
+  const weekly = i18n.exists(`planWindow.${limit.window}`)
+    ? null
+    : /^Weekly · (.+)$/.exec(limit.label)
+  return weekly ? i18n.t('planWindowInText.weeklyOf', { model: weekly[1] }) : limitLabel(limit)
+}
+
 /** A count compactly, for figures, readouts and legends: "980", "1.2K", "41.7B". */
 export function count(n: number): string {
   return format().compact.format(n)

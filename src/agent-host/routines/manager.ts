@@ -1122,13 +1122,17 @@ function pauseView({ agentId, limit }: LimitPause): NonNullable<RoutineView['pau
   }
 }
 
-/** A plan-limit window's name: Kettu's for the windows it knows, else the agent's own. */
+/**
+ * A plan-limit window's name inside a sentence: Kettu's for the windows it knows, else the agent's
+ * own, with a per-model week as "Fable weekly" so it does not read as two windows.
+ */
 function windowName(limit: PlanLimit): string {
-  const key = `planWindow.${limit.window}`
-  if (hasMessage(key)) return (t as (key: string) => string)(key)
+  for (const key of [`planWindowInText.${limit.window}`, `planWindow.${limit.window}`]) {
+    if (hasMessage(key)) return (t as (key: string) => string)(key)
+  }
   // Claude Code names a weekly limit per model, "Weekly · Fable", in English.
   const weekly = /^Weekly · (.+)$/.exec(limit.label)
-  return weekly ? t('planWindow.weeklyOf', { model: weekly[1]! }) : limit.label
+  return weekly ? t('planWindowInText.weeklyOf', { model: weekly[1]! }) : limit.label
 }
 
 const DAY = 24 * 60 * 60_000
