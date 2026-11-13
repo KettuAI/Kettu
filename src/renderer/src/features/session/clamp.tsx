@@ -11,12 +11,25 @@ interface Measured {
 
 const measuredBy = new Map<Element, Measured>()
 let sharedObserver: ResizeObserver | null = null
+// Heights measured out of view, committed on the next frame.
+const later = new Map<Measured, number>()
+let laterFrame = 0
+
+function commitLater(): void {
+  laterFrame = 0
+  const heights = [...later]
+  later.clear()
+  for (const [m, height] of heights) m.setHeight(height)
+}
 
 /**
  * One observer for every Clamp. Its callback runs after layout and before paint: it reads every
- * changed height while the layout is clean, then commits them in one synchronous render, so a
- * mount forces no layout of its own and the first paint is already clamped. Measuring in each
- * Clamp's layout effect instead laid out the whole thread once per commit of a long history.
+ * changed height while the layout is clean, so a mount forces no layout of its own. A Clamp in
+ * view commits at once in one synchronous render, so its first paint is already clamped. One out
+ * of view, as a page of history is, commits on the next frame: a change of layout from here
+ * would leave the thread's own observers' notices undelivered until then, which the browser
+ * reports as a ResizeObserver loop. Measuring in each Clamp's layout effect instead laid out the
+ * whole thread once per commit of a long history.
  */
 function observer(): ResizeObserver {
   sharedObserver ??= new ResizeObserver((entries) => {
@@ -25,9 +38,16 @@ function observer(): ResizeObserver {
       const measured = measuredBy.get(entry.target)
       if (measured) changed.add(measured)
     }
-    const heights = [...changed].map((m) => [m, m.el.scrollHeight] as const)
+    const now: [Measured, number][] = []
+    for (const m of changed) {
+      const box = m.el.getBoundingClientRect()
+      if (box.bottom > 0 && box.top < window.innerHeight) now.push([m, m.el.scrollHeight])
+      else later.set(m, m.el.scrollHeight)
+    }
+    if (later.size > 0 && laterFrame === 0) laterFrame = requestAnimationFrame(commitLater)
+    if (now.length === 0) return
     flushSync(() => {
-      for (const [m, height] of heights) m.setHeight(height)
+      for (const [m, height] of now) m.setHeight(height)
     })
   })
   return sharedObserver
@@ -70,6 +90,7 @@ export function Clamp({
       observer().observe(target)
     }
     return () => {
+      later.delete(measured)
       for (const target of targets) {
         observer().unobserve(target)
         measuredBy.delete(target)

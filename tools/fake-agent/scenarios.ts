@@ -253,7 +253,7 @@ const toolStorm: Scenario = async (turn) => {
       rawInput: kind === 'execute' ? { command } : { path },
     })
     await turn.send({ sessionUpdate: 'tool_call_update', toolCallId, status: 'in_progress' })
-    await turn.sleep(2)
+    await turn.sleep(turn.options.paceMs)
     await turn.send({
       sessionUpdate: 'tool_call_update',
       toolCallId,
@@ -281,7 +281,7 @@ const toolStorm: Scenario = async (turn) => {
               },
             ],
     })
-    await turn.sleep(2)
+    await turn.sleep(turn.options.paceMs)
   }
   if (
     !(await stream(turn, `\nChecked ${turn.options.count} places. Nothing else needs to change.`))

@@ -43,7 +43,6 @@ import {
   replyKeys,
   signatureOf,
   withoutPlans,
-  type Estimate,
   type Item,
 } from './thread-items'
 
@@ -122,6 +121,20 @@ function useShownFrom(
   return { shownFrom, showFrom }
 }
 
+/** The index past the items from `from` that fill a window by their estimates, at most `to`. */
+function windowEnd(
+  items: readonly Item[],
+  from: number,
+  to: number,
+  byId: Parameters<typeof estimateOf>[1],
+): number {
+  let end = from
+  for (let height = 0; end < to && height < window.innerHeight; end++) {
+    height += estimateOf(items[end]!, byId)
+  }
+  return end
+}
+
 /** What a jump in the outline needs of the thread. */
 export interface ThreadJumps {
   /** Resolves once the item `key` is rendered. */
@@ -131,15 +144,6 @@ export interface ThreadJumps {
    * settles: either would prepend items and cut the scroll short.
    */
   hold(on: boolean): void
-}
-
-// Each estimate as a class of its own, so Tailwind generates it; it replaces the item's default.
-const INTRINSIC_SIZE: Record<Estimate, string> = {
-  18: '[contain-intrinsic-size:auto_18px]',
-  20: '[contain-intrinsic-size:auto_20px]',
-  24: '[contain-intrinsic-size:auto_24px]',
-  28: '[contain-intrinsic-size:auto_28px]',
-  69: '[contain-intrinsic-size:auto_69px]',
 }
 
 /**
@@ -341,18 +345,40 @@ export const Thread = memo(function Thread({
   )
   const revealing = useRef<{ key: string; resolve: () => void } | null>(null)
   const [, setRevealTick] = useState(0)
+  // A jump far back renders a window's worth from its target; the items it passes over, from
+  // `start` up to `end`, hold their estimated height and render a window's worth at a time in
+  // transitions, nearest the target first.
+  const [gap, setGap] = useState<{ start: string; end: string } | null>(null)
+  const revealFrom = useCallback(
+    (index: number) => {
+      const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
+      const start = windowEnd(items, index, shownFrom, byId)
+      setGap(start < shownFrom ? { start: items[start]!.key, end: items[shownFrom]!.key } : null)
+      showFrom(index)
+    },
+    [sessionId, items, shownFrom, showFrom],
+  )
   useEffect(() => {
     const waiting = revealing.current
     if (!waiting) return
     const index = items.findIndex((item) => item.key === waiting.key)
     if (index < 0) return
     if (shownFrom > index) {
-      showFrom(index)
+      revealFrom(index)
       return
     }
     revealing.current = null
     waiting.resolve()
   })
+  const gapStart = gap ? items.findIndex((item) => item.key === gap.start) : -1
+  const gapEnd = gap ? items.findIndex((item) => item.key === gap.end) : -1
+  const gapOpen = gapStart >= 0 && gapStart < gapEnd
+  useEffect(() => {
+    if (!gap || !gapOpen) return
+    const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
+    const next = windowEnd(items, gapStart, gapEnd, byId)
+    startTransition(() => setGap(next < gapEnd ? { start: items[next]!.key, end: gap.end } : null))
+  }, [sessionId, gap, gapOpen, gapStart, gapEnd, items])
   const jumps = useMemo<ThreadJumps>(
     () => ({
       reveal: (key) =>
@@ -436,6 +462,9 @@ export const Thread = memo(function Thread({
     [],
   )
 
+  // Read, not watched: an estimate matters only until its item first lays out.
+  const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
+
   return (
     // While it returns it follows no end, which the estimated heights of items not yet laid out
     // would make it seem to reach.
@@ -464,24 +493,36 @@ export const Thread = memo(function Thread({
             {shownFrom === 0 && hasOlder && <OlderFailed sessionId={sessionId} />}
             {items.slice(shownFrom).map((item, shownIndex) => {
               const index = shownFrom + shownIndex
+              const estimate = estimateOf(item, byId)
+              if (gapOpen && index >= gapStart && index < gapEnd) {
+                return (
+                  <MessageScrollerItem
+                    key={item.key}
+                    messageId={item.key}
+                    style={{ height: estimate, containIntrinsicSize: `auto ${estimate}px` }}
+                    className={cn(index > 0 && spacing(item, items[index - 1]!))}
+                  />
+                )
+              }
               return (
                 <MessageScrollerItem
                   key={item.key}
                   messageId={item.key}
                   onPointerEnter={() => hoverReply(replies[index] ?? null)}
+                  style={{ containIntrinsicSize: `auto ${estimate}px` }}
                   className={cn(
                     // content-visibility's paint containment clips at the item's edge, but fold
                     // lines and tool rows reach 6 px past the column and their focus ring 4 px more.
                     '[overflow-clip-margin:10px]',
-                    INTRINSIC_SIZE[estimateOf(item)],
                     index > 0 && spacing(item, items[index - 1]!),
-                    // 回复操作栏的提示浮在行外，避免历史消息的绘制隔离将其裁掉。
+                    // A reply's action tooltips float outside its row, which paint containment
+                    // would clip; they show only while it is pointed at or focused.
+                    item.type === 'reply' &&
+                      'hover:[content-visibility:visible] focus-within:[content-visibility:visible]',
                     // The growing tail would flip between skipped and rendered on every chunk,
                     // recalculating its whole subtree each time. With the status last, the entry
                     // before it grows the same way.
-                    (item.type === 'reply' ||
-                      index === items.length - 1 ||
-                      (statusLast && index === items.length - 2)) &&
+                    (index === items.length - 1 || (statusLast && index === items.length - 2)) &&
                       '[content-visibility:visible]',
                   )}
                 >

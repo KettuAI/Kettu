@@ -57,7 +57,10 @@ const defaultFormat = (n: number) => new Intl.NumberFormat("en-US", { maximumFra
 const PALETTE = ["var(--ui-cbc-c1)", "var(--ui-cbc-c2)", "var(--ui-cbc-c3)", "var(--ui-cbc-c4)", "var(--ui-cbc-c5)"];
 const EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 const ease = (t: number) => 1 - Math.pow(1 - t, 4);
-const reduced = () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+// The app's own Reduce motion setting marks the root, as well as the system's.
+const reduced = () =>
+  typeof window !== "undefined" &&
+  (document.documentElement.dataset.reduceMotion === "always" || window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 const keyOf = (item: BreakdownItem) => item.id ?? item.label;
 // NaN, Infinity and negatives count as nothing, so no share or width turns into NaN
 const num = (n: number) => (Number.isFinite(n) ? Math.max(0, n) : 0);

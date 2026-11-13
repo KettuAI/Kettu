@@ -1,7 +1,9 @@
-import { memo, useMemo } from 'react'
+import { memo, startTransition, useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import type { IconSvgElement } from '@hugeicons/react'
 import type { ThreadEntry, ToolContent } from '@shared/thread'
+import type { ToolCallLabels } from '@renderer/components/affect/tool-call-card'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ToolCallGroup } from '@renderer/components/affect/tool-call-card'
 import { cn } from '@renderer/lib/utils'
@@ -18,7 +20,13 @@ import {
 } from './helpers'
 import { RowThumbs } from './row-thumbs'
 import { StepCard, StepStub } from './tool-call'
-import { runPictures, stackedGlyphs, stepFacts, useToolCallLabels } from './tool-call-model'
+import {
+  runPictures,
+  stackedGlyphs,
+  stepFacts,
+  useToolCallLabels,
+  type StepFacts,
+} from './tool-call-model'
 import { cachedStats, useDiffStats } from './use-diff-stats'
 import { useOpenedOnce } from './use-opened'
 
@@ -35,6 +43,42 @@ interface RunGroupProps {
 
 // What an agent's own label for a run names, so the counts after it leave these out.
 const LABELLED = new Set(['read', 'search', 'fetch'])
+
+// A step's row is 30 px tall, so a window this tall shows at most its height over this many.
+const STEP_PX = 30
+
+/**
+ * A step of an opened run, which reads its own entry: a change to one step re-renders that step's
+ * card alone. Its facts come as props too, since the run's line reads them off its children.
+ */
+const OpenedStep = memo(function OpenedStep({
+  sessionId,
+  entryId,
+  glyph,
+  late,
+  ...rest
+}: Omit<StepFacts, 'glyph'> & {
+  sessionId: string
+  entryId: string
+  glyph: IconSvgElement
+  projectPath: string
+  labels: Partial<ToolCallLabels>
+  rail: boolean
+  /** Mounted after the run's first open, below the window, so it takes no entrance. */
+  late: boolean
+}) {
+  const entry = useThreadsStore((s) => s.replicas[sessionId]?.state?.byId[entryId])
+  if (!entry) return null
+  return (
+    <StepCard
+      {...rest}
+      icon={<Icon icon={glyph} size={14} />}
+      sessionId={sessionId}
+      entry={entry}
+      late={late}
+    />
+  )
+})
 
 /**
  * The work between messages on affectUI's Tool Call Group: one line that says what it did ("Read
@@ -70,28 +114,48 @@ export const RunGroup = memo(function RunGroup({
   useDiffStats(diffs)
   const pictures = useMemo(() => runPictures(entries), [entries])
   const [opened, onOpenChange, opening] = useOpenedOnce()
-  const card = (entry: ThreadEntry, folded: boolean) => {
+  // A first open mounts the steps a window can show, with their entrance; the rest follow in a
+  // transition, without one.
+  const [shownSteps, setShownSteps] = useState(Number.POSITIVE_INFINITY)
+  const [lateFrom, setLateFrom] = useState(Number.POSITIVE_INFINITY)
+  const open = useCallback(
+    (next: boolean) => {
+      if (next && !opened) {
+        const fit = Math.ceil(window.innerHeight / STEP_PX)
+        setShownSteps(fit)
+        setLateFrom(fit)
+      }
+      onOpenChange(next)
+    },
+    [opened, onOpenChange],
+  )
+  useEffect(() => {
+    if (shownSteps !== Number.POSITIVE_INFINITY) {
+      startTransition(() => setShownSteps(Number.POSITIVE_INFINITY))
+    }
+  }, [shownSteps])
+  const card = (entry: ThreadEntry, index: number, folded: boolean) => {
     const facts = stepFacts(sessionId, entry)
     if (!facts) return null
     const { glyph, ...rest } = facts
-    const icon = <Icon icon={glyph} size={14} />
-    if (folded) return <StepStub key={entry.id} {...rest} icon={icon} />
+    if (folded) return <StepStub key={entry.id} {...rest} icon={<Icon icon={glyph} size={14} />} />
     return (
-      <StepCard
+      <OpenedStep
         key={entry.id}
         {...rest}
-        icon={icon}
+        glyph={glyph}
         sessionId={sessionId}
-        entry={entry}
+        entryId={entry.id}
         projectPath={projectPath}
         labels={labels}
         rail={shown.length > 1}
+        late={index >= lateFrom}
       />
     )
   }
 
   if (shown.length === 1) {
-    return <div className={cn('min-w-0', animation)}>{card(shown[0]!, false)}</div>
+    return <div className={cn('min-w-0', animation)}>{card(shown[0]!, 0, false)}</div>
   }
 
   const steps: RunStep[] = []
@@ -156,9 +220,9 @@ export const RunGroup = memo(function RunGroup({
       trail={
         pictures.length > 0 ? <RowThumbs sessionId={sessionId} pictures={pictures} /> : undefined
       }
-      onOpenChange={onOpenChange}
+      onOpenChange={open}
     >
-      {shown.map((entry) => card(entry, !opened))}
+      {shown.map((entry, index) => card(entry, index, !opened || index >= shownSteps))}
     </ToolCallGroup>
   )
 }, sameRun)

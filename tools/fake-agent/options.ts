@@ -50,7 +50,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     description: '200 KB of markdown in small chunks',
     hint: '--rate <updates per second> --size <bytes, such as 200k>',
   },
-  'tool-storm': { description: '500 tool calls with updates for each', hint: '--count <n>' },
+  'tool-storm': {
+    description: '500 tool calls with updates for each',
+    hint: '--count <n> --pace <ms each call runs and waits after>',
+  },
   permission: {
     description: 'A command that needs approval, with all four option kinds',
     hint: '--withdraw <ms>',
@@ -148,6 +151,7 @@ export interface ScenarioOptions {
   rate: number // updates per second, for long-stream
   size: number // bytes, for long-stream
   count: number // tool calls, for tool-storm
+  paceMs: number // tool-storm: how long each call runs, and the wait before the next
   ignoreCancel: boolean
   withdrawMs: number | null // permission: withdraw the request after this long
   exitCode: number
@@ -255,6 +259,7 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     rate: parseNumber(flagValue(args, 'rate')) || parseNumber(env.FAKE_AGENT_RATE) || 200,
     size: parseSize(flagValue(args, 'size')) ?? parseSize(env.FAKE_AGENT_SIZE) ?? 200 * 1024,
     count: parseNumber(flagValue(args, 'count')) ?? parseNumber(env.FAKE_AGENT_COUNT) ?? 500,
+    paceMs: parseNumber(flagValue(args, 'pace')) ?? 2,
     ignoreCancel:
       flagValue(args, 'ignore-cancel') !== undefined || env.FAKE_AGENT_IGNORE_CANCEL === '1',
     withdrawMs: withdraw === undefined ? null : withdraw === '' ? 1500 : parseNumber(withdraw),

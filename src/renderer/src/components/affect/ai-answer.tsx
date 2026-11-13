@@ -707,7 +707,10 @@ const restIds = (tile: HTMLElement, total: number) => {
 /** A favicon that fails to load leaves its tile – the name stays */
 const hideBroken = (e: { currentTarget: HTMLElement }) => (e.currentTarget.hidden = true);
 
-const reducedMotion = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+// The app's own Reduce motion setting marks the root, as well as the system's.
+const reducedMotion = () =>
+  typeof window !== "undefined" &&
+  (document.documentElement.dataset.reduceMotion === "always" || !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 
 /* ---------- Styles ---------- */
 
