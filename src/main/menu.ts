@@ -4,7 +4,7 @@ import type { ZoomStep } from '@shared/settings'
 import { isDebugRun } from './debug-mode'
 import { sendCommand, sendEvent } from './events'
 import { t } from './i18n'
-import { currentWindow } from './window'
+import { currentWindow, isHiddenOnClose } from './window'
 
 export interface MenuDeps {
   checkForUpdates(): void
@@ -34,7 +34,8 @@ function quitFromMenu(event: Electron.KeyboardEvent): void {
 /** Sends a command to the current window only; without one there is nothing to act on. */
 function toCurrentWindow(command: AppCommand): void {
   const window = currentWindow()
-  if (window) sendEvent(window.webContents, 'app:command', command)
+  // A window closing hid acts on nothing, as one that was gone did not.
+  if (window && !isHiddenOnClose(window)) sendEvent(window.webContents, 'app:command', command)
 }
 
 /**

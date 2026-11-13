@@ -136,6 +136,10 @@ export type AppCommand =
   | { kind: 'close'; browser?: true }
   /** Report a problem, from the Help menu or the end of a recording, with its span then. */
   | { kind: 'report-problem'; span?: { from: number; to: number } }
+  /** macOS: closing hid the window, which keeps its page; none of its sessions counts as seen. */
+  | { kind: 'window-hidden' }
+  /** The window hidden on close shows again. */
+  | { kind: 'window-shown' }
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:

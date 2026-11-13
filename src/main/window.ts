@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, nativeTheme, screen, shell, type WebContents } from 'electron'
+import type { AppCommand } from '@shared/ipc'
 import type { Locale } from '@shared/locale'
 import { DEFAULT_SETTINGS, type SettingsFile, type ZoomLevel } from '@shared/settings'
 import type { Theme } from '@shared/themes'
@@ -231,6 +232,50 @@ export function currentWindow(): BrowserWindow | null {
   const focused = BrowserWindow.getFocusedWindow()
   if (focused && !focused.isDestroyed() && !panels.has(focused)) return focused
   return appWindows()[0] ?? null
+}
+
+// macOS: windows that closing hid, their pages kept as they were.
+const hiddenOnClose = new WeakSet<BrowserWindow>()
+
+/** Whether closing `window` hides it: on macOS, the last app window, so reopening it is instant. */
+export function hidesOnClose(window: BrowserWindow): boolean {
+  return (
+    process.platform === 'darwin' &&
+    !panels.has(window) &&
+    appWindows().every((other) => other === window || !other.isVisible())
+  )
+}
+
+/** Whether `window` is hidden because it was closed, which no menu command reaches. */
+export function isHiddenOnClose(window: BrowserWindow): boolean {
+  return hiddenOnClose.has(window)
+}
+
+/**
+ * Hides a window that is being closed, out of full screen first, since macOS would leave its
+ * space behind. Its page hears it, and hears again when the window shows.
+ */
+export function hideOnClose(window: BrowserWindow): void {
+  if (hiddenOnClose.has(window)) return
+  hiddenOnClose.add(window)
+  tell(window, { kind: 'window-hidden' })
+  window.once('show', () => {
+    hiddenOnClose.delete(window)
+    tell(window, { kind: 'window-shown' })
+  })
+  if (window.isFullScreen()) {
+    window.once('leave-full-screen', () => {
+      if (hiddenOnClose.has(window)) window.hide()
+    })
+    window.setFullScreen(false)
+  } else {
+    window.hide()
+  }
+}
+
+// events.ts's sendEvent, which imports this module.
+function tell(window: BrowserWindow, command: AppCommand): void {
+  if (!window.webContents.isDestroyed()) window.webContents.send('app:command', command)
 }
 
 /** Brings the main window forward, creating it if every window was closed. */
