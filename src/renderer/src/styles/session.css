@@ -331,14 +331,13 @@
   color: var(--ui-tcc-muted);
 }
 
-/* The state is the dot's: no check mark, and on the rail no spinner either. A failed step's
-   time is replaced by its badge. */
+/* The state is the dot's: no check mark, and no spinner either, on the rail or on its own. A failed
+   step's time is replaced by its badge. */
 .ks-thread .ui-tcc__status {
   gap: 8px;
   color: var(--ui-tcc-muted);
 }
-.ks-thread .ui-tcc__status > :is(.ui-tcc__ok, .ui-tcc__err, .ui-tcc__cancel),
-.ks-thread .ui-tcc-group__list > .ui-tcc .ui-tcc__spinner {
+.ks-thread .ui-tcc__status > :is(.ui-tcc__ok, .ui-tcc__err, .ui-tcc__cancel, .ui-tcc__spinner) {
   display: none;
 }
 .ks-thread .ui-tcc[data-status='error'] .ui-tcc__time {
@@ -386,11 +385,13 @@
 }
 
 /* A step on its own leads with its chevron, as the runs around it do: the chevron always shows,
-   its tile starts under a run's tiles and its time follows its words. */
+   even before the step has details to open, its tile starts under a run's tiles and its time
+   follows its words. */
 .ks-thread .ui-tcc__head[data-chevron='before'] {
   & .ui-tcc__chevron {
     margin-right: 2px;
     opacity: 1;
+    visibility: visible;
   }
   & :is(.ui-tcc__main, .ui-tcc__summary) {
     flex: 0 1 auto;
@@ -401,7 +402,7 @@
   }
 }
 .ks-thread
-  .ui-tcc:not([data-status='error'], [data-status='running'])
+  .ui-tcc:not([data-status='error'])
   > .ui-tcc__top
   > .ui-tcc__head[data-chevron='before']
   .ui-tcc__time {
