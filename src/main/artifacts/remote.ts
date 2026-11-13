@@ -1,10 +1,11 @@
-// Artifacts of the other hosts this computer connects to. Main asks the host for a version's
-// files over its session and keeps them in a folder of its own, so the protocol serves them as it
-// serves this computer's; a page's capability messages go to the host through a frame it opens
-// there, which names the artifact, and the host checks each as it does a paired device's.
+// Artifacts of the other hosts this computer connects to. Main asks the host which files a version
+// has, fetches each file the first time a page or thumbnail asks for it, and keeps them in a folder
+// of its own across runs, so the protocol serves them as it serves this computer's; a page's
+// capability messages go to the host through a frame it opens there, which names the artifact,
+// and the host checks each as it does a paired device's.
 
 import { createHash } from 'node:crypto'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   errorAnswer,
@@ -32,6 +33,13 @@ const log = createLogger('artifacts')
 
 /** The files of one version fetched at a time. */
 const PARALLEL = 6
+/** What the files kept from other hosts may take; the versions used longest ago go past it. */
+export const REMOTE_CACHE_BYTES = 256 * 1024 * 1024
+/** How long after a fetch the kept files are checked against their size. */
+const PRUNE_DELAY_MS = 10_000
+/** A version's folder is marked used at most this often. */
+const TOUCH_MS = 60_000
+const PART = '.part'
 const MAX_TITLE = 1_000
 const MAX_FORMAT = 1_000
 const FRAME_PATH = /^\/frame\/[A-Za-z0-9_-]{43}\/$/
@@ -43,6 +51,8 @@ export interface RemoteArtifactsDeps {
   call: HostCall
   /** The folder the fetched files lie in, which is main's alone. */
   dir: string
+  /** `REMOTE_CACHE_BYTES` unless a test sets less. */
+  maxBytes?: number
 }
 
 interface Read {
@@ -101,14 +111,29 @@ function bytesOf(value: unknown): Uint8Array | null {
   return null
 }
 
+function hash(text: string): string {
+  return createHash('sha256').update(text, 'utf8').digest('hex')
+}
+
+async function exists(file: string): Promise<boolean> {
+  return stat(file).then(
+    () => true,
+    () => false,
+  )
+}
+
 function isAnswer(value: unknown): value is RuntimeAnswer {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export class RemoteArtifacts {
   private readonly cache: ContentCache
-  /** Each fetched version's files, by host, artifact and version; a version never changes. */
-  private readonly fetched = new Map<string, Promise<ArtifactContentFile[]>>()
+  /** The files being fetched, by where they go; a version's files never change. */
+  private readonly fetching = new Map<string, Promise<void>>()
+  /** When each version's folder was last marked used. */
+  private readonly touched = new Map<string, number>()
+  private pruneTimer: ReturnType<typeof setTimeout> | null = null
+  private parts = 0
   /** The frame each artifact's messages go through, as its host named it. */
   private readonly frames = new Map<string, Promise<string>>()
   /** The open streams, by host and the name main gave each. */
@@ -122,14 +147,71 @@ export class RemoteArtifacts {
     })
   }
 
-  /** Removes what an earlier run fetched, since nothing says which of it its host still has. */
-  async clear(): Promise<void> {
-    await rm(this.deps.dir, { recursive: true, force: true })
+  /**
+   * Keeps what earlier runs fetched within the size, the versions used longest ago going first,
+   * and removes files a fetch left unfinished. A version's files never change, so what is kept
+   * stays true for it.
+   */
+  async prune(): Promise<void> {
+    const folders = await readdir(this.deps.dir).catch((): string[] => [])
+    const kept: { folder: string; bytes: number; usedAt: number }[] = []
+    for (const name of folders) {
+      const folder = path.join(this.deps.dir, name)
+      const info = await stat(folder).catch(() => null)
+      if (!info?.isDirectory()) {
+        await rm(folder, { force: true }).catch(() => {})
+        continue
+      }
+      let bytes = 0
+      for (const file of await readdir(folder).catch((): string[] => [])) {
+        const at = path.join(folder, file)
+        if (file.endsWith(PART)) {
+          const target = at.slice(0, at.lastIndexOf('.', at.length - PART.length - 1))
+          if (!this.fetching.has(target)) await rm(at, { force: true }).catch(() => {})
+          continue
+        }
+        bytes += (await stat(at).catch(() => null))?.size ?? 0
+      }
+      kept.push({ folder, bytes, usedAt: info.mtimeMs })
+    }
+    const max = this.deps.maxBytes ?? REMOTE_CACHE_BYTES
+    let total = 0
+    for (const version of kept.toSorted((a, b) => b.usedAt - a.usedAt)) {
+      total += version.bytes
+      if (total <= max) continue
+      if ([...this.fetching.keys()].some((file) => path.dirname(file) === version.folder)) continue
+      await rm(version.folder, { recursive: true, force: true })
+      this.touched.delete(version.folder)
+    }
   }
 
-  /** The files of a version on the host, the latest when `version` is null, fetched once. */
+  /** The files of a version on the host, the latest when `version` is null, as yet unfetched. */
   content(hostId: string, id: string, version: number | null): Promise<ArtifactContentResult> {
     return this.cache.get(artifactRef(hostId, id), version)
+  }
+
+  /**
+   * Fetches the files of a version that `paths` names, every one when null, unless a run fetched
+   * them before; a path the version does not list is left out.
+   */
+  async fetch(
+    hostId: string,
+    id: string,
+    version: number,
+    paths: readonly string[] | null,
+  ): Promise<void> {
+    const found = await this.content(hostId, id, version)
+    if (found.kind !== 'found') throw new Error(`Host ${hostId} has no version ${version} of ${id}`)
+    const files = paths === null ? found.files : found.files.filter((f) => paths.includes(f.path))
+    if (files.length === 0) return
+    await this.touch(path.dirname(files[0]!.file))
+    let next = 0
+    const worker = async (): Promise<void> => {
+      for (let i = next++; i < files.length; i = next++) {
+        await this.fetchFile(hostId, id, version, files[i]!)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(PARALLEL, files.length) }, worker))
   }
 
   /** A host's artifacts changed: its latest versions and titles are asked again. */
@@ -242,29 +324,22 @@ export class RemoteArtifacts {
         log.warn(`Host ${hostId} sent no version of ${id} that can be shown`)
         return { kind: 'failed' }
       }
-      const name = createHash('sha256')
-        .update(`${hostId}\0${id}\0${read.version}`, 'utf8')
-        .digest('hex')
-      let files = this.fetched.get(name)
-      if (!files) {
-        files = this.fetch(hostId, id, read, path.join(this.deps.dir, name))
-        this.fetched.set(name, files)
-        files.catch(() => {
-          if (this.fetched.get(name) === files) this.fetched.delete(name)
-        })
-      }
+      const name = hash(`${hostId}\0${id}\0${read.version}`)
+      const folder = path.join(this.deps.dir, name)
       return {
         kind: 'found',
         version: read.version,
         title: read.title,
         // What the host's own key would name: these files, and for a type its format.
-        key: createHash('sha256')
-          .update(`${name}\0${read.type?.name ?? ''}\0${read.type?.format ?? ''}`, 'utf8')
-          .digest('hex'),
+        key: hash(`${name}\0${read.type?.name ?? ''}\0${read.type?.format ?? ''}`),
         // The host does not say what the version declares. A page that asks to read beyond itself
         // loses the CDNs then, as the request filter does for any origin.
         strict: false,
-        files: await files,
+        files: read.files.map((file) => ({
+          path: file.path,
+          file: path.join(folder, hash(file.path).slice(0, 32)),
+          size: file.size,
+        })),
         type: read.type,
       }
     } catch (error) {
@@ -274,40 +349,57 @@ export class RemoteArtifacts {
     }
   }
 
-  /** Fetches every file of the version into `folder`, each under its place in the list. */
-  private async fetch(
+  /** Fetches one file of a version where its list places it, unless it is there already. */
+  private fetchFile(
     hostId: string,
     id: string,
-    read: Read,
-    folder: string,
-  ): Promise<ArtifactContentFile[]> {
-    await mkdir(folder, { recursive: true })
-    const files: ArtifactContentFile[] = read.files.map((file, i) => ({
-      path: file.path,
-      file: path.join(folder, String(i)),
-      size: file.size,
-    }))
-    let next = 0
-    let total = 0
-    const worker = async (): Promise<void> => {
-      for (let i = next++; i < files.length; i = next++) {
-        const file = files[i]!
-        const bytes = bytesOf(
-          await this.deps.call(hostId, 'artifacts.file', {
-            id,
-            version: read.version,
-            path: file.path,
-          }),
-        )
-        if (!bytes) throw new Error(`The host sent no bytes for ${file.path}`)
-        total += bytes.byteLength
-        if (total > VERSION_BYTES) throw new Error('The version is larger than a version may be')
-        file.size = bytes.byteLength
-        await writeFile(file.file, bytes)
+    version: number,
+    file: ArtifactContentFile,
+  ): Promise<void> {
+    let pending = this.fetching.get(file.file)
+    if (pending) return pending
+    pending = (async () => {
+      if (await exists(file.file)) return
+      const bytes = bytesOf(
+        await this.deps.call(hostId, 'artifacts.file', { id, version, path: file.path }),
+      )
+      if (!bytes) throw new Error(`The host sent no bytes for ${file.path}`)
+      if (bytes.byteLength > VERSION_BYTES) {
+        throw new Error('The file is larger than a version may be')
       }
+      await mkdir(path.dirname(file.file), { recursive: true })
+      // Written whole under another name first, so a run that ends meanwhile leaves no part of it.
+      const part = `${file.file}.${++this.parts}${PART}`
+      await writeFile(part, bytes)
+      await rename(part, file.file)
+      this.schedulePrune()
+    })()
+    this.fetching.set(file.file, pending)
+    const done = (): void => {
+      this.fetching.delete(file.file)
     }
-    await Promise.all(Array.from({ length: Math.min(PARALLEL, files.length) }, worker))
-    return files
+    pending.then(done, done)
+    return pending
+  }
+
+  /** Marks a version's folder used now, which keeps it from the next prune longer. */
+  private async touch(folder: string): Promise<void> {
+    const now = Date.now()
+    if (now - (this.touched.get(folder) ?? 0) < TOUCH_MS) return
+    this.touched.set(folder, now)
+    const at = new Date(now)
+    await utimes(folder, at, at).catch(() => {})
+  }
+
+  private schedulePrune(): void {
+    if (this.pruneTimer) return
+    this.pruneTimer = setTimeout(() => {
+      this.pruneTimer = null
+      this.prune().catch((error: unknown) => {
+        log.warn(`Could not keep the files of other hosts within their size: ${String(error)}`)
+      })
+    }, PRUNE_DELAY_MS)
+    this.pruneTimer.unref()
   }
 
   private async send(

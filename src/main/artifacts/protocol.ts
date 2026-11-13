@@ -33,7 +33,7 @@ const log = createLogger('artifacts')
  */
 export const CONTENT_WAIT_MS = 2_000
 
-/** The same wait for an artifact of another host, whose files main fetches before it names them. */
+/** The same wait for an artifact of another host, and for each of its files main fetches. */
 export const REMOTE_CONTENT_WAIT_MS = 30_000
 
 /** A standard scheme gives each host its own origin and storage. */
@@ -56,6 +56,11 @@ export interface ArtifactSource {
   /** The artifact on this origin id, when it was opened in this run. */
   artifactOf(host: string): string | undefined
   content(id: string, version: number | null): Promise<ArtifactContentResult>
+  /**
+   * Puts the files of a version that `paths` names, every one when null, where its answer to
+   * `content` places them; only another host's are fetched then.
+   */
+  ready?(id: string, version: number, paths: readonly string[] | null): Promise<void>
   /** A page on this origin id reported a pick, checked; null where no window takes them. */
   selected: ((host: string, message: SelectMessage) => void) | null
   /** Where a page's capability requests go; none, as for thumbnails, offers no capability. */
@@ -114,18 +119,15 @@ export function isStored(
   return source.remoteDir !== undefined && isInside(source.remoteDir, file)
 }
 
-function withinWait(
-  content: Promise<ArtifactContentResult>,
-  ms: number,
-): Promise<ArtifactContentResult> {
+function withinWait<T>(waited: Promise<T>, ms: number, late: T, what: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined
-  const late = new Promise<ArtifactContentResult>((resolve) => {
+  const giveUp = new Promise<T>((resolve) => {
     timer = setTimeout(() => {
-      log.warn(`The host named no files within ${ms} ms`)
-      resolve({ kind: 'failed' })
+      log.warn(`The host ${what} within ${ms} ms`)
+      resolve(late)
     }, ms)
   })
-  return Promise.race([content, late]).finally(() => clearTimeout(timer))
+  return Promise.race([waited, giveUp]).finally(() => clearTimeout(timer))
 }
 
 function json(status: number, body: RuntimeAnswer): Response {
@@ -169,9 +171,12 @@ export async function respond(request: Request, source: ArtifactSource): Promise
   const wanted = parseRequest(request.url, (host) => source.artifactOf(host))
   if (!wanted) return answer(404)
   const remote = parseArtifactRef(wanted.id)?.hostId != null
-  const found = await withinWait(
+  const wait = remote ? REMOTE_CONTENT_WAIT_MS : CONTENT_WAIT_MS
+  const found = await withinWait<ArtifactContentResult>(
     source.content(wanted.id, wanted.version),
-    remote ? REMOTE_CONTENT_WAIT_MS : CONTENT_WAIT_MS,
+    wait,
+    { kind: 'failed' },
+    'named no files',
   )
   if (found.kind === 'not_found') return answer(404)
   if (found.kind === 'failed') return answer(503)
@@ -200,6 +205,21 @@ export async function respond(request: Request, source: ArtifactSource): Promise
   if (!isStored(source, wanted.id, file.file)) {
     log.error(`Refused ${wanted.id}'s file outside the content folder: ${file.file}`)
     return answer(404)
+  }
+  if (source.ready) {
+    const ready = await withinWait(
+      source.ready(wanted.id, found.version, [file.path]).then(
+        () => true,
+        (error: unknown) => {
+          log.warn(`Could not fetch ${file.path} of ${wanted.id}: ${String(error)}`)
+          return false
+        },
+      ),
+      wait,
+      false,
+      'sent no file',
+    )
+    if (!ready) return answer(503)
   }
   source.declared?.(wanted.id, found.strict)
   const headers = { ...artifactHeaders(found.strict), 'Content-Type': artifactFileType(file.path) }
