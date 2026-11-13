@@ -750,6 +750,8 @@ export class AgentHost {
       },
       agents: {
         limits: (agentId) => this.agents.limitsOf(agentId),
+        modelOption: (agentId) =>
+          this.agentOptions.get(agentId)?.config.find((option) => option.category === 'model'),
         readLimits: (agentId) => this.agents.refreshLimits(agentId),
         name: (agentId) => this.agents.name(agentId),
       },
