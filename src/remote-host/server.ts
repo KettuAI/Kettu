@@ -54,6 +54,7 @@ import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/n
 import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
   BACKGROUND_PACE_MS,
+  BACKGROUND_RESUME_MS,
   BROWSER_FEATURE,
   IMAGE_REFS_FEATURE,
   negotiate,
@@ -178,6 +179,8 @@ export interface RemoteServerOptions {
   keepalive?: KeepaliveTimings
   /** How long a session waits for its device to resume it, RESUME_MS unless a test shortens it. */
   resumeMs?: number
+  /** The same for a device in the background, BACKGROUND_RESUME_MS unless a test changes it. */
+  backgroundResumeMs?: number
   /** What a device's outbox holds, OUTBOX_LIMITS unless a test lowers them. */
   outboxLimits?: Partial<OutboxLimits>
   now?: () => number
@@ -1109,8 +1112,13 @@ class DeviceSession {
     // Their bytes on the way are lost; the device sends them again in uploads of their own.
     this.uploads.dropUnfinished()
     this.forwards.dropConnections()
-    this.awayTimer = setTimeout(() => this.end(), this.server.options.resumeMs ?? RESUME_MS)
-    this.server.options.changed()
+    const { options } = this.server
+    const waitMs =
+      this.paceMs >= BACKGROUND_PACE_MS
+        ? (options.backgroundResumeMs ?? BACKGROUND_RESUME_MS)
+        : (options.resumeMs ?? RESUME_MS)
+    this.awayTimer = setTimeout(() => this.end(), waitMs)
+    options.changed()
   }
 
   /** Ends the session, after telling its device why when it is connected. */

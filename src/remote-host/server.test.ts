@@ -18,7 +18,7 @@ import {
 import { isHostAdminEvent, type HostAdminEvent } from '@shared/remote/host-admin'
 import { generateKeyPair, type KeyPair } from '@shared/remote/noise'
 import { parsePairingLink, type PairingState } from '@shared/remote/pairing'
-import { PROTOCOL_VERSION } from '@shared/remote/protocol'
+import { BACKGROUND_PACE_MS, PROTOCOL_VERSION } from '@shared/remote/protocol'
 import { encodeRelayBytes, importRelayKey, newRelaySeed, relayHostId } from '@shared/remote/relay'
 import { startTestHost, type TestHost } from '../agent-host/testing/harness'
 import { ActivityLog } from './activity'
@@ -47,6 +47,8 @@ async function setup(
   options: {
     agentDown?: boolean
     helloTimeoutMs?: number
+    resumeMs?: number
+    backgroundResumeMs?: number
     ttlMs?: number
     now?: () => number
     admin?: RemoteServerOptions['admin']
@@ -127,6 +129,8 @@ async function setup(
     log,
     ...(options.admin ? { admin: options.admin } : {}),
     ...(options.helloTimeoutMs ? { helloTimeoutMs: options.helloTimeoutMs } : {}),
+    ...(options.resumeMs ? { resumeMs: options.resumeMs } : {}),
+    ...(options.backgroundResumeMs ? { backgroundResumeMs: options.backgroundResumeMs } : {}),
     ...(options.now ? { now: options.now } : {}),
   })
   const connect = (
@@ -481,6 +485,34 @@ describe("a device's notifications", () => {
     await device.send({ type: 'pace', ms: 0 })
     await device.port.request('sessions.show', { sessionIds: [] })
     expect(t.server.showing(t.phone.id, session.id)).toBe(false)
+  })
+})
+
+describe('a device session after its connection drops', () => {
+  const protocol = { min: 1, max: PROTOCOL_VERSION }
+
+  /** Connects, asks for `pace`, drops the connection and comes back once the foreground window passed. */
+  async function dropAndReturn(pace: number) {
+    const t = await setup({ resumeMs: 50, backgroundResumeMs: 5_000 })
+    const device = await t.connect(undefined, { protocol })
+    const { resume: token } = (await device.first) as { resume: string }
+    await device.send({ type: 'pace', ms: pace })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    device.close()
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    const again = await t.connect(undefined, {
+      protocol,
+      resume: { token, received: device.received() },
+    })
+    return (await again.first) as { resumed?: unknown }
+  }
+
+  it('waits longer for a device that went to the background', async () => {
+    expect((await dropAndReturn(BACKGROUND_PACE_MS)).resumed).toEqual({ request: 0 })
+  })
+
+  it('waits the foreground window for a device in the foreground', async () => {
+    expect((await dropAndReturn(0)).resumed).toBeUndefined()
   })
 })
 
