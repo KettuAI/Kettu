@@ -29,7 +29,7 @@ import { startConfig } from '@renderer/features/session/new-session/start-option
 import { Glyph } from '@renderer/features/shell/glyph'
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { useThreadsStore } from '@renderer/stores/threads'
+import { showSending, useThreadsStore } from '@renderer/stores/threads'
 import { useViewStore } from '@renderer/stores/view'
 import { endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
@@ -223,7 +223,7 @@ export function Composer({
   // that hands the session to another agent goes as that agent's first turn.
   const send = (now = { canSend, canQueue }) => {
     if (pending && now.canSend) handOver()
-    else if (now.canSend || now.canQueue) queue(false)
+    else if (now.canSend || now.canQueue) queue(false, now.canSend)
   }
   const blockedEnter = useBlockedEnter({
     reason: unsendable,
@@ -281,10 +281,14 @@ export function Composer({
     })
   }
 
-  const queue = (steer: boolean) => {
+  /** With `shown`, the session is free, so the message shows in the thread as it goes. */
+  const queue = (steer: boolean, shown = false) => {
     const { taken, sent, content } = takeContent()
+    const unshow = shown ? showSending(sessionId, content) : null
     host('sessions.queue', { sessionId, content })
       .then(({ itemId }) => {
+        // It waits in the queue after all, which shows it there.
+        if (itemId) unshow?.()
         // Once queued, a failed steer leaves the message in the queue, not lost.
         if (steer && itemId) {
           host('sessions.steer', { sessionId, itemId }).catch((e: unknown) =>
@@ -293,6 +297,7 @@ export function Composer({
         }
       })
       .catch((reason: unknown) => {
+        unshow?.()
         if (sent) setPaneSelection(sent)
         box.restore(taken)(reason)
       })

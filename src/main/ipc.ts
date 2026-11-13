@@ -652,6 +652,7 @@ export function registerIpcHandlers({
   handle('terminal-host:restart', 0, () => {
     terminalHost.restart()
   })
+  handle('terminal-host:running', 0, () => terminalHost.running)
   handle('device-host:restart', 0, () => {
     deviceHost.restart()
   })

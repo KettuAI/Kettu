@@ -283,6 +283,7 @@ export interface IpcInvokeContract {
   'update:dismiss': { args: []; result: void }
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
+  'terminal-host:running': { args: []; result: boolean }
   'device-host:restart': { args: []; result: void }
   'artifact:open': { args: [id: string]; result: ArtifactOpenResult }
   'artifact:close': { args: [url: string]; result: void }

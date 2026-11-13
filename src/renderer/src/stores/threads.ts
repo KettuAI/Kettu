@@ -10,7 +10,9 @@ import {
   type PatchBatch,
   type PlanEntry,
   type SessionSnapshot,
+  type ThreadEntry,
   type ThreadState,
+  type UserContent,
 } from '@shared/thread'
 import { errorMessage, host } from '@renderer/lib/host'
 
@@ -196,6 +198,21 @@ const pagesInFlight = new Map<string, Promise<boolean>>()
 // Entries added live, with when they arrived; they animate in once, on their first render.
 const fresh = new Map<string, Map<string, number>>()
 const FRESH_FOR_MS = 1000
+
+type UserEntry = Extract<ThreadEntry, { kind: 'user' }>
+
+/** A message sent from this window that the host has not put in the thread yet. */
+interface Sending {
+  entry: UserEntry
+  text: string
+  sentAt: number
+  /** The thread's last entry when it was sent, if the replica was loaded. */
+  after: string | null
+}
+const sending = new Map<string, Sending[]>()
+let sendingCount = 0
+// How far before the send a stored message's host time may lie and still be the send's own.
+const ECHO_SKEW_MS = 10_000
 let queue: PatchBatch[] = []
 let frame = 0
 /**
@@ -268,6 +285,7 @@ function receiveSnapshot(sessionId: string, snapshot: SessionSnapshot): void {
     state = applyPatches(state, batch.patches, { partial })
     seq = batch.seq
   }
+  if (sending.has(sessionId)) state = settleSnapshot(sessionId, state)
   setReplica(sessionId, {
     state,
     seq,
@@ -307,10 +325,12 @@ function flush(): void {
     }
     try {
       const live = replica.state.session.status !== 'starting'
-      if (live) markFresh(batch)
-      const state = applyPatches(replica.state, batch.patches, {
+      const echoes = echoesOf(batch)
+      if (live) markFresh(batch, echoes)
+      let state = applyPatches(replica.state, batch.patches, {
         partial: replica.older !== null,
       })
+      if (sending.has(batch.sessionId)) state = settleSending(batch.sessionId, state, echoes)
       next ??= { ...replicas }
       next[batch.sessionId] = { ...replica, state, seq: batch.seq }
     } catch (error) {
@@ -335,10 +355,11 @@ function flush(): void {
   for (const sessionId of refetch) void fetchSnapshot(sessionId, 'sessions.snapshot')
 }
 
-function markFresh(batch: PatchBatch): void {
+function markFresh(batch: PatchBatch, echoes: readonly UserEntry[]): void {
   const now = performance.now()
   for (const patch of batch.patches) {
-    if (patch.op !== 'entry.add') continue
+    // A message shown while it was sending is already in view.
+    if (patch.op !== 'entry.add' || echoes.includes(patch.entry as UserEntry)) continue
     let entries = fresh.get(batch.sessionId)
     if (!entries) fresh.set(batch.sessionId, (entries = new Map()))
     for (const [id, at] of entries) if (now - at >= FRESH_FOR_MS) entries.delete(id)
@@ -484,6 +505,7 @@ function dropUnwatched(): void {
     void host('sessions.unwatch', { sessionId }).catch(() => {})
     pending.delete(sessionId)
     fresh.delete(sessionId)
+    sending.delete(sessionId)
     useThreadsStore.setState((s) => {
       const replicas = { ...s.replicas }
       delete replicas[sessionId]
@@ -528,6 +550,7 @@ export function forgetSession(sessionId: string): void {
   if (at >= 0) watched.splice(at, 1)
   pending.delete(sessionId)
   fresh.delete(sessionId)
+  sending.delete(sessionId)
   useThreadsStore.setState((s) => {
     if (!(sessionId in s.replicas)) return s
     const replicas = { ...s.replicas }
@@ -539,4 +562,127 @@ export function forgetSession(sessionId: string): void {
 /** Retries opening a session whose snapshot failed. */
 export function reloadSession(sessionId: string): Promise<void> {
   return fetchSnapshot(sessionId, 'sessions.open')
+}
+
+const textOf = (content: readonly UserContent[]) =>
+  content.map((part) => (part.type === 'text' ? part.text : '')).join('')
+
+/**
+ * Shows a message the user sent at the end of the session's thread at once. The host's own entry
+ * takes its place when it comes; the returned function takes it away before that, for a send that
+ * failed or went to the queue.
+ */
+export function showSending(sessionId: string, content: UserContent[]): () => void {
+  const replica = store.getState().replicas[sessionId]
+  const order = replica?.state?.order ?? []
+  const list = sending.get(sessionId) ?? []
+  const item: Sending = {
+    entry: { kind: 'user', id: `sending-${++sendingCount}`, content, at: Date.now() },
+    text: textOf(content),
+    sentAt: Date.now(),
+    after: replica?.state ? (order.findLast((id) => !id.startsWith('sending-')) ?? null) : null,
+  }
+  list.push(item)
+  sending.set(sessionId, list)
+  let entries = fresh.get(sessionId)
+  if (!entries) fresh.set(sessionId, (entries = new Map()))
+  entries.set(item.entry.id, performance.now())
+  if (replica?.state)
+    setReplica(sessionId, { ...replica, state: withSending(sessionId, replica.state) })
+  return () => {
+    const kept = sending.get(sessionId)
+    const at = kept?.indexOf(item) ?? -1
+    if (!kept || at < 0) return
+    kept.splice(at, 1)
+    if (kept.length === 0) sending.delete(sessionId)
+    const current = store.getState().replicas[sessionId]
+    if (current?.state) {
+      setReplica(sessionId, { ...current, state: withoutEntry(current.state, item.entry.id) })
+    }
+  }
+}
+
+/** A message the user sent from a window of this host, which a send's entry is. */
+function isOwnMessage(entry: ThreadEntry): entry is UserEntry {
+  return entry.kind === 'user' && !entry.steered && !entry.from && !entry.device
+}
+
+/** The batch's new messages that take the place of messages sending, oldest first. */
+function echoesOf(batch: PatchBatch): UserEntry[] {
+  const waiting = sending.get(batch.sessionId)?.length ?? 0
+  if (waiting === 0) return []
+  const echoes: UserEntry[] = []
+  for (const patch of batch.patches) {
+    if (patch.op === 'entry.add' && isOwnMessage(patch.entry)) echoes.push(patch.entry)
+    if (echoes.length === waiting) break
+  }
+  return echoes
+}
+
+/** Takes away the messages `echoes` stand for, and keeps the others at the thread's end. */
+function settleSending(sessionId: string, state: ThreadState, echoes: readonly UserEntry[]) {
+  const list = sending.get(sessionId) ?? []
+  for (const echo of echoes) {
+    const text = textOf(echo.content)
+    const at = list.findIndex((item) => item.text === text)
+    const [gone] = list.splice(at >= 0 ? at : 0, 1)
+    if (gone) state = withoutEntry(state, gone.entry.id)
+  }
+  if (list.length === 0) {
+    sending.delete(sessionId)
+    return state
+  }
+  return withSending(sessionId, state)
+}
+
+/** After a snapshot: the messages it holds already go, the others stay at its end. */
+function settleSnapshot(sessionId: string, state: ThreadState): ThreadState {
+  const list = sending.get(sessionId) ?? []
+  const taken = new Set<string>()
+  const echoed = (item: Sending) => {
+    const start = item.after === null ? -1 : state.order.indexOf(item.after)
+    for (let i = state.order.length - 1; i > start; i--) {
+      const id = state.order[i]!
+      const entry = state.byId[id]
+      if (!entry || taken.has(id) || !isOwnMessage(entry)) continue
+      if (textOf(entry.content) !== item.text) continue
+      // Without the entry it followed, only a message from about the send's time is its own.
+      if (start < 0 && (entry.at ?? 0) < item.sentAt - ECHO_SKEW_MS) continue
+      taken.add(id)
+      return true
+    }
+    return false
+  }
+  const kept = list.filter((item) => !echoed(item))
+  if (kept.length === 0) {
+    sending.delete(sessionId)
+    return state
+  }
+  sending.set(sessionId, kept)
+  return withSending(sessionId, state)
+}
+
+/** `state` with the messages still sending at its end, in the order they were sent. */
+function withSending(sessionId: string, state: ThreadState): ThreadState {
+  const list = sending.get(sessionId) ?? []
+  const ids = new Set(list.map((item) => item.entry.id))
+  const tail = state.order.slice(state.order.length - list.length)
+  if (
+    list.every((item, i) => tail[i] === item.entry.id && state.byId[item.entry.id] === item.entry)
+  )
+    return state
+  const byId = { ...state.byId }
+  for (const item of list) byId[item.entry.id] = item.entry
+  return {
+    ...state,
+    byId,
+    order: [...state.order.filter((id) => !ids.has(id)), ...list.map((item) => item.entry.id)],
+  }
+}
+
+function withoutEntry(state: ThreadState, entryId: string): ThreadState {
+  if (!(entryId in state.byId)) return state
+  const byId = { ...state.byId }
+  delete byId[entryId]
+  return { ...state, byId, order: state.order.filter((id) => id !== entryId) }
 }

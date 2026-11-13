@@ -56,6 +56,11 @@ export class TerminalHost {
     return this.host.state
   }
 
+  /** Whether it may hold terminals: started and not stopped or crashed since. */
+  get running(): boolean {
+    return this.host.state === 'starting' || this.host.state === 'ready'
+  }
+
   history(): UtilityHostEvent[] {
     return this.host.history()
   }

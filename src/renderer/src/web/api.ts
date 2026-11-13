@@ -548,6 +548,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         link.wake()
         await admin('host.restart', { process: 'terminal' })
       },
+      running: async () => true,
     },
     devices: {
       // Over the channel frames, screenshots and frame pictures are base64; the page gets them
