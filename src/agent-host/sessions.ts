@@ -154,7 +154,7 @@ import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
-import { cutReply, type ToolSession } from './session-tools'
+import { cutReply, REPORT_LIMIT, reportText, type ToolSession } from './session-tools'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
@@ -728,6 +728,9 @@ function sessionPullRequests(
 export class SessionManager {
   private readonly records = new Map<string, SessionRecord>()
   private readonly live = new Map<string, Live>()
+  // Reports each session got since the user last wrote there; one past the limit once its notice
+  // is shown. In memory: a restart lets a few more through, which the limit tolerates.
+  private readonly reportsSent = new Map<string, number>()
   private readonly watchers = new Map<string, Set<string>>()
   // Port id to the sessions it shows in front, every pane of a split view in view.
   private readonly shown = new Map<string, Set<string>>()
@@ -4838,6 +4841,7 @@ export class SessionManager {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
     this.refuseIfCannotSend(sessionId)
+    this.reportsSent.delete(sessionId)
     const hydrated = this.hydrate(content)
     const live = await this.revive(sessionId)
     if (!canSend(live.thread.session.status) || this.waitsForWorktree(live)) {
@@ -4882,6 +4886,7 @@ export class SessionManager {
     this.refuseIfCannotSend(sessionId)
     if (!this.deps.agents.has(agentId)) throw invalidParams(`Unknown agent ${agentId}`)
     this.deps.agents.assertEnabled(agentId)
+    this.reportsSent.delete(sessionId)
     const hydrated = this.hydrate(params.content)
     const live = await this.revive(sessionId)
     const { status } = live.thread.session
@@ -5319,6 +5324,7 @@ export class SessionManager {
       throw new HostError('restricted', t('session.subagent.noPrompt'))
     }
     this.refuseIfCannotSend(sessionId)
+    this.reportsSent.delete(sessionId)
     const content = this.hydrate(input)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
@@ -5967,6 +5973,7 @@ export class SessionManager {
     turn.attachments = []
     this.deps.mcp?.turnEnded(live.id)
     this.deps.diagnostics.turnEnded(live.record.agentId, [live.id, live.record.acpSessionId])
+    this.reportTurn(live, turn, stopReason)
     this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
     const byAgent = live.archiveAfterTurn
@@ -7095,11 +7102,15 @@ export class SessionManager {
    */
   async startFromTool(
     callerId: string,
-    params: { prompt: string; title?: string; agentId?: AgentId },
+    params: { prompt: string; title?: string; agentId?: AgentId; report: boolean },
   ): Promise<string> {
     const caller = this.recordOf(callerId)
     const agentId = params.agentId ?? caller.agentId
-    const from = { sessionId: callerId, title: this.toolName(callerId) }
+    const from: FromSession = {
+      sessionId: callerId,
+      title: this.toolName(callerId),
+      ...(params.report ? {} : { report: false }),
+    }
     const options: Record<string, string | boolean> = {}
     if (agentId === caller.agentId) {
       const live = this.live.get(callerId)
@@ -7155,6 +7166,68 @@ export class SessionManager {
     this.persist(live)
     this.touch(live.id)
     return 'queued'
+  }
+
+  /**
+   * Tells the session that started this one that a turn it asked for ended: one whose first
+   * message came from it without `report: false`. Not while the session closes, which the user
+   * or the host chose.
+   */
+  private reportTurn(live: Live, turn: Turn, stopReason: StopReason | null): void {
+    const starterId = live.record.startedBy
+    if (!starterId || turn.entryId === null || this.stopped || live.closing) return
+    const entry = live.thread.byId[turn.entryId]
+    if (entry?.kind !== 'user' || entry.from?.sessionId !== starterId) return
+    if (entry.from.report === false) return
+    const text = reportText(this.agentName(live.id), live.id, stopReason)
+    const from: FromSession = { sessionId: live.id, title: this.toolName(live.id) }
+    queueMicrotask(() => {
+      void this.deliverReport(starterId, text, from).catch((error: unknown) => {
+        this.deps.diagnostics.log(
+          'warn',
+          `Could not report to session ${starterId}: ${(error as Error).message}`,
+        )
+      })
+    })
+  }
+
+  /**
+   * Sends a report as a turn when the session is idle, else at the end of its queue, which stays
+   * paused if it is. An archived session gets none. Past the limit since the user's last message
+   * there, the thread says so once and later reports go nowhere.
+   */
+  private async deliverReport(sessionId: string, text: string, from: FromSession): Promise<void> {
+    if (!this.has(sessionId) || this.isArchived(this.recordOf(sessionId))) return
+    const sent = this.reportsSent.get(sessionId) ?? 0
+    if (sent > REPORT_LIMIT) return
+    this.reportsSent.set(sessionId, sent + 1)
+    const live = await this.revive(sessionId)
+    if (sent === REPORT_LIMIT) {
+      this.emit(live, [
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'notice',
+            id: this.nextId(live),
+            severity: 'info',
+            title: t('notice.reportsPaused.title'),
+            description: t('notice.reportsPaused.description', { count: REPORT_LIMIT }),
+            after: agentEntryBefore(live.thread),
+          },
+        },
+      ])
+      this.touch(live.id)
+      return
+    }
+    const content: UserContent[] = [{ type: 'text', text }]
+    const { status, queue } = live.thread.session
+    if (canSend(status) && queue.length === 0 && !this.waitsForWorktree(live)) {
+      this.sendPrompt(live, content, from)
+      return
+    }
+    this.update(live, { queue: [...queue, { id: randomUUID(), content, at: this.now(), from }] })
+    this.persist(live)
+    this.touch(live.id)
   }
 
   /** A message from the user does not bring an archived session back; restoring it does. */

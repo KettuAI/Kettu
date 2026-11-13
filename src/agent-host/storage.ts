@@ -596,7 +596,14 @@ function queueOf(value: unknown): { queue?: QueuedPrompt[] } {
 function withFrom(item: QueuedPrompt): QueuedPrompt {
   const { from, ...rest } = item as QueuedPrompt & { from?: unknown }
   return isRecord(from) && isString(from.sessionId) && isString(from.title)
-    ? { ...rest, from: { sessionId: from.sessionId, title: from.title } }
+    ? {
+        ...rest,
+        from: {
+          sessionId: from.sessionId,
+          title: from.title,
+          ...(from.report === false ? { report: false as const } : {}),
+        },
+      }
     : rest
 }
 
