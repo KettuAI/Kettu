@@ -178,6 +178,7 @@ const api: KettuApi = {
     rename: (id, name) => invoke('hosts:rename', id, name),
     setAddresses: (id, addresses) => invoke('hosts:set-addresses', id, addresses),
     remove: (id) => invoke('hosts:remove', id),
+    retry: () => invoke('hosts:retry'),
     onChanged: onHostsChanged,
     onPairing: onHostPairing,
     request: (hostId, method, params) => otherHosts.request(hostId, method, params),

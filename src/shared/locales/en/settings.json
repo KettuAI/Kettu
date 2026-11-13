@@ -1100,6 +1100,10 @@
   },
   "hosts": {
     "keywords": "hosts host computer computers connect pair pairing link remote other machine ssh",
+    "away": {
+      "reconnect": "Reconnect",
+      "switchAccount": "Switch account"
+    },
     "self": {
       "badge": "Local",
       "label": "This computer"

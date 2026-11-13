@@ -1092,6 +1092,10 @@
   },
   "hosts": {
     "keywords": "主机 电脑 连接 配对 链接 远程 别的电脑 开发机 hosts host computer connect pair link ssh",
+    "away": {
+      "reconnect": "重新连接",
+      "switchAccount": "切换账号"
+    },
     "self": {
       "badge": "本机",
       "label": "这台电脑"

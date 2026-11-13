@@ -6,6 +6,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useWindowHostAway } from '@renderer/stores/window-host'
 import { Glyph } from './glyph'
+import { HostAwayAction } from './host-away-action'
 
 /**
  * The notice a global page shows while the host the window is narrowed to is not connected: what
@@ -34,6 +35,7 @@ export function WindowHostAway({ read, className }: { read: boolean; className?:
           {t(read ? 'windowHost.lastRead' : 'windowHost.nothingRead')}
         </small>
       </span>
+      <HostAwayAction connection={host.connection} className="shrink-0" />
     </div>
   )
 }
