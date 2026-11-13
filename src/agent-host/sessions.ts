@@ -166,7 +166,7 @@ import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
-import { cutReply, REPORT_LIMIT, reportText, type ToolSession } from './session-tools'
+import { REPORT_LIMIT, reportText, type ToolSession } from './session-tools'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
@@ -7274,7 +7274,7 @@ export class SessionManager {
       const { order, byId } = live.thread
       for (let i = order.length - 1; i >= 0; i--) {
         const entry = byId[order[i]!]
-        if (entry?.kind === 'agent' && entry.markdown.trim() !== '') return cutReply(entry.markdown)
+        if (entry?.kind === 'agent' && entry.markdown.trim() !== '') return entry.markdown
       }
       return null
     }
@@ -7283,7 +7283,7 @@ export class SessionManager {
     if (!stored) return null
     for (let i = stored.entries.length - 1; i >= 0; i--) {
       const entry = stored.entries[i]!.entry
-      if (entry.kind === 'agent' && entry.markdown.trim() !== '') return cutReply(entry.markdown)
+      if (entry.kind === 'agent' && entry.markdown.trim() !== '') return entry.markdown
     }
     return null
   }
