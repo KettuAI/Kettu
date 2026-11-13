@@ -29,11 +29,11 @@ import { startConfig } from '@renderer/features/session/new-session/start-option
 import { Glyph } from '@renderer/features/shell/glyph'
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { useThreadsStore } from '@renderer/stores/threads'
+import { showSending, useThreadsStore } from '@renderer/stores/threads'
 import { useViewStore } from '@renderer/stores/view'
 import { endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
-import { attachmentContent, attachmentsBlock } from './attachments'
+import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
 import { OptionMenu } from './control-row'
 import { useModeControl } from './mode-control'
 import { isSelect, onCycleKeys } from './options'
@@ -53,7 +53,7 @@ import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
 import type { Select } from './use-pick'
 import { useBlockedEnter } from './use-blocked-enter'
-import { usePromptBox } from './use-prompt-box'
+import { useBoxText, usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 import { firstWaiting, pressWaitingCard } from '../waiting-card'
 import { limitsForModel } from '@shared/plan-limits'
@@ -150,12 +150,24 @@ export function Composer({
     hostId,
     disabled: starting,
   })
-  const { text, attachments, error, setError } = box
-  const blocked = attachmentsBlock(attachments, text)
-  const holdsMessage = hasMessage(text, attachments)
-  const canSend = idle && holdsMessage && !blocked && (!mustSwitch || pending !== null)
-  // During a turn the send key queues the message and the steer key sends it into the turn.
-  const canQueue = running && holdsMessage && !blocked && pending === null && !mustSwitch
+  const { attachments, error, setError } = box
+  /** Whether a message can go now, as it is or into the queue. */
+  const can = (holds: boolean, blocked: AttachmentsBlock | null) => ({
+    canSend: idle && holds && !blocked && (!mustSwitch || pending !== null),
+    // During a turn the send key queues the message and the steer key sends it into the turn.
+    canQueue: running && holds && !blocked && pending === null && !mustSwitch,
+  })
+  // Read as values, so typing renders the composer only when one of them changes.
+  const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments))
+  const blockedBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
+  const blocked = blockedBy === null ? null : attachmentsBlock(attachments, box.source.text)
+  const { canSend, canQueue } = can(holdsMessage, blocked)
+  // The message as a key comes, from the editor itself, which a render may not have caught up with.
+  const live = () => {
+    const text = box.editor.current?.text() ?? box.source.text
+    const holds = hasMessage(text, attachments)
+    return { holds, ...can(holds, attachmentsBlock(attachments, text)) }
+  }
   // Why the send key does nothing now, for the line under the box.
   const unsendable =
     mustSwitch && !pending
@@ -209,16 +221,16 @@ export function Composer({
 
   // Both go through the host's queue, which sends at once when the session is free; a message
   // that hands the session to another agent goes as that agent's first turn.
-  const send = () => {
-    if (pending && canSend) handOver()
-    else if (canSend || canQueue) queue(false)
+  const send = (now = { canSend, canQueue }) => {
+    if (pending && now.canSend) handOver()
+    else if (now.canSend || now.canQueue) queue(false, now.canSend)
   }
   const blockedEnter = useBlockedEnter({
     reason: unsendable,
     waiting: unsendable !== null && unsendable === blocked?.message && blocked.adding,
-    text,
+    source: box.source,
     attachments,
-    send,
+    send: () => send(live()),
   })
 
   const takeContent = () => {
@@ -269,10 +281,14 @@ export function Composer({
     })
   }
 
-  const queue = (steer: boolean) => {
+  /** With `shown`, the session is free, so the message shows in the thread as it goes. */
+  const queue = (steer: boolean, shown = false) => {
     const { taken, sent, content } = takeContent()
+    const unshow = shown ? showSending(sessionId, content) : null
     host('sessions.queue', { sessionId, content })
       .then(({ itemId }) => {
+        // It waits in the queue after all, which shows it there.
+        if (itemId) unshow?.()
         // Once queued, a failed steer leaves the message in the queue, not lost.
         if (steer && itemId) {
           host('sessions.steer', { sessionId, itemId }).catch((e: unknown) =>
@@ -281,6 +297,7 @@ export function Composer({
         }
       })
       .catch((reason: unknown) => {
+        unshow?.()
         if (sent) setPaneSelection(sent)
         box.restore(taken)(reason)
       })
@@ -329,15 +346,16 @@ export function Composer({
       // A card waiting for the user takes Esc as its Deny, as its button shows, and the turn goes on;
       // with a message being written, Esc answers nothing, as Enter and the number keys do.
       if (firstWaiting(sessionId)) {
-        if (!holdsMessage) pressWaitingCard(sessionId, 'escape')
+        if (!live().holds) pressWaitingCard(sessionId, 'escape')
       } else cancel()
       return
     }
     if (event.key !== 'Enter') return
+    const now = live()
     // With nothing written, Enter and Mod+Enter answer the waiting card, as its buttons show.
     const cardKey = isMod(event) ? 'confirm' : event.metaKey || event.ctrlKey ? null : 'enter'
     if (
-      !holdsMessage &&
+      !now.holds &&
       !event.shiftKey &&
       !event.altKey &&
       !event.isComposing &&
@@ -354,13 +372,13 @@ export function Composer({
       (sendKey === 'enter' ? isMod(event) && !event.shiftKey : isMod(event) && event.shiftKey)
     if (steers) {
       event.preventDefault()
-      if (canQueue) queue(true)
+      if (now.canQueue) queue(true)
       return
     }
     if (!sends) return
     event.preventDefault()
-    if (canSend || canQueue) send()
-    else if (holdsMessage) blockedEnter.enter()
+    if (now.canSend || now.canQueue) send(now)
+    else if (now.holds) blockedEnter.enter()
   }
 
   const placeholder = starting
@@ -406,7 +424,7 @@ export function Composer({
       <TooltipContent>{blocked.message}</TooltipContent>
     </Tooltip>
   ) : (
-    <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={send} />
+    <SendButton key="send" disabled={!canSend} label={t('prompt.send')} onClick={() => send()} />
   )
   const shownError =
     error ??

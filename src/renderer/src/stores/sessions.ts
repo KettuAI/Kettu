@@ -16,6 +16,20 @@ interface SessionsStore {
   upsert(summary: SessionSummary): void
   remove(sessionId: string): void
   refresh(): Promise<void>
+  /**
+   * Shows the session archived before the host has closed it; the returned function says how the
+   * host's archive went, and one that failed brings the session back.
+   */
+  archiveNow(sessionId: string): (archived: boolean) => void
+}
+
+/** Sessions archived here that the host has not answered for yet, with when. */
+const archiving = new Map<string, number>()
+
+/** A summary as the list shows it: one archived here stays archived until the host answers. */
+function listed(summary: SessionSummary): SessionSummary {
+  const at = archiving.get(summary.id)
+  return at === undefined || summary.archivedAt ? summary : { ...summary, archivedAt: at }
 }
 
 export const useSessionsStore = create<SessionsStore>()((set) => ({
@@ -31,14 +45,14 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
     set((state) => ({
       byId: {
         ...Object.fromEntries(Object.entries(state.byId).filter(([, summary]) => kept(summary))),
-        ...Object.fromEntries(summaries.map((summary) => [summary.id, summary])),
+        ...Object.fromEntries(summaries.map((summary) => [summary.id, listed(summary)])),
       },
       loaded: hostId === null ? true : state.loaded,
       error: hostId === null ? null : state.error,
     }))
   },
   upsert(summary) {
-    set((state) => ({ byId: { ...state.byId, [summary.id]: summary } }))
+    set((state) => ({ byId: { ...state.byId, [summary.id]: listed(summary) } }))
   },
   remove(sessionId) {
     set((state) => {
@@ -57,6 +71,22 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
       throw error
     }
     useSessionsStore.getState().setAll(summaries)
+  },
+  archiveNow(sessionId) {
+    const at = Date.now()
+    archiving.set(sessionId, at)
+    const mark = (from: number | null, to: number | null) =>
+      set((state) => {
+        const summary = state.byId[sessionId]
+        if (!summary || summary.archivedAt !== from) return state
+        return { byId: { ...state.byId, [sessionId]: { ...summary, archivedAt: to } } }
+      })
+    mark(null, at)
+    return (archived) => {
+      if (archiving.get(sessionId) !== at) return
+      archiving.delete(sessionId)
+      if (!archived) mark(at, null)
+    }
   },
 }))
 
@@ -233,6 +263,35 @@ function buildTree(
 
 function isActive(summary: SessionSummary): boolean {
   return summary.status === 'running' || summary.status === 'awaiting_permission'
+}
+
+/**
+ * `next` with every node that shows the same as in `previous` taken from there, so a row whose
+ * session did not change keeps its node and skips its render.
+ */
+export function keepSameNodes(
+  previous: readonly SessionNode[],
+  next: readonly SessionNode[],
+): SessionNode[] {
+  const before = new Map(previous.map((node) => [node.summary.id, node]))
+  return next.map((node) => {
+    const old = before.get(node.summary.id)
+    return old && sameNode(old, node) ? old : node
+  })
+}
+
+function sameNode(a: SessionNode, b: SessionNode): boolean {
+  return (
+    a.summary === b.summary &&
+    a.permissionCount === b.permissionCount &&
+    a.running === b.running &&
+    a.own.permissionCount === b.own.permissionCount &&
+    a.own.running === b.own.running &&
+    a.subagents.length === b.subagents.length &&
+    a.subagents.every((agent, i) => agent === b.subagents[i]) &&
+    a.children.length === b.children.length &&
+    a.children.every((child, i) => sameNode(child, b.children[i]!))
+  )
 }
 
 /** The sessions in sidebar order, flattened, for Mod+Shift+[ and ]. */

@@ -35,10 +35,12 @@ import {
   hostGroup,
   hostOfSession,
   inPinnedTree,
+  keepSameNodes,
   noProjectGroup,
   pinnedTree,
   sessionTree,
   sidebarTabStop,
+  type SessionNode,
   type SidebarTabStop,
   useSessionsStore,
 } from '@renderer/stores/sessions'
@@ -68,8 +70,8 @@ export function SidebarList() {
   const loaded = projectsLoaded && sessionsLoaded
   const loadError = useProjectsStore((s) => s.error)
   const sessionsError = useSessionsStore((s) => s.error)
-  const sessionsById = useSessionsStore((s) => s.byId)
-  const shownProjects = visibleProjects(projects, sessionsById)
+  // The list follows which projects show and its Tab stop; each group follows its own sessions.
+  const shownProjects = useSessionsStore(useShallow((s) => visibleProjects(projects, s.byId)))
   const main = useViewStore((s) => s.main)
   const collapsedProjects = useViewStore((s) => s.collapsedProjects)
   const expandedParents = useViewStore((s) => s.expandedParents)
@@ -85,11 +87,16 @@ export function SidebarList() {
     [others],
   )
   // The list has one Tab stop, chosen from the store so a hidden shown row leaves it to a header.
-  const stop = sidebarTabStop(
-    { main, collapsedProjects, expandedParents, hosts, away },
-    sessionsById,
-    shownProjects,
+  const stopKey = useSessionsStore((s) =>
+    tabStopKey(
+      sidebarTabStop(
+        { main, collapsedProjects, expandedParents, hosts, away },
+        s.byId,
+        shownProjects,
+      ),
+    ),
   )
+  const stop = useMemo(() => tabStopOf(stopKey), [stopKey])
   // One dialog serves every project; it mounts the first time a project asks for it.
   const [importing, setImporting] = useState<{ project: Project; open: boolean } | null>(null)
   const importSessions = (project: Project) => setImporting({ project, open: true })
@@ -255,9 +262,11 @@ function ProjectGroup({
     ),
   )
   const projectPath = project?.path ?? null
-  const tree = useMemo(
-    () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath, hostId),
-    [summaries, projectPath, hostId],
+  const tree = useKeptNodes(
+    useMemo(
+      () => sessionTree(Object.fromEntries(summaries.map((x) => [x.id, x])), projectPath, hostId),
+      [summaries, projectPath, hostId],
+    ),
   )
   if (!project && tree.length === 0) return null
   const limited = limitRows(tree, allShown, (node) => keepInSight(node, shownId))
@@ -395,6 +404,29 @@ function ProjectGroup({
   )
 }
 
+/** The Tab stop as a string, which a selector can compare. */
+function tabStopKey(stop: SidebarTabStop | null): string {
+  return stop ? `${stop.kind}:${stop.kind === 'session' ? stop.id : stop.key}` : ''
+}
+
+function tabStopOf(key: string): SidebarTabStop | null {
+  const at = key.indexOf(':')
+  if (at < 0) return null
+  const value = key.slice(at + 1)
+  return key.slice(0, at) === 'session'
+    ? { kind: 'session', id: value }
+    : { kind: 'group', key: value }
+}
+
+/** `next`, with the nodes of rows that did not change kept from before, so those rows skip a render. */
+function useKeptNodes(next: SessionNode[]): SessionNode[] {
+  const [kept, setKept] = useState({ from: next, nodes: next })
+  if (kept.from === next) return kept.nodes
+  const nodes = keepSameNodes(kept.nodes, next)
+  setKept({ from: next, nodes })
+  return nodes
+}
+
 function toggleGroup(key: string): void {
   useViewStore.setState((s) => {
     const collapsedProjects = { ...s.collapsedProjects }
@@ -420,12 +452,14 @@ function PinnedGroup({
   const summaries = useSessionsStore(
     useShallow((s) => Object.values(s.byId).filter((x) => inPinnedTree(s.byId, x))),
   )
-  const tree = useMemo(
-    () =>
-      pinnedTree(Object.fromEntries(summaries.map((x) => [x.id, x]))).filter(
-        (node) => !hosts || hosts.includes(hostOfSession(node.summary)),
-      ),
-    [summaries, hosts],
+  const tree = useKeptNodes(
+    useMemo(
+      () =>
+        pinnedTree(Object.fromEntries(summaries.map((x) => [x.id, x]))).filter(
+          (node) => !hosts || hosts.includes(hostOfSession(node.summary)),
+        ),
+      [summaries, hosts],
+    ),
   )
   if (tree.length === 0) return null
   const toggle = () => toggleGroup(PINNED_GROUP)

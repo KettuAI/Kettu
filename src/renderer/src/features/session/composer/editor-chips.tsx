@@ -1,7 +1,7 @@
 // The composer's chips: the leading command as marks the caret can enter, so Backspace turns it
 // back into text one letter at a time, and mentions and links as atomic widgets the caret steps
 // over and Backspace deletes whole. A mention or link being typed stays text until the caret
-// leaves it.
+// leaves it. A chip never spans lines, so an edit looks for chips again on the lines it touched.
 
 import {
   Facet,
@@ -19,6 +19,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from '@codemirror/view'
+import type { EditorState, Line } from '@codemirror/state'
 import { createRoot, type Root } from 'react-dom/client'
 import { RenderedChip, type ChipState } from './chip-view'
 import { findChips, findLinks, mentionEndingAt, type Chip, type ChipContext } from './chips'
@@ -30,6 +31,8 @@ export interface ChipHooks extends ChipContext {
   onOpen?: (chip: Chip) => void
   /** One link was pasted, now at `from` to `to`. */
   onLinkPasted?: (from: number, to: number) => void
+  /** The draft attachments the text's mentions stand for, by key, whenever that changes. */
+  onMentioned?: (keys: ReadonlySet<string>) => void
   /** A range drawn as chosen besides the selection, as a link just pasted. */
   highlight?: { from: number; to: number } | null
 }
@@ -132,7 +135,67 @@ interface Drawn {
 const within = (chip: { from: number; to: number }, range: { from: number; to: number } | null) =>
   !!range && range.from <= chip.from && range.to >= chip.to && range.to > range.from
 
-function draw(view: EditorView, typing: { from: number; to: number } | null): Drawn {
+/** The chips on one line; only the first line can start with a command. */
+function chipsOfLine(line: Line, hooks: ChipHooks): Chip[] {
+  const context = line.number === 1 ? hooks : { commands: [], resolve: hooks.resolve }
+  const chips = findChips(line.text, context)
+  if (line.from === 0) return chips
+  return chips.map((chip) => ({ ...chip, from: chip.from + line.from, to: chip.to + line.from }))
+}
+
+/** Every chip in the text, typed ones included, in order. */
+function findAll(state: EditorState): Chip[] {
+  const hooks = state.facet(chipHooks)
+  if (!hooks) return []
+  const chips: Chip[] = []
+  for (let n = 1; n <= state.doc.lines; n++) chips.push(...chipsOfLine(state.doc.line(n), hooks))
+  return chips
+}
+
+/** The chips after an edit: those on lines it left alone moved with the text, the rest found again. */
+function refind(found: readonly Chip[], update: ViewUpdate): Chip[] {
+  const hooks = update.state.facet(chipHooks)
+  if (!hooks) return []
+  const { doc } = update.state
+  const touched: { from: number; to: number }[] = []
+  update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    const from = doc.lineAt(fromB).from
+    const to = doc.lineAt(toB).to
+    const last = touched.at(-1)
+    if (last && from <= last.to + 1) last.to = Math.max(last.to, to)
+    else touched.push({ from, to })
+  })
+  const hit = (pos: number) => touched.some((range) => pos >= range.from && pos <= range.to)
+  const chips: Chip[] = []
+  for (const chip of found) {
+    const from = update.changes.mapPos(chip.from, 1)
+    const to = update.changes.mapPos(chip.to, -1)
+    if (to <= from || hit(from) || hit(to)) continue
+    chips.push(from === chip.from && to === chip.to ? chip : { ...chip, from, to })
+  }
+  for (const range of touched) {
+    for (let pos = range.from; pos <= range.to;) {
+      const line = doc.lineAt(pos)
+      chips.push(...chipsOfLine(line, hooks))
+      pos = line.to + 1
+    }
+  }
+  return chips.sort((a, b) => a.from - b.from)
+}
+
+/** The draft attachments the chips stand for, by key. */
+function attachmentKeys(chips: readonly Chip[]): Set<string> {
+  const keys = new Set<string>()
+  for (const chip of chips)
+    if ('attachmentKey' in chip && chip.attachmentKey) keys.add(chip.attachmentKey)
+  return keys
+}
+
+function draw(
+  view: EditorView,
+  found: readonly Chip[],
+  typing: { from: number; to: number } | null,
+): Drawn {
   const hooks = view.state.facet(chipHooks)
   if (!hooks) return { decorations: Decoration.none, atomic: Decoration.none, chips: [] }
   const plain = view.state.field(plainLinks)
@@ -140,7 +203,7 @@ function draw(view: EditorView, typing: { from: number; to: number } | null): Dr
   const marks = []
   const widgets = []
   const chips: Chip[] = []
-  for (const chip of findChips(view.state.doc.toString(), hooks)) {
+  for (const chip of found) {
     if (chip.kind === 'command') {
       marks.push(commandMark.range(chip.from, chip.to), slashMark.range(chip.from, chip.from + 1))
       continue
@@ -192,11 +255,15 @@ function typingAt(view: EditorView, head: number): { from: number; to: number } 
 
 const chipPlugin = ViewPlugin.fromClass(
   class {
+    found: Chip[]
     drawn: Drawn
+    keys: ReadonlySet<string> = new Set()
     typing: { from: number; to: number } | null = null
     hovered: HTMLElement | null = null
     constructor(readonly view: EditorView) {
-      this.drawn = draw(view, null)
+      this.found = findAll(view.state)
+      this.drawn = draw(view, this.found, null)
+      this.report(view.state)
     }
     update(update: ViewUpdate) {
       const head = update.state.selection.main.head
@@ -222,14 +289,29 @@ const chipPlugin = ViewPlugin.fromClass(
         this.typing = null
         this.pasted(update)
       }
+      const hooks = update.state.facet(chipHooks)
+      const before = update.startState.facet(chipHooks)
+      // What resolves a chip changed, so every one is looked at again.
+      const rescan = hooks?.commands !== before?.commands || hooks?.resolve !== before?.resolve
+      if (rescan) this.found = findAll(update.state)
+      else if (update.docChanged) this.found = refind(this.found, update)
+      if (rescan || update.docChanged) this.report(update.state)
       if (
+        rescan ||
         update.docChanged ||
         update.selectionSet ||
-        update.startState.facet(chipHooks) !== update.state.facet(chipHooks) ||
+        hooks !== before ||
         update.startState.field(plainLinks) !== update.state.field(plainLinks)
       ) {
-        this.drawn = draw(update.view, this.typing)
+        this.drawn = draw(update.view, this.found, this.typing)
       }
+    }
+    report(state: EditorState) {
+      const keys = attachmentKeys(this.found)
+      if (keys.size === this.keys.size && [...keys].every((key) => this.keys.has(key))) return
+      this.keys = keys
+      const tell = state.facet(chipHooks)?.onMentioned
+      if (tell) queueMicrotask(() => tell(keys))
     }
     pasted(update: ViewUpdate) {
       const hooks = update.state.facet(chipHooks)

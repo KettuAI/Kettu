@@ -5,7 +5,7 @@ import type { SettingsFile } from '@shared/settings'
 import { sendEvent } from './events'
 import { t } from './i18n'
 import { createLogger } from './log'
-import { currentWindow } from './window'
+import { currentWindow, hideOnClose, hidesOnClose, isHiddenOnClose } from './window'
 
 const log = createLogger('quit')
 
@@ -104,7 +104,7 @@ export class QuitFlow {
   /**
    * On Windows and Linux, closing the last window quits, so it goes through the flow first, unless
    * Kettu runs in the background. Where the app stays, the page's unsaved edits would go, so that
-   * asks first.
+   * asks first. On macOS the last window hides instead, unless it has unsaved edits.
    */
   watchWindow(window: BrowserWindow): void {
     // Coming back to a window ends a choice to keep running: closing it goes as the setting says.
@@ -118,6 +118,13 @@ export class QuitFlow {
     if (process.platform === 'darwin') {
       window.on('close', (event) => {
         if (this.phase === 'done' || this.closing === window) return
+        // The last window hides with its page as it was, for the Dock icon or the menu to bring
+        // back; one with unsaved edits asks and closes as before.
+        if (hidesOnClose(window) && !this.unsaved.get(window.webContents.id)?.length) {
+          event.preventDefault()
+          hideOnClose(window)
+          return
+        }
         confirmUnsaved(event)
       })
       return
@@ -237,7 +244,7 @@ export class QuitFlow {
 
   private ask(request: QuitRequest, target?: BrowserWindow): Promise<QuitAnswer> {
     return new Promise((resolve) => {
-      const window = target ?? currentWindow()
+      const window = target ?? shownWindow()
       const webContents = window && !window.webContents.isDestroyed() ? window.webContents : null
       // A page that goes away mid-question cannot answer; fall back to a native dialog.
       const fallBack = (): void => {
@@ -278,7 +285,7 @@ export class QuitFlow {
   private async askNatively(pending: PendingAnswer): Promise<void> {
     pending.webContents = null
     const { reason, sessions, terminals, unsaved, keepRunning } = pending.request
-    const window = currentWindow()
+    const window = shownWindow()
     const buttons = [t('quit.cancel'), confirmLabel(reason, unsaved.length > 0, keepRunning)]
     if (keepRunning) buttons.push(t('quit.keepRunning'))
     const restarts = reason === 'update' || reason === 'restart'
@@ -304,6 +311,12 @@ export class QuitFlow {
       : await dialog.showMessageBox(options)
     pending.resolve(response === 2 ? 'background' : response === 1)
   }
+}
+
+/** The current window, unless closing hid it: then a question asks as with no window. */
+function shownWindow(): BrowserWindow | null {
+  const window = currentWindow()
+  return window && !isHiddenOnClose(window) ? window : null
 }
 
 function confirmLabel(

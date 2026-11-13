@@ -244,6 +244,15 @@ function finishLaunch(): void {
 }
 
 let shownSessions = ''
+// macOS hid the window on close, keeping the page: it shows no session until it comes back.
+let windowHidden = false
+
+/** The window was hidden on close, or shows again. */
+export function setWindowHidden(hidden: boolean): void {
+  if (windowHidden === hidden) return
+  windowHidden = hidden
+  showFront(true)
+}
 
 /**
  * Tells the host the sessions the panes in view show; a turn that ends anywhere else leaves it
@@ -251,7 +260,7 @@ let shownSessions = ''
  */
 function showFront(again = false): void {
   const state = useViewStore.getState()
-  const sessionIds = shownLayoutSessions(state)
+  const sessionIds = windowHidden ? [] : shownLayoutSessions(state)
   keepWatched(layoutSessions(state.layout))
   const key = sessionIds.join('\n')
   if (key === shownSessions && !again) return

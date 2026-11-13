@@ -13,7 +13,7 @@ import { useBrowserStore } from '@renderer/stores/browser'
 import { shownSidePane, useViewStore } from '@renderer/stores/view'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { insertAt } from './mentions'
-import type { PromptBoxState } from './use-prompt-box'
+import { useBoxText, type PromptBoxState } from './use-prompt-box'
 
 /**
  * **+**: adds files, photos or a folder through the system dialog, a screenshot of the session's
@@ -30,7 +30,7 @@ export function useAddMenu({
   commands: readonly SlashCommand[]
 }): { sections: ComposerAddSection[]; onAttach: (id: string) => void; disabled?: string } {
   const { t } = useTranslation('composer')
-  const { disabled, full, remote, text, editor, update, sessionId } = box
+  const { disabled, full, remote, source, editor, update, sessionId } = box
   const hasPage = useBrowserStore((s) => {
     const page = sessionId ? s.bySession[sessionId] : undefined
     // An evicted page keeps its address for the pane, with no live page behind it.
@@ -41,7 +41,7 @@ export function useAddMenu({
     (s) =>
       shownSidePane(s) === 'browser' && s.main.kind === 'session' && s.main.sessionId === sessionId,
   )
-  const emptyDraft = text === ''
+  const emptyDraft = useBoxText(box, (text) => text === '')
   const atMost = full ? t('attachments.atMost') : undefined
   const shot = full
     ? t('attachments.atMost')
@@ -111,7 +111,7 @@ export function useAddMenu({
     },
   ]
   const startMention = () => {
-    const current = editor.current?.text() ?? text
+    const current = editor.current?.text() ?? source.text
     const { from, to } = editor.current?.selection() ?? { from: current.length, to: current.length }
     const next = insertAt(current, from, to)
     update(next.text, next.caret)

@@ -20,7 +20,7 @@ import {
 import { usePromptChips } from './prompt-chips'
 import { orderSlashMatches } from './slash'
 import { useMentionList, type MentionList } from './use-mention-list'
-import type { PromptBoxState } from './use-prompt-box'
+import { useBoxText, type PromptBoxState } from './use-prompt-box'
 
 // The box both composers share, the session's and New session's: the text with its slash and `@`
 // popovers and the attachments, kept in a draft, inside the Chat Composer's writing area. What
@@ -63,11 +63,10 @@ export function PromptBox({
     draft,
     projectPath,
     disabled,
-    text,
+    source,
     attachments,
     update,
     editor,
-    caret,
     setCaret,
     slashDismissed,
     setSlashDismissed,
@@ -84,11 +83,22 @@ export function PromptBox({
   const popup = useRef<HTMLDivElement>(null)
   const listId = useId()
 
-  const slashQuery = text.startsWith('/') && !/\s/.test(text) ? text.slice(1).toLowerCase() : null
+  // Read from the text as values, so a key or a caret move renders the box only when one changes.
+  const slashQuery = useBoxText(box, (text) =>
+    text.startsWith('/') && !/\s/.test(text) ? text.slice(1).toLowerCase() : null,
+  )
   const slashMatches = slashQuery === null ? [] : orderSlashMatches(commands, slashQuery)
   const slashOpen = slashQuery !== null && slashMatches.length > 0 && !slashDismissed
 
-  const mention = mentionAt(text, caret)
+  const mentionKey = useBoxText(box, (text, caret) => {
+    const found = mentionAt(text, caret)
+    return found ? `${found.start}:${found.query}` : null
+  })
+  const mention = useMemo(() => {
+    if (mentionKey === null) return null
+    const colon = mentionKey.indexOf(':')
+    return { start: Number(mentionKey.slice(0, colon)), query: mentionKey.slice(colon + 1) }
+  }, [mentionKey])
   if (mentionDismissed !== null && mention?.start !== mentionDismissed) setMentionDismissed(null)
   const shown = mentionShown(mention, mentionDismissed, composition)
   const mentions = useMentionList(draft, projectPath, shown ? mention!.query : null)
@@ -138,7 +148,7 @@ export function PromptBox({
   }, [open, active, listId])
   const choose = (row: MentionRow) => {
     if (!mention || !projectPath) return
-    const next = replaceMention(text, mention, mentionName(row))
+    const next = replaceMention(source.text, mention, mentionName(row))
     update(next.text, next.caret)
     box.limitError(attachMention(draft, projectPath, row.path, row.folder))
   }
@@ -158,7 +168,7 @@ export function PromptBox({
   const chips = usePromptChips({
     draft,
     sessionId: box.sessionId,
-    text,
+    source,
     attachments,
     commands,
     agentName,
@@ -172,6 +182,7 @@ export function PromptBox({
   // Tab on a folder lists what is in it, as the query `folder/`.
   const openFolder = (row: MentionRow) => {
     if (!mention) return
+    const text = source.text
     const before = `${text.slice(0, mention.start)}@${row.path}/`
     update(`${before}${text.slice(mention.start + 1 + mention.query.length)}`, before.length)
   }
@@ -263,7 +274,7 @@ export function PromptBox({
         <div className="min-w-0">
           <ComposerEditor
             ref={editor}
-            initialText={text}
+            initialText={source.text}
             label={label}
             placeholder={placeholder}
             disabled={disabled}

@@ -382,7 +382,16 @@ export async function pinSession(sessionId: string, pinned: boolean): Promise<vo
 export async function archiveSession(sessionId: string): Promise<void> {
   const summary = useSessionsStore.getState().byId[sessionId]
   const archived = [sessionId, ...descendantIds(sessionId)]
-  await host('sessions.archive', { sessionId })
+  // Its row leaves at once, and its view with it; the host closes it behind, and a failure brings
+  // it back.
+  const settle = useSessionsStore.getState().archiveNow(sessionId)
+  try {
+    await host('sessions.archive', { sessionId })
+  } catch (error) {
+    settle(false)
+    throw error
+  }
+  settle(true)
   for (const id of archived) forgetSession(id)
   const { main, layout } = useViewStore.getState()
   // In a split every pane of an archived session closes; in the only pane, New session takes it.
@@ -526,7 +535,14 @@ export async function terminalsAtStake(sessionIds: readonly string[]): Promise<T
       return path && allowsTerminal(hostOfPath(path)) ? [path] : []
     }),
   )
-  await Promise.all([...paths].map((path) => loadTerminals(path)))
+  // Starting this computer's terminal host only to list nothing would hold the archive back.
+  const local = [...paths].some((path) => hostOfPath(path) === null)
+  const listLocal = local && (await window.kettu.terminals.running())
+  await Promise.all(
+    [...paths]
+      .filter((path) => listLocal || hostOfPath(path) !== null)
+      .map((path) => loadTerminals(path)),
+  )
   return busyTerminalsOf(all)
 }
 

@@ -134,6 +134,11 @@ export function App() {
 // The sidebar's width as last set, kept across launches.
 const SIDEBAR_WIDTH = 'sidebar-width'
 
+// Made once, so the frame's renders for its own props pass over them; each follows its stores.
+const SIDEBAR_LIST = <SidebarList />
+const SIDEBAR_NOTICES = <SidebarNotices />
+const CORNER = <CornerControls />
+
 /**
  * The window: App Shell's frame with Kettu's sidebar, the corner's toggle, Back and Forward, and
  * the main area's sheets on the desk.
@@ -168,8 +173,8 @@ function Workbench() {
         sideCards={false}
         {...nav}
         {...account}
-        list={<SidebarList />}
-        footCards={<SidebarNotices />}
+        list={SIDEBAR_LIST}
+        footCards={SIDEBAR_NOTICES}
         onSearch={() => showSearch(true)}
         collapsed={collapsed}
         onCollapsedChange={(next) => useViewStore.setState({ sidebarCollapsed: next })}
@@ -180,7 +185,7 @@ function Workbench() {
           clearTimeout(save.current)
           save.current = setTimeout(() => writeJson(SIDEBAR_WIDTH, width), 300)
         }}
-        corner={<CornerControls />}
+        corner={CORNER}
         labels={{
           search: t('nav.searchField'),
           searchKey: formatShortcut('Mod+K'),
@@ -189,7 +194,7 @@ function Workbench() {
           account: t('account.signedOut'),
         }}
       >
-        <MainFrame />
+        {MAIN_FRAME}
       </AppShell>
       <CornerDragHole />
     </div>
@@ -254,3 +259,5 @@ function MainFrame() {
 
 // App Shell's own width for a narrow window, where the sidebar becomes a drawer.
 const NARROW_FRAME = 900
+
+const MAIN_FRAME = <MainFrame />

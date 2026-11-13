@@ -14,6 +14,7 @@ import {
   type SettingsSection,
 } from '@renderer/stores/view'
 import { newSession, openProjectDialog } from './actions'
+import { setWindowHidden } from './bootstrap'
 import { closeCurrent } from './close'
 import { back, forward, toggleHistory } from './history'
 import { layerOpen } from './shortcuts'
@@ -69,6 +70,12 @@ export function useAppCommands(): void {
             break
           case 'confirm-debug-restart':
             confirmDebugRestart()
+            break
+          case 'window-hidden':
+            setWindowHidden(true)
+            break
+          case 'window-shown':
+            setWindowHidden(false)
             break
           case 'report-problem':
             void openReport(

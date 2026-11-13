@@ -82,6 +82,8 @@ export interface TerminalsApi {
   onConnection(listener: (state: PortConnectionState) => void): () => void
   /** Starts the host again after it failed (crashed too often); does nothing otherwise. */
   restart(): Promise<void>
+  /** Whether the host runs, asked without starting it: one that does not holds no terminals. */
+  running(): Promise<boolean>
 }
 
 /** Flow control constants, from VS Code's pty host (MIT). */

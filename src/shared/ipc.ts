@@ -136,6 +136,10 @@ export type AppCommand =
   | { kind: 'close'; browser?: true }
   /** Report a problem, from the Help menu or the end of a recording, with its span then. */
   | { kind: 'report-problem'; span?: { from: number; to: number } }
+  /** macOS: closing hid the window, which keeps its page; none of its sessions counts as seen. */
+  | { kind: 'window-hidden' }
+  /** The window hidden on close shows again. */
+  | { kind: 'window-shown' }
 
 /**
  * `artifact:open`: the artifact's origin URL, without a query, or why it cannot be shown:
@@ -283,6 +287,7 @@ export interface IpcInvokeContract {
   'update:dismiss': { args: []; result: void }
   'agent-host:restart': { args: []; result: void }
   'terminal-host:restart': { args: []; result: void }
+  'terminal-host:running': { args: []; result: boolean }
   'device-host:restart': { args: []; result: void }
   'artifact:open': { args: [id: string]; result: ArtifactOpenResult }
   'artifact:close': { args: [url: string]; result: void }

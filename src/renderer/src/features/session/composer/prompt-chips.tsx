@@ -20,15 +20,19 @@ import { openAttachmentPath } from '../attachments/open-attachment'
 import { draftKey } from '../media/viewer-items'
 import { ChipPreview } from './chip-preview'
 import { ChipView } from './chip-view'
-import { findChips, mentioned, mentionResolver, type Chip } from './chips'
+import { mentionResolver, type Chip } from './chips'
 import type { ComposerEditorHandle } from './editor'
 import type { ChipHooks } from './editor-chips'
 import { useLinkOpener } from './link-opener'
+import { leadingCommand } from './slash'
+import { useBoxText, type BoxText } from './use-prompt-box'
 
 // The hover preview opens once the pointer rests on a chip, and stays while it moves between two.
 const PREVIEW_DELAY = 350
 // "Pasted as a link" stays this long, or until the text changes again.
 const PASTED_FOR = 6000
+
+const NO_KEYS: ReadonlySet<string> = new Set()
 
 const POPUP =
   'origin-(--transform-origin) rounded-xl bg-popover text-popover-foreground shadow-menu outline-none animation-duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:animate-none'
@@ -55,7 +59,7 @@ export function projectOf(paths: readonly string[], known: ReadonlySet<string>) 
 export function usePromptChips({
   draft,
   sessionId,
-  text,
+  source,
   attachments,
   commands,
   agentName,
@@ -67,7 +71,7 @@ export function usePromptChips({
 }: {
   draft: string
   sessionId: string | null
-  text: string
+  source: BoxText
   attachments: readonly DraftAttachment[]
   commands: readonly SlashCommand[]
   agentName: string
@@ -81,7 +85,7 @@ export function usePromptChips({
 }) {
   const { t } = useTranslation('composer')
   const files = useFilesStore((s) => (projectPath ? s.byProject[projectPath] : undefined))
-  const mentions = /[@＠]/.test(text)
+  const mentions = useBoxText({ source }, (text) => /[@＠]/.test(text))
   useEffect(() => {
     if (projectPath && mentions) ensureFiles(projectPath)
   }, [projectPath, mentions])
@@ -90,10 +94,7 @@ export function usePromptChips({
   const names = useMemo(() => commands.map((c) => c.name), [commands])
 
   // The preview belongs to the text it was opened on: an edit can take its chip away.
-  const [hover, setHover] = useState<{ chip: Chip; element: HTMLElement; text: string } | null>(
-    null,
-  )
-  if (hover && hover.text !== text) setHover(null)
+  const [hover, setHover] = useState<{ chip: Chip; element: HTMLElement } | null>(null)
   const hoverTimer = useRef<number | undefined>(undefined)
   const onHover = (chip: Chip | null, element: HTMLElement | null) => {
     window.clearTimeout(hoverTimer.current)
@@ -101,15 +102,27 @@ export function usePromptChips({
       setHover(null)
       return
     }
+    const at = source.text
     hoverTimer.current = window.setTimeout(
-      () => setHover({ chip, element, text }),
+      () => {
+        if (source.text === at) setHover({ chip, element })
+      },
       hover ? 0 : PREVIEW_DELAY,
     )
   }
   useEffect(() => () => window.clearTimeout(hoverTimer.current), [])
 
-  const [pasted, setPasted] = useState<{ from: number; to: number; text: string } | null>(null)
-  if (pasted && pasted.text !== text) setPasted(null)
+  const [pasted, setPasted] = useState<{ from: number; to: number } | null>(null)
+  // An edit closes the preview and ends "Pasted as a link".
+  useEffect(() => {
+    let last = source.text
+    return source.subscribe(() => {
+      if (source.text === last) return
+      last = source.text
+      setHover(null)
+      setPasted(null)
+    })
+  }, [source])
   useEffect(() => {
     if (!pasted) return
     const timer = window.setTimeout(() => setPasted(null), PASTED_FOR)
@@ -158,11 +171,16 @@ export function usePromptChips({
 
   // The editor redraws its chips when the context changes, so it changes only with what they
   // show; the handlers are read when they fire.
-  const onLinkPasted = (from: number, to: number) =>
-    setPasted({ from, to, text: editor.current?.text() ?? '' })
-  const handlers = useRef({ onHover, open, onLinkPasted })
+  const onLinkPasted = (from: number, to: number) => setPasted({ from, to })
+  // An attachment a chip stands for needs no tile; one whose chip goes shows its tile again.
+  const [hidden, setHidden] = useState(NO_KEYS)
+  const onMentioned = (keys: ReadonlySet<string>) =>
+    setHidden((shown) =>
+      shown.size === keys.size && [...keys].every((key) => shown.has(key)) ? shown : keys,
+    )
+  const handlers = useRef({ onHover, open, onLinkPasted, onMentioned })
   useLayoutEffect(() => {
-    handlers.current = { onHover, open, onLinkPasted }
+    handlers.current = { onHover, open, onLinkPasted, onMentioned }
   })
   const chipContext = useMemo<ChipHooks>(
     () => ({
@@ -171,13 +189,11 @@ export function usePromptChips({
       onHover: (chip, element) => handlers.current.onHover(chip, element),
       onOpen: (chip) => handlers.current.open(chip),
       onLinkPasted: (from, to) => handlers.current.onLinkPasted(from, to),
+      onMentioned: (keys) => handlers.current.onMentioned(keys),
       highlight: pasted,
     }),
     [names, resolve, pasted],
   )
-
-  // An attachment a chip stands for needs no tile; one whose chip goes shows its tile again.
-  const hidden = useMemo(() => mentioned(text, resolve), [text, resolve])
 
   const keyDown = (event: KeyboardEvent): boolean => {
     if (!pasted || !isMod(event) || !event.shiftKey || event.key.toLowerCase() !== 'v') return false
@@ -186,9 +202,18 @@ export function usePromptChips({
     return true
   }
 
-  const leading = findChips(text, { commands: names, resolve: () => null })[0]
-  const command =
-    leading?.kind === 'command' ? commands.find((c) => c.name === leading.name) : undefined
+  const leadingName = useBoxText({ source }, (text) => {
+    const end = leadingCommand(text, names)
+    return end ? text.slice(1, end) : null
+  })
+  const leading = useMemo<Chip | null>(
+    () =>
+      leadingName === null
+        ? null
+        : { kind: 'command', from: 0, to: leadingName.length + 1, name: leadingName },
+    [leadingName],
+  )
+  const command = leadingName === null ? undefined : commands.find((c) => c.name === leadingName)
   const strip = !!command && focused && !popoverOpen && !hover && !pasted
 
   const overlays: ReactNode = (

@@ -352,6 +352,7 @@ const api: KettuApi = {
     onEvent: (listener) => terminals.onEvent(listener),
     onConnection: (listener) => terminals.onConnection(listener),
     restart: () => invoke('terminal-host:restart'),
+    running: () => invoke('terminal-host:running'),
   } as TerminalsApi,
   devices: {
     request: (method, params) => devices.request(method, params),
