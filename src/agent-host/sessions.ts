@@ -155,7 +155,7 @@ import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { WorktreeInspection } from './worktrees/api'
-import type { PrepareState, WorktreeManager } from './worktrees/manager'
+import type { PrepareState, SetupLog, WorktreeManager } from './worktrees/manager'
 import {
   carriedContext,
   threadTurns,
@@ -7316,10 +7316,11 @@ export class SessionManager {
     this.releaseWorktreeWaiters(worktree.path)
   }
 
-  /** The setup command's output in the session's worktree. */
-  worktreeSetupLog(sessionId: string): string {
+  /** The setup command's output in the session's worktree, whole or from an offset. */
+  worktreeSetupLog(sessionId: string, from?: number): SetupLog {
     const { worktree } = this.recordOf(sessionId)
-    return worktree ? (this.deps.worktrees?.setupLog(worktree.path) ?? '') : ''
+    const log = worktree ? this.deps.worktrees?.setupLog(worktree.path, from) : undefined
+    return log ?? { log: '', start: 0, end: 0 }
   }
 
   /** Marks worktrees whose folders are gone, so their sessions say so; run at load. */

@@ -1209,7 +1209,13 @@ export function createValidators(platform: Platform): Validators {
     },
     'worktrees.retrySetup': session,
     'worktrees.skipSetup': session,
-    'worktrees.setupLog': session,
+    'worktrees.setupLog': (params) => {
+      const o = fields(params)
+      return {
+        sessionId: sessionId(o),
+        ...(o.from === undefined ? {} : { from: count(o, 'from') }),
+      }
+    },
     'sessions.switchAgent': (params) => {
       const o = fields(params)
       if (o.summarize !== undefined && typeof o.summarize !== 'boolean') {

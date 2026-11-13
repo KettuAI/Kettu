@@ -862,6 +862,17 @@ describe('worktree requests', () => {
     )
   })
 
+  it('reads the setup output whole or from an offset', () => {
+    expect(posix['worktrees.setupLog']({ sessionId: 's' })).toEqual({ sessionId: 's' })
+    expect(posix['worktrees.setupLog']({ sessionId: 's', from: 1200 })).toEqual({
+      sessionId: 's',
+      from: 1200,
+    })
+    rejects(() => posix['worktrees.setupLog']({ sessionId: 's', from: -1 }))
+    rejects(() => posix['worktrees.setupLog']({ sessionId: 's', from: 1.5 }))
+    rejects(() => posix['worktrees.setupLog']({ sessionId: 's', from: '10' }))
+  })
+
   it("checks a project's worktree settings as the host will use them", () => {
     const set = (value: unknown, validators = posix) =>
       validators['projects.setWorktreeSettings']({ path: '/repo', settings: value })

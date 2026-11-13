@@ -1705,7 +1705,7 @@ export class AgentHost {
         this.gitCall(() => sessions.removeWorktree(sessionId, branch, expected)),
       'worktrees.retrySetup': ({ sessionId }) => sessions.retryWorktreeSetup(sessionId),
       'worktrees.skipSetup': ({ sessionId }) => sessions.skipWorktreeSetup(sessionId),
-      'worktrees.setupLog': ({ sessionId }) => ({ log: sessions.worktreeSetupLog(sessionId) }),
+      'worktrees.setupLog': ({ sessionId, from }) => sessions.worktreeSetupLog(sessionId, from),
       'sessions.switchAgent': (params, { portId, device }) =>
         sessions.switchAgent(params, portId, fromDevice(device)),
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
