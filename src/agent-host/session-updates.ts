@@ -314,7 +314,19 @@ export const WINDOW_LABELS: Readonly<Record<string, string>> = {
   seven_day: 'Weekly',
   seven_day_opus: 'Weekly · Opus',
   seven_day_sonnet: 'Weekly · Sonnet',
+  seven_day_fable: 'Weekly · Fable',
   overage: 'Extra usage',
+}
+
+// Claude Code's rate limit events call the Fable weekly window `seven_day_overage_included`; its
+// own messages name it the Fable limit, and its usage report `seven_day_fable`.
+const WINDOW_ALIASES: Readonly<Record<string, string>> = {
+  seven_day_overage_included: 'seven_day_fable',
+}
+
+/** The window Kettu keeps a window Claude Code names under. */
+export function planWindow(window: string): string {
+  return WINDOW_ALIASES[window] ?? window
 }
 
 function windowLabel(window: string): string {
@@ -365,13 +377,15 @@ export function mapRateLimits(
   const limits: PlanLimit[] = []
   const windows = info.unifiedWindows
   if (typeof windows === 'object' && windows !== null) {
-    for (const [window, reading] of Object.entries(windows as Record<string, unknown>)) {
+    for (const [name, reading] of Object.entries(windows as Record<string, unknown>)) {
+      const window = planWindow(name)
       if (window === '' || typeof reading !== 'object' || reading === null) continue
+      if (limits.some((l) => l.window === window)) continue
       limits.push(windowLimit(window, reading as Record<string, unknown>, now))
     }
   }
-  const window = info.rateLimitType
-  if (typeof window === 'string' && window !== '' && !limits.some((l) => l.window === window)) {
+  const window = typeof info.rateLimitType === 'string' ? planWindow(info.rateLimitType) : ''
+  if (window !== '' && !limits.some((l) => l.window === window)) {
     limits.push(windowLimit(window, info, now))
   }
   return { allowed: info.status !== 'rejected', limits }
