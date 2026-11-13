@@ -17,8 +17,10 @@ import { planReset } from '@renderer/features/sidebar/plan-usage'
 import { addDays, dayOf, monthStartOf } from '@renderer/features/usage/model'
 import { limitLabel, mediumAgo, money } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { newestLimits } from '@renderer/lib/plan-readings'
 import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
+import { usePlanReadings } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { limitsReadable, percent, useAction } from './agent-helpers'
 import { CommandLine, ControlError, IconAction, Meter, SetButton, Spin } from './controls'
@@ -249,9 +251,11 @@ export function UsageGroup({
   const [act, busy, error] = useAction()
   const refresh = useRefresh()
   const [refreshError, setRefreshError] = useState<string | null>(null)
-  const observed = Math.max(0, ...status.limits.map((l) => l.observedAt)) || null
+  // The account's newest reading, which may be another host's.
+  const limits = newestLimits(usePlanReadings(), status)
+  const observed = Math.max(0, ...limits.map((l) => l.observedAt)) || null
   const actions =
-    status.limits.length > 0 && limitsReadable(status) ? (
+    limits.length > 0 && limitsReadable(status) ? (
       <>
         {observed && (
           <span className="k-muted">
@@ -274,9 +278,9 @@ export function UsageGroup({
   return (
     <section className="k-group" aria-label={t('agents.usage')}>
       <GroupLabel group={{ id: 'usage', label: t('agents.usage'), actions }} />
-      {status.limits.length > 0 ? (
+      {limits.length > 0 ? (
         <RowGroup>
-          {status.limits.map((limit) => {
+          {limits.map((limit) => {
             const level = limitLevel(limit)
             return (
               <RowFrame
@@ -318,7 +322,7 @@ export function UsageGroup({
       ) : (
         <p className="k-reading">{t('agents.usageNotReported', { name: status.name })}</p>
       )}
-      {(error ?? refreshError) && status.limits.length > 0 && (
+      {(error ?? refreshError) && limits.length > 0 && (
         <p className="ui-sg-hint k-error" data-wrap="">
           {error ?? refreshError}
         </p>

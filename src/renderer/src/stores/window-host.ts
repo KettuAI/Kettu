@@ -1,9 +1,12 @@
 // The host the window shows, as the account menu chose it: the sidebar and every global page
 // (Artifacts, Routines, Marketplace, Usage, Search) follow it.
 
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
 import { isMac } from '@renderer/lib/platform'
+import type { HostAgentList } from '@renderer/lib/plan-readings'
+import { agentsOn, listedAgents, useAgentsStore } from './agents'
 import { hostScope, LOCAL_SCOPE, type HostScope } from './host-scope'
 import { isAway, otherHosts, shownHosts, useHostsStore, type OtherHost } from './hosts'
 import { useViewStore } from './view'
@@ -62,6 +65,26 @@ export function useShowsHost(): (hostId: string | null) => boolean {
 export function useWindowScope(): HostScope {
   const key = useKey()
   return key === null || key === ALL ? LOCAL_SCOPE : hostScope(key)
+}
+
+/**
+ * The agents of the hosts the window shows, this computer (null) first, as menus and pages list
+ * them: added ones that are not turned off.
+ */
+export function shownHostAgents(): HostAgentList[] {
+  const state = useAgentsStore.getState()
+  return windowHosts().map((hostId) => ({ hostId, agents: listedAgents(agentsOn(state, hostId)) }))
+}
+
+export function useShownHostAgents(): HostAgentList[] {
+  const key = useKey()
+  const others = useHostsStore(useShallow((s) => otherHosts(s).map((h) => h.id)))
+  const ids = useMemo(() => (key === ALL ? [null, ...others] : [key]), [key, others])
+  const lists = useAgentsStore(useShallow((s) => ids.map((id) => agentsOn(s, id))))
+  return useMemo(
+    () => ids.map((hostId, index) => ({ hostId, agents: listedAgents(lists[index]!) })),
+    [ids, lists],
+  )
 }
 
 /** Whether pages name hosts at all: only once another host is added. */

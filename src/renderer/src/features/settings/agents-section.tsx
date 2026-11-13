@@ -46,6 +46,7 @@ import { AgentStateLine } from '@renderer/features/agents/agent-state'
 import { readiness, type AgentReadiness } from '@renderer/features/agents/readiness'
 import { focusedPane } from '@renderer/features/split/layout'
 import { errorMessage } from '@renderer/lib/host'
+import { newestLimits } from '@renderer/lib/plan-readings'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
@@ -56,7 +57,7 @@ import {
   readHostAgentOptions,
   useAgentOptionsStore,
 } from '@renderer/stores/agent-options'
-import { addableHarnesses, type AgentsStoreHook } from '@renderer/stores/agents'
+import { addableHarnesses, usePlanReadings, type AgentsStoreHook } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
@@ -218,7 +219,7 @@ export function AgentListItem({ status }: { status: AgentStatus }) {
   const ready = readiness(status)
   const reading = useAgentReads(status)
   const account = status.account?.kind === 'none' ? null : status.account
-  const limits = currentLimits(status.limits, now)
+  const limits = currentLimits(newestLimits(usePlanReadings(), status), now)
   const folder = details?.config.find((item) => item.id === 'folder')?.path
   const off = status.disabled === true
   const identity = accountIdentity(status, account, ready, reading, (key) => t(key))

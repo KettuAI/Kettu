@@ -25,6 +25,7 @@ import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, limitLabel, longAgo, resetTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
+import { newestLimits } from '@renderer/lib/plan-readings'
 import { isMod } from '@renderer/lib/platform'
 import { useClock, useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -36,7 +37,13 @@ import {
   preparedFor,
   useAgentOptionsStore,
 } from '@renderer/stores/agent-options'
-import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import {
+  agentName,
+  agentsOn,
+  usableAgents,
+  useAgentsStore,
+  usePlanReadings,
+} from '@renderer/stores/agents'
 import { useGitStore } from '@renderer/stores/git'
 import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
@@ -243,7 +250,8 @@ function DraftComposer({
   const [projectError, setProjectError] = useState<string | null>(null)
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const status = useAgentsStore((s) => (agentId ? agentsOn(s, hostId).byId[agentId] : undefined))
-  const limits = status?.limits
+  const readings = usePlanReadings()
+  const limits = status ? newestLimits(readings, status) : undefined
   // A default agent that became usable after this page opened, such as the first start's, is what
   // the page starts with.
   const defaultAgent = useSettingsStore((s) => s.settings.general.defaultAgent)

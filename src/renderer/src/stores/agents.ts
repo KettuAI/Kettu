@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import type {
   AgentDetails,
   AgentInstallMethod,
@@ -14,6 +16,7 @@ import {
   type HarnessId,
 } from '@shared/thread'
 import { errorMessage, host, hostAt, type HostRequest } from '@renderer/lib/host'
+import { newestReadings, type PlanReading } from '@renderer/lib/plan-readings'
 import { useSettingsStore } from '@renderer/stores/settings'
 
 /** One host's agents, in the order the menus list them. */
@@ -175,6 +178,37 @@ function listOf(statuses: AgentStatus[]): HostAgents {
 }
 
 const NO_AGENTS: HostAgents = { byId: {}, order: [] }
+
+/** The agents of a host's list that menus and pages show: added ones that are not turned off. */
+export function listedAgents(agents: HostAgents): AgentStatus[] {
+  return agents.order
+    .map((id) => agents.byId[id])
+    .filter((a): a is AgentStatus => !!a && a.registered !== false && !a.disabled)
+}
+
+function readingsOf(
+  byId: HostAgents['byId'],
+  hosts: AgentsStore['hosts'],
+): Map<string, PlanReading> {
+  const all = (agents: HostAgents['byId']) =>
+    Object.values(agents).filter((a): a is AgentStatus => !!a)
+  return newestReadings([
+    { hostId: null, agents: all(byId) },
+    ...Object.entries(hosts).map(([hostId, agents]) => ({ hostId, agents: all(agents.byId) })),
+  ])
+}
+
+/** The newest plan limits read of each account on any host this window knows. */
+export function planReadingsOf(
+  state: Pick<AgentsStore, 'byId' | 'hosts'>,
+): Map<string, PlanReading> {
+  return readingsOf(state.byId, state.hosts)
+}
+
+export function usePlanReadings(): ReadonlyMap<string, PlanReading> {
+  const { byId, hosts } = useAgentsStore(useShallow((s) => ({ byId: s.byId, hosts: s.hosts })))
+  return useMemo(() => readingsOf(byId, hosts), [byId, hosts])
+}
 
 /** The agents of the host named, null being this computer; none while another's are unread. */
 export function agentsOn(

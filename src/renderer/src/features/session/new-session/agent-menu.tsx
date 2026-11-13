@@ -36,6 +36,7 @@ import { planReset, tightestLimit } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel } from '@renderer/lib/format'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { LIMIT_TEXT, limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
+import { newestLimits } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -47,7 +48,13 @@ import {
   useAgentOptionsStore,
   type OptionValues,
 } from '@renderer/stores/agent-options'
-import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import {
+  agentName,
+  agentsOn,
+  usableAgents,
+  useAgentsStore,
+  usePlanReadings,
+} from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
@@ -524,7 +531,8 @@ function ModelButtonLabel({
 function RailRow({ status }: { status: AgentStatus }) {
   const { t } = useTranslation('session')
   const now = useNow()
-  const limit = tightestLimit(status.limits, now)
+  const limits = newestLimits(usePlanReadings(), status)
+  const limit = tightestLimit(limits, now)
   const need = agentNeed(status)
   const trailing =
     need === 'setup'
@@ -559,7 +567,7 @@ function RailRow({ status }: { status: AgentStatus }) {
           {trailing}
         </span>
       ) : (
-        limit && <UsageNote limits={status.limits} now={now} />
+        limit && <UsageNote limits={limits} now={now} />
       )}
     </TabsTrigger>
   )

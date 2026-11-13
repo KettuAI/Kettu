@@ -22,6 +22,8 @@ import {
 import { addCost, mergeSummaries } from '@renderer/features/usage/merge'
 import { errorMessage, host, hostAt } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
+import { limitWays, type LimitWay } from '@renderer/lib/plan-readings'
+import { agentsOn, listedAgents, useAgentsStore } from './agents'
 import { otherHosts, shownHosts, useHostsStore } from './hosts'
 import { useViewStore } from './view'
 
@@ -134,6 +136,30 @@ export function refreshLimits(agentId: AgentId, hostId: string | null = null): P
   return hostAt(hostId, 'agents.refreshLimits', { agentId })
 }
 
+/** What reads every plan limit this window knows of, by card key, each account once. */
+export function planLimitWays(): Map<string, LimitWay[]> {
+  const state = useAgentsStore.getState()
+  const hosts = [null, ...otherHosts(useHostsStore.getState()).map((h) => h.id)]
+  return limitWays(
+    hosts.map((hostId) => ({ hostId, agents: listedAgents(agentsOn(state, hostId)) })),
+    reachable,
+  )
+}
+
+/** Reads a card's limits through the first of `ways` that answers; rejects as the last one did. */
+export async function readLimitsThrough(ways: readonly LimitWay[]): Promise<void> {
+  let error: unknown = new Error('No host to read the plan limits through')
+  for (const way of ways) {
+    try {
+      await refreshLimits(way.agentId, way.hostId)
+      return
+    } catch (failed) {
+      error = failed
+    }
+  }
+  throw error
+}
+
 /** The hosts the window's usage covers, this computer (null) first: the one chosen, or each. */
 export function usageHosts(): (string | null)[] {
   return shownHosts(otherHosts(useHostsStore.getState()), useViewStore.getState().hostFilter)
@@ -147,7 +173,7 @@ function usageKey(hosts: readonly (string | null)[]): string {
 }
 
 /** Whether a host answers now: this computer always, another while it is online. */
-function reachable(hostId: string | null): boolean {
+export function reachable(hostId: string | null): boolean {
   if (hostId === null) return true
   const other = otherHosts(useHostsStore.getState()).find((h) => h.id === hostId)
   return other?.connection.state === 'online'

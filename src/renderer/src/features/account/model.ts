@@ -1,10 +1,11 @@
 import type { AccountStatus } from '@shared/account'
-import type { AgentAccount, AgentStatus, PlanLimit } from '@shared/agent-host'
+import type { AgentAccount, PlanLimit } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
 import { planName } from '@renderer/features/tray/model'
 import type { UpdateItem } from '@renderer/features/updates/card-model'
 import { limitLevel, type LimitLevel } from '@renderer/lib/plan-limit'
+import type { AccountAgent } from '@renderer/lib/plan-readings'
 import { THIS_COMPUTER } from '@renderer/stores/view'
 
 /** Who the account row and its menu name. */
@@ -56,6 +57,10 @@ export interface CardWindow {
 /** One account's card in the account menu, an OpenCode provider's included. */
 export interface PlanCard {
   key: string
+  /** The host of `agentId`, null being this computer. */
+  hostId: string | null
+  /** Every host shown that the account is on. */
+  hostIds: (string | null)[]
   agentId: AgentId
   agentName: string
   /** The agent's name, or for OpenCode the provider's. */
@@ -113,11 +118,11 @@ export function planTier(account: AgentAccount | null): string | null {
 }
 
 /**
- * A card per account that reports plan windows, in the agents' order. OpenCode gets one per
- * provider, named without a leading "OpenCode", which its mark shows.
+ * A card per account that reports plan windows, in the accounts' order, at the account's newest
+ * reading. OpenCode gets one per provider, named without a leading "OpenCode", which its mark shows.
  */
-export function planCards(agents: readonly AgentStatus[], now: number): PlanCard[] {
-  return agents.flatMap((agent): PlanCard[] => {
+export function planCards(accounts: readonly AccountAgent[], now: number): PlanCard[] {
+  return accounts.flatMap(({ key, hostId, hostIds, agent, limits, name }): PlanCard[] => {
     if (agent.harnessId === 'opencode') {
       return (agent.providers ?? []).flatMap((provider) => {
         const limits = provider.usage?.limits ?? []
@@ -125,7 +130,9 @@ export function planCards(agents: readonly AgentStatus[], now: number): PlanCard
         if (windows.length === 0) return []
         return [
           {
-            key: `${agent.id}:${provider.id}`,
+            key: `${key}:${provider.id}`,
+            hostId,
+            hostIds,
             agentId: agent.id,
             agentName: agent.name,
             name: planName(agent.harnessName, provider.name),
@@ -137,17 +144,19 @@ export function planCards(agents: readonly AgentStatus[], now: number): PlanCard
         ]
       })
     }
-    const windows = cardWindows(agent.limits, now)
+    const windows = cardWindows(limits, now)
     if (windows.length === 0) return []
     return [
       {
-        key: agent.id,
+        key,
+        hostId,
+        hostIds,
         agentId: agent.id,
         agentName: agent.name,
-        name: agent.name,
+        name,
         tier: planTier(agent.account),
         windows,
-        limits: agent.limits,
+        limits,
         account: agent.account,
       },
     ]

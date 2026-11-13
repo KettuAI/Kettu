@@ -5,6 +5,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/compone
 import { PlanPart } from '@renderer/features/session/composer/usage'
 import { LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
+import { useHostName, useWindowHost } from '@renderer/stores/window-host'
 import type { PlanCard } from './model'
 
 /**
@@ -12,6 +13,9 @@ import type { PlanCard } from './model'
  * opens the Usage page; hovered or focused, it shows every window beside it.
  */
 export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => void }) {
+  const hostName = useHostName()
+  // With every host shown, which of them the account is on.
+  const hosts = useWindowHost().kind === 'all' ? card.hostIds.map(hostName).join(' · ') : null
   return (
     <HoverCard>
       <HoverCardTrigger
@@ -29,10 +33,13 @@ export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => 
       </HoverCardTrigger>
       <HoverCardContent side="right" align="start" sideOffset={6} className="w-68">
         <div className="mb-2.5 flex min-w-0 items-center gap-1.5">
-          <AgentTile agent={card.agentId} size={18} />
+          <AgentTile agent={card.agentId} hostId={card.hostId} size={18} />
           <span className="min-w-0 truncate text-small font-semibold text-primary">
             {card.agentName}
           </span>
+          {hosts && (
+            <span className="ml-auto min-w-0 shrink truncate text-hint text-tertiary">{hosts}</span>
+          )}
         </div>
         <PlanPart limits={card.limits} account={card.account} />
       </HoverCardContent>
@@ -45,7 +52,7 @@ function CardFace({ card }: { card: PlanCard }) {
   return (
     <>
       <span className="flex h-4.5 min-w-0 items-center gap-1.5">
-        <AgentTile agent={card.agentId} size={18} />
+        <AgentTile agent={card.agentId} hostId={card.hostId} size={18} />
         <span className="min-w-0 truncate text-small font-semibold text-primary">{card.name}</span>
         {card.tier && (
           <span className="ml-auto shrink-0 rounded-sm bg-popover px-1.25 text-badge leading-3.75 text-secondary shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">

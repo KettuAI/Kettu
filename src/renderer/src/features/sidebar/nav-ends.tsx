@@ -1,8 +1,7 @@
 import { useEffect } from 'react'
 import { Alert02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus, PlanLimit } from '@shared/agent-host'
+import type { PlanLimit } from '@shared/agent-host'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { strongestSignal } from '@renderer/features/routines/model'
@@ -11,10 +10,12 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { dayOf } from '@renderer/features/usage/model'
 import { limitLabel, tokens } from '@renderer/lib/format'
 import { LIMIT_TEXT, limitLevel } from '@renderer/lib/plan-limit'
+import { accountAgents, type AccountAgent } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { loadToday, useUsageStore } from '@renderer/stores/usage'
-import { useWindowScope } from '@renderer/stores/window-host'
+import { usePlanReadings } from '@renderer/stores/agents'
+import { useShownHostAgents } from '@renderer/stores/window-host'
 import { tightestLimit } from './plan-usage'
 import { costText } from './usage-row'
 
@@ -87,38 +88,31 @@ export function TodayCost() {
   )
 }
 
-/** Across the agents, a reached window first, then the fullest. */
+/** Across the accounts, a reached window first, then the fullest. */
 function tightestOf(
-  agents: AgentStatus[],
+  accounts: readonly AccountAgent[],
   now: number,
-): { agent: AgentStatus; limit: PlanLimit } | null {
-  let best: { agent: AgentStatus; limit: PlanLimit } | null = null
-  for (const agent of agents) {
-    const limit = tightestLimit(agent.limits, now)
+): { account: AccountAgent; limit: PlanLimit } | null {
+  let best: { account: AccountAgent; limit: PlanLimit } | null = null
+  for (const account of accounts) {
+    const limit = tightestLimit(account.limits, now)
     if (!limit || limit.usedPercent === null) continue
     const rank = (l: PlanLimit) => (l.state === 'reached' ? 1000 : 0) + (l.usedPercent ?? 0)
-    if (!best || rank(limit) > rank(best.limit)) best = { agent, limit }
+    if (!best || rank(limit) > rank(best.limit)) best = { account, limit }
   }
   return best
 }
 
-/** The window's host's tightest limit; this computer's with every host shown, as one account's. */
+/** The tightest limit of the window's hosts' accounts, each at its newest reading. */
 export function TightestLimit() {
   const { t } = useTranslation('usage')
-  const { hostId, useAgentsStore } = useWindowScope()
-  const agents = useAgentsStore(
-    useShallow((s) =>
-      s.order
-        .map((id) => s.byId[id])
-        .filter(
-          (a): a is AgentStatus =>
-            !!a && a.registered !== false && !a.disabled && a.limits.length > 0,
-        ),
-    ),
-  )
-  const tightest = tightestOf(agents, useNow())
+  const accounts = accountAgents(useShownHostAgents(), usePlanReadings())
+  const tightest = tightestOf(accounts, useNow())
   if (!tightest) return null
-  const { agent, limit } = tightest
+  const {
+    account: { agent, hostId, name },
+    limit,
+  } = tightest
   const percent = `${Math.round(limit.usedPercent ?? 0)}%`
   const level = limitLevel(limit)
   return (
@@ -133,7 +127,7 @@ export function TightestLimit() {
         {t('nav.limitShort', { limit: limitLabel(limit), percent })}
       </span>
       <span className="sr-only">
-        {t('nav.limit', { agent: agent.name, limit: limitLabel(limit), percent })}
+        {t('nav.limit', { agent: name, limit: limitLabel(limit), percent })}
       </span>
     </span>
   )
