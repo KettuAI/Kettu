@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
+import { limitsForModel } from '@shared/plan-limits'
 import { startNewSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { FolderMark } from '@renderer/components/affect/assistant-home'
@@ -312,7 +313,10 @@ function DraftComposer({
       branchNameInvalid(s.branch),
   )
   const canSend = !!agentId && ready && holdsMessage && !held && !badBranch
-  const tightest = limits ? tightestLimit(limits, now) : null
+  const config = useStartConfig(agentId, undefined, hostId)
+  const model = config?.find((o) => o.category === 'model' && isSelect(o))
+  // A used-up window of another model does not hold the picked one back.
+  const tightest = limits ? tightestLimit(limitsForModel(limits, model), now) : null
   const reached = tightest?.state === 'reached' ? tightest : null
   const sending = useRef(false)
   // An agent that must sign in first opens no session until it has, which is known once this
@@ -320,7 +324,6 @@ function DraftComposer({
   const agentsRead = useAgentsStore((s) => hostId !== null || s.loaded)
   const signIn = !!status && agentNeed(status) === 'sign-in'
   const parentId = parent?.id ?? null
-  const config = useStartConfig(agentId, undefined, hostId)
   const add = useAddMenu({
     box,
     agentName: name ?? tc('attachments.theAgent'),
