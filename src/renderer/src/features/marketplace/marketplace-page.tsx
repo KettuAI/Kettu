@@ -44,13 +44,14 @@ export default function MarketplacePage({
   useEffect(() => {
     if (away) return
     const store = useMarketplaceStore.getState()
-    // The host keeps each catalog for a while; a read that failed is tried again on each visit.
-    if (!store.catalogLoading && (!store.catalog || store.catalog.error)) void store.loadCatalog()
-    if (!store.pluginsLoading && (!store.plugins || store.pluginsError)) void store.loadPlugins()
-    if (!store.skillsLoading && (!store.skills || store.skills.error)) void store.loadSkills()
+    store.visit()
     void store.loadKeys()
     void store.loadConnections()
   }, [useMarketplaceStore, away])
+  // What shows may be the host's old copy while a newer one is read behind it.
+  const reading = useMarketplaceStore(
+    (s) => s.catalogLoading || s.pluginsLoading || s.skillsLoading,
+  )
 
   const directoryKey = (): string =>
     `${scope.hostId ?? ''}|${tab}|${useMarketplaceStore.getState().query}`
@@ -77,6 +78,7 @@ export default function MarketplacePage({
       <AgentMarkHost.Provider value={scope.hostId}>
         <div
           ref={scroller}
+          aria-busy={reading || undefined}
           className="k-mkt-scroll"
           onScroll={(event) => {
             if (!item) rememberScroll(directoryKey(), event.currentTarget.scrollTop)

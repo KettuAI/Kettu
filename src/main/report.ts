@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto'
 import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { app, type BrowserWindow, dialog } from 'electron'
+import { app, type BrowserWindow, dialog, type NativeImage } from 'electron'
 import JSZip from 'jszip'
 import { flushLog } from '@shared/log/process-log'
 import { bundleForDevice, ReportShelf } from '@shared/log/report-bundle'
@@ -76,7 +76,7 @@ export class Reports {
   private readonly shelf: ReportShelf
   /** The zips read to show their files, by the shelf's ids. */
   private readonly zips = new Map<string, JSZip>()
-  private readonly shots = new Map<number, string>()
+  private readonly shots = new Map<number, NativeImage>()
   private recording: (ReportRecording & { verboseBefore: number | null }) | null = null
   private recordingTimer: NodeJS.Timeout | null = null
 
@@ -95,10 +95,13 @@ export class Reports {
     )
   }
 
-  /** The window as it looks now, before the dialog covers it; kept for its next bundle. */
+  /**
+   * The window as it looks now, before the dialog covers it; kept for its next bundle, and encoded
+   * only then so the dialog opens without waiting for it.
+   */
   async capture(window: BrowserWindow): Promise<void> {
     const image = await window.webContents.capturePage()
-    this.shots.set(window.id, image.toPNG().toString('base64'))
+    this.shots.set(window.id, image)
     window.once('closed', () => this.shots.delete(window.id))
   }
 
@@ -266,7 +269,7 @@ export class Reports {
       crashDir: app.getPath('crashDumps'),
       screenshot:
         window && request.extras.includes('screenshot')
-          ? (this.shots.get(window.id) ?? null)
+          ? (this.shots.get(window.id)?.toPNG().toString('base64') ?? null)
           : null,
     })
     if (!result.ok) {

@@ -34,7 +34,7 @@ import { CanvasView, type PageActions } from './canvas-view'
 import { useEditorState, type ArtifactEditor } from './editor'
 import { daysLeft, presenceShown } from './model'
 import { PageFrame } from './page-frame'
-import { pageUrl, type Presence as PresenceState, type ShownVersion } from './use-artifact'
+import { framePageUrl, type Presence as PresenceState, type ShownVersion } from './use-artifact'
 import './viewer.css'
 
 type Size = 'compact' | 'pane'
@@ -660,6 +660,7 @@ export function ArtifactSurface({
         key={url}
         url={url}
         version={shown.version}
+        loadFrom={shown.loadFrom}
         title={title}
         layout={shown.canvas}
         reloads={reloads}
@@ -679,7 +680,7 @@ export function ArtifactSurface({
       <PageFrame
         key={url}
         url={url}
-        src={pageUrl(url, shown.version)}
+        src={framePageUrl(url, shown)}
         title={title}
         reloads={reloads}
         since={since}

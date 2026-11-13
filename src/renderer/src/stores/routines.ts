@@ -217,10 +217,16 @@ export const useRoutinesStore = create<RoutinesStore>()((set, get) => ({
     const current = get().runs[routineId]
     if (current?.loading) return
     if (!more) {
+      // The runs read before show until the newest arrive.
       set((state) => ({
         runs: {
           ...state.runs,
-          [routineId]: { items: [], older: null, loading: true, error: null },
+          [routineId]: {
+            items: current?.items ?? [],
+            older: current?.older ?? null,
+            loading: true,
+            error: null,
+          },
         },
       }))
     } else {

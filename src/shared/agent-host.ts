@@ -594,8 +594,9 @@ export interface HostContract {
   'mcp.status': { params: void; result: McpStatus }
   // Listens again when Kettu's MCP server does not, then sends main its port.
   'mcp.retry': { params: void; result: McpStatus }
-  // The Marketplace's catalog of MCP servers from the registry, cached for a day; refresh skips the cache.
-  'market.catalog': { params: { refresh?: boolean }; result: MarketCatalog }
+  // The Marketplace's catalog of MCP servers from the registry, cached for a day; refresh skips the
+  // cache, and cached answers from it however old, unless there is none.
+  'market.catalog': { params: { refresh?: boolean; cached?: boolean }; result: MarketCatalog }
   // The registry's servers whose name has `query` in it, for the Marketplace's search.
   'market.search': { params: { query: string }; result: MarketSearch }
   // Which inputs of the servers Kettu keeps have a value; never the values.
@@ -609,7 +610,7 @@ export interface HostContract {
   'market.connections': { params: void; result: MarketConnections }
   // Plugins from Claude Code's and Codex's own marketplaces, and the ones each agent has installed;
   // adds Claude's official marketplace to an agent that has none, as Claude Code does on first start.
-  'market.plugins': { params: { refresh?: boolean }; result: MarketPlugins }
+  'market.plugins': { params: { refresh?: boolean; cached?: boolean }; result: MarketPlugins }
   'market.pluginDetails': { params: { agentId: AgentId; pluginId: string }; result: PluginDetails }
   'market.pluginLogo': { params: { pluginId: string }; result: PluginLogo }
   // Installs, removes or switches a plugin through the agent's own harness, in its configuration.
@@ -637,7 +638,7 @@ export interface HostContract {
   }
   'market.removeMarketplace': { params: { agentId: AgentId; name: string }; result: void }
   // The skills catalog and each agent's own skills.
-  'market.skills': { params: { refresh?: boolean }; result: MarketSkills }
+  'market.skills': { params: { refresh?: boolean; cached?: boolean }; result: MarketSkills }
   // Copies a skill's files onto the host; the caller then adds the entry to settings.marketplace.skills.
   'market.addSkill': { params: { source: SkillSource }; result: MarketSkill }
   'projects.list': { params: void; result: Project[] }

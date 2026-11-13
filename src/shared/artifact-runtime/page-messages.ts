@@ -114,6 +114,8 @@ export type DriveMessage =
   | { v: typeof RUNTIME_VERSION; kind: 'select-locate'; src: number; channel: string }
   // Values for the parameters the page declares, shown at once and kept until the page reloads.
   | { v: typeof RUNTIME_VERSION; kind: 'params'; values: Record<string, string | number | boolean> }
+  // The frame loads the next version of this page now, which comes back where this one is scrolled.
+  | { v: typeof RUNTIME_VERSION; kind: 'keep-scroll' }
 
 /** The properties a direct edit may write into a start tag's `style`, by their CSS names. */
 export const EDITABLE_PROPERTIES = [

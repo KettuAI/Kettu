@@ -41,6 +41,8 @@ const OUTPUT_WIDTH = 720
 const JPEG_QUALITY = 82
 /** The thumbnails kept on disk; older ones render again when asked for. */
 export const KEPT_THUMBNAILS = 500
+/** Thumbnails rendering at once, each in its own offscreen window. */
+const THUMBNAILS_AT_ONCE = 3
 
 const HASH = /^[0-9a-f]{64}$/
 
@@ -213,9 +215,16 @@ export interface ThumbnailDeps {
   strict?(host: string): boolean
 }
 
-/** Renders card thumbnails one at a time and keeps them on disk. */
+/**
+ * Renders card thumbnails a few at a time and keeps them on disk. A page image or a PDF the user
+ * asked for has a queue of its own, so it never waits behind the cards.
+ */
 export class Thumbnails {
-  private queue: Promise<unknown> = Promise.resolve()
+  // Page images and PDFs, one at a time.
+  private exports: Promise<unknown> = Promise.resolve()
+  private running = 0
+  private readonly waiting: (() => void)[] = []
+  private readonly making = new Map<string, Promise<string | null>>()
   private session: Session | null = null
 
   constructor(private readonly deps: ThumbnailDeps) {}
@@ -237,9 +246,28 @@ export class Thumbnails {
 
   /** `artifact:thumbnail`: the version's image as a `data:` URL, or null when it cannot render. */
   thumbnail(id: string, version: number, layout: ThumbnailPage[] | null): Promise<string | null> {
-    const run = this.queue.then(() => this.make(id, version, layout))
-    this.queue = run.catch(() => {})
+    const key = `${id}\0${version}\0${JSON.stringify(layout)}`
+    const made = this.making.get(key)
+    if (made) return made
+    const run = this.slot(() => this.make(id, version, layout)).finally(() =>
+      this.making.delete(key),
+    )
+    this.making.set(key, run)
     return run
+  }
+
+  /** Runs a thumbnail once fewer than THUMBNAILS_AT_ONCE are rendering. */
+  private async slot<T>(make: () => Promise<T>): Promise<T> {
+    // A finished thumbnail hands its turn to the next one waiting.
+    if (this.running < THUMBNAILS_AT_ONCE) this.running++
+    else await new Promise<void>((resolve) => this.waiting.push(resolve))
+    try {
+      return await make()
+    } finally {
+      const next = this.waiting.shift()
+      if (next) next()
+      else this.running--
+    }
   }
 
   /**
@@ -247,14 +275,14 @@ export class Thumbnails {
    * the same isolation as thumbnails; null when it cannot render.
    */
   image(id: string, version: number, page: CanvasPage | null, size: Size): Promise<Buffer | null> {
-    const run = this.queue.then(async () => {
+    const run = this.exports.then(async () => {
       const found = await this.deps.content(id, version)
       if (found.kind !== 'found') return null
       const document = pageDocument(this.deps.serve(id), version, page, size)
       const captured = await this.capture(document, size, false, 1)
       return captured ? captured.toPNG() : null
     })
-    this.queue = run.catch(() => {})
+    this.exports = run.catch(() => {})
     return run
   }
 
@@ -354,17 +382,17 @@ export class Thumbnails {
 
   /**
    * A typed version printed by its viewer, one sheet a page, as a PDF, in a window of the
-   * thumbnails' session; one at a time, as the thumbnails are.
+   * thumbnails' session; one at a time, with the page images.
    */
   print(id: string, version: number): Promise<Buffer> {
-    const run = this.queue.then(() => {
+    const run = this.exports.then(() => {
       if (!this.session) throw new Error('Printing is not ready')
       return printViewer(
         this.session,
         `${this.deps.serve(id).replace(/\/$/, '')}${versionUrlPath(version)}`,
       )
     })
-    this.queue = run.catch(() => {})
+    this.exports = run.catch(() => {})
     return run
   }
 

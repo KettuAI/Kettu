@@ -12,6 +12,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import type { AgentProvider, AgentStatus, ProviderBalance } from '@shared/agent-host'
 import { Icon } from '@renderer/components/affect/app-shell'
+import { useRefresh } from '@renderer/components/refresh'
 import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { toast } from '@renderer/components/ui/toast'
 import { currentLocale } from '@renderer/lib/i18n'
@@ -75,6 +76,7 @@ export function AgentProviders({
   const { hostId, request } = useHostScope()
   const { t } = useTranslation('settings')
   const [act, busy, error] = useAction()
+  const refresh = useRefresh()
   const [pending, setPending] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [keyTarget, setKeyTarget] = useState<AgentProvider | null>(null)
@@ -87,7 +89,12 @@ export function AgentProviders({
   if (status.providers === undefined) return null
 
   const retry = (): void => {
-    act(() => request('agents.refreshAccount', { agentId: status.id, force: true }))
+    act(() => {
+      const asked = request('agents.refreshAccount', { agentId: status.id, force: true })
+      // The icon turns to the end of its turn; the rows and the error follow the request alone.
+      refresh.run(() => asked).catch(() => {})
+      return asked
+    })
   }
 
   // The agents' native calls can take a while; the row that started one keeps its spinner.
@@ -121,7 +128,7 @@ export function AgentProviders({
                 <IconAction
                   label={t('agents.providers.refresh')}
                   icon={RefreshIcon}
-                  busy={busy}
+                  busy={refresh.phase === 'turning'}
                   onClick={retry}
                 />
               </>

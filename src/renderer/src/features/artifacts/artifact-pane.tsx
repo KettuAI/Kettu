@@ -210,6 +210,7 @@ export default function ArtifactPane({
         artifactId={id}
         url={url}
         version={shown.version}
+        loadFrom={shown.loadFrom}
         title={title}
         canvas={liveCanvas}
         files={shown.paths}

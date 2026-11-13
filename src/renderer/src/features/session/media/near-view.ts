@@ -23,14 +23,18 @@ function observerFor(root: Element | null): IntersectionObserver {
 /**
  * Whether the element has come near the view, through one observer per scroller: the margin
  * applies to the scroller's visible part only when the scroller is the root. Once near, it stays
- * so, and the media it holds keeps its source.
+ * so, and the media it holds keeps its source. `scroller` finds the scroller from the element.
  */
-export function useNearView(ref: RefObject<Element | null>, enabled = true): boolean {
+export function useNearView(
+  ref: RefObject<Element | null>,
+  enabled = true,
+  scroller = '[data-slot="message-scroller-viewport"]',
+): boolean {
   const [near, setNear] = useState(false)
   useEffect(() => {
     const element = ref.current
     if (!element || !enabled || near) return
-    const root = element.closest('[data-slot="message-scroller-viewport"]')
+    const root = element.closest(scroller)
     const observer = observerFor(root)
     watched.set(element, () => setNear(true))
     observer.observe(element)
@@ -38,6 +42,6 @@ export function useNearView(ref: RefObject<Element | null>, enabled = true): boo
       watched.delete(element)
       observer.unobserve(element)
     }
-  }, [ref, enabled, near])
+  }, [ref, enabled, near, scroller])
   return near
 }

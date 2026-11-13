@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
+import { RUNTIME_VERSION, type DriveMessage } from '@shared/artifact-runtime/page-messages'
 import { ARTIFACT_FRAME_SANDBOX, WEB_ARTIFACT_FRAME_SANDBOX } from '@shared/artifacts'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { Spinner } from '@renderer/components/ui/spinner'
@@ -46,7 +47,19 @@ export function PageFrame({
   const [loaded, setLoaded] = useState(false)
   const [blocked, setBlocked] = useState<string | null>(null)
   const [mountedAt] = useState(reloads)
+  const [firstSrc] = useState(src)
+  const shownSrc = useRef(src)
   const origin = url.slice(0, -1)
+
+  // A new version loads in the same frame, the page told first so it keeps its scroll.
+  useEffect(() => {
+    const element = frame.current
+    if (src === shownSrc.current || !element) return
+    shownSrc.current = src
+    const keep: DriveMessage = { v: RUNTIME_VERSION, kind: 'keep-scroll' }
+    element.contentWindow?.postMessage(keep, '*')
+    element.src = src
+  }, [src])
 
   useEffect(() => {
     const show = setTimeout(() => setLoaded(true), SHOW_BY_MS)
@@ -78,7 +91,7 @@ export function PageFrame({
           frame.current = el
           driven.ref(el)
         }}
-        src={src}
+        src={firstSrc}
         title={title}
         sandbox={isWeb ? WEB_ARTIFACT_FRAME_SANDBOX : ARTIFACT_FRAME_SANDBOX}
         allow=""

@@ -91,10 +91,18 @@ export interface CatalogSection {
   items: CatalogServer[]
 }
 
+/** How long the host keeps each list before it reads it again, in ms. */
+export const MARKET_KEPT_MS = {
+  catalog: 24 * 60 * 60_000,
+  plugins: 60 * 60_000,
+  skills: 24 * 60 * 60_000,
+} as const
+
 export interface MarketCatalog {
   sections: CatalogSection[]
   fetchedAt: number | null // ms since the epoch the registry last answered; null when it never has
   error: string | null // why the last read failed; the sections then come from the cache
+  stale?: boolean // a `cached` answer older than MARKET_KEPT_MS; a read without `cached` renews it
 }
 
 export interface MarketSearch {
@@ -174,6 +182,7 @@ export interface MarketSkills {
   catalog: CatalogSkill[]
   own: AgentOwnSkill[]
   error: string | null // why the catalog could not be read; it then comes from the cache
+  stale?: boolean // as MarketCatalog's
 }
 
 /** The harnesses that install plugins themselves. */
@@ -221,6 +230,7 @@ export interface MarketPlugins {
   installed: InstalledPlugin[]
   marketplaces: PluginMarketplace[]
   errors: { agentId: AgentId; message: string }[]
+  stale?: boolean // as MarketCatalog's, for any agent's lists
 }
 
 /** A plugin's own logo as data URLs, read from its package on the host; null without one. */

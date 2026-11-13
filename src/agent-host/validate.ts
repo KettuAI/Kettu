@@ -807,10 +807,14 @@ export function promptContent(value: unknown): UserContent[] {
 type Validators = { [M in HostMethod]: (params: unknown) => HostParams<M> }
 
 /** Params that hold at most a `refresh` flag, which skips a cache. */
-function refreshOnly(params: unknown): { refresh?: boolean } {
+function marketRead(params: unknown): { refresh?: boolean; cached?: boolean } {
   const o = params === undefined || params === null ? {} : fields(params)
   const refresh = optionalFlag(o, 'refresh')
-  return refresh === undefined ? {} : { refresh }
+  const cached = optionalFlag(o, 'cached')
+  return {
+    ...(refresh === undefined ? {} : { refresh }),
+    ...(cached === undefined ? {} : { cached }),
+  }
 }
 
 // A plugin's or marketplace's name; never one that could pass for a command line flag.
@@ -1016,7 +1020,7 @@ export function createValidators(platform: Platform): Validators {
     'agents.options': none,
     'mcp.status': none,
     'mcp.retry': none,
-    'market.catalog': refreshOnly,
+    'market.catalog': marketRead,
     'market.search': (params) => {
       const query = fields(params).query
       const trimmed = typeof query === 'string' ? query.trim() : ''
@@ -1040,7 +1044,7 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.disconnect': (params) => ({ serverId: marketServerId(fields(params)) }),
     'market.connections': none,
-    'market.plugins': refreshOnly,
+    'market.plugins': marketRead,
     'market.pluginDetails': (params) => {
       const o = fields(params)
       return { agentId: agentId(o), pluginId: pluginId(o) }
@@ -1066,7 +1070,7 @@ export function createValidators(platform: Platform): Validators {
       if (!PLUGIN_PART.test(name)) throw invalidParams('name is not a marketplace name')
       return { agentId: agentId(o), name }
     },
-    'market.skills': refreshOnly,
+    'market.skills': marketRead,
     'market.addSkill': (params) => ({ source: skillSource(fields(params).source, platform) }),
     'agents.listSessions': (params) => {
       const o = fields(params)

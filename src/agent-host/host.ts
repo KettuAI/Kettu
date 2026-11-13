@@ -1624,14 +1624,16 @@ export class AgentHost {
       'agents.refreshAccount': ({ agentId, force }) => agents.refreshAccount(agentId, { force }),
       'agents.options': () => this.agentOptions.list().map((o) => this.withStartMode(o)),
       'mcp.status': () => this.mcpStatus(),
-      'market.catalog': ({ refresh }) => this.marketCatalog.catalog(refresh === true),
+      'market.catalog': ({ refresh, cached }) =>
+        this.marketCatalog.catalog(refresh === true, cached === true),
       'market.search': ({ query }) => this.marketCatalog.search(query),
       'market.keys': () => keyState(this.settings.marketplace.mcp, this.marketKeys),
       'market.connect': ({ serverId }) => this.marketConnections.connect(serverId),
       'market.cancelConnect': ({ loginId }) => this.marketConnections.cancel(loginId),
       'market.disconnect': ({ serverId }) => this.marketConnections.disconnect(serverId),
       'market.connections': () => this.marketConnections.view(),
-      'market.plugins': ({ refresh }) => this.marketPlugins.plugins(refresh === true),
+      'market.plugins': ({ refresh, cached }) =>
+        this.marketPlugins.plugins(refresh === true, cached === true),
       'market.pluginDetails': ({ agentId, pluginId }) =>
         this.marketPlugins.details(agentId, pluginId),
       'market.pluginLogo': ({ pluginId }) => this.marketPlugins.logo(pluginId),
@@ -1645,7 +1647,8 @@ export class AgentHost {
         this.marketPlugins.addMarketplace(agentId, source),
       'market.removeMarketplace': ({ agentId, name }) =>
         this.marketPlugins.removeMarketplace(agentId, name),
-      'market.skills': ({ refresh }) => this.marketSkills.skills(refresh === true),
+      'market.skills': ({ refresh, cached }) =>
+        this.marketSkills.skills(refresh === true, cached === true),
       'market.addSkill': ({ source }) => this.marketSkills.add(source),
       'mcp.retry': async () => {
         await this.artifactService.start()
@@ -1882,6 +1885,7 @@ export class AgentHost {
             path: file.path,
             size: file.size,
             type: artifactFileType(file.path),
+            hash: file.hash,
           })),
         }
       },

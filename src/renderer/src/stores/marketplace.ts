@@ -1,17 +1,18 @@
 import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import type { KettuApi } from '@shared/ipc'
 import type { HostEvent } from '@shared/agent-host'
-import type {
-  ConnectStart,
-  MarketCatalog,
-  MarketConnections,
-  MarketKeyState,
-  MarketKeysPatch,
-  MarketPlugins,
-  MarketSearch,
-  MarketSkills,
-  PluginDetails,
-  PluginLogo,
+import {
+  MARKET_KEPT_MS,
+  type ConnectStart,
+  type MarketCatalog,
+  type MarketConnections,
+  type MarketKeyState,
+  type MarketKeysPatch,
+  type MarketPlugins,
+  type MarketSearch,
+  type MarketSkills,
+  type PluginDetails,
+  type PluginLogo,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
 import { errorMessage, host, type HostRequest } from '@renderer/lib/host'
@@ -78,16 +79,22 @@ export interface MarketplaceStore {
   query: string
   /** How many rows each section shows past its first six, by tab and section. */
   more: Record<string, number>
-  loadCatalog(refresh?: boolean): Promise<void>
+  /**
+   * The page came into view: each list shows the host's copy at once, however old, and is read
+   * again behind it when that copy, or the last read in this run, is past the host's keeping time.
+   */
+  visit(): void
+  /** `cached` takes the host's copy, however old, and reads it again behind it if it is. */
+  loadCatalog(refresh?: boolean, cached?: boolean): Promise<void>
   find(query: string): Promise<void>
   clearSearch(): void
   loadKeys(): Promise<void>
   setKeys(patch: MarketKeysPatch): Promise<void>
   loadConnections(): Promise<void>
-  loadPlugins(refresh?: boolean): Promise<void>
+  loadPlugins(refresh?: boolean, cached?: boolean): Promise<void>
   loadDetails(agentId: AgentId, pluginId: string): Promise<void>
   loadLogo(pluginId: string): Promise<void>
-  loadSkills(refresh?: boolean): Promise<void>
+  loadSkills(refresh?: boolean, cached?: boolean): Promise<void>
 }
 
 export type MarketplaceStoreHook = UseBoundStore<StoreApi<MarketplaceStore>>
@@ -109,6 +116,11 @@ export function createMarketplaceStore(
   let connectionsRead = 0
   let pluginsRead = 0
   let skillsRead = 0
+  // When each list was last known to be within the host's keeping time.
+  const readAt = { catalog: 0, plugins: 0, skills: 0 }
+  const params = (refresh: boolean, cached: boolean) =>
+    refresh ? { refresh } : cached ? { cached } : {}
+  const old = (kind: keyof typeof readAt) => Date.now() - readAt[kind] >= MARKET_KEPT_MS[kind]
   return create<MarketplaceStore>()((set, get) => ({
     catalog: null,
     catalogError: null,
@@ -130,12 +142,31 @@ export function createMarketplaceStore(
     busy: [],
     query: '',
     more: {},
-    async loadCatalog(refresh = false) {
+    visit() {
+      const s = get()
+      // A read that failed is tried again on each visit.
+      if (!s.catalogLoading) {
+        if (!s.catalog) void s.loadCatalog(false, true)
+        else if (s.catalog.error || old('catalog')) void s.loadCatalog()
+      }
+      if (!s.pluginsLoading) {
+        if (!s.plugins) void s.loadPlugins(false, true)
+        else if (s.pluginsError || old('plugins')) void s.loadPlugins()
+      }
+      if (!s.skillsLoading) {
+        if (!s.skills) void s.loadSkills(false, true)
+        else if (s.skills.error || old('skills')) void s.loadSkills()
+      }
+    },
+    async loadCatalog(refresh = false, cached = false) {
       const id = ++catalogRead
       set({ catalogLoading: true, catalogError: null })
       try {
-        const catalog = await request('market.catalog', refresh ? { refresh } : {})
-        if (id === catalogRead) set({ catalog, catalogLoading: false })
+        const catalog = await request('market.catalog', params(refresh, cached))
+        if (id !== catalogRead) return
+        set({ catalog, catalogLoading: !!catalog.stale })
+        if (catalog.stale) void get().loadCatalog()
+        else readAt.catalog = catalog.fetchedAt ?? Date.now()
       } catch (e) {
         if (id === catalogRead) set({ catalogError: errorMessage(e), catalogLoading: false })
       }
@@ -180,12 +211,15 @@ export function createMarketplaceStore(
         if (id === connectionsRead) set({ connectionsError: errorMessage(e) })
       }
     },
-    async loadPlugins(refresh = false) {
+    async loadPlugins(refresh = false, cached = false) {
       const id = ++pluginsRead
       set({ pluginsLoading: true, pluginsError: null })
       try {
-        const plugins = await request('market.plugins', refresh ? { refresh } : {})
-        if (id === pluginsRead) set({ plugins, pluginsLoading: false })
+        const plugins = await request('market.plugins', params(refresh, cached))
+        if (id !== pluginsRead) return
+        set({ plugins, pluginsLoading: !!plugins.stale })
+        if (plugins.stale) void get().loadPlugins()
+        else readAt.plugins = Date.now()
       } catch (e) {
         if (id === pluginsRead) set({ pluginsError: errorMessage(e), pluginsLoading: false })
       }
@@ -217,12 +251,15 @@ export function createMarketplaceStore(
       }
       set((s) => ({ logos: { ...s.logos, [pluginId]: logo } }))
     },
-    async loadSkills(refresh = false) {
+    async loadSkills(refresh = false, cached = false) {
       const id = ++skillsRead
       set({ skillsLoading: true, skillsError: null })
       try {
-        const skills = await request('market.skills', refresh ? { refresh } : {})
-        if (id === skillsRead) set({ skills, skillsLoading: false })
+        const skills = await request('market.skills', params(refresh, cached))
+        if (id !== skillsRead) return
+        set({ skills, skillsLoading: !!skills.stale })
+        if (skills.stale) void get().loadSkills()
+        else readAt.skills = Date.now()
       } catch (e) {
         if (id === skillsRead) set({ skillsError: errorMessage(e), skillsLoading: false })
       }
