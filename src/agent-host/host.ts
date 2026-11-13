@@ -827,6 +827,15 @@ export class AgentHost {
       this.broadcast({ type: 'environment.changed', info })
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
     })
+    // As Reload does: the fallback's PATH may have missed programs the login shell's finds.
+    this.env.onRecovered(() => {
+      void (async () => {
+        await this.agents.redetect()
+        if (this.git) await this.gitCall((g) => g.reloadTools())
+      })().catch((error: unknown) =>
+        log('warn', `Could not detect the agents again: ${(error as Error).message}`),
+      )
+    })
     this.git =
       typeof options.git === 'function'
         ? options.git({
