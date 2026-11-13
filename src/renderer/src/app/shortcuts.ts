@@ -163,6 +163,12 @@ export function useKeyboardShortcuts(): void {
     // An artifact's page keeps the keys typed in it; main passes on the app's own shortcuts.
     const offForwarded = window.kettu.app.onShortcut((key) => {
       const event = new KeyboardEvent('keydown', { ...key, cancelable: true })
+      // Mod+L in a browser page goes to that page's address, as in a browser.
+      const address = key.key.toLowerCase() === 'l' && isMod(event) && !key.shiftKey
+      if (key.browserSession && address && !key.altKey) {
+        emitAppEvent({ kind: 'focus-browser-address', sessionId: key.browserSession })
+        return
+      }
       onKeyDown(event)
     })
     return () => {

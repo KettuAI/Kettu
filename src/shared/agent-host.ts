@@ -748,7 +748,13 @@ export interface HostContract {
   'worktrees.retrySetup': { params: { sessionId: string }; result: void }
   // Goes on without the setup command; what waited for it is sent.
   'worktrees.skipSetup': { params: { sessionId: string }; result: void }
-  'worktrees.setupLog': { params: { sessionId: string }; result: { log: string } }
+  // The output kept of the last setup run, or with `from` what it wrote after that offset:
+  // `log` starts at `start` and ends at `end`, counted in characters from the run's start, and a
+  // `start` other than `from` means the kept output no longer reaches back there.
+  'worktrees.setupLog': {
+    params: { sessionId: string; from?: number }
+    result: { log: string; start?: number; end?: number }
+  }
   // Hands the session to another agent between turns and sends `content` as its first turn;
   // `options` are the values chosen for that agent, `summarize` asks it to summarize first.
   'sessions.switchAgent': {

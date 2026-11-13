@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ArrowRight01Icon,
   CodeIcon,
@@ -20,6 +20,7 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { LineCounts } from '@renderer/features/git/rows'
+import { MENTION_LIMIT } from '@renderer/features/session/composer/mentions'
 import {
   PaneEmpty,
   PaneHead,
@@ -36,11 +37,10 @@ import {
   activateTab,
   activeFile,
   closeDiff,
-  loadFiles,
   openDiff,
   openFile,
-  refreshFiles,
   useFilesStore,
+  watchFiles,
 } from '@renderer/stores/files'
 import { openGitDialog, useGitStore } from '@renderer/stores/git'
 import { ChangeBadge } from './change-badge'
@@ -52,52 +52,90 @@ import { FileTabs } from './file-tabs'
 import { FileTypeIcon } from './file-type-icon'
 import { UnsavedPrompt } from './unsaved-prompt'
 import {
-  filterPaths,
   folderOf,
   foldersAbove,
   indexFolders,
   nameOf,
+  rankPaths,
   treeRows,
   type PathMatch,
 } from './paths'
-import { VirtualRows } from './virtual-rows'
+import { VirtualRows, type RowKey } from './virtual-rows'
 
-// A filter that matches more than this shows the best ones; refining it finds the rest.
-const FILTER_LIMIT = 1000
 const SEARCH_DELAY_MS = 250
 // A single click in a list opens the preview tab, which the next single click replaces.
 const PREVIEW = { preview: true }
 // A change's row: its name, its folder under it.
 const CHANGE_ROW = 40
 
-/**
- * The side panel's Files pane: the changes or the project's files, beside the open files. Its head
- * switches between Changes and All files, or holds the filter while one is typed.
- */
-export default function FilesPanel({
-  projectPath,
-  panel,
-  maximized,
-}: {
+/** What the pane's left column shows, kept by side panel while another pane takes its place. */
+interface Column {
+  mode: 'changes' | 'all' | null
+  query: string
+  searching: boolean
+  expanded: ReadonlySet<string>
+  /** The open file the tree last opened its folders for. */
+  revealed: string | undefined
+  scroll: number
+}
+
+const columns = new Map<string, Column>()
+const NO_FOLDERS: ReadonlySet<string> = new Set()
+
+function columnOf(key: string): Column {
+  return (
+    columns.get(key) ?? {
+      mode: null,
+      query: '',
+      searching: false,
+      expanded: NO_FOLDERS,
+      revealed: undefined,
+      scroll: 0,
+    }
+  )
+}
+
+function saveColumn(key: string, change: Partial<Column>): void {
+  columns.set(key, { ...columnOf(key), ...change })
+}
+
+interface FilesPanelProps {
   projectPath: string
   /** The side panel it shows in; the open files are the project's, whichever panel shows them. */
   panel: string
   maximized: boolean
-}) {
+}
+
+/**
+ * The side panel's Files pane: the changes or the project's files, beside the open files. Its head
+ * switches between Changes and All files, or holds the filter while one is typed.
+ */
+export default function FilesPanel(props: FilesPanelProps) {
+  // Each side panel has its own column, so another session's pane starts from its own.
+  return <FilesPane key={`${props.panel}\0${props.projectPath}`} {...props} />
+}
+
+function FilesPane({ projectPath, panel, maximized }: FilesPanelProps) {
   const { t } = useTranslation(['files', 'common'])
+  const columnKey = `${panel}\0${projectPath}`
   const tabs = useFilesStore((s) => s.open[projectPath] ?? null)
   const open = activeFile(tabs)
   const diff = useFilesStore((s) => s.diffs[projectPath] ?? null)
   const isRepo = useGitStore((s) => !!s.status[projectPath]?.repo)
   // Editors open folders on this computer only.
   const local = !isWeb && hostOfPath(projectPath) === null
-  const [query, setQuery] = useState('')
-  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState(() => columnOf(columnKey).query)
+  const [searching, setSearching] = useState(() => columnOf(columnKey).searching)
   const changes = useFileChanges(projectPath)
   const changed = changes.list?.length ?? 0
-  // The changes first while there are any; a folder without git has only its files.
-  const [chosenMode, setMode] = useState<'changes' | 'all' | null>(null)
-  const mode = !isRepo || searching ? 'all' : (chosenMode ?? (changed > 0 ? 'changes' : 'all'))
+  // The changes first when there are any as the pane opens; after that the column stays where it
+  // is, and new changes only count on its Changes tab. A folder without git has only its files.
+  const [chosenMode, setMode] = useState(() => columnOf(columnKey).mode)
+  const opening = changed > 0 ? 'changes' : 'all'
+  if (chosenMode === null && isRepo && (changes.list !== null || changes.error !== null)) {
+    setMode(opening)
+  }
+  const mode = !isRepo || searching ? 'all' : (chosenMode ?? opening)
   const layout = useDefaultLayout({ id: 'files-pane', storage: layoutStorage })
   const tree = usePanelRef()
   const [treeShown, setTreeShown] = useState(true)
@@ -114,12 +152,13 @@ export default function FilesPanel({
     )
   })
 
+  // The list follows the files while the pane shows; window focus refreshes it through the git
+  // status it brings.
+  useEffect(() => watchFiles(projectPath), [projectPath])
+
   useEffect(() => {
-    void loadFiles(projectPath)
-    const onFocus = () => refreshFiles(projectPath)
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [projectPath])
+    saveColumn(columnKey, { mode: chosenMode, query, searching })
+  }, [columnKey, chosenMode, query, searching])
 
   const stopSearching = (): void => {
     setQuery('')
@@ -249,6 +288,7 @@ export default function FilesPanel({
               ) : (
                 <Browser
                   projectPath={projectPath}
+                  columnKey={columnKey}
                   query={query}
                   openPath={open?.path}
                   changes={changes.byPath}
@@ -346,14 +386,15 @@ function ChangesList({
     return <PaneEmpty title={t('changes.emptyTitle')} text={t('changes.emptyDescription')} />
   }
   return (
-    <VirtualRows count={list.length} rowHeight={CHANGE_ROW} className="kp-tree">
-      {(i) => {
+    <VirtualRows count={list.length} rowHeight={CHANGE_ROW} className="kp-tree" roving>
+      {(i, tabIndex) => {
         const change = list[i]!
         return (
           <ChangeRow
             key={change.path}
             change={change}
             selected={change.path === selectedPath}
+            tabIndex={tabIndex}
             onOpen={() => showChange(projectPath, changes, change.path, true)}
             onKeep={() => openFile(projectPath, change.path)}
           />
@@ -366,11 +407,13 @@ function ChangesList({
 function ChangeRow({
   change,
   selected,
+  tabIndex,
   onOpen,
   onKeep,
 }: {
   change: ProjectChange
   selected: boolean
+  tabIndex: number | undefined
   onOpen: () => void
   onKeep: () => void
 }) {
@@ -378,6 +421,7 @@ function ChangeRow({
   return (
     <button
       type="button"
+      tabIndex={tabIndex}
       className="kp-node kp-node--change"
       aria-current={selected || undefined}
       title={change.file.oldPath ? `${change.file.oldPath} → ${change.path}` : change.path}
@@ -465,11 +509,13 @@ function ChangesFoot({ projectPath, changes }: { projectPath: string; changes: F
 /** The tree, the filter's matches or the search's lines, by what is typed. */
 function Browser({
   projectPath,
+  columnKey,
   query,
   openPath,
   changes,
 }: {
   projectPath: string
+  columnKey: string
   query: string
   openPath: string | undefined
   changes: ReadonlyMap<string, ChangeStatus>
@@ -496,37 +542,85 @@ function Browser({
   }
   if (files.paths.length === 0) return <Message>{t('browser.empty')}</Message>
   return (
-    <Tree projectPath={projectPath} paths={files.paths} openPath={openPath} changes={changes} />
+    <Tree
+      projectPath={projectPath}
+      columnKey={columnKey}
+      paths={files.paths}
+      openPath={openPath}
+      changes={changes}
+    />
   )
+}
+
+// A list's folders and files, worked out once while the list lives.
+const folderIndexes = new WeakMap<readonly string[], ReturnType<typeof indexFolders>>()
+
+function folderIndex(paths: readonly string[]): ReturnType<typeof indexFolders> {
+  let index = folderIndexes.get(paths)
+  if (!index) {
+    index = indexFolders(paths)
+    folderIndexes.set(paths, index)
+  }
+  return index
 }
 
 function Tree({
   projectPath,
+  columnKey,
   paths,
   openPath,
   changes,
 }: {
   projectPath: string
+  columnKey: string
   paths: string[]
   openPath: string | undefined
   changes: ReadonlyMap<string, ChangeStatus>
 }) {
-  const index = useMemo(() => indexFolders(paths), [paths])
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
+  const { t } = useTranslation('files')
+  const index = folderIndex(paths)
+  const [expanded, setExpanded] = useState(() => columnOf(columnKey).expanded)
   // A file opened from the conversation shows in the tree, its folders opened.
-  const [revealed, setRevealed] = useState<string | undefined>(undefined)
+  const [revealed, setRevealed] = useState(() => columnOf(columnKey).revealed)
   if (openPath !== revealed) {
     setRevealed(openPath)
     if (openPath) setExpanded(new Set([...expanded, ...foldersAbove(openPath)]))
   }
+  const [initialScroll] = useState(() => columnOf(columnKey).scroll)
+  useEffect(() => saveColumn(columnKey, { expanded, revealed }), [columnKey, expanded, revealed])
   const rows = useMemo(() => treeRows(index, expanded), [index, expanded])
   const openIndex = openPath ? rows.findIndex((r) => r.path === openPath) : -1
 
-  const toggle = (folder: string) => {
+  const toggle = (folder: string, open = !expanded.has(folder)) => {
+    if (open === expanded.has(folder)) return
     const next = new Set(expanded)
-    if (next.has(folder)) next.delete(folder)
-    else next.add(folder)
+    if (open) next.add(folder)
+    else next.delete(folder)
     setExpanded(next)
+  }
+
+  // ArrowRight opens a folder, then goes into it; ArrowLeft closes it, then goes to its parent.
+  const onRowKey: RowKey = (i, event) => {
+    const row = rows[i]
+    if (!row) return null
+    if (event.key === 'ArrowRight') {
+      if (!row.folder) return null
+      if (!expanded.has(row.path)) {
+        toggle(row.path, true)
+        return i
+      }
+      return rows[i + 1]?.depth === row.depth + 1 ? i + 1 : i
+    }
+    if (event.key === 'ArrowLeft') {
+      if (row.folder && expanded.has(row.path)) {
+        toggle(row.path, false)
+        return i
+      }
+      const parent = folderOf(row.path)
+      const at = parent ? rows.findIndex((r) => r.path === parent) : -1
+      return at >= 0 ? at : i
+    }
+    return null
   }
 
   return (
@@ -534,8 +628,14 @@ function Tree({
       count={rows.length}
       scrollTo={openIndex < 0 ? null : openIndex}
       className="kp-tree"
+      initialScroll={initialScroll}
+      onScrollTop={(scroll) => saveColumn(columnKey, { scroll })}
+      roving
+      onRowKey={onRowKey}
+      role="tree"
+      label={t('panel.title')}
     >
-      {(i) => {
+      {(i, tabIndex) => {
         const row = rows[i]!
         const isOpen = expanded.has(row.path)
         const change = row.folder ? undefined : changes.get(row.path)
@@ -546,6 +646,8 @@ function Tree({
             folder={row.folder}
             selected={row.path === openPath}
             title={row.path}
+            tabIndex={tabIndex}
+            treeItem
             aria-expanded={row.folder ? isOpen : undefined}
             onClick={() =>
               row.folder ? toggle(row.path) : openFile(projectPath, row.path, null, PREVIEW)
@@ -578,19 +680,23 @@ function FilteredList({
   changes: ReadonlyMap<string, ChangeStatus>
 }) {
   const { t } = useTranslation('files')
-  const { matches, total } = useMemo(() => filterPaths(query, paths, FILTER_LIMIT), [query, paths])
-  if (total === 0) return <Message>{t('browser.noMatch', { query: query.trim() })}</Message>
+  // As in the composer's mentions: the best few by the same matcher, trailing the typing on a
+  // long list rather than holding it up.
+  const typed = useDeferredValue(query)
+  const { matches, total } = useMemo(() => rankPaths(typed, paths, MENTION_LIMIT), [typed, paths])
+  if (total === 0) return <Message>{t('browser.noMatch', { query: typed.trim() })}</Message>
   const more = total - matches.length
   return (
     <div className="kp-tree">
-      <VirtualRows count={matches.length} className="flex-1">
-        {(i) => (
+      <VirtualRows count={matches.length} className="flex-1" roving>
+        {(i, tabIndex) => (
           <FileRow
             key={matches[i]!.path}
             projectPath={projectPath}
             match={matches[i]!}
             selected={matches[i]!.path === openPath}
             change={changes.get(matches[i]!.path)}
+            tabIndex={tabIndex}
           />
         )}
       </VirtualRows>
@@ -605,11 +711,13 @@ function FileRow({
   match,
   selected,
   change,
+  tabIndex,
 }: {
   projectPath: string
   match: PathMatch
   selected: boolean
   change: ChangeStatus | undefined
+  tabIndex: number | undefined
 }) {
   const { path, positions } = match
   const nameStart = path.lastIndexOf('/') + 1
@@ -619,6 +727,7 @@ function FileRow({
     <Row
       selected={selected}
       title={path}
+      tabIndex={tabIndex}
       onClick={() => openFile(projectPath, path, null, PREVIEW)}
       onDoubleClick={() => openFile(projectPath, path)}
     >
@@ -743,6 +852,8 @@ function Row({
   folder = false,
   selected = false,
   title,
+  tabIndex,
+  treeItem = false,
   onClick,
   onDoubleClick,
   children,
@@ -753,6 +864,10 @@ function Row({
   folder?: boolean
   selected?: boolean
   title: string
+  /** Its list's Tab stop, or -1 for the other rows of a list that is one. */
+  tabIndex?: number
+  /** A row of the tree, which names its level. */
+  treeItem?: boolean
   onClick: () => void
   onDoubleClick?: () => void
   children: ReactNode
@@ -762,9 +877,11 @@ function Row({
     <button
       type="button"
       title={title}
+      tabIndex={tabIndex}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
       {...aria}
+      {...(treeItem && { role: 'treeitem', 'aria-level': depth + 1, 'aria-selected': selected })}
       style={{ paddingLeft: 8 + depth * 14 }}
       aria-current={selected || undefined}
       className={folder ? 'kp-node kp-node--dir' : 'kp-node'}

@@ -491,7 +491,10 @@ export interface VisibleLayout {
   panes: string[]
 }
 
-/** The shown tree: a split with one shown part gives way to it in its slot. */
+/**
+ * The shown tree. A split with one shown part stays a split of that part, so the part keeps its
+ * place among the page's elements and is not drawn again when the others fold or come back.
+ */
 function shownNode(node: Node, keep: ReadonlySet<string>): ShownNode | null {
   if (node.kind === 'pane') {
     return keep.has(node.id) ? { kind: 'pane', slot: node.id, size: node.share, pane: node } : null
@@ -501,7 +504,6 @@ function shownNode(node: Node, keep: ReadonlySet<string>): ShownNode | null {
     return shown ? [shown] : []
   })
   if (children.length === 0) return null
-  if (children.length === 1) return { ...children[0]!, slot: node.id, size: node.share }
   const total = sum(children.map((child) => child.size))
   return {
     kind: 'split',

@@ -10,7 +10,8 @@ import { onColorsChange } from '@renderer/stores/themes'
 
 // One xterm.js instance per terminal for the terminal's whole life. A tab that is hidden, or a
 // project that is not shown, keeps its instance; only its element leaves the page, so switching
-// back costs no replay and the scrollback stays intact.
+// back costs no replay and the scrollback stays intact. Only a shown terminal holds a WebGL
+// context, since the page may keep few of them alive.
 
 type Modules = {
   Terminal: typeof import('@xterm/xterm').Terminal
@@ -45,6 +46,8 @@ export interface Instance {
   element: HTMLDivElement
   visible: boolean
   size: { cols: number; rows: number }
+  /** The WebGL renderer while the terminal shows, and the canvas its context is on. */
+  webgl: { addon: { dispose(): void }; canvas: HTMLCanvasElement | null } | null
 }
 
 const instances = new Map<string, Promise<Instance>>()
@@ -160,7 +163,15 @@ async function create(id: string): Promise<Instance> {
   const element = document.createElement('div')
   element.className = 'size-full'
   element.dataset.terminal = id
-  const instance: Instance = { id, term, fit, element, visible: false, size: { cols: 0, rows: 0 } }
+  const instance: Instance = {
+    id,
+    term,
+    fit,
+    element,
+    visible: false,
+    size: { cols: 0, rows: 0 },
+    webgl: null,
+  }
 
   term.attachCustomKeyEventHandler((event) => keyHandler(instance, event))
   // Input, acks and resizes fail only for a terminal that has ended, which its tab already shows.
@@ -218,32 +229,59 @@ function markActivity(id: string): void {
   useTerminalsStore.setState((s) => ({ byId: { ...s.byId, [id]: { ...t, activity: true } } }))
 }
 
-/** Opens the instance in a container the first time, and moves it there afterwards. */
+/**
+ * Opens the instance in a container the first time, and moves it there afterwards; with `webgl`,
+ * it draws with a WebGL context while it shows.
+ */
 export function mount(instance: Instance, container: HTMLElement, webgl: boolean): void {
   container.appendChild(instance.element)
-  if (!instance.term.element) {
-    instance.term.open(instance.element)
-    if (webgl) void loadWebgl(instance)
-  }
+  if (!instance.term.element) instance.term.open(instance.element)
   instance.visible = true
+  if (webgl && !instance.webgl) void loadWebgl(instance)
   fitNow(instance)
 }
 
+/** Takes the instance off the page, giving its WebGL context back; the buffer stays. */
 export function unmount(instance: Instance): void {
   instance.visible = false
+  releaseWebgl(instance)
   instance.element.remove()
 }
 
 async function loadWebgl(instance: Instance): Promise<void> {
   const m = await loadModules()
+  // Hidden again, or another call loaded it, while the modules loaded.
+  if (!instance.visible || instance.webgl) return
+  const screen = instance.term.element
+  const before = new Set(screen?.querySelectorAll('canvas'))
   try {
     const addon = new m.WebglAddon()
-    // On a lost context, xterm.js falls back to its DOM renderer and keeps the buffer.
-    addon.onContextLoss(() => addon.dispose())
+    // On a lost context, xterm.js falls back to its DOM renderer and keeps the buffer; the next
+    // time the terminal shows, it tries WebGL again.
+    addon.onContextLoss(() => {
+      addon.dispose()
+      if (instance.webgl?.addon === addon) instance.webgl = null
+    })
     instance.term.loadAddon(addon)
+    // The renderer's own canvas, beside the 2D one it adds for links; both have their context
+    // by now, so asking for WebGL here creates none.
+    const canvas = [...(screen?.querySelectorAll('canvas') ?? [])].find(
+      (c) => !before.has(c) && c.getContext('webgl2') !== null,
+    )
+    instance.webgl = { addon, canvas: canvas ?? null }
   } catch (error) {
     console.warn('WebGL renderer unavailable; using the DOM renderer', error)
   }
+}
+
+function releaseWebgl(instance: Instance): void {
+  const webgl = instance.webgl
+  if (!webgl) return
+  instance.webgl = null
+  webgl.addon.dispose()
+  // A disposed renderer leaves its context to the garbage collector, which the page's limit on
+  // live contexts still counts until then.
+  webgl.canvas?.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext()
 }
 
 export function fitNow(instance: Instance): void {
@@ -264,6 +302,7 @@ function dispose(id: string): void {
   ready.delete(id)
   setSink(id, null)
   void pending?.then((instance) => {
+    releaseWebgl(instance)
     instance.element.remove()
     instance.term.dispose()
   })

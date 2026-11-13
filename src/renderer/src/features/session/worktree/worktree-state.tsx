@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   AlertCircleIcon,
   ArrowRight01Icon,
+  FolderRemoveIcon,
   InformationCircleIcon,
   RefreshIcon,
 } from '@hugeicons/core-free-icons'
@@ -12,7 +13,10 @@ import { Dialog, DialogContent, DialogTitle } from '@renderer/components/ui/dial
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { askRemoveWorktree } from '@renderer/features/worktrees/remove-worktree-model'
 import { errorMessage, host } from '@renderer/lib/host'
+import { cn } from '@renderer/lib/utils'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import { WORKTREE_ICON } from './worktree-icon'
 
 // How often the setup output is read while it runs and is shown.
@@ -25,16 +29,27 @@ interface SetupLog {
   error: string | null
 }
 
-/** The setup output, read while `active`, and again every 2 s while `live`. */
+/**
+ * The setup output, read while `active`, and while `live` every 2 s from where the last read
+ * ended, so a long run is not read whole each time.
+ */
 function useSetupLog(sessionId: string, active: boolean, live: boolean): SetupLog {
   const [state, setState] = useState<SetupLog>({ log: null, error: null })
   useEffect(() => {
     if (!active) return
     let stopped = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    let log: string | null = null
+    // Where the output read so far ends; unknown from a host that answers with the whole of it.
+    let end: number | undefined
     const read = () => {
-      host('worktrees.setupLog', { sessionId }).then(
-        ({ log }) => !stopped && setState({ log, error: null }),
+      host('worktrees.setupLog', { sessionId, ...(end === undefined ? {} : { from: end }) }).then(
+        (read) => {
+          if (stopped) return
+          log = log !== null && end !== undefined && read.start === end ? log + read.log : read.log
+          end = read.end
+          setState({ log, error: null })
+        },
         (error: unknown) => !stopped && setState((s) => ({ ...s, error: errorMessage(error) })),
       )
       if (live) timer = setTimeout(read, POLL_MS)
@@ -82,6 +97,16 @@ function PreparingLine({ sessionId, creating }: { sessionId: string; creating: b
   const [open, setOpen] = useState(false)
   const { log, error } = useSetupLog(sessionId, !creating, !creating)
   const last = log ? lastLines(log, 1).trim() : ''
+  const [skipping, setSkipping] = useState(false)
+  const [skipError, setSkipError] = useState<string | null>(null)
+  // Stops the setup and goes on in the worktree as it is, as Skip does after a failure.
+  const skip = () => {
+    setSkipping(true)
+    setSkipError(null)
+    host('worktrees.skipSetup', { sessionId })
+      .catch((e: unknown) => setSkipError(errorMessage(e)))
+      .finally(() => setSkipping(false))
+  }
   return (
     <div
       role="status"
@@ -89,9 +114,21 @@ function PreparingLine({ sessionId, creating }: { sessionId: string; creating: b
     >
       <Spinner className="size-3.5 shrink-0 text-icon" />
       <span className="shrink-0">{t(creating ? 'worktree.creating' : 'worktree.preparing')}</span>
-      <span className="min-w-0 flex-1 truncate font-mono text-meta text-tertiary" title={last}>
-        {last}
+      <span
+        className={cn(
+          'min-w-0 flex-1 truncate font-mono text-meta',
+          skipError ? 'text-danger' : 'text-tertiary',
+        )}
+        title={skipError ?? last}
+      >
+        {skipError ?? last}
       </span>
+      {!creating && (
+        <Button variant="ghost" size="xs" className="shrink-0" disabled={skipping} onClick={skip}>
+          {skipping && <Spinner data-icon="inline-start" className="size-3" />}
+          {t('worktree.skip')}
+        </Button>
+      )}
       {!creating && (
         <Button variant="ghost" size="xs" className="shrink-0" onClick={() => setOpen(true)}>
           {t('worktree.showOutput')}
@@ -121,6 +158,8 @@ function SetupFailed({
   failure: WorktreeFailure | undefined
 }) {
   const { t } = useTranslation('session')
+  const { t: sidebar } = useTranslation('sidebar')
+  const summary = useSessionsStore((s) => s.byId[sessionId])
   const [busy, setBusy] = useState<'retry' | 'skip' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -181,6 +220,17 @@ function SetupFailed({
         <Button variant="ghost" size="compact" onClick={() => setOpen(true)}>
           {t('worktree.showOutput')}
         </Button>
+        {summary && (
+          <Button
+            variant="ghost"
+            size="compact"
+            disabled={busy !== null}
+            onClick={() => void askRemoveWorktree(summary)}
+          >
+            <Glyph icon={FolderRemoveIcon} data-icon="inline-start" />
+            {sidebar('worktree.menu')}
+          </Button>
+        )}
       </div>
       {error && <p className="pl-6 text-xs text-danger">{error}</p>}
       <OutputDialog open={open} onOpenChange={setOpen} log={output.log} error={output.error} />

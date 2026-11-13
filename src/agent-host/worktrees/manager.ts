@@ -32,6 +32,13 @@ interface Preparation {
   done: Promise<PrepareState>
 }
 
+/** Setup output: `log` runs from `start` to `end`, in characters from the run's start. */
+export interface SetupLog {
+  log: string
+  start: number
+  end: number
+}
+
 /** The last lines of a command's output, for a failure note. */
 export function lastLines(text: string, count = TAIL_LINES): string {
   return text.replace(/\s+$/, '').split(/\r?\n/).slice(-count).join('\n')
@@ -40,6 +47,8 @@ export function lastLines(text: string, count = TAIL_LINES): string {
 export class WorktreeManager {
   private readonly running = new Map<string, Preparation>()
   private readonly logs = new Map<string, string>()
+  /** How much each run wrote in all, of which `logs` keeps the end. */
+  private readonly written = new Map<string, number>()
 
   constructor(private readonly deps: WorktreeManagerDeps) {}
 
@@ -88,7 +97,10 @@ export class WorktreeManager {
     return done
   }
 
-  /** Ends a running preparation, which then reports itself failed. */
+  /**
+   * Ends a running preparation, which then reports no state: whoever stopped it says what comes
+   * next, such as going on without it.
+   */
   stop(path: string): void {
     this.running.get(pathKey(path, this.deps.platform))?.abort.abort()
   }
@@ -97,9 +109,17 @@ export class WorktreeManager {
     return this.running.has(pathKey(path, this.deps.platform))
   }
 
-  /** What the setup command wrote last time it ran in this worktree. */
-  setupLog(path: string): string {
-    return this.logs.get(pathKey(path, this.deps.platform)) ?? ''
+  /**
+   * What the setup command wrote last time it ran in this worktree: what is kept of it, or what
+   * it wrote after `from` when that is still kept.
+   */
+  setupLog(path: string, from?: number): SetupLog {
+    const key = pathKey(path, this.deps.platform)
+    const log = this.logs.get(key) ?? ''
+    const end = this.written.get(key) ?? log.length
+    const start = end - log.length
+    if (from === undefined || from < start || from > end) return { log, start, end }
+    return { log: log.slice(from - start), start: from, end }
   }
 
   inspect(projectPath: string, record: WorktreeRecord): Promise<WorktreeInspection> {
@@ -147,19 +167,26 @@ export class WorktreeManager {
       onState(state)
       return state
     }
+    const stopped = (): PrepareState => ({
+      state: 'setup-failed',
+      failure: { stage: 'setup', exitCode: null, message: 'stopped' },
+    })
     try {
       const copy = await this.deps.git.copyLocalFiles(projectPath, record.path, settings.copy)
       for (const { path, reason } of copy.skipped) {
         this.deps.log('info', `Worktree copy skipped ${path}: ${reason}`)
       }
     } catch (error) {
+      if (signal.aborted) return stopped()
       return fail({ stage: 'copy', exitCode: null, message: messageOf(error) })
     }
+    if (signal.aborted) return stopped()
     if (settings.setup === null) {
       onState({ state: 'ready' })
       return { state: 'ready' }
     }
     this.logs.set(key, '')
+    this.written.set(key, 0)
     let env: NodeJS.ProcessEnv
     try {
       env = withLongPaths(await this.deps.env(), this.deps.platform)
@@ -175,18 +202,23 @@ export class WorktreeManager {
       onOutput: (chunk) => {
         const log = (this.logs.get(key) ?? '') + chunk
         this.logs.set(key, log.length > MAX_LOG ? log.slice(-MAX_LOG) : log)
+        this.written.set(key, (this.written.get(key) ?? 0) + chunk.length)
       },
     })
+    if (signal.aborted) {
+      this.deps.log('info', `Worktree setup stopped in ${record.path}`)
+      return stopped()
+    }
     if (run.exitCode === 0 && !run.timedOut) {
       onState({ state: 'ready' })
       return { state: 'ready' }
     }
-    const reason = run.timedOut ? 'timed out' : signal.aborted ? 'stopped' : 'failed'
+    const reason = run.timedOut ? 'timed out' : 'failed'
     this.deps.log('warn', `Worktree setup ${reason} in ${record.path} (${run.exitCode ?? '-'})`)
     return fail({
       stage: 'setup',
       exitCode: run.exitCode,
-      message: lastLines(run.tail || this.setupLog(record.path)),
+      message: lastLines(run.tail || this.setupLog(record.path).log),
     })
   }
 }

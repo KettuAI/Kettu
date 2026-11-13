@@ -561,41 +561,24 @@ li[data-row-exit='dust'] > * {
     opacity: 0;
   }
 }
-/* Opening or closing the side panel glides the columns as App Shell's work area does: the pane
-   grows from nothing, fading in and sliding 16px from the right, and closing runs it back. Only
-   while it glides, so dragging the edge and resizing the window still follow at once. */
-.kettu-pane-area[data-glide] > :is([data-panel], .kp-resizer) {
-  transition:
-    flex-grow 420ms var(--ease),
-    width 420ms var(--ease);
-}
+/* Opening or closing the side panel moves only the pane: it takes its width at once and fades in
+   sliding 16px from the right, and closing runs it back before the columns change. The columns
+   are laid out once, not on every frame of the glide. */
 .kettu-pane-area[data-glide] > [data-panel]:not(#content) .kp-pane {
   transition:
     opacity 260ms ease,
     translate 420ms var(--ease);
 }
 @starting-style {
-  .kettu-pane-area[data-glide='open'] > [data-panel]:not(#content) {
-    flex-grow: 0 !important;
-  }
-  .kettu-pane-area[data-glide='open'] > .kp-resizer {
-    width: 0 !important;
-  }
   .kettu-pane-area[data-glide='open'] > [data-panel]:not(#content) .kp-pane {
     opacity: 0;
     translate: 16px 0;
   }
 }
-.kettu-pane-area[data-glide='close'] > [data-panel]:not(#content) {
-  flex-grow: 0 !important;
-}
-.kettu-pane-area[data-glide='close'] > .kp-resizer {
-  width: 0 !important;
-}
 .kettu-pane-area[data-glide='close'] > [data-panel]:not(#content) .kp-pane {
   opacity: 0;
   translate: 16px 0;
-  transition-duration: 200ms, 420ms;
+  transition-duration: 200ms;
 }
 .kp-head {
   display: flex;

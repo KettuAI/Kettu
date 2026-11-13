@@ -789,7 +789,10 @@ export class BrowserViews {
       if (!key) return
       event.preventDefault()
       const window = this.deps.window()
-      if (window && !window.isDestroyed()) sendEvent(window.webContents, 'app:shortcut', key)
+      if (!window || window.isDestroyed()) return
+      // Mod+L goes to the pane's address field, which needs the keyboard back from the page.
+      if (key.key.toLowerCase() === 'l' && !key.shiftKey && !key.altKey) window.webContents.focus()
+      sendEvent(window.webContents, 'app:shortcut', { ...key, browserSession: page.sessionId })
     })
     contents.on('before-mouse-event', (_event, mouse) => {
       if (!isUserMouse(mouse.type)) return
