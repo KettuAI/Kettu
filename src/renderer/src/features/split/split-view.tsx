@@ -102,8 +102,9 @@ function Part({
   const row = node.direction === 'row'
   return (
     <ResizablePanelGroup
-      // Rebuilt when its parts change: a default layout is read once.
-      key={`split:${node.id}:${node.children.map((child) => child.slot).join(',')}`}
+      // The same group while its parts fold and come back, so the parts in view stay mounted; it
+      // takes the default layout for each new set of parts.
+      key={`split:${node.id}`}
       orientation={row ? 'horizontal' : 'vertical'}
       defaultLayout={Object.fromEntries(node.children.map((child) => [child.slot, child.size]))}
       onLayoutChanged={(sizes) => setSplitShares(node.id, sizes)}

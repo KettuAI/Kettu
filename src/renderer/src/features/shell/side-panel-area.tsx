@@ -41,11 +41,11 @@ const PANES = {
   devices: { id: 'side-panel-devices', ...PANE_SIZE },
 } as const
 
-// As long as App Shell's columns take to glide.
-const GLIDE_MS = 420
+// How long the pane takes to come in, and to go before its columns close.
+const GLIDE_MS = { open: 420, close: 200 } as const
 
 /**
- * The pane the side panel holds and how it moves. Opening or closing glides the columns; a closed
+ * The pane the side panel holds and how it moves. Opening or closing glides the pane; a closed
  * pane stays until its glide ends. Switching panes or sessions, dragging and resizing the window
  * do not glide.
  */
@@ -72,7 +72,7 @@ function usePaneGlide(panel: string | null, pane: SidePane | undefined) {
     const timer = setTimeout(() => {
       setGlide(null)
       if (glide === 'close') setHeld(undefined)
-    }, GLIDE_MS)
+    }, GLIDE_MS[glide])
     return () => clearTimeout(timer)
   }, [glide])
   return { held, glide }
@@ -81,8 +81,10 @@ function usePaneGlide(panel: string | null, pane: SidePane | undefined) {
 /**
  * The main area with the side panel of the pane in focus on its right: its session's, or New
  * session's in its project, holding the terminal, the files, the browser or, opened from the
- * thread, an artifact. Opening or closing it glides the content's edge as App Shell's work area
- * does. Maximized, the panel covers the whole area while the layout underneath keeps its sizes.
+ * thread, an artifact. Opening or closing it glides the pane in or out; the content's edge moves
+ * once, and dragging the edge moves a line that the content follows when it is let go, so the
+ * thread is not laid out on every frame. Maximized, the panel covers the whole area while the
+ * layout underneath keeps its sizes.
  */
 export function SidePanelArea({
   projectPath,
@@ -162,6 +164,7 @@ export function SidePanelArea({
       orientation="horizontal"
       defaultLayout={layout.defaultLayout}
       onLayoutChanged={layout.onLayoutChanged}
+      resizePreviewMode="separator"
       className="kettu-pane-area relative"
       data-glide={glide ?? undefined}
       style={SHEET_PANEL}
