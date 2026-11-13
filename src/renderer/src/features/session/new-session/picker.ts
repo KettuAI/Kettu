@@ -2,7 +2,7 @@
 
 import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
-import { limitLabel } from '@renderer/lib/format'
+import { limitPhrase } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { agentNeed } from './start-options'
@@ -35,10 +35,10 @@ export function agentLine(
   if (limit) {
     parts.push(
       limit.usedPercent === null
-        ? i18n.t('session:newSession.picker.limitReached', { limit: limitLabel(limit) })
+        ? i18n.t('session:newSession.picker.limitReached', { limit: limitPhrase(limit) })
         : i18n.t('session:newSession.picker.limitUsed', {
             percent: Math.round(limit.usedPercent),
-            limit: limitLabel(limit),
+            limit: limitPhrase(limit),
           }),
     )
   }

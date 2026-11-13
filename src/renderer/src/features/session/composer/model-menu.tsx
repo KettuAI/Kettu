@@ -13,7 +13,7 @@ import {
 import { ShimmerText } from '@renderer/components/affect/shimmer-loader'
 import { joinPlanTier } from '@renderer/features/account/model'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
-import { limitLabel } from '@renderer/lib/format'
+import { limitPhrase } from '@renderer/lib/format'
 import { formatShortcut } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { Glyph } from '@renderer/features/shell/glyph'
@@ -138,7 +138,10 @@ export function ModelMenu({
     account?.email,
     plan,
     limit?.usedPercent != null &&
-      t('controls.limitUsed', { percent: Math.round(limit.usedPercent), limit: limitLabel(limit) }),
+      t('controls.limitUsed', {
+        percent: Math.round(limit.usedPercent),
+        limit: limitPhrase(limit),
+      }),
   ]
     .filter(Boolean)
     .join(' · ')

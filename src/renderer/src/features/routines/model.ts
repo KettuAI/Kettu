@@ -13,7 +13,7 @@ import {
   type Schedule,
 } from '@shared/routines'
 import { startConfig, startValues } from '@renderer/features/session/new-session/start-options'
-import { limitLabel, shortDuration } from '@renderer/lib/format'
+import { limitPhrase, shortDuration } from '@renderer/lib/format'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
 import type { OptionValues } from '@renderer/stores/agent-options'
 import { routineHost } from '@renderer/lib/host'
@@ -449,7 +449,7 @@ function pauseWindow(pause: RoutinePause, hostId: string | null): string {
   const limit = agentsOn(useAgentsStore.getState(), hostId).byId[pause.agentId]?.limits.find(
     (known) => known.window === pause.window,
   )
-  return limitLabel(limit ?? { window: pause.window, label: pause.window })
+  return limitPhrase(limit ?? { window: pause.window, label: pause.window })
 }
 
 /** When a pause ends: the time, with the weekday or the date when it is not today. */

@@ -137,10 +137,10 @@
     "noScopeMode": "{{agent}} 没有提供符合这组权限的模式",
     "modeFailed": "{{agent}} 无法设置符合这组权限的模式",
     "pausedTitle": "{{agent}} 的例程已暂停",
-    "pausedUsed": "限额已用 {{percent}}%（{{limit}}）· {{time}} 重置",
-    "pausedReached": "限额已用完（{{limit}}）· {{time}} 重置",
-    "pausedUsedNoReset": "限额已用 {{percent}}%（{{limit}}）",
-    "pausedReachedNoReset": "限额已用完（{{limit}}）"
+    "pausedUsed": "{{limit}}限额已用 {{percent}}% · {{time}} 重置",
+    "pausedReached": "{{limit}}限额已用完 · {{time}} 重置",
+    "pausedUsedNoReset": "{{limit}}限额已用 {{percent}}%",
+    "pausedReachedNoReset": "{{limit}}限额已用完"
   },
   "planWindow": {
     "five_hour": "5 小时",
@@ -151,6 +151,11 @@
     "annual": "每年",
     "overage": "额外用量",
     "weeklyOf": "每周 · {{model}}"
+  },
+  "planWindowInText": {
+    "seven_day_opus": "Opus 每周",
+    "seven_day_sonnet": "Sonnet 每周",
+    "weeklyOf": "{{model}} 每周"
   },
   "agent": {
     "stoppedBeforeAnswer": "Agent 在回复前停止了",

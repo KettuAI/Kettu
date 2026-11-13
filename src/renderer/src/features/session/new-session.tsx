@@ -23,7 +23,7 @@ import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useCloudOff } from '@renderer/lib/cloud'
-import { basename, limitLabel, longAgo, resetTime } from '@renderer/lib/format'
+import { basename, limitPhrase, longAgo, resetTime } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { newestLimits } from '@renderer/lib/plan-readings'
@@ -457,7 +457,7 @@ function DraftComposer({
               placeholder={
                 reached?.resetsAt
                   ? tc('prompt.placeholder.limitReached', {
-                      limit: limitLabel(reached),
+                      limit: limitPhrase(reached),
                       time: resetTime(reached.resetsAt),
                     })
                   : t('newSession.describeTask')

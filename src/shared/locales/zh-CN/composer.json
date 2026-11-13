@@ -4,7 +4,7 @@
     "placeholder": {
       "starting": "正在启动 {{agent}}…",
       "awaiting": "等待你的授权",
-      "limitReached": "限额已用完（{{limit}}）· {{time}} 重置",
+      "limitReached": "{{limit}}限额已用完 · {{time}} 重置",
       "ask": "回复 {{agent}}…",
       "denied": "告诉 {{agent}} 改用什么做法",
       "running": "排队一条消息 · {{keys}} 插入这一轮 · Esc 停止",

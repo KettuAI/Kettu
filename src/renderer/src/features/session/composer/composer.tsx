@@ -7,7 +7,7 @@ import type { AgentId, ConfigOption, SessionView, UserContent } from '@shared/th
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { BranchTrayLink } from '@renderer/features/git/git-status'
-import { limitLabel, resetTime } from '@renderer/lib/format'
+import { limitPhrase, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
 import { isMac, isMod } from '@renderer/lib/platform'
@@ -389,7 +389,7 @@ export function Composer({
         ? t('prompt.placeholder.awaiting')
         : !running && reached?.resetsAt
           ? t('prompt.placeholder.limitReached', {
-              limit: limitLabel(reached),
+              limit: limitPhrase(reached),
               time: resetTime(reached.resetsAt),
             })
           : !running && rejected

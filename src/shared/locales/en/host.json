@@ -153,6 +153,11 @@
     "overage": "Extra usage",
     "weeklyOf": "Weekly · {{model}}"
   },
+  "planWindowInText": {
+    "seven_day_opus": "Opus weekly",
+    "seven_day_sonnet": "Sonnet weekly",
+    "weeklyOf": "{{model}} weekly"
+  },
   "agent": {
     "stoppedBeforeAnswer": "The agent stopped before it answered",
     "failedToStart": "{{agent}} failed to start",
