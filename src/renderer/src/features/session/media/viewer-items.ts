@@ -16,6 +16,8 @@ export type ViewerSource =
   | { kind: 'file'; path: string } // a file the thread names, shown through its grant
   // base64 the thread carries
   | { kind: 'bytes'; media: 'image' | 'video'; mimeType: string; data: string }
+  // a picture the thread store keeps, by the hash of its bytes
+  | { kind: 'stored'; hash: string }
   | { kind: 'attachment'; attachment: Attachment } // the user's, from the thread store or a draft
 
 export interface ViewerItem {
@@ -189,7 +191,10 @@ function byteItem(entryId: string, index: number, ref: ContentRef): ViewerItem[]
   return [
     {
       key: refKey(entryId, index),
-      source: { kind: 'bytes', media: ref.kind, mimeType: ref.mimeType, data: ref.data },
+      source:
+        'data' in ref
+          ? { kind: 'bytes', media: ref.kind, mimeType: ref.mimeType, data: ref.data }
+          : { kind: 'stored', hash: ref.blob },
       name: ref.kind === 'video' ? ref.name : null,
       alt: '',
     },

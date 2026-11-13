@@ -66,9 +66,9 @@ function ThumbList({
             sessionId={sessionId}
             entryId={picture.entryId}
             index={picture.index}
-            mimeType={picture.mimeType}
-            data={picture.data}
+            image={picture.image}
             className={cn(THUMB, 'object-cover')}
+            quiet
           />
         ) : (
           <SessionIdContext key={picture.key} value={sessionId}>

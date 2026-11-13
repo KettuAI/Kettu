@@ -279,6 +279,8 @@ export interface TestHostOptions {
   fakeThroughRouter?: { agentIds: AgentId[]; oneSession?: boolean; router?: boolean }
   /** Drivers over the built-in ones, by protocol. */
   drivers?: HostOptions['drivers']
+  /** The thread worker, the service in the test's own thread unless given. */
+  threadWorker?: HostOptions['threadWorker']
 }
 
 export interface TestHost {
@@ -383,7 +385,7 @@ export async function startTestHost(options: TestHostOptions = {}): Promise<Test
     ...(options.routineClock ? { routineClock: options.routineClock } : {}),
     ...(options.treeNoteMs !== undefined ? { treeNoteMs: options.treeNoteMs } : {}),
     ...(options.processControl ? { processControl: options.processControl } : {}),
-    threadWorker: inThreadWorker,
+    threadWorker: options.threadWorker ?? inThreadWorker,
     usageWorker: (file) => inUsageWorker(file, options.usageReaders),
     ...(options.usageReaders ? { usageReaders: options.usageReaders } : {}),
     ...(options.cacheTtl ? { cacheTtl: options.cacheTtl } : {}),

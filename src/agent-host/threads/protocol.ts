@@ -5,12 +5,16 @@ import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall } from '../artifacts/model'
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall } from '../routines/calls'
-import type { ThreadWrite } from './model'
+import type { ImageMode, ThreadWrite } from './model'
 
-/** What the worker is started with: the database, and the folder of the artifacts' HTML. */
+/**
+ * What the worker is started with: the database, and the folder of the artifacts' HTML. A
+ * `reader` only reads the pages, outlines and bytes of threads, beside the worker that writes.
+ */
 export interface ThreadWorkerData {
   file: string
   contentDir: string | null
+  reader?: boolean
 }
 
 /**
@@ -27,13 +31,28 @@ export type ThreadDbStatus = 'ok' | 'created' | 'recovered' | 'newer' | 'unavail
  * `not_found`, `deleted`: no such artifact or version in reach, or the artifact is in Recently
  * deleted.
  * `invalid`, `too_large`: a write of an artifact's data that does not apply, or would not fit.
+ * `full`: the disk has no room for the write, which changed nothing.
  */
 export type ThreadErrorCode =
-  'corrupt' | 'conflict' | 'unavailable' | 'not_found' | 'deleted' | 'invalid' | 'too_large'
+  | 'corrupt'
+  | 'conflict'
+  | 'unavailable'
+  | 'not_found'
+  | 'deleted'
+  | 'invalid'
+  | 'too_large'
+  | 'full'
 
 export type ThreadRequest =
-  | { id: number; op: 'page'; sessionId: string; before: number | null; from: number | null }
-  | { id: number; op: 'tail'; sessionId: string; from: number }
+  | {
+      id: number
+      op: 'page'
+      sessionId: string
+      before: number | null
+      from: number | null
+      images?: ImageMode
+    }
+  | { id: number; op: 'tail'; sessionId: string; from: number; images?: ImageMode }
   | { id: number; op: 'load'; sessionId: string }
   | { id: number; op: 'write'; sessionId: string; change: ThreadWrite }
   | { id: number; op: 'remove'; sessionIds: string[] }
@@ -48,6 +67,8 @@ export type ThreadRequest =
 
 export type ThreadReply =
   | { type: 'ready'; status: ThreadDbStatus }
+  // The database was damaged and replaced by an empty one, which a reader must open again.
+  | { type: 'recovered' }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; message: string }
   | { type: 'result'; id: number; value: unknown }
   | {

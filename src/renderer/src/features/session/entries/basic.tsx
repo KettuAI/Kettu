@@ -160,8 +160,7 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
                 sessionId={sessionId}
                 entryId={entryId}
                 index={i}
-                mimeType={ref.mimeType}
-                data={ref.data}
+                image={ref}
                 className="max-h-72 max-w-full rounded-lg shadow-card"
               />
             ) : ref.kind === 'audio' || ref.kind === 'video' ? (

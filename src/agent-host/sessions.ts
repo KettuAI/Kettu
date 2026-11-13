@@ -187,13 +187,16 @@ import {
   type TurnScope,
 } from './session-updates'
 import {
-  attachmentBlobs,
   changesStored,
+  imageBlobs,
   opensTurn,
   pageStart,
   settled,
   splitLinks,
+  storedBlobs,
   storedSession,
+  withImageBytes,
+  type ImageMode,
   type OutlineRow,
   type PositionedEntry,
   type StoredBlob,
@@ -202,7 +205,7 @@ import {
   type ThreadPage,
   type ThreadWrite,
 } from './threads/model'
-import type { ThreadStore } from './threads/store'
+import { ThreadStoreError, type ThreadStore } from './threads/store'
 import type { UsageRow } from './usage/model'
 import { recordRows } from './usage/record'
 
@@ -229,6 +232,9 @@ export interface SessionTimings {
   contextRefreshMs: number
   contextDebounceMs: number
 }
+
+/** The longest a thread's write waits after writes that failed. */
+const MAX_RETRY_MS = 5 * 60_000
 
 export const SESSION_TIMINGS: SessionTimings = {
   flushMs: 16,
@@ -473,8 +479,18 @@ interface Live {
   dirty: Set<string>
   /** The stored part of the session view changed since the last checkpoint. */
   sessionDirty: boolean
-  /** The next checkpoint replaces the stored thread: after a replay, or a write that failed. */
+  /**
+   * The next checkpoint replaces the stored thread: after a replay, or a write that failed after
+   * which another had gone.
+   */
   rewrite: boolean
+  /** Checkpoints sent to the thread store, which the writes that fail compare. */
+  writes: number
+  /** Writes that failed in a row, and when the next may go; 0 while they succeed. */
+  writeFailures: number
+  retryAt: number
+  /** The thread says the disk is full, until a write succeeds again. */
+  fullNoticed: boolean
   /** A replay failed partway, so the thread is not stored until one completes. */
   partial: boolean
   /** Bytes of sent attachments for the next checkpoint, by hash. */
@@ -1709,17 +1725,21 @@ export class SessionManager {
   private scheduleCheckpoint(live: Live): void {
     if (live.checkpointTimer || !this.deps.threads || this.stopped || live.replaying) return
     if (!live.saved || live.partial || !this.hasChanges(live)) return
+    const wait = Math.max(this.timings.checkpointMs, live.retryAt - this.now())
     live.checkpointTimer = setTimeout(() => {
       live.checkpointTimer = null
       this.checkpoint(live)
-    }, this.timings.checkpointMs)
+    }, wait)
   }
 
   /**
    * Writes what changed since the last checkpoint. The store answers in order, so a later read
-   * sees it. A failed write is logged, and the next checkpoint writes the whole thread again.
+   * sees it. After a write that failed, the next waits, longer after each failure, unless it is
+   * the last before the session leaves memory (`final`).
    */
-  private checkpoint(live: Live, { afterShutdown = false } = {}): void {
+  private checkpoint(live: Live, options: { afterShutdown?: boolean; final?: boolean } = {}): void {
+    const afterShutdown = options.afterShutdown ?? false
+    const final = options.final ?? afterShutdown
     if (live.checkpointTimer) {
       clearTimeout(live.checkpointTimer)
       live.checkpointTimer = null
@@ -1728,6 +1748,10 @@ export class SessionManager {
     if (!store || (this.stopped && !afterShutdown) || live.replaying || live.partial || !live.saved)
       return
     if (!live.record.acpSessionId || !this.hasChanges(live)) return
+    if (!final && live.retryAt > this.now()) {
+      this.scheduleCheckpoint(live)
+      return
+    }
     const replace = live.rewrite
     const entries: PositionedEntry[] = []
     for (const id of replace ? live.thread.order : live.dirty) {
@@ -1747,15 +1771,60 @@ export class SessionManager {
     live.sessionDirty = false
     live.rewrite = false
     live.blobs = new Map()
-    store.write(live.id, change).catch((error: unknown) => {
+    const write = ++live.writes
+    store.write(live.id, change).then(
+      () => {
+        live.writeFailures = 0
+        live.retryAt = 0
+        live.fullNoticed = false
+      },
+      (error: unknown) => this.writeFailed(live, change, write, error),
+    )
+  }
+
+  /**
+   * A write changes nothing when it fails, so the next one takes its entries again, or the whole
+   * thread when another write went after it, which may have stored entries placed by its.
+   */
+  private writeFailed(live: Live, change: ThreadWrite, write: number, error: unknown): void {
+    const code = error instanceof ThreadStoreError ? error.code : null
+    if (change.replace || write !== live.writes || code === 'conflict' || code === 'corrupt') {
       live.rewrite = true
-      // Kept for the rewrite, which takes the whole thread but only the bytes it is handed.
-      for (const blob of blobs) if (!live.blobs.has(blob.hash)) live.blobs.set(blob.hash, blob)
-      this.deps.diagnostics.log(
-        'warn',
-        `Could not store the thread of session ${live.id}: ${(error as Error).message}`,
-      )
-    })
+    } else {
+      for (const { entry } of change.entries) live.dirty.add(entry.id)
+      if (change.session) live.sessionDirty = true
+    }
+    // Kept for the next write, which takes only the bytes it is handed.
+    for (const blob of change.blobs ?? []) {
+      if (!live.blobs.has(blob.hash)) live.blobs.set(blob.hash, blob)
+    }
+    live.writeFailures++
+    const wait = Math.min(this.timings.checkpointMs * 2 ** live.writeFailures, MAX_RETRY_MS)
+    live.retryAt = this.now() + wait
+    this.deps.diagnostics.log(
+      'warn',
+      `Could not store the thread of session ${live.id}; trying again in ${Math.round(wait / 1000)} s: ${(error as Error).message}`,
+    )
+    if (this.live.get(live.id) !== live) return
+    if (code === 'full' && !live.fullNoticed) {
+      live.fullNoticed = true
+      const title = t('notice.diskFull.title')
+      this.emit(live, [
+        {
+          op: 'entry.add',
+          entry: {
+            kind: 'notice',
+            id: this.nextId(live),
+            severity: 'error',
+            title,
+            description: t('notice.diskFull.description'),
+            after: agentEntryBefore(live.thread),
+          },
+        },
+      ])
+      this.deps.events.attention(live.id, 'error', this.titleOf(live), title)
+    }
+    this.scheduleCheckpoint(live)
   }
 
   // Snapshots and pages: a session's view with the latest page of its thread, from memory while
@@ -1811,16 +1880,50 @@ export class SessionManager {
     return head.agentId === record.agentId && head.acpSessionId === record.acpSessionId
   }
 
-  async snapshot(sessionId: string, from?: number): Promise<SessionSnapshot> {
+  /** `images`: `inline` for a client that reads only the bytes of the images the thread holds. */
+  async snapshot(
+    sessionId: string,
+    from?: number,
+    images: ImageMode = 'refs',
+  ): Promise<SessionSnapshot> {
     const live = this.live.get(sessionId)
-    if (live) return this.liveSnapshot(live, from)
+    if (live) return this.withBytes(live, images, () => this.liveSnapshot(live, from))
     const record = this.recordOf(sessionId)
     const page = await this.readPage(record, (store) =>
-      from === undefined ? store.page(sessionId) : store.tail(sessionId, from),
+      from === undefined
+        ? store.page(sessionId, null, null, images)
+        : store.tail(sessionId, from, images),
     )
     // It went live, or away, while the page was read.
-    if (this.live.has(sessionId) || !this.has(sessionId)) return this.snapshot(sessionId, from)
+    if (this.live.has(sessionId) || !this.has(sessionId)) {
+      return this.snapshot(sessionId, from, images)
+    }
     return this.storedSnapshot(record, page)
+  }
+
+  /**
+   * What `take` reads of a live session: as it is, or with the bytes of the stored images it
+   * holds, which are read first, so `take` still reads it at once, in step with its patches.
+   */
+  private async withBytes<T extends { entries: ThreadEntry[] }>(
+    live: Live,
+    images: ImageMode,
+    take: () => T,
+  ): Promise<T> {
+    if (images === 'refs') return take()
+    const bytes = new Map<string, string | null>()
+    for (;;) {
+      const missing = [...imageBlobs(take().entries)].filter((hash) => !bytes.has(hash))
+      if (missing.length === 0) break
+      await Promise.all(
+        missing.map(async (hash) => {
+          const blob = await this.storedBlob(live.id, hash).catch(() => null)
+          bytes.set(hash, blob ? Buffer.from(blob.data).toString('base64') : null)
+        }),
+      )
+    }
+    const taken = take()
+    return { ...taken, entries: taken.entries.map((entry) => withImageBytes(entry, bytes)) }
   }
 
   private liveSnapshot(live: Live, from: number | undefined): SessionSnapshot {
@@ -1889,26 +1992,37 @@ export class SessionManager {
    * The page before the position `before`, for a renderer scrolling back through the thread; with
    * `from`, everything back to the start of the turn holding that position, for a jump.
    */
-  async page(sessionId: string, before: number, from?: number): Promise<OlderPage> {
+  async page(
+    sessionId: string,
+    before: number,
+    from?: number,
+    images: ImageMode = 'refs',
+  ): Promise<OlderPage> {
     const live = this.live.get(sessionId)
     if (live) {
-      // Patches go out before the page, so the renderer has every change to the entries it holds.
-      this.flushPatches(live)
-      const { order, byId } = live.thread
-      const end = this.indexAt(live, before)
-      let start = from === undefined ? pageStart(order, byId, end) : this.indexAt(live, from)
-      if (from !== undefined) {
-        start = Math.min(start, end)
-        while (start > 0 && !opensTurn(byId[order[start]!]!, byId[order[start - 1]!]!)) start--
-      }
-      return {
-        entries: order.slice(start, end).map((id) => byId[id]!),
-        older: start > 0 ? this.posAt(live, start) : null,
-      }
+      return this.withBytes(live, images, () => {
+        // Patches go out before the page, so the renderer has every change to the entries it holds.
+        this.flushPatches(live)
+        const { order, byId } = live.thread
+        const end = this.indexAt(live, before)
+        let start = from === undefined ? pageStart(order, byId, end) : this.indexAt(live, from)
+        if (from !== undefined) {
+          start = Math.min(start, end)
+          while (start > 0 && !opensTurn(byId[order[start]!]!, byId[order[start - 1]!]!)) start--
+        }
+        return {
+          entries: order.slice(start, end).map((id) => byId[id]!),
+          older: start > 0 ? this.posAt(live, start) : null,
+        }
+      })
     }
     const record = this.recordOf(sessionId)
-    const page = await this.readPage(record, (store) => store.page(sessionId, before, from ?? null))
-    if (this.live.has(sessionId) || !this.has(sessionId)) return this.page(sessionId, before, from)
+    const page = await this.readPage(record, (store) =>
+      store.page(sessionId, before, from ?? null, images),
+    )
+    if (this.live.has(sessionId) || !this.has(sessionId)) {
+      return this.page(sessionId, before, from, images)
+    }
     return page
       ? { entries: page.entries.map(settled), older: page.older }
       : { entries: [], older: null }
@@ -2108,6 +2222,10 @@ export class SessionManager {
       dirty: new Set(),
       sessionDirty: false,
       rewrite: false,
+      writes: 0,
+      writeFailures: 0,
+      retryAt: 0,
+      fullNoticed: false,
       partial: false,
       blobs: new Map(),
       keeper: null,
@@ -3621,24 +3739,24 @@ export class SessionManager {
    * session, loads its history from the agent and stays live. Agent-side failures leave the
    * session live in `failed` or `auth_required`, so the snapshot shows them with Retry.
    */
-  async open(sessionId: string): Promise<SessionSnapshot> {
+  async open(sessionId: string, images: ImageMode = 'refs'): Promise<SessionSnapshot> {
     const existing = this.live.get(sessionId)
     if (existing) {
       if (existing.opening) await existing.opening
-      return this.snapshot(sessionId)
+      return this.snapshot(sessionId, undefined, images)
     }
     const record = this.recordOf(sessionId)
-    const page = await this.readPage(record, (store) => store.page(sessionId))
-    if (this.live.has(sessionId) || !this.has(sessionId)) return this.open(sessionId)
+    const page = await this.readPage(record, (store) => store.page(sessionId, null, null, images))
+    if (this.live.has(sessionId) || !this.has(sessionId)) return this.open(sessionId, images)
     if (page) return this.storedSnapshot(record, page)
     if (record.origin === 'subagent' && record.parentId) {
       // A subagent's thread comes back with its parent's load, which replays the children.
       await this.open(record.parentId)
-      return this.snapshot(sessionId)
+      return this.snapshot(sessionId, undefined, images)
     }
     const live = this.makeLive(record, true, 'starting')
     await this.runOpening(live)
-    return this.snapshot(sessionId)
+    return this.snapshot(sessionId, undefined, images)
   }
 
   private runOpening(live: Live): Promise<void> {
@@ -4938,6 +5056,16 @@ export class SessionManager {
       }
     }
     for (const item of content) {
+      if (item.type === 'ref' && item.ref.kind === 'image' && 'blob' in item.ref) {
+        // An image the thread store keeps, as a message of a session that came back from it.
+        const { blob, mimeType } = item.ref
+        const stored = await this.storedBlob(live.id, blob).catch(() => null)
+        if (!stored) throw notFound(t('session.attachmentGone', { name: mimeType }))
+        const data = Buffer.from(stored.data).toString('base64')
+        wire.push({ type: 'image', mimeType: stored.mime, data })
+        shown.push(item)
+        continue
+      }
       if (item.type !== 'ref' || item.ref.kind !== 'attachment') {
         wire.push(...promptBlocks([item]))
         shown.push(item)
@@ -5439,9 +5567,7 @@ export class SessionManager {
     )
     // Read now, so the reads go before a delete of the source that would take the bytes with it.
     const reading = Promise.all(
-      [...attachmentBlobs(entries)].map((hash) =>
-        this.storedBlob(source.id, hash).catch(() => null),
-      ),
+      [...storedBlobs(entries)].map((hash) => this.storedBlob(source.id, hash).catch(() => null)),
     )
     const forkId = randomUUID()
     const own = await this.forkWorktree(source.record, worktree)
@@ -5563,9 +5689,7 @@ export class SessionManager {
     const kept = entries.filter((entry) => entry.kind !== 'subagent')
     const blobs = (
       await Promise.all(
-        [...attachmentBlobs(kept)].map((hash) =>
-          this.storedBlob(source.id, hash).catch(() => null),
-        ),
+        [...storedBlobs(kept)].map((hash) => this.storedBlob(source.id, hash).catch(() => null)),
       )
     ).filter((blob) => blob !== null)
     const now = this.now()
@@ -7316,7 +7440,7 @@ export class SessionManager {
       if (live.thread.session.status !== 'closed') {
         this.update(live, { status: 'closed', turnStartedAt: null, turnStartUsed: null })
       }
-      this.checkpoint(live)
+      this.checkpoint(live, { final: true })
     }
     this.dropLive(live)
     this.updateBadge()
@@ -7694,7 +7818,7 @@ export class SessionManager {
       if (live.turn?.fallback) clearTimeout(live.turn.fallback)
       if (live.releaseTimer) clearTimeout(live.releaseTimer)
       if (live.contextTimer) clearTimeout(live.contextTimer)
-      this.checkpoint(live)
+      this.checkpoint(live, { final: true })
     }
     for (const timer of this.cacheReads.values()) clearTimeout(timer)
     this.stopped = true

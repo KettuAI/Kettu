@@ -9,7 +9,7 @@ import type { ThreadReply, ThreadRequest, ThreadWorkerData } from './protocol'
  * answers each request in the order it arrives.
  */
 export function startThreadService(
-  { file, contentDir }: ThreadWorkerData,
+  { file, contentDir, reader }: ThreadWorkerData,
   reply: (message: ThreadReply) => void,
   now?: () => number,
 ): (request: ThreadRequest) => void {
@@ -17,12 +17,13 @@ export function startThreadService(
     reply({ type: 'log', level, message })
   let db: ThreadDb | null = null
   try {
-    db = ThreadDb.open(file, log, now, contentDir)
+    db = reader ? ThreadDb.openReader(file, log) : ThreadDb.open(file, log, now, contentDir)
     reply({ type: 'ready', status: db.status })
   } catch (error) {
     log('error', `Could not open the thread database: ${(error as Error).message}`)
     reply({ type: 'ready', status: 'unavailable' })
   }
+  let recoveries = db?.recoveries ?? 0
   return (request) => {
     if (!db) {
       reply({
@@ -45,15 +46,19 @@ export function startThreadService(
         ...(known?.data ? { data: known.data } : {}),
       })
     }
+    if (db.recoveries !== recoveries) {
+      recoveries = db.recoveries
+      reply({ type: 'recovered' })
+    }
   }
 }
 
 function run(db: ThreadDb, request: ThreadRequest): unknown {
   switch (request.op) {
     case 'page':
-      return db.page(request.sessionId, request.before, request.from)
+      return db.page(request.sessionId, request.before, request.from, request.images)
     case 'tail':
-      return db.tail(request.sessionId, request.from)
+      return db.tail(request.sessionId, request.from, request.images)
     case 'load':
       return db.load(request.sessionId)
     case 'write':

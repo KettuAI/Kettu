@@ -55,6 +55,7 @@ import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
   BACKGROUND_PACE_MS,
   BROWSER_FEATURE,
+  IMAGE_REFS_FEATURE,
   negotiate,
   parseHello,
   RESUME_MS,
@@ -798,6 +799,7 @@ class DeviceConnection {
       id: device.id,
       name: device.name,
       ...(hello.features?.includes(BROWSER_FEATURE) ? { browser: true as const } : {}),
+      ...(hello.features?.includes(IMAGE_REFS_FEATURE) ? { imageRefs: true as const } : {}),
     })
     if (this.state !== 'opening') return port?.close()
     if (!port) return this.close('unavailable')

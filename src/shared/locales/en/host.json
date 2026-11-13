@@ -64,6 +64,10 @@
     },
     "turnFailed": "The turn failed",
     "archivedByAgent": "{{agent}} archived this session",
+    "diskFull": {
+      "title": "Kettu can't save this session: the disk is full",
+      "description": "Free up space on this computer. Until then the conversation stays in memory, and Kettu saves it once there is room."
+    },
     "stopped": {
       "title": "{{agent}} exited before finishing this turn"
     },
