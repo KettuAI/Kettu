@@ -508,11 +508,22 @@ export interface ProjectMcpFile {
   folders: Record<string, { all?: true; use: string[]; skip: string[] }>
 }
 
+/**
+ * The user's answers about the hooks each folder's own Claude Code settings declare, by the
+ * folder's path key: those hooks, by their digest (`use`), every one, later ones too (`all`), or
+ * none (`skip`).
+ */
+export interface ProjectHooksFile {
+  version: 1
+  folders: Record<string, { decision: 'use'; digest: string } | { decision: 'all' | 'skip' }>
+}
+
 export const PROJECTS_VERSION = 1
 export const SESSIONS_VERSION = 1
 export const AGENTS_VERSION = 1
 export const RETURNED_VERSION = 1
 export const PROJECT_MCP_VERSION = 1
+export const PROJECT_HOOKS_VERSION = 1
 export const AGENT_PROCESSES_VERSION = 1
 export const AGENT_UPDATES_VERSION = 1
 export const ROUTINES_VERSION = 1
@@ -523,6 +534,7 @@ export const SESSIONS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENTS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const RETURNED_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const PROJECT_MCP_MIGRATIONS: Readonly<Record<number, Migration>> = {}
+export const PROJECT_HOOKS_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_PROCESSES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 export const AGENT_UPDATES_MIGRATIONS: Readonly<Record<number, Migration>> = {}
 
@@ -816,6 +828,21 @@ export function parseProjectMcpFile(data: Record<string, unknown>): ProjectMcpFi
   return { version: 1, folders }
 }
 
+// An answer that does not parse is dropped, which only asks again.
+export function parseProjectHooksFile(data: Record<string, unknown>): ProjectHooksFile | string {
+  if (!isRecord(data.folders)) return 'folders is not an object'
+  const folders: ProjectHooksFile['folders'] = {}
+  for (const [folder, value] of Object.entries(data.folders)) {
+    if (!isRecord(value)) continue
+    if (value.decision === 'use' && isString(value.digest)) {
+      folders[folder] = { decision: 'use', digest: value.digest }
+    } else if (value.decision === 'all' || value.decision === 'skip') {
+      folders[folder] = { decision: value.decision }
+    }
+  }
+  return { version: 1, folders }
+}
+
 export function parseReturnedFile(data: Record<string, unknown>): ReturnedFile | string {
   if (!Array.isArray(data.messages)) return 'messages is not a list'
   const nullableString = isNullable(isString)
@@ -1031,6 +1058,19 @@ export function projectMcpFile(userDataPath: string, log: LogFn): JsonFile<Proje
     empty: () => ({ version: 1, folders: {} }),
     log,
     // Written at once: a refusal lost to a quit would start the server next time.
+    debounceMs: 0,
+  })
+}
+
+export function projectHooksFile(userDataPath: string, log: LogFn): JsonFile<ProjectHooksFile> {
+  return new JsonFile<ProjectHooksFile>({
+    file: path.join(userDataPath, 'state', 'project-hooks.json'),
+    version: PROJECT_HOOKS_VERSION,
+    migrations: PROJECT_HOOKS_MIGRATIONS,
+    parse: parseProjectHooksFile,
+    empty: () => ({ version: 1, folders: {} }),
+    log,
+    // Written at once: a refusal lost to a quit would run the hooks next time.
     debounceMs: 0,
   })
 }

@@ -15,6 +15,7 @@ import { BrowserOriginEntry } from './browser-origin-entry'
 import { DeviceAccessEntry } from './device-access-entry'
 import { ComputerAppEntry } from './computer-app-entry'
 import { ProblemReportEntry } from './problem-report-entry'
+import { ProjectHooksEntry } from './project-hooks-entry'
 import { ProjectMcpEntry } from './project-mcp-entry'
 import { ComputerSetupEntry } from './computer-setup-entry'
 import { SessionStartedEntry } from './session-started-entry'
@@ -75,6 +76,8 @@ export const Entry = memo(function Entry({
       return <ComputerSetupEntry {...props} agentName={agentName} />
     case 'project_mcp':
       return <ProjectMcpEntry {...props} agentName={agentName} />
+    case 'project_hooks':
+      return <ProjectHooksEntry {...props} agentName={agentName} />
     case 'problem_report':
       return <ProblemReportEntry {...props} agentName={agentName} />
     default:

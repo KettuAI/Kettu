@@ -76,6 +76,7 @@ import type {
   OlderPage,
   PatchBatch,
   PromptCache,
+  ProjectHooksDecision,
   ProjectMcpDecision,
   ProblemReportOutcome,
   QuestionAnswer,
@@ -1080,6 +1081,11 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: ProjectMcpDecision }
     result: void
   }
+  // The same for a card holding the hooks a session's folder declares in its own settings.
+  'sessions.answerProjectHooks': {
+    params: { sessionId: string; entryId: string; decision: ProjectHooksDecision }
+    result: void
+  }
   // What became of a problem report the agent drafted, from the window or device that sent, saved
   // or dropped it; the first answer counts.
   'sessions.answerReport': {
@@ -1289,6 +1295,7 @@ export const HOST_METHODS = [
   'devices.forget',
   'computer.answerApp',
   'sessions.answerProjectMcp',
+  'sessions.answerProjectHooks',
   'sessions.answerReport',
   'computer.stop',
   'computer.declineSetup',

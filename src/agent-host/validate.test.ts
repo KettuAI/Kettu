@@ -737,6 +737,19 @@ describe('computer use requests', () => {
     rejects(() => posix['sessions.answerProjectMcp']({ sessionId: 's', decision: 'use' }))
   })
 
+  it("takes an answer to a card holding a folder's own hooks", () => {
+    for (const decision of ['use', 'all', 'skip']) {
+      expect(
+        posix['sessions.answerProjectHooks']({ sessionId: 's', entryId: 'e:1', decision }),
+      ).toEqual({ sessionId: 's', entryId: 'e:1', decision })
+    }
+    rejects(() =>
+      posix['sessions.answerProjectHooks']({ sessionId: 's', entryId: 'e:1', decision: 'timeout' }),
+    )
+    rejects(() => posix['sessions.answerProjectHooks']({ entryId: 'e:1', decision: 'use' }))
+    rejects(() => posix['sessions.answerProjectHooks']({ sessionId: 's', decision: 'use' }))
+  })
+
   it('takes what became of a drafted problem report', () => {
     const sent = { kind: 'sent', reportId: 'R-7K2F' }
     expect(

@@ -196,6 +196,7 @@ export function settled(entry: ThreadEntry): ThreadEntry {
       // A request still waiting went unanswered: the call that asked ended with the session.
       return entry.decision === null ? { ...entry, decision: 'timeout' } : entry
     case 'project_mcp':
+    case 'project_hooks':
       // A card still waiting went unanswered: the session's next start asks again.
       return entry.decision === null ? { ...entry, decision: 'timeout' } : entry
     case 'computer_setup':

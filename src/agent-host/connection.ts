@@ -9,6 +9,7 @@ import type {
 } from '@shared/agent-host'
 import type {
   ConfigOption,
+  DeclaredHook,
   DeclaredMcpServer,
   FormValues,
   PendingElicitation,
@@ -247,6 +248,8 @@ export interface SessionOptions {
   hidden?: HiddenPurpose
   /** The user's answers about the MCP servers the folder declares itself; without it none start. */
   projectMcp?: ProjectMcpGate
+  /** The user's answers about the hooks the folder declares itself; without it none run. */
+  projectHooks?: ProjectHooksGate
 }
 
 /** Decides which of the MCP servers a session's folder declares itself may start. */
@@ -258,6 +261,23 @@ export interface ProjectMcpGate {
   hold(cwd: string, servers: readonly DeclaredMcpServer[]): Promise<string[]>
   /** Of `names`, those that still may not start in `cwd`, without asking. */
   held(cwd: string, names: readonly string[]): Promise<string[]>
+}
+
+/** The hooks a folder's own settings declare, and a digest of them that any change changes. */
+export interface FolderHooks {
+  hooks: DeclaredHook[]
+  digest: string
+}
+
+/** Decides whether the hooks a session's folder declares itself may run. */
+export interface ProjectHooksGate {
+  /**
+   * Whether `cwd`'s hooks may not run; while nobody answered for them, the user is asked in the
+   * session's thread.
+   */
+  hold(cwd: string, hooks: FolderHooks): Promise<boolean>
+  /** Whether they still may not run in `cwd`, without asking. */
+  held(cwd: string, hooks: FolderHooks): Promise<boolean>
 }
 
 /**

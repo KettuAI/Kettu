@@ -425,6 +425,8 @@ export interface StoredMessage {
 
 export interface ResolvedSettings {
   effective: Record<string, unknown>
+  /** Each source's own settings, lowest precedence first: `user`, `project`, `local` and others. */
+  sources: { source: string; settings: Record<string, unknown>; path?: string }[]
 }
 
 /** The SDK's module, as its entry exports it. */

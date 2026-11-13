@@ -167,6 +167,21 @@
       "timeout": "未回答"
     }
   },
+  "projectHooks": {
+    "where": "来自项目的 .claude 设置，在这台电脑上以你的权限运行。允许之前，这个会话不运行任何 hook，包括你自己的。",
+    "hooks": "Hooks",
+    "decision": {
+      "use": "运行",
+      "all": "总是运行",
+      "skip": "不运行"
+    },
+    "answer": {
+      "use": "已允许",
+      "all": "已允许这个项目的全部",
+      "skip": "未运行",
+      "timeout": "未回答"
+    }
+  },
   "problemReport": {
     "action": "把问题报告发给 Kettu",
     "send": "提交给 Kettu",
@@ -793,7 +808,8 @@
       "site": "打开网站",
       "device": "使用设备",
       "app": "使用应用",
-      "projectMcp": "启动 MCP 服务器"
+      "projectMcp": "启动 MCP 服务器",
+      "projectHooks": "运行项目的 hooks"
     }
   },
   "worktree": {
