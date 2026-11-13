@@ -9,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { BranchTrayLink } from '@renderer/features/git/git-status'
 import { limitLabel, resetTime } from '@renderer/lib/format'
 import { errorMessage, host } from '@renderer/lib/host'
+import { newestLimits } from '@renderer/lib/plan-readings'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { selectionPrompt } from '@renderer/features/artifacts/anchors'
 import { SelectionChip } from '@renderer/features/artifacts/selection-chip'
@@ -19,7 +20,7 @@ import {
   updatePendingSwitch,
   useAgentSwitchStore,
 } from '@renderer/stores/agent-switch'
-import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { agentsOn, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
@@ -116,7 +117,8 @@ export function Composer({
   const agentName = pendingName ?? ownName
   const sendKey = useSettingsStore((s) => s.settings.general.sendKey)
   const agent = useAgentsStore((s) => agentsOn(s, hostId).byId[session.agentId])
-  const limits = agent?.limits
+  const readings = usePlanReadings()
+  const limits = agent ? newestLimits(readings, agent) : undefined
   const steering = !!agent?.capabilities.steering
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const [configError, setConfigError] = useState<string | null>(null)

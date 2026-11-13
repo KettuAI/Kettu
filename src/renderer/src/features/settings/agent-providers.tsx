@@ -17,7 +17,9 @@ import { toast } from '@renderer/components/ui/toast'
 import { currentLocale } from '@renderer/lib/i18n'
 import { mediumAgo, money } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
+import { newestLimits } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
+import { usePlanReadings } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { UsageGroup } from './agent-parts'
 import { useAction } from './agent-helpers'
@@ -338,7 +340,8 @@ function ProviderUsage({
   running: boolean
 }) {
   const { t } = useTranslation('settings')
-  if (status.limits.length > 0) {
+  const limits = newestLimits(usePlanReadings(), status)
+  if (limits.length > 0) {
     return (
       <>
         <UsageGroup status={status} reading={reading} running={running} />

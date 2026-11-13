@@ -1,4 +1,4 @@
-import { useEffect, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, type KeyboardEvent } from 'react'
 import {
   Add01Icon,
   Analytics01Icon,
@@ -16,27 +16,25 @@ import {
   UserIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus } from '@shared/agent-host'
 import { RELEASES_URL, releaseUrl } from '@shared/updates'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ProfileMenu, type ProfileMenuItem } from '@renderer/components/affect/profile-menu'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
-import { limitReaders } from '@renderer/features/sidebar/plan-usage'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { errorMessage } from '@renderer/lib/host'
+import { accountAgents, type AccountAgent } from '@renderer/lib/plan-readings'
 import { formatShortcut, isHosted, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
 import { useNow } from '@renderer/lib/use-now'
 import { cancelSignIn, signIn, signOut, useAccountStore } from '@renderer/stores/account'
-import type { HostScope } from '@renderer/stores/host-scope'
 import { switchHost } from '@renderer/stores/host-switch'
 import { isAway, useHostsStore, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { refreshLimits } from '@renderer/stores/usage'
-import { useWindowScope } from '@renderer/stores/window-host'
+import { planReadingsOf, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
+import { planLimitWays, readLimitsThrough } from '@renderer/stores/usage'
+import { shownHostAgents, useShownHostAgents, useWindowHost } from '@renderer/stores/window-host'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import {
   openSettings,
@@ -51,11 +49,17 @@ import { useThisComputerName } from './use-account'
 
 const DOCS_URL = 'https://github.com/KettuAI/Kettu#readme'
 
-/** Reads the plan limits the menu lists again; the host asks each agent at most once a minute. */
-function readLimits(scope: HostScope): void {
-  const { order, byId } = scope.useAgentsStore.getState()
-  for (const agentId of limitReaders(order.flatMap((id) => byId[id] ?? []))) {
-    refreshLimits(agentId, scope.hostId).catch((error: unknown) =>
+/**
+ * Reads the plan limits the menu lists again, each account once through one of its hosts; the host
+ * asks each agent at most once a minute.
+ */
+function readLimits(): void {
+  const listed = new Set(
+    accountAgents(shownHostAgents(), planReadingsOf(useAgentsStore.getState())).map((a) => a.key),
+  )
+  for (const [key, ways] of planLimitWays()) {
+    if (!listed.has(key)) continue
+    readLimitsThrough(ways).catch((error: unknown) =>
       console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
     )
   }
@@ -83,8 +87,9 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
   const hostItems = useHostItems(hosts, close)
   const planItems = usePlanItems(close, hostItems.length > 0)
   const help = useHelpItems(close)
-  const scope = useWindowScope()
-  useEffect(() => readLimits(scope), [scope])
+  const windowHost = useWindowHost()
+  const shownKey = windowHost.kind === 'all' ? '*' : (windowHost.hostId ?? '')
+  useEffect(() => readLimits(), [shownKey])
 
   const then = (run: () => void) => () => {
     close()
@@ -377,7 +382,7 @@ function ColorMode() {
  */
 function usePlanItems(close: () => void, divided: boolean): ProfileMenuItem[] {
   const { t } = useTranslation('sidebar')
-  const { shown, more } = shownCards(planCards(useAgentsWithLimits(), useNow()))
+  const { shown, more } = shownCards(planCards(useAccountsWithLimits(), useNow()))
   if (shown.length === 0) return []
   const open = () => {
     close()
@@ -411,18 +416,14 @@ function usePlanItems(close: () => void, divided: boolean): ProfileMenuItem[] {
 }
 
 /**
- * The window's host's agents; this computer's while every host shows, as an account's limits are
- * the same on each host.
+ * The window's hosts' accounts with plan limits, an account once however many hosts it is signed
+ * in on, each at its newest reading and called by its email where its agents' names differ.
  */
-function useAgentsWithLimits(): AgentStatus[] {
-  return useWindowScope().useAgentsStore(
-    useShallow((s) =>
-      s.order
-        .map((id) => s.byId[id])
-        .filter(
-          (a): a is AgentStatus =>
-            !!a && a.registered !== false && !a.disabled && a.limits.length > 0,
-        ),
-    ),
+function useAccountsWithLimits(): AccountAgent[] {
+  const shown = useShownHostAgents()
+  const readings = usePlanReadings()
+  return useMemo(
+    () => accountAgents(shown, readings).filter((a) => a.limits.length > 0),
+    [shown, readings],
   )
 }

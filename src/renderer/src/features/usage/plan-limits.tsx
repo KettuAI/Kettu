@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowDown01Icon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
-import type { AgentStatus } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -12,39 +10,28 @@ import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
 import { limitLabel, longAgo, shortAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
+import type { LimitWay } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
-import { agentsOn, isInstalled, useAgentsStore, type HostAgents } from '@renderer/stores/agents'
-import { otherHosts, useHostsStore, useOtherHosts } from '@renderer/stores/hosts'
-import { useHostName, useWindowHost, useWindowHostAway } from '@renderer/stores/window-host'
-import { refreshLimits } from '@renderer/stores/usage'
+import { agentsOn, isInstalled, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
+import { planLimitWays, readLimitsThrough } from '@renderer/stores/usage'
 import {
-  limitWays,
-  newestReadings,
+  useHostName,
+  useShownHostAgents,
+  useWindowHost,
+  useWindowHostAway,
+} from '@renderer/stores/window-host'
+import {
   planColumns,
   ringStroke,
   usageCards,
   type CardRing,
-  type HostAgentList,
   type LimitRead,
-  type LimitWay,
   type UsageCard,
 } from './plan-cards'
 
 const RINGS = 72
 /** A reading this old says on its card how long ago it was taken. */
 const STALE = 60 * 60_000
-
-const listed = (agents: HostAgents): AgentStatus[] =>
-  agents.order
-    .map((id) => agents.byId[id])
-    .filter((a): a is AgentStatus => !!a && a.registered !== false && !a.disabled)
-
-/** Whether a computer answers now: this one always, another while it is online. */
-function reachable(hostId: string | null): boolean {
-  if (hostId === null) return true
-  const host = otherHosts(useHostsStore.getState()).find((h) => h.id === hostId)
-  return host?.connection.state === 'online'
-}
 
 /**
  * The plans as they stand, across the page: a card per account that reports limits, as many to
@@ -62,26 +49,17 @@ export function PlanLimits({ used }: { used: Readonly<Record<string, readonly Ag
 function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly AgentId[]>> }) {
   const { t } = useTranslation('usage')
   const now = useNow()
-  const windowHost = useWindowHost()
-  const others = useOtherHosts()
-  const everyHost = useMemo(() => [null, ...others.map((h) => h.id)], [others])
-  const lists = useAgentsStore(useShallow((s) => everyHost.map((id) => agentsOn(s, id))))
-  const hosts: HostAgentList[] = everyHost.map((hostId, index) => ({
-    hostId,
-    agents: listed(lists[index]!),
-  }))
-  const shownHosts = hosts.filter((h) =>
-    windowHost.kind === 'all' ? true : h.hostId === windowHost.hostId,
-  )
+  const shownHosts = useShownHostAgents()
+  const readings = usePlanReadings()
   const away = useWindowHostAway() !== null
   // Read afresh when the page opens, unless the host is away: an account once, through one of its
   // computers; the host asks each agent at most once a minute.
   const [toRead] = useState(() => {
     if (away) return new Map<string, LimitWay[]>()
     const shownKeys = new Set(
-      usageCards(shownHosts, newestReadings(hosts), {}, {}, Date.now()).cards.map((c) => c.key),
+      usageCards(shownHosts, readings, {}, {}, Date.now()).cards.map((c) => c.key),
     )
-    return new Map([...limitWays(hosts, reachable)].filter(([key]) => shownKeys.has(key)))
+    return new Map([...planLimitWays()].filter(([key]) => shownKeys.has(key)))
   })
   const [reads, setReads] = useState<Partial<Record<string, LimitRead>>>(() =>
     Object.fromEntries([...toRead.keys()].map((key) => [key, 'reading' as const])),
@@ -89,31 +67,21 @@ function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly Agent
   const [open, setOpen] = useState(false)
   useEffect(() => {
     for (const [key, ways] of toRead) {
-      void (async () => {
-        let error: unknown = null
-        for (const way of ways) {
-          try {
-            await refreshLimits(way.agentId, way.hostId)
-            error = null
-            break
-          } catch (failed) {
-            error = failed
-          }
-        }
-        if (error === null) {
+      readLimitsThrough(ways).then(
+        () =>
           setReads((was) => {
             const next = { ...was }
             delete next[key]
             return next
-          })
-          return
-        }
-        console.warn(`Could not read the plan limits: ${errorMessage(error)}`)
-        setReads((was) => ({ ...was, [key]: 'failed' }))
-      })()
+          }),
+        (error: unknown) => {
+          console.warn(`Could not read the plan limits: ${errorMessage(error)}`)
+          setReads((was) => ({ ...was, [key]: 'failed' }))
+        },
+      )
     }
   }, [toRead])
-  const { cards, unreported } = usageCards(shownHosts, newestReadings(hosts), used, reads, now)
+  const { cards, unreported } = usageCards(shownHosts, readings, used, reads, now)
   const named = shownHosts.length > 1
   const read = Math.max(0, ...cards.map((card) => card.readAt ?? 0))
   const names = new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(

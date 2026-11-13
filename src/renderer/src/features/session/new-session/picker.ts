@@ -16,6 +16,8 @@ export type LineTone = 'muted' | 'attention' | 'danger'
 export function agentLine(
   status: AgentStatus,
   now = Date.now(),
+  /** The account's newest reading, which may be another host's. */
+  limits = status.limits,
 ): { text: string; tone: LineTone } | null {
   const need = agentNeed(status)
   if (need === 'sign-in')
@@ -29,7 +31,7 @@ export function agentLine(
   const parts: string[] = []
   if (status.name !== status.harnessName) parts.push(status.harnessName)
   if (status.account?.label) parts.push(status.account.label)
-  const limit = tightestLimit(status.limits, now)
+  const limit = tightestLimit(limits, now)
   if (limit) {
     parts.push(
       limit.usedPercent === null

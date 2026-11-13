@@ -22,10 +22,17 @@ import { Skeleton } from '@renderer/components/ui/skeleton'
 import { SettingsGlyph } from '@renderer/features/account/avatar'
 import { useHostLabel } from '@renderer/features/sidebar/host-label'
 import { errorMessage } from '@renderer/lib/host'
+import { newestLimits } from '@renderer/lib/plan-readings'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { Glyph } from '@renderer/features/shell/glyph'
-import { agentName, agentsOn, usableAgents, useAgentsStore } from '@renderer/stores/agents'
+import {
+  agentName,
+  agentsOn,
+  usableAgents,
+  useAgentsStore,
+  usePlanReadings,
+} from '@renderer/stores/agents'
 import { refreshLimits } from '@renderer/stores/usage'
 import { openAgentSettings } from '@renderer/stores/view'
 import { menuAgents } from './start-options'
@@ -56,6 +63,7 @@ export function AgentPicker({
   const { t } = useTranslation('session')
   const hostLabel = useHostLabel(hostId)
   const now = useNow()
+  const readings = usePlanReadings()
   const statuses = useAgentsStore(
     useShallow((s) => {
       const { order, byId } = agentsOn(s, hostId)
@@ -155,7 +163,7 @@ export function AgentPicker({
               {(id: AgentId) => {
                 const status = byId.get(id)
                 if (!status) return null
-                const line = agentLine(status, now)
+                const line = agentLine(status, now, newestLimits(readings, status))
                 return (
                   <ComboboxItem
                     key={id}
