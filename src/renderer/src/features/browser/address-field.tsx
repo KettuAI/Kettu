@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type Ref } from 'react'
 import { Globe02Icon, SquareLock02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { PaneIcon } from '@renderer/features/shell/panel-button'
@@ -14,11 +14,13 @@ export function AddressField({
   onNavigate,
   className,
   autoFocus,
+  ref,
 }: {
   url: string | null
   onNavigate: (url: string) => void
   className?: string
   autoFocus?: boolean
+  ref?: Ref<HTMLInputElement>
 }) {
   const { t } = useTranslation('browser')
   const shown = (url ? addressText(url) : '') ?? ''
@@ -48,6 +50,7 @@ export function AddressField({
     >
       <PaneIcon icon={secure ? SquareLock02Icon : Globe02Icon} size={14} />
       <input
+        ref={ref}
         autoFocus={autoFocus}
         aria-label={t('address.label')}
         aria-invalid={invalid || undefined}

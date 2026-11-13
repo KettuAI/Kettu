@@ -47,6 +47,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   // The frame the page fills.
   const page = useRef<HTMLDivElement>(null)
+  const address = useRef<HTMLInputElement>(null)
 
   // The pane shows the page, so the toggle's dot has done its work.
   useEffect(() => {
@@ -60,15 +61,19 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
       .catch((error: unknown) => console.error('Could not close the page', error))
   }, [sessionId])
 
-  // Mod+W destroys the page and folds the pane away.
+  // Mod+W destroys the page and folds the pane away; Mod+L in the page goes to its address.
   useEffect(
     () =>
       onAppEvent((event) => {
+        if (event.kind === 'focus-browser-address') {
+          if (event.sessionId === sessionId) address.current?.focus()
+          return
+        }
         if (event.kind !== 'close-browser') return
         closePage()
         toggleSidePane(panel, 'browser', false)
       }),
-    [closePage, panel],
+    [closePage, panel, sessionId],
   )
 
   const navigate = (url: string) => {
@@ -229,7 +234,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                   <PaneIcon icon={ReloadIcon} />
                 </PanelButton>
               )}
-              <AddressField url={url} onNavigate={navigate} />
+              <AddressField ref={address} url={url} onNavigate={navigate} />
               {/* Main draws the page over its frame, so the pill sits beside the address. */}
               {(driving || userControl) && (
                 <DrivingPill

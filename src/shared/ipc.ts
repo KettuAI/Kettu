@@ -179,6 +179,8 @@ export interface ForwardedKey {
   ctrlKey: boolean
   metaKey: boolean
   altKey: boolean
+  /** The session whose side panel's browser page had focus, when the key was typed there. */
+  browserSession?: string
 }
 
 /** A rectangle of the page in CSS pixels, as `getBoundingClientRect` gives it. */

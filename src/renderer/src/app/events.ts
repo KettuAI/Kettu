@@ -2,6 +2,7 @@
 
 export type AppEvent =
   | { kind: 'focus-composer' }
+  | { kind: 'focus-browser-address'; sessionId: string } // Mod+L typed in a session's browser page
   | { kind: 'ask-selection' } // Mod+L with text selected in the terminal
   | { kind: 'new-terminal' }
   | { kind: 'close-terminal' } // Mod+W with the terminal used last
