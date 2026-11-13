@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest'
-import { isReadMethod, summarizeParams } from './requests'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { writeLog } from './process-log'
+import { isReadMethod, logRequest, REQUEST_REPEAT_MS, summarizeParams } from './requests'
+
+vi.mock('./process-log', () => ({ writeLog: vi.fn() }))
 
 describe('summarizeParams', () => {
   it('keeps ids, choices, numbers and switches', () => {
@@ -59,5 +62,54 @@ describe('isReadMethod', () => {
     expect(isReadMethod('git.status')).toBe(true)
     expect(isReadMethod('sessions.prompt')).toBe(false)
     expect(isReadMethod('permissions.respond')).toBe(false)
+  })
+})
+
+describe('logRequest', () => {
+  const written = () => vi.mocked(writeLog).mock.calls
+  const SUMMARY = { from: 1, to: 2, dayStarts: [1, 2], scope: 'computer' }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.mocked(writeLog).mockClear()
+  })
+  afterEach(() => {
+    vi.runOnlyPendingTimers()
+    vi.useRealTimers()
+  })
+
+  it("counts a client's repeats of the same request instead of writing each", () => {
+    for (let i = 0; i < 25; i++) logRequest('usage.summary', SUMMARY, 'd-1')
+    expect(written()).toHaveLength(1)
+    vi.advanceTimersByTime(REQUEST_REPEAT_MS)
+    expect(written()).toEqual([
+      ['debug', 'request', 'usage.summary', { device: 'd-1', ...summarizeParams(SUMMARY) }],
+      [
+        'debug',
+        'request',
+        'usage.summary repeated 24 times',
+        { device: 'd-1', ...summarizeParams(SUMMARY), repeated: 24 },
+      ],
+    ])
+    // A repeat after the count was written is counted again.
+    logRequest('usage.summary', SUMMARY, 'd-1')
+    expect(written()).toHaveLength(2)
+  })
+
+  it('writes the count of the repeats before a different request from the same client', () => {
+    for (let i = 0; i < 3; i++) logRequest('sessions.rename', { sessionId: 's', title: 'a' }, 'd-2')
+    logRequest('sessions.pin', { sessionId: 's', pinned: true }, 'd-2')
+    expect(written().map((call) => call[2])).toEqual([
+      'sessions.rename',
+      'sessions.rename repeated 2 times',
+      'sessions.pin',
+    ])
+  })
+
+  it('keeps clients apart', () => {
+    logRequest('usage.summary', SUMMARY, 'd-3')
+    logRequest('usage.summary', SUMMARY, 'd-4')
+    logRequest('usage.summary', SUMMARY, null)
+    expect(written()).toHaveLength(3)
   })
 })

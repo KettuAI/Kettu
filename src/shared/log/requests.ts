@@ -112,11 +112,64 @@ export function summarizeParams(params: unknown): Record<string, unknown> | unde
   return summary
 }
 
-/** Logs a client's request where the host receives it: `info` for actions, `debug` for reads. */
+/** How long a client's repeats of its last request are counted before the count is written. */
+export const REQUEST_REPEAT_MS = 10_000
+
+interface Last {
+  key: string
+  method: string
+  data: Record<string, unknown>
+  /** Repeats since the request or the count was last written. */
+  repeats: number
+  timer: ReturnType<typeof setTimeout> | null
+}
+
+/** Each client's last request, by device id or '' for the windows. */
+const lasts = new Map<string, Last>()
+
+function levelOf(method: string): 'debug' | 'info' {
+  return isReadMethod(method) ? 'debug' : 'info'
+}
+
+/** The record's key, the same whatever order the params' keys came in. */
+function recordKey(method: string, data: Record<string, unknown>): string {
+  const sorted = Object.keys(data)
+    .sort()
+    .map((key) => [key, data[key]])
+  return `${method}\0${JSON.stringify(sorted)}`
+}
+
+function writeRepeats(last: Last): void {
+  if (last.timer) clearTimeout(last.timer)
+  last.timer = null
+  if (last.repeats === 0) return
+  writeLog(levelOf(last.method), 'request', `${last.method} repeated ${last.repeats} times`, {
+    ...last.data,
+    repeated: last.repeats,
+  })
+  last.repeats = 0
+}
+
+/**
+ * Logs a client's request where the host receives it: `info` for actions, `debug` for reads. A
+ * client's repeats of its last request are counted, and the count is written once a different
+ * request comes from it or `REQUEST_REPEAT_MS` after the first repeat.
+ */
 export function logRequest(method: string, params: unknown, device: string | null): void {
   if (UNLOGGED.has(method)) return
-  writeLog(isReadMethod(method) ? 'debug' : 'info', 'request', method, {
-    ...(device ? { device } : {}),
-    ...summarizeParams(params),
-  })
+  const data = { ...(device ? { device } : {}), ...summarizeParams(params) }
+  const client = device ?? ''
+  const key = recordKey(method, data)
+  const last = lasts.get(client)
+  if (last?.key === key) {
+    last.repeats++
+    if (!last.timer) {
+      last.timer = setTimeout(() => writeRepeats(last), REQUEST_REPEAT_MS)
+      last.timer.unref()
+    }
+    return
+  }
+  if (last) writeRepeats(last)
+  lasts.set(client, { key, method, data, repeats: 0, timer: null })
+  writeLog(levelOf(method), 'request', method, data)
 }
