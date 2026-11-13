@@ -1,5 +1,5 @@
 // The routines' scheduler: one timer, recomputed from the wall clock, that starts due runs and
-// ends the pauses a plan limit near its end puts on an agent's routines.
+// ends the pauses a plan limit near its end puts on an agent's routines of one model.
 
 import type { PlanLimit } from '@shared/agent-host'
 import { nextRuns, occurrencesBetween } from '@shared/schedule'
@@ -25,7 +25,7 @@ export const SYSTEM_CLOCK: RoutineClock = {
 /** The longest the timer waits, so a clock change or a sleep is seen within a minute. */
 const MAX_DELAY = 60_000
 
-/** A plan-limit window this many percent used, or reached, pauses its agent's routines. */
+/** A plan-limit window this many percent used, or reached, pauses the routines it holds back. */
 export const NEAR_LIMIT_PERCENT = 90
 
 /** A pause whose window gives no reset lasts this long, then the limits decide again. */
@@ -34,9 +34,14 @@ export const PAUSE_WITHOUT_RESET_MS = 60 * 60_000
 /** Limits read longer ago than this are read again before a scheduled run starts. */
 export const LIMITS_FRESH_MS = 10 * 60_000
 
-/** An agent's routines, paused while one of its plan-limit windows is near. */
+/**
+ * An agent's routines of one model, paused while a plan-limit window that holds that model back
+ * is near: a window of every model pauses each model's routines, one of a single model only its.
+ */
 export interface LimitPause {
   agentId: AgentId
+  /** The model of the routines it holds, as their model option says; null when it is unknown. */
+  model: string | null
   /** Of the near windows, the one that holds the routines longest. */
   limit: PlanLimit
   /** When it began, or went on past its end; a window without a reset holds an hour from it. */
@@ -53,6 +58,8 @@ export type PauseChange = 'began' | 'changed' | 'lifted' | 'time-up'
 export interface SchedulerRoutine {
   id: string
   agentId: AgentId
+  /** The model it runs on, as its model option says; null when it is unknown. */
+  model: string | null
   schedule: Schedule
   enabled: boolean
   checkedThrough: number
@@ -68,18 +75,25 @@ export interface SchedulerDeps {
   due(routineId: string, at: number, trigger: 'schedule' | 'catch-up', count: number): void
   /** Every scheduled time up to `at` is accounted for: run, skipped or caught up. */
   accounted(routineId: string, at: number): void
-  /** The plan limits the agent reported last. */
-  limits(agentId: AgentId): readonly PlanLimit[]
-  /** The agent's pause changed; null once it ended. */
-  paused(agentId: AgentId, pause: LimitPause | null, change: PauseChange): void
+  /** The plan limits the agent reported last that hold back `model`. */
+  limits(agentId: AgentId, model: string | null): readonly PlanLimit[]
+  /** The pause of the agent's routines on `model` changed; null once it ended. */
+  paused(
+    agentId: AgentId,
+    model: string | null,
+    pause: LimitPause | null,
+    change: PauseChange,
+  ): void
 }
+
+const keyOf = (agentId: AgentId, model: string | null): string => JSON.stringify([agentId, model])
 
 export class RoutineScheduler {
   private timer: unknown = null
   private started = false
   private first = true
   private gapped = false
-  private readonly pauses = new Map<AgentId, LimitPause>()
+  private readonly pauses = new Map<string, LimitPause>()
 
   constructor(private readonly deps: SchedulerDeps) {}
 
@@ -110,49 +124,58 @@ export class RoutineScheduler {
 
   /** The next scheduled time after now, or null while off, done, paused or beyond the horizon. */
   nextRunAt(routine: SchedulerRoutine, now = this.deps.clock.now()): number | null {
-    if (!routine.enabled || this.pauses.has(routine.agentId)) return null
+    if (!routine.enabled || this.pauses.has(keyOf(routine.agentId, routine.model))) return null
     const after = Math.max(routine.checkedThrough, now)
     return nextRuns(routine.schedule, after, { count: 1 })[0]?.at ?? null
   }
 
-  pauseOf(agentId: AgentId): LimitPause | null {
-    return this.pauses.get(agentId) ?? null
+  pauseOf(agentId: AgentId, model: string | null): LimitPause | null {
+    return this.pauses.get(keyOf(agentId, model)) ?? null
+  }
+
+  /** The agent's pauses, one for each model whose routines wait. */
+  pausesOf(agentId: AgentId): LimitPause[] {
+    return [...this.pauses.values()].filter((pause) => pause.agentId === agentId)
   }
 
   /**
-   * Whether a scheduled run of the agent must wait, by its latest plan limits: its pause, which
-   * begins here when a window is near, or null when the run may start.
+   * Whether a scheduled run of the agent on `model` must wait, by its latest plan limits: its
+   * pause, which begins here when a window holding that model back is near, or null when the run
+   * may start.
    */
-  check(agentId: AgentId): LimitPause | null {
-    const current = this.pauses.get(agentId)
+  check(agentId: AgentId, model: string | null): LimitPause | null {
+    const key = keyOf(agentId, model)
+    const current = this.pauses.get(key)
     if (current) return current
     const now = this.deps.clock.now()
-    const limit = holdingWindow(this.deps.limits(agentId), now, now)
+    const limit = holdingWindow(this.deps.limits(agentId, model), now, now)
     if (!limit) return null
-    const pause: LimitPause = { agentId, limit, since: now, until: holdUntil(limit, now) }
-    this.pauses.set(agentId, pause)
-    this.deps.paused(agentId, pause, 'began')
+    const pause: LimitPause = { agentId, model, limit, since: now, until: holdUntil(limit, now) }
+    this.pauses.set(key, pause)
+    this.deps.paused(agentId, model, pause, 'began')
     this.refresh()
     return pause
   }
 
-  /** The agent reported its limits: a pause ends once no window is near, else follows them. */
+  /** The agent reported its limits: each of its pauses ends once no window is near, else follows them. */
   limitsChanged(agentId: AgentId): void {
-    const current = this.pauses.get(agentId)
-    if (!current) return
-    const limit = holdingWindow(this.deps.limits(agentId), this.deps.clock.now(), current.since)
-    if (!limit) {
-      this.pauses.delete(agentId)
-      this.deps.paused(agentId, null, 'lifted')
+    for (const current of this.pausesOf(agentId)) {
+      const key = keyOf(agentId, current.model)
+      const now = this.deps.clock.now()
+      const limit = holdingWindow(this.deps.limits(agentId, current.model), now, current.since)
+      if (!limit) {
+        this.pauses.delete(key)
+        this.deps.paused(agentId, current.model, null, 'lifted')
+        this.refresh()
+        continue
+      }
+      const until = holdUntil(limit, current.since)
+      if (sameWindow(limit, current.limit) && until === current.until) continue
+      const pause: LimitPause = { ...current, limit, until }
+      this.pauses.set(key, pause)
+      this.deps.paused(agentId, current.model, pause, 'changed')
       this.refresh()
-      return
     }
-    const until = holdUntil(limit, current.since)
-    if (sameWindow(limit, current.limit) && until === current.until) return
-    const pause: LimitPause = { ...current, limit, until }
-    this.pauses.set(agentId, pause)
-    this.deps.paused(agentId, pause, 'changed')
-    this.refresh()
   }
 
   private evaluate(): void {
@@ -177,12 +200,18 @@ export class RoutineScheduler {
     this.arm()
   }
 
-  /** Accounts for every time an agent's routines had while a pause ended before `now`. */
+  /** Accounts for every time the routines a pause held had while it ended before `now`. */
   private skipPausedSpans(now: number): void {
     for (const pause of [...this.pauses.values()]) {
       if (pause.until > now) continue
       for (const routine of this.deps.routines()) {
-        if (!routine.enabled || routine.agentId !== pause.agentId) continue
+        if (
+          !routine.enabled ||
+          routine.agentId !== pause.agentId ||
+          routine.model !== pause.model
+        ) {
+          continue
+        }
         // The time at the reset itself is the first that may run.
         const span = occurrencesBetween(routine.schedule, routine.checkedThrough, pause.until - 1)
         if (!span) continue
@@ -201,20 +230,22 @@ export class RoutineScheduler {
   private endPauses(now: number): void {
     for (const pause of [...this.pauses.values()]) {
       if (pause.until > now) continue
-      const limit = holdingWindow(this.deps.limits(pause.agentId), now, now)
+      const key = keyOf(pause.agentId, pause.model)
+      const limit = holdingWindow(this.deps.limits(pause.agentId, pause.model), now, now)
       if (!limit) {
-        this.pauses.delete(pause.agentId)
-        this.deps.paused(pause.agentId, null, 'time-up')
+        this.pauses.delete(key)
+        this.deps.paused(pause.agentId, pause.model, null, 'time-up')
         continue
       }
       const next: LimitPause = {
         agentId: pause.agentId,
+        model: pause.model,
         limit,
         since: now,
         until: holdUntil(limit, now),
       }
-      this.pauses.set(pause.agentId, next)
-      this.deps.paused(pause.agentId, next, 'time-up')
+      this.pauses.set(key, next)
+      this.deps.paused(pause.agentId, pause.model, next, 'time-up')
     }
   }
 
@@ -225,7 +256,7 @@ export class RoutineScheduler {
     let next: number | null = null
     for (const routine of this.deps.routines()) {
       if (!routine.enabled) continue
-      // A paused agent's times still come due, so they are skipped and accounted for.
+      // A paused routine's times still come due, so they are skipped and accounted for.
       const after = Math.max(routine.checkedThrough, now)
       const run = nextRuns(routine.schedule, after, { count: 1 })[0]
       if (run && (next === null || run.at < next)) next = run.at
@@ -248,7 +279,7 @@ export class RoutineScheduler {
 }
 
 /**
- * Of an agent's windows that are near, reached or at least 90% used, the one that holds its
+ * Of the windows given that are near, reached or at least 90% used, the one that holds the
  * routines longest; null when none is. A window whose reset has passed does not count.
  */
 export function holdingWindow(

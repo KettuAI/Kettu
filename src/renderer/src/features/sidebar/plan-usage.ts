@@ -1,5 +1,5 @@
 import type { AgentStatus, PlanLimit } from '@shared/agent-host'
-import type { AgentId, ConfigOption } from '@shared/thread'
+import type { AgentId } from '@shared/thread'
 import { resetTime } from '@renderer/lib/format'
 import { i18n } from '@renderer/lib/i18n'
 
@@ -18,34 +18,6 @@ export function tightestLimit(limits: readonly PlanLimit[], now: number): PlanLi
   const known = current.filter((l) => l.usedPercent !== null)
   const fullest = known.sort((a, b) => (b.usedPercent ?? 0) - (a.usedPercent ?? 0))[0]
   return fullest ?? current[0] ?? null
-}
-
-const words = (...texts: (string | undefined)[]): Set<string> =>
-  new Set(
-    texts
-      .join(' ')
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter(Boolean),
-  )
-
-/**
- * The windows that hold back a session on the model `model` has chosen. A per-model weekly
- * window, such as `seven_day_fable`, counts only on a model that names it, so a used-up Fable
- * week does not stop Opus; a window naming none of the menu's models counts for all of them.
- */
-export function sessionLimits(limits: readonly PlanLimit[], model: ConfigOption | undefined) {
-  const choices = model?.choices ?? []
-  const current = choices.find((c) => c.value === model?.value)
-  if (!current) return [...limits]
-  const known = words(...choices.flatMap((c) => [c.value, c.name, c.modelId]))
-  const own = words(current.value, current.name, current.modelId, current.description)
-  return limits.filter((limit) => {
-    const scoped = /^seven_day_(.+)$/.exec(limit.window)
-    const names = scoped?.[1]?.split('_') ?? []
-    if (names.length === 0 || !names.every((name) => known.has(name))) return true
-    return names.every((name) => own.has(name))
-  })
 }
 
 /**

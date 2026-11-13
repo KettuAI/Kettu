@@ -55,7 +55,7 @@ import { useBlockedEnter } from './use-blocked-enter'
 import { usePromptBox } from './use-prompt-box'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 import { firstWaiting, pressWaitingCard } from '../waiting-card'
-import { sessionLimits } from '@renderer/features/sidebar/plan-usage'
+import { limitsForModel } from '@shared/plan-limits'
 
 const valuesOf = (config: readonly ConfigOption[]): Record<string, string | boolean> =>
   Object.fromEntries(config.map((o) => [o.id, o.value]))
@@ -171,7 +171,7 @@ export function Composer({
   const model = config.find((o): o is SelectOption => o.category === 'model' && isSelect(o))
   const effort = config.find((o) => o.category === 'thought_level' && isSelect(o))
   // A used-up window of another model does not hold this session back.
-  const modelLimits = sessionLimits(limits ?? [], model)
+  const modelLimits = limitsForModel(limits ?? [], model)
   const reached = modelLimits.find((l) => l.state === 'reached')
   const switches = config.filter((o) => o.type === 'boolean')
   const others = config.filter(
