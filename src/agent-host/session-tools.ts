@@ -3,6 +3,7 @@
 // project come from the service, which knows them from the token or the call's `_meta`.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import type { AgentStatus } from '@shared/agent-host'
 import { longer } from '@shared/artifacts'
 import { isAgentId, type AgentId, type FromSession, type SessionStatus } from '@shared/thread'
 import { folded, type Caller } from './artifacts/tools'
@@ -68,6 +69,8 @@ export interface SessionToolsDeps {
   agentName(sessionId: string): string
   /** An agent's display name, which the history tool labels its turns with. */
   agentLabel(agentId: AgentId): string
+  /** The host's agents as Settings lists them, for list_agents and the agent a start names. */
+  agents(): AgentStatus[]
   now?(): number
 }
 
@@ -88,6 +91,38 @@ const WORKING: ReadonlySet<SessionStatus> = new Set(['starting', 'running', 'awa
 
 export function toolStatus(status: SessionStatus): ToolSessionStatus {
   return status === 'auth_required' ? 'failed' : status
+}
+
+/** Whether a session can be started with an agent now, as list_agents shows it. */
+export type ToolAgentStatus = 'ready' | 'needs_sign_in' | 'installing' | 'not_installed' | 'failed'
+
+const AGENT_STATUSES: ToolAgentStatus[] = [
+  'ready',
+  'needs_sign_in',
+  'installing',
+  'not_installed',
+  'failed',
+]
+
+/** The agent's status for the tools, or null for one New session never offers: turned off or hidden. */
+export function toolAgentStatus(status: AgentStatus): ToolAgentStatus | null {
+  if (status.registered === false || status.disabled || status.hidden) return null
+  switch (status.state) {
+    case 'not-installed':
+    case 'node-missing':
+    case 'node-outdated':
+      return 'not_installed'
+    case 'installing':
+      return 'installing'
+    case 'failed':
+      return 'failed'
+  }
+  // A package agent without its adapter cannot start; Claude Code with the user's CLI installs
+  // its SDK on its first start, so it can.
+  if (status.uninstalled || (status.package && !status.package.installed && !status.cli)) {
+    return 'not_installed'
+  }
+  return status.signIn === 'required' ? 'needs_sign_in' : 'ready'
 }
 
 /** The caller, or a session it started. One level only: a started session's own child is out. */
@@ -155,7 +190,9 @@ export class SessionToolError extends Error {
 export const SESSION_INSTRUCTIONS =
   "You can manage Kettu sessions in your project: list them, read another session's latest " +
   'reply, rename or archive your own session or one you started, start a session for a separate ' +
-  'task with its first prompt, and send a session you started a follow-up. Archive your own ' +
+  'task with its first prompt, and send a session you started a follow-up. A session you start ' +
+  "can run another of the user's agents, which list_agents shows, for example to review your " +
+  'work. Archive your own ' +
   'session only when the user asked you to or your work is clearly done. A session you start ' +
   'runs on its own; check it with get_session rather than in a loop. When you took a session ' +
   `over from another agent, ${HISTORY_TOOL} reads the earlier turns it was given only in part.`
@@ -259,6 +296,27 @@ const INFO_REQUIRED = [
 ]
 
 export const SESSION_TOOLS: Tool[] = [
+  {
+    name: 'list_agents',
+    title: 'List agents',
+    description:
+      "Lists the user's agents on this computer that start_session can run, and whether each " +
+      'can start now.',
+    inputSchema: object({}),
+    outputSchema: output({
+      agents: {
+        type: 'array',
+        items: object({
+          id: { type: 'string' },
+          name: { type: 'string' },
+          harness: { type: 'string' },
+          is_you: { type: 'boolean' },
+          status: { type: 'string', enum: [...AGENT_STATUSES] },
+        }),
+      },
+    }),
+    annotations: { readOnlyHint: true },
+  },
   {
     name: 'list_sessions',
     title: 'List sessions',
@@ -532,6 +590,9 @@ export class SessionTools {
 
   private run(caller: Caller, name: string, input: unknown): Promise<CallToolResult> {
     switch (name) {
+      case 'list_agents':
+        args(input, [])
+        return this.listAgents(caller)
       case 'list_sessions':
         return this.list(caller, args(input, ['query', 'include_archived', 'limit']))
       case 'get_session':
@@ -557,6 +618,52 @@ export class SessionTools {
     const session = this.deps.info(id)
     if (!session || session.projectPath !== caller.project) throw notFound(id)
     return session
+  }
+
+  private async listAgents(caller: Caller): Promise<CallToolResult> {
+    const own = this.deps.info(caller.sessionId)?.agentId
+    const agents = this.deps.agents().flatMap((agent) => {
+      const status = toolAgentStatus(agent)
+      if (!status) return []
+      return [
+        {
+          id: agent.id,
+          name: agent.name,
+          harness: agent.harnessName,
+          is_you: agent.id === own,
+          status,
+        },
+      ]
+    })
+    const text =
+      agents.length === 0
+        ? 'No agent can be started here.'
+        : agents
+            .map(
+              (agent) =>
+                `${agent.id}: ${agent.name} (${agent.harness}), ${agent.status}` +
+                (agent.is_you ? ', yours' : ''),
+            )
+            .join('\n')
+    return result(text, { agents })
+  }
+
+  /** Refuses an agent the user cannot start a session with here. */
+  private checkAgent(agentId: AgentId): void {
+    const agent = this.deps.agents().find((status) => status.id === agentId)
+    const status = agent ? toolAgentStatus(agent) : null
+    if (!agent || !status) {
+      throw new SessionToolError(
+        'not_found',
+        `No agent ${agentId} can be started here. list_agents shows the ones that can.`,
+      )
+    }
+    if (status === 'not_installed') {
+      throw new SessionToolError(
+        'not_allowed',
+        `${agent.name} is not installed on this computer. list_agents shows the agents that can start.`,
+      )
+    }
   }
 
   private async list(caller: Caller, o: Args): Promise<CallToolResult> {
@@ -630,6 +737,7 @@ export class SessionTools {
     }
     const limit = startLimit(caller.sessionId, this.deps.started(caller.sessionId), this.now())
     if (limit) throw limitError(limit)
+    if (agentId !== undefined && agentId !== callerInfo.agentId) this.checkAgent(agentId)
     const started = await this.deps.start(caller.sessionId, {
       prompt,
       ...(value === undefined ? {} : { title: value }),

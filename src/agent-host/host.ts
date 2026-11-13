@@ -536,6 +536,7 @@ export class AgentHost {
         name: (sessionId) => this.sessions.toolName(sessionId),
         agentName: (sessionId) => this.sessions.agentName(sessionId),
         agentLabel: (agentId) => this.agents.name(agentId),
+        agents: () => this.agents.statuses(),
         history: (sessionId) => this.sessions.historyTurns(sessionId),
       },
       log,
