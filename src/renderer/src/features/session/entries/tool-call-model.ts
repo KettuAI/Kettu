@@ -11,6 +11,7 @@ import {
   File01Icon,
   FileEditIcon,
   Globe02Icon,
+  Notebook01Icon,
   RepeatIcon,
   Search01Icon,
   Wrench01Icon,
@@ -36,6 +37,9 @@ export const KIND_GLYPH: Record<ToolKind, IconSvgElement> = {
   switch_mode: RepeatIcon,
   other: Wrench01Icon,
 }
+
+/** Kettu's memory, wherever a write to it shows. */
+export const MEMORY_GLYPH = Notebook01Icon
 
 export const toolCallStatus = (status: ToolEntry['status']): ToolCallStatus =>
   status === 'completed'
@@ -74,6 +78,14 @@ export function stepFacts(sessionId: string, entry: ThreadEntry): StepFacts | nu
       status: entry.streaming ? 'running' : 'success',
       duration: entry.durationMs,
       time: entry.durationMs !== undefined,
+    }
+  }
+  // A project write is done as it shows; an undone one reads as cancelled, its word "Undone".
+  if (entry.kind === 'memory' && entry.layer === 'project') {
+    return {
+      glyph: MEMORY_GLYPH,
+      status: entry.status === 'undone' ? 'cancelled' : 'success',
+      time: false,
     }
   }
   return null

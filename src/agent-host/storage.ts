@@ -324,6 +324,11 @@ export interface SessionRecord {
   worktree?: WorktreeRecord
   /** A worktree its agent made for a subagent, which Kettu shows and never removes. */
   agentWorktree?: { path: string; branch: string | null }
+  /**
+   * The agent's own session that got Kettu's memory ahead of a prompt, for an agent that takes it
+   * no other way; cleared when that session's context is compacted, so the next prompt carries it.
+   */
+  memorySentTo?: string
 }
 
 /** What a session's new agent is to be given with its first turn, kept until that turn goes. */
@@ -802,6 +807,9 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       ...carryOf(item.carry),
       ...worktreeOf(item.worktree),
       ...agentWorktreeOf(item.agentWorktree),
+      ...(isString(item.memorySentTo) && item.memorySentTo !== ''
+        ? { memorySentTo: item.memorySentTo }
+        : {}),
     })
   }
   return {

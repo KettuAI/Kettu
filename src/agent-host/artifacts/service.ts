@@ -52,6 +52,14 @@ import {
   type ReportToolsDeps,
 } from '../report-tool'
 import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from '../computer/tools'
+import {
+  isMemoryToolName,
+  MEMORY_INSTRUCTIONS,
+  MEMORY_TOOL_NAMES,
+  MEMORY_TOOLS,
+  MemoryTools,
+  type MemoryToolsDeps,
+} from '../memory/tools'
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
 import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
@@ -74,7 +82,7 @@ const SUMMARY_CHARS = 200
 /** Where OpenCode names the calling session on each `tools/call`, a subagent's own included. */
 const SESSION_META = 'ai.opencode/sessionID'
 
-/** The tools `tools/list` answers: the artifact tools, the session tools and the browser's. */
+/** The tools `tools/list` always answers: the artifact tools, the session tools and the browser's. */
 const SERVICE_TOOLS: Tool[] = [
   ...TOOLS,
   ...DATA_TOOLS,
@@ -136,6 +144,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   plan: PlanToolsDeps
   /** Where the problem report tool adds its drafts. */
   report: ReportToolsDeps
+  /** Kettu's memory behind the memory tools, listed only while it is on; without it none. */
+  memory?: MemoryToolsDeps
   /** Whether the agent's session `id` is a subagent that runs under a session of its own. */
   subagentCall?(process: AgentProcess, id: string): boolean
   /** The mobile devices behind the `device_*` tools; without them every call fails. */
@@ -182,7 +192,7 @@ function entry(url: string, token: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      autoAllow: [PLAN_TOOL, REPORT_TOOL],
+      autoAllow: [PLAN_TOOL, REPORT_TOOL, ...MEMORY_TOOL_NAMES],
       prompt: PLAN_PROMPT,
       secret: true,
     },
@@ -226,6 +236,7 @@ export class ArtifactService {
   private readonly sessionTools: SessionTools
   private readonly planTools: PlanTools
   private readonly reportTools: ReportTools
+  private readonly memoryTools: MemoryTools | null
   private readonly browserTools: BrowserTools
   private readonly deviceTools: DeviceTools | null
   private readonly dataTools: DataTools | null
@@ -241,6 +252,7 @@ export class ArtifactService {
     this.sessionTools = new SessionTools(deps.sessions)
     this.planTools = new PlanTools(deps.plan)
     this.reportTools = new ReportTools(deps.report)
+    this.memoryTools = deps.memory ? new MemoryTools(deps.memory) : null
     this.serviceTools = deps.computer ? [...SERVICE_TOOLS, ...COMPUTER_TOOLS] : SERVICE_TOOLS
     this.instructions = deps.computer
       ? `${SERVICE_INSTRUCTIONS} ${COMPUTER_INSTRUCTIONS}`
@@ -335,9 +347,19 @@ export class ArtifactService {
     return this.startError
   }
 
+  /** Whether Kettu's memory is on, which lists its tools and their instructions. */
+  private get memoryOn(): boolean {
+    return this.memoryTools !== null && this.deps.memory?.service.enabled === true
+  }
+
+  /** The tools `tools/list` answers now. */
+  private listedTools(): Tool[] {
+    return this.memoryOn ? [...this.serviceTools, ...MEMORY_TOOLS] : this.serviceTools
+  }
+
   /** Each tool's name and the first sentence of its description, for Settings › MCP servers. */
   toolSummaries(): { name: string; description: string }[] {
-    return this.serviceTools.map((tool) => ({
+    return this.listedTools().map((tool) => ({
       name: tool.name,
       description: firstSentence(tool.description ?? ''),
     }))
@@ -569,12 +591,15 @@ export class ArtifactService {
   /** A server for one request with the token, as a stateless transport needs. */
   private mcpServer(sdk: Sdk, grant: Grant): Server {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
+    const instructions = this.memoryOn
+      ? `${this.instructions} ${MEMORY_INSTRUCTIONS}`
+      : this.instructions
     const server = new sdk.Server(
       { name: SERVICE_NAME, title: 'Kettu', version: this.deps.appVersion },
-      { capabilities: { tools: {} }, instructions: this.instructions },
+      { capabilities: { tools: {} }, instructions },
     )
     server.setRequestHandler(ListToolsRequestSchema, () => ({
-      tools: this.serviceTools,
+      tools: this.listedTools(),
     }))
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: input, _meta: meta } = request.params
@@ -613,6 +638,15 @@ export class ArtifactService {
             ErrorCode.InternalError,
             `${REPORT_TOOL} failed: ${(error as Error).message}`,
           )
+        }
+      }
+      if (this.memoryTools && isMemoryToolName(name)) {
+        // While memory is off they are not listed, and a call answers that it is off.
+        try {
+          return await this.memoryTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
         }
       }
       if (isBrowserToolName(name)) {

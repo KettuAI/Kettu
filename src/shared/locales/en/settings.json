@@ -15,6 +15,7 @@
     "remote": "Remote access",
     "browser": "Browser",
     "harnesses": "Harnesses",
+    "memory": "Memory",
     "hosts": "Hosts",
     "devices": "Mobile devices",
     "computer-use": "Computer use"
@@ -987,6 +988,8 @@
     "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
     "browserWeb": "Links in agents’ replies open in a new tab.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu installs and updates them for you.",
+    "memory": "What agents learn about you and about each project, kept on this computer and handed to every agent.",
+    "memory_web": "What agents learn about you and about each project, kept on {{host}} and handed to every agent there.",
     "hosts": "Other computers running Kettu that this one connects to. Their sessions show up in your sidebar.",
     "hostsWeb": "The computer this page connects to. Its sessions, projects and agents stay on it; here is only how this browser reaches it.",
     "devices": "Simulators and phones agents may use without asking.",
@@ -1675,6 +1678,116 @@
       "body": "Kettu deletes its installed package for {{name}} and removes the agents you added here. Any turn still running stops; their sessions stay and can still be read. Your own program, its sign-in and configuration folders are not touched.",
       "program": "Also uninstall the program with this command",
       "installAgain": "Install it again to use it; its configuration and sessions were kept."
+    }
+  },
+  "memory": {
+    "keywords": "memory remember forget notes facts preferences global project",
+    "switch": {
+      "name": "Use memory",
+      "on": "Every agent is handed memory when its session starts and can add to it. In Kettu’s sessions, each harness’s own memory is turned off.",
+      "off": "Off: each agent goes back to its own memory, as its harness keeps it.",
+      "keywords": "memory on off auto memory"
+    },
+    "global": {
+      "group": "Global"
+    },
+    "project": {
+      "group": "Project",
+      "picker": "Project",
+      "count_one": "{{count}} entry",
+      "count_other": "{{count}} entries"
+    },
+    "you": "You",
+    "line": "{{who}} · {{when}}",
+    "add": "Add",
+    "empty": {
+      "globalTitle": "Nothing in global memory yet",
+      "globalHint": "Agents note what they learn about you as they work, and ask you before keeping it. You can add things yourself too.",
+      "projectTitle": "Nothing remembered for {{project}} yet",
+      "projectHint": "Agents note how to run it, its pitfalls and decisions as they work. You can add things yourself too.",
+      "noProjectsTitle": "No projects yet",
+      "noProjectsHint": "Once you open a project, agents note what they learn about it as they work."
+    },
+    "loading": "Loading memory",
+    "loadFailed": "Memory could not be read: {{error}}",
+    "retry": "Try again",
+    "import": {
+      "agents_one": "{{count}} agent",
+      "agents_other": "{{count}} agents",
+      "found_one": "Found {{count}} memory in {{agents}}",
+      "found_other": "Found {{count}} memories in {{agents}}",
+      "foundSome_one": "Found {{count}} memory in the agents’ own memory",
+      "foundSome_other": "Found {{count}} memories in the agents’ own memory",
+      "hint": "Copy them into Kettu’s memory so every agent can use them. The originals stay as they are.",
+      "button": "Import…",
+      "title": "Import agents’ memories",
+      "body": "What the agents remember on their own about the projects Kettu knows. Each goes into its project’s memory, and the originals stay as they are.",
+      "sources": "By agent and project",
+      "source": "{{agent}} · {{project}}",
+      "entries_one": "{{count}} entry",
+      "entries_other": "{{count}} entries",
+      "aboutYou": "About you",
+      "aboutYouHint": "Tick the ones to put in global memory, which every session uses. The rest go into their project’s memory.",
+      "putGlobal": "Put in global",
+      "import": "Import",
+      "nothing": "Nothing is left to import.",
+      "scanFailed": "The agents’ memories could not be read: {{error}}",
+      "imported_one": "Imported {{count}} memory",
+      "imported_other": "Imported {{count}} memories",
+      "importedSkipped_one": "Imported {{count}} memory and skipped {{skipped}} already in Kettu’s memory",
+      "importedSkipped_other": "Imported {{count}} memories and skipped {{skipped}} already in Kettu’s memory"
+    },
+    "entry": {
+      "global": "Global memory",
+      "project": "Project memory · {{project}}",
+      "edit": "Edit…",
+      "body": "Content",
+      "noBody": "Only the title and summary.",
+      "details": "Details",
+      "writtenBy": "Written by",
+      "session": "Session",
+      "openSession": "Go to session",
+      "sessionGone": "No longer here",
+      "created": "Created",
+      "updated": "Last changed",
+      "gone": "This memory entry is no longer here.",
+      "move": {
+        "name": "Move to global",
+        "description": "Use it in every session, not only in this project’s.",
+        "button": "Move to global",
+        "done": "Moved to global memory"
+      },
+      "remove": {
+        "name": "Delete this entry",
+        "description": "Agents are not handed it again.",
+        "button": "Delete…",
+        "title": "Delete “{{title}}”?",
+        "body": "It is removed from Kettu’s memory, and agents are not handed it again.",
+        "confirm": "Delete",
+        "done": "Deleted"
+      }
+    },
+    "editor": {
+      "addGlobal": "Add to global memory",
+      "addProject": "Add to {{project}}’s memory",
+      "edit": "Edit memory",
+      "addBody": "Every agent is handed it when a session starts.",
+      "title": "Title",
+      "titlePlaceholder": "A short name, such as “Prefers pnpm”",
+      "description": "Summary",
+      "descriptionHint": "One line, what agents see in the list of what Kettu remembers.",
+      "body": "Content",
+      "bodyHint": "Markdown. One thing per entry, with why it holds.",
+      "save": "Save",
+      "add": "Add"
+    },
+    "errors": {
+      "secret": "This looks like it holds a secret, such as a key or a password. Memory never keeps those.",
+      "full": "This memory is full. Delete some entries first.",
+      "changed": "The memory changed after this write, so it stays as it is.",
+      "gone": "This write can no longer be undone.",
+      "off": "Memory is turned off.",
+      "notFound": "This memory entry is no longer here."
     }
   },
   "devices": {

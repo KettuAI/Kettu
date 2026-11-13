@@ -2551,6 +2551,21 @@ li[data-row-exit='dust'] > * {
   font-weight: 500;
   color: var(--muted);
 }
+/* A memory entry's text as it was written */
+:is(.kettu-settings, .kettu-sd) .k-memory-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+:is(.kettu-settings, .kettu-sd) .k-memory-text[data-empty] {
+  color: var(--muted);
+}
 :is(.kettu-settings, .kettu-sd) .k-path {
   color: var(--muted);
 }
@@ -3125,6 +3140,14 @@ li[data-row-exit='dust'] > * {
 .kettu-sd .kettu-sd__input--mono.ui-sg-input {
   font-family: var(--code-face);
   font-size: 12.5px;
+}
+/* A field of several lines, such as a memory entry's text */
+.kettu-sd textarea.kettu-sd__input.ui-sg-input {
+  height: auto;
+  min-height: 140px;
+  padding: 7px 10px;
+  line-height: 20px;
+  resize: vertical;
 }
 .kettu-sd .kettu-sd__input.ui-sg-input[aria-invalid='true'] {
   box-shadow:

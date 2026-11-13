@@ -122,6 +122,22 @@ describe('Diagnostics traffic', () => {
     },
   )
 
+  it("masks the token of the Kettu service a session's process gets from the router", () => {
+    const text = recorded({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'session/load',
+      params: {
+        sessionId: 's',
+        cwd: '/repo',
+        mcpServers: [],
+        _meta: { 'sh.kettu/mcp': { url: 'http://127.0.0.1:9/mcp', token: 'pi-session-token' } },
+      },
+    })
+    expect(text).not.toContain('pi-session-token')
+    expect(text).toContain('http://127.0.0.1:9/mcp')
+  })
+
   it('keeps a message without servers as it was', () => {
     const message = { id: 2, method: 'turn/start', params: { input: [{ text: 'hi' }] } }
     expect(JSON.parse(recorded(message))).toEqual(message)

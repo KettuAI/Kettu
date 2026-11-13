@@ -9,6 +9,7 @@ import type { Platform } from '@shared/platform'
 import type { HostSettings } from '@shared/settings'
 import { harnessOf, type AgentId, type HarnessId } from '@shared/thread'
 import { compareInstalls, listInstalled, type InstalledAdapter } from './adapter-install'
+import { PI_COMMAND_VARIABLE, PI_EXTENSION_VARIABLE, piLauncher } from './pi/launcher'
 import { AGORAGENTIC } from './agents/agoragentic'
 import { AMP } from './agents/amp'
 import { ANTIGRAVITY } from './agents/antigravity'
@@ -107,6 +108,12 @@ export interface AgentRequires {
   minimum: string
   /** The variable the adapter reads to run it instead. */
   variable: string
+  /**
+   * The oldest version of it that loads Kettu's extension, which then reaches Kettu's MCP service
+   * for the adapter (pi 1.0.0, the first with `registerMcpServer`): the adapter runs a launcher in
+   * `variable` that starts the program with the extension.
+   */
+  extension?: string
 }
 
 export interface AgentDefinition {
@@ -308,7 +315,12 @@ export interface LaunchSpec {
   display: CommandWords
   /** The user's own CLI this launch passes to the SDK, or runs itself. */
   cli?: string
+  /** It runs Kettu's extension, which takes Kettu's MCP service from each session's environment. */
+  kettuExtension?: true
 }
+
+/** Kettu's own files an agent runs, such as Pi's extension, beside the installs and no install. */
+const EXTENSIONS_FOLDER = '.extensions'
 
 /** Where a package agent's pinned version lives once installed, before detection says more. */
 export function packageDir(adaptersDir: string, def: AgentDefinition): string | null {
@@ -745,8 +757,24 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
         }
         requires = { program, version: answer.version }
       }
-      const requiresEnv =
+      let requiresEnv: Record<string, string> =
         requires && def.requires ? { [def.requires.variable]: requires.program } : {}
+      let extension = false
+      const oldest = def.requires?.extension
+      if (requires && def.requires && oldest && compareVersions(requires.version, oldest) >= 0) {
+        try {
+          const dir = path.join(ctx.adaptersDir, EXTENSIONS_FOLDER, def.id)
+          const launcher = await piLauncher(dir, ctx.platform)
+          requiresEnv = {
+            [def.requires.variable]: launcher.command,
+            [PI_COMMAND_VARIABLE]: requires.program,
+            [PI_EXTENSION_VARIABLE]: launcher.extension,
+          }
+          extension = true
+        } catch {
+          // Unwritten, the program runs by itself as before, only without Kettu's tools.
+        }
+      }
       // A per-session agent runs only through the router, which every packaged build carries.
       if (launch.perSession && !ctx.sessionRouterPath) {
         return { state: 'not-installed', detail: 'The session router is missing from this build.' }
@@ -788,7 +816,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
             cli: passed.installed.path,
           }
         }
-        return installedSpec(
+        const spec = await installedSpec(
           def,
           nodePath,
           install,
@@ -796,6 +824,7 @@ export async function detectAgent(def: AgentDefinition, ctx: DetectContext): Pro
           requiresEnv,
           ctx.sessionRouterPath ?? null,
         )
+        return extension ? { ...spec, kettuExtension: true } : spec
       }
       const spec = current ? await specFor(current) : null
       const fallbackSpec = other ? await specFor(other) : null

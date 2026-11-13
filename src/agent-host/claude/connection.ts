@@ -458,6 +458,10 @@ export class ClaudeConnection implements AgentConnection {
     return this.done
   }
 
+  get ownInstructions(): boolean {
+    return true
+  }
+
   get hiddenSessions(): boolean {
     return true
   }
@@ -891,9 +895,10 @@ export class ClaudeConnection implements AgentConnection {
     const plugins = bare
       ? []
       : (options.localPlugins ?? []).map((folder) => ({ type: 'local' as const, path: folder }))
-    const prompts = servers.flatMap((server) =>
-      server.type === 'stdio' ? [] : (server.prompt ?? []),
-    )
+    const prompts = [
+      ...servers.flatMap((server) => (server.type === 'stdio' ? [] : (server.prompt ?? []))),
+      ...(options.memory ? [options.memory.text] : []),
+    ]
     const queryOptions: QueryOptions = {
       cwd,
       env: {
@@ -901,6 +906,8 @@ export class ClaudeConnection implements AgentConnection {
         CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS: '1',
         // Without it Claude Code sends no summary of its tool calls.
         CLAUDE_CODE_EMIT_TOOL_USE_SUMMARIES: '1',
+        // Kettu's memory stands in for Claude Code's own, which would load and write beside it.
+        ...(options.memory ? { CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' } : {}),
       },
       pathToClaudeCodeExecutable: this.requireCli(),
       spawnClaudeCodeProcess: (spawn) => {

@@ -154,6 +154,8 @@ type Diff = Extract<ToolContent, { type: 'diff' }>
 /** A step of a folded run, as its summary counts it. */
 export type RunStep =
   | { kind: 'thought'; durationMs?: number; streaming?: boolean }
+  // An agent's write to project memory.
+  | { kind: 'memory' }
   | {
       kind: 'tool'
       toolKind: ToolKind
@@ -196,7 +198,7 @@ export interface SummaryPart {
 
 type FilePart = 'read' | 'create' | 'edit' | 'delete' | 'move'
 
-type RunPart = FilePart | 'thought' | 'plan' | 'execute' | 'search' | 'fetch' | 'other'
+type RunPart = FilePart | 'thought' | 'plan' | 'memory' | 'execute' | 'search' | 'fetch' | 'other'
 
 /** What a step adds to a part: an edit adds one unit per file it touched. */
 interface Unit {
@@ -274,6 +276,8 @@ function partsOf(part: RunPart, units: Unit[]): Omit<SummaryPart, 'kind'>[] {
     }
     case 'plan':
       return [{ text: i18n.t('session:summary.plan') }]
+    case 'memory':
+      return [{ text: i18n.t('session:summary.memory', { count: n }) }]
     case 'execute': {
       const only = units[0]?.step
       const description = n === 1 && only?.kind === 'tool' ? only.description : undefined
@@ -323,6 +327,7 @@ export function runSummary(steps: RunStep[]): {
     parts,
     failed: steps.filter((s) => s.kind === 'tool' && s.status === 'failed').length,
     running: steps.some((s) => {
+      if (s.kind === 'memory') return false
       if (s.kind === 'thought') return !!s.streaming
       return s.status === 'pending' || s.status === 'in_progress'
     }),

@@ -107,6 +107,8 @@ export type ToolCallCardProps = {
   chevron?: "after" | "before";
   /** Your own content for the open card, in place of the error, arguments and result; false leaves the card without a body */
   children?: ReactNode;
+  /** For a card without a body: what a click on its header does instead, e.g. open what the call made */
+  onActivate?: () => void;
   /** Beside the header at its end, outside the toggle, e.g. thumbnails that are buttons themselves */
   trail?: ReactNode;
   /** false shows no time, e.g. when it is not known when the call started */
@@ -161,6 +163,7 @@ export function ToolCallCard({
   maxCodeHeight = 220,
   chevron = "after",
   children,
+  onActivate,
   trail,
   time = true,
   shine = false,
@@ -170,6 +173,7 @@ export function ToolCallCard({
   const id = useId();
   const L = { ...LABELS, ...labels };
   const bodyless = children === false;
+  const inert = bodyless && !onActivate;
   const [openState, setOpenState] = useState(defaultOpen);
   const open = openProp ?? openState;
   const setOpen = (next: boolean) => {
@@ -220,10 +224,10 @@ export function ToolCallCard({
         aria-expanded={bodyless ? undefined : open}
         aria-controls={bodyless ? undefined : `${id}-body`}
         data-chevron={chevron}
-        data-bodyless={bodyless || undefined}
-        tabIndex={bodyless ? -1 : undefined}
+        data-bodyless={inert || undefined}
+        tabIndex={inert ? -1 : undefined}
         onClick={() => {
-          if (bodyless) return;
+          if (bodyless) return onActivate?.();
           setAutoOpened(false);
           setOpen(!open);
         }}

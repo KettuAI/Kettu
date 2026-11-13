@@ -22,6 +22,7 @@ import type {
 } from '@shared/thread'
 import type { ModelTokens } from '../connection'
 import { currentLocale, t } from '../i18n'
+import { isClaudeRowWhenFailed } from '../plan-tool'
 import {
   appendContent,
   attachmentCount,
@@ -49,6 +50,7 @@ import {
   type MapperEffect,
   type MapperOutput,
   type SubagentState,
+  type TurnScope,
 } from '../session-updates'
 
 /** Every `sessionUpdate` the SDK's unstable v1 schema accepts; others never reach the SDK. */
@@ -341,6 +343,14 @@ function mapMessageChunk(
   }
 }
 
+/** Kettu's memory index ahead of a session's first prompt, and the blank line the host adds. */
+const MEMORY_AHEAD = /^\s*<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2}/
+
+/** A replayed user message's text without the memory index Kettu sent ahead of it. */
+export function withoutMemory(text: string): string {
+  return text.replace(MEMORY_AHEAD, '')
+}
+
 function mapUserChunk(ctx: MapperContext, out: Output, chunk: acp.ContentChunk): void {
   // In a live turn the host already added the user entry when it sent the prompt.
   if (!ctx.replaying) return
@@ -373,17 +383,24 @@ function mapUserChunk(ctx: MapperContext, out: Output, chunk: acp.ContentChunk):
     })
     return
   }
+  let content = chunk.content
+  if (content.type === 'text') {
+    const text = withoutMemory(content.text)
+    // A chunk of the memory index alone starts no message; the chunk after it does.
+    if (text === '' && content.text !== '') return
+    content = { ...content, text }
+  }
   // Each replayed user message starts a turn, which scopes "current" plans.
   ctx.scope.planId = null
   const id = byId ?? ctx.nextId()
   const parts =
-    chunk.content.type === 'text'
-      ? parseReplayedText(chunk.content.text, id, [], out)
-      : replayedBlock(chunk.content, id, [], out)
+    content.type === 'text'
+      ? parseReplayedText(content.text, id, [], out)
+      : replayedBlock(content, id, [], out)
   addEntry(ctx, out, {
     kind: 'user',
     id,
-    content: parts ?? [userContent(chunk.content)],
+    content: parts ?? [userContent(content)],
   })
 }
 
@@ -448,6 +465,37 @@ function mapToolCall(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate
   addEntry(ctx, out, entry)
   toolEffects(out, update.toolCallId, id, null, entry)
   return id
+}
+
+/** Calls of Kettu's memory writes, by Claude Code's names as Pi uses them too, per turn. */
+const memoryWrites = new WeakMap<TurnScope, Map<string, acp.ToolCallUpdate>>()
+
+/**
+ * Holds back a call of Kettu's memory writes, whose row the host adds once it succeeds; one that
+ * failed wrote nothing, so it shows as a failed row. False for any other call.
+ */
+function heldMemoryWrite(ctx: MapperContext, out: Output, update: acp.ToolCallUpdate): boolean {
+  let calls = memoryWrites.get(ctx.scope)
+  const held = calls?.get(update.toolCallId)
+  if (!held) {
+    if (update.title == null || !isClaudeRowWhenFailed(update.title)) return false
+    if (ctx.thread.byId[`t:${update.toolCallId}`]) return false
+  }
+  const given = Object.entries(update).filter(([, value]) => value != null)
+  const merged = { ...held, ...Object.fromEntries(given) } as acp.ToolCallUpdate
+  if (update.status === 'failed') {
+    calls?.delete(update.toolCallId)
+    mapToolCall(ctx, out, merged)
+  } else if (update.status === 'completed') {
+    calls?.delete(update.toolCallId)
+  } else {
+    if (!calls) {
+      calls = new Map()
+      memoryWrites.set(ctx.scope, calls)
+    }
+    calls.set(update.toolCallId, merged)
+  }
+  return true
 }
 
 function mapPlan(ctx: MapperContext, out: Output, plan: acp.Plan): void {
@@ -743,10 +791,10 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
       mapMessageChunk(ctx, out, 'thought', update)
       break
     case 'tool_call':
-      mapToolCall(ctx, out, update)
+      if (!heldMemoryWrite(ctx, out, update)) mapToolCall(ctx, out, update)
       break
     case 'tool_call_update':
-      mapToolCall(ctx, out, update)
+      if (!heldMemoryWrite(ctx, out, update)) mapToolCall(ctx, out, update)
       break
     case 'plan':
       mapPlan(ctx, out, update)

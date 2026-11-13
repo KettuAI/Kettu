@@ -5,6 +5,7 @@
 import type { AgentId } from '@shared/thread'
 import type { TrafficRecord } from '@shared/agent-host'
 import { sideLog, verboseRecords, writeLog, type SideLog } from '@shared/log/process-log'
+import { KETTU_SERVICE_META } from './connection'
 import { Ring, TextRing } from './ring'
 
 export const TRAFFIC_MESSAGES = 2_000
@@ -87,7 +88,8 @@ function maskedRecord(record: unknown): unknown {
 /**
  * The message without the values of the headers and environment its MCP servers carry: the
  * artifacts service's session tokens and the keys of the Marketplace's servers. Masked by where
- * they sit, ACP's `params.mcpServers` and Codex's `params.config.mcp_servers`, whatever they hold.
+ * they sit, ACP's `params.mcpServers` and Codex's `params.config.mcp_servers`, whatever they hold,
+ * and the token of the Kettu service in `params._meta` that Kettu's extension in Pi takes.
  */
 function redacted(message: unknown): unknown {
   if (!isRecord(message) || !isRecord(message.params)) return message
@@ -124,6 +126,14 @@ function redacted(message: unknown): unknown {
       ]),
     )
     masked = { ...masked, config: { ...config, mcp_servers: servers } }
+  }
+  const meta = params._meta
+  const service = isRecord(meta) ? meta[KETTU_SERVICE_META] : undefined
+  if (isRecord(meta) && isRecord(service)) {
+    masked = {
+      ...masked,
+      _meta: { ...meta, [KETTU_SERVICE_META]: { ...service, token: REDACTED } },
+    }
   }
   return masked === params ? message : { ...message, params: masked }
 }

@@ -7,6 +7,7 @@ import type { DeviceAccessAnswer } from './device-agent'
 import type { ComputerAppAnswer, ComputerSetupOutcome, ComputerSetupStep } from './computer-use'
 import { isComputerSetupStep } from './computer-use'
 import type { ContextReport } from './context'
+import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
 import type { RoutineRef } from './routines'
 
 export {
@@ -262,6 +263,7 @@ export type ThreadEntry =
   | ProjectMcpEntry // Kettu's own record of a folder's MCP servers held for the user, and the answer
   | ProjectHooksEntry // Kettu's own record of a folder's hooks held for the user, and the answer
   | ProblemReportEntry // Kettu's own record of a problem report an agent drafted, and its outcome
+  | MemoryWriteEntry // Kettu's own record of an agent's write to Kettu's memory, and its answer
 
 /**
  * Where another agent took the session over: from here on its turns are that agent's. `turns` of
@@ -470,6 +472,28 @@ export interface ProblemReportEntry {
   /** When the agent drafted it, in Unix milliseconds, for the daily limit. */
   at: number
   outcome: ProblemReportOutcome | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * An agent's write to Kettu's memory, at its tool call. A project write is done when it appears and
+ * `undo` names the record that takes it back, null once undone; a global write is only proposed,
+ * `draft` holding what would be written until the user answers.
+ */
+export interface MemoryWriteEntry {
+  kind: 'memory'
+  id: string
+  layer: MemoryLayer
+  action: MemoryAction
+  /** The entry written; null for a proposed new global entry until it is accepted. */
+  memoryId: string | null
+  title: string
+  status: MemoryWriteStatus
+  undo: string | null
+  draft: MemoryDraft | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
@@ -976,6 +1000,25 @@ function isToolContent(value: unknown): value is ToolContent {
   }
 }
 
+function isMemoryWriteStatus(value: unknown): value is MemoryWriteStatus {
+  return (
+    value === 'written' ||
+    value === 'undone' ||
+    value === 'proposed' ||
+    value === 'accepted' ||
+    value === 'declined'
+  )
+}
+
+function isMemoryDraft(value: unknown): value is MemoryDraft {
+  return (
+    isRecord(value) &&
+    typeof value.title === 'string' &&
+    typeof value.description === 'string' &&
+    typeof value.body === 'string'
+  )
+}
+
 function isProblemReportOutcome(value: unknown): value is ProblemReportOutcome {
   if (!isRecord(value)) return false
   if (value.kind === 'sent') return typeof value.reportId === 'string'
@@ -1099,6 +1142,17 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.decision === 'always' ||
           value.decision === 'deny' ||
           value.decision === 'timeout') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'memory':
+      return (
+        (value.layer === 'global' || value.layer === 'project') &&
+        (value.action === 'remember' || value.action === 'update' || value.action === 'forget') &&
+        (value.memoryId === null || typeof value.memoryId === 'string') &&
+        typeof value.title === 'string' &&
+        isMemoryWriteStatus(value.status) &&
+        (value.undo === null || typeof value.undo === 'string') &&
+        (value.draft === null || isMemoryDraft(value.draft)) &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'problem_report':

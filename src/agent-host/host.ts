@@ -33,8 +33,9 @@ import type {
 import type { ArtifactExportFormat } from '@shared/artifact-types'
 import type { Platform } from '@shared/platform'
 import type { PortChannel } from '@shared/port-channel'
-import type { FromPort } from '@shared/port-rpc'
+import type { FromPort, PortErrorCode } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
+import type { MemorySource } from '@shared/memory'
 import type { HostSettings } from '@shared/settings'
 import { serverFor, type MarketConnection, type MarketServer } from '@shared/marketplace'
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
@@ -80,6 +81,8 @@ import { HostError, invalidParams } from './errors'
 import { setLocale, t } from './i18n'
 import { FilesService } from './files'
 import { MediaService } from './media'
+import { MemoryError, type MemoryErrorCode } from './memory/errors'
+import { MemoryService } from './memory/service'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
 import { MarketConnectionsService } from './marketplace/connections'
 import { parseSignIns } from './marketplace/oauth'
@@ -169,6 +172,30 @@ function imagesFor(device: PortDevice | null): ImageMode {
 /** What a message or answer from a paired device's port keeps of it; none from a window. */
 function fromDevice(device: PortDevice | null): FromDevice | undefined {
   return device ? { id: device.id, name: device.name } : undefined
+}
+
+/** The user's own writes to Kettu's memory, from Settings, name no agent or session. */
+const BY_USER: MemorySource = { agentId: null, sessionId: null }
+
+const MEMORY_ERRORS: Record<MemoryErrorCode, PortErrorCode> = {
+  invalid: 'invalid_params',
+  secret: 'invalid_params',
+  full: 'conflict',
+  not_found: 'not_found',
+  conflict: 'conflict',
+  off: 'unavailable',
+}
+
+/** Runs a memory request, its refusals crossing the port with `memory_<code>` as `data.reason`. */
+async function memoryCall<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run()
+  } catch (error) {
+    if (!(error instanceof MemoryError)) throw error
+    throw new HostError(MEMORY_ERRORS[error.code], error.message, {
+      reason: `memory_${error.code}`,
+    })
+  }
 }
 
 export interface HostOptions {
@@ -290,6 +317,8 @@ export class AgentHost {
   readonly artifacts: ArtifactStore
   /** The `kettu` MCP server, through which the sessions' agents reach the artifacts. */
   readonly artifactService: ArtifactService
+  /** Kettu's memory of the user and of each project, which every session is handed. */
+  readonly memory: MemoryService
   /** The artifacts' own data, which their pages and the agents read and write. */
   private readonly artifactData: ArtifactData
   /** Agents using the desktop apps of this computer; null on a host without the driver. */
@@ -497,6 +526,13 @@ export class AgentHost {
           log,
         })
       : null
+    this.memory = new MemoryService({
+      root: path.join(options.userDataPath, 'memory'),
+      log,
+      projects: () => this.projects.list().map(({ path, name }) => ({ path, name })),
+      claudeAgents: () => this.claudeAgents(),
+    })
+    this.memory.onChange(() => this.hub.broadcast({ type: 'memory.changed' }))
     this.artifactService = new ArtifactService({
       data: this.artifactData,
       store: this.artifacts,
@@ -507,6 +543,13 @@ export class AgentHost {
       subagentCall: (process, id) => this.sessions.isSubagentCall(process, id),
       plan: { set: (sessionId, items) => this.sessions.planSet(sessionId, items) },
       report: { add: (sessionId, draft) => this.sessions.reportDrafted(sessionId, draft) },
+      memory: {
+        service: this.memory,
+        projectOf: (caller) => this.projects.find(caller.project)?.path ?? null,
+        written: (sessionId, write) => this.sessions.memoryWritten(sessionId, write),
+        proposed: (sessionId, proposal) => this.sessions.memoryProposed(sessionId, proposal),
+        agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
+      },
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
       browserCall: (request) => this.browserCall(request),
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),
@@ -670,6 +713,7 @@ export class AgentHost {
         },
       },
       skills: (agentId) => this.marketSkills.sessionOptions(agentId),
+      memory: this.memory,
       usage: this.usage,
       cacheTtl:
         options.cacheTtl ??
@@ -869,6 +913,7 @@ export class AgentHost {
       host.attachments.load(),
       host.artifactService.start(),
       host.routines.load(),
+      host.memory.load(),
     ])
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
@@ -897,6 +942,15 @@ export class AgentHost {
   private firstStart(): void {
     if (this.settings.initialSetupDone || this.env.info().source === 'fallback') return
     this.options.send({ type: 'host:first-start', harnesses: this.agents.userPrograms() })
+  }
+
+  /** The Claude Code agents of this host and their configuration folders, for memory's import. */
+  private claudeAgents(): { agentId: AgentId; name: string; configDir: string }[] {
+    return this.agents.ids().flatMap((agentId) => {
+      if (harnessOf(agentId) !== 'claude-code') return []
+      const configDir = this.agents.configFolder(agentId)
+      return configDir ? [{ agentId, name: this.agents.name(agentId), configDir }] : []
+    })
   }
 
   private wireGit(git: GitServiceApi): void {
@@ -1583,7 +1637,7 @@ export class AgentHost {
   }
 
   private handlers(): Handlers {
-    const { agents, sessions, projects, artifacts, routines } = this
+    const { agents, sessions, projects, artifacts, routines, memory } = this
     return {
       'agents.list': () => agents.list(),
       'agents.check': ({ agentId }) => agents.check(agentId),
@@ -2024,6 +2078,28 @@ export class AgentHost {
       'sessions.answerReport': ({ sessionId, entryId, outcome }, { device }) => {
         sessions.answerReport(sessionId, entryId, outcome, fromDevice(device))
       },
+      'sessions.answerMemory': ({ sessionId, entryId, decision }, { device }) =>
+        memoryCall(() => sessions.answerMemory(sessionId, entryId, decision, fromDevice(device))),
+      'sessions.undoMemory': ({ sessionId, entryId }) =>
+        memoryCall(() => sessions.undoMemory(sessionId, entryId)),
+      'memory.overview': () => memoryCall(() => memory.overview()),
+      'memory.list': ({ scope }) => memoryCall(() => memory.list(scope)),
+      'memory.save': ({ scope, id, draft }) =>
+        memoryCall(async () => (await memory.save(scope, id, draft, BY_USER)).entry),
+      'memory.remove': ({ scope, id }) =>
+        memoryCall(async () => {
+          await memory.remove(scope, id, BY_USER)
+        }),
+      'memory.moveToGlobal': ({ project, id }) =>
+        memoryCall(() => memory.moveToGlobal(project, id)),
+      'memory.setEnabled': ({ enabled }) =>
+        memoryCall(async () => {
+          const was = memory.enabled
+          await memory.setEnabled(enabled)
+          if (memory.enabled !== was) sessions.memorySwitched()
+        }),
+      'memory.importScan': () => memoryCall(() => memory.importScan()),
+      'memory.import': ({ sources, global }) => memoryCall(() => memory.import(sources, global)),
       'computer.stop': ({ sessionId }) => {
         this.computer?.stop(sessionId)
       },

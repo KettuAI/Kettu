@@ -21,6 +21,7 @@ type OwnEntry = Extract<
       | 'project_mcp'
       | 'project_hooks'
       | 'problem_report'
+      | 'memory'
       | 'takeover'
   }
 >
@@ -148,6 +149,7 @@ function isOwn(entry: ThreadEntry): entry is OwnEntry {
     case 'project_mcp':
     case 'project_hooks':
     case 'problem_report':
+    case 'memory':
     case 'session_started':
     case 'git':
     case 'turn_end':

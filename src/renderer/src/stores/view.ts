@@ -120,6 +120,7 @@ export type SettingsSection =
   | 'appearance'
   | 'agents'
   | 'harnesses'
+  | 'memory'
   | 'terminal'
   | 'git'
   | 'notifications'

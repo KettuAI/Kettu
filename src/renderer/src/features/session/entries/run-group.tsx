@@ -164,6 +164,8 @@ export const RunGroup = memo(function RunGroup({
       steps.push({ kind: 'thought', durationMs: entry.durationMs, streaming: entry.streaming })
     } else if (entry.kind === 'tool') {
       steps.push(toolStep(entry))
+    } else if (entry.kind === 'memory') {
+      steps.push({ kind: 'memory' })
     }
   }
   const summary = runSummary(steps)
@@ -201,7 +203,7 @@ export const RunGroup = memo(function RunGroup({
       const time = toolTime(sessionId, entry.id)
       if (time.durationMs !== undefined) total += time.durationMs
       else if (!summary.running || time.startedAt === undefined) known = false
-    } else known = false
+    } else if (entry.kind !== 'memory') known = false
   }
 
   return (

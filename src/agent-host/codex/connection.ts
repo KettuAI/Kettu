@@ -241,17 +241,21 @@ function sandboxMode(policy: SandboxPolicy): SandboxMode {
   return 'workspace-write'
 }
 
-/** Per-session config Codex takes at start: the folder trusted, as codex-acp did, and Kettu's MCP. */
-function sessionConfig(
-  cwd: string,
-  servers: readonly McpServer[] | undefined,
-): Record<string, JsonValue> {
+/**
+ * Per-session config Codex takes at start: the folder trusted, as codex-acp did, Kettu's MCP, and
+ * with Kettu's memory Codex's own off, so it neither reads its memories nor makes them from it.
+ */
+function sessionConfig(cwd: string, options: SessionOptions): Record<string, JsonValue> {
   const config: Record<string, JsonValue> = { projects: { [cwd]: { trust_level: 'trusted' } } }
-  const entries = (servers ?? []).flatMap((server) => {
+  const entries = (options.mcpServers ?? []).flatMap((server) => {
     const entry = codexServer(server)
     return entry ? [[server.name.replace(/\s+/g, '_'), entry] as const] : []
   })
   if (entries.length > 0) config.mcp_servers = Object.fromEntries(entries)
+  if (options.memory) {
+    config.features = { memories: false }
+    config.memories = { use_memories: false, generate_memories: false }
+  }
   return config
 }
 
@@ -280,13 +284,16 @@ function codexServer(server: McpServer): JsonValue | null {
   }
 }
 
-/** The servers' paragraphs for the model, as a thread takes them. */
+/** The servers' paragraphs and Kettu's memory for the model, as a thread takes them. */
 function developerInstructions(
-  servers: readonly McpServer[] | undefined,
+  options: SessionOptions,
 ): { developerInstructions: string } | Record<string, never> {
-  const prompts = (servers ?? []).flatMap((server) =>
-    server.type === 'stdio' ? [] : (server.prompt ?? []),
-  )
+  const prompts = [
+    ...(options.mcpServers ?? []).flatMap((server) =>
+      server.type === 'stdio' ? [] : (server.prompt ?? []),
+    ),
+    ...(options.memory ? [options.memory.text] : []),
+  ]
   return prompts.length > 0 ? { developerInstructions: prompts.join('\n\n') } : {}
 }
 
@@ -404,6 +411,10 @@ export class CodexConnection implements AgentConnection {
 
   get isClosed(): boolean {
     return this.rpc.isClosed
+  }
+
+  get ownInstructions(): boolean {
+    return true
   }
 
   close(): void {
@@ -651,8 +662,8 @@ export class CodexConnection implements AgentConnection {
       approvalPolicy: mode.approvalPolicy,
       approvalsReviewer: mode.approvalsReviewer,
       sandbox: sandboxMode(mode.sandbox),
-      config: sessionConfig(cwd, options.mcpServers),
-      ...developerInstructions(options.mcpServers),
+      config: sessionConfig(cwd, options),
+      ...developerInstructions(options),
       ephemeral: hidden,
       experimentalRawEvents: false,
     })
@@ -681,8 +692,8 @@ export class CodexConnection implements AgentConnection {
             sandbox: sandboxMode(mode.sandbox),
           }
         : {}),
-      config: sessionConfig(cwd, options.mcpServers),
-      ...developerInstructions(options.mcpServers),
+      config: sessionConfig(cwd, options),
+      ...developerInstructions(options),
       excludeTurns: true,
     })
     const record = await this.record(threadId, cwd, response, options.hidden !== undefined, known)
@@ -773,8 +784,8 @@ export class CodexConnection implements AgentConnection {
       sandbox: sandboxMode(mode.sandbox),
       // A fork takes the model and effort of the configuration, not of its source.
       ...(source ? { model: source.model } : {}),
-      config: sessionConfig(cwd, options.mcpServers),
-      ...developerInstructions(options.mcpServers),
+      config: sessionConfig(cwd, options),
+      ...developerInstructions(options),
       ephemeral: hidden,
       excludeTurns: true,
     })

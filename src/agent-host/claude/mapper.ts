@@ -45,7 +45,7 @@ import type {
   ToolUseSummaryMessage,
   UserMessage,
 } from './sdk'
-import { isClaudeRowlessCall } from '../plan-tool'
+import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
 import { PLAN_TOOLS, resultContent, startsBackgroundWork, SUBAGENT_TOOLS, toolView } from './tools'
 
 /** Output for one session, built against its thread when it is delivered. */
@@ -570,6 +570,22 @@ export class ClaudeMapper {
     }
     const id = `t:${block.tool_use_id}`
     const entry = ctx.thread.byId[id]
+    if (!entry && tool && block.is_error === true && isClaudeRowWhenFailed(name)) {
+      // A memory write that failed wrote nothing, so its call shows as a failed row.
+      const view = toolView(name, tool.input, this.cwd)
+      addEntry(ctx, out, {
+        kind: 'tool',
+        id,
+        title: view.title,
+        toolKind: view.toolKind,
+        status: 'failed',
+        content: resultContent(name, block, structured, view.content) ?? view.content,
+        locations: view.locations,
+        permission: null,
+        permissionResult: null,
+      })
+      return out
+    }
     if (entry?.kind !== 'tool') return out
     const status: ToolEntry['status'] = block.is_error === true ? 'failed' : 'completed'
     const content = resultContent(name, block, structured, entry.content)

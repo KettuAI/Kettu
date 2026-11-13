@@ -26,6 +26,7 @@ import {
 } from '@agentclientprotocol/sdk/unstable'
 import type { AgentId, ConfigOption } from '@shared/thread'
 import {
+  KETTU_SERVICE_META,
   AgentRequestError,
   optionAnswer,
   type AgentConnection,
@@ -105,6 +106,8 @@ export interface AcpOptions {
   levelsAsModes?: boolean
   /** The agent sends its startup note as the first message after `session/new`, which is dropped. */
   startupNote?: boolean
+  /** It runs Kettu's extension, which takes Kettu's MCP service from the session router. */
+  kettuExtension?: boolean
 }
 
 export type AcpHooks = ConnectionHooks & AcpOptions
@@ -445,6 +448,10 @@ export class AcpConnection implements AgentConnection {
     return this.connection.signal.aborted
   }
 
+  get kettuExtension(): boolean {
+    return this.hooks.kettuExtension === true
+  }
+
   close(): void {
     this.connection.close()
     this.transport.close()
@@ -538,8 +545,16 @@ export class AcpConnection implements AgentConnection {
     return sessionMeta(this.hooks.agentId, options)
   }
 
-  async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
+  /** The `_meta` of a request that starts the session's process: with its Kettu MCP service. */
+  private startMeta(options: SessionOptions): Record<string, unknown> | undefined {
     const meta = this.meta(options)
+    const service = this.kettuExtension ? options.kettuService : undefined
+    if (!service) return meta
+    return { ...meta, [KETTU_SERVICE_META]: { url: service.url, token: service.token } }
+  }
+
+  async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
+    const meta = this.startMeta(options)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.new, {
         cwd,
@@ -564,7 +579,7 @@ export class AcpConnection implements AgentConnection {
     cwd: string,
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
-    const meta = this.meta(options)
+    const meta = this.startMeta(options)
     const response = await this.call(() =>
       this.connection.agent.request(methods.agent.session.load, {
         sessionId,

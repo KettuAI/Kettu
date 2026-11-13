@@ -274,6 +274,40 @@ describe('sessions', () => {
     ])
   })
 
+  it('hands Kettu’s memory over as developer instructions and turns Codex’s own memories off', async () => {
+    const { server, connection } = await connect()
+    const kettu = {
+      type: 'http' as const,
+      name: 'kettu',
+      url: 'http://127.0.0.1:9/mcp',
+      headers: [],
+      prompt: 'Plan first.',
+    }
+    const memory = { text: 'Memory index.' }
+    const memoryOff = {
+      features: { memories: false },
+      memories: { use_memories: false, generate_memories: false },
+    }
+    const opened = await connection.newSession('/project', { mcpServers: [kettu], memory })
+    await connection.resumeSession('thread-7', '/project', { mcpServers: [kettu], memory })
+    await connection.forkSession(opened.sessionId, '/project', { mcpServers: [kettu], memory })
+    for (const method of ['thread/start', 'thread/resume', 'thread/fork']) {
+      expect(server.sent(method)[0]).toMatchObject({
+        config: { projects: { '/project': { trust_level: 'trusted' } }, ...memoryOff },
+        developerInstructions: 'Plan first.\n\nMemory index.',
+      })
+    }
+    await connection.newSession('/project', { memory: { text: 'Only memory.' } })
+    expect(server.sent('thread/start')[1]).toMatchObject({ developerInstructions: 'Only memory.' })
+
+    await connection.newSession('/project', { mcpServers: [kettu] })
+    const without = server.sent('thread/start')[2] as { config: Record<string, unknown> }
+    expect(without).toMatchObject({ developerInstructions: 'Plan first.' })
+    expect(without.config).not.toHaveProperty('features')
+    expect(without.config).not.toHaveProperty('memories')
+    expect(connection.ownInstructions).toBe(true)
+  })
+
   it('sets the Marketplace’s skill folders on app-server before a thread starts, once while unchanged', async () => {
     const { server, connection } = await connect()
     server.on('skills/extraRoots/set', () => ({}))

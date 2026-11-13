@@ -206,6 +206,17 @@ describe('dsh mapper', () => {
     })
   })
 
+  it('shows no row for a memory write, unless it failed and so wrote nothing', () => {
+    const { entries } = run([
+      call('toolu_1', 'mcp__kettu__remember', { title: 'a' }),
+      result('toolu_1', 'Saved to project memory as a.'),
+      call('toolu_2', 'mcp__kettu__forget_memory', { layer: 'project', id: 'b' }),
+      result('toolu_2', 'No project memory entry has the id b.', { isError: true }),
+    ])
+    expect(entries.map((entry) => entry.id)).toEqual(['t:toolu_2'])
+    expect(entries[0]).toMatchObject({ status: 'failed' })
+  })
+
   it('shows a subagent as its session, and its call only when no subagent started', () => {
     const { entries } = run([
       call('toolu_7', 'subagent', { description: 'Child task', prompt: 'hi', name: 'kid' }),
