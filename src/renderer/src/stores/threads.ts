@@ -1,4 +1,5 @@
-import { create } from 'zustand'
+import { useState, useSyncExternalStore } from 'react'
+import { createStore } from 'zustand/vanilla'
 import {
   applyPatches,
   coalescePatches,
@@ -52,7 +53,136 @@ interface ThreadsStore {
   replicas: Record<string, Replica>
 }
 
-export const useThreadsStore = create<ThreadsStore>()(() => ({ replicas: {} }))
+const store = createStore<ThreadsStore>()(() => ({ replicas: {} }))
+
+// A hook's selector runs again only when a replica it read changed: a patch to one session leaves
+// the components of the others alone. What a selector read is recorded as it reads the map.
+
+/** The sessions the selector being run looked up, 'all' once it went through the map's keys. */
+let reading: Set<string> | 'all' | null = null
+
+const readHandler: ProxyHandler<Record<string, Replica>> = {
+  get(target, key) {
+    if (typeof key === 'string' && reading instanceof Set) reading.add(key)
+    return Reflect.get(target, key)
+  },
+  has(target, key) {
+    if (typeof key === 'string' && reading instanceof Set) reading.add(key)
+    return Reflect.has(target, key)
+  },
+  getOwnPropertyDescriptor(target, key) {
+    if (typeof key === 'string' && reading instanceof Set) reading.add(key)
+    return Reflect.getOwnPropertyDescriptor(target, key)
+  },
+  ownKeys(target) {
+    if (reading !== null) reading = 'all'
+    return Reflect.ownKeys(target)
+  },
+}
+const readViews = new WeakMap<ThreadsStore, ThreadsStore>()
+
+// A function, since TypeScript narrows `reading` to the set the selector was given.
+const readEverything = () => reading === 'all'
+
+function readView(state: ThreadsStore): ThreadsStore {
+  let view = readViews.get(state)
+  if (!view) {
+    view = { ...state, replicas: new Proxy(state.replicas, readHandler) }
+    readViews.set(state, view)
+  }
+  return view
+}
+
+/** Each subscribed hook, by the sessions it read; those that read every session are under null. */
+const watchers = new Map<string | null, Set<Watch>>()
+
+class Watch {
+  private read = new Set<string>()
+  private next = new Set<string>()
+  private all = false
+  private listener: (() => void) | null = null
+
+  select<T>(selector: (state: ThreadsStore) => T): T {
+    const outer = reading
+    this.next.clear()
+    reading = this.next
+    let value: T
+    try {
+      value = selector(readView(store.getState()))
+    } finally {
+      const all = readEverything()
+      reading = outer
+      this.keep(all)
+    }
+    return value
+  }
+
+  /** Files the hook under what its selector read this time, if that differs from last time. */
+  private keep(all: boolean): void {
+    const same =
+      all === this.all &&
+      (all ||
+        (this.next.size === this.read.size && [...this.next].every((id) => this.read.has(id))))
+    if (same) return
+    const listening = this.listener !== null
+    if (listening) this.file(false)
+    ;[this.read, this.next] = [this.next, this.read]
+    this.all = all
+    if (listening) this.file(true)
+  }
+
+  private file(on: boolean): void {
+    for (const key of this.all ? [null] : this.read) {
+      let set = watchers.get(key)
+      if (on) {
+        if (!set) watchers.set(key, (set = new Set()))
+        set.add(this)
+      } else if (set) {
+        set.delete(this)
+        if (set.size === 0) watchers.delete(key)
+      }
+    }
+  }
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listener = listener
+    this.file(true)
+    return () => {
+      this.file(false)
+      this.listener = null
+    }
+  }
+
+  changed(): void {
+    this.listener?.()
+  }
+}
+
+store.subscribe((state, previous) => {
+  if (state.replicas === previous.replicas) return
+  const told = new Set<Watch>(watchers.get(null))
+  for (const id of new Set([...Object.keys(previous.replicas), ...Object.keys(state.replicas)])) {
+    if (state.replicas[id] === previous.replicas[id]) continue
+    for (const watch of watchers.get(id) ?? []) told.add(watch)
+  }
+  for (const watch of told) watch.changed()
+})
+
+function useThreads<T>(selector: (state: ThreadsStore) => T): T {
+  const [watch] = useState(() => new Watch())
+  return useSyncExternalStore(watch.subscribe, () => watch.select(selector))
+}
+
+/**
+ * The replicas as a Zustand store. As a hook it takes a selector, which runs again only when a
+ * replica it read changes; `subscribe` hears every change.
+ */
+export const useThreadsStore = Object.assign(useThreads, {
+  getState: store.getState,
+  setState: store.setState,
+  subscribe: store.subscribe,
+  getInitialState: store.getInitialState,
+})
 
 /** How many recently viewed sessions stay watched, so switching back to them is instant. */
 const KEEP_WATCHED = 4
@@ -375,9 +505,9 @@ export function focusSession(sessionId: string): Promise<void> {
     return Promise.resolve()
   }
   if (!replica) setReplica(sessionId, { ...EMPTY, status: 'loading' })
-  return host('sessions.watch', { sessionId })
-    .catch(() => {})
-    .then(() => fetchSnapshot(sessionId, 'sessions.open'))
+  // Asked together: the host takes them in order, so it watches before it reads the snapshot.
+  const watching = host('sessions.watch', { sessionId }).catch(() => {})
+  return Promise.all([watching, fetchSnapshot(sessionId, 'sessions.open')]).then(() => {})
 }
 
 /**

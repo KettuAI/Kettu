@@ -235,6 +235,35 @@ function isActive(summary: SessionSummary): boolean {
   return summary.status === 'running' || summary.status === 'awaiting_permission'
 }
 
+/**
+ * `next` with every node that shows the same as in `previous` taken from there, so a row whose
+ * session did not change keeps its node and skips its render.
+ */
+export function keepSameNodes(
+  previous: readonly SessionNode[],
+  next: readonly SessionNode[],
+): SessionNode[] {
+  const before = new Map(previous.map((node) => [node.summary.id, node]))
+  return next.map((node) => {
+    const old = before.get(node.summary.id)
+    return old && sameNode(old, node) ? old : node
+  })
+}
+
+function sameNode(a: SessionNode, b: SessionNode): boolean {
+  return (
+    a.summary === b.summary &&
+    a.permissionCount === b.permissionCount &&
+    a.running === b.running &&
+    a.own.permissionCount === b.own.permissionCount &&
+    a.own.running === b.own.running &&
+    a.subagents.length === b.subagents.length &&
+    a.subagents.every((agent, i) => agent === b.subagents[i]) &&
+    a.children.length === b.children.length &&
+    a.children.every((child, i) => sameNode(child, b.children[i]!))
+  )
+}
+
 /** The sessions in sidebar order, flattened, for Mod+Shift+[ and ]. */
 export function flattenTree(nodes: SessionNode[], expanded: (id: string) => boolean): string[] {
   const out: string[] = []
