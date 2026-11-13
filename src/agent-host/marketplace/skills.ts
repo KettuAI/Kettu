@@ -18,12 +18,13 @@ import {
   writeFile,
 } from 'node:fs/promises'
 import path from 'node:path'
-import type {
-  AgentOwnSkill,
-  CatalogSkill,
-  MarketSkill,
-  MarketSkills,
-  SkillSource,
+import {
+  MARKET_KEPT_MS,
+  type AgentOwnSkill,
+  type CatalogSkill,
+  type MarketSkill,
+  type MarketSkills,
+  type SkillSource,
 } from '@shared/marketplace'
 import type { Platform } from '@shared/platform'
 import { harnessOf, type AgentId } from '@shared/thread'
@@ -50,7 +51,6 @@ const CATALOG_URL = 'https://codeload.github.com/anthropics/skills/tar.gz/refs/h
 const CATALOG_REPOSITORY = 'https://github.com/anthropics/skills'
 const CATALOG_PREFIX = 'anthropics/skills:'
 const CATALOG_FOLDER = 'skills'
-const DAY_MS = 24 * 60 * 60_000
 /** A copied skill's folder stays this long without an entry, which the settings add after it. */
 export const PRUNE_GRACE_MS = 10 * 60_000
 const TAR_LIMITS: TarLimits = {
@@ -243,9 +243,13 @@ export class MarketSkillsService {
     return path.join(this.root, 'catalog', 'anthropics-skills', dir)
   }
 
-  /** The catalog and the agents' own skills; the catalog is read again a day on, or on `refresh`. */
-  async skills(refresh = false): Promise<MarketSkills> {
-    const [error, own] = await Promise.all([this.readCatalog(refresh), this.ownSkills()])
+  /**
+   * The catalog and the agents' own skills; the catalog is read again a day on, or on `refresh`.
+   * `cached` takes any copy of the catalog there is, however old, and says whether it is.
+   */
+  async skills(refresh = false, cached = false): Promise<MarketSkills> {
+    const [read, own] = await Promise.all([this.readCatalog(refresh, cached), this.ownSkills()])
+    const { error, stale } = read
     const kept = await this.load()
     const catalog = kept.skills.map((skill): CatalogSkill => ({
       id: `${CATALOG_PREFIX}${skill.name}`,
@@ -257,7 +261,7 @@ export class MarketSkillsService {
       path: `${CATALOG_FOLDER}/${skill.name}`,
       version: kept.commit,
     }))
-    return { catalog, own, error }
+    return { catalog, own, error, ...(cached && { stale }) }
   }
 
   /** Copies a skill's files onto the host and returns the entry the settings then keep. */
@@ -389,7 +393,7 @@ export class MarketSkillsService {
       throw new HostError('invalid_params', `${id} is not in the catalog`)
     let kept = await this.load()
     if (kept.dir === null) {
-      await this.readCatalog(false)
+      await this.readCatalog(false, false)
       kept = await this.load()
     }
     const name = id.slice(CATALOG_PREFIX.length)
@@ -496,20 +500,27 @@ export class MarketSkillsService {
     }
   }
 
-  /** Reads the catalog again when it is a day old or `refresh` asks; the reason when it could not. */
-  private readCatalog(refresh: boolean): Promise<string | null> {
-    this.reading ??= this.readCatalogNow(refresh).finally(() => (this.reading = null))
-    return this.reading
-  }
-
-  private async readCatalogNow(refresh: boolean): Promise<string | null> {
+  /**
+   * Reads the catalog again when it is a day old or `refresh` asks, unless `cached` takes the copy
+   * there is; the reason when it could not, and whether the copy is old.
+   */
+  private async readCatalog(
+    refresh: boolean,
+    cached: boolean,
+  ): Promise<{ error: string | null; stale: boolean }> {
     const kept = await this.load()
-    const fresh =
+    const there =
       kept.fetchedAt !== null &&
       kept.dir !== null &&
-      this.now() - kept.fetchedAt < DAY_MS &&
       (await stat(this.catalogDir(kept.dir)).catch(() => null)) !== null
-    if (fresh && !refresh) return null
+    const old = kept.fetchedAt === null || this.now() - kept.fetchedAt >= MARKET_KEPT_MS.skills
+    if (there && !refresh && (!old || cached)) return { error: null, stale: old }
+    this.reading ??= this.readCatalogNow().finally(() => (this.reading = null))
+    return { error: await this.reading, stale: false }
+  }
+
+  private async readCatalogNow(): Promise<string | null> {
+    const kept = await this.load()
     const partial = this.catalogDir(`${PARTIAL.slice(1)}${randomUUID()}`)
     try {
       const tarball = await this.download(CATALOG_URL)

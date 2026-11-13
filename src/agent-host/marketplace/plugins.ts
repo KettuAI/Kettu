@@ -3,15 +3,16 @@
 // and the changes, made the same way in the agent's configuration.
 
 import path from 'node:path'
-import type {
-  CatalogPlugin,
-  InstalledPlugin,
-  MarketPlugins,
-  PluginDetails,
-  PluginHarness,
-  PluginLogo,
-  PluginMarketplace,
-  PluginScope,
+import {
+  MARKET_KEPT_MS,
+  type CatalogPlugin,
+  type InstalledPlugin,
+  type MarketPlugins,
+  type PluginDetails,
+  type PluginHarness,
+  type PluginLogo,
+  type PluginMarketplace,
+  type PluginScope,
 } from '@shared/marketplace'
 import type { Platform } from '@shared/platform'
 import { harnessOf, type AgentId } from '@shared/thread'
@@ -23,8 +24,6 @@ import * as claude from './claude-plugins'
 import * as codex from './codex-plugins'
 import type { PluginLogoPaths } from './codex-plugins'
 import { readLogo } from './plugin-logo'
-
-const HOUR_MS = 60 * 60_000
 
 /** What one agent's harness reported, as kept. */
 interface AgentPlugins {
@@ -200,24 +199,33 @@ export class MarketPluginsService {
     this.now = deps.now ?? Date.now
   }
 
-  /** Every agent's plugins, each from the hour's copy unless `refresh` reads them again. */
-  async plugins(refresh = false): Promise<MarketPlugins> {
+  /**
+   * Every agent's plugins, each from the hour's copy unless `refresh` reads them again; `cached`
+   * takes any copy there is, however old, and says whether one is.
+   */
+  async plugins(refresh = false, cached = false): Promise<MarketPlugins> {
     const kept = await this.load()
     const out: MarketPlugins = { catalog: [], installed: [], marketplaces: [], errors: [] }
     const seen = new Set<string>()
     const agentIds = await this.deps.agents()
+    let stale = false
     const results = await Promise.all(
       agentIds.map(async (agentId): Promise<{ entry: AgentPlugins | null; error?: string }> => {
-        const cached = kept.agents[agentId]
-        if (!refresh && cached && this.now() - cached.at < HOUR_MS) return { entry: cached }
+        const copy = kept.agents[agentId]
+        const old = !copy || this.now() - copy.at >= MARKET_KEPT_MS.plugins
+        if (!refresh && copy && (!old || cached)) {
+          stale ||= old
+          return { entry: copy }
+        }
         try {
           return { entry: await this.read(agentId) }
         } catch (error) {
           // The lists from before stand in, with the reason they are not new.
-          return { entry: cached ?? null, error: (error as Error).message }
+          return { entry: copy ?? null, error: (error as Error).message }
         }
       }),
     )
+    if (cached) out.stale = stale
     results.forEach(({ entry, error }, index) => {
       if (error !== undefined) out.errors.push({ agentId: agentIds[index]!, message: error })
       if (!entry) return

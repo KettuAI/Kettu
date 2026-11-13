@@ -3,16 +3,16 @@
 // When the registry cannot be reached, the catalog comes from what was kept, with the reason.
 
 import path from 'node:path'
-import type {
-  CatalogSection,
-  CatalogServer,
-  MarketCatalog,
-  MarketSearch,
+import {
+  MARKET_KEPT_MS,
+  type CatalogSection,
+  type CatalogServer,
+  type MarketCatalog,
+  type MarketSearch,
 } from '@shared/marketplace'
 import { JsonFile, type LogFn } from '../storage'
 import { catalogServer, REGISTRY_URL, type Listing } from './registry'
 
-const DAY_MS = 24 * 60 * 60_000
 const SEARCH_MS = 5 * 60_000
 const SEARCHES = 50
 const SEARCH_LIMIT = 30
@@ -214,11 +214,16 @@ export class MarketCatalogService {
     this.now = options.now ?? Date.now
   }
 
-  /** The catalog, from the day's copy unless `refresh` asks the registry again. */
-  async catalog(refresh = false): Promise<MarketCatalog> {
+  /**
+   * The catalog, from the day's copy unless `refresh` asks the registry again; `cached` takes any
+   * copy there is, however old, and says whether it is.
+   */
+  async catalog(refresh = false, cached = false): Promise<MarketCatalog> {
     const kept = await this.load()
-    if (!refresh && kept.fetchedAt !== null && this.now() - kept.fetchedAt < DAY_MS) {
-      return { sections: catalogSections(kept.entries), fetchedAt: kept.fetchedAt, error: null }
+    const old = kept.fetchedAt === null || this.now() - kept.fetchedAt >= MARKET_KEPT_MS.catalog
+    if (!refresh && kept.fetchedAt !== null && (!old || cached)) {
+      const sections = catalogSections(kept.entries)
+      return { sections, fetchedAt: kept.fetchedAt, error: null, ...(cached && { stale: old }) }
     }
     this.reading ??= this.read().finally(() => (this.reading = null))
     return this.reading

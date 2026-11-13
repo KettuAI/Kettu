@@ -436,7 +436,7 @@ function usePluginsRead(): void {
   const { useMarketplaceStore } = useHostScope()
   useEffect(() => {
     const store = useMarketplaceStore.getState()
-    if (!store.plugins && !store.pluginsLoading) void store.loadPlugins()
+    if (!store.plugins && !store.pluginsLoading) void store.loadPlugins(false, true)
   }, [useMarketplaceStore])
 }
 
@@ -444,7 +444,7 @@ function useSkillsRead(): void {
   const { useMarketplaceStore } = useHostScope()
   useEffect(() => {
     const store = useMarketplaceStore.getState()
-    if (!store.skills && !store.skillsLoading) void store.loadSkills()
+    if (!store.skills && !store.skillsLoading) void store.loadSkills(false, true)
   }, [useMarketplaceStore])
 }
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { CatalogPlugin } from '@shared/marketplace'
-import { pluginsFile } from './plugins'
+import { MarketPluginsService, pluginsFile } from './plugins'
 
 function plugin(name: string, installs: number | null = 10): CatalogPlugin {
   return {
@@ -104,5 +104,52 @@ describe('the kept plugin lists', () => {
     const loaded = await pluginsFile(dir, log).load()
     expect(Object.keys(loaded.agents)).toEqual(['claude-code'])
     expect(loaded.agents['claude-code']!.catalog).toEqual([plugin('review')])
+  })
+})
+
+describe('a cached read of the plugins', () => {
+  const at = 1_700_000_000_000
+  async function service(now: number) {
+    const file = pluginsFile(dir, log)
+    const kept = await file.load()
+    kept.agents['claude-code'] = entry([plugin('review')])
+    file.save(kept)
+    await file.flush()
+    const asked: string[] = []
+    const plugins = new MarketPluginsService({
+      file,
+      log,
+      platform: 'darwin',
+      agents: async () => ['claude-code'],
+      program: async (agentId) => {
+        asked.push(agentId)
+        return null
+      },
+      appServer: async () => {
+        throw new Error('not started in this test')
+      },
+      now: () => now,
+    })
+    return { plugins, asked }
+  }
+
+  it('answers from a copy older than the hour without asking the harness, saying so', async () => {
+    const { plugins, asked } = await service(at + 2 * 60 * 60_000)
+    const answer = await plugins.plugins(false, true)
+    expect(answer.catalog).toEqual([plugin('review')])
+    expect(answer.stale).toBe(true)
+    expect(asked).toEqual([])
+  })
+
+  it('says a copy within the hour is not old', async () => {
+    const { plugins } = await service(at + 60_000)
+    expect((await plugins.plugins(false, true)).stale).toBe(false)
+  })
+
+  it('still reads an old copy again without cached', async () => {
+    const { plugins, asked } = await service(at + 2 * 60 * 60_000)
+    const answer = await plugins.plugins()
+    expect(asked).toEqual(['claude-code'])
+    expect(answer.stale).toBeUndefined()
   })
 })
