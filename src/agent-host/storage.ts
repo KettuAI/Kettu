@@ -974,6 +974,9 @@ export function sessionsFile(userDataPath: string, log: LogFn): JsonFile<Session
     parse: parseSessionsFile,
     empty: () => ({ version: 1, sessions: [] }),
     log,
+    // Every change of any session rewrites the whole index: the changes of 2 s share one write.
+    debounceMs: 2_000,
+    compact: true,
   })
 }
 
