@@ -7037,7 +7037,7 @@ export class SessionManager {
     from: FromSession,
   ): Promise<'sent' | 'queued'> {
     const content: UserContent[] = [{ type: 'text', text }]
-    this.unarchive(sessionId)
+    await this.unarchive(sessionId)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
@@ -7347,17 +7347,22 @@ export class SessionManager {
   }
 
   /** Brings back the archived session at the top of this one's tree, or the session itself. */
-  unarchive(sessionId: string): void {
+  async unarchive(sessionId: string): Promise<void> {
     let record = this.recordOf(sessionId)
-    if (record.archivedAt !== undefined) {
-      delete record.archivedAt
-      this.saveRecord(record.id)
-      return
+    if (record.archivedAt === undefined) {
+      while (record.parentId !== null && this.has(record.parentId)) {
+        record = this.recordOf(record.parentId)
+      }
+      if (record.archivedAt === undefined) return
     }
-    while (record.parentId !== null && this.has(record.parentId)) {
-      record = this.recordOf(record.parentId)
+    // The sidebar lists only the projects in the list, which the user may have removed it from.
+    const { projectPath } = record
+    const listed = this.deps.projects
+      .list()
+      .some((project) => samePath(project.path, projectPath, this.deps.platform))
+    if (!listed && !this.deps.scratch.contains(projectPath)) {
+      await this.deps.projects.add(projectPath)
     }
-    if (record.archivedAt === undefined) return
     delete record.archivedAt
     this.saveRecord(record.id)
   }

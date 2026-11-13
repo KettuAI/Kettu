@@ -7,7 +7,7 @@ import type { Diagnostics } from './diagnostics'
 import type { Projects } from './projects'
 import type { ScratchFolders } from './scratch'
 import { SessionManager, type SessionEvents } from './sessions'
-import { returnedFile, sessionsFile, type SessionsFile } from './storage'
+import { returnedFile, sessionsFile, type SessionRecord, type SessionsFile } from './storage'
 
 let dir: string
 
@@ -33,6 +33,7 @@ function manager(projects: Partial<Projects> = {}) {
       sessionsChanged: () => {},
     } as unknown as AgentManager,
     projects: {
+      list: () => [],
       resolveDirectory: async (folder: string) => folder,
       add: async (folder: string) => {
         added.push(folder)
@@ -73,5 +74,33 @@ describe('the session index', () => {
     await vi.waitFor(async () =>
       expect((await index())?.sessions.map((record) => record.id)).toEqual([summary.id]),
     )
+  })
+})
+
+describe('restoring an archived session', () => {
+  const archived: SessionRecord = {
+    id: 's1',
+    agentId: 'claude-code',
+    acpSessionId: 'acp-1',
+    projectPath: '/repo',
+    title: 'Fix the build',
+    createdAt: 1,
+    updatedAt: 2,
+    lastViewedAt: null,
+    parentId: null,
+    origin: 'user',
+    description: null,
+    branch: null,
+    archivedAt: 3,
+  }
+
+  it('puts its project back in the list, which the sidebar shows it under', async () => {
+    const store = sessionsFile(dir, log)
+    store.save({ version: 1, sessions: [archived] })
+    await store.flush()
+    const { sessions, added } = manager()
+    await sessions.load()
+    await sessions.unarchive('s1')
+    expect(added).toEqual(['/repo'])
   })
 })
