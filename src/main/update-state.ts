@@ -178,6 +178,9 @@ export function nextState(
       return { kind: 'error', message: event.message, manual: true, move: true }
     case 'error':
       if (event.manual) return { kind: 'error', message: event.message, manual: true }
+      // A failure after the download was ready, as Squirrel.Mac's check of it, leaves nothing to
+      // install, so Restart goes; the next check tries again.
+      if (state.kind === 'ready') return { kind: 'error', message: event.message, manual: false }
       // Automatic failures are only logged and retried at the next check, so the state falls
       // back to what was known before.
       if (state.kind === 'downloading') return available(state.version, context)
