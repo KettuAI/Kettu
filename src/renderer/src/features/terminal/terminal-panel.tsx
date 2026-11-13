@@ -81,7 +81,7 @@ export function TerminalPanel({
   const activeId = useTerminalsStore((s) => s.active[panel])
   const rightId = useTerminalsStore((s) => s.split[panel] ?? null)
   const side = useTerminalsStore((s) => s.focusedSide[panel] ?? 'left')
-  const error = useTerminalsStore((s) => s.error)
+  const error = useTerminalsStore((s) => s.errors[panel] ?? null)
   const [creating, setCreating] = useState(false)
   // Only a start that takes a while shows its Starting tab, so a quick one shows its tab at once.
   const [slowStart, setSlowStart] = useState(false)

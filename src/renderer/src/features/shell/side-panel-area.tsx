@@ -127,7 +127,7 @@ export function SidePanelArea({
     previous.current = now
     if (!open || !panel) return
     let stale = false
-    void loadTerminals(projectPath).then((loaded) => {
+    void loadTerminals(projectPath, panel).then((loaded) => {
       finishTerminalLoad(projectPath, panel, { explicitOpen: tracked.explicitOpen, stale, loaded })
     })
     return () => {

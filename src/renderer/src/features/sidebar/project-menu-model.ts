@@ -31,7 +31,7 @@ export async function openProjectTerminal(projectPath: string): Promise<void> {
   const draft = newSessionPanel(projectPath)
   toggleTerminal(draft, true)
   // Shown together with its New session, the pane leaves starting one to whoever switched.
-  await loadTerminals(projectPath)
+  await loadTerminals(projectPath, draft)
   if (terminalsOf(useTerminalsStore.getState().byId, draft).length === 0) {
     await createTerminal(projectPath, draft)
   }

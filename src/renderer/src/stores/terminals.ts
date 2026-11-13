@@ -37,7 +37,7 @@ interface TerminalsStore {
   // does; one that shows on its own, such as on switching sessions, leaves the focus where it is.
   focusing: string | null
   connection: PortConnectionState
-  error: string | null
+  errors: Record<string, string> // panel -> its last failure, until a terminal starts there
 }
 
 export const useTerminalsStore = create<TerminalsStore>()(() => ({
@@ -48,8 +48,35 @@ export const useTerminalsStore = create<TerminalsStore>()(() => ({
   focusedSide: {},
   focusing: null,
   connection: 'connected',
-  error: null,
+  errors: {},
 }))
+
+/** Records a failure in the side panels it happened in, or clears theirs with null. */
+function setError(panels: Iterable<string>, error: unknown): void {
+  const message = error === null ? null : errorMessage(error)
+  useTerminalsStore.setState((s) => {
+    const errors = { ...s.errors }
+    let changed = false
+    for (const panel of panels) {
+      if ((errors[panel] ?? null) === message) continue
+      if (message === null) delete errors[panel]
+      else errors[panel] = message
+      changed = true
+    }
+    return changed ? { errors } : s
+  })
+}
+
+/** The panel a terminal shows in, as its store last heard, for its failures. */
+function panelsOf(ids: Iterable<string>): string[] {
+  const { byId } = useTerminalsStore.getState()
+  const panels = new Set<string>()
+  for (const id of ids) {
+    const t = byId[id]
+    if (t) panels.add(terminalPanel(t))
+  }
+  return [...panels]
+}
 
 type Sink = (data: string) => void
 const sinks = new Map<string, Sink>()
@@ -335,14 +362,17 @@ export function initTerminals(): void {
   })
 }
 
-/** Lists a project's terminals, for example after a reload of the window. False when the list fails. */
-export async function loadTerminals(projectPath: string): Promise<boolean> {
+/**
+ * Lists a project's terminals, for example after a reload of the window. False when the list
+ * fails, which the side panel that asked, if any, shows.
+ */
+export async function loadTerminals(projectPath: string, panel?: string): Promise<boolean> {
   try {
     const list = await terminals('terminals.list', { projectPath })
     for (const info of list) upsert(info)
     return true
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    if (panel !== undefined) setError([panel], error)
     return false
   }
 }
@@ -380,7 +410,7 @@ async function startTerminal(
   options?: CreateTerminalOptions,
 ): Promise<TerminalInfo | null> {
   beginCreate(panel)
-  useTerminalsStore.setState({ error: null })
+  setError([panel], null)
   const sessionId = panelSession(panel)
   try {
     const info = await terminals('terminals.create', {
@@ -402,7 +432,7 @@ async function startTerminal(
     upsert(info, options?.owner ?? null)
     return info
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    setError([panel], error)
     return null
   } finally {
     endCreate(panel)
@@ -432,7 +462,7 @@ export async function assignTerminals(projectPath: string, sessionId: string): P
   try {
     await terminals('terminals.assign', { projectPath, sessionId })
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    setError([sessionId], error)
   }
 }
 
@@ -521,7 +551,7 @@ export async function interruptTerminal(id: string): Promise<void> {
   try {
     await terminals('terminals.input', { id, data: '\x03' })
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    setError(panelsOf([id]), error)
   }
 }
 
@@ -551,12 +581,12 @@ export async function killTerminal(id: string): Promise<void> {
   try {
     await terminals('terminals.kill', { id })
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    setError(panelsOf([id]), error)
   }
 }
 
 export async function restartTerminal(id: string): Promise<void> {
-  useTerminalsStore.setState({ error: null })
+  setError(panelsOf([id]), null)
   try {
     const info = await terminals('terminals.restart', { id })
     // A new shell the user started: no agent's, with none of the old one's output.
@@ -567,7 +597,7 @@ export async function restartTerminal(id: string): Promise<void> {
     })
     upsert(info)
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    setError(panelsOf([id]), error)
   }
 }
 
@@ -610,7 +640,7 @@ export async function reattachTerminals(hostId: string): Promise<void> {
       }),
     )
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    setError(panelsOf(known.map((t) => t.id)), error)
   }
 }
 
@@ -623,7 +653,12 @@ async function reconcileTerminals(): Promise<void> {
     markStale((id) => terminalHost(id) === null && !alive.has(id))
     for (const info of list) upsert(info)
   } catch (error) {
-    useTerminalsStore.setState({ error: errorMessage(error) })
+    setError(
+      panelsOf(
+        Object.keys(useTerminalsStore.getState().byId).filter((id) => terminalHost(id) === null),
+      ),
+      error,
+    )
   }
 }
 
@@ -637,7 +672,7 @@ export async function replaceStale(id: string): Promise<void> {
     try {
       await window.kettu.terminals.restart()
     } catch (error) {
-      useTerminalsStore.setState({ error: errorMessage(error) })
+      setError([terminalPanel(old)], error)
       return
     }
   }
