@@ -168,8 +168,8 @@
     }
   },
   "projectHooks": {
-    "where": "来自项目的 .claude 设置，在这台电脑上以你的权限运行。允许之前，这个会话不运行任何 hook，包括你自己的。",
-    "hooks": "Hooks",
+    "where": "这个项目的 .claude 设置会在特定时刻自动执行这些命令，比如会话开始时，以你的权限在这台电脑上运行。允许之前，这个会话不会自动执行任何命令，包括你自己设置的。",
+    "hooks": "命令",
     "decision": {
       "use": "运行",
       "all": "总是运行",
@@ -809,7 +809,7 @@
       "device": "使用设备",
       "app": "使用应用",
       "projectMcp": "启动 MCP 服务器",
-      "projectHooks": "运行项目的 hooks"
+      "projectHooks": "运行这个项目设为自动执行的命令"
     }
   },
   "worktree": {
