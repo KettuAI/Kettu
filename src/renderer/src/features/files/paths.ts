@@ -10,20 +10,6 @@ export interface PathMatch {
 
 const SEPARATORS = new Set(['/', '-', '_', '.', ' '])
 
-/**
- * Whether the query's characters appear in the path in order, ignoring case, and how well:
- * consecutive characters, characters at the start of a word and characters in the file name
- * count for more, and a shorter path wins a tie. Null when they do not appear. A folder's path
- * ends in `/`, and its last segment is its name.
- */
-export function matchPath(query: string, path: string): PathMatch | null {
-  const q = normalizeQuery(query)
-  if (!q) return { path, score: 0, positions: [] }
-  const positions = new Array<number>(q.length)
-  const score = scorePath(q, path, path.toLowerCase(), positions)
-  return score === null ? null : { path, score, positions }
-}
-
 function normalizeQuery(query: string): string {
   return query.toLowerCase().replace(/\s+/g, '')
 }
@@ -65,11 +51,18 @@ const ranksBefore = (score: number, path: string, other: PathMatch): boolean =>
 const lowerCase = new WeakMap<readonly string[], string[]>()
 
 /**
- * The best `limit` matches, ranked as `filterPaths` ranks them, without sorting every match, for
- * a list too long to rank on each keystroke. A list's lowercase form is kept while it lives.
+ * The best `limit` paths for the query, without sorting every match, for a list too long to rank
+ * on each keystroke, and how many matched in all. The query's characters must appear in the path
+ * in order, ignoring case and spaces; consecutive characters, characters at the start of a word
+ * and characters in the file name count for more, and a shorter path wins a tie. A folder's path
+ * ends in `/`, and its last segment is its name. A list's lowercase form is kept while it lives.
  */
-export function bestPaths(query: string, paths: readonly string[], limit: number): PathMatch[] {
-  if (limit <= 0) return []
+export function rankPaths(
+  query: string,
+  paths: readonly string[],
+  limit: number,
+): { matches: PathMatch[]; total: number } {
+  if (limit <= 0) return { matches: [], total: 0 }
   const q = normalizeQuery(query)
   let lower = lowerCase.get(paths)
   if (!lower) {
@@ -78,10 +71,12 @@ export function bestPaths(query: string, paths: readonly string[], limit: number
   }
   const best: PathMatch[] = []
   const positions = new Array<number>(q.length)
+  let total = 0
   for (let i = 0; i < paths.length; i++) {
     const path = paths[i]!
     const score = q ? scorePath(q, path, lower[i]!, positions) : 0
     if (score === null) continue
+    total++
     if (best.length === limit && !ranksBefore(score, path, best[limit - 1]!)) continue
     let low = 0
     let high = best.length
@@ -93,22 +88,12 @@ export function bestPaths(query: string, paths: readonly string[], limit: number
     best.splice(low, 0, { path, score, positions: positions.slice() })
     if (best.length > limit) best.pop()
   }
-  return best
+  return { matches: best, total }
 }
 
-/** The paths that match, best first, at most `limit` of them, and how many matched in all. */
-export function filterPaths(
-  query: string,
-  paths: readonly string[],
-  limit: number,
-): { matches: PathMatch[]; total: number } {
-  const matches: PathMatch[] = []
-  for (const path of paths) {
-    const match = matchPath(query, path)
-    if (match) matches.push(match)
-  }
-  matches.sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1))
-  return { matches: matches.slice(0, limit), total: matches.length }
+/** The best `limit` matches, ranked as `rankPaths` ranks them. */
+export function bestPaths(query: string, paths: readonly string[], limit: number): PathMatch[] {
+  return rankPaths(query, paths, limit).matches
 }
 
 export interface Folder {

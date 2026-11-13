@@ -129,12 +129,29 @@ function dropBuffer(projectPath: string, path: string): void {
 
 const inFlight = new Map<string, Promise<void>>()
 
+/** By project, how many views show its list now: the Files pane and an open `@` mention list. */
+const watchers = new Map<string, number>()
+
+/** Projects whose working tree changed since their list was read, while nothing showed it. */
+const staleLists = new Set<string>()
+
+const samePaths = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((path, i) => path === b[i])
+
 /** Lists the project's files; one request at a time per project. */
 export function loadFiles(projectPath: string): Promise<void> {
   const running = inFlight.get(projectPath)
   if (running) return running
+  staleLists.delete(projectPath)
   const request = host('files.list', { projectPath })
-    .then(({ paths, truncated }) => ({ paths, known: new Set(paths), truncated, error: null }))
+    .then(({ paths, truncated }): ProjectFiles => {
+      // An unchanged list keeps its arrays, so nothing that indexes them works again.
+      const before = useFilesStore.getState().byProject[projectPath]
+      if (before && !before.error && before.truncated === truncated) {
+        if (samePaths(before.paths, paths)) return before
+      }
+      return { paths, known: new Set(paths), truncated, error: null }
+    })
     .catch((error: unknown) => {
       // A failed refresh keeps the list it had.
       const before = useFilesStore.getState().byProject[projectPath]
@@ -146,6 +163,7 @@ export function loadFiles(projectPath: string): Promise<void> {
       }
     })
     .then((files) => {
+      if (useFilesStore.getState().byProject[projectPath] === files) return
       useFilesStore.setState((s) => ({ byProject: { ...s.byProject, [projectPath]: files } }))
     })
     .finally(() => inFlight.delete(projectPath))
@@ -156,6 +174,28 @@ export function loadFiles(projectPath: string): Promise<void> {
 /** Lists the project's files unless they are already known. */
 export function ensureFiles(projectPath: string): void {
   if (!useFilesStore.getState().byProject[projectPath]) void loadFiles(projectPath)
+}
+
+/** Lists the project's files unless they are known and nothing changed on disk since. */
+export function ensureFreshFiles(projectPath: string): void {
+  if (!useFilesStore.getState().byProject[projectPath] || staleLists.has(projectPath)) {
+    void loadFiles(projectPath)
+  }
+}
+
+/**
+ * Keeps the project's list current while a view shows it: read now if it is unknown or stale,
+ * then again after each change on disk. Returns the call that stops watching.
+ */
+export function watchFiles(projectPath: string): () => void {
+  watchers.set(projectPath, (watchers.get(projectPath) ?? 0) + 1)
+  if (!useFilesStore.getState().byProject[projectPath]) void loadFiles(projectPath)
+  else if (staleLists.has(projectPath)) refreshFiles(projectPath)
+  return () => {
+    const count = (watchers.get(projectPath) ?? 1) - 1
+    if (count > 0) watchers.set(projectPath, count)
+    else watchers.delete(projectPath)
+  }
 }
 
 function fresh(path: string, line: number | null, content: FileContent | null): OpenFile {
@@ -550,13 +590,18 @@ export function closeDiff(projectPath: string): void {
   })
 }
 
-// A new git status means the working tree changed, after an agent's edit as after one of yours;
-// a burst of them refreshes once.
+// A new git status means the working tree changed, after an agent's edit as after one of yours,
+// or the window came back into focus; a burst of them refreshes once. Only a list a view shows is
+// read again; the others wait until one shows them.
 const REFRESH_DELAY_MS = 300
 const timers = new Map<string, ReturnType<typeof setTimeout>>()
 useGitStore.subscribe((state, previous) => {
   for (const [projectPath, status] of Object.entries(state.status)) {
     if (status === previous.status[projectPath]) continue
+    if (!watchers.has(projectPath)) {
+      if (useFilesStore.getState().byProject[projectPath]) staleLists.add(projectPath)
+      continue
+    }
     clearTimeout(timers.get(projectPath))
     timers.set(
       projectPath,

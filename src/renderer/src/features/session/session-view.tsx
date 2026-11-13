@@ -13,7 +13,7 @@ import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
-import { ensureFiles } from '@renderer/stores/files'
+import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
@@ -82,9 +82,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     void focusSession(sessionId)
   }, [sessionId])
 
-  // File references in replies link to the project's files once their list is known.
   const folder = sessionFolder(summary)
-  useEffect(() => ensureFiles(folder), [folder])
 
   const [actionError, setActionError] = useState<string | null>(null)
   // A queued message's failed action; the stack clears it with its next action or its last item.
@@ -92,6 +90,12 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const gutter = useScrollbarGutter()
   const status = session?.status ?? summary.status
   const running = status === 'running' || status === 'awaiting_permission'
+  // File references in replies link to the project's files once their list is known: read when
+  // the session shows, and again after a turn that changed the files.
+  useEffect(() => {
+    if (running) ensureFiles(folder)
+    else ensureFreshFiles(folder)
+  }, [folder, running])
   const fail = useCallback((e: unknown) => setActionError(errorMessage(e)), [])
   // Settings › Agents of the host the agent is on.
   const openAgents = (agentId: AgentId | null) => {

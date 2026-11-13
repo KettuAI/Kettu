@@ -1,7 +1,7 @@
 import { useDeferredValue, useEffect, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { ThreadState } from '@shared/thread'
-import { loadFiles, useFilesStore, type ProjectFiles } from '@renderer/stores/files'
+import { loadFiles, useFilesStore, watchFiles, type ProjectFiles } from '@renderer/stores/files'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { foldersOf, matchMentions, usedFiles, type MentionRow } from './mentions'
 
@@ -38,7 +38,7 @@ function usedIn(
 
 /**
  * The rows for a mention's query, or none while no mention is typed. The project's files are
- * listed again as each mention starts, so files made since show up.
+ * listed again as each mention starts, and while it is open, so files made since show up.
  */
 export function useMentionList(
   sessionId: string,
@@ -47,7 +47,9 @@ export function useMentionList(
 ): MentionList {
   const active = query !== null && projectPath !== null
   useEffect(() => {
-    if (active) void loadFiles(projectPath)
+    if (!active) return
+    void loadFiles(projectPath)
+    return watchFiles(projectPath)
   }, [active, projectPath])
   const files = useFilesStore((s) => (active ? s.byProject[projectPath] : undefined))
   // Matching tens of thousands of paths can trail the typing rather than hold it up; the rows
