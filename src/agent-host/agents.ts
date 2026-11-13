@@ -116,7 +116,7 @@ import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import { hasContextReport, limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
-import { allowedLimit, mergeReadLimit, planWindow } from './session-updates'
+import { allowedLimit, mergeReadLimits, planWindow } from './session-updates'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile, RememberedInit } from './storage'
 import { compareVersions } from './versions'
@@ -2481,9 +2481,9 @@ export class AgentManager {
     } else {
       return
     }
-    for (const limit of limits) {
-      slot.limits.set(limit.window, mergeReadLimit(slot.limits.get(limit.window), limit, now))
-    }
+    const merged = mergeReadLimits([...slot.limits.values()], limits, now)
+    slot.limits.clear()
+    for (const limit of merged) slot.limits.set(limit.window, limit)
     this.emit(slot)
   }
 

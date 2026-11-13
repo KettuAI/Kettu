@@ -425,3 +425,27 @@ export function mergeReadLimit(
   if (before.state === 'reached' && read.usedPercent !== null) return read
   return { ...read, state: before.state }
 }
+
+/**
+ * The windows after a read of the plan limits. A read lists every window the plan has, so one it
+ * no longer lists is gone, as a plan without a 5-hour window answers it null; extra usage comes
+ * only in rate limit events and stays. A read with no windows changes nothing, since Claude
+ * Code's read answers none when it fails.
+ */
+export function mergeReadLimits(
+  known: readonly PlanLimit[],
+  read: readonly PlanLimit[],
+  now: number,
+): PlanLimit[] {
+  if (read.length === 0) return [...known]
+  const listed = new Set(read.map((limit) => limit.window))
+  const kept = known.filter((limit) => limit.window === 'overage' && !listed.has('overage'))
+  const merged = read.map((limit) =>
+    mergeReadLimit(
+      known.find((before) => before.window === limit.window),
+      limit,
+      now,
+    ),
+  )
+  return [...merged, ...kept]
+}
