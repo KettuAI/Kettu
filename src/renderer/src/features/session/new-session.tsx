@@ -68,7 +68,7 @@ import { useAddMenu } from './composer/add-menu'
 import { StartStyles, TrayStyles } from './composer/affect-styles'
 import { PromptBox } from './composer/prompt-box'
 import { useBlockedEnter } from './composer/use-blocked-enter'
-import { usePromptBox } from './composer/use-prompt-box'
+import { useBoxText, usePromptBox } from './composer/use-prompt-box'
 import { AgentPicker } from './new-session/agent-picker'
 import { HostMenu } from './new-session/host-menu'
 import { ProjectMenu } from './new-session/project-menu'
@@ -295,10 +295,12 @@ function DraftComposer({
     disabled: false,
     onActivity: noteActivity,
   })
-  const { text, attachments, editor } = box
+  const { attachments, editor } = box
   const ready = inScratch || (!!project && !project.missing)
-  const held = attachmentsBlock(attachments, text)
-  const holdsMessage = hasMessage(text, attachments)
+  // Read as values, so typing renders New session only when one of them changes.
+  const heldBy = useBoxText(box, (text) => attachmentsBlock(attachments, text)?.message ?? null)
+  const held = heldBy === null ? null : attachmentsBlock(attachments, box.source.text)
+  const holdsMessage = useBoxText(box, (text) => hasMessage(text, attachments))
   // A sub-session works in its parent's worktree, so only a top-level session in a repository
   // with a commit chooses one.
   const gitStatus = useWorktreeStatus(!parent && !inScratch && project ? project.path : '')
@@ -366,6 +368,7 @@ function DraftComposer({
         ? startValues(entry, picksOf(optionsState, hostId, agentId), { startMode: true })
         : null
       const preparedId = preparedFor(optionsState, hostId, agentId)?.summary?.id ?? null
+      const text = editor.current?.text() ?? box.source.text
       const content: UserContent[] = [
         ...(text.trim() ? [{ type: 'text' as const, text }] : []),
         ...attachmentContent(attachments),
@@ -394,7 +397,7 @@ function DraftComposer({
     // A missing folder is said under the box already.
     reason: project?.missing && !inScratch ? null : blocked,
     waiting: blocked !== null && blocked === held?.message && held.adding,
-    text,
+    source: box.source,
     attachments,
     send: () => void send(),
   })

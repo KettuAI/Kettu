@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { ATTACHMENT_LIMIT } from '@shared/attachments'
 import { putBackDraft } from '@renderer/app/actions'
@@ -38,6 +45,45 @@ export interface Taken {
 export type PromptBoxState = ReturnType<typeof usePromptBox>
 
 /**
+ * The box's text and caret, kept outside React state: a key or a caret move renders again only
+ * what reads a value it changed, through `useBoxText`.
+ */
+export class BoxText {
+  private readonly listeners = new Set<() => void>()
+  constructor(
+    public text: string,
+    /** The caret, or null while a range is selected, for telling which `@` word it is in. */
+    public caret: number | null = null,
+  ) {}
+
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  set(text: string, caret: number | null): void {
+    if (text === this.text && caret === this.caret) return
+    this.text = text
+    this.caret = caret
+    for (const listener of this.listeners) listener()
+  }
+}
+
+/**
+ * A value read from the box's text and caret, which renders again only when it changes, so it
+ * must be a primitive or otherwise compare equal while it means the same.
+ */
+export function useBoxText<T>(
+  box: { source: BoxText },
+  select: (text: string, caret: number | null) => T,
+): T {
+  const { source } = box
+  return useSyncExternalStore(source.subscribe, () => select(source.text, source.caret))
+}
+
+/**
  * The box's state, kept in the draft `draft`. `sessionId` is the session whose `insert-into-composer`
  * events it takes besides those for no session; null for New session. While `disabled`, nothing
  * is attached.
@@ -60,11 +106,9 @@ export function usePromptBox({
   onActivity?: () => void
 }) {
   const { t } = useTranslation('composer')
-  const [text, setText] = useState(() => readDraft(draft))
+  const [source] = useState(() => new BoxText(readDraft(draft)))
   const [error, setError] = useState<string | null>(null)
   const [slashDismissed, setSlashDismissed] = useState(false)
-  // The caret, or null while a range is selected, for telling which `@` word it is in.
-  const [caret, setCaret] = useState<number | null>(null)
   const editor = useRef<ComposerEditorHandle>(null)
   const {
     position: historyPosition,
@@ -77,9 +121,8 @@ export function usePromptBox({
     editor,
     // Not written to the draft: the draft stays what it was until the text is edited.
     onRecall: (next) => {
-      setText(next)
+      source.set(next, null)
       editor.current?.setText(next)
-      setCaret(null)
       setSlashDismissed(true)
       setError(null)
     },
@@ -152,13 +195,12 @@ export function usePromptBox({
     (added: string) => {
       const current = editor.current?.text() ?? ''
       const next = current ? `${current.replace(/\s+$/, '')}\n\n${added}` : added
-      setText(next)
+      source.set(next, null)
       writeDraft(draft, next)
-      setCaret(null)
       editor.current?.setText(next)
       requestAnimationFrame(() => editor.current?.focus())
     },
-    [draft],
+    [draft, source],
   )
 
   /** Puts the command at the start of the text, unless it starts with it already. */
@@ -168,13 +210,12 @@ export function usePromptBox({
       const command = `/${name}`
       const has = current.startsWith(command) && /^(\s|$)/.test(current.slice(command.length))
       const next = has ? current : `${command} ${current.trimStart()}`
-      setText(next)
+      source.set(next, null)
       writeDraft(draft, next)
-      setCaret(null)
       editor.current?.setText(next)
       requestAnimationFrame(() => editor.current?.focus())
     },
-    [draft],
+    [draft, source],
   )
 
   useEffect(
@@ -185,8 +226,7 @@ export function usePromptBox({
         if (event.kind === 'draft-written' && event.draft === draft) {
           closeHistory()
           const next = readDraft(draft)
-          setText(next)
-          setCaret(null)
+          source.set(next, null)
           editor.current?.setText(next)
         }
         if (
@@ -201,13 +241,13 @@ export function usePromptBox({
           addCommand(event.name)
         }
       }),
-    [draft, sessionId, closeHistory, addText, addCommand],
+    [draft, sessionId, source, closeHistory, addText, addCommand],
   )
 
   /** Typing changed the text: its state, its draft, and a slash list Esc closed. */
   const changed = (next: string) => {
     closeHistory()
-    setText(next)
+    source.set(next, source.caret)
     writeDraft(draft, next)
     onActivity?.()
     if (!next.startsWith('/')) setSlashDismissed(false)
@@ -216,18 +256,18 @@ export function usePromptBox({
   const update = (next: string, at = next.length) => {
     changed(next)
     editor.current?.setText(next, at)
-    setCaret(at)
+    source.set(next, at)
   }
 
   /** Empties the box for a send. */
   const take = (): Taken => {
     closeHistory()
-    const prompt = text
+    // The editor's own text: keys typed just before the send may not have reached a render.
+    const prompt = editor.current?.text() ?? source.text
     const held = attachments
-    setText('')
     editor.current?.setText('')
     // A draft put back after a failed send opens no mention until the caret moves.
-    setCaret(null)
+    source.set('', null)
     clearDraft(draft)
     setDraftAttachments(draft, [])
     setError(null)
@@ -273,7 +313,7 @@ export function usePromptBox({
     sessionId,
     projectPath,
     disabled,
-    text,
+    source,
     attachments,
     error,
     setError,
@@ -289,8 +329,7 @@ export function usePromptBox({
     // For the view.
     slashDismissed,
     setSlashDismissed,
-    caret,
-    setCaret,
+    setCaret: (caret: number | null) => source.set(source.text, caret),
     full,
     remote,
     pick,

@@ -1,9 +1,10 @@
 // The composer's Markdown, drawn as it is typed. The text stays Markdown, which is what is sent;
 // each element shows as the thread renders it, and the marks that make it show only where the
-// selection is while the box has focus.
+// selection is while the box has focus. CodeMirror keeps the parse, which an edit updates around
+// what it changed.
 
-import { DocInput } from '@codemirror/language'
-import type { EditorState, Range } from '@codemirror/state'
+import { defineLanguageFacet, Language, languageDataProp, syntaxTree } from '@codemirror/language'
+import type { EditorState, Extension, Range } from '@codemirror/state'
 import {
   Decoration,
   ViewPlugin,
@@ -15,10 +16,14 @@ import {
 import { GFM, parser } from '@lezer/markdown'
 import { HAN } from '@renderer/lib/han'
 
-const markdown = parser.configure(GFM)
-// Parse enough text before the viewport to recover a block's context, but not the whole draft.
-const CONTEXT = 20_000
-type SyntaxNode = ReturnType<typeof markdown.parse>['topNode']
+const data = defineLanguageFacet()
+const markdown = new Language(
+  data,
+  parser.configure([GFM, { props: [languageDataProp.add({ Document: data })] }]),
+  [],
+  'markdown',
+)
+type SyntaxNode = ReturnType<typeof syntaxTree>['topNode']
 
 class BulletWidget extends WidgetType {
   eq(): boolean {
@@ -97,42 +102,31 @@ export function previewDecorations(
   }
   // `[text](url "title")`: the text styled, the rest a mark. A link with no URL, such as `[1]`,
   // stays as typed, as the thread shows one with no definition.
-  const link = (node: SyntaxNode, offset: number) => {
+  const link = (node: SyntaxNode) => {
     if (!node.getChild('URL')) return
     const open = node.firstChild
     let close = open?.nextSibling ?? null
-    while (
-      close &&
-      !(
-        close.name === 'LinkMark' && doc.sliceString(offset + close.from, offset + close.to) === ']'
-      )
-    )
+    while (close && !(close.name === 'LinkMark' && doc.sliceString(close.from, close.to) === ']'))
       close = close.nextSibling
     if (!open || !close) return
-    if (open.to < close.from)
-      ranges.push(mark('cm-md-link').range(offset + open.to, offset + close.from))
-    if (touches(offset + node.from, offset + node.to)) {
-      show(offset + open.from, offset + open.to)
-      show(offset + close.from, offset + node.to)
+    if (open.to < close.from) ranges.push(mark('cm-md-link').range(open.to, close.from))
+    if (touches(node.from, node.to)) {
+      show(open.from, open.to)
+      show(close.from, node.to)
     } else {
-      hide(offset + open.from, offset + open.to)
-      hide(offset + close.from, offset + node.to)
+      hide(open.from, open.to)
+      hide(close.from, node.to)
     }
   }
 
+  const tree = syntaxTree(state)
   for (const { from: start, to: end } of visible) {
     if (start >= end) continue
-    // A visible range is enough to draw, but a block that begins above it needs some context.
-    const contextStart = doc.lineAt(Math.max(0, start - CONTEXT)).from
-    const contextEnd = doc.lineAt(end).to
-    const tree = markdown.parse(new DocInput(doc), [], [{ from: contextStart, to: contextEnd }])
     tree.iterate({
-      from: start - contextStart,
-      to: end - contextStart,
+      from: start,
+      to: end,
       enter: (ref) => {
-        const { name } = ref
-        const from = contextStart + ref.from
-        const to = contextStart + ref.to
+        const { name, from, to } = ref
         const node = ref.node
         const heading = HEADING.exec(name)
         if (heading) {
@@ -143,7 +137,7 @@ export function previewDecorations(
           const han = name === 'Emphasis' && HAN.test(doc.sliceString(from, to))
           ranges.push(mark(han ? 'cm-md-em-han' : INLINE.get(name)!).range(from, to))
         } else if (name === 'Link') {
-          link(node, contextStart)
+          link(node)
         } else if (INLINE_MARKS.has(name)) {
           const parent = node.parent
           if (!parent || !INLINE.has(parent.name)) return
@@ -168,14 +162,20 @@ export function previewDecorations(
 }
 
 /** The decorations, kept in step with the text, the selection, the focus, the parse and the view. */
-export const markdownPreview = ViewPlugin.fromClass(
+const preview = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet
     constructor(view: EditorView) {
       this.decorations = previewDecorations(view.state, view.hasFocus, view.visibleRanges)
     }
     update(update: ViewUpdate) {
-      if (update.docChanged || update.selectionSet || update.focusChanged || update.viewportChanged)
+      if (
+        update.docChanged ||
+        update.selectionSet ||
+        update.focusChanged ||
+        update.viewportChanged ||
+        syntaxTree(update.startState) !== syntaxTree(update.state)
+      )
         this.decorations = previewDecorations(
           update.state,
           update.view.hasFocus,
@@ -185,3 +185,5 @@ export const markdownPreview = ViewPlugin.fromClass(
   },
   { decorations: (plugin) => plugin.decorations },
 )
+
+export const markdownPreview: Extension = [markdown.extension, preview]
