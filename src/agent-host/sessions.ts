@@ -5037,6 +5037,8 @@ export class SessionManager {
   ): Promise<{
     wire: PromptBlock[]
     shown: UserContent[]
+    /** The content with the bytes of the images the thread store keeps, for a composer. */
+    written: UserContent[]
     blobs: StoredBlob[]
     ids: string[]
   }> {
@@ -5044,6 +5046,7 @@ export class SessionManager {
     const prompt = this.deps.agents.status(live.record.agentId).capabilities.prompt
     const wire: PromptBlock[] = []
     const shown: UserContent[] = []
+    const written: UserContent[] = []
     const blobs: StoredBlob[] = []
     const ids: string[] = []
     // A pasted text sent as text follows the message's text after a blank line.
@@ -5064,8 +5067,10 @@ export class SessionManager {
         const data = Buffer.from(stored.data).toString('base64')
         wire.push({ type: 'image', mimeType: stored.mime, data })
         shown.push(item)
+        written.push({ type: 'ref', ref: { kind: 'image', mimeType, data } })
         continue
       }
+      written.push(item)
       if (item.type !== 'ref' || item.ref.kind !== 'attachment') {
         wire.push(...promptBlocks([item]))
         shown.push(item)
@@ -5092,7 +5097,7 @@ export class SessionManager {
     if (wire.reduce((sum, block) => sum + blockBytes(block), 0) > PROMPT_BYTES) {
       throw invalidParams(t('session.promptTooLarge'))
     }
-    return { wire, shown, blobs, ids }
+    return { wire, shown, written, blobs, ids }
   }
 
   private async resend(live: Live, attachment: Attachment): Promise<PromptBlock> {
@@ -5780,6 +5785,8 @@ export class SessionManager {
     try {
       const resolved = await this.resolveAttachments(live, turn.content)
       if (turn.ended) return
+      // A message given back goes to a composer, which sends an image with its bytes.
+      turn.written = resolved.written
       if (resolved.ids.length > 0) {
         const entry = turn.entryId ? live.thread.byId[turn.entryId] : undefined
         if (entry?.kind === 'user') {

@@ -44,6 +44,42 @@ export interface PortHubDeps {
 
 const METHODS: ReadonlySet<string> = new Set(HOST_METHODS)
 
+const BLOB = /^[0-9a-f]{64}$/
+
+/**
+ * The value with each image it names by hash in the thread store as one that cannot show, for a
+ * device that did not send `IMAGE_REFS_FEATURE` and decodes an image only with its bytes; the
+ * same value when it names none.
+ */
+function withoutImageRefs<T>(value: T): T {
+  if (Array.isArray(value)) {
+    let out: unknown[] | null = null
+    value.forEach((item: unknown, index) => {
+      const next = withoutImageRefs(item)
+      if (next !== item) (out ??= [...value])[index] = next
+    })
+    return (out ?? value) as T
+  }
+  if (typeof value !== 'object' || value === null) return value
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) return value
+  const record = value as Record<string, unknown>
+  if (
+    record.kind === 'image' &&
+    typeof record.blob === 'string' &&
+    BLOB.test(record.blob) &&
+    typeof record.data !== 'string'
+  ) {
+    return { kind: 'unsupported', label: String(record.mimeType) } as T
+  }
+  let out: Record<string, unknown> | null = null
+  for (const key of Object.keys(record)) {
+    const item = record[key]
+    const next = withoutImageRefs(item)
+    if (next !== item) (out ??= { ...record })[key] = next
+  }
+  return (out ?? value) as T
+}
+
 function toPortError(error: unknown): PortError {
   if (isHostError(error)) return error.toPortError()
   return { code: 'internal', message: (error as Error)?.message ?? String(error) }
@@ -90,11 +126,25 @@ export class PortHub {
   }
 
   broadcast(event: HostEvent): void {
-    for (const channel of this.ports.values()) channel.send({ type: 'event', event })
+    let bytesOnly: HostEvent | null = null
+    for (const [portId, channel] of this.ports) {
+      const sent = this.readsImageRefs(portId) ? event : (bytesOnly ??= withoutImageRefs(event))
+      channel.send({ type: 'event', event: sent })
+    }
   }
 
   send(portIds: Iterable<string>, event: HostEvent): void {
-    for (const portId of portIds) this.ports.get(portId)?.send({ type: 'event', event })
+    let bytesOnly: HostEvent | null = null
+    for (const portId of portIds) {
+      const sent = this.readsImageRefs(portId) ? event : (bytesOnly ??= withoutImageRefs(event))
+      this.ports.get(portId)?.send({ type: 'event', event: sent })
+    }
+  }
+
+  /** A window's port, or a device's that reads stored images by hash. */
+  private readsImageRefs(portId: string): boolean {
+    const device = this.devices.get(portId)
+    return !device || device.imageRefs === true
   }
 
   /**
@@ -145,7 +195,11 @@ export class PortHub {
     }
     const reply = (response: FromPort<HostEvent>): void => {
       // The page may have gone while the request ran.
-      if (this.ports.has(portId)) channel.send(response)
+      if (!this.ports.has(portId)) return
+      const bytesOnly = response.type === 'response' && !this.readsImageRefs(portId)
+      channel.send(
+        bytesOnly ? { ...response, result: withoutImageRefs(response.result) } : response,
+      )
     }
     const method = message.method
     if (typeof method !== 'string' || !METHODS.has(method)) {
