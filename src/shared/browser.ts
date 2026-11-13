@@ -23,11 +23,7 @@ export type BrowserNotice =
   | { kind: 'unresponsive' }
 
 /** Who drives a page: nobody, an agent's running call, or the user until they hand back. */
-export type BrowserControlState =
-  | { kind: 'none' }
-  | { kind: 'agent' }
-  // `bar` says whether the pane shows the bar: it leaves after 10 s without a call.
-  | { kind: 'user'; bar: boolean }
+export type BrowserControlState = { kind: 'none' } | { kind: 'agent' } | { kind: 'user' }
 
 /** What the user answered a request to open a new origin. */
 export type BrowserOriginDecision = 'session' | 'project' | 'deny'
