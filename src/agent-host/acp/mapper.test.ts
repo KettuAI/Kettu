@@ -1168,7 +1168,24 @@ describe('extensions and helpers', () => {
         { status: 'allowed', rateLimitType: 'seven_day_overage_included', utilization: 1.5 },
         5,
       )?.limits,
-    ).toMatchObject([{ label: 'Weekly overage included', usedPercent: 100, state: 'ok' }])
+    ).toEqual([
+      expect.objectContaining({
+        window: 'seven_day_fable',
+        label: 'Weekly · Fable',
+        usedPercent: 100,
+        state: 'ok',
+      }),
+    ])
+    expect(
+      mapRateLimits(
+        {
+          status: 'rejected',
+          rateLimitType: 'seven_day_overage_included',
+          unifiedWindows: { seven_day_fable: { status: 'rejected', utilization: 1 } },
+        },
+        5,
+      )?.limits.map((l) => l.window),
+    ).toEqual(['seven_day_fable'])
     expect(mapRateLimits({ status: 'allowed' }, 5)).toEqual({ allowed: true, limits: [] })
     expect(mapRateLimits({ rateLimitType: 'five_hour' }, 5)).toBeNull()
     expect(mapRateLimits('nope', 5)).toBeNull()

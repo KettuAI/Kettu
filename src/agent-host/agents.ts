@@ -116,7 +116,7 @@ import { QUIT_REASON, type ToolOptions } from './process-tree'
 import { formatCommand } from './quote'
 import { hasContextReport, limitsReport, runReport, type LimitsReport } from './reports'
 import { TextRing } from './ring'
-import { allowedLimit, mergeReadLimit } from './session-updates'
+import { allowedLimit, mergeReadLimit, planWindow } from './session-updates'
 import type { EnvironmentService } from './shell-env'
 import type { AgentsFile, AgentUpdatesFile, RememberedInit } from './storage'
 import { compareVersions } from './versions'
@@ -2687,7 +2687,9 @@ export class AgentManager {
       const slot = this.slots.get(agentId)
       if (!slot || !entry) continue
       slot.account = entry.account
-      slot.limits = new Map(entry.limits.map((limit) => [limit.window, limit]))
+      // A window an earlier run kept under one of Claude Code's other names is read again.
+      const kept = entry.limits.filter((limit) => planWindow(limit.window) === limit.window)
+      slot.limits = new Map(kept.map((limit) => [limit.window, limit]))
       slot.initRecord = entry.init ?? null
       slot.apiKey = entry.apiKey === true
       slot.remembered = rememberedJson(slot)
