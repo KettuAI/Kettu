@@ -386,6 +386,7 @@ export function errorMessage(error: unknown): string {
   // The preload cannot translate, so its one error a user meets is worded here.
   if (errorCode(error) === 'host_restarted') return i18n.t('errors.hostRestarted')
   if (errorCode(error) === 'host_offline') return i18n.t('errors.hostOffline')
+  if (errorCode(error) === 'timeout') return i18n.t('errors.hostTimeout')
   if (error instanceof Error) return error.message
   if (typeof error === 'object' && error !== null && 'message' in error) {
     return String((error as { message: unknown }).message)

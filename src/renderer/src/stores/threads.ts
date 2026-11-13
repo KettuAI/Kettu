@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import {
   applyPatches,
+  coalescePatches,
   prependEntries,
   threadFromSnapshot,
   UnknownEntryError,
@@ -67,6 +68,15 @@ const fresh = new Map<string, Map<string, number>>()
 const FRESH_FOR_MS = 1000
 let queue: PatchBatch[] = []
 let frame = 0
+/**
+ * Each session's last batch in `queue`, which the session's next batch joins: a hidden window runs
+ * no frames, so without it the queue would grow with every batch for as long as it stays hidden.
+ */
+const queuedLast = new Map<string, PatchBatch>()
+/** Sessions whose queued patches were dropped for a snapshot, read once a frame runs. */
+const resync = new Set<string>()
+/** How many patches of one session wait for a frame before they give way to a snapshot. */
+const MAX_QUEUED_PATCHES = 1_000
 
 /**
  * Whether an entry arrived live in the last second rather than from a snapshot or a history
@@ -144,6 +154,9 @@ function flush(): void {
   frame = 0
   const batches = queue
   queue = []
+  queuedLast.clear()
+  const resynced = [...resync]
+  resync.clear()
   const { replicas } = useThreadsStore.getState()
   let next: Record<string, Replica> | null = null
   const refetch = new Set<string>()
@@ -177,6 +190,18 @@ function flush(): void {
   }
 
   if (next) useThreadsStore.setState({ replicas: next })
+  for (const sessionId of resynced) {
+    const hasState = () => Boolean(useThreadsStore.getState().replicas[sessionId]?.state)
+    const inFlight = snapshotsInFlight.get(sessionId)
+    if (inFlight) {
+      // That snapshot may predate the dropped patches.
+      void inFlight.then(() => {
+        if (hasState()) void fetchSnapshot(sessionId, 'sessions.snapshot')
+      })
+    } else if (hasState()) {
+      refetch.add(sessionId)
+    }
+  }
   for (const sessionId of refetch) void fetchSnapshot(sessionId, 'sessions.snapshot')
 }
 
@@ -191,10 +216,36 @@ function markFresh(batch: PatchBatch): void {
   }
 }
 
-/** Called for every `session.patches` event; batches are applied once per animation frame. */
+/**
+ * Called for every `session.patches` event; batches are applied once per animation frame. Until
+ * then a session's batches that follow each other merge into one, and past `MAX_QUEUED_PATCHES`
+ * they are dropped for a snapshot, which the replica already takes after a gap.
+ */
 export function receiveBatch(batch: PatchBatch): void {
-  queue.push(batch)
+  const { sessionId } = batch
   if (!frame) frame = requestAnimationFrame(flush)
+  // The snapshot read at the next frame holds what this batch changes.
+  if (resync.has(sessionId)) return
+  const last = queuedLast.get(sessionId)
+  if (last && firstSeq(batch) === last.seq + 1) {
+    const end = last.patches.pop()
+    last.patches.push(...coalescePatches(end ? [end, ...batch.patches] : batch.patches))
+    last.seq = batch.seq
+    if (last.patches.length > MAX_QUEUED_PATCHES) {
+      queue = queue.filter((queued) => queued.sessionId !== sessionId)
+      queuedLast.delete(sessionId)
+      resync.add(sessionId)
+    }
+    return
+  }
+  const own: PatchBatch = {
+    sessionId,
+    seq: batch.seq,
+    from: firstSeq(batch),
+    patches: [...batch.patches],
+  }
+  queue.push(own)
+  queuedLast.set(sessionId, own)
 }
 
 /**

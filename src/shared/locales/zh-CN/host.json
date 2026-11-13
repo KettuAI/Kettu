@@ -158,6 +158,7 @@
     "stillRunning": "{{agent}} 未能停止，仍在运行，请等它退出后再试",
     "noLogout": "{{agent}} 不支持退出登录",
     "noOptions": "{{agent}} 在 {{seconds}} 秒内没有给出模型",
+    "noLimits": "{{agent}} 在 {{seconds}} 秒内没有给出套餐限额",
     "initializeTimeout": "{{agent}} 没有在 {{seconds}} 秒内响应 initialize。",
     "exit": {
       "code": "{{agent}} 已退出，退出码 {{code}}",

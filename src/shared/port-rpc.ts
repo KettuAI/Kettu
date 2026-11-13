@@ -17,6 +17,7 @@ export type PortErrorCode =
   | 'host_restarted'
   | 'unavailable' // the host has no such service, as the daemon publishes nothing, or not now
   | 'host_offline' // another host this computer connects to is not connected now
+  | 'timeout' // the window stopped waiting for an answer; never sent by a host
   | 'internal'
 
 export interface PortError {

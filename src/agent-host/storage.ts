@@ -103,6 +103,10 @@ export interface JsonFileOptions<T> {
   empty(): T
   log: LogFn
   debounceMs?: number
+  /** Written without indentation, for a large file that is rewritten often. */
+  compact?: boolean
+  /** What is written for the data, when the file keeps it in another shape than `parse` gives. */
+  serialize?(data: T): unknown
   now?: () => number
 }
 
@@ -194,7 +198,9 @@ export class JsonFile<T> {
     const data = this.pending
     if (data === null) return this.writing
     this.pending = null
-    const contents = `${JSON.stringify(data, null, 2)}\n`
+    const { serialize, compact } = this.options
+    const json = JSON.stringify(serialize ? serialize(data) : data, null, compact ? undefined : 2)
+    const contents = `${json}\n`
     this.writing = this.writing
       .then(() => writeFileAtomic(this.options.file, contents))
       .then(
@@ -968,6 +974,9 @@ export function sessionsFile(userDataPath: string, log: LogFn): JsonFile<Session
     parse: parseSessionsFile,
     empty: () => ({ version: 1, sessions: [] }),
     log,
+    // Every change of any session rewrites the whole index: the changes of 2 s share one write.
+    debounceMs: 2_000,
+    compact: true,
   })
 }
 

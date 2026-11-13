@@ -31,11 +31,12 @@ let noticeClosed = false
 let quitCleanly = false
 
 /**
- * Opens main's log before anything else runs. A development run logs beside its own data, as the
- * installed app's folder would otherwise be shared.
+ * Opens main's log before anything else runs. A run with a data folder of its own, a development
+ * run or one started with `--user-data-dir`, logs beside it: in the installed app's folder it
+ * would rotate the installed app's files.
  */
-export function openAppLog(devUserData: string | null, debug: boolean): void {
-  if (devUserData) app.setAppLogsPath(join(devUserData, 'logs'))
+export function openAppLog(ownUserData: string | null, debug: boolean): void {
+  if (ownUserData) app.setAppLogsPath(join(ownUserData, 'logs'))
   else app.setAppLogsPath()
   verboseRun = app.commandLine.hasSwitch('verbose')
   debugRun = debug

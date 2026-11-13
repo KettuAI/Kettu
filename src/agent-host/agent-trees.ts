@@ -34,13 +34,15 @@ interface Running {
   root: TreeRoot
   /** What its tree held when last listed. */
   members: TreeRoot[]
-  timer: ReturnType<typeof setTimeout> | null
 }
 
 const keyOf = (id: ProcessId): string => `${id.pid}:${id.startedAt}`
 
 export class AgentTrees {
   private readonly running = new Map<string, Running>()
+  /** The agents that talked since the last listing, listed together once `noteMs` pass. */
+  private readonly talking = new Set<string>()
+  private talkingTimer: ReturnType<typeof setTimeout> | null = null
   /** Processes asked to stop, kept until the grace ends; the last run's until they are asked. */
   private readonly stopping = new Set<TreeRoot[]>()
   private leftovers: TreeRoot[] = []
@@ -58,11 +60,7 @@ export class AgentTrees {
   }
 
   launched(root: ProcessId): void {
-    this.running.set(keyOf(root), {
-      root: { ...root, seenAt: Date.now() },
-      members: [],
-      timer: null,
-    })
+    this.running.set(keyOf(root), { root: { ...root, seenAt: Date.now() }, members: [] })
     this.save()
   }
 
@@ -74,13 +72,21 @@ export class AgentTrees {
    * that child ends with the agent and nothing links the agent to what the child started.
    */
   active(root: ProcessId): void {
-    const running = this.running.get(keyOf(root))
-    if (!running || running.timer) return
-    running.timer = setTimeout(() => {
-      running.timer = null
-      void this.note(root)
+    const key = keyOf(root)
+    if (!this.running.has(key)) return
+    this.talking.add(key)
+    if (this.talkingTimer) return
+    this.talkingTimer = setTimeout(() => {
+      this.talkingTimer = null
+      const keys = [...this.talking]
+      this.talking.clear()
+      // Together, so that one listing serves them all.
+      for (const key of keys) {
+        const running = this.running.get(key)
+        if (running) void this.note(running.root)
+      }
     }, this.options.noteMs ?? 10_000)
-    running.timer.unref?.()
+    this.talkingTimer.unref?.()
   }
 
   /** Lists the agent's tree now: after it talked, and before it is stopped. */
@@ -127,7 +133,7 @@ export class AgentTrees {
     if (!run) {
       const running = this.running.get(key)
       this.running.delete(key)
-      if (running?.timer) clearTimeout(running.timer)
+      this.talking.delete(key)
       // It has just exited, and what is noted ran until a moment ago at the latest.
       const seenAt = Date.now()
       const noted = [root, ...(running?.members ?? [])].map((id) => ({ ...id, seenAt }))

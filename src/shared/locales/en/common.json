@@ -35,7 +35,8 @@
   },
   "errors": {
     "hostRestarted": "A background process of Kettu restarted. Try again.",
-    "hostOffline": "The host is not connected. Try again once it is back."
+    "hostOffline": "The host is not connected. Try again once it is back.",
+    "hostTimeout": "Kettu got no answer in time. Try again."
   },
   "planReset": {
     "in": "Resets in {{time}}",

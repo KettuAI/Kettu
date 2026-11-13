@@ -524,6 +524,8 @@ interface Live {
   contextTimer: ReturnType<typeof setTimeout> | null
   contextDueAt: number
   contextDirty: boolean
+  /** A read due though no port shows the session, as after its turn ended. */
+  contextOwed: boolean
   contextRevision: number
   contextFailures: number
   contextReadAt: number
@@ -2133,6 +2135,7 @@ export class SessionManager {
       contextTimer: null,
       contextDueAt: 0,
       contextDirty: false,
+      contextOwed: false,
       contextRevision: 0,
       contextFailures: 0,
       contextReadAt: 0,
@@ -2410,11 +2413,7 @@ export class SessionManager {
         break
       }
       case 'ignored':
-        this.deps.diagnostics.event(
-          agentId,
-          'ignored',
-          `${effect.variant}: ${effect.detail} (session ${live.id})`,
-        )
+        this.deps.diagnostics.ignored(agentId, live.id, `${effect.variant}: ${effect.detail}`)
         break
       case 'tool': {
         const git = this.deps.git()
@@ -4449,6 +4448,7 @@ export class SessionManager {
       if (live.contextTimer) clearTimeout(live.contextTimer)
       live.contextTimer = null
       live.contextDirty = false
+      live.contextOwed = false
       live.contextReadAt = this.now()
     }
     const run = this.readContext(sessionId)
@@ -4472,7 +4472,7 @@ export class SessionManager {
         if (live && this.contextCurrent(live)) {
           const active = this.contextActive(live)
           const retry = live.contextFailures > 0 && live.contextFailures <= 3
-          if (live.contextDirty || active || retry) {
+          if (this.contextWanted(live) && (live.contextDirty || active || retry)) {
             const delay = live.contextDirty
               ? this.timings.contextDebounceMs
               : this.timings.contextRefreshMs * Math.min(8, 2 ** live.contextFailures)
@@ -5725,6 +5725,7 @@ export class SessionManager {
     if (turn.attachments.length > 0) void this.deps.attachments?.release(turn.attachments)
     turn.attachments = []
     this.deps.mcp?.turnEnded(live.id)
+    this.deps.diagnostics.turnEnded(live.record.agentId, [live.id, live.record.acpSessionId])
     this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
     const byAgent = live.archiveAfterTurn
@@ -5848,15 +5849,24 @@ export class SessionManager {
     // An agent that lists its titles sends none in the thread: the turn's end reads the session's.
     this.maybeReadListedTitle(live, this.userMessages(live) === 1)
     this.checkpoint(live)
-    this.refreshContext(live)
+    this.refreshContext(live, 0, true)
   }
 
-  /** Coalesces activity reads; a change during a read is followed by another read. */
-  private refreshContext(live: Live, delay = 0): void {
+  /**
+   * Coalesces activity reads; a change during a read is followed by another read. Only a session a
+   * port shows is read as it changes; any other is read once its turn ends (`owed`), and again
+   * when a port shows it.
+   */
+  private refreshContext(live: Live, delay = 0, owed = false): void {
     if (!this.contextCurrent(live) || !live.connection?.readContext) return
     live.contextDirty = true
-    if (this.contextRuns.has(live.id)) return
+    if (owed) live.contextOwed = true
+    if (!this.contextWanted(live) || this.contextRuns.has(live.id)) return
     this.scheduleContext(live, delay)
+  }
+
+  private contextWanted(live: Live): boolean {
+    return live.contextOwed || this.inFront(live.id)
   }
 
   private contextCurrent(live: Live): boolean {
@@ -6118,7 +6128,7 @@ export class SessionManager {
     }
     this.followAgentTurn(live)
     this.checkpoint(live)
-    this.refreshContext(live)
+    this.refreshContext(live, 0, true)
   }
 
   /**

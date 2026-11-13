@@ -18,7 +18,7 @@ import { harnessOf, type AgentId } from '@shared/thread'
 import type { ProgramOptions, ProgramRun } from '../adapter-install'
 import { HostError } from '../errors'
 import type { Env } from '../find-command'
-import { JsonFile, type LogFn } from '../storage'
+import { JsonFile, type LogFn, type Migration } from '../storage'
 import * as claude from './claude-plugins'
 import * as codex from './codex-plugins'
 import type { PluginLogoPaths } from './codex-plugins'
@@ -39,17 +39,105 @@ interface AgentPlugins {
 }
 
 export interface PluginsFile {
-  version: 1
+  version: 2
   agents: Record<string, AgentPlugins>
+}
+
+/**
+ * The file since version 2: each plugin the agents offer once, in `plugins`, and each agent's
+ * catalog as the indexes of its plugins there. The agents of one harness offer nearly the same
+ * catalog, of thousands of plugins, which version 1 kept whole for each of them.
+ */
+interface StoredPlugins {
+  version: 2
+  plugins: CatalogPlugin[]
+  agents: Record<string, Omit<AgentPlugins, 'catalog'> & { catalog: number[] }>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** The same plugin as offered: equal fields, each a plain value, as the harnesses report them. */
+function samePlugin(a: Record<string, unknown>, b: Record<string, unknown>): boolean {
+  const keys = Object.keys(a)
+  if (keys.length !== Object.keys(b).length) return false
+  return keys.every((key) => {
+    const value = a[key]
+    return (value === null || typeof value !== 'object') && Object.is(value, b[key])
+  })
+}
+
+/** Every distinct item of the catalogs once, and each catalog as indexes into them. */
+function shareCatalogs(catalogs: readonly (readonly unknown[])[]): {
+  plugins: unknown[]
+  indexes: number[][]
+} {
+  const plugins: unknown[] = []
+  const known = new Map<unknown, number>()
+  const byId = new Map<string, number[]>()
+  const indexes = catalogs.map((catalog) =>
+    catalog.map((item) => {
+      let index = known.get(item)
+      if (index !== undefined) return index
+      if (isRecord(item) && typeof item.id === 'string') {
+        const sameId = byId.get(item.id) ?? []
+        index = sameId.find((at) => samePlugin(plugins[at] as Record<string, unknown>, item))
+        if (index === undefined) sameId.push(plugins.length)
+        byId.set(item.id, sameId)
+      }
+      if (index === undefined) {
+        index = plugins.length
+        plugins.push(item)
+      }
+      known.set(item, index)
+      return index
+    }),
+  )
+  return { plugins, indexes }
+}
+
+const PLUGINS_MIGRATIONS: Readonly<Record<number, Migration>> = {
+  // Each plugin kept once. An entry that is not the shape written stays as it was, and is dropped.
+  1: (data) => {
+    if (!isRecord(data.agents)) return data
+    const listed = Object.entries(data.agents).flatMap(([agentId, entry]) =>
+      isRecord(entry) && Array.isArray(entry.catalog)
+        ? [{ agentId, entry, catalog: entry.catalog }]
+        : [],
+    )
+    const { plugins, indexes } = shareCatalogs(listed.map(({ catalog }) => catalog))
+    const agents: Record<string, unknown> = { ...data.agents }
+    listed.forEach(({ agentId, entry }, at) => {
+      agents[agentId] = { ...entry, catalog: indexes[at] }
+    })
+    return { ...data, plugins, agents }
+  },
+}
+
+function storedPlugins(file: PluginsFile): StoredPlugins {
+  const agentIds = Object.keys(file.agents)
+  const { plugins, indexes } = shareCatalogs(agentIds.map((id) => file.agents[id]!.catalog))
+  return {
+    version: 2,
+    plugins: plugins as CatalogPlugin[],
+    agents: Object.fromEntries(
+      agentIds.map((id, at) => [id, { ...file.agents[id]!, catalog: indexes[at]! }]),
+    ),
+  }
+}
+
 /** The kept lists; an agent's entry that is not the shape written is dropped and read again. */
 export function parsePluginsFile(data: Record<string, unknown>): PluginsFile | string {
   if (!isRecord(data.agents)) return 'agents is not an object'
+  if (!Array.isArray(data.plugins)) return 'plugins is not a list'
+  const plugins: unknown[] = data.plugins
+  const offered = (at: unknown): boolean =>
+    Number.isInteger(at) &&
+    (at as number) >= 0 &&
+    (at as number) < plugins.length &&
+    isRecord(plugins[at as number]) &&
+    typeof (plugins[at as number] as Record<string, unknown>).id === 'string'
   const agents: Record<string, AgentPlugins> = {}
   for (const [agentId, entry] of Object.entries(data.agents)) {
     if (
@@ -60,22 +148,25 @@ export function parsePluginsFile(data: Record<string, unknown>): PluginsFile | s
       Array.isArray(entry.marketplaces) &&
       isRecord(entry.paths) &&
       isRecord(entry.logos) &&
-      entry.catalog.every((item) => isRecord(item) && typeof item.id === 'string') &&
+      entry.catalog.every(offered) &&
       entry.installed.every((item) => isRecord(item) && typeof item.id === 'string')
     ) {
-      agents[agentId] = entry as unknown as AgentPlugins
+      const catalog = entry.catalog.map((at: number) => plugins[at] as CatalogPlugin)
+      agents[agentId] = { ...(entry as unknown as AgentPlugins), catalog }
     }
   }
-  return { version: 1, agents }
+  return { version: 2, agents }
 }
 
 export function pluginsFile(userDataPath: string, log: LogFn): JsonFile<PluginsFile> {
   return new JsonFile<PluginsFile>({
     file: path.join(userDataPath, 'state', 'market-plugins.json'),
-    version: 1,
-    migrations: {},
+    version: 2,
+    migrations: PLUGINS_MIGRATIONS,
     parse: parsePluginsFile,
-    empty: () => ({ version: 1, agents: {} }),
+    empty: () => ({ version: 2, agents: {} }),
+    serialize: storedPlugins,
+    compact: true,
     log,
   })
 }
@@ -347,7 +438,7 @@ export class MarketPluginsService {
       (file) => (this.kept = file),
       (error: unknown) => {
         this.deps.log('warn', `Could not read the kept plugin lists: ${(error as Error).message}`)
-        return (this.kept = { version: 1, agents: {} })
+        return (this.kept = { version: 2, agents: {} })
       },
     )
     return this.loading

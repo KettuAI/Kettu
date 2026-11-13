@@ -3,6 +3,7 @@
 
 import { contextBridge } from 'electron'
 import type { HostEvent } from '@shared/agent-host'
+import { hostRequestLimit } from '@shared/host-request-limits'
 import { isLocale, type Locale } from '@shared/locale'
 import { TRAY_HOST_METHODS, type TrayPanelApi } from '@shared/tray'
 import { hostTransport, invoke, send, subscribe } from './ipc'
@@ -13,6 +14,7 @@ const agents = new PortClient<HostEvent>({
   methods: TRAY_HOST_METHODS,
   transport: hostTransport('agent-host'),
   lazy: false,
+  limitMs: hostRequestLimit,
 })
 
 function systemLocale(): Locale {

@@ -171,32 +171,65 @@ export interface ProcessControlOptions {
   run?: typeof runTool
 }
 
+/** How long a listing waits for others to share its run with; a quit's does not wait. */
+const LIST_BATCH_MS = 50
+
+interface Listings {
+  /** The listing not yet started, which a listing asked for now joins, by time limit. */
+  next: Map<number, Promise<ProcessRow[]>>
+  /** When a listing with that limit last timed out. */
+  timedOutAt: Map<number, number>
+}
+
+/** The real tool's listings, shared by every control of the process: one `ps` serves them all. */
+const toolListings: Listings = { next: new Map(), timedOutAt: new Map() }
+
+/**
+ * One run of the tool for the listings asked for within `LIST_BATCH_MS`, such as those of every
+ * process of an agent that stops. A listing asked for within its time limit after one timed out
+ * fails at once: the tool is that slow now, and a stop should not wait for it again.
+ */
+function sharedListing(
+  listings: Listings,
+  limitMs: number,
+  batchMs: number,
+  read: () => Promise<ProcessRow[]>,
+): Promise<ProcessRow[]> {
+  const timedOutAt = listings.timedOutAt.get(limitMs)
+  if (timedOutAt !== undefined && Date.now() - timedOutAt < limitMs) {
+    return Promise.reject(
+      Object.assign(new Error(`The process listing timed out less than ${limitMs} ms ago`), {
+        code: 'ETIMEDOUT',
+      }),
+    )
+  }
+  let listing = listings.next.get(limitMs)
+  if (!listing) {
+    listing = new Promise<void>((resolve) => setTimeout(resolve, batchMs)).then(() => {
+      listings.next.delete(limitMs)
+      return read().catch((error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
+          listings.timedOutAt.set(limitMs, Date.now())
+        }
+        throw error
+      })
+    })
+    listings.next.set(limitMs, listing)
+  }
+  return listing
+}
+
 export function processControl(
   platform: Platform,
   { limits = toolLimits(platform), run = runTool }: ProcessControlOptions = {},
 ): ProcessControl {
+  const listings = run === runTool ? toolListings : { next: new Map(), timedOutAt: new Map() }
   return {
     platform,
-    async list({ quitting = false } = {}) {
+    list({ quitting = false } = {}) {
       const limitMs = quitting ? limits.quitListMs : limits.listMs
-      if (platform !== 'win32') {
-        const text = await run('ps', ['-A', '-o', 'pid=,ppid=,pgid=,etime='], limitMs, {
-          ...process.env,
-          LC_ALL: 'C',
-        })
-        return parsePs(text, Date.now())
-      }
-      const root = process.env.SystemRoot
-      const powershell = root
-        ? path.win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-        : 'powershell.exe'
-      const encoded = Buffer.from(CIM_SCRIPT, 'utf16le').toString('base64')
-      const text = await run(
-        powershell,
-        ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
-        limitMs,
-      )
-      return parseCim(text)
+      const batchMs = quitting ? 0 : LIST_BATCH_MS
+      return sharedListing(listings, limitMs, batchMs, () => listWith(platform, run, limitMs))
     },
     kill: (target, signal) => process.kill(target, signal),
     async taskkill(pids, { quitting = false } = {}) {
@@ -212,6 +245,32 @@ export function processControl(
     },
     delay: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }
+}
+
+/** One listing: `ps`, or on Windows the CIM query through PowerShell. */
+async function listWith(
+  platform: Platform,
+  run: typeof runTool,
+  limitMs: number,
+): Promise<ProcessRow[]> {
+  if (platform !== 'win32') {
+    const text = await run('ps', ['-A', '-o', 'pid=,ppid=,pgid=,etime='], limitMs, {
+      ...process.env,
+      LC_ALL: 'C',
+    })
+    return parsePs(text, Date.now())
+  }
+  const root = process.env.SystemRoot
+  const powershell = root
+    ? path.win32.join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    : 'powershell.exe'
+  const encoded = Buffer.from(CIM_SCRIPT, 'utf16le').toString('base64')
+  const text = await run(
+    powershell,
+    ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+    limitMs,
+  )
+  return parseCim(text)
 }
 
 /**
