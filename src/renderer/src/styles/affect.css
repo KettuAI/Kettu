@@ -5530,3 +5530,12 @@ li[data-row-exit='dust'] > * {
   --ui-agc-flag: var(--agent-flag);
   --ui-agc-flag-ink: var(--agent-flag-ink);
 }
+
+/* The answer and the breakdown stop their motion under the system's reduced motion only; the app's
+   own Reduce motion setting stops it too. */
+:root[data-reduce-motion='always'] :is(.ui-ansc, .ui-cbc) *,
+:root[data-reduce-motion='always'] :is(.ui-ansc, .ui-cbc) *::before,
+:root[data-reduce-motion='always'] :is(.ui-ansc, .ui-cbc) *::after {
+  animation: none !important;
+  transition: none !important;
+}

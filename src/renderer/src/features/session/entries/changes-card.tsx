@@ -18,7 +18,7 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import { turnChanges } from '../turn-work'
 import { DiffBlock } from './diff-block'
 import { PANEL } from './helpers'
-import { cachedStats, useDiffStats } from './use-diff-stats'
+import { cachedStats, diffsSettled, useDiffStats } from './use-diff-stats'
 
 type Change = ReturnType<typeof turnChanges>[number]
 
@@ -67,6 +67,8 @@ export const ChangesCard = memo(function ChangesCard({
   const all = useMemo(() => changes.flatMap((change) => change.diffs), [changes])
   const totals = useDiffStats(all)
   const counted = totals !== null
+  // The rows keep their place unseen until the lines are counted, so they never move once shown.
+  const settled = counted || diffsSettled(all)
   const ordered = useMemo(() => (counted ? byChangedLines(changes) : changes), [changes, counted])
   const [allShown, setAllShown] = useState(false)
   const root = useGitStore((s) => s.status[projectPath]?.repo?.root ?? null)
@@ -111,12 +113,17 @@ export const ChangesCard = memo(function ChangesCard({
         )}
       </div>
       {(allShown ? ordered : ordered.slice(0, SHOWN)).map((change) => (
-        <ChangeRow key={change.path} change={change} projectPath={projectPath} />
+        <ChangeRow
+          key={change.path}
+          change={change}
+          projectPath={projectPath}
+          counting={!settled}
+        />
       ))}
       {hidden > 0 && (
         <button
           type="button"
-          className="ks-file ks-changes__more focus-ring"
+          className={cn('ks-file ks-changes__more focus-ring', !settled && 'invisible')}
           aria-expanded={allShown}
           onClick={() => setAllShown(!allShown)}
         >
@@ -138,13 +145,24 @@ function Counts({ insertions, deletions }: { insertions: number; deletions: numb
 }
 
 /** A changed file; a click unfolds its diffs under it. */
-function ChangeRow({ change, projectPath }: { change: Change; projectPath: string }) {
+function ChangeRow({
+  change,
+  projectPath,
+  counting,
+}: {
+  change: Change
+  projectPath: string
+  counting: boolean
+}) {
   const stats = useDiffStats(change.diffs)
   const shown = relativePath(change.path, projectPath)
   const cut = shown.lastIndexOf('/') + 1
   return (
     <Collapsible>
-      <CollapsibleTrigger className="ks-file focus-ring" title={shown}>
+      <CollapsibleTrigger
+        className={cn('ks-file focus-ring', counting && 'invisible')}
+        title={shown}
+      >
         <FileTypeIcon path={change.path} className="size-4" />
         <span className="ks-file__name">
           <span className="ks-file__dir">{shown.slice(0, cut)}</span>

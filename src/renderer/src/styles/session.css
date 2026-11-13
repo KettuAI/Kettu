@@ -350,20 +350,26 @@
   font-size: 11px;
   line-height: 18px;
 }
+/* A running step's words in ink, dimmed by a band that sweeps across each of them: the card's glint,
+   which moves by transforms alone, lays a copy of the words in the sheet's color over them, as
+   opaque as takes the ink to the faint color. */
 .ks-thread .ui-tcc[data-status='running'] :is(.ui-tcc__name, .ui-tcc__summary) {
-  background: linear-gradient(
-      90deg,
-      var(--ui-tcc-ink) 0 40%,
-      var(--ui-tcc-faint) 50%,
-      var(--ui-tcc-ink) 60% 100%
-    )
-    0 0 / 250% 100%;
-  background-clip: text;
-  color: transparent;
-  animation: ks-step-shine 1.4s linear infinite;
+  position: relative;
+  color: var(--ui-tcc-ink);
 }
 .ks-thread .ui-tcc[data-status='running'] .ui-tcc__summary * {
-  color: transparent;
+  color: inherit;
+}
+.ks-thread .ui-tcc[data-status='running'] .ui-tcc__main .ui-tcc__glint {
+  mask: linear-gradient(90deg, transparent 40%, black 50%, transparent 60%) center / 250% 100%
+    no-repeat;
+  animation-name: ks-step-glint;
+  animation-duration: 1.4s;
+}
+.ks-thread .ui-tcc[data-status='running'] .ui-tcc__main .ui-tcc__glint > span {
+  color: color-mix(in srgb, var(--bg-app) 68%, transparent);
+  animation-name: ks-step-glint-back;
+  animation-duration: 1.4s;
 }
 
 /* The chevron at a row's end shows on hover, on focus and while the row is open. */
@@ -686,7 +692,7 @@
   transition: grid-template-rows 320ms var(--ease-out-quint);
 }
 .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
-.ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > * {
+.ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > :not(.ks-step-late) {
   animation: ks-rise 320ms var(--ease-out-quint) backwards;
 }
 .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > * {
@@ -762,12 +768,20 @@
     transform: scale(1.8);
   }
 }
-@keyframes ks-step-shine {
+@keyframes ks-step-glint {
   from {
-    background-position: 100% 0;
+    transform: translateX(-75%);
   }
   to {
-    background-position: 0 0;
+    transform: translateX(75%);
+  }
+}
+@keyframes ks-step-glint-back {
+  from {
+    transform: translateX(75%);
+  }
+  to {
+    transform: translateX(-75%);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -792,16 +806,11 @@
   .ks-thread :is(.ui-tcc, .ui-tcc-group) > .ui-tcc__body {
     transition: none;
   }
-  .ks-thread .ui-tcc[data-status='running'] :is(.ui-tcc__name, .ui-tcc__summary) {
-    background: none;
-    color: var(--ui-tcc-ink);
-    animation: none;
-  }
-  .ks-thread .ui-tcc[data-status='running'] .ui-tcc__summary * {
-    color: inherit;
-  }
 }
 :root[data-reduce-motion='always'] {
+  & .ui-tcc__glint {
+    display: none;
+  }
   & .ks-thread .ks-step-opening > .ui-tcc__body .ui-tcc__sections > *,
   & .ks-thread .ks-run-opening > .ui-tcc__body .ui-tcc-group__list > *,
   & .ks-fold-in,
@@ -1430,6 +1439,11 @@
 }
 .ks-jump:is(:hover, :focus-visible) circle[data-cell] {
   animation: none !important;
+}
+/* Out of view at the thread's end, the button's dots hold still instead of animating unseen; the
+   inline animation sets its own play state, so this one must outrank it. */
+.ks-jump[data-active='false'] circle[data-cell] {
+  animation-play-state: paused !important;
 }
 .ks-jump[data-mark='ended'] {
   color: var(--thread-fox);

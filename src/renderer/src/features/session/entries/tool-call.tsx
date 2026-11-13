@@ -39,6 +39,7 @@ export function StepCard({
   duration,
   time,
   icon,
+  late = false,
 }: Omit<StepFacts, 'glyph'> & {
   sessionId: string
   entry: ThreadEntry
@@ -47,6 +48,8 @@ export function StepCard({
   note?: string
   rail?: boolean
   icon: ReactNode
+  /** Mounted after its run first opened, out of view, so it takes no part in the entrance. */
+  late?: boolean
 }) {
   const { t } = useTranslation('session')
   // A step that arrived while shown draws its part of a run's timeline in (session.css).
@@ -60,7 +63,9 @@ export function StepCard({
     icon,
     labels,
     chevron: rail ? ('after' as const) : ('before' as const),
-    className: cn(fresh && 'ks-step-new', opening && 'ks-step-opening') || undefined,
+    className:
+      cn(fresh && 'ks-step-new', opening && 'ks-step-opening', late && 'ks-step-late') || undefined,
+    shine: true,
     onOpenChange,
   }
   if (entry.kind === 'tool') {

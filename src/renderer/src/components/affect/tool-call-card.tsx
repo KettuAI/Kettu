@@ -111,6 +111,8 @@ export type ToolCallCardProps = {
   trail?: ReactNode;
   /** false shows no time, e.g. when it is not known when the call started */
   time?: boolean;
+  /** Sweeps a light over the name and summary while running; style its .ui-tcc__glint */
+  shine?: boolean;
   labels?: Partial<ToolCallLabels>;
   className?: string;
 };
@@ -161,6 +163,7 @@ export function ToolCallCard({
   children,
   trail,
   time = true,
+  shine = false,
   labels,
   className,
 }: ToolCallCardProps) {
@@ -194,6 +197,7 @@ export function ToolCallCard({
   const ms = !time ? null : status === "running" ? (measured ?? 0) : (duration ?? measured);
 
   const announce = L.announce(name, status, error);
+  const glint = shine && status === "running";
 
   return (
     <div
@@ -231,10 +235,12 @@ export function ToolCallCard({
         <span className="ui-tcc__main">
           <code className="ui-tcc__name" title={name}>
             {name}
+            {glint && <Glint>{name}</Glint>}
           </code>
           {summary != null && (
             <span className="ui-tcc__summary" dir="auto" title={typeof summary === "string" ? summary : undefined}>
               {summary}
+              {glint && <Glint>{summary}</Glint>}
             </span>
           )}
         </span>
@@ -380,8 +386,9 @@ export function ToolCallGroup({
           ))}
         </span>
         <span className="ui-tcc-group__title" key={running ? "busy" : "done"}>
-          <span className={running ? "ui-tcc-group__label ui-tcc__shine" : "ui-tcc-group__label"} data-text={title}>
+          <span className={running ? "ui-tcc-group__label ui-tcc__shine" : "ui-tcc-group__label"}>
             {title}
+            {running && <Glint>{title}</Glint>}
           </span>
           {!running && failed > 0 && <span className="ui-tcc-group__failed">· {L.failedCount(failed)}</span>}
           {ms != null && <span className="ui-tcc-group__time">· {formatMs(ms, running)}</span>}
@@ -401,6 +408,18 @@ export function ToolCallGroup({
 }
 
 /* ---------- Pieces ---------- */
+
+/**
+ * A copy of the words in the light's color, seen through a band that sweeps across them. The band
+ * moves one way and the copy the other, so the copy stays in place and only transforms animate.
+ */
+function Glint({ children }: { children: ReactNode }) {
+  return (
+    <span className="ui-tcc__glint" aria-hidden="true">
+      <span>{children}</span>
+    </span>
+  );
+}
 
 /**
  * A section of your own card content, drawn as the card's arguments and result are: a small
@@ -1082,18 +1101,21 @@ const css = /* css */ `
 .ui-tcc-group__list { display: grid; gap: 8px; padding: 6px 0 2px; }
 
 /* A soft light sweeping over "Using tools…" */
-.ui-tcc__shine::after {
-  content: attr(data-text);
-  content: attr(data-text) / "";
+.ui-tcc__glint {
   position: absolute;
   inset: 0;
-  white-space: nowrap;
-  color: transparent;
-  background: linear-gradient(90deg, transparent 38%, var(--ui-tcc-shine) 50%, transparent 62%) 100% 0 / 300% 100% no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  animation: ui-tcc-sweep 1.8s linear infinite;
   pointer-events: none;
+  user-select: none;
+  mask: linear-gradient(90deg, transparent 38%, black 50%, transparent 62%) center / 300% 100% no-repeat;
+  animation: ui-tcc-glint 1.8s linear infinite;
+}
+.ui-tcc__glint > span {
+  display: block;
+  overflow: hidden;
+  color: var(--ui-tcc-shine);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: ui-tcc-glint-back 1.8s linear infinite;
 }
 
 @keyframes ui-tcc-in {
@@ -1106,10 +1128,8 @@ const css = /* css */ `
 }
 @keyframes ui-tcc-spin { to { transform: rotate(360deg); } }
 @keyframes ui-tcc-draw { to { stroke-dashoffset: 0; } }
-@keyframes ui-tcc-sweep {
-  from { background-position: 100% 0; }
-  to { background-position: 0% 0; }
-}
+@keyframes ui-tcc-glint { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes ui-tcc-glint-back { from { transform: translateX(100%); } to { transform: translateX(-100%); } }
 
 /* Narrow (phones): a little less padding, the summary gives way first */
 @container (max-width: 360px) {
@@ -1130,7 +1150,7 @@ const css = /* css */ `
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
-  .ui-tcc__shine::after { display: none; }
+  .ui-tcc__glint { display: none; }
   .ui-tcc__ok path { stroke-dashoffset: 0; }
 }
 

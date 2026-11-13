@@ -1,4 +1,5 @@
 import type { ThreadEntry, ThreadState } from '@shared/thread'
+import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
@@ -173,24 +174,117 @@ function sentItem(item: Item | undefined): boolean {
   return item?.type === 'entry' && (item.char === 'u' || item.char === 's')
 }
 
-/** An item's height in px before it renders: its kind's shortest rendered height. */
-export type Estimate = 18 | 20 | 24 | 28 | 69
+// An item's height before it renders, laid out at the default text size in a full column: a line
+// of prose is 23 px and holds about 100 Latin characters or 55 Chinese ones, a line of code 20 px.
+const LINE_PX = 23
+const LINE_UNITS = 100
+const BLOCK_GAP_PX = 14
+const HEADING_PX = 40
+const CODE_LINE_PX = 20
+// A code block's header and padding, and the row that shows a folded block's other lines.
+const CODE_FRAME_PX = 60
+const CODE_MORE_PX = 36
+const TABLE_ROW_PX = 37
+const TABLE_FOOT_PX = 36
+const DIAGRAM_PX = 220
+// A reply's actions, and its changes card: the head, a row per file up to three, then one more.
+const FOOTER_PX = 24
+const CHANGES_HEAD_PX = 62
+const CHANGE_ROW_PX = 36
+const SHOWN_CHANGES = 3
+
+/** A line's width in Latin characters, where a character of a wide script takes about two. */
+function lineUnits(line: string): number {
+  let units = 0
+  for (const char of line) {
+    const code = char.codePointAt(0)!
+    units += (code >= 0x2e80 && code <= 0x9fff) || (code >= 0xff00 && code <= 0xffef) ? 1.8 : 1
+  }
+  return units
+}
 
 /**
- * The height an item is laid out at until it renders: the shortest its kind renders at, at any
- * text size, measured on macOS and rounded down. It is a lower bound, so an item not rendered yet
- * never takes more room than it will.
+ * About the height an agent's Markdown renders at, from its blocks: wrapped lines of prose,
+ * headings, code blocks folded past FOLD_OVER lines, tables and diagrams.
  */
-export function estimateOf(item: Item): Estimate {
+export function markdownHeight(markdown: string): number {
+  const lines = markdown.split('\n')
+  let height = 0
+  let blocks = 0
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!.trim()
+    if (line.startsWith('```')) {
+      const lang = line.slice(3).split(' ')[0]
+      let end = i + 1
+      while (end < lines.length && !lines[end]!.trim().startsWith('```')) end++
+      const count = end - i - 1
+      if (lang === 'mermaid' || lang === 'svg') height += DIAGRAM_PX
+      else {
+        const folded = count > FOLD_OVER
+        height += CODE_FRAME_PX + (folded ? FOLDED_LINES : count) * CODE_LINE_PX
+        if (folded) height += CODE_MORE_PX
+      }
+      blocks++
+      i = end
+    } else if (line.startsWith('|')) {
+      let end = i
+      while (end + 1 < lines.length && lines[end + 1]!.trim().startsWith('|')) end++
+      // Less the line under the header.
+      height += (end - i) * TABLE_ROW_PX + TABLE_FOOT_PX
+      blocks++
+      i = end
+    } else if (line.startsWith('#')) {
+      height += HEADING_PX
+      blocks++
+    } else if (line) {
+      height += LINE_PX * Math.max(1, Math.ceil(lineUnits(line) / LINE_UNITS))
+      if (i === 0 || !lines[i - 1]!.trim()) blocks++
+    }
+  }
+  return Math.max(LINE_PX, height + BLOCK_GAP_PX * Math.max(0, blocks - 1))
+}
+
+/** The changed files a reply's changes card lists. */
+function changedFiles(toolIds: string[], byId: Record<string, ThreadEntry>): number {
+  const paths = new Set<string>()
+  for (const id of toolIds) {
+    const entry = byId[id]
+    if (entry?.kind !== 'tool') continue
+    for (const content of entry.content) if (content.type === 'diff') paths.add(content.path)
+  }
+  return paths.size
+}
+
+// By entry, which a change replaces, so the thread's renders scan each message once.
+const agentHeights = new WeakMap<ThreadEntry, number>()
+
+/**
+ * The height an item is laid out at until it renders: from its content where that varies, an
+ * agent's message and a reply with its changes card, else the shortest its kind renders at,
+ * measured on macOS and rounded down. A close estimate keeps the scrollbar steady as the thread
+ * scrolls back through items not rendered yet.
+ */
+export function estimateOf(item: Item, byId: Record<string, ThreadEntry> | undefined): number {
   if (item.type === 'run') return 28
-  if (item.type === 'group' || item.type === 'reply' || item.type === 'status') return 24
+  if (item.type === 'group' || item.type === 'status') return 24
+  if (item.type === 'reply') {
+    const files = byId ? changedFiles(item.toolIds, byId) : 0
+    if (files === 0) return FOOTER_PX
+    const rows = Math.min(files, SHOWN_CHANGES) + (files > SHOWN_CHANGES ? 1 : 0)
+    return FOOTER_PX + CHANGES_HEAD_PX + rows * CHANGE_ROW_PX
+  }
   switch (item.char) {
     // One line of bubble and the row under it: the time, Copy and the steered label.
     case 'u':
     case 's':
       return 69
-    case 'a':
-      return 20
+    case 'a': {
+      const entry = byId?.[item.id]
+      if (entry?.kind !== 'agent') return 20
+      let height = agentHeights.get(entry)
+      if (height === undefined) agentHeights.set(entry, (height = markdownHeight(entry.markdown)))
+      return height
+    }
     case 'g':
     case 't':
     case 'w':

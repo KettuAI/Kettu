@@ -2,6 +2,7 @@ import { memo, useState } from 'react'
 import { ArrowTurnDownIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
 import type { UserContent } from '@shared/thread'
 import { forkSession } from '@renderer/app/actions'
 import { MessageActions } from '@renderer/components/affect/message-actions'
@@ -15,7 +16,7 @@ import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { hostOfSession } from '@renderer/stores/sessions'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { useReplyHover } from '../reply-hover'
-import { useEntry, useEntryAnimation, useSessionView } from '../use-thread'
+import { useEntry, useEntryAnimation } from '../use-thread'
 import { ChangesCard } from './changes-card'
 import { forkBlocked, forkEntry, stopReasonText } from './helpers'
 
@@ -118,7 +119,20 @@ export const ReplyFooter = memo(
       const entry = s.replicas[sessionId]?.state?.byId[lastId]
       return entry?.kind === 'agent' ? entry.at : undefined
     })
-    const session = useSessionView(sessionId)
+    // The session's view changes on most patches of a running turn, so take only what is shown.
+    const session = useThreadsStore(
+      useShallow((s) => {
+        const view = s.replicas[sessionId]?.state?.session
+        return view
+          ? {
+              agentId: view.agentId,
+              projectPath: view.projectPath,
+              origin: view.origin,
+              blocked: forkBlocked(view.status),
+            }
+          : null
+      }),
+    )
     const forkAt = useAgentsStore((s) =>
       session
         ? forkEntry(
@@ -131,16 +145,18 @@ export const ReplyFooter = memo(
     const [error, setError] = useState<string | null>(null)
     const hovered = useReplyHover((s) => s.key === replyKey)
     const labels = useCopyLabels(t('replyFooter.copyReply'))
-    const text = useThreadsStore((s) => {
-      const byId = s.replicas[sessionId]?.state?.byId
-      return agentIds
+    // Joined when copied, not on every change of the thread.
+    const copyText = () => {
+      const byId = useThreadsStore.getState().replicas[sessionId]?.state?.byId
+      const text = agentIds
         .map((id) => {
           const entry = byId?.[id]
           return entry?.kind === 'agent' ? entry.markdown.trim() : ''
         })
         .filter(Boolean)
         .join('\n\n')
-    })
+      navigator.clipboard?.writeText(text).catch(() => {})
+    }
     const fork = async () => {
       setForking(true)
       setError(null)
@@ -153,7 +169,7 @@ export const ReplyFooter = memo(
       }
     }
     const showFork = forkAt !== null && session?.origin === 'user'
-    const blocked = session ? forkBlocked(session.status) : false
+    const blocked = session?.blocked ?? false
     const forkLabel = forking
       ? t('replyFooter.forking')
       : blocked
@@ -180,7 +196,7 @@ export const ReplyFooter = memo(
         >
           <MessageActions
             quiet={false}
-            text={text}
+            onCopy={copyText}
             actions={['copy']}
             label={t('replyFooter.label')}
             labels={labels}
