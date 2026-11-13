@@ -106,8 +106,8 @@ interface HourTotals {
 
 /**
  * The usage page: a dashboard of the tokens the agents used, for a chosen agent and range, on the
- * window's host or every host added up. Its status, settings and plan limits are the window's
- * host's, this computer's while every host is shown.
+ * window's host or every host added up. Its status and settings are the window's host's, this
+ * computer's while every host is shown; its plan limits are every shown host's.
  */
 export default function UsagePage() {
   const scope = useWindowScope()
@@ -720,7 +720,7 @@ function Dashboard({
         <Filters page={page} />
         <div className="k-u__content">
           {notice}
-          <PlanLimits used={summary.agents} />
+          <PlanLimits used={page.used} />
           <Figures
             facts={facts}
             requestFacts={requestFacts}

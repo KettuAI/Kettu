@@ -48,6 +48,8 @@ export interface UsagePage {
   starts: number[]
   range: DayRange
   summary: UsageSummary
+  /** Each host's agents with usage in the range, by host id, '' for this computer. */
+  used: Record<string, AgentId[]>
   /** A one-day range's sums per hour, for its trend; null for a longer range. */
   hours: { starts: number[]; summary: UsageSummary } | null
   /** The days the summary's hours of the day cover: the range, or the last 30 days for one day. */
@@ -230,22 +232,28 @@ export async function loadUsagePage(): Promise<void> {
       })
       const hourly = oneDay(range) ? hourStarts(range) : null
       const clock = hourly ? { from: addDays(range.to, -CLOCK_DAYS), to: range.to } : range
-      const read = async (boundaries: number[], byHour = false) =>
-        mergeSummaries(
-          await readEach(targets, (hostId) =>
-            hostAt(hostId, 'usage.summary', {
-              dayStarts: boundaries,
-              from: range.from,
-              to: range.to,
-              scope: filters.scope,
-              ...(byHour && { clock: { ...clock, zones: clockZones(clock.from, clock.to) } }),
-            }),
+      const read = async (boundaries: number[], byHour = false) => {
+        const answers = await readEach(targets, async (hostId) => ({
+          hostId,
+          summary: await hostAt(hostId, 'usage.summary', {
+            dayStarts: boundaries,
+            from: range.from,
+            to: range.to,
+            scope: filters.scope,
+            ...(byHour && { clock: { ...clock, zones: clockZones(clock.from, clock.to) } }),
+          }),
+        }))
+        return {
+          summary: mergeSummaries(answers.map((answer) => answer.summary)),
+          used: Object.fromEntries(
+            answers.map((answer) => [answer.hostId ?? '', answer.summary.agents]),
           ),
-        )
+        }
+      }
       // All time starts at the first day with usage of this scope, known only from the answer, so
       // its hours are read after it; any other range's along with it.
       const settled = filters.range.kind !== 'all'
-      const [summary, early] = await Promise.all([
+      const [{ summary, used }, early] = await Promise.all([
         read(starts, true),
         settled && hourly ? read(hourly) : null,
       ])
@@ -254,7 +262,7 @@ export async function loadUsagePage(): Promise<void> {
         first = summary.first
         continue
       }
-      const hours = hourly && (early ?? (await read(hourly)))
+      const hours = hourly && (early ?? (await read(hourly))).summary
       if (id !== request) return
       const next: UsagePage = {
         key,
@@ -265,6 +273,7 @@ export async function loadUsagePage(): Promise<void> {
         starts,
         range,
         summary,
+        used,
         hours: hourly && hours ? { starts: hourly, summary: hours } : null,
         clock,
       }
