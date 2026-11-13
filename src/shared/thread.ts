@@ -260,6 +260,7 @@ export type ThreadEntry =
   | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
   | ComputerSetupEntry // Kettu's own record of the setup a first call waited on, and its end
   | ProjectMcpEntry // Kettu's own record of a folder's MCP servers held for the user, and the answer
+  | ProjectHooksEntry // Kettu's own record of a folder's hooks held for the user, and the answer
   | ProblemReportEntry // Kettu's own record of a problem report an agent drafted, and its outcome
 
 /**
@@ -416,6 +417,36 @@ export interface ProjectMcpEntry {
   id: string
   servers: DeclaredMcpServer[]
   decision: ProjectMcpAnswer | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * Whether a folder's own Claude Code hooks may run: these ones (a changed or added hook asks
+ * again), every one of the folder's, later ones too, or none.
+ */
+export type ProjectHooksDecision = 'use' | 'all' | 'skip'
+
+/** `timeout` when the session left memory before an answer came. */
+export type ProjectHooksAnswer = ProjectHooksDecision | 'timeout'
+
+/** A hook a folder's own settings declare: the event it runs on and the command or URL it runs. */
+export interface DeclaredHook {
+  event: string
+  target: string
+}
+
+/**
+ * The folder's own settings declare hooks the user has not allowed, which the agent does not run
+ * until they do. `decision` is null while it waits, then the answer, `timeout` when none came.
+ */
+export interface ProjectHooksEntry {
+  kind: 'project_hooks'
+  id: string
+  hooks: DeclaredHook[]
+  decision: ProjectHooksAnswer | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */

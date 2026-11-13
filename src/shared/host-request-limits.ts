@@ -196,6 +196,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'devices.forget': HOST_MS,
   'computer.answerApp': HOST_MS,
   'sessions.answerProjectMcp': AGENT_MS,
+  'sessions.answerProjectHooks': AGENT_MS,
   'sessions.answerReport': AGENT_MS,
   'computer.stop': AGENT_MS,
   'computer.declineSetup': HOST_MS,

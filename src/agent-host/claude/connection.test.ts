@@ -19,6 +19,8 @@ import {
   type PermissionAnswer,
   type PermissionRequest,
   type SessionTarget,
+  type FolderHooks,
+  type ProjectHooksGate,
   type ProjectMcpGate,
 } from '../connection'
 import type { HostedContext, HostedSpawnOptions } from '../driver'
@@ -458,6 +460,93 @@ describe('the Claude Agent SDK driver', () => {
       held: async (_cwd, names) => (allowed ? [] : [...names]),
     }
     const { sessionId } = await connection.newSession(repo, { projectMcp: gate })
+    await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(sdk.queries).toHaveLength(1)
+    allowed = true
+    await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+    expect(sdk.queries).toHaveLength(2)
+    expect(sdk.last.options.resume).toBe(sessionId)
+    expect(sdk.last.options.settings).toBeUndefined()
+  })
+
+  const userHook = {
+    source: 'user',
+    settings: { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'say done' }] }] } },
+  }
+  const folderHooks = [
+    userHook,
+    {
+      source: 'project',
+      path: '/repo/.claude/settings.json',
+      settings: {
+        hooks: { SessionStart: [{ hooks: [{ type: 'command', command: './setup.sh' }] }] },
+      },
+    },
+    {
+      source: 'local',
+      path: '/repo/.claude/settings.local.json',
+      settings: {
+        hooks: {
+          PreToolUse: [
+            { matcher: 'Bash', hooks: [{ type: 'http', url: 'https://example.com/audit' }] },
+          ],
+        },
+      },
+    },
+  ]
+
+  it("holds the hooks of the folder's own settings until the user allows them", async () => {
+    const { sdk, connection } = await setup()
+    sdk.sources = folderHooks
+    // Without the user's answers, none of them runs.
+    await connection.newSession('/repo', {})
+    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    const asked: FolderHooks[] = []
+    let allowed = false
+    const gate: ProjectHooksGate = {
+      hold: async (_cwd, hooks) => {
+        asked.push(hooks)
+        return !allowed
+      },
+      held: async () => !allowed,
+    }
+    await connection.newSession('/repo', { projectHooks: gate })
+    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+    expect(asked.map((hooks) => hooks.hooks)).toEqual([
+      [
+        { event: 'SessionStart', target: './setup.sh' },
+        { event: 'PreToolUse (Bash)', target: 'https://example.com/audit' },
+      ],
+    ])
+    allowed = true
+    await connection.newSession('/repo', { projectHooks: gate })
+    expect(sdk.last.options.settings).toBeUndefined()
+    // Kettu's own hidden sessions ask nobody and run none.
+    await connection.newSession('/repo', { projectHooks: gate, hidden: 'options' })
+    expect(sdk.last.options.settings).toMatchObject({ disableAllHooks: true })
+    expect(asked).toHaveLength(2)
+    // The user's own hooks need no answer.
+    sdk.sources = [userHook]
+    allowed = false
+    await connection.newSession('/repo', { projectHooks: gate })
+    expect(sdk.last.options.settings).toBeUndefined()
+    expect(asked).toHaveLength(2)
+  })
+
+  it('holds every hook while the settings cannot be read', async () => {
+    const { sdk, connection } = await setup()
+    sdk.settingsError = new Error('unreadable')
+    const gate: ProjectHooksGate = { hold: async () => false, held: async () => false }
+    await connection.newSession('/repo', { projectHooks: gate })
+    expect(sdk.last.options.settings).toEqual({ disableAllHooks: true })
+  })
+
+  it('opens the query again before the next prompt once its held hooks are allowed', async () => {
+    const { sdk, connection } = await setup()
+    sdk.sources = folderHooks
+    let allowed = false
+    const gate: ProjectHooksGate = { hold: async () => !allowed, held: async () => !allowed }
+    const { sessionId } = await connection.newSession('/repo', { projectHooks: gate })
     await connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
     expect(sdk.queries).toHaveLength(1)
     allowed = true

@@ -165,8 +165,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
 
   const url = state?.url ?? null
   const driving = state?.control.kind === 'agent'
-  // The user keeps control after Hand back's 10 s; only the pill goes until the next call.
-  const userControl = state?.control.kind === 'user' && state.control.bar
+  const userControl = state?.control.kind === 'user'
 
   return (
     <PaneSheet pane="browser" maximized={maximized} data-browser-panel="">

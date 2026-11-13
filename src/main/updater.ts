@@ -387,7 +387,16 @@ export class Updater {
         return updater.checkForUpdates()
       })
       .then(
-        () => undefined,
+        (result) => {
+          // With automatic downloads the check hands back the download, which outlives it.
+          const download = result?.downloadPromise
+          if (!download) return
+          const errorsAtDownload = this.errorEvents
+          download.catch((error: unknown) => {
+            if (this.errorEvents !== errorsAtDownload) return
+            this.dispatch({ type: 'error', message: errorMessage(error), manual: this.manual })
+          })
+        },
         (error: unknown) => {
           const message = errorMessage(error)
           if (!loaded) {

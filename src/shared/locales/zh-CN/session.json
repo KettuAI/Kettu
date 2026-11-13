@@ -167,6 +167,21 @@
       "timeout": "未回答"
     }
   },
+  "projectHooks": {
+    "where": "这个项目的 .claude 设置会在特定时刻自动执行这些命令，比如会话开始时，以你的权限在这台电脑上运行。允许之前，这个会话不会自动执行任何命令，包括你自己设置的。",
+    "hooks": "命令",
+    "decision": {
+      "use": "运行",
+      "all": "总是运行",
+      "skip": "不运行"
+    },
+    "answer": {
+      "use": "已允许",
+      "all": "已允许这个项目的全部",
+      "skip": "未运行",
+      "timeout": "未回答"
+    }
+  },
   "problemReport": {
     "action": "把问题报告发给 Kettu",
     "send": "提交给 Kettu",
@@ -793,7 +808,8 @@
       "site": "打开网站",
       "device": "使用设备",
       "app": "使用应用",
-      "projectMcp": "启动 MCP 服务器"
+      "projectMcp": "启动 MCP 服务器",
+      "projectHooks": "运行这个项目设为自动执行的命令"
     }
   },
   "worktree": {

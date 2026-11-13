@@ -15,6 +15,9 @@ import { translate, type HostMessage } from './i18n'
 import { quotePosix } from './quote'
 
 export const SHELL_ENV_TIMEOUT_MS = 10_000
+/** The first wait before a read that fell back is tried again; each one after it doubles it. */
+const RETRY_MS = 5_000
+const MAX_RETRY_MS = 5 * 60_000
 const MAX_PROBE_OUTPUT = 8 * 1024 * 1024
 
 export function defaultShell(platform: Platform, env: Env): string {
@@ -269,7 +272,8 @@ export interface EnvironmentServiceDeps {
 
 /**
  * Resolves the environment once, in the background, and caches it for the life of the
- * host. Agents wait for it; `reload` resolves it again.
+ * host. Agents wait for it; `reload` resolves it again. A read that fell back is tried again in
+ * the background until the login shell answers, since one at a busy start can time out.
  */
 export class EnvironmentService {
   private resolved: ShellEnvironment | null = null
@@ -279,6 +283,9 @@ export class EnvironmentService {
   private configFolders: Partial<Record<AgentId, ConfigFolder>> = {}
   private resolvedAt: number | null = null
   private listeners = new Set<(info: EnvironmentInfo) => void>()
+  private recoveredListeners = new Set<() => void>()
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private retries = 0
 
   constructor(private readonly deps: EnvironmentServiceDeps) {}
 
@@ -289,6 +296,7 @@ export class EnvironmentService {
   }
 
   reload(): Promise<void> {
+    this.retries = 0
     this.current = this.run()
     return this.current
   }
@@ -304,6 +312,26 @@ export class EnvironmentService {
     this.resolvedAt = Date.now()
     const info = this.info()
     for (const listener of this.listeners) listener(info)
+    this.retryLater()
+  }
+
+  private retryLater(): void {
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = null
+    if (this.resolved?.source !== 'fallback') {
+      this.retries = 0
+      return
+    }
+    const delay = Math.min(RETRY_MS * 2 ** this.retries, MAX_RETRY_MS)
+    this.retries++
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      this.current = this.run().then(() => {
+        if (this.resolved?.source === 'fallback') return
+        for (const listener of this.recoveredListeners) listener()
+      })
+    }, delay)
+    this.retryTimer.unref?.()
   }
 
   setProxy(proxy: ProxySettings): void {
@@ -350,5 +378,11 @@ export class EnvironmentService {
   onChange(listener: (info: EnvironmentInfo) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  /** A background read replaced a fallback with the login shell's environment. */
+  onRecovered(listener: () => void): () => void {
+    this.recoveredListeners.add(listener)
+    return () => this.recoveredListeners.delete(listener)
   }
 }

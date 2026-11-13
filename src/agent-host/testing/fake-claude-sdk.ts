@@ -249,6 +249,8 @@ export class FakeClaudeSdk implements ClaudeSdk {
   /** Thrown by `resolveSettings` until cleared, so a test can fail to read the settings. */
   settingsError: Error | null = null
   settings: Record<string, unknown> = {}
+  /** Each source's own settings `resolveSettings` reports, lowest precedence first. */
+  sources: { source: string; settings: Record<string, unknown>; path?: string }[] = []
   generatedTitle: string | null = null
   /** What a query's `getTaskOutput` answers. */
   taskOutput = { output: '', total_bytes: 0, truncated: false }
@@ -343,7 +345,7 @@ export class FakeClaudeSdk implements ClaudeSdk {
   async resolveSettings(options: { cwd: string; settingSources?: string[] }) {
     this.record('resolveSettings', options, process.env.CLAUDE_CONFIG_DIR)
     if (this.settingsError) throw this.settingsError
-    return { effective: this.settings }
+    return { effective: this.settings, sources: this.sources }
   }
 
   filterEscalatingDefaultMode(resolved: { effective: Record<string, unknown> }) {

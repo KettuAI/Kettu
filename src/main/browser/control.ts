@@ -5,9 +5,6 @@
 import type { BrowserControlState } from '@shared/browser'
 import { ToolFailure } from './cdp'
 
-/** How long the "You have control" bar stays after the last call that met it. */
-export const CONTROL_BAR_MS = 10_000
-
 export interface BrowserControlDeps {
   /** A page's control state changed, for the pane. */
   changed(sessionId: string, state: BrowserControlState): void
@@ -18,8 +15,6 @@ interface State {
   running: boolean
   /** The user took control; it lasts until they hand back. */
   user: boolean
-  /** The hand-back bar shows while this timer runs. */
-  bar: ReturnType<typeof setTimeout> | null
 }
 
 export class BrowserControl {
@@ -31,7 +26,7 @@ export class BrowserControl {
   state(sessionId: string): BrowserControlState {
     const state = this.states.get(sessionId)
     if (!state) return { kind: 'none' }
-    if (state.user) return { kind: 'user', bar: state.bar !== null }
+    if (state.user) return { kind: 'user' }
     return state.running ? { kind: 'agent' } : { kind: 'none' }
   }
 
@@ -40,15 +35,10 @@ export class BrowserControl {
     return this.states.get(sessionId)?.user === true
   }
 
-  /**
-   * A call starts. While the user holds the page it fails, and the hand-back bar comes back for
-   * another 10 s, so the way out of their control is always one click away.
-   */
+  /** A call starts. While the user holds the page it fails. */
   begin(sessionId: string): void {
     const state = this.get(sessionId)
     if (state.user) {
-      this.showBar(state)
-      this.emit(sessionId)
       throw new ToolFailure(
         'user_has_control',
         'The user has control of the browser. Wait for them to hand it back.',
@@ -72,7 +62,6 @@ export class BrowserControl {
     if (state.user) return
     state.user = true
     state.running = false
-    this.showBar(state)
     this.emit(sessionId)
   }
 
@@ -86,15 +75,11 @@ export class BrowserControl {
     const state = this.states.get(sessionId)
     if (!state) return
     state.user = false
-    this.clearBar(state)
     this.emit(sessionId)
   }
 
   /** The page is gone; nothing holds it. */
   forget(sessionId: string): void {
-    const state = this.states.get(sessionId)
-    if (!state) return
-    this.clearBar(state)
     this.states.delete(sessionId)
   }
 
@@ -111,37 +96,13 @@ export class BrowserControl {
   private get(sessionId: string): State {
     let state = this.states.get(sessionId)
     if (!state) {
-      state = { running: false, user: false, bar: null }
+      state = { running: false, user: false }
       this.states.set(sessionId, state)
     }
     return state
   }
 
-  /**
-   * Shows Hand back for 10 s after the last call that met the user's control. The bar goes then,
-   * but their control stays until they press it; the next call brings the bar back.
-   */
-  private showBar(state: State): void {
-    this.clearBar(state)
-    state.bar = setTimeout(() => {
-      state.bar = null
-      this.emitOf(state)
-    }, CONTROL_BAR_MS)
-    state.bar.unref?.()
-  }
-
-  private clearBar(state: State): void {
-    if (state.bar) clearTimeout(state.bar)
-    state.bar = null
-  }
-
   private emit(sessionId: string): void {
     this.deps.changed(sessionId, this.state(sessionId))
-  }
-
-  private emitOf(state: State): void {
-    for (const [sessionId, known] of this.states) {
-      if (known === state) this.emit(sessionId)
-    }
   }
 }

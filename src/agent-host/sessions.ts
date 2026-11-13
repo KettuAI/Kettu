@@ -73,6 +73,8 @@ import {
   type ComputerSetupEntry,
   type ComputerUseView,
   type DeclaredMcpServer,
+  type ProjectHooksDecision,
+  type ProjectHooksEntry,
   type ProjectMcpDecision,
   type ProjectMcpEntry,
   type ThreadEntry,
@@ -122,6 +124,8 @@ import {
   type ModelTokens,
   type PermissionAnswer,
   type PermissionRequest,
+  type FolderHooks,
+  type ProjectHooksGate,
   type ProjectMcpGate,
   type PromptBlock,
   type SessionOptions,
@@ -142,6 +146,7 @@ import {
 } from '@shared/git'
 import type { GitEventDraft, GitServiceApi } from './git/api'
 import { canonicalizePath, isInside, pathKey, samePath } from './paths'
+import type { ProjectHooksAnswers } from './project-hooks'
 import type { ProjectMcpAnswers } from './project-mcp'
 import { REPORTS_PER_DAY, type ReportDraft } from './report-tool'
 import { isOutOfCredit } from './out-of-credit'
@@ -312,6 +317,8 @@ export interface SessionManagerDeps {
   returned: JsonFile<ReturnedFile>
   /** The user's answers about each folder's own MCP servers; without them none start. */
   projectMcp?: ProjectMcpAnswers
+  /** The user's answers about each folder's own Claude Code hooks; without them none run. */
+  projectHooks?: ProjectHooksAnswers
   /** Whether a port is still open, so a failed start knows whether its window can take its message. */
   portOpen(portId: string): boolean
   /** The paired device an open port serves, null for a window's; without it every port is one. */
@@ -732,6 +739,11 @@ export class SessionManager {
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
   private readonly projectMcpCards = new Map<string, { entryId: string; folder: string }>()
+  /** Each session's card holding its folder's own hooks while it waits, with what it holds. */
+  private readonly projectHooksCards = new Map<
+    string,
+    { entryId: string; folder: string; digest: string }
+  >()
   /** Each setup that waits, by the computer use service's request id, with who said Not now. */
   private readonly setupRequests = new Map<
     number,
@@ -804,6 +816,7 @@ export class SessionManager {
     this.emptySessionsRemovedAt = file.emptySessionsRemovedAt ?? null
     this.returned = (await this.deps.returned.load()).messages
     await this.deps.projectMcp?.load()
+    await this.deps.projectHooks?.load()
   }
 
   async flush(): Promise<void> {
@@ -811,6 +824,7 @@ export class SessionManager {
       this.deps.file.flush(),
       this.deps.returned.flush(),
       this.deps.projectMcp?.flush(),
+      this.deps.projectHooks?.flush(),
     ])
   }
 
@@ -2293,10 +2307,12 @@ export class SessionManager {
   ): SessionOptions {
     const skills = this.deps.skills?.(record.agentId) ?? {}
     const projectMcp = this.projectMcpGate(sessionId)
+    const projectHooks = this.projectHooksGate(sessionId)
     return {
       mcpServers: this.mcpServers(sessionId, record, runtime),
       ...skills,
       ...(projectMcp ? { projectMcp } : {}),
+      ...(projectHooks ? { projectHooks } : {}),
     }
   }
 
@@ -2318,9 +2334,24 @@ export class SessionManager {
     }
   }
 
+  /** Lets the user answer, in the session's thread, for the hooks its folder's settings declare. */
+  private projectHooksGate(sessionId: string): ProjectHooksGate | undefined {
+    const answers = this.deps.projectHooks
+    if (!answers) return undefined
+    return {
+      hold: async (cwd, hooks) => {
+        const folder = await this.folderKey(cwd)
+        const allowed = answers.allowed(folder, hooks.digest)
+        if (allowed === null) this.askProjectHooks(sessionId, folder, hooks)
+        return allowed !== true
+      },
+      held: async (cwd, hooks) => answers.allowed(await this.folderKey(cwd), hooks.digest) !== true,
+    }
+  }
+
   /**
-   * The key the user's answers about a folder's MCP servers are kept by: a session's worktree
-   * shares its project's, as switching branches in the project's folder would.
+   * The key the user's answers about a folder's MCP servers and hooks are kept by: a session's
+   * worktree shares its project's, as switching branches in the project's folder would.
    */
   private async folderKey(folder: string): Promise<string> {
     const platform = this.deps.platform
@@ -2407,6 +2438,71 @@ export class SessionManager {
     }
   }
 
+  /**
+   * The session's folder declares hooks nobody answered for: one card asks the user, taking up the
+   * hooks a later start of the session finds instead.
+   */
+  private askProjectHooks(sessionId: string, folder: string, hooks: FolderHooks): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const card = this.projectHooksCards.get(sessionId)
+    const open = card ? live.thread.byId[card.entryId] : undefined
+    if (card?.folder === folder && open?.kind === 'project_hooks' && open.decision === null) {
+      if (card.digest === hooks.digest) return
+      card.digest = hooks.digest
+      this.emit(live, [{ op: 'entry.update', id: card.entryId, changes: { hooks: hooks.hooks } }])
+      return
+    }
+    const entry: ProjectHooksEntry = {
+      kind: 'project_hooks',
+      id: this.nextId(live),
+      hooks: hooks.hooks,
+      decision: null,
+      after: agentEntryBefore(live.thread),
+    }
+    this.projectHooksCards.set(sessionId, { entryId: entry.id, folder, digest: hooks.digest })
+    this.emit(live, [{ op: 'entry.add', entry }])
+  }
+
+  /**
+   * A window's or a device's answer to a card holding its folder's own hooks. The first one counts:
+   * it is kept for the folder and settles every card of the folder it answers.
+   */
+  answerProjectHooks(
+    sessionId: string,
+    entryId: string,
+    decision: ProjectHooksDecision,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'project_hooks') throw notFound(`No hooks wait in ${entryId}`)
+    if (entry.decision !== null) {
+      throw new HostError('not_found', `The hooks of ${entryId} were already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    }
+    const card = this.projectHooksCards.get(sessionId)
+    const answers = this.deps.projectHooks
+    if (card?.entryId !== entryId || !answers) throw notFound(`No hooks wait in ${entryId}`)
+    answers.answer(card.folder, card.digest, decision)
+    for (const [id, other] of [...this.projectHooksCards]) {
+      if (other.folder !== card.folder) continue
+      const otherLive = this.live.get(id)
+      const waiting = otherLive?.thread.byId[other.entryId]
+      if (!otherLive || waiting?.kind !== 'project_hooks' || waiting.decision !== null) {
+        this.projectHooksCards.delete(id)
+        continue
+      }
+      if (answers.allowed(card.folder, other.digest) === null) continue
+      this.projectHooksCards.delete(id)
+      const changes = { decision, ...(device ? { device } : {}) }
+      this.emit(otherLive, [{ op: 'entry.update', id: other.entryId, changes }])
+    }
+  }
+
   private mcpServers(
     sessionId: string,
     record: SessionRecord,
@@ -2436,6 +2532,13 @@ export class SessionManager {
       this.emit(live, [{ op: 'entry.update', id: card.entryId, changes: { decision: 'timeout' } }])
     }
     this.projectMcpCards.delete(live.id)
+    const hooksCard = this.projectHooksCards.get(live.id)
+    const hooksWaiting = hooksCard ? live.thread.byId[hooksCard.entryId] : undefined
+    if (hooksCard && hooksWaiting?.kind === 'project_hooks' && hooksWaiting.decision === null) {
+      const changes = { decision: 'timeout' as const }
+      this.emit(live, [{ op: 'entry.update', id: hooksCard.entryId, changes }])
+    }
+    this.projectHooksCards.delete(live.id)
     this.flushPatches(live)
     if (live.checkpointTimer) clearTimeout(live.checkpointTimer)
     if (live.releaseTimer) clearTimeout(live.releaseTimer)
@@ -2478,10 +2581,17 @@ export class SessionManager {
   }
 
   private save(live: Live): void {
+    const added = !this.records.has(live.id)
     live.saved = true
     this.records.set(live.id, live.record)
     this.persist(live)
+    if (added) this.writeIndexNow()
     this.scheduleCheckpoint(live)
+  }
+
+  /** For a session new to the index, which a host that dies within the debounce would lose. */
+  private writeIndexNow(): void {
+    void this.deps.file.flushWritten()
   }
 
   // Mapper output.
@@ -7030,7 +7140,7 @@ export class SessionManager {
     from: FromSession,
   ): Promise<'sent' | 'queued'> {
     const content: UserContent[] = [{ type: 'text', text }]
-    this.unarchive(sessionId)
+    await this.unarchive(sessionId)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
@@ -7340,17 +7450,22 @@ export class SessionManager {
   }
 
   /** Brings back the archived session at the top of this one's tree, or the session itself. */
-  unarchive(sessionId: string): void {
+  async unarchive(sessionId: string): Promise<void> {
     let record = this.recordOf(sessionId)
-    if (record.archivedAt !== undefined) {
-      delete record.archivedAt
-      this.saveRecord(record.id)
-      return
+    if (record.archivedAt === undefined) {
+      while (record.parentId !== null && this.has(record.parentId)) {
+        record = this.recordOf(record.parentId)
+      }
+      if (record.archivedAt === undefined) return
     }
-    while (record.parentId !== null && this.has(record.parentId)) {
-      record = this.recordOf(record.parentId)
+    // The sidebar lists only the projects in the list, which the user may have removed it from.
+    const { projectPath } = record
+    const listed = this.deps.projects
+      .list()
+      .some((project) => samePath(project.path, projectPath, this.deps.platform))
+    if (!listed && !this.deps.scratch.contains(projectPath)) {
+      await this.deps.projects.add(projectPath)
     }
-    if (record.archivedAt === undefined) return
     delete record.archivedAt
     this.saveRecord(record.id)
   }
@@ -7748,6 +7863,7 @@ export class SessionManager {
     this.stampConfig(record)
     this.records.set(record.id, record)
     this.saveIndex()
+    this.writeIndexNow()
     this.touch(record.id)
     return this.summary(record.id)
   }

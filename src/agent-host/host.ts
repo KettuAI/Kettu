@@ -103,6 +103,7 @@ import { completePath } from './path-completion'
 import { pathKey } from './paths'
 import { PreparedRecords, preparedFile, settingsTargets } from './prepared'
 import { processControl, type ProcessControl } from './process-tree'
+import { ProjectHooksAnswers } from './project-hooks'
 import { ProjectMcpAnswers } from './project-mcp'
 import { Projects } from './projects'
 import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
@@ -123,6 +124,7 @@ import {
   agentsFile,
   agentUpdatesFile,
   projectsFile,
+  projectHooksFile,
   projectMcpFile,
   returnedFile,
   routinesFile,
@@ -626,6 +628,7 @@ export class AgentHost {
       file: sessionsFile(options.userDataPath, log),
       returned: returnedFile(options.userDataPath, log),
       projectMcp: new ProjectMcpAnswers(projectMcpFile(options.userDataPath, log)),
+      projectHooks: new ProjectHooksAnswers(projectHooksFile(options.userDataPath, log)),
       portOpen: (portId) => this.hub.has(portId),
       portDevice: (portId) => this.hub.deviceOf(portId),
       threads: this.threads,
@@ -826,6 +829,15 @@ export class AgentHost {
     this.env.onChange((info) => {
       this.broadcast({ type: 'environment.changed', info })
       this.git?.setEnvironment(this.env.agentEnv() as NodeJS.ProcessEnv)
+    })
+    // As Reload does: the fallback's PATH may have missed programs the login shell's finds.
+    this.env.onRecovered(() => {
+      void (async () => {
+        await this.agents.redetect()
+        if (this.git) await this.gitCall((g) => g.reloadTools())
+      })().catch((error: unknown) =>
+        log('warn', `Could not detect the agents again: ${(error as Error).message}`),
+      )
     })
     this.git =
       typeof options.git === 'function'
@@ -2005,6 +2017,9 @@ export class AgentHost {
       },
       'sessions.answerProjectMcp': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerProjectMcp(sessionId, entryId, decision, fromDevice(device))
+      },
+      'sessions.answerProjectHooks': ({ sessionId, entryId, decision }, { device }) => {
+        sessions.answerProjectHooks(sessionId, entryId, decision, fromDevice(device))
       },
       'sessions.answerReport': ({ sessionId, entryId, outcome }, { device }) => {
         sessions.answerReport(sessionId, entryId, outcome, fromDevice(device))

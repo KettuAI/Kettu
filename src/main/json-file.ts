@@ -61,16 +61,25 @@ export async function writeFileAtomic(path: string, data: string, mode?: number)
   }
 }
 
-/** Debounces writes of one JSON file and serializes them, so only the latest value lands. */
+const MAX_RETRY_MS = 60_000
+
+/**
+ * Debounces writes of one JSON file and serializes them, so only the latest value lands. A write
+ * that fails is kept and tried again, each wait twice the last, until it lands or a newer value
+ * replaces it.
+ */
 export class JsonFileWriter {
   private pending: { value: unknown } | null = null
   private timer: NodeJS.Timeout | null = null
+  private retryTimer: NodeJS.Timeout | null = null
+  private failures = 0
   private running: Promise<void> | null = null
 
   constructor(
     private readonly path: string,
     private readonly log: Logger,
     private readonly delayMs = 500,
+    private readonly retryMs = 5_000,
   ) {}
 
   schedule(value: unknown): void {
@@ -93,15 +102,40 @@ export class JsonFileWriter {
 
   private async drain(): Promise<void> {
     while (this.running) await this.running
-    if (!this.pending) return
-    const { value } = this.pending
+    const pending = this.pending
+    if (!pending) return
     this.pending = null
-    this.running = writeFileAtomic(this.path, `${JSON.stringify(value, null, 2)}\n`)
-      .catch((error: unknown) => this.log.error(`Could not write ${this.path}`, error))
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
+    this.running = writeFileAtomic(this.path, `${JSON.stringify(pending.value, null, 2)}\n`)
+      .then(
+        () => {
+          this.failures = 0
+        },
+        (error: unknown) => {
+          this.log.error(`Could not write ${this.path}`, error)
+          // Kept for the next try, unless a later value has replaced it.
+          this.pending ??= pending
+          this.retryLater()
+        },
+      )
       .finally(() => {
         this.running = null
       })
     await this.running
-    if (this.pending && !this.timer) await this.drain()
+    if (this.pending && !this.timer && !this.retryTimer) await this.drain()
+  }
+
+  private retryLater(): void {
+    if (this.timer || this.retryTimer) return
+    const delay = Math.min(this.retryMs * 2 ** this.failures, MAX_RETRY_MS)
+    this.failures++
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      void this.drain()
+    }, delay)
+    this.retryTimer.unref?.()
   }
 }

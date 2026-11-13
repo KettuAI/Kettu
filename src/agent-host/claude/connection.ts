@@ -16,6 +16,7 @@ import {
   optionAnswer,
   type AgentConnection,
   type AgentInit,
+  type FolderHooks,
   type ForkPoint,
   type ListedSession,
   type McpServer,
@@ -73,6 +74,7 @@ import {
   questionOptions,
   QUESTIONS_SKIPPED,
 } from './permissions'
+import { folderHooks } from './project-hooks'
 import { declaredServers } from './project-mcp'
 import { mapAccount, mapAuthStatus, mapContextUsage, mapUsageLimits } from './reports'
 import { askedQuestions } from './tools'
@@ -234,6 +236,10 @@ interface Session {
   stale: boolean
   /** The servers the folder declares itself that the query was started without. */
   held: string[]
+  /** The hooks the folder declares itself, which the query runs only when `hooksHeld` is false. */
+  hooks: FolderHooks | null
+  /** The query was started with every hook off, the folder's not being allowed. */
+  hooksHeld: boolean
   /** What the title is generated from, until one is settled on. */
   titleText: string | null
   /** Bumps each time `titleText` grows, so a failed ask is not repeated for the same text. */
@@ -772,22 +778,28 @@ export class ClaudeConnection implements AgentConnection {
 
   // Opening a query.
 
-  /** Reads the settings a session starts with; an unreadable file only leaves the defaults. */
+  /**
+   * Reads the settings a session starts with, and the hooks the folder's own declare; an
+   * unreadable file only leaves the defaults.
+   */
   private async settings(
     cwd: string,
     sources: SettingSource[],
-  ): Promise<{ values: Record<string, unknown>; known: boolean }> {
+  ): Promise<{ values: Record<string, unknown>; known: boolean; hooks: FolderHooks | null }> {
     const sdk = this.requireSdk()
     try {
-      const values = await this.withConfigDir(async () => {
+      const { values, hooks } = await this.withConfigDir(async () => {
         const resolved = await sdk.resolveSettings({ cwd, settingSources: sources })
         // A mode a repository's own settings escalate to holds only once Claude Code trusts it.
-        return sdk.filterEscalatingDefaultMode(resolved)
+        return {
+          values: sdk.filterEscalatingDefaultMode(resolved),
+          hooks: folderHooks(resolved.sources),
+        }
       })
-      return { values, known: true }
+      return { values, known: true, hooks }
     } catch (error) {
       this.context.hooks.log('warn', `Could not read Claude Code's settings: ${errorText(error)}`)
-      return { values: {}, known: false }
+      return { values: {}, known: false, hooks: null }
     }
   }
 
@@ -841,6 +853,8 @@ export class ClaudeConnection implements AgentConnection {
       terminal: new Set(),
       stale: false,
       held: [],
+      hooks: settings.hooks,
+      hooksHeld: false,
       titleText: '',
       titleRev: 0,
       titleForRev: null,
@@ -854,7 +868,9 @@ export class ClaudeConnection implements AgentConnection {
       process: null,
     }
     const flags: Record<string, unknown> = {}
-    if (hidden) flags.disableAllHooks = true
+    // Through the SDK, Claude Code runs the hooks of a folder's own settings without asking.
+    session.hooksHeld = !hidden && (await this.hooksHeld(cwd, options, settings))
+    if (hidden || session.hooksHeld) flags.disableAllHooks = true
     // A page's question reads none of the user's settings but how they sign in, which may be there.
     if (bare) Object.assign(flags, signInSettings((await this.settings(cwd, ['user'])).values))
     // Through the SDK, Claude Code starts the servers of a folder's .mcp.json without asking.
@@ -1439,10 +1455,35 @@ export class ClaudeConnection implements AgentConnection {
   }
 
   /**
-   * Whether the user allowed a server the query was started without since, which a running query
-   * never takes up, so it opens again.
+   * Whether the hooks of `cwd`'s own settings may not run: all of them without a gate, and those
+   * of settings that could not be read, which may declare some.
+   */
+  private async hooksHeld(
+    cwd: string,
+    options: SessionOptions,
+    settings: { known: boolean; hooks: FolderHooks | null },
+  ): Promise<boolean> {
+    if (!settings.known) return true
+    if (!settings.hooks) return false
+    const gate = options.projectHooks
+    if (!gate) return true
+    try {
+      return await gate.hold(cwd, settings.hooks)
+    } catch (error) {
+      this.context.hooks.log('warn', `Could not read the answers for ${cwd}: ${errorText(error)}`)
+      return true
+    }
+  }
+
+  /**
+   * Whether the user allowed hooks or a server the query was started without since, which a
+   * running query never takes up, so it opens again.
    */
   private async released(session: Session): Promise<boolean> {
+    const hooks = session.options.projectHooks
+    if (session.hooksHeld && session.hooks && hooks) {
+      if (!(await hooks.held(session.cwd, session.hooks))) return true
+    }
     const gate = session.options.projectMcp
     if (!gate || session.held.length === 0) return false
     return (await gate.held(session.cwd, session.held)).length < session.held.length

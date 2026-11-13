@@ -744,6 +744,11 @@ export class AgentManager {
 
   async reloadEnvironment(): Promise<AgentStatus[]> {
     await this.deps.env.reload()
+    return this.redetect()
+  }
+
+  /** Detects every harness again in the environment as it is now. */
+  async redetect(): Promise<AgentStatus[]> {
     this.cliVersions.clear()
     await Promise.all([...this.harnesses.values()].map((h) => this.detect(h)))
     return this.statuses()

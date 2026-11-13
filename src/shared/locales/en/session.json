@@ -176,6 +176,21 @@
       "timeout": "Not answered"
     }
   },
+  "projectHooks": {
+    "where": "This project’s .claude settings run these commands by themselves, such as when a session starts, on this computer as you. Until you allow them, this session runs no such commands, your own included.",
+    "hooks": "Commands",
+    "decision": {
+      "use": "Run",
+      "all": "Always run",
+      "skip": "Don’t run"
+    },
+    "answer": {
+      "use": "Allowed",
+      "all": "All of this project’s allowed",
+      "skip": "Not run",
+      "timeout": "Not answered"
+    }
+  },
   "problemReport": {
     "action": "send a problem report to Kettu",
     "send": "Send to Kettu",
@@ -830,7 +845,8 @@
       "site": "open a site",
       "device": "use a device",
       "app": "use an app",
-      "projectMcp": "start MCP servers"
+      "projectMcp": "start MCP servers",
+      "projectHooks": "run commands this project sets to run automatically"
     }
   },
   "worktree": {
