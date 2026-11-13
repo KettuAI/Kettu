@@ -1,4 +1,4 @@
-// Card thumbnails, asked for as cards scroll into view, one at a time in that order. Main renders
+// Card thumbnails, asked for as cards scroll into view, a few at a time in that order. Main renders
 // and keeps them on disk; this keeps the ones shown in this run.
 
 import { useEffect, useSyncExternalStore } from 'react'
@@ -27,11 +27,13 @@ export type ThumbnailOf = Pick<ArtifactSummary, 'id' | 'version' | 'pages' | 'ca
 
 /** About two hundred cards' worth of images; older ones are asked for again. */
 const KEPT = 200
+/** As many as main renders at once. */
+const AT_ONCE = 3
 
 const made = new Map<string, Thumbnail>()
 const waiting: { key: string; artifact: ThumbnailOf }[] = []
 const listeners = new Set<() => void>()
-let busy = false
+let asking = 0
 
 const LOADING: Thumbnail = { state: 'loading' }
 
@@ -86,10 +88,10 @@ async function render(artifact: ThumbnailOf): Promise<Thumbnail> {
 }
 
 function pump(): void {
-  if (busy) return
+  if (asking >= AT_ONCE) return
   const next = waiting.shift()
   if (!next) return
-  busy = true
+  asking++
   render(next.artifact)
     .catch((error: unknown) => {
       console.warn(`Could not show a thumbnail of ${next.artifact.id}`, error)
@@ -97,9 +99,10 @@ function pump(): void {
     })
     .then((thumbnail) => settle(next.key, thumbnail))
     .finally(() => {
-      busy = false
+      asking--
       pump()
     })
+  pump()
 }
 
 /** Queues the card's thumbnail, unless it is made or already waits. */
