@@ -28,6 +28,12 @@ export const RESUME_VERSION = 2
 /** How long the host keeps a device session after its connection drops, for the device to resume. */
 export const RESUME_MS = 60_000
 
+/**
+ * How long it keeps the session of a device that asked for the background pace: a phone is
+ * suspended soon after it leaves the foreground, so its connection drops while the user is away.
+ */
+export const BACKGROUND_RESUME_MS = 5 * 60_000
+
 /** The pace a device in the background asks for: a batch of patches a second. */
 export const BACKGROUND_PACE_MS = 1000
 
