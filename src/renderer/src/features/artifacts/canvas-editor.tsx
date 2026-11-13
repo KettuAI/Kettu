@@ -56,7 +56,7 @@ import { useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
 import { isModeKey } from './keys'
 import type { CanvasDocState } from './use-canvas-doc'
 import { useFrameParams } from './use-frame-params'
-import { pageUrl } from './use-artifact'
+import { framePageUrl } from './use-artifact'
 import { NOTE_COLOR_VAR, type PenStyle, type ShapeKind, type Tool } from './canvas-tools'
 import './canvas-editor.css'
 
@@ -309,6 +309,7 @@ export const CanvasEditor = memo(function CanvasEditor({
   artifactId,
   url,
   version,
+  loadFrom,
   title,
   canvas,
   files,
@@ -327,6 +328,8 @@ export const CanvasEditor = memo(function CanvasEditor({
   artifactId: string
   url: string
   version: number
+  /** The version each page file's frame loads, as the shown version keeps it. */
+  loadFrom: ReadonlyMap<string, number>
   title: string
   canvas: CanvasDocState
   /** The files of the version on screen; a page whose file is missing shows blank. */
@@ -1314,7 +1317,11 @@ export const CanvasEditor = memo(function CanvasEditor({
                   </div>
                 ) : live.has(p.id) ? (
                   <CanvasFrame
-                    src={pageUrl(url, version, { group: 0, index: 1, file: p.file })}
+                    src={framePageUrl(
+                      url,
+                      { version, loadFrom },
+                      { group: 0, index: 1, file: p.file },
+                    )}
                     title={name(p)}
                     width={p.width}
                     height={p.height}
@@ -1708,7 +1715,11 @@ export const CanvasEditor = memo(function CanvasEditor({
       {focusedPage && (
         <FocusedPage
           key={focusedPage.id}
-          src={pageUrl(url, version, { group: 0, index: 1, file: focusedPage.file })}
+          src={framePageUrl(
+            url,
+            { version, loadFrom },
+            { group: 0, index: 1, file: focusedPage.file },
+          )}
           page={{ ...focusedPage, number: 0, group: 0, index: 1 }}
           name={focusedPage.name}
           top={top}

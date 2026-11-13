@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ARTIFACT_ENTRY, isHtmlPath } from '@shared/artifact-files'
 import { versionUrlPath } from '@shared/artifact-page'
 import type { SessionViewer } from '@shared/agent-host'
-import { CONTENT_MISSING, type ArtifactSession, type ArtifactSummary } from '@shared/artifacts'
+import {
+  CONTENT_MISSING,
+  type ArtifactFileInfo,
+  type ArtifactSession,
+  type ArtifactSummary,
+} from '@shared/artifacts'
 import { artifactHost, artifactRefOf, errorCode, host } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import {
@@ -30,6 +36,52 @@ export interface ShownVersion {
   doc: CanvasDoc | null
   /** The version's files, by path. */
   paths: ReadonlySet<string>
+  /** Each file's hash, by path; null when the host gives none. */
+  sums: ReadonlyMap<string, string> | null
+  /** The version each HTML file's frame loads, by path, as `frameVersions` keeps it. */
+  loadFrom: ReadonlyMap<string, number>
+}
+
+/** The files a version's pages share: all but its HTML files and the canvas document. */
+function sharedFiles(sums: ReadonlyMap<string, string>): string {
+  return [...sums]
+    .filter(([path]) => !isHtmlPath(path) && path !== CANVAS_FILE)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([path, sum]) => `${path}\0${sum}`)
+    .join('\n')
+}
+
+/**
+ * The version each HTML file's frame loads: the one it loaded before while neither the file nor
+ * any file the pages share changed since, so a new version reloads only the pages it changed.
+ */
+function frameVersions(
+  before: ShownVersion | null,
+  version: number,
+  files: readonly ArtifactFileInfo[],
+): Pick<ShownVersion, 'sums' | 'loadFrom'> {
+  const sums = files.every((f) => f.hash !== undefined)
+    ? new Map(files.map((f) => [f.path, f.hash!]))
+    : null
+  const prior =
+    sums && before?.sums && sharedFiles(sums) === sharedFiles(before.sums) ? before : null
+  const loadFrom = new Map<string, number>()
+  for (const { path } of files) {
+    if (!isHtmlPath(path)) continue
+    if (prior && prior.sums?.get(path) === sums?.get(path)) {
+      loadFrom.set(path, prior.loadFrom.get(path) ?? prior.version)
+    } else loadFrom.set(path, version)
+  }
+  return { sums, loadFrom }
+}
+
+/** The address a frame of the shown version loads `page` from, as `frameVersions` keeps it. */
+export function framePageUrl(
+  url: string,
+  shown: Pick<ShownVersion, 'version' | 'loadFrom'>,
+  page?: { group: number; index: number; file?: string | null },
+): string {
+  return pageUrl(url, shown.loadFrom.get(page?.file ?? ARTIFACT_ENTRY) ?? shown.version, page)
 }
 
 /** A canvas document's pages in reading order, for the parts that number them: present, pins. */
@@ -78,6 +130,7 @@ export function useArtifact(id: string, version: number | null) {
   const [reloads, setReloads] = useState(0)
   const [announced, setAnnounced] = useState(0)
   const lastRead = useRef<number | null>(null)
+  const lastShown = useRef<{ id: string; shown: ShownVersion } | null>(null)
   const connected = useArtifactHostConnected(id)
   const summary = useSummary(id)
 
@@ -144,14 +197,18 @@ export function useArtifact(id: string, version: number | null) {
         if (!live) return
         lastRead.current = read.version
         const layout = doc ? docPages(doc) : layoutCanvas(parseCanvas(read.html))
-        setShown({
+        const before = lastShown.current?.id === id ? lastShown.current.shown : null
+        const next: ShownVersion = {
           version: read.version,
           title: read.title,
           files: read.files.length,
           canvas: doc || layout.pages.length >= 2 ? layout : null,
           doc,
           paths,
-        })
+          ...frameVersions(before, read.version, read.files),
+        }
+        lastShown.current = { id, shown: next }
+        setShown(next)
         setReadError(null)
       },
       (reason: unknown) => {

@@ -332,6 +332,7 @@ export default function ArtifactViewer({ id, history }: { id: string; history: b
             artifactId={id}
             url={url}
             version={shown.version}
+            loadFrom={shown.loadFrom}
             title={title}
             canvas={shownCanvas}
             files={shown.paths}

@@ -26,6 +26,8 @@ import {
 const USE_WAIT_MS = 10_000
 const SOURCE = 'data-kettu-src'
 const TEXT_CHARS = 200
+/** How long after the old page left the next version takes its scroll. */
+const SCROLL_KEPT_MS = 10_000
 
 type Message = Record<string, unknown> & { v: typeof RUNTIME_VERSION; id: string; kind: string }
 // Read from the transport as it came, so every field is checked where it is used.
@@ -235,6 +237,7 @@ export function start(config: RuntimeConfig): void {
   let accent = '#f2581b'
   let hovered: Element | null = null
   let picked: Element | null = null
+  let keepScroll = false
   let pins: Pin[] = []
   let frame = 0
   // What a preview changed on the picked element, to put back.
@@ -517,6 +520,9 @@ export function start(config: RuntimeConfig): void {
         if (typeof message.values !== 'object' || message.values === null) return
         for (const [name, value] of Object.entries(message.values)) setParam(name, value)
         return
+      case 'keep-scroll':
+        keepScroll = true
+        return
     }
   }
 
@@ -541,6 +547,50 @@ export function start(config: RuntimeConfig): void {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', readParams)
   else readParams()
 
+  // A page told that its next version replaces it, as an edit saves one, hands its scroll to that
+  // version through the session's storage of the artifact's origin, read once and only shortly
+  // after. A frame on an opaque origin, as the web client's are, has no storage and starts at top.
+  const KEPT = 'kettu-scroll'
+  const file = location.pathname.replace(/\/v\/\d+\//, '/')
+  const scrollTo = window.scrollTo.bind(window)
+  const storage = (() => {
+    try {
+      return window.sessionStorage
+    } catch {
+      return null
+    }
+  })()
+  try {
+    const kept = storage?.getItem(KEPT)
+    if (kept) {
+      storage!.removeItem(KEPT)
+      const { path, x, y, at } = JSON.parse(kept) as Record<string, unknown>
+      if (path === file && typeof at === 'number' && Date.now() - at < SCROLL_KEPT_MS) {
+        let placed = -1
+        const place = (): void => {
+          scrollTo({ left: Number(x) || 0, top: Number(y) || 0, behavior: 'instant' })
+          placed = window.scrollY
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', place, { once: true })
+        } else place()
+        // Images and fonts may make the page long enough only once they load.
+        window.addEventListener('load', () => window.scrollY === placed && place(), { once: true })
+      }
+    }
+  } catch {
+    // A page may have written the key itself; it starts at the top then.
+  }
+  window.addEventListener('pagehide', () => {
+    if (!keepScroll) return
+    const at = Date.now()
+    try {
+      storage?.setItem(KEPT, JSON.stringify({ path: file, x: scrollX, y: scrollY, at }))
+    } catch {
+      // Storage full or turned off: the next version starts at the top.
+    }
+  })
+
   window.addEventListener('message', (event) => {
     // Only the client that holds the frame drives it; the page's own messages are ignored.
     if (event.source !== parent || parent === window) return
@@ -550,6 +600,7 @@ export function start(config: RuntimeConfig): void {
     if (
       data.kind !== 'transport' &&
       data.kind !== 'params' &&
+      data.kind !== 'keep-scroll' &&
       !data.kind.startsWith('select') &&
       !data.kind.startsWith('preview')
     ) {

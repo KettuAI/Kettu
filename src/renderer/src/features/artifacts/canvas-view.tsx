@@ -35,7 +35,7 @@ import type { CanvasLayout, PlacedPage } from './canvas'
 import type { CanvasControls } from './canvas-controls'
 import { useEditorFrame, useEditorState, type ArtifactEditor, type EditorFrame } from './editor'
 import { isModeKey } from './keys'
-import { pageUrl } from './use-artifact'
+import { framePageUrl } from './use-artifact'
 import { BarButton } from './viewer-parts'
 
 /** How long a page may load before the next one starts anyway. */
@@ -68,6 +68,7 @@ export interface PageActions {
 export const CanvasView = memo(function CanvasView({
   url,
   version,
+  loadFrom,
   title,
   layout,
   reloads,
@@ -81,6 +82,8 @@ export const CanvasView = memo(function CanvasView({
 }: {
   url: string
   version: number
+  /** The version each page file's frame loads, as the shown version keeps it. */
+  loadFrom: ReadonlyMap<string, number>
   title: string
   layout: CanvasLayout
   reloads: number
@@ -510,7 +513,7 @@ export const CanvasView = memo(function CanvasView({
             >
               {live.has(i) ? (
                 <CanvasFrame
-                  src={pageUrl(url, version, p)}
+                  src={framePageUrl(url, { version, loadFrom }, p)}
                   title={name(p)}
                   width={p.width}
                   height={p.height}
@@ -681,7 +684,7 @@ export const CanvasView = memo(function CanvasView({
       {shownPage && (
         <FocusedPage
           key={`${shownPage.group}.${shownPage.index}`}
-          src={pageUrl(url, version, shownPage)}
+          src={framePageUrl(url, { version, loadFrom }, shownPage)}
           page={shownPage}
           name={name(shownPage)}
           top={top}

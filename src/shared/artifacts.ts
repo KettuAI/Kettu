@@ -132,6 +132,8 @@ export interface ArtifactFileInfo {
   path: string
   size: number
   type: string
+  /** The bytes' hash, the same in every version that has the same file; absent from older hosts. */
+  hash?: string
 }
 
 export interface ArtifactContent {

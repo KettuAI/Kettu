@@ -1885,6 +1885,7 @@ export class AgentHost {
             path: file.path,
             size: file.size,
             type: artifactFileType(file.path),
+            hash: file.hash,
           })),
         }
       },
