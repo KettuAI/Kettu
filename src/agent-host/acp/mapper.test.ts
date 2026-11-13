@@ -30,7 +30,13 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
-import { allowedLimit, mapRateLimits, mergeReadLimit, rawInputText } from '../session-updates'
+import {
+  allowedLimit,
+  mapRateLimits,
+  mergeReadLimit,
+  mergeReadLimits,
+  rawInputText,
+} from '../session-updates'
 
 const baseSession: SessionView = {
   id: 's1',
@@ -1265,6 +1271,24 @@ describe('extensions and helpers', () => {
     expect(mergeReadLimit(reached, unknown, 3_000)).toEqual(unknown)
     const warning = { ...reached, usedPercent: 80, state: 'warning' as const }
     expect(mergeReadLimit(warning, read, 10)).toEqual({ ...read, state: 'warning' })
+  })
+
+  it('drops a window the read no longer lists, unless the read found none', () => {
+    const window = (id: string, usedPercent: number, observedAt: number) => ({
+      window: id,
+      label: id,
+      usedPercent,
+      resetsAt: 9_000,
+      state: 'ok' as const,
+      observedAt,
+    })
+    const known = [window('five_hour', 0, 1), window('seven_day', 3, 5), window('overage', 20, 5)]
+    expect(mergeReadLimits(known, [window('seven_day', 4, 10)], 10)).toEqual([
+      window('seven_day', 4, 10),
+      // Extra usage comes only in rate limit events.
+      window('overage', 20, 5),
+    ])
+    expect(mergeReadLimits(known, [], 10)).toEqual(known)
   })
 
   it('clears a reached state once the plan is allowed again, unless the window is used up', () => {
