@@ -54,6 +54,7 @@ import { dialRelay } from '@shared/remote/relay-device'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import {
   BROWSER_FEATURE,
+  IMAGE_REFS_FEATURE,
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   RESUME_MS,
@@ -1297,7 +1298,7 @@ export class HostClient {
       protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
       client: this.options.client,
       // Main runs the browser calls of the turns this computer sends.
-      features: [BROWSER_FEATURE],
+      features: [BROWSER_FEATURE, IMAGE_REFS_FEATURE],
     }
     if (model === undefined) return hello
     const name = normalizeDeviceName(this.options.name()) ?? 'Kettu'

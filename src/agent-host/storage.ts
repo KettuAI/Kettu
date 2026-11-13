@@ -107,8 +107,13 @@ export interface JsonFileOptions<T> {
   compact?: boolean
   /** What is written for the data, when the file keeps it in another shape than `parse` gives. */
   serialize?(data: T): unknown
+  /** The first wait before a failed write is tried again; each failure after it doubles it. */
+  retryMs?: number
   now?: () => number
 }
+
+/** The longest a failed write waits before it is tried again. */
+const MAX_RETRY_MS = 60_000
 
 /** The file name a corrupt file is moved to, safe on every platform. */
 export function corruptName(file: string, at: number): string {
@@ -119,6 +124,9 @@ export function corruptName(file: string, at: number): string {
 export class JsonFile<T> {
   private pending: T | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
+  /** Writes that failed in a row. */
+  private failures = 0
   /** The writes in turn; each settles to whether it reached the disk. */
   private writing: Promise<boolean> = Promise.resolve(true)
   /** A file from a newer version of the app is never overwritten. */
@@ -198,22 +206,43 @@ export class JsonFile<T> {
     const data = this.pending
     if (data === null) return this.writing
     this.pending = null
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
     const { serialize, compact } = this.options
     const json = JSON.stringify(serialize ? serialize(data) : data, null, compact ? undefined : 2)
     const contents = `${json}\n`
     this.writing = this.writing
       .then(() => writeFileAtomic(this.options.file, contents))
       .then(
-        () => true,
+        () => {
+          this.failures = 0
+          return true
+        },
         (error: unknown) => {
           this.options.log(
             'error',
             `Could not write ${this.options.file}: ${(error as Error).message}`,
           )
+          // Kept for the next try, unless a later save has replaced it.
+          this.pending ??= data
+          this.retryLater()
           return false
         },
       )
     return this.writing
+  }
+
+  private retryLater(): void {
+    if (this.timer || this.retryTimer) return
+    const delay = Math.min((this.options.retryMs ?? 5_000) * 2 ** this.failures, MAX_RETRY_MS)
+    this.failures++
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      void this.writePending()
+    }, delay)
+    this.retryTimer.unref?.()
   }
 
   /** Writes what is pending now, and waits for writes in flight. */

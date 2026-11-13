@@ -23,6 +23,7 @@ import {
 import type { KeyPair } from './noise'
 import { bytesOf, isBinary } from './places'
 import {
+  IMAGE_REFS_FEATURE,
   MIN_PROTOCOL_VERSION,
   PROTOCOL_VERSION,
   RESUME_MS,
@@ -198,6 +199,8 @@ export function hello(client: Hello['client'], device?: Hello['device']): Hello 
     protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
     client,
     ...(device ? { device } : {}),
+    // The web client shows the thread with the window's components.
+    features: [IMAGE_REFS_FEATURE],
   }
 }
 

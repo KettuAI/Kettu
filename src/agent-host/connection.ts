@@ -196,7 +196,10 @@ export function promptBlocks(content: readonly UserContent[]): PromptBlock[] {
     const ref = item.ref
     switch (ref.kind) {
       case 'image':
-        return { type: 'image', mimeType: ref.mimeType, data: ref.data }
+        // The host reads a stored image's bytes and sends them itself; never reached without.
+        return 'data' in ref
+          ? { type: 'image', mimeType: ref.mimeType, data: ref.data }
+          : { type: 'text', text: ref.mimeType }
       case 'link':
         return { type: 'resource_link', uri: ref.uri, name: ref.name }
       // The host turns attachments into images and links before a prompt goes; never reached.

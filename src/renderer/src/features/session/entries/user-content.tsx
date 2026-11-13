@@ -66,18 +66,17 @@ export function UserContentView({
                   sessionId={sessionId}
                   entryId={entryId}
                   index={i}
-                  mimeType={ref.mimeType}
-                  data={ref.data}
+                  image={ref}
                   className={IMAGE}
                 />
-              ) : (
+              ) : 'data' in ref ? (
                 <img
                   key={i}
                   alt=""
                   src={`data:${ref.mimeType};base64,${ref.data}`}
                   className={IMAGE}
                 />
-              )
+              ) : null
             ) : ref.kind === 'audio' || ref.kind === 'video' ? (
               <CarriedMedia
                 key={i}

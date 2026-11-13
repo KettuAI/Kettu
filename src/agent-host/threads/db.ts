@@ -2,7 +2,7 @@
 // node:sqlite is synchronous, so this runs in the thread worker, never on the host's event loop.
 
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, renameSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, statfsSync } from 'node:fs'
 import path from 'node:path'
 import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite'
 import { RUNTIME_VERSION } from '@shared/artifact-capabilities'
@@ -36,9 +36,10 @@ import type {
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
 import {
-  attachmentBlobs,
+  storedBlobs,
   EMPTY_SESSION,
   INLINE_MEDIA_LIMIT,
+  type ImageMode,
   mapRefs,
   PAGE_ENTRIES,
   PAGE_LIMIT,
@@ -227,7 +228,9 @@ export function schemaAt(version: number): string {
 }
 
 // SQLite's primary result codes, the low byte of node:sqlite's `errcode`.
+const SQLITE_IOERR = 10
 const SQLITE_CORRUPT = 11
+const SQLITE_FULL = 13
 const SQLITE_CONSTRAINT = 19
 const SQLITE_NOTADB = 26
 // Above every position; SQLite compares it as a 64-bit integer.
@@ -256,6 +259,22 @@ function resultCode(error: unknown): number | null {
 const isCorrupt = (error: unknown): boolean => {
   const code = resultCode(error)
   return code === SQLITE_CORRUPT || code === SQLITE_NOTADB
+}
+
+// Less free space than this makes an I/O error a full disk's.
+const LOW_SPACE_BYTES = 64 * 1024 * 1024
+
+/** Whether the failure is for want of room: SQLite's own, or an I/O error on a disk nearly full. */
+function isFull(error: unknown, folder: string): boolean {
+  const code = resultCode(error)
+  if (code === SQLITE_FULL) return true
+  if (code !== SQLITE_IOERR) return false
+  try {
+    const { bavail, bsize } = statfsSync(folder)
+    return bavail * bsize < LOW_SPACE_BYTES
+  } catch {
+    return false
+  }
 }
 
 type Row = Record<string, SQLOutputValue>
@@ -394,6 +413,7 @@ function prepareAll(db: DatabaseSync) {
       'INSERT OR IGNORE INTO blobs (session_id, hash, mime, data) VALUES (?, ?, ?, ?)',
     ),
     blob: sql('SELECT mime, data FROM blobs WHERE session_id = ? AND hash = ?'),
+    hasBlob: sql('SELECT 1 AS found FROM blobs WHERE session_id = ? AND hash = ?'),
     // `entries.json`, since json_each has a hidden column of that name.
     mentions: sql(`SELECT 1 FROM entries WHERE session_id = ?1 AND (
       (kind = 'agent' AND instr(json_extract(json, '$.markdown'), ?2) > 0)
@@ -526,6 +546,10 @@ export class ThreadDb {
   status: ThreadDbStatus = 'ok'
   /** False once the content folder could not follow a damaged database aside. */
   private sweeps = true
+  /** How many times a damaged file was moved aside and an empty one started. */
+  recoveries = 0
+  /** Opened only to read, beside the connection that writes and recovers. */
+  private reader = false
 
   private constructor(
     private readonly file: string,
@@ -551,6 +575,31 @@ export class ThreadDb {
     } catch (error) {
       if (!isCorrupt(error)) throw error
       store.recover(error)
+    }
+    return store
+  }
+
+  /**
+   * Opens the file another connection created and migrated, only to read the threads: it never
+   * creates, migrates or moves the file aside, and fails when it is not at this schema version.
+   */
+  static openReader(file: string, log: ThreadDbLog): ThreadDb {
+    const store = new ThreadDb(file, log, Date.now, null)
+    store.reader = true
+    const db = new DatabaseSync(file)
+    try {
+      const version = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0)
+      if (version !== SCHEMA_VERSION) {
+        throw new Error(
+          `${path.basename(file)} is at schema version ${version}, not ${SCHEMA_VERSION}`,
+        )
+      }
+      db.exec('PRAGMA query_only = ON')
+      store.sql = prepareAll(db)
+      store.db = db
+    } catch (error) {
+      db.close()
+      throw error
     }
     return store
   }
@@ -627,6 +676,7 @@ export class ThreadDb {
       }
     }
     this.status = 'recovered'
+    this.recoveries++
     this.connect()
   }
 
@@ -657,6 +707,8 @@ export class ThreadDb {
     } catch (error) {
       if (error instanceof ThreadDbError) throw error
       if (isCorrupt(error)) {
+        // A reader leaves the file to the connection that writes, which the store asks again.
+        if (this.reader) throw new ThreadDbError((error as Error).message, 'corrupt')
         this.recover(error)
         throw new ThreadDbError(
           `The thread database was damaged: ${(error as Error).message}`,
@@ -665,6 +717,9 @@ export class ThreadDb {
       }
       if (resultCode(error) === SQLITE_CONSTRAINT) {
         throw new ThreadDbError((error as Error).message, 'conflict')
+      }
+      if (isFull(error, path.dirname(this.file))) {
+        throw new ThreadDbError((error as Error).message, 'full')
       }
       throw error
     }
@@ -707,8 +762,17 @@ export class ThreadDb {
     }
   }
 
-  /** An entry as stored, with its images put back; null when it does not parse. */
-  private entryOf(sql: Statements, sessionId: string, row: Row): ThreadEntry | null {
+  /**
+   * An entry as stored, with its sounds and clips put back, and its images too when `images` is
+   * `inline`; with `refs`, an image names its bytes by their hash instead. Null when it does not
+   * parse.
+   */
+  private entryOf(
+    sql: Statements,
+    sessionId: string,
+    row: Row,
+    images: ImageMode,
+  ): ThreadEntry | null {
     let value: unknown
     try {
       value = JSON.parse(String(row.json))
@@ -718,6 +782,13 @@ export class ThreadDb {
     if (typeof value === 'object' && value !== null) {
       value = mapRefs(value as Record<string, unknown>, (ref) => {
         if (typeof ref.blob !== 'string') return ref
+        if (images === 'refs' && ref.kind === 'image') {
+          if (sql.hasBlob.get(sessionId, ref.blob)) {
+            return { kind: 'image', mimeType: ref.mimeType, blob: ref.blob }
+          }
+          this.log('warn', `Media ${ref.blob} of session ${sessionId} is missing`)
+          return { kind: 'unsupported', label: String(ref.mimeType) }
+        }
         const blob = sql.blob.get(sessionId, ref.blob)
         if (!blob) {
           this.log('warn', `Media ${ref.blob} of session ${sessionId} is missing`)
@@ -736,10 +807,15 @@ export class ThreadDb {
     return null
   }
 
-  private entriesOf(sql: Statements, sessionId: string, rows: Row[]): ThreadEntry[] | null {
+  private entriesOf(
+    sql: Statements,
+    sessionId: string,
+    rows: Row[],
+    images: ImageMode,
+  ): ThreadEntry[] | null {
     const entries: ThreadEntry[] = []
     for (const row of rows) {
-      const entry = this.entryOf(sql, sessionId, row)
+      const entry = this.entryOf(sql, sessionId, row, images)
       if (!entry) return null
       entries.push(entry)
     }
@@ -751,16 +827,18 @@ export class ThreadDb {
     sessionId: string,
     from: number,
     before: number,
+    images: ImageMode,
   ): ThreadPage | null {
     const head = this.headOf(sql, sessionId)
     if (!head) return null
-    const entries = this.entriesOf(sql, sessionId, sql.range.all(sessionId, from, before))
+    const rows = sql.range.all(sessionId, from, before)
+    const entries = this.entriesOf(sql, sessionId, rows, images)
     if (!entries) return null
     const older = sql.previous.get(sessionId, from) ? from : null
     let plan: ThreadPage['plan'] = null
     const latest = sql.latestPlan.get(sessionId)
     if (latest && Number(latest.pos) < from) {
-      const entry = this.entryOf(sql, sessionId, latest)
+      const entry = this.entryOf(sql, sessionId, latest, images)
       if (entry?.kind === 'plan') plan = entry
     }
     const { session, ...rest } = head
@@ -771,15 +849,21 @@ export class ThreadDb {
    * The page that ends below `before`, or the latest page when it is null: at least
    * `PAGE_ENTRIES` entries back to the start of their turn, cut at `PAGE_LIMIT`. With `reach`, it
    * goes back to the start of the turn holding that position instead, uncut. Null when the
-   * session has no stored thread, or a part of it does not parse.
+   * session has no stored thread, or a part of it does not parse. Images are references unless
+   * `images` is `inline`, for a client that reads only the bytes.
    */
-  page(sessionId: string, before: number | null, reach: number | null = null): ThreadPage | null {
+  page(
+    sessionId: string,
+    before: number | null,
+    reach: number | null = null,
+    images: ImageMode = 'refs',
+  ): ThreadPage | null {
     return this.guard((sql) => {
       const bound = before ?? END
       if (reach !== null && reach < bound) {
         const turn = sql.turnFrom.get(sessionId, reach)?.turn
         const start = turn === undefined || turn === null ? reach : Math.min(Number(turn), reach)
-        return this.pageOf(sql, sessionId, start, bound)
+        return this.pageOf(sql, sessionId, start, bound, images)
       }
       const start = sql.pageStart.get(sessionId, bound, PAGE_ENTRIES)?.start
       if (start === null || start === undefined) {
@@ -792,13 +876,13 @@ export class ThreadDb {
       let from = Number(start)
       const floor = sql.pageFloor.get(sessionId, bound, PAGE_LIMIT - 1)?.pos
       if (floor !== undefined && floor !== null && Number(floor) > from) from = Number(floor)
-      return this.pageOf(sql, sessionId, from, bound)
+      return this.pageOf(sql, sessionId, from, bound, images)
     }, null)
   }
 
   /** Everything from `from` to the end, for a window the renderer holds already. */
-  tail(sessionId: string, from: number): ThreadPage | null {
-    return this.guard((sql) => this.pageOf(sql, sessionId, from, END), null)
+  tail(sessionId: string, from: number, images: ImageMode = 'refs'): ThreadPage | null {
+    return this.guard((sql) => this.pageOf(sql, sessionId, from, END, images), null)
   }
 
   /** The session's user messages with their titles, oldest first; null without a stored thread. */
@@ -830,14 +914,14 @@ export class ThreadDb {
     )
   }
 
-  /** The whole thread, for a session whose agent connects. */
+  /** The whole thread, for a session whose agent connects, its images as references. */
   load(sessionId: string): StoredThread | null {
     return this.guard((sql) => {
       const head = this.headOf(sql, sessionId)
       if (!head) return null
       const entries: PositionedEntry[] = []
       for (const row of sql.range.all(sessionId, 0, END)) {
-        const entry = this.entryOf(sql, sessionId, row)
+        const entry = this.entryOf(sql, sessionId, row, 'refs')
         if (!entry) return null
         entries.push({ pos: Number(row.pos), entry })
       }
@@ -876,12 +960,12 @@ export class ThreadDb {
   write(sessionId: string, change: ThreadWrite): void {
     this.guard((sql, db) => {
       this.transaction(db, () => {
-        // Writing whole drops the session's bytes with its rows; those its attachments name stay.
+        // Writing whole drops the session's bytes with its rows; those its entries name stay.
         const kept: StoredBlob[] = []
         // So do the outline's titles, whose positions keep their messages.
         let titles: Row[] = []
         if (change.replace) {
-          for (const hash of attachmentBlobs(change.entries.map(({ entry }) => entry))) {
+          for (const hash of storedBlobs(change.entries.map(({ entry }) => entry))) {
             const row = sql.blob.get(sessionId, hash)
             if (row) kept.push({ hash, mime: String(row.mime), data: row.data as Uint8Array })
           }
@@ -1596,7 +1680,7 @@ export class ThreadDb {
     this.sql = null
     if (!db) return
     try {
-      if (checkpoint) db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+      if (checkpoint && !this.reader) db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
     } catch (error) {
       this.log('warn', `Could not fold the thread database's WAL: ${(error as Error).message}`)
     }

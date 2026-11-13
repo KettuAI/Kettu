@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   existsSync,
   mkdirSync,
@@ -12,7 +13,7 @@ import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ContextBreakdown } from '@shared/context'
-import type { SessionView, ThreadEntry } from '@shared/thread'
+import type { ContentRef, SessionView, ThreadEntry } from '@shared/thread'
 import { contentHash, contentPath } from '../artifacts/content'
 import { schemaAt, SCHEMA_VERSION, ThreadDb, ThreadDbError } from './db'
 import {
@@ -363,23 +364,33 @@ describe('the thread database', () => {
     again.close()
   })
 
-  it('keeps large images apart, once per session, and puts them back when read', () => {
+  it('keeps large images apart, once per session, and reads them back by hash or with bytes', () => {
     const file = tempFile()
     const db = open(file)
-    const big = Buffer.alloc(INLINE_MEDIA_LIMIT, 7).toString('base64')
+    const bytes = Buffer.alloc(INLINE_MEDIA_LIMIT, 7)
+    const big = bytes.toString('base64')
+    const hash = createHash('sha256').update(bytes).digest('hex')
     const small = Buffer.from('tiny').toString('base64')
-    const shot = (id: string, data: string): ThreadEntry => ({
+    const shot = (id: string, ref: ContentRef): ThreadEntry => ({
       ...(tool(id) as Extract<ThreadEntry, { kind: 'tool' }>),
-      content: [{ type: 'ref', ref: { kind: 'image', mimeType: 'image/png', data } }],
+      content: [{ type: 'ref', ref }],
     })
-    const prompt: ThreadEntry = {
+    const prompt = (ref: ContentRef): ThreadEntry => ({
       kind: 'user',
       id: 'u',
-      content: [{ type: 'ref', ref: { kind: 'image', mimeType: 'image/png', data: big } }],
-    }
-    const entries = [prompt, shot('t1', big), shot('t2', small)]
+      content: [{ type: 'ref', ref }],
+    })
+    const image = (data: string): ContentRef => ({ kind: 'image', mimeType: 'image/png', data })
+    const stored: ContentRef = { kind: 'image', mimeType: 'image/png', blob: hash }
+    const entries = [prompt(image(big)), shot('t1', image(big)), shot('t2', image(small))]
     db.write('s1', { head, entries: entries.map((entry, pos) => ({ pos, entry })) })
-    expect(db.page('s1', null)!.entries).toEqual(entries)
+    // A client that reads only bytes gets them back; the others, and a load, the hash.
+    expect(db.page('s1', null, null, 'inline')!.entries).toEqual(entries)
+    const byHash = [prompt(stored), shot('t1', stored), shot('t2', image(small))]
+    expect(db.page('s1', null)!.entries).toEqual(byHash)
+    expect(db.tail('s1', 0)!.entries).toEqual(byHash)
+    expect(db.load('s1')!.entries.map(({ entry }) => entry)).toEqual(byHash)
+    expect(db.blob('s1', hash)?.data).toEqual(new Uint8Array(bytes))
     db.close()
 
     const raw = new DatabaseSync(file)
@@ -431,6 +442,36 @@ describe('the thread database', () => {
       name: null,
       blob: expect.any(String),
     })
+  })
+
+  it('keeps the bytes of images read by hash through a whole write that still names them', () => {
+    const db = open()
+    const bytes = Buffer.alloc(INLINE_MEDIA_LIMIT + 1, 5)
+    const hash = createHash('sha256').update(bytes).digest('hex')
+    const shot: ThreadEntry = {
+      ...(tool('t1') as Extract<ThreadEntry, { kind: 'tool' }>),
+      content: [
+        {
+          type: 'ref',
+          ref: { kind: 'image', mimeType: 'image/png', data: bytes.toString('base64') },
+        },
+      ],
+    }
+    db.write('s1', { head, entries: [{ pos: 0, entry: shot }] })
+    // A session that came back from the store holds the image by its hash, and is written whole.
+    const loaded = db.load('s1')!.entries
+    expect(loaded[0]!.entry).toMatchObject({
+      content: [{ type: 'ref', ref: { kind: 'image', mimeType: 'image/png', blob: hash } }],
+    })
+    db.write('s1', { head, entries: [...loaded, { pos: 1, entry: user('u1') }], replace: true })
+    expect(db.page('s1', null, null, 'inline')!.entries).toEqual([shot, user('u1')])
+    // A ref whose bytes are gone reads as one that cannot show.
+    db.write('s1', { head, entries: [{ pos: 0, entry: user('u0') }], replace: true })
+    db.write('s1', { head, entries: [{ pos: 1, entry: loaded[0]!.entry }] })
+    expect(db.page('s1', null)!.entries[1]).toMatchObject({
+      content: [{ type: 'ref', ref: { kind: 'unsupported', label: 'image/png' } }],
+    })
+    db.close()
   })
 
   it('keeps the bytes of sent attachments through a whole write that still names them', () => {
@@ -489,6 +530,32 @@ describe('the thread database', () => {
     expect(db.blob('s1', hash)).toBeNull()
     db.remove(['s2'])
     expect(db.blob('s2', hash)).toBeNull()
+    db.close()
+  })
+
+  it('tells a write that finds no room apart, and keeps what was stored', () => {
+    const db = open()
+    db.write('s1', { head, entries: turns(1, 0) })
+    // The pages it has are all it gets, as on a full disk.
+    const connection = (db as unknown as { db: DatabaseSync }).db
+    const pages = Number(connection.prepare('PRAGMA page_count').get()!.page_count)
+    connection.exec(`PRAGMA max_page_count = ${pages}`)
+    const long: ThreadEntry = {
+      kind: 'agent',
+      id: 'a1',
+      markdown: 'x'.repeat(1_000_000),
+      attachments: [],
+      streaming: false,
+    }
+    let failure: unknown = null
+    try {
+      db.write('s1', { head, entries: [{ pos: 3, entry: long }] })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toBeInstanceOf(ThreadDbError)
+    expect((failure as ThreadDbError).code).toBe('full')
+    expect(ids(db.page('s1', null)!.entries)).toEqual(['u0', 'a0', 'end0'])
     db.close()
   })
 

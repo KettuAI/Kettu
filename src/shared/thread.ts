@@ -602,6 +602,9 @@ export type StopReason = 'end_turn' | 'max_tokens' | 'max_turn_requests' | 'refu
 export type UserContent = { type: 'text'; text: string } | { type: 'ref'; ref: ContentRef }
 export type ContentRef =
   | { kind: 'image'; mimeType: string; data: string }
+  // An image the host keeps in its thread store, whose bytes `sessions.blob` reads by `blob`,
+  // their SHA-256; only for a client that said it reads them (`IMAGE_REFS_FEATURE`).
+  | { kind: 'image'; mimeType: string; blob: string }
   // A sound or a clip the conversation carries, `size` its bytes; `name` from a resource's URI.
   | { kind: 'audio'; mimeType: string; data: string; size: number; name: string | null }
   | { kind: 'video'; mimeType: string; data: string; size: number; name: string | null }
@@ -867,11 +870,17 @@ function appendText(entry: ThreadEntry, text: string): ThreadEntry {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const BLOB = /^[0-9a-f]{64}$/
+
 function isContentRef(value: unknown): value is ContentRef {
   if (!isRecord(value)) return false
   switch (value.kind) {
     case 'image':
-      return typeof value.mimeType === 'string' && typeof value.data === 'string'
+      return (
+        typeof value.mimeType === 'string' &&
+        (typeof value.data === 'string' ||
+          (typeof value.blob === 'string' && BLOB.test(value.blob)))
+      )
     case 'audio':
     case 'video':
       return (

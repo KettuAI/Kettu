@@ -131,6 +131,7 @@ import {
   type AgentUpdatesFile,
   type JsonFile,
 } from './storage'
+import type { ImageMode } from './threads/model'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { UsageManager, type UsageTimings } from './usage/manager'
 import type { LogReader } from './usage/model'
@@ -156,6 +157,11 @@ function brief(
 ): ArtifactBrief {
   const { id, version, createdAt, updatedAt } = artifact
   return { id, version, createdAt, updatedAt, deleted }
+}
+
+/** A window, and a device that said so, read stored images by hash; other devices get bytes. */
+function imagesFor(device: PortDevice | null): ImageMode {
+  return device && !device.imageRefs ? 'inline' : 'refs'
 }
 
 /** What a message or answer from a paired device's port keeps of it; none from a window. */
@@ -1675,9 +1681,11 @@ export class AgentHost {
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
       'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
-      'sessions.open': ({ sessionId }) => sessions.open(sessionId),
-      'sessions.snapshot': ({ sessionId, from }) => sessions.snapshot(sessionId, from),
-      'sessions.page': ({ sessionId, before, from }) => sessions.page(sessionId, before, from),
+      'sessions.open': ({ sessionId }, { device }) => sessions.open(sessionId, imagesFor(device)),
+      'sessions.snapshot': ({ sessionId, from }, { device }) =>
+        sessions.snapshot(sessionId, from, imagesFor(device)),
+      'sessions.page': ({ sessionId, before, from }, { device }) =>
+        sessions.page(sessionId, before, from, imagesFor(device)),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),

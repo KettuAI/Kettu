@@ -41,6 +41,8 @@ export interface PortDevice {
   name: string
   /** The device is a desktop app, whose main runs the browser calls of the turns it sends. */
   browser?: true
+  /** The device reads stored images by their hash (`IMAGE_REFS_FEATURE`). */
+  imageRefs?: true
 }
 
 export async function deviceId(publicKey: Uint8Array): Promise<string> {
@@ -81,9 +83,14 @@ export function normalizeDeviceName(value: unknown): string | null {
 /** The device a port names, or null when the value does not name one. */
 export function parsePortDevice(value: unknown): PortDevice | null {
   if (typeof value !== 'object' || value === null) return null
-  const { id, name, browser } = value as Record<string, unknown>
+  const { id, name, browser, imageRefs } = value as Record<string, unknown>
   if (typeof id !== 'string' || !DEVICE_ID.test(id) || !isDeviceName(name)) return null
-  return browser === true ? { id, name, browser } : { id, name }
+  return {
+    id,
+    name,
+    ...(browser === true ? { browser } : {}),
+    ...(imageRefs === true ? { imageRefs } : {}),
+  }
 }
 
 /**

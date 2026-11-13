@@ -7,6 +7,10 @@ import path from 'node:path'
 const FLUSH_DELAY_MS = 500
 // A buffer this large is written at once instead of waiting for the delay.
 const FLUSH_BYTES = 64 * 1024
+// How long a file that failed to write waits before it tries again.
+const RETRY_MS = 30_000
+// What a failing file holds for its next try; later lines are dropped.
+const MAX_HELD_BYTES = 1024 * 1024
 
 export interface RotatingFileOptions {
   dir: string
@@ -15,6 +19,8 @@ export interface RotatingFileOptions {
   files: number
   /** After each rotation, as when the folder may need pruning. */
   onRotate?: () => void
+  /** For tests: the wait after a failed write. */
+  retryMs?: number
 }
 
 export class RotatingFile {
@@ -25,7 +31,8 @@ export class RotatingFile {
   private timer: NodeJS.Timeout | null = null
   private chain: Promise<void> = Promise.resolve()
   private closed = false
-  private failed = false
+  /** While a write that failed waits to be tried again: when it may be. */
+  private retryAt = 0
 
   constructor(private readonly options: RotatingFileOptions) {}
 
@@ -34,9 +41,11 @@ export class RotatingFile {
   }
 
   write(text: string, urgent = false): void {
-    if (this.closed || this.failed) return
+    if (this.closed) return
+    if (this.retryAt > 0 && this.pendingBytes + text.length > MAX_HELD_BYTES) return
     this.pending.push(text)
     this.pendingBytes += text.length
+    if (this.retryAt > 0) return
     if (urgent || this.pendingBytes >= FLUSH_BYTES) {
       void this.flush()
     } else if (!this.timer) {
@@ -56,7 +65,7 @@ export class RotatingFile {
   flushSync(): void {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
-    if (this.pending.length === 0 || this.failed) return
+    if (this.pending.length === 0) return
     const data = this.take()
     try {
       if (this.handle) fs.writeSync(this.handle.fd, data)
@@ -82,7 +91,7 @@ export class RotatingFile {
   }
 
   private async drain(): Promise<void> {
-    if (this.pending.length === 0 || this.failed) return
+    if (this.pending.length === 0 || Date.now() < this.retryAt) return
     const data = this.take()
     try {
       if (!this.handle) await this.open()
@@ -90,9 +99,21 @@ export class RotatingFile {
       if (this.size > 0 && this.size + bytes > this.options.maxBytes) await this.rotate()
       await this.handle!.write(data)
       this.size += bytes
+      this.retryAt = 0
     } catch {
-      // A folder that cannot be written stops this file; the app runs on without it.
-      this.failed = true
+      // A folder that cannot be written, as on a full disk, pauses this file; it holds what it
+      // has for the next try, and the app runs on meanwhile.
+      this.pending.unshift(data)
+      this.pendingBytes += data.length
+      const handle = this.handle
+      this.handle = null
+      await handle?.close().catch(() => undefined)
+      const wait = this.options.retryMs ?? RETRY_MS
+      this.retryAt = Date.now() + wait
+      if (!this.timer && !this.closed) {
+        this.timer = setTimeout(() => void this.flush(), wait)
+        this.timer.unref?.()
+      }
     }
   }
 

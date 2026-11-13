@@ -44,6 +44,12 @@ const MAX_CLIENT_FIELD = 64
 /** The hello's feature of a desktop app, whose main runs the browser calls of the turns it sends. */
 export const BROWSER_FEATURE = 'browser'
 
+/**
+ * The hello's feature of a client that reads an image the host keeps in its thread store by its
+ * hash, asking `sessions.blob` for the bytes as it shows it. Others get the bytes in the thread.
+ */
+export const IMAGE_REFS_FEATURE = 'image-refs'
+
 /** The most features a hello names that the host reads. */
 const MAX_FEATURES = 16
 

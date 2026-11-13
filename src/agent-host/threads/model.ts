@@ -19,6 +19,9 @@ export const PAGE_LIMIT = 500
 /** Base64 media data longer than this is stored once per session as bytes of its own. */
 export const INLINE_MEDIA_LIMIT = 32 * 1024
 
+/** How a read gives an image the store keeps apart: by its hash, or with its bytes. */
+export type ImageMode = 'refs' | 'inline'
+
 export interface ThreadHead {
   agentId: AgentId
   acpSessionId: string
@@ -305,8 +308,11 @@ const mapContent = (map: (ref: Json) => Json) => (item: Json) => {
   return ref === item.ref ? item : { ...item, ref }
 }
 
-/** The hashes of the bytes the entries' attachments keep in the thread store. */
-export function attachmentBlobs(entries: readonly ThreadEntry[]): Set<string> {
+/**
+ * The hashes of the bytes the entries name in the thread store: their sent attachments', and the
+ * images they hold as references.
+ */
+export function storedBlobs(entries: readonly ThreadEntry[]): Set<string> {
   const hashes = new Set<string>()
   for (const entry of entries) {
     const content =
@@ -317,7 +323,37 @@ export function attachmentBlobs(entries: readonly ThreadEntry[]): Set<string> {
       }
     }
   }
+  for (const hash of imageBlobs(entries)) hashes.add(hash)
   return hashes
+}
+
+/** The hashes of the images the entries hold as references to the thread store. */
+export function imageBlobs(entries: readonly ThreadEntry[]): Set<string> {
+  const hashes = new Set<string>()
+  for (const entry of entries) {
+    mapRefs(entry as unknown as Json, (ref) => {
+      if (ref.kind === 'image' && typeof ref.blob === 'string') hashes.add(ref.blob)
+      return ref
+    })
+  }
+  return hashes
+}
+
+/**
+ * The entry with the bytes of each image it holds as a reference, as base64 by hash, for a client
+ * that reads only bytes; an image whose bytes are gone becomes one that cannot show.
+ */
+export function withImageBytes(
+  entry: ThreadEntry,
+  bytes: ReadonlyMap<string, string | null>,
+): ThreadEntry {
+  return mapRefs(entry as unknown as Json, (ref) => {
+    if (ref.kind !== 'image' || typeof ref.blob !== 'string') return ref
+    const data = bytes.get(ref.blob)
+    return data
+      ? { kind: 'image', mimeType: ref.mimeType, data }
+      : { kind: 'unsupported', label: String(ref.mimeType) }
+  }) as unknown as ThreadEntry
 }
 
 /**

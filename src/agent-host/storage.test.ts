@@ -205,6 +205,28 @@ describe('JsonFile', () => {
     expect(await store.flushWritten()).toBe(true)
   })
 
+  it('keeps a write that failed and makes it once the file can be written again', async () => {
+    const file = path.join(dir, 'doc.json')
+    const store = new JsonFile<Doc>({
+      file,
+      version: 1,
+      migrations: {},
+      parse: (data) => ({ version: 1, value: Number(data.value) }),
+      empty: () => ({ version: 1, value: 0 }),
+      log,
+      debounceMs: 10,
+      retryMs: 20,
+    })
+    await mkdir(`${file}.tmp`)
+    store.save({ version: 1, value: 4 })
+    await vi.waitFor(() => expect(logs.some((line) => line.includes('Could not write'))).toBe(true))
+    await rm(`${file}.tmp`, { recursive: true })
+    await vi.waitFor(async () => expect(JSON.parse(await readFile(file, 'utf8')).value).toBe(4), {
+      timeout: 5_000,
+      interval: 20,
+    })
+  })
+
   it('never writes over a file from a newer version', async () => {
     const file = path.join(dir, 'doc.json')
     const newer = JSON.stringify({ version: 9, value: 1, future: true })

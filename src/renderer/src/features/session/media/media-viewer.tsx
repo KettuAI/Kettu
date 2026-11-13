@@ -193,16 +193,21 @@ function ViewerLayer({ request, closing }: { request: ViewerRequest; closing: bo
     }
   }, [all, request, setSource])
 
-  // An attachment's bytes are read as it comes near: the item shown and those beside it.
+  // An attachment's bytes, and a stored picture's, are read as it comes near: the item shown and
+  // those beside it.
   useEffect(() => {
     for (const each of [shown[index], shown[index + 1], shown[index - 1]]) {
-      if (!each || each.source.kind !== 'attachment' || asked.current.has(each.key)) continue
+      if (!each || asked.current.has(each.key)) continue
+      const { source } = each
+      if (source.kind !== 'attachment' && source.kind !== 'stored') continue
       asked.current.add(each.key)
-      const { attachment } = each.source
+      const hash = source.kind === 'stored' ? source.hash : source.attachment.blob
       const read =
-        attachment.blob && request.sessionId
-          ? host('sessions.blob', { sessionId: request.sessionId, hash: attachment.blob })
-          : host('attachments.read', { id: attachment.id })
+        hash && request.sessionId
+          ? host('sessions.blob', { sessionId: request.sessionId, hash })
+          : source.kind === 'attachment'
+            ? host('attachments.read', { id: source.attachment.id })
+            : Promise.reject(new Error('The picture has no session to read it from'))
       read.then(
         ({ mimeType, bytes }) => {
           const url = URL.createObjectURL(new Blob([bytes], { type: mimeType }))

@@ -77,8 +77,7 @@ export function ContentBlock({
             sessionId={sessionId}
             entryId={entryId}
             index={index}
-            mimeType={content.ref.mimeType}
-            data={content.ref.data}
+            image={content.ref}
             className="max-h-40 max-w-full self-start rounded-lg shadow-card"
           />
         )
