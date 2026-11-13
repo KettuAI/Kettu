@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { ArrowDown01Icon } from '@hugeicons/core-free-icons'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowDown01Icon, Clock01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { AgentStatus } from '@shared/agent-host'
@@ -9,81 +9,112 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
-import { limitLabel, longAgo } from '@renderer/lib/format'
+import { limitLabel, longAgo, shortAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useNow } from '@renderer/lib/use-now'
-import { isInstalled } from '@renderer/stores/agents'
-import { useHostScope } from '@renderer/stores/host-scope'
-import { useWindowHostAway } from '@renderer/stores/window-host'
+import { agentsOn, isInstalled, useAgentsStore, type HostAgents } from '@renderer/stores/agents'
+import { otherHosts, useHostsStore, useOtherHosts } from '@renderer/stores/hosts'
+import { useHostName, useWindowHost, useWindowHostAway } from '@renderer/stores/window-host'
 import { refreshLimits } from '@renderer/stores/usage'
-import { limitsToRead } from './model'
 import {
+  limitWays,
+  newestReadings,
   planColumns,
   ringStroke,
   usageCards,
   type CardRing,
+  type HostAgentList,
   type LimitRead,
+  type LimitWay,
   type UsageCard,
 } from './plan-cards'
 
 const RINGS = 72
+/** A reading this old says on its card how long ago it was taken. */
+const STALE = 60 * 60_000
+
+const listed = (agents: HostAgents): AgentStatus[] =>
+  agents.order
+    .map((id) => agents.byId[id])
+    .filter((a): a is AgentStatus => !!a && a.registered !== false && !a.disabled)
+
+/** Whether a computer answers now: this one always, another while it is online. */
+function reachable(hostId: string | null): boolean {
+  if (hostId === null) return true
+  const host = otherHosts(useHostsStore.getState()).find((h) => h.id === hostId)
+  return host?.connection.state === 'online'
+}
 
 /**
  * The plans as they stand, across the page: a card per account that reports limits, as many to
  * a row as leave the last row fullest, then one line for the agents with usage that report none.
  * Past two full rows the rest folds away, so the page's own figures stay in view. They are the
- * page's host's; with every host shown, this computer's, since an account's limits are the same
- * on each.
+ * shown hosts', an account once however many computers it is signed in on, with its newest
+ * reading from any of them.
  */
-export function PlanLimits({ used }: { used: readonly AgentId[] }) {
-  const { hostId } = useHostScope()
-  // Each host reads its own agents' limits afresh.
-  return <HostPlanLimits key={hostId ?? ''} used={used} />
+export function PlanLimits({ used }: { used: Readonly<Record<string, readonly AgentId[]>> }) {
+  const host = useWindowHost()
+  // Each choice of hosts reads its limits afresh.
+  return <HostPlanLimits key={host.kind === 'all' ? '*' : (host.hostId ?? '')} used={used} />
 }
 
-function HostPlanLimits({ used }: { used: readonly AgentId[] }) {
+function HostPlanLimits({ used }: { used: Readonly<Record<string, readonly AgentId[]>> }) {
   const { t } = useTranslation('usage')
   const now = useNow()
-  const { hostId, useAgentsStore } = useHostScope()
-  const agents = useAgentsStore(
-    useShallow((s) =>
-      s.order
-        .map((id) => s.byId[id])
-        .filter((a): a is AgentStatus => !!a && a.registered !== false && !a.disabled),
-    ),
+  const windowHost = useWindowHost()
+  const others = useOtherHosts()
+  const everyHost = useMemo(() => [null, ...others.map((h) => h.id)], [others])
+  const lists = useAgentsStore(useShallow((s) => everyHost.map((id) => agentsOn(s, id))))
+  const hosts: HostAgentList[] = everyHost.map((hostId, index) => ({
+    hostId,
+    agents: listed(lists[index]!),
+  }))
+  const shownHosts = hosts.filter((h) =>
+    windowHost.kind === 'all' ? true : h.hostId === windowHost.hostId,
   )
   const away = useWindowHostAway() !== null
-  // Read afresh when the page opens, unless the host is away; the host asks each agent at most
-  // once a minute.
-  const [toRead] = useState(() =>
-    away
-      ? []
-      : limitsToRead(
-          Object.values(useAgentsStore.getState().byId).filter((a): a is AgentStatus => !!a),
-        ),
-  )
-  const [reads, setReads] = useState<Partial<Record<AgentId, LimitRead>>>(() =>
-    Object.fromEntries(toRead.map((agent) => [agent.id, 'reading' as const])),
+  // Read afresh when the page opens, unless the host is away: an account once, through one of its
+  // computers; the host asks each agent at most once a minute.
+  const [toRead] = useState(() => {
+    if (away) return new Map<string, LimitWay[]>()
+    const shownKeys = new Set(
+      usageCards(shownHosts, newestReadings(hosts), {}, {}, Date.now()).cards.map((c) => c.key),
+    )
+    return new Map([...limitWays(hosts, reachable)].filter(([key]) => shownKeys.has(key)))
+  })
+  const [reads, setReads] = useState<Partial<Record<string, LimitRead>>>(() =>
+    Object.fromEntries([...toRead.keys()].map((key) => [key, 'reading' as const])),
   )
   const [open, setOpen] = useState(false)
   useEffect(() => {
-    for (const agent of toRead) {
-      refreshLimits(agent.id, hostId).then(
-        () =>
+    for (const [key, ways] of toRead) {
+      void (async () => {
+        let error: unknown = null
+        for (const way of ways) {
+          try {
+            await refreshLimits(way.agentId, way.hostId)
+            error = null
+            break
+          } catch (failed) {
+            error = failed
+          }
+        }
+        if (error === null) {
           setReads((was) => {
             const next = { ...was }
-            delete next[agent.id]
+            delete next[key]
             return next
-          }),
-        (error: unknown) => {
-          console.warn(`Could not read the plan limits: ${errorMessage(error)}`)
-          setReads((was) => ({ ...was, [agent.id]: 'failed' }))
-        },
-      )
+          })
+          return
+        }
+        console.warn(`Could not read the plan limits: ${errorMessage(error)}`)
+        setReads((was) => ({ ...was, [key]: 'failed' }))
+      })()
     }
-  }, [toRead, hostId])
-  const { cards, unreported } = usageCards(agents, used, reads, now)
+  }, [toRead])
+  const { cards, unreported } = usageCards(shownHosts, newestReadings(hosts), used, reads, now)
+  const named = shownHosts.length > 1
   const read = Math.max(0, ...cards.map((card) => card.readAt ?? 0))
   const names = new Intl.ListFormat(currentLocale(), { type: 'conjunction' }).format(
     unreported.map((a) => a.name),
@@ -112,7 +143,7 @@ function HostPlanLimits({ used }: { used: readonly AgentId[] }) {
       ) : (
         <div className="k-u-plans" data-cols={columns}>
           {shown.map((card) => (
-            <PlanCard key={card.key} card={card} now={now} />
+            <PlanCard key={card.key} card={card} named={named} now={now} />
           ))}
         </div>
       )}
@@ -141,22 +172,33 @@ function HostPlanLimits({ used }: { used: readonly AgentId[] }) {
 
 /**
  * An account's card: its mark, name and tier, then a ring per window beside a line per window,
- * the longest outside and first. Hovered or focused, it lists when each window resets.
+ * the longest outside and first, and with several computers shown, a line of those it is on. A
+ * reading over an hour old says how long ago it was taken, on that line or else beside the name.
+ * Hovered or focused, it lists when each window resets and what each computer calls the account.
  */
-function PlanCard({ card, now }: { card: UsageCard; now: number }) {
+function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: number }) {
   const { t } = useTranslation('usage')
-  const { useAgentsStore } = useHostScope()
+  const hostName = useHostName()
   const installed = useAgentsStore((s) => {
-    const agent = s.byId[card.agentId]
+    const agent = agentsOn(s, card.hostId).byId[card.agentId]
     return agent ? isInstalled(agent) : true
   })
   const failed = card.state === 'failed'
   const shortName = useShortWindow()
+  const where = [...new Set(card.places.map((place) => hostName(place.hostId)))]
+  const age = !failed && card.readAt !== null && now - card.readAt > STALE && (
+    <span className="k-u-plan__age" title={t('limits.read', { ago: longAgo(card.readAt, now) })}>
+      <Icon icon={Clock01Icon} size={12} />
+      <span aria-hidden>{shortAgo(card.readAt, now)}</span>
+      <span className="sr-only">{t('limits.read', { ago: longAgo(card.readAt, now) })}</span>
+    </span>
+  )
   const face = (
     <>
       <header>
-        <AgentMark agent={card.agentId} size={16} mono={!installed} />
+        <AgentMark agent={card.agentId} hostId={card.hostId} size={16} mono={!installed} />
         <b>{card.name}</b>
+        {!named && age}
         {failed ? (
           <span className="k-u-tier k-u-tier--bad">{t('limits.failed')}</span>
         ) : (
@@ -222,6 +264,12 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
           </div>
         </div>
       )}
+      {named && (
+        <footer className="k-u-plan__foot">
+          <span className="k-u-plan__where">{where.join(' · ')}</span>
+          {age}
+        </footer>
+      )}
     </>
   )
   if (card.rings.length === 0) {
@@ -267,6 +315,15 @@ function PlanCard({ card, now }: { card: UsageCard; now: number }) {
               </span>
             </span>
           ))}
+          {card.places.length > 1 &&
+            card.places.map((place) => (
+              <span
+                key={`${place.hostId ?? ''}/${place.agentId}`}
+                className="col-span-3 truncate text-tertiary"
+              >
+                {`${hostName(place.hostId)} · ${place.agentName}`}
+              </span>
+            ))}
         </div>
       </HoverCardContent>
     </HoverCard>

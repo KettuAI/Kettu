@@ -691,20 +691,6 @@ export function presets(today: number, firstDay: number): Preset[] {
   ]
 }
 
-/** The agents whose plan limits are worth asking for when the page opens. */
-export function limitsToRead<
-  T extends {
-    state: string
-    limits: readonly unknown[]
-    providers?: unknown
-  },
->(agents: readonly T[]): T[] {
-  return agents.filter(
-    (agent) =>
-      agent.providers !== undefined || (agent.state === 'ready' && agent.limits.length > 0),
-  )
-}
-
 /** The series colors, in the order the agents are listed. */
 const SERIES = [
   'var(--series-1)',

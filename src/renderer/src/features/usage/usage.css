@@ -265,6 +265,35 @@
   margin-top: 3px;
   font-size: 12px;
 }
+/* The computers a card is on, at its foot whatever the row's height */
+.k-u-plan__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--faint);
+}
+.k-u-plan__where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-u-plan__age {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--faint);
+}
 .k-u-plan__reading {
   display: flex;
   flex: 1;
