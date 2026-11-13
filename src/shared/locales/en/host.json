@@ -159,6 +159,7 @@
     "stillRunning": "{{agent}} did not stop and is still running; try again once it has exited",
     "noLogout": "{{agent}} does not support signing out",
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
+    "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
     "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",
     "exit": {
       "code": "{{agent}} exited with code {{code}}",

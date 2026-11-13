@@ -25,6 +25,8 @@ export interface PortClientOptions {
   transport: PortTransport
   /** Connect on the first request instead of at once, so an unused host never starts. */
   lazy: boolean
+  /** How long a request waits for its answer before it fails with `timeout`; null for no limit. */
+  limitMs?(method: string): number | null
 }
 
 /**
@@ -75,9 +77,47 @@ export class PortClient<Event> {
       return Promise.reject(portError('host_restarted', `The ${this.options.label} is not running`))
     }
     return new Promise((resolve, reject) => {
-      if (this.port) this.post(this.port, method, params, { resolve, reject })
-      else this.queued.push({ method, params, resolve, reject })
+      const pending = this.limited(method, { resolve, reject })
+      if (this.port) this.post(this.port, method, params, pending)
+      else this.queued.push({ method, params, ...pending })
     })
+  }
+
+  /**
+   * The request's callbacks, failing it with `timeout` once its limit passes without an answer,
+   * queued or in flight; an answer that comes later is dropped.
+   */
+  private limited(method: string, pending: Pending): Pending {
+    const limitMs = this.options.limitMs?.(method) ?? null
+    if (limitMs === null) return pending
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      for (const [id, entry] of this.inFlight) {
+        if (entry.resolve === limited.resolve) this.inFlight.delete(id)
+      }
+      this.queued = this.queued.filter((entry) => entry.resolve !== limited.resolve)
+      const seconds = Math.round(limitMs / 1000)
+      pending.reject(
+        portError('timeout', `The ${this.options.label} did not answer ${method} in ${seconds} s`),
+      )
+    }, limitMs)
+    const limited: Pending = {
+      resolve: (value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        pending.resolve(value)
+      },
+      reject: (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        pending.reject(error)
+      },
+    }
+    return limited
   }
 
   onEvent(listener: (event: Event) => void): () => void {

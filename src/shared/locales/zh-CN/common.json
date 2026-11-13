@@ -34,7 +34,8 @@
   },
   "errors": {
     "hostRestarted": "Kettu 的后台进程已重启，请重试。",
-    "hostOffline": "这台主机没有连上，等它回来后再试。"
+    "hostOffline": "这台主机没有连上，等它回来后再试。",
+    "hostTimeout": "Kettu 没有及时得到响应，请重试。"
   },
   "planReset": {
     "in": "{{time}}后重置",

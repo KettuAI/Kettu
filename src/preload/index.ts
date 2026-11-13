@@ -5,6 +5,7 @@ import type { AppCommand, KettuApi, QuitRequest } from '@shared/ipc'
 import { isLocale, type Locale } from '@shared/locale'
 import { TERMINAL_METHODS, type TerminalEvent, type TerminalsApi } from '@shared/terminal-host'
 import { DEVICE_METHODS, type DeviceEvent } from '@shared/device-host'
+import { hostRequestLimit } from '@shared/host-request-limits'
 import { filePaths } from './attachments'
 import { HostsClient } from './hosts-client'
 import { hostTransport, invoke, send, subscribe } from './ipc'
@@ -15,6 +16,7 @@ const agents = new PortClient<HostEvent>({
   methods: HOST_METHODS,
   transport: hostTransport('agent-host'),
   lazy: false,
+  limitMs: hostRequestLimit,
 })
 
 const otherHosts = new HostsClient({

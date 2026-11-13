@@ -162,6 +162,8 @@ export interface AgentTimings {
   limitsMs: number
   /** How often the plan limits of the agents with a live session are read in the background. */
   limitsBackgroundMs: number
+  /** How long one read of the plan limits may take before later refreshes stop waiting for it. */
+  limitsReadMs: number
   /** How long the hidden `session/new` that reads an agent's options may take. */
   optionsMs: number
   /** How long one `npm view` of the update check may take. */
@@ -186,6 +188,7 @@ export const AGENT_TIMINGS: AgentTimings = {
   progressMs: 250,
   limitsMs: 60_000,
   limitsBackgroundMs: 5 * 60_000,
+  limitsReadMs: 90_000,
   optionsMs: 30_000,
   updateViewMs: 20_000,
   updateDelayMs: 60_000,
@@ -2411,10 +2414,32 @@ export class AgentManager {
     if (!force && slot.signIn === 'required') return
     if (slot.limitsRun) return slot.limitsRun
     if (!force && Date.now() - slot.limitsReadAt < this.timings.limitsMs) return
-    slot.limitsRun = this.readLimits(slot).finally(() => {
+    slot.limitsRun = this.limitedRead(slot, this.readLimits(slot)).finally(() => {
       slot.limitsRun = null
     })
     return slot.limitsRun
+  }
+
+  /**
+   * A limits read that fails once `limitsReadMs` pass, so a read the agent never answers holds
+   * the refreshes that share it only that long; a later refresh starts a read of its own.
+   */
+  private limitedRead(slot: Slot, read: Promise<void>): Promise<void> {
+    const ms = this.timings.limitsReadMs
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const late = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new HostError(
+            'agent_error',
+            t('agent.noLimits', { agent: slot.name, seconds: String(ms / 1000) }),
+          ),
+        )
+      }, ms)
+    })
+    return Promise.race([read, late]).finally(() => {
+      if (timer) clearTimeout(timer)
+    })
   }
 
   /** Whether the agent tells its plan limits: from its connection, or from its report. */
@@ -2736,7 +2761,7 @@ export class AgentManager {
     if (slot.h.detection?.state !== 'available' || !slot.h.detection.spec) return
     if (slot.providersRun) return slot.providersRun
     if (!force && Date.now() - slot.providersReadAt < this.timings.limitsMs) return
-    slot.providersRun = this.readProviders(slot).finally(() => {
+    slot.providersRun = this.limitedRead(slot, this.readProviders(slot)).finally(() => {
       slot.providersRun = null
     })
     return slot.providersRun
@@ -2803,7 +2828,7 @@ export class AgentManager {
   private async refreshBalance(slot: Slot, force: boolean): Promise<void> {
     if (slot.balanceRun) return slot.balanceRun
     if (!force && Date.now() - slot.balanceReadAt < this.timings.limitsMs) return
-    slot.balanceRun = this.readBalance(slot).finally(() => {
+    slot.balanceRun = this.limitedRead(slot, this.readBalance(slot)).finally(() => {
       slot.balanceRun = null
     })
     return slot.balanceRun
