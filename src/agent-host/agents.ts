@@ -2310,8 +2310,7 @@ export class AgentManager {
         }
       },
       account: (account) => this.setAccount(slot, account),
-      ignored: (sessionId, what) =>
-        diagnostics.event(agentId, 'ignored', sessionId ? `${what} (session ${sessionId})` : what),
+      ignored: (sessionId, what) => diagnostics.ignored(agentId, sessionId, what),
       log: (level, message) => diagnostics.log(level, `${slot.name}: ${message}`),
     }
   }

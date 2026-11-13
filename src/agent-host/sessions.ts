@@ -2410,11 +2410,7 @@ export class SessionManager {
         break
       }
       case 'ignored':
-        this.deps.diagnostics.event(
-          agentId,
-          'ignored',
-          `${effect.variant}: ${effect.detail} (session ${live.id})`,
-        )
+        this.deps.diagnostics.ignored(agentId, live.id, `${effect.variant}: ${effect.detail}`)
         break
       case 'tool': {
         const git = this.deps.git()
@@ -5725,6 +5721,7 @@ export class SessionManager {
     if (turn.attachments.length > 0) void this.deps.attachments?.release(turn.attachments)
     turn.attachments = []
     this.deps.mcp?.turnEnded(live.id)
+    this.deps.diagnostics.turnEnded(live.record.agentId, [live.id, live.record.acpSessionId])
     this.closeOpenEntries(live)
     this.clearPermissions(live, 'cancelled')
     const byAgent = live.archiveAfterTurn

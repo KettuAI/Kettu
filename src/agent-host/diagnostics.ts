@@ -14,6 +14,15 @@ const MESSAGE_PREVIEW_CHARS = 256 * 1024
 const EVENTS = 500
 const LOG_ENTRIES = 2_000
 const STDERR_LINE_CHARS = 16 * 1024
+/** How many kinds of ignored messages are counted at once; past it the counts are written. */
+const IGNORED_KINDS = 200
+
+/** Messages of one kind an agent sent that Kettu does not use, since the turn began. */
+interface IgnoredKind {
+  sessionId: string | null
+  what: string
+  count: number
+}
 
 interface StoredTraffic {
   at: number
@@ -119,6 +128,10 @@ function redacted(message: unknown): unknown {
   return masked === params ? message : { ...message, params: masked }
 }
 
+function ignoredDetail(sessionId: string | null, what: string): string {
+  return sessionId ? `${what} (session ${sessionId})` : what
+}
+
 export interface DiagnosticsOptions {
   /** Mirrors ACP traffic to stdout, for `KETTU_ACP_LOG=1` in development. */
   mirrorTraffic?: boolean
@@ -128,6 +141,7 @@ export interface DiagnosticsOptions {
 
 export class Diagnostics {
   private agents = new Map<AgentId, AgentBuffers>()
+  private ignoredKinds = new Map<AgentId, Map<string, IgnoredKind>>()
   private logRing = new Ring<LogEntry>(LOG_ENTRIES)
   private listeners = new Set<(entry: LogEntry) => void>()
   private readonly now: () => number
@@ -205,6 +219,52 @@ export class Diagnostics {
       event,
       ...(detail !== undefined ? { detail } : {}),
     })
+  }
+
+  /**
+   * Something the agent sent that Kettu does not use: the first of its kind in a session's turn is
+   * an event, and the rest are counted until `turnEnded`, so a stream of them, such as Claude
+   * Code's thinking tokens, does not push the agent's other events out of the log and reports.
+   */
+  ignored(agentId: AgentId, sessionId: string | null, what: string): void {
+    let kinds = this.ignoredKinds.get(agentId)
+    if (!kinds) {
+      kinds = new Map()
+      this.ignoredKinds.set(agentId, kinds)
+    }
+    const key = `${sessionId ?? ''}\n${what}`
+    const kind = kinds.get(key)
+    if (kind) {
+      kind.count++
+      return
+    }
+    if (kinds.size >= IGNORED_KINDS) this.writeIgnored(agentId, () => true)
+    kinds.set(key, { sessionId, what, count: 1 })
+    this.event(agentId, 'ignored', ignoredDetail(sessionId, what))
+  }
+
+  /** A turn of the session ended: writes how many of each kind it ignored, and of no session. */
+  turnEnded(agentId: AgentId, sessionIds: readonly string[]): void {
+    this.writeIgnored(
+      agentId,
+      (kind) => kind.sessionId === null || sessionIds.includes(kind.sessionId),
+    )
+  }
+
+  private writeIgnored(agentId: AgentId, which: (kind: IgnoredKind) => boolean): void {
+    const kinds = this.ignoredKinds.get(agentId)
+    if (!kinds) return
+    for (const [key, kind] of kinds) {
+      if (!which(kind)) continue
+      kinds.delete(key)
+      if (kind.count > 1) {
+        this.event(
+          agentId,
+          'ignored',
+          `${ignoredDetail(kind.sessionId, kind.what)}, ${kind.count} in all`,
+        )
+      }
+    }
   }
 
   log(level: LogEntry['level'], message: string): void {
