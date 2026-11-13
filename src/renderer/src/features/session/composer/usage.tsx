@@ -251,6 +251,7 @@ export function ContextButton({
   usage,
   context,
   limits,
+  holding,
   account,
   model,
 }: {
@@ -269,13 +270,15 @@ export function ContextButton({
   usage: SessionUsage | null
   context?: ContextReport
   limits: PlanLimit[]
+  /** Of `limits`, those that hold this session's model back, which the tray warns about. */
+  holding: PlanLimit[]
   account: AgentAccount | null
   /** The model's name, for the card's chip. */
   model: string | null
 }) {
   const { t } = useTranslation('composer')
   // The tray names a limit only from 70% on; below that it stays in the popover.
-  const nearest = warningLimit(limits)
+  const nearest = warningLimit(holding)
   const warning = nearest && limitLevel(nearest) !== 'ok' ? nearest : null
   // An account of another kind has no plan; an unknown one shows the limits the agent reports.
   const subscribed = account ? account.kind === 'account' : limits.length > 0
