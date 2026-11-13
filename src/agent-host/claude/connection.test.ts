@@ -1235,6 +1235,59 @@ describe('a turn', () => {
     ])
   })
 
+  it('ends a turn at its result while a background subagent it started runs on', async () => {
+    const task = 'a9f0c2'
+    const system = (query: FakeQuery, fields: Record<string, unknown>) =>
+      ({ type: 'system', session_id: query.sessionId, ...fields }) as SdkMessage
+    const result = (query: FakeQuery) =>
+      ({
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        result: '',
+        stop_reason: 'end_turn',
+        terminal_reason: 'completed',
+        total_cost_usd: 0,
+        usage: { input_tokens: 10, output_tokens: 5 },
+        modelUsage: {},
+        session_id: query.sessionId,
+      }) as SdkMessage
+    // Claude Code holds its idle state back until the subagent ends.
+    s.sdk.script = (q) => {
+      q.running()
+      q.emit(
+        system(q, { subtype: 'init' }),
+        system(q, {
+          subtype: 'task_started',
+          task_id: task,
+          tool_use_id: 'toolu_bg',
+          description: 'Draw mockups',
+          subagent_type: 'general-purpose',
+          is_backgrounded: true,
+          task_type: 'local_agent',
+        }),
+        assistant(q, 'msg_1', [{ type: 'text', text: 'While we wait, read the diagram.' }]),
+        result(q),
+      )
+    }
+    await expect(
+      s.connection.prompt(sessionId, [{ type: 'text', text: 'Draw them' }]),
+    ).resolves.toMatchObject({ stopReason: 'end_turn' })
+    // Once it ends, Claude Code reports back in a turn of its own, without a running state.
+    const query = s.sdk.last
+    query.emit(
+      system(query, { subtype: 'task_notification', task_id: task, status: 'completed' }),
+      system(query, { subtype: 'init' }),
+      assistant(query, 'msg_2', [{ type: 'text', text: 'The mockups are ready.' }]),
+    )
+    await settle()
+    expect(turns()).toEqual([{ kind: 'agentTurn', phase: 'started' }])
+    query.finish()
+    await settle()
+    expect(turns().at(-1)).toMatchObject({ kind: 'agentTurn', phase: 'ended' })
+    expect(target.entries().at(-1)).toMatchObject({ markdown: 'The mockups are ready.' })
+  })
+
   it('fails a turn Claude Code started on its own when its query ends', async () => {
     await s.connection.prompt(sessionId, [{ type: 'text', text: 'Build it' }])
     const query = s.sdk.last

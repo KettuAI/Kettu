@@ -1183,6 +1183,15 @@ export class ClaudeMapper {
     return this.subagentState(parent, taskId, { kind: waits ? 'requires_action' : 'running' })
   }
 
+  /** Whether a background subagent or workflow runs, which Claude Code stays busy for. */
+  holdsIdleBack(): boolean {
+    if (this.running.size > 0) return true
+    for (const task of this.background.values()) {
+      if (task.kind === 'workflow' && task.status === 'running') return true
+    }
+    return false
+  }
+
   /** Ends the subagents still running when the query that ran them ends. */
   endAll(stopReason: 'cancelled' | 'error'): Delivery[] {
     return [...this.running.keys()].flatMap((taskId) => this.end(taskId, stopReason))
