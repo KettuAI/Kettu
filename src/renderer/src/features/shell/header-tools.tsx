@@ -92,7 +92,6 @@ export function HeaderTools({
   menu?: { finalFocus: () => boolean; onOpenChangeComplete: (open: boolean) => void }
 }) {
   const { t } = useTranslation('shell')
-  const pane = usePane()
   const terminal = useTerminalAllowed(projectPath)
   const sessionId = panelSession(panel)
   // A session has a board; New session has no session yet, and a sub-agent's page shows its
@@ -163,15 +162,23 @@ export function HeaderTools({
       )}
       <PaneToggle panel={panel} pane="files" label={t('headerTools.files')} icon={File01Icon} />
       <SidePanelButton panel={panel} available={available} />
-      {pane?.split && (
-        <BarButton
-          label={t('headerTools.closePane')}
-          onClick={() => closeSplitPane(pane.paneId, pane.focused)}
-        >
-          <PaneIcon icon={Cancel01Icon} size={15} />
-        </BarButton>
-      )}
+      <ClosePaneButton />
     </NoDrag>
+  )
+}
+
+/** **Close pane**, in a split. */
+export function ClosePaneButton() {
+  const { t } = useTranslation('shell')
+  const pane = usePane()
+  if (!pane?.split) return null
+  return (
+    <BarButton
+      label={t('headerTools.closePane')}
+      onClick={() => closeSplitPane(pane.paneId, pane.focused)}
+    >
+      <PaneIcon icon={Cancel01Icon} size={15} />
+    </BarButton>
   )
 }
 

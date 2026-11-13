@@ -26,6 +26,7 @@ export function launchTarget({
   lastSessionId,
   main,
   byId,
+  waiting = () => false,
 }: {
   enabled: boolean
   /** The split the last run saved, or null. */
@@ -34,32 +35,42 @@ export function launchTarget({
   lastSessionId: string | null
   main: MainView
   byId: Record<string, SessionSummary>
+  /** Whether a pane's session, not listed yet, is on a host whose lists have not been read. */
+  waiting?: Waiting
 }): LaunchTarget {
   if (main.kind !== 'launch') return null
   if (!enabled) return { kind: 'new' }
-  const restored = savedLayout(layout, byId)
+  const restored = savedLayout(layout, byId, waiting)
   if (restored) return { kind: 'layout', layout: restored }
   const summary = lastSessionId ? byId[lastSessionId] : undefined
   return summary ? { kind: 'session', summary } : { kind: 'new' }
 }
 
+export type Waiting = (view: { sessionId: string; projectPath: string }) => boolean
+
 /**
- * The saved split with the sessions that are still listed: a pane whose session is gone closes,
- * and the one in focus leaves for New session when no session is left among the others.
+ * The saved split with the sessions that are still listed, or that wait for their host: a pane
+ * whose session is gone closes, and the one in focus leaves for New session when no session is
+ * left among the others.
  */
-export function savedLayout(saved: unknown, byId: Record<string, SessionSummary>): Layout | null {
+export function savedLayout(
+  saved: unknown,
+  byId: Record<string, SessionSummary>,
+  waiting: Waiting = () => false,
+): Layout | null {
   const layout = readLayout(saved)
   if (!layout) return null
   const pruned = pruneLayout(
     layout,
-    (pane) => pane.view.kind === 'new' || !!byId[pane.view.sessionId],
+    (pane) => pane.view.kind === 'new' || !!byId[pane.view.sessionId] || waiting(pane.view),
   )
   if (!pruned) return null
-  const withPaths = mapPanes(pruned, (pane) =>
-    pane.view.kind === 'session'
-      ? { ...pane, view: { ...pane.view, projectPath: byId[pane.view.sessionId]!.projectPath } }
-      : pane,
-  )
+  const withPaths = mapPanes(pruned, (pane) => {
+    const summary = pane.view.kind === 'session' ? byId[pane.view.sessionId] : undefined
+    return summary && pane.view.kind === 'session'
+      ? { ...pane, view: { ...pane.view, projectPath: summary.projectPath } }
+      : pane
+  })
   // A save of New session alone comes back as New session alone.
   if (allPanes(withPaths).some((pane) => pane.view.kind === 'session')) return withPaths
   const first = allPanes(withPaths)[0]!
