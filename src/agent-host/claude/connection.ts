@@ -224,6 +224,8 @@ interface Session {
   totals: Record<string, ModelUsage> | undefined
   /** Whether Claude Code sends its state changes, which end a turn. */
   states: boolean
+  /** Claude Code has not gone idle since it last ran, as while background agents hold it. */
+  busy: boolean
   /** The latest main-thread model. */
   model: string | null
   /** The main thread's message uuids, by API message id, for a fork point. */
@@ -835,6 +837,7 @@ export class ClaudeConnection implements AgentConnection {
       resumed: how.resume,
       totals: undefined,
       states: false,
+      busy: false,
       model: null,
       uuids: new Map(),
       commands: [],
@@ -1103,11 +1106,15 @@ export class ClaudeConnection implements AgentConnection {
         const terminal = system.terminal_slash_commands
         session.terminal = new Set(Array.isArray(terminal) ? (terminal as string[]) : [])
         this.publishCommands(session)
+        // A turn Claude Code starts once a background agent ends: it never went idle, so no
+        // running state comes, only the init each turn of its opens with.
+        if (!turn && session.busy && !session.options.hidden) this.agentTurn(session)
       } else if (system.subtype === 'commands_changed' && Array.isArray(system.commands)) {
         session.commands = system.commands as SlashCommandInfo[]
         this.publishCommands(session)
       } else if (system.subtype === 'session_state_changed') {
         session.states = true
+        session.busy = system.state !== 'idle'
         if (system.state === 'running' && turn) turn.running = true
         else if (system.state === 'running' && !session.options.hidden) this.agentTurn(session)
         if (system.state === 'idle' && turn?.running) this.settle(session)
@@ -1208,9 +1215,11 @@ export class ClaudeConnection implements AgentConnection {
     } else {
       turn.stopReason = 'end_turn'
     }
-    // A Claude Code that does not send its states ends the turn with its result. So does a stopped
-    // turn: background agents the stop spares keep Claude Code from going idle.
-    if (!session.states || turn.cancelled) this.settle(session)
+    // A Claude Code that does not send its states ends the turn with its result. So do a stopped
+    // turn and one that leaves background agents running, which keep Claude Code from going idle.
+    if (!session.states || turn.cancelled || (!aborted && session.mapper.holdsIdleBack())) {
+      this.settle(session)
+    }
   }
 
   private turnResult(turn: Turn, stopReason: PromptResult['stopReason']): PromptResult {
