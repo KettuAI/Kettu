@@ -22,6 +22,7 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { AgentMarkHost } from '@renderer/components/agents/agent-mark-host'
 import { useRefresh } from '@renderer/components/refresh'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { Notice } from '@renderer/features/routines/kit'
 import { useCornered } from '@renderer/features/shell/corner'
@@ -156,6 +157,7 @@ function Page() {
       <>
         <Head page={null} used={NO_DAYS} bare />
         <div className="k-u__alone">
+          <PlanLimits used={NO_USED} />
           <Unavailable />
         </div>
       </>
@@ -165,28 +167,23 @@ function Page() {
     body = (
       <>
         <Head page={null} used={NO_DAYS} bare />
-        <div className="k-u__alone">{importing ? <ImportProgress alone /> : <FirstRun />}</div>
-      </>
-    )
-  } else if (!page) {
-    body = (
-      <>
-        <Head page={null} used={NO_DAYS} />
-        <Filters page={null} />
-        <div className="k-u__content">
-          {error ? <ReadFailed error={error} kept={false} /> : <LoadingState />}
+        <div className="k-u__alone">
+          <PlanLimits used={NO_USED} />
+          {importing ? <ImportProgress alone /> : <FirstRun />}
         </div>
       </>
     )
   } else {
-    // The figures stay until a read replaces them, so a failure shows above them.
+    // The figures stay until a read replaces them, so a failure shows above them; the plan limits
+    // show as the agents report them, whether the figures came or not.
     body = (
       <Dashboard
         page={page}
+        loading={!page && !error}
         notice={
           <>
-            {error && <ReadFailed error={error} kept />}
-            {importing && <ImportProgress alone={false} />}
+            {error && <ReadFailed error={error} kept={!!page} />}
+            {page && importing && <ImportProgress alone={false} />}
           </>
         }
       />
@@ -201,6 +198,10 @@ function Page() {
 }
 
 const NO_DAYS: ReadonlySet<number> = new Set()
+const NO_USED: Readonly<Record<string, readonly AgentId[]>> = {}
+const NO_TOTALS: DayTotal[] = []
+/** A quicker read shows no loading, so a range switch does not flash. */
+const LOADING_AFTER_MS = 200
 
 /**
  * The sticky head: the title, then the range picker and the periods. On macOS with the sidebar
@@ -211,6 +212,7 @@ function Head({
   used,
   bare = false,
   away = false,
+  waiting = false,
 }: {
   page: PageData | null
   used: ReadonlySet<number>
@@ -218,6 +220,8 @@ function Head({
   bare?: boolean
   /** The figures are what was last read from a host that is away, so nothing can be chosen. */
   away?: boolean
+  /** The figures of the range just chosen are being read. */
+  waiting?: boolean
 }) {
   const { t } = useTranslation('usage')
   const cornered = useCornered()
@@ -254,6 +258,7 @@ function Head({
       {!bare && (
         <AwayContent away={away}>
           <span className="k-u__actions">
+            {waiting && <Spinner className="k-u__wait" />}
             <DateRangePicker
               className="k-u__range"
               align="end"
@@ -606,10 +611,6 @@ function LoadingState() {
       <span role="status" className="sr-only">
         {t('page.loading')}
       </span>
-      <div className="k-u-plans" data-cols={2}>
-        {card(128)}
-        {card(128)}
-      </div>
       <div className="k-u-figs">
         {card(96)}
         {card(96)}
@@ -655,19 +656,84 @@ function FirstRun() {
 function Dashboard({
   page,
   notice,
+  loading = false,
   away = false,
 }: {
-  page: PageData
+  page: PageData | null
   notice: ReactNode
+  /** The first figures are being read. */
+  loading?: boolean
   /** What was last read from the window's host while it is away. */
   away?: boolean
+}) {
+  const allDays = useMemo(
+    () => (page ? dayTotals(page.summary, page.starts, 'all') : NO_TOTALS),
+    [page],
+  )
+  const used = useMemo(
+    () => new Set(allDays.filter((d) => d.total > 0).map((d) => d.day)),
+    [allDays],
+  )
+  const waiting = useWaiting(page) && !away
+  return (
+    <>
+      <Head page={page} used={used} away={away} waiting={waiting} />
+      {away && (
+        <div className="k-u__away">
+          <WindowHostAway read />
+        </div>
+      )}
+      <AwayContent away={away}>
+        <Filters page={page} />
+        <div className="k-u__content">
+          {notice}
+          <PlanLimits used={page?.used ?? NO_USED} />
+          {page ? (
+            <Body page={page} allDays={allDays} waiting={waiting} />
+          ) : (
+            loading && <LoadingState />
+          )}
+        </div>
+      </AwayContent>
+    </>
+  )
+}
+
+/**
+ * Whether the figures shown were read for another range or source than the one chosen, once the
+ * read for it has taken a moment; a failed read says so itself.
+ */
+function useWaiting(page: PageData | null): boolean {
+  const filters = useUsageStore((s) => s.filters)
+  const failed = useUsageStore((s) => s.error !== null)
+  const other =
+    !!page &&
+    !failed &&
+    (page.filters.range !== filters.range || page.filters.scope !== filters.scope)
+  const [late, setLate] = useState<object | null>(null)
+  useEffect(() => {
+    if (!other) return
+    const timer = setTimeout(() => setLate(filters), LOADING_AFTER_MS)
+    return () => clearTimeout(timer)
+  }, [other, filters])
+  return other && late === filters
+}
+
+/** The figures and charts, dimmed while those of a newly chosen range are read. */
+function Body({
+  page,
+  allDays,
+  waiting,
+}: {
+  page: PageData
+  allDays: DayTotal[]
+  waiting: boolean
 }) {
   const filters = useUsageStore((s) => s.filters)
   const { summary, starts, range } = page
   const { agent, metric, scope } = filters
   const kind = metricKind(metric, scope)
 
-  const allDays = useMemo(() => dayTotals(summary, starts, 'all'), [summary, starts])
   const days = useMemo(
     () => (agent === 'all' ? allDays : dayTotals(summary, starts, agent)),
     [agent, allDays, summary, starts],
@@ -689,10 +755,6 @@ function Dashboard({
   // Where the tokens come from counts tokens, whatever the metric.
   const tokenFacts = useMemo(() => figures(days, range), [days, range])
   const requestFacts = useMemo(() => figures(days, range, 'requests', scope), [days, range, scope])
-  const used = useMemo(
-    () => new Set(allDays.filter((d) => d.total > 0).map((d) => d.day)),
-    [allDays],
-  )
   // Re-renders as an hour begins; a range of days never does.
   const begun = useClock((now) => (hours ? hoursSoFar(hours.starts, now).to : 0))
   const main = useMemo(
@@ -709,71 +771,58 @@ function Dashboard({
   const rangeLabel = rangeText(range.from, range.to)
 
   return (
-    <>
-      <Head page={page} used={used} away={away} />
-      {away && (
-        <div className="k-u__away">
-          <WindowHostAway read />
-        </div>
-      )}
-      <AwayContent away={away}>
-        <Filters page={page} />
-        <div className="k-u__content">
-          {notice}
-          <PlanLimits used={page.used} />
-          <Figures
-            facts={facts}
-            requestFacts={requestFacts}
-            hours={hours}
-            begun={begun}
-            kind={kind}
-            metric={metric}
-            scope={scope}
-            rangeLabel={rangeLabel}
-            bars={past(main.bars).map((bar) => bar.total)}
-            sideBars={past(side.bars).map((bar) => bar.total)}
-          />
-          <div className="k-u-row">
-            <Sources
-              kind={kind}
-              facts={facts}
-              tokenFacts={tokenFacts}
-              agent={agent}
-              rangeLabel={rangeLabel}
-              asOf={summary.pricesAsOf}
-            />
-            <Breakdown
-              summary={summary}
-              agent={agent}
-              metric={metric}
-              scope={scope}
-              kind={kind}
-              rangeLabel={rangeLabel}
-            />
-          </div>
-          <OverTime
-            unit={main.unit}
-            bars={main.bars}
-            begun={hours ? begun : null}
-            zoned={hours?.zoned ?? false}
-            kind={kind}
-            total={facts.total}
-            rangeLabel={rangeLabel}
-            tokensUsed={days.some((d) => d.total > 0)}
-          />
-          <div className="k-u-row k-u-row--tod">
-            <TimeOfDay
-              page={page}
-              agent={agent}
-              metric={metric}
-              scope={scope}
-              rangeLabel={rangeLabel}
-            />
-            <Activity days={days} page={page} metric={metric} scope={scope} />
-          </div>
-        </div>
-      </AwayContent>
-    </>
+    <div className="k-u__body" aria-busy={waiting || undefined} data-busy={waiting || undefined}>
+      <Figures
+        facts={facts}
+        requestFacts={requestFacts}
+        hours={hours}
+        begun={begun}
+        kind={kind}
+        metric={metric}
+        scope={scope}
+        rangeLabel={rangeLabel}
+        bars={past(main.bars).map((bar) => bar.total)}
+        sideBars={past(side.bars).map((bar) => bar.total)}
+      />
+      <div className="k-u-row">
+        <Sources
+          kind={kind}
+          facts={facts}
+          tokenFacts={tokenFacts}
+          agent={agent}
+          rangeLabel={rangeLabel}
+          asOf={summary.pricesAsOf}
+        />
+        <Breakdown
+          summary={summary}
+          agent={agent}
+          metric={metric}
+          scope={scope}
+          kind={kind}
+          rangeLabel={rangeLabel}
+        />
+      </div>
+      <OverTime
+        unit={main.unit}
+        bars={main.bars}
+        begun={hours ? begun : null}
+        zoned={hours?.zoned ?? false}
+        kind={kind}
+        total={facts.total}
+        rangeLabel={rangeLabel}
+        tokensUsed={days.some((d) => d.total > 0)}
+      />
+      <div className="k-u-row k-u-row--tod">
+        <TimeOfDay
+          page={page}
+          agent={agent}
+          metric={metric}
+          scope={scope}
+          rangeLabel={rangeLabel}
+        />
+        <Activity days={days} page={page} metric={metric} scope={scope} />
+      </div>
+    </div>
   )
 }
 
