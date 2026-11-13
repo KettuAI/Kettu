@@ -69,6 +69,8 @@ export function disableDnsPrefetching(): void {
 
 export interface ArtifactsDeps {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
+  /** Puts the files of a version where `content` places them; only another host's are fetched. */
+  ready?(id: string, version: number, paths: readonly string[] | null): Promise<void>
   contentDir: string
   /** Where the files main fetched from other hosts lie. */
   remoteDir?: string
@@ -109,6 +111,7 @@ export class Artifacts {
       remoteDir: deps.remoteDir,
       artifactOf: (host) => this.origins.artifactOf(host),
       content: (id, version) => deps.content(id, version),
+      ...(deps.ready && { ready: deps.ready }),
       selected: (host, message) => this.selected(host, message),
       runtime: {
         send: (id, message, answer) => deps.runtime(id, message, answer),
@@ -130,6 +133,7 @@ export class Artifacts {
     })
     this.files = new ArtifactFiles({
       content: (id, version) => deps.content(id, version),
+      ...(deps.ready && { ready: deps.ready }),
       contentDir: deps.contentDir,
       remoteDir: deps.remoteDir,
       importFile: (path, project) => deps.importFile(path, project),

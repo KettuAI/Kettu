@@ -16,6 +16,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton } from '@renderer/compone
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { connectionText } from '@renderer/features/settings/host-text'
+import { HostAwayAction } from '@renderer/features/shell/host-away-action'
 import { errorMessage } from '@renderer/lib/host'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
@@ -400,6 +401,7 @@ export function HostAway({ host, inline = false }: { host: OtherHost; inline?: b
         <span className="min-w-0 flex-1 text-pretty">
           {t('host.awayComposer', { name: host.name, state })}
         </span>
+        <HostAwayAction connection={host.connection} className="ks-btn" />
       </div>
     )
   }
@@ -418,6 +420,7 @@ export function HostAway({ host, inline = false }: { host: OtherHost; inline?: b
         {t('host.away', { name: host.name })}
       </span>
       <span className="text-ui text-pretty text-tertiary">{t('host.awayBody', { state })}</span>
+      <HostAwayAction connection={host.connection} className="mt-2" />
     </div>
   )
 }

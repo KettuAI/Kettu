@@ -20,7 +20,7 @@ import {
 } from '@renderer/features/session/composer/attachments'
 import { loadMarkdown, preloadRenderers } from '@renderer/features/session/markdown/preload'
 import { toast } from '@renderer/components/ui/toast'
-import { errorCode, errorMessage, host, hostAt } from '@renderer/lib/host'
+import { errorCode, errorMessage, forgetSessionHost, host, hostAt } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { adoptedPrepared } from '@renderer/features/session/new-session/prepared'
@@ -38,7 +38,7 @@ import {
   useSessionsStore,
 } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { allowsTerminal } from '@renderer/stores/hosts'
+import { allowsTerminal, useHostsStore } from '@renderer/stores/hosts'
 import {
   assignTerminals,
   busyTerminalsOf,
@@ -50,6 +50,7 @@ import { focusSession, forgetSession } from '@renderer/stores/threads'
 import {
   chooseNewSessionHost,
   closeLayoutSession,
+  closeSplitPane,
   newSessionAt,
   openNewSession,
   openSession,
@@ -59,6 +60,7 @@ import {
 } from '@renderer/stores/view'
 import { create } from 'zustand'
 import { emitAppEvent } from './events'
+import { goneHosts, hostListed } from './host-sessions'
 import { writeBranch } from '@renderer/stores/worktree-choice'
 
 /** A session being created: shown in place of the thread until `session/new` answers. */
@@ -440,6 +442,29 @@ export function sessionRemoved(sessionId: string): void {
 function closeSessionInSplit(sessionId: string): void {
   const { layout } = useViewStore.getState()
   if (isSplit(layout) && paneWithSession(layout, sessionId)) closeLayoutSession(sessionId)
+}
+
+/**
+ * Closes the panes a launch kept for these sessions of hosts not listed yet, once a host's lists
+ * came without its session or the host is no longer known here; a session settled leaves the set.
+ */
+export function closeUnlistedPanes(waiting: Set<string>): void {
+  const hosts = useHostsStore.getState().status?.hosts ?? null
+  for (const pane of allPanes(useViewStore.getState().layout)) {
+    const view = pane.view
+    if (view.kind !== 'session' || !waiting.has(view.sessionId)) continue
+    const hostId = hostOfPath(view.projectPath)
+    if (hostId === null || useSessionsStore.getState().byId[view.sessionId]) {
+      waiting.delete(view.sessionId)
+      continue
+    }
+    if (!hostListed(hostId) && goneHosts([hostId], hosts).length === 0) continue
+    waiting.delete(view.sessionId)
+    forgetSessionHost(view.sessionId)
+    const { layout, main } = useViewStore.getState()
+    if (isSplit(layout)) closeSplitPane(pane.id)
+    else if (main.kind === 'session' && main.sessionId === view.sessionId) newSessionInPlace()
+  }
 }
 
 /**

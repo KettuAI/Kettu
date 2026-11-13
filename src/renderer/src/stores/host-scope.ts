@@ -21,7 +21,7 @@ import {
   type HostInfo,
   type HostSettingsPart,
 } from '@shared/remote/host-admin'
-import { DEFAULT_SETTINGS, type SettingsFile } from '@shared/settings'
+import { DEFAULT_SETTINGS, type SettingsFile, type SettingsPatch } from '@shared/settings'
 import type { HarnessId } from '@shared/thread'
 import type { UsageStatus } from '@shared/usage'
 import { copyPath } from '@renderer/lib/copy-path'
@@ -193,7 +193,14 @@ async function load(other: OtherScope): Promise<void> {
   const { scope } = other
   const admin = adminCall(scope.hostId!)
   const reads: Promise<unknown>[] = [
-    admin('settings.get').then((part) => other.part.setState({ part })),
+    admin('settings.get').then(
+      (part) => other.part.setState({ part }),
+      (error: unknown) => {
+        // Settings shows the defaults, as before it waited, rather than wait for good.
+        scope.useSettingsStore.setState({ loaded: true })
+        throw error
+      },
+    ),
     admin('host.info').then(async (info) => {
       other.info.setState({ info })
       if (!info.sharing) return
@@ -224,6 +231,19 @@ async function done(call: Promise<unknown>): Promise<void> {
   await call
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** A value with a patch's keys over it, objects key by key; lists and `proxy` replaced whole. */
+function overlay(value: unknown, patch: unknown, key = ''): unknown {
+  if (key === 'proxy' || !isRecord(value) || !isRecord(patch)) return structuredClone(patch)
+  const next: Record<string, unknown> = { ...value }
+  for (const [k, v] of Object.entries(patch)) {
+    if (v !== undefined) next[k] = overlay(value[k], v, key === '' ? k : `${key}.${k}`)
+  }
+  return next
+}
+
 function createScope(hostId: string): OtherScope {
   const admin = adminCall(hostId)
   const request: HostRequest = (method, params) => hostAt(hostId, method, params)
@@ -247,12 +267,17 @@ function createScope(hostId: string): OtherScope {
     return () => adminListeners.delete(each)
   }
 
+  // Changes sent to the host and not answered yet, which show at once over what it last said.
+  const pending: SettingsPatch[] = []
   // The window's own keys stay this computer's; the host's come from the host, at their
   // defaults until it answers, never this computer's values in their place.
   const merged = (): SettingsFile =>
     withHostSettings(
       useSettingsStore.getState().settings,
-      part.getState().part ?? hostSettingsPart(DEFAULT_SETTINGS),
+      pending.reduce<HostSettingsPart>(
+        (shown, patch) => overlay(shown, patch) as HostSettingsPart,
+        part.getState().part ?? hostSettingsPart(DEFAULT_SETTINGS),
+      ),
     )
   const takePart = (next: HostSettingsPart): void => part.setState({ part: next })
   const settings = create<SettingsStore>()(() => ({
@@ -260,12 +285,29 @@ function createScope(hostId: string): OtherScope {
     loaded: false,
     async update(patch) {
       const split = splitSettingsPatch(patch)
-      if (split.host) takePart(await admin('settings.update', { patch: split.host }))
+      if (split.host) {
+        const sent = split.host
+        pending.push(sent)
+        follow()
+        try {
+          const answer = await admin('settings.update', { patch: sent })
+          pending.splice(pending.indexOf(sent), 1)
+          takePart(answer)
+        } catch (error) {
+          // Refused: the control goes back to what the host has.
+          pending.splice(pending.indexOf(sent), 1)
+          follow()
+          throw error
+        }
+      }
       if (split.client) await useSettingsStore.getState().update(split.client)
     },
   }))
   const follow = (): void =>
-    settings.setState({ settings: merged(), loaded: part.getState().part !== null })
+    settings.setState({
+      settings: merged(),
+      loaded: part.getState().part !== null || settings.getState().loaded,
+    })
   part.subscribe(follow)
   useSettingsStore.subscribe((state, previous) => {
     if (state.settings !== previous.settings) follow()

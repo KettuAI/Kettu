@@ -400,6 +400,8 @@ export interface IpcInvokeContract {
   }
   // Forgets the host here; nothing changes on it.
   'hosts:remove': { args: [id: string]; result: 'unknown_host' | null }
+  // Tries the hosts not connected now, without waiting for the next try.
+  'hosts:retry': { args: []; result: void }
   'browser:show': { args: [sessionId: string]; result: void }
   'browser:hide': { args: [sessionId: string]; result: void }
   // Destroys the page. The session stays, unlike a session leaving the list.
@@ -720,6 +722,8 @@ export interface KettuApi {
     setAddresses(id: string, addresses: DirectAddress[]): Promise<'unknown_host' | null>
     /** Forgets the host here; nothing changes on it. Null once forgotten, else why not. */
     remove(id: string): Promise<'unknown_host' | null>
+    /** Tries the hosts not connected now, without waiting for the next try. */
+    retry(): Promise<void>
     onChanged(listener: (status: HostsStatus) => void): () => void
     onPairing(listener: (event: HostPairingEvent) => void): () => void
     /**

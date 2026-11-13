@@ -819,6 +819,7 @@ export function registerIpcHandlers({
   handle('hosts:remove', 1, (_, id) =>
     remoteHost.removeHost(hostIdArg(id)) ? null : 'unknown_host',
   )
+  handle('hosts:retry', 0, () => remoteHost.resume())
 
   handle('browser:show', 1, (_, id) => browserViews.show(sessionId(id)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))

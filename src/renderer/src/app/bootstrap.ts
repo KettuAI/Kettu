@@ -1,6 +1,7 @@
 import type { HostEvent } from '@shared/agent-host'
 import type { AgentId } from '@shared/agents'
 import {
+  closeUnlistedPanes,
   followShownSession,
   removeEmptySessions,
   sessionRemoved,
@@ -10,8 +11,17 @@ import {
 import { onAppEvent } from '@renderer/app/events'
 import { launchTarget } from '@renderer/app/restore'
 import { restoreDraftAttachments } from '@renderer/features/session/composer/attachments'
-import { errorMessage, forgetSessionHost, host, hostAt, sessionHost } from '@renderer/lib/host'
+import { allPanes } from '@renderer/features/split/layout'
+import {
+  errorMessage,
+  forgetSessionHost,
+  host,
+  hostAt,
+  learnSessionHosts,
+  sessionHost,
+} from '@renderer/lib/host'
 import { whenHostHas } from '@renderer/lib/host-features'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import { isHosted, isWeb, platform } from '@renderer/lib/platform'
 import { initAccount } from '@renderer/stores/account'
 import { loadAgentOptions, receiveAgentOptions } from '@renderer/stores/agent-options'
@@ -46,7 +56,7 @@ import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@rende
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { hostScopeEvent, hostScopeOpened } from '@renderer/stores/host-scope'
-import { initHosts, loadHosts } from '@renderer/stores/hosts'
+import { initHosts, loadHosts, useHostsStore } from '@renderer/stores/hosts'
 import { initRemote } from '@renderer/stores/remote'
 import { initSharing } from '@renderer/stores/sharing'
 import { initTerminals } from '@renderer/stores/terminals'
@@ -73,7 +83,7 @@ import {
   shownLayoutSessions,
   useViewStore,
 } from '@renderer/stores/view'
-import { initHostSessions } from './host-sessions'
+import { goneHosts, hostListed, initHostSessions } from './host-sessions'
 import { followWindowTitle } from './window-title'
 
 /** An event of this computer's agent host, or with `hostId` of another host's. */
@@ -210,6 +220,8 @@ export async function retryHostState(): Promise<void> {
 }
 
 let launched = false
+// The sessions of the panes a launch kept for hosts not listed yet.
+const waitingSessions = new Set<string>()
 
 /**
  * Leaves the launch view for the session shown when the app last closed, as Settings › General
@@ -222,15 +234,35 @@ function finishLaunch(): void {
   // A viewer opened while launch was restoring would go back to the launch view, which nothing
   // leaves again: what launch shows goes beneath it, and the viewer opens over that.
   const over = main.kind === 'artifact' && main.back.kind === 'launch' ? main : null
+  const { byId } = useSessionsStore.getState()
   const target = launchTarget({
     enabled: useSettingsStore.getState().settings.general.restoreLastSession,
     layout: savedLayout,
     lastSessionId,
     main: over ? over.back : main,
-    byId: useSessionsStore.getState().byId,
+    byId,
+    // A pane of another host not read since launch waits for it, until its lists say otherwise.
+    waiting: ({ projectPath }) => {
+      const hostId = hostOfPath(projectPath)
+      return (
+        !isWeb &&
+        hostId !== null &&
+        !hostListed(hostId) &&
+        goneHosts([hostId], useHostsStore.getState().status?.hosts ?? null).length === 0
+      )
+    },
   })
-  if (target?.kind === 'layout') restoreLayout(target.layout)
-  else if (target?.kind === 'session') {
+  if (target?.kind === 'layout') {
+    for (const pane of allPanes(target.layout)) {
+      const view = pane.view
+      const hostId = view.kind === 'session' ? hostOfPath(view.projectPath) : null
+      if (view.kind === 'session' && hostId !== null && !byId[view.sessionId]) {
+        learnSessionHosts(hostId, [view.sessionId])
+        waitingSessions.add(view.sessionId)
+      }
+    }
+    restoreLayout(target.layout)
+  } else if (target?.kind === 'session') {
     resetLayout(target.summary.projectPath, null)
     openSession(target.summary.id, target.summary.projectPath)
   } else if (target) {
@@ -330,12 +362,18 @@ export function bootstrap(): Promise<unknown> {
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
         showFront(true)
         rewatchGit(hostId)
+        if (waitingSessions.size > 0) closeUnlistedPanes(waitingSessions)
       },
       closed: (hostId) => {
         artifactsHostClosed(hostId)
         routinesHostClosed(hostId)
       },
       resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
+    })
+    useHostsStore.subscribe((state, previous) => {
+      if (waitingSessions.size > 0 && state.status !== previous.status) {
+        closeUnlistedPanes(waitingSessions)
+      }
     })
     initBrowser()
     initDevices()

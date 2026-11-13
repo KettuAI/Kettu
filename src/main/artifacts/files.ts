@@ -63,6 +63,8 @@ async function copyInto(folder: string, files: readonly ArtifactContentFile[]): 
 
 export interface ArtifactFilesDeps {
   content(id: string, version: number | null): Promise<ArtifactContentResult>
+  /** Puts every file of a version where `content` places it, as `ArtifactSource.ready` does. */
+  ready?(id: string, version: number, paths: readonly string[] | null): Promise<void>
   /** `artifacts/content/` in the data folder, where the bytes of every file lie. */
   contentDir: string
   /** Where the files main fetched from other hosts lie. */
@@ -228,6 +230,7 @@ export class ArtifactFiles {
     ) {
       throw new Error('Not found')
     }
+    await this.deps.ready?.(wanted.id, found.version, null)
     return { ...wanted, title: found.title, files: found.files }
   }
 }

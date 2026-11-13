@@ -271,9 +271,24 @@ export const useRoutinesStore = create<RoutinesStore>()((set, get) => ({
   },
 
   async update(routineId, changes) {
-    const routine = await host('routines.update', { routineId, changes })
-    get().receive(routine, routineHost(routineId))
-    return routine
+    // The switch moves at once, and goes back if the host refuses.
+    const { enabled } = changes
+    const flip = (on: boolean) =>
+      set((state) => {
+        const shown = state.byId[routineId]
+        if (!shown || shown.enabled === on) return state
+        return { byId: { ...state.byId, [routineId]: { ...shown, enabled: on } } }
+      })
+    const was = get().byId[routineId]?.enabled
+    if (enabled !== undefined) flip(enabled)
+    try {
+      const routine = await host('routines.update', { routineId, changes })
+      get().receive(routine, routineHost(routineId))
+      return routine
+    } catch (error) {
+      if (enabled !== undefined && was !== undefined) flip(was)
+      throw error
+    }
   },
 
   async remove(routineId) {

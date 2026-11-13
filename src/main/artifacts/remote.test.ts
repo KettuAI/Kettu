@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -20,6 +20,20 @@ let calls: Call[]
 let answer: (call: Call) => unknown
 let remote: RemoteArtifacts
 
+function remoteIn(folder: string, maxBytes?: number): RemoteArtifacts {
+  return new RemoteArtifacts({
+    dir: folder,
+    ...(maxBytes === undefined ? {} : { maxBytes }),
+    call: async (hostId, method, params) => {
+      const call = { hostId, method, params: params as Record<string, unknown> }
+      calls.push(call)
+      return answer(call)
+    },
+  })
+}
+
+const fileCalls = () => calls.filter((c) => c.method === 'artifacts.file')
+
 beforeEach(() => {
   dir = mkdtempSync(path.join(os.tmpdir(), 'kettu-remote-'))
   calls = []
@@ -36,19 +50,13 @@ beforeEach(() => {
       }
     }
     if (method === 'artifacts.file') {
-      return { type: '', bytes: new TextEncoder().encode(`${hostId[0]}:${String(params.path)}`) }
+      const text = `${hostId[0]}:${String(params.path)}:v${String(params.version)}`
+      return { type: '', bytes: new TextEncoder().encode(text) }
     }
     if (method === 'artifacts.openFrame') return { path: FRAME }
     throw { code: 'unknown_method', message: method }
   }
-  remote = new RemoteArtifacts({
-    dir: path.join(dir, 'remote'),
-    call: async (hostId, method, params) => {
-      const call = { hostId, method, params: params as Record<string, unknown> }
-      calls.push(call)
-      return answer(call)
-    },
-  })
+  remote = remoteIn(path.join(dir, 'remote'))
 })
 
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
@@ -114,6 +122,8 @@ describe("another host's artifacts in main", () => {
   it('fetches a version from its host into its own folder, apart from another host under the same id', async () => {
     const a = await remote.content(HOST_A, ID, 2)
     const b = await remote.content(HOST_B, ID, 2)
+    await remote.fetch(HOST_A, ID, 2, null)
+    await remote.fetch(HOST_B, ID, 2, null)
     if (a.kind !== 'found' || b.kind !== 'found') throw new Error('not found')
     expect(a.title).toBe('On a')
     expect(a.key).not.toBe(b.key)
@@ -128,12 +138,12 @@ describe("another host's artifacts in main", () => {
       ).toBe(true)
     }
     expect(a.files.map((f) => readFileSync(f.file, 'utf8'))).toEqual([
-      'a:index.html',
-      'a:img/a.png',
+      'a:index.html:v2',
+      'a:img/a.png:v2',
     ])
     expect(b.files.map((f) => readFileSync(f.file, 'utf8'))).toEqual([
-      'b:index.html',
-      'b:img/a.png',
+      'b:index.html:v2',
+      'b:img/a.png:v2',
     ])
     expect(
       calls.filter((c) => c.method === 'artifacts.file').every((c) => c.params.version === 2),
@@ -141,10 +151,68 @@ describe("another host's artifacts in main", () => {
   })
 
   it('fetches the files of a version once, however often it is asked for', async () => {
-    await remote.content(HOST_A, ID, 2)
+    await Promise.all([remote.fetch(HOST_A, ID, 2, null), remote.fetch(HOST_A, ID, 2, null)])
     remote.changed()
-    await remote.content(HOST_A, ID, null)
-    expect(calls.filter((c) => c.method === 'artifacts.file')).toHaveLength(2)
+    await remote.fetch(HOST_A, ID, 2, null)
+    expect(fileCalls()).toHaveLength(2)
+  })
+
+  it('names the files of a version without fetching them, and fetches only those asked for', async () => {
+    const found = await remote.content(HOST_A, ID, 2)
+    if (found.kind !== 'found') throw new Error('not found')
+    expect(fileCalls()).toHaveLength(0)
+    await remote.fetch(HOST_A, ID, 2, ['index.html'])
+    expect(fileCalls().map((c) => c.params.path)).toEqual(['index.html'])
+    expect(readFileSync(found.files[0]!.file, 'utf8')).toBe('a:index.html:v2')
+    expect(existsSync(found.files[1]!.file)).toBe(false)
+    // A path the version does not list is never asked of the host.
+    await remote.fetch(HOST_A, ID, 2, ['../other.html'])
+    expect(fileCalls()).toHaveLength(1)
+  })
+
+  it('keeps fetched files for the next run, and fetches a new version anew', async () => {
+    await remote.fetch(HOST_A, ID, 2, null)
+    const again = remoteIn(path.join(dir, 'remote'))
+    await again.prune()
+    const kept = await again.content(HOST_A, ID, 2)
+    await again.fetch(HOST_A, ID, 2, null)
+    expect(fileCalls()).toHaveLength(2)
+    if (kept.kind !== 'found') throw new Error('not found')
+    expect(readFileSync(kept.files[0]!.file, 'utf8')).toBe('a:index.html:v2')
+    const next = await again.content(HOST_A, ID, 3)
+    await again.fetch(HOST_A, ID, 3, ['index.html'])
+    if (next.kind !== 'found') throw new Error('not found')
+    expect(fileCalls()).toHaveLength(3)
+    expect(next.files[0]!.file).not.toBe(kept.files[0]!.file)
+    expect(readFileSync(next.files[0]!.file, 'utf8')).toBe('a:index.html:v3')
+  })
+
+  it('fetches again a file a run left unfinished', async () => {
+    const found = await remote.content(HOST_A, ID, 2)
+    if (found.kind !== 'found') throw new Error('not found')
+    await remote.fetch(HOST_A, ID, 2, ['index.html'])
+    const folder = path.dirname(found.files[0]!.file)
+    rmSync(found.files[0]!.file)
+    writeFileSync(`${found.files[0]!.file}.1.part`, 'a:ind')
+    const again = remoteIn(path.join(dir, 'remote'))
+    await again.prune()
+    expect(readdirSync(folder)).toEqual([])
+    await again.fetch(HOST_A, ID, 2, ['index.html'])
+    expect(fileCalls()).toHaveLength(2)
+    expect(readFileSync(found.files[0]!.file, 'utf8')).toBe('a:index.html:v2')
+  })
+
+  it('stays within its size, the versions used longest ago going first', async () => {
+    const small = remoteIn(path.join(dir, 'small'), 40)
+    const two = await small.content(HOST_A, ID, 2)
+    const three = await small.content(HOST_A, ID, 3)
+    if (two.kind !== 'found' || three.kind !== 'found') throw new Error('not found')
+    await small.fetch(HOST_A, ID, 2, null)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    await small.fetch(HOST_A, ID, 3, null)
+    await small.prune()
+    expect(existsSync(two.files[0]!.file)).toBe(false)
+    expect(existsSync(three.files[0]!.file)).toBe(true)
   })
 
   it('says not found, failed or nothing usable as the host answers', async () => {

@@ -363,6 +363,7 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       rename: () => unsupported('connect to other hosts'),
       setAddresses: () => unsupported('connect to other hosts'),
       remove: () => unsupported('connect to other hosts'),
+      retry: () => unsupported('connect to other hosts'),
       onChanged: never,
       onPairing: never,
       request: () => unsupported('connect to other hosts'),

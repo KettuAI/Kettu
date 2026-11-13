@@ -541,8 +541,8 @@ async function start(): Promise<void> {
     call: (hostId, method, params) => hostSessions.call(hostId, method, params),
     dir: remoteArtifactsDir,
   })
-  await remoteArtifacts.clear().catch((error: unknown) => {
-    log.warn(`Could not remove the files fetched from other hosts: ${String(error)}`)
+  await remoteArtifacts.prune().catch((error: unknown) => {
+    log.warn(`Could not prune the files kept from other hosts: ${String(error)}`)
   })
   /** An artifact a window names, on this computer or on another host. */
   const artifactOn = (ref: string): { hostId: string | null; id: string } => {
@@ -614,6 +614,10 @@ async function start(): Promise<void> {
       return hostId === null
         ? agentHost.artifactContent(id, version)
         : remoteArtifacts.content(hostId, id, version)
+    },
+    ready: (ref, version, paths) => {
+      const { hostId, id } = artifactOn(ref)
+      return hostId === null ? Promise.resolve() : remoteArtifacts.fetch(hostId, id, version, paths)
     },
     contentDir: join(userDataPath, 'artifacts', 'content'),
     remoteDir: remoteArtifactsDir,

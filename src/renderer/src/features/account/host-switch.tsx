@@ -2,11 +2,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { useOtherHost } from '@renderer/stores/hosts'
-import {
-  cancelHostSwitch,
-  hostSwitchSettled,
-  useHostSwitchStore,
-} from '@renderer/stores/host-switch'
+import { cancelHostSwitch, useHostSwitchStore } from '@renderer/stores/host-switch'
 
 /**
  * A slim bar over the sidebar's list while the host the window switched to connects; the account
@@ -17,10 +13,6 @@ export function HostSwitchBar() {
   const switching = useHostSwitchStore((s) => s.switching)
   const host = useOtherHost(switching?.hostId ?? null)
   const connecting = host?.connection.state === 'connecting'
-
-  useEffect(() => {
-    if (switching && !connecting) hostSwitchSettled()
-  }, [switching, connecting])
 
   useEffect(() => {
     if (!switching) return

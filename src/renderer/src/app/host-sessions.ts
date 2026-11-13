@@ -75,7 +75,16 @@ export function goneHosts(lists: readonly string[], hosts: readonly HostStatus[]
   return lists.filter((hostId) => !kept.has(hostId))
 }
 
+// The hosts whose lists were read since launch; a kept list may lack what a pane shows.
+const listed = new Set<string>()
+
+/** Whether the host's lists were read since launch. */
+export function hostListed(hostId: string): boolean {
+  return listed.has(hostId)
+}
+
 function forget(hostId: string): void {
+  listed.delete(hostId)
   useSessionsStore.getState().setAll([], hostId)
   useProjectsStore.getState().setAll([], hostId)
   forgetHostSessions(hostId)
@@ -91,6 +100,7 @@ async function readLists(hostId: string): Promise<void> {
     ])
     useSessionsStore.getState().setAll(sessions, hostId)
     useProjectsStore.getState().setAll(projects, hostId)
+    listed.add(hostId)
   } catch (error) {
     console.warn(`Could not read the sessions of host ${hostId}`, error)
   }

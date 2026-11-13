@@ -20,6 +20,7 @@ import { css as modelsCss } from '@renderer/components/affect/settings-models'
 import { css as prefsCss } from '@renderer/components/affect/settings-preferences'
 import { css as securityCss } from '@renderer/components/affect/settings-security'
 import { Dialog, DialogPortal } from '@renderer/components/ui/dialog'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { formatShortcut, isMod, isWeb } from '@renderer/lib/platform'
 import {
@@ -40,7 +41,7 @@ import {
 import { HostPicker } from './host-picker'
 import { HOST_SECTIONS } from './host-sections'
 import { excerpt, FlashContext, highlight, matches, type RowDef, type SectionDef } from './model'
-import { GroupLabel, PageHeader, SectionBody } from './rows'
+import { GroupLabel, PageHeader, RowFrame, RowGroup, RowText, SectionBody } from './rows'
 import { webClusters } from './web-sections'
 import {
   useAboutSection,
@@ -296,6 +297,8 @@ function SettingsLayout({
   }, [])
 
   const hostPage = HOST_SECTIONS.has(page.id)
+  // Another host's values show once it sent them, never the defaults in their place.
+  const waiting = scope.useSettingsStore((s) => !s.loaded) && hostPage && scope.hostId !== null
   return (
     <>
       <nav aria-label={t('page.sections')} className="kettu-settings__nav">
@@ -348,7 +351,11 @@ function SettingsLayout({
                 {searching ? (
                   <SearchResults query={needle} hits={hits} count={hitCount} onGo={go} />
                 ) : item && page.itemPage ? (
-                  page.itemPage(item)
+                  waiting ? (
+                    <SettingsSkeleton />
+                  ) : (
+                    page.itemPage(item)
+                  )
                 ) : (
                   <section aria-labelledby={`settings-${page.id}`}>
                     {page.hero ?? (
@@ -356,8 +363,8 @@ function SettingsLayout({
                         {page.description}
                       </PageHeader>
                     )}
-                    <SectionBody section={page} />
-                    {page.footer}
+                    {waiting ? <SettingsSkeleton /> : <SectionBody section={page} />}
+                    {!waiting && page.footer}
                   </section>
                 )}
               </div>
@@ -366,6 +373,31 @@ function SettingsLayout({
         </FlashContext.Provider>
       </div>
     </>
+  )
+}
+
+/** Rows in place of another host's settings until it sent them. */
+function SettingsSkeleton() {
+  return (
+    <div className="k-groups" aria-hidden>
+      <section className="k-group">
+        <RowGroup>
+          {[0, 1, 2].map((row) => (
+            <RowFrame
+              key={row}
+              text={
+                <RowText
+                  name={<Skeleton render={<span />} className="block h-3.5 w-36" />}
+                  description={<Skeleton render={<span />} className="mt-1.5 block h-3 w-60" />}
+                />
+              }
+            >
+              <Skeleton className="h-5 w-9 rounded-full" />
+            </RowFrame>
+          ))}
+        </RowGroup>
+      </section>
+    </div>
   )
 }
 
