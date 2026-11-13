@@ -182,10 +182,24 @@ export function reachable(hostId: string | null): boolean {
 /** The last page read for each choice of hosts, shown while a chosen host is away. */
 const keptPages = new Map<string, UsagePage>()
 
+/** Each host's answers behind the page, so a change on one host reads only that host again. */
+interface PageParts {
+  /** The read they came from, as `request` numbers it. */
+  request: number
+  page: UsagePage
+  /** By host; a host that did not answer is absent. */
+  summaries: Map<string | null, UsageSummary>
+  /** A one-day range's sums per hour, by host. */
+  hours: Map<string | null, UsageSummary>
+}
+
 let pageOpen = false
 let request = 0
+let parts: PageParts | null = null
 let reading: Promise<void> | null = null
 let readAgain = false
+/** Hosts whose usage changed while the whole page was read, read again once it is. */
+const changedMeanwhile = new Set<string | null>()
 
 /** The page came into view or left it; while it shows, a change in the figures reads them again. */
 export function usagePageShown(shown: boolean): void {
@@ -258,37 +272,35 @@ export async function loadUsagePage(): Promise<void> {
       })
       const hourly = oneDay(range) ? hourStarts(range) : null
       const clock = hourly ? { from: addDays(range.to, -CLOCK_DAYS), to: range.to } : range
-      const read = async (boundaries: number[], byHour = false) => {
-        const answers = await readEach(targets, async (hostId) => ({
-          hostId,
-          summary: await hostAt(hostId, 'usage.summary', {
-            dayStarts: boundaries,
-            from: range.from,
-            to: range.to,
-            scope: filters.scope,
-            ...(byHour && { clock: { ...clock, zones: clockZones(clock.from, clock.to) } }),
-          }),
-        }))
-        return {
-          summary: mergeSummaries(answers.map((answer) => answer.summary)),
-          used: Object.fromEntries(
-            answers.map((answer) => [answer.hostId ?? '', answer.summary.agents]),
+      const read = async (boundaries: number[], byHour = false) =>
+        new Map(
+          await readEach(
+            targets,
+            async (hostId) =>
+              [
+                hostId,
+                await hostAt(
+                  hostId,
+                  'usage.summary',
+                  summaryParams(range, filters.scope, boundaries, byHour ? clock : null),
+                ),
+              ] as const,
           ),
-        }
-      }
+        )
       // All time starts at the first day with usage of this scope, known only from the answer, so
       // its hours are read after it; any other range's along with it.
       const settled = filters.range.kind !== 'all'
-      const [{ summary, used }, early] = await Promise.all([
+      const [summaries, early] = await Promise.all([
         read(starts, true),
         settled && hourly ? read(hourly) : null,
       ])
       if (id !== request) return
+      const summary = mergeSummaries([...summaries.values()])
       if (pass === 0 && rangeOf(filters.range, today, summary.first).from !== range.from) {
         first = summary.first
         continue
       }
-      const hours = hourly && (early ?? (await read(hourly))).summary
+      const hours = hourly && (early ?? (await read(hourly)))
       if (id !== request) return
       const next: UsagePage = {
         key,
@@ -299,10 +311,12 @@ export async function loadUsagePage(): Promise<void> {
         starts,
         range,
         summary,
-        used,
-        hours: hourly && hours ? { starts: hourly, summary: hours } : null,
+        used: usedBy(summaries),
+        hours:
+          hourly && hours ? { starts: hourly, summary: mergeSummaries([...hours.values()]) } : null,
         clock,
       }
+      parts = { request: id, page: next, summaries, hours: hours ?? new Map() }
       keptPages.set(key, next)
       useUsageStore.setState({ page: next, loading: false, error: null })
       return
@@ -311,6 +325,114 @@ export async function loadUsagePage(): Promise<void> {
     if (id === request) useUsageStore.setState({ loading: false, error: errorMessage(error) })
   }
 }
+
+/** Each answering host's agents with usage in the range, as `UsagePage.used` holds them. */
+function usedBy(summaries: ReadonlyMap<string | null, UsageSummary>): Record<string, AgentId[]> {
+  return Object.fromEntries(
+    [...summaries].map(([hostId, summary]) => [hostId ?? '', summary.agents]),
+  )
+}
+
+/** What the page asks a host: its range by day, with the hours of the day over `clock`. */
+function summaryParams(
+  range: DayRange,
+  scope: UsageScope,
+  dayStarts: number[],
+  clock: DayRange | null,
+) {
+  return {
+    dayStarts,
+    from: range.from,
+    to: range.to,
+    scope,
+    ...(clock && { clock: { ...clock, zones: clockZones(clock.from, clock.to) } }),
+  }
+}
+
+/**
+ * Reads one host's part of the page again and adds it to the others' as last read. The whole page
+ * is read instead when its parts are not the page shown, or when the change moves where All time
+ * starts.
+ */
+async function readHostPart(hostId: string | null): Promise<void> {
+  const base = parts
+  const { page } = useUsageStore.getState()
+  if (!pageOpen || !reachable(hostId)) return
+  if (!base || !page || base.request !== request || base.page !== page) return readPage()
+  if (page.today !== dayOf(Date.now())) return readPage()
+  const ask = (dayStarts: number[], clock: DayRange | null) =>
+    hostAt(hostId, 'usage.summary', summaryParams(page.range, page.filters.scope, dayStarts, clock))
+  let summary: UsageSummary | null = null
+  let hours: UsageSummary | null = null
+  let failed: unknown = null
+  try {
+    ;[summary, hours] = await Promise.all([
+      ask(page.starts, page.clock),
+      page.hours ? ask(page.hours.starts, null) : null,
+    ])
+  } catch (error) {
+    failed = error
+  }
+  if (parts !== base || base.request !== request || useUsageStore.getState().page !== base.page) {
+    return
+  }
+  // As in a whole read, a host that does not answer is left out, and fails the page only when no
+  // other host answered.
+  const summaries = new Map(base.summaries)
+  const byHour = new Map(base.hours)
+  if (summary) summaries.set(hostId, summary)
+  else summaries.delete(hostId)
+  if (hours) byHour.set(hostId, hours)
+  else byHour.delete(hostId)
+  if (summaries.size === 0) {
+    useUsageStore.setState({ error: errorMessage(failed) })
+    return
+  }
+  const merged = mergeSummaries([...summaries.values()])
+  const shown = base.page
+  const moved = rangeOf(shown.filters.range, shown.today, merged.first).from !== shown.range.from
+  if (moved || (shown.hours && byHour.size === 0)) return readPage()
+  base.summaries = summaries
+  base.hours = byHour
+  const next: UsagePage = {
+    ...shown,
+    summary: merged,
+    used: usedBy(summaries),
+    hours: shown.hours && {
+      starts: shown.hours.starts,
+      summary: mergeSummaries([...byHour.values()]),
+    },
+  }
+  base.page = next
+  keptPages.set(next.key, next)
+  useUsageStore.setState({ page: next, error: null })
+}
+
+/** Runs a host's read one at a time; asked again while it runs, it runs once more after. */
+function oneAtATime(
+  reads: Map<string | null, { again: boolean }>,
+  hostId: string | null,
+  run: () => Promise<void>,
+): void {
+  const under = reads.get(hostId)
+  if (under) {
+    under.again = true
+    return
+  }
+  const entry = { again: false }
+  reads.set(hostId, entry)
+  const go = (): void => {
+    void run().finally(() => {
+      if (!entry.again) return void reads.delete(hostId)
+      entry.again = false
+      go()
+    })
+  }
+  go()
+}
+
+const partReads = new Map<string | null, { again: boolean }>()
+const todayReads = new Map<string | null, { again: boolean }>()
 
 /** The day turned while the page shows: the heatmap ends today, so the figures are read again. */
 export function usageDayTurned(day: number): void {
@@ -338,36 +460,53 @@ export async function loadToday(): Promise<void> {
   const id = ++todayRequest
   const today = dayOf(Date.now())
   const hosts = usageHosts()
-  const totals = await Promise.all(
-    hosts.map(async (hostId) => {
-      const key = hostId ?? ''
-      const reached = reachable(hostId)
-      if (reached) {
-        try {
-          const total = await hostAt(hostId, 'usage.total', { from: today, to: addDays(today, 1) })
-          keptToday.set(key, { day: today, total })
-          return total
-        } catch {
-          // What was last read today stands in until the host answers.
-        }
-      }
-      const kept = keptToday.get(key)
-      return (reached || hosts.length === 1) && kept?.day === today ? kept.total : null
-    }),
-  )
-  if (id !== todayRequest) return
-  const read = totals.filter((total): total is UsageTotal => total !== null)
+  const reached = hosts.filter(reachable)
+  await Promise.all(reached.map((hostId) => readToday(hostId, today)))
+  if (id === todayRequest) showToday(hosts, reached, today)
+}
+
+/** Reads a host's figure for today; on failure what was last read today stands in. */
+async function readToday(hostId: string | null, today: number): Promise<void> {
+  try {
+    const total = await hostAt(hostId, 'usage.total', { from: today, to: addDays(today, 1) })
+    keptToday.set(hostId ?? '', { day: today, total })
+  } catch {
+    // What was last read today stands in until the host answers.
+  }
+}
+
+function showToday(
+  hosts: readonly (string | null)[],
+  reached: readonly (string | null)[],
+  today: number,
+): void {
+  const read = hosts.flatMap((hostId) => {
+    const kept = keptToday.get(hostId ?? '')
+    const counts = reached.includes(hostId) || hosts.length === 1
+    return counts && kept?.day === today ? [kept.total] : []
+  })
   useUsageStore.setState({
     today: read.length > 0 ? read.reduce((sum, total) => sum + total.total, 0) : null,
     todayCost: read.length > 0 ? read.map((total) => total.cost).reduce(addCost) : null,
   })
 }
 
-/** A host's usage changed, null being this computer: read again if the window shows it. */
+/**
+ * A host's usage changed, null being this computer: if the window shows it, that host alone is
+ * read again, one read at a time, and added to the others as last read.
+ */
 export function usageChanged(hostId: string | null = null): void {
   if (!usageHosts().includes(hostId)) return
-  void loadToday()
-  if (pageOpen) readPage()
+  oneAtATime(todayReads, hostId, async () => {
+    const today = dayOf(Date.now())
+    if (!reachable(hostId)) return
+    await readToday(hostId, today)
+    const hosts = usageHosts()
+    showToday(hosts, hosts.filter(reachable), today)
+  })
+  if (!pageOpen) return
+  if (reading) changedMeanwhile.add(hostId)
+  else oneAtATime(partReads, hostId, () => readHostPart(hostId))
 }
 
 /** Reads the page, or once more after the read under way, so a scan's notices never pile up. */
@@ -378,9 +517,14 @@ function readPage(): void {
   }
   reading = loadUsagePage().finally(() => {
     reading = null
-    if (readAgain && pageOpen) {
+    const changed = [...changedMeanwhile]
+    changedMeanwhile.clear()
+    if (!pageOpen) return
+    if (readAgain) {
       readAgain = false
       readPage()
+    } else {
+      for (const hostId of changed) oneAtATime(partReads, hostId, () => readHostPart(hostId))
     }
   })
 }
