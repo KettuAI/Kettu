@@ -2478,10 +2478,17 @@ export class SessionManager {
   }
 
   private save(live: Live): void {
+    const added = !this.records.has(live.id)
     live.saved = true
     this.records.set(live.id, live.record)
     this.persist(live)
+    if (added) this.writeIndexNow()
     this.scheduleCheckpoint(live)
+  }
+
+  /** For a session new to the index, which a host that dies within the debounce would lose. */
+  private writeIndexNow(): void {
+    void this.deps.file.flushWritten()
   }
 
   // Mapper output.
@@ -7748,6 +7755,7 @@ export class SessionManager {
     this.stampConfig(record)
     this.records.set(record.id, record)
     this.saveIndex()
+    this.writeIndexNow()
     this.touch(record.id)
     return this.summary(record.id)
   }
