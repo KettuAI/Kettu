@@ -8,24 +8,32 @@ import { countdown, longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { agentName } from '@renderer/stores/agents'
 import { optionsOn, useAgentOptionsStore } from '@renderer/stores/agent-options'
-import { hostOfSession } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle } from '@renderer/stores/sessions'
 import type { SessionCache } from './session-cache'
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 
-/** What a row's hover card says about its session: the agent, model, branch, cache, last turn. */
+/**
+ * What a row's hover card says about its session: its whole title, which the row may cut short, then
+ * the agent, model, branch, cache, last turn.
+ */
 export function SessionCard({ summary, cache }: { summary: SessionSummary; cache: SessionCache }) {
   const { t } = useTranslation('sidebar')
   const model = useModelName(summary)
   const now = useNow()
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <AgentMark agent={summary.agentId} size={16} hostId={hostOfSession(summary)} />
-        <span className="truncate text-[13.5px] font-semibold text-primary">
-          {agentName(summary.agentId, hostOfSession(summary))}
-        </span>
+      <div className="flex flex-col gap-1">
+        <p className="text-label font-semibold text-pretty wrap-anywhere text-primary">
+          {sessionTitle(summary)}
+        </p>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <AgentMark agent={summary.agentId} size={14} hostId={hostOfSession(summary)} />
+          <span className="truncate text-hint text-secondary">
+            {agentName(summary.agentId, hostOfSession(summary))}
+          </span>
+        </div>
       </div>
       <dl className="flex flex-col gap-[5px] text-hint text-secondary">
         {model && <Line label={t('card.model')}>{model}</Line>}
