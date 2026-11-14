@@ -597,25 +597,25 @@
   "artifacts": {
     "formatUpgraded": "已迁移到其类型格式的第 {{format}} 版"
   },
-  "sop": {
+  "workflow": {
     "unusable": "{{name}} 用不了：{{problem}}",
     "notApproved": "先批准 {{name}}，才能用它开始需求",
-    "notFound": "没有这个 SOP",
-    "changedSinceShown": "这个 SOP 在你看过之后改了，请再看一遍再批准。",
-    "invalid": "这个 SOP 有问题，要先改好",
-    "officialKept": "官方 SOP 不能删除",
-    "noSuchStep": "这个 SOP 里没有这一步，或者这一步不是 Agent 做的",
+    "notFound": "没有这个 工作流",
+    "changedSinceShown": "这个 工作流 在你看过之后改了，请再看一遍再批准。",
+    "invalid": "这个 工作流 有问题，要先改好",
+    "officialKept": "官方 工作流 不能删除",
+    "noSuchStep": "这个 工作流 里没有这一步，或者这一步不是 Agent 做的",
     "notGithub": "请给出 GitHub 上一个文件的地址",
-    "notFromGithub": "只有从 GitHub 加的 SOP 才能更新",
-    "tooLarge": "SOP 文件超过了 256 KB",
-    "libraryFull": "你的 SOP 库满了",
-    "downloadFailed": "没能下载这个 SOP：{{error}}",
-    "downloadStatus": "GitHub 对这个 SOP 返回了 {{status}}"
+    "notFromGithub": "只有从 GitHub 加的 工作流 才能更新",
+    "tooLarge": "工作流 文件超过了 256 KB",
+    "libraryFull": "你的 工作流 库满了",
+    "downloadFailed": "没能下载这个 工作流：{{error}}",
+    "downloadStatus": "GitHub 对这个 工作流 返回了 {{status}}"
   },
   "tasks": {
     "notFound": "没有这个需求",
     "noStep": "这个需求里没有这一步",
-    "cannotStep": "{{agent}} 不能做 SOP 的步骤",
+    "cannotStep": "{{agent}} 不能做 工作流 的步骤",
     "notReviewing": "这一步没有在等你审阅",
     "notPerson": "这一步没有在等你回答",
     "noOutcome": "{{step}} 没有“{{outcome}}”这个结果",
@@ -625,9 +625,9 @@
     "noteEmpty": "备注不能为空",
     "cannotPin": "这一步已经开始了，现在不能固定",
     "needsYou": "{{title}} 需要你",
-    "needsYouBody": "{{step}} · {{sop}}",
+    "needsYouBody": "{{step}} · {{workflow}}",
     "done": "{{title}} 做完了",
     "dropped": "{{title}} 结束了，没有做",
-    "endedBody": "{{sop}} · {{steps}} 步"
+    "endedBody": "{{workflow}} · {{steps}} 步"
   }
 }

@@ -1317,18 +1317,18 @@ describe("the thread database's comments", () => {
   })
 })
 
-describe('SOP tasks', () => {
+describe('Workflow tasks', () => {
   const task = (id: string, updatedAt: number) =>
     ({
       id,
       projectPath: '/p',
       title: 'Export',
       text: 'Add export',
-      sopId: 'fix-a-bug',
-      sopName: 'Fix a bug',
-      sopSource: 'official',
-      sopHash: 'h',
-      sop: {
+      workflowId: 'fix-a-bug',
+      workflowName: 'Fix a bug',
+      workflowSource: 'official',
+      workflowHash: 'h',
+      workflow: {
         format: 1,
         name: 'Fix a bug',
         description: '',
@@ -1398,7 +1398,7 @@ describe('SOP tasks', () => {
     db.taskPut({ task: structuredClone(task('t-000000000001', 1)) as never })
     db.close()
     const raw = new DatabaseSync(file)
-    raw.prepare('UPDATE sop_tasks SET json = \'{"id":1}\'').run()
+    raw.prepare('UPDATE workflow_tasks SET json = \'{"id":1}\'').run()
     raw.close()
     const again = open(file)
     expect(again.taskAll()).toEqual([])

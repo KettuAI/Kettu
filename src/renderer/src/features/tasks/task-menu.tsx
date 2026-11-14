@@ -10,7 +10,7 @@ import {
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { TaskSummary } from '@shared/sop'
+import type { TaskSummary } from '@shared/workflow'
 import {
   AlertDialog,
   AlertDialogAction,

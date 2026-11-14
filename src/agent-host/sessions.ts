@@ -191,7 +191,7 @@ import {
   type ModeRank,
 } from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
-import type { TaskSessionHooksRef, TaskStepStart } from './sop/engine'
+import type { TaskSessionHooksRef, TaskStepStart } from './workflow/engine'
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
@@ -433,7 +433,7 @@ export interface SessionManagerDeps {
   settings: () => HostSettings
   /** What a routine's run hears of its session; set once the routines manager exists. */
   routine?: RoutineSessionHooksRef
-  /** What an SOP step hears of its session; set once the task engine exists. */
+  /** What a workflow step hears of its session; set once the task engine exists. */
   task?: TaskSessionHooksRef
   timings?: Partial<SessionTimings>
   now?: () => number
@@ -3603,7 +3603,7 @@ export class SessionManager {
   }
 
   /**
-   * An SOP step's session: top-level with `origin: 'task'`, in its task's folder, in the mode that
+   * A workflow step's session: top-level with `origin: 'task'`, in its task's folder, in the mode that
    * asks before it acts, so Kettu answers inside the step's scope; the step's prompt goes first.
    * A worktree it is handed is the task's: removing the session never removes it.
    */

@@ -941,9 +941,9 @@
     },
     "signInCopied": "No project is open, so the sign-in command was copied.",
     "signInCopyFailed": "No project is open and the sign-in command could not be copied.",
-    "sop": {
+    "workflow": {
       "group": "Workflows",
-      "keywords": "workflow suggest auto pick steps tasks flow",
+      "keywords": "Workflow suggest auto pick steps tasks flow",
       "suggest": {
         "name": "Agents can suggest a workflow",
         "description": "In a regular session, an agent offers a workflow when it thinks the work needs one, and it starts only when you click Start. Turned off, agents don’t see the feature."

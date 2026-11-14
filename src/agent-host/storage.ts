@@ -4,7 +4,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
 import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/git'
-import type { SessionTaskRef } from '@shared/sop'
+import type { SessionTaskRef } from '@shared/workflow'
 import {
   isAgentId,
   isUserContent,
@@ -305,7 +305,7 @@ export interface SessionRecord {
   parentId: string | null
   origin: 'user' | 'subagent' | 'routine' | 'task'
   routine?: RoutineRef // a routine's run, when origin is 'routine'
-  task?: SessionTaskRef // an SOP step's session, when origin is 'task'
+  task?: SessionTaskRef // a workflow step's session, when origin is 'task'
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved

@@ -5,7 +5,7 @@ import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall } from '../artifacts/model'
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall } from '../routines/calls'
-import type { TaskCall } from '../sop/model'
+import type { TaskCall } from '../workflow/model'
 import type { ImageMode, ThreadWrite } from './model'
 
 /**

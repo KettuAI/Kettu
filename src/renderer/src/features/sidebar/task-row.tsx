@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { SessionPullRequest, SessionSummary } from '@shared/agent-host'
-import type { TaskSummary, TaskView } from '@shared/sop'
+import type { TaskSummary, TaskView } from '@shared/workflow'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   ContextMenu,
@@ -385,7 +385,7 @@ function StepRowItem({
   )
   const variants = useMemo(() => rowVariants(row.id), [row.id])
   const status = stepRowStatus(step, summary, latestRound(view, step.id))
-  const name = stepTitle(view?.sop, step.id, step.name)
+  const name = stepTitle(view?.workflow, step.id, step.name)
   const open = () => (summary ? openSession(summary.id, summary.projectPath) : openTask(task.id))
   const button = (
     <button

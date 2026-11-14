@@ -8,14 +8,14 @@ import {
   type BlockedReason,
   type PickedBy,
   type RoundView,
-  type Sop,
+  type Workflow,
   type StepPick,
   type StuckReason,
   type TaskNeed,
   type TaskStepSummary,
   type TaskSummary,
   type TaskView,
-} from '@shared/sop'
+} from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import type { RowStatus } from '@renderer/features/sidebar/row-status'
 import { i18n } from '@renderer/lib/i18n'
@@ -94,15 +94,19 @@ export function latestRound(view: TaskView | undefined, stepId: string): RoundVi
   return view?.rounds.findLast((round) => round.stepId === stepId)
 }
 
-/** A step's name in the language shown, from the SOP's own locale when it has one. */
-export function stepTitle(sop: Sop | undefined, stepId: string, fallback?: string): string {
-  if (!sop) return fallback ?? stepId
-  return stepName(sop, stepId, i18n.language)
+/** A step's name in the language shown, from the workflow's own locale when it has one. */
+export function stepTitle(
+  workflow: Workflow | undefined,
+  stepId: string,
+  fallback?: string,
+): string {
+  if (!workflow) return fallback ?? stepId
+  return stepName(workflow, stepId, i18n.language)
 }
 
-/** The SOP's name in the language shown. */
-export function sopTitle(task: TaskSummary, view: TaskView | undefined): string {
-  return view?.sop.locales[i18n.language]?.name ?? task.sopName
+/** The workflow's name in the language shown. */
+export function workflowTitle(task: TaskSummary, view: TaskView | undefined): string {
+  return view?.workflow.locales[i18n.language]?.name ?? task.workflowName
 }
 
 /** Which step it is on, for step/total: the furthest that started, while the task runs. */
@@ -155,10 +159,10 @@ export function pickedByText(pickedBy: PickedBy, view: TaskView): string {
       return t('picked.first')
     case 'task_pin':
       return t('picked.taskPin')
-    case 'sop_pin':
-      return t('picked.sopPin')
+    case 'workflow_pin':
+      return t('picked.workflowPin')
     case 'agent':
-      return t('picked.agent', { step: stepTitle(view.sop, pickedBy.stepId) })
+      return t('picked.agent', { step: stepTitle(view.workflow, pickedBy.stepId) })
     case 'previous': {
       const round = view.rounds.find((r) => r.id === pickedBy.roundId)
       return round ? t('picked.previous', { n: round.n }) : t('picked.previousAny')
@@ -170,9 +174,9 @@ export function pickedByText(pickedBy: PickedBy, view: TaskView): string {
 
 /** The steps whose forward arrows lead to `stepId`. */
 function stepsBefore(view: TaskView, stepId: string) {
-  const at = stepIndex(view.sop, stepId)
-  return view.sop.steps.filter(
-    (s) => stepIndex(view.sop, s.id) < at && s.outcomes.some((o) => o.to.includes(stepId)),
+  const at = stepIndex(view.workflow, stepId)
+  return view.workflow.steps.filter(
+    (s) => stepIndex(view.workflow, s.id) < at && s.outcomes.some((o) => o.to.includes(stepId)),
   )
 }
 
@@ -182,7 +186,7 @@ function stepsBefore(view: TaskView, stepId: string) {
  * finish; nobody for the first step, which the tray chose.
  */
 export function whoPicksText(view: TaskView, stepId: string): string {
-  const step = view.sop.steps.find((s) => s.id === stepId)
+  const step = view.workflow.steps.find((s) => s.id === stepId)
   if (!step) return ''
   if (step.by === 'you') return t('picked.person')
   if (view.pins[stepId]) return t('picked.taskPin')
@@ -192,9 +196,9 @@ export function whoPicksText(view: TaskView, stepId: string): string {
     seen.add(from[0]!.id)
     from = stepsBefore(view, from[0]!.id)
   }
-  if (stepIndex(view.sop, stepId) === 0 || from.length === 0) return t('picked.first')
+  if (stepIndex(view.workflow, stepId) === 0 || from.length === 0) return t('picked.first')
   if (from.length > 1) return t('picks.join')
-  return t('picks.by', { step: stepTitle(view.sop, from[0]!.id) })
+  return t('picks.by', { step: stepTitle(view.workflow, from[0]!.id) })
 }
 
 /** What a stuck step ran into, in words. */
@@ -243,11 +247,11 @@ export function needKey(need: TaskNeed): string {
 
 /** Where the steps after `stepId` lead, by name, for an Approve button: the next steps or the end. */
 export function nextAfter(view: TaskView, round: RoundView): string | null {
-  const step = view.sop.steps.find((s) => s.id === round.stepId)
+  const step = view.workflow.steps.find((s) => s.id === round.stepId)
   const outcome = step?.outcomes.find((o) => o.name === round.outcome) ?? step?.outcomes[0]
   if (!outcome) return null
   if (outcome.end) return null
-  return outcome.to.map((id) => stepTitle(view.sop, id)).join(t('and'))
+  return outcome.to.map((id) => stepTitle(view.workflow, id)).join(t('and'))
 }
 
 /** A step's state in a word, as a card or a node says it. */

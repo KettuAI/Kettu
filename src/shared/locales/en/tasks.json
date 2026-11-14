@@ -61,7 +61,7 @@
   "picked": {
     "first": "First step",
     "taskPin": "Pinned for this task",
-    "sopPin": "Pinned on this workflow",
+    "workflowPin": "Pinned on this workflow",
     "agent": "Picked by {{step}}",
     "previous": "Same as round {{n}}",
     "previousAny": "Same as before",
@@ -86,8 +86,8 @@
     "newSession": "New session"
   },
   "timeline": {
-    "started": "Started with {{sop}} · {{time}}",
-    "startedFrom": "Started from “{{session}}” · {{sop}} · {{time}}",
+    "started": "Started with {{workflow}} · {{time}}",
+    "startedFrom": "Started from “{{session}}” · {{workflow}} · {{time}}",
     "noteAdded": "Added for the steps · {{time}}",
     "round": "{{step}} · Round {{n}}",
     "why": "Why: “{{reason}}”",

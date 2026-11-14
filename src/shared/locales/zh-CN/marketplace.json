@@ -14,7 +14,7 @@
       "installed": "已安装",
       "plugins": "插件",
       "skills": "技能",
-      "sop": "工作流"
+      "workflow": "工作流"
     }
   },
   "add": {
@@ -28,10 +28,10 @@
     "skillGithubLine": "一个仓库，或仓库中的一个文件夹",
     "skillFolder": "来自文件夹的技能…",
     "skillFolderLine": "含有 SKILL.md 的文件夹",
-    "sopGithub": "来自 GitHub 的工作流…",
-    "sopGithubLine": "GitHub 仓库中的一个文件",
-    "sopFile": "来自文件的工作流…",
-    "sopFileLine": "这台电脑上的一个 .yaml 文件"
+    "workflowGithub": "来自 GitHub 的工作流…",
+    "workflowGithubLine": "GitHub 仓库中的一个文件",
+    "workflowFile": "来自文件的工作流…",
+    "workflowFileLine": "这台电脑上的一个 .yaml 文件"
   },
   "sections": {
     "featured": "精选",
@@ -48,7 +48,7 @@
     "plugins": "插件",
     "skills": "技能",
     "mcp": "MCP 服务器",
-    "sop": "工作流"
+    "workflow": "工作流"
   },
   "row": {
     "install": "安装",
@@ -179,7 +179,7 @@
     "mcpConfig": "MCP 配置",
     "offIn": "在 {{agents}} 中已关闭",
     "notCreated": "{{path}} · 尚未创建",
-    "sops": "工作流"
+    "workflows": "工作流"
   },
   "kettu": {
     "note": "Artifacts、会话和浏览器都通过 Kettu 自带的服务器提供给每个 Agent。",
@@ -315,7 +315,7 @@
     "mcp": "MCP",
     "plugin": "插件",
     "skill": "技能",
-    "sop": "工作流"
+    "workflow": "工作流"
   },
   "notes": {
     "plugins": "无法列出插件：{{error}}",
@@ -415,7 +415,7 @@
     "disconnect": "断开连接",
     "remove": "移除…"
   },
-  "sop": {
+  "workflow": {
     "intro": "工作流是一张流程图，让几个 Agent 合作完成一件事。每一步由谁来做，在它开始时由交棒给它的 Agent 选，除非你固定了一个。能用的工作流会出现在新建会话里，Agent 也能在对话中建议使用它。",
     "by": {
       "kettu": "Kettu",
@@ -487,9 +487,9 @@
       "agentTitle": "这个工作流由 Agent 创建，你批准之后才能使用。",
       "changedTitle": "批准之后，这个工作流又被改过",
       "changedText": "批准这个版本之前，它不能开始需求。再看一遍每一步和它的文件，然后决定。",
-      "agentText": "{{agent}} 在一个会话里用 create_sop 写了它。",
+      "agentText": "{{agent}} 在一个会话里用 create_workflow 写了它。",
       "agentInBefore": "{{agent}} 在会话“",
-      "agentInAfter": "”里用 create_sop 写了它。",
+      "agentInAfter": "”里用 create_workflow 写了它。",
       "untitled": "未命名会话",
       "githubText": "从 GitHub 上的 {{repo}} 添加。",
       "fileText": "从 {{file}} 添加。",

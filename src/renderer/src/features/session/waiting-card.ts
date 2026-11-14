@@ -1,5 +1,5 @@
 import { useThreadsStore } from '@renderer/stores/threads'
-import { openSuggestion } from './entries/sop-tools'
+import { openSuggestion } from './entries/workflow-tools'
 
 /** The first card in the thread that waits for the user's answer. */
 export function firstWaiting(sessionId: string): string | null {

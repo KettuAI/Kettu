@@ -47,7 +47,7 @@ import type {
 } from './sdk'
 import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
 import { SERVICE_NAME } from '../service-name'
-import { sopToolStructured } from '../sop/tools'
+import { workflowToolStructured } from '../workflow/tools'
 import { PLAN_TOOLS, resultContent, startsBackgroundWork, SUBAGENT_TOOLS, toolView } from './tools'
 
 /** Output for one session, built against its thread when it is delivered. */
@@ -595,7 +595,7 @@ export class ClaudeMapper {
     const status: ToolEntry['status'] = block.is_error === true ? 'failed' : 'completed'
     const content = resultContent(name, block, structured, entry.content)
     const own = name.startsWith(KETTU_PREFIX)
-      ? sopToolStructured(name.slice(KETTU_PREFIX.length), structured)
+      ? workflowToolStructured(name.slice(KETTU_PREFIX.length), structured)
       : undefined
     const changes = {
       status,

@@ -37,17 +37,17 @@ import {
 } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import {
-  MAX_SOP_STEPS,
+  MAX_WORKFLOW_STEPS,
   PICK_REASON_CHARS,
-  SOP_FILE_BYTES,
-  SOP_ID_CHARS,
+  WORKFLOW_FILE_BYTES,
+  WORKFLOW_ID_CHARS,
   TASK_NOTE_CHARS,
   TASK_TEXT_CHARS,
   TASK_TITLE_CHARS,
   isPace,
   isStepPick,
   type StepPick,
-} from '@shared/sop'
+} from '@shared/workflow'
 import type { ClockRequest, ClockZone } from '@shared/usage'
 import {
   isPermissionScope,
@@ -76,7 +76,7 @@ import {
 } from '@shared/thread'
 import { FORM_FIELDS, FORM_KEY_CHARS } from './elicitation'
 import { invalidParams } from './errors'
-import { TASK_ID } from './sop/model'
+import { TASK_ID } from './workflow/model'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
@@ -326,12 +326,12 @@ function worktreeRequest(value: unknown): { base: string; branch?: string } {
   return { base: baseRef(o, 'base'), ...(branch === undefined ? {} : { branch }) }
 }
 
-const SOP_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
-const SOP_HASH = /^[0-9a-f]{64}$/
+const WORKFLOW_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
+const WORKFLOW_HASH = /^[0-9a-f]{64}$/
 
-function sopId(o: Fields): string {
-  const value = string(o, 'sopId', SOP_ID_CHARS)
-  if (!SOP_ID.test(value)) throw invalidParams('sopId is not an SOP id')
+function workflowId(o: Fields): string {
+  const value = string(o, 'workflowId', WORKFLOW_ID_CHARS)
+  if (!WORKFLOW_ID.test(value)) throw invalidParams('workflowId is not a workflow id')
   return value
 }
 
@@ -363,7 +363,8 @@ function stepPickOf(value: unknown): StepPick | null {
 function stepPicks(value: unknown): Record<string, StepPick> {
   const o = fields(value)
   const entries = Object.entries(o)
-  if (entries.length > MAX_SOP_STEPS) throw invalidParams(`pins holds more than ${MAX_SOP_STEPS}`)
+  if (entries.length > MAX_WORKFLOW_STEPS)
+    throw invalidParams(`pins holds more than ${MAX_WORKFLOW_STEPS}`)
   const out: Record<string, StepPick> = {}
   for (const [key, pick] of entries) {
     if (key.length > 64) throw invalidParams('A pin names a step id that is too long')
@@ -382,7 +383,7 @@ function taskStart(value: unknown, platform: Platform): HostParams<'tasks.start'
   const from = o.from === undefined ? undefined : { sessionId: sessionId(fields(o.from)) }
   return {
     projectPath: absolutePath(o, 'projectPath', platform),
-    sopId: sopId(o),
+    workflowId: workflowId(o),
     text: string(o, 'text', TASK_TEXT_CHARS),
     ...(title === undefined ? {} : { title }),
     pace,
@@ -395,16 +396,20 @@ function taskStart(value: unknown, platform: Platform): HostParams<'tasks.start'
   }
 }
 
-function sopAddSource(value: unknown): HostParams<'sops.add'> {
+function workflowAddSource(value: unknown): HostParams<'workflows.add'> {
   const o = fields(value)
   if (o.kind === 'url') return { kind: 'url', url: string(o, 'url', URL_CHARS) }
   if (o.kind === 'file') {
-    return { kind: 'file', name: string(o, 'name', 255), text: string(o, 'text', SOP_FILE_BYTES) }
+    return {
+      kind: 'file',
+      name: string(o, 'name', 255),
+      text: string(o, 'text', WORKFLOW_FILE_BYTES),
+    }
   }
   throw invalidParams('kind must be url or file')
 }
 
-function sopSettingsChange(value: unknown): HostParams<'sops.setSettings'> {
+function workflowSettingsChange(value: unknown): HostParams<'workflows.setSettings'> {
   const o = fields(value)
   const suggest = optionalFlag(o, 'suggest')
   let autoPick: Partial<Record<AgentId, boolean | null>> | undefined
@@ -1522,23 +1527,23 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
-    'sops.list': none,
-    'sops.read': (params) => ({ sopId: sopId(fields(params)) }),
-    'sops.add': sopAddSource,
-    'sops.update': (params) => ({ sopId: sopId(fields(params)) }),
-    'sops.approve': (params) => {
+    'workflows.list': none,
+    'workflows.read': (params) => ({ workflowId: workflowId(fields(params)) }),
+    'workflows.add': workflowAddSource,
+    'workflows.update': (params) => ({ workflowId: workflowId(fields(params)) }),
+    'workflows.approve': (params) => {
       const o = fields(params)
       const hash = string(o, 'hash', 64)
-      if (!SOP_HASH.test(hash)) throw invalidParams('hash must be a SHA-256 in hex')
-      return { sopId: sopId(o), hash }
+      if (!WORKFLOW_HASH.test(hash)) throw invalidParams('hash must be a SHA-256 in hex')
+      return { workflowId: workflowId(o), hash }
     },
-    'sops.remove': (params) => ({ sopId: sopId(fields(params)) }),
-    'sops.pin': (params) => {
+    'workflows.remove': (params) => ({ workflowId: workflowId(fields(params)) }),
+    'workflows.pin': (params) => {
       const o = fields(params)
-      return { sopId: sopId(o), stepId: stepId(o), pick: stepPickOf(o.pick ?? null) }
+      return { workflowId: workflowId(o), stepId: stepId(o), pick: stepPickOf(o.pick ?? null) }
     },
-    'sops.settings': none,
-    'sops.setSettings': sopSettingsChange,
+    'workflows.settings': none,
+    'workflows.setSettings': workflowSettingsChange,
     'tasks.list': none,
     'tasks.get': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.sessions': (params) => ({ taskId: taskId(fields(params)) }),

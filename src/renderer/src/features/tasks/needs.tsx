@@ -8,7 +8,7 @@ import {
   UserIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { TaskNeed, TaskView } from '@shared/sop'
+import type { TaskNeed, TaskView } from '@shared/workflow'
 import { ApprovalCard } from '@renderer/components/affect/approval-card'
 import { Button } from '@renderer/components/ui/button'
 import { useComments } from '@renderer/features/artifacts/use-comments'
@@ -87,7 +87,7 @@ function ReviewCard({ view, roundId }: { view: TaskView; roundId: string }) {
   const { threads } = useComments(round?.document?.artifactId ?? null)
   if (!round) return null
   const hostId = hostOfPath(view.projectPath)
-  const step = stepTitle(view.sop, round.stepId)
+  const step = stepTitle(view.workflow, round.stepId)
   const agent = round.by ? agentName(round.by.agentId, hostId) : t('picked.person')
   const comments = threads?.filter((thread) => thread.resolvedAt === null).length ?? 0
   const next = nextAfter(view, round)
@@ -159,11 +159,11 @@ function ReviewCard({ view, roundId }: { view: TaskView; roundId: string }) {
   )
 }
 
-/** A step the SOP gives you: what it asks, a note, and its outcomes as buttons. */
+/** A step the workflow gives you: what it asks, a note, and its outcomes as buttons. */
 function PersonCard({ view, roundId }: { view: TaskView; roundId: string }) {
   const { t } = useTranslation('tasks')
   const round = view.rounds.find((r) => r.id === roundId)
-  const step = view.sop.steps.find((s) => s.id === round?.stepId)
+  const step = view.workflow.steps.find((s) => s.id === round?.stepId)
   const [note, setNote] = useState('')
   const [chosen, setChosen] = useState<string | null>(null)
   const { busy, error, run } = useTaskRequest(view.id)
@@ -182,7 +182,7 @@ function PersonCard({ view, roundId }: { view: TaskView; roundId: string }) {
   return (
     <Card
       icon={UserIcon}
-      title={t('person.title', { step: stepTitle(view.sop, step.id) })}
+      title={t('person.title', { step: stepTitle(view.workflow, step.id) })}
       body={<Prompt text={step.prompt} />}
       error={error}
     >
@@ -221,7 +221,7 @@ function AskingCard({
   return (
     <Card
       icon={HelpCircleIcon}
-      title={t('asking.title', { agent, step: stepTitle(view.sop, need.stepId) })}
+      title={t('asking.title', { agent, step: stepTitle(view.workflow, need.stepId) })}
       body={t('asking.body')}
     >
       <div className="flex justify-end">
@@ -249,8 +249,8 @@ function BlockedCard({
   const now = useNow()
   const [pinning, setPinning] = useState(false)
   const hostId = hostOfPath(view.projectPath)
-  const step = stepTitle(view.sop, need.stepId)
-  const canPin = view.sop.steps.find((s) => s.id === need.stepId)?.by === 'agent'
+  const step = stepTitle(view.workflow, need.stepId)
+  const canPin = view.workflow.steps.find((s) => s.id === need.stepId)?.by === 'agent'
   return (
     <Card
       icon={Alert02Icon}
@@ -282,7 +282,7 @@ function StuckCard({ view, need }: { view: TaskView; need: Extract<TaskNeed, { k
   const { t } = useTranslation('tasks')
   const round = view.rounds.find((r) => r.id === need.roundId)
   const session = useSessionsStore((s) => (round?.sessionId ? s.byId[round.sessionId] : undefined))
-  const step = stepTitle(view.sop, need.stepId)
+  const step = stepTitle(view.workflow, need.stepId)
   return (
     <Card
       icon={Alert02Icon}

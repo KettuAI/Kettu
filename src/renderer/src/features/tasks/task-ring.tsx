@@ -1,4 +1,4 @@
-import type { StepState, TaskSummary } from '@shared/sop'
+import type { StepState, TaskSummary } from '@shared/workflow'
 import { cn } from '@renderer/lib/utils'
 
 /** A segment's look: a step's state, or `off` for a step an ended task never reached. */
@@ -14,7 +14,7 @@ const STROKE: Record<Segment, string> = {
   off: 'stroke-(--shell-faint)',
 }
 
-/** The segments of a task's ring, one per step of its SOP in order. */
+/** The segments of a task's ring, one per step of its workflow in order. */
 function taskSegments(task: Pick<TaskSummary, 'steps' | 'status'>): Segment[] {
   const ended = task.status === 'dropped' || task.status === 'cancelled'
   return task.steps.map((step) =>

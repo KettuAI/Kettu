@@ -1,8 +1,8 @@
-// Where the flowchart draws an SOP: the steps in rows from the top, forward arrows going down and
+// Where the flowchart draws a workflow: the steps in rows from the top, forward arrows going down and
 // steps that run side by side in one row, arrows back on lanes beside the rows. Laid out from the
-// SOP's own order, since no graph layout library is part of the app.
+// Workflow's own order, since no graph layout library is part of the app.
 
-import { isBackArrow, type Sop, type TaskEnd } from '@shared/sop'
+import { isBackArrow, type Workflow, type TaskEnd } from '@shared/workflow'
 
 export const NODE_W = 204
 export const NODE_H = 100
@@ -60,14 +60,16 @@ export interface FlowLayout {
 const endKey = (end: TaskEnd) => `end:${end}`
 
 /** The row of each step: one below the lowest step an arrow forward comes from. */
-function rowsOf(sop: Sop): Map<string, number> {
+function rowsOf(workflow: Workflow): Map<string, number> {
   const rows = new Map<string, number>()
   // Forward arrows only go to later steps, so one pass in order settles every row.
-  sop.steps.forEach((step, i) => {
-    const from = sop.steps
+  workflow.steps.forEach((step, i) => {
+    const from = workflow.steps
       .slice(0, i)
-      .filter((s) => s.outcomes.some((o) => !isBackArrow(sop, s.id, o) && o.to.includes(step.id)))
-    const previous = i === 0 ? -1 : (rows.get(sop.steps[i - 1]!.id) ?? 0)
+      .filter((s) =>
+        s.outcomes.some((o) => !isBackArrow(workflow, s.id, o) && o.to.includes(step.id)),
+      )
+    const previous = i === 0 ? -1 : (rows.get(workflow.steps[i - 1]!.id) ?? 0)
     rows.set(
       step.id,
       from.length > 0 ? Math.max(...from.map((s) => rows.get(s.id)! + 1)) : previous + 1,
@@ -76,25 +78,25 @@ function rowsOf(sop: Sop): Map<string, number> {
   return rows
 }
 
-/** Lays out the SOP; every coordinate is in the chart's own box, from its top left. */
-export function layoutFlow(sop: Sop): FlowLayout {
-  const rows = rowsOf(sop)
+/** Lays out the workflow; every coordinate is in the chart's own box, from its top left. */
+export function layoutFlow(workflow: Workflow): FlowLayout {
+  const rows = rowsOf(workflow)
   const rowCount = Math.max(...rows.values()) + 1
   const byRow: string[][] = Array.from({ length: rowCount }, () => [])
-  for (const step of sop.steps) byRow[rows.get(step.id)!]!.push(step.id)
+  for (const step of workflow.steps) byRow[rows.get(step.id)!]!.push(step.id)
   const ends: TaskEnd[] = (['done', 'dropped'] as const).filter((end) =>
-    sop.steps.some((s) => s.outcomes.some((o) => o.end === end)),
+    workflow.steps.some((s) => s.outcomes.some((o) => o.end === end)),
   )
   const widest = Math.max(...byRow.map((ids) => ids.length), ends.length)
   const rowsWidth = widest * NODE_W + (widest - 1) * COL_GAP
 
   // Arrows back, the shortest nearest the rows, each on its own lane at its side.
-  const backs = sop.steps.flatMap((s) =>
+  const backs = workflow.steps.flatMap((s) =>
     s.outcomes
-      .filter((o) => isBackArrow(sop, s.id, o))
+      .filter((o) => isBackArrow(workflow, s.id, o))
       .flatMap((o) => o.to.map((to) => ({ from: s.id, outcome: o.name, to }))),
   )
-  for (const step of sop.steps) {
+  for (const step of workflow.steps) {
     if (step.youReview) backs.push({ from: step.id, outcome: '', to: step.id })
   }
   const leftmost = (id: string) => {
@@ -137,10 +139,10 @@ export function layoutFlow(sop: Sop): FlowLayout {
   // Forward arrows: the outcomes of a step that lead to the same steps share one arrow, and each
   // arrow leaves the step's bottom at its own point. With one way on, its label sits under the
   // step; with several, by where each arrives, so they keep apart.
-  for (const step of sop.steps) {
+  for (const step of workflow.steps) {
     const from = box.get(step.id)!
     const ways: { key: string; names: string[]; targets: string[]; end: TaskEnd | null }[] = []
-    for (const outcome of step.outcomes.filter((o) => !isBackArrow(sop, step.id, o))) {
+    for (const outcome of step.outcomes.filter((o) => !isBackArrow(workflow, step.id, o))) {
       const targets = outcome.end ? [endKey(outcome.end)] : outcome.to
       const key = targets.join('|')
       const way = ways.find((w) => w.key === key)

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { SparklesIcon, Tick02Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { RoundView, StepPick, TaskView, WaitingView } from '@shared/sop'
+import type { RoundView, StepPick, TaskView, WaitingView } from '@shared/workflow'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
@@ -43,14 +43,14 @@ interface StepFacts {
 }
 
 function factsOf(view: TaskView, stepId: string): StepFacts {
-  const step = view.sop.steps.find((s) => s.id === stepId)!
+  const step = view.workflow.steps.find((s) => s.id === stepId)!
   const summary = view.steps.find((s) => s.id === stepId)!
   const round = latestRound(view, stepId)
   const waiting = view.waiting.find((w) => w.stepId === stepId)
   const live = round && round.state !== 'stopped' ? round : undefined
   return {
     id: stepId,
-    name: stepTitle(view.sop, stepId),
+    name: stepTitle(view.workflow, stepId),
     by: step.by,
     round,
     waiting,
@@ -62,22 +62,22 @@ function factsOf(view: TaskView, stepId: string): StepFacts {
 
 /** The step a flowchart selects first: the one that needs you, else the one at work, else the furthest. */
 function firstSelected(view: TaskView): string {
-  const order = view.sop.steps.map((s) => view.steps.find((x) => x.id === s.id)!)
+  const order = view.workflow.steps.map((s) => view.steps.find((x) => x.id === s.id)!)
   return (
     order.find((s) => s.state === 'needs_you' || s.state === 'error')?.id ??
     order.find((s) => s.state === 'running')?.id ??
-    (view.at !== null ? view.sop.steps[view.at - 1]?.id : undefined) ??
-    view.sop.steps[0]!.id
+    (view.at !== null ? view.workflow.steps[view.at - 1]?.id : undefined) ??
+    view.workflow.steps[0]!.id
   )
 }
 
 /**
- * The task's SOP as a flowchart: each step with who does it and its state, solid arrows for the
+ * The task's workflow as a flowchart: each step with who does it and its state, solid arrows for the
  * path taken and quiet ones for the rest, arrows back dashed with how often they were taken; the
  * step picked shows its details under the chart.
  */
 export function Flowchart({ view }: { view: TaskView }) {
-  const layout = useMemo(() => layoutFlow(view.sop), [view.sop])
+  const layout = useMemo(() => layoutFlow(view.workflow), [view.workflow])
   const [selected, setSelected] = useState(() => firstSelected(view))
   const details = useRef<HTMLDivElement>(null)
   // A step picked on a tall chart shows its details, which sit under it.
@@ -183,7 +183,7 @@ function arrowsOf(view: TaskView, edge: FlowEdge) {
 /** An arrow's outcomes, and on an arrow back how often it was taken of how often it may be. */
 function EdgeLabel({ view, edge, taken }: { view: TaskView; edge: FlowEdge; taken: boolean }) {
   const { t } = useTranslation('tasks')
-  const step = view.sop.steps.find((s) => s.id === edge.from)
+  const step = view.workflow.steps.find((s) => s.id === edge.from)
   // A step with one way forward needs no label on it.
   if (!edge.back && (step?.outcomes.length ?? 0) < 2) return null
   const arrow = arrowsOf(view, edge)[0]
@@ -191,8 +191,11 @@ function EdgeLabel({ view, edge, taken }: { view: TaskView; edge: FlowEdge; take
   const text = edge.back
     ? `${name}${t('separator')}${
         arrow && arrow.taken > 0
-          ? t('flow.taken', { taken: arrow.taken, limit: arrow.limit ?? view.sop.sendBackLimit })
-          : t('flow.upTo', { limit: arrow?.limit ?? view.sop.sendBackLimit })
+          ? t('flow.taken', {
+              taken: arrow.taken,
+              limit: arrow.limit ?? view.workflow.sendBackLimit,
+            })
+          : t('flow.upTo', { limit: arrow?.limit ?? view.workflow.sendBackLimit })
       }`
     : name
   return (
@@ -381,13 +384,13 @@ function StateBadge({ facts, view }: { facts: StepFacts; view: TaskView }) {
 
 /** The steps a waiting step still waits on: those leading to it that are not done. */
 function waitsOn(view: TaskView, stepId: string): string[] {
-  return view.sop.steps
+  return view.workflow.steps
     .filter((s) => s.outcomes.some((o) => o.to.includes(stepId)) && s.id !== stepId)
     .filter((s) => {
       const state = view.steps.find((x) => x.id === s.id)?.state
       return state === 'running' || state === 'needs_you' || state === 'waiting'
     })
-    .map((s) => stepTitle(view.sop, s.id))
+    .map((s) => stepTitle(view.workflow, s.id))
 }
 
 /** The step picked on the chart: who does it and why, its state and branch, and what to do. */
@@ -397,7 +400,7 @@ function NodeDetails({ view, facts }: { view: TaskView; facts: StepFacts }) {
   const hostId = hostOfPath(view.projectPath)
   const models = useModelText(hostId, facts.pick)
   const round = facts.round
-  const step = view.sop.steps.find((s) => s.id === facts.id)!
+  const step = view.workflow.steps.find((s) => s.id === facts.id)!
   const session = useSessionsStore((s) => (round?.sessionId ? s.byId[round.sessionId] : undefined))
   const live = view.rounds.some((r) => r.stepId === facts.id && LIVE.has(r.state))
   const canPin = view.status === 'running' && step.by === 'agent' && !live
@@ -440,12 +443,12 @@ function NodeDetails({ view, facts }: { view: TaskView; facts: StepFacts }) {
   if (step.reviewOf.length > 0) {
     rows.push([
       t('details.reviews'),
-      step.reviewOf.map((id) => stepTitle(view.sop, id)).join(t('and')),
+      step.reviewOf.map((id) => stepTitle(view.workflow, id)).join(t('and')),
     ])
   }
   if (!round && step.hint) rows.push([t('details.hint'), t('details.quoted', { text: step.hint })])
   if (sent) {
-    const from = sent.by === 'person' ? t('picked.person') : stepTitle(view.sop, sent.stepId)
+    const from = sent.by === 'person' ? t('picked.person') : stepTitle(view.workflow, sent.stepId)
     rows.push([
       t('details.sentBack'),
       <span key="sent" className="whitespace-pre-wrap">

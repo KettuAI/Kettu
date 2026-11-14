@@ -935,7 +935,7 @@
     },
     "signInCopied": "当前没有打开项目，已复制登录命令。",
     "signInCopyFailed": "当前没有打开项目，也无法复制登录命令。",
-    "sop": {
+    "workflow": {
       "group": "工作流",
       "keywords": "工作流 建议 Auto 选人 步骤 需求 流程",
       "suggest": {

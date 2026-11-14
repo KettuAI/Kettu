@@ -8,7 +8,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import type { TaskSummary, TaskView } from '@shared/sop'
+import type { TaskSummary, TaskView } from '@shared/workflow'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ChatComposer } from '@renderer/components/affect/chat-composer'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
@@ -39,7 +39,7 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { openNewSession, setTaskFlow } from '@renderer/stores/view'
 import { Flowchart } from './flowchart'
-import { progressText, sopTitle } from './model'
+import { progressText, workflowTitle } from './model'
 import { CancelTaskDialog, DeleteTaskDialog, TaskMenuItems, TaskTitleField } from './task-menu'
 import { updateTask } from './actions'
 import { TaskRing } from './task-ring'
@@ -47,7 +47,7 @@ import { Timeline } from './timeline'
 import { useTaskSessions, useTaskView } from './use-task'
 
 /**
- * A task's page: its name, SOP and progress in the top bar with Timeline and Flowchart beside
+ * A task's page: its name, workflow and progress in the top bar with Timeline and Flowchart beside
  * them, the view chosen under it, and a composer that adds notes for the steps at work and every
  * later one, which move nothing.
  */
@@ -157,7 +157,7 @@ function Missing() {
 }
 
 /**
- * The top bar: the ring and the task's name, which a click renames, its More menu, the SOP with
+ * The top bar: the ring and the task's name, which a click renames, its More menu, the workflow with
  * the step it is on, Needs you or how it ended; Timeline and Flowchart at the right.
  */
 function TaskBar({
@@ -235,10 +235,10 @@ function TaskBar({
             />
           </DropdownMenuContent>
         </DropdownMenu>
-        <span className="ks-chip shrink-1000" title={sopTitle(task, view)}>
+        <span className="ks-chip shrink-1000" title={workflowTitle(task, view)}>
           <Glyph icon={FlowIcon} size={13} />
           <span className="ks-chip__text truncate @max-[44rem]/top-bar:hidden">
-            {sopTitle(task, view)}
+            {workflowTitle(task, view)}
           </span>
           {progress && <span className="ks-chip__dim tabular-nums">{progress}</span>}
         </span>

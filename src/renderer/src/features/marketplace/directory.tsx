@@ -1,5 +1,5 @@
 // The Marketplace's directory: its tabs, search and Add over sections of plugins, skills, MCP
-// servers and SOPs. Each source fills its sections as it answers; the rest show at once.
+// servers and workflows. Each source fills its sections as it answers; the rest show at once.
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import {
@@ -23,7 +23,7 @@ import type {
   MarketSkills,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
-import type { SopEntry } from '@shared/sop'
+import type { WorkflowEntry } from '@shared/workflow'
 import {
   Dropdown,
   EmptyState,
@@ -67,18 +67,18 @@ import {
   SkeletonSection,
 } from './rows'
 import { SkillRow } from './skills'
-import { sopMatches, sopName } from './sop-model'
-import { addSopFromFile, retrySops, useSops } from './sop-actions'
-import { AddSopDialog, SopRow, SopSections } from './sops'
+import { workflowMatches, workflowName } from './workflow-model'
+import { addWorkflowFromFile, retryWorkflows, useWorkflows } from './workflow-actions'
+import { AddWorkflowDialog, WorkflowRow, WorkflowSections } from './workflows'
 import {
   pluginSubject,
   serverSubject,
   skillSubject,
-  sopSubject,
+  workflowSubject,
   type TileSubject,
 } from './tile-art'
 
-const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'sop', 'installed']
+const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'workflow', 'installed']
 
 /** Rows a section shows before it folds the rest into "… and N more", and how many more a click shows. */
 const SECTION_ROWS = 6
@@ -101,7 +101,7 @@ type Entry =
   | { kind: 'mcp'; key: string; title: string; subject: TileSubject; server: CatalogServer }
   | { kind: 'plugin'; key: string; title: string; subject: TileSubject; plugin: CatalogPlugin }
   | { kind: 'skill'; key: string; title: string; subject: TileSubject; skill: CatalogSkill }
-  | { kind: 'sop'; key: string; title: string; subject: TileSubject; sop: SopEntry }
+  | { kind: 'workflow'; key: string; title: string; subject: TileSubject; workflow: WorkflowEntry }
 
 interface Section {
   id: string
@@ -134,12 +134,12 @@ const skillEntry = (skill: CatalogSkill): Entry => ({
   skill,
 })
 
-const sopEntry = (sop: SopEntry): Entry => ({
-  kind: 'sop',
-  key: itemKey({ kind: 'sop', id: sop.id }),
-  title: sopName(sop, currentLocale()),
-  subject: sopSubject(sop),
-  sop,
+const workflowEntry = (workflow: WorkflowEntry): Entry => ({
+  kind: 'workflow',
+  key: itemKey({ kind: 'workflow', id: workflow.id }),
+  title: workflowName(workflow, currentLocale()),
+  subject: workflowSubject(workflow),
+  workflow,
 })
 
 /** The lists taken in turn, one item from each, so a section mixes its kinds. */
@@ -158,8 +158,8 @@ interface Sources {
   pluginsPending: boolean
   skills: MarketSkills | null
   skillsPending: boolean
-  sops: SopEntry[]
-  sopsPending: boolean
+  workflows: WorkflowEntry[]
+  workflowsPending: boolean
   search: MarketSearchState | null
 }
 
@@ -172,8 +172,8 @@ function useSources(): Sources {
   const skills = useMarketplaceStore((s) => s.skills)
   const skillsPending = useMarketplaceStore((s) => !s.skills && !s.skillsError)
   const search = useMarketplaceStore((s) => s.search)
-  const { entries: sops, loaded: sopsLoaded } = useSops()
-  const sopsPending = !sopsLoaded
+  const { entries: workflows, loaded: workflowsLoaded } = useWorkflows()
+  const workflowsPending = !workflowsLoaded
   return useMemo(
     () => ({
       catalog,
@@ -182,8 +182,8 @@ function useSources(): Sources {
       pluginsPending,
       skills,
       skillsPending,
-      sops,
-      sopsPending,
+      workflows,
+      workflowsPending,
       search,
     }),
     [
@@ -193,8 +193,8 @@ function useSources(): Sources {
       pluginsPending,
       skills,
       skillsPending,
-      sops,
-      sopsPending,
+      workflows,
+      workflowsPending,
       search,
     ],
   )
@@ -232,7 +232,7 @@ function sectionTitle(id: string, t: TFunction<'marketplace'>): string {
   }
 }
 
-/** All without a query: Featured, From Anthropic, For Codex and SOP, then the MCP categories. */
+/** All without a query: Featured, From Anthropic, For Codex and workflow, then the MCP categories. */
 function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
   const plugins = [...(src.plugins?.catalog ?? [])].sort(byInstalls)
   const skills = src.skills?.catalog ?? []
@@ -273,10 +273,10 @@ function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
       pending: src.pluginsPending ? 4 : 0,
     },
     {
-      id: 'sops',
-      title: t('sections.sop'),
-      entries: src.sops.map(sopEntry),
-      pending: src.sopsPending ? 2 : 0,
+      id: 'workflows',
+      title: t('sections.workflow'),
+      entries: src.workflows.map(workflowEntry),
+      pending: src.workflowsPending ? 2 : 0,
     },
     ...mcpSections(src, t, 'featured'),
   ]
@@ -366,10 +366,12 @@ function foundSections(
   }
   if (tab === 'all') {
     sections.push({
-      id: 'found-sops',
-      title: t('sections.sop'),
-      entries: src.sops.filter((s) => sopMatches(s, query, currentLocale())).map(sopEntry),
-      pending: src.sopsPending ? 2 : 0,
+      id: 'found-workflows',
+      title: t('sections.workflow'),
+      entries: src.workflows
+        .filter((s) => workflowMatches(s, query, currentLocale()))
+        .map(workflowEntry),
+      pending: src.workflowsPending ? 2 : 0,
     })
   }
   if (tab === 'all' || tab === 'mcp') {
@@ -400,7 +402,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   const scope = useHostScope()
   const { useMarketplaceStore } = scope
   const query = useMarketplaceStore((s) => s.query)
-  const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | 'sop' | null>(null)
+  const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | 'workflow' | null>(null)
   const namesHosts = useNamesHosts()
   const windowHost = useWindowHost()
   const hostName = useHostName()
@@ -409,7 +411,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     plugins: t('page.tabs.plugins'),
     skills: t('page.tabs.skills'),
     mcp: t('page.tabs.mcp'),
-    sop: t('page.tabs.sop'),
+    workflow: t('page.tabs.workflow'),
     installed: t('page.tabs.installed'),
   }
   const q = query.trim()
@@ -497,16 +499,16 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
                   onSelect: () => setDialog('mcp'),
                 },
                 {
-                  label: t('add.sopGithub'),
-                  description: t('add.sopGithubLine'),
+                  label: t('add.workflowGithub'),
+                  description: t('add.workflowGithubLine'),
                   icon: Flowchart01Icon,
-                  onSelect: () => setDialog('sop'),
+                  onSelect: () => setDialog('workflow'),
                 },
                 {
-                  label: t('add.sopFile'),
-                  description: t('add.sopFileLine'),
+                  label: t('add.workflowFile'),
+                  description: t('add.workflowFileLine'),
                   icon: File02Icon,
-                  onSelect: () => addSopFromFile(scope),
+                  onSelect: () => addWorkflowFromFile(scope),
                 },
               ]}
               trigger={({ open, toggle }) => (
@@ -527,9 +529,9 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           <div key="installed">
             <InstalledView query={filter} />
           </div>
-        ) : tab === 'sop' ? (
-          <div key={`sop|${filter}`}>
-            <SopSections query={filter} />
+        ) : tab === 'workflow' ? (
+          <div key={`workflow|${filter}`}>
+            <WorkflowSections query={filter} />
           </div>
         ) : (
           <div key={`${tab}|${filter}`}>
@@ -549,9 +551,9 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           open={dialog === 'skill'}
           onOpenChange={(open) => setDialog(open ? 'skill' : null)}
         />
-        <AddSopDialog
-          open={dialog === 'sop'}
-          onOpenChange={(open) => setDialog(open ? 'sop' : null)}
+        <AddWorkflowDialog
+          open={dialog === 'workflow'}
+          onOpenChange={(open) => setDialog(open ? 'workflow' : null)}
         />
       </MarketAway>
     </div>
@@ -641,8 +643,8 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
   if (entry.kind === 'skill') {
     return <SkillRow skill={entry.skill} tab={tab} showKind={showKind} fresh={fresh} />
   }
-  if (entry.kind === 'sop') {
-    return <SopRow entry={entry.sop} tab={tab} showKind={showKind} fresh={fresh} />
+  if (entry.kind === 'workflow') {
+    return <WorkflowRow entry={entry.workflow} tab={tab} showKind={showKind} fresh={fresh} />
   }
   const server = entry.server
   const open = () => openMarketplace({ item: entry.key, tab })
@@ -670,7 +672,7 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
   const skillsError = useMarketplaceStore((s) => s.skillsError)
   const store = useMarketplaceStore.getState
   const scope = useHostScope()
-  const sops = useSops()
+  const workflows = useWorkflows()
   const notes: ReactNode[] = []
   const plugins = tab === 'all' || tab === 'plugins'
   const skills = tab === 'all' || tab === 'skills'
@@ -710,10 +712,10 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
       </QuietNote>,
     )
   }
-  if (tab === 'all' && sops.error && sops.entries.length === 0) {
+  if (tab === 'all' && workflows.error && workflows.entries.length === 0) {
     notes.push(
-      <QuietNote key="sops" action={<Retry onRetry={() => retrySops(scope)} />}>
-        {t('sop.readFailed', { error: sops.error })}
+      <QuietNote key="workflows" action={<Retry onRetry={() => retryWorkflows(scope)} />}>
+        {t('workflow.readFailed', { error: workflows.error })}
       </QuietNote>,
     )
   }

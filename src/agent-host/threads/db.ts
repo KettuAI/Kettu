@@ -35,7 +35,7 @@ import type {
 } from '../artifacts/model'
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
-import { taskRecordOf, type TaskCall, type TaskCalls } from '../sop/model'
+import { taskRecordOf, type TaskCall, type TaskCalls } from '../workflow/model'
 import {
   storedBlobs,
   EMPTY_SESSION,
@@ -210,10 +210,10 @@ const ARTIFACT_TYPES = `
   ) STRICT, WITHOUT ROWID;
 `
 
-// SOP tasks, each with its rounds, lanes and arrows in one JSON record that only the agent host
+// Workflow tasks, each with its rounds, lanes and arrows in one JSON record that only the agent host
 // writes. They do not reference threads, so a task keeps its record when a step's session goes.
-const SOP_TASKS = `
-  CREATE TABLE sop_tasks (
+const WORKFLOW_TASKS = `
+  CREATE TABLE workflow_tasks (
     task_id      TEXT PRIMARY KEY,
     project_path TEXT NOT NULL,
     status       TEXT NOT NULL,
@@ -231,7 +231,7 @@ const MIGRATIONS: Record<number, string> = {
   6: ARTIFACT_COMMENTS,
   7: RUNTIME_TABLES,
   8: ARTIFACT_TYPES,
-  9: SOP_TASKS,
+  9: WORKFLOW_TASKS,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -549,12 +549,12 @@ function prepareAll(db: DatabaseSync) {
     ),
     deleteRoutineRuns: sql('DELETE FROM routine_runs WHERE routine_id = ?'),
     putTask: sql(`
-      INSERT INTO sop_tasks (task_id, project_path, status, updated_at, json) VALUES (?, ?, ?, ?, ?)
+      INSERT INTO workflow_tasks (task_id, project_path, status, updated_at, json) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT (task_id) DO UPDATE SET
         project_path = excluded.project_path, status = excluded.status,
         updated_at = excluded.updated_at, json = excluded.json`),
-    allTasks: sql('SELECT task_id, json FROM sop_tasks ORDER BY updated_at'),
-    deleteTask: sql('DELETE FROM sop_tasks WHERE task_id = ?'),
+    allTasks: sql('SELECT task_id, json FROM workflow_tasks ORDER BY updated_at'),
+    deleteTask: sql('DELETE FROM workflow_tasks WHERE task_id = ?'),
   }
 }
 
@@ -1695,7 +1695,7 @@ export class ThreadDb {
     }
   }
 
-  // SOP tasks.
+  // Workflow tasks.
 
   taskPut({ task }: TaskCalls['put']['params']): null {
     this.must((sql) =>
@@ -1718,7 +1718,8 @@ export class ThreadDb {
         }
         const task = taskRecordOf(value)
         if (task) tasks.push(task)
-        else this.log('warn', `The SOP task ${String(row.task_id)} does not read and is left out`)
+        else
+          this.log('warn', `The workflow task ${String(row.task_id)} does not read and is left out`)
       }
       return tasks
     }, [])

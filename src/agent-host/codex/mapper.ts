@@ -17,7 +17,7 @@ import { planMarkdown, planRevision } from '../plan-revision'
 import { isCodexRowlessCall, isCodexRowWhenFailed } from '../plan-tool'
 import { parseReplayedText } from '../replayed-content'
 import { SERVICE_NAME } from '../service-name'
-import { sopToolStructured } from '../sop/tools'
+import { workflowToolStructured } from '../workflow/tools'
 import {
   addEntry,
   firstUserMessage,
@@ -378,7 +378,7 @@ export class ThreadMapper {
         const raw = rawInputText(item.arguments)
         const own =
           done && item.server === SERVICE_NAME
-            ? sopToolStructured(item.tool, item.result?.structuredContent)
+            ? workflowToolStructured(item.tool, item.result?.structuredContent)
             : undefined
         this.tool(ctx, out, item.id, {
           title: t('codex.tool.mcp', { server: item.server, tool: item.tool }),

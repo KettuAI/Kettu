@@ -565,7 +565,7 @@
       "found": "已在这台电脑上找到",
       "redetect": "重新检测"
     },
-    "sop": {
+    "workflow": {
       "label": "工作流",
       "chat": "对话",
       "chatHint": "和一个 Agent 对话，和普通会话一样",
@@ -948,7 +948,7 @@
     "agentWorktreeUnnamed": "在自己的 worktree 里工作过",
     "copyPath": "复制路径"
   },
-  "sop": {
+  "workflow": {
     "pace": "Pace",
     "paces": {
       "quick": "快速",
@@ -978,7 +978,7 @@
       "description": "每一步一个会话。",
       "descriptionReview_other": "每一步一个会话；{{steps}}等你审。",
       "label": "{{agent}} 的建议 · 等你回答",
-      "sop": "工作流",
+      "workflow": "工作流",
       "steps_other": "{{count}} 步",
       "task": "需求 · {{agent}} 写的，可以修改",
       "taskLabel": "需求",
@@ -988,13 +988,13 @@
       "start": "开始",
       "decline": "不用，直接做",
       "declineMessage": "这个不用工作流，你直接做吧。",
-      "unusable": "{{sop}} 现在不能开始需求。换一个工作流，或者不用工作流直接做。",
+      "unusable": "{{workflow}} 现在不能开始需求。换一个工作流，或者不用工作流直接做。",
       "missing": "这个工作流已经不在库里了。换一个，或者不用工作流直接做。",
       "emptyTask": "先写好需求。",
       "started": "已作为需求开始",
       "openTask": "打开",
       "declined": "不用工作流，直接做",
-      "chooseSop": "选择工作流"
+      "chooseWorkflow": "选择工作流"
     },
     "saved": {
       "pending": "已保存“{{name}}”，等你批准",

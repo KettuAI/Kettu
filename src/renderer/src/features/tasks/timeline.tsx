@@ -7,7 +7,7 @@ import {
   UserIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { isBackArrow, type RoundView, type TaskView } from '@shared/sop'
+import { isBackArrow, type RoundView, type TaskView } from '@shared/workflow'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Badge } from '@renderer/components/ui/badge'
 import { TurnDots } from '@renderer/features/session/turn-dots'
@@ -18,7 +18,7 @@ import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession, taskPanel, toggleArtifactPane, useViewStore } from '@renderer/stores/view'
-import { pickedByText, pickLine, sopTitle, stepTitle, useModelText } from './model'
+import { pickedByText, pickLine, workflowTitle, stepTitle, useModelText } from './model'
 import { NeedCards } from './needs'
 
 /** A thing on the timeline, in the order it happened: a round of a step, or a note you added. */
@@ -76,12 +76,15 @@ function Asked({ view }: { view: TaskView }) {
           >
             {t('timeline.startedFrom', {
               session: sessionTitle(from),
-              sop: sopTitle(view, view),
+              workflow: workflowTitle(view, view),
               time: clockTime(view.createdAt),
             })}
           </button>
         ) : (
-          t('timeline.started', { sop: sopTitle(view, view), time: clockTime(view.createdAt) })
+          t('timeline.started', {
+            workflow: workflowTitle(view, view),
+            time: clockTime(view.createdAt),
+          })
         )}
       </span>
     </div>
@@ -119,13 +122,13 @@ function RoundCard({ view, round }: { view: TaskView; round: RoundView }) {
   const now = useNow()
   const hostId = hostOfPath(view.projectPath)
   const models = useModelText(hostId, round.by)
-  const name = stepTitle(view.sop, round.stepId)
+  const name = stepTitle(view.workflow, round.stepId)
   const several = view.rounds.filter((r) => r.stepId === round.stepId).length > 1
   const title = several ? t('timeline.round', { step: name, n: round.n }) : name
   const back = reviewedBack(view, round)
-  const step = view.sop.steps.find((x) => x.id === round.stepId)
+  const step = view.workflow.steps.find((x) => x.id === round.stepId)
   const outcome = step?.outcomes.find((o) => o.name === round.outcome)
-  const backward = !!outcome && isBackArrow(view.sop, round.stepId, outcome)
+  const backward = !!outcome && isBackArrow(view.workflow, round.stepId, outcome)
   const session = useSessionsStore((s) => (round.sessionId ? s.byId[round.sessionId] : undefined))
   const time =
     round.startedAt !== null ? runningFor((round.endedAt ?? now) - round.startedAt) : null
@@ -284,15 +287,15 @@ export function DocumentChip({
   )
 }
 
-/** The steps still to come, in the SOP's order, each marked when it waits for you or is pinned. */
+/** The steps still to come, in the workflow's order, each marked when it waits for you or is pinned. */
 function Upcoming({ view }: { view: TaskView }) {
   const { t } = useTranslation('tasks')
   if (view.status !== 'running') return null
   const furthest = Math.max(
     -1,
-    ...view.rounds.map((round) => view.sop.steps.findIndex((s) => s.id === round.stepId)),
+    ...view.rounds.map((round) => view.workflow.steps.findIndex((s) => s.id === round.stepId)),
   )
-  const next = view.sop.steps
+  const next = view.workflow.steps
     .slice(furthest + 1)
     .filter((step) => !view.rounds.some((round) => round.stepId === step.id))
   if (next.length === 0) return null
@@ -303,7 +306,7 @@ function Upcoming({ view }: { view: TaskView }) {
       {next.map((step, i) => (
         <span key={step.id} className="inline-flex items-center gap-1.5">
           {i > 0 && <span aria-hidden>→</span>}
-          <span className="text-(--thread-muted)">{stepTitle(view.sop, step.id)}</span>
+          <span className="text-(--thread-muted)">{stepTitle(view.workflow, step.id)}</span>
           {(step.by === 'you' || step.youReview) && (
             <Badge variant="warning" className="font-medium">
               {step.by === 'you' ? t('flow.you') : t('timeline.youReview')}

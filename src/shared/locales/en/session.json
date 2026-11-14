@@ -583,7 +583,7 @@
       "found": "Found on this computer",
       "redetect": "Re-detect"
     },
-    "sop": {
+    "workflow": {
       "label": "Workflow",
       "chat": "Chat",
       "chatHint": "Talk with one agent, as a session does",
@@ -987,7 +987,7 @@
     "agentWorktreeUnnamed": "Worked in its own worktree",
     "copyPath": "Copy path"
   },
-  "sop": {
+  "workflow": {
     "pace": "Pace",
     "paces": {
       "quick": "Quick",
@@ -1018,7 +1018,7 @@
       "descriptionReview_one": "One session per step; {{steps}} waits for your review.",
       "descriptionReview_other": "One session per step; {{steps}} wait for your review.",
       "label": "Suggested by {{agent}} · Waiting for you",
-      "sop": "Workflow",
+      "workflow": "Workflow",
       "steps_one": "{{count}} step",
       "steps_other": "{{count}} steps",
       "task": "Task · written by {{agent}}, editable",
@@ -1029,13 +1029,13 @@
       "start": "Start",
       "decline": "No, just do it",
       "declineMessage": "No workflow for this one: just do it yourself.",
-      "unusable": "{{sop}} can't start a task now. Choose another workflow or do it without one.",
+      "unusable": "{{workflow}} can't start a task now. Choose another workflow or do it without one.",
       "missing": "This workflow is no longer in the library. Choose another or do it without one.",
       "emptyTask": "Write the task first.",
       "started": "Started as a task",
       "openTask": "Open",
       "declined": "Doing it without a workflow",
-      "chooseSop": "Choose the workflow"
+      "chooseWorkflow": "Choose the workflow"
     },
     "saved": {
       "pending": "Saved “{{name}}” for your approval",

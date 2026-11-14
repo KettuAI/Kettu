@@ -50,9 +50,9 @@ import {
   type Listing,
 } from './model'
 import { ItemRow, MoreButton, QuietNote, SkeletonRows } from './rows'
-import { sopMatches } from './sop-model'
-import { useSops } from './sop-actions'
-import { InstalledSops } from './sops'
+import { workflowMatches } from './workflow-model'
+import { useWorkflows } from './workflow-actions'
+import { InstalledWorkflows } from './workflows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
 import { PlainTile } from './tiles'
 
@@ -74,12 +74,14 @@ export function InstalledView({ query }: { query: string }) {
   const plugins = useInstalledPlugins(query)
   const own = useOwn(query)
   const markets = useMarketplaces(query)
-  const sops = useSops().entries.filter((entry) => sopMatches(entry, query, currentLocale()))
+  const workflows = useWorkflows().entries.filter((entry) =>
+    workflowMatches(entry, query, currentLocale()),
+  )
   const searching = query.trim() !== ''
   const nothing =
     searching &&
     !matchesText(['Kettu'], query) &&
-    servers.length + skills.length + sops.length + (plugins?.length ?? 0) === 0 &&
+    servers.length + skills.length + workflows.length + (plugins?.length ?? 0) === 0 &&
     own.folders.length + own.places.length + markets.length === 0
   if (nothing) {
     return (
@@ -113,7 +115,7 @@ export function InstalledView({ query }: { query: string }) {
           </div>
         )}
       </Section>
-      <InstalledSops query={query} index={3} />
+      <InstalledWorkflows query={query} index={3} />
       <PluginsSection plugins={plugins} searching={searching} />
       <OwnSection own={own} searching={searching} />
       <MarketplacesSection markets={markets} />

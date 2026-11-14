@@ -600,25 +600,25 @@
   "artifacts": {
     "formatUpgraded": "Moved to version {{format}} of its type’s format"
   },
-  "sop": {
+  "workflow": {
     "unusable": "{{name}} cannot be used: {{problem}}",
     "notApproved": "Approve {{name}} before starting a task with it",
-    "notFound": "No such SOP",
-    "changedSinceShown": "The SOP changed since you saw it. Look at it again before approving it.",
-    "invalid": "The SOP has problems to fix first",
-    "officialKept": "Official SOPs cannot be removed",
-    "noSuchStep": "The SOP has no such step for an agent",
+    "notFound": "No such workflow",
+    "changedSinceShown": "The workflow changed since you saw it. Look at it again before approving it.",
+    "invalid": "The workflow has problems to fix first",
+    "officialKept": "Official workflows cannot be removed",
+    "noSuchStep": "The workflow has no such step for an agent",
     "notGithub": "Give the address of a file on GitHub",
-    "notFromGithub": "Only an SOP added from GitHub can be updated",
-    "tooLarge": "The SOP file is larger than 256 KB",
-    "libraryFull": "Your SOP library is full",
-    "downloadFailed": "Could not download the SOP: {{error}}",
-    "downloadStatus": "GitHub answered {{status}} for the SOP"
+    "notFromGithub": "Only a workflow added from GitHub can be updated",
+    "tooLarge": "The workflow file is larger than 256 KB",
+    "libraryFull": "Your workflow library is full",
+    "downloadFailed": "Could not download the workflow: {{error}}",
+    "downloadStatus": "GitHub answered {{status}} for the workflow"
   },
   "tasks": {
     "notFound": "No such task",
     "noStep": "No such step on this task",
-    "cannotStep": "{{agent}} cannot do SOP steps",
+    "cannotStep": "{{agent}} cannot do workflow steps",
     "notReviewing": "This step waits for no review",
     "notPerson": "This step waits for no answer",
     "noOutcome": "{{step}} has no outcome “{{outcome}}”",
@@ -628,9 +628,9 @@
     "noteEmpty": "A note needs text",
     "cannotPin": "This step has started, so it cannot be pinned now",
     "needsYou": "{{title}} needs you",
-    "needsYouBody": "{{step}} · {{sop}}",
+    "needsYouBody": "{{step}} · {{workflow}}",
     "done": "{{title}} is done",
     "dropped": "{{title}} ended without being done",
-    "endedBody": "{{sop}} · {{steps}} steps"
+    "endedBody": "{{workflow}} · {{steps}} steps"
   }
 }

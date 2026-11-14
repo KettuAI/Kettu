@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Project, SessionSummary } from '@shared/agent-host'
-import type { TaskSummary } from '@shared/sop'
+import type { TaskSummary } from '@shared/workflow'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'

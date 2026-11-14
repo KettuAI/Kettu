@@ -63,7 +63,7 @@ type PageView =
   | { kind: 'task'; taskId: string; flow?: true }
 
 /** The Marketplace directory's tabs. */
-export type MarketplaceTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'sop' | 'installed'
+export type MarketplaceTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'workflow' | 'installed'
 
 // An artifact in the viewer, which Back leaves for what the main area showed before; `history`
 // opens it with its version history.

@@ -50,7 +50,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, NoUpdates, UpdateRow } from './about-section'
-import { useSopRows } from './sop-settings'
+import { useWorkflowRows } from './workflow-settings'
 import {
   AgentListItem,
   AgentPage,
@@ -626,8 +626,8 @@ export function useAgentsSection(): SectionDef {
   const { useAgentsStore } = useHostScope()
   const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const sopRows = useSopRows()
-  // The footer goes under the list, so the SOP groups after it keep their own notes.
+  const workflowRows = useWorkflowRows()
+  // The footer goes under the list, so the workflow groups after it keep their own notes.
   const list: GroupDef =
     agents.length === 0
       ? {
@@ -687,7 +687,7 @@ export function useAgentsSection(): SectionDef {
               render: () => null,
             },
           ]),
-      ...sopRows,
+      ...workflowRows,
     ],
     itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,
   }

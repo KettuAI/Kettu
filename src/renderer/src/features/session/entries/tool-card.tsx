@@ -9,8 +9,8 @@ import { revealWaiting } from './helpers'
 import { PermissionEntry } from './permission-card'
 import { PlanCard, PlanSettled } from './plan-card'
 import { AnsweredAsk, OptionQuestionCard, QuestionCard } from './question-card'
-import { SopToolCard } from './sop-cards'
-import { sopCardOf } from './sop-tools'
+import { WorkflowToolCard } from './workflow-cards'
+import { workflowCardOf } from './workflow-tools'
 import { StepCard } from './tool-call'
 import { stepFacts, useToolCallLabels } from './tool-call-model'
 
@@ -62,10 +62,10 @@ export const ToolCard = memo(function ToolCard({
       return <OptionQuestionCard key={permission.requestId} {...props} />
     }
   }
-  // Kettu's own SOP tools, once a call ended, as cards of their own.
-  if (sopCardOf(entry)) {
+  // Kettu's own workflow tools, once a call ended, as cards of their own.
+  if (workflowCardOf(entry)) {
     return (
-      <SopToolCard
+      <WorkflowToolCard
         ref={ref}
         sessionId={sessionId}
         entry={entry}

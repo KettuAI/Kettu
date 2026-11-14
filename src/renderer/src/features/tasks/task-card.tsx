@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { GitBranchIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { StepState, TaskStepSummary, TaskSummary, TaskView } from '@shared/sop'
+import type { StepState, TaskStepSummary, TaskSummary, TaskView } from '@shared/workflow'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -9,7 +9,7 @@ import { longAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { agentName } from '@renderer/stores/agents'
-import { progressText, sopTitle, stepTitle, stepWord } from './model'
+import { progressText, workflowTitle, stepTitle, stepWord } from './model'
 import { TaskRing } from './task-ring'
 
 const DOT: Record<StepState, string> = {
@@ -22,7 +22,7 @@ const DOT: Record<StepState, string> = {
 }
 
 /**
- * What a task row's hover card says: the SOP and which step it is on, every step with its state,
+ * What a task row's hover card says: the workflow and which step it is on, every step with its state,
  * the one in front in bold, then the agents, the branch and the latest activity.
  */
 export function TaskCard({ task, view }: { task: TaskSummary; view: TaskView | undefined }) {
@@ -36,7 +36,7 @@ export function TaskCard({ task, view }: { task: TaskSummary; view: TaskView | u
       <div className="flex min-w-0 items-center gap-2">
         <TaskRing task={task} size={16} />
         <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-primary">
-          {sopTitle(task, view)}
+          {workflowTitle(task, view)}
         </span>
         {progress && <span className="shrink-0 text-tertiary tabular-nums">{progress}</span>}
       </div>
@@ -52,7 +52,7 @@ export function TaskCard({ task, view }: { task: TaskSummary; view: TaskView | u
           >
             <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', DOT[step.state])} />
             <span className="min-w-0 flex-1 truncate">
-              {stepTitle(view?.sop, step.id, step.name)}
+              {stepTitle(view?.workflow, step.id, step.name)}
             </span>
             <StepWord step={step} view={view} />
           </li>

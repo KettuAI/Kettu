@@ -909,7 +909,7 @@ describe('a turn', () => {
     ])
   })
 
-  it("keeps what an SOP tool returned for its card, without a report's facts", async () => {
+  it("keeps what a workflow tool returned for its card, without a report's facts", async () => {
     const result = {
       accepted: true,
       checks: [{ check: 'outcome', ok: true, detail: null }],
@@ -923,10 +923,10 @@ describe('a turn', () => {
           {
             type: 'tool_use',
             id: 'toolu_1',
-            name: 'mcp__kettu__sop_report',
+            name: 'mcp__kettu__report_step',
             input: { outcome: 'Done' },
           },
-          { type: 'tool_use', id: 'toolu_2', name: 'mcp__other__sop_report', input: {} },
+          { type: 'tool_use', id: 'toolu_2', name: 'mcp__other__report_step', input: {} },
         ]),
         {
           type: 'user',

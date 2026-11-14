@@ -29,7 +29,7 @@ export function OfficialBadge() {
   )
 }
 
-export type ItemKind = 'mcp' | 'plugin' | 'skill' | 'sop'
+export type ItemKind = 'mcp' | 'plugin' | 'skill' | 'workflow'
 
 /** The kind of an item, and for a plugin the harness it belongs to. */
 export function KindTag({ kind, harness }: { kind: ItemKind; harness?: PluginHarness }) {

@@ -1,9 +1,9 @@
-// The tasks that run through SOPs, as each host reports them: their sidebar summaries, and the
+// The tasks that run through workflows, as each host reports them: their sidebar summaries, and the
 // full view of each task a page or card has read. The host sends the full view on every change.
 
 import { create } from 'zustand'
 import type { HostParams, SessionSummary } from '@shared/agent-host'
-import type { TaskStepSummary, TaskSummary, TaskView } from '@shared/sop'
+import type { TaskStepSummary, TaskSummary, TaskView } from '@shared/workflow'
 import { errorMessage, hostAt, learnTaskHost, taskHost } from '@renderer/lib/host'
 import { useSessionsStore } from './sessions'
 

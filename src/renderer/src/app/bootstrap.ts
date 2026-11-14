@@ -54,7 +54,7 @@ import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/mar
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
-import { useSopsStore } from '@renderer/stores/sops'
+import { useWorkflowsStore } from '@renderer/stores/workflows'
 import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
@@ -155,8 +155,8 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'task.removed':
       useTasksStore.getState().removed(event.taskId)
       return
-    case 'sops.changed':
-      useSopsStore.getState().changed(hostId)
+    case 'workflows.changed':
+      useWorkflowsStore.getState().changed(hostId)
       return
   }
   receiveArtifactEvent(event, hostId)

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { StepPick, TaskView } from '@shared/sop'
+import type { StepPick, TaskView } from '@shared/workflow'
 import type { AgentId, ConfigOption } from '@shared/thread'
 import { Button } from '@renderer/components/ui/button'
 import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
@@ -16,7 +16,7 @@ import {
 import type { AgentOptions } from '@shared/agent-host'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { canDoSteps } from './model'
-import { runsSteps } from '@renderer/features/session/new-session/sop-picks'
+import { runsSteps } from '@renderer/features/session/new-session/workflow-picks'
 
 function modelOption(entry: AgentOptions | undefined): ConfigOption | undefined {
   return entry?.config.find((o) => o.category === 'model' && o.type === 'select')

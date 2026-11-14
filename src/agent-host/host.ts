@@ -134,12 +134,12 @@ import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
-import { TaskEngine, type TaskSessionHooksRef, type WrittenDocument } from './sop/engine'
-import type { SopSettings, TaskSummary } from '@shared/sop'
-import { STEP_HARNESSES } from './sop/picks'
-import { createTaskGit } from './sop/git'
-import { optionsOfPick, pickOfOptions, sopAgents } from './sop/host-agents'
-import { SopLibrary, sopsFile } from './sop/library'
+import { TaskEngine, type TaskSessionHooksRef, type WrittenDocument } from './workflow/engine'
+import type { WorkflowSettings, TaskSummary } from '@shared/workflow'
+import { STEP_HARNESSES } from './workflow/picks'
+import { createTaskGit } from './workflow/git'
+import { optionsOfPick, pickOfOptions, workflowAgents } from './workflow/host-agents'
+import { WorkflowLibrary, workflowsFile } from './workflow/library'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
 import { ScratchFolders } from './scratch'
@@ -343,9 +343,9 @@ export class AgentHost {
   readonly sessions: SessionManager
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
-  /** The SOPs, official and the user's. */
-  readonly sopLibrary: SopLibrary
-  /** The tasks that run through SOPs. */
+  /** The workflows, official and the user's. */
+  readonly workflowLibrary: WorkflowLibrary
+  /** The tasks that run through workflows. */
   readonly tasks: TaskEngine
   /** The attachments of drafts and queued prompts, until sent or removed. */
   readonly attachments: Attachments
@@ -591,19 +591,19 @@ export class AgentHost {
       claudeAgents: () => this.claudeAgents(),
     })
     this.memory.onChange(() => this.hub.broadcast({ type: 'memory.changed' }))
-    this.sopLibrary = new SopLibrary({
-      dir: path.join(options.userDataPath, 'sops'),
-      file: sopsFile(options.userDataPath, log),
+    this.workflowLibrary = new WorkflowLibrary({
+      dir: path.join(options.userDataPath, 'workflows'),
+      file: workflowsFile(options.userDataPath, log),
       knownTools: () => ({
         mcp: new Set(this.settings.marketplace.mcp.map((server) => server.name)),
         skills: new Set(this.settings.marketplace.skills.map((skill) => skill.name)),
       }),
       log,
-      changed: () => this.broadcast({ type: 'sops.changed' }),
+      changed: () => this.broadcast({ type: 'workflows.changed' }),
     })
     this.artifactService = new ArtifactService({
-      sop: {
-        library: this.sopLibrary,
+      workflow: {
+        library: this.workflowLibrary,
         report: (sessionId, input) => this.tasks.report(sessionId, input),
         pick: (sessionId, picks) => this.tasks.pick(sessionId, picks),
         isStep: (sessionId) => this.tasks.refOf(sessionId) !== null,
@@ -935,7 +935,7 @@ export class AgentHost {
             remove: (taskId) => threads.task('remove', { taskId }),
           }
         : { put: async () => null, all: async () => [], remove: async () => null },
-      library: this.sopLibrary,
+      library: this.workflowLibrary,
       sessions: {
         createStep: (params) => this.sessions.createStep(params),
         send: (sessionId, text) => this.sessions.sendFromKettu(sessionId, text),
@@ -963,7 +963,7 @@ export class AgentHost {
       },
       resolveProject: (value) => this.projects.resolveDirectory(value),
       agents: () =>
-        sopAgents({
+        workflowAgents({
           statuses: this.agents.statuses(),
           options: (agentId) => this.agentOptions.get(agentId),
           catalog: this.catalog,
@@ -1062,7 +1062,7 @@ export class AgentHost {
       host.artifactService.start(),
       host.routines.load(),
       host.memory.load(),
-      host.sopLibrary.load(),
+      host.workflowLibrary.load(),
     ])
     // After the sessions, whose step sessions it messages when it resumes.
     await host.tasks.load()
@@ -1139,17 +1139,17 @@ export class AgentHost {
     this.hub.broadcast(event)
   }
 
-  /** The SOP settings: suggestions, and which Claude Code and Codex agents Auto may pick. */
-  private sopSettings(): SopSettings {
+  /** The workflow settings: suggestions, and which Claude Code and Codex agents Auto may pick. */
+  private workflowSettings(): WorkflowSettings {
     const agents = this.agents
       .statuses()
       .filter((status) => STEP_HARNESSES.has(status.harnessId) && status.registered !== false)
       .filter((status) => status.disabled !== true && status.uninstalled !== true)
       .map((status) => {
         const apiKey = status.account?.kind === 'api_key' || status.apiKey?.set === true
-        return { agentId: status.id, ...this.sopLibrary.autoPick(status.id, apiKey) }
+        return { agentId: status.id, ...this.workflowLibrary.autoPick(status.id, apiKey) }
       })
-    return { suggest: this.sopLibrary.suggest, agents }
+    return { suggest: this.workflowLibrary.suggest, agents }
   }
 
   /** Whether `sessionId` wrote a version of the document artifact at or after `since`. */
@@ -1187,8 +1187,8 @@ export class AgentHost {
           : t('tasks.dropped', { title: task.title })
     const body =
       kind === 'needs-you'
-        ? t('tasks.needsYouBody', { step: step?.name ?? '', sop: task.sopName })
-        : t('tasks.endedBody', { sop: task.sopName, steps: task.steps.length })
+        ? t('tasks.needsYouBody', { step: step?.name ?? '', workflow: task.workflowName })
+        : t('tasks.endedBody', { workflow: task.workflowName, steps: task.steps.length })
     this.options.send({
       type: 'host:attention',
       sessionId,
@@ -2178,22 +2178,22 @@ export class AgentHost {
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
-      'sops.list': () => this.sopLibrary.list(),
-      'sops.read': ({ sopId }) => this.sopLibrary.read(sopId),
-      'sops.add': (source) => this.sopLibrary.add(source),
-      'sops.update': ({ sopId }) => this.sopLibrary.update(sopId),
-      'sops.approve': ({ sopId, hash }) => this.sopLibrary.approve(sopId, hash),
-      'sops.remove': ({ sopId }) => this.sopLibrary.remove(sopId),
-      'sops.pin': async ({ sopId, stepId, pick }) => {
-        const entry = await this.sopLibrary.setPin(sopId, stepId, pick)
+      'workflows.list': () => this.workflowLibrary.list(),
+      'workflows.read': ({ workflowId }) => this.workflowLibrary.read(workflowId),
+      'workflows.add': (source) => this.workflowLibrary.add(source),
+      'workflows.update': ({ workflowId }) => this.workflowLibrary.update(workflowId),
+      'workflows.approve': ({ workflowId, hash }) => this.workflowLibrary.approve(workflowId, hash),
+      'workflows.remove': ({ workflowId }) => this.workflowLibrary.remove(workflowId),
+      'workflows.pin': async ({ workflowId, stepId, pick }) => {
+        const entry = await this.workflowLibrary.setPin(workflowId, stepId, pick)
         this.tasks.recheck()
         return entry
       },
-      'sops.settings': () => this.sopSettings(),
-      'sops.setSettings': (change) => {
-        this.sopLibrary.setSettings(change)
+      'workflows.settings': () => this.workflowSettings(),
+      'workflows.setSettings': (change) => {
+        this.workflowLibrary.setSettings(change)
         this.tasks.recheck()
-        return this.sopSettings()
+        return this.workflowSettings()
       },
       'tasks.list': () => this.tasks.list(),
       'tasks.get': ({ taskId }) => this.tasks.get(taskId),

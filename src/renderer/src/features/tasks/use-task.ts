@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { SessionSummary } from '@shared/agent-host'
-import type { TaskView } from '@shared/sop'
+import type { TaskView } from '@shared/workflow'
 import { errorMessage } from '@renderer/lib/host'
 import { loadTaskSessions, useTasksStore } from '@renderer/stores/tasks'
 import { stepTitle } from './model'
@@ -67,5 +67,5 @@ export function useStepSessionTitle(summary: SessionSummary): string | null {
   if (!ref || !name) return null
   const title = summary.title?.trim()
   if (title && !title.endsWith(` · ${name}`)) return null
-  return stepTitle(view?.sop, ref.stepId, name)
+  return stepTitle(view?.workflow, ref.stepId, name)
 }

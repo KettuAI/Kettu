@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
-import { usableSop, type Sop, type SopEntry } from '@shared/sop'
+import { usableWorkflow, type Workflow, type WorkflowEntry } from '@shared/workflow'
 import { limitsForModel } from '@shared/plan-limits'
 import { startNewSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -51,7 +51,7 @@ import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { useHostSops } from '@renderer/stores/sops'
+import { useHostWorkflows } from '@renderer/stores/workflows'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { branchHold, useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
 import { refreshLimits } from '@renderer/stores/usage'
@@ -102,10 +102,15 @@ import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session
 import { useStartConfig } from './new-session/use-start-config'
 import { AgentMenu } from './new-session/agent-menu'
 import { openTask } from './new-session/open-task'
-import { chooseSop, taskPins, taskStarted, useSopChoice } from './new-session/sop-choice'
-import { SopMenu, TaskWorktreeNote, TaskWorktreeTag } from './new-session/sop-menu'
-import { modelOptionId, runsSteps } from './new-session/sop-picks'
-import { TaskStepsCard } from './new-session/sop-steps'
+import {
+  chooseWorkflow,
+  taskPins,
+  taskStarted,
+  useWorkflowChoice,
+} from './new-session/workflow-choice'
+import { WorkflowMenu, TaskWorktreeNote, TaskWorktreeTag } from './new-session/workflow-menu'
+import { modelOptionId, runsSteps } from './new-session/workflow-picks'
+import { TaskStepsCard } from './new-session/workflow-steps'
 import { WorktreeTrayTag } from './worktree/worktree-tag'
 import { currentBase, useWorktreeStatus } from './new-session/worktree-base'
 import { WorktreeMenu, WorktreeNote } from './new-session/worktree-menu'
@@ -324,17 +329,21 @@ function DraftComposer({
   )
   // A task runs in a project of its own host, never as a sub-session or with No project.
   const taskProject = !parent && !inScratch && project && !project.missing ? project : null
-  const sops = useHostSops(hostId)
-  const chosenSop = useSopChoice((s) => (taskProject ? (s.chosen[taskProject.path] ?? null) : null))
-  // An SOP no longer usable, or not read yet, leaves Chat chosen.
-  const sop = chosenSop
-    ? sops.entries.find(
-        (entry): entry is SopEntry & { sop: Sop } => entry.id === chosenSop && usableSop(entry),
+  const workflows = useHostWorkflows(hostId)
+  const chosenWorkflow = useWorkflowChoice((s) =>
+    taskProject ? (s.chosen[taskProject.path] ?? null) : null,
+  )
+  // A workflow no longer usable, or not read yet, leaves Chat chosen.
+  const workflow = chosenWorkflow
+    ? workflows.entries.find(
+        (entry): entry is WorkflowEntry & { workflow: Workflow } =>
+          entry.id === chosenWorkflow && usableWorkflow(entry),
       )
     : undefined
   // The first step goes to the tray's agent, which must be one that works on steps.
-  const firstOff = !!sop && sop.sop.steps[0]?.by === 'agent' && !!status && !runsSteps(status)
-  const canSend = sop
+  const firstOff =
+    !!workflow && workflow.workflow.steps[0]?.by === 'agent' && !!status && !runsSteps(status)
+  const canSend = workflow
     ? !!agentId && !!taskProject && holdsMessage && !held && attachments.length === 0 && !firstOff
     : !!agentId && ready && holdsMessage && !held && !branchHeld
   const config = useStartConfig(agentId, undefined, hostId)
@@ -377,17 +386,17 @@ function DraftComposer({
 
   useEffect(() => onInput(holdsMessage), [holdsMessage, onInput])
 
-  // With an SOP the message starts a task, its first step on the tray's agent and options.
-  const startTask = async (entry: SopEntry, options: Record<string, string | boolean>) => {
+  // With a workflow the message starts a task, its first step on the tray's agent and options.
+  const startTask = async (entry: WorkflowEntry, options: Record<string, string | boolean>) => {
     if (!agentId || !taskProject) return
     const taken = box.take()
     const base = gitStatus ? currentBase(gitStatus) : null
-    const { pace, pins } = useSopChoice.getState()
+    const { pace, pins } = useWorkflowChoice.getState()
     try {
       const view = await useTasksStore.getState().start(
         {
           projectPath: taskProject.path,
-          sopId: entry.id,
+          workflowId: entry.id,
           text: taken.prompt,
           pace,
           agentId,
@@ -421,12 +430,12 @@ function DraftComposer({
       const options = entry
         ? startValues(entry, picksOf(optionsState, hostId, agentId), { startMode: true })
         : null
-      if (sop) {
+      if (workflow) {
         // A step session works in the mode Kettu gives steps, so the tray's mode stays behind.
         const kept = Object.entries(options ?? {}).filter(
           ([id]) => entry?.config.find((o) => o.id === id)?.category !== 'mode',
         )
-        await startTask(sop, Object.fromEntries(kept))
+        await startTask(workflow, Object.fromEntries(kept))
         return
       }
       const preparedId = preparedFor(optionsState, hostId, agentId)?.summary?.id ?? null
@@ -453,14 +462,14 @@ function DraftComposer({
       : project?.missing && !inScratch
         ? t('newSession.missingLine')
         : firstOff
-          ? t('newSession.sop.stepAgents')
-          : sop && attachments.length > 0
-            ? t('newSession.sop.textOnly')
-            : !sop && branchHeld === 'invalid'
+          ? t('newSession.workflow.stepAgents')
+          : workflow && attachments.length > 0
+            ? t('newSession.workflow.textOnly')
+            : !workflow && branchHeld === 'invalid'
               ? t('worktree.branchInvalid')
-              : !sop && branchHeld === 'failed'
+              : !workflow && branchHeld === 'failed'
                 ? t('worktree.templateFailed', { message: templateError })
-                : !sop && branchHeld === 'reading'
+                : !workflow && branchHeld === 'reading'
                   ? t('worktree.templateReading')
                   : (held?.message ?? null)
   const blockedEnter = useBlockedEnter({
@@ -613,16 +622,16 @@ function DraftComposer({
                 )}
                 <AgentPicker agentId={agentId} onChoose={choose} hostId={hostId} />
                 {taskProject && (
-                  <SopMenu
+                  <WorkflowMenu
                     hostId={hostId}
-                    sopId={sop?.id ?? null}
+                    workflowId={workflow?.id ?? null}
                     onChoose={(id) => {
-                      chooseSop(taskProject.path, id)
+                      chooseWorkflow(taskProject.path, id)
                       requestAnimationFrame(() => editor.current?.focus())
                     }}
                   />
                 )}
-                {sop && gitStatus ? (
+                {workflow && gitStatus ? (
                   <TaskWorktreeTag base={currentBase(gitStatus)} />
                 ) : gitStatus && project ? (
                   <WorktreeMenu projectPath={project.path} status={gitStatus} />
@@ -647,7 +656,7 @@ function DraftComposer({
             {shownError}
           </p>
         )}
-        {sop && gitStatus ? (
+        {workflow && gitStatus ? (
           <TaskWorktreeNote base={currentBase(gitStatus)} />
         ) : (
           gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />
@@ -657,15 +666,15 @@ function DraftComposer({
           <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />
         )}
       </div>
-      {sop ? (
+      {workflow ? (
         <TaskStepsCard
-          entry={sop}
+          entry={workflow}
           hostId={hostId}
           first={
             <AgentMenu
               agentId={agentId}
               hostId={hostId}
-              label={t('newSession.sop.firstStepAgent')}
+              label={t('newSession.workflow.firstStepAgent')}
               only={runsSteps}
               triggerClassName="h-7.5 max-w-64 rounded-lg bg-card shadow-outline hover:bg-hover"
               onChoose={(id, model) => {

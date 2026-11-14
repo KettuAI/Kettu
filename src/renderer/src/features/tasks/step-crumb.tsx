@@ -6,7 +6,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
-import type { RoundView, TaskView } from '@shared/sop'
+import type { RoundView, TaskView } from '@shared/workflow'
 import { backTo } from '@renderer/app/history'
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -95,7 +95,7 @@ export function StepSentBack({ summary }: { summary: SessionSummary }) {
   const by =
     sent.by === 'person'
       ? t('sentBack.byYou')
-      : t('sentBack.byStep', { step: stepTitle(view.sop, sent.stepId) })
+      : t('sentBack.byStep', { step: stepTitle(view.workflow, sent.stepId) })
   const agent = sent.by === 'agent' && from?.by ? agentName(from.by.agentId, hostId) : null
   const left = sent.limit - sent.count
   const items = [sent.note, ...sent.comments].filter((text): text is string => !!text?.trim())

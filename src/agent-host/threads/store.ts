@@ -7,7 +7,7 @@ import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
 import type { RuntimeCall, RuntimeCallName, RuntimeCalls } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
-import type { TaskCall, TaskCallName, TaskCalls } from '../sop/model'
+import type { TaskCall, TaskCallName, TaskCalls } from '../workflow/model'
 import type { LogFn } from '../storage'
 import type {
   ImageMode,
@@ -381,7 +381,7 @@ export class ThreadStore {
     return this.request({ op: 'routine', call: { name, params } as RoutineCall })
   }
 
-  /** A call on the SOP tasks, which share the database. */
+  /** A call on the workflow tasks, which share the database. */
   task<K extends TaskCallName>(
     name: K,
     params: TaskCalls[K]['params'],

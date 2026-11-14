@@ -61,7 +61,7 @@
   "picked": {
     "first": "第一步",
     "taskPin": "这条需求固定的",
-    "sopPin": "工作流上固定的",
+    "workflowPin": "工作流上固定的",
     "agent": "{{step}} 选的",
     "previous": "沿用第 {{n}} 轮",
     "previousAny": "沿用上一轮",
@@ -86,8 +86,8 @@
     "newSession": "新建会话"
   },
   "timeline": {
-    "started": "按 {{sop}} 开始 · {{time}}",
-    "startedFrom": "从“{{session}}”开始 · {{sop}} · {{time}}",
+    "started": "按 {{workflow}} 开始 · {{time}}",
+    "startedFrom": "从“{{session}}”开始 · {{workflow}} · {{time}}",
     "noteAdded": "已补充给各步骤 · {{time}}",
     "round": "{{step}} · 第 {{n}} 轮",
     "why": "理由：“{{reason}}”",

@@ -14,7 +14,7 @@
       "installed": "Installed",
       "plugins": "Plugins",
       "skills": "Skills",
-      "sop": "Workflows"
+      "workflow": "Workflows"
     }
   },
   "add": {
@@ -28,10 +28,10 @@
     "skillGithubLine": "A repository, or a folder in one",
     "skillFolder": "A skill from a folder…",
     "skillFolderLine": "A folder with a SKILL.md",
-    "sopGithub": "A workflow from GitHub…",
-    "sopGithubLine": "A file in a GitHub repository",
-    "sopFile": "A workflow from a file…",
-    "sopFileLine": "A .yaml file on this computer"
+    "workflowGithub": "A workflow from GitHub…",
+    "workflowGithubLine": "A file in a GitHub repository",
+    "workflowFile": "A workflow from a file…",
+    "workflowFileLine": "A .yaml file on this computer"
   },
   "sections": {
     "featured": "Featured",
@@ -48,7 +48,7 @@
     "plugins": "Plugins",
     "skills": "Skills",
     "mcp": "MCP servers",
-    "sop": "Workflows"
+    "workflow": "Workflows"
   },
   "row": {
     "install": "Install",
@@ -179,7 +179,7 @@
     "mcpConfig": "MCP configuration",
     "offIn": "Off in {{agents}}",
     "notCreated": "{{path}} · not created yet",
-    "sops": "Workflows"
+    "workflows": "Workflows"
   },
   "kettu": {
     "note": "Artifacts, sessions and the browser reach every agent through Kettu’s own server.",
@@ -315,7 +315,7 @@
     "mcp": "MCP",
     "plugin": "Plugin",
     "skill": "Skill",
-    "sop": "Workflow"
+    "workflow": "Workflow"
   },
   "notes": {
     "plugins": "Couldn’t list the plugins: {{error}}",
@@ -415,7 +415,7 @@
     "disconnect": "Disconnect",
     "remove": "Remove…"
   },
-  "sop": {
+  "workflow": {
     "intro": "A workflow is a flowchart that has several agents carry out one piece of work. Who does each step is picked when it starts, by the agent handing off to it, unless you pin one. The workflows you can use show up in New session, and agents can suggest them in a conversation.",
     "by": {
       "kettu": "Kettu",
@@ -487,8 +487,8 @@
       "agentTitle": "An agent made this workflow. You can use it once you approve it.",
       "changedTitle": "This workflow changed since you approved it",
       "changedText": "It can’t start tasks until you approve this version. Look at each step and its file again, then decide.",
-      "agentText": "{{agent}} wrote it with create_sop in a session.",
-      "agentInBefore": "{{agent}} wrote it with create_sop in the session “",
+      "agentText": "{{agent}} wrote it with create_workflow in a session.",
+      "agentInBefore": "{{agent}} wrote it with create_workflow in the session “",
       "agentInAfter": "”.",
       "untitled": "Untitled session",
       "githubText": "Added from {{repo}} on GitHub.",

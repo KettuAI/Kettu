@@ -162,7 +162,7 @@ export interface AgentDefinition {
    * project's own, relative to its folder, and `listCommand` lists them in a session.
    */
   mcpConfig?: { project: string; listCommand?: string }
-  /** What Kettu knows of the models it lists, for an agent that picks who does an SOP step. */
+  /** What Kettu knows of the models it lists, for an agent that picks who does a workflow step. */
   modelNotes?: readonly ModelNote[]
 }
 
