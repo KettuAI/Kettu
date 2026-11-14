@@ -59,6 +59,11 @@ class SourceError extends Error {
   }
 }
 
+/** Whether electron-updater's executor failed on an HTTP status, which its HttpError carries. */
+function isHttpError(error: unknown): boolean {
+  return typeof (error as { statusCode?: unknown } | null)?.statusCode === 'number'
+}
+
 function isFileInfo(value: unknown): value is UpdateFileInfo {
   if (typeof value !== 'object' || value === null) return false
   const { url, sha512 } = value as Record<string, unknown>
@@ -141,8 +146,9 @@ export function sourcesProvider(
           deps.checked(new SourceRun(sources, index, list.stallSeconds * 1000))
           return info
         } catch (error) {
+          // Only fetchSmall's own errors say whether the source was reached; any other came after.
           failure =
-            error instanceof SourceError ? error : new SourceError(errorMessage(error), false)
+            error instanceof SourceError ? error : new SourceError(errorMessage(error), true)
           const next = sources[index + 1]
           log.warn(
             `Could not check on ${source.id}: ${failure.message}` +
@@ -213,9 +219,9 @@ export function sourcesProvider(
         releaseFileUrl(source, version, `${name}.sig`),
         timeoutMs,
       )
-      if (!verifyUpdateFile(file, signature)) {
+      if (!verifyUpdateFile(name, file, signature)) {
         file = await this.fetchSmall(releaseFileUrl(source, version, name), timeoutMs)
-        if (!verifyUpdateFile(file, signature)) {
+        if (!verifyUpdateFile(name, file, signature)) {
           throw new SourceError(`${name} is not signed with Kettu's release key`, true)
         }
       }
@@ -243,7 +249,9 @@ export function sourcesProvider(
         if (token.cancelled) {
           throw new SourceError(`no answer from ${url} within ${timeoutMs / 1000} s`, false)
         }
-        throw error instanceof SourceError ? error : new SourceError(errorMessage(error), false)
+        if (error instanceof SourceError) throw error
+        // An HTTP status, such as 404 for a release from before signing, means it was reached.
+        throw new SourceError(errorMessage(error), isHttpError(error))
       } finally {
         clearTimeout(timer)
         token.dispose()

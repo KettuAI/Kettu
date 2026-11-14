@@ -81,14 +81,25 @@ export function verifySignature(
   })
 }
 
-/** Whether `signatureFile`, a `<name>.sig` as the release uploads it, signs the update file `file`. */
+/**
+ * What the release key signs for an update file: its name, a newline and its bytes, so one
+ * channel's signed file cannot pass as another's, such as arm64's as x64's.
+ */
+export function updateFileMessage(name: string, file: Uint8Array): Buffer {
+  return Buffer.concat([Buffer.from(`${name}\n`, 'utf8'), file])
+}
+
+/** Whether `signatureFile`, a `<name>.sig` as the release uploads it, signs update file `name`. */
 export function verifyUpdateFile(
+  name: string,
   file: Uint8Array,
   signatureFile: Uint8Array,
   keys: readonly string[] = RELEASE_KEYS,
 ): boolean {
   const match = SIGNATURE_FILE.exec(Buffer.from(signatureFile).toString('latin1'))
-  return !!match && verifySignature(file, Buffer.from(match[1], 'base64'), keys)
+  return (
+    !!match && verifySignature(updateFileMessage(name, file), Buffer.from(match[1], 'base64'), keys)
+  )
 }
 
 function sameUrl(a: string, b: string): boolean {

@@ -10,7 +10,13 @@ import { broadcast } from './events'
 import { createLogger } from './log'
 import { sessionProxy } from './proxy'
 import type { SettingsSection } from './settings-schema'
-import { SourceRun, SourcesFailed, updaterUserAgent, type SourceChoice } from './update-sources'
+import {
+  GITHUB_SOURCE,
+  SourceRun,
+  SourcesFailed,
+  updaterUserAgent,
+  type SourceChoice,
+} from './update-sources'
 import {
   dismissTarget,
   dmgDownloadUrl,
@@ -73,6 +79,8 @@ export class Updater {
   private lastFiles: readonly UpdateFileInfo[] = []
   /** The sources of the last check that found an update; a download moves along them. */
   private run: SourceRun | null = null
+  /** Stops the download attempt on a source other than GitHub, while one runs. */
+  private leaveSource: (() => void) | null = null
   private checking: Promise<void> | null = null
   private started = false
   private errorEvents = 0
@@ -262,6 +270,7 @@ export class Updater {
     }
     if (this.sourceChoice() !== 'github' || !this.run || this.run.githubOnly) return
     this.run = SourceRun.githubOnly(this.run.stallMs)
+    this.leaveSource?.()
     if (state.kind !== 'available' || this.mode !== 'link') return
     this.lastDownloadUrl = this.linkUrl()
     this.publish({ ...this.status, state: { ...state, downloadUrl: this.lastDownloadUrl } })
@@ -541,6 +550,14 @@ export class Updater {
       const { current: source, stallMs } = run
       const attempt = new Token(cancellation ?? undefined)
       let stalled = false
+      let left = false
+      // GitHub only, chosen during the download, stops this source at once.
+      if (source !== GITHUB_SOURCE) {
+        this.leaveSource = () => {
+          left = true
+          attempt.cancel()
+        }
+      }
       let downloaded = false
       let timer: ReturnType<typeof setTimeout> | undefined
       const watch = (): void => {
@@ -571,6 +588,10 @@ export class Updater {
         if (cancellation?.cancelled || downloaded || errorCode(error) === INVALID_PUBLISHER) {
           throw error
         }
+        if (left) {
+          log.info(`Moving the download from ${source.id} to GitHub, now the only source`)
+          continue
+        }
         const reason = stalled ? `no progress for ${stallMs / 1000} s` : errorMessage(error)
         const next = run.next()
         if (!next) {
@@ -579,6 +600,7 @@ export class Updater {
         }
         log.warn(`Could not download from ${source.id}: ${reason}; moving on to ${next.id}`)
       } finally {
+        this.leaveSource = null
         clearTimeout(timer)
         updater.off('download-progress', onProgress)
         updater.off('update-downloaded', onDownloaded)

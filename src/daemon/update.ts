@@ -100,15 +100,25 @@ export async function latestVersion(deps: Releases) {
 
 /**
  * The latest release, with its install script when it is newer than the one running, from the
- * first place that answers with both.
+ * first place that answers with both. A place whose latest is older than the one running lags
+ * behind, so the next is asked, and only when every place that answered has nothing newer is
+ * there no update.
  */
 async function latestRelease(
   deps: UpdateDeps,
 ): Promise<{ version: string; script: string | null }> {
   let failure: unknown = new UpdateError('No place to download releases from')
+  let stale: string | null = null
   for (const [index, releases] of deps.releases.entries()) {
     try {
       const version = await latestVersion({ ...deps, releases })
+      if (isNewer(deps.version, version)) {
+        stale = version
+        const next = deps.releases[index + 1]
+        if (next)
+          deps.write(`${releases} offers ${version}, older than ${deps.version}; trying ${next}\n`)
+        continue
+      }
       if (!isNewer(version, deps.version)) return { version, script: null }
       const url = `${releases}/download/v${version}/install.sh`
       let script: string
@@ -126,6 +136,7 @@ async function latestRelease(
       if (next) deps.write(`${(error as Error).message}; trying ${next}\n`)
     }
   }
+  if (stale) return { version: stale, script: null }
   throw failure
 }
 

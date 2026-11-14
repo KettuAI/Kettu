@@ -26,8 +26,11 @@ const YML = Buffer.from(
   'version: 0.0.45\nfiles:\n  - url: Kettu-0.0.45-arm64.dmg\n    sha512: c2hhNTEy\n',
 )
 
-function signatureFile(file: Buffer, key: KeyObject): Buffer {
-  return Buffer.from(`${sign(null, file, key).toString('base64')}\n`)
+const NAME = 'latest-mac.yml'
+
+function signatureFile(file: Buffer, key: KeyObject, name = NAME): Buffer {
+  const message = Buffer.concat([Buffer.from(`${name}\n`), file])
+  return Buffer.from(`${sign(null, message, key).toString('base64')}\n`)
 }
 
 const LIST = {
@@ -55,41 +58,49 @@ describe('update file signatures', () => {
   const keys = [release.raw, nextRelease.raw]
 
   it('accepts a file signed with the current or the next release key', () => {
-    expect(verifyUpdateFile(YML, signatureFile(YML, release.privateKey), keys)).toBe(true)
-    expect(verifyUpdateFile(YML, signatureFile(YML, nextRelease.privateKey), keys)).toBe(true)
+    expect(verifyUpdateFile(NAME, YML, signatureFile(YML, release.privateKey), keys)).toBe(true)
+    expect(verifyUpdateFile(NAME, YML, signatureFile(YML, nextRelease.privateKey), keys)).toBe(true)
   })
 
   it('accepts the signature without its closing newline', () => {
     const file = signatureFile(YML, release.privateKey)
-    expect(verifyUpdateFile(YML, file.subarray(0, file.length - 1), keys)).toBe(true)
+    expect(verifyUpdateFile(NAME, YML, file.subarray(0, file.length - 1), keys)).toBe(true)
   })
 
   it('refuses a file changed after it was signed', () => {
     const signature = signatureFile(YML, release.privateKey)
     const tampered = Buffer.from(YML.toString().replace('0.0.45', '0.0.46'))
-    expect(verifyUpdateFile(tampered, signature, keys)).toBe(false)
+    expect(verifyUpdateFile(NAME, tampered, signature, keys)).toBe(false)
     const extra = Buffer.concat([YML, Buffer.from('\n')])
-    expect(verifyUpdateFile(extra, signature, keys)).toBe(false)
+    expect(verifyUpdateFile(NAME, extra, signature, keys)).toBe(false)
+  })
+
+  it('refuses a file served under another name than it was signed for', () => {
+    const signature = signatureFile(YML, release.privateKey, 'latest-linux-arm64.yml')
+    expect(verifyUpdateFile('latest-linux-arm64.yml', YML, signature, keys)).toBe(true)
+    expect(verifyUpdateFile('latest-linux.yml', YML, signature, keys)).toBe(false)
+    const bare = Buffer.from(`${sign(null, YML, release.privateKey).toString('base64')}\n`)
+    expect(verifyUpdateFile(NAME, YML, bare, keys)).toBe(false)
   })
 
   it('refuses a signature under any other key', () => {
-    expect(verifyUpdateFile(YML, signatureFile(YML, stranger.privateKey), keys)).toBe(false)
-    expect(verifyUpdateFile(YML, signatureFile(YML, sources.privateKey), keys)).toBe(false)
+    expect(verifyUpdateFile(NAME, YML, signatureFile(YML, stranger.privateKey), keys)).toBe(false)
+    expect(verifyUpdateFile(NAME, YML, signatureFile(YML, sources.privateKey), keys)).toBe(false)
   })
 
   it('refuses a signature file in any other form', () => {
-    const base64 = sign(null, YML, release.privateKey).toString('base64')
+    const base64 = signatureFile(YML, release.privateKey).toString().trim()
     for (const text of [
       '',
       base64.replace(/=+$/, ''),
       `${base64}\r\n`,
       `${base64}\n\n`,
       ` ${base64}`,
-      sign(null, YML, release.privateKey).toString('base64url'),
+      Buffer.from(base64, 'base64').toString('base64url'),
       Buffer.alloc(64).toString('base64'),
       `${base64.slice(0, -4)}AAAA`,
     ]) {
-      expect(verifyUpdateFile(YML, Buffer.from(text), keys)).toBe(false)
+      expect(verifyUpdateFile(NAME, YML, Buffer.from(text), keys)).toBe(false)
     }
   })
 
