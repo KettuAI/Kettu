@@ -1554,17 +1554,13 @@ li[data-row-exit='dust'] > * {
     animation: none;
   }
 }
-.kp-tab[data-selected] .kp-tab__btn.kp-device-tab {
-  padding-right: 8px;
-}
-.kp-device-tab > .kp-device-state {
-  margin-right: -3px;
-}
-.kp-device-dot {
+/* A tab without room for its name: its mark and a dot for its state, with the close over the
+   dot's place on hover. */
+.kp-tab[data-compact] {
   flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+  min-width: 42px;
+}
+.kp-tab__dot.kp-device-dot {
   background: currentColor;
 }
 .kp-device-move {

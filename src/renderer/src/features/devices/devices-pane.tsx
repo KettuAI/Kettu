@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
 import {
   Alert02Icon,
@@ -24,6 +24,7 @@ import {
   VolumeHighIcon,
   VolumeLowIcon,
 } from '@hugeicons/core-free-icons'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
   SESSION_DEVICE_LIMIT,
@@ -59,6 +60,7 @@ import {
   PaneIcon,
   PaneSheet,
   PaneSpinner,
+  PaneTabClose,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
 import { errorMessage } from '@renderer/lib/host'
@@ -114,7 +116,7 @@ function markOf(device: DeviceInfo): IconSvgElement {
 }
 
 const DOT_COLOR = {
-  neutral: 'text-disabled',
+  neutral: 'text-tertiary',
   info: 'text-info',
   warning: 'text-warning',
   error: 'text-danger',
@@ -138,8 +140,7 @@ function State({
       <span
         role="img"
         aria-label={children}
-        title={children}
-        className={cn('kp-device-dot', DOT_COLOR[variant])}
+        className={cn('kp-tab__dot kp-device-dot', DOT_COLOR[variant])}
       />
     )
   }
@@ -151,63 +152,81 @@ function State({
   )
 }
 
+interface TabStatus {
+  variant: 'neutral' | 'info' | 'warning' | 'error'
+  dot?: 'still' | 'live'
+  label: string
+}
+
 /** What a device's tab says after its name, when it is anything but ready. */
-function TabState({
-  device,
-  stream,
-  opening,
-  compact,
-}: {
-  device: DeviceInfo
-  stream: DeviceStream | undefined
+function statusOf(
+  t: TFunction<'devices'>,
+  device: DeviceInfo,
+  stream: DeviceStream | undefined,
   /** The pane is still opening it: booted, but not yet ready to show. */
-  opening: boolean
-  compact: boolean
-}) {
-  const { t } = useTranslation('devices')
-  if (device.problems.length > 0)
-    return (
-      <State variant="warning" compact={compact}>
-        {t('state.notReady')}
-      </State>
-    )
+  opening: boolean,
+): TabStatus | null {
+  if (device.problems.length > 0) return { variant: 'warning', label: t('state.notReady') }
   if (device.state === 'booting' || opening) {
-    return (
-      <State variant="info" dot="live" compact={compact}>
-        {t('state.starting')}
-      </State>
-    )
+    return { variant: 'info', dot: 'live', label: t('state.starting') }
   }
-  if (device.state === 'shutdown') {
-    return (
-      <State variant="neutral" compact={compact}>
-        {t('state.shutdown')}
-      </State>
-    )
-  }
-  if (device.state === 'unavailable') {
-    return (
-      <State variant="neutral" compact={compact}>
-        {t('state.unavailable')}
-      </State>
-    )
-  }
-  const ended = stream?.state === 'stopped' || stream?.state === 'error'
-  if (ended && stream.drawn) {
-    return (
-      <State variant="warning" dot="still">
-        {t('state.lost')}
-      </State>
-    )
-  }
-  if (ended) {
-    return (
-      <State variant="error" dot="still">
-        {t('state.error')}
-      </State>
-    )
-  }
-  return null
+  if (device.state === 'shutdown') return { variant: 'neutral', label: t('state.shutdown') }
+  if (device.state === 'unavailable') return { variant: 'neutral', label: t('state.unavailable') }
+  if (stream?.state !== 'stopped' && stream?.state !== 'error') return null
+  return stream.drawn
+    ? { variant: 'warning', dot: 'still', label: t('state.lost') }
+    : { variant: 'error', dot: 'still', label: t('state.error') }
+}
+
+/**
+ * Whether the tabs fit the head at their full width. When they do not, the ones not selected
+ * keep only their mark and a dot for their state. `signature` changes with what the tabs say.
+ */
+function useTabsFit(signature: string): { tabs: RefObject<HTMLDivElement | null>; fit: boolean } {
+  const tabs = useRef<HTMLDivElement>(null)
+  // The width the full tabs need, measured while they are drawn in full.
+  const needed = useRef<number | null>(null)
+  const [state, setState] = useState({ signature, fit: true })
+  // What the tabs say changed: draw them in full again and measure anew.
+  const fit = state.signature === signature ? state.fit : true
+
+  useLayoutEffect(() => {
+    const strip = tabs.current
+    const head = strip?.parentElement
+    if (!strip || !head) return
+    const room = (): number => {
+      let others = 0
+      for (const child of head.children) {
+        if (child !== strip) others += (child as HTMLElement).offsetWidth
+      }
+      const gap = parseFloat(getComputedStyle(head).columnGap) || 0
+      return head.clientWidth - others - gap * (head.children.length - 1)
+    }
+    const check = (): void => {
+      if (needed.current === null) return
+      const fits = room() >= needed.current
+      setState((now) =>
+        now.signature === signature && now.fit === fits ? now : { signature, fit: fits },
+      )
+    }
+    if (fit) {
+      // A name cut short takes less than it needs, so its hidden part is added back.
+      let width = 0
+      for (const tab of strip.children) {
+        const name = tab.querySelector<HTMLElement>('.kp-tab__name')
+        width += (tab as HTMLElement).offsetWidth
+        if (name) width += Math.max(0, name.scrollWidth - name.clientWidth)
+      }
+      const gap = parseFloat(getComputedStyle(strip).columnGap) || 0
+      needed.current = Math.ceil(width + gap * Math.max(0, strip.children.length - 1))
+    }
+    check()
+    const observer = new ResizeObserver(check)
+    observer.observe(head)
+    return () => observer.disconnect()
+  }, [signature, fit])
+
+  return { tabs, fit }
 }
 
 /** The side panel's Mobile devices pane: the devices a session holds, one tab each. */
@@ -225,6 +244,15 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
   const stream = useDevicesStore((s) => (selected ? s.streams[selected.id] : undefined))
   const recording = useDevicesStore((s) =>
     selected && s.recording?.deviceId === selected.id ? s.recording : null,
+  )
+
+  const statuses = held.map((device) =>
+    statusOf(t, device, device.id === selected?.id ? stream : undefined, device.id === opening),
+  )
+  const { tabs, fit } = useTabsFit(
+    held
+      .map((device, index) => `${device.id}:${device.name}:${statuses[index]?.label ?? ''}`)
+      .join('|') + `|${selected?.id ?? ''}`,
   )
 
   useEffect(() => {
@@ -360,32 +388,42 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
         }
       >
         {held.length > 0 ? (
-          <div role="tablist" aria-label={t('tabs')} className="kp-head__tabs">
-            {held.map((device) => (
-              <span
-                key={device.id}
-                className="kp-tab"
-                data-selected={device.id === selected?.id || undefined}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={device.id === selected?.id}
-                  title={`${device.name} · ${t(`kind.${device.kind}`)}`}
-                  onClick={() => sessionId && selectDevice(sessionId, device.id)}
-                  className="kp-tab__btn kp-device-tab"
+          <div ref={tabs} role="tablist" aria-label={t('tabs')} className="kp-head__tabs">
+            {held.map((device, index) => {
+              const chosen = device.id === selected?.id
+              const status = statuses[index]
+              const compact = !fit && !chosen
+              return (
+                <span
+                  key={device.id}
+                  className="kp-tab"
+                  data-selected={chosen || undefined}
+                  data-compact={compact || undefined}
                 >
-                  <PaneIcon icon={markOf(device)} size={14} className="kp-tab__icon" />
-                  <span className="kp-tab__name">{device.name}</span>
-                  <TabState
-                    device={device}
-                    stream={device.id === selected?.id ? stream : undefined}
-                    opening={device.id === opening}
-                    compact={device.id !== selected?.id}
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={chosen}
+                    aria-label={compact ? device.name : undefined}
+                    title={`${device.name} · ${status?.label ?? t(`kind.${device.kind}`)}`}
+                    onClick={() => sessionId && selectDevice(sessionId, device.id)}
+                    className="kp-tab__btn"
+                  >
+                    <PaneIcon icon={markOf(device)} size={14} className="kp-tab__icon" />
+                    {!compact && <span className="kp-tab__name">{device.name}</span>}
+                    {status && (
+                      <State variant={status.variant} dot={status.dot} compact={compact}>
+                        {status.label}
+                      </State>
+                    )}
+                  </button>
+                  <PaneTabClose
+                    label={t('actions.disconnect', { name: device.name })}
+                    onClick={() => sessionId && void closeDevice(sessionId, device.id)}
                   />
-                </button>
-              </span>
-            ))}
+                </span>
+              )
+            })}
           </div>
         ) : (
           <span className="kp-head__title">{t('title')}</span>

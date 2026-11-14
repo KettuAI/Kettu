@@ -8,7 +8,8 @@
     "screenshot": "截图",
     "record": "录屏",
     "stopRecording": "停止录屏",
-    "more": "更多"
+    "more": "更多",
+    "disconnect": "断开 {{name}}"
   },
   "kind": {
     "simulator": "模拟器",
