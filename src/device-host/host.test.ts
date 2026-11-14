@@ -11,6 +11,10 @@ import { ValidationError, validators } from './validate'
 const fake = vi.hoisted(() => ({
   devices: [] as FoundDevice[],
   drivers: [] as Array<{ events: DriverEvents | null; sent: DeviceInput[] }>,
+  boots: [] as string[],
+  shutdowns: [] as string[],
+  /** The user boots the simulator between the host's listing and its own boot. */
+  bootedMeanwhile: false,
 }))
 
 vi.mock('./discovery', () => ({
@@ -19,6 +23,23 @@ vi.mock('./discovery', () => ({
   listPhysicalIos: async () => [],
   listAndroid: async () => fake.devices.filter((device) => device.platform === 'android'),
   run: async () => '',
+}))
+
+vi.mock('./ios-simulator', () => ({
+  IosSimulatorDriver: class {},
+  // Answers as simctl does: false when the simulator was already booted.
+  bootSimulator: async (_xcrun: string, udid: string) => {
+    const device = fake.devices.find((found) => found.target === udid)
+    const wasBooted = fake.bootedMeanwhile || device?.state === 'booted'
+    if (device) device.state = 'booted'
+    if (!wasBooted) fake.boots.push(udid)
+    return !wasBooted
+  },
+  shutdownSimulator: async (_xcrun: string, udid: string) => {
+    const device = fake.devices.find((found) => found.target === udid)
+    if (device) device.state = 'shutdown'
+    fake.shutdowns.push(udid)
+  },
 }))
 
 vi.mock('./android', () => ({
@@ -139,37 +160,67 @@ const EMULATOR: FoundDevice = {
   target: 'emulator-5554',
 }
 
+const SIMULATOR: FoundDevice = {
+  id: 'ios-sim:0E02CA7B-60D9-40F6-BCE1-C66A3DECAAEF',
+  platform: 'ios',
+  kind: 'simulator',
+  name: 'iPhone 17',
+  osVersion: '26.5',
+  model: null,
+  state: 'shutdown',
+  connection: null,
+  problems: [],
+  target: '0E02CA7B-60D9-40F6-BCE1-C66A3DECAAEF',
+}
+
+const USERS_SIMULATOR: FoundDevice = {
+  ...SIMULATOR,
+  id: 'ios-sim:5A1F3C70-2B7E-4C8D-9E0A-1B2C3D4E5F60',
+  name: 'iPad Air',
+  state: 'booted',
+  target: '5A1F3C70-2B7E-4C8D-9E0A-1B2C3D4E5F60',
+}
+
+let dataDir: string
+let events: { port: string | null; event: DeviceEvent }[]
+const managers: DeviceManager[] = []
+
+beforeEach(async () => {
+  dataDir = await mkdtemp(path.join(tmpdir(), 'kettu-devices-'))
+  events = []
+  fake.devices = [{ ...EMULATOR }, { ...SIMULATOR }, { ...USERS_SIMULATOR }]
+  fake.drivers = []
+  fake.boots = []
+  fake.shutdowns = []
+  fake.bootedMeanwhile = false
+})
+
+afterEach(async () => {
+  await Promise.all(managers.splice(0).map((devices) => devices.dispose()))
+  await rm(dataDir, { recursive: true, force: true })
+})
+
+/** A device host's devices; a second one on the same folder is the host after a restart. */
+function manager(): DeviceManager {
+  const devices = new DeviceManager({
+    platform: 'darwin',
+    dataDir,
+    env: async () => ({}),
+    resourcesPath: null,
+    emit: (port, event) => events.push({ port, event }),
+    log: () => undefined,
+  })
+  managers.push(devices)
+  return devices
+}
+
+async function restart(devices: DeviceManager): Promise<DeviceManager> {
+  managers.splice(managers.indexOf(devices), 1)
+  await devices.dispose()
+  return manager()
+}
+
 describe('device access by session', () => {
-  let dataDir: string
-  let events: { port: string | null; event: DeviceEvent }[]
-
-  beforeEach(async () => {
-    dataDir = await mkdtemp(path.join(tmpdir(), 'kettu-devices-'))
-    events = []
-    fake.devices = [{ ...EMULATOR }]
-    fake.drivers = []
-  })
-
-  const managers: DeviceManager[] = []
-
-  afterEach(async () => {
-    await Promise.all(managers.splice(0).map((devices) => devices.dispose()))
-    await rm(dataDir, { recursive: true, force: true })
-  })
-
-  function manager(): DeviceManager {
-    const devices = new DeviceManager({
-      platform: 'darwin',
-      dataDir,
-      env: async () => ({}),
-      resourcesPath: null,
-      emit: (port, event) => events.push({ port, event }),
-      log: () => undefined,
-    })
-    managers.push(devices)
-    return devices
-  }
-
   const frames = (port: string) =>
     events.filter((sent) => sent.port === port && sent.event.type === 'device.frame').length
 
@@ -218,11 +269,64 @@ describe('device access by session', () => {
     await devices.open(EMULATOR.id, 's1')
     await devices.watch('own', EMULATOR.id, 's1')
     const driver = fake.drivers[0]!
-    devices.endSessions(['s1'])
+    await devices.endSessions(['s1'])
 
     driver.events!.frame('key', new Uint8Array([1]))
     expect(frames('own')).toBe(0)
     await refused(() => devices.input(EMULATOR.id, { type: 'button', button: 'home' }, 's1'))
     expect(driver.sent).toEqual([])
+  })
+})
+
+describe('simulators the host booted', () => {
+  it('shuts one down when its only tab closes, and leaves the one the user started on', async () => {
+    const devices = manager()
+    await devices.open(SIMULATOR.id, 's1')
+    await devices.open(USERS_SIMULATOR.id, 's1')
+    expect(fake.boots).toEqual([SIMULATOR.target])
+
+    await devices.close(SIMULATOR.id, 's1', false)
+    await devices.close(USERS_SIMULATOR.id, 's1', false)
+    expect(fake.shutdowns).toEqual([SIMULATOR.target])
+  })
+
+  it('shuts one down when the session holding it ends', async () => {
+    const devices = manager()
+    await devices.open(SIMULATOR.id, 's1')
+    await devices.open(USERS_SIMULATOR.id, 's1')
+    await devices.endSessions(['s1'])
+    expect(fake.shutdowns).toEqual([SIMULATOR.target])
+  })
+
+  it('remembers which it booted across a restart of the host', async () => {
+    let devices = manager()
+    await devices.open(SIMULATOR.id, 's1')
+    await devices.open(USERS_SIMULATOR.id, 's2')
+    devices = await restart(devices)
+
+    await devices.close(SIMULATOR.id, 's1', false)
+    await devices.endSessions(['s2'])
+    expect(fake.shutdowns).toEqual([SIMULATOR.target])
+  })
+
+  it('leaves one on that the user booted again after it was shut down', async () => {
+    let devices = manager()
+    await devices.open(SIMULATOR.id, 's1')
+    // The user shuts it down while the session holds it, and later boots it themselves.
+    fake.devices.find((device) => device.id === SIMULATOR.id)!.state = 'shutdown'
+    await devices.list()
+    fake.devices.find((device) => device.id === SIMULATOR.id)!.state = 'booted'
+    devices = await restart(devices)
+
+    await devices.close(SIMULATOR.id, 's1', false)
+    expect(fake.shutdowns).toEqual([])
+  })
+
+  it('leaves one on that the user booted while the host was about to', async () => {
+    const devices = manager()
+    fake.bootedMeanwhile = true
+    await devices.open(SIMULATOR.id, 's1')
+    await devices.close(SIMULATOR.id, 's1', false)
+    expect(fake.shutdowns).toEqual([])
   })
 })

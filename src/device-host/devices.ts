@@ -71,6 +71,10 @@ export class DeviceManager {
   private tools: Tools | null = null
   private found = new Map<DeviceId, FoundDevice>()
   private readonly leases = new Map<DeviceId, string>()
+  /** Simulators this host booted, which shut down once no session holds them. */
+  private readonly booted = new Set<DeviceId>()
+  /** Simulators this host is booting, which a listing from before the boot must not forget. */
+  private readonly booting = new Set<DeviceId>()
   private readonly operators = new Map<DeviceId, DeviceOperator>()
   private readonly live = new Map<DeviceId, Live>()
   /** The devices each port watches. */
@@ -96,20 +100,29 @@ export class DeviceManager {
     const text = await readFile(file, 'utf8').catch(() => null)
     if (!text) return
     try {
-      const parsed = JSON.parse(text) as { leases?: Record<string, unknown> }
+      const parsed = JSON.parse(text) as { leases?: Record<string, unknown>; booted?: unknown }
       for (const [id, sessionId] of Object.entries(parsed.leases ?? {})) {
         if (typeof sessionId === 'string' && sessionId.length <= 256) this.leases.set(id, sessionId)
+      }
+      for (const id of Array.isArray(parsed.booted) ? parsed.booted : []) {
+        if (typeof id === 'string' && id.length <= 256) this.booted.add(id)
       }
     } catch {
       this.deps.log('Ignored an unreadable device-leases.json')
     }
   }
 
-  /** Which session holds which device, so a pane shows its devices again after a restart. */
+  /**
+   * Which session holds which device, so a pane shows its devices again after a restart, and
+   * which simulators this host booted.
+   */
   private saveLeases(): void {
     const file = this.leasesFile()
     if (!file) return
-    const body = JSON.stringify({ leases: Object.fromEntries(this.leases) })
+    const body = JSON.stringify({
+      leases: Object.fromEntries(this.leases),
+      booted: [...this.booted],
+    })
     // One write at a time, so an older one never lands last; dispose waits for the last.
     this.saving = this.saving
       .then(() => mkdir(path.dirname(file), { recursive: true }))
@@ -183,11 +196,19 @@ export class DeviceManager {
     const env = await this.deps.env()
     if (found.kind === 'simulator' && found.state !== 'booted' && tools.xcrun) {
       this.setState(id, 'booting')
+      this.booting.add(id)
       try {
-        await bootSimulator(tools.xcrun, found.target, env)
+        if (await bootSimulator(tools.xcrun, found.target, env)) {
+          this.booted.add(id)
+          this.saveLeases()
+        }
+        // Waits for a listing that began before the boot, too, while it cannot forget the boot.
+        await this.list()
       } catch (error) {
         this.setState(id, 'shutdown')
         throw new DeviceError('unavailable', `The simulator did not boot: ${String(error)}`)
+      } finally {
+        this.booting.delete(id)
       }
     } else if (found.kind === 'emulator' && found.state === 'shutdown') {
       if (!tools.emulator || !tools.adb)
@@ -204,44 +225,69 @@ export class DeviceManager {
       id = `android:${serial}`
       this.leases.set(id, sessionId)
       this.saveLeases()
+      await this.list()
+    } else {
+      await this.list()
     }
-    await this.list()
     const info = this.info(id)
     if (!info) throw new DeviceError('not_found', 'The device went away')
     return info
   }
 
+  /** Takes the device from the session; a simulator this host booted shuts down with it. */
   async close(id: DeviceId, sessionId: string, shutdown: boolean): Promise<void> {
+    await this.restored
     if (this.leases.get(id) !== sessionId) return
     this.leases.delete(id)
+    const booted = this.booted.delete(id)
     this.saveLeases()
     this.operators.delete(id)
     this.dropWatchers(id)
-    const found = this.found.get(id)
     await this.stopLive(id)
-    if (shutdown && found) {
-      const tools = await this.loadTools()
-      const env = await this.deps.env()
-      if (found.kind === 'simulator' && tools.xcrun)
-        await shutdownSimulator(tools.xcrun, found.target, env)
-      if (found.kind === 'emulator' && tools.adb) {
-        await run(tools.adb, ['-s', found.target, 'emu', 'kill'], env).catch(() => undefined)
-      }
-    }
+    if (shutdown || booted) await this.shutDown(id)
     await this.list()
   }
 
-  /** Lets go of the devices of sessions that were archived or deleted, without shutting them down. */
-  endSessions(sessionIds: string[]): void {
+  /**
+   * Lets go of the devices of sessions that were archived or deleted. Only the simulators this
+   * host booted shut down; others stay on, since the user may still be using them.
+   */
+  async endSessions(sessionIds: string[]): Promise<void> {
+    await this.restored
     const ended = new Set(sessionIds)
+    const booted: DeviceId[] = []
     for (const [id, sessionId] of [...this.leases]) {
       if (!ended.has(sessionId)) continue
       this.leases.delete(id)
       this.operators.delete(id)
       this.dropWatchers(id)
+      if (this.booted.delete(id)) booted.push(id)
     }
     this.saveLeases()
     this.broadcastList()
+    if (booted.length === 0) return
+    await Promise.all(
+      booted.map(async (id) => {
+        await this.stopLive(id)
+        await this.shutDown(id)
+      }),
+    )
+    await this.list()
+  }
+
+  private async shutDown(id: DeviceId): Promise<void> {
+    // A host that just started has not listed yet.
+    if (!this.found.has(id)) await this.list()
+    const found = this.found.get(id)
+    if (!found) return
+    const tools = await this.loadTools()
+    const env = await this.deps.env()
+    if (found.kind === 'simulator' && tools.xcrun) {
+      await shutdownSimulator(tools.xcrun, found.target, env)
+    }
+    if (found.kind === 'emulator' && tools.adb) {
+      await run(tools.adb, ['-s', found.target, 'emu', 'kill'], env).catch(() => undefined)
+    }
   }
 
   holder(id: DeviceId): string | null {
@@ -389,6 +435,15 @@ export class DeviceManager {
     const next = new Map<DeviceId, FoundDevice>()
     for (const device of lists.flat()) next.set(device.id, device)
     this.found = next
+    // One that went down is no longer ours: booted again by the user, it stays on.
+    let forgot = false
+    for (const id of this.booted) {
+      if (next.get(id)?.state === 'shutdown' && !this.booting.has(id)) {
+        this.booted.delete(id)
+        forgot = true
+      }
+    }
+    if (forgot) this.saveLeases()
     for (const id of [...this.live.keys()]) if (!next.has(id)) void this.stopLive(id)
     return this.broadcastList()
   }

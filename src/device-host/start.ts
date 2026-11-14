@@ -214,7 +214,9 @@ export function startDeviceHost(
         server?.setAllowDevices(message.allowed)
         break
       case 'device-host:sessions-ended': {
-        manager?.endSessions(message.sessionIds)
+        void manager
+          ?.endSessions(message.sessionIds)
+          .catch((error: unknown) => warn(`Cannot let go of ended sessions' devices: ${error}`))
         break
       }
       case 'device-host:call':
