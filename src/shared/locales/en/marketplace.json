@@ -87,6 +87,7 @@
     "ready": "{{name}} is ready for every agent",
     "readyFor": "{{name}} is ready for {{agents}}",
     "keysNotSaved": "{{name}} is installed, but its keys weren’t saved: {{error}}",
+    "signInUnchecked": "Couldn’t check whether {{name}} needs a sign-in: {{error}}. Agents get it as you entered it.",
     "installFailed": "Couldn’t install {{name}}: {{error}}",
     "changeFailed": "Couldn’t change {{name}}: {{error}}",
     "uninstalled": "{{name}} uninstalled",
@@ -226,7 +227,7 @@
     },
     "add": {
       "title": "Add an MCP server",
-      "description": "Every agent gets it when a session starts. Values marked secret are kept on this computer and never shown again.",
+      "description": "Every agent gets it when a session starts. A server that needs a sign-in opens it in your browser once added. Values marked secret are kept on this computer and never shown again.",
       "name": "Name",
       "namePlaceholder": "my-server",
       "nameHint": "What agents call it: lowercase letters, digits, - and _.",

@@ -14,6 +14,7 @@ import type {
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import { addLogSecret } from '@shared/log/process-log'
+import type { McpOAuth } from '@shared/marketplace'
 
 /** A sign-in as main keeps it, by server id. */
 export interface SignIn {
@@ -40,6 +41,10 @@ export interface SignIn {
 const DEVICE_CLIENTS: Readonly<Record<string, string>> = {
   'https://github.com/login/oauth': 'Ov23liLvsqnYGSdgcs3U',
 }
+// The servers that sign in with that app, by host. Only these: the app's token is good for the
+// whole service, so a server that merely names the service as its authorization server never
+// gets one.
+export const DEVICE_HOSTS: ReadonlySet<string> = new Set(['api.githubcopilot.com'])
 const DEVICE_GRANT = 'urn:ietf:params:oauth:grant-type:device_code'
 const PROTOCOL_VERSION = '2025-06-18'
 export const LOGIN_MS = 5 * 60_000
@@ -211,6 +216,31 @@ export async function probe(
     )
   }
   return { kind: 'open' }
+}
+
+/**
+ * How a server the user adds by hand signs in: not at all when it answers without a sign-in, or
+ * when it asks for one but offers no OAuth Kettu can do, so that it reaches agents as typed. The
+ * device flow for a host Kettu has an app for; else the browser flow, which needs PKCE with S256
+ * and dynamic client registration. Throws when the server or its metadata cannot be reached.
+ */
+export async function detectSignIn(
+  url: string,
+  headers: Record<string, string>,
+  fetcher: Fetch,
+): Promise<McpOAuth | null> {
+  const asked = await probe(url, headers, fetcher)
+  if (asked.kind === 'open') return null
+  if (DEVICE_HOSTS.has(new URL(url).hostname)) return { flow: 'device' }
+  const sdk = await loadAuth()
+  const { authorizationServerMetadata: metadata } = await sdk.discoverOAuthServerInfo(url, {
+    ...(asked.resourceMetadataUrl ? { resourceMetadataUrl: asked.resourceMetadataUrl } : {}),
+    fetchFn: fetcher,
+  })
+  const browser =
+    metadata?.code_challenge_methods_supported?.includes('S256') === true &&
+    metadata.registration_endpoint !== undefined
+  return browser ? { flow: 'browser' } : null
 }
 
 /** A sign-in on its way: what the user is shown, and how it ends. */

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import {
   browserLogin,
+  detectSignIn,
   deviceLogin,
   isCancelled,
   parseSignIn,
@@ -108,6 +109,84 @@ describe('probe', () => {
     expect(await probe(MCP, { 'X-Read-Only': 'true' }, fetcher)).toEqual({ kind: 'open' })
     await new Promise((resolve) => setImmediate(resolve))
     expect(calls.map((call) => call.method)).toEqual(['POST', 'DELETE'])
+  })
+})
+
+describe('detectSignIn', () => {
+  const unauthorized = () => new Response('', { status: 401 })
+
+  it('finds the browser flow where discovery, S256 and registration are offered', async () => {
+    const { fetcher, calls } = authorizationServer()
+    expect(await detectSignIn(MCP, { 'X-Team': 'a' }, fetcher)).toEqual({ flow: 'browser' })
+    expect(calls.some((call) => call.method === 'POST' && call.url === `${AS}/register`)).toBe(
+      false,
+    )
+  })
+
+  it('needs none for a server that answers with the headers typed', async () => {
+    const { fetcher } = fakeFetch({
+      [`POST ${MCP}`]: (_, init) =>
+        new Headers(init.headers).get('authorization') === 'Bearer typed'
+          ? json({ jsonrpc: '2.0', id: 1, result: {} })
+          : unauthorized(),
+    })
+    expect(await detectSignIn(MCP, { Authorization: 'Bearer typed' }, fetcher)).toBeNull()
+  })
+
+  it('offers none where the authorization server lacks S256 or registration', async () => {
+    expect(await detectSignIn(MCP, {}, authorizationServer({ pkce: false }).fetcher)).toBeNull()
+    const { fetcher } = fakeFetch({
+      [`POST ${MCP}`]: unauthorized,
+      [`GET https://mcp.example.com/.well-known/oauth-authorization-server`]: () =>
+        json({
+          issuer: 'https://mcp.example.com',
+          authorization_endpoint: 'https://mcp.example.com/authorize',
+          token_endpoint: 'https://mcp.example.com/token',
+          response_types_supported: ['code'],
+          code_challenge_methods_supported: ['S256'],
+        }),
+    })
+    expect(await detectSignIn(MCP, {}, fetcher)).toBeNull()
+  })
+
+  it('offers none for a 401 without any authorization server', async () => {
+    const { fetcher } = fakeFetch({ [`POST ${MCP}`]: unauthorized })
+    expect(await detectSignIn(MCP, {}, fetcher)).toBeNull()
+  })
+
+  it('gives the device flow to the GitHub host alone', async () => {
+    const github = 'https://api.githubcopilot.com/mcp/'
+    const { fetcher: own } = fakeFetch({ [`POST ${github}`]: unauthorized })
+    expect(await detectSignIn(github, {}, own)).toEqual({ flow: 'device' })
+
+    // A server elsewhere that names GitHub as its authorization server never gets Kettu's app.
+    const { fetcher, calls } = fakeFetch({
+      [`POST ${MCP}`]: () =>
+        new Response('', {
+          status: 401,
+          headers: { 'WWW-Authenticate': `Bearer resource_metadata="${PRM}"` },
+        }),
+      [`GET ${PRM}`]: () =>
+        json({ resource: MCP, authorization_servers: ['https://github.com/login/oauth'] }),
+      'GET https://github.com/.well-known/oauth-authorization-server/login/oauth': () =>
+        json({
+          issuer: 'https://github.com/login/oauth',
+          authorization_endpoint: 'https://github.com/login/oauth/authorize',
+          token_endpoint: 'https://github.com/login/oauth/access_token',
+          device_authorization_endpoint: 'https://github.com/login/device/code',
+          response_types_supported: ['code'],
+          code_challenge_methods_supported: ['S256'],
+        }),
+    })
+    expect(await detectSignIn(MCP, {}, fetcher)).toBeNull()
+    expect(calls.some((call) => call.url.startsWith('https://github.com/login/device'))).toBe(false)
+  })
+
+  it('fails when the server cannot be asked', async () => {
+    const fetcher = (async () => {
+      throw new TypeError('fetch failed')
+    }) as typeof fetch
+    await expect(detectSignIn(MCP, {}, fetcher)).rejects.toThrow('fetch failed')
   })
 })
 

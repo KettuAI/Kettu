@@ -15,6 +15,7 @@ import { HostError } from '../errors'
 import type { LogFn } from '../storage'
 import {
   browserLogin,
+  detectSignIn,
   deviceLogin,
   isCancelled,
   parseSignIn,
@@ -126,6 +127,15 @@ export class MarketConnectionsService {
     const sign = this.current(found)
     if (!sign || sign.reconnect) return null
     return sign.kind === 'open' ? 'open' : 'proxy'
+  }
+
+  /** How a URL the user is adding signs in, asked with the headers they typed. */
+  async detect(url: string, headers: Record<string, string>): Promise<McpOAuth | null> {
+    try {
+      return await detectSignIn(url, headers, timedFetch(this.fetch))
+    } catch (error) {
+      throw new HostError('unavailable', (error as Error).message)
+    }
   }
 
   /** Starts signing in to a server of the settings; a sign-in already on its way for it ends. */

@@ -5,6 +5,7 @@
 
 import { getDomain } from 'tldts'
 import type { CatalogServer, McpSpec, McpValue } from '@shared/marketplace'
+import { DEVICE_HOSTS } from './oauth'
 
 export const REGISTRY_URL = 'https://registry.modelcontextprotocol.io/v0.1'
 
@@ -157,10 +158,6 @@ function remoteSpec(remotes: Fields[], listing: Listing | undefined): McpSpec | 
   }
   return null
 }
-
-// Remote servers whose service registers no clients: Kettu signs in with the device flow of an app
-// it registered there, in place of the token header they ask for.
-const DEVICE_HOSTS: ReadonlySet<string> = new Set(['api.githubcopilot.com'])
 
 /**
  * A remote with no secret to type in signs in with OAuth, if it turns out to need any: GitHub's
