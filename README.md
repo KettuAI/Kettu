@@ -106,7 +106,7 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 ## Privacy
 
-- No telemetry. Your sessions, code and files stay on your own computers.
+- Your sessions, code and files stay on your own computers. Kettu collects none of them, nor how you use it.
 - Kettu keeps no copy of your agents' credentials.
 - A Kettu account is optional. Everything on your own computers and network works without one; signing in adds the relay, app.kettu.sh, publishing to kettu.page and problem reports.
 - A problem report leaves your computer only when you send it.
