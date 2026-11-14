@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from 'react'
-import { ArrowTurnBackwardIcon, ComputerIcon, StopCircleIcon } from '@hugeicons/core-free-icons'
+import { ComputerIcon, StopCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import { harnessOf, isAgentId } from '@shared/agents'
@@ -88,7 +88,6 @@ export function FloatingLabel({
                 className="kco-float__btn kco-float__btn--solid"
                 onClick={() => api.act('hand-back')}
               >
-                <Glyph icon={ArrowTurnBackwardIcon} />
                 {t('computerFloat.handBack')}
               </button>
             </>
