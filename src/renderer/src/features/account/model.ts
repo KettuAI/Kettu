@@ -174,18 +174,43 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
   })
 }
 
-/** Two rows of cards at most, so the menu stays within the window. */
+/** Two rows of cards at most, so the popover stays within the window. */
 const MAX_CARDS = 4
 
+const LEVEL_RANK: Record<LimitLevel, number> = { ok: 0, warn: 1, bad: 2 }
+const windowRank = (w: CardWindow): number => LEVEL_RANK[w.level] * 1000 + w.percent
+
+/** A card's tightest window, a reached or red one first: what the account row's ring draws. */
+export function tightestWindow(card: PlanCard): CardWindow {
+  return card.windows.reduce((a, b) => (windowRank(b) > windowRank(a) ? b : a))
+}
+
+const cardRank = (card: PlanCard): number => windowRank(tightestWindow(card))
+
 /**
- * The cards the menu shows and how many more there are. When they do not all fit, those near a
- * limit come first, so a hidden card is never the one that needs attention.
+ * The card of the account `key` names: its own, or for an OpenCode agent the tightest of its
+ * providers'. Null when the account reports no plan windows.
  */
-export function shownCards(cards: readonly PlanCard[]): { shown: PlanCard[]; more: number } {
-  if (cards.length <= MAX_CARDS) return { shown: [...cards], more: 0 }
-  const near = (card: PlanCard): boolean => card.windows.some((w) => w.level && w.level !== 'ok')
-  const ordered = [...cards.filter(near), ...cards.filter((card) => !near(card))]
-  return { shown: ordered.slice(0, MAX_CARDS), more: cards.length - MAX_CARDS }
+export function currentCard(cards: readonly PlanCard[], key: string): PlanCard | null {
+  let found: PlanCard | null = null
+  for (const card of cards) {
+    if (card.key !== key && !card.key.startsWith(`${key}:`)) continue
+    if (!found || cardRank(card) > cardRank(found)) found = card
+  }
+  return found
+}
+
+/**
+ * The cards the popover shows and how many more there are: the current account's first, then the
+ * others tightest first, so a hidden card is never the one that needs attention.
+ */
+export function popoverCards(
+  cards: readonly PlanCard[],
+  current: PlanCard | null,
+): { shown: PlanCard[]; more: number } {
+  const others = cards.filter((card) => card !== current).sort((a, b) => cardRank(b) - cardRank(a))
+  const ordered = current ? [current, ...others] : others
+  return { shown: ordered.slice(0, MAX_CARDS), more: Math.max(0, ordered.length - MAX_CARDS) }
 }
 
 /** The host choice the menu checks: one host by its filter value, or null for every host. */

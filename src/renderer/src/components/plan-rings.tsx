@@ -10,19 +10,22 @@ export interface PlanRing {
 
 /**
  * One ring per plan window, the first innermost, each filled to how much of it is used, on a
- * track in a tint of its own color. `size` is the diagram's width in pixels.
+ * track in a tint of its own color, or in a neutral gray with `track="neutral"`. `size` is the
+ * diagram's width in pixels.
  */
 export function PlanRings({
   rings,
   size,
   stroke,
   gap,
+  track = 'tint',
   className,
 }: {
   rings: readonly PlanRing[]
   size: number
   stroke: number
   gap: number
+  track?: 'tint' | 'neutral'
   className?: string
 }) {
   const center = size / 2
@@ -47,7 +50,11 @@ export function PlanRings({
               r={r}
               fill="none"
               strokeWidth={stroke}
-              className="stroke-current opacity-(--ring-tint)"
+              className={
+                track === 'neutral'
+                  ? 'stroke-(--bg-selected)'
+                  : 'stroke-current opacity-(--ring-tint)'
+              }
             />
             {share > 0 && (
               <circle

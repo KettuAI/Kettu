@@ -1,7 +1,6 @@
-import { useEffect, useMemo, type KeyboardEvent } from 'react'
+import { type KeyboardEvent, type ReactNode } from 'react'
 import {
   Add01Icon,
-  Analytics01Icon,
   Book02Icon,
   ComputerIcon,
   HelpCircleIcon,
@@ -10,9 +9,11 @@ import {
   Layers01Icon,
   Login01Icon,
   Logout01Icon,
+  Moon02Icon,
   News01Icon,
+  PaintBoardIcon,
   Settings01Icon,
-  UserEdit01Icon,
+  Sun03Icon,
   UserIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -23,47 +24,19 @@ import { SegmentedControl } from '@renderer/components/affect/segmented-control'
 import { HostIcon } from '@renderer/features/settings/remote-parts'
 import { deviceShape } from '@renderer/features/settings/remote-text'
 import { useCloudOff } from '@renderer/lib/cloud'
-import { errorMessage } from '@renderer/lib/host'
-import { accountAgents, type AccountAgent } from '@renderer/lib/plan-readings'
 import { formatShortcut, isHosted, isMod, isWeb } from '@renderer/lib/platform'
 import { useAppInfo } from '@renderer/lib/use-app-info'
-import { useNow } from '@renderer/lib/use-now'
 import { cancelSignIn, signIn, signOut, useAccountStore } from '@renderer/stores/account'
 import { switchHost } from '@renderer/stores/host-switch'
 import { isAway, useHostsStore, useOtherHosts, type OtherHost } from '@renderer/stores/hosts'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { planReadingsOf, useAgentsStore, usePlanReadings } from '@renderer/stores/agents'
-import { planLimitWays, readLimitsThrough } from '@renderer/stores/usage'
-import { shownHostAgents, useShownHostAgents, useWindowHost } from '@renderer/stores/window-host'
 import { useUpdatesStore } from '@renderer/stores/updates'
-import {
-  openSettings,
-  openUsage,
-  showShortcuts,
-  THIS_COMPUTER,
-  useViewStore,
-} from '@renderer/stores/view'
-import { chosenHost, planCards, shownCards, systemName, type Identity } from './model'
-import { PlanLimitCard } from './plan-limit-card'
+import { openSettings, showShortcuts, THIS_COMPUTER, useViewStore } from '@renderer/stores/view'
+import { chosenHost, systemName, type Identity } from './model'
+import { useMenuClose } from './menu-close'
 import { useThisComputerName } from './use-account'
 
 const DOCS_URL = 'https://github.com/KettuAI/Kettu#readme'
-
-/**
- * Reads the plan limits the menu lists again, each account once through one of its hosts; the host
- * asks each agent at most once a minute.
- */
-function readLimits(): void {
-  const listed = new Set(
-    accountAgents(shownHostAgents(), planReadingsOf(useAgentsStore.getState())).map((a) => a.key),
-  )
-  for (const [key, ways] of planLimitWays()) {
-    if (!listed.has(key)) continue
-    readLimitsThrough(ways).catch((error: unknown) =>
-      console.warn(`Could not read the plan limits: ${errorMessage(error)}`),
-    )
-  }
-}
 
 /** An http(s) page in the system browser, as the app opens every outside link. */
 function openPage(url: string): void {
@@ -71,9 +44,9 @@ function openPage(url: string): void {
 }
 
 /**
- * The account menu on affectUI's Profile Menu, opened from the account row: who you are, the hosts
- * this window controls (Mod+1 to Mod+9 while open), the plan limits, then color mode, Settings,
- * Help on a second card, and signing in or out.
+ * The account menu on affectUI's Profile Menu, opened from the account row: who you are, which
+ * edits the profile, the hosts this window controls (Mod+1 to Mod+9 while open), then color mode,
+ * Settings, Help on a second card, and signing in or out. The plan limits are the ring's beside it.
  */
 export function AccountMenu({ identity, close }: { identity: Identity; close: () => void }) {
   const { t } = useTranslation('sidebar')
@@ -85,11 +58,8 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
   const selfName = useThisComputerName()
   const info = useAppInfo()
   const hostItems = useHostItems(hosts, close)
-  const planItems = usePlanItems(close, hostItems.length > 0)
   const help = useHelpItems(close)
-  const windowHost = useWindowHost()
-  const shownKey = windowHost.kind === 'all' ? '*' : (windowHost.hostId ?? '')
-  useEffect(() => readLimits(), [shownKey])
+  useMenuClose(close)
 
   const then = (run: () => void) => () => {
     close()
@@ -108,27 +78,19 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
   }
 
   const manageUrl = status?.state === 'signed-in' ? status.manageUrl : null
+  // The header edits the profile; not while signed out, self-hosted or with the account hidden.
+  const editProfile =
+    manageUrl && !cloudOff && !hidden ? then(() => openPage(manageUrl)) : undefined
   const account: ProfileMenuItem[] =
     (isWeb && !isHosted) || cloudOff || !status
       ? []
       : status.state === 'signed-in'
         ? [
-            ...(manageUrl
-              ? [
-                  {
-                    id: 'profile',
-                    label: t('account.editProfile'),
-                    icon: <MenuIcon icon={UserEdit01Icon} />,
-                    divider: true,
-                    onSelect: then(() => openPage(manageUrl)),
-                  },
-                ]
-              : []),
             {
               id: 'sign-out',
               label: t(isHosted ? 'account.signOutHosted' : 'account.signOut'),
               icon: <MenuIcon icon={Logout01Icon} />,
-              divider: !manageUrl,
+              divider: true,
               onSelect: then(() => void signOut()),
             },
           ]
@@ -147,12 +109,11 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
 
   const items: ProfileMenuItem[] = [
     ...hostItems,
-    ...planItems,
     {
       id: 'mode',
       label: t('account.theme'),
       control: <ColorMode />,
-      divider: hostItems.length > 0 || planItems.length > 0,
+      divider: hostItems.length > 0,
     },
     {
       id: 'settings',
@@ -201,6 +162,8 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
         avatar={<Avatar identity={identity} hidden={hidden} />}
         items={items}
         labels={{ menu: t('account.menuLabel') }}
+        onUser={editProfile}
+        userLabel={t('account.editProfile')}
       />
     </div>
   )
@@ -208,6 +171,16 @@ export function AccountMenu({ identity, close }: { identity: Identity; close: ()
 
 function MenuIcon({ icon }: { icon: Parameters<typeof Icon>[0]['icon'] }) {
   return <Icon icon={icon} size={16} />
+}
+
+/** A host's icon, with a dot at its corner while the host is online or being reached. */
+function HostMark({ icon, state }: { icon: ReactNode; state?: 'online' | 'connecting' }) {
+  return (
+    <span className="kettu-host-mark">
+      {icon}
+      {state && <span aria-hidden className="kettu-host-mark__dot" data-state={state} />}
+    </span>
+  )
 }
 
 function choose(choice: string | null, hosts: readonly OtherHost[]): void {
@@ -253,7 +226,7 @@ function useHostItems(hosts: OtherHost[], close: () => void): ProfileMenuItem[] 
     {
       id: 'host:self',
       label: selfName,
-      icon: <MenuIcon icon={laptop ? LaptopIcon : ComputerIcon} />,
+      icon: <HostMark icon={<MenuIcon icon={laptop ? LaptopIcon : ComputerIcon} />} />,
       checked: value === THIS_COMPUTER,
       shortcut: formatShortcut('Mod+1'),
       onSelect: pick(THIS_COMPUTER),
@@ -261,19 +234,26 @@ function useHostItems(hosts: OtherHost[], close: () => void): ProfileMenuItem[] 
     ...hosts.map((host, index): ProfileMenuItem => {
       const state = host.connection.state
       const away = isAway(host.connection)
+      const connecting = state === 'connecting'
       return {
         id: `host:${host.id}`,
         label: host.name,
-        icon: <HostIcon platform={host.platform} className="size-4" />,
+        icon: (
+          <HostMark
+            icon={<HostIcon platform={host.platform} className="size-4" />}
+            state={connecting ? 'connecting' : away ? undefined : 'online'}
+          />
+        ),
         checked: value === host.id,
         // Mod+N still picks a host away; the row only stops advertising it.
-        shortcut: index < 8 && !away ? formatShortcut(`Mod+${index + 2}`) : undefined,
-        badge:
-          state === 'connecting'
-            ? ts('hosts.state.connecting')
-            : away
-              ? ts('hosts.state.offline')
-              : undefined,
+        shortcut:
+          index < 8 && !away && !connecting ? formatShortcut(`Mod+${index + 2}`) : undefined,
+        note: connecting
+          ? ts('hosts.state.connecting')
+          : away
+            ? ts('hosts.state.offline')
+            : undefined,
+        tone: away ? 'away' : undefined,
         onSelect: pick(host.id),
       }
     }),
@@ -292,6 +272,7 @@ function useHostItems(hosts: OtherHost[], close: () => void): ProfileMenuItem[] 
       id: 'add-host',
       label: t('account.addHost'),
       icon: <MenuIcon icon={Add01Icon} />,
+      tone: 'quiet',
       onSelect: () => {
         close()
         openSettings('hosts')
@@ -354,7 +335,9 @@ function useHelpItems(close: () => void): ProfileMenuItem[] {
 const THEMES = ['system', 'light', 'dark'] as const
 type Theme = (typeof THEMES)[number]
 
-/** System, Light or Dark, as one menu row's segmented control. */
+const THEME_ICONS = { system: ComputerIcon, light: Sun03Icon, dark: Moon02Icon } as const
+
+/** System, Light or Dark: a menu row with the choices as icons at its end. */
 function ColorMode() {
   const { t } = useTranslation('sidebar')
   const theme = useSettingsStore((s) => s.settings.appearance.theme)
@@ -364,66 +347,23 @@ function ColorMode() {
       .update({ appearance: { theme: next } })
       .catch((error: unknown) => console.warn('Could not change the theme', error))
   return (
-    <SegmentedControl<Theme>
-      aria-label={t('account.theme')}
-      variant="tray"
-      size="lg"
-      fullWidth
-      value={theme}
-      onChange={choose}
-      options={THEMES.map((value) => ({ value, label: t(`account.themes.${value}`) }))}
-    />
-  )
-}
-
-/**
- * A card per account with every plan window as a ring, two to a row; past four, a row that opens
- * the Usage page, which lists them all.
- */
-function usePlanItems(close: () => void, divided: boolean): ProfileMenuItem[] {
-  const { t } = useTranslation('sidebar')
-  const { shown, more } = shownCards(planCards(useAccountsWithLimits(), useNow()))
-  if (shown.length === 0) return []
-  const open = () => {
-    close()
-    openUsage()
-  }
-  return [
-    { id: 'limits', label: t('account.limits'), heading: true, divider: divided },
-    {
-      id: 'limit-cards',
-      label: t('account.limits'),
-      control: (
-        <div className="grid grid-cols-2 gap-1.5 pb-1">
-          {shown.map((card) => (
-            <PlanLimitCard key={card.key} card={card} onOpen={open} />
-          ))}
-        </div>
-      ),
-    },
-    ...(more > 0
-      ? [
-          {
-            id: 'all-limits',
-            label: t('account.allLimits'),
-            icon: <MenuIcon icon={Analytics01Icon} />,
-            shortcut: `+${more}`,
-            onSelect: open,
-          },
-        ]
-      : []),
-  ]
-}
-
-/**
- * The window's hosts' accounts with plan limits, an account once however many hosts it is signed
- * in on, each at its newest reading and called by its email where its agents' names differ.
- */
-function useAccountsWithLimits(): AccountAgent[] {
-  const shown = useShownHostAgents()
-  const readings = usePlanReadings()
-  return useMemo(
-    () => accountAgents(shown, readings).filter((a) => a.limits.length > 0),
-    [shown, readings],
+    <div className="kettu-theme-row">
+      <span className="ui-pmc__icon">
+        <MenuIcon icon={PaintBoardIcon} />
+      </span>
+      <span className="kettu-theme-row__label">{t('account.theme')}</span>
+      <SegmentedControl<Theme>
+        aria-label={t('account.theme')}
+        variant="tray"
+        size="sm"
+        value={theme}
+        onChange={choose}
+        options={THEMES.map((value) => ({
+          value,
+          icon: <Icon icon={THEME_ICONS[value]} size={14} />,
+          ariaLabel: t(`account.themes.${value}`),
+        }))}
+      />
+    </div>
   )
 }

@@ -279,6 +279,10 @@
     "limits": "Plan limits",
     "allLimits": "All plan limits",
     "limitUsed": "{{window}}: {{percent}}% used",
+    "ring": "{{account}} · {{window}} {{percent}}% used",
+    "ringNone": "{{agent}} reports no plan limits",
+    "ringButton": "Plan limits: {{limit}}",
+    "openUsage": "Open Usage",
     "theme": "Theme",
     "themes": {
       "system": "System",
