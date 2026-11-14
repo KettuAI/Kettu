@@ -2184,6 +2184,9 @@ export class AgentHost {
         }
         sessions.controlHandedBack(sessionId, 'browser', durationMs)
       },
+      'terminal.handedBack': ({ sessionId, durationMs }) => {
+        sessions.controlHandedBack(sessionId, 'terminal', durationMs)
+      },
       // The first answer goes to the page, whose waiting call then settles the card.
       'control.answerAsk': ({ sessionId, entryId, outcome }, { device }) => {
         sessions.answerControlAsk(sessionId, entryId, outcome, fromDevice(device))

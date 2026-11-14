@@ -1133,29 +1133,16 @@ li[data-row-exit='dust'] > * {
 .kp-texit[data-failed] > span {
   color: var(--danger);
 }
-.kp-tlock {
+/* While a turn uses the terminal: who has it, at its foot. */
+.kp-tbox__pill {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  z-index: 4;
   display: flex;
-  flex: none;
-  align-items: flex-start;
-  gap: 7px;
-  margin: 0;
-  padding: 9px 16px;
-  border-top: var(--hairline) solid var(--border-subtle);
-  font-size: 12px;
-  line-height: 17px;
-  color: var(--text-tertiary);
-}
-.kp-tlock > svg {
-  margin-top: 2px;
-  color: var(--text-disabled);
-}
-.kp-tlock kbd {
-  padding: 0 4px;
-  border-radius: 4px;
-  background: var(--bg-hover);
-  font: inherit;
-  font-size: 11px;
-  color: var(--text-tertiary);
+  width: max-content;
+  max-width: calc(100% - 24px);
+  translate: -50% 0;
 }
 .kp-ask {
   position: absolute;

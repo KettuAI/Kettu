@@ -10,6 +10,7 @@ import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { Button } from '@renderer/components/ui/button'
 import { BrowserLabel } from '@renderer/features/browser/browser-label'
 import { DeviceLabel } from '@renderer/features/devices/device-label'
+import { TerminalLabel } from '@renderer/features/terminal/terminal-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -284,6 +285,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                         hostId={hostId}
                       />
                       <DeviceLabel
+                        sessionId={sessionId}
+                        agentId={summary.agentId}
+                        hostId={hostId}
+                      />
+                      <TerminalLabel
                         sessionId={sessionId}
                         agentId={summary.agentId}
                         hostId={hostId}

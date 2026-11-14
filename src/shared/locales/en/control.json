@@ -47,7 +47,8 @@
   },
   "bubble": {
     "title": "{{agent}} is using {{scope}}.",
-    "hint": "Take over to click and type here."
+    "hint": "Take over to click and type here.",
+    "hintTerminal": "Take over to type here. {{keys}} still stops its command."
   },
   "actions": {
     "takeOver": "Take over",

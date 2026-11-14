@@ -47,7 +47,8 @@
   },
   "bubble": {
     "title": "{{agent}} 正在使用{{scope}}。",
-    "hint": "接管后才能在这里点击和输入。"
+    "hint": "接管后才能在这里点击和输入。",
+    "hintTerminal": "接管后才能在这里输入。{{keys}} 仍会停掉它的命令。"
   },
   "actions": {
     "takeOver": "接管",

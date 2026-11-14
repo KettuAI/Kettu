@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { duration, tokens } from '@renderer/lib/format'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { deviceInUse, useDevicesStore } from '@renderer/stores/devices'
+import { terminalInUse, useTerminalsStore } from '@renderer/stores/terminals'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { TurnDots } from './turn-dots'
 import { askedStep, turnPhase, turnTokens, writingId } from './turn-phase'
@@ -78,13 +79,18 @@ export const TurnStatus = memo(function TurnStatus({
       return { state, name: used?.name ?? '' }
     }),
   )
+  // A terminal its agent started that the user took over.
+  const terminal = useTerminalsStore((s) => {
+    const used = terminalInUse(s, sessionId)
+    return used?.control.kind === 'you' ? used.name : null
+  })
   if (writing) return null
   const separator = <i aria-hidden>·</i>
   const app = computer?.app ?? null
   const appHeld = computer?.control === 'you'
   const appUsed = !!app && !appHeld && !QUIET_PHASES.has(phase)
-  // The device the user holds, which the turn waits for.
-  const holding = device.state === 'you' ? device.name : null
+  // The device or terminal the user holds, which the turn waits for.
+  const holding = device.state === 'you' ? device.name : terminal
   const waiting =
     phase === 'approval' || asked !== null || page === 'you' || appHeld || holding !== null
   const text = asked

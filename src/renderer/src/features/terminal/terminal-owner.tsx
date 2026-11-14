@@ -1,6 +1,13 @@
-import { Globe02Icon, SquareLock02Icon } from '@hugeicons/core-free-icons'
+import { useEffect, type RefObject } from 'react'
+import { Globe02Icon } from '@hugeicons/core-free-icons'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { HeldBubble } from '@renderer/components/control/held-bubble'
+import { SurfaceLight } from '@renderer/components/control/surface-light'
+import { SurfacePill } from '@renderer/components/control/surface-pill'
+import { useControlAgent } from '@renderer/components/control/use-control-agent'
+import { useHeldBubble } from '@renderer/components/control/use-held-bubble'
 import { addressText } from '@renderer/features/browser/address'
 import { PaneIcon } from '@renderer/features/shell/panel-button'
 import { longAgo } from '@renderer/lib/format'
@@ -9,11 +16,15 @@ import { isMac } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { agentName } from '@renderer/stores/agents'
 import {
+  handBackTerminal,
   interruptTerminal,
+  takeOverTerminal,
+  useTerminalsStore,
   type TerminalOwner,
   type TerminalState,
 } from '@renderer/stores/terminals'
 import { toggleSidePane } from '@renderer/stores/view'
+import { onHeld } from './xterm-registry'
 
 /** Over a terminal an agent started: who started it and when, with its address and Stop. */
 export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: TerminalOwner }) {
@@ -70,22 +81,70 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
   )
 }
 
-/** At the foot of a terminal an agent is using: typing takes it over, and Ctrl+C stops it. */
-export function TakeoverNotice({
+/**
+ * Over a terminal an agent's running turn uses: the light along its inner edge, the pill at its
+ * foot with Take over or Hand back, and the bubble at the cursor when typing is held back.
+ */
+export function TerminalControl({
   terminal,
   owner,
+  box,
 }: {
   terminal: TerminalState
   owner: TerminalOwner
+  /** The box it sits in, whose pixels the bubble is placed in. */
+  box: RefObject<HTMLDivElement | null>
 }) {
-  const { t } = useTranslation('terminal')
-  const agent = agentName(owner.agentId, hostOfPath(terminal.projectPath))
+  const { t } = useTranslation('control')
+  const control = useTerminalsStore((s) => s.controls[terminal.id] ?? null)
+  const hostId = hostOfPath(terminal.projectPath)
+  const agent = useControlAgent(owner.agentId, hostId)
+  const agentName = agent?.name ?? t('agent')
+  const bubble = useHeldBubble()
+  const { held } = bubble
+
+  useEffect(
+    () =>
+      onHeld(terminal.id, (at) => {
+        const room = box.current?.getBoundingClientRect()
+        held(room ? { x: at.x - room.left, y: at.y - room.top } : null)
+      }),
+    [terminal.id, box, held],
+  )
+
+  const takeOver = () => takeOverTerminal(terminal.id)
+  const holds = control?.kind === 'agent'
   return (
-    <p className="kp-tlock">
-      <PaneIcon icon={SquareLock02Icon} size={13} />
-      <span>
-        {t('owner.notice', { agent })} <kbd>{isMac ? '⌃C' : 'Ctrl+C'}</kbd> {t('owner.stops')}
-      </span>
-    </p>
+    <>
+      <AnimatePresence>{holds && <SurfaceLight key="light" radius={0} />}</AnimatePresence>
+      {holds && bubble.bubble && (
+        <HeldBubble
+          key={bubble.bubble.id}
+          at={bubble.bubble.at}
+          agentName={agentName}
+          scope={t('scope.terminal')}
+          hint={t('bubble.hintTerminal', { keys: isMac ? '⌃C' : 'Ctrl+C' })}
+          leaving={bubble.bubble.leaving}
+          onTakeOver={takeOver}
+        />
+      )}
+      <div className="kp-tbox__pill">
+        <AnimatePresence>
+          {control && (
+            <SurfacePill
+              key="pill"
+              control={control}
+              agent={agent}
+              agentName={agentName}
+              scope={t('scope.terminal')}
+              nudge={bubble.nudge}
+              onTakeOver={takeOver}
+              onHandBack={() => handBackTerminal(terminal.id)}
+              onDone={() => handBackTerminal(terminal.id)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    </>
   )
 }

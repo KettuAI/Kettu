@@ -1067,6 +1067,9 @@ export interface HostContract {
   }
   // The desktop app's user handed its page back after taking it over in the session's turn.
   'browser.handedBack': { params: { sessionId: string; durationMs: number }; result: void }
+  // Any window's or device's user handed back a terminal an agent of the session started, after
+  // taking it over in the session's turn.
+  'terminal.handedBack': { params: { sessionId: string; durationMs: number }; result: void }
   // Any window's or device's Done or Skip on the card of a step an agent asked the user to do,
   // which goes to the page; the first counts.
   'control.answerAsk': {
@@ -1357,6 +1360,7 @@ export const HOST_METHODS = [
   'browser.origin',
   'browser.originSettled',
   'browser.handedBack',
+  'terminal.handedBack',
   'control.answerAsk',
   'browser.answerOrigin',
   'devices.answerAccess',
