@@ -16,6 +16,9 @@ export const SHEET = `${ON_DESK} overflow-clip rounded-card border border-(--bor
 /** The corners of a layer over a sheet's whole inside, flush with its rounded 1 px border. */
 export const SHEET_INSIDE = 'rounded-[calc(var(--radius-card)-1px)]'
 
+/** The radius of those corners, for a style. */
+export const SHEET_INSIDE_RADIUS = 'calc(var(--radius-card) - 1px)'
+
 /** The edge of the pane in focus in a split view. */
 export const SHEET_FOCUSED = 'border-(--border-strong)'
 

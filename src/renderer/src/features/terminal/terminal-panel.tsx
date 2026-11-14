@@ -36,6 +36,7 @@ import {
   PaneTabClose,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
+import { SHEET_INSIDE_RADIUS } from '@renderer/features/shell/sheet'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { formatShortcut } from '@renderer/lib/platform'
 import { layoutStorage } from '@renderer/lib/storage'
@@ -311,6 +312,10 @@ function TerminalSideView({
 }) {
   const focus = side ? () => focusTerminalSide(panel, side) : undefined
   const box = useRef<HTMLDivElement>(null)
+  const strip = terminal.waiting === 'password' && !terminal.stale
+  // The box reaches the sheet's lower corners on its outer sides, unless the strip lies under it.
+  const lower = (outer: boolean) => (outer && !strip ? SHEET_INSIDE_RADIUS : '0')
+  const radius = `0 0 ${lower(side !== 'left')} ${lower(side !== 'right')}`
   return (
     <div
       className="kp-tview"
@@ -322,9 +327,11 @@ function TerminalSideView({
       {terminal.owner && <OwnerBar terminal={terminal} owner={terminal.owner} />}
       <div ref={box} className="kp-tbox">
         <TerminalView key={terminal.id} terminal={terminal} focused={focused} />
-        {terminal.owner && <TerminalControl terminal={terminal} owner={terminal.owner} box={box} />}
+        {terminal.owner && (
+          <TerminalControl terminal={terminal} owner={terminal.owner} box={box} radius={radius} />
+        )}
       </div>
-      {terminal.waiting === 'password' && !terminal.stale && <PasswordStrip terminal={terminal} />}
+      {strip && <PasswordStrip terminal={terminal} />}
     </div>
   )
 }
