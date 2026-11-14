@@ -32,6 +32,7 @@ export const SCENARIOS = [
   'report',
   'tables',
   'open-site',
+  'browser',
   'device',
   'computer',
   'approvals',
@@ -117,6 +118,10 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   'open-site': {
     description: 'Opens a site through the browser tools, which asks the user for a new one',
     hint: '<url>',
+  },
+  browser: {
+    description: "Calls Kettu's browser tools in turn, calling again while the user has the page",
+    hint: '<browser_* tool> [arguments as JSON] [; wait <ms> ; ...]',
   },
   device: {
     description: 'Calls one of the device tools with JSON arguments and reports its answer',
