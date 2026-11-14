@@ -23,7 +23,8 @@ function Ring({ part, ref }: { part: string; ref?: Ref<HTMLSpanElement> }) {
  * `inside` draws it along the inner edge of the positioned box it fills, such as a page; `outside`
  * around it and behind it, for a thing Kettu shows whose content it must not cover, such as a
  * phone or an app's window. `act` changes with each action, `at` is where it landed in the box's
- * pixels, and `radius` is the box's corner radius.
+ * pixels, and `radius` is the box's corner radius in pixels or, `inside`, a CSS `border-radius`
+ * for a box whose corners differ.
  */
 export function SurfaceLight({
   placement = 'inside',
@@ -34,7 +35,7 @@ export function SurfaceLight({
   placement?: 'inside' | 'outside'
   act?: number
   at?: ControlPoint | null
-  radius?: number
+  radius?: number | string
 }) {
   const glow = useRef<HTMLSpanElement>(null)
   const core = useRef<HTMLSpanElement>(null)
@@ -51,7 +52,7 @@ export function SurfaceLight({
   }, [act])
 
   const style = {
-    '--ctl-light-r': `${radius}px`,
+    '--ctl-light-r': typeof radius === 'number' ? `${radius}px` : radius,
     '--ctl-light-x': at ? `${at.x}px` : '50%',
     '--ctl-light-y': at ? `${at.y}px` : '50%',
   } as CSSProperties

@@ -116,11 +116,14 @@ export function TerminalControl({
   terminal,
   owner,
   box,
+  radius,
 }: {
   terminal: TerminalState
   owner: TerminalOwner
   /** The box it sits in, whose pixels the bubble is placed in. */
   box: RefObject<HTMLDivElement | null>
+  /** The box's corners as the sheet clips them, which the light follows. */
+  radius: string
 }) {
   const { t } = useTranslation('control')
   const control = useTerminalsStore((s) => s.controls[terminal.id] ?? null)
@@ -143,7 +146,7 @@ export function TerminalControl({
   const holds = control?.kind === 'agent'
   return (
     <>
-      <AnimatePresence>{holds && <SurfaceLight key="light" radius={0} />}</AnimatePresence>
+      <AnimatePresence>{holds && <SurfaceLight key="light" radius={radius} />}</AnimatePresence>
       {holds && bubble.bubble && (
         <HeldBubble
           key={bubble.bubble.id}

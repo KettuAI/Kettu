@@ -13,6 +13,7 @@ import { DeviceLabel } from '@renderer/features/devices/device-label'
 import { TerminalLabel } from '@renderer/features/terminal/terminal-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { openHostSettings } from '@renderer/features/settings/host-sections'
+import { SHEET_INSIDE_RADIUS } from '@renderer/features/shell/sheet'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
@@ -336,7 +337,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
             key="computer"
             placement="inside"
             act={session?.computer?.act?.seq ?? 0}
-            radius={11}
+            radius={SHEET_INSIDE_RADIUS}
           />
         )}
       </AnimatePresence>
