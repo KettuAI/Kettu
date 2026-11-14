@@ -11,15 +11,27 @@ import { describeFailure, GIT_TIMEOUT_MS, type Exec, type ExecResult } from '../
 import { canonicalizePath, folderName, pathKey, samePath } from '../paths'
 import { processControl, type ProcessControl } from '../process-tree'
 import type { WorktreeRecord } from '../storage'
-import type { WorktreeGit, WorktreeInspection, WorktreeRequest } from './api'
+import type { BranchRename, WorktreeGit, WorktreeInspection, WorktreeRequest } from './api'
 import { copyLocalFiles } from './copy'
-import { branchFromTemplate, checkWorktreeBranch, folderNameFor, insideRoot, slugOf } from './names'
+import {
+  branchFromTemplate,
+  checkWorktreeBranch,
+  cleanSlug,
+  folderNameFor,
+  insideRoot,
+  slugOf,
+} from './names'
 import { runSetup } from './setup'
 
 /** Checking out a large repository takes a while. */
 export const WORKTREE_ADD_TIMEOUT_MS = 300_000
 export const WORKTREE_REMOVE_TIMEOUT_MS = 120_000
 const MAX_SUFFIX = 100
+
+interface TakenNames {
+  local: Set<string>
+  remote: string[]
+}
 
 export interface WorktreeGitDeps {
   exec: Exec
@@ -72,7 +84,7 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
   }
 
   /** Branch names on any local or remote ref, folded on case-insensitive file systems. */
-  async function takenNames(cwd: string): Promise<{ local: Set<string>; remote: string[] }> {
+  async function takenNames(cwd: string): Promise<TakenNames> {
     const result = await git(cwd, [
       'for-each-ref',
       '--format=%(refname)',
@@ -92,6 +104,30 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
   // A ref whose name differs only in case is the same loose ref file on macOS and Windows.
   function fold(name: string): string {
     return platform === 'darwin' || platform === 'win32' ? name.toLowerCase() : name
+  }
+
+  function onRemote(taken: TakenNames, name: string): boolean {
+    const key = fold(name)
+    return taken.remote.some((ref) => ref.endsWith(`/${key}`))
+  }
+
+  function isTaken(
+    taken: TakenNames,
+    name: string,
+    byPullRequest: ((branch: string) => boolean) | undefined,
+  ): boolean {
+    return taken.local.has(fold(name)) || onRemote(taken, name) || (byPullRequest?.(name) ?? false)
+  }
+
+  /** Whether the branch has an upstream in git's config, as a push with `-u` sets. */
+  async function hasUpstream(cwd: string, branch: string): Promise<boolean> {
+    for (const key of ['remote', 'merge']) {
+      const result = await git(cwd, ['config', '--get', `branch.${branch}.${key}`])
+      if (result.failure === null && result.code === 1) continue
+      if (!ok(result)) throw gitError('git config', result)
+      return true
+    }
+    return false
   }
 
   async function exists(target: string): Promise<boolean> {
@@ -180,20 +216,12 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
 
     const root = await rootFor(project, request.root)
     const taken = await takenNames(project)
-    const isTaken = (name: string): boolean => {
-      const key = fold(name)
-      return (
-        taken.local.has(key) ||
-        taken.remote.some((ref) => ref.endsWith(`/${key}`)) ||
-        (request.takenByPullRequest?.(name) ?? false)
-      )
-    }
 
     for (let n = 1; n <= MAX_SUFFIX; n++) {
       const branch = n === 1 ? wanted : `${wanted}-${n}`
       // The suffix may push the name past the limit.
       checkWorktreeBranch(branch)
-      if (isTaken(branch)) continue
+      if (isTaken(taken, branch, request.takenByPullRequest)) continue
       const folder = p.join(root, folderNameFor(branch, platform))
       if (!insideRoot(root, folder, platform))
         throw invalidParams('Worktree folder outside its root')
@@ -211,6 +239,38 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
     function slugFor(text: string): string {
       return slugOf(text) || `session-${random().slice(0, 6)}`
     }
+  }
+
+  async function renameBranch(request: BranchRename): Promise<string | null> {
+    const { projectPath: project, record, takenByPullRequest } = request
+    const slug = cleanSlug(request.slug)
+    if (slug === '') return null
+    const current = checkWorktreeBranch(record.branch)
+    const wanted = checkWorktreeBranch(
+      branchFromTemplate(request.template, { slug, type: request.type, issue: request.issue }),
+    )
+    if (fold(wanted) === fold(current)) return null
+
+    if ((await branchHead(project, current)) !== record.baseOid) return null
+    const listed = await listWorktrees(project)
+    const checkedOut = listed.some(
+      (entry) => entry.branch === current && samePath(entry.path, record.path, platform),
+    )
+    if (!checkedOut || (await hasUpstream(project, current))) return null
+    const taken = await takenNames(project)
+    if (onRemote(taken, current) || (takenByPullRequest?.(current) ?? false)) return null
+
+    for (let n = 1; n <= MAX_SUFFIX; n++) {
+      const branch = n === 1 ? wanted : `${wanted}-${n}`
+      checkWorktreeBranch(branch)
+      if (fold(branch) === fold(current)) return null
+      if (isTaken(taken, branch, takenByPullRequest)) continue
+      // Moves the worktree's HEAD with it; fails rather than overwrite a branch made meanwhile.
+      const result = await git(project, ['branch', '-m', '--', current, branch])
+      if (!ok(result)) throw gitError('git branch -m', result)
+      return branch
+    }
+    return null
   }
 
   async function countEntries(worktree: string): Promise<number> {
@@ -364,6 +424,7 @@ export function createWorktreeGit(deps: WorktreeGitDeps): WorktreeGit {
   return {
     rootFor,
     create,
+    renameBranch,
     copyLocalFiles: (projectPath, worktreePath, extra) =>
       copyLocalFiles(exec, platform, projectPath, worktreePath, extra),
     runSetup: (command, options) => runSetup(command, options, { platform, control, now }),

@@ -39,6 +39,7 @@ export function pickModel(
 export function summaryPrompt(
   messages: readonly { pos: number; text: string }[],
   cut: number = SUMMARY_CHARS,
+  instruction: string = INSTRUCTION,
 ): {
   positions: number[]
   prompt: string
@@ -50,7 +51,7 @@ export function summaryPrompt(
   }))
   return {
     positions: picked.map(({ pos }) => pos),
-    prompt: `${INSTRUCTION}\n\n${JSON.stringify(list)}`,
+    prompt: `${instruction}\n\n${JSON.stringify(list)}`,
   }
 }
 
@@ -91,6 +92,11 @@ export interface SummaryRequest {
   cut?: number
   /** What the titles are for, in its log lines: the outline's messages by default. */
   name?: string
+  /**
+   * What the model is asked to write for each message, ending by asking for the JSON object;
+   * titles by default.
+   */
+  instruction?: string
   log(message: string): void
   timeoutMs?: number
 }
@@ -110,7 +116,7 @@ export async function writeTitles(
   }
   const timeoutMs = request.timeoutMs ?? REPORT_TIMEOUT_MS
   const name = request.name ?? 'the outline titles'
-  const { positions, prompt } = summaryPrompt(request.messages, request.cut)
+  const { positions, prompt } = summaryPrompt(request.messages, request.cut, request.instruction)
   const remove = (sessionId: string): Promise<void> =>
     connection.removeHidden(sessionId, (message) =>
       request.log(`Could not remove the session of ${name}: ${message}`),

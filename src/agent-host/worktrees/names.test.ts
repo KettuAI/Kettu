@@ -1,6 +1,13 @@
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { branchFromTemplate, checkWorktreeBranch, folderNameFor, insideRoot, slugOf } from './names'
+import {
+  branchFromTemplate,
+  checkWorktreeBranch,
+  cleanSlug,
+  folderNameFor,
+  insideRoot,
+  slugOf,
+} from './names'
 
 describe('slugOf', () => {
   it('keeps the leading ASCII words', () => {
@@ -18,6 +25,58 @@ describe('slugOf', () => {
   it('is empty when nothing is usable', () => {
     expect(slugOf('修复登录按钮')).toBe('')
     expect(slugOf('  !!! ')).toBe('')
+  })
+})
+
+describe('cleanSlug', () => {
+  const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/
+
+  it("keeps a model's name in lowercase words joined by single dashes", () => {
+    expect(cleanSlug('fix-rss-feed-timezones')).toBe('fix-rss-feed-timezones')
+    expect(cleanSlug('  Fix RSS feed_timezones. ')).toBe('fix-rss-feed-timezones')
+    expect(cleanSlug('"add--dark---mode"\n')).toBe('add-dark-mode')
+  })
+
+  it('leaves nothing git or the command line would read as more than a name', () => {
+    expect(cleanSlug('--force; rm -rf ~/')).toBe('force-rm-rf')
+    expect(cleanSlug('../../refs/heads/main')).toBe('refs-heads-main')
+    expect(cleanSlug('HEAD@{1}~2^:x?*[a]\\b.lock')).toBe('head-1-2-x-a-b-lock')
+    expect(cleanSlug('kettu/feature x')).toBe('kettu-feature-x')
+    expect(cleanSlug('a\x00b\x7fc\u202ed\te')).toBe('a-b-c-d-e')
+  })
+
+  it('keeps only ASCII, never what lowercases to it', () => {
+    expect(cleanSlug('修复 RSS 时区')).toBe('rss')
+    // The Kelvin sign lowercases to "k" and the fi ligature folds to "fi" elsewhere.
+    expect(cleanSlug('\u212aelvin \ufb01x')).toBe('elvin-x')
+    expect(cleanSlug('café')).toBe('caf')
+  })
+
+  it('cuts at a word boundary within 40 characters', () => {
+    const slug = cleanSlug('implement-the-extremely-complicated-worktree-removal-dialog')
+    expect(slug).toBe('implement-the-extremely-complicated')
+    expect(cleanSlug('a'.repeat(60))).toBe('a'.repeat(40))
+  })
+
+  it('is empty when nothing is usable', () => {
+    for (const reply of ['', '---', '修复登录按钮', ' \n\t ', '!!!'])
+      expect(cleanSlug(reply)).toBe('')
+  })
+
+  it('gives a slug or nothing for any reply', () => {
+    const alphabet = 'aZ09-_ ./\\@{}~^:?*[]\x00\x1f\x7f修é\u212a\ufb01\u202e'
+    let seed = 1
+    const next = (): number => {
+      seed = (seed * 1103515245 + 12345) % 2 ** 31
+      return seed
+    }
+    for (let i = 0; i < 2000; i++) {
+      const length = next() % 80
+      const reply = Array.from({ length }, () => alphabet[next() % alphabet.length]).join('')
+      const slug = cleanSlug(reply)
+      expect(slug.length).toBeLessThanOrEqual(40)
+      if (slug !== '') expect(slug, JSON.stringify(reply)).toMatch(SLUG)
+    }
   })
 })
 

@@ -195,6 +195,7 @@ import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
 import type { WorktreeInspection } from './worktrees/api'
 import type { PrepareState, SetupLog, WorktreeManager } from './worktrees/manager'
+import { BranchNaming } from './worktrees/naming'
 import {
   carriedContext,
   threadTurns,
@@ -212,7 +213,7 @@ import {
   type WorktreeRecord,
 } from './storage'
 import { SUMMARY_RETRY_MS, writeTitles } from './outline-titles'
-import { listedTitle, titleMessageText, writeSessionTitle } from './session-titles'
+import { listedTitle, titleMessageText, writeBranchSlug, writeSessionTitle } from './session-titles'
 import {
   addTokenTotals,
   firstUserMessage,
@@ -850,6 +851,14 @@ export class SessionManager {
   private readonly preparing = new Map<string, Exclude<PrepareState, { state: 'ready' }>>()
   /** Worktrees whose folder was found gone, by path key, until they are made again. */
   private readonly missingWorktrees = new Set<string>()
+  /**
+   * New worktrees whose branch name their agent is writing, by path key, until it is settled, with
+   * the template's other values they were made with.
+   */
+  private readonly branchNames = new Map<
+    string,
+    { naming: BranchNaming; values: { type?: string; issue?: string } }
+  >()
   private readonly lastSummaries = new Map<string, string>()
   /** `/context` reports running, by session id. */
   private readonly contextRuns = new Map<string, Promise<ContextBreakdown | null>>()
@@ -3500,12 +3509,16 @@ export class SessionManager {
       if (!manager || scratch.contains(projectPath)) {
         throw invalidParams('A worktree needs a project in a Git repository')
       }
-      worktree = await manager.create(projectPath, {
+      const request: Parameters<WorktreeManager['create']>[1] = {
         base: params.worktree.base,
         ...(params.worktree.branch === undefined ? {} : { branch: params.worktree.branch }),
         text: (prompt && fallbackTitle(prompt)) ?? '',
-      })
+      }
+      worktree = await manager.create(projectPath, request)
       newWorktree = true
+      if (prompt && !request.branch?.trim()) {
+        this.nameBranch(params.agentId, projectPath, worktree, prompt, request)
+      }
     }
     const now = this.now()
     const record: SessionRecord = {
@@ -3566,6 +3579,7 @@ export class SessionManager {
         this.forget(live.id)
         if (newWorktree && worktree) {
           this.deps.worktrees?.stop(worktree.path)
+          this.dropBranchName(worktree.path)
           void this.discardWorktree(projectPath, worktree)
         }
         throw error
@@ -7978,17 +7992,114 @@ export class SessionManager {
       record.pending = true
     })
     void manager.prepare(projectPath, worktree, (next) => {
-      if (next.state === 'ready') this.preparing.delete(key)
-      else this.preparing.set(key, next)
       if (next.state === 'ready') {
-        this.markWorktree(worktree.path, (record) => {
-          delete record.pending
+        this.afterBranchName(projectPath, worktree.path, () => {
+          this.preparing.delete(key)
+          this.markWorktree(worktree.path, (record) => {
+            delete record.pending
+          })
+          this.releaseWorktreeWaiters(worktree.path)
         })
-        this.releaseWorktreeWaiters(worktree.path)
         return
       }
+      this.preparing.set(key, next)
       for (const record of this.worktreeUsers(worktree.path)) this.touch(record.id)
     })
+  }
+
+  /**
+   * Has the session's agent write a name for the new worktree's branch from the first message,
+   * while the worktree is prepared. Only while titles are written, and only for a first message
+   * that waits for preparation, since one that does not goes before a name could come.
+   */
+  private nameBranch(
+    agentId: AgentId,
+    projectPath: string,
+    worktree: WorktreeRecord,
+    message: UserContent[],
+    values: { type?: string; issue?: string },
+  ): void {
+    const manager = this.deps.worktrees
+    if (!manager || !this.deps.settings().sessionTitles) return
+    if (!manager.settings(projectPath).waitForSetup) return
+    if (titleMessageText(message).trim() === '') return
+    const naming = new BranchNaming(this.writeBranchSlug(agentId, message))
+    const { type, issue } = values
+    this.branchNames.set(pathKey(worktree.path, this.deps.platform), {
+      naming,
+      values: {
+        ...(type === undefined ? {} : { type }),
+        ...(issue === undefined ? {} : { issue }),
+      },
+    })
+  }
+
+  /** The slug the agent's hidden session writes for a branch, or null when it writes none. */
+  private async writeBranchSlug(agentId: AgentId, message: UserContent[]): Promise<string | null> {
+    try {
+      const runtime = await this.deps.agents.ensureReady(agentId)
+      await mkdir(this.deps.reportsDir, { recursive: true })
+      return await writeBranchSlug(runtime, {
+        dir: this.deps.reportsDir,
+        sessionModel: null,
+        message,
+        log: (line) => this.deps.diagnostics.log('warn', line),
+      })
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `${this.deps.agents.name(agentId)}: could not name a branch: ${(error as Error).message}`,
+      )
+      return null
+    }
+  }
+
+  /**
+   * Runs `release`, which sends what waited for the worktree, once its branch has the name its
+   * agent wrote or keeps its own: at once when no name is being written.
+   */
+  private afterBranchName(projectPath: string, path: string, release: () => void): void {
+    const key = pathKey(path, this.deps.platform)
+    const entry = this.branchNames.get(key)
+    if (!entry) {
+      release()
+      return
+    }
+    void entry.naming
+      .settle((slug) => this.renameBranch(projectPath, path, { ...entry.values, slug }))
+      .then(() => {
+        if (this.branchNames.get(key) === entry) this.branchNames.delete(key)
+        release()
+      })
+  }
+
+  /** Names the worktree's branch from the slug, for every session in it; never rejects. */
+  private async renameBranch(
+    projectPath: string,
+    path: string,
+    values: { slug: string; type?: string; issue?: string },
+  ): Promise<void> {
+    const manager = this.deps.worktrees
+    const worktree = this.worktreeUsers(path)[0]?.worktree
+    if (!manager || !worktree || worktree.removed !== undefined) return
+    try {
+      const branch = await manager.renameBranch(projectPath, { ...worktree }, values)
+      if (branch === null) return
+      this.markWorktree(path, (record) => {
+        record.branch = branch
+      })
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not rename the branch of the worktree ${path}: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  private dropBranchName(path: string): void {
+    const key = pathKey(path, this.deps.platform)
+    this.branchNames.get(key)?.naming.drop()
+    this.branchNames.delete(key)
   }
 
   /** Sends what waited for the worktree: each session's first message, then its queue. */
@@ -8049,6 +8160,7 @@ export class SessionManager {
       true,
     )
     manager.stop(worktree.path)
+    this.dropBranchName(worktree.path)
     const result = await manager.remove(record.projectPath, worktree, { branch, expected })
     const key = pathKey(worktree.path, this.deps.platform)
     this.preparing.delete(key)
@@ -8086,11 +8198,13 @@ export class SessionManager {
     const { worktree } = record
     if (!worktree || worktree.removed !== undefined) throw notFound('This session has no worktree')
     this.deps.worktrees?.stop(worktree.path)
-    this.preparing.delete(pathKey(worktree.path, this.deps.platform))
-    this.markWorktree(worktree.path, (item) => {
-      delete item.pending
+    this.afterBranchName(record.projectPath, worktree.path, () => {
+      this.preparing.delete(pathKey(worktree.path, this.deps.platform))
+      this.markWorktree(worktree.path, (item) => {
+        delete item.pending
+      })
+      this.releaseWorktreeWaiters(worktree.path)
     })
-    this.releaseWorktreeWaiters(worktree.path)
   }
 
   /** The setup command's output in the session's worktree, whole or from an offset. */
