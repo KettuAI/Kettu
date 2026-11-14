@@ -250,12 +250,18 @@ export class Updater {
 
   /**
    * Once GitHub only is chosen, an update a check found elsewhere downloads from GitHub, and Link
-   * mode's link names GitHub's disk image, so nothing more goes to another source.
+   * mode's link names GitHub's disk image, so nothing more goes to another source. Once it is not,
+   * a check that GitHub failed runs again.
    */
   private sourceChanged(): void {
+    const { state } = this.status
+    // A failure on GitHub alone is stale once other sources may be used, so they are asked.
+    if (state.kind === 'error' && state.githubUnreachable && this.sourceChoice() === 'auto') {
+      void this.check()
+      return
+    }
     if (this.sourceChoice() !== 'github' || !this.run || this.run.githubOnly) return
     this.run = SourceRun.githubOnly(this.run.stallMs)
-    const { state } = this.status
     if (state.kind !== 'available' || this.mode !== 'link') return
     this.lastDownloadUrl = this.linkUrl()
     this.publish({ ...this.status, state: { ...state, downloadUrl: this.lastDownloadUrl } })

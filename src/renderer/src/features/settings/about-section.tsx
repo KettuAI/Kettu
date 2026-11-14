@@ -173,23 +173,29 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
     case 'moving':
       title = t('about.updates.moving')
       break
-    case 'error':
+    case 'error': {
+      // Only while updates still come from GitHub alone; changing the source checks again.
+      const github = !!state.githubUnreachable && githubOnly
       title = state.move
         ? t('about.updates.moveFailed')
-        : state.githubUnreachable
+        : github
           ? t('about.updates.githubUnreachable')
           : t('about.updates.failed')
       // Local mode leaves no other source to suggest.
-      detail =
-        state.githubUnreachable && githubOnly && !cloudOff ? (
-          t('about.updates.githubUnreachableDetail')
+      detail = github ? (
+        cloudOff ? (
+          t('about.updates.githubUnreachableLocal')
         ) : (
-          <span data-selectable="">{state.message}</span>
+          t('about.updates.githubUnreachableDetail')
         )
+      ) : (
+        <span data-selectable="">{state.message}</span>
+      )
       action = (
         <SetButton onClick={() => run(checkForUpdates)}>{t('about.updates.tryAgain')}</SetButton>
       )
       break
+    }
     case 'off':
       title =
         state.reason === 'development'

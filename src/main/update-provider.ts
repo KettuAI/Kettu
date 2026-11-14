@@ -123,9 +123,20 @@ export function sourcesProvider(
       const { sources, list } = await this.sources()
       const name = `${this.getDefaultChannelName()}.yml`
       let failure: SourceError | null = null
+      let stale: UpdateInfo | null = null
       for (const [index, source] of sources.entries()) {
         try {
           const info = await this.readUpdateFile(source, name, list.connectTimeoutSeconds * 1000)
+          const next = sources[index + 1]
+          // A signed file of an older release is real but stale, as a lagging source serves.
+          if (compareVersions(info.version, deps.current) < 0) {
+            if (!stale || compareVersions(info.version, stale.version) > 0) stale = info
+            log.warn(
+              `${source.id} offers ${info.version}, older than the running ${deps.current}` +
+                (next ? `; trying ${next.id}` : ''),
+            )
+            continue
+          }
           log.info(`Checked ${name} on ${source.id} (${source.url}): ${info.version}`)
           deps.checked(new SourceRun(sources, index, list.stallSeconds * 1000))
           return info
@@ -139,6 +150,9 @@ export function sourcesProvider(
           )
         }
       }
+      // Every source that answered has only older releases, as when this one was taken back: the
+      // check finds no update, which electron-updater never offers as a downgrade.
+      if (stale) return stale
       const githubOnly = sources.length === 1 && sources[0] === GITHUB_SOURCE
       throw new SourcesFailed(
         failure?.message ?? 'No source to check',
@@ -211,10 +225,6 @@ export function sourcesProvider(
       }
       if (!Array.isArray(info.files) || info.files.length === 0 || !info.files.every(isFileInfo)) {
         throw new SourceError(`${name} lists no files with their checksums`, true)
-      }
-      // A signed file of an older release is real but stale, which only a lagging source serves.
-      if (compareVersions(version, deps.current) < 0) {
-        throw new SourceError(`it offers ${version}, older than the running ${deps.current}`, true)
       }
       return info
     }

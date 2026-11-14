@@ -963,6 +963,7 @@
       "failed": "Couldn’t check for updates",
       "githubUnreachable": "Couldn’t reach GitHub",
       "githubUnreachableDetail": "Updates come only from GitHub now. Set Download source to Automatic to use Kettu’s download service too.",
+      "githubUnreachableLocal": "In Local mode, updates come only from GitHub.",
       "moveFailed": "Couldn’t move Kettu to Applications",
       "offDevelopment": "Updates are off in development builds",
       "offPackageManager": "Updates are installed by your package manager",
