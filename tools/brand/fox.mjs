@@ -255,7 +255,7 @@ export function foxMarkSvg() {
 // The flat fox's three fox-orange tones for each ground: the forehead strongest, the ears between,
 // the cheeks and the ears' insides lightest, the right-hand parts a step darker as the light comes
 // from the upper left. The dark ground's set is a step lighter, so every part holds on white and on
-// dark gray, which the mark's cream parts do not on white.
+// dark gray.
 const FLAT_TONES = {
   light: {
     ear: '#F98A44',
@@ -281,7 +281,7 @@ export const FLAT_GROUNDS = ['light', 'dark']
 
 /**
  * The mark drawn flat, without its gradients and light, in the tones for a `light` or `dark`
- * ground, on the mark's square, for the greeting on New session.
+ * ground, on the mark's square, for the brand's files.
  */
 export function foxFlatSvg(ground = 'light') {
   const tones = FLAT_TONES[ground]
