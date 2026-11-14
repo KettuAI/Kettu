@@ -15,7 +15,9 @@ import { ValidationError, validators } from './validate'
 const fake = vi.hoisted(() => {
   const fake = {
     devices: [] as FoundDevice[],
-    drivers: [] as Array<{ events: DriverEvents | null; sent: DeviceInput[] }>,
+    drivers: [] as Array<{ events: DriverEvents | null; sent: DeviceInput[]; stopped: boolean }>,
+    /** While set, a stream does not finish starting. */
+    starting: null as Promise<void> | null,
     boots: [] as string[],
     shutdowns: [] as string[],
     /** The user boots the simulator between the host's listing and its own boot. */
@@ -129,14 +131,16 @@ vi.mock('./android', () => ({
   AndroidDriver: class {
     events: DriverEvents | null = null
     sent: DeviceInput[] = []
+    stopped = false
     constructor() {
       fake.drivers.push(this)
     }
-    start(events: DriverEvents): Promise<void> {
+    async start(events: DriverEvents): Promise<void> {
       this.events = events
-      return Promise.resolve()
+      await fake.starting
     }
     stop(): Promise<void> {
+      this.stopped = true
       return Promise.resolve()
     }
     send(input: DeviceInput): void {
@@ -290,6 +294,7 @@ beforeEach(async () => {
   fake.devices = [{ ...EMULATOR }, { ...AVD }, { ...SIMULATOR }, { ...USERS_SIMULATOR }]
   fake.avds = new Map([[EMULATOR.target, 'Pixel_9']])
   fake.drivers = []
+  fake.starting = null
   fake.boots = []
   fake.shutdowns = []
   fake.bootedMeanwhile = false
@@ -375,6 +380,36 @@ describe('device access by session', () => {
     expect(frames('own')).toBe(0)
     await refused(() => devices.input(EMULATOR.id, { type: 'button', button: 'home' }, 's1'))
     expect(driver.sent).toEqual([])
+  })
+})
+
+describe('device streams', () => {
+  it('stops a stream whose watchers left while it started', async () => {
+    const devices = manager()
+    await devices.open(EMULATOR.id, 's1')
+    let started!: () => void
+    fake.starting = new Promise<void>((resolve) => (started = resolve))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const left = devices.watch('left', EMULATOR.id, 's1')
+      const closed = devices.watch('closed', EMULATOR.id, 's1')
+      for (let i = 0; i < 50 && !fake.drivers.some((driver) => driver.events); i++) {
+        await Promise.resolve()
+      }
+      devices.unwatch('left', EMULATOR.id, 's1')
+      devices.portClosed('closed')
+      started()
+      await Promise.all([left, closed])
+      // Two watches at once share one capture.
+      expect(fake.drivers).toHaveLength(1)
+
+      fake.drivers[0]!.events!.frame('key', new Uint8Array([1]))
+      expect(events.filter((sent) => sent.event.type === 'device.frame')).toEqual([])
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(fake.drivers[0]!.stopped).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

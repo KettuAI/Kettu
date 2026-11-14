@@ -80,6 +80,7 @@ export class DeviceManager {
   private readonly booting = new Set<DeviceId>()
   private readonly operators = new Map<DeviceId, DeviceOperator>()
   private readonly live = new Map<DeviceId, Live>()
+  private readonly ensuring = new Map<DeviceId, Promise<Live>>()
   /** The devices each port watches. */
   private readonly watching = new Map<string, Set<DeviceId>>()
   private listing: Promise<DeviceInfo[]> | null = null
@@ -320,12 +321,23 @@ export class DeviceManager {
     if (!this.found.has(id)) await this.list()
     const found = this.found.get(id)
     if (!found) throw new DeviceError('not_found', 'No such device on this host')
-    const live = await this.ensureLive(found)
-    // The session may have let go of the device while its stream started.
-    this.checkHolder(id, sessionId)
+    // Watching from here, so an unwatch or a closed port while the stream starts is not undone.
     let set = this.watching.get(port)
     if (!set) this.watching.set(port, (set = new Set()))
     set.add(id)
+    let live: Live
+    try {
+      live = await this.ensureLive(found)
+    } catch (error) {
+      this.watching.get(port)?.delete(id)
+      throw error
+    }
+    // The session may have let go of the device while its stream started.
+    this.checkHolder(id, sessionId)
+    if (!this.watching.get(port)?.has(id)) {
+      this.idleIfUnwatched(id, live)
+      return { screen: live.screen }
+    }
     if (live.idle) clearTimeout(live.idle)
     live.idle = null
     live.fanout.add(port)
@@ -347,6 +359,10 @@ export class DeviceManager {
     const live = this.live.get(id)
     if (!live) return
     live.fanout.remove(port)
+    this.idleIfUnwatched(id, live)
+  }
+
+  private idleIfUnwatched(id: DeviceId, live: Live): void {
     if (live.fanout.watching === 0 && !live.idle) {
       live.idle = setTimeout(() => void this.stopLive(id), IDLE_CAPTURE_MS)
     }
@@ -382,9 +398,7 @@ export class DeviceManager {
     try {
       return await live.driver.screenshot()
     } finally {
-      if (live.fanout.watching === 0 && !live.idle) {
-        live.idle = setTimeout(() => void this.stopLive(found.id), IDLE_CAPTURE_MS)
-      }
+      this.idleIfUnwatched(found.id, live)
     }
   }
 
@@ -529,7 +543,17 @@ export class DeviceManager {
     return new AndroidDriver(found.target, tools.adb, this.deps.resourcesPath, env, log)
   }
 
-  private async ensureLive(found: FoundDevice): Promise<Live> {
+  /** The device's stream, started once however many ask for it at the same time. */
+  private ensureLive(found: FoundDevice): Promise<Live> {
+    let pending = this.ensuring.get(found.id)
+    if (!pending) {
+      pending = this.startLive(found).finally(() => this.ensuring.delete(found.id))
+      this.ensuring.set(found.id, pending)
+    }
+    return pending
+  }
+
+  private async startLive(found: FoundDevice): Promise<Live> {
     const existing = this.live.get(found.id)
     if (existing) {
       await existing.starting
