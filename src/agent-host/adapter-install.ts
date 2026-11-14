@@ -1,7 +1,7 @@
 // Installs the ACP adapters from npm into the data directory, once per version or update, so a
 // launch runs `node <entry>` with no registry round trip.
 
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -267,14 +267,23 @@ export function runProgram(options: ProgramOptions): Promise<ProgramRun> {
       resolve({ code: null, signal: null, timedOut, aborted: true, output, stdout })
       return
     }
-    const child = spawn(file, args, {
-      cwd: options.cwd,
-      env: options.env as NodeJS.ProcessEnv,
-      stdio: 'pipe',
-      detached: platform !== 'win32',
-      windowsHide: true,
-      shell,
-    })
+    let child: ChildProcessWithoutNullStreams
+    try {
+      child = spawn(file, args, {
+        cwd: options.cwd,
+        env: options.env as NodeJS.ProcessEnv,
+        stdio: 'pipe',
+        detached: platform !== 'win32',
+        windowsHide: true,
+        shell,
+      })
+    } catch (error) {
+      // Node throws instead of emitting `error` when a start fails for any reason but a missing or
+      // forbidden file, such as a file Windows cannot run (`spawn UNKNOWN`).
+      const message = error instanceof Error ? error.message : String(error)
+      resolve({ code: null, signal: null, error: message, timedOut, aborted, output, stdout })
+      return
+    }
     // A program that exits before reading it all closes the pipe, which is no failure of ours.
     child.stdin.on('error', () => {})
     child.stdin.end(options.input)
