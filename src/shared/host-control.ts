@@ -7,7 +7,7 @@ import type { ArtifactImportResult } from './artifacts'
 import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './artifact-types'
 import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
-import type { ComputerApp } from './computer-use'
+import type { ComputerApp, ComputerFrame, ComputerHold } from './computer-use'
 import type { ControlOutcome } from './control'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
@@ -54,6 +54,9 @@ export interface BusyTerminal {
   projectPath: string
   title: string // the foreground command
 }
+
+/** What the floating label and the stop shortcut ask of the session holding the computer. */
+export type ComputerControlAction = 'take-over' | 'hand-back' | 'stop'
 
 export type MainToHost =
   | {
@@ -143,6 +146,10 @@ export type MainToHost =
   | { type: 'host:browser-origin-answer'; requestId: number; decision: BrowserOriginAnswer }
   // The user handed the session's page back after taking it over: the thread says for how long.
   | { type: 'host:browser-handed-back'; sessionId: string; durationMs: number }
+  // The floating label's buttons and the stop shortcut, for the session holding the computer.
+  | { type: 'host:computer-control'; sessionId: string; action: ComputerControlAction }
+  // Where the window the holding session uses is now; answered by host:computer-frame.
+  | { type: 'host:computer-frame-request'; requestId: number }
   | { type: 'host:shutdown' }
 
 /** A file of an artifact's version: its path in the artifact, and where its bytes lie on disk. */
@@ -298,6 +305,10 @@ export type HostToMain =
   | { type: 'host:service-port'; port: number | null }
   // A session's card allowed an app always: main keeps it in the settings, which come back.
   | { type: 'host:computer-app-allow'; app: ComputerApp }
+  // The session holding the computer took it, changed app, window or control, acted, or let go.
+  | { type: 'host:computer-hold'; hold: ComputerHold | null }
+  // Null when no session holds a window, or the driver could not find it.
+  | { type: 'host:computer-frame'; requestId: number; frame: ComputerFrame | null }
   | { type: 'host:stopped' }
 
 export type MainToTerminalHost =

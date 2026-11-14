@@ -31,12 +31,14 @@ import type {
   ArtifactContentResult,
   ArtifactExportResult,
   ArtifactListResult,
+  ComputerControlAction,
   HostToMain,
   MainToHost,
   NodeRuntime,
   ReportBuildResult,
 } from '@shared/host-control'
 import type { ArtifactExportFormat } from '@shared/artifact-types'
+import type { ComputerFrame } from '@shared/computer-use'
 import type { Platform } from '@shared/platform'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortErrorCode } from '@shared/port-rpc'
@@ -540,6 +542,11 @@ export class AgentHost {
           setupSettled: (requestId, outcome) =>
             this.sessions.computerSetupSettled(requestId, outcome),
           stopped: (sessionId) => this.sessions.computerStopped(sessionId),
+          agent: (sessionId) => ({
+            id: this.sessions.sessionAgent(sessionId) ?? '',
+            name: this.sessions.agentName(sessionId),
+          }),
+          held: (hold) => options.send({ type: 'host:computer-hold', hold }),
           log,
         })
       : null
@@ -1229,6 +1236,22 @@ export class AgentHost {
 
   busy(requestId: number): void {
     this.options.send({ type: 'host:busy', requestId, sessions: this.sessions.busy() })
+  }
+
+  /** The floating label's buttons and the stop shortcut, from main. */
+  computerControl(sessionId: string, action: ComputerControlAction): void {
+    this.computer?.control(sessionId, action)
+  }
+
+  /** `host:computer-frame-request`: where the window the holding session uses is now. */
+  computerFrame(requestId: number): void {
+    const answer = (frame: ComputerFrame | null) =>
+      this.options.send({ type: 'host:computer-frame', requestId, frame })
+    if (!this.computer) return answer(null)
+    this.computer.frame().then(answer, (error: unknown) => {
+      this.diagnostics.log('info', `Computer use could not find its window: ${String(error)}`)
+      answer(null)
+    })
   }
 
   /**
@@ -2201,6 +2224,17 @@ export class AgentHost {
       'memory.import': ({ sources, global }) => memoryCall(() => memory.import(sources, global)),
       'computer.stop': ({ sessionId }) => {
         this.computer?.stop(sessionId)
+      },
+      'computer.takeOver': ({ sessionId }) => {
+        this.computer?.takeOver(sessionId)
+      },
+      'computer.handBack': ({ sessionId }) => {
+        this.computer?.handBack(sessionId)
+      },
+      'computer.show': async ({ sessionId }, { device }) => {
+        // The window comes forward on this computer, for someone in front of it.
+        if (device) throw new HostError('forbidden', 'Show app works only on this computer.')
+        await this.computer?.show(sessionId)
       },
       'computer.declineSetup': ({ sessionId, entryId }, { device }) => {
         const requestId = sessions.declineComputerSetup(sessionId, entryId, fromDevice(device))

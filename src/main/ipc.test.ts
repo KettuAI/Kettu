@@ -128,6 +128,14 @@ describe('mayUse', () => {
     }
   })
 
+  it("takes no channel from computer use's overlay page", () => {
+    const contents = new FakeContents()
+    contents.mainFrame.url = 'http://localhost:5173/computer-overlay.html#label'
+    for (const channel of ['settings:get', 'agent-host:connect', 'tray:open', 'app:get-info']) {
+      expect(mayUse(eventFrom(contents), channel)).toBe(false)
+    }
+  })
+
   it("takes only the panel's channels from its window, whatever URL its page shows", () => {
     const contents = new FakeContents()
     const window = {}

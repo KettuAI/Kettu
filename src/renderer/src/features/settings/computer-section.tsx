@@ -7,7 +7,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { isMac, isWindows, platform } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { Pill } from './controls'
-import { AllowedAppRow, ComputerSwitch, PermissionRow } from './computer-rows'
+import { AllowedAppRow, ComputerSwitch, PermissionRow, StopShortcut } from './computer-rows'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 import { GroupNote } from './rows'
 
@@ -87,6 +87,15 @@ export function useComputerUseSection(): SectionDef {
       keywords: t('computer.enabled.keywords'),
       group: main,
       render: () => <ComputerSwitch label={t('computer.enabled.name')} />,
+    },
+    {
+      id: 'stop-shortcut',
+      name: t('computer.stopShortcut.name'),
+      english: en('computer.stopShortcut.name'),
+      description: t('computer.stopShortcut.description'),
+      keywords: t('computer.stopShortcut.keywords'),
+      group: main,
+      render: () => <StopShortcut />,
     },
     ...(isMac && status?.accessibility && status.screenRecording
       ? ([

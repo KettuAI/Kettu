@@ -12,7 +12,13 @@ import {
   type ControlSurface,
 } from './control'
 import type { DeviceAccessAnswer } from './device-agent'
-import type { ComputerAppAnswer, ComputerSetupOutcome, ComputerSetupStep } from './computer-use'
+import type {
+  ComputerAct,
+  ComputerAppAnswer,
+  ComputerControl,
+  ComputerSetupOutcome,
+  ComputerSetupStep,
+} from './computer-use'
 import { isComputerSetupStep } from './computer-use'
 import type { ContextReport } from './context'
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
@@ -97,6 +103,12 @@ export interface ComputerUseView {
   appPath?: string | null
   /** Whether its latest call to that app only read the window or acted on it. */
   action?: 'read' | 'act' | null
+  /** The agent, or the user once they took the app over: the agent's calls then wait. */
+  control?: ComputerControl
+  /** The window it last read or drove, for the Computer pane; null before its first. */
+  window?: { id: number; title: string | null } | null
+  /** Its latest action in that window, where the pane draws its pointer. */
+  act?: ComputerAct | null
 }
 
 export interface QueuedPrompt {

@@ -2,6 +2,7 @@
   "headerTools": {
     "board": "看板",
     "files": "文件",
+    "computer": "Computer",
     "terminal": "终端",
     "browser": "浏览器",
     "devices": "移动设备",

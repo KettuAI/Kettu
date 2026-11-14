@@ -103,10 +103,10 @@ Kettu drives agents that run shell commands, so these are not negotiable:
 - Keep `sandbox: true`, `contextIsolation: true` and `nodeIntegration: false`.
 - Never expose `ipcRenderer` or Node APIs to the renderer; expose narrow, typed methods only.
 - Treat every IPC argument as untrusted input and validate it in the main process.
-- Keep the permission handlers in `src/main/permissions.ts`: the clipboard is the only web permission granted, and only to the app's own page. Add another only with a stated reason.
+- Keep the permission handlers in `src/main/permissions.ts`: only the app's own page gets a web permission, the clipboard, and while an agent uses the computer a capture of the window it uses for the Computer pane, which the display media handler in `src/main/computer-use.ts` picks. Add another only with a stated reason.
 - Navigation away from the app and new windows stay blocked; external `http(s)` links open in the system browser.
 - The sandboxed preload can only `require('electron')`. Bundled source and type-only imports from `@shared` are fine; Node built-ins and npm packages are not.
-- Do not loosen the CSP in `src/renderer/index.html` and `src/renderer/tray.html` without a stated reason. The menu bar panel's page gets only what `src/preload/tray.ts` exposes, main takes from it only the channels `PANEL_CHANNELS` in `src/main/ipc.ts` lists, and its `tray:*` calls from that page alone.
+- Do not loosen the CSP in `src/renderer/index.html`, `src/renderer/tray.html` and `src/renderer/computer-overlay.html` without a stated reason. The menu bar panel's page gets only what `src/preload/tray.ts` exposes, main takes from it only the channels `PANEL_CHANNELS` in `src/main/ipc.ts` lists, and its `tray:*` calls from that page alone. Computer use's overlay pages get only what `src/preload/computer-overlay.ts` exposes, and main takes from them only `OVERLAY_CHANNELS`, the actions from the label's page alone.
 
 ## Commands
 

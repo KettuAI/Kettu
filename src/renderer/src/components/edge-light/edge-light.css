@@ -1,0 +1,243 @@
+/* The edge light. Three rings, each a border masked to its own width so the inner edge follows the
+   corner's radius: a wide blurred glow, a narrow bright core and a fine rim with breaks in it. The
+   colors lie on a square under each ring that turns with `rotate`, so the light moves without a
+   repaint. Outside, the light covers a band around the surface and a mask keeps it off the
+   surface itself; the layers are placed against the surface's own box. */
+.edge-light {
+  --edge-light-w: 10px;
+  --edge-light-x: 50%;
+  --edge-light-y: 50%;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: var(--edge-light-r);
+  pointer-events: none;
+}
+.edge-light[data-place='inside'] {
+  overflow: hidden;
+}
+.edge-light[data-place='outside'] {
+  inset: calc(var(--edge-light-pad) * -1);
+  border: var(--edge-light-pad) solid transparent;
+  border-radius: calc(var(--edge-light-r) + var(--edge-light-pad));
+  mask:
+    linear-gradient(black 0 0) padding-box,
+    linear-gradient(black 0 0);
+  mask-composite: exclude;
+}
+.edge-light[data-wide] {
+  --edge-light-w: 18px;
+}
+.edge-light > span {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--edge-light-r);
+  animation: edge-light-in 560ms var(--ease-out-quint) both;
+}
+.edge-light[data-out] > span {
+  animation: edge-light-out 420ms ease-in both;
+}
+.edge-light__ring,
+.edge-light__flare > i {
+  position: absolute;
+  inset: 0;
+  border: solid transparent;
+  border-radius: inherit;
+  mask:
+    linear-gradient(black 0 0) padding-box,
+    linear-gradient(black 0 0);
+  mask-composite: exclude;
+}
+.edge-light__ring {
+  container-type: size;
+}
+.edge-light__turn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* Wider than the ring's diagonal, so its corners stay covered at every turn. */
+  width: calc(100cqw + 100cqh + 240px);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: conic-gradient(
+    var(--edge-light-1),
+    var(--edge-light-2) 25%,
+    var(--edge-light-3) 50%,
+    var(--edge-light-4) 75%,
+    var(--edge-light-1)
+  );
+  animation: edge-light-turn 14s linear infinite;
+}
+
+.edge-light__glow {
+  filter: blur(14px);
+  opacity: 0.62;
+}
+.edge-light__glow > .edge-light__ring {
+  border-width: var(--edge-light-w);
+}
+.edge-light__core {
+  filter: blur(3px);
+  opacity: 0.42;
+}
+.edge-light__core > .edge-light__ring {
+  border-width: calc(var(--edge-light-w) * 0.32);
+}
+.edge-light__rim {
+  opacity: 0.55;
+}
+.edge-light__rim > .edge-light__ring {
+  border-width: 1.5px;
+}
+/* The rim breaks where the light does not reach the edge. */
+.edge-light__rim .edge-light__turn {
+  background: conic-gradient(
+    var(--edge-light-1),
+    transparent 12%,
+    transparent 22%,
+    var(--edge-light-2) 32%,
+    var(--edge-light-3) 42%,
+    transparent 54%,
+    transparent 64%,
+    var(--edge-light-4) 76%,
+    var(--edge-light-1)
+  );
+}
+.edge-light__flare {
+  filter: blur(14px);
+  animation: edge-light-flare 1100ms var(--ease-out-quint) both !important;
+}
+.edge-light__flare > i {
+  border-width: 22px;
+  background: radial-gradient(
+      circle 180px at var(--edge-light-x) var(--edge-light-y),
+      var(--edge-light-1),
+      var(--edge-light-2) 40%,
+      transparent 78%
+    )
+    border-box;
+  opacity: 0.7;
+}
+
+/* Around a thing the light reaches further out, and stronger. */
+.edge-light[data-place='outside'] .edge-light__glow {
+  inset: -6px;
+  border-radius: calc(var(--edge-light-r) + 6px);
+  filter: blur(18px);
+  opacity: 0.95;
+}
+.edge-light[data-place='outside'] .edge-light__glow > .edge-light__ring {
+  border-width: calc(var(--edge-light-w) * 2.2);
+}
+.edge-light[data-place='outside'] .edge-light__core {
+  inset: -2px;
+  border-radius: calc(var(--edge-light-r) + 2px);
+  filter: blur(5px);
+  opacity: 0.7;
+}
+.edge-light[data-place='outside'] .edge-light__core > .edge-light__ring {
+  border-width: calc(var(--edge-light-w) * 0.5);
+}
+.edge-light[data-place='outside'] .edge-light__rim {
+  inset: -1px;
+  border-radius: calc(var(--edge-light-r) + 1px);
+  opacity: 0.8;
+}
+.edge-light[data-place='outside'] .edge-light__flare {
+  inset: -10px;
+  border-radius: calc(var(--edge-light-r) + 10px);
+}
+.edge-light[data-place='outside'] .edge-light__flare > i {
+  border-width: 30px;
+  opacity: 0.9;
+}
+.edge-light[data-wide] .edge-light__glow {
+  filter: blur(26px);
+}
+.edge-light[data-wide] .edge-light__core {
+  filter: blur(7px);
+  opacity: 0.9;
+}
+
+/* The dark page swallows light laid over it, so there it adds. */
+[data-theme='dark'] .edge-light__glow,
+[data-theme='dark'] .edge-light__core,
+[data-theme='dark'] .edge-light__flare {
+  mix-blend-mode: plus-lighter;
+}
+[data-theme='dark'] .edge-light__glow {
+  opacity: 0.82;
+}
+[data-theme='dark'] .edge-light__core {
+  opacity: 0.62;
+}
+[data-theme='dark'] .edge-light[data-place='outside'] .edge-light__glow {
+  opacity: 0.95;
+}
+
+@keyframes edge-light-turn {
+  to {
+    rotate: 1turn;
+  }
+}
+/* It grows out of the edge it lights. */
+@keyframes edge-light-in {
+  from {
+    opacity: 0;
+    scale: 0.985;
+  }
+}
+@keyframes edge-light-out {
+  to {
+    opacity: 0;
+    scale: 0.985;
+  }
+}
+.edge-light[data-place='inside'] > span {
+  animation-name: edge-light-in-inside;
+}
+.edge-light[data-place='inside'][data-out] > span {
+  animation-name: edge-light-out-inside;
+}
+@keyframes edge-light-in-inside {
+  from {
+    opacity: 0;
+    scale: 1.015;
+  }
+}
+@keyframes edge-light-out-inside {
+  to {
+    opacity: 0;
+    scale: 1.015;
+  }
+}
+@keyframes edge-light-flare {
+  0% {
+    opacity: 0;
+  }
+  16% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Still: no turn, no answer to actions, and it comes and goes at once. */
+.edge-light[data-still],
+.edge-light[data-still] * {
+  animation: none !important;
+}
+:root[data-reduce-motion='always'] .edge-light,
+:root[data-reduce-motion='always'] .edge-light * {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .edge-light,
+  .edge-light * {
+    animation: none !important;
+  }
+  .edge-light__flare {
+    display: none;
+  }
+}

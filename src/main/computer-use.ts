@@ -2,10 +2,11 @@
 // about Kettu's own processes, and the macOS permissions Kettu holds for the driver, which
 // Settings shows and asks for. The driver is Kettu's child, so its grants are Kettu's.
 
-import { app, desktopCapturer, shell, systemPreferences } from 'electron'
+import { app, desktopCapturer, shell, systemPreferences, type Session } from 'electron'
 import { access, constants } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type {
+  ComputerHold,
   ComputerPermission,
   ComputerPermissionKind,
   ComputerUseStatus,
@@ -108,4 +109,35 @@ export function computerAppIcon(path: string): Promise<string | null> {
     if (icons.size > ICONS_KEPT) icons.delete(icons.keys().next().value!)
   }
   return icon
+}
+
+/**
+ * The Computer pane's live picture: a page's request to capture the screen gets the one window the
+ * session holding the computer uses, picked here and never by the page, and only the window's own
+ * page asks with any effect. The picture stays in that page; nothing sends it on.
+ */
+export function serveComputerCapture(
+  session: Session,
+  hold: () => ComputerHold | null,
+  isOwnPage: (url: string | undefined) => boolean,
+): void {
+  session.setDisplayMediaRequestHandler(
+    (request, callback) => {
+      const window = hold()?.window
+      const frame = request.frame
+      if (!window || !frame || frame.parent !== null || !isOwnPage(frame.url)) {
+        callback(null)
+        return
+      }
+      desktopCapturer
+        .getSources({ types: ['window'], thumbnailSize: { width: 0, height: 0 } })
+        .then((sources) => {
+          // A source is named `window:<id>:<n>`, its id the one the driver gives the window.
+          const source = sources.find((found) => found.id.startsWith(`window:${window.id}:`))
+          callback(source && hold()?.window?.id === window.id ? { video: source } : null)
+        })
+        .catch(() => callback(null))
+    },
+    { useSystemPicker: false },
+  )
 }

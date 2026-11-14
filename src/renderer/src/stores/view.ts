@@ -107,7 +107,7 @@ export const PINNED_GROUP = 'pinned'
 export const THIS_COMPUTER = 'this-computer'
 
 /** What the side panel shows; one pane at a time. An artifact's pane opens from the thread. */
-export type SidePane = 'terminal' | 'files' | 'browser' | 'devices' | 'artifact'
+export type SidePane = 'terminal' | 'files' | 'browser' | 'devices' | 'computer' | 'artifact'
 
 // No session id takes this form, so New session's panel in a project has a key of its own.
 const NEW_SESSION_PANEL = 'new-session:'
@@ -259,10 +259,11 @@ useViewStore.subscribe((state) => {
       hostFilter: state.hostFilter,
       expandedParents: state.expandedParents,
       showFinishedSubagents: state.showFinishedSubagents,
-      // An artifact's pane is not remembered: it opens from the thread, for the work at hand.
+      // An artifact's pane is not remembered: it opens from the thread, for the work at hand;
+      // nor the Computer pane, which shows only while the session uses the computer.
       sidePanes: Object.fromEntries(
         Object.entries(state.sidePane)
-          .filter(([, pane]) => pane !== 'artifact')
+          .filter(([, pane]) => pane !== 'artifact' && pane !== 'computer')
           .slice(-REMEMBERED_PANELS),
       ),
       boardOpen: Object.fromEntries(Object.entries(state.boardOpen).slice(-REMEMBERED_PANELS)),

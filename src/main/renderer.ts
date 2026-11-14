@@ -6,8 +6,13 @@ import { is } from '@electron-toolkit/utils'
 /** Where the renderer loads from: the dev server in development, else the built index.html. */
 export type RendererEntry = { kind: 'dev-server'; url: string } | { kind: 'file'; path: string }
 
-/** The renderer's pages: the main window's, the menu bar panel's and the page overlay's. */
-export type RendererPage = 'index' | 'tray' | 'overlay'
+/**
+ * The renderer's pages: the main window's, the menu bar panel's, the page overlay's, and computer
+ * use's overlay, the light and the label drawn over the desktop while Kettu is in the background.
+ */
+export type RendererPage = 'index' | 'tray' | 'overlay' | 'computer-overlay'
+
+const PAGES: readonly RendererPage[] = ['index', 'tray', 'overlay', 'computer-overlay']
 
 const devServerUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
 
@@ -21,6 +26,7 @@ const entries: Record<RendererPage, RendererEntry> = {
   index: entryOf('index'),
   tray: entryOf('tray'),
   overlay: entryOf('overlay'),
+  'computer-overlay': entryOf('computer-overlay'),
 }
 
 /** The page the overlay over a browser page loads, and its address once loaded. */
@@ -30,14 +36,19 @@ export function overlayEntry(): RendererEntry & { url: string } {
   return { ...entry, url: pathToFileURL(entry.path).href }
 }
 
-export function loadRenderer(window: BrowserWindow, page: RendererPage = 'index'): Promise<void> {
+export function loadRenderer(
+  window: BrowserWindow,
+  page: RendererPage = 'index',
+  hash?: string,
+): Promise<void> {
   const entry = entries[page]
-  return entry.kind === 'dev-server' ? window.loadURL(entry.url) : window.loadFile(entry.path)
+  if (entry.kind === 'file') return window.loadFile(entry.path, hash ? { hash } : undefined)
+  return window.loadURL(hash ? `${entry.url}#${hash}` : entry.url)
 }
 
 /**
  * Whether a URL is one of the app's own pages that may call main, as opposed to remote content.
- * The page overlay is not one: it speaks only over its own channel.
+ * The overlays are not: each speaks only over its own channels.
  */
 export function isRendererUrl(url: string | undefined): boolean {
   const page = rendererPage(url)
@@ -49,14 +60,12 @@ export function isRendererUrl(url: string | undefined): boolean {
  * shares one origin, so a page there is told by its path.
  */
 export function rendererPage(url: string | undefined): RendererPage | null {
-  const pages: RendererPage[] = ['index', 'tray', 'overlay']
-  if (!pages.some((page) => matchesRendererEntry(url, entries[page]))) return null
-  if (entries.tray.kind === 'file') {
-    if (matchesRendererEntry(url, entries.overlay)) return 'overlay'
-    return matchesRendererEntry(url, entries.tray) ? 'tray' : 'index'
+  if (entries.index.kind === 'file') {
+    return PAGES.find((page) => matchesRendererEntry(url, entries[page])) ?? null
   }
+  if (!matchesRendererEntry(url, entries.index)) return null
   const path = URL.parse(url!)?.pathname
-  return path === '/tray.html' ? 'tray' : path === '/overlay.html' ? 'overlay' : 'index'
+  return PAGES.find((page) => page !== 'index' && path === `/${page}.html`) ?? 'index'
 }
 
 /**

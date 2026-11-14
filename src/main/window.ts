@@ -47,7 +47,46 @@ export function markPanel(window: BrowserWindow): void {
 /** Whether `contents` is the menu bar panel's page. */
 export function isPanel(contents: WebContents): boolean {
   const window = BrowserWindow.fromWebContents(contents)
-  return window !== null && panels.has(window)
+  return window !== null && panels.has(window) && !overlays.has(window)
+}
+
+// Computer use's windows over the desktop: never the one to talk to, and none of the app's.
+const overlays = new WeakSet<BrowserWindow>()
+let creatingOverlay = false
+
+/**
+ * Creates one of computer use's windows over the desktop. Each is a panel to the rest of the app,
+ * and the hooks every new window gets, which run while it is being created, can tell it apart.
+ */
+export function createOverlayWindow(
+  options: Electron.BrowserWindowConstructorOptions,
+): BrowserWindow {
+  creatingOverlay = true
+  try {
+    const window = new BrowserWindow(options)
+    overlays.add(window)
+    panels.add(window)
+    return window
+  } finally {
+    creatingOverlay = false
+  }
+}
+
+/** Whether `window` is one of computer use's windows, or one being created. */
+export function isOverlayWindow(window: BrowserWindow): boolean {
+  return creatingOverlay || overlays.has(window)
+}
+
+/** Whether `contents` is the page of one of computer use's windows. */
+export function isOverlay(contents: WebContents): boolean {
+  const window = BrowserWindow.fromWebContents(contents)
+  return window !== null && overlays.has(window)
+}
+
+/** Whether one of the app's own windows, not a panel or overlay, has the focus. */
+export function appFocused(): boolean {
+  const focused = BrowserWindow.getFocusedWindow()
+  return focused !== null && !focused.isDestroyed() && !panels.has(focused)
 }
 
 // The overlays over the browser's pages: the app's own page in a view, which may call main only

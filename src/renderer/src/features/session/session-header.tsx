@@ -166,7 +166,12 @@ export function SessionHeader({
         <ViewersChip sessionId={summary.id} projectPath={summary.projectPath} />
       </NoDrag>
       <span className="flex-1" />
-      <HeaderTools projectPath={summary.projectPath} panel={summary.id} />
+      <HeaderTools
+        projectPath={summary.projectPath}
+        panel={summary.id}
+        summary={summary}
+        session={session}
+      />
     </TopBar>
   )
 }
