@@ -66,8 +66,15 @@ export function AccessCard({
     answer: (answer: string) => string
   }
   request: (decision: AccessDecision) => Promise<void>
-  /** Another action in place of the lasting allow, which answers nothing by itself; null for none. */
-  trailing?: { glyph: IconSvgElement; label: string; onClick: () => void } | null
+  /**
+   * Another action in place of the lasting allow, which answers nothing by itself; null for none.
+   * `mark` draws its own icon in place of `glyph`'s.
+   */
+  trailing?:
+    | ({ label: string; onClick: () => void } & (
+        { glyph: IconSvgElement; mark?: never } | { mark: ReactNode; glyph?: never }
+      ))
+    | null
   /** The card's title in place of "wants to", from the agent's name and the action. */
   title?: (agent: string, action: string) => ReactNode
 }) {
@@ -142,7 +149,7 @@ export function AccessCard({
               disabled={answering !== null}
               onClick={trailing.onClick}
             >
-              <Icon icon={trailing.glyph} size={14} />
+              {trailing.glyph ? <Icon icon={trailing.glyph} size={14} /> : trailing.mark}
               {trailing.label}
             </button>
           ) : (

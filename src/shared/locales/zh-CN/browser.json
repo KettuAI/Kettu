@@ -8,8 +8,108 @@
     "title": "尚未打开页面",
     "noSession": "没有正在显示的会话",
     "noSessionHint": "打开一个会话后即可使用浏览器。",
-    "hint": "{{agent}} 打开的页面也会显示在这里，并沿用你在此浏览器中的登录。",
+    "hint": "{{agent}} 打开的页面也会显示在这里，并沿用你在此浏览器中登录或带来的登录。",
     "agent": "Agent"
+  },
+  "signIns": {
+    "title": "从其他浏览器带来登录",
+    "titleOne": "使用 {{browser}} 里的登录",
+    "steps": {
+      "label": "第 {{step}} 步，共 3 步",
+      "browser": "浏览器",
+      "sites": "网站",
+      "import": "导入"
+    },
+    "lead": "Kettu 把你选的网站的登录复制到自己的浏览器里，Agent 在那里打开它们时就是登录状态。密码、passkey、历史记录和书签都留在原处。",
+    "browsers": "浏览器",
+    "sites_one": "{{count}} 个网站有登录",
+    "sites_other": "{{count}} 个网站有登录",
+    "unavailable": {
+      "safari": "Safari 把登录放在只有拥有完全磁盘访问权限的 App 才能读的地方，暂不支持。",
+      "windowsLocked": "{{browser}} 在 Windows 上把登录锁给自己，其他 App 读不到。",
+      "linuxKeyring": "{{browser}} 把登录的钥匙放在系统钥匙环里，Kettu 读不到。"
+    },
+    "noBrowsers": "这台电脑上没有找到有登录的浏览器。",
+    "readFailed": "读不到你的浏览器：{{error}}",
+    "nothingUnlocked": "选好网站之前，什么都不会解锁。",
+    "search": "搜索 {{count}} 个网站",
+    "searchLabel": "搜索网站",
+    "noMatch": "没有网站匹配“{{query}}”。",
+    "noSites": "{{browser}} 的这个配置文件里没有登录。",
+    "groups": {
+      "recent": "最近 30 天用过",
+      "recentNote": "已为你选好",
+      "held": "默认不带，除非你选上",
+      "heldNote": "邮箱、银行和用来登录其他网站的网站",
+      "google": "带不过来"
+    },
+    "kind": {
+      "email": "邮箱",
+      "banking": "银行",
+      "sso": "用来登录其他网站"
+    },
+    "google": "{{browser}} 把 Google 的登录绑在这台电脑上。在 Kettu 的浏览器里登录一次 Google 就好。",
+    "more_one": "另外 {{count}} 个网站",
+    "more_other": "另外 {{count}} 个网站",
+    "used": {
+      "today": "今天用过",
+      "yesterday": "昨天用过",
+      "days": "{{count}} 天前",
+      "lastWeek": "上周",
+      "weeks": "{{count}} 周前"
+    },
+    "picked": "已选 <b>{{picked}}</b> 个，共 {{total}} 个网站",
+    "pickedKeychain": "已选 <b>{{picked}}</b> 个，共 {{total}} 个网站 · 接下来 macOS 会要你的密码",
+    "bring_one": "带来 {{count}} 个网站",
+    "bring_other": "带来 {{count}} 个网站",
+    "unlock": {
+      "title": "macOS 会要你的 Mac 密码",
+      "body": "在 macOS 弹出的窗口里输入密码，然后选“允许”。Kettu 只读你选的 {{count}} 个网站的登录，别的都不读。",
+      "bodyOne": "在 macOS 弹出的窗口里输入密码，然后选“允许”。只读这一个网站的登录。",
+      "always": "选“始终允许”的话，这台 Mac 上的任何 App 以后都能不经询问读到 {{browser}} 的登录。"
+    },
+    "prompt": {
+      "label": "macOS 弹出的窗口",
+      "ask": "“{{app}}”想要使用您存储在钥匙串的“{{item}}”中的机密信息。",
+      "password": "要允许此操作，请输入“登录”钥匙串密码。",
+      "field": "密码：",
+      "alwaysAllow": "始终允许",
+      "deny": "拒绝",
+      "allow": "允许"
+    },
+    "waiting": "正在等待 macOS…",
+    "bringing": "正在带来登录…",
+    "from": "来自 {{browser}} · {{profile}}",
+    "done": {
+      "title_one": "已登录 {{count}} 个网站",
+      "title_other": "已登录 {{count}} 个网站",
+      "body": "Agent 在 Kettu 的浏览器里打开这些网站时就是登录状态。以后某个网站把你登出了，就在那里登录，或者再带来一次。",
+      "note": "随时可以在设置 › 浏览器里带来更多。",
+      "none": "什么都没带过来",
+      "noneBody": "{{browser}} 里已经没有这些网站的登录了。请在 Kettu 的浏览器里登录它们。"
+    },
+    "denied": {
+      "title": "{{browser}} 的登录没有解锁",
+      "body": "macOS 没有放行，什么都没带过来。再试一次并选“允许”，或者在 Kettu 的浏览器里逐个登录。"
+    },
+    "failed": {
+      "title": "读不到 {{browser}} 的登录",
+      "body": "什么都没带过来。再试一次，或者在 Kettu 的浏览器里登录这个网站。"
+    },
+    "actions": {
+      "continue": "继续",
+      "back": "返回",
+      "cancel": "取消",
+      "close": "关闭",
+      "done": "完成",
+      "tryAgain": "再试一次",
+      "signInHere": "在 Kettu 里登录"
+    },
+    "signedIn": "已用 {{browser}} 里的登录登录 {{site}}",
+    "chip": "使用 {{browser}} 里的登录",
+    "chipTitle": "使用 {{browser}} 的 {{profile}} 配置文件里 {{site}} 的登录",
+    "offer": "从 {{browser}} 带来你的登录",
+    "offerNote": "选好网站就行，密码留在 {{browser}} 里。"
   },
   "loading": "正在加载",
   "actions": {

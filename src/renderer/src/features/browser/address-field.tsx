@@ -1,4 +1,4 @@
-import { useState, type Ref } from 'react'
+import { useState, type ReactNode, type Ref } from 'react'
 import { Globe02Icon, SquareLock02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { PaneIcon } from '@renderer/features/shell/panel-button'
@@ -15,12 +15,15 @@ export function AddressField({
   className,
   autoFocus,
   ref,
+  trailing,
 }: {
   url: string | null
   onNavigate: (url: string) => void
   className?: string
   autoFocus?: boolean
   ref?: Ref<HTMLInputElement>
+  /** What sits at the field's end while it is not being edited, such as a sign-in to use. */
+  trailing?: ReactNode
 }) {
   const { t } = useTranslation('browser')
   const shown = (url ? addressText(url) : '') ?? ''
@@ -89,6 +92,7 @@ export function AddressField({
           }
         }}
       />
+      {!editing && trailing}
     </label>
   )
 }

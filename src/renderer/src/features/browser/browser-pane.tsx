@@ -31,6 +31,7 @@ import { panelSession, toggleSidePane } from '@renderer/stores/view'
 import { addressText } from './address'
 import { AddressField } from './address-field'
 import { OriginBar } from './origin-bar'
+import { BringSignInsOffer, SignInChip } from './sign-in-offer'
 
 /** The side panel's Browser pane: one page per session, drawn by main over the pane's page area. */
 export function BrowserPane({ panel, maximized }: { panel: string; maximized: boolean }) {
@@ -233,7 +234,18 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                   <PaneIcon icon={ReloadIcon} />
                 </PanelButton>
               )}
-              <AddressField ref={address} url={url} onNavigate={navigate} />
+              <AddressField
+                ref={address}
+                url={url}
+                onNavigate={navigate}
+                trailing={
+                  <SignInChip
+                    url={url}
+                    sessionId={sessionId}
+                    hidden={state.control.kind === 'agent'}
+                  />
+                }
+              />
               {state.loading && (
                 <span role="progressbar" aria-label={t('loading')} className="kp-load" />
               )}
@@ -276,6 +288,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                   <AddressField url={null} onNavigate={navigate} autoFocus />
                 </div>
               )}
+              {sessionId && <BringSignInsOffer />}
             </PaneEmpty>
             {/* Main keeps a closed page's view hidden, but still needs a place for the next one. */}
             <div ref={page} hidden />

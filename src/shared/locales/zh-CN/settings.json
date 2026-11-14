@@ -405,9 +405,21 @@
     }
   },
   "browser": {
+    "signIns": {
+      "name": "从其他浏览器带来登录",
+      "description": "复制你选的网站的登录。密码和 passkey 留在原处。",
+      "keywords": "登录 cookie 导入 chrome edge brave arc firefox 浏览器 会话 sign in login import",
+      "button": "带来登录…",
+      "from": "来自 {{browser}} · {{profile}} · {{date}}",
+      "remove": "移除",
+      "removed": "Kettu 的浏览器已退出 {{site}}",
+      "removeFailed": "无法移除 {{site}}：{{reason}}",
+      "showAll": "显示全部 {{count}} 个网站",
+      "showFewer": "收起"
+    },
     "clearData": {
       "name": "清除浏览数据",
-      "description": "浏览器打开过的每个网站的 Cookie、存储和缓存。",
+      "description": "Kettu 浏览器的登录、cookie、存储和缓存，包括从其他浏览器带来的。",
       "keywords": "browser cookies cache storage site data privacy 浏览器 Cookie 缓存 数据",
       "button": "清除…",
       "dialogTitle": "清除浏览数据？",
@@ -416,6 +428,7 @@
       "cleared": "浏览数据已清除"
     },
     "groups": {
+      "signIns": "登录状态",
       "links": "Agent 给出的链接",
       "siteData": "站点数据",
       "allowedSites": "始终允许"
@@ -979,7 +992,7 @@
     "sharing": "把 artifact 发布为链接，发布到 Kettu 或你自己的 Cloudflare 账号；发布到 Kettu 的可以选择谁能打开。",
     "remote": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用这台电脑的会话。",
     "remote_web": "在 iPhone、iPad 或另一台电脑上的 Kettu 里使用 {{host}} 的会话。",
-    "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
+    "browser": "登录状态、Agent 给出的链接在哪里打开，以及它们可以使用的网站。",
     "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
     "memory": "Agent 记下的关于你和各个项目的事，存在这台电脑上，交给每个 Agent。",

@@ -24,6 +24,15 @@ import type { DirectAddress } from './remote/protocol'
 import type { RemoteStatus } from './remote/status'
 import type { AgentColor, SettingsFile, SettingsPatch } from './settings'
 import type {
+  BroughtSite,
+  SignInChoice,
+  SignInOffer,
+  SignInRequest,
+  SignInResult,
+  SignInSite,
+  SignInSource,
+} from './signins'
+import type {
   ShareAccess,
   SharingConnectResult,
   SharingOpenResult,
@@ -436,6 +445,19 @@ export interface IpcInvokeContract {
     args: [sessionId: string, requestId: number, decision: BrowserOriginDecision]
     result: void
   }
+  /** The user's own browsers and profiles, with how many sites have sign-ins in each. */
+  'sign-ins:sources': { args: []; result: SignInSource[] }
+  /** A profile's sites with sign-ins; hosts and times only. */
+  'sign-ins:sites': { args: [choice: SignInChoice]; result: SignInSite[] }
+  /** Copies the chosen sites' cookies into Kettu's browser; on macOS the system asks first. */
+  'sign-ins:bring': { args: [request: SignInRequest]; result: SignInResult }
+  /** Stops a bring that waits for the keychain. */
+  'sign-ins:cancel': { args: []; result: void }
+  'sign-ins:brought': { args: []; result: BroughtSite[] }
+  /** Signs Kettu's browser out of a brought site. */
+  'sign-ins:remove': { args: [site: string]; result: void }
+  /** The sign-in another browser has for a page's site, when Kettu's browser lacks one. */
+  'sign-ins:offer': { args: [url: string]; result: SignInOffer | null }
   /** This computer as computer use sees it: the driver, and the permissions on macOS. */
   'computer:status': { args: []; result: ComputerUseStatus }
   /** Asks macOS for a permission computer use needs, or opens its pane in System Settings. */
@@ -486,6 +508,8 @@ export interface IpcEventContract {
   /** A session's agent opened a mobile device, which the pane shows if the panel is free. */
   'devices:opened': { sessionId: string; deviceId: string }
   'browser:site-icon': SiteIconEvent
+  /** The sites brought from other browsers changed. */
+  'sign-ins:changed': BroughtSite[]
   /** To the menu bar panel: it came forward. */
   'tray:shown': null
 }
@@ -922,6 +946,17 @@ export interface KettuApi {
     onState(listener: (state: BrowserState) => void): () => void
     /** An agent opened a session's page for the first time. */
     onOpened(listener: (event: { sessionId: string }) => void): () => void
+  }
+  /** Sign-ins brought from the user's own browsers into Kettu's, by site. */
+  signIns: {
+    sources(): Promise<SignInSource[]>
+    sites(choice: SignInChoice): Promise<SignInSite[]>
+    bring(request: SignInRequest): Promise<SignInResult>
+    cancel(): Promise<void>
+    brought(): Promise<BroughtSite[]>
+    remove(site: string): Promise<void>
+    offer(url: string): Promise<SignInOffer | null>
+    onChanged(listener: (sites: BroughtSite[]) => void): () => void
   }
   /** What the user chose to attach, granted to the agent host by main; never a path. */
   attachments: {

@@ -523,6 +523,17 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
       onState: never,
       onOpened: never,
     },
+    // Kettu's browser runs in the desktop app, so there is nothing to bring sign-ins into.
+    signIns: {
+      sources: async () => [],
+      sites: () => unsupported('bring sign-ins'),
+      bring: () => unsupported('bring sign-ins'),
+      cancel: async () => {},
+      brought: async () => [],
+      remove: () => unsupported('bring sign-ins'),
+      offer: async () => null,
+      onChanged: never,
+    },
     attachments: {
       // The page picks and reads files itself and sends their bytes.
       pick: async () => [],

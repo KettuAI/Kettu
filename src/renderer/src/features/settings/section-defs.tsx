@@ -71,6 +71,8 @@ import { useCloudOffHere } from './use-cloud-off-here'
 import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { GroupNote } from './rows'
+import { BROUGHT_SHOWN, useBroughtSites } from './brought-sites'
+import { BringSignInsRow, BroughtMoreRow, BroughtSiteRow } from './sign-ins-rows'
 import { HostPage } from './host-page'
 import { hostLine, platformName, webHostLine } from './host-text'
 import { AccountHostRow, AccountHostsActions, AccountHostsState } from './host-account'
@@ -836,7 +838,52 @@ export function useBrowserSection(): SectionDef {
     ),
   })
   const links = group('links-from-agents', t('browser.groups.links'))
+  const brought = useBroughtSites()
+  const [allBrought, setAllBrought] = useState(false)
+  const signIns = group('sign-ins', t('browser.groups.signIns'))
+  const shownBrought = allBrought ? (brought ?? []) : (brought ?? []).slice(0, BROUGHT_SHOWN)
+  // Kettu's browser, which sign-ins are brought into, runs in the desktop app alone.
+  const signInRows: RowDef[] = isWeb
+    ? []
+    : [
+        {
+          id: 'bring-sign-ins',
+          name: t('browser.signIns.name'),
+          english: en('browser.signIns.name'),
+          description: t('browser.signIns.description'),
+          keywords: t('browser.signIns.keywords'),
+          group: signIns,
+          layout: 'custom',
+          render: () => <BringSignInsRow />,
+        },
+        ...shownBrought.map((site): RowDef => ({
+          id: `brought-${site.site}`,
+          name: site.site,
+          keywords: t('browser.signIns.keywords'),
+          group: signIns,
+          layout: 'custom',
+          render: () => <BroughtSiteRow site={site} />,
+        })),
+        ...((brought?.length ?? 0) > BROUGHT_SHOWN
+          ? [
+              {
+                id: 'brought-more',
+                name: t('browser.signIns.showAll', { count: brought!.length }),
+                group: signIns,
+                layout: 'custom',
+                render: () => (
+                  <BroughtMoreRow
+                    count={brought!.length}
+                    all={allBrought}
+                    onToggle={() => setAllBrought((all) => !all)}
+                  />
+                ),
+              } satisfies RowDef,
+            ]
+          : []),
+      ]
   const rows: RowDef[] = [
+    ...signInRows,
     {
       id: 'open-links-in',
       name: t('browser.openLinksIn.name'),

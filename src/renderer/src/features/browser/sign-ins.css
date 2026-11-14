@@ -1,0 +1,671 @@
+/* Bringing sign-ins from the user's own browsers: the dialog and its steps, the address field's
+   chip and the empty browser's offer. Colors and motion come from the theme's tokens. */
+
+.ksi {
+  display: flex;
+  flex-direction: column;
+  max-height: min(680px, calc(100vh - 64px));
+  overflow: hidden;
+}
+.ksi-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px 12px 0 20px;
+}
+.ksi-head__title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.ksi-head__title > h2 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--shell-ink);
+}
+.ksi-steps {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--shell-faint);
+}
+.ksi-steps > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ksi-steps i {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--shell-line-strong);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+}
+.ksi-steps [data-on] {
+  font-weight: 500;
+  color: var(--shell-ink);
+}
+.ksi-steps [data-on] i {
+  background: var(--shell-button);
+  box-shadow: none;
+  color: var(--shell-on-ink);
+}
+.ksi-steps [data-done] {
+  color: var(--shell-muted);
+}
+.ksi-steps [data-done] svg {
+  color: var(--success);
+}
+.ksi-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px 20px;
+  animation: ksi-rise 300ms var(--ease-out-quint) both;
+}
+.ksi-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 19px;
+  color: var(--shell-text);
+}
+.ksi-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 16px 20px;
+  border-top: var(--hairline) solid var(--shell-line-soft);
+}
+.ksi-note {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--shell-muted);
+}
+.ksi-note b {
+  font-weight: 600;
+  color: var(--shell-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Step 1: the browsers, a card of rows each with its radio at the end. */
+.ksi-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--bg-surface);
+  box-shadow: var(--shell-card-shadow);
+}
+.ksi-src {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 9px 14px;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.ksi-src + .ksi-src {
+  box-shadow: inset 0 var(--hairline) 0 var(--shell-line-soft);
+}
+.ksi-src:not([data-disabled]):hover {
+  background: var(--shell-hover);
+}
+.ksi-src[data-disabled] .ksi-src__mark {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+.ksi-src[data-disabled] b {
+  color: var(--shell-muted);
+}
+.ksi-src__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+}
+.ksi-src__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ksi-src__text b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--shell-ink);
+}
+.ksi-src__text small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--shell-muted);
+}
+.ksi-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: -5px;
+  padding: 0 5px;
+  border-radius: 5px;
+  color: var(--shell-text);
+}
+.ksi-profile:hover,
+.ksi-profile[aria-expanded='true'] {
+  background: var(--shell-chip);
+}
+
+/* Step 2: the sites, searchable, in groups. */
+.ksi-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 10px;
+  background: var(--bg-surface);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--shell-line-strong),
+    var(--elevation-control);
+  color: var(--shell-faint);
+}
+.ksi-search:focus-within {
+  box-shadow:
+    inset 0 0 0 1px var(--border-default),
+    0 0 0 3px var(--bg-hover);
+}
+.ksi-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--shell-ink);
+}
+.ksi-search input::placeholder {
+  color: var(--shell-faint);
+}
+.ksi-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  margin: 0 -20px;
+  padding: 2px 20px 4px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.ksi-group {
+  display: flex;
+  flex-direction: column;
+}
+.ksi-group__label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 2px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--shell-ink);
+}
+.ksi-group__label small {
+  font-weight: 400;
+  color: var(--shell-muted);
+}
+.ksi-site {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-radius: 9px;
+  text-align: left;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.ksi-site:not([data-off]):hover {
+  background: var(--shell-hover);
+}
+.ksi-site[data-off] {
+  align-items: flex-start;
+  padding-left: 34px;
+}
+.ksi-site__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.ksi-site__text b {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--shell-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ksi-site__text small {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--shell-muted);
+}
+.ksi-site__note {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--shell-faint);
+}
+.ksi-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--shell-muted);
+}
+.ksi-more:hover {
+  background: var(--shell-hover);
+  color: var(--shell-ink);
+}
+.ksi-more svg {
+  transition: transform var(--duration-fast) var(--ease-standard);
+}
+.ksi-more[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.ksi-empty {
+  margin: 0;
+  padding: 18px 4px;
+  font-size: 12.5px;
+  color: var(--shell-muted);
+  text-align: center;
+}
+
+/* A site's tile: its icon when Kettu's browser has one, else its first letter. */
+.ksi-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  overflow: hidden;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--tile-ink);
+}
+.ksi-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ksi-tile[data-icon] {
+  background: var(--bg-surface);
+}
+.ksi-tile--lg {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-size: 10.5px;
+}
+
+/* Step 3: macOS's prompt drawn beside what to do in it. */
+.ksi-unlock {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 4px 0 6px;
+}
+.ksi-how {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ksi-how > b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--shell-ink);
+}
+.ksi-how p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--shell-text);
+}
+.ksi-how p + p {
+  color: var(--shell-muted);
+}
+.ksi-onesite {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--shell-chip);
+  font-size: 12.5px;
+}
+/* The site's name keeps its room; where it came from wraps beside it. */
+.ksi-onesite b {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--shell-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ksi-onesite small {
+  flex: 1 1 0;
+  min-width: 64px;
+  font-size: 11px;
+  line-height: 13px;
+  color: var(--shell-muted);
+}
+.ksi-kc {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  width: 236px;
+  padding: 16px 14px 12px;
+  border-radius: 12px;
+  background: var(--keychain-prompt);
+  box-shadow:
+    0 0 0 var(--hairline) var(--keychain-prompt-edge),
+    0 14px 30px -12px var(--keychain-prompt-shade);
+  font-family: -apple-system, 'SF Pro Text', var(--font-sans);
+  color: var(--keychain-prompt-ink);
+  transform: rotate(-1.2deg);
+}
+.ksi-kc__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--keychain-prompt-field);
+  box-shadow: 0 0 0 var(--hairline) var(--keychain-prompt-edge);
+  color: var(--keychain-prompt-icon);
+}
+.ksi-kc p {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 14px;
+}
+.ksi-kc p:first-of-type {
+  font-weight: 600;
+}
+.ksi-kc p + p {
+  color: var(--keychain-prompt-muted);
+}
+.ksi-kc__field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+.ksi-kc__field span {
+  flex: 1;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--keychain-prompt-field);
+  box-shadow: inset 0 0 0 var(--hairline) var(--keychain-prompt-edge);
+  font-size: 10px;
+  line-height: 20px;
+  letter-spacing: 1px;
+}
+.ksi-kc__btns {
+  display: flex;
+  gap: 5px;
+  margin-top: 2px;
+}
+.ksi-kc__gap {
+  flex: 1;
+}
+.ksi-kc__btn {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: var(--keychain-prompt-field);
+  box-shadow: 0 0 0 var(--hairline) var(--keychain-prompt-edge);
+  font-size: 10px;
+  line-height: 20px;
+}
+.ksi-kc__btn[data-pick] {
+  position: relative;
+  background: var(--keychain-prompt-default);
+  color: var(--keychain-prompt-default-ink);
+  box-shadow: 0 0 0 3px var(--keychain-prompt-default-ring);
+}
+/* A soft ring that breathes around the button to choose, drawn once and faded in and out. */
+.ksi-kc__btn[data-pick]::after {
+  position: absolute;
+  inset: -3px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--keychain-prompt-default) 12%, transparent);
+  opacity: 0;
+  content: '';
+  pointer-events: none;
+  animation: ksi-pick 1600ms ease-in-out infinite;
+}
+
+/* The end of the import: a mark, what happened and the sites that came over. */
+.ksi-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px 6px;
+  text-align: center;
+}
+.ksi-result__mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: var(--success-tint);
+  color: var(--success);
+  animation: ksi-mark 420ms var(--ease-out-quint) both;
+}
+.ksi-result[data-tone='warn'] .ksi-result__mark {
+  background: none;
+  color: var(--shell-text);
+}
+.ksi-result > b {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--shell-ink);
+}
+.ksi-result p {
+  max-width: 400px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--shell-text);
+}
+.ksi-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 470px;
+  max-height: 160px;
+  margin-top: 12px;
+  overflow: auto;
+}
+.ksi-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px 0 5px;
+  border-radius: 8px;
+  background: var(--shell-chip);
+  font-size: 12px;
+  color: var(--shell-text);
+}
+.ksi-chip .ksi-tile {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  font-size: 9px;
+}
+
+/* Settings › Browser: the Bring row's note wraps, since what stays behind is the point of it. */
+.ui-sg-row.ksi-bring-row .k-lines > small {
+  white-space: normal;
+}
+
+/* Settings › Browser: Show all under the first brought sites, lined up with their names. */
+.ui-sg-row.ksi-brought-more {
+  justify-content: flex-start;
+  min-height: 40px;
+}
+.ksi-brought-more button {
+  padding-left: 36px;
+  font-size: 12.5px;
+  color: var(--shell-accent);
+}
+.ksi-brought-more button:hover {
+  text-decoration: underline;
+}
+
+/* The address field's offer of the site's sign-in from another browser. */
+.ksi-addr-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  margin-right: -6px;
+  padding: 0 8px 0 6px;
+  border-radius: 6px;
+  background: var(--shell-accent-soft);
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--shell-accent);
+  white-space: nowrap;
+  animation: ksi-rise 320ms var(--ease-out-quint) both;
+}
+.ksi-addr-chip:hover {
+  background: color-mix(in srgb, var(--shell-accent) 14%, transparent);
+}
+.ksi-addr-chip img,
+.ksi-offer img {
+  flex: none;
+  object-fit: contain;
+}
+/* In a narrow field the chip keeps its icon and gives the address its words. */
+.kp-addr:has(> .ksi-addr-chip) {
+  container: ksi-addr / inline-size;
+}
+@container ksi-addr (inline-size < 360px) {
+  .ksi-addr-chip > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+/* The empty browser's offer to bring sign-ins from the browser used most here. */
+.ksi-offer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 300px);
+  margin-top: 10px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 11px;
+  background: var(--bg-surface);
+  box-shadow: var(--shell-card-shadow);
+  text-align: left;
+  transition: box-shadow var(--duration-fast) var(--ease-standard);
+}
+.ksi-offer:hover {
+  box-shadow: var(--shell-card-shadow-hover);
+}
+.ksi-offer > span {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.ksi-offer b {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--shell-ink);
+}
+.ksi-offer small {
+  font-size: 11.5px;
+  color: var(--shell-muted);
+}
+.ksi-offer > svg:last-child {
+  flex: none;
+  color: var(--shell-faint);
+}
+
+@keyframes ksi-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes ksi-mark {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes ksi-pick {
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ksi-body,
+  .ksi-result__mark,
+  .ksi-kc__btn[data-pick]::after,
+  .ksi-addr-chip {
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .ksi-body,
+  & .ksi-result__mark,
+  & .ksi-kc__btn[data-pick]::after,
+  & .ksi-addr-chip {
+    animation: none;
+  }
+}
