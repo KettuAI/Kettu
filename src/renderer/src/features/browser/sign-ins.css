@@ -459,9 +459,20 @@
   line-height: 20px;
 }
 .ksi-kc__btn[data-pick] {
+  position: relative;
   background: var(--keychain-prompt-default);
   color: var(--keychain-prompt-default-ink);
   box-shadow: 0 0 0 3px var(--keychain-prompt-default-ring);
+}
+/* A soft ring that breathes around the button to choose, drawn once and faded in and out. */
+.ksi-kc__btn[data-pick]::after {
+  position: absolute;
+  inset: -3px;
+  border-radius: 8px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--keychain-prompt-default) 12%, transparent);
+  opacity: 0;
+  content: '';
+  pointer-events: none;
   animation: ksi-pick 1600ms ease-in-out infinite;
 }
 
@@ -627,27 +638,25 @@
 @keyframes ksi-rise {
   from {
     opacity: 0;
-    filter: blur(4px);
     transform: translateY(4px);
   }
 }
 @keyframes ksi-mark {
   from {
     opacity: 0;
-    filter: blur(4px);
     transform: scale(0.6);
   }
 }
 @keyframes ksi-pick {
   50% {
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--keychain-prompt-default) 12%, transparent);
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ksi-body,
   .ksi-result__mark,
-  .ksi-kc__btn[data-pick],
+  .ksi-kc__btn[data-pick]::after,
   .ksi-addr-chip {
     animation: none;
   }
@@ -655,7 +664,7 @@
 :root[data-reduce-motion='always'] {
   & .ksi-body,
   & .ksi-result__mark,
-  & .ksi-kc__btn[data-pick],
+  & .ksi-kc__btn[data-pick]::after,
   & .ksi-addr-chip {
     animation: none;
   }
