@@ -12,21 +12,70 @@ import { DeviceError, DeviceManager } from './devices'
 import { startDeviceHost, type StartedDeviceHost } from './start'
 import { ValidationError, validators } from './validate'
 
-const fake = vi.hoisted(() => ({
-  devices: [] as FoundDevice[],
-  drivers: [] as Array<{ events: DriverEvents | null; sent: DeviceInput[] }>,
-  boots: [] as string[],
-  shutdowns: [] as string[],
-  /** The user boots the simulator between the host's listing and its own boot. */
-  bootedMeanwhile: false,
-}))
+const fake = vi.hoisted(() => {
+  const fake = {
+    devices: [] as FoundDevice[],
+    drivers: [] as Array<{ events: DriverEvents | null; sent: DeviceInput[] }>,
+    boots: [] as string[],
+    shutdowns: [] as string[],
+    /** The user boots the simulator between the host's listing and its own boot. */
+    bootedMeanwhile: false,
+    /** The AVD each running emulator was started from. */
+    avds: new Map<string, string>(),
+    /** An AVD runs as `serial`, so adb lists the emulator in its place. */
+    runEmulator(avd: string, serial: string): void {
+      fake.devices = fake.devices.filter((device) => device.id !== `avd:${avd}`)
+      fake.devices.push({
+        id: `android:${serial}`,
+        platform: 'android',
+        kind: 'emulator',
+        name: avd.replace(/_/g, ' '),
+        osVersion: '16',
+        model: null,
+        state: 'booted',
+        connection: null,
+        problems: [],
+        target: serial,
+      })
+      fake.avds.set(serial, avd)
+    },
+    /** The emulator `serial` went down, so its AVD is listed again. */
+    stopEmulator(serial: string): void {
+      const avd = fake.avds.get(serial)!
+      fake.devices = fake.devices.filter((device) => device.id !== `android:${serial}`)
+      fake.devices.push({
+        id: `avd:${avd}`,
+        platform: 'android',
+        kind: 'emulator',
+        name: avd.replace(/_/g, ' '),
+        osVersion: null,
+        model: null,
+        state: 'shutdown',
+        connection: null,
+        problems: [],
+        target: avd,
+      })
+    },
+  }
+  return fake
+})
 
 vi.mock('./discovery', () => ({
-  findTools: async () => ({ xcrun: '/usr/bin/xcrun', adb: '/sdk/adb', emulator: null }),
+  findTools: async () => ({
+    xcrun: '/usr/bin/xcrun',
+    adb: '/sdk/adb',
+    emulator: '/sdk/emulator/emulator',
+  }),
   listSimulators: async () => fake.devices.filter((device) => device.kind === 'simulator'),
   listPhysicalIos: async () => [],
   listAndroid: async () => fake.devices.filter((device) => device.platform === 'android'),
-  run: async () => '',
+  run: async (_file: string, args: string[]) => {
+    if (args[2] === 'emu' && args[3] === 'kill') {
+      fake.shutdowns.push(args[1]!)
+      fake.stopEmulator(args[1]!)
+    }
+    return ''
+  },
 }))
 
 vi.mock('./ios-simulator', () => ({
@@ -72,7 +121,11 @@ vi.mock('./agent', () => {
 })
 
 vi.mock('./android', () => ({
-  bootEmulator: async () => 'emulator-5554',
+  bootEmulator: async (_emulator: string, _adb: string, avd: string) => {
+    fake.boots.push(avd)
+    fake.runEmulator(avd, 'emulator-5556')
+    return 'emulator-5556'
+  },
   AndroidDriver: class {
     events: DriverEvents | null = null
     sent: DeviceInput[] = []
@@ -206,6 +259,19 @@ const SIMULATOR: FoundDevice = {
   target: '0E02CA7B-60D9-40F6-BCE1-C66A3DECAAEF',
 }
 
+const AVD: FoundDevice = {
+  id: 'avd:Pixel_9_Pro',
+  platform: 'android',
+  kind: 'emulator',
+  name: 'Pixel 9 Pro',
+  osVersion: null,
+  model: null,
+  state: 'shutdown',
+  connection: null,
+  problems: [],
+  target: 'Pixel_9_Pro',
+}
+
 const USERS_SIMULATOR: FoundDevice = {
   ...SIMULATOR,
   id: 'ios-sim:5A1F3C70-2B7E-4C8D-9E0A-1B2C3D4E5F60',
@@ -221,7 +287,8 @@ const managers: DeviceManager[] = []
 beforeEach(async () => {
   dataDir = await mkdtemp(path.join(tmpdir(), 'kettu-devices-'))
   events = []
-  fake.devices = [{ ...EMULATOR }, { ...SIMULATOR }, { ...USERS_SIMULATOR }]
+  fake.devices = [{ ...EMULATOR }, { ...AVD }, { ...SIMULATOR }, { ...USERS_SIMULATOR }]
+  fake.avds = new Map([[EMULATOR.target, 'Pixel_9']])
   fake.drivers = []
   fake.boots = []
   fake.shutdowns = []
@@ -422,6 +489,52 @@ function startHost(): {
     },
   }
 }
+
+describe('emulators the host booted', () => {
+  it('shuts one down when its only tab closes, and leaves the one the user started on', async () => {
+    const devices = manager()
+    const started = await devices.open(AVD.id, 's1')
+    await devices.open(EMULATOR.id, 's1')
+    expect(fake.boots).toEqual([AVD.target])
+
+    await devices.close(started.id, 's1', false)
+    await devices.close(EMULATOR.id, 's1', false)
+    expect(fake.shutdowns).toEqual([started.id.slice('android:'.length)])
+  })
+
+  it('shuts one down when the session holding it ends', async () => {
+    const devices = manager()
+    const started = await devices.open(AVD.id, 's1')
+    await devices.open(EMULATOR.id, 's1')
+    await devices.endSessions(['s1'])
+    expect(fake.shutdowns).toEqual([started.id.slice('android:'.length)])
+  })
+
+  it('remembers which it booted across a restart of the host', async () => {
+    let devices = manager()
+    const started = await devices.open(AVD.id, 's1')
+    await devices.open(EMULATOR.id, 's2')
+    devices = await restart(devices)
+
+    await devices.close(started.id, 's1', false)
+    await devices.endSessions(['s2'])
+    expect(fake.shutdowns).toEqual([started.id.slice('android:'.length)])
+  })
+
+  it('leaves one on that the user started again under the same serial', async () => {
+    let devices = manager()
+    const started = await devices.open(AVD.id, 's1')
+    const serial = started.id.slice('android:'.length)
+    // The user shuts it down while the session holds it, and later starts it themselves.
+    fake.stopEmulator(serial)
+    await devices.list()
+    fake.runEmulator(AVD.target, serial)
+    devices = await restart(devices)
+
+    await devices.close(started.id, 's1', false)
+    expect(fake.shutdowns).toEqual([])
+  })
+})
 
 describe('device operations by session', () => {
   it('lets only the session holding a device stop its agent, hand it back or take its frames', async () => {

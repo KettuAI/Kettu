@@ -71,9 +71,12 @@ export class DeviceManager {
   private tools: Tools | null = null
   private found = new Map<DeviceId, FoundDevice>()
   private readonly leases = new Map<DeviceId, string>()
-  /** Simulators this host booted, which shut down once no session holds them. */
-  private readonly booted = new Set<DeviceId>()
-  /** Simulators this host is booting, which a listing from before the boot must not forget. */
+  /**
+   * Simulators and emulators this host booted, which shut down once no session holds them, each
+   * with the id it is listed under while shut down: a simulator's own, an emulator's AVD.
+   */
+  private readonly booted = new Map<DeviceId, DeviceId>()
+  /** Devices this host is booting, which a listing from before the boot must not forget. */
   private readonly booting = new Set<DeviceId>()
   private readonly operators = new Map<DeviceId, DeviceOperator>()
   private readonly live = new Map<DeviceId, Live>()
@@ -100,12 +103,17 @@ export class DeviceManager {
     const text = await readFile(file, 'utf8').catch(() => null)
     if (!text) return
     try {
-      const parsed = JSON.parse(text) as { leases?: Record<string, unknown>; booted?: unknown }
+      const parsed = JSON.parse(text) as {
+        leases?: Record<string, unknown>
+        booted?: Record<string, unknown>
+      }
       for (const [id, sessionId] of Object.entries(parsed.leases ?? {})) {
         if (typeof sessionId === 'string' && sessionId.length <= 256) this.leases.set(id, sessionId)
       }
-      for (const id of Array.isArray(parsed.booted) ? parsed.booted : []) {
-        if (typeof id === 'string' && id.length <= 256) this.booted.add(id)
+      for (const [id, down] of Object.entries(parsed.booted ?? {})) {
+        if (id.length <= 256 && typeof down === 'string' && down.length <= 256) {
+          this.booted.set(id, down)
+        }
       }
     } catch {
       this.deps.log('Ignored an unreadable device-leases.json')
@@ -114,14 +122,14 @@ export class DeviceManager {
 
   /**
    * Which session holds which device, so a pane shows its devices again after a restart, and
-   * which simulators this host booted.
+   * which devices this host booted.
    */
   private saveLeases(): void {
     const file = this.leasesFile()
     if (!file) return
     const body = JSON.stringify({
       leases: Object.fromEntries(this.leases),
-      booted: [...this.booted],
+      booted: Object.fromEntries(this.booted),
     })
     // One write at a time, so an older one never lands last; dispose waits for the last.
     this.saving = this.saving
@@ -199,7 +207,7 @@ export class DeviceManager {
       this.booting.add(id)
       try {
         if (await bootSimulator(tools.xcrun, found.target, env)) {
-          this.booted.add(id)
+          this.booted.set(id, id)
           this.saveLeases()
         }
         // Waits for a listing that began before the boot, too, while it cannot forget the boot.
@@ -222,10 +230,17 @@ export class DeviceManager {
       )
       // The running emulator is listed by its serial; the lease moves with it.
       this.leases.delete(id)
+      const avd = id
       id = `android:${serial}`
       this.leases.set(id, sessionId)
+      this.booted.set(id, avd)
       this.saveLeases()
-      await this.list()
+      this.booting.add(id)
+      try {
+        await this.list()
+      } finally {
+        this.booting.delete(id)
+      }
     } else {
       await this.list()
     }
@@ -234,7 +249,7 @@ export class DeviceManager {
     return info
   }
 
-  /** Takes the device from the session; a simulator this host booted shuts down with it. */
+  /** Takes the device from the session; one this host booted shuts down with it. */
   async close(id: DeviceId, sessionId: string, shutdown: boolean): Promise<void> {
     await this.restored
     if (this.leases.get(id) !== sessionId) return
@@ -249,8 +264,8 @@ export class DeviceManager {
   }
 
   /**
-   * Lets go of the devices of sessions that were archived or deleted. Only the simulators this
-   * host booted shut down; others stay on, since the user may still be using them.
+   * Lets go of the devices of sessions that were archived or deleted. Only the simulators and
+   * emulators this host booted shut down; others stay on, since the user may still be using them.
    */
   async endSessions(sessionIds: string[]): Promise<void> {
     await this.restored
@@ -449,10 +464,10 @@ export class DeviceManager {
     const next = new Map<DeviceId, FoundDevice>()
     for (const device of lists.flat()) next.set(device.id, device)
     this.found = next
-    // One that went down is no longer ours: booted again by the user, it stays on.
+    // One that went down is no longer ours: started again by the user, it stays on.
     let forgot = false
-    for (const id of this.booted) {
-      if (next.get(id)?.state === 'shutdown' && !this.booting.has(id)) {
+    for (const [id, down] of this.booted) {
+      if (next.get(down)?.state === 'shutdown' && !this.booting.has(id)) {
         this.booted.delete(id)
         forgot = true
       }

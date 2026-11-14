@@ -136,8 +136,8 @@ export interface DeviceContract {
   /** Boots the device if it is a simulator or emulator, and gives it to the session. */
   'devices.open': { params: { deviceId: DeviceId; sessionId: string }; result: DeviceInfo }
   /**
-   * Takes the device from the session; `shutdown` also shuts a simulator or emulator down. A
-   * simulator the host booted itself shuts down either way.
+   * Takes the device from the session; `shutdown` also shuts a simulator or emulator down. One
+   * the host booted itself shuts down either way.
    */
   'devices.close': {
     params: { deviceId: DeviceId; sessionId: string; shutdown?: boolean }
