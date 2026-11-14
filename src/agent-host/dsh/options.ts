@@ -15,7 +15,7 @@ const MODELS = [
 const EFFORTS = ['off', 'low', 'high', 'max'] as const
 
 /** The modes, in the menu's order: plan mode, then the permission presets from narrow to broad. */
-const MODES = ['plan', 'read-only', 'workspace-write', 'danger-full-access'] as const
+export const MODES = ['plan', 'read-only', 'workspace-write', 'danger-full-access'] as const
 
 export type Mode = (typeof MODES)[number]
 
@@ -43,7 +43,7 @@ export interface Choices {
   plan: boolean
 }
 
-const MODE_KEYS = {
+export const MODE_KEYS = {
   plan: 'plan',
   'read-only': 'readOnly',
   'workspace-write': 'workspaceWrite',

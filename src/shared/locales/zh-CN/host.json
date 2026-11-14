@@ -10,6 +10,7 @@
       "closed": "已关闭"
     },
     "busy": "会话当前状态：{{status}}",
+    "startedModeFailed": "{{agent}} 没能切到不超过开它的会话的权限模式",
     "openFirst": "请先打开这个会话",
     "removedWhileStarting": "会话在启动前已被移除",
     "noTurn": "当前没有进行中的对话",
