@@ -20,6 +20,9 @@ const variants = cva(
         // Delete and remove in rows and popovers: the surface with a thin red ring.
         'destructive-outline':
           'bg-card text-destructive shadow-destructive-ring hover:shadow-destructive-ring-hover aria-expanded:bg-accent disabled:text-tertiary',
+        // Stop for what an agent or a command runs: the error badge's red tint.
+        'destructive-tint':
+          'bg-danger-tint text-danger shadow-[inset_0_0_0_var(--hairline)_var(--danger-border)] hover:bg-destructive-tint-hover',
         link: 'text-foreground underline decoration-border-strong underline-offset-3 hover:decoration-current',
         quiet:
           'text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground aria-pressed:bg-pressed aria-pressed:text-foreground aria-pressed:shadow-sunk aria-pressed:hover:bg-pressed-hover',

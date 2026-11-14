@@ -1668,6 +1668,15 @@
 .ks-btn--solid:hover {
   opacity: 0.88;
 }
+.ks-btn--stop,
+.ks-btn--stop:hover {
+  background: var(--danger-tint);
+  box-shadow: inset 0 0 0 var(--hairline) var(--danger-border);
+  color: var(--danger);
+}
+.ks-btn--stop:hover {
+  background: var(--destructive-tint-hover);
+}
 .ks-file {
   display: flex;
   gap: 8px;
