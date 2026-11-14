@@ -217,8 +217,6 @@ describe('checkFolder', () => {
 describe('findSecrets', () => {
   it('finds the kinds of keys and tokens people paste', () => {
     const samples: [string, string][] = [
-      ['-----BEGIN OPENSSH PRIVATE KEY-----', 'a private key'],
-      ['-----BEGIN RSA PRIVATE KEY-----', 'a private key'],
       [`token = "github_pat_${'A1b2C3d4E5'.repeat(3)}"`, 'a GitHub token'],
       [`gho_${'Zx9'.repeat(12)}`, 'a GitHub token'],
       [`ANTHROPIC_API_KEY=sk-ant-api03-${'Qw3Er4Ty5'.repeat(4)}`, 'an Anthropic API key'],
@@ -234,6 +232,29 @@ describe('findSecrets', () => {
     for (const [line, what] of samples) {
       expect(findSecrets(`first\n${line}\n`), line).toEqual([{ line: 2, what }])
     }
+  })
+
+  it('finds what the Marketplace refuses: a key in a JSON string and more kinds of tokens', () => {
+    const body = 'QUJDRA'.repeat(10)
+    expect(
+      findSecrets(`a\n-----BEGIN RSA PRIVATE KEY-----\n${body}\n-----END RSA PRIVATE KEY-----`),
+    ).toEqual([{ line: 2, what: 'a private key' }])
+    const json = `{\n  "private_key": "-----BEGIN PRIVATE KEY-----\\n${body}\\n-----END PRIVATE KEY-----\\n"\n}`
+    expect(findSecrets(json)).toEqual([{ line: 2, what: 'a private key' }])
+    const samples: [string, string][] = [
+      [`OPENROUTER_API_KEY=sk-or-v1-${'0a1b2c3d'.repeat(8)}`, 'an OpenRouter API key'],
+      [`DEEPSEEK_API_KEY=sk-${'0a1b2c3d'.repeat(4)}`, 'a DeepSeek-style API key'],
+      [`//registry.npmjs.org/:_authToken=npm_${'Ab1Cd2Ef3G'.repeat(3)}Hi4Jk5`, 'an npm token'],
+      [`GITLAB_TOKEN=glpat-${'Ab1Cd2Ef3G'.repeat(2)}`, 'a GitLab token'],
+      [`HF_TOKEN=hf_${'Ab1Cd2Ef3G'.repeat(3)}Hi4Jk`, 'a Hugging Face token'],
+    ]
+    for (const [line, what] of samples) {
+      expect(findSecrets(`first\n${line}\n`), line).toEqual([{ line: 2, what }])
+    }
+  })
+
+  it('passes over a private key header alone, as documentation shows one', () => {
+    expect(findSecrets('Starts with -----BEGIN OPENSSH PRIVATE KEY----- and a body.')).toEqual([])
   })
 
   it('passes over placeholders and ordinary words', () => {
