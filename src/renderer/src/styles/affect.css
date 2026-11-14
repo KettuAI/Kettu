@@ -1382,6 +1382,116 @@ li[data-row-exit='dust'] > * {
   border-radius: 3px;
 }
 
+/* The browser's tabs: when they do not fit, the others keep only their site icon and the selected
+   one its name, and the count in the head lists them all. */
+.kp-btabs {
+  flex: 0 1 auto;
+}
+.kp-btabs[data-collapsed] .kp-btab:not([data-selected]) {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.kp-btabs[data-collapsed] .kp-btab:not([data-selected]) .kp-tab__btn {
+  gap: 4px;
+  padding: 0 7px;
+}
+.kp-btabs[data-collapsed] .kp-btab:not([data-selected]) :is(.kp-tab__name, .kp-tab__x) {
+  display: none;
+}
+.kp-btabs[data-collapsed] .kp-btab[data-selected] {
+  flex-shrink: 1;
+  max-width: 168px;
+}
+.kp-btab[data-released] :is(.kp-sitemark, .kp-tab__icon) {
+  filter: grayscale(1);
+  opacity: 0.5;
+}
+.kp-btab[data-released] .kp-tab__name {
+  color: var(--text-disabled);
+}
+/* The agent's tab: a fox dot with a slow ring while its turn uses it, gray while the user holds
+   it, amber while it waits on them. */
+.kp-btab__who {
+  position: relative;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pane-fox);
+}
+.kp-btab[data-agent='agent'] .kp-btab__who::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--pane-fox);
+  opacity: 0;
+  animation: kp-btab-ring 1800ms ease-out infinite;
+}
+.kp-btab[data-agent='you'] .kp-btab__who {
+  background: var(--text-disabled);
+}
+.kp-btab[data-agent='asks'] .kp-btab__who {
+  background: var(--tone-amber);
+}
+.kp-btab:not([data-selected]):is(:hover, :focus-within) .kp-btab__who {
+  opacity: 0;
+}
+@keyframes kp-btab-ring {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  70%,
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kp-btab__who::after {
+    animation: none !important;
+  }
+}
+:where([data-reduce-motion='always']) .kp-btab__who::after {
+  animation: none;
+}
+.kp-head__main > .kp-bnew {
+  margin-left: 2px;
+}
+.kp-tabcount {
+  display: inline-flex;
+  gap: 2px;
+  width: auto;
+  padding: 0 5px 0 7px;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.kp-tablist {
+  min-width: 260px;
+  max-width: 340px;
+}
+.kp-tablist__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.kp-tablist__name,
+.kp-tablist__note {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kp-tablist__note {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+.kp-tablist__check {
+  color: var(--text-primary);
+}
+
 /* ---------- panes: Mobile devices ---------- */
 .kp-stage {
   position: relative;

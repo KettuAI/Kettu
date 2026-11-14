@@ -33,8 +33,8 @@ export function useAddMenu({
   const { disabled, full, remote, source, editor, update, sessionId } = box
   const hasPage = useBrowserStore((s) => {
     const page = sessionId ? s.bySession[sessionId] : undefined
-    // An evicted page keeps its address for the pane, with no live page behind it.
-    return !!page?.url && page.notice?.kind !== 'evicted'
+    // A released tab keeps its address for the pane, with no live page behind it.
+    return !!page?.url && !page.tabs.find((tab) => tab.id === page.selected)?.released
   })
   // Only a page in front draws a frame to capture; the pane shows the main session's.
   const pageShown = useViewStore(

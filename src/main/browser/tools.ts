@@ -2,8 +2,13 @@
 // DevTools protocol layer that drives them, as one service the agent host talks to.
 
 import type { WebContents } from 'electron'
-import type { BrowserCallAnswer, BrowserToolError, BrowserToolName } from '@shared/browser'
-import { BROWSER_TOOL_NAMES } from '@shared/browser'
+import type {
+  BrowserCallAnswer,
+  BrowserCallResult,
+  BrowserToolError,
+  BrowserToolName,
+} from '@shared/browser'
+import { BROWSER_TOOL_NAMES, MAX_SESSION_TABS } from '@shared/browser'
 import {
   CONTROL_WAIT_MS,
   SurfaceControls,
@@ -11,6 +16,7 @@ import {
   type SurfaceControl,
 } from '@shared/control'
 import { BrowserCdp, ToolFailure } from './cdp'
+import { listTabs, tabsText } from './tabs'
 import type { BrowserViews, NavigateResult } from './views'
 
 export interface BrowserToolsDeps {
@@ -48,6 +54,7 @@ export class BrowserTools {
       handedBack: (sessionId, ms) => deps.handedBack?.(sessionId, ms),
     })
     this.cdp = new BrowserCdp({
+      tab: (sessionId) => deps.views.agentTab(sessionId),
       contents: (sessionId) => deps.views.contents(sessionId),
       load: async (sessionId, url) => {
         const result = await deps.views.load(sessionId, url)
@@ -65,6 +72,7 @@ export class BrowserTools {
         if (!result.ok) throw refused(result)
         return result
       },
+      tabs: (sessionId, args) => this.tabs(sessionId, args),
       controls: this.controls,
       acted: (sessionId, at, click) => deps.acted?.(sessionId, at, click),
       log: (level, message) => deps.log(level, message),
@@ -76,9 +84,9 @@ export class BrowserTools {
     return this.controls.state(sessionId)
   }
 
-  /** A page was made: its debugger's events flow to the page's buffers from here on. */
-  watch(sessionId: string, contents: WebContents): void {
-    this.cdp.watch(sessionId, contents)
+  /** A tab's page was made: its debugger's events flow to the tab's buffers from here on. */
+  watch(tabId: string, contents: WebContents): void {
+    this.cdp.watch(tabId, contents)
   }
 
   /** Take over, from the label, the pill or the bubble: the page is the user's until Hand back. */
@@ -106,14 +114,14 @@ export class BrowserTools {
     for (const sessionId of sessionIds) this.controls.turnEnded(sessionId)
   }
 
-  /** Whether an input event a page reports right now is the agent's own. */
-  isInjecting(sessionId: string): boolean {
-    return this.cdp.isInjecting(sessionId)
+  /** Whether an input event a tab's page reports right now is the agent's own. */
+  isInjecting(tabId: string): boolean {
+    return this.cdp.isInjecting(tabId)
   }
 
-  /** A page opened a dialog, which views.ts answered at once. */
-  dialogOpened(sessionId: string, type: string, accepted: boolean): void {
-    this.cdp.dialogOpened(sessionId, type, accepted)
+  /** A tab's page opened a dialog, which views.ts answered at once. */
+  dialogOpened(tabId: string, type: string, accepted: boolean): void {
+    this.cdp.dialogOpened(tabId, type, accepted)
   }
 
   /** The session's page crashed or stopped responding: its call in flight fails now. */
@@ -121,10 +129,14 @@ export class BrowserTools {
     this.cdp.pageFailed(sessionId, kind, message)
   }
 
-  /** The session's page is gone: nothing more drives it. */
+  /** A tab's page is gone: nothing more reads its events. */
+  forgetTab(tabId: string): void {
+    this.cdp.forget(tabId)
+  }
+
+  /** The session's browser is gone: nothing more drives it. */
   forget(sessionId: string): void {
     this.controls.forget(sessionId)
-    this.cdp.forget(sessionId)
     this.opened.delete(sessionId)
   }
 
@@ -155,6 +167,10 @@ export class BrowserTools {
     }
     this.deps.views.setOriginWait(sessionId, callId, wait)
     try {
+      // A released tab loads again before the agent's call reads or acts on it.
+      if (tool !== 'browser_navigate' && tool !== 'browser_tabs') {
+        await this.deps.views.reviveAgentTab(sessionId)
+      }
       const result = await this.cdp.call(sessionId, tool, args, {
         // Before the harness's own limit for one tool call, from when it reached main.
         deadline: Date.now() + CONTROL_WAIT_MS,
@@ -173,6 +189,61 @@ export class BrowserTools {
       return error('invalid', (caught as Error)?.message ?? String(caught))
     } finally {
       this.deps.views.setOriginWait(sessionId, callId, null)
+    }
+  }
+
+  /** `browser_tabs`: what the agent's tabs are, and its new, selected or closed one. */
+  private async tabs(sessionId: string, args: Record<string, unknown>): Promise<BrowserCallResult> {
+    const views = this.deps.views
+    const action = args.action
+    const at = (index: unknown): string => {
+      const { tabs } = views.agentTabs(sessionId)
+      const tab = typeof index === 'number' ? tabs[index] : undefined
+      if (!tab) {
+        throw new ToolFailure(
+          'invalid',
+          `There is no tab ${String(index)}. List the tabs with browser_tabs to see their indexes.`,
+        )
+      }
+      return tab.id
+    }
+    let done: string
+    switch (action) {
+      case 'list':
+        done = 'The browser’s tabs:'
+        break
+      case 'new': {
+        if (views.agentNewTab(sessionId) === null) {
+          throw new ToolFailure(
+            'invalid',
+            `The browser holds at most ${MAX_SESSION_TABS} tabs. Close one first.`,
+          )
+        }
+        this.firstOpen(sessionId)
+        done = 'Opened a blank tab, now your current tab. Open a page in it with browser_navigate.'
+        break
+      }
+      case 'select': {
+        const id = at(args.index)
+        await views.agentSelectTab(sessionId, id)
+        done = `Switched to tab ${String(args.index)}, now your current tab.`
+        break
+      }
+      case 'close': {
+        const id = args.index === undefined ? views.agentTab(sessionId) : at(args.index)
+        if (id === null) throw new ToolFailure('no_page', 'The browser has no tab to close.')
+        views.closeTab(sessionId, id)
+        done = 'Closed the tab.'
+        break
+      }
+      default:
+        throw new ToolFailure('invalid', 'action must be list, new, select or close.')
+    }
+    const { tabs, current } = views.agentTabs(sessionId)
+    const listed = listTabs(tabs, current)
+    return {
+      text: `${done}\n${tabsText(listed)}`,
+      value: { tabs: listed },
     }
   }
 
