@@ -16,6 +16,8 @@ import { hasMessage, t } from '../i18n'
 import { planMarkdown, planRevision } from '../plan-revision'
 import { isCodexRowlessCall, isCodexRowWhenFailed } from '../plan-tool'
 import { parseReplayedText } from '../replayed-content'
+import { SERVICE_NAME } from '../service-name'
+import { sopToolStructured } from '../sop/tools'
 import {
   addEntry,
   firstUserMessage,
@@ -374,12 +376,17 @@ export class ThreadMapper {
           break
         }
         const raw = rawInputText(item.arguments)
+        const own =
+          done && item.server === SERVICE_NAME
+            ? sopToolStructured(item.tool, item.result?.structuredContent)
+            : undefined
         this.tool(ctx, out, item.id, {
           title: t('codex.tool.mcp', { server: item.server, tool: item.tool }),
           toolKind: 'other',
           status: done ? toolStatus(item.status) : 'in_progress',
           ...(done ? { content: mcpContent(item) } : {}),
           ...(raw !== undefined ? { rawInput: raw } : {}),
+          ...(own ? { structured: own } : {}),
         })
         break
       }
@@ -709,6 +716,7 @@ export class ThreadMapper {
       ...(changes.question !== undefined ? { question: changes.question } : {}),
       ...(changes.planVersion !== undefined ? { planVersion: changes.planVersion } : {}),
       ...(changes.elicitation !== undefined ? { elicitation: changes.elicitation } : {}),
+      ...(changes.structured !== undefined ? { structured: changes.structured } : {}),
     }
     addEntry(ctx, out, entry)
     toolEffects(out, itemId, id, null, entry)

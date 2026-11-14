@@ -611,6 +611,11 @@ export interface ToolEntry {
   planVersion?: number
   // A request from an MCP server, kept once answered: what it asked, without the form's fields.
   elicitation?: { server: string; kind: 'form' | 'url'; url?: string }
+  /**
+   * What a call of one of Kettu's SOP tools returned beside its text, which its card draws; absent
+   * where the harness did not pass it on, such as Claude Code for a call that returned an error.
+   */
+  structured?: Record<string, unknown>
 }
 
 export type ToolContent =

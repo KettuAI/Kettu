@@ -222,6 +222,29 @@ describe('the plan tool', () => {
     expect(entries.map((entry) => entry.id)).toEqual(['t:b'])
     expect(entries[0]).toMatchObject({ status: 'failed' })
   })
+
+  it("keeps what an SOP tool returned for its card, and nothing from another server's", () => {
+    const structuredContent = {
+      accepted: false,
+      checks: [{ check: 'outcome', ok: false, detail: 'Report one of its outcomes.' }],
+      next: { kind: 'retry' },
+      facts: null,
+    }
+    const result = { content: [{ type: 'text', text: 'Refused' }], structuredContent }
+    const { entries } = run([
+      completed({ ...call('a', 'kettu', 'sop_report'), status: 'failed', result }),
+      completed({ ...call('b', 'other', 'sop_report'), result }),
+    ])
+    expect(entries[0]).toMatchObject({
+      structured: {
+        accepted: false,
+        checks: structuredContent.checks,
+        next: { kind: 'retry' },
+      },
+    })
+    expect(entries[0]).not.toHaveProperty('structured.facts')
+    expect(entries[1]).not.toHaveProperty('structured')
+  })
 })
 
 describe('other items', () => {

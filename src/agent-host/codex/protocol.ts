@@ -281,7 +281,7 @@ export type ThreadItem = ItemTimes &
         tool: string
         status: 'inProgress' | 'completed' | 'failed'
         arguments: JsonValue
-        result: { content: JsonValue[] } | null
+        result: { content: JsonValue[]; structuredContent?: JsonValue | null } | null
         error: { message: string } | null
       }
     | {

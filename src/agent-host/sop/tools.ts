@@ -217,6 +217,29 @@ export function isSopToolName(name: string): boolean {
   return SOP_TOOL_NAMES.includes(name)
 }
 
+/**
+ * The structured content of an SOP tool's call as a harness passed it on, Claude Code as JSON
+ * text, for the call's card; the facts a report gives to pick from stay in the call's text.
+ */
+export function sopToolStructured(
+  tool: string,
+  structured: unknown,
+): Record<string, unknown> | undefined {
+  if (!isSopToolName(tool)) return undefined
+  let value = structured
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return undefined
+    }
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const kept = { ...(value as Record<string, unknown>) }
+  delete kept.facts
+  return kept
+}
+
 export interface SopToolsDeps {
   library: Pick<SopLibrary, 'list' | 'create' | 'suggest'>
   report(sessionId: string, input: ReportInput): Promise<ReportResult>

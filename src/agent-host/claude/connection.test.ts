@@ -909,6 +909,61 @@ describe('a turn', () => {
     ])
   })
 
+  it("keeps what an SOP tool returned for its card, without a report's facts", async () => {
+    const result = {
+      accepted: true,
+      checks: [{ check: 'outcome', ok: true, detail: null }],
+      next: { kind: 'pick', steps: ['build'] },
+      facts: { agents: [] },
+    }
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        assistant(query, 'msg_1', [
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'mcp__kettu__sop_report',
+            input: { outcome: 'Done' },
+          },
+          { type: 'tool_use', id: 'toolu_2', name: 'mcp__other__sop_report', input: {} },
+        ]),
+        {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'Accepted.' }],
+          },
+          parent_tool_use_id: null,
+          tool_use_result: JSON.stringify(result),
+          session_id: query.sessionId,
+        } as SdkMessage,
+        {
+          type: 'user',
+          message: {
+            role: 'user',
+            content: [{ type: 'tool_result', tool_use_id: 'toolu_2', content: 'Other.' }],
+          },
+          parent_tool_use_id: null,
+          tool_use_result: JSON.stringify(result),
+          session_id: query.sessionId,
+        } as SdkMessage,
+      )
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'report' }])
+    expect(target.entry('t:toolu_1')).toMatchObject({
+      status: 'completed',
+      structured: {
+        accepted: true,
+        checks: [{ check: 'outcome', ok: true, detail: null }],
+        next: { kind: 'pick', steps: ['build'] },
+      },
+    })
+    expect(target.entry('t:toolu_1')).not.toHaveProperty('structured.facts')
+    expect(target.entry('t:toolu_2')).not.toHaveProperty('structured')
+  })
+
   it("labels the tool calls Claude Code's summary names, and skips one it names wrongly", async () => {
     s.sdk.script = (query) => {
       query.running()
