@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
+import { usableSop, type Sop, type SopEntry } from '@shared/sop'
 import { limitsForModel } from '@shared/plan-limits'
 import { startNewSession } from '@renderer/app/actions'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
@@ -50,6 +51,8 @@ import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
+import { useHostSops } from '@renderer/stores/sops'
+import { useTasksStore } from '@renderer/stores/tasks'
 import { branchHold, useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
 import { refreshLimits } from '@renderer/stores/usage'
 import {
@@ -97,6 +100,12 @@ import { AgentGuide } from './new-session/agent-guide'
 import { useGuideStatuses } from './new-session/guide-statuses'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
+import { AgentMenu } from './new-session/agent-menu'
+import { openTask } from './new-session/open-task'
+import { chooseSop, taskPins, taskStarted, useSopChoice } from './new-session/sop-choice'
+import { SopMenu, TaskWorktreeNote, TaskWorktreeTag } from './new-session/sop-menu'
+import { modelOptionId, runsSteps } from './new-session/sop-picks'
+import { TaskStepsCard } from './new-session/sop-steps'
 import { WorktreeTrayTag } from './worktree/worktree-tag'
 import { currentBase, useWorktreeStatus } from './new-session/worktree-base'
 import { WorktreeMenu, WorktreeNote } from './new-session/worktree-menu'
@@ -313,7 +322,21 @@ function DraftComposer({
   const templateError = useWorktreeChoice((s) =>
     project ? (s.templateError[project.path] ?? null) : null,
   )
-  const canSend = !!agentId && ready && holdsMessage && !held && !branchHeld
+  // A task runs in a project of its own host, never as a sub-session or with No project.
+  const taskProject = !parent && !inScratch && project && !project.missing ? project : null
+  const sops = useHostSops(hostId)
+  const chosenSop = useSopChoice((s) => (taskProject ? (s.chosen[taskProject.path] ?? null) : null))
+  // An SOP no longer usable, or not read yet, leaves Chat chosen.
+  const sop = chosenSop
+    ? sops.entries.find(
+        (entry): entry is SopEntry & { sop: Sop } => entry.id === chosenSop && usableSop(entry),
+      )
+    : undefined
+  // The first step goes to the tray's agent, which must be one that works on steps.
+  const firstOff = !!sop && sop.sop.steps[0]?.by === 'agent' && !!status && !runsSteps(status)
+  const canSend = sop
+    ? !!agentId && !!taskProject && holdsMessage && !held && attachments.length === 0 && !firstOff
+    : !!agentId && ready && holdsMessage && !held && !branchHeld
   const config = useStartConfig(agentId, undefined, hostId)
   const model = config?.find((o) => o.category === 'model' && isSelect(o))
   // A used-up window of another model does not hold the picked one back.
@@ -354,9 +377,36 @@ function DraftComposer({
 
   useEffect(() => onInput(holdsMessage), [holdsMessage, onInput])
 
+  // With an SOP the message starts a task, its first step on the tray's agent and options.
+  const startTask = async (entry: SopEntry, options: Record<string, string | boolean>) => {
+    if (!agentId || !taskProject) return
+    const taken = box.take()
+    const base = gitStatus ? currentBase(gitStatus) : null
+    const { pace, pins } = useSopChoice.getState()
+    try {
+      const view = await useTasksStore.getState().start(
+        {
+          projectPath: taskProject.path,
+          sopId: entry.id,
+          text: taken.prompt,
+          pace,
+          agentId,
+          options,
+          pins: taskPins({ pins }, entry.id),
+          ...(base ? { worktree: { base } } : {}),
+        },
+        hostId,
+      )
+      taskStarted()
+      openTask(view.id)
+    } catch (error) {
+      box.restore(taken)(error)
+    }
+  }
+
   // The message leaves the draft with the request and comes back to it if the start fails.
   const send = async () => {
-    if (!canSend || sending.current) return
+    if (!canSend || !agentId || sending.current) return
     sending.current = true
     try {
       try {
@@ -371,6 +421,14 @@ function DraftComposer({
       const options = entry
         ? startValues(entry, picksOf(optionsState, hostId, agentId), { startMode: true })
         : null
+      if (sop) {
+        // A step session works in the mode Kettu gives steps, so the tray's mode stays behind.
+        const kept = Object.entries(options ?? {}).filter(
+          ([id]) => entry?.config.find((o) => o.id === id)?.category !== 'mode',
+        )
+        await startTask(sop, Object.fromEntries(kept))
+        return
+      }
       const preparedId = preparedFor(optionsState, hostId, agentId)?.summary?.id ?? null
       const text = editor.current?.text() ?? box.source.text
       const content: UserContent[] = [
@@ -394,13 +452,17 @@ function DraftComposer({
       ? t('newSession.chooseProjectFirst')
       : project?.missing && !inScratch
         ? t('newSession.missingLine')
-        : branchHeld === 'invalid'
-          ? t('worktree.branchInvalid')
-          : branchHeld === 'failed'
-            ? t('worktree.templateFailed', { message: templateError })
-            : branchHeld === 'reading'
-              ? t('worktree.templateReading')
-              : (held?.message ?? null)
+        : firstOff
+          ? t('newSession.sop.stepAgents')
+          : sop && attachments.length > 0
+            ? t('newSession.sop.textOnly')
+            : !sop && branchHeld === 'invalid'
+              ? t('worktree.branchInvalid')
+              : !sop && branchHeld === 'failed'
+                ? t('worktree.templateFailed', { message: templateError })
+                : !sop && branchHeld === 'reading'
+                  ? t('worktree.templateReading')
+                  : (held?.message ?? null)
   const blockedEnter = useBlockedEnter({
     // A missing folder is said under the box already.
     reason: project?.missing && !inScratch ? null : blocked,
@@ -550,7 +612,19 @@ function DraftComposer({
                   </>
                 )}
                 <AgentPicker agentId={agentId} onChoose={choose} hostId={hostId} />
-                {gitStatus && project ? (
+                {taskProject && (
+                  <SopMenu
+                    hostId={hostId}
+                    sopId={sop?.id ?? null}
+                    onChoose={(id) => {
+                      chooseSop(taskProject.path, id)
+                      requestAnimationFrame(() => editor.current?.focus())
+                    }}
+                  />
+                )}
+                {sop && gitStatus ? (
+                  <TaskWorktreeTag base={currentBase(gitStatus)} />
+                ) : gitStatus && project ? (
                   <WorktreeMenu projectPath={project.path} status={gitStatus} />
                 ) : parent?.worktree ? (
                   <WorktreeTrayTag worktree={parent.worktree} />
@@ -573,13 +647,40 @@ function DraftComposer({
             {shownError}
           </p>
         )}
-        {gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />}
+        {sop && gitStatus ? (
+          <TaskWorktreeNote base={currentBase(gitStatus)} />
+        ) : (
+          gitStatus && project && <WorktreeNote projectPath={project.path} status={gitStatus} />
+        )}
         {agentId && <StartNotices agentId={agentId} hostId={hostId} />}
         {waitingForNode && !(noAgent && guide) && (
           <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />
         )}
       </div>
-      {children}
+      {sop ? (
+        <TaskStepsCard
+          entry={sop}
+          hostId={hostId}
+          first={
+            <AgentMenu
+              agentId={agentId}
+              hostId={hostId}
+              label={t('newSession.sop.firstStepAgent')}
+              only={runsSteps}
+              triggerClassName="h-7.5 max-w-64 rounded-lg bg-card shadow-outline hover:bg-hover"
+              onChoose={(id, model) => {
+                choose(id)
+                const modelId = modelOptionId(
+                  optionsOn(useAgentOptionsStore.getState(), hostId)[id],
+                )
+                if (model !== null && modelId) setOption(hostId, id, modelId, model)
+              }}
+            />
+          }
+        />
+      ) : (
+        children
+      )}
     </>
   )
 }

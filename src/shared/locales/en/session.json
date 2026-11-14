@@ -582,6 +582,24 @@
       },
       "found": "Found on this computer",
       "redetect": "Re-detect"
+    },
+    "sop": {
+      "label": "Workflow",
+      "chat": "Chat",
+      "chatHint": "Talk with one agent, as a session does",
+      "heading": "Workflows",
+      "unreadableHint": "Its file doesn't read",
+      "blocked": {
+        "approval": "Needs approval",
+        "changed": "Changed, needs approval",
+        "unreadable": "Can't be read"
+      },
+      "findMore": "Find more workflows in the Marketplace…",
+      "worktreeHint": "A task works in a worktree and on a branch of its own.",
+      "worktreeNote": "A task works in its own worktree, on a new branch cut from <base>{{base}}</base>. Kettu names it when you send.",
+      "textOnly": "A task takes text only: remove the attachments to send it.",
+      "firstStepAgent": "Who does the first step",
+      "stepAgents": "Only Claude Code and Codex agents work on workflow steps: choose one of them."
     }
   },
   "signIn": {
@@ -968,5 +986,115 @@
     "agentWorktree": "Worked in its own worktree <branch/>",
     "agentWorktreeUnnamed": "Worked in its own worktree",
     "copyPath": "Copy path"
+  },
+  "sop": {
+    "pace": "Pace",
+    "paces": {
+      "quick": "Quick",
+      "balanced": "Balanced",
+      "thorough": "Thorough"
+    },
+    "auto": "Auto",
+    "you": "You",
+    "youReview": "You review",
+    "source": {
+      "first": "First step",
+      "pinned": "Pinned",
+      "task": "This task",
+      "you": "You"
+    },
+    "reviews": "Reviews {{steps}}",
+    "hint": "“{{hint}}”",
+    "pinnedHint": "Pinned for every task of this workflow, on its Marketplace page",
+    "backToAuto": "Back to Auto",
+    "whoDoes": "Who does {{step}}",
+    "whoDoesEach": "Who does each step",
+    "autoExplained": "Auto steps are picked by the agent that hands off to them, when they start",
+    "paceExplained": "Pace is told to every agent that picks; a pick here counts for this task only.",
+    "pinEveryTask": "Pin steps for every task",
+    "suggest": {
+      "title": "Run this as a workflow?",
+      "description": "One session per step.",
+      "descriptionReview_one": "One session per step; {{steps}} waits for your review.",
+      "descriptionReview_other": "One session per step; {{steps}} wait for your review.",
+      "label": "Suggested by {{agent}} · Waiting for you",
+      "sop": "Workflow",
+      "steps_one": "{{count}} step",
+      "steps_other": "{{count}} steps",
+      "task": "Task · written by {{agent}}, editable",
+      "taskLabel": "The task",
+      "who": "Who does each step · Auto steps are picked when they start",
+      "edit": "Edit",
+      "doneEditing": "Done",
+      "start": "Start",
+      "decline": "No, just do it",
+      "declineMessage": "No workflow for this one: just do it yourself.",
+      "unusable": "{{sop}} can't start a task now. Choose another workflow or do it without one.",
+      "missing": "This workflow is no longer in the library. Choose another or do it without one.",
+      "emptyTask": "Write the task first.",
+      "started": "Started as a task",
+      "openTask": "Open",
+      "declined": "Doing it without a workflow",
+      "chooseSop": "Choose the workflow"
+    },
+    "saved": {
+      "pending": "Saved “{{name}}” for your approval",
+      "approved": "“{{name}}” is approved",
+      "changed": "“{{name}}” changed since you approved it",
+      "removed": "“{{name}}” is no longer in the library",
+      "refused": "The workflow wasn't saved",
+      "refusedHint": "{{agent}} can fix these and save it again.",
+      "approveHint": "Nothing can use it until you approve it in the Marketplace.",
+      "open": "Open in Marketplace",
+      "madeBy": "Written by {{agent}}"
+    },
+    "check": {
+      "report": "Report · {{outcome}}",
+      "reportPlain": "Report",
+      "pick": "Pick · {{steps}}",
+      "accepted": "Accepted",
+      "refused": "Refused",
+      "lines": {
+        "report": {
+          "step_open": "The step was open for its report",
+          "outcome": "“{{outcome}}” is one of this step's outcomes",
+          "outcomePlain": "It reported one of this step's outcomes",
+          "note": "The note it hands in is there",
+          "document": "It wrote the document it hands in during this step",
+          "committed": "Its changes are committed",
+          "merged": "The merge is committed",
+          "picks": "Its picks hold"
+        },
+        "pick": {
+          "step": "{{step}} waits for this pick",
+          "agent": "{{agent}} is there and on",
+          "allowed": "Auto can pick {{agent}}",
+          "model": "{{agent}} lists {{model}}",
+          "modelPlain": "{{agent}} lists the model",
+          "effort": "{{effort}} is one of its efforts",
+          "effortPlain": "It takes the effort",
+          "tools": "The step's tools can be handed to it",
+          "limit": "Its plan limit isn't used up",
+          "review": "It doesn't review its own work"
+        }
+      },
+      "next": {
+        "review": "{{step}} now waits for your review.",
+        "pick": "Next, {{agent}} picks who does {{steps}}.",
+        "endDone": "The task is done.",
+        "endDropped": "The task ends as dropped.",
+        "retryReport": "{{agent}} fixes this and reports again.",
+        "retryPick": "{{agent}} picks again.",
+        "stuck": "Refused too often: the task waits for you.",
+        "start_one": "{{steps}} starts next.",
+        "start_other": "{{steps}} start next.",
+        "wait_one": "{{steps}} waits for the other branches.",
+        "wait_other": "{{steps}} wait for the other branches.",
+        "person_one": "{{steps}} waits for you.",
+        "person_other": "{{steps}} wait for you."
+      },
+      "showDetails": "What Kettu said",
+      "hideDetails": "Hide"
+    }
   }
 }
