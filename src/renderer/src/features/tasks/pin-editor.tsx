@@ -16,6 +16,7 @@ import {
 import type { AgentOptions } from '@shared/agent-host'
 import { useTasksStore } from '@renderer/stores/tasks'
 import { canDoSteps } from './model'
+import { runsSteps } from '@renderer/features/session/new-session/sop-picks'
 
 function modelOption(entry: AgentOptions | undefined): ConfigOption | undefined {
   return entry?.config.find((o) => o.category === 'model' && o.type === 'select')
@@ -103,6 +104,7 @@ export function PinEditor({
       <div className="flex flex-wrap items-center gap-2">
         <span className="flex min-w-0 items-center rounded-lg bg-(--thread-chip)">
           <AgentMenu
+            only={runsSteps}
             agentId={agentId}
             values={values}
             hostId={hostId}

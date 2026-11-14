@@ -842,6 +842,7 @@ function StepPin({ entry, step }: { entry: SopEntry; step: SopStep }) {
         {choosing ? (
           <span className="k-sop-pick">
             <AgentMenu
+              only={(status) => runsSteps(status.id)}
               agentId={pin?.agentId ?? null}
               values={pin ? pinValues(options(pin.agentId), pin) : undefined}
               onChoose={choose}

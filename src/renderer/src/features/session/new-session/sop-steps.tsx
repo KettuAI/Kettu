@@ -334,7 +334,7 @@ export function TaskStepsCard({
         <button
           type="button"
           className="shrink-0 text-meta text-link hover:underline"
-          onClick={openSopMarketplace}
+          onClick={() => openSopMarketplace(entry.id)}
         >
           {t('sop.pinEveryTask')}
         </button>

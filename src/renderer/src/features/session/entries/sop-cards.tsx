@@ -542,7 +542,7 @@ function SavedCard({
             <button
               type="button"
               className="shrink-0 text-meta text-link hover:underline"
-              onClick={openSopMarketplace}
+              onClick={() => openSopMarketplace(saved.sopId)}
             >
               {t('sop.saved.open')}
             </button>
