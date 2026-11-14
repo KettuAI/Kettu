@@ -66,7 +66,7 @@ export interface SessionView {
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
-  origin: 'user' | 'subagent' | 'routine'
+  origin: 'user' | 'subagent' | 'routine' | 'task'
   subagent: SubagentInfo | null // set when origin is 'subagent'
   routine: RoutineRef | null // set when origin is 'routine'
   queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
@@ -589,7 +589,7 @@ export interface ToolEntry {
     | {
         optionId: string
         kind: PermissionKind
-        by?: 'routine'
+        by?: 'routine' | 'task'
         device?: FromDevice
         name?: string
         questions?: AnsweredQuestion[]

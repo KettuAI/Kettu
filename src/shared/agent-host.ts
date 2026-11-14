@@ -78,6 +78,17 @@ import type {
   RoutinesProblem,
 } from './routines'
 import type { AgentColor } from './settings'
+import type {
+  SessionTaskRef,
+  SopAddSource,
+  SopEntry,
+  SopSettings,
+  SopSettingsChange,
+  StepPick,
+  TaskStart,
+  TaskSummary,
+  TaskView,
+} from './sop'
 import type { ClockRequest, UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
@@ -457,8 +468,9 @@ export interface SessionSummary {
   createdAt: number
   updatedAt: number
   parentId: string | null
-  origin: 'user' | 'subagent' | 'routine'
+  origin: 'user' | 'subagent' | 'routine' | 'task'
   routine: RoutineRef | null // a routine's run, listed under its routine rather than its project
+  task?: SessionTaskRef | null // an SOP step's session, listed under its task; absent from older hosts
   description: string | null // a subagent's purpose, as its parent described it
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
@@ -706,6 +718,59 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
+  // SOPs: the official ones and the user's library. See sop.
+  'sops.list': { params: void; result: SopEntry[] }
+  'sops.read': { params: { sopId: string }; result: { entry: SopEntry; text: string | null } }
+  // Unapproved until `sops.approve` names the hash the user was shown.
+  'sops.add': { params: SopAddSource; result: SopEntry }
+  // Reads a GitHub SOP again; a changed file waits for approval again.
+  'sops.update': { params: { sopId: string }; result: { entry: SopEntry; changed: boolean } }
+  'sops.approve': { params: { sopId: string; hash: string }; result: SopEntry }
+  'sops.remove': { params: { sopId: string }; result: void }
+  // Who does a step for every task of the SOP; null goes back to Auto.
+  'sops.pin': {
+    params: { sopId: string; stepId: string; pick: StepPick | null }
+    result: SopEntry
+  }
+  'sops.settings': { params: void; result: SopSettings }
+  'sops.setSettings': { params: SopSettingsChange; result: SopSettings }
+  // Tasks: a requirement run through an SOP, one session per step.
+  'tasks.list': { params: void; result: TaskSummary[] }
+  'tasks.get': { params: { taskId: string }; result: TaskView }
+  // `from` is the session whose agent suggested it.
+  'tasks.start': { params: TaskStart & { from?: { sessionId: string } }; result: TaskView }
+  // Approves what a step handed in, or sends it back to the same step with a note.
+  'tasks.review': {
+    params: { taskId: string; roundId: string; approve: boolean; note?: string }
+    result: TaskView
+  }
+  // The user's outcome on a step the SOP gives them.
+  'tasks.answer': {
+    params: { taskId: string; roundId: string; outcome: string; note?: string }
+    result: TaskView
+  }
+  // Lets a step that waits for the user go on.
+  'tasks.retry': { params: { taskId: string; stepId: string; note?: string }; result: TaskView }
+  'tasks.cancel': { params: { taskId: string }; result: TaskView }
+  // A task that is not running, with its steps' sessions.
+  'tasks.delete': { params: { taskId: string }; result: void }
+  // A note for the running steps and every later one.
+  'tasks.note': { params: { taskId: string; text: string }; result: TaskView }
+  // Who does a step for this task only; null goes back to what the SOP's page says.
+  'tasks.pin': {
+    params: { taskId: string; stepId: string; pick: StepPick | null }
+    result: TaskView
+  }
+  'tasks.update': {
+    params: {
+      taskId: string
+      title?: string
+      pinned?: boolean
+      archived?: boolean
+      unread?: boolean
+    }
+    result: TaskView
+  }
   // The window's prepared session for New session; `replace` opens a new one even when it holds one.
   'sessions.prepare': {
     params: {
@@ -1304,6 +1369,26 @@ export const HOST_METHODS = [
   'routines.cancelRun',
   'routines.runs',
   'routines.markSeen',
+  'sops.list',
+  'sops.read',
+  'sops.add',
+  'sops.update',
+  'sops.approve',
+  'sops.remove',
+  'sops.pin',
+  'sops.settings',
+  'sops.setSettings',
+  'tasks.list',
+  'tasks.get',
+  'tasks.start',
+  'tasks.review',
+  'tasks.answer',
+  'tasks.retry',
+  'tasks.cancel',
+  'tasks.delete',
+  'tasks.note',
+  'tasks.pin',
+  'tasks.update',
   'permissions.respond',
   'git.status',
   'git.unwatch',
@@ -1459,6 +1544,9 @@ export type HostEvent =
   | { type: 'artifacts.consentsChanged' }
   | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
   | { type: 'routine.removed'; routineId: string }
+  | { type: 'task.changed'; task: TaskView }
+  | { type: 'task.removed'; taskId: string }
+  | { type: 'sops.changed' } // the SOP library or its settings changed; a page showing it reads again
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's
   // page, answered by `browser.answer`.

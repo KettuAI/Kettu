@@ -51,6 +51,13 @@ import {
   type PlanToolsDeps,
 } from '../plan-tool'
 import {
+  isSopToolName,
+  SOP_INSTRUCTIONS,
+  SOP_TOOL_NAMES,
+  SopTools,
+  type SopToolsDeps,
+} from '../sop/tools'
+import {
   isReportToolName,
   REPORT_INSTRUCTIONS,
   REPORT_TOOL,
@@ -102,7 +109,7 @@ const SERVICE_TOOLS: Tool[] = [
 ]
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS}`
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS} ${SOP_INSTRUCTIONS}`
 
 /** Serves the computer use tools, on a host that carries the driver. */
 export interface ComputerCalls {
@@ -162,6 +169,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   terminals?: Omit<TerminalToolDeps, 'sessionOf' | 'folderOf'>
   /** The computer use tools; without it the service lists none. */
   computer?: ComputerCalls
+  /** The SOP tools; without them the service lists none. */
+  sop?: SopToolsDeps
   /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
   proxy?: {
     handle(req: http.IncomingMessage, res: http.ServerResponse, path: string): Promise<void>
@@ -209,6 +218,7 @@ function entry(url: string, token: string): McpServer[] {
         REPORT_TOOL,
         ...MEMORY_TOOL_NAMES,
         ...SESSION_TOOLS.map((tool) => tool.name),
+        ...SOP_TOOL_NAMES,
       ],
       prompt: PLAN_PROMPT,
       secret: true,
@@ -258,6 +268,7 @@ export class ArtifactService {
   private readonly deviceTools: DeviceTools | null
   private readonly terminalTools: TerminalTools | null
   private readonly dataTools: DataTools | null
+  private readonly sopTools: SopTools | null
   private sdk: Promise<Sdk> | null = null
   /** Why the last `start()` could not listen; cleared once it does. */
   private startError: string | null = null
@@ -271,6 +282,7 @@ export class ArtifactService {
     this.planTools = new PlanTools(deps.plan)
     this.reportTools = new ReportTools(deps.report)
     this.memoryTools = deps.memory ? new MemoryTools(deps.memory) : null
+    this.sopTools = deps.sop ? new SopTools(deps.sop) : null
     this.serviceTools = deps.computer ? [...SERVICE_TOOLS, ...COMPUTER_TOOLS] : SERVICE_TOOLS
     this.instructions = deps.computer
       ? `${SERVICE_INSTRUCTIONS} ${COMPUTER_INSTRUCTIONS}`
@@ -385,8 +397,12 @@ export class ArtifactService {
   }
 
   /** The tools `tools/list` answers now. */
-  private listedTools(): Tool[] {
-    return this.memoryOn ? [...this.serviceTools, ...MEMORY_TOOLS] : this.serviceTools
+  /** What `tools/list` answers; a step's session alone gets the step's tools. */
+  private listedTools(grant?: Grant): Tool[] {
+    const tools = this.memoryOn ? [...this.serviceTools, ...MEMORY_TOOLS] : this.serviceTools
+    if (!this.sopTools) return tools
+    const sessionId = grant && 'sessionId' in grant ? grant.sessionId : null
+    return [...tools, ...this.sopTools.listed(sessionId)]
   }
 
   /** Each tool's name and the first sentence of its description, for Settings › MCP servers. */
@@ -631,7 +647,7 @@ export class ArtifactService {
       { capabilities: { tools: {} }, instructions },
     )
     server.setRequestHandler(ListToolsRequestSchema, () => ({
-      tools: this.listedTools(),
+      tools: this.listedTools(grant),
     }))
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: input, _meta: meta } = request.params
@@ -645,6 +661,14 @@ export class ArtifactService {
       if (isSessionToolName(name)) {
         try {
           return await this.sessionTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      if (this.sopTools && isSopToolName(name)) {
+        try {
+          return await this.sopTools.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

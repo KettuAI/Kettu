@@ -36,6 +36,18 @@ import {
   type WorktreeInspection,
 } from '@shared/git'
 import type { Platform } from '@shared/platform'
+import {
+  MAX_SOP_STEPS,
+  PICK_REASON_CHARS,
+  SOP_FILE_BYTES,
+  SOP_ID_CHARS,
+  TASK_NOTE_CHARS,
+  TASK_TEXT_CHARS,
+  TASK_TITLE_CHARS,
+  isPace,
+  isStepPick,
+  type StepPick,
+} from '@shared/sop'
 import type { ClockRequest, ClockZone } from '@shared/usage'
 import {
   isPermissionScope,
@@ -64,6 +76,7 @@ import {
 } from '@shared/thread'
 import { FORM_FIELDS, FORM_KEY_CHARS } from './elicitation'
 import { invalidParams } from './errors'
+import { TASK_ID } from './sop/model'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
 import { MAX_WORKTREE_COPY_PATHS } from './storage'
@@ -311,6 +324,103 @@ function worktreeRequest(value: unknown): { base: string; branch?: string } {
   const o = fields(value)
   const branch = o.branch === undefined ? undefined : checkWorktreeBranch(string(o, 'branch', 100))
   return { base: baseRef(o, 'base'), ...(branch === undefined ? {} : { branch }) }
+}
+
+const SOP_ID = /^[a-z0-9][a-z0-9-]{0,63}$/
+const SOP_HASH = /^[0-9a-f]{64}$/
+
+function sopId(o: Fields): string {
+  const value = string(o, 'sopId', SOP_ID_CHARS)
+  if (!SOP_ID.test(value)) throw invalidParams('sopId is not an SOP id')
+  return value
+}
+
+function taskId(o: Fields): string {
+  const value = string(o, 'taskId', 20)
+  if (!TASK_ID.test(value)) throw invalidParams('taskId is not a task id')
+  return value
+}
+
+function stepId(o: Fields): string {
+  return string(o, 'stepId', 64)
+}
+
+function optionalNote(o: Fields, key: string, max: number): string | undefined {
+  const value = o[key]
+  if (value === undefined) return undefined
+  if (typeof value !== 'string') throw invalidParams(`${key} must be a string`)
+  if (value.length > max) throw invalidParams(`${key} is longer than ${max} characters`)
+  return value
+}
+
+function stepPickOf(value: unknown): StepPick | null {
+  if (value === null) return null
+  if (!isStepPick(value))
+    throw invalidParams('pick must name an agent, a model or null and an effort or null')
+  return { agentId: value.agentId, model: value.model, effort: value.effort }
+}
+
+function stepPicks(value: unknown): Record<string, StepPick> {
+  const o = fields(value)
+  const entries = Object.entries(o)
+  if (entries.length > MAX_SOP_STEPS) throw invalidParams(`pins holds more than ${MAX_SOP_STEPS}`)
+  const out: Record<string, StepPick> = {}
+  for (const [key, pick] of entries) {
+    if (key.length > 64) throw invalidParams('A pin names a step id that is too long')
+    const checked = stepPickOf(pick)
+    if (checked) out[key] = checked
+  }
+  return out
+}
+
+function taskStart(value: unknown, platform: Platform): HostParams<'tasks.start'> {
+  const o = fields(value)
+  const pace = o.pace
+  if (!isPace(pace)) throw invalidParams('pace must be quick, balanced or thorough')
+  const title = optionalString(o, 'title', TASK_TITLE_CHARS)
+  const paceReason = optionalNote(o, 'paceReason', PICK_REASON_CHARS)
+  const from = o.from === undefined ? undefined : { sessionId: sessionId(fields(o.from)) }
+  return {
+    projectPath: absolutePath(o, 'projectPath', platform),
+    sopId: sopId(o),
+    text: string(o, 'text', TASK_TEXT_CHARS),
+    ...(title === undefined ? {} : { title }),
+    pace,
+    ...(paceReason === undefined ? {} : { paceReason }),
+    agentId: agentId(o),
+    options: configValues(o.options ?? {}),
+    ...(o.pins === undefined ? {} : { pins: stepPicks(o.pins) }),
+    ...(o.worktree === undefined ? {} : { worktree: worktreeRequest(o.worktree) }),
+    ...(from ? { from } : {}),
+  }
+}
+
+function sopAddSource(value: unknown): HostParams<'sops.add'> {
+  const o = fields(value)
+  if (o.kind === 'url') return { kind: 'url', url: string(o, 'url', URL_CHARS) }
+  if (o.kind === 'file') {
+    return { kind: 'file', name: string(o, 'name', 255), text: string(o, 'text', SOP_FILE_BYTES) }
+  }
+  throw invalidParams('kind must be url or file')
+}
+
+function sopSettingsChange(value: unknown): HostParams<'sops.setSettings'> {
+  const o = fields(value)
+  const suggest = optionalFlag(o, 'suggest')
+  let autoPick: Partial<Record<AgentId, boolean | null>> | undefined
+  if (o.autoPick !== undefined) {
+    const entries = Object.entries(fields(o.autoPick))
+    if (entries.length > 64) throw invalidParams('autoPick names too many agents')
+    autoPick = {}
+    for (const [id, allowed] of entries) {
+      if (!isAgentId(id)) throw invalidParams(`Unknown agent ${id}`)
+      if (allowed !== null && typeof allowed !== 'boolean') {
+        throw invalidParams('autoPick values must be true, false or null')
+      }
+      autoPick[id] = allowed
+    }
+  }
+  return { ...(suggest === undefined ? {} : { suggest }), ...(autoPick ? { autoPick } : {}) }
 }
 
 function count(o: Fields, key: string): number {
@@ -1412,6 +1522,75 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'routines.markSeen': (params) => ({ routineId: routineId(fields(params)) }),
+    'sops.list': none,
+    'sops.read': (params) => ({ sopId: sopId(fields(params)) }),
+    'sops.add': sopAddSource,
+    'sops.update': (params) => ({ sopId: sopId(fields(params)) }),
+    'sops.approve': (params) => {
+      const o = fields(params)
+      const hash = string(o, 'hash', 64)
+      if (!SOP_HASH.test(hash)) throw invalidParams('hash must be a SHA-256 in hex')
+      return { sopId: sopId(o), hash }
+    },
+    'sops.remove': (params) => ({ sopId: sopId(fields(params)) }),
+    'sops.pin': (params) => {
+      const o = fields(params)
+      return { sopId: sopId(o), stepId: stepId(o), pick: stepPickOf(o.pick ?? null) }
+    },
+    'sops.settings': none,
+    'sops.setSettings': sopSettingsChange,
+    'tasks.list': none,
+    'tasks.get': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.start': (params) => taskStart(params, platform),
+    'tasks.review': (params) => {
+      const o = fields(params)
+      const note = optionalNote(o, 'note', TASK_NOTE_CHARS)
+      return {
+        taskId: taskId(o),
+        roundId: string(o, 'roundId', 64),
+        approve: flag(o, 'approve'),
+        ...(note === undefined ? {} : { note }),
+      }
+    },
+    'tasks.answer': (params) => {
+      const o = fields(params)
+      const note = optionalNote(o, 'note', TASK_NOTE_CHARS)
+      return {
+        taskId: taskId(o),
+        roundId: string(o, 'roundId', 64),
+        outcome: string(o, 'outcome', 60),
+        ...(note === undefined ? {} : { note }),
+      }
+    },
+    'tasks.retry': (params) => {
+      const o = fields(params)
+      const note = optionalNote(o, 'note', TASK_NOTE_CHARS)
+      return { taskId: taskId(o), stepId: stepId(o), ...(note === undefined ? {} : { note }) }
+    },
+    'tasks.cancel': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.delete': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.note': (params) => {
+      const o = fields(params)
+      return { taskId: taskId(o), text: string(o, 'text', TASK_NOTE_CHARS) }
+    },
+    'tasks.pin': (params) => {
+      const o = fields(params)
+      return { taskId: taskId(o), stepId: stepId(o), pick: stepPickOf(o.pick ?? null) }
+    },
+    'tasks.update': (params) => {
+      const o = fields(params)
+      const title = optionalString(o, 'title', TASK_TITLE_CHARS)
+      const pinned = optionalFlag(o, 'pinned')
+      const archived = optionalFlag(o, 'archived')
+      const unread = optionalFlag(o, 'unread')
+      return {
+        taskId: taskId(o),
+        ...(title === undefined ? {} : { title }),
+        ...(pinned === undefined ? {} : { pinned }),
+        ...(archived === undefined ? {} : { archived }),
+        ...(unread === undefined ? {} : { unread }),
+      }
+    },
     'permissions.respond': (params) => {
       const o = fields(params)
       const base = { sessionId: sessionId(o), requestId: string(o, 'requestId', ID_CHARS) }

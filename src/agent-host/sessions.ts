@@ -59,6 +59,7 @@ import {
   type AgentId,
   type ConfigOption,
   type FormValues,
+  type HarnessId,
   type FromDevice,
   type FromSession,
   type MemoryWriteEntry,
@@ -190,6 +191,7 @@ import {
   type ModeRank,
 } from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
+import type { TaskSessionHooksRef, TaskStepStart } from './sop/engine'
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
 import type { ScratchFolders } from './scratch'
@@ -248,6 +250,15 @@ import {
 import { ThreadStoreError, type ThreadStore } from './threads/store'
 import type { UsageRow } from './usage/model'
 import { recordRows } from './usage/record'
+
+/** What a step may do without asking until it reports: edit and run commands in its folder. */
+const STEP_SCOPE: PermissionScope = { level: 'commands', web: false }
+
+/** The mode of each harness that asks before it acts, so a step's requests reach Kettu. */
+const STEP_MODES: Partial<Record<HarnessId, string>> = {
+  'claude-code': 'default',
+  codex: 'workspace-write',
+}
 
 export interface SessionTimings {
   /** Patches of a session are flushed at most this often. */
@@ -422,6 +433,8 @@ export interface SessionManagerDeps {
   settings: () => HostSettings
   /** What a routine's run hears of its session; set once the routines manager exists. */
   routine?: RoutineSessionHooksRef
+  /** What an SOP step hears of its session; set once the task engine exists. */
+  task?: TaskSessionHooksRef
   timings?: Partial<SessionTimings>
   now?: () => number
 }
@@ -1111,6 +1124,7 @@ export class SessionManager {
       parentId: record.parentId,
       origin: record.origin,
       routine: record.routine ?? null,
+      task: record.task ?? null,
       description: record.description,
       missing: this.missing.has(record.id),
       branch: record.branch,
@@ -1143,8 +1157,8 @@ export class SessionManager {
       // A prepared session is its window's alone until its first message.
       if (this.live.get(id)?.prepared) continue
       const summary = this.summary(id)
-      // A routine's runs are listed under their routine, never under their project.
-      if (summary.origin === 'routine') continue
+      // A routine's runs are listed under their routine, a task's steps under their task.
+      if (summary.origin === 'routine' || summary.origin === 'task') continue
       if (key === null || pathKey(summary.projectPath, this.deps.platform) === key)
         out.push(summary)
     }
@@ -3589,6 +3603,75 @@ export class SessionManager {
   }
 
   /**
+   * An SOP step's session: top-level with `origin: 'task'`, in its task's folder, in the mode that
+   * asks before it acts, so Kettu answers inside the step's scope; the step's prompt goes first.
+   * A worktree it is handed is the task's: removing the session never removes it.
+   */
+  async createStep(params: TaskStepStart): Promise<SessionSummary> {
+    const { agents, projects } = this.deps
+    if (!agents.has(params.agentId)) throw invalidParams(`Unknown agent ${params.agentId}`)
+    agents.assertEnabled(params.agentId)
+    const projectPath = await projects.resolveDirectory(params.projectPath)
+    const now = this.now()
+    const worktree = params.worktree ? { ...params.worktree } : undefined
+    if (worktree) delete worktree.pending
+    const record: SessionRecord = {
+      id: randomUUID(),
+      agentId: params.agentId,
+      acpSessionId: '',
+      projectPath,
+      ...(worktree ? { worktree } : {}),
+      title: params.title,
+      titleSource: 'agent',
+      createdAt: now,
+      updatedAt: now,
+      lastViewedAt: now,
+      parentId: null,
+      origin: 'task',
+      task: { ...params.task },
+      description: null,
+      branch: null,
+    }
+    const live = this.makeLive(record, false, 'starting')
+    live.unread = false
+    live.used = true
+    live.routineMode = STEP_MODES[harnessOf(params.agentId)] ?? null
+    const content: UserContent[] = [{ type: 'text', text: params.prompt }]
+    live.first = { content, entryId: this.addPrompt(live, content, now) }
+    this.touch(live.id)
+    this.deps.task?.current?.sessionCreated(live.id, params.task)
+    if (worktree && params.prepare) this.prepareWorktree(projectPath, worktree)
+    try {
+      live.startValues = params.options
+      await this.startNew(live)
+    } catch (error) {
+      if (this.live.get(live.id) === live) {
+        this.dropLive(live)
+        this.forget(live.id)
+      }
+      throw error
+    }
+    return this.summary(live.id)
+  }
+
+  /** Kettu's own message to a session, such as a step's reminder: sent now or queued. */
+  async sendFromKettu(sessionId: string, text: string): Promise<void> {
+    const content: UserContent[] = [{ type: 'text', text }]
+    const live = await this.revive(sessionId)
+    const { status, queue, queuePaused } = live.thread.session
+    if (canSend(status) && (queue.length === 0 || queuePaused)) {
+      this.sendPrompt(live, content)
+      return
+    }
+    if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
+      throw busyError(status)
+    }
+    this.update(live, { queue: [...queue, { id: randomUUID(), content, at: this.now() }] })
+    this.persist(live)
+    this.touch(live.id)
+  }
+
+  /**
    * A routine's run's session: created as `sessions.create` creates one, but top-level with
    * `origin: 'routine'`, in the routine's folder, in the mode its scope names, with the
    * routine's prompt as its first message.
@@ -4055,7 +4138,9 @@ export class SessionManager {
       return
     }
     // A run starts in the strictest mode that still asks, before anything is sent.
-    if (live.record.origin === 'routine') await this.applyRoutineMode(live, runtime.connection)
+    if (live.record.origin === 'routine' || live.record.origin === 'task') {
+      await this.applyRoutineMode(live, runtime.connection)
+    }
     if (live.startedMode) await this.applyStartedMode(live, runtime.connection)
     this.update(live, { status: 'ready' })
     this.deps.agents.signedIn(agentId)
@@ -4609,9 +4694,10 @@ export class SessionManager {
         if (this.inFront(live.id)) live.record.lastViewedAt = now
         this.persist(live)
         const stopped: { message: string } = { message: t('notice.stopped.title', { agent: name }) }
-        const routineTurn = turn
-          ? this.reportRun(live, { stopReason: null, error: stopped, usage: null, turn })
-          : false
+        const routineTurn =
+          (turn
+            ? this.reportRun(live, { stopReason: null, error: stopped, usage: null, turn })
+            : false) || this.reportStep(live)
         if (!routineTurn) {
           this.deps.events.attention(live.id, 'error', this.titleOf(live), stopped.message)
         }
@@ -6273,6 +6359,8 @@ export class SessionManager {
     delete record.pinnedAt
     delete record.archivedAt
     delete record.routine
+    delete record.task
+    if (record.origin === 'task') record.origin = 'user'
     // A title of its own, so one the agent reports from the copied history does not replace it.
     if (title === null) delete record.customTitle
     else record.customTitle = title
@@ -6381,6 +6469,7 @@ export class SessionManager {
       'pinnedAt',
       'archivedAt',
       'routine',
+      'task',
       'configDir',
       'cache',
       'model',
@@ -6625,13 +6714,15 @@ export class SessionManager {
     else live.unread = true
     this.persist(live)
     this.touch(live.id)
-    const routineTurn = this.reportRun(live, {
-      stopReason,
-      error: null,
-      usage: turnTokens ?? null,
-      turn,
-    })
-    // A run's end notifies as the routine's, once, so its session sends nothing here.
+    const routineTurn =
+      this.reportRun(live, {
+        stopReason,
+        error: null,
+        usage: turnTokens ?? null,
+        turn,
+      }) || this.reportStep(live)
+    // A run's end notifies as the routine's, once, and a step's as its task's, so its session
+    // sends nothing here.
     if (!routineTurn) {
       const reply = stopReason === 'end_turn' ? replySummary(live.thread) : null
       const changed = stopReason === 'end_turn' ? changedFiles(live.thread) : 0
@@ -6792,6 +6883,13 @@ export class SessionManager {
     return true
   }
 
+  /** Tells the task engine a step's turn ended; true for a step's session, which stays quiet. */
+  private reportStep(live: Live): boolean {
+    if (live.record.origin !== 'task') return false
+    this.deps.task?.current?.turnEnded(live.id)
+    return true
+  }
+
   /** The entries of a turn, after the user entry that opened it. */
   private turnEntries(live: Live, turn: Turn): ThreadEntry[] {
     const order = live.thread.order
@@ -6919,12 +7017,13 @@ export class SessionManager {
     this.persist(live)
     this.touch(live.id)
     if (givenBack) this.giveBack(live, turn)
-    const routineTurn = this.reportRun(live, {
-      stopReason: null,
-      error: mapped,
-      usage: null,
-      turn,
-    })
+    const routineTurn =
+      this.reportRun(live, {
+        stopReason: null,
+        error: mapped,
+        usage: null,
+        turn,
+      }) || this.reportStep(live)
     if (!routineTurn) {
       this.deps.events.attention(live.id, 'error', this.titleOf(live), mapped.message)
     }
@@ -7102,6 +7201,23 @@ export class SessionManager {
     )
   }
 
+  /** The `allow_once` option a step's scope allows in its folder, or null to ask the user. */
+  private stepAnswer(live: Live, request: PermissionRequest): string | null {
+    if (request.plan !== undefined || request.elicitation || request.questions) return null
+    const entry = live.thread.byId[request.toolEntryId]
+    if (entry?.kind !== 'tool') return null
+    return scopeAnswer(
+      STEP_SCOPE,
+      workDir(live.record),
+      {
+        toolKind: entry.toolKind,
+        locations: entry.locations.map((location) => location.path),
+        options: request.options,
+      },
+      this.deps.platform,
+    )
+  }
+
   private requestPermission(
     live: Live,
     request: PermissionRequest,
@@ -7121,6 +7237,24 @@ export class SessionManager {
             changes: {
               permission: null,
               permissionResult: { optionId, kind: 'allow_once', by: 'routine' },
+            },
+          },
+        ])
+        this.touch(live.id)
+        return Promise.resolve({ optionId })
+      }
+    }
+    // A step answers inside its scope until it reports; anything else waits for the user.
+    if (live.record.origin === 'task' && this.deps.task?.current?.working(live.id)) {
+      const optionId = this.stepAnswer(live, request)
+      if (optionId !== null) {
+        this.emit(live, [
+          {
+            op: 'entry.update',
+            id: request.toolEntryId,
+            changes: {
+              permission: null,
+              permissionResult: { optionId, kind: 'allow_once', by: 'task' },
             },
           },
         ])
@@ -7195,6 +7329,9 @@ export class SessionManager {
           true,
           tool ? tool.title : t('attention.permission'),
         )
+      } else if (live.record.origin === 'task' && this.deps.task?.current) {
+        // A step's request needs the user as its task does, which says so once.
+        this.deps.task.current.waiting(live.id, true)
       } else {
         const optionId = allowOnceOption(tool, request.options)
         const allow = request.options.find((option) => option.id === optionId)
@@ -7235,6 +7372,9 @@ export class SessionManager {
     this.stopWaiting(live)
     if (live.permissions.size === 0 && live.record.origin === 'routine') {
       this.deps.routine?.current?.waiting(live.id, false)
+    }
+    if (live.permissions.size === 0 && live.record.origin === 'task') {
+      this.deps.task?.current?.waiting(live.id, false)
     }
     this.updateBadge()
   }
@@ -8427,6 +8567,7 @@ export class SessionManager {
     this.watchers.delete(sessionId)
     this.seqs.delete(sessionId)
     if (record?.origin === 'routine') this.deps.routine?.current?.sessionGone(sessionId)
+    if (record?.origin === 'task') this.deps.task?.current?.sessionGone(sessionId)
     if (known) this.deps.events.removed(sessionId, portIds)
   }
 

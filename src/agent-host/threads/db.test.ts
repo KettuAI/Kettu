@@ -1316,3 +1316,115 @@ describe("the thread database's comments", () => {
     db.close()
   })
 })
+
+describe('SOP tasks', () => {
+  const task = (id: string, updatedAt: number) =>
+    ({
+      id,
+      projectPath: '/p',
+      title: 'Export',
+      text: 'Add export',
+      sopId: 'fix-a-bug',
+      sopName: 'Fix a bug',
+      sopSource: 'official',
+      sopHash: 'h',
+      sop: {
+        format: 1,
+        name: 'Fix a bug',
+        description: '',
+        locales: {},
+        sendBackLimit: 3,
+        steps: [
+          {
+            id: 'fix',
+            name: 'Fix',
+            prompt: 'Fix it.',
+            by: 'agent',
+            handIn: 'note',
+            outcomes: [{ name: 'Done', to: [], end: 'done', limit: null }],
+            youReview: false,
+            hint: null,
+            reviewOf: [],
+            tools: { mcp: [], skills: [] },
+          },
+        ],
+      },
+      pace: 'quick',
+      paceReason: null,
+      first: { agentId: 'claude-code', options: {} },
+      pins: {},
+      status: 'running',
+      end: null,
+      rounds: [],
+      waiting: [],
+      lanes: [
+        { id: 'main', parent: null, worktree: null, base: null, state: 'open', createdAt: 1 },
+      ],
+      arrows: {},
+      extra: {},
+      ahead: {},
+      notes: [],
+      ending: null,
+      needing: false,
+      from: null,
+      pinnedAt: null,
+      archivedAt: null,
+      unread: false,
+      createdAt: 1,
+      updatedAt,
+      endedAt: null,
+    }) as const
+
+  it('keeps a task whole, replaces it on a change and removes it', () => {
+    const db = open()
+    db.taskPut({ task: structuredClone(task('t-000000000001', 2)) as never })
+    db.taskPut({ task: structuredClone(task('t-000000000002', 1)) as never })
+    db.taskPut({
+      task: { ...structuredClone(task('t-000000000001', 3)), title: 'Renamed' } as never,
+    })
+    const all = db.taskAll()
+    expect(all.map((t) => [t.id, t.title])).toEqual([
+      ['t-000000000002', 'Export'],
+      ['t-000000000001', 'Renamed'],
+    ])
+    db.taskRemove({ taskId: 't-000000000002' })
+    expect(db.taskAll().map((t) => t.id)).toEqual(['t-000000000001'])
+    db.close()
+  })
+
+  it('leaves out a stored task that does not read, and says so', () => {
+    const file = tempFile()
+    const db = open(file)
+    db.taskPut({ task: structuredClone(task('t-000000000001', 1)) as never })
+    db.close()
+    const raw = new DatabaseSync(file)
+    raw.prepare('UPDATE sop_tasks SET json = \'{"id":1}\'').run()
+    raw.close()
+    const again = open(file)
+    expect(again.taskAll()).toEqual([])
+    expect(logs.some((l) => l.level === 'warn' && l.message.includes('t-000000000001'))).toBe(true)
+    again.close()
+  })
+
+  it('adds the task table to a database of version 8, keeping what it holds', () => {
+    const file = tempFile()
+    mkdirSync(path.dirname(file), { recursive: true })
+    const raw = new DatabaseSync(file)
+    raw.exec(`BEGIN; ${schemaAt(8)} PRAGMA user_version = 8; COMMIT;`)
+    raw
+      .prepare(
+        'INSERT INTO artifacts (id, project, title, head, session_id, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 1, 1)',
+      )
+      .run('art_kept', '/p', 'Kept', 's1')
+    raw.close()
+    const db = open(file)
+    expect(db.taskAll()).toEqual([])
+    db.taskPut({ task: structuredClone(task('t-000000000001', 1)) as never })
+    expect(db.taskAll()).toHaveLength(1)
+    db.close()
+    const check = new DatabaseSync(file)
+    expect(check.prepare('PRAGMA user_version').get()!.user_version).toBe(SCHEMA_VERSION)
+    expect(check.prepare('SELECT title FROM artifacts').get()).toEqual({ title: 'Kept' })
+    check.close()
+  })
+})

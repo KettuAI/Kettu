@@ -7,6 +7,7 @@ import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall, ArtifactCallName, ArtifactCalls } from '../artifacts/model'
 import type { RuntimeCall, RuntimeCallName, RuntimeCalls } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCallName, RoutineCalls } from '../routines/calls'
+import type { TaskCall, TaskCallName, TaskCalls } from '../sop/model'
 import type { LogFn } from '../storage'
 import type {
   ImageMode,
@@ -378,6 +379,14 @@ export class ThreadStore {
     params: RoutineCalls[K]['params'],
   ): Promise<RoutineCalls[K]['result']> {
     return this.request({ op: 'routine', call: { name, params } as RoutineCall })
+  }
+
+  /** A call on the SOP tasks, which share the database. */
+  task<K extends TaskCallName>(
+    name: K,
+    params: TaskCalls[K]['params'],
+  ): Promise<TaskCalls[K]['result']> {
+    return this.request({ op: 'task', call: { name, params } as TaskCall })
   }
 
   /** Settles once every request made so far is answered, whatever the answer. */

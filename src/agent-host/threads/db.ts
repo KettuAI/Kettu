@@ -35,6 +35,7 @@ import type {
 } from '../artifacts/model'
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall, RoutineCalls, RoutineRunStats } from '../routines/calls'
+import { taskRecordOf, type TaskCall, type TaskCalls } from '../sop/model'
 import {
   storedBlobs,
   EMPTY_SESSION,
@@ -65,7 +66,7 @@ import {
   type RuntimeStatements,
 } from './runtime-db'
 
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 // `turn` is the position of the entry that opened the entry's turn, so a page that starts at a
 // turn is one range of the primary key.
@@ -209,6 +210,18 @@ const ARTIFACT_TYPES = `
   ) STRICT, WITHOUT ROWID;
 `
 
+// SOP tasks, each with its rounds, lanes and arrows in one JSON record that only the agent host
+// writes. They do not reference threads, so a task keeps its record when a step's session goes.
+const SOP_TASKS = `
+  CREATE TABLE sop_tasks (
+    task_id      TEXT PRIMARY KEY,
+    project_path TEXT NOT NULL,
+    status       TEXT NOT NULL,
+    updated_at   INTEGER NOT NULL,
+    json         TEXT NOT NULL
+  ) STRICT, WITHOUT ROWID;
+`
+
 /** What brings a database of the version before each key up to it; a new one runs them all. */
 const MIGRATIONS: Record<number, string> = {
   2: ARTIFACTS,
@@ -218,6 +231,7 @@ const MIGRATIONS: Record<number, string> = {
   6: ARTIFACT_COMMENTS,
   7: RUNTIME_TABLES,
   8: ARTIFACT_TYPES,
+  9: SOP_TASKS,
 }
 
 /** The tables of a database at schema `version`, as a new one made then had them. */
@@ -534,6 +548,13 @@ function prepareAll(db: DatabaseSync) {
       "SELECT seq, run_id, json FROM routine_runs WHERE routine_id = ? AND json_extract(json, '$.seen') = 0 AND status IN ('succeeded', 'failed', 'timed_out', 'cancelled', 'interrupted')",
     ),
     deleteRoutineRuns: sql('DELETE FROM routine_runs WHERE routine_id = ?'),
+    putTask: sql(`
+      INSERT INTO sop_tasks (task_id, project_path, status, updated_at, json) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (task_id) DO UPDATE SET
+        project_path = excluded.project_path, status = excluded.status,
+        updated_at = excluded.updated_at, json = excluded.json`),
+    allTasks: sql('SELECT task_id, json FROM sop_tasks ORDER BY updated_at'),
+    deleteTask: sql('DELETE FROM sop_tasks WHERE task_id = ?'),
   }
 }
 
@@ -1671,6 +1692,52 @@ export class ThreadDb {
         return this.routineMarkSeen(call.params)
       case 'remove':
         return this.routineRemove(call.params)
+    }
+  }
+
+  // SOP tasks.
+
+  taskPut({ task }: TaskCalls['put']['params']): null {
+    this.must((sql) =>
+      sql.putTask.run(task.id, task.projectPath, task.status, task.updatedAt, JSON.stringify(task)),
+    )
+    return null
+  }
+
+  /** Every task that reads, oldest change first; one that does not is logged and left out. */
+  taskAll(): TaskCalls['all']['result'] {
+    return this.guard((sql) => {
+      const rows = sql.allTasks.all() as { task_id: string; json: string }[]
+      const tasks: TaskCalls['all']['result'] = []
+      for (const row of rows) {
+        let value: unknown = null
+        try {
+          value = JSON.parse(row.json)
+        } catch {
+          // Logged below as not reading.
+        }
+        const task = taskRecordOf(value)
+        if (task) tasks.push(task)
+        else this.log('warn', `The SOP task ${String(row.task_id)} does not read and is left out`)
+      }
+      return tasks
+    }, [])
+  }
+
+  taskRemove({ taskId }: TaskCalls['remove']['params']): null {
+    this.guard((sql) => sql.deleteTask.run(taskId), undefined)
+    return null
+  }
+
+  /** One task call, for the worker's `task` op. */
+  task(call: TaskCall): unknown {
+    switch (call.name) {
+      case 'put':
+        return this.taskPut(call.params)
+      case 'all':
+        return this.taskAll()
+      case 'remove':
+        return this.taskRemove(call.params)
     }
   }
 

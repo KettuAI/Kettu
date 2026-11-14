@@ -29,7 +29,7 @@ describe('the servers a session attaches with', () => {
   })
 
   // Allowed tools run without asking the user, so none may reach past Kettu's own data.
-  it("allow without asking only Kettu's plan, report, memory and session tools", async () => {
+  it("allow without asking only Kettu's plan, report, memory, session and SOP tools", async () => {
     const service = await started()
     const process = { closed: new Promise<void>(() => {}) } as AgentProcess
     const expected = [
@@ -48,6 +48,11 @@ describe('the servers a session attaches with', () => {
       'start_session',
       'read_session_history',
       'send_message',
+      'list_sops',
+      'start_sop',
+      'create_sop',
+      'sop_report',
+      'sop_pick',
     ]
     for (const server of [
       ...service.servers('s1', '/repo'),

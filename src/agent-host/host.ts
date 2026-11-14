@@ -134,6 +134,12 @@ import { claudeCacheTtl, type CacheTtlReader } from './prompt-cache'
 import { PortHub, type Handlers, type RequestContext } from './rpc'
 import { Attachments, toArrayBuffer } from './attachments'
 import { RoutinesManager, type RoutineTimings } from './routines/manager'
+import { TaskEngine, type TaskSessionHooksRef, type WrittenDocument } from './sop/engine'
+import type { SopSettings, TaskSummary } from '@shared/sop'
+import { STEP_HARNESSES } from './sop/picks'
+import { createTaskGit } from './sop/git'
+import { optionsOfPick, pickOfOptions, sopAgents } from './sop/host-agents'
+import { SopLibrary, sopsFile } from './sop/library'
 import type { RoutineSessionHooksRef } from './routines/hooks'
 import type { RoutineClock } from './routines/scheduler'
 import { ScratchFolders } from './scratch'
@@ -337,6 +343,10 @@ export class AgentHost {
   readonly sessions: SessionManager
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
+  /** The SOPs, official and the user's. */
+  readonly sopLibrary: SopLibrary
+  /** The tasks that run through SOPs. */
+  readonly tasks: TaskEngine
   /** The attachments of drafts and queued prompts, until sent or removed. */
   readonly attachments: Attachments
   /** Every session's thread, read a page at a time, in a worker of its own. */
@@ -581,7 +591,24 @@ export class AgentHost {
       claudeAgents: () => this.claudeAgents(),
     })
     this.memory.onChange(() => this.hub.broadcast({ type: 'memory.changed' }))
+    this.sopLibrary = new SopLibrary({
+      dir: path.join(options.userDataPath, 'sops'),
+      file: sopsFile(options.userDataPath, log),
+      knownTools: () => ({
+        mcp: new Set(this.settings.marketplace.mcp.map((server) => server.name)),
+        skills: new Set(this.settings.marketplace.skills.map((skill) => skill.name)),
+      }),
+      log,
+      changed: () => this.broadcast({ type: 'sops.changed' }),
+    })
     this.artifactService = new ArtifactService({
+      sop: {
+        library: this.sopLibrary,
+        report: (sessionId, input) => this.tasks.report(sessionId, input),
+        pick: (sessionId, picks) => this.tasks.pick(sessionId, picks),
+        isStep: (sessionId) => this.tasks.refOf(sessionId) !== null,
+        agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
+      },
       data: this.artifactData,
       store: this.artifacts,
       types: this.artifactTypes,
@@ -692,6 +719,7 @@ export class AgentHost {
       status: (status) => {
         this.hub.broadcast({ type: 'agent.status', status })
         this.routines.limitsChanged(status.id)
+        this.tasks?.recheck()
       },
       removed: (agentId) => this.hub.broadcast({ type: 'agent.removed', agentId }),
       processes: (processes) => this.reportProcesses(processes),
@@ -702,6 +730,7 @@ export class AgentHost {
       launchEnv: (agentId, env) => this.marketSkills.launchEnv(agentId, env),
     })
     const routineHooks: RoutineSessionHooksRef = { current: null }
+    const taskHooks: TaskSessionHooksRef = { current: null }
     this.worktrees = new WorktreeManager({
       git: createWorktreeGit({
         exec: this.execRunner.exec,
@@ -806,6 +835,7 @@ export class AgentHost {
           platform,
         ),
       routine: routineHooks,
+      task: taskHooks,
       events: {
         patches: (batch, portIds) => this.hub.send(portIds, { type: 'session.patches', batch }),
         summary: (summary, portIds) => {
@@ -896,6 +926,59 @@ export class AgentHost {
       },
     })
     routineHooks.current = this.routines.hooks
+    const threads = this.threads
+    this.tasks = new TaskEngine({
+      store: threads
+        ? {
+            put: (task) => threads.task('put', { task }),
+            all: () => threads.task('all', undefined),
+            remove: (taskId) => threads.task('remove', { taskId }),
+          }
+        : { put: async () => null, all: async () => [], remove: async () => null },
+      library: this.sopLibrary,
+      sessions: {
+        createStep: (params) => this.sessions.createStep(params),
+        send: (sessionId, text) => this.sessions.sendFromKettu(sessionId, text),
+        cancel: (sessionId) => this.sessions.cancel(sessionId),
+        delete: (sessionId) => this.sessions.delete(sessionId),
+        has: (sessionId) => this.sessions.has(sessionId),
+      },
+      worktrees: {
+        create: (projectPath, request) => this.worktrees.create(projectPath, request),
+        remove: async (projectPath, record, branch) => {
+          const expected = await this.worktrees.inspect(projectPath, record)
+          // Nothing the user was not shown is thrown away: a dirty worktree stays.
+          if (expected.uncommitted > 0) return
+          await this.worktrees.remove(projectPath, record, { branch, expected })
+        },
+      },
+      git: createTaskGit(this.execRunner.exec),
+      documents: {
+        written: (artifactId, sessionId, since) =>
+          this.documentWritten(artifactId, sessionId, since),
+        openComments: async (artifactId) =>
+          (await this.artifacts.threads(artifactId))
+            .filter((thread) => thread.resolvedAt === null)
+            .map((thread) => thread.comments.map((comment) => comment.body).join(' / ')),
+      },
+      resolveProject: (value) => this.projects.resolveDirectory(value),
+      agents: () =>
+        sopAgents({
+          statuses: this.agents.statuses(),
+          options: (agentId) => this.agentOptions.get(agentId),
+          catalog: this.catalog,
+          marketplace: this.settings.marketplace,
+        }),
+      optionsOf: (pick) => optionsOfPick(this.agentOptions.get(pick.agentId), pick),
+      pickOf: (agentId, values) => pickOfOptions(this.agentOptions.get(agentId), agentId, values),
+      events: {
+        changed: (task) => this.broadcast({ type: 'task.changed', task }),
+        removed: (taskId) => this.broadcast({ type: 'task.removed', taskId }),
+        attention: (task, kind) => this.taskAttention(task, kind),
+      },
+      log,
+    })
+    taskHooks.current = this.tasks
     this.consents = new ArtifactConsents({
       store: this.artifacts,
       isDevice: (portId) => this.hub.deviceOf(portId) !== null,
@@ -979,7 +1062,10 @@ export class AgentHost {
       host.artifactService.start(),
       host.routines.load(),
       host.memory.load(),
+      host.sopLibrary.load(),
     ])
+    // After the sessions, whose step sessions it messages when it resumes.
+    await host.tasks.load()
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
     host.routines.start()
@@ -1051,6 +1137,66 @@ export class AgentHost {
 
   private broadcast(event: HostEvent): void {
     this.hub.broadcast(event)
+  }
+
+  /** The SOP settings: suggestions, and which Claude Code and Codex agents Auto may pick. */
+  private sopSettings(): SopSettings {
+    const agents = this.agents
+      .statuses()
+      .filter((status) => STEP_HARNESSES.has(status.harnessId) && status.registered !== false)
+      .filter((status) => status.disabled !== true && status.uninstalled !== true)
+      .map((status) => {
+        const apiKey = status.account?.kind === 'api_key' || status.apiKey?.set === true
+        return { agentId: status.id, ...this.sopLibrary.autoPick(status.id, apiKey) }
+      })
+    return { suggest: this.sopLibrary.suggest, agents }
+  }
+
+  /** Whether `sessionId` wrote a version of the document artifact at or after `since`. */
+  private async documentWritten(
+    artifactId: string,
+    sessionId: string,
+    since: number,
+  ): Promise<WrittenDocument> {
+    let found
+    try {
+      found = await this.artifacts.get(artifactId)
+    } catch {
+      return { ok: false, why: 'not_found' }
+    }
+    if (found.type?.name !== 'document') return { ok: false, why: 'not_document' }
+    const versions = await this.artifacts.versions(artifactId)
+    const own = versions.find((v) => v.author === sessionId && v.createdAt >= since)
+    if (!own) return { ok: false, why: 'not_written' }
+    return { ok: true, version: found.version.version, title: found.artifact.title }
+  }
+
+  /** A task's notification: through its latest step's session, which opens the task from there. */
+  private taskAttention(task: TaskSummary, kind: 'needs-you' | 'ended'): void {
+    const step =
+      [...task.steps].reverse().find((s) => s.state === 'needs_you' || s.state === 'error') ??
+      [...task.steps].reverse().find((s) => s.sessionId !== null)
+    const sessionId =
+      step?.sessionId ?? [...task.steps].reverse().find((s) => s.sessionId)?.sessionId
+    if (!sessionId) return
+    const title =
+      kind === 'needs-you'
+        ? t('tasks.needsYou', { title: task.title })
+        : task.end === 'done'
+          ? t('tasks.done', { title: task.title })
+          : t('tasks.dropped', { title: task.title })
+    const body =
+      kind === 'needs-you'
+        ? t('tasks.needsYouBody', { step: step?.name ?? '', sop: task.sopName })
+        : t('tasks.endedBody', { sop: task.sopName, steps: task.steps.length })
+    this.options.send({
+      type: 'host:attention',
+      sessionId,
+      kind: kind === 'needs-you' ? 'permission' : 'turn-ended',
+      title,
+      body,
+      front: this.front(sessionId),
+    })
   }
 
   /** Who shows a session in front now: any window or device, and which devices. */
@@ -2032,6 +2178,36 @@ export class AgentHost {
       'routines.cancelRun': ({ runId }) => routines.cancelRun(runId),
       'routines.runs': ({ routineId, before }) => routines.runsOf(routineId, before),
       'routines.markSeen': ({ routineId }) => routines.markSeen(routineId),
+      'sops.list': () => this.sopLibrary.list(),
+      'sops.read': ({ sopId }) => this.sopLibrary.read(sopId),
+      'sops.add': (source) => this.sopLibrary.add(source),
+      'sops.update': ({ sopId }) => this.sopLibrary.update(sopId),
+      'sops.approve': ({ sopId, hash }) => this.sopLibrary.approve(sopId, hash),
+      'sops.remove': ({ sopId }) => this.sopLibrary.remove(sopId),
+      'sops.pin': async ({ sopId, stepId, pick }) => {
+        const entry = await this.sopLibrary.setPin(sopId, stepId, pick)
+        this.tasks.recheck()
+        return entry
+      },
+      'sops.settings': () => this.sopSettings(),
+      'sops.setSettings': (change) => {
+        this.sopLibrary.setSettings(change)
+        this.tasks.recheck()
+        return this.sopSettings()
+      },
+      'tasks.list': () => this.tasks.list(),
+      'tasks.get': ({ taskId }) => this.tasks.get(taskId),
+      'tasks.start': ({ from, ...params }) => this.tasks.start(params, from),
+      'tasks.review': ({ taskId, roundId, approve, note }) =>
+        this.tasks.review(taskId, roundId, approve, note ?? null),
+      'tasks.answer': ({ taskId, roundId, outcome, note }) =>
+        this.tasks.answer(taskId, roundId, outcome, note ?? null),
+      'tasks.retry': ({ taskId, stepId, note }) => this.tasks.retry(taskId, stepId, note ?? null),
+      'tasks.cancel': ({ taskId }) => this.tasks.cancel(taskId),
+      'tasks.delete': ({ taskId }) => this.tasks.delete(taskId),
+      'tasks.note': ({ taskId, text }) => this.tasks.note(taskId, text),
+      'tasks.pin': ({ taskId, stepId, pick }) => this.tasks.pinStep(taskId, stepId, pick),
+      'tasks.update': ({ taskId, ...change }) => this.tasks.update(taskId, change),
       'sessions.removeAll': async () => {
         await sessions.removeAll()
         this.options.send({ type: 'host:media-revoke', sessionId: null })

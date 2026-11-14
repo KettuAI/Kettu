@@ -36,4 +36,34 @@ export const CLAUDE_CODE: AgentDefinition = {
   cli: CLAUDE_CLI,
   configVariable: CONFIG_VARIABLES['claude-code'],
   mcpConfig: { project: '.mcp.json' },
+  modelNotes: [
+    {
+      match: ['claude-haiku-5-5', 'haiku'],
+      name: 'Haiku 5.5',
+      rank: 1,
+      price: { input: 0.1, output: 0.5 },
+      note: 'Smallest and fastest; enough for mechanical steps such as shipping or small edits.',
+    },
+    {
+      match: ['claude-sonnet-5-5', 'sonnet'],
+      name: 'Sonnet 5.5',
+      rank: 2,
+      price: { input: 2, output: 10 },
+      note: 'Strong general coder at a moderate price; fits most building and reviewing.',
+    },
+    {
+      match: ['claude-opus-5-5', 'opus'],
+      name: 'Opus 5.5',
+      rank: 3,
+      price: { input: 4, output: 20 },
+      note: 'For hard design, broad changes and careful review.',
+    },
+    {
+      match: ['claude-fable-5-2', 'fable'],
+      name: 'Fable 5.2',
+      rank: 4,
+      price: { input: 8, output: 40 },
+      note: 'The strongest; long turns can run many minutes, so keep it for the hardest steps.',
+    },
+  ],
 }

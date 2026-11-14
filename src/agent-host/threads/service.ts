@@ -77,6 +77,8 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.setOutlineTitles(request.sessionId, request.titles)
     case 'routine':
       return db.routine(request.call)
+    case 'task':
+      return db.task(request.call)
     case 'artifact':
       return artifact(db, request.call)
     case 'runtime':

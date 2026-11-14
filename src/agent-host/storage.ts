@@ -4,6 +4,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type { AgentAccount, AgentUpdate, PlanLimit } from '@shared/agent-host'
 import { GITHUB_PULL_REQUEST_URL, type ProjectWorktreeSettings } from '@shared/git'
+import type { SessionTaskRef } from '@shared/sop'
 import {
   isAgentId,
   isUserContent,
@@ -302,8 +303,9 @@ export interface SessionRecord {
   updatedAt: number
   lastViewedAt: number | null
   parentId: string | null
-  origin: 'user' | 'subagent' | 'routine'
+  origin: 'user' | 'subagent' | 'routine' | 'task'
   routine?: RoutineRef // a routine's run, when origin is 'routine'
+  task?: SessionTaskRef // an SOP step's session, when origin is 'task'
   description: string | null
   branch: string | null
   queue?: QueuedPrompt[] // prompts that were waiting when it was saved
@@ -617,6 +619,18 @@ function cacheOf(value: unknown): { cache?: PromptCache } {
   return { cache: { lastRequestAt: value.lastRequestAt, ttl: value.ttl } }
 }
 
+function taskRefOf(value: unknown): { task?: SessionTaskRef } {
+  if (
+    !isRecord(value) ||
+    !isString(value.taskId) ||
+    !isString(value.stepId) ||
+    !isString(value.roundId)
+  ) {
+    return {}
+  }
+  return { task: { taskId: value.taskId, stepId: value.stepId, roundId: value.roundId } }
+}
+
 function routineRefOf(value: unknown): { routine?: RoutineRef } {
   if (
     !isRecord(value) ||
@@ -777,7 +791,10 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       !isTime(item.updatedAt) ||
       !isNullable(isTime)(item.lastViewedAt) ||
       !nullableString(item.parentId) ||
-      (item.origin !== 'user' && item.origin !== 'subagent' && item.origin !== 'routine') ||
+      (item.origin !== 'user' &&
+        item.origin !== 'subagent' &&
+        item.origin !== 'routine' &&
+        item.origin !== 'task') ||
       !nullableString(item.description) ||
       !nullableString(item.branch)
     ) {
@@ -798,6 +815,7 @@ export function parseSessionsFile(data: Record<string, unknown>): SessionsFile |
       parentId: item.parentId,
       origin: item.origin,
       ...routineRefOf(item.routine),
+      ...taskRefOf(item.task),
       description: item.description,
       branch: item.branch,
       ...queueOf(item.queue),
