@@ -26,11 +26,14 @@ import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import { isComputerToolName } from '@shared/computer-use'
 import type { McpServer } from '../connection'
 import { PROXY_PREFIX } from '../marketplace/proxy'
+import type { McpToolGroup, McpToolSummary } from '@shared/agent-host'
 import {
   isMarketToolName,
   MARKET_AUTO_ALLOW,
   MARKET_INSTRUCTIONS,
+  MARKET_PUBLISH,
   MARKET_TOOLS,
+  MARKET_UNLIST,
   type MarketTools,
 } from '../marketplace/publish-tools'
 import { SERVICE_NAME } from '../service-name'
@@ -110,6 +113,27 @@ const SERVICE_TOOLS: Tool[] = [
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
 const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS}`
+
+/** The group each of Kettu's tools is listed in on its server's page in the Marketplace. */
+const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
+  (
+    [
+      [MARKET_TOOLS, 'marketplace'],
+      [SESSION_TOOLS, 'sessions'],
+      [PLAN_TOOLS, 'sessions'],
+      [TOOLS, 'artifacts'],
+      [DATA_TOOLS, 'artifacts'],
+      [BROWSER_TOOLS, 'browser'],
+      [COMPUTER_TOOLS, 'computer'],
+      [DEVICE_TOOLS, 'devices'],
+      [TERMINAL_TOOLS, 'terminal'],
+      [MEMORY_TOOLS, 'memory'],
+      [REPORT_TOOLS, 'reports'],
+    ] as const
+  ).flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const)),
+)
+/** The tools that wait for the user's answer in the session before they act. */
+const ASKING_TOOLS: ReadonlySet<string> = new Set([MARKET_PUBLISH, MARKET_UNLIST])
 
 /** Serves the computer use tools, on a host that carries the driver. */
 export interface ComputerCalls {
@@ -412,11 +436,13 @@ export class ArtifactService {
     ]
   }
 
-  /** Each tool's name and the first sentence of its description, for Settings › MCP servers. */
-  toolSummaries(): { name: string; description: string }[] {
+  /** Each tool's name, the first sentence of its description and its group, for the Marketplace. */
+  toolSummaries(): McpToolSummary[] {
     return this.listedTools().map((tool) => ({
       name: tool.name,
       description: firstSentence(tool.description ?? ''),
+      group: TOOL_GROUPS.get(tool.name) ?? 'sessions',
+      asks: ASKING_TOOLS.has(tool.name),
     }))
   }
 

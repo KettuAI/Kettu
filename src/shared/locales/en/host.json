@@ -605,7 +605,25 @@
   "marketPublish": {
     "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
     "handleTaken": "@{{handle}} is taken. Choose another publisher name.",
-    "publisherFailed": "Could not set the publisher name: {{reason}}"
+    "publisherFailed": "Could not set the publisher name: {{reason}}",
+    "notReady": "Nothing was uploaded: fix what the check found first.",
+    "failure": {
+      "signed_out": "Sign in to a Kettu account with Kettu’s cloud services on to publish.",
+      "unauthorized": "Sign in to your Kettu account again to publish.",
+      "network": "Couldn’t reach the Kettu Marketplace. Check the connection and try again.",
+      "unreadable": "Couldn’t read what you published.",
+      "storage_full": "Your cloud storage is full, and something only you can see counts against it.",
+      "too_many_listings": "Your account has as many listings as it can have.",
+      "rate_limited": "Too many versions in the last hour. Try again later.",
+      "last_version": "It’s the only version left. Publish a new one before you withdraw this one, or delete the listing.",
+      "handle_taken": "That publisher name is taken. Choose another.",
+      "taken_down": "Kettu took it down, so it takes no new versions.",
+      "version_exists": "This version is published already. Raise the version and try again.",
+      "no_publisher": "Choose a publisher name first.",
+      "not_found": "It’s no longer in the Kettu Marketplace.",
+      "check_failed": "The Kettu Marketplace’s check didn’t pass.",
+      "conflict": "Something else changed it at the same time. Try again."
+    }
   },
   "marketCommunity": {
     "signedOut": "Sign in to a Kettu account, with Kettu’s services on, to install from the Kettu Marketplace.",

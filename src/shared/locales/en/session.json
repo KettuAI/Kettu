@@ -1028,6 +1028,7 @@
       "unlist": "It leaves the Marketplace. People who have it keep it and its updates."
     },
     "notes": "What’s new · Written by {{agent}}, editable",
+    "notesYours": "What’s new",
     "notesPlaceholder": "What changed in this version",
     "publisherName": "Publisher name",
     "publisherHint": "Your first publish: this name goes on everything you publish. Change it later in Published.",

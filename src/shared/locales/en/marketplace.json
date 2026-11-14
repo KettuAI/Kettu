@@ -13,8 +13,10 @@
       "mcp": "MCP servers",
       "installed": "Installed",
       "plugins": "Plugins",
-      "skills": "Skills"
-    }
+      "skills": "Skills",
+      "published": "Published"
+    },
+    "searchPublished": "Search what you published"
   },
   "add": {
     "button": "Add",
@@ -462,5 +464,267 @@
     "updating": "Updating",
     "updateLine": "{{version}} available",
     "takenDownLine": "Taken down"
+  },
+  "published": {
+    "publish": "Publish",
+    "ask": "Ask an agent",
+    "askLine": "Start a session that publishes a folder",
+    "folder": "From a folder…",
+    "folderLine": "Kettu checks it and asks you to confirm",
+    "askPrompt": "Check the skill, plugin or MCP server in this project and publish it to the Kettu Marketplace.",
+    "askVersionPrompt": "Publish a new version of {{name}} from {{folder}} to the Kettu Marketplace, with short notes on what changed.",
+    "askVersionPromptAnywhere": "Publish a new version of {{name}} to the Kettu Marketplace, with short notes on what changed.",
+    "fromOrigin": "From {{folder}}",
+    "fromOriginLine": "The folder it was last published from",
+    "me": {
+      "since": "Publishing since {{date}}",
+      "noHandle": "You choose your publisher name at your first publish",
+      "editProfile": "Edit profile",
+      "published": "Published",
+      "installs": "Installs",
+      "week": "Last 7 days"
+    },
+    "needs": {
+      "title": "Needs you",
+      "notPublished": "Not published",
+      "needsFix": "Needs a fix",
+      "asked": "{{agent}} asked to publish {{version}} in <ref>{{session}}</ref>; it wasn’t published.",
+      "askedNoSession": "{{agent}} asked to publish {{version}}; it wasn’t published.",
+      "kept": "{{version}} from {{folder}} wasn’t published.",
+      "stays": "{{version}} stays listed.",
+      "discard": "Discard",
+      "review": "Review and publish",
+      "withdraw": "Withdraw {{version}}",
+      "checkAgain": "Check again"
+    },
+    "table": {
+      "title": "Published",
+      "label": "What you published",
+      "name": "Name",
+      "visibleTo": "Visible to",
+      "version": "Version",
+      "installs": "Installs",
+      "updated": "Updated",
+      "yourComputers": "Your computers",
+      "week": "+{{count}} in 7 days",
+      "noNew": "No new installs",
+      "needsFix": "{{version}} needs a fix",
+      "more": "More for {{name}}",
+      "noMatch": "Nothing you published matches “{{query}}”."
+    },
+    "visibility": {
+      "public": "Everyone",
+      "private": "Only me",
+      "unlisted": "Unlisted",
+      "takenDown": "Taken down"
+    },
+    "state": {
+      "public": "Listed",
+      "private": "Only me",
+      "unlisted": "Unlisted",
+      "takenDown": "Taken down"
+    },
+    "menu": {
+      "newVersion": "New version…",
+      "newVersionHeading": "New version",
+      "editDetails": "Edit details…",
+      "editDetailsLine": "Name, line, about and who can see it",
+      "unlist": "Unlist…",
+      "unlistLine": "People who have it keep it",
+      "listAgain": "List again",
+      "delete": "Delete…"
+    },
+    "foot": "Agents publish with the Marketplace tools of Kettu’s built-in MCP server, and each publish waits for your OK in the session.",
+    "seeTools": "See the tools",
+    "empty": {
+      "title": "Share what you made for agents",
+      "text": "Ask an agent to publish a skill, a plugin or an MCP server. It checks the folder with Kettu’s built-in tools, and nothing goes out until you confirm in the session.",
+      "start": "Start a session",
+      "or": "or <ref>publish a folder yourself</ref>",
+      "who": "Everyone, or only you",
+      "whoLine": "Only you: on every computer signed in to your account, nowhere else.",
+      "checked": "Checked before it’s listed",
+      "checkedLine": "Its manifest, secrets left in the files, and what it runs.",
+      "versions": "Versions",
+      "versionsLine": "Each new version goes to the people who have it, at their next update."
+    },
+    "readFailed": "Couldn’t read what you published: {{error}}",
+    "toast": {
+      "published": "Published {{name}} {{version}}",
+      "unlisted": "Unlisted {{name}}",
+      "listed": "{{name}} is listed again",
+      "deleted": "Deleted {{name}}",
+      "withdrawn": "Withdrew {{version}} of {{name}}",
+      "saved": "Saved {{name}}",
+      "profile": "Your publisher name is @{{handle}}",
+      "discarded": "Discarded the draft of {{name}}"
+    },
+    "dialogs": {
+      "folder": {
+        "checking": "Checking {{folder}}…",
+        "nothing": "Nothing to publish here",
+        "nothingText": "Kettu publishes a folder with a SKILL.md, a .claude-plugin or .codex-plugin folder, or a server.json.",
+        "problems": "Fix these first, then check again:",
+        "checkAgain": "Check again",
+        "failed": "Couldn’t publish: {{error}}"
+      },
+      "profile": {
+        "title": "Edit your publisher profile",
+        "description": "Your publisher name shows on everything you publish. What people installed keeps working.",
+        "name": "Publisher name",
+        "save": "Save"
+      },
+      "details": {
+        "title": "Edit {{name}}",
+        "description": "What people see in the Marketplace. Its files change only with a new version.",
+        "name": "Name",
+        "line": "One line",
+        "about": "About",
+        "aboutHint": "Shown on its page. Leave it empty to show none.",
+        "visibleTo": "Visible to",
+        "hint": {
+          "public": "Listed in the Marketplace for anyone signed in to Kettu.",
+          "private": "Not listed. Installs on the computers signed in to your account, and counts against your cloud storage.",
+          "unlisted": "Out of the Marketplace. People who have it keep it and its updates."
+        },
+        "lineInvalid": "One line of at most {{count}} characters.",
+        "save": "Save"
+      },
+      "unlist": {
+        "title": "Unlist {{name}}?",
+        "body_zero": "It leaves the Marketplace and gets no new installs. Nobody has installed it yet.",
+        "body_one": "It leaves the Marketplace and gets no new installs. The person who has it keeps it and its updates.",
+        "body_other": "It leaves the Marketplace and gets no new installs. The {{count}} people who have it keep it and its updates.",
+        "confirm": "Unlist"
+      },
+      "delete": {
+        "title": "Delete {{name}}?",
+        "body": "It leaves the Marketplace for good and can’t be downloaded again; its files are deleted. Everyone who installed it keeps their copy.",
+        "confirm": "Delete"
+      },
+      "withdraw": {
+        "title": "Withdraw {{version}}?",
+        "body": "Its files are deleted, and people who have it move to {{current}} at their next update.",
+        "confirm": "Withdraw"
+      },
+      "files": {
+        "title": "Files of {{name}} {{version}}",
+        "description": "What this version uploaded, as installs download it.",
+        "none": "This version uploaded no files: it points to its server."
+      }
+    },
+    "listing": {
+      "back": "Published",
+      "you": "You · Community",
+      "facts": {
+        "installs": "Installs",
+        "week": "Last 7 days",
+        "version": "Version",
+        "updated": "Updated",
+        "visibleTo": "Visible to"
+      },
+      "installs": "Installs",
+      "chartWeek": "installs in the last 7 days",
+      "chartRange": "Last 30 days",
+      "today": "Today",
+      "chartLabel": "Installs each day over the last 30 days",
+      "versions": "Versions",
+      "current": "Current",
+      "withdrawn": "Withdrawn",
+      "noNotes": "No notes",
+      "by": "Published by {{agent}} in <ref>{{session}}</ref>",
+      "byAgent": "Published by {{agent}}",
+      "bySession": "Published in <ref>{{session}}</ref>",
+      "byYou": "Published by you",
+      "versionMore": "More for {{version}}",
+      "viewFiles": "View files",
+      "openSession": "Open the session",
+      "withdraw": "Withdraw {{version}}…",
+      "withdrawLine": "Its people move to {{current}}",
+      "checks": "Checks on {{version}}",
+      "side": {
+        "publisher": "Publisher",
+        "kind": "Kind",
+        "folder": "Folder",
+        "folderIn": "in {{project}}",
+        "worksWith": "Works with"
+      },
+      "countsOnly": "Installs are counts only: Kettu doesn’t tell you who installed it.",
+      "takenDown": "Kettu took it down: {{reason}} It’s out of the Marketplace and takes no new versions; you can still change it, withdraw a version or delete it.",
+      "missingTitle": "This isn’t one of yours",
+      "missingText": "It may have been deleted.",
+      "backToPublished": "Back to Published"
+    },
+    "checks": {
+      "paths": {
+        "title": "File paths",
+        "detail": "Relative, with no .git folder"
+      },
+      "skill": {
+        "title": "SKILL.md",
+        "detail": "Name and description present"
+      },
+      "plugin": {
+        "title": "plugin.json",
+        "detail": "A {{harness}} plugin’s manifest"
+      },
+      "secrets": {
+        "title": "No secrets",
+        "detail_one": "No keys or tokens in its file",
+        "detail_other": "No keys or tokens in its {{count}} files"
+      },
+      "package": {
+        "title": "Package"
+      },
+      "remote": {
+        "title": "Remote"
+      },
+      "size": {
+        "title": "Size"
+      },
+      "skipped": "Skipped: {{note}}"
+    }
+  },
+  "builtin": {
+    "line": "Kettu’s own tools for your agents. Always there; it can be turned off for an agent, not uninstalled.",
+    "facts": {
+      "from": "From",
+      "builtInto": "Built into Kettu",
+      "tools": "Tools"
+    },
+    "about": "Agents use it to work with Kettu itself: sessions, artifacts, the browser, your computer and devices, the terminal, memory and plans. Kettu hands it to every session it starts, on top of what you installed.",
+    "tools": "Tools",
+    "groups": {
+      "marketplace": "Marketplace",
+      "sessions": "Sessions",
+      "artifacts": "Artifacts",
+      "browser": "Browser",
+      "computer": "Computer",
+      "devices": "Mobile devices",
+      "terminal": "Terminal",
+      "memory": "Memory",
+      "reports": "Problem reports"
+    },
+    "new": "New",
+    "whileSignedIn": "While you’re signed in to Kettu",
+    "waits": "Waits for you",
+    "more": "+ {{count}} more",
+    "marketTools": {
+      "marketplace_check": "Reads a folder, works out what it is and runs the checks publishing would. Uploads nothing.",
+      "marketplace_publish": "Publishes a folder as a new listing or a new version of one of yours.",
+      "marketplace_mine": "Lists what you published: versions, who can see it, installs and problems.",
+      "marketplace_unlist": "Takes one of yours out of the Marketplace; people who have it keep it."
+    },
+    "useIn": "Use in",
+    "useInNote": "Turned off for an agent, its sessions get none of these tools, the Marketplace ones included.",
+    "side": {
+      "kindValue": "MCP server",
+      "runs": "Runs",
+      "runsMac": "Inside Kettu on this Mac",
+      "runsComputer": "Inside Kettu on this computer",
+      "runsOn": "Inside Kettu on {{host}}",
+      "signedIn": "Signed in",
+      "notSignedIn": "Not signed in"
+    }
   }
 }

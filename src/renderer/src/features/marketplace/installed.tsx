@@ -5,7 +5,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Delete02Icon, RefreshIcon, Store01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
 import type { McpStatus } from '@shared/agent-host'
 import {
   displayTitle,
@@ -24,15 +23,20 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
-import { errorMessage } from '@renderer/lib/host'
-import { usableAgents } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { busyKey } from '@renderer/stores/marketplace'
 import { openMarketplace } from '@renderer/stores/view'
 import { removeMarketplace, setPluginEnabled, setServerOn, setSkillOn } from './actions'
 import { ConnectionControls } from './connect'
 import { ConfirmDialog } from './dialogs'
-import { useAgentName, useBusy, useCommunityLine, useConnection, useConnectionText } from './hooks'
+import {
+  useAgentName,
+  useBusy,
+  useCommunityLine,
+  useConnection,
+  useConnectionText,
+  useKettuSwitches,
+} from './hooks'
 import {
   catalogEntry,
   catalogPlugin,
@@ -50,6 +54,7 @@ import {
   skillMatches,
   type Listing,
 } from './model'
+import { KETTU_ITEM } from './published-keys'
 import { ItemRow, MoreButton, QuietNote, SkeletonRows } from './rows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
 import { PlainTile } from './tiles'
@@ -169,6 +174,7 @@ function KettuSection() {
                 t('kettu.tools', { count: server.tools.length }),
               ].join(' · ')}
               lineTitle={t('kettu.note')}
+              onOpen={() => openMarketplace({ item: KETTU_ITEM, tab: 'installed' })}
               end={<AgentsButton />}
             />
           </div>
@@ -239,20 +245,9 @@ function RetryButton() {
 /** "5 agents", or "3 of 5 agents", opening a switch per agent: whether it gets Kettu's tools. */
 function AgentsButton() {
   const { t } = useTranslation('marketplace')
-  const { useAgentsStore, useSettingsStore } = useHostScope()
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const off = useSettingsStore((s) => s.settings.mcp.kettu.off)
+  const { agents, off, error, set } = useKettuSwitches()
   const [open, setOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const on = agents.filter((agent) => !off.includes(agent.id)).length
-  const set = (agentId: AgentId, enabled: boolean) => {
-    const next = enabled ? off.filter((id) => id !== agentId) : [...off, agentId]
-    setError(null)
-    useSettingsStore
-      .getState()
-      .update({ mcp: { kettu: { off: next } } })
-      .catch((e: unknown) => setError(errorMessage(e)))
-  }
   return (
     <span className="ui-as-anchor">
       <Button
@@ -296,7 +291,7 @@ function AgentsButton() {
   )
 }
 
-function AgentSwitchRow({
+export function AgentSwitchRow({
   agentId,
   off,
   set,

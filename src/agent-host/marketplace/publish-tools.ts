@@ -5,26 +5,34 @@
 
 import path from 'node:path'
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import type { PublishPlan } from '@shared/agent-host'
 import {
   LISTING_NOTES_CHARS,
   VERSION,
   nextPatch,
   suggestHandle,
+  type ListingChange,
   type MarketAccount,
   type MarketCall,
   type MarketFailure,
   type MarketMine,
   type MarketProblem,
+  type MarketPublished,
+  type MarketPublisher,
   type MarketResults,
+  type MarketVersionFiles,
   type MineListing,
   type PublishDraft,
   type PublishManifest,
+  type PublishOrigin,
   type PublishVisibility,
 } from '@shared/market-publish'
-import type { MarketPublishChange, MarketPublishEntry, MarketPublishOutcome } from '@shared/thread'
+import type { MarketPublishAsk, MarketPublishChange, MarketPublishOutcome } from '@shared/thread'
 import type { Caller } from '../artifacts/tools'
+import { HostError } from '../errors'
+import { t } from '../i18n'
 import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
-import type { NewDraft } from './publish-drafts'
+import type { NewDraft, PublishedVersion } from './publish-drafts'
 
 export const MARKET_CHECK = 'marketplace_check'
 export const MARKET_PUBLISH = 'marketplace_publish'
@@ -161,10 +169,7 @@ export function isMarketToolName(name: string): boolean {
 }
 
 /** What a card shows, as the host adds it to the thread. */
-export type MarketAsk = Omit<
-  MarketPublishEntry,
-  'kind' | 'id' | 'expiresAt' | 'outcome' | 'device' | 'after'
->
+export type MarketAsk = MarketPublishAsk
 
 /** The user's answer to a card, or how it ended without one. */
 export type MarketAnswer =
@@ -192,9 +197,13 @@ export interface MarketToolsDeps {
   settle(sessionId: string, entryId: string, outcome: MarketPublishOutcome): void
   drafts: {
     put(draft: NewDraft): Promise<PublishDraft>
-    published(folder: string): Promise<void>
+    published(folder: string, version?: PublishedVersion): Promise<void>
     list(): PublishDraft[]
+    origins(): Record<string, PublishOrigin>
+    forget(listingId: string): Promise<void>
   }
+  /** What Marketplace › Published shows changed: the listings, the drafts or the publisher. */
+  changed(): void
   agentOf(sessionId: string): string | null
   sessionTitle(sessionId: string): string | null | undefined
   home: string
@@ -309,6 +318,8 @@ function stable(value: unknown): string {
 /** What a folder is ready to publish as, or why not, with the user's listing it would update. */
 interface Plan {
   check: FolderCheck
+  /** The folder as it was given, resolved but not through links, as the user's projects name it. */
+  target: string
   folder: string
   mine: MarketMine | null
   /** Why the user's listings could not be read, for a check that goes on without them. */
@@ -365,8 +376,141 @@ export class MarketTools {
   }
 
   /** Sets the account's publisher name, from the card of a first publish. */
-  async setPublisher(handle: string): Promise<void> {
-    await this.deps.call({ kind: 'set-publisher', handle })
+  async setPublisher(handle: string): Promise<MarketPublisher> {
+    const publisher = await this.deps.call({ kind: 'set-publisher', handle })
+    this.deps.changed()
+    return publisher
+  }
+
+  /** Marketplace › Published: what the account published, the drafts and where each came from. */
+  async published(): Promise<MarketPublished> {
+    const account = this.deps.account()
+    const drafts = this.deps.drafts.list()
+    const origins = this.deps.drafts.origins()
+    if (!account) return { account: null, mine: null, error: null, drafts, origins }
+    try {
+      const mine = await this.deps.call({ kind: 'mine' })
+      return { account, mine, error: null, drafts, origins }
+    } catch (error) {
+      if (!(error instanceof MarketCallError)) throw error
+      return { account, mine: null, error: userText(error.failure), drafts, origins }
+    }
+  }
+
+  /** From a folder: the same check and what to confirm as a session's card, uploading nothing. */
+  async checkFolder(target: string, draftId: string | null): Promise<PublishPlan> {
+    this.signedIn()
+    const draft = this.draftFor(draftId, target)
+    const plan = await this.plan(target, null, draftVersion(draft), true)
+    const problems = [...plan.problems]
+    if (plan.check.slug && !plan.mine && plan.mineError) problems.push({ message: plan.mineError })
+    const ask = await this.askOf(
+      plan,
+      draft?.manifest.visibility ?? null,
+      draft?.manifest.notes ?? null,
+    )
+    return { ask, problems }
+  }
+
+  /** Publishes a folder the user confirmed in the dialog; a refusal is kept as a draft. */
+  async publishFolder(
+    target: string,
+    answer: { draftId: string | null; visibility: PublishVisibility | null; notes: string | null },
+  ): Promise<MineListing> {
+    this.signedIn()
+    const draft = this.draftFor(answer.draftId, target)
+    const plan = await this.plan(target, null, draftVersion(draft), true)
+    if (plan.problems.length > 0 || !plan.check.kind || !plan.version) {
+      throw new HostError('invalid_params', t('marketPublish.notReady'), {
+        problems: plan.problems,
+      })
+    }
+    if (!plan.mine) {
+      throw new HostError('unavailable', plan.mineError ?? t('marketPublish.failure.unreadable'))
+    }
+    const from = draft
+      ? {
+          ...(draft.manifest.agent ? { agent: draft.manifest.agent } : {}),
+          ...(draft.manifest.session ? { session: draft.manifest.session } : {}),
+        }
+      : {}
+    const notes = answer.notes?.trim() ? answer.notes : null
+    const manifest = this.manifestOf(
+      plan,
+      answer.visibility ?? draft?.manifest.visibility ?? null,
+      plan.listing ? notes : null,
+      from,
+    )
+    try {
+      return await this.upload(plan, manifest, draft?.sessionId ?? null)
+    } catch (error) {
+      if (!(error instanceof MarketCallError)) throw error
+      await this.keepDraft(plan, manifest, {
+        sessionId: draft?.sessionId ?? null,
+        sessionTitle: draft?.sessionTitle ?? null,
+        agentId: draft?.agentId ?? null,
+        error: userText(error.failure),
+        problems: error.failure.problems ?? [],
+      })
+      throw hostFailure(error.failure)
+    }
+  }
+
+  async updateListing(id: string, change: ListingChange): Promise<MineListing> {
+    return this.change(() => this.deps.call({ kind: 'update', id, change }))
+  }
+
+  async withdrawVersion(id: string, version: string): Promise<MineListing> {
+    return this.change(() => this.deps.call({ kind: 'withdraw', id, version }))
+  }
+
+  async deleteListing(id: string): Promise<void> {
+    await this.change(() => this.deps.call({ kind: 'delete', id }))
+    await this.deps.drafts.forget(id)
+  }
+
+  async versionFiles(id: string, version: string): Promise<MarketVersionFiles> {
+    this.signedIn()
+    try {
+      return await this.deps.call({ kind: 'version', id, version })
+    } catch (error) {
+      if (error instanceof MarketCallError) throw hostFailure(error.failure)
+      throw error
+    }
+  }
+
+  /** Sets the publisher name from Edit profile, with the reason the service refused one. */
+  async renamePublisher(handle: string): Promise<MarketPublisher> {
+    return this.change(() => this.deps.call({ kind: 'set-publisher', handle }))
+  }
+
+  private async change<T>(call: () => Promise<T>): Promise<T> {
+    this.signedIn()
+    try {
+      const result = await call()
+      this.deps.changed()
+      return result
+    } catch (error) {
+      if (error instanceof MarketCallError) throw hostFailure(error.failure)
+      throw error
+    }
+  }
+
+  private signedIn(): void {
+    if (!this.deps.account()) {
+      throw new HostError('auth_required', t('marketPublish.failure.signed_out'))
+    }
+  }
+
+  /**
+   * The draft a dialog publishes, when it is of the folder it names; one kept of that folder since,
+   * as a refused publish keeps, stands in for it.
+   */
+  private draftFor(draftId: string | null, target: string): PublishDraft | null {
+    if (draftId === null) return null
+    const folder = path.resolve(target)
+    const drafts = this.deps.drafts.list().filter((d) => path.resolve(d.path) === folder)
+    return drafts.find((d) => d.id === draftId) ?? drafts[0] ?? null
   }
 
   private where(caller: Caller): string {
@@ -380,15 +524,26 @@ export class MarketTools {
     if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
       return relative.split(path.sep).join('/')
     }
+    return this.homeShown(target)
+  }
+
+  private homeShown(target: string): string {
     const home = this.deps.home
     return target === home || target.startsWith(home + path.sep)
       ? `~${target.slice(home.length)}`
       : target
   }
 
-  private async plan(caller: Caller, given: string, wanted: string | null): Promise<Plan> {
-    const base = this.where(caller)
-    const target = path.resolve(base, given)
+  /**
+   * `target` is absolute; the card shows it from `base`, or from the home folder without one. A
+   * `soft` version is dropped for the next patch when it is published already, as a draft's.
+   */
+  private async plan(
+    target: string,
+    base: string | null,
+    wanted: string | null,
+    soft = false,
+  ): Promise<Plan> {
     const check = await checkFolder(target)
     const problems = [...check.problems]
     let mine: MarketMine | null = null
@@ -416,6 +571,7 @@ export class MarketTools {
       }
     }
     const taken = listing?.versions.map((v) => v.version) ?? []
+    if (soft && wanted !== null && taken.includes(wanted)) wanted = null
     let version: string | null = check.version
     if (check.kind === 'skill') {
       version = wanted ?? (listing ? nextPatch(taken) : '1.0.0')
@@ -436,7 +592,8 @@ export class MarketTools {
     }
     return {
       check,
-      folder: this.shown(target, base),
+      target,
+      folder: base === null ? this.homeShown(target) : this.shown(target, base),
       mine,
       mineError,
       listing,
@@ -447,7 +604,9 @@ export class MarketTools {
 
   private async check(caller: Caller, input: unknown): Promise<CallToolResult> {
     const o = fields(input, ['path'])
-    const plan = await this.plan(caller, text(o, 'path', PATH_CHARS, true)!, null)
+    const base = this.where(caller)
+    const given = text(o, 'path', PATH_CHARS, true)!
+    const plan = await this.plan(path.resolve(base, given), base, null)
     const { check, listing, problems } = plan
     const lines: string[] = []
     if (check.kind && check.name) {
@@ -495,7 +654,8 @@ export class MarketTools {
 
   private async publish(caller: Caller, input: unknown): Promise<CallToolResult> {
     const args = parsePublishInput(input)
-    const plan = await this.plan(caller, args.path, args.version)
+    const base = this.where(caller)
+    const plan = await this.plan(path.resolve(base, args.path), base, args.version)
     const { check, listing } = plan
     if (plan.problems.length > 0 || !check.kind || !check.slug || !check.name || !plan.version) {
       throw new Refusal(
@@ -510,53 +670,13 @@ export class MarketTools {
         `Nothing was uploaded: ${plan.mineError ?? 'Kettu could not read the user’s listings.'}`,
       )
     }
-    const account = this.deps.account()
-    const changes = listing ? await this.changes(listing, check) : null
-    const asked = this.deps.ask(caller.sessionId, {
-      action: 'publish',
-      item: {
-        name: check.name,
-        slug: check.slug,
-        kind: check.kind,
-        harness: check.harness,
-        description: check.description ?? '',
-      },
-      listingId: listing?.id ?? null,
-      version: plan.version,
-      previous: listing?.current ?? null,
-      installs: listing?.installs.total ?? 0,
-      visibility: listing?.visibility ?? args.visibility ?? 'public',
-      notes: args.notes,
-      adds: check.adds,
-      runs: check.runs,
-      manifest: check.manifest,
-      folder: plan.folder,
-      files: check.files.map((file) => ({ path: file.path, size: file.size })),
-      bytes: check.bytes,
-      changes,
-      publisher: plan.mine.publisher || !account ? null : { suggested: suggestHandle(account) },
-    })
+    const ask = await this.askOf(plan, args.visibility, args.notes)
+    const asked = ask ? this.deps.ask(caller.sessionId, ask) : null
     if (!asked) throw new Refusal('not_found', 'This session is not open, so it shows no card.')
     const answer = await asked.answer
-    const manifest: PublishManifest = {
-      slug: check.slug,
-      name: check.name,
-      kind: check.kind,
-      ...(check.harness ? { harness: check.harness } : {}),
-      description: check.description ?? '',
-      ...(check.about ? { about: check.about } : {}),
-      version: plan.version,
-      ...(args.notes ? { notes: args.notes } : {}),
-      ...(listing ? {} : { visibility: args.visibility ?? 'public' }),
-      ...(check.server ? { server: check.server } : {}),
-      ...(check.adds.length > 0 ? { adds: check.adds } : {}),
-      ...this.from(caller.sessionId),
-    }
+    const manifest = this.manifestOf(plan, args.visibility, args.notes, this.from(caller.sessionId))
     const draft = (error: string | null, problems: MarketProblem[] = []) =>
-      this.deps.drafts.put({
-        path: check.path,
-        manifest,
-        listingId: listing?.id ?? null,
+      this.keepDraft(plan, manifest, {
         sessionId: caller.sessionId,
         sessionTitle: this.deps.sessionTitle(caller.sessionId) ?? null,
         agentId: this.deps.agentOf(caller.sessionId),
@@ -585,11 +705,7 @@ export class MarketTools {
     if (!listing && answer.visibility) manifest.visibility = answer.visibility
     let published: MineListing
     try {
-      published = await this.deps.call({
-        kind: 'publish',
-        manifest,
-        files: check.files.map((file) => ({ path: file.path, data: file.data.toString('base64') })),
-      })
+      published = await this.upload(plan, manifest, caller.sessionId)
     } catch (error) {
       if (!(error instanceof MarketCallError)) throw error
       const message = serviceText(error.failure)
@@ -611,7 +727,6 @@ export class MarketTools {
       handle: published.handle,
       version: plan.version,
     })
-    await this.deps.drafts.published(check.path)
     const who =
       published.visibility === 'public'
         ? 'listed for everyone'
@@ -633,6 +748,106 @@ export class MarketTools {
         visibility: published.visibility,
       },
     }
+  }
+
+  /** What a card or the folder dialog asks the user; null for a folder that is nothing to publish. */
+  private async askOf(
+    plan: Plan,
+    visibility: PublishVisibility | null,
+    notes: string | null,
+  ): Promise<MarketAsk | null> {
+    const { check, listing } = plan
+    if (!check.kind || !check.slug || !check.name) return null
+    const account = this.deps.account()
+    return {
+      action: 'publish',
+      item: {
+        name: check.name,
+        slug: check.slug,
+        kind: check.kind,
+        harness: check.harness,
+        description: check.description ?? '',
+      },
+      listingId: listing?.id ?? null,
+      version: plan.version,
+      previous: listing?.current ?? null,
+      installs: listing?.installs.total ?? 0,
+      visibility: listing?.visibility ?? visibility ?? 'public',
+      notes,
+      adds: check.adds,
+      runs: check.runs,
+      manifest: check.manifest,
+      folder: plan.folder,
+      files: check.files.map((file) => ({ path: file.path, size: file.size })),
+      bytes: check.bytes,
+      changes: listing ? await this.changes(listing, check) : null,
+      publisher:
+        !plan.mine || plan.mine.publisher || !account
+          ? null
+          : { suggested: suggestHandle(account) },
+    }
+  }
+
+  /** The manifest of a plan with no problems. */
+  private manifestOf(
+    plan: Plan,
+    visibility: PublishVisibility | null,
+    notes: string | null,
+    from: { agent?: string; session?: string },
+  ): PublishManifest {
+    const { check, listing } = plan
+    return {
+      slug: check.slug!,
+      name: check.name!,
+      kind: check.kind!,
+      ...(check.harness ? { harness: check.harness } : {}),
+      description: check.description ?? '',
+      ...(check.about ? { about: check.about } : {}),
+      version: plan.version!,
+      ...(notes ? { notes } : {}),
+      ...(listing ? {} : { visibility: visibility ?? 'public' }),
+      ...(check.server ? { server: check.server } : {}),
+      ...(check.adds.length > 0 ? { adds: check.adds } : {}),
+      ...from,
+    }
+  }
+
+  private async keepDraft(
+    plan: Plan,
+    manifest: PublishManifest,
+    rest: Pick<NewDraft, 'sessionId' | 'sessionTitle' | 'agentId' | 'error' | 'problems'>,
+  ): Promise<void> {
+    await this.deps.drafts.put({
+      path: plan.check.path,
+      manifest,
+      listingId: plan.listing?.id ?? null,
+      ...rest,
+    })
+    this.deps.changed()
+  }
+
+  /** Sends the version; once the service has it, its folder and session are kept with it. */
+  private async upload(
+    plan: Plan,
+    manifest: PublishManifest,
+    sessionId: string | null,
+  ): Promise<MineListing> {
+    const published = await this.deps.call({
+      kind: 'publish',
+      manifest,
+      files: plan.check.files.map((file) => ({
+        path: file.path,
+        data: file.data.toString('base64'),
+      })),
+    })
+    await this.deps.drafts.published(plan.check.path, {
+      listingId: published.id,
+      version: manifest.version,
+      sessionId,
+      path: plan.target,
+    })
+    this.deps.changed()
+    return published
   }
 
   /** Who asked, as the version history shows it. */
@@ -827,6 +1042,7 @@ export class MarketTools {
       throw new Refusal('refused', `The Kettu Marketplace did not unlist it: ${message}`)
     }
     this.deps.settle(caller.sessionId, asked.entryId, { kind: 'unlisted' })
+    this.deps.changed()
     return {
       content: [
         {
@@ -837,6 +1053,11 @@ export class MarketTools {
       structuredContent: { unlisted: true, listing: listingName(listing) },
     }
   }
+}
+
+/** The version a draft keeps: a skill's, which Kettu chose; the others' manifests say theirs. */
+function draftVersion(draft: PublishDraft | null): string | null {
+  return draft?.manifest.kind === 'skill' ? draft.manifest.version : null
 }
 
 function comparable(file: CheckedFile, oldSize: number): boolean {
@@ -861,6 +1082,52 @@ function serviceText(failure: MarketFailure): string {
       return 'Too many versions were published in the last hour. Try again later.'
     default:
       return failure.message
+  }
+}
+
+const USER_TEXT = new Set([
+  'signed_out',
+  'unauthorized',
+  'storage_full',
+  'too_many_listings',
+  'rate_limited',
+  'last_version',
+  'handle_taken',
+  'taken_down',
+  'version_exists',
+  'no_publisher',
+  'not_found',
+  'check_failed',
+  'conflict',
+])
+
+/** A service's failure in the user's language: by its code when Kettu knows it, else as it said. */
+export function userText(failure: MarketFailure): string {
+  if (failure.code === 'network') return t('marketPublish.failure.network')
+  if (!USER_TEXT.has(failure.code)) return failure.message
+  return (t as (key: string) => string)(`marketPublish.failure.${failure.code}`)
+}
+
+/** A service's failure as the window gets it, with its code and problems. */
+export function hostFailure(failure: MarketFailure): HostError {
+  const data = { code: failure.code, problems: failure.problems ?? [] }
+  const message = userText(failure)
+  switch (failure.code) {
+    case 'signed_out':
+    case 'unauthorized':
+      return new HostError('auth_required', message, data)
+    case 'check_failed':
+    case 'invalid_request':
+      return new HostError('invalid_params', message, data)
+    case 'not_found':
+      return new HostError('not_found', message, data)
+    case 'handle_taken':
+    case 'version_exists':
+    case 'last_version':
+    case 'conflict':
+      return new HostError('conflict', message, data)
+    default:
+      return new HostError('unavailable', message, data)
   }
 }
 

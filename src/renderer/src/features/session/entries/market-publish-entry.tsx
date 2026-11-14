@@ -25,7 +25,7 @@ import {
   type ListingVisibility,
   type PublishVisibility,
 } from '@shared/market-publish'
-import type { MarketPublishEntry as Entry } from '@shared/thread'
+import type { MarketPublishAsk as Ask, MarketPublishEntry as Entry } from '@shared/thread'
 import { emitAppEvent } from '@renderer/app/events'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { ApprovalCard } from '@renderer/components/affect/approval-card'
@@ -47,7 +47,7 @@ const VISIBILITY_ICON = {
 } as const satisfies Record<ListingVisibility, unknown>
 
 /** The listing's tile, on the Marketplace's own glyph and color for its kind. */
-function PublishTile({ item }: { item: Entry['item'] }) {
+function PublishTile({ item }: { item: Ask['item'] }) {
   const art = tileArt(
     item.kind === 'skill'
       ? { kind: 'skill', name: item.slug }
@@ -67,7 +67,7 @@ function PublishTile({ item }: { item: Entry['item'] }) {
   )
 }
 
-function KindLabel({ item }: { item: Entry['item'] }) {
+function KindLabel({ item }: { item: Ask['item'] }) {
   const { t } = useTranslation('session')
   return (
     <span className="ks-pub-kind">
@@ -78,7 +78,7 @@ function KindLabel({ item }: { item: Entry['item'] }) {
 }
 
 /** The listing's line: tile, name, kind and the version, old to new for a new version. */
-function ListingLine({ entry }: { entry: Entry }) {
+function ListingLine({ entry }: { entry: Ask }) {
   return (
     <div className="ks-pub-line">
       <PublishTile item={entry.item} />
@@ -123,7 +123,7 @@ function Check({ children }: { children: ReactNode }) {
 }
 
 /** The agents an install works with: a plugin's harness, else every agent Kettu runs. */
-function WorksWith({ item }: { item: Entry['item'] }) {
+function WorksWith({ item }: { item: Ask['item'] }) {
   const { t } = useTranslation('session')
   if (item.kind === 'plugin' && item.harness) {
     return (
@@ -144,7 +144,7 @@ function WorksWith({ item }: { item: Entry['item'] }) {
 }
 
 /** What the card shows of the version: what it adds and runs, its files or changes, the checks. */
-function Facts({ entry, visibility }: { entry: Entry; visibility: ReactNode }) {
+function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
   const { t } = useTranslation('session')
   const [filesOpen, setFilesOpen] = useState(false)
   const publish = entry.action === 'publish'
@@ -262,6 +262,111 @@ function stayInField(event: KeyboardEvent<HTMLElement>) {
 }
 
 /**
+ * What a publish or an unlisting asks, as a session's card and Marketplace › Published's folder
+ * dialog show it: the listing, who sees it, a new version's notes, what it adds and uploads, the
+ * checks and a first publish's publisher name. `agentName` is null when no agent asked.
+ */
+export function PublishForm({
+  ask,
+  fieldId,
+  agentName,
+  visibility,
+  onVisibility,
+  notes,
+  onNotes,
+  handle,
+  onHandle,
+  handleInvalid,
+}: {
+  ask: Ask
+  fieldId: string
+  agentName: string | null
+  visibility: PublishVisibility
+  onVisibility: (visibility: PublishVisibility) => void
+  notes: string
+  onNotes: (notes: string) => void
+  handle: string
+  onHandle: (handle: string) => void
+  handleInvalid: boolean
+}) {
+  const { t } = useTranslation('session')
+  const unlist = ask.action === 'unlist'
+  const fresh = !unlist && ask.listingId === null
+  const newVersion = !unlist && ask.listingId !== null
+  const visibilityRow = fresh ? null : (
+    <div>
+      <dt>{t('marketPublish.visibleTo')}</dt>
+      <dd>
+        <Visibility value={ask.visibility} />
+        {!unlist && <span className="ks-pub-faint">{t('marketPublish.asBefore')}</span>}
+      </dd>
+    </div>
+  )
+  return (
+    <div className="ks-pub__body">
+      <ListingLine entry={ask} />
+      {fresh && (
+        <div className="ks-pub-row">
+          <span className="ks-pub-label">{t('marketPublish.visibleTo')}</span>
+          <SegmentedControl
+            aria-label={t('marketPublish.visibleTo')}
+            variant="tray"
+            size="sm"
+            value={visibility}
+            onChange={onVisibility}
+            options={[
+              { value: 'public', label: t('marketPublish.visibility.public') },
+              { value: 'private', label: t('marketPublish.visibility.private') },
+            ]}
+          />
+          <small className="ks-pub-hint">{t(`marketPublish.visibilityHint.${visibility}`)}</small>
+        </div>
+      )}
+      {newVersion && (
+        <label className="ks-pub-notes">
+          <span className="ks-pub-label">
+            {agentName
+              ? t('marketPublish.notes', { agent: agentName })
+              : t('marketPublish.notesYours')}
+          </span>
+          <textarea
+            rows={3}
+            value={notes}
+            maxLength={LISTING_NOTES_CHARS}
+            placeholder={t('marketPublish.notesPlaceholder')}
+            onChange={(event) => onNotes(event.target.value)}
+            onKeyDown={stayInField}
+          />
+        </label>
+      )}
+      <Facts entry={ask} visibility={visibilityRow} />
+      {ask.publisher && (
+        <div className="ks-pub-row ks-pub-handle">
+          <label className="ks-pub-label" htmlFor={`${fieldId}-handle`}>
+            {t('marketPublish.publisherName')}
+          </label>
+          <span className="ks-pub-input">
+            <span className="ks-pub-faint">@</span>
+            <input
+              id={`${fieldId}-handle`}
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={32}
+              value={handle}
+              aria-invalid={handleInvalid}
+              onChange={(event) => onHandle(event.target.value.toLowerCase())}
+              onKeyDown={stayInField}
+            />
+          </span>
+          <small className="ks-pub-hint">{t('marketPublish.publisherHint')}</small>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * An agent's publish to the Kettu Marketplace, or its unlisting, waiting for the user on Approval
  * Card: the listing, who sees it, what it adds and uploads and the checks, a new version's notes and
  * a first publish's publisher name. Publish uploads; Not now keeps a draft and uploads nothing.
@@ -329,16 +434,6 @@ function PublishCard({
         })
       : t('marketPublish.description.new')
 
-  const visibilityRow = fresh ? null : (
-    <div>
-      <dt>{t('marketPublish.visibleTo')}</dt>
-      <dd>
-        <Visibility value={entry.visibility} />
-        {!unlist && <span className="ks-pub-faint">{t('marketPublish.asBefore')}</span>}
-      </dd>
-    </div>
-  )
-
   return (
     <div ref={root} className="min-w-0">
       <ApprovalCard
@@ -361,69 +456,21 @@ function PublishCard({
         onApprove={publish}
         onDeny={() => void answer('later')}
         preview={
-          <div className="ks-pub__body">
-            <ListingLine entry={entry} />
-            {fresh && (
-              <div className="ks-pub-row">
-                <span className="ks-pub-label">{t('marketPublish.visibleTo')}</span>
-                <SegmentedControl
-                  aria-label={t('marketPublish.visibleTo')}
-                  variant="tray"
-                  size="sm"
-                  value={visibility}
-                  onChange={setVisibility}
-                  options={[
-                    { value: 'public', label: t('marketPublish.visibility.public') },
-                    { value: 'private', label: t('marketPublish.visibility.private') },
-                  ]}
-                />
-                <small className="ks-pub-hint">
-                  {t(`marketPublish.visibilityHint.${visibility}`)}
-                </small>
-              </div>
-            )}
-            {newVersion && (
-              <label className="ks-pub-notes">
-                <span className="ks-pub-label">
-                  {t('marketPublish.notes', { agent: agentName })}
-                </span>
-                <textarea
-                  rows={3}
-                  value={notes}
-                  maxLength={LISTING_NOTES_CHARS}
-                  placeholder={t('marketPublish.notesPlaceholder')}
-                  onChange={(event) => setNotes(event.target.value)}
-                  onKeyDown={stayInField}
-                />
-              </label>
-            )}
-            <Facts entry={entry} visibility={visibilityRow} />
-            {entry.publisher && (
-              <div className="ks-pub-row ks-pub-handle">
-                <label className="ks-pub-label" htmlFor={`${entry.id}-handle`}>
-                  {t('marketPublish.publisherName')}
-                </label>
-                <span className="ks-pub-input">
-                  <span className="ks-pub-faint">@</span>
-                  <input
-                    id={`${entry.id}-handle`}
-                    type="text"
-                    autoComplete="off"
-                    spellCheck={false}
-                    maxLength={32}
-                    value={handle}
-                    aria-invalid={problem !== null}
-                    onChange={(event) => {
-                      setHandle(event.target.value.toLowerCase())
-                      setProblem(null)
-                    }}
-                    onKeyDown={stayInField}
-                  />
-                </span>
-                <small className="ks-pub-hint">{t('marketPublish.publisherHint')}</small>
-              </div>
-            )}
-          </div>
+          <PublishForm
+            ask={entry}
+            fieldId={entry.id}
+            agentName={agentName}
+            visibility={visibility}
+            onVisibility={setVisibility}
+            notes={notes}
+            onNotes={setNotes}
+            handle={handle}
+            onHandle={(next) => {
+              setHandle(next)
+              setProblem(null)
+            }}
+            handleInvalid={problem !== null}
+          />
         }
       />
       {(problem ?? error) && (

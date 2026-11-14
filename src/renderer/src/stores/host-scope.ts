@@ -38,6 +38,7 @@ import {
   useMarketplaceStore,
   type MarketplaceStoreHook,
 } from './marketplace'
+import { marketPublishedChanged } from './market-published'
 import { createMcpStore, useMcpStore, type McpStoreHook } from './mcp'
 import { useRemoteStore, type RemoteStore } from './remote'
 import { useSettingsStore, type SettingsStore } from './settings'
@@ -170,6 +171,9 @@ export function hostScopeEvent(hostId: string, event: HostEvent | HostAdminEvent
       break
     case 'market.connectionChanged':
       marketConnectionChanged(event, other.scope.useMarketplaceStore)
+      break
+    case 'market.publishedChanged':
+      marketPublishedChanged(other.scope.hostId)
       break
   }
 }

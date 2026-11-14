@@ -23,6 +23,8 @@ import { harnessOf } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
 import type { HostScope } from '@renderer/stores/host-scope'
+import { publishedStore } from '@renderer/stores/market-published'
+import { publishedTitle } from './published-keys'
 
 /** A server as its listing shows it; what only the catalog knows is null for one added by hand. */
 export interface Listing {
@@ -156,6 +158,8 @@ export function parseItem(key: string): ItemRef | null {
 
 /** A listing's name for the history, where the stores know it. */
 export function listingTitle(scope: HostScope, key: string): string | null {
+  const own = publishedTitle(publishedStore(scope.hostId, scope.request).getState().published, key)
+  if (own !== undefined) return own
   const ref = parseItem(key)
   if (!ref) return null
   const { mcp, skills } = scope.useSettingsStore.getState().settings.marketplace

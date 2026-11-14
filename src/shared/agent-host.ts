@@ -39,7 +39,18 @@ import type {
   PluginScope,
   SkillSource,
 } from './marketplace'
-import type { PublishDraft, PublishKind, PublishVisibility } from './market-publish'
+import type {
+  ListingChange,
+  MarketAccount,
+  MarketProblem,
+  MarketPublished,
+  MarketPublisher,
+  MarketVersionFiles,
+  MineListing,
+  PublishDraft,
+  PublishKind,
+  PublishVisibility,
+} from './market-publish'
 import type { CommunityDirectory, CommunityInstalled, CommunityListing } from './market-community'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
@@ -94,6 +105,7 @@ import type {
   ProblemReportOutcome,
   QuestionAnswer,
   FormValues,
+  MarketPublishAsk,
   SessionSnapshot,
   SessionStatus,
   UserContent,
@@ -376,6 +388,36 @@ export interface AgentConfigItem {
   chosen: boolean // the agent's own folder, set by Kettu, whose env is then null
 }
 
+/** The groups Kettu's own tools are listed in, on its server's page in the Marketplace. */
+export type McpToolGroup =
+  | 'marketplace'
+  | 'sessions'
+  | 'artifacts'
+  | 'browser'
+  | 'computer'
+  | 'devices'
+  | 'terminal'
+  | 'memory'
+  | 'reports'
+
+export interface McpToolSummary {
+  name: string
+  description: string
+  group: McpToolGroup
+  /** It waits for the user's answer in the session before it acts. */
+  asks: boolean
+}
+
+/**
+ * A folder checked for Marketplace › Published's From a folder: what the confirmation shows, as a
+ * session's card does, and what keeps it from being published. `ask` is null when the folder is
+ * nothing Kettu can publish.
+ */
+export interface PublishPlan {
+  ask: MarketPublishAsk | null
+  problems: MarketProblem[]
+}
+
 /** For Marketplace › Installed: Kettu's own server, and where each agent keeps its own servers. */
 export interface McpStatus {
   servers: {
@@ -384,7 +426,7 @@ export interface McpStatus {
     builtIn: boolean // Kettu's own; the only server today
     running: boolean // it listens on 127.0.0.1
     error: string | null // why it does not, from its last try
-    tools: { name: string; description: string }[] // as tools/list answers them, first sentence each
+    tools: McpToolSummary[] // as tools/list answers them, first sentence each
   }[]
   places: {
     agentId: AgentId // each agent that keeps MCP servers of its own in a file, in catalog order
@@ -706,6 +748,28 @@ export interface HostContract {
     result: InstalledPlugin
   }
   'market.reportCommunity': { params: { id: string; message: string }; result: void }
+  // Marketplace › Published: the host's Kettu account while it is signed in with Kettu's services
+  // on, which alone shows the tab; then what it published, its drafts and where each came from.
+  'market.account': { params: void; result: { account: MarketAccount | null } }
+  'market.published': { params: void; result: MarketPublished }
+  'market.setPublisher': { params: { handle: string }; result: MarketPublisher }
+  'market.updateListing': { params: { id: string; change: ListingChange }; result: MineListing }
+  'market.withdrawVersion': { params: { id: string; version: string }; result: MineListing }
+  'market.deleteListing': { params: { id: string }; result: void }
+  'market.versionFiles': { params: { id: string; version: string }; result: MarketVersionFiles }
+  // From a folder: the check and what to confirm, then the publish once the user confirmed it, as
+  // a session's card does; a draft's own notes, visibility and session go with it.
+  'market.checkFolder': { params: { path: string; draftId?: string }; result: PublishPlan }
+  'market.publishFolder': {
+    params: {
+      path: string
+      draftId?: string
+      visibility?: PublishVisibility
+      notes?: string
+      handle?: string
+    }
+    result: MineListing
+  }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
@@ -1302,6 +1366,15 @@ export const HOST_METHODS = [
   'market.communityInstalled',
   'market.installCommunityPlugin',
   'market.reportCommunity',
+  'market.account',
+  'market.published',
+  'market.setPublisher',
+  'market.updateListing',
+  'market.withdrawVersion',
+  'market.deleteListing',
+  'market.versionFiles',
+  'market.checkFolder',
+  'market.publishFolder',
   'projects.list',
   'projects.add',
   'projects.remove',
@@ -1482,6 +1555,8 @@ export type HostEvent =
   | { type: 'git.tools'; tools: GitTools }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
+  // The account, what it published or the drafts changed; Marketplace › Published reads again.
+  | { type: 'market.publishedChanged' }
   | { type: 'memory.changed' } // Kettu's memory or its switch changed; a page showing it reads again
   // A server's sign-in changed; `loginId` and `error` close a Connect the window started.
   | {
