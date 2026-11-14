@@ -220,16 +220,35 @@ export function foxSvg(framing = 'tile', { colors } = {}) {
 // The square around the fox in the drawing's coordinates, for the mark.
 const MARK = { x: 300, y: 303, size: 648 }
 
+// Off its tile the fox's cream cheek edges, ear tips and chin fade into a white ground, leaving only
+// the round forehead. The mark's chin ends in peach, and a soft peach band runs just inside its outer
+// outline: the fox's alpha less an eroded, blurred copy, so the seams between its parts stay as drawn.
+// Moving that copy toward the light thins the band at the upper left and fills it at the lower right.
+const WEDGE_END = '<stop offset=".93" stop-color="#FDE4C6"/><stop offset="1" stop-color="#FEEDDC"/>'
+const MARK_WEDGE_END =
+  '<stop offset=".93" stop-color="#FCC9A0"/><stop offset="1" stop-color="#FBBE92"/>'
+const MARK_EDGE = `
+  <filter id="markEdge" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+    <feMorphology in="SourceAlpha" operator="erode" radius="13" result="eroded"/>
+    <feOffset in="eroded" dx="-6" dy="-6" result="lit"/>
+    <feGaussianBlur in="lit" stdDeviation="8" result="core"/>
+    <feComposite in="SourceAlpha" in2="core" operator="out" result="band"/>
+    <feFlood flood-color="#F39256" flood-opacity=".62"/>
+    <feComposite in2="band" operator="in" result="shade"/>
+    <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shade"/></feMerge>
+  </filter>`
+
 /**
  * The icon's fox alone, in the icon's colors: no tile, no sheets and none of the shadow it casts on
- * them, cropped to a square around it, for places that set it beside text.
+ * them, cropped to a square around it, for places that set it beside text, on light or dark grounds.
  */
 export function foxMarkSvg() {
   const { x, y, size } = MARK
+  if (!FOX_DEFS.includes(WEDGE_END)) throw new Error('The chin gradient changed; update the mark')
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="${x} ${y} ${size} ${size}">\n` +
-    `<defs>${FOX_DEFS}</defs>\n` +
-    `<g id="fox" transform="translate(${FOX_DX} 0)">${FOX}</g>\n</svg>\n`
+    `<defs>${FOX_DEFS.replace(WEDGE_END, MARK_WEDGE_END)}${MARK_EDGE}</defs>\n` +
+    `<g filter="url(#markEdge)"><g id="fox" transform="translate(${FOX_DX} 0)">${FOX}</g></g>\n</svg>\n`
   )
 }
 
