@@ -7,6 +7,9 @@ export interface MemoryItem {
   id: string
 }
 
+/** The id of the page that adds an entry, which no entry's id can be. */
+export const NEW_MEMORY = '+'
+
 /** The item a memory entry's page goes by: `g/<id>`, or `p/<id>/<project>` with the path encoded. */
 export function memoryItemKey(scope: MemoryScope, id: string): string {
   return scope.layer === 'global' ? `g/${id}` : `p/${id}/${encodeURIComponent(scope.project)}`
