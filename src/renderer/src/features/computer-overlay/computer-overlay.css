@@ -1,0 +1,195 @@
+/* Computer use over the desktop: transparent pages in windows of their own. */
+html[data-overlay],
+html[data-overlay] body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ---------- The light's window: the real window, and the light and the pointer on it ---------- */
+.kco-target {
+  position: absolute;
+}
+
+.kco-pointer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  pointer-events: none;
+  transition: transform 620ms var(--ease-out-quint);
+  animation: kco-pointer-in 200ms ease both;
+}
+.kco-pointer__mark {
+  /* The tip of the arrow is the point it acts on. */
+  margin: -2px 0 0 -3px;
+  filter: drop-shadow(0 1px 2px var(--agent-pointer-shadow));
+}
+.kco-pointer__mark path {
+  fill: var(--agent-pointer);
+  stroke: var(--agent-pointer-edge);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+.kco-pointer__name {
+  margin-top: 14px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--agent-pointer);
+  box-shadow: 0 2px 6px -2px var(--agent-pointer-tag-shadow);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+  color: var(--on-fill);
+  white-space: nowrap;
+}
+/* It rings where it clicks, once it has arrived there. */
+.kco-pointer__ring {
+  position: absolute;
+  top: -13px;
+  left: -13px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--agent-pointer);
+  animation: kco-ring 520ms ease-out 560ms both;
+}
+@keyframes kco-ring {
+  from {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+@keyframes kco-pointer-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---------- The label at the top of the screen ---------- */
+.kco-float-room {
+  display: flex;
+  justify-content: center;
+  width: max-content;
+}
+.kco-float {
+  display: inline-flex;
+  overflow: hidden;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--computer-label);
+  box-shadow: var(--computer-float-shadow);
+  font-size: 13px;
+  color: color-mix(in srgb, var(--on-fill) 88%, transparent);
+  white-space: nowrap;
+  animation: kco-float-in 360ms var(--ease-out-quint) both;
+}
+.kco-float[data-control='you'] {
+  background: var(--bg-surface);
+  box-shadow: var(--computer-float-you-shadow);
+  color: var(--text-secondary);
+}
+.kco-float__in {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 5px 0 12px;
+  animation: kco-blur-rise 280ms var(--ease-out-quint) both;
+}
+.kco-float__icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.kco-float__text b {
+  font-weight: 600;
+  color: var(--on-fill);
+}
+.kco-float[data-control='you'] .kco-float__text b {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kco-float__btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--on-fill) 20%, transparent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--on-fill);
+  outline: none;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+.kco-float__btn:hover {
+  background: color-mix(in srgb, var(--on-fill) 30%, transparent);
+}
+.kco-float__btn:active {
+  transform: scale(0.97);
+}
+.kco-float__btn--quiet {
+  background: transparent;
+}
+.kco-float__btn--quiet:hover {
+  background: color-mix(in srgb, var(--on-fill) 14%, transparent);
+}
+.kco-float__btn kbd {
+  margin-left: 3px;
+  font: inherit;
+  font-size: 11.5px;
+  opacity: 0.75;
+}
+.kco-float__btn--solid,
+.kco-float__btn--solid:hover {
+  background: var(--text-primary);
+  color: var(--bg-surface);
+}
+.kco-float__btn--solid:hover {
+  opacity: 0.88;
+}
+@keyframes kco-float-in {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+}
+@keyframes kco-blur-rise {
+  from {
+    transform: translateY(4px);
+    filter: blur(4px);
+    opacity: 0;
+  }
+}
+
+:root[data-reduce-motion='always']
+  :is(.kco-float, .kco-float__in, .kco-pointer, .kco-pointer__ring) {
+  animation: none !important;
+  transition: none !important;
+}
+:root[data-reduce-motion='always'] .kco-pointer__ring {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kco-float,
+  .kco-float__in,
+  .kco-pointer {
+    animation: none !important;
+    transition: none !important;
+  }
+  .kco-pointer__ring {
+    display: none;
+  }
+}

@@ -1,5 +1,10 @@
-import { useEffect, useState } from 'react'
-import { ComputerIcon, DashboardSquare01Icon } from '@hugeicons/core-free-icons'
+import { useState } from 'react'
+import {
+  ArrowTurnBackwardIcon,
+  ComputerIcon,
+  Cursor02Icon,
+  DashboardSquare01Icon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { SessionView } from '@shared/thread'
@@ -8,6 +13,7 @@ import { SHEET_INSIDE } from '@renderer/features/shell/sheet'
 import { errorMessage, host } from '@renderer/lib/host'
 import { cn } from '@renderer/lib/utils'
 import { useThreadsStore } from '@renderer/stores/threads'
+import { useAppIcon } from './app-icon'
 
 /** How far back from the thread's end a waiting app card is looked for: it follows the agent. */
 const WAITING_LOOKBACK = 40
@@ -38,23 +44,6 @@ function useWaitingApp(sessionId: string): string | null {
     }
     return null
   })
-}
-
-/** The system's icon for the app at `path`, as main reads it; null until then, or when none. */
-function useAppIcon(path: string | null): string | null {
-  const [icon, setIcon] = useState<{ path: string; url: string | null } | null>(null)
-  useEffect(() => {
-    if (!path) return
-    let live = true
-    window.kettu.computer.appIcon(path).then(
-      (url) => live && setIcon({ path, url }),
-      () => live && setIcon({ path, url: null }),
-    )
-    return () => {
-      live = false
-    }
-  }, [path])
-  return icon && icon.path === path ? icon.url : null
 }
 
 /**
@@ -88,6 +77,12 @@ export function ComputerLabel({
       setStopping(false)
     }
   }
+  const control = (method: 'computer.takeOver' | 'computer.handBack') => {
+    onError(null)
+    host(method, { sessionId: session.id }).catch((caught: unknown) =>
+      onError(errorMessage(caught)),
+    )
+  }
 
   const name = <b className="font-semibold" />
   const frame =
@@ -117,6 +112,47 @@ export function ComputerLabel({
             components={{ app: name }}
           />
         </span>
+      </div>
+    )
+  }
+
+  if (view?.control === 'you' && !stopping) {
+    return (
+      <div
+        role="status"
+        data-computer-label=""
+        className={cn(
+          frame,
+          'bg-card pr-1 text-secondary shadow-[0_0_0_var(--hairline)_var(--border-strong)]',
+        )}
+      >
+        <HugeiconsIcon
+          icon={Cursor02Icon}
+          strokeWidth={1.9}
+          aria-hidden
+          className="size-3.75 shrink-0 text-primary"
+        />
+        <span className="min-w-0 truncate">
+          <Trans
+            t={t}
+            i18nKey={app ? 'computerBar.tookOver' : 'computerBar.tookOverComputer'}
+            values={{ agent: agentName, app }}
+            components={{ app: <b className="font-medium text-primary" /> }}
+          />
+        </span>
+        <button
+          type="button"
+          onClick={() => control('computer.handBack')}
+          className="flex h-5.5 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-small font-medium text-primary-foreground transition-opacity duration-(--duration-fast) outline-none hover:opacity-90 focus-ring"
+        >
+          <HugeiconsIcon
+            icon={ArrowTurnBackwardIcon}
+            strokeWidth={1.9}
+            aria-hidden
+            className="size-3.25"
+          />
+          {t('computerBar.handBack')}
+        </button>
       </div>
     )
   }
@@ -160,6 +196,15 @@ export function ComputerLabel({
           t('computerBar.using', { agent: agentName })
         )}
       </span>
+      {!stopping && app && (
+        <button
+          type="button"
+          onClick={() => control('computer.takeOver')}
+          className="h-5.5 shrink-0 rounded-md bg-(--on-fill)/20 px-2 text-small font-semibold transition-colors duration-(--duration-fast) outline-none hover:bg-(--on-fill)/30 focus-ring"
+        >
+          {t('computerBar.takeOver')}
+        </button>
+      )}
       {!stopping && (
         <button
           type="button"

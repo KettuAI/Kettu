@@ -165,7 +165,10 @@ const PANEL_CHANNELS = new Set<string>([
  * The panel is told by its window, since a page can change its URL with history.pushState.
  */
 export function mayUse(event: IpcMainInvokeEvent | IpcMainEvent, channel: string): boolean {
-  const panel = isPanel(event.sender) || rendererPage(event.senderFrame?.url) === 'tray'
+  // The overlays' pages talk only to their own channels, which each checks itself.
+  const page = rendererPage(event.senderFrame?.url)
+  if (isOverlay(event.sender) || page === 'overlay' || page === 'computer-overlay') return false
+  const panel = isPanel(event.sender) || page === 'tray'
   return !panel || PANEL_CHANNELS.has(channel)
 }
 

@@ -24,6 +24,7 @@ import { SHEET, SHEET_PANEL } from './sheet'
 const FilesPanel = lazy(() => import('@renderer/features/files/files-panel'))
 const ArtifactPane = lazy(() => import('@renderer/features/artifacts/artifact-pane'))
 const DevicesPane = lazy(() => import('@renderer/features/devices/devices-pane'))
+const ComputerPane = lazy(() => import('@renderer/features/computer/computer-pane'))
 const BrowserPane = lazy(() =>
   import('@renderer/features/browser/browser-pane').then((module) => ({
     default: module.BrowserPane,
@@ -39,6 +40,7 @@ const PANES = {
   artifact: { id: 'side-panel-artifact', defaultSize: '560px', minSize: '360px' },
   browser: { id: 'side-panel-browser', ...PANE_SIZE },
   devices: { id: 'side-panel-devices', ...PANE_SIZE },
+  computer: { id: 'side-panel-computer', defaultSize: '540px', minSize: '360px' },
 } as const
 
 // As long as App Shell's columns take to glide.
@@ -200,6 +202,8 @@ export function SidePanelArea({
                     <BrowserPane panel={panel} maximized={maximized} />
                   ) : held === 'devices' ? (
                     <DevicesPane panel={panel} maximized={maximized} />
+                  ) : held === 'computer' ? (
+                    <ComputerPane panel={panel} maximized={maximized} />
                   ) : (
                     artifactId && (
                       <ArtifactPane

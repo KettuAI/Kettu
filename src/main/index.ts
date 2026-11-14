@@ -2,6 +2,7 @@ import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import {
   app,
+  nativeTheme,
   powerMonitor,
   protocol,
   safeStorage,
@@ -20,6 +21,7 @@ import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { RemoteStatus } from '@shared/remote/status'
+import type { ComputerHold } from '@shared/computer-use'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import { Account } from './account'
@@ -73,6 +75,8 @@ import { RelayToken } from './relay-token'
 import { readJsonFile } from './json-file'
 import { MarketKeys, marketKeysFile } from './market-keys'
 import { computerModelForRun } from './system-model'
+import { ComputerOverlay } from './computer-overlay'
+import { computerAppIcon, serveComputerCapture } from './computer-use'
 import { systemReleaseForRun } from './system-name'
 import { rendererPage } from './renderer'
 import { SettingsStore } from './settings'
@@ -104,6 +108,7 @@ import {
   createMainWindow,
   currentWindow,
   devIcon,
+  isOverlayWindow,
   showMainWindow,
   watchTheme,
   WindowStateStore,
@@ -169,11 +174,14 @@ async function start(): Promise<void> {
     process.platform === 'darwin' ? app.getLoginItemSettings().wasOpenedAtLogin : false
   const icon = devIcon()
   if (icon) app.dock?.setIcon(icon)
+  // The session holding the computer, which the overlay draws and the Computer pane shows.
+  let computerHold: ComputerHold | null = null
   // The window's page only: the menu bar panel's needs no clipboard.
   restrictPermissions(
     session.defaultSession,
     (url) => rendererPage(url) === 'index',
     (contents) => isRevoked(contents) || hasPendingFrame(contents),
+    () => !!computerHold?.window,
   )
   const [settings, windowState, appState, themeFolder, themeSources] = await loading
   syncLoginItem(settings.get().general.openAtLogin)
@@ -380,6 +388,28 @@ async function start(): Promise<void> {
     changed: (contents) => hostRef.current?.pushMarketKeys(contents),
     log: createLogger('market-keys'),
   })
+  const computerOverlay = new ComputerOverlay({
+    control: (sessionId, action) => agentHost.computerControl(sessionId, action),
+    frame: () => agentHost.computerFrame(),
+    appIcon: (path) => computerAppIcon(path),
+    look: () => {
+      const file = settings.get()
+      const { theme, reduceMotion } = file.appearance
+      return {
+        shortcut: file.computerUse.stopShortcut,
+        dark: theme === 'dark' || (theme === 'system' && nativeTheme.shouldUseDarkColors),
+        reduceMotion: reduceMotion === 'always',
+        locale: localeOf(file),
+      }
+    },
+    systemLocale,
+  })
+  nativeTheme.on('updated', () => computerOverlay.settingsChanged())
+  serveComputerCapture(
+    session.defaultSession,
+    () => computerHold,
+    (url) => rendererPage(url) === 'index',
+  )
   const agentHost = new AgentHost({
     settings: () => hostSettings(settings.get(), systemLocale),
     marketKeys: () => marketKeys.contentsForHost(),
@@ -427,6 +457,10 @@ async function start(): Promise<void> {
     onOriginDecided: (sessionId, requestId, decision) =>
       browserViews.answerOrigin(sessionId, requestId, decision),
     onComputerAppAllowed: (app) => settings.allowComputerApp(app),
+    onComputerHold: (hold) => {
+      computerHold = hold
+      computerOverlay.setHold(hold)
+    },
     browser: (request) =>
       remoteBrowser.claimLocal(request.sessionId)
         ? browserTools!.call(
@@ -883,6 +917,9 @@ async function start(): Promise<void> {
     if (changed.has('terminal') || changed.has('remote')) {
       terminalHost.pushSettings(terminalSettings(next))
     }
+    if (changed.has('appearance') || changed.has('computerUse') || localeChanged) {
+      computerOverlay.settingsChanged()
+    }
     if (changed.has('appearance')) {
       tray.motionChanged()
       applyTheme(next.appearance.theme)
@@ -932,8 +969,9 @@ async function start(): Promise<void> {
   installMenu(menuDeps)
 
   app.on('browser-window-created', (_, window) => {
-    // The thumbnails' offscreen windows load no app page and keep their own guards.
-    if (window.webContents.isOffscreen()) return
+    // The thumbnails' offscreen windows load no app page and keep their own guards, and computer
+    // use's windows over the desktop are none of the app's windows.
+    if (window.webContents.isOffscreen() || isOverlayWindow(window)) return
     // F12 toggles DevTools in development; reload shortcuts are disabled in production. Without
     // zoom: true it swallows Mod+- and Mod+Shift+=, which the menu and the renderer handle.
     optimizer.watchWindowShortcuts(window, { zoom: true })

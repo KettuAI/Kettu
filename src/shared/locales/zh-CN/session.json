@@ -242,7 +242,41 @@
     "waiting": "等你允许使用 <app>{{app}}</app>",
     "stopping": "正在收回电脑…",
     "stop": "停止使用",
-    "stopLabel": "这一轮不再使用电脑，回合继续"
+    "stopLabel": "这一轮不再使用电脑，回合继续",
+    "takeOver": "接管",
+    "tookOver": "<app>你接管了 {{app}}</app> · {{agent}} 在等",
+    "tookOverComputer": "<app>你接管了电脑</app> · {{agent}} 在等",
+    "handBack": "交还"
+  },
+  "computerFloat": {
+    "using": "{{agent}} 正在使用 <app>{{app}}</app>",
+    "usingComputer": "{{agent}} 正在使用你的电脑",
+    "takeOver": "接管",
+    "stop": "停止",
+    "stopLabel": "这一轮不再使用电脑，回合继续",
+    "tookOver": "<app>你接管了 {{app}}</app> · {{agent}} 在等",
+    "tookOverComputer": "<app>你接管了电脑</app> · {{agent}} 在等",
+    "handBack": "交还"
+  },
+  "computerPane": {
+    "title": "Computer",
+    "live": "实时",
+    "paused": "已暂停",
+    "show": "显示 {{app}}",
+    "showApp": "显示这个应用",
+    "note": "只显示 {{agent}} 在用的窗口，你的其他窗口不在这里。",
+    "idle": "{{agent}} 没在使用电脑",
+    "idleHint": "回合使用电脑时，Agent 在用的那个窗口会实时显示在这里。",
+    "noWindow": "{{agent}} 还没打开窗口",
+    "noWindowHint": "它一读取或操作某个窗口，那个窗口就会显示在这里。",
+    "starting": "正在显示窗口…",
+    "hiddenHint": "它被最小化、隐藏了，或在另一个桌面上。显示它之后就能在这里看到。",
+    "failed": "Kettu 无法显示这个窗口",
+    "noPermission": "Kettu 需要屏幕录制权限才能显示窗口",
+    "noPermissionHint": "在系统设置里允许，然后退出并重新打开 Kettu。",
+    "allow": "打开系统设置",
+    "retry": "重试",
+    "elsewhere": "只有在 Agent 使用其应用的那台电脑上才能显示窗口。"
   },
   "computerSetup": {
     "label": "设置 Computer use",

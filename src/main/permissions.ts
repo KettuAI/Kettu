@@ -11,18 +11,26 @@ export interface PermissionContext {
   /** The URL of the frame that asks, when Electron knows it. */
   url: string | undefined
   isMainFrame: boolean
+  /** The devices a `media` request asks for: none when it captures a window or a screen. */
+  mediaTypes?: readonly string[]
 }
 
 /**
  * Whether a web permission is granted: only the clipboard ones, and only to the app's own page,
  * in its main frame. Everything else, such as notifications, media and geolocation, is denied.
+ * While an agent uses the computer (`capturing`), that page may also capture what is on screen,
+ * never a camera or a microphone, for the pane that shows the agent's window; which window it
+ * gets is the display media handler's choice.
  */
 export function isPermissionAllowed(
   permission: string,
   context: PermissionContext,
   isOwnUrl: (url: string | undefined) => boolean,
+  capturing = false,
 ): boolean {
-  return ALLOWED_PERMISSIONS.has(permission) && context.isMainFrame && isOwnUrl(context.url)
+  if (!context.isMainFrame || !isOwnUrl(context.url)) return false
+  if (ALLOWED_PERMISSIONS.has(permission)) return true
+  return permission === 'media' && capturing && context.mediaTypes?.length === 0
 }
 
 /**
@@ -35,14 +43,17 @@ export function restrictPermissions(
   session: Session,
   isOwnUrl: (url: string | undefined) => boolean,
   isFramed: (webContents: WebContents) => boolean,
+  capturing: () => boolean = () => false,
 ): void {
   session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const mediaTypes = 'mediaTypes' in details ? details.mediaTypes : undefined
     callback(
       !isFramed(webContents) &&
         isPermissionAllowed(
           permission,
-          { url: details.requestingUrl, isMainFrame: details.isMainFrame },
+          { url: details.requestingUrl, isMainFrame: details.isMainFrame, mediaTypes },
           isOwnUrl,
+          capturing(),
         ),
     )
   })
