@@ -135,7 +135,7 @@ function ExistingRoutine({ routineId }: { routineId: string }) {
         {loaded ? (
           <div className="k-routine__missing">
             <span>{loadError ? t('page.loadFailed') : t('routine.deleted')}</span>
-            <Button size="sm" variant="secondary" onClick={leaveRoutine}>
+            <Button size="md" variant="secondary" onClick={leaveRoutine}>
               {t('routine.backToRoutines')}
             </Button>
           </div>
@@ -245,7 +245,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
         title={t('routine.waitingTitle')}
         action={
           routine.activeRun?.sessionId && (
-            <Button size="sm" variant="secondary" onClick={openRun}>
+            <Button size="md" variant="secondary" onClick={openRun}>
               {t('routine.openRun')}
             </Button>
           )
@@ -313,7 +313,7 @@ function RoutineBody({ routine }: { routine: RoutineView }) {
           </span>
           <span inert={away} className={cn('k-routine__acts', away && 'opacity-50')}>
             <Button
-              size="sm"
+              size="md"
               variant="secondary"
               icon={<Icon icon={PlayIcon} size={14} />}
               disabled={!!routine.activeRun}
@@ -569,14 +569,14 @@ function NewRoutine({ example }: { example: RoutineExampleId | null }) {
             <span>{t('routine.notSaved')}</span>
           </span>
           <span className="k-routine__acts">
-            <Button size="sm" variant="secondary" onClick={openRoutines}>
+            <Button size="md" variant="secondary" onClick={openRoutines}>
               {t('routine.cancel')}
             </Button>
             {/* Says what is missing; once nothing is, the button needs no words of its own. */}
             <Tooltip disabled={!missing}>
               <TooltipTrigger render={<span className="inline-flex" />}>
                 <Button
-                  size="sm"
+                  size="md"
                   disabled={!!missing || creating}
                   loading={creating}
                   onClick={() => void create()}

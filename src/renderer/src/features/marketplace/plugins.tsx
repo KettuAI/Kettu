@@ -68,7 +68,6 @@ export function PluginRow({
     <ItemRow
       title={plugin.title}
       subject={pluginSubject(plugin)}
-      official={plugin.official}
       tag={showKind ? <KindTag kind="plugin" harness={plugin.harness} /> : undefined}
       line={[installsLabel(plugin.installs), plugin.description].filter(Boolean).join(' · ')}
       fresh={fresh}

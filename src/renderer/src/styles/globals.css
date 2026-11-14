@@ -153,7 +153,8 @@
   --color-muted: var(--bg-subtle);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
+  /* Text on shadcn's primary, which is the ink; the primary button's label is --primary-foreground. */
+  --color-primary-foreground: var(--bg-surface);
   --color-primary: var(--primary);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);

@@ -109,7 +109,7 @@ export function RunHistory({ routine }: { routine: RoutineView }) {
             title={t('routine.runsFailed')}
             action={
               <Button
-                size="sm"
+                size="md"
                 variant="secondary"
                 onClick={() => void useRoutinesStore.getState().loadRuns(routine.id)}
               >

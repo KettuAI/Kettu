@@ -2,7 +2,7 @@
 // each lives, and the user's own Cloudflare account.
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { CloudIcon, LockIcon, Share08Icon, ShapesIcon, UserIcon } from '@hugeicons/core-free-icons'
+import { CloudIcon, LockIcon, ShapesIcon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   CLOUDFLARE_DASHBOARD_URL,
@@ -55,7 +55,7 @@ import {
   Skel,
 } from './controls'
 import { useCloudOffHere } from './use-cloud-off-here'
-import { BlockLine, ItemLine, Notice, RowText, Thing } from './rows'
+import { BlockLine, EmptyCard, ItemLine, Notice, RowText, Thing } from './rows'
 
 type Failure = Extract<SharingResult, { failed: string }>
 
@@ -66,15 +66,7 @@ const PASTED_TOKEN = /^cf(?:ut|at)_/
 export function NoSharing() {
   const { t } = useTranslation('settings')
   const host = useHostContext().host ?? ''
-  return (
-    <div className="ui-as-empty">
-      <span className="ui-as-empty__icon">
-        <Icon icon={Share08Icon} size={18} />
-      </span>
-      <b className="ui-as-empty__title">{t('sharing.none.title')}</b>
-      <p className="ui-as-empty__text">{t('sharing.none.body', { host })}</p>
-    </div>
-  )
+  return <EmptyCard title={t('sharing.none.title')} hint={t('sharing.none.body', { host })} />
 }
 
 /** The account's place while the web client has not heard whether its host publishes. */

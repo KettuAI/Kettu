@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { DashboardSquare02Icon, RefreshIcon, ShapesIcon } from '@hugeicons/core-free-icons'
+import { RefreshIcon, ShapesIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -7,7 +7,7 @@ import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { ControlError, Pill, SetButton, Spin } from './controls'
-import { ItemLine, Notice, Thing } from './rows'
+import { EmptyCard, ItemLine, Notice, Thing } from './rows'
 
 /** An artifact the user allowed something: what, and Revoke, which takes all of it back. */
 export function ConsentRow({ row, where }: { row: ArtifactConsentRow; where: string }) {
@@ -85,13 +85,5 @@ export function ConsentsState({
       />
     )
   }
-  return (
-    <div className="ui-as-empty">
-      <span className="ui-as-empty__icon">
-        <Icon icon={DashboardSquare02Icon} size={18} />
-      </span>
-      <b className="ui-as-empty__title">{t('artifacts.emptyTitle')}</b>
-      <p className="ui-as-empty__text">{t('artifacts.emptyHint')}</p>
-    </div>
-  )
+  return <EmptyCard title={t('artifacts.emptyTitle')} hint={t('artifacts.emptyHint')} />
 }

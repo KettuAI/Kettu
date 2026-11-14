@@ -44,14 +44,14 @@ export function KindTag({ kind, harness }: { kind: ItemKind; harness?: PluginHar
 
 /**
  * A row: its tile, name and line open its listing, when it has one; `end` sits at the row's end.
- * `icon` stands in for the item's tile, such as an agent's mark.
+ * `icon` stands in for the item's tile, such as an agent's mark. The official badge shows on the
+ * listing only, since every row carrying one crowds the list.
  */
 export function ItemRow({
   title,
   subject,
   icon,
   quiet,
-  official = false,
   tag,
   line,
   lineTitle,
@@ -64,7 +64,6 @@ export function ItemRow({
   icon?: ReactNode
   /** For what an agent keeps itself. */
   quiet?: boolean
-  official?: boolean
   tag?: ReactNode
   line: string | null
   /** The line's tooltip when it says more than the line. */
@@ -79,7 +78,6 @@ export function ItemRow({
         <span className="ui-as-int-row__label" title={title}>
           {title}
         </span>
-        {official && <OfficialBadge />}
         {tag}
       </span>
       {line && (
@@ -147,7 +145,7 @@ export function AddControl({
   return (
     <span className="ui-as-anchor">
       <Button
-        size="sm"
+        size="md"
         variant="secondary"
         loading={state === 'busy'}
         aria-label={t('row.action', { action: label, name })}

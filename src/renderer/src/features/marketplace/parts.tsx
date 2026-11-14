@@ -71,7 +71,7 @@ export function Missing({ back }: { back: () => void }) {
     <div className="ui-as-empty">
       <b className="ui-as-empty__title">{t('listing.missingTitle')}</b>
       <p className="ui-as-empty__text">{t('listing.missingText')}</p>
-      <Button size="sm" variant="secondary" onClick={back}>
+      <Button size="md" variant="secondary" onClick={back}>
         {t('listing.backToDirectory')}
       </Button>
     </div>

@@ -511,7 +511,7 @@ function ReadFailed({ error, kept }: { error: string; kept: boolean }) {
       mark={<Icon icon={Alert02Icon} size={16} />}
       title={t('error.title')}
       action={
-        <Button size="sm" variant="secondary" onClick={() => void loadUsagePage()}>
+        <Button size="md" variant="secondary" onClick={() => void loadUsagePage()}>
           {t('error.retry')}
         </Button>
       }
@@ -531,7 +531,7 @@ function Unavailable() {
       title={t('error.title')}
       action={
         <Button
-          size="sm"
+          size="md"
           variant="secondary"
           onClick={() =>
             void openReport({

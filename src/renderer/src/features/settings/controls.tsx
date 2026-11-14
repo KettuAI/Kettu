@@ -107,8 +107,8 @@ export function Segmented<T extends string | number>({
   )
 }
 
-/** A row's button: affectUI's small Button, white with a hairline unless `variant` says otherwise. */
-export function SetButton({ variant = 'secondary', size = 'sm', ...props }: ButtonProps) {
+/** A row's button: affectUI's 28 px Button, white with a hairline unless `variant` says otherwise. */
+export function SetButton({ variant = 'secondary', size = 'md', ...props }: ButtonProps) {
   return <Button variant={variant} size={size} {...props} />
 }
 
@@ -133,7 +133,7 @@ export function LinkButton({
         rel="noreferrer"
         className="ui-buttonc"
         data-variant="secondary"
-        data-size="sm"
+        data-size="md"
         data-icon-left={icon ? '' : undefined}
       >
         {icon && (
@@ -364,13 +364,17 @@ export function SettingSelect<T extends string>({
   )
 }
 
-/** An icon-only quiet button, named by its tooltip and its accessible name. */
+/**
+ * An icon-only quiet button, named by its tooltip and its accessible name. `danger` turns it red
+ * on hover only, for a delete that every row of a list carries.
+ */
 export function IconAction({
   label,
   icon,
   onClick,
   disabled,
   busy,
+  danger,
   ref,
 }: {
   label: string
@@ -378,6 +382,7 @@ export function IconAction({
   onClick: () => void
   disabled?: boolean
   busy?: boolean
+  danger?: boolean
   ref?: Ref<HTMLButtonElement>
 }) {
   return (
@@ -387,7 +392,8 @@ export function IconAction({
           <Button
             ref={ref}
             variant="ghost"
-            size="sm"
+            size="md"
+            className={danger ? 'k-danger-icon' : undefined}
             aria-label={label}
             loading={busy}
             disabled={disabled}

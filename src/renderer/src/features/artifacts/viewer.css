@@ -1249,5 +1249,5 @@
   background: var(--control-on);
   font-size: 12px;
   font-weight: 600;
-  color: var(--primary-foreground);
+  color: var(--on-fill);
 }

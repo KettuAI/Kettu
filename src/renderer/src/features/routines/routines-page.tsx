@@ -128,7 +128,7 @@ export default function RoutinesPage() {
         title={t('page.loadFailed')}
         action={
           <Button
-            size="sm"
+            size="md"
             variant="secondary"
             onClick={() => void useRoutinesStore.getState().load(hostId ?? null)}
           >
@@ -200,7 +200,7 @@ export default function RoutinesPage() {
           </span>
           {!empty && !away && (
             <Button
-              size="sm"
+              size="md"
               icon={<Icon icon={PlusSignIcon} size={15} />}
               onClick={() => openRoutine(null)}
             >
@@ -597,7 +597,7 @@ function Examples() {
         <b>{t('page.emptyTitle')}</b>
         <p>{t('page.emptyDescription')}</p>
         <Button
-          size="sm"
+          size="md"
           icon={<Icon icon={PlusSignIcon} size={15} />}
           onClick={() => openRoutine(null)}
         >

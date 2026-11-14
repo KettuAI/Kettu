@@ -2,7 +2,7 @@
 // dialog that compares the code both screens show.
 
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { ComputerIcon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { DiscoveredHost, DiscoveredHosts } from '@shared/remote/discovery'
 import type { HostPairingFailure, HostPairingState, HostStatus } from '@shared/remote/hosts'
@@ -17,7 +17,7 @@ import { platformName } from './host-text'
 import { closeRequest } from './pair-close'
 import { DeviceTile, HostIcon } from './remote-parts'
 import { useDiscoveredHosts, useRereadDiscovered } from './use-discovered'
-import { ItemLine, RowLine, RowText, Thing } from './rows'
+import { EmptyRow, ItemLine, RowLine, RowText, Thing } from './rows'
 import {
   SettingsDialogBody,
   SettingsDialogContent,
@@ -101,15 +101,7 @@ export function AccountHostsState({ discovered }: { discovered: DiscoveredHosts 
       </RowLine>
     )
   }
-  return (
-    <div className="ui-as-empty" data-bare="">
-      <span className="ui-as-empty__icon">
-        <Icon icon={ComputerIcon} size={18} />
-      </span>
-      <b className="ui-as-empty__title">{t('hosts.account.empty.title')}</b>
-      <p className="ui-as-empty__text">{t('hosts.account.empty.body')}</p>
-    </div>
-  )
+  return <EmptyRow title={t('hosts.account.empty.title')} hint={t('hosts.account.empty.body')} />
 }
 
 /** The account group's heading actions: list again, and the pairing dialog Connect opens. */

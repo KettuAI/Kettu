@@ -787,7 +787,6 @@
       "title": "还没有 Agent",
       "description": "添加第一个 Agent 开始使用。如果它的 Harness 还没安装，Kettu 会先帮你安装。",
       "installed": "已经有可用的 Harness。选择一个，沿用现有的配置，或创建独立的配置。",
-      "harnesses": "查看 Harnesses",
       "keywords": "空 首次 设置 Harness 安装 添加"
     },
     "remove": {
