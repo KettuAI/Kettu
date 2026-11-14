@@ -1,4 +1,7 @@
+import type { MarkBodyProps } from './index'
+
 // Corust Agent mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
+// Brand color: the two-tone logo in https://corust.ai's header, brackets in the text color.
 const LEFT =
   'm 297,6493 c -4,-3 -7,-1357 -7,-3008 0,-2390 3,-3005 12,-3012 13,-10 1199,-9 1224,1 11,4 13,61 10,295 -2,159 -7,294 -10,299 -4,7 -112,11 -312,11 -168,0 -309,3 -314,6 -12,7 -13,4775 -2,4792 6,10 85,13 317,15 l 310,3 v 600 l -611,3 c -336,1 -614,-1 -617,-5 z'
 const RIGHT =
@@ -10,13 +13,15 @@ const STEM =
 
 export const viewBox = '0 0 12 12'
 
-/** The mark in `currentColor`, at every size. */
-export function Body() {
+export function Body({ mono }: MarkBodyProps) {
   return (
     <g fill="currentColor" transform="matrix(0.00160555,0,0,-0.0014599,-0.26812129,11.08482)">
       <path d={LEFT} />
       <path d={RIGHT} />
-      <g transform="matrix(1.0249,0,0,1.0566,-429.39,51.322)">
+      <g
+        transform="matrix(1.0249,0,0,1.0566,-429.39,51.322)"
+        fill={mono ? 'currentColor' : 'var(--brand-corust)'}
+      >
         <path d={INNER} />
         <path d={STEM} />
       </g>
