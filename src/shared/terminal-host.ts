@@ -5,10 +5,14 @@ import type { SurfaceControl } from './control'
 import type { PortConnectionState } from './port-rpc'
 import type { AgentId } from './thread'
 
-/** The agent that started a terminal with its tools, and the session it started it from. */
+/**
+ * The agent that started a terminal with its tools, and the session it started it from; or, with
+ * `fromReply`, the agent whose reply the user ran a code block of.
+ */
 export interface TerminalOwner {
   agentId: AgentId
   sessionId: string
+  fromReply?: true
 }
 
 export interface TerminalInfo {
@@ -25,6 +29,8 @@ export interface TerminalInfo {
   owner: TerminalOwner | null
   /** Who uses it in the owner's running turn; idle for every terminal no turn uses. */
   control: SurfaceControl
+  /** What its program waits for the user to type: a password, or nothing known. */
+  waiting: 'password' | null
 }
 
 export interface TerminalContract {
@@ -54,7 +60,8 @@ export interface TerminalContract {
 
 /**
  * Text typed into a new terminal once its shell is ready, without pressing Enter unless
- * `run` is set. `run` is only accepted for a sign-in command the agent host built.
+ * `run` is set. From a port, `run` is only accepted for a sign-in command the agent host built;
+ * the agent's commands and the code blocks the user runs from a reply come over main's channel.
  */
 export interface TerminalCommand {
   text: string

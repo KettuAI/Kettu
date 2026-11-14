@@ -1,4 +1,4 @@
-// A terminal's output as an agent reads it: the screen's text without escape sequences.
+// A terminal's output as plain text, as an agent reads it and a reply's command bar shows it.
 
 const MAX_CHARS = 64 * 1024
 

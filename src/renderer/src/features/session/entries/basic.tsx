@@ -15,6 +15,7 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
 import type { RoutineRef } from '@shared/routines'
+import { parseReplyRunNotice } from '@shared/terminal-agent'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import {
   Collapsible,
@@ -33,6 +34,7 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import { Clamp } from '../clamp'
 import { ConfirmedLink } from '../link-confirm'
 import { Markdown } from '../markdown'
+import { ReplyContext } from '../markdown/live'
 import { CarriedImage } from '../media/carried-image'
 import { CarriedMedia } from '../media/carried-media'
 import { EntryIdContext, SessionIdContext } from '../media/grants'
@@ -44,6 +46,7 @@ import { FailedTurnActions } from './failed-turn'
 import { OutOfCreditEnd } from './out-of-credit'
 import { splitLinks } from './text-links'
 import { UserActions } from './message-actions'
+import { ReplyRunChip } from './reply-run-chip'
 import { RefChip, SentAttachments, UserContentView } from './user-content'
 
 export interface EntryProps {
@@ -66,6 +69,8 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
     c.type === 'ref' && c.ref.kind === 'attachment' ? [c.ref.attachment] : [],
   )
   const rest = entry.content.filter((c) => c.type !== 'ref' || c.ref.kind !== 'attachment')
+  const only = rest.length === 1 ? rest[0] : undefined
+  const runNotice = only?.type === 'text' ? parseReplyRunNotice(only.text) : null
   return (
     <div className={cn('ks-user', animation)}>
       {attachments.length > 0 && (
@@ -75,8 +80,12 @@ export const UserEntry = memo(function UserEntry({ sessionId, entryId }: EntryPr
       )}
       {/* A message of attachments alone has no bubble. */}
       {rest.length > 0 && (
-        <div className="ks-user__bubble">
-          <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
+        <div className="ks-user__bubble" data-run-notice={runNotice ? '' : undefined}>
+          {runNotice ? (
+            <ReplyRunChip terminalId={runNotice.terminalId} command={runNotice.command} />
+          ) : (
+            <UserContentView content={rest} sessionId={sessionId} entryId={entryId} />
+          )}
         </div>
       )}
       {/* A prompt another session's agent sent says whose it is, under the bubble. */}
@@ -147,7 +156,9 @@ export const AgentEntry = memo(function AgentEntry({ sessionId, entryId }: Entry
       >
         <SessionIdContext value={sessionId}>
           <EntryIdContext value={entryId}>
-            <Markdown markdown={entry.markdown} streaming={entry.streaming} />
+            <ReplyContext value={sessionId}>
+              <Markdown markdown={entry.markdown} streaming={entry.streaming} />
+            </ReplyContext>
           </EntryIdContext>
         </SessionIdContext>
       </AIAnswer>

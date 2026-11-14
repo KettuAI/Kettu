@@ -12,9 +12,12 @@ import { TextWrapIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { CodeBlock, useIsCodeFenceIncomplete, type ExtraProps } from 'streamdown'
+import { FileTypeIcon } from '@renderer/features/files/file-type-icon'
 import { BlockAction, BlockCopy, BlockFrame, BlockSpacer } from './block-frame'
 import { fenceFileName, fenceLanguage, fenceStartLine, foldLines } from './code-meta'
-import { LiveContext } from './live'
+import { CommandBar } from './command-bar'
+import { isCommandLanguage, useSessionPlatform } from './command'
+import { LiveContext, ReplyContext } from './live'
 import { SvgBlock } from './svg-block'
 
 const MermaidBlock = lazy(() => import('./mermaid-block'))
@@ -27,9 +30,10 @@ function codeOf(children: ReactNode): string {
   return ''
 }
 
-/** A fenced block, by its language: maths, an SVG, a diagram, or code. */
+/** A fenced block, by its language: maths, an SVG, a diagram, a command in a reply, or code. */
 export function BlockCode({ node, className, children }: ComponentProps<'code'> & ExtraProps) {
   const isIncomplete = useIsCodeFenceIncomplete()
+  const reply = useContext(ReplyContext)
   const language = /language-(\S+)/.exec(className ?? '')?.[1] ?? ''
   const meta = node?.properties?.metastring
   const code = codeOf(children)
@@ -47,6 +51,10 @@ export function BlockCode({ node, className, children }: ComponentProps<'code'> 
     isIncomplete,
   }
   if (language === 'svg') return <SvgBlock {...props} />
+  // Windows takes the most languages, so a block no host runs skips the host lookup.
+  if (reply !== null && isCommandLanguage(language, 'win32')) {
+    return <ReplyCommand sessionId={reply} {...props} />
+  }
   if (language === 'mermaid') {
     return (
       <Suspense fallback={<CodeFrame {...props} />}>
@@ -55,6 +63,15 @@ export function BlockCode({ node, className, children }: ComponentProps<'code'> 
     )
   }
   return <CodeFrame {...props} />
+}
+
+/** A shell block of an agent's reply: a command bar when its session's host runs the language. */
+function ReplyCommand({ sessionId, ...props }: BlockProps & { sessionId: string }) {
+  const platform = useSessionPlatform(sessionId)
+  if (platform === null || !isCommandLanguage(props.language, platform)) {
+    return <CodeFrame {...props} />
+  }
+  return <CommandBar sessionId={sessionId} platform={platform} {...props} />
 }
 
 /** A formula's source on the block's ground while KaTeX loads. */
@@ -74,7 +91,7 @@ export interface BlockProps {
 }
 
 /**
- * Code in the block frame: its language and file on the left, Wrap and Copy on the right, line
+ * Code in the block frame: its file and language on the left, Wrap and Copy on the right, line
  * numbers, and anything over 20 lines folded to its first lines until opened.
  */
 export function CodeFrame({
@@ -107,13 +124,8 @@ export function CodeFrame({
       }
       header={
         <>
+          {name ?? (file && <FileName path={file} />)}
           {lang && <span className="block-frame-lang">{lang}</span>}
-          {name ??
-            (file && (
-              <span className="block-frame-name" title={file}>
-                {file}
-              </span>
-            ))}
           <BlockSpacer />
           <BlockAction label={t('block.wrap')} aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
             <HugeiconsIcon icon={TextWrapIcon} strokeWidth={1.9} aria-hidden />
@@ -140,5 +152,19 @@ export function CodeFrame({
         </button>
       )}
     </BlockFrame>
+  )
+}
+
+/** A fence's file: its icon, then the name after its folder in a fainter ink. */
+function FileName({ path }: { path: string }) {
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1
+  return (
+    <>
+      <FileTypeIcon path={path} className="block-frame-icon" />
+      <span className="block-frame-name" title={path}>
+        {cut > 0 && <span className="block-frame-dir">{path.slice(0, cut)}</span>}
+        {path.slice(cut)}
+      </span>
+    </>
   )
 }

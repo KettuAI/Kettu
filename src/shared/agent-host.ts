@@ -784,6 +784,15 @@ export interface HostContract {
     params: { sessionId: string; content: UserContent[] }
     result: { itemId: string | null } // null when it was sent at once
   }
+  /**
+   * Runs a shell code block of the session's agent's reply in a new terminal of the session, and
+   * unless `notify` is false tells the agent which, queued while a turn runs. `notified` is false
+   * when that message could not go, while the terminal runs anyway.
+   */
+  'sessions.runCommand': {
+    params: { sessionId: string; command: string; notify: boolean }
+    result: { terminalId: string; notified: boolean }
+  }
   'sessions.unqueue': { params: { sessionId: string; itemId: string }; result: void }
   'sessions.steer': { params: { sessionId: string; itemId: string }; result: void }
   // Steers where the agent can; otherwise stops the turn and sends the prompt as the next one.
@@ -1262,6 +1271,7 @@ export const HOST_METHODS = [
   'sessions.switchAgent',
   'sessions.context',
   'sessions.queue',
+  'sessions.runCommand',
   'sessions.unqueue',
   'sessions.steer',
   'sessions.sendNow',

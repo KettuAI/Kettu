@@ -96,6 +96,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.switchAgent': AGENT_MS,
   'sessions.context': AGENT_MS,
   'sessions.queue': HOST_MS,
+  'sessions.runCommand': AGENT_MS,
   'sessions.unqueue': HOST_MS,
   'sessions.steer': AGENT_MS,
   'sessions.sendNow': AGENT_MS,

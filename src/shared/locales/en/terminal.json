@@ -16,7 +16,8 @@
     "newOutput": "New output",
     "running": "Running",
     "close": "Close {{name}}",
-    "owner": "· {{agent}}"
+    "owner": "· {{agent}}",
+    "password": "Waiting for a password"
   },
   "closeDialog": {
     "title": "End this terminal?",
@@ -36,6 +37,13 @@
   "owner": {
     "startedBy": "Started by {{agent}} · {{time}}",
     "openInBrowser": "Open in browser",
-    "stop": "Stop"
+    "stop": "Stop",
+    "fromReply": "Run from {{agent}}’s reply · {{time}}"
+  },
+  "password": {
+    "strip": "<b>Type the password here and press Enter</b> · It stays hidden as you type, and {{agent}} cannot see it",
+    "stripNoAgent": "<b>Type the password here and press Enter</b> · It stays hidden as you type",
+    "label": "{{agent}} needs you to type a password in <b>{{terminal}}</b>",
+    "go": "Type password"
   }
 }

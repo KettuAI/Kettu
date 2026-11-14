@@ -3,17 +3,22 @@ import { CONTROL_WAIT_MS, ControlWait, SurfaceControls } from '@shared/control'
 import type { BusyTerminal } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortErrorCode } from '@shared/port-rpc'
-import type {
-  AgentTerminal,
-  TerminalCall,
-  TerminalCallAnswer,
-  TerminalCallErrorCode,
+import {
+  replyCommandProblem,
+  TERMINAL_QUIET_MS,
+  TERMINAL_WAIT_MS,
+  type AgentTerminal,
+  type TerminalCall,
+  type TerminalCallAnswer,
+  type TerminalCallErrorCode,
+  type TerminalWaitReason,
 } from '@shared/terminal-agent'
 import type { TerminalCommand, TerminalInfo, TerminalParams } from '@shared/terminal-host'
 import { TERMINAL_FLOW } from '@shared/terminal-host'
 import { DeviceFlow, FlowControl } from './flow'
 import { OutputScanner } from './output-scanner'
-import { plainTail } from './plain-text'
+import { looksLikePasswordPrompt, readsPassword, type TtyModes } from './password'
+import { plainTail } from '@shared/terminal-text'
 import type { ProjectRegistry } from './projects'
 import { ReplayBuffer } from './replay'
 import {
@@ -29,6 +34,8 @@ import {
 export interface PtyProcess {
   readonly pid: number
   readonly process: string
+  /** The pty's device on macOS and Linux, such as /dev/ttys003. */
+  readonly ptsName?: string
   onData(listener: (data: string) => void): { dispose(): void }
   onExit(listener: (event: { exitCode: number; signal?: number }) => void): { dispose(): void }
   write(data: string): void
@@ -77,6 +84,8 @@ export interface TerminalManagerOptions {
   isDevicePort?: (port: string) => boolean
   /** The user handed back a terminal an agent's turn uses, after holding it for `durationMs`. */
   handedBack?: (sessionId: string, durationMs: number) => void
+  /** Reads a pty's echo and canonical input modes; none are read when absent. */
+  ttyModes?: (pty: PtyProcess) => Promise<TtyModes | null>
   now?: () => number
 }
 
@@ -86,6 +95,13 @@ const READY_LIMIT_MS = 3000
 const BRACKETED_PASTE_START = '\x1b[200~'
 const BRACKETED_PASTE_END = '\x1b[201~'
 const CTRL_C = '\x03'
+// How long output must stop before the host asks whether the program waits for a password.
+const PASSWORD_CHECK_MS = 300
+const WAIT_POLL_MS = 200
+// A wait that saw no command start in this long finds the terminal idle at its prompt.
+const IDLE_AFTER_MS = 1500
+// The output kept to read the line the cursor waits on.
+const TAIL_CHARS = 1024
 // An agent's command and text are typed as they are; a control character could act as a key.
 // eslint-disable-next-line no-control-regex
 const AGENT_CONTROL = /[\x00-\x08\x0a-\x1f\x7f]/
@@ -111,6 +127,12 @@ interface Terminal {
   agentCommand: boolean // the command is an agent's, which runs: Enter follows it
   readyTimer: NodeJS.Timeout | null
   readyLimit: NodeJS.Timeout | null
+  /** Resolves once the command is typed, false when it could not be. */
+  typed: ((ok: boolean) => void) | null
+  tail: string // the latest output, for the line the cursor waits on
+  lastOutputAt: number
+  quietTimer: NodeJS.Timeout | null
+  quietSeq: number // bumped by each output, so a password check that output overtook is dropped
 }
 
 /**
@@ -211,6 +233,7 @@ export class TerminalManager {
         createdAt: Date.now(),
         owner,
         control: { kind: 'idle' },
+        waiting: null,
       },
       cwd: project.cwd,
       shell,
@@ -231,6 +254,11 @@ export class TerminalManager {
       agentCommand: owner !== null && params.command !== undefined,
       readyTimer: null,
       readyLimit: null,
+      typed: null,
+      tail: '',
+      lastOutputAt: this.now(),
+      quietTimer: null,
+      quietSeq: 0,
     }
     await this.spawn(terminal)
     this.terminals.set(terminal.info.id, terminal)
@@ -277,10 +305,15 @@ export class TerminalManager {
     return { replay: terminal.replay.snapshot() }
   }
 
-  /** A window's or device's keys: while an agent's turn uses the terminal, only Ctrl+C goes in. */
+  /**
+   * A window's or device's keys: while an agent's turn uses the terminal, only Ctrl+C goes in, and
+   * a password its program waits for, which only the user can type.
+   */
   input(id: string, data: string): void {
     const terminal = this.get(id)
-    if (this.controls.holdsInput(id) && data !== CTRL_C) return
+    if (this.controls.holdsInput(id) && data !== CTRL_C && terminal.info.waiting !== 'password') {
+      return
+    }
     terminal.pty?.write(data)
   }
 
@@ -315,6 +348,10 @@ export class TerminalManager {
       switch (call.kind) {
         case 'run':
           return await this.agentRun(call)
+        case 'reply':
+          return await this.replyRun(call)
+        case 'wait':
+          return await this.agentWait(call)
         case 'read': {
           const terminal = this.owned(call.sessionId, call.terminalId)
           this.flush(terminal)
@@ -374,16 +411,106 @@ export class TerminalManager {
     return { result: { kind: 'terminal', terminal: agentView(this.get(info.id)) } }
   }
 
-  /** Acts on an agent's own terminal once the user does not hold it, or answers `held`. */
+  /**
+   * The user's Run on a code block of the agent's reply: the terminal is the agent's, for its tools
+   * to follow, but no turn uses it, so the user's keys go in. A block of several lines goes in one
+   * bracketed paste, so a prompt on the way cannot read the lines after it as its answer.
+   */
+  private async replyRun(
+    call: Extract<TerminalCall, { kind: 'reply' }>,
+  ): Promise<TerminalCallAnswer> {
+    const problem = replyCommandProblem(call.command)
+    if (problem) return failure('failed', `The code block cannot run: ${problem}`)
+    const command = call.command.replace(/\r?\n$/, '')
+    const info = await this.open(
+      {
+        projectPath: call.folder,
+        sessionId: call.sessionId,
+        cols: 100,
+        rows: 24,
+        command: { text: command, run: true },
+      },
+      null,
+      { agentId: call.agentId, sessionId: call.sessionId, fromReply: true },
+    )
+    const terminal = this.get(info.id)
+    const typed = await new Promise<boolean>((resolve) => {
+      if (!terminal.command) resolve(terminal.pty !== null)
+      else terminal.typed = resolve
+    })
+    if (!typed) {
+      this.kill(info.id)
+      return failure(
+        'failed',
+        "This shell takes no bracketed paste, so the block's lines cannot go in at once",
+      )
+    }
+    return { result: { kind: 'terminal', terminal: agentView(this.get(info.id)) } }
+  }
+
+  /**
+   * Waits on a terminal the session reaches until its command ends, it waits for a password or its
+   * output stays quiet, at most TERMINAL_WAIT_MS, and answers its output then and why.
+   */
+  private async agentWait(
+    call: Extract<TerminalCall, { kind: 'wait' }>,
+  ): Promise<TerminalCallAnswer> {
+    const started = this.now()
+    let sawBusy = false
+    let reason: TerminalWaitReason
+    for (;;) {
+      const terminal = this.owned(call.sessionId, call.terminalId)
+      const { info } = terminal
+      const now = this.now()
+      // Windows tells no foreground process, so there a command's end shows only as quiet.
+      const knowsBusy = this.options.platform !== 'win32'
+      sawBusy ||= info.busy
+      if (info.exitCode !== null) reason = 'exited'
+      else if (info.waiting === 'password') reason = 'password'
+      else if (knowsBusy && sawBusy && !info.busy) reason = 'ended'
+      else if (
+        knowsBusy &&
+        !sawBusy &&
+        !terminal.command &&
+        now - started >= IDLE_AFTER_MS &&
+        now - terminal.lastOutputAt >= IDLE_AFTER_MS
+      ) {
+        reason = 'idle'
+      } else if (
+        now - started >= TERMINAL_QUIET_MS &&
+        now - terminal.lastOutputAt >= TERMINAL_QUIET_MS
+      ) {
+        reason = 'quiet'
+      } else if (now - started >= TERMINAL_WAIT_MS) reason = 'timeout'
+      else {
+        await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS))
+        continue
+      }
+      this.flush(terminal)
+      const output = plainTail(terminal.replay.snapshot(), call.lines)
+      return { result: { kind: 'output', terminal: agentView(terminal), output, reason } }
+    }
+  }
+
+  /**
+   * Acts on an agent's own terminal once the user does not hold it, or answers `held`; while its
+   * program waits for a password the user types, the call waits too, or answers `password`.
+   */
   private async agentAct(
     sessionId: string,
     id: string,
     act: (terminal: Terminal) => Extract<TerminalCallAnswer, { result: unknown }>['result'],
   ): Promise<TerminalCallAnswer> {
     this.owned(sessionId, id)
+    const deadline = this.now() + CONTROL_WAIT_MS
+    while (this.terminals.get(id)?.info.waiting === 'password') {
+      if (this.now() >= deadline) return { result: { kind: 'password' } }
+      await new Promise((resolve) => setTimeout(resolve, WAIT_POLL_MS))
+    }
+    this.owned(sessionId, id)
     let end: () => void
     try {
-      end = await this.controls.begin(id, { deadline: this.now() + CONTROL_WAIT_MS })
+      end = await this.controls.begin(id, { deadline })
     } catch (error) {
       if (!(error instanceof ControlWait)) throw error
       if (error.reason === 'held' || error.reason === 'asking') return { result: { kind: 'held' } }
@@ -456,6 +583,7 @@ export class TerminalManager {
       busy: false,
       exitCode: null,
       owner: null,
+      waiting: null,
     })
     // The new shell is the user's: no agent started it.
     this.controls.forget(id)
@@ -564,6 +692,7 @@ export class TerminalManager {
     terminal.pending = ''
     terminal.replay.append(data)
     terminal.scanner.scan(data)
+    this.outputArrived(terminal, data)
     if (terminal.ports.size > 0) {
       const windows: string[] = []
       const devices: string[] = []
@@ -580,6 +709,42 @@ export class TerminalManager {
       if (terminal.readyTimer) clearTimeout(terminal.readyTimer)
       terminal.readyTimer = setTimeout(() => this.typeCommand(terminal), READY_QUIET_MS)
     }
+  }
+
+  /** New output answers any password prompt; once it stops, asks whether another waits. */
+  private outputArrived(terminal: Terminal, data: string): void {
+    terminal.tail = (terminal.tail + data).slice(-TAIL_CHARS)
+    terminal.lastOutputAt = this.now()
+    terminal.quietSeq++
+    if (terminal.info.waiting !== null) {
+      terminal.info.waiting = null
+      this.options.sink.info(this.view(terminal))
+    }
+    if (terminal.quietTimer) clearTimeout(terminal.quietTimer)
+    terminal.quietTimer = setTimeout(() => {
+      terminal.quietTimer = null
+      void this.checkPassword(terminal)
+    }, PASSWORD_CHECK_MS)
+  }
+
+  private async checkPassword(terminal: Terminal): Promise<void> {
+    const { pty } = terminal
+    const seq = terminal.quietSeq
+    // A prompt leaves the cursor after its words; a program that printed whole lines asks nothing.
+    const line = plainTail(terminal.tail.slice(terminal.tail.lastIndexOf('\n') + 1), 1)
+    if (!pty || terminal.info.exitCode !== null || !line) return
+    let waits: boolean
+    if (this.options.platform === 'win32') {
+      waits = looksLikePasswordPrompt(line)
+    } else {
+      this.refreshInfo(terminal)
+      if (!terminal.info.busy || !this.options.ttyModes) return
+      const modes = await this.options.ttyModes(pty)
+      waits = modes !== null && readsPassword(modes)
+    }
+    if (!waits || terminal.quietSeq !== seq || terminal.pty !== pty) return
+    terminal.info.waiting = 'password'
+    this.options.sink.info(this.view(terminal))
   }
 
   private applyFlow(terminal: Terminal, change: 'pause' | 'resume' | null): void {
@@ -615,11 +780,25 @@ export class TerminalManager {
     if (terminal.readyLimit) clearTimeout(terminal.readyLimit)
     terminal.readyTimer = null
     terminal.readyLimit = null
-    const { command, pty } = terminal
+    const { command, pty, typed } = terminal
     terminal.command = null
-    if (!command || !pty) return
+    terminal.typed = null
+    if (!command || !pty) {
+      typed?.(false)
+      return
+    }
+    if (terminal.agentCommand && command.text.includes('\n')) {
+      const ok = terminal.scanner.bracketedPaste
+      if (ok) {
+        const text = command.text.replace(/\r?\n/g, '\r')
+        pty.write(`${BRACKETED_PASTE_START}${text}${BRACKETED_PASTE_END}\r`)
+      }
+      typed?.(ok)
+      return
+    }
     if (terminal.agentCommand || (command.run && this.authCommands.has(command.text))) {
       pty.write(`${command.text}\r`)
+      typed?.(true)
       return
     }
     if (!command.text.includes('\n')) {
@@ -643,6 +822,7 @@ export class TerminalManager {
     // A shell reports death by signal N as 128 + N.
     terminal.info.exitCode = signal ? 128 + signal : exitCode
     terminal.info.busy = false
+    terminal.info.waiting = null
     terminal.info.title = terminal.shell.name
     this.options.sink.info(this.view(terminal))
   }
@@ -653,10 +833,14 @@ export class TerminalManager {
       terminal.titleTimer,
       terminal.readyTimer,
       terminal.readyLimit,
+      terminal.quietTimer,
     ]) {
       if (timer) clearTimeout(timer)
     }
     terminal.batchTimer = terminal.titleTimer = terminal.readyTimer = terminal.readyLimit = null
+    terminal.quietTimer = null
+    terminal.typed?.(false)
+    terminal.typed = null
   }
 
   private stopPty(terminal: Terminal): void {
@@ -675,8 +859,8 @@ export class TerminalManager {
 }
 
 function agentView(terminal: Terminal): AgentTerminal {
-  const { id, title, busy, exitCode } = terminal.info
-  return { id, title, busy, exitCode }
+  const { id, title, busy, exitCode, waiting } = terminal.info
+  return { id, title, busy, exitCode, password: waiting === 'password' }
 }
 
 function failure(code: TerminalCallErrorCode, message: string): TerminalCallAnswer {

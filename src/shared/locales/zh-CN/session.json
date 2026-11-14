@@ -684,6 +684,32 @@
     "rows_other": "{{count}} 行",
     "columns_other": "{{count}} 列"
   },
+  "command": {
+    "run": "运行",
+    "more": "更多运行方式",
+    "runNote": "在新终端里运行，{{agent}} 看着输出接着做",
+    "runOnly": "只运行",
+    "runOnlyNote": "在新终端里运行，不告诉 {{agent}}",
+    "put": "放进终端",
+    "putNote": "不按回车，你看过再按",
+    "openTerminal": "打开终端",
+    "goType": "去输入",
+    "stop": "停止",
+    "runAgain": "再运行",
+    "state": {
+      "running": "运行中",
+      "password": "等你输入密码",
+      "ended": "已结束",
+      "shellExited": "Shell 已退出，退出码 {{code}}",
+      "gone": "终端已关闭"
+    },
+    "failed": "无法运行这段命令：{{message}}",
+    "notNotified": "命令在运行，但没能告诉 {{agent}}",
+    "chip": "在终端运行了 <code>{{command}}</code>",
+    "chipMore_other": "等 {{count}} 行",
+    "chipOpen": "打开它的终端",
+    "chipGone": "它的终端已关闭"
+  },
   "media": {
     "openImage": "打开图片 {{name}}",
     "openImageMore_other": "打开图片 {{name}}，另有 {{count}} 张",

@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TerminalCallAnswer } from '@shared/terminal-agent'
+import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
 import type { TerminalInfo } from '@shared/terminal-host'
 import { ProjectRegistry } from './projects'
+import type { TtyModes } from './password'
 import { type PtyProcess, TerminalManager } from './terminals'
 
 class FakePty implements PtyProcess {
   readonly pid = 4242
-  readonly process = 'zsh'
+  process = 'zsh'
+  readonly ptsName = '/dev/ttys042'
   readonly written: string[] = []
   private data: ((data: string) => void) | null = null
   onData(listener: (data: string) => void) {
@@ -28,7 +30,7 @@ class FakePty implements PtyProcess {
   resume(): void {}
 }
 
-function host() {
+function host(modes: TtyModes | null = { echo: true, icanon: true }) {
   const ptys: FakePty[] = []
   const infos: TerminalInfo[] = []
   const handedBack: [string, number][] = []
@@ -52,6 +54,7 @@ function host() {
       removed: () => undefined,
     },
     handedBack: (sessionId, ms) => handedBack.push([sessionId, ms]),
+    ttyModes: async () => modes,
   })
   return { manager, ptys, infos, handedBack }
 }
@@ -216,6 +219,167 @@ describe('terminals an agent starts', () => {
       await manager.agentCall({ kind: 'read', sessionId: 's1', terminalId: id, lines: 10 }),
     ).toMatchObject({
       result: { kind: 'output', output: 'ready on http://localhost:5173\n100%' },
+    })
+  })
+})
+
+const REPLY: Extract<TerminalCall, { kind: 'reply' }> = {
+  kind: 'reply',
+  sessionId: 's1',
+  agentId: 'claude-code',
+  folder: '/work/app',
+  command: 'pnpm dev',
+  fromDevice: false,
+}
+
+/** Starts a reply's run, lets the shell print its prompt and returns the answer. */
+async function replyRun(
+  manager: TerminalManager,
+  ptys: FakePty[],
+  call: Partial<typeof REPLY> = {},
+  prompt = '% ',
+): Promise<TerminalCallAnswer> {
+  const answer = manager.agentCall({ ...REPLY, ...call })
+  await vi.advanceTimersByTimeAsync(0)
+  ptys.at(-1)?.emit(prompt)
+  await vi.advanceTimersByTimeAsync(500)
+  return answer
+}
+
+/** A program in the foreground prints a prompt and goes quiet. */
+async function prompts(pty: FakePty, program: string, text: string): Promise<void> {
+  pty.process = program
+  pty.emit(text)
+  await vi.advanceTimersByTimeAsync(400)
+}
+
+describe('code blocks the user runs from a reply', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it("runs the block with Enter in a terminal of the agent's that the user types into", async () => {
+    const { manager, ptys } = host()
+    const id = terminalOf(await replyRun(manager, ptys))
+    expect(ptys[0]!.written).toEqual(['pnpm dev\r'])
+    const [info] = await manager.list()
+    expect(info).toMatchObject({
+      id,
+      sessionId: 's1',
+      owner: { agentId: 'claude-code', sessionId: 's1', fromReply: true },
+      control: { kind: 'idle' },
+    })
+    manager.input(id, 'q')
+    expect(ptys[0]!.written.at(-1)).toBe('q')
+    expect(
+      await manager.agentCall({ kind: 'read', sessionId: 's1', terminalId: id, lines: 5 }),
+    ).toMatchObject({ result: { kind: 'output' } })
+  })
+
+  it('pastes a block of several lines at once, then presses Enter', async () => {
+    const { manager, ptys } = host()
+    await replyRun(manager, ptys, { command: 'sudo true\npnpm dev\n' }, '\x1b[?2004h% ')
+    expect(ptys[0]!.written).toEqual(['\x1b[200~sudo true\rpnpm dev\x1b[201~\r'])
+  })
+
+  it('refuses a block of several lines where the shell takes no bracketed paste', async () => {
+    const { manager, ptys } = host()
+    const answer = await replyRun(manager, ptys, { command: 'sudo true\npnpm dev' })
+    expect(answer).toMatchObject({ error: { code: 'failed' } })
+    expect(ptys[0]!.written).toEqual([])
+    expect(await manager.list()).toEqual([])
+  })
+
+  it('refuses a block holding control or invisible characters', async () => {
+    const { manager, ptys } = host()
+    for (const command of ['ls\x1b[A', 'ls\r', 'rm -rf /tmp/a\u202e', 'echo\u200bhi', '  ']) {
+      expect(await manager.agentCall({ ...REPLY, command })).toMatchObject({
+        error: { code: 'failed' },
+      })
+    }
+    expect(ptys).toHaveLength(0)
+  })
+
+  it("is reached by its own session's agent only", async () => {
+    const { manager, ptys } = host()
+    const id = terminalOf(await replyRun(manager, ptys))
+    expect(
+      await manager.agentCall({ kind: 'read', sessionId: 's2', terminalId: id, lines: 5 }),
+    ).toMatchObject({ error: { code: 'not_found' } })
+  })
+})
+
+describe('a terminal waiting for a password', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('is told when a program reads one, and no longer once output goes on', async () => {
+    const { manager, ptys } = host({ echo: false, icanon: true })
+    const id = terminalOf(await replyRun(manager, ptys))
+    await prompts(ptys[0]!, 'sudo', '[sudo] password for me: ')
+    expect((await manager.list())[0]).toMatchObject({ id, waiting: 'password' })
+    ptys[0]!.emit('\r\n')
+    await vi.advanceTimersByTimeAsync(10)
+    expect((await manager.list())[0]).toMatchObject({ waiting: null })
+  })
+
+  it('is not a full-screen program, the shell at its prompt or a line that ended', async () => {
+    const raw = host({ echo: false, icanon: false })
+    await replyRun(raw.manager, raw.ptys)
+    await prompts(raw.ptys[0]!, 'vim', 'INSERT ')
+    expect((await raw.manager.list())[0]?.waiting).toBeNull()
+
+    const atPrompt = host({ echo: false, icanon: true })
+    await replyRun(atPrompt.manager, atPrompt.ptys)
+    await prompts(atPrompt.ptys[0]!, 'zsh', '% ')
+    expect((await atPrompt.manager.list())[0]?.waiting).toBeNull()
+
+    const lines = host({ echo: false, icanon: true })
+    await replyRun(lines.manager, lines.ptys)
+    await prompts(lines.ptys[0]!, 'node', 'ready on http://localhost:5173\r\n')
+    expect((await lines.manager.list())[0]?.waiting).toBeNull()
+  })
+
+  it("lets the user's keys in while the agent's turn uses the terminal", async () => {
+    const { manager, ptys } = host({ echo: false, icanon: true })
+    const id = terminalOf(await manager.agentCall(RUN))
+    await promptShown(ptys[0]!)
+    manager.input(id, 'q')
+    expect(ptys[0]!.written).toEqual(['pnpm dev\r'])
+    await prompts(ptys[0]!, 'sudo', 'Password: ')
+    manager.input(id, 'secret\r')
+    expect(ptys[0]!.written.at(-1)).toBe('secret\r')
+  })
+
+  it("holds the agent's input until the password is typed", async () => {
+    const { manager, ptys } = host({ echo: false, icanon: true })
+    const id = terminalOf(await manager.agentCall(RUN))
+    await promptShown(ptys[0]!)
+    await prompts(ptys[0]!, 'sudo', 'Password: ')
+    const typing = manager.agentCall({
+      kind: 'input',
+      sessionId: 's1',
+      terminalId: id,
+      text: 'guess',
+      enter: true,
+    })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(await typing).toEqual({ result: { kind: 'password' } })
+    expect(ptys[0]!.written).toEqual(['pnpm dev\r'])
+  })
+
+  it('ends a wait with the reason', async () => {
+    const { manager, ptys } = host({ echo: false, icanon: true })
+    const id = terminalOf(await replyRun(manager, ptys))
+    const waiting = manager.agentCall({ kind: 'wait', sessionId: 's1', terminalId: id, lines: 5 })
+    await prompts(ptys[0]!, 'sudo', '[sudo] password for me: ')
+    await vi.advanceTimersByTimeAsync(400)
+    expect(await waiting).toMatchObject({
+      result: {
+        kind: 'output',
+        reason: 'password',
+        terminal: { password: true },
+        output: '% [sudo] password for me:',
+      },
     })
   })
 })
