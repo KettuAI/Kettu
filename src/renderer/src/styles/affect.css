@@ -1453,7 +1453,7 @@ li[data-row-exit='dust'] > * {
     animation: none !important;
   }
 }
-:where([data-reduce-motion='always']) .kp-btab__who::after {
+:root[data-reduce-motion='always'] .kp-btab__who::after {
   animation: none;
 }
 .kp-head__main > .kp-bnew {
