@@ -7,6 +7,7 @@ import {
   type WheelEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { ActiveControl, ControlPoint } from '@shared/control'
 import type {
   DeviceFrame as Frame,
   DeviceInfo,
@@ -16,12 +17,14 @@ import type {
 } from '@shared/device-host'
 import { RefreshIcon } from '@hugeicons/core-free-icons'
 import { Button } from '@renderer/components/affect/button'
+import { HeldBubble } from '@renderer/components/control/held-bubble'
+import { useHeldBubble } from '@renderer/components/control/use-held-bubble'
 import { PaneIcon, PaneSpinner } from '@renderer/features/shell/panel-button'
 import { errorCode, errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { setDeviceStream } from '@renderer/stores/devices'
 import { shareCanvas } from './device-capture'
-import { DeviceFrame } from './device-frame'
+import { DeviceFrame, type DeviceAgentActs } from './device-frame'
 
 type StreamState = 'starting' | 'live' | 'stopped' | 'error'
 
@@ -73,18 +76,35 @@ function send(
 /**
  * One device's live screen: the host's encoded frames decoded on the GPU and drawn to a canvas,
  * acknowledged as they are drawn, with the pointer as a finger and the keyboard as the device's.
+ * While a turn uses the device, the user's taps and keys are held back, with the bubble at a tap,
+ * and the agent's actions show around and on it.
  */
 export function DeviceScreen({
   device,
   sessionId,
-  driven,
+  control,
+  agentName,
+  onHeld,
+  onTakeOver,
 }: {
   device: DeviceInfo
   /** The session whose pane shows the device; the host serves it to that session alone. */
   sessionId: string
-  driven: boolean
+  /** Who uses it in a turn now; null when no turn does. */
+  control: ActiveControl | null
+  agentName: string
+  /** Input the turn held back, for the pill to bob. */
+  onHeld: () => void
+  onTakeOver: () => void
 }) {
   const { t } = useTranslation('devices')
+  const { t: tc } = useTranslation('control')
+  const holds = control?.kind === 'agent'
+  const bubble = useHeldBubble()
+  const [acts, setActs] = useState<{ count: number; at: ControlPoint | null }>({
+    count: 0,
+    at: null,
+  })
   const canvas = useRef<HTMLCanvasElement>(null)
   const field = useRef<HTMLTextAreaElement>(null)
   const [stream, setStream] = useState<{ state: StreamState; error: string | null }>({
@@ -210,6 +230,10 @@ export function DeviceScreen({
 
     const unsubscribe = window.kettu.devices.onEvent((event) => {
       if (!('deviceId' in event) || event.deviceId !== id) return
+      if (event.type === 'device.act') {
+        setActs((last) => ({ count: last.count + 1, at: event.at }))
+        return
+      }
       if (event.type === 'device.screen') {
         const changed = event.screen.codec !== screen?.codec
         screen = event.screen
@@ -357,25 +381,36 @@ export function DeviceScreen({
     }
   }
 
+  /** Input the turn holds back: the pill bobs, and a tap gets the bubble where it landed. */
+  const held = (at: ControlPoint | null): void => {
+    bubble.held(at)
+    onHeld()
+  }
+
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (event.metaKey || event.ctrlKey) return
     if (KEY_CODES.has(event.code)) {
       event.preventDefault()
+      if (holds) {
+        if (!event.repeat) held(null)
+        return
+      }
       send(id, sessionId, { type: 'key', phase: 'down', code: event.code }, inputFailed)
     }
   }
 
   const onKeyUp = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.nativeEvent.isComposing || event.metaKey || event.ctrlKey) return
-    if (KEY_CODES.has(event.code))
+    if (KEY_CODES.has(event.code) && !holds)
       send(id, sessionId, { type: 'key', phase: 'up', code: event.code }, inputFailed)
   }
 
   const flushText = (): void => {
     const element = field.current
     if (!element || !element.value) return
-    send(id, sessionId, { type: 'text', text: element.value }, inputFailed)
+    if (holds) held(null)
+    else send(id, sessionId, { type: 'text', text: element.value }, inputFailed)
     element.value = ''
   }
 
@@ -405,13 +440,22 @@ export function DeviceScreen({
       </>
     )
 
-  const ripple = (event: PointerEvent<HTMLCanvasElement>): void => {
+  const inRoom = (event: PointerEvent<HTMLElement>): ControlPoint | null => {
     const room = box.current?.getBoundingClientRect()
-    if (!room) return
+    return room ? { x: event.clientX - room.left, y: event.clientY - room.top } : null
+  }
+
+  const ripple = (event: PointerEvent<HTMLCanvasElement>): void => {
+    const at = inRoom(event)
+    if (!at) return
     const id = ++tapId.current
-    setTaps((all) => [...all, { id, x: event.clientX - room.left, y: event.clientY - room.top }])
+    setTaps((all) => [...all, { id, ...at }])
     setTimeout(() => setTaps((all) => all.filter((tap) => tap.id !== id)), 700)
   }
+
+  const agent: DeviceAgentActs | null = control
+    ? { light: control.kind === 'agent', act: acts.count, at: acts.at }
+    : null
 
   return (
     <div className="kp-device-screen">
@@ -423,10 +467,11 @@ export function DeviceScreen({
           orientation={orientation}
           room={room ?? NO_ROOM}
           focused={focused}
-          glow={driven}
-          onButton={(name, phase) =>
-            send(id, sessionId, { type: 'frameButton', name, phase }, inputFailed)
-          }
+          agent={agent}
+          onButton={(name, phase) => {
+            if (!holds) send(id, sessionId, { type: 'frameButton', name, phase }, inputFailed)
+            else if (phase === 'down') held(null)
+          }}
         >
           <canvas
             ref={canvas}
@@ -437,6 +482,10 @@ export function DeviceScreen({
             onPointerDown={(event) => {
               // The mouse down that follows would move focus off the keyboard field.
               event.preventDefault()
+              if (holds) {
+                if (event.button === 0) held(inRoom(event))
+                return
+              }
               event.currentTarget.setPointerCapture(event.pointerId)
               pointer.current = { id: event.pointerId, pinch: fingers && event.altKey }
               touch(event, 'begin')
@@ -481,6 +530,16 @@ export function DeviceScreen({
         {taps.map((tap) => (
           <span key={tap.id} aria-hidden className="kp-tap" style={{ left: tap.x, top: tap.y }} />
         ))}
+        {holds && bubble.bubble && (
+          <HeldBubble
+            key={bubble.bubble.id}
+            at={bubble.bubble.at}
+            agentName={agentName}
+            scope={tc('scope.device')}
+            leaving={bubble.bubble.leaving}
+            onTakeOver={onTakeOver}
+          />
+        )}
       </div>
       {!canDecode && <p className="kp-device-screen__note">{t('screen.limited')}</p>}
       {/* The keyboard goes to the device through this field, so input methods compose as usual. */}
@@ -503,7 +562,8 @@ export function DeviceScreen({
         onPaste={(event) => {
           event.preventDefault()
           const text = event.clipboardData.getData('text/plain')
-          if (text) send(id, sessionId, { type: 'text', text }, inputFailed)
+          if (text && holds) held(null)
+          else if (text) send(id, sessionId, { type: 'text', text }, inputFailed)
         }}
       />
     </div>

@@ -162,6 +162,15 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.browserOriginSettled(message.requestId, message.decision))
         }
         break
+      case 'host:device-handed-back':
+        if (
+          typeof message.sessionId === 'string' &&
+          Number.isSafeInteger(message.durationMs) &&
+          message.durationMs >= 0
+        ) {
+          withHost((h) => h.deviceHandedBack(message.sessionId, message.durationMs))
+        }
+        break
       case 'host:browser-handed-back':
         if (
           typeof message.sessionId === 'string' &&

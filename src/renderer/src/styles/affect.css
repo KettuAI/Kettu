@@ -1007,28 +1007,6 @@ li[data-row-exit='dust'] > * {
   margin-top: 10px;
 }
 
-/* "Claude Code is driving", over a page or a device's screen, with the control to swap who drives. */
-.kp-drive {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 5px 0 10px;
-  border-radius: 10px;
-  background: var(--bg-surface);
-  box-shadow:
-    0 0 0 var(--hairline) var(--border-default),
-    var(--elevation-popover);
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-.kp-drive[data-driver='user'] > svg {
-  color: var(--pane-added);
-}
-
 /* ---------- panes: Terminal ---------- */
 /* The terminal lies on the pane's sheet with no box of its own: a hairline from edge to edge
    under the head and the screen out to the sheet's edges. Its tabs are names in a row, the chosen
@@ -1499,15 +1477,19 @@ li[data-row-exit='dust'] > * {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  /* The driving pill's room mirrors the hardware keys' and stays when the pill hides, so the
-     device keeps its size each time an agent acts. */
-  padding-block: 52px;
+  /* Room for the pill over the hardware keys, which stays when the pill hides, so the device keeps
+     its size each time a turn uses it. */
+  padding: 8px 0 96px;
 }
-.kp-stage > .kp-drive {
+/* While a turn uses the device: who has it, at its bottom, above the hardware keys. */
+.kp-stage__pill {
   position: absolute;
-  top: 0;
+  bottom: 46px;
   left: 50%;
-  z-index: 3;
+  z-index: 4;
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - 24px);
   translate: -50% 0;
 }
 .kp-device-screen {
@@ -1557,14 +1539,6 @@ li[data-row-exit='dust'] > * {
   font-size: 12px;
   color: var(--text-tertiary);
   text-align: center;
-}
-.kp-screen-glow {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  border-radius: inherit;
-  box-shadow: var(--pane-drive-glow-inset);
-  pointer-events: none;
 }
 .kp-tap {
   position: absolute;

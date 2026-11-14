@@ -1,9 +1,15 @@
-// The devices of this host: what the tools list, which session holds each, who is operating it,
+// The devices of this host: what the tools list, which session holds each, who uses it in a turn,
 // and the stream of each device someone watches.
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Env } from '../agent-host/find-command'
+import {
+  SurfaceControls,
+  type ControlPoint,
+  type ControlWaitOptions,
+  type SurfaceControl,
+} from '@shared/control'
 import {
   SESSION_DEVICE_LIMIT,
   type DeviceAppearance,
@@ -66,7 +72,15 @@ export interface DeviceManagerDeps {
   resourcesPath: string | null
   /** Sends an event to one port, or to every window and allowed device when `port` is null. */
   emit(port: string | null, event: DeviceEvent): void
+  /** The user handed a device back to the turn of `sessionId` after holding it for `durationMs`. */
+  handedBack?(sessionId: string, durationMs: number): void
   log(message: string): void
+}
+
+/** The turn that uses a device: its session and its agent's name. */
+interface DeviceTurn {
+  sessionId: string
+  agentName: string
 }
 
 export class DeviceManager {
@@ -80,7 +94,9 @@ export class DeviceManager {
   private readonly booted = new Map<DeviceId, DeviceId>()
   /** Devices this host is booting, which a listing from before the boot must not forget. */
   private readonly booting = new Set<DeviceId>()
-  private readonly operators = new Map<DeviceId, DeviceOperator>()
+  /** Who uses each device a turn uses, by its id. */
+  private readonly controls: SurfaceControls
+  private readonly turns = new Map<DeviceId, DeviceTurn>()
   private readonly live = new Map<DeviceId, Live>()
   private readonly ensuring = new Map<DeviceId, Promise<Live>>()
   /** The devices each port watches. */
@@ -94,6 +110,16 @@ export class DeviceManager {
 
   constructor(private readonly deps: DeviceManagerDeps) {
     this.restored = this.restoreLeases()
+    this.controls = new SurfaceControls({
+      changed: (id, state) => {
+        if (state.kind === 'idle') this.turns.delete(id)
+        this.broadcastList()
+      },
+      handedBack: (id, durationMs) => {
+        const turn = this.turns.get(id)
+        if (turn) deps.handedBack?.(turn.sessionId, durationMs)
+      },
+    })
   }
 
   private leasesFile(): string | null {
@@ -263,7 +289,7 @@ export class DeviceManager {
     if (!holder) return this.open(id, sessionId)
     if (holder !== sessionId) {
       this.checkRoom(id, sessionId)
-      this.operators.delete(id)
+      this.controls.forget(id)
       this.dropWatchers(id)
       this.leases.set(id, sessionId)
       this.saveLeases()
@@ -295,7 +321,7 @@ export class DeviceManager {
     this.leases.delete(id)
     const booted = this.booted.delete(id)
     this.saveLeases()
-    this.operators.delete(id)
+    this.controls.forget(id)
     this.dropWatchers(id)
     await this.stopLive(id)
     if (shutdown || booted) await this.shutDown(id)
@@ -315,7 +341,7 @@ export class DeviceManager {
     }
     const down = found?.kind === 'emulator' ? (this.booted.get(id) ?? null) : id
     this.booted.delete(id)
-    this.operators.delete(id)
+    this.controls.forget(id)
     this.dropWatchers(id)
     if (down !== id) {
       this.leases.delete(id)
@@ -338,7 +364,7 @@ export class DeviceManager {
     for (const [id, sessionId] of [...this.leases]) {
       if (!ended.has(sessionId)) continue
       this.leases.delete(id)
-      this.operators.delete(id)
+      this.controls.forget(id)
       this.dropWatchers(id)
       if (this.booted.delete(id)) booted.push(id)
     }
@@ -441,15 +467,17 @@ export class DeviceManager {
     this.live.get(id)?.fanout.ack(port, seq)
   }
 
-  input(id: DeviceId, input: DeviceInput, sessionId: string): void {
+  /**
+   * The user's input to the device, held back while a turn uses it unless it is scrolling; only
+   * Take over gives the user the device then. False when it was held back.
+   */
+  input(id: DeviceId, input: DeviceInput, sessionId: string): boolean {
     this.checkHolder(id, sessionId)
     const live = this.live.get(id)
     if (!live) throw new DeviceError('unavailable', 'The device is not streaming')
-    const operator = this.operators.get(id)
-    if (operator && operator.sessionId && !operator.user) {
-      this.setOperator(id, { ...operator, user: true })
-    }
+    if (this.controls.holdsInput(id) && input.type !== 'scroll') return false
     live.driver.send(input)
+    return true
   }
 
   async screenshot(id: DeviceId, sessionId: string): Promise<Uint8Array> {
@@ -539,28 +567,79 @@ export class DeviceManager {
     return (await live.driver.frame?.()) ?? null
   }
 
-  operator(id: DeviceId): DeviceOperator | null {
-    return this.operators.get(id) ?? null
+  /** Who uses the device now. */
+  control(id: DeviceId): SurfaceControl {
+    return this.controls.state(id)
   }
 
-  setOperator(id: DeviceId, operator: DeviceOperator | null): void {
-    if (operator) this.operators.set(id, operator)
-    else this.operators.delete(id)
-    this.broadcastList()
+  /**
+   * An agent's call of `sessionId`'s turn starts on the device, which the turn uses from now until
+   * it ends. While the user holds it, the call waits as `wait` says; it settles with the function
+   * that ends the call, or throws a ControlWait.
+   */
+  begin(
+    id: DeviceId,
+    turn: { sessionId: string; agentName: string },
+    wait: ControlWaitOptions,
+  ): Promise<() => void> {
+    if (this.controls.state(id).kind === 'idle') this.turns.set(id, { ...turn })
+    return this.controls.begin(id, wait)
   }
 
-  /** The user takes the device from the agent; the caller stops the agent's running call. */
-  takeOver(id: DeviceId, sessionId: string): void {
+  /**
+   * The turn of `sessionId` ended, however it ended, or every turn when null: the devices they used
+   * are nobody's now.
+   */
+  turnEnded(sessionId: string | null): void {
+    for (const [id, turn] of [...this.turns]) {
+      if (sessionId === null || turn.sessionId === sessionId) this.controls.turnEnded(id)
+    }
+  }
+
+  /** The user's Take over, from the label, the pill or the bubble; false when no turn has it. */
+  takeOver(id: DeviceId, sessionId: string): boolean {
     this.checkHolder(id, sessionId)
-    this.setOperator(id, { sessionId: null, agentName: null, user: true })
+    return this.controls.takeOver(id)
   }
 
-  handBack(id: DeviceId, sessionId: string): void {
+  /** The user's Hand back: the turn goes on, and its waiting calls with it. */
+  handBack(id: DeviceId, sessionId: string): boolean {
     this.checkHolder(id, sessionId)
-    const operator = this.operators.get(id)
-    if (!operator) return
-    if (operator.sessionId) this.setOperator(id, { ...operator, user: false })
-    else this.setOperator(id, null)
+    return this.controls.handBack(id)
+  }
+
+  /** The agent acted on the device: its watchers draw it, at a point of the screen or on all of it. */
+  acted(id: DeviceId, at: ControlPoint | null): void {
+    for (const port of this.portsOf(id)) {
+      this.deps.emit(port, { type: 'device.act', deviceId: id, at })
+    }
+  }
+
+  /**
+   * Where a point the agent named in the device's own points lies on its screen as shown, from 0
+   * to 1; null when the host cannot tell the device's size in points.
+   */
+  async pointOnScreen(id: DeviceId, x: number, y: number): Promise<ControlPoint | null> {
+    const live = this.live.get(id)
+    const found = this.found.get(id)
+    if (!live?.screen || !found) return null
+    const { width, height } = live.screen
+    const sideways = live.screen.orientation.startsWith('landscape')
+    let scale: number | null = null
+    // Android's tools speak the screen's own pixels; an iOS simulator's frame its points.
+    if (found.platform === 'android') scale = 1
+    else {
+      const frame = await live.driver.frame?.().catch(() => null)
+      const portraitWidth = Math.min(width, height)
+      if (frame && frame.screen.width > 0) scale = portraitWidth / frame.screen.width
+    }
+    if (!scale) return null
+    // The picture of a simulator stays portrait when it turns; the agent's points follow the turn.
+    const shownWidth = (sideways ? Math.max(width, height) : Math.min(width, height)) / scale
+    const shownHeight = (sideways ? Math.min(width, height) : Math.max(width, height)) / scale
+    const fx = x / shownWidth
+    const fy = y / shownHeight
+    return fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1 ? { x: fx, y: fy } : null
   }
 
   async dispose(): Promise<void> {
@@ -639,10 +718,22 @@ export class DeviceManager {
       state: found.state,
       connection: found.connection,
       sessionId: this.leases.get(found.id) ?? null,
-      operator: this.operators.get(found.id) ?? null,
+      operator: this.operatorOf(found.id),
       problems: found.problems,
       input: live?.input ?? false,
       bootedByHost: this.booted.has(found.id),
+    }
+  }
+
+  private operatorOf(id: DeviceId): DeviceOperator | null {
+    const control = this.controls.state(id)
+    const turn = this.turns.get(id)
+    if (control.kind === 'idle' || !turn) return null
+    return {
+      sessionId: turn.sessionId,
+      agentName: turn.agentName,
+      user: control.kind === 'you',
+      control,
     }
   }
 

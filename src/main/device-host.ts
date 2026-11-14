@@ -15,6 +15,8 @@ const log = createLogger('device-host')
 export interface DeviceHostDeps {
   /** Whether paired devices may use this computer's mobile devices. */
   allowDevices(): boolean
+  /** The user handed a device back to the turn of `sessionId` after holding it for `durationMs`. */
+  onHandedBack?(sessionId: string, durationMs: number): void
 }
 
 /**
@@ -45,7 +47,7 @@ export class DeviceHost {
       shutdownMessage: { type: 'device-host:shutdown' },
       readyType: 'device-host:ready',
       stoppedType: 'device-host:stopped',
-      onMessage: (message) => this.receive(message),
+      onMessage: (message) => this.receive(message, deps),
       onReady: () => this.flushPending(),
       onExit: () => {
         for (const resolve of this.calls.values()) {
@@ -94,6 +96,11 @@ export class DeviceHost {
     this.host.post({ type: 'device-host:sessions-ended', sessionIds })
   }
 
+  /** The turn of a session whose agent acted on devices ended; null: every turn of the host. */
+  turnEnded(sessionId: string | null): void {
+    this.host.post({ type: 'device-host:turn-ended', sessionId })
+  }
+
   /** Runs an agent's device call, starting the host when it is not running. */
   call(call: DeviceCall): Promise<DeviceCallAnswer> {
     this.host.start()
@@ -127,7 +134,14 @@ export class DeviceHost {
     return this.host.stop()
   }
 
-  private receive(message: DeviceHostToMain): void {
+  private receive(message: DeviceHostToMain, deps: DeviceHostDeps): void {
+    if (message.type === 'device-host:handed-back') {
+      const { sessionId, durationMs } = message
+      if (typeof sessionId === 'string' && Number.isSafeInteger(durationMs) && durationMs >= 0) {
+        deps.onHandedBack?.(sessionId, durationMs)
+      }
+      return
+    }
     if (message.type !== 'device-host:answer') {
       log.warn(`Ignored unknown message "${message.type}"`)
       return

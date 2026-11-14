@@ -262,6 +262,15 @@ export class Hosts {
       onMessage: (message) => {
         if (message.type === 'device-host:answer') {
           this.agent.post({ type: 'device-result', callId: message.callId, answer: message.answer })
+        } else if (message.type === 'device-host:handed-back') {
+          const { sessionId, durationMs } = message
+          if (
+            typeof sessionId === 'string' &&
+            Number.isSafeInteger(durationMs) &&
+            durationMs >= 0
+          ) {
+            this.agent.post({ type: 'host:device-handed-back', sessionId, durationMs })
+          }
         }
       },
     })
@@ -894,6 +903,11 @@ export class Hosts {
           void this.deviceCall(message.callId, message.call)
         }
         break
+      case 'host:device-turn-ended':
+        if (typeof message.sessionId === 'string') {
+          this.deviceHost.post({ type: 'device-host:turn-ended', sessionId: message.sessionId })
+        }
+        break
       case 'host:auth-commands':
         if (isStringList(message.commands)) {
           this.authCommands = message.commands
@@ -950,6 +964,8 @@ export class Hosts {
   }
 
   private agentExited(clean: boolean): void {
+    // No turn of the agent host runs now, so none uses a device.
+    this.deviceHost.post({ type: 'device-host:turn-ended', sessionId: null })
     for (const answer of [...this.reportRequests.values()]) {
       answer({ ok: false, reason: 'failed', message: 'The agent host exited' })
     }

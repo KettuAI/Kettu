@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
 import type { DeviceEvent, DeviceInput } from '@shared/device-host'
-import type { MainToDeviceHost } from '@shared/host-control'
+import type { DeviceHostToMain, MainToDeviceHost } from '@shared/host-control'
 import type { FromPort } from '@shared/port-rpc'
 import type { DriverEvents } from './driver'
 import type { FoundDevice } from './discovery'
@@ -111,9 +111,10 @@ vi.mock('./agent', () => {
   }
   return {
     ActionError,
-    // An agent's action that runs until it is stopped.
+    // An agent's action: a snapshot runs until it is stopped, anything else is done at once.
     AgentActions: class {
-      run(_session: string, _target: unknown, _action: unknown, signal: AbortSignal) {
+      run(_session: string, _target: unknown, action: { type: string }, signal: AbortSignal) {
+        if (action.type !== 'snapshot') return Promise.resolve({ text: `Did ${action.type}.` })
         return new Promise((_resolve, reject) =>
           signal.addEventListener('abort', () => reject(new ActionError('stopped', 'Stopped'))),
         )
@@ -437,7 +438,11 @@ describe('devices a session holds', () => {
     await devices.open(EMULATOR.id, 's1')
     await devices.watch('first', EMULATOR.id, 's1')
     const driver = fake.drivers[0]!
-    devices.setOperator(EMULATOR.id, { sessionId: 's1', agentName: 'Agent', user: false })
+    await devices.begin(
+      EMULATOR.id,
+      { sessionId: 's1', agentName: 'Agent' },
+      { deadline: Date.now() + 1_000 },
+    )
 
     const moved = await devices.move(EMULATOR.id, 's2')
     expect(moved).toMatchObject({ sessionId: 's2', operator: null })
@@ -611,13 +616,19 @@ describe('simulators the host booted', () => {
 /** The device host as main runs it, its agent calls in and a port per client. */
 function startHost(): {
   call(request: DeviceCall): Promise<DeviceCallAnswer>
-  port(): { request(method: string, params: unknown): Promise<unknown> }
+  port(): { request(method: string, params: unknown): Promise<unknown>; events: DeviceEvent[] }
+  /** A message from main, such as a turn that ended. */
+  tell(message: MainToDeviceHost): void
+  /** What the host told main besides its answers. */
+  told: DeviceHostToMain[]
 } {
   const answers = new Map<number, (answer: DeviceCallAnswer) => void>()
+  const told: DeviceHostToMain[] = []
   let control: ((message: MainToDeviceHost) => void) | null = null
   const host: StartedDeviceHost = startDeviceHost({
     send: (message) => {
       if (message.type === 'device-host:answer') answers.get(message.callId)?.(message.answer)
+      else told.push(message)
     },
     onMessage: (listener) => (control = listener),
   })
@@ -633,6 +644,8 @@ function startHost(): {
   })
   let calls = 0
   return {
+    told,
+    tell: (message) => control!(message),
     call: (request) =>
       new Promise((resolve) => {
         const callId = ++calls
@@ -643,9 +656,11 @@ function startHost(): {
       const waiting = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>()
       let toHost: ((data: unknown) => void) | null = null
       let requests = 0
+      const events: DeviceEvent[] = []
       host.connect(
         {
           send: (message: FromPort<DeviceEvent>) => {
+            if (message.type === 'event') events.push(message.event)
             if (message.type === 'response') waiting.get(message.id)?.resolve(message.result)
             if (message.type === 'error') waiting.get(message.id)?.reject(message.error)
           },
@@ -656,6 +671,7 @@ function startHost(): {
         1,
       )
       return {
+        events,
         request: (method, params) =>
           new Promise((resolve, reject) => {
             const id = ++requests
@@ -730,7 +746,7 @@ describe('emulators the host booted', () => {
 })
 
 describe('device operations by session', () => {
-  it('lets only the session holding a device stop its agent, hand it back or take its frames', async () => {
+  it('lets only the session holding a device take it over, hand it back or take its frames', async () => {
     const host = startHost()
     const own = host.port()
     const other = host.port()
@@ -747,6 +763,7 @@ describe('device operations by session', () => {
     })
 
     const asOther: [string, Record<string, unknown>][] = [
+      ['devices.takeOver', {}],
       ['devices.stopAgent', {}],
       ['devices.handBack', {}],
       ['devices.frame', {}],
@@ -765,10 +782,153 @@ describe('device operations by session', () => {
     ])
     expect(running).toBe('running')
 
-    await own.request('devices.stopAgent', { deviceId: EMULATOR.id, sessionId: 's1' })
-    expect(await acting).toMatchObject({ error: { code: 'stopped' } })
+    await own.request('devices.takeOver', { deviceId: EMULATOR.id, sessionId: 's1' })
     await own.request('devices.handBack', { deviceId: EMULATOR.id, sessionId: 's1' })
     await own.request('devices.frame', { deviceId: EMULATOR.id, sessionId: 's1' })
     await own.request('devices.unwatch', { deviceId: EMULATOR.id, sessionId: 's1' })
+  })
+})
+
+describe('who uses a device in a turn', () => {
+  const tap = (sessionId = 's1'): DeviceCall => ({
+    kind: 'action',
+    sessionId,
+    agentName: 'Agent',
+    deviceId: EMULATOR.id,
+    action: { type: 'tap', x: 10, y: 20 },
+    projectPath: null,
+  })
+  const settled = (call: Promise<unknown>) =>
+    Promise.race([call, new Promise((resolve) => setTimeout(() => resolve('waiting'), 20))])
+
+  async function opened() {
+    const host = startHost()
+    const port = host.port()
+    await host.call({ kind: 'open', sessionId: 's1', agentName: 'Agent', deviceId: EMULATOR.id })
+    await port.request('devices.watch', { deviceId: EMULATOR.id, sessionId: 's1' })
+    const input = (input: DeviceInput) =>
+      port.request('devices.input', { deviceId: EMULATOR.id, sessionId: 's1', input })
+    const latest = () =>
+      port.events
+        .flatMap((event) => (event.type === 'devices.changed' ? [event.devices] : []))
+        .at(-1)
+        ?.find((device) => device.id === EMULATOR.id)
+    return { host, port, input, latest, driver: fake.drivers.at(-1)! }
+  }
+
+  const home: DeviceInput = { type: 'button', button: 'home' }
+  const scroll: DeviceInput = { type: 'scroll', x: 0.5, y: 0.5, dx: 0, dy: 40 }
+
+  it('holds the user back from the first call to the end of the turn, scrolling aside', async () => {
+    const { host, input, latest, driver } = await opened()
+    await input(home)
+    expect(driver.sent).toEqual([home])
+
+    expect(await host.call(tap())).toHaveProperty('result')
+    expect(latest()?.operator).toMatchObject({
+      sessionId: 's1',
+      user: false,
+      control: { kind: 'agent', acting: false },
+    })
+    await input(home)
+    await input(scroll)
+    expect(driver.sent).toEqual([home, scroll])
+
+    host.tell({ type: 'device-host:turn-ended', sessionId: 's2' })
+    await input(home)
+    expect(driver.sent).toEqual([home, scroll])
+
+    host.tell({ type: 'device-host:turn-ended', sessionId: 's1' })
+    expect(latest()?.operator).toBeNull()
+    await input(home)
+    expect(driver.sent).toEqual([home, scroll, home])
+  })
+
+  it('gives the device to the user only on Take over, until they hand it back', async () => {
+    const { host, port, input, latest, driver } = await opened()
+    await host.call(tap())
+    const ids = { deviceId: EMULATOR.id, sessionId: 's1' }
+
+    await port.request('devices.takeOver', ids)
+    expect(latest()?.operator).toMatchObject({ user: true, control: { kind: 'you' } })
+    await input(home)
+    expect(driver.sent).toEqual([home])
+
+    await port.request('devices.handBack', ids)
+    expect(latest()?.operator).toMatchObject({ user: false, control: { kind: 'agent' } })
+    await input(home)
+    expect(driver.sent).toEqual([home])
+    expect(host.told.filter((message) => message.type === 'device-host:handed-back')).toEqual([
+      expect.objectContaining({ sessionId: 's1' }),
+    ])
+  })
+
+  it("keeps the agent's calls waiting while the user has the device, and goes on after", async () => {
+    const { host, port } = await opened()
+    await host.call(tap())
+    const ids = { deviceId: EMULATOR.id, sessionId: 's1' }
+    await port.request('devices.takeOver', ids)
+
+    const waiting = host.call(tap())
+    expect(await settled(waiting)).toBe('waiting')
+    await port.request('devices.handBack', ids)
+    expect(await waiting).toMatchObject({ result: { text: 'Did tap.' } })
+  })
+
+  it('ends a waiting call when the turn ends, and frees the device', async () => {
+    const { host, port, latest } = await opened()
+    await host.call(tap())
+    await port.request('devices.takeOver', { deviceId: EMULATOR.id, sessionId: 's1' })
+
+    const waiting = host.call(tap())
+    expect(await settled(waiting)).toBe('waiting')
+    host.tell({ type: 'device-host:turn-ended', sessionId: 's1' })
+    expect(await waiting).toMatchObject({ error: { code: 'stopped' } })
+    expect(latest()?.operator).toBeNull()
+  })
+
+  it('ends a waiting call when the device moves to another session', async () => {
+    const { host, port } = await opened()
+    await host.call(tap())
+    await port.request('devices.takeOver', { deviceId: EMULATOR.id, sessionId: 's1' })
+
+    const waiting = host.call(tap())
+    expect(await settled(waiting)).toBe('waiting')
+    await port.request('devices.move', { deviceId: EMULATOR.id, sessionId: 's2' })
+    expect(await waiting).toMatchObject({ error: { code: 'not_open' } })
+  })
+
+  it('returns a waiting call before the time limit, which the agent calls again to wait on', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    try {
+      const devices = manager()
+      await devices.open(EMULATOR.id, 's1')
+      const turn = { sessionId: 's1', agentName: 'Agent' }
+      ;(await devices.begin(EMULATOR.id, turn, { deadline: Date.now() + 1_000 }))()
+      expect(devices.takeOver(EMULATOR.id, 's1')).toBe(true)
+
+      const waiting = devices.begin(EMULATOR.id, turn, { deadline: Date.now() + 45_000 })
+      const outcome = waiting.then(
+        () => 'acted',
+        (error: unknown) => (error as { reason?: string }).reason,
+      )
+      await vi.advanceTimersByTimeAsync(45_000)
+      expect(await outcome).toBe('held')
+      expect(devices.control(EMULATOR.id)).toMatchObject({ kind: 'you' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('tells the screen where the agent tapped', async () => {
+    const { host, port } = await opened()
+    await host.call(tap())
+    // A device that streams no picture yet cannot place the tap, so it flares as a whole.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(port.events).toContainEqual({
+      type: 'device.act',
+      deviceId: EMULATOR.id,
+      at: null,
+    })
   })
 })

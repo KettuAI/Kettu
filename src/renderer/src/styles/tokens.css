@@ -1640,10 +1640,6 @@
   --terminal-foreground: var(--text-primary);
   --terminal-cursor: var(--pane-fox);
   --terminal-selection: var(--terminal-selection-tint);
-  /* The glow of a device an agent drives, and its tap. */
-  --pane-drive-glow-inset:
-    inset 0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 60%, transparent),
-    inset 0 0 22px -4px color-mix(in srgb, var(--pane-fox) 40%, transparent);
 
   /* The primary button's gradients, from their stops, so a theme sets them as colors. */
   --primary-gradient: linear-gradient(180deg, var(--primary-from), var(--primary-to));

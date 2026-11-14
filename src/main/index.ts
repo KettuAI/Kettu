@@ -381,7 +381,10 @@ async function start(): Promise<void> {
   })
   const routinesAwake = new RoutinesAwake()
   const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
-  const deviceHost = new DeviceHost({ allowDevices: () => true })
+  const deviceHost = new DeviceHost({
+    allowDevices: () => true,
+    onHandedBack: (sessionId, ms) => hostRef.current?.deviceHandedBack(sessionId, ms),
+  })
   // Set once the sharing service exists; the host reports ready only after that, at each start.
   let reconcileSharing: (() => void) | null = null
   let sharingArtifactsChanged: (() => void) | null = null
@@ -450,7 +453,9 @@ async function start(): Promise<void> {
       browserTools?.endTurns(
         browserTools.controls.keys().filter((sessionId) => !remoteBrowser.isRemote(sessionId)),
       )
+      deviceHost.turnEnded(null)
     },
+    onDeviceTurnEnded: (sessionId) => deviceHost.turnEnded(sessionId),
     onBrowserTurnEnded: (sessionId) => {
       if (!remoteBrowser.isRemote(sessionId)) browserTools?.turnEnded(sessionId)
     },

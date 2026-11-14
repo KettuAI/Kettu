@@ -7,12 +7,15 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import type { ControlPoint } from '@shared/control'
 import type {
   DeviceFrame as Frame,
   DeviceFrameButton,
   DeviceOrientation,
 } from '@shared/device-host'
+import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { cn } from '@renderer/lib/utils'
 
 type Size = { width: number; height: number }
@@ -76,6 +79,30 @@ function layoutOf(frame: Frame | null, picture: Size, orientation: DeviceOrienta
   }
 }
 
+/** A point on the screen as it is shown, from 0 to 1, on the picture the device turns to show it. */
+function onPicture(at: ControlPoint, turn: number): ControlPoint {
+  switch (turn) {
+    case 90:
+      return { x: at.y, y: 1 - at.x }
+    case -90:
+      return { x: 1 - at.y, y: at.x }
+    case 180:
+      return { x: 1 - at.x, y: 1 - at.y }
+    default:
+      return at
+  }
+}
+
+/** What an agent does on the device in its turn: each action and where it landed, if anywhere. */
+export interface DeviceAgentActs {
+  /** The agent has the device: the light goes around it. */
+  light: boolean
+  /** Counts the agent's actions; each swells the light and taps where it landed. */
+  act: number
+  /** Where the latest action landed on the screen as it is shown, from 0 to 1. */
+  at: ControlPoint | null
+}
+
 function dataUrl(png: ArrayBuffer): string {
   const bytes = new Uint8Array(png)
   let binary = ''
@@ -95,7 +122,7 @@ export function DeviceFrame({
   orientation,
   room,
   focused,
-  glow = false,
+  agent = null,
   onButton,
   className,
   children,
@@ -106,8 +133,8 @@ export function DeviceFrame({
   orientation: DeviceOrientation
   room: Size
   focused: boolean
-  /** An agent drives the device: the fox glows along the screen's edge. */
-  glow?: boolean
+  /** What an agent does on the device in its turn, drawn around and on it. */
+  agent?: DeviceAgentActs | null
   /** A button on the frame went down or up. */
   onButton?: (name: string, phase: 'down' | 'up') => void
   className?: string
@@ -129,6 +156,9 @@ export function DeviceFrame({
     [frame],
   )
   const px = (value: number): number => value * scale
+  const tap = agent?.at ? onPicture(agent.at, layout.turn) : null
+  // The light goes around the device's body, the screen's corner and bezel on a simulator's frame.
+  const bodyRadius = layout.body !== null ? px(layout.body) : px(layout.radii[0] + layout.screen.x)
   const place = (rect: Rect) => ({
     left: px(rect.x),
     top: px(rect.y),
@@ -149,6 +179,24 @@ export function DeviceFrame({
           transform: `translate(-50%, -50%) rotate(${layout.turn}deg)`,
         }}
       >
+        <AnimatePresence>
+          {agent?.light && (
+            <SurfaceLight
+              key="light"
+              placement="outside"
+              act={agent.act}
+              at={
+                tap
+                  ? {
+                      x: px(layout.screen.x + tap.x * layout.screen.width),
+                      y: px(layout.screen.y + tap.y * layout.screen.height),
+                    }
+                  : null
+              }
+              radius={bodyRadius}
+            />
+          )}
+        </AnimatePresence>
         {layout.body !== null && (
           <div
             aria-hidden
@@ -189,7 +237,14 @@ export function DeviceFrame({
           }}
         >
           {children}
-          {glow && <span aria-hidden className="kp-screen-glow" />}
+          {tap && agent && agent.act > 0 && (
+            <span
+              key={agent.act}
+              aria-hidden
+              className="kp-tap"
+              style={{ left: `${tap.x * 100}%`, top: `${tap.y * 100}%` }}
+            />
+          )}
         </div>
       </div>
     </div>

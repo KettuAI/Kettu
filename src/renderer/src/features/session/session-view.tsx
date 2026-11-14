@@ -9,6 +9,7 @@ import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/comp
 import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { Button } from '@renderer/components/ui/button'
 import { BrowserLabel } from '@renderer/features/browser/browser-label'
+import { DeviceLabel } from '@renderer/features/devices/device-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -276,7 +277,18 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     />
                   )}
                   {!archived && !away && summary.origin !== 'subagent' && (
-                    <BrowserLabel sessionId={sessionId} agentId={summary.agentId} hostId={hostId} />
+                    <>
+                      <BrowserLabel
+                        sessionId={sessionId}
+                        agentId={summary.agentId}
+                        hostId={hostId}
+                      />
+                      <DeviceLabel
+                        sessionId={sessionId}
+                        agentId={summary.agentId}
+                        hostId={hostId}
+                      />
+                    </>
                   )}
                   {away ? (
                     session && <HostAway host={away} inline />
