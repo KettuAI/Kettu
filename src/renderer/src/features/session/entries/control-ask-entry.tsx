@@ -1,7 +1,10 @@
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 import { Key01Icon } from '@hugeicons/core-free-icons'
 import { Trans, useTranslation } from 'react-i18next'
+import { BrowserMark } from '@renderer/features/browser/sign-in-parts'
+import { shortBrowserName } from '@renderer/features/browser/sign-in-text'
 import { host } from '@renderer/lib/host'
+import { bringOfferedSignIn, loadSources, useSignInOffer } from '@renderer/stores/sign-ins'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { AccessCard } from './access-card'
 
@@ -19,11 +22,25 @@ export const ControlAskEntry = memo(function ControlAskEntry({
   entryId: string
   agentName: string
 }) {
-  const { t } = useTranslation('control')
+  const { t } = useTranslation(['control', 'browser'])
   const entry = useEntry(sessionId, entryId, 'control_ask')
   const animation = useEntryAnimation(sessionId, entryId)
+  // A sign-in the card waits for may come from one of the user's own browsers instead.
+  const signIn =
+    entry?.outcome === null &&
+    entry.surface === 'browser' &&
+    entry.step === 'sign_in' &&
+    entry.target
+      ? `https://${entry.target}/`
+      : null
+  const offer = useSignInOffer(signIn)
+  // The browser's icon comes with the list of browsers, read once a run.
+  useEffect(() => {
+    if (offer) void loadSources().catch(() => {})
+  }, [offer])
   if (!entry) return null
   const step = entry.step
+  const browser = offer ? shortBrowserName(offer.browserName) : ''
   return (
     <AccessCard
       sessionId={sessionId}
@@ -62,7 +79,15 @@ export const ControlAskEntry = memo(function ControlAskEntry({
           outcome: decision === 'deny' ? 'skipped' : 'done',
         })
       }
-      trailing={null}
+      trailing={
+        offer
+          ? {
+              mark: <BrowserMark browser={offer.browser} size={14} />,
+              label: t('browser:signIns.chip', { browser }),
+              onClick: () => bringOfferedSignIn(offer, sessionId),
+            }
+          : null
+      }
     />
   )
 })
