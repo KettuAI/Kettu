@@ -145,6 +145,11 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           withHost((h) => h.deviceResult(message.callId, message.answer))
         }
         break
+      case 'terminal-result':
+        if (Number.isSafeInteger(message.callId) && typeof message.answer === 'object') {
+          withHost((h) => h.terminalResult(message.callId, message.answer))
+        }
+        break
       case 'host:browser-waiting':
         if (Number.isSafeInteger(message.callId) && typeof message.waiting === 'boolean') {
           withHost((h) => h.browserWaiting(message.callId, message.waiting))
@@ -169,6 +174,15 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
           message.durationMs >= 0
         ) {
           withHost((h) => h.deviceHandedBack(message.sessionId, message.durationMs))
+        }
+        break
+      case 'host:terminal-handed-back':
+        if (
+          typeof message.sessionId === 'string' &&
+          Number.isSafeInteger(message.durationMs) &&
+          message.durationMs >= 0
+        ) {
+          withHost((h) => h.terminalHandedBack(message.sessionId, message.durationMs))
         }
         break
       case 'host:browser-handed-back':

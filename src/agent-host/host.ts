@@ -3,6 +3,7 @@
 // shell and git.
 
 import { DEVICE_ACCESS_WAIT_MS, type DeviceCall, type DeviceCallAnswer } from '@shared/device-agent'
+import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
 import { DeviceAccessStore } from './devices/access'
 import os from 'node:os'
 import path from 'node:path'
@@ -358,6 +359,10 @@ export class AgentHost {
   /** Browser calls awaiting main's answer, by the id the call was given. */
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
   private readonly deviceCalls = new Map<number, (answer: DeviceCallAnswer) => void>()
+  private readonly terminalCalls = new Map<number, (answer: TerminalCallAnswer) => void>()
+  private nextTerminalCall = 1
+  // Sessions whose running turn used a terminal, told to the terminal host when the turn ends.
+  private readonly terminalTurns = new Set<string>()
   /** Sessions whose running turn acted on a device, which the device host hears the end of. */
   private readonly deviceTurns = new Set<string>()
   private nextDeviceCall = 1
@@ -590,6 +595,10 @@ export class AgentHost {
         alwaysAllowed: (deviceId) => this.deviceAccess.has(deviceId),
         allowAlways: (deviceId) => this.deviceAccess.add(deviceId),
       },
+      terminals: {
+        call: (call) => this.terminalCall(call),
+        agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
+      },
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       sessionFolder: (sessionId) => this.sessions.sessionFolder(sessionId),
       ...(this.computer ? { computer: this.computer } : {}),
@@ -748,6 +757,9 @@ export class AgentHost {
           this.browserTurnEnded(sessionId)
           if (this.deviceTurns.delete(sessionId)) {
             this.options.send({ type: 'host:device-turn-ended', sessionId })
+          }
+          if (this.terminalTurns.delete(sessionId)) {
+            this.options.send({ type: 'host:terminal-turn-ended', sessionId })
           }
         },
       },
@@ -1582,6 +1594,29 @@ export class AgentHost {
     this.sessions.controlHandedBack(sessionId, 'device', durationMs)
   }
 
+  /** Sends an agent's terminal call to its parent, which hands it to the terminal host. */
+  terminalCall(call: TerminalCall): Promise<TerminalCallAnswer> {
+    if (call.kind !== 'read') this.terminalTurns.add(call.sessionId)
+    const callId = this.nextTerminalCall++
+    return new Promise<TerminalCallAnswer>((resolve) => {
+      this.terminalCalls.set(callId, resolve)
+      this.options.send({ type: 'host:terminal-call', callId, call })
+    })
+  }
+
+  /** `terminal-result`: the terminal host's answer to a call this host forwarded. */
+  terminalResult(callId: number, answer: TerminalCallAnswer): void {
+    const resolve = this.terminalCalls.get(callId)
+    if (!resolve) return
+    this.terminalCalls.delete(callId)
+    resolve(answer)
+  }
+
+  /** `host:terminal-handed-back`: the user handed a terminal back; the thread says for how long. */
+  terminalHandedBack(sessionId: string, durationMs: number): void {
+    this.sessions.controlHandedBack(sessionId, 'terminal', durationMs)
+  }
+
   /** `device-result`: the device host's answer to a call this host forwarded. */
   deviceResult(callId: number, answer: DeviceCallAnswer): void {
     const resolve = this.deviceCalls.get(callId)
@@ -1612,6 +1647,12 @@ export class AgentHost {
       })
     }
     this.deviceCalls.clear()
+    for (const resolve of this.terminalCalls.values()) {
+      resolve({
+        error: { code: 'unavailable', message: 'Kettu stopped before the terminal answered.' },
+      })
+    }
+    this.terminalCalls.clear()
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
@@ -2183,9 +2224,6 @@ export class AgentHost {
           throw new HostError('forbidden', 'This port does not drive the session’s browser')
         }
         sessions.controlHandedBack(sessionId, 'browser', durationMs)
-      },
-      'terminal.handedBack': ({ sessionId, durationMs }) => {
-        sessions.controlHandedBack(sessionId, 'terminal', durationMs)
       },
       // The first answer goes to the page, whose waiting call then settles the card.
       'control.answerAsk': ({ sessionId, entryId, outcome }, { device }) => {

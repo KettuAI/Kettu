@@ -1,4 +1,5 @@
 import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
+import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
 import { join } from 'node:path'
 import { app, MessageChannelMain, type MessagePortMain, type WebContents } from 'electron'
 import {
@@ -104,12 +105,15 @@ export interface AgentHostDeps {
   browser?: (request: BrowserCallRequest) => Promise<BrowserCallAnswer>
   /** An agent's device tool call, run by the device host. Set after construction, like `browser`. */
   device?: (call: DeviceCall) => Promise<DeviceCallAnswer>
+  /** Runs an agent's terminal call on the terminal host. */
+  terminal?: (call: TerminalCall) => Promise<TerminalCallAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** The last running turn that used a page of main's ended. */
   onBrowserTurnEnded?(sessionId: string): void
   /** The turn of a session whose agent acted on a device ended. */
   onDeviceTurnEnded?(sessionId: string): void
+  onTerminalTurnEnded?(sessionId: string): void
   /** Done or Skip on the card of a step the agent asked for on a page of main's. */
   onBrowserAskAnswer?(sessionId: string, outcome: ControlOutcome): void
   /** A session's card allowed an app always, for the settings to keep. */
@@ -591,6 +595,15 @@ export class AgentHost {
     })
   }
 
+  /** `host:terminal-handed-back`: the user handed a terminal back; the thread says for how long. */
+  terminalHandedBack(sessionId: string, durationMs: number): void {
+    this.host.post({
+      type: 'host:terminal-handed-back',
+      sessionId,
+      durationMs: Math.max(0, Math.round(durationMs)),
+    })
+  }
+
   /** `host:browser-handed-back`: the user handed the page back; the thread says for how long. */
   browserHandedBack(sessionId: string, durationMs: number): void {
     this.host.post({
@@ -691,6 +704,19 @@ export class AgentHost {
                 error: { code: 'unavailable', message: 'This build has no device host.' },
               })
         ).then((answer) => this.host.post({ type: 'device-result', callId, answer }))
+        break
+      }
+      case 'host:terminal-call': {
+        const { callId, call } = message
+        if (!Number.isSafeInteger(callId) || typeof call !== 'object' || call === null) break
+        const run = this.deps.terminal
+        void (
+          run
+            ? run(call)
+            : Promise.resolve<TerminalCallAnswer>({
+                error: { code: 'unavailable', message: 'This build has no terminal host.' },
+              })
+        ).then((answer) => this.host.post({ type: 'terminal-result', callId, answer }))
         break
       }
 
@@ -833,6 +859,11 @@ export class AgentHost {
       }
       case 'host:device-turn-ended':
         if (typeof message.sessionId === 'string') this.deps.onDeviceTurnEnded?.(message.sessionId)
+        break
+      case 'host:terminal-turn-ended':
+        if (typeof message.sessionId === 'string') {
+          this.deps.onTerminalTurnEnded?.(message.sessionId)
+        }
         break
       case 'host:browser-turn-ended':
         if (typeof message.sessionId === 'string') this.deps.onBrowserTurnEnded?.(message.sessionId)

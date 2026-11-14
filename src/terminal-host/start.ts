@@ -69,6 +69,8 @@ export function startTerminalHost(
       consoleProcesses,
       warn,
       isDevicePort: (port) => server?.isDevice(port) ?? false,
+      handedBack: (sessionId, durationMs) =>
+        send({ type: 'terminal-host:handed-back', sessionId, durationMs: Math.round(durationMs) }),
       sink: {
         data: (id, data, ports) => {
           for (const port of ports) server?.send(port, { type: 'terminal.data', id, data })
@@ -92,6 +94,8 @@ export function startTerminalHost(
         'terminals.ack': (port, params) => terminals.ack(port, params.id, params.chars),
         'terminals.kill': (_, params) => terminals.kill(params.id),
         'terminals.restart': (_, params) => terminals.restart(params.id),
+        'terminals.takeOver': (_, params) => terminals.takeOver(params.id),
+        'terminals.handBack': (_, params) => terminals.handBack(params.id),
       },
       (port) => terminals.detach(port),
       warn,
@@ -128,6 +132,19 @@ export function startTerminalHost(
         void (manager?.busy() ?? Promise.resolve([])).then((terminals) =>
           send({ type: 'terminal-host:busy', requestId: message.requestId, terminals }),
         )
+        break
+      case 'terminal-host:call': {
+        const { callId, call } = message
+        void (
+          manager?.agentCall(call) ??
+          Promise.resolve({
+            error: { code: 'unavailable' as const, message: 'The terminal host is starting' },
+          })
+        ).then((answer) => send({ type: 'terminal-host:answer', callId, answer }))
+        break
+      }
+      case 'terminal-host:turn-ended':
+        manager?.turnEnded(message.sessionId)
         break
       case 'terminal-host:shutdown':
         manager?.dispose()

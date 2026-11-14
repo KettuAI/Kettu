@@ -9,6 +9,13 @@ import {
   isDeviceToolName,
   type DeviceToolDeps,
 } from '../devices/tools'
+import {
+  isTerminalToolName,
+  TERMINAL_INSTRUCTIONS,
+  TERMINAL_TOOLS,
+  TerminalTools,
+  type TerminalToolDeps,
+} from '../terminals/tools'
 import { addLogSecret } from '@shared/log/process-log'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import http from 'node:http'
@@ -91,10 +98,11 @@ const SERVICE_TOOLS: Tool[] = [
   ...REPORT_TOOLS,
   ...BROWSER_TOOLS,
   ...DEVICE_TOOLS,
+  ...TERMINAL_TOOLS,
 ]
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS}`
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS}`
 
 /** Serves the computer use tools, on a host that carries the driver. */
 export interface ComputerCalls {
@@ -150,6 +158,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   subagentCall?(process: AgentProcess, id: string): boolean
   /** The mobile devices behind the `device_*` tools; without them every call fails. */
   devices?: Omit<DeviceToolDeps, 'sessionOf' | 'projectOf'>
+  /** The terminal host behind the `terminal_*` tools; without it every call fails. */
+  terminals?: Omit<TerminalToolDeps, 'sessionOf' | 'folderOf'>
   /** The computer use tools; without it the service lists none. */
   computer?: ComputerCalls
   /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
@@ -193,7 +203,7 @@ function entry(url: string, token: string): McpServer[] {
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
       // Kettu's own tools, which reach no further than its thread, memory and the project's
-      // sessions; the browser, computer use, devices and artifacts still ask.
+      // sessions; the browser, computer use, devices, terminals and artifacts still ask.
       autoAllow: [
         PLAN_TOOL,
         REPORT_TOOL,
@@ -246,6 +256,7 @@ export class ArtifactService {
   private readonly memoryTools: MemoryTools | null
   private readonly browserTools: BrowserTools
   private readonly deviceTools: DeviceTools | null
+  private readonly terminalTools: TerminalTools | null
   private readonly dataTools: DataTools | null
   private sdk: Promise<Sdk> | null = null
   /** Why the last `start()` could not listen; cleared once it does. */
@@ -284,6 +295,15 @@ export class ArtifactService {
           ...devices,
           sessionOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
           projectOf: (sessionId) =>
+            deps.sessionFolder?.(sessionId) ?? deps.sessionProject?.(sessionId) ?? null,
+        })
+      : null
+    const terminals = deps.terminals
+    this.terminalTools = terminals
+      ? new TerminalTools({
+          ...terminals,
+          sessionOf: (sessionId) => deps.browserSession?.(sessionId) ?? sessionId,
+          folderOf: (sessionId) =>
             deps.sessionFolder?.(sessionId) ?? deps.sessionProject?.(sessionId) ?? null,
         })
       : null
@@ -675,6 +695,17 @@ export class ArtifactService {
         }
         try {
           return await this.deviceTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      if (isTerminalToolName(name)) {
+        if (!this.terminalTools) {
+          throw new McpError(ErrorCode.InternalError, `${name} is not available on this host`)
+        }
+        try {
+          return await this.terminalTools.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

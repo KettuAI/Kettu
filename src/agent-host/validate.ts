@@ -1808,14 +1808,6 @@ export function createValidators(platform: Platform): Validators {
       }
       return { sessionId: sessionId(o), durationMs }
     },
-    'terminal.handedBack': (params) => {
-      const o = fields(params)
-      const durationMs = o.durationMs
-      if (typeof durationMs !== 'number' || !Number.isSafeInteger(durationMs) || durationMs < 0) {
-        throw invalidParams('durationMs must be a whole number of milliseconds')
-      }
-      return { sessionId: sessionId(o), durationMs }
-    },
     'control.answerAsk': (params) => {
       const o = fields(params)
       if (!isControlOutcome(o.outcome)) throw invalidParams('outcome must be done or skipped')

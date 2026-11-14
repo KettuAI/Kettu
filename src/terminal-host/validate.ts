@@ -107,4 +107,6 @@ export const validators: Validators = {
   },
   'terminals.kill': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
   'terminals.restart': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
+  'terminals.takeOver': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
+  'terminals.handBack': (raw) => ({ id: string(object(raw, ['id']), 'id', MAX_ID) }),
 }

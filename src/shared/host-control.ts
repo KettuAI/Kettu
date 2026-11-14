@@ -20,6 +20,7 @@ import type { HostPairingState, HostStatus } from './remote/hosts'
 import type { PairingState } from './remote/pairing'
 import type { DirectAddress } from './remote/protocol'
 import type { ReportBuildResult, ReportRequest } from './report'
+import type { TerminalCall, TerminalCallAnswer } from './terminal-agent'
 import type { RelayStatus } from './remote/relay-host'
 import type { DirectSettings, HostSettings, SettingsFile, TerminalSettings } from './settings'
 import type { AgentId, HarnessId } from './thread'
@@ -138,6 +139,8 @@ export type MainToHost =
   | { type: 'browser-result'; callId: number; result?: unknown; error?: unknown }
   // The answer to a host:device-call, from the device host.
   | { type: 'device-result'; callId: number; answer: DeviceCallAnswer }
+  // The answer to a host:terminal-call, from the terminal host.
+  | { type: 'terminal-result'; callId: number; answer: TerminalCallAnswer }
   // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
   | { type: 'host:browser-waiting'; callId: number; waiting: boolean }
   // A page waits for a new origin: the session's thread shows it, waiting for the user.
@@ -152,6 +155,8 @@ export type MainToHost =
   | { type: 'host:computer-frame-request'; requestId: number }
   // The user handed a device back after taking it over in the session's turn.
   | { type: 'host:device-handed-back'; sessionId: string; durationMs: number }
+  // The user handed back a terminal the session's agent started.
+  | { type: 'host:terminal-handed-back'; sessionId: string; durationMs: number }
   | { type: 'host:shutdown' }
 
 /** A file of an artifact's version: its path in the artifact, and where its bytes lie on disk. */
@@ -305,6 +310,10 @@ export type HostToMain =
   | { type: 'host:device-call'; callId: number; call: DeviceCall }
   // The turn of a session whose agent used a device ended: its devices are nobody's now.
   | { type: 'host:device-turn-ended'; sessionId: string }
+  // An agent's terminal tool call for the terminal host; answered by terminal-result.
+  | { type: 'host:terminal-call'; callId: number; call: TerminalCall }
+  // The turn of a session whose agent used a terminal ended: its terminals are nobody's now.
+  | { type: 'host:terminal-turn-ended'; sessionId: string }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
   // A session's card allowed an app always: main keeps it in the settings, which come back.
@@ -333,11 +342,17 @@ export type MainToTerminalHost =
   | { type: 'terminal-host:sessions-ended'; sessionIds: string[] }
   | { type: 'terminal-host:auth-commands'; commands: string[] }
   | { type: 'terminal-host:busy-request'; requestId: number }
+  // An agent's terminal tool call; answered by terminal-host:answer.
+  | { type: 'terminal-host:call'; callId: number; call: TerminalCall }
+  // The turn of a session whose agent used a terminal ended; null: every turn of the host.
+  | { type: 'terminal-host:turn-ended'; sessionId: string | null }
   | { type: 'terminal-host:shutdown' }
 
 export type TerminalHostToMain =
   | { type: 'terminal-host:ready' }
   | { type: 'terminal-host:busy'; requestId: number; terminals: BusyTerminal[] }
+  | { type: 'terminal-host:answer'; callId: number; answer: TerminalCallAnswer }
+  | { type: 'terminal-host:handed-back'; sessionId: string; durationMs: number }
   | { type: 'terminal-host:stopped' }
 
 export type MainToDeviceHost =
