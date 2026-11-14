@@ -4,17 +4,19 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { Env } from '../agent-host/find-command'
-import type {
-  DeviceEnvironment,
-  DeviceEvent,
-  DeviceFrame,
-  DeviceId,
-  DeviceInfo,
-  DeviceInput,
-  DeviceOperator,
-  DeviceOrientation,
-  DeviceProblem,
-  DeviceScreen,
+import {
+  SESSION_DEVICE_LIMIT,
+  type DeviceAppearance,
+  type DeviceEnvironment,
+  type DeviceEvent,
+  type DeviceFrame,
+  type DeviceId,
+  type DeviceInfo,
+  type DeviceInput,
+  type DeviceOperator,
+  type DeviceOrientation,
+  type DeviceProblem,
+  type DeviceScreen,
 } from '@shared/device-host'
 import type { Platform } from '@shared/platform'
 import { AndroidDriver, bootEmulator } from './android'
@@ -199,6 +201,7 @@ export class DeviceManager {
     if (holder && holder !== sessionId) {
       throw new DeviceError('busy', 'Another session is using this device', { sessionId: holder })
     }
+    this.checkRoom(id, sessionId)
     this.leases.set(id, sessionId)
     this.saveLeases()
     const tools = await this.loadTools()
@@ -250,6 +253,41 @@ export class DeviceManager {
     return info
   }
 
+  /**
+   * Gives a device another session holds to this one. It stays as it is: its stream runs on, and
+   * one this host booted shuts down only when its new session lets it go.
+   */
+  async move(id: DeviceId, sessionId: string): Promise<DeviceInfo> {
+    await this.restored
+    const holder = this.leases.get(id)
+    if (!holder) return this.open(id, sessionId)
+    if (holder !== sessionId) {
+      this.checkRoom(id, sessionId)
+      this.operators.delete(id)
+      this.dropWatchers(id)
+      this.leases.set(id, sessionId)
+      this.saveLeases()
+      this.broadcastList()
+    }
+    const info = this.info(id)
+    if (!info) throw new DeviceError('not_found', 'The device went away')
+    return info
+  }
+
+  /** A session holds only so many devices at a time. */
+  private checkRoom(id: DeviceId, sessionId: string): void {
+    if (this.leases.get(id) === sessionId) return
+    let held = 0
+    for (const holder of this.leases.values()) if (holder === sessionId) held += 1
+    if (held >= SESSION_DEVICE_LIMIT) {
+      throw new DeviceError(
+        'busy',
+        `This session already has ${SESSION_DEVICE_LIMIT} devices open. Close one first.`,
+        { limit: SESSION_DEVICE_LIMIT },
+      )
+    }
+  }
+
   /** Takes the device from the session; one this host booted shuts down with it. */
   async close(id: DeviceId, sessionId: string, shutdown: boolean): Promise<void> {
     await this.restored
@@ -261,6 +299,31 @@ export class DeviceManager {
     this.dropWatchers(id)
     await this.stopLive(id)
     if (shutdown || booted) await this.shutDown(id)
+    await this.list()
+  }
+
+  /**
+   * Shuts a simulator or emulator down for the session that holds it, which keeps it. An emulator
+   * is then listed by its AVD, so the lease moves there; one whose AVD is unknown is let go.
+   */
+  async shutdown(id: DeviceId, sessionId: string): Promise<void> {
+    await this.restored
+    this.checkHolder(id, sessionId)
+    const found = this.found.get(id)
+    if (found && found.kind === 'physical') {
+      throw new DeviceError('unavailable', 'Only simulators and emulators shut down from here')
+    }
+    const down = found?.kind === 'emulator' ? (this.booted.get(id) ?? null) : id
+    this.booted.delete(id)
+    this.operators.delete(id)
+    this.dropWatchers(id)
+    if (down !== id) {
+      this.leases.delete(id)
+      if (down) this.leases.set(down, sessionId)
+    }
+    this.saveLeases()
+    await this.stopLive(id)
+    await this.shutDown(id)
     await this.list()
   }
 
@@ -402,6 +465,59 @@ export class DeviceManager {
     }
   }
 
+  /** Light or dark as the device is set now; null where the host has no way to tell. */
+  async appearance(id: DeviceId, sessionId: string): Promise<DeviceAppearance | null> {
+    await this.restored
+    this.checkHolder(id, sessionId)
+    const found = this.found.get(id)
+    if (!found || (found.state !== 'booted' && found.state !== 'connected')) return null
+    const tools = await this.loadTools()
+    const env = await this.deps.env()
+    if (found.kind === 'simulator' && tools.xcrun) {
+      const out = await run(tools.xcrun, ['simctl', 'ui', found.target, 'appearance'], env)
+      const mode = out.trim()
+      return mode === 'light' || mode === 'dark' ? mode : null
+    }
+    if (found.platform === 'android' && tools.adb) {
+      const out = await run(tools.adb, ['-s', found.target, 'shell', 'cmd', 'uimode', 'night'], env)
+      const mode = /Night mode: (yes|no)/.exec(out)?.[1]
+      return mode === 'yes' ? 'dark' : mode === 'no' ? 'light' : null
+    }
+    return null
+  }
+
+  async setAppearance(
+    id: DeviceId,
+    sessionId: string,
+    appearance: DeviceAppearance,
+  ): Promise<void> {
+    await this.restored
+    this.checkHolder(id, sessionId)
+    const found = this.found.get(id)
+    if (!found) throw new DeviceError('not_found', 'No such device on this host')
+    const tools = await this.loadTools()
+    const env = await this.deps.env()
+    if (found.kind === 'simulator' && tools.xcrun) {
+      await run(tools.xcrun, ['simctl', 'ui', found.target, 'appearance', appearance], env)
+    } else if (found.platform === 'android' && tools.adb) {
+      await run(
+        tools.adb,
+        [
+          '-s',
+          found.target,
+          'shell',
+          'cmd',
+          'uimode',
+          'night',
+          appearance === 'dark' ? 'yes' : 'no',
+        ],
+        env,
+      )
+    } else {
+      throw new DeviceError('unavailable', 'The appearance of this device cannot be set from here')
+    }
+  }
+
   /**
    * Turns a streaming device through its own driver, so the stream and the panes see the turn;
    * false when the device is not streaming or its driver cannot.
@@ -526,6 +642,7 @@ export class DeviceManager {
       operator: this.operators.get(found.id) ?? null,
       problems: found.problems,
       input: live?.input ?? false,
+      bootedByHost: this.booted.has(found.id),
     }
   }
 

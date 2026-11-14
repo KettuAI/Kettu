@@ -502,6 +502,11 @@ export class DeviceTools {
     }
   }
 
+  /** Forgets the user's allow for this session; a device always allowed stays so. */
+  revoke(sessionId: string, deviceId: string): void {
+    this.allowed.get(sessionId)?.delete(deviceId)
+  }
+
   /** Null when the session may use the device; otherwise the refusal to return. */
   private async access(sessionId: string, deviceId: string): Promise<CallToolResult | null> {
     if (this.deps.alwaysAllowed(deviceId) || this.allowed.get(sessionId)?.has(deviceId)) return null

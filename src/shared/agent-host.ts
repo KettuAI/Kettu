@@ -1084,6 +1084,8 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; decision: DeviceAccessDecision }
     result: void
   }
+  // Takes back the allow a session's agent has for a device, so its next use asks again.
+  'devices.revokeAccess': { params: { sessionId: string; deviceId: string }; result: void }
   // The mobile devices agents may always use on this host, and taking one off that list.
   'devices.allowed': { params: Record<string, never>; result: { deviceIds: string[] } }
   'devices.forget': { params: { deviceId: string }; result: void }
@@ -1344,6 +1346,7 @@ export const HOST_METHODS = [
   'control.answerAsk',
   'browser.answerOrigin',
   'devices.answerAccess',
+  'devices.revokeAccess',
   'devices.allowed',
   'devices.forget',
   'computer.answerApp',

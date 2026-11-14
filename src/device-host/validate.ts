@@ -166,6 +166,7 @@ export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M
     const params = object(raw, ['deviceId', 'sessionId'])
     return { deviceId: deviceId(params), sessionId: sessionId(params) }
   },
+  'devices.move': (raw) => held(raw),
   'devices.close': (raw) => {
     const params = object(raw, ['deviceId', 'sessionId', 'shutdown'])
     if (params.shutdown !== undefined && typeof params.shutdown !== 'boolean') {
@@ -177,6 +178,7 @@ export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M
       ...(params.shutdown !== undefined ? { shutdown: params.shutdown as boolean } : {}),
     }
   },
+  'devices.shutdown': (raw) => held(raw),
   'devices.watch': (raw) => held(raw),
   'devices.unwatch': (raw) => held(raw),
   'devices.ack': (raw) => {
@@ -194,5 +196,17 @@ export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M
   'devices.handBack': (raw) => held(raw),
   'devices.stopAgent': (raw) => held(raw),
   'devices.screenshot': (raw) => held(raw),
+  'devices.appearance': (raw) => held(raw),
+  'devices.setAppearance': (raw) => {
+    const params = object(raw, ['deviceId', 'sessionId', 'appearance'])
+    if (params.appearance !== 'light' && params.appearance !== 'dark') {
+      throw new ValidationError('"appearance" must be light or dark')
+    }
+    return {
+      deviceId: deviceId(params),
+      sessionId: sessionId(params),
+      appearance: params.appearance,
+    }
+  },
   'devices.frame': (raw) => held(raw),
 }

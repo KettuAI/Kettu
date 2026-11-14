@@ -2224,6 +2224,10 @@ export class AgentHost {
       'devices.answerAccess': ({ sessionId, entryId, decision }, { device }) => {
         sessions.answerDeviceAccess(sessionId, entryId, decision, fromDevice(device))
       },
+      'devices.revokeAccess': ({ sessionId, deviceId }) => {
+        this.artifactService.revokeDevice(sessionId, deviceId)
+        sessions.deviceAccessRevoked(sessionId, deviceId)
+      },
       'devices.allowed': async () => {
         await this.deviceAccess.ready
         return { deviceIds: this.deviceAccess.list() }

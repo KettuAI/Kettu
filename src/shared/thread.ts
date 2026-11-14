@@ -396,6 +396,10 @@ export interface DeviceAccessEntry {
   deviceId: string
   deviceName: string
   decision: DeviceAccessAnswer | null
+  /** When an unanswered request counts as denied, in the host's milliseconds. */
+  expiresAt?: number
+  /** The user took the session's allow back, so the agent's next use of the device asks again. */
+  revoked?: true
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */

@@ -289,6 +289,11 @@ export class ArtifactService {
       : null
   }
 
+  /** Takes back a session's allow for a device; its agent's next use of it asks again. */
+  revokeDevice(sessionId: string, deviceId: string): void {
+    this.deviceTools?.revoke(sessionId, deviceId)
+  }
+
   /** `host:browser-waiting`: the call waits on a new origin, so its own limit grows to that wait. */
   browserWaiting(callId: number, waiting: boolean): void {
     this.browserTools.browserWaiting(callId, waiting)

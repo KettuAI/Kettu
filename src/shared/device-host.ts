@@ -55,7 +55,18 @@ export interface DeviceInfo {
   problems: DeviceProblem[]
   /** Whether the user can tap and type on its stream now. */
   input: boolean
+  /** The host booted this simulator or emulator, so it shuts down when its session lets it go. */
+  bootedByHost: boolean
 }
+
+export type DeviceAppearance = 'light' | 'dark'
+
+/** What a pane keeps of a device: a screenshot, or a recording as the client could encode it. */
+export const DEVICE_CAPTURE_KINDS = ['png', 'mp4', 'webm'] as const
+export type DeviceCaptureKind = (typeof DEVICE_CAPTURE_KINDS)[number]
+
+/** How many devices one session holds at a time. */
+export const SESSION_DEVICE_LIMIT = 4
 
 export interface DeviceEnvironment {
   platform: Platform
@@ -133,8 +144,13 @@ export interface DeviceFrame {
 export interface DeviceContract {
   'devices.environment': { params: Record<string, never>; result: DeviceEnvironment }
   'devices.list': { params: { sessionId?: string }; result: DeviceInfo[] }
-  /** Boots the device if it is a simulator or emulator, and gives it to the session. */
+  /**
+   * Boots the device if it is a simulator or emulator, and gives it to the session, which holds
+   * at most `SESSION_DEVICE_LIMIT`.
+   */
   'devices.open': { params: { deviceId: DeviceId; sessionId: string }; result: DeviceInfo }
+  /** Takes a device another session holds for this one, as it is: running, and still booted. */
+  'devices.move': { params: { deviceId: DeviceId; sessionId: string }; result: DeviceInfo }
   /**
    * Takes the device from the session; `shutdown` also shuts a simulator or emulator down. One
    * the host booted itself shuts down either way.
@@ -143,6 +159,11 @@ export interface DeviceContract {
     params: { deviceId: DeviceId; sessionId: string; shutdown?: boolean }
     result: void
   }
+  /**
+   * Shuts a simulator or emulator down while its session keeps it, so its tab stays to start it
+   * again. A running emulator the host did not start is let go, since only its serial is known.
+   */
+  'devices.shutdown': { params: { deviceId: DeviceId; sessionId: string }; result: void }
   /**
    * Starts sending the device's frames to this port, starting at a keyframe. This and every
    * request below are served only for the session that holds the device.
@@ -166,6 +187,15 @@ export interface DeviceContract {
     params: { deviceId: DeviceId; sessionId: string }
     result: { png: ArrayBuffer }
   }
+  /** Light or dark, or null for a device whose appearance the host cannot read or set. */
+  'devices.appearance': {
+    params: { deviceId: DeviceId; sessionId: string }
+    result: { appearance: DeviceAppearance | null }
+  }
+  'devices.setAppearance': {
+    params: { deviceId: DeviceId; sessionId: string; appearance: DeviceAppearance }
+    result: void
+  }
   /** The frame to draw the screen in, or null where the client draws a plain one. */
   'devices.frame': {
     params: { deviceId: DeviceId; sessionId: string }
@@ -181,7 +211,9 @@ export const DEVICE_METHODS = [
   'devices.environment',
   'devices.list',
   'devices.open',
+  'devices.move',
   'devices.close',
+  'devices.shutdown',
   'devices.watch',
   'devices.unwatch',
   'devices.ack',
@@ -189,6 +221,8 @@ export const DEVICE_METHODS = [
   'devices.handBack',
   'devices.stopAgent',
   'devices.screenshot',
+  'devices.appearance',
+  'devices.setAppearance',
   'devices.frame',
 ] as const satisfies readonly DeviceMethod[]
 
