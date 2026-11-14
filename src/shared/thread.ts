@@ -105,6 +105,8 @@ export interface QueuedPrompt {
 export interface FromSession {
   sessionId: string
   title: string
+  /** The sender asked not to be told when the turn this message begins ends. */
+  report?: false
 }
 
 /** The paired device a message or answer came from, under the name the host lists it by. */

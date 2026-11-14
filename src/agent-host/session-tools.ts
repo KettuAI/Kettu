@@ -5,7 +5,13 @@
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { AgentStatus } from '@shared/agent-host'
 import { longer } from '@shared/artifacts'
-import { isAgentId, type AgentId, type FromSession, type SessionStatus } from '@shared/thread'
+import {
+  isAgentId,
+  type AgentId,
+  type FromSession,
+  type SessionStatus,
+  type StopReason,
+} from '@shared/thread'
 import { folded, type Caller } from './artifacts/tools'
 import { cutStart, historyPage, HISTORY_TOOL, type RenderedTurn } from './carried-context'
 
@@ -15,6 +21,8 @@ export const LIST_LIMIT = 200
 export const LIST_DEFAULT = 50
 export const WORKING_LIMIT = 3
 export const DAILY_LIMIT = 10
+/** Reports stop waking a session once this many went to it since the user last wrote there. */
+export const REPORT_LIMIT = 10
 const QUERY_CHARS = 200
 const ID_CHARS = 200
 const LAST_REPLY_BYTES = 8 * 1024
@@ -57,7 +65,7 @@ export interface SessionToolsDeps {
   /** Starts a sub-session of the caller with its first prompt; returns its id. */
   start(
     callerId: string,
-    params: { prompt: string; title?: string; agentId?: AgentId },
+    params: { prompt: string; title?: string; agentId?: AgentId; report: boolean },
   ): Promise<string>
   /** Prompts a session the caller started, or queues the prompt while it works. */
   send(sessionId: string, text: string, from: FromSession): Promise<'sent' | 'queued'>
@@ -194,7 +202,8 @@ export const SESSION_INSTRUCTIONS =
   "can run another of the user's agents, which list_agents shows, for example to review your " +
   'work. Archive your own ' +
   'session only when the user asked you to or your work is clearly done. A session you start ' +
-  'runs on its own; check it with get_session rather than in a loop. When you took a session ' +
+  'runs on its own: when a turn you asked it for ends, Kettu sends you a message saying so and ' +
+  'you read its reply with get_session, so never wait for it in a loop. When you took a session ' +
   `over from another agent, ${HISTORY_TOOL} reads the earlier turns it was given only in part.`
 
 // Schemas.
@@ -242,6 +251,12 @@ const PROMPT: Schema = {
 const AGENT: Schema = {
   type: 'string',
   description: 'The agent to run it with, as list_agents names it; yours by default.',
+}
+const REPORT: Schema = {
+  type: 'boolean',
+  default: true,
+  description:
+    'Whether Kettu tells you when this turn ends; false for work whose result you do not need.',
 }
 const TIME: Schema = { type: 'string', format: 'date-time' }
 
@@ -362,9 +377,9 @@ export const SESSION_TOOLS: Tool[] = [
     name: 'start_session',
     title: 'Start session',
     description:
-      'Starts a session of your own in this project with its first prompt. It runs on its own: ' +
-      'check it with get_session rather than in a loop.',
-    inputSchema: object({ prompt: PROMPT, title: TITLE, agent: AGENT }, ['prompt']),
+      'Starts a session of your own in this project with its first prompt. It runs on its own, ' +
+      'and Kettu tells you when its turn ends; do not wait for it in a loop.',
+    inputSchema: object({ prompt: PROMPT, title: TITLE, agent: AGENT, report: REPORT }, ['prompt']),
     outputSchema: output(INFO, INFO_REQUIRED),
     annotations: { destructiveHint: false, openWorldHint: true },
   },
@@ -400,8 +415,10 @@ export const SESSION_TOOLS: Tool[] = [
   {
     name: 'send_message',
     title: 'Send message',
-    description: 'Sends a prompt to a session you started, or queues it while that session works.',
-    inputSchema: object({ id: ID, text: TEXT }, ['id', 'text']),
+    description:
+      'Sends a prompt to a session you started, or queues it while that session works. Kettu ' +
+      'tells you when the turn it begins ends.',
+    inputSchema: object({ id: ID, text: TEXT, report: REPORT }, ['id', 'text']),
     outputSchema: output({ id: ID, delivered: { type: 'string', enum: ['sent', 'queued'] } }),
     annotations: { destructiveHint: false, openWorldHint: true },
   },
@@ -522,6 +539,13 @@ function agent(o: Args): AgentId | undefined {
   return value
 }
 
+function report(o: Args): boolean {
+  const value = o.report
+  if (value === undefined) return true
+  if (typeof value !== 'boolean') throw invalid('report must be true or false.')
+  return value
+}
+
 function titleOf(session: Pick<ToolSession, 'title'>): string {
   return session.title ?? 'Untitled session'
 }
@@ -602,9 +626,9 @@ export class SessionTools {
       case 'archive_session':
         return this.archive(caller, args(input, ['id']))
       case 'start_session':
-        return this.start(caller, args(input, ['prompt', 'title', 'agent']))
+        return this.start(caller, args(input, ['prompt', 'title', 'agent', 'report']))
       case 'send_message':
-        return this.send(caller, args(input, ['id', 'text']))
+        return this.send(caller, args(input, ['id', 'text', 'report']))
       case HISTORY_TOOL:
         return this.history(caller, args(input, ['before_turn', 'limit']))
       default:
@@ -727,6 +751,7 @@ export class SessionTools {
     const prompt = text(o, 'prompt')
     const value = o.title === undefined ? undefined : title(o)
     const agentId = agent(o)
+    const reported = report(o)
     const callerInfo = this.deps.info(caller.sessionId)
     if (!callerInfo) throw notFound(caller.sessionId)
     if (callerInfo.startedBy !== null) {
@@ -742,6 +767,7 @@ export class SessionTools {
       prompt,
       ...(value === undefined ? {} : { title: value }),
       ...(agentId === undefined ? {} : { agentId }),
+      report: reported,
     })
     const session = this.deps.info(started)
     if (!session) throw notFound(started)
@@ -792,12 +818,14 @@ export class SessionTools {
   private async send(caller: Caller, o: Args): Promise<CallToolResult> {
     const session = this.target(caller, id(o, true))
     const value = text(o, 'text')
+    const reported = report(o)
     if (session.id === caller.sessionId || !canTarget(session, caller.sessionId)) {
       throw notAllowed()
     }
     const delivered = await this.deps.send(session.id, value, {
       sessionId: caller.sessionId,
       title: this.deps.name(caller.sessionId),
+      ...(reported ? {} : { report: false }),
     })
     return result(
       delivered === 'sent'
@@ -806,6 +834,32 @@ export class SessionTools {
       { id: session.id, delivered },
     )
   }
+}
+
+/**
+ * What a session is told when a turn it asked a started session for ends. It goes in as a user
+ * message, so it holds nothing another agent wrote, not even the title it may give its session:
+ * the reply is read through get_session.
+ */
+export function reportText(
+  agent: string,
+  sessionId: string,
+  stopReason: StopReason | null,
+): string {
+  const how =
+    stopReason === 'end_turn'
+      ? 'has ended'
+      : stopReason === 'cancelled'
+        ? 'was stopped'
+        : stopReason === 'refusal'
+          ? 'ended in a refusal'
+          : stopReason === null
+            ? 'failed'
+            : 'ended at a limit'
+  return (
+    `Kettu: the turn you asked the ${agent} session ${sessionId} for ${how}. ` +
+    'Read its reply with get_session.'
+  )
 }
 
 /** The latest reply cut to 8 KB at a line, so one long answer cannot fill a tool result. */

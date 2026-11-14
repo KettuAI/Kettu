@@ -336,6 +336,25 @@ describe('the host files', () => {
     ).toEqual({ version: 1, sessions: [session] })
   })
 
+  it('keeps who queued a prompt and whether they asked for no report of its turn', () => {
+    const from = { sessionId: 's-parent', title: 'Build login' }
+    const item = { id: 'q1', content: [{ type: 'text' as const, text: 'Review it' }], at: 1 }
+    const queued: SessionRecord = {
+      ...session,
+      queue: [
+        { ...item, from },
+        { ...item, id: 'q2', from: { ...from, report: false } },
+      ],
+    }
+    expect(parseSessionsFile({ sessions: [queued] })).toEqual({ version: 1, sessions: [queued] })
+    // Only false is kept: a report is the default.
+    expect(
+      parseSessionsFile({
+        sessions: [{ ...session, queue: [{ ...item, from: { ...from, report: 'no' } }] }],
+      }),
+    ).toEqual({ version: 1, sessions: [{ ...session, queue: [{ ...item, from }] }] })
+  })
+
   it("keeps a session's worktree and never lets an unreadable one fall back to the project", () => {
     const worktree = {
       path: '/repo-worktrees/kettu-fix-login-1a2b3c',

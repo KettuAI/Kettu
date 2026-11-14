@@ -64,6 +64,10 @@
     },
     "turnFailed": "本轮对话失败",
     "archivedByAgent": "{{agent}} 已归档此会话",
+    "reportsPaused": {
+      "title": "子会话的回报已暂停",
+      "description": "自你上一条消息以来，回报已唤醒这个会话 {{count}} 次。发一条消息即可恢复。"
+    },
     "diskFull": {
       "title": "磁盘已满，Kettu 无法保存这个会话",
       "description": "请在这台电脑上腾出空间。在此之前对话保留在内存中，有空间后 Kettu 会自动保存。"
