@@ -367,10 +367,9 @@ export class BrowserViews {
     return this.browsers.get(sessionId)?.strip.agentTarget() ?? null
   }
 
-  /** The web contents of the agent's tab, or null when it has none now. */
-  contents(sessionId: string): WebContents | null {
-    const id = this.agentTab(sessionId)
-    return id ? this.contentsOf(this.tabs.get(id)) : null
+  /** A tab's web contents, or null when it has none now. */
+  tabContents(tabId: string): WebContents | null {
+    return this.contentsOf(this.tabs.get(tabId))
   }
 
   /** Whether the contents is one of the session pages. */

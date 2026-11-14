@@ -57,8 +57,8 @@ export interface LoadOutcome {
 export interface BrowserCdpDeps {
   /** The agent's tab in the session's browser, which its calls act on; null when none is open. */
   tab(sessionId: string): string | null
-  /** The web contents of the agent's tab, or null when it has none. */
-  contents(sessionId: string): WebContents | null
+  /** A tab's web contents, or null when it has none now. */
+  tabContents(tabId: string): WebContents | null
   /** Loads a URL in the agent's tab, making a tab when the browser has none. */
   load(sessionId: string, url: string): Promise<LoadOutcome>
   back(sessionId: string): Promise<LoadOutcome>
@@ -503,6 +503,11 @@ export class BrowserCdp {
   private readonly running = new Map<string, Set<(failure: ToolFailure) => void>>()
   /** How each session's latest call waits on the user, for its steps after the first. */
   private readonly waits = new Map<string, ControlWaitOptions>()
+  /**
+   * The tab each session's running call acts on, held for the call so that a popup its click
+   * opens takes over only once the action is done.
+   */
+  private readonly acting = new Map<string, string>()
 
   constructor(private readonly deps: BrowserCdpDeps) {}
 
@@ -593,6 +598,9 @@ export class BrowserCdp {
       throw failure(error)
     }
     this.waits.set(sessionId, wait)
+    const tab = this.deps.tab(sessionId)
+    const pinned = !this.acting.has(sessionId) && tab !== null
+    if (pinned) this.acting.set(sessionId, tab)
     let stop!: (failure: ToolFailure) => void
     const stopped = new Promise<never>((_, reject) => (stop = reject))
     const running = this.running.get(sessionId) ?? new Set()
@@ -603,6 +611,7 @@ export class BrowserCdp {
     } catch (error) {
       throw failure(error)
     } finally {
+      if (pinned) this.acting.delete(sessionId)
       running.delete(stop)
       if (running.size === 0 && this.running.get(sessionId) === running) {
         this.running.delete(sessionId)
@@ -697,7 +706,7 @@ export class BrowserCdp {
 
   /** The state of the agent's tab. */
   private pageOf(sessionId: string): PageState {
-    const tab = this.deps.tab(sessionId)
+    const tab = this.tabOf(sessionId)
     const page = tab === null ? undefined : this.pages.get(tab)
     if (!page) {
       throw new ToolFailure(
@@ -710,7 +719,8 @@ export class BrowserCdp {
 
   private contentsOf(sessionId: string): WebContents {
     this.pageOf(sessionId)
-    const contents = this.deps.contents(sessionId)
+    const tab = this.tabOf(sessionId)
+    const contents = tab === null ? null : this.deps.tabContents(tab)
     if (!contents || contents.isDestroyed()) {
       throw new ToolFailure(
         'no_page',
@@ -724,6 +734,11 @@ export class BrowserCdp {
       )
     }
     return contents
+  }
+
+  /** The tab the session's call acts on: the one held for the running call, else the agent's. */
+  private tabOf(sessionId: string): string | null {
+    return this.acting.get(sessionId) ?? this.deps.tab(sessionId)
   }
 
   /** Waits while the user holds the page, as the session's call in flight waits. */
@@ -744,7 +759,7 @@ export class BrowserCdp {
     // Chromium reports an injected input event as it reports the user's, so the pane's input
     // watch must know this one is the agent's.
     const injecting = method.startsWith('Input.')
-    const tab = this.deps.tab(sessionId)
+    const tab = this.tabOf(sessionId)
     const state = tab === null ? undefined : this.pages.get(tab)
     if (injecting && state) state.injecting += 1
     try {
@@ -837,7 +852,13 @@ export class BrowserCdp {
         break
       }
       case 'Page.frameStoppedLoading': {
-        if (this.isMainFrame(page, params.frameId)) page.loading = false
+        if (!this.isMainFrame(page, params.frameId)) break
+        page.loading = false
+        // A popup's document request shows on both pages and ends on one only; once the page
+        // stopped loading, no document of its own is still on its way.
+        for (const entry of page.requests) {
+          if (entry.type === 'Document') page.inFlight.delete(entry.id)
+        }
         break
       }
       case 'Page.frameNavigated': {
@@ -871,11 +892,12 @@ export class BrowserCdp {
     }
   }
 
-  private async settle(sessionId: string, page: PageState): Promise<void> {
+  private async settle(sessionId: string, page: PageState, stop?: () => boolean): Promise<void> {
     const start = Date.now()
     let idleSince: number | null = null
     for (;;) {
       await this.gate(sessionId)
+      if (stop?.()) return
       if (
         hasSettled({ loading: page.loading, inFlight: page.inFlight.size, idleSince }, Date.now())
       )
@@ -933,17 +955,30 @@ export class BrowserCdp {
     page: PageState,
     text: string,
   ): Promise<BrowserCallResult> {
-    await this.settle(sessionId, page)
-    // The action opened a popup, which became the agent's tab: the result is that tab's.
+    // A popup the action opened becomes the agent's tab, and the result is that tab's. Its first
+    // request shows on the opener too and never ends there, so the opener is not waited for.
+    const held = this.acting.get(sessionId)
+    const moved = (): string | null => {
+      const now = this.deps.tab(sessionId)
+      return held !== undefined && now !== null && now !== held ? now : null
+    }
+    await this.settle(sessionId, page, () => moved() !== null)
+    const now = moved()
+    const switched = now !== null
+    if (switched) this.acting.set(sessionId, now)
     const current = this.pageOf(sessionId)
-    const switched = current !== page
     if (switched) await this.settle(sessionId, current)
     const contents = this.contentsOf(sessionId)
     const { outline } = await this.capture(sessionId, current)
     const url = contents.getURL()
     const title = contents.getTitle()
     const dialogs = page.dialogs.splice(0)
-    const opened = switched ? ['It opened a new tab, which is now your current tab.'] : []
+    // A popup that closed itself is gone; its opener is the agent's tab again.
+    const opened = !switched
+      ? []
+      : held !== undefined && this.pages.has(held)
+        ? ['It opened a new tab, which is now your current tab.']
+        : ['The page closed itself, and the tab that opened it is your current tab again.']
     return {
       text: [text, ...dialogs, ...opened].join(' '),
       value: { url, title, snapshot: outline },

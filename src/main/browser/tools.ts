@@ -55,7 +55,7 @@ export class BrowserTools {
     })
     this.cdp = new BrowserCdp({
       tab: (sessionId) => deps.views.agentTab(sessionId),
-      contents: (sessionId) => deps.views.contents(sessionId),
+      tabContents: (tabId) => deps.views.tabContents(tabId),
       load: async (sessionId, url) => {
         const result = await deps.views.load(sessionId, url)
         if (!result.ok) throw refused(result)
