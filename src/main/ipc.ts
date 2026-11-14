@@ -76,6 +76,7 @@ import { computerAppIcon, computerUseStatus, requestComputerPermission } from '.
 import { framesSettled, isRevoked } from './subframes'
 import { systemNameForRun } from './system-name'
 import type { TerminalHost } from './terminal-host'
+import { saveCapture } from './device-captures'
 import type { DeviceHost } from './device-host'
 import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
 import type { ThemeStore } from './themes'
@@ -680,6 +681,9 @@ export function registerIpcHandlers({
   handle('device-host:restart', 0, () => {
     deviceHost.restart()
   })
+  handle('devices:save-capture', 3, (_, device, kind, data) =>
+    saveCapture(app.getPath('downloads'), device, kind, data),
+  )
 
   handle('artifact:open', 1, ({ event }, id) => artifacts.open(event.sender, id))
   handle('artifact:close', 1, ({ event }, url) => artifacts.close(event.sender, url))

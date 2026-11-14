@@ -383,6 +383,148 @@ describe('device access by session', () => {
   })
 })
 
+describe('devices a session holds', () => {
+  /** More booted simulators the user started, enough to fill a session. */
+  function simulators(count: number): FoundDevice[] {
+    return Array.from({ length: count }, (_, index) => ({
+      ...USERS_SIMULATOR,
+      id: `ios-sim:EXTRA-${index}`,
+      name: `Extra ${index}`,
+      target: `EXTRA-${index}`,
+    }))
+  }
+
+  it('gives a session at most four devices, and room again once it closes one', async () => {
+    const extra = simulators(4)
+    fake.devices.push(...extra)
+    const devices = manager()
+    for (const device of extra) await devices.open(device.id, 's1')
+
+    await expect(devices.open(EMULATOR.id, 's1')).rejects.toMatchObject({
+      code: 'busy',
+      data: { limit: 4 },
+    })
+    expect(devices.holder(EMULATOR.id)).toBeNull()
+    // One it already holds opens again, and another session has room of its own.
+    await devices.open(extra[0]!.id, 's1')
+    await devices.open(EMULATOR.id, 's2')
+    await expect(devices.move(EMULATOR.id, 's1')).rejects.toMatchObject({
+      code: 'busy',
+      data: { limit: 4 },
+    })
+    expect(devices.holder(EMULATOR.id)).toBe('s2')
+
+    await devices.close(extra[0]!.id, 's1', false)
+    await devices.move(EMULATOR.id, 's1')
+    expect(devices.holder(EMULATOR.id)).toBe('s1')
+  })
+
+  it('counts a booted emulator once, under its serial', async () => {
+    const extra = simulators(3)
+    fake.devices.push(...extra)
+    const devices = manager()
+    for (const device of extra) await devices.open(device.id, 's1')
+    const opened = await devices.open(AVD.id, 's1')
+    expect(opened.id).toBe('android:emulator-5556')
+    await expect(devices.open(EMULATOR.id, 's1')).rejects.toMatchObject({
+      code: 'busy',
+      data: { limit: 4 },
+    })
+  })
+
+  it('moves a device to another session, which alone is served from then on', async () => {
+    const devices = manager()
+    await devices.open(EMULATOR.id, 's1')
+    await devices.watch('first', EMULATOR.id, 's1')
+    const driver = fake.drivers[0]!
+    devices.setOperator(EMULATOR.id, { sessionId: 's1', agentName: 'Agent', user: false })
+
+    const moved = await devices.move(EMULATOR.id, 's2')
+    expect(moved).toMatchObject({ sessionId: 's2', operator: null })
+    expect(driver.stopped).toBe(false)
+    driver.events!.frame('key', new Uint8Array([1]))
+    expect(events.some((sent) => sent.port === 'first' && sent.event.type === 'device.frame')).toBe(
+      false,
+    )
+    await expect(devices.watch('first', EMULATOR.id, 's1')).rejects.toMatchObject({
+      code: 'forbidden',
+    })
+    await devices.watch('second', EMULATOR.id, 's2')
+    devices.input(EMULATOR.id, { type: 'button', button: 'home' }, 's2')
+    expect(driver.sent).toEqual([{ type: 'button', button: 'home' }])
+  })
+
+  it('keeps a moved simulator on until its new session lets it go', async () => {
+    const devices = manager()
+    await devices.open(SIMULATOR.id, 's1')
+    await devices.move(SIMULATOR.id, 's2')
+    await devices.endSessions(['s1'])
+    expect(fake.shutdowns).toEqual([])
+
+    const after = await restart(devices)
+    await after.list()
+    expect(after.holder(SIMULATOR.id)).toBe('s2')
+    await after.close(SIMULATOR.id, 's2', false)
+    expect(fake.shutdowns).toEqual([SIMULATOR.target])
+  })
+
+  it('shuts a device down for its session alone, which keeps it to start again', async () => {
+    const devices = manager()
+    await devices.open(SIMULATOR.id, 's1')
+    await expect(devices.shutdown(SIMULATOR.id, 's2')).rejects.toMatchObject({ code: 'forbidden' })
+    expect(fake.shutdowns).toEqual([])
+
+    await devices.shutdown(SIMULATOR.id, 's1')
+    expect(fake.shutdowns).toEqual([SIMULATOR.target])
+    expect(devices.info(SIMULATOR.id)).toMatchObject({ sessionId: 's1', state: 'shutdown' })
+    // Shut down already, so letting go of it shuts nothing down again.
+    await devices.close(SIMULATOR.id, 's1', false)
+    expect(fake.shutdowns).toEqual([SIMULATOR.target])
+  })
+
+  it('keeps an emulator it shut down under its AVD, and lets go of one it did not start', async () => {
+    const devices = manager()
+    const opened = await devices.open(AVD.id, 's1')
+    await devices.shutdown(opened.id, 's1')
+    expect(fake.shutdowns).toEqual(['emulator-5556'])
+    expect(devices.holder(opened.id)).toBeNull()
+    expect(devices.info(AVD.id)).toMatchObject({ sessionId: 's1', state: 'shutdown' })
+
+    await devices.open(EMULATOR.id, 's1')
+    await devices.shutdown(EMULATOR.id, 's1')
+    expect(fake.shutdowns).toEqual(['emulator-5556', EMULATOR.target])
+    expect(devices.holder(EMULATOR.id)).toBeNull()
+  })
+
+  it("stops the other session's agent when its device is moved away", async () => {
+    const host = startHost()
+    const port = host.port()
+    await host.call({ kind: 'open', sessionId: 's1', agentName: 'Agent', deviceId: EMULATOR.id })
+    const acting = host.call({
+      kind: 'action',
+      sessionId: 's1',
+      agentName: 'Agent',
+      deviceId: EMULATOR.id,
+      action: { type: 'snapshot' },
+      projectPath: null,
+    })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    await port.request('devices.move', { deviceId: EMULATOR.id, sessionId: 's2' })
+    expect(await acting).toMatchObject({ error: { code: 'stopped' } })
+    expect(
+      await host.call({
+        kind: 'action',
+        sessionId: 's1',
+        agentName: 'Agent',
+        deviceId: EMULATOR.id,
+        action: { type: 'snapshot' },
+        projectPath: null,
+      }),
+    ).toMatchObject({ error: { code: 'not_open' } })
+  })
+})
+
 describe('device streams', () => {
   it('stops a stream whose watchers left while it started', async () => {
     const devices = manager()

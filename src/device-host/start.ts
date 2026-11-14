@@ -70,8 +70,17 @@ export function startDeviceHost(
         'devices.environment': () => devices.environment(),
         'devices.list': () => devices.list(),
         'devices.open': (_, params) => devices.open(params.deviceId, params.sessionId),
+        'devices.move': (_, params) => {
+          // The other session's agent may be acting on it right now.
+          running.get(params.deviceId)?.abort()
+          return devices.move(params.deviceId, params.sessionId)
+        },
         'devices.close': (_, params) =>
           devices.close(params.deviceId, params.sessionId, params.shutdown === true),
+        'devices.shutdown': (_, params) => {
+          running.get(params.deviceId)?.abort()
+          return devices.shutdown(params.deviceId, params.sessionId)
+        },
         'devices.watch': (port, params) => devices.watch(port, params.deviceId, params.sessionId),
         'devices.unwatch': (port, params) =>
           devices.unwatch(port, params.deviceId, params.sessionId),
@@ -88,6 +97,11 @@ export function startDeviceHost(
           const png = await devices.screenshot(params.deviceId, params.sessionId)
           return { png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) }
         },
+        'devices.appearance': async (_, params) => ({
+          appearance: await devices.appearance(params.deviceId, params.sessionId),
+        }),
+        'devices.setAppearance': (_, params) =>
+          devices.setAppearance(params.deviceId, params.sessionId, params.appearance),
         'devices.frame': async (_, params) => ({
           frame: await devices.frame(params.deviceId, params.sessionId),
         }),

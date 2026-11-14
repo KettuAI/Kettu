@@ -1583,6 +1583,7 @@ export class SessionManager {
       deviceId,
       deviceName,
       decision: null,
+      expiresAt: Date.now() + waitMs,
       after: agentEntryBefore(live.thread),
     }
     const key = `device:${entry.id}`
@@ -1630,6 +1631,27 @@ export class SessionManager {
       })
     }
     this.settleDeviceAccess(sessionId, entryId, decision, device)
+  }
+
+  /** Marks the session's allow for a device as taken back on the cards that gave it. */
+  deviceAccessRevoked(sessionId: string, deviceId: string): void {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const patches = threadEntries(live.thread)
+      .filter(
+        (entry) =>
+          entry.kind === 'device_access' &&
+          entry.deviceId === deviceId &&
+          entry.decision === 'session' &&
+          !entry.revoked,
+      )
+      .map((entry) => ({
+        op: 'entry.update' as const,
+        id: entry.id,
+        changes: { revoked: true as const },
+      }))
+    if (patches.length > 0) this.emit(live, patches)
   }
 
   private settleDeviceAccess(

@@ -11,7 +11,8 @@ const ANSWER_TEXT = {
   always: 'deviceAccess.answer.always',
   deny: 'deviceAccess.answer.deny',
   timeout: 'deviceAccess.answer.timeout',
-} as const satisfies Record<DeviceAccessAnswer, string>
+  revoked: 'deviceAccess.answer.revoked',
+} as const satisfies Record<DeviceAccessAnswer | 'revoked', string>
 
 /** An agent asked to use a mobile device for the first time in its session. */
 export const DeviceAccessEntry = memo(function DeviceAccessEntry({
@@ -37,7 +38,7 @@ export const DeviceAccessEntry = memo(function DeviceAccessEntry({
       target={entry.deviceName}
       glyph={SmartPhone01Icon}
       reason={t('deviceAccess.where')}
-      answer={entry.decision}
+      answer={entry.revoked ? 'revoked' : entry.decision}
       device={entry.device}
       words={{
         allow: {
@@ -45,7 +46,7 @@ export const DeviceAccessEntry = memo(function DeviceAccessEntry({
           always: t('deviceAccess.decision.always'),
         },
         deny: t('deviceAccess.decision.deny'),
-        answer: (a) => t(ANSWER_TEXT[a as DeviceAccessAnswer] ?? ANSWER_TEXT.deny),
+        answer: (a) => t(ANSWER_TEXT[a as keyof typeof ANSWER_TEXT] ?? ANSWER_TEXT.deny),
       }}
       request={(decision) =>
         host('devices.answerAccess', { sessionId, entryId: entry.id, decision })

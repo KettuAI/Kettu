@@ -194,6 +194,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'control.answerAsk': HOST_MS,
   'browser.answerOrigin': HOST_MS,
   'devices.answerAccess': HOST_MS,
+  'devices.revokeAccess': HOST_MS,
   'devices.allowed': HOST_MS,
   'devices.forget': HOST_MS,
   'computer.answerApp': HOST_MS,

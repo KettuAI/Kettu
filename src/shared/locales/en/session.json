@@ -145,7 +145,8 @@
       "session": "Allowed for this session",
       "always": "Always allowed",
       "deny": "Denied",
-      "timeout": "Not answered in time"
+      "timeout": "Not answered in time",
+      "revoked": "Allowed for this session, then taken back"
     },
     "where": "Tap, type and take screenshots, which go to the agent’s model provider"
   },

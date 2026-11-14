@@ -84,6 +84,31 @@ describe('device access', () => {
     expect(calls.filter((call) => call.kind === 'action')).toHaveLength(2)
   })
 
+  it("asks again after the session's allow is taken back, for that session and device only", async () => {
+    const { tools: subject, deps, calls } = tools('session')
+    const other = { sessionId: 's2', project: '/work/app' }
+    await subject.call(caller, 'device_snapshot', { deviceId: SIM })
+    await subject.call(other, 'device_snapshot', { deviceId: SIM })
+    expect(deps.ask).toHaveBeenCalledTimes(2)
+
+    subject.revoke('s1', SIM)
+    await subject.call(other, 'device_snapshot', { deviceId: SIM })
+    expect(deps.ask).toHaveBeenCalledTimes(2)
+    vi.mocked(deps.ask).mockResolvedValueOnce('deny')
+    const refused = await subject.call(caller, 'device_tap', { deviceId: SIM, ref: '@e1' })
+    expect(deps.ask).toHaveBeenCalledTimes(3)
+    expect(refused.structuredContent).toMatchObject({ code: 'not_allowed' })
+    expect(calls.filter((call) => call.kind === 'action')).toHaveLength(3)
+  })
+
+  it('keeps an always-allowed device allowed when a session takes its allow back', async () => {
+    const { tools: subject, deps } = tools('always')
+    await subject.call(caller, 'device_snapshot', { deviceId: SIM })
+    subject.revoke('s1', SIM)
+    await subject.call(caller, 'device_snapshot', { deviceId: SIM })
+    expect(deps.ask).toHaveBeenCalledTimes(1)
+  })
+
   it('does nothing on the device when the user denies or does not answer', async () => {
     for (const answer of ['deny', 'timeout'] as const) {
       const { tools: subject, calls } = tools(answer)

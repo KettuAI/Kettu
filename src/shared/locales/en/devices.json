@@ -2,12 +2,14 @@
   "tabs": "Devices",
   "actions": {
     "addDevice": "Add device",
-    "closeDevice": "Close device",
     "boot": "Start",
     "reconnect": "Reconnect",
-    "maximize": "Maximize",
-    "restore": "Restore",
-    "close": "Close"
+    "retry": "Try again",
+    "screenshot": "Screenshot",
+    "record": "Record",
+    "stopRecording": "Stop recording",
+    "more": "More",
+    "disconnect": "Disconnect {{name}}"
   },
   "kind": {
     "simulator": "Simulator",
@@ -16,7 +18,11 @@
   },
   "state": {
     "shutdown": "Shut down",
-    "unavailable": "Not connected"
+    "unavailable": "Not connected",
+    "notReady": "Not ready",
+    "starting": "Starting",
+    "lost": "Picture lost",
+    "error": "Error"
   },
   "connection": {
     "network": "Wi-Fi"
@@ -31,20 +37,22 @@
     "noSession": "Devices belong to a session. Send a message first.",
     "opening": "Starting the device…",
     "openingHint": "A simulator or emulator can take a minute to boot.",
-    "noTools": "This computer cannot run mobile devices"
+    "starting": "Starting {{name}}…",
+    "failed": "Couldn’t list the devices"
   },
   "screen": {
     "label": "Screen of {{name}}",
     "keyboard": "Keyboard for {{name}}",
     "starting": "Waiting for the screen…",
-    "stopped": "The stream stopped.",
+    "stopped": "Kettu stopped getting frames from {{name}}. It still runs.",
     "error": "The screen could not be shown.",
     "forbidden": "This device is open in another session, so this session cannot show or control it.",
-    "shutdown": "This device is shut down.",
-    "limited": "The picture updates once a second here. Open this page over https or on localhost for live video."
-  },
-  "checklist": {
-    "title": "Before this device can be used"
+    "shutdown": "{{name}} is shut down",
+    "limited": "The picture updates once a second here. Open this page over https or on localhost for live video.",
+    "shutdownHint": "Start it to see and use its screen.",
+    "unavailable": "{{name}} is not connected",
+    "unavailableHint": "Connect it to this computer again.",
+    "failed": "Couldn’t show {{name}}"
   },
   "problem": {
     "xcode-missing": "Install Xcode from the App Store to use iOS simulators and iPhones.",
@@ -73,5 +81,100 @@
     "side": "Side button",
     "action": "Action button",
     "other": "Hardware button"
+  },
+  "title": "Mobile devices",
+  "add": {
+    "title": "Add device · {{open}} of {{limit}} open",
+    "full": "This session already has {{count}} devices open. Disconnect one first."
+  },
+  "row": {
+    "shutdown": "Shut down",
+    "unavailable": "Not connected",
+    "plugIn": "Plug in",
+    "notAllowed": "Not allowed yet",
+    "elsewhere": "In another session",
+    "move": "Move here"
+  },
+  "more": {
+    "appearance": "Appearance",
+    "light": "Light",
+    "dark": "Dark",
+    "disconnect": "Disconnect",
+    "disconnectShutsDown": "Kettu started it, so it shuts down",
+    "disconnectStaysOn": "It stays on",
+    "disconnectStaysConnected": "It stays connected",
+    "shutDown": "Shut down"
+  },
+  "capture": {
+    "screenshotSaved": "Screenshot saved to Downloads",
+    "recordingSaved": "Recording saved to Downloads",
+    "show": "Show",
+    "recording": "Recording, {{time}}"
+  },
+  "request": {
+    "action": "use {{name}}",
+    "where": "Screenshots go to its model provider.",
+    "whereUntil": "Screenshots go to its model provider. Auto-deny in {{time}}.",
+    "deny": "Deny",
+    "always": "Always allow",
+    "untilTurnEnds": "Until this turn ends",
+    "revoke": "Revoke"
+  },
+  "setup": {
+    "thisMac": "This Mac",
+    "thisComputer": "This computer",
+    "deviceTitle": "Get {{name}} ready",
+    "deviceDescription": "Kettu checks again as you go.",
+    "hostTitleMac": "Set up this Mac for mobile devices",
+    "hostTitleComputer": "Set up this computer for mobile devices",
+    "hostDescription": "Kettu doesn’t install these itself; each step links to the official download.",
+    "minimize": "Minimize",
+    "expand": "Expand",
+    "check": {
+      "xcode-missing": {
+        "label": "Xcode",
+        "todo": "iOS simulators and iPhones need Xcode on this Mac.",
+        "done": "Xcode is installed.",
+        "link": "Get Xcode on the App Store"
+      },
+      "android-sdk-missing": {
+        "label": "Android SDK",
+        "todo": "Emulators and Android phones need the Android SDK, which comes with Android Studio.",
+        "done": "Found, with adb.",
+        "link": "Get Android Studio"
+      },
+      "usb-required": {
+        "label": "Connect with a cable",
+        "todo": "Plug it into this computer to see and control its screen.",
+        "done": "Connected with a cable."
+      },
+      "not-paired": {
+        "label": "Trust this computer",
+        "todo": "Unlock the device and tap Trust on its prompt.",
+        "done": "It trusts this computer."
+      },
+      "developer-mode-off": {
+        "label": "Developer Mode",
+        "todo": "Turn it on in Settings › Privacy & Security › Developer Mode.",
+        "done": "On.",
+        "link": "Apple’s steps"
+      },
+      "ddi-not-mounted": {
+        "label": "Developer disk image",
+        "todo": "Kettu mounts it once the device is unlocked; keep it unlocked.",
+        "done": "Mounted."
+      },
+      "offline": {
+        "label": "Connection",
+        "todo": "The phone is offline. Reconnect its cable.",
+        "done": "Online."
+      },
+      "usb-debugging-unauthorized": {
+        "label": "USB debugging",
+        "todo": "Unlock the phone and tap Allow on its “Allow USB debugging?” prompt.",
+        "done": "Allowed for this computer.",
+        "link": "Android’s steps"
+      }
+    }
   }
 }
