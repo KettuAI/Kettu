@@ -3,6 +3,7 @@ import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { PlanPart } from '@renderer/features/session/composer/usage'
+import { ringStroke } from '@renderer/features/usage/plan-cards'
 import { LIMIT_TEXT } from '@renderer/lib/plan-limit'
 import { cn } from '@renderer/lib/utils'
 import { useHostName, useWindowHost } from '@renderer/stores/window-host'
@@ -49,6 +50,7 @@ export function PlanLimitCard({ card, onOpen }: { card: PlanCard; onOpen: () => 
 
 function CardFace({ card }: { card: PlanCard }) {
   const { t } = useTranslation(['sidebar', 'composer', 'common'])
+  const count = card.windows.length
   return (
     <>
       <span className="flex h-4.5 min-w-0 items-center gap-1.5">
@@ -62,22 +64,27 @@ function CardFace({ card }: { card: PlanCard }) {
       </span>
       <span className="mt-1.5 flex items-center gap-2">
         <PlanRings
-          rings={card.windows.map((w) => ({ id: w.window, percent: w.percent, level: w.level }))}
+          rings={card.windows.map((w) => ({ id: w.id, percent: w.percent, level: w.level }))}
           size={40}
-          stroke={card.windows.length > 2 ? 4 : 5}
-          gap={1.5}
+          {...(count > 3 ? ringStroke(count, 40) : { stroke: count > 2 ? 4 : 5, gap: 1.5 })}
           className="size-10"
         />
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           {[...card.windows].reverse().map((w) => {
-            const name = t(`common:planWindow.${w.window}`)
+            const name = w.model
+              ? t('common:planWindow.weeklyOf', { model: w.model })
+              : t(`common:planWindow.${w.window}`)
+            // A model's name beside "100%" is too wide for the card; its details name it.
+            const short = w.model
+              ? w.model.charAt(0).toUpperCase()
+              : t(`composer:usage.shortWindow.${w.window}`)
             return (
               <span
-                key={w.window}
+                key={w.id}
                 className="flex justify-between gap-1 text-caption leading-3.25 whitespace-nowrap"
               >
                 <span aria-hidden className="text-tertiary">
-                  {t(`composer:usage.shortWindow.${w.window}`)}
+                  {short}
                 </span>
                 <span
                   aria-hidden

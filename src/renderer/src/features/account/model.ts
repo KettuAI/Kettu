@@ -48,7 +48,11 @@ const RING_OF: Readonly<Record<string, RingWindow>> = {
 }
 
 export interface CardWindow {
+  /** The ring's key: its window, or a per-model window's own id, such as `seven_day_fable`. */
+  id: string
   window: RingWindow
+  /** The one model a weekly window counts, such as "Fable"; null for the plan's own windows. */
+  model: string | null
   /** The whole percentage used; 0 once its reset has passed, since the window starts again. */
   percent: number
   level: LimitLevel
@@ -75,18 +79,25 @@ export interface PlanCard {
 }
 
 function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
-  const byRing = new Map<RingWindow, CardWindow>()
+  const rings: CardWindow[] = []
   for (const limit of limits) {
-    const ring = RING_OF[limit.window]
-    if (!ring || byRing.has(ring) || limit.usedPercent === null) continue
+    const perModel = limit.window.startsWith('seven_day_')
+    const window = perModel ? 'seven_day' : RING_OF[limit.window]
+    if (!window || limit.usedPercent === null) continue
+    const id = perModel ? limit.window : window
+    if (rings.some((ring) => ring.id === id)) continue
     const stale = limit.resetsAt !== null && limit.resetsAt <= now
-    byRing.set(ring, {
-      window: ring,
+    rings.push({
+      id,
+      window,
+      model: perModel ? (/^Weekly · (.+)$/.exec(limit.label)?.[1] ?? limit.label) : null,
       percent: stale ? 0 : Math.round(limit.usedPercent),
       level: stale ? 'ok' : limitLevel(limit),
     })
   }
-  return RING_WINDOWS.flatMap((ring) => byRing.get(ring) ?? [])
+  // A window for one model sits inside the weekly ring it narrows.
+  const rank = (ring: CardWindow) => RING_WINDOWS.indexOf(ring.window) * 2 + (ring.model ? 0 : 1)
+  return rings.sort((a, b) => rank(a) - rank(b))
 }
 
 const MAX_PLAN = /^(.*\b)max(?:\s+(\d+x))?$/i
