@@ -256,8 +256,12 @@ export class ComputerUse {
         if (hold?.sessionId !== sessionId || (state.kind !== 'agent' && state.kind !== 'you')) {
           return
         }
-        // A call starting or ending changes nothing the views draw.
-        if (state.kind === hold.control) return
+        // A call starting or ending changes nothing the views draw, but the first one starts the
+        // watch for the user taking the app.
+        if (state.kind === hold.control) {
+          this.syncWatch()
+          return
+        }
         hold.control = state.kind
         this.arm(hold)
         this.emit(hold)

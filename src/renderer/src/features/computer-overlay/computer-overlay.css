@@ -59,12 +59,7 @@ html[data-overlay] body {
   font-weight: 600;
   color: var(--on-fill);
 }
-.kco-float[data-control='you'] .kco-float__text i {
-  margin: 0 6px;
-  font-style: normal;
-  opacity: 0.6;
-}
-.kco-float__text b {
+.kco-float[data-control='you'] .kco-float__text b {
   font-weight: 500;
   color: var(--text-primary);
 }

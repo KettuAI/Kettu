@@ -398,6 +398,19 @@ describe('who has the app', () => {
     expect(last(h)?.control).toBe('agent')
   })
 
+  it('watches the app again in the next turn, whose first read changes nothing', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    await h.service.call('a', 'computer_get_window_state', READ)
+    h.service.turnEnded('a')
+    await h.service.call('a', 'computer_get_window_state', READ)
+    await vi.advanceTimersByTimeAsync(PAUSE_SETTLE_MS + PAUSE_POLL_MS)
+    h.driver.frontPid = 10
+    await vi.advanceTimersByTimeAsync(PAUSE_POLL_MS * 2)
+    expect(last(h)?.control).toBe('you')
+  })
+
   it('does not pause for the app its own call or Show app brought forward, or with the setting off', async () => {
     vi.useFakeTimers()
     const h = harness()
