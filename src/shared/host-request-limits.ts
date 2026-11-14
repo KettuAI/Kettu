@@ -133,6 +133,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sops.setSettings': HOST_MS,
   'tasks.list': HOST_MS,
   'tasks.get': HOST_MS,
+  'tasks.sessions': HOST_MS,
   'tasks.start': AGENT_MS,
   'tasks.review': AGENT_MS,
   'tasks.answer': AGENT_MS,
