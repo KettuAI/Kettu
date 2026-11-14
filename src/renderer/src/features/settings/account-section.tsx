@@ -312,6 +312,19 @@ export function StorageUsage({ plan, usage }: { plan: AccountPlan; usage: Accoun
   )
 }
 
+/** The points to spend, and the website's page where they are spent. */
+export function PointsBalance({ points, url }: { points: number; url: string }) {
+  const { t } = useTranslation('settings')
+  return (
+    <>
+      <Pill>{t('account.points.balance', { count: points })}</Pill>
+      <LinkButton href={url} icon={<Icon icon={ArrowUpRight01Icon} size={14} />}>
+        {t('account.points.redeem')}
+      </LinkButton>
+    </>
+  )
+}
+
 /** Under the account: what works without one. */
 export function AccountNote() {
   const { t } = useTranslation('settings')

@@ -386,6 +386,14 @@
       "keywords": "storage space quota cloud artifacts published",
       "used": "{{used}} of {{limit}}"
     },
+    "points": {
+      "name": "Points",
+      "description": "Earned when a problem you reported is confirmed. Redeem them on the website.",
+      "keywords": "points rewards reports redeem",
+      "balance_one": "{{count}} point",
+      "balance_other": "{{count}} points",
+      "redeem": "Redeem points"
+    },
     "subscription": {
       "name": "Subscription",
       "description": "Managed on the website.",

@@ -10,6 +10,7 @@ const ME: Me = {
   subscription: 'none',
   plan: null,
   usage: null,
+  points: null,
 }
 
 interface Shared {

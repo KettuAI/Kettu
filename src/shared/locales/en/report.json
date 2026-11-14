@@ -42,6 +42,7 @@
   "submitted": {
     "title": "Report submitted",
     "body": "Put this id in an issue, so the report can be found from it.",
+    "points": "Once the problem is confirmed, this account earns points.",
     "copy": "Copy",
     "copied": "Copied",
     "openIssue": "Open an issue on GitHub"

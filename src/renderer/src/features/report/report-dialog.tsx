@@ -300,6 +300,7 @@ function Submitted({ report }: { report: Extract<ReportSubmitResult, { ok: true 
       </DialogHeader>
       <div className="flex flex-col gap-3 px-5.5 pt-3">
         <p className="text-control text-secondary">{t('submitted.body')}</p>
+        <p className="text-hint text-tertiary">{t('submitted.points')}</p>
         <div className="flex items-center gap-2 rounded-lg bg-muted py-1.5 pr-1.5 pl-3">
           <span data-selectable="" className="flex-1 font-mono text-code text-primary">
             {report.id}
