@@ -341,22 +341,11 @@
     "copyCommitId": "Copy commit id"
   },
   "artifactEntry": {
+    "created": "Created",
+    "updated": "Updated",
+    "restored": "Restored",
     "version": "v{{version}}",
-    "createdAgo": "created {{time}}",
-    "updatedAgo": "updated {{time}}",
-    "restoredAgo": "restored {{time}}",
-    "writing": "writing…",
-    "writingPill": "Writing…",
-    "writes_one": "{{count}} version this turn",
-    "writes_other": "{{count}} versions this turn",
-    "published": "Published",
-    "private": "Private",
-    "deleted": "Deleted",
-    "erased": "Deleted permanently",
-    "open": "Open {{title}}",
-    "openShort": "Open",
-    "stop": "Stop",
-    "deletedLine": "Deleted artifact <title/>"
+    "versions": "v{{from}} → v{{to}}"
   },
   "planChip": {
     "label": "Plan: step {{step}} of {{total}}, {{content}}",

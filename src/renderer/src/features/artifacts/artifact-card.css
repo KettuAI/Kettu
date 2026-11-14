@@ -1,0 +1,678 @@
+/* One artifact card, on the Artifacts page and in the thread, and each kind's sketch. */
+
+/* A card in affectUI's Writing Assistant shape: the title on top, then an inset panel whose corners
+   run parallel to the card's, where the preview lies as a page over a glow in the kind's colors. */
+.k-art {
+  position: relative;
+  min-width: 0;
+}
+.k-art[data-kind='web'] {
+  --k-glow-1: var(--kind-web-glow);
+  --k-glow-2: var(--kind-document-glow);
+}
+.k-art[data-kind='canvas'] {
+  --k-glow-1: var(--kind-canvas-glow);
+  --k-glow-2: var(--kind-document-glow);
+}
+.k-art[data-kind='document'] {
+  --k-glow-1: var(--kind-document-glow);
+  --k-glow-2: var(--kind-web-glow);
+}
+.k-art[data-kind='slides'] {
+  --k-glow-1: var(--kind-slides-glow);
+  --k-glow-2: var(--kind-canvas-glow);
+}
+.k-art__open {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--bg-surface);
+  box-shadow: var(--artifact-card-shadow);
+  text-align: left;
+  outline: none;
+  transition:
+    border-color 220ms ease,
+    box-shadow 220ms ease;
+}
+.k-art:is(:hover, [data-held]) .k-art__open {
+  border-color: var(--line-strong);
+  box-shadow: var(--artifact-card-shadow-hover);
+}
+.k-art__open:focus-visible {
+  border-color: var(--line-strong);
+  box-shadow:
+    var(--artifact-card-shadow),
+    0 0 0 2px var(--accent-soft);
+}
+/* A deleted card's dust is drawn over it from its own pixels (features/artifacts/card-dust.ts);
+   only its shadow, which lies outside what is read, fades while the sweep passes. */
+.k-art[data-dust] {
+  pointer-events: none;
+}
+.k-art[data-dust] .k-art__open {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  transition: box-shadow var(--duration-slower) var(--ease-standard);
+}
+.k-art[data-dust] .k-art__open > *,
+.k-art[data-dust] .k-art__more {
+  visibility: hidden;
+}
+/* Room on the right for the More button, which sits over the card rather than inside its button. */
+.k-art__head {
+  display: grid;
+  min-width: 0;
+  padding: 7px 38px 9px 9px;
+}
+.k-art__name {
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  color: var(--strong);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-art__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.k-art__meta > span:not(.k-art__shared, .k-art__mark) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-art__shared {
+  display: flex;
+  flex: none;
+  color: var(--faint);
+}
+/* The card's 20px corner less its 6px rim. */
+.k-art__panel {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 1px var(--line);
+  isolation: isolate;
+}
+.k-art__glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+/* Still at rest, so a page of cards costs nothing; it drifts and brightens while pointed at. */
+.k-art__glow i {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(20px);
+  opacity: var(--artifact-glow);
+  animation: k-art-drift-a 6s ease-in-out infinite alternate paused;
+  transition: opacity 320ms ease;
+}
+.k-art__glow i:nth-child(1) {
+  top: 40%;
+  left: -18%;
+  width: 66%;
+  height: 50%;
+  background: var(--k-glow-1);
+}
+.k-art__glow i:nth-child(2) {
+  top: 30%;
+  right: -16%;
+  width: 62%;
+  height: 52%;
+  background: var(--k-glow-2);
+  animation-name: k-art-drift-b;
+  animation-duration: 7s;
+}
+.k-art__glow i:nth-child(3) {
+  bottom: -14%;
+  left: 18%;
+  width: 70%;
+  height: 50%;
+  background: var(--k-glow-1);
+  animation-name: k-art-drift-c;
+  animation-duration: 5.5s;
+}
+.k-art:hover .k-art__glow i {
+  opacity: var(--artifact-glow-hover);
+  animation-play-state: running;
+}
+.k-art[data-gone] .k-art__glow {
+  display: none;
+}
+@keyframes k-art-drift-a {
+  50% {
+    transform: translate(55%, -22%) scale(1.25);
+  }
+  100% {
+    transform: translate(20%, 14%) scale(0.85);
+  }
+}
+@keyframes k-art-drift-b {
+  50% {
+    transform: translate(-55%, 24%) scale(0.85);
+  }
+  100% {
+    transform: translate(-22%, -16%) scale(1.25);
+  }
+}
+@keyframes k-art-drift-c {
+  50% {
+    transform: translate(-45%, -26%) scale(1.2);
+  }
+  100% {
+    transform: translate(30%, -10%) scale(0.88);
+  }
+}
+.k-art__page {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  transition:
+    transform 420ms var(--ease),
+    box-shadow 420ms var(--ease);
+}
+.k-art__page .k-th {
+  border-radius: inherit;
+  box-shadow: none;
+}
+.k-art:hover .k-art__page {
+  transform: translateY(-3px);
+  box-shadow: var(--artifact-page-lift);
+}
+.k-art[data-gone] .k-th {
+  opacity: 0.72;
+  filter: grayscale(0.85);
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-art .k-art__glow i {
+    animation: none;
+  }
+  .k-art:hover .k-art__page {
+    transform: none;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .k-art .k-art__glow i {
+    animation: none;
+  }
+  & .k-art:hover .k-art__page {
+    transform: none;
+  }
+}
+.k-art__more {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.k-art:is(:hover, :focus-within) .k-art__more,
+.k-art__more:has([aria-expanded='true']) {
+  opacity: 1;
+}
+.k-art__more-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--muted);
+  transform: scale(0.8);
+  transition:
+    transform 320ms var(--ease),
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.k-art:is(:hover, :focus-within) .k-art__more-btn,
+.k-art__more-btn[aria-expanded='true'] {
+  transform: none;
+}
+.k-art__more-btn:hover {
+  background: var(--chip-hover);
+  color: var(--ink);
+}
+.k-art__more .ui-as-menu {
+  width: 232px;
+}
+/* The line: the kind and version shorten first, the time never; another host follows the time. */
+.k-art__mark {
+  display: flex;
+  flex: none;
+}
+.k-art__what {
+  flex-shrink: 4;
+}
+.k-art__meta > .k-art__time {
+  flex: none;
+  overflow: visible;
+}
+.k-art__time[data-writing] {
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-art__note {
+  overflow: hidden;
+  margin: 1px -29px 0 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Who is there, on the panel's corner over the glow; the card under them is the button. */
+.k-art__who {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 1;
+  display: flex;
+  pointer-events: none;
+}
+.k-art__who .k-art-faces.ui-agc {
+  --ui-agc-tray: var(--bg-surface);
+  container-type: normal;
+  display: inline-flex;
+  align-items: center;
+}
+.k-art-faces .ui-agc__face {
+  width: 20px;
+  height: 20px;
+  margin-left: -4px;
+}
+.k-art-faces .ui-agc__face:first-child {
+  margin-left: 0;
+}
+.k-art-faces .ui-agc__face-mark,
+.k-art-faces .ui-agc__face-mark svg {
+  width: 11px;
+  height: 11px;
+}
+.k-art-faces .ui-agc__face-more {
+  min-width: 20px;
+  font-size: 10px;
+}
+/* Open beside the thread: pressed into the page, a gray fill and a firmer edge, the glow up. */
+.k-art[data-open] .k-art__open,
+.k-art[data-open]:is(:hover, [data-held]) .k-art__open {
+  border-color: var(--edge-active);
+  background: color-mix(in srgb, var(--ink) 4.5%, var(--bg-surface));
+  box-shadow: var(--artifact-card-pressed);
+}
+.k-art[data-open] .k-art__panel {
+  background: color-mix(in srgb, var(--ink) 3%, var(--subtle));
+}
+.k-art[data-open] .k-art__glow i {
+  opacity: var(--artifact-glow-hover);
+}
+.k-art[data-open] .k-art__who .k-art-faces.ui-agc {
+  --ui-agc-tray: color-mix(in srgb, var(--ink) 4.5%, var(--bg-surface));
+}
+/* Deleted: the words step back, Restore on the panel's corner. */
+.k-art[data-gone] .k-art__name {
+  color: var(--muted);
+}
+.k-art[data-gone] .k-art__mark {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+.k-art__restore {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2;
+}
+/* Share... from the menu opens its panel under More. */
+.k-art__share {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  width: 26px;
+  height: 26px;
+}
+.k-art__share .k-share {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* In the thread: the tile at a width that suits a reply, left-aligned. */
+.k-art:is([data-form='full'], [data-form='half'], [data-form='small']) {
+  width: 100%;
+  max-width: 384px;
+}
+/* An update, or one of several new ones: the panel half as tall, the page cut off by its foot. An
+   update's page lies over a blank sheet behind it, which slides out a little when pointed at. */
+.k-art:is([data-form='half'], [data-form='small']) .k-art__panel {
+  height: 118px;
+  padding: 0;
+}
+.k-art__sheet {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  width: 70%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  translate: -50% 0;
+  transition:
+    translate 420ms var(--ease),
+    transform 420ms var(--ease),
+    box-shadow 420ms var(--ease);
+}
+.k-art__sheet .k-th {
+  border-radius: 0;
+  box-shadow: none;
+}
+.k-art__sheet[data-behind] {
+  top: 12px;
+  translate: calc(-50% + 18px) 0;
+  opacity: var(--artifact-sheet-behind);
+}
+.k-art:hover .k-art__sheet:not([data-behind], [data-blank]) {
+  transform: translateY(-3px);
+  box-shadow: var(--artifact-page-lift);
+}
+.k-art:hover .k-art__sheet[data-behind] {
+  translate: calc(-50% + 26px) -2px;
+}
+/* A deletion: the smallest, one gray sheet without a glow, Restore where More would be. */
+.k-art[data-form='small'] .k-art__panel {
+  height: 58px;
+}
+.k-art[data-form='small'] .k-art__sheet {
+  top: 16px;
+}
+.k-art[data-form='small'] .k-art__open:disabled {
+  cursor: default;
+}
+.k-art[data-form='small'][data-gone='deleted'] .k-art__head {
+  padding-right: 104px;
+}
+.k-art[data-form='small'] .k-art__restore {
+  top: 12px;
+  right: 12px;
+  bottom: auto;
+}
+.k-art__sheet[data-blank] {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 18px;
+}
+.k-art__sheet[data-blank] b {
+  margin-bottom: 3px;
+  overflow: hidden;
+  font-size: 8px;
+  line-height: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-art__sheet[data-blank] i {
+  display: block;
+  flex: none;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+@media (prefers-reduced-motion: reduce) {
+  .k-art:hover .k-art__sheet {
+    transform: none;
+    translate: -50% 0;
+  }
+  .k-art:hover .k-art__sheet[data-behind] {
+    translate: calc(-50% + 18px) 0;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .k-art:hover .k-art__sheet {
+    transform: none;
+    translate: -50% 0;
+  }
+  & .k-art:hover .k-art__sheet[data-behind] {
+    translate: calc(-50% + 18px) 0;
+  }
+}
+
+/* Room for a format's whole name in the Export submenu. */
+.k-art__more .ui-as-menu__subpanel {
+  min-width: 220px;
+}
+
+/* Thumbnails: a white sheet on the card's gray stage, drawn with the kind's own shapes */
+.k-th {
+  --t: var(--sketch-accent);
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.k-th--image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+/* A canvas's pages lie on a light desk in either theme, as their content is light. */
+.k-th--image[data-canvas] {
+  background: color-mix(in oklab, var(--canvas-ink) 5%, var(--canvas));
+}
+.k-th--image > i {
+  position: absolute;
+  box-shadow: 0 0 0 0.5px var(--line);
+}
+.k-th--loading {
+  background: var(--chip);
+  box-shadow: none;
+}
+.k-th b {
+  display: block;
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--strong);
+}
+.k-th__line {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+.k-th--doc {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+  background: var(--frame);
+  box-shadow: none;
+}
+.k-th__page {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 64%;
+  height: 120%;
+  padding: 12px 12px 0;
+  border-radius: 4px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.k-th__page b {
+  margin-bottom: 4px;
+  font-size: 9px;
+}
+.k-th__page b::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 3px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+  background: var(--t);
+}
+.k-th__gap {
+  display: block;
+  height: 3px;
+}
+.k-th--slide {
+  display: grid;
+  place-items: center;
+  background: var(--frame);
+  box-shadow: none;
+}
+.k-th__slide {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 82%;
+  aspect-ratio: 16 / 9;
+  padding: 10px 12px;
+  border-radius: 5px;
+  background: var(--t);
+  box-shadow: var(--card-shadow);
+  color: var(--sketch-on-accent);
+}
+.k-th__slide b {
+  color: var(--sketch-on-accent);
+  font-size: 10px;
+}
+.k-th__kicker {
+  width: 22px;
+  height: 3px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+  background: var(--sketch-on-accent-soft);
+}
+.k-th__bars {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: 5px;
+  margin-top: 6px;
+}
+.k-th__bars i {
+  width: 12%;
+  border-radius: 2px 2px 0 0;
+  background: var(--sketch-on-accent-bar);
+}
+.k-th__bars i:last-child {
+  background: var(--sketch-on-accent);
+}
+.k-th__nav {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  box-shadow: inset 0 -0.5px 0 var(--line);
+}
+.k-th__nav i {
+  width: 16px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+.k-th__nav i:first-child {
+  width: 10px;
+  background: var(--t);
+}
+.k-th__hero {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  padding: 10px 10px 8px;
+}
+.k-th__hero b {
+  max-width: 100%;
+  font-size: 11px;
+}
+.k-th__btn {
+  width: 30px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--t);
+}
+.k-th__cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  padding: 0 10px;
+}
+.k-th__cards i {
+  height: 26px;
+  border-radius: 4px;
+  background: var(--chip);
+}
+.k-th--canvas {
+  background-color: var(--frame);
+  background-image: radial-gradient(var(--line-strong) 0.8px, transparent 0.8px);
+  background-size: 9px 9px;
+  box-shadow: none;
+}
+.k-th__frame {
+  position: absolute;
+  width: 24%;
+  height: 58%;
+  border-radius: 4px;
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.k-th__frame::before {
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 12%;
+  height: 22%;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--t) 22%, transparent);
+}
+.k-th__frame::after {
+  content: '';
+  position: absolute;
+  left: 12%;
+  width: 55%;
+  bottom: 14%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip);
+}
+.k-th__wire {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.k-th__wire path {
+  fill: none;
+  stroke: var(--t);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 1.5;
+  vector-effect: non-scaling-stroke;
+}

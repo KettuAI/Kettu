@@ -130,8 +130,9 @@ interface ShareButtonProps {
   shown: number
   /** The latest version, which Update offers when it is newer than the published one. */
   head: number
-  /** A quiet icon button with no label, as on a reply's artifact card. */
-  iconOnly?: boolean
+  /** Opened from elsewhere, as a card's menu does: the panel alone, where it is put. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 /** Publishing happens on the artifact's host, with that host's accounts. */
@@ -143,7 +144,7 @@ export function ShareButton(props: ShareButtonProps) {
   )
 }
 
-function ShareButtonBody({ id, title, shown, head, iconOnly = false }: ShareButtonProps) {
+function ShareButtonBody({ id, title, shown, head, open: asked, onOpenChange }: ShareButtonProps) {
   const { t } = useTranslation('artifacts')
   const onHost = useHostContext()
   const { sharing } = useHostScope()
@@ -155,7 +156,9 @@ function ShareButtonBody({ id, title, shown, head, iconOnly = false }: ShareButt
   const autoOn = status?.auto.enabled === true
   const skipped = status?.auto.blocked.find((entry) => entry.id === id)?.reason ?? null
   const now = useNow()
-  const [open, setOpen] = useState(false)
+  const [own, setOwn] = useState(false)
+  const open = asked ?? own
+  const setOpen = onOpenChange ?? setOwn
   const [chosen, setChosen] = useState<SharingTarget>('kettu')
   const cloudOff = useCloudOffHere()
   // Without a Cloudflare account there is no choice: pages go to Kettu. Self-hosted, they go only
@@ -513,42 +516,29 @@ function ShareButtonBody({ id, title, shown, head, iconOnly = false }: ShareButt
   return (
     <>
       <span className="ui-as-anchor k-share">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              iconOnly ? (
-                <button
-                  ref={trigger}
-                  type="button"
-                  aria-label={t('share.open')}
-                  aria-expanded={open}
-                  onClick={() => (open ? close() : setOpen(true))}
-                  className="ui-as-icon-btn k-av-btn"
-                />
-              ) : (
-                <Button
-                  ref={trigger}
-                  variant="secondary"
-                  size="sm"
-                  aria-label={t('share.open')}
-                  aria-expanded={open}
-                  icon={<Icon icon={Share08Icon} size={14} />}
-                  onClick={() => (open ? close() : setOpen(true))}
-                />
-              )
-            }
-          >
-            {iconOnly ? (
-              <Icon icon={Share08Icon} size={15} />
-            ) : published ? (
-              t('share.buttonShared')
-            ) : (
-              t('share.button')
-            )}
-          </TooltipTrigger>
-          <TooltipContent>{t('share.open')}</TooltipContent>
-        </Tooltip>
-        {published && <span aria-hidden className="k-share__dot" />}
+        {asked === undefined && (
+          <>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    ref={trigger}
+                    variant="secondary"
+                    size="sm"
+                    aria-label={t('share.open')}
+                    aria-expanded={open}
+                    icon={<Icon icon={Share08Icon} size={14} />}
+                    onClick={() => (open ? close() : setOpen(true))}
+                  />
+                }
+              >
+                {published ? t('share.buttonShared') : t('share.button')}
+              </TooltipTrigger>
+              <TooltipContent>{t('share.open')}</TooltipContent>
+            </Tooltip>
+            {published && <span aria-hidden className="k-share__dot" />}
+          </>
+        )}
         <Popover open={open} onClose={close} align="end" className="ui-as-menu k-share__pop">
           {body}
           {reason && (

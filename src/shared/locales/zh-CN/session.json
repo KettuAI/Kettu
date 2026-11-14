@@ -328,21 +328,11 @@
     "copyCommitId": "复制提交 ID"
   },
   "artifactEntry": {
+    "created": "已创建",
+    "updated": "已更新",
+    "restored": "已恢复",
     "version": "v{{version}}",
-    "createdAgo": "{{time}}创建",
-    "updatedAgo": "{{time}}更新",
-    "restoredAgo": "{{time}}恢复",
-    "writing": "正在写入…",
-    "writingPill": "正在写入…",
-    "writes_other": "本轮 {{count}} 个版本",
-    "published": "已发布",
-    "private": "未发布",
-    "deleted": "已删除",
-    "erased": "已永久删除",
-    "open": "打开 {{title}}",
-    "openShort": "打开",
-    "stop": "停止",
-    "deletedLine": "已删除 artifact <title/>"
+    "versions": "v{{from}} → v{{to}}"
   },
   "planChip": {
     "label": "计划：第 {{step}} 步，共 {{total}} 步，{{content}}",

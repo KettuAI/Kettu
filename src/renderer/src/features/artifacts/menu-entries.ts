@@ -8,6 +8,7 @@ import {
   PencilEdit02Icon,
   RefreshIcon,
   RotateLeft01Icon,
+  Share08Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -83,6 +84,10 @@ export interface MenuOptions {
   onDeleted?: () => void
   /** Saves the page as an image, where it is a single page a host can render. */
   onDownloadPng?: () => void
+  /** On a card, which has no Share button of its own. */
+  onShare?: () => void
+  /** Shown in its own session, so Open the session is left out. */
+  inSession?: boolean
 }
 
 /** One of the menu's actions, drawn by either menu below. */
@@ -118,7 +123,8 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
   const prints = useHostHas('thumbnails')
   const failed = (error: unknown) => toast(errorMessage(error), undefined, { tone: 'warning' })
   const typed = target.type ?? null
-  const { onOpen, onReload, onVersionHistory, historyOpen, onDeleted, onDownloadPng } = options
+  const { onOpen, onReload, onVersionHistory, historyOpen, onDeleted, onDownloadPng, onShare } =
+    options
 
   if (target.deletedAt !== null) {
     return [
@@ -195,6 +201,9 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
           .catch(failed),
     })
   }
+  if (onShare) {
+    entries.push({ key: 'share', label: t('menu.share'), icon: Share08Icon, run: onShare })
+  }
   entries.push(
     exports.length > 1
       ? {
@@ -229,7 +238,7 @@ export function useEntries(target: MenuTarget, options: MenuOptions): Entry[] {
       run: onVersionHistory,
     },
   )
-  if (session) {
+  if (session && !options.inSession) {
     entries.push({
       key: 'session',
       label: t('menu.openSession'),
