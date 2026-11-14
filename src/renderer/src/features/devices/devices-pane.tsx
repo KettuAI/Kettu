@@ -388,7 +388,13 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
         }
       >
         {held.length > 0 ? (
-          <div ref={tabs} role="tablist" aria-label={t('tabs')} className="kp-head__tabs">
+          <div
+            ref={tabs}
+            role="tablist"
+            aria-label={t('tabs')}
+            className="kp-head__tabs"
+            data-crowded={!fit || undefined}
+          >
             {held.map((device, index) => {
               const chosen = device.id === selected?.id
               const status = statuses[index]

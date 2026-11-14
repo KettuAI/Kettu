@@ -1554,11 +1554,17 @@ li[data-row-exit='dust'] > * {
     animation: none;
   }
 }
-/* A tab without room for its name: its mark and a dot for its state, with the close over the
-   dot's place on hover. */
+/* A tab without room for its name: its mark and a dot for its state, with room after the mark
+   where the close shows on hover, so a click on the mark still chooses the tab. */
 .kp-tab[data-compact] {
   flex: none;
   min-width: 42px;
+}
+/* The chosen tab then gives way last: its name is cut short before another tab is pushed out of
+   reach, while its badge and close stay. */
+.kp-head__tabs[data-crowded] > .kp-tab[data-selected] {
+  flex-shrink: 1;
+  min-width: 0;
 }
 .kp-tab__dot.kp-device-dot {
   background: currentColor;
