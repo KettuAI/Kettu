@@ -147,6 +147,12 @@ function sessionId(params: Params): string {
   return string(params, 'sessionId', MAX_ID)
 }
 
+/** A request on a device for the session that holds it. */
+function held(raw: unknown): { deviceId: string; sessionId: string } {
+  const params = object(raw, ['deviceId', 'sessionId'])
+  return { deviceId: deviceId(params), sessionId: sessionId(params) }
+}
+
 export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M> } = {
   'devices.environment': (raw) => {
     object(raw ?? {}, [])
@@ -171,22 +177,22 @@ export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M
       ...(params.shutdown !== undefined ? { shutdown: params.shutdown as boolean } : {}),
     }
   },
-  'devices.watch': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
-  'devices.unwatch': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
+  'devices.watch': (raw) => held(raw),
+  'devices.unwatch': (raw) => held(raw),
   'devices.ack': (raw) => {
-    const params = object(raw, ['deviceId', 'seq'])
+    const params = object(raw, ['deviceId', 'sessionId', 'seq'])
     const seq = params.seq
     if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 0 || seq > MAX_SEQ) {
       throw new ValidationError('"seq" must be a sequence number')
     }
-    return { deviceId: deviceId(params), seq }
+    return { deviceId: deviceId(params), sessionId: sessionId(params), seq }
   },
   'devices.input': (raw) => {
-    const params = object(raw, ['deviceId', 'input'])
-    return { deviceId: deviceId(params), input: input(params.input) }
+    const params = object(raw, ['deviceId', 'sessionId', 'input'])
+    return { deviceId: deviceId(params), sessionId: sessionId(params), input: input(params.input) }
   },
-  'devices.handBack': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
-  'devices.stopAgent': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
-  'devices.screenshot': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
-  'devices.frame': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
+  'devices.handBack': (raw) => held(raw),
+  'devices.stopAgent': (raw) => held(raw),
+  'devices.screenshot': (raw) => held(raw),
+  'devices.frame': (raw) => held(raw),
 }

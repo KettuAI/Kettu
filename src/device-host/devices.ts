@@ -71,13 +71,22 @@ export class DeviceManager {
   private tools: Tools | null = null
   private found = new Map<DeviceId, FoundDevice>()
   private readonly leases = new Map<DeviceId, string>()
+  /**
+   * Simulators and emulators this host booted, which shut down once no session holds them, each
+   * with the id it is listed under while shut down: a simulator's own, an emulator's AVD.
+   */
+  private readonly booted = new Map<DeviceId, DeviceId>()
+  /** Devices this host is booting, which a listing from before the boot must not forget. */
+  private readonly booting = new Set<DeviceId>()
   private readonly operators = new Map<DeviceId, DeviceOperator>()
   private readonly live = new Map<DeviceId, Live>()
+  private readonly ensuring = new Map<DeviceId, Promise<Live>>()
   /** The devices each port watches. */
   private readonly watching = new Map<string, Set<DeviceId>>()
   private listing: Promise<DeviceInfo[]> | null = null
   private poll: ReturnType<typeof setInterval> | null = null
   private lastList = ''
+  private saving: Promise<void> = Promise.resolve()
 
   private readonly restored: Promise<void>
 
@@ -95,21 +104,37 @@ export class DeviceManager {
     const text = await readFile(file, 'utf8').catch(() => null)
     if (!text) return
     try {
-      const parsed = JSON.parse(text) as { leases?: Record<string, unknown> }
+      const parsed = JSON.parse(text) as {
+        leases?: Record<string, unknown>
+        booted?: Record<string, unknown>
+      }
       for (const [id, sessionId] of Object.entries(parsed.leases ?? {})) {
         if (typeof sessionId === 'string' && sessionId.length <= 256) this.leases.set(id, sessionId)
+      }
+      for (const [id, down] of Object.entries(parsed.booted ?? {})) {
+        if (id.length <= 256 && typeof down === 'string' && down.length <= 256) {
+          this.booted.set(id, down)
+        }
       }
     } catch {
       this.deps.log('Ignored an unreadable device-leases.json')
     }
   }
 
-  /** Which session holds which device, so a pane shows its devices again after a restart. */
+  /**
+   * Which session holds which device, so a pane shows its devices again after a restart, and
+   * which devices this host booted.
+   */
   private saveLeases(): void {
     const file = this.leasesFile()
     if (!file) return
-    const body = JSON.stringify({ leases: Object.fromEntries(this.leases) })
-    void mkdir(path.dirname(file), { recursive: true })
+    const body = JSON.stringify({
+      leases: Object.fromEntries(this.leases),
+      booted: Object.fromEntries(this.booted),
+    })
+    // One write at a time, so an older one never lands last; dispose waits for the last.
+    this.saving = this.saving
+      .then(() => mkdir(path.dirname(file), { recursive: true }))
       .then(() => writeFile(`${file}.tmp`, body))
       .then(() => rename(`${file}.tmp`, file))
       .catch((error: unknown) => this.deps.log(`Cannot save device-leases.json: ${String(error)}`))
@@ -180,11 +205,19 @@ export class DeviceManager {
     const env = await this.deps.env()
     if (found.kind === 'simulator' && found.state !== 'booted' && tools.xcrun) {
       this.setState(id, 'booting')
+      this.booting.add(id)
       try {
-        await bootSimulator(tools.xcrun, found.target, env)
+        if (await bootSimulator(tools.xcrun, found.target, env)) {
+          this.booted.set(id, id)
+          this.saveLeases()
+        }
+        // Waits for a listing that began before the boot, too, while it cannot forget the boot.
+        await this.list()
       } catch (error) {
         this.setState(id, 'shutdown')
         throw new DeviceError('unavailable', `The simulator did not boot: ${String(error)}`)
+      } finally {
+        this.booting.delete(id)
       }
     } else if (found.kind === 'emulator' && found.state === 'shutdown') {
       if (!tools.emulator || !tools.adb)
@@ -198,60 +231,113 @@ export class DeviceManager {
       )
       // The running emulator is listed by its serial; the lease moves with it.
       this.leases.delete(id)
+      const avd = id
       id = `android:${serial}`
       this.leases.set(id, sessionId)
+      this.booted.set(id, avd)
       this.saveLeases()
+      this.booting.add(id)
+      try {
+        await this.list()
+      } finally {
+        this.booting.delete(id)
+      }
+    } else {
+      await this.list()
     }
-    await this.list()
     const info = this.info(id)
     if (!info) throw new DeviceError('not_found', 'The device went away')
     return info
   }
 
+  /** Takes the device from the session; one this host booted shuts down with it. */
   async close(id: DeviceId, sessionId: string, shutdown: boolean): Promise<void> {
+    await this.restored
     if (this.leases.get(id) !== sessionId) return
     this.leases.delete(id)
+    const booted = this.booted.delete(id)
     this.saveLeases()
     this.operators.delete(id)
-    const found = this.found.get(id)
+    this.dropWatchers(id)
     await this.stopLive(id)
-    if (shutdown && found) {
-      const tools = await this.loadTools()
-      const env = await this.deps.env()
-      if (found.kind === 'simulator' && tools.xcrun)
-        await shutdownSimulator(tools.xcrun, found.target, env)
-      if (found.kind === 'emulator' && tools.adb) {
-        await run(tools.adb, ['-s', found.target, 'emu', 'kill'], env).catch(() => undefined)
-      }
-    }
+    if (shutdown || booted) await this.shutDown(id)
     await this.list()
   }
 
-  /** Lets go of the devices of sessions that were archived or deleted, without shutting them down. */
-  endSessions(sessionIds: string[]): void {
+  /**
+   * Lets go of the devices of sessions that were archived or deleted. Only the simulators and
+   * emulators this host booted shut down; others stay on, since the user may still be using them.
+   */
+  async endSessions(sessionIds: string[]): Promise<void> {
+    await this.restored
     const ended = new Set(sessionIds)
+    const booted: DeviceId[] = []
     for (const [id, sessionId] of [...this.leases]) {
       if (!ended.has(sessionId)) continue
       this.leases.delete(id)
       this.operators.delete(id)
+      this.dropWatchers(id)
+      if (this.booted.delete(id)) booted.push(id)
     }
     this.saveLeases()
     this.broadcastList()
+    if (booted.length === 0) return
+    await Promise.all(
+      booted.map(async (id) => {
+        await this.stopLive(id)
+        await this.shutDown(id)
+      }),
+    )
+    await this.list()
+  }
+
+  private async shutDown(id: DeviceId): Promise<void> {
+    // A host that just started has not listed yet.
+    if (!this.found.has(id)) await this.list()
+    const found = this.found.get(id)
+    if (!found) return
+    const tools = await this.loadTools()
+    const env = await this.deps.env()
+    if (found.kind === 'simulator' && tools.xcrun) {
+      await shutdownSimulator(tools.xcrun, found.target, env)
+    }
+    if (found.kind === 'emulator' && tools.adb) {
+      await run(tools.adb, ['-s', found.target, 'emu', 'kill'], env).catch(() => undefined)
+    }
   }
 
   holder(id: DeviceId): string | null {
     return this.leases.get(id) ?? null
   }
 
-  async watch(port: string, id: DeviceId): Promise<{ screen: DeviceScreen | null }> {
+  async watch(
+    port: string,
+    id: DeviceId,
+    sessionId: string,
+  ): Promise<{ screen: DeviceScreen | null }> {
+    await this.restored
+    this.checkHolder(id, sessionId)
     // A host that just started has not listed yet.
     if (!this.found.has(id)) await this.list()
     const found = this.found.get(id)
     if (!found) throw new DeviceError('not_found', 'No such device on this host')
-    const live = await this.ensureLive(found)
+    // Watching from here, so an unwatch or a closed port while the stream starts is not undone.
     let set = this.watching.get(port)
     if (!set) this.watching.set(port, (set = new Set()))
     set.add(id)
+    let live: Live
+    try {
+      live = await this.ensureLive(found)
+    } catch (error) {
+      this.watching.get(port)?.delete(id)
+      throw error
+    }
+    // The session may have let go of the device while its stream started.
+    this.checkHolder(id, sessionId)
+    if (!this.watching.get(port)?.has(id)) {
+      this.idleIfUnwatched(id, live)
+      return { screen: live.screen }
+    }
     if (live.idle) clearTimeout(live.idle)
     live.idle = null
     live.fanout.add(port)
@@ -263,26 +349,37 @@ export class DeviceManager {
     return { screen: live.screen }
   }
 
-  unwatch(port: string, id: DeviceId): void {
+  unwatch(port: string, id: DeviceId, sessionId: string): void {
+    this.checkHolder(id, sessionId)
+    this.stopWatching(port, id)
+  }
+
+  private stopWatching(port: string, id: DeviceId): void {
     this.watching.get(port)?.delete(id)
     const live = this.live.get(id)
     if (!live) return
     live.fanout.remove(port)
+    this.idleIfUnwatched(id, live)
+  }
+
+  private idleIfUnwatched(id: DeviceId, live: Live): void {
     if (live.fanout.watching === 0 && !live.idle) {
       live.idle = setTimeout(() => void this.stopLive(id), IDLE_CAPTURE_MS)
     }
   }
 
   portClosed(port: string): void {
-    for (const id of this.watching.get(port) ?? []) this.unwatch(port, id)
+    for (const id of this.watching.get(port) ?? []) this.stopWatching(port, id)
     this.watching.delete(port)
   }
 
-  ack(port: string, id: DeviceId, seq: number): void {
+  ack(port: string, id: DeviceId, seq: number, sessionId: string): void {
+    this.checkHolder(id, sessionId)
     this.live.get(id)?.fanout.ack(port, seq)
   }
 
-  input(id: DeviceId, input: DeviceInput): void {
+  input(id: DeviceId, input: DeviceInput, sessionId: string): void {
+    this.checkHolder(id, sessionId)
     const live = this.live.get(id)
     if (!live) throw new DeviceError('unavailable', 'The device is not streaming')
     const operator = this.operators.get(id)
@@ -292,16 +389,16 @@ export class DeviceManager {
     live.driver.send(input)
   }
 
-  async screenshot(id: DeviceId): Promise<Uint8Array> {
+  async screenshot(id: DeviceId, sessionId: string): Promise<Uint8Array> {
+    await this.restored
+    this.checkHolder(id, sessionId)
     const found = this.found.get(id)
     if (!found) throw new DeviceError('not_found', 'No such device on this host')
     const live = await this.ensureLive(found)
     try {
       return await live.driver.screenshot()
     } finally {
-      if (live.fanout.watching === 0 && !live.idle) {
-        live.idle = setTimeout(() => void this.stopLive(found.id), IDLE_CAPTURE_MS)
-      }
+      this.idleIfUnwatched(found.id, live)
     }
   }
 
@@ -317,7 +414,9 @@ export class DeviceManager {
   }
 
   /** The frame of a device that is streaming, or null when it is not or has none of its own. */
-  async frame(id: DeviceId): Promise<DeviceFrame | null> {
+  async frame(id: DeviceId, sessionId: string): Promise<DeviceFrame | null> {
+    await this.restored
+    this.checkHolder(id, sessionId)
     const live = this.live.get(id)
     if (!live) return null
     await live.starting
@@ -334,7 +433,14 @@ export class DeviceManager {
     this.broadcastList()
   }
 
-  handBack(id: DeviceId): void {
+  /** The user takes the device from the agent; the caller stops the agent's running call. */
+  takeOver(id: DeviceId, sessionId: string): void {
+    this.checkHolder(id, sessionId)
+    this.setOperator(id, { sessionId: null, agentName: null, user: true })
+  }
+
+  handBack(id: DeviceId, sessionId: string): void {
+    this.checkHolder(id, sessionId)
     const operator = this.operators.get(id)
     if (!operator) return
     if (operator.sessionId) this.setOperator(id, { ...operator, user: false })
@@ -344,6 +450,7 @@ export class DeviceManager {
   async dispose(): Promise<void> {
     this.setPolling(false)
     await Promise.all([...this.live.keys()].map((id) => this.stopLive(id)))
+    await this.saving
   }
 
   /** Where the tools are, which agent-device needs on its PATH as well. */
@@ -371,6 +478,17 @@ export class DeviceManager {
     const next = new Map<DeviceId, FoundDevice>()
     for (const device of lists.flat()) next.set(device.id, device)
     this.found = next
+    // One that went down is no longer ours: started again by the user, it stays on. An emulator
+    // is down once its AVD is listed and its serial is not; adb lists an offline one as both.
+    let forgot = false
+    for (const [id, down] of this.booted) {
+      const shutDown = next.get(down)?.state === 'shutdown' && (down === id || !next.has(id))
+      if (shutDown && !this.booting.has(id)) {
+        this.booted.delete(id)
+        forgot = true
+      }
+    }
+    if (forgot) this.saveLeases()
     for (const id of [...this.live.keys()]) if (!next.has(id)) void this.stopLive(id)
     return this.broadcastList()
   }
@@ -427,7 +545,17 @@ export class DeviceManager {
     return new AndroidDriver(found.target, tools.adb, this.deps.resourcesPath, env, log)
   }
 
-  private async ensureLive(found: FoundDevice): Promise<Live> {
+  /** The device's stream, started once however many ask for it at the same time. */
+  private ensureLive(found: FoundDevice): Promise<Live> {
+    let pending = this.ensuring.get(found.id)
+    if (!pending) {
+      pending = this.startLive(found).finally(() => this.ensuring.delete(found.id))
+      this.ensuring.set(found.id, pending)
+    }
+    return pending
+  }
+
+  private async startLive(found: FoundDevice): Promise<Live> {
     const existing = this.live.get(found.id)
     if (existing) {
       await existing.starting
@@ -519,6 +647,21 @@ export class DeviceManager {
       if (this.live.get(id) === live && live.fanout.starved) this.wantKeyframe(id)
     }, 1_000)
     live.driver.requestKeyframe()
+  }
+
+  /** A client sees and operates a device only for the session that holds it. */
+  private checkHolder(id: DeviceId, sessionId: string): void {
+    if (this.leases.get(id) !== sessionId) {
+      throw new DeviceError('forbidden', 'This device is not open in this session')
+    }
+  }
+
+  /** Stops sending a device to the ports that watched it for the session that let it go. */
+  private dropWatchers(id: DeviceId): void {
+    for (const port of this.portsOf(id)) {
+      this.stopWatching(port, id)
+      this.deps.emit(port, { type: 'device.stream', deviceId: id, state: 'stopped' })
+    }
   }
 
   private portsOf(id: DeviceId): string[] {

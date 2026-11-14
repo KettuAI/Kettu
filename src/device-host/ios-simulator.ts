@@ -406,12 +406,16 @@ export class IosSimulatorDriver implements DeviceDriver {
   }
 }
 
-export async function bootSimulator(xcrun: string, udid: string, env: Env): Promise<void> {
+/** Boots the simulator and waits until it is up; false when it was booted already. */
+export async function bootSimulator(xcrun: string, udid: string, env: Env): Promise<boolean> {
+  let booted = true
   await run(xcrun, ['simctl', 'boot', udid], env, 120_000).catch((error: { stderr?: string }) => {
     // Booting a booted device fails with this; it is what we want.
     if (!/current state: Booted/i.test(error.stderr ?? '')) throw error
+    booted = false
   })
   await run(xcrun, ['simctl', 'bootstatus', udid, '-b'], env, 180_000)
+  return booted
 }
 
 export async function shutdownSimulator(xcrun: string, udid: string, env: Env): Promise<void> {
