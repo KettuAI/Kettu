@@ -192,7 +192,14 @@ function entry(url: string, token: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      autoAllow: [PLAN_TOOL, REPORT_TOOL, ...MEMORY_TOOL_NAMES],
+      // Kettu's own tools, which reach no further than its thread, memory and the project's
+      // sessions; the browser, computer use, devices and artifacts still ask.
+      autoAllow: [
+        PLAN_TOOL,
+        REPORT_TOOL,
+        ...MEMORY_TOOL_NAMES,
+        ...SESSION_TOOLS.map((tool) => tool.name),
+      ],
       prompt: PLAN_PROMPT,
       secret: true,
     },
