@@ -77,21 +77,21 @@ function CardFace({ card }: { card: PlanCard }) {
             const name = w.model
               ? t('common:planWindow.weeklyOf', { model: w.model })
               : t(`common:planWindow.${w.window}`)
-            // A model's name beside "100%" is too wide for the card; its details name it.
-            const short = w.model
-              ? w.model.charAt(0).toUpperCase()
-              : t(`composer:usage.shortWindow.${w.window}`)
+            const short = w.model ?? t(`composer:usage.shortWindow.${w.window}`)
             return (
               <span
                 key={w.id}
                 className="flex justify-between gap-1 text-caption leading-3.25 whitespace-nowrap"
               >
-                <span aria-hidden className="text-tertiary">
+                <span aria-hidden className="min-w-0 truncate text-tertiary">
                   {short}
                 </span>
                 <span
                   aria-hidden
-                  className={cn('tabular', w.level === 'ok' ? 'text-primary' : LIMIT_TEXT[w.level])}
+                  className={cn(
+                    'tabular shrink-0',
+                    w.level === 'ok' ? 'text-primary' : LIMIT_TEXT[w.level],
+                  )}
                 >
                   {w.percent}%
                 </span>
