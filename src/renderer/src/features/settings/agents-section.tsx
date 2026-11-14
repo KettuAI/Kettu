@@ -5,7 +5,6 @@
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   Add01Icon,
-  AiBrain01Icon,
   ComputerTerminal01Icon,
   Edit02Icon,
   FolderOpenIcon,
@@ -110,6 +109,7 @@ import {
   SettingsField,
 } from './settings-dialog'
 import {
+  EmptyRow,
   GroupLabel,
   ItemPageHeader,
   ItemRow,
@@ -284,7 +284,7 @@ export function AgentsGroupActions() {
 }
 
 /** Adding stays discoverable before the first harness is installed. */
-function AddAgentButton({ row, primary = false }: { row?: boolean; primary?: boolean }) {
+function AddAgentButton({ primary = false }: { primary?: boolean }) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
   const addable = useAddable()
@@ -294,51 +294,27 @@ function AddAgentButton({ row, primary = false }: { row?: boolean; primary?: boo
   }
   return (
     <>
-      {row ? (
-        <button type="button" onClick={add} className="ui-sg-row k-add-row">
-          <span className="k-mark">
-            <Icon icon={Add01Icon} size={16} />
-          </span>
-          {t('agents.add.button')}
-        </button>
-      ) : (
-        <SetButton
-          variant={primary ? 'primary' : 'ghost'}
-          icon={<Icon icon={Add01Icon} size={14} />}
-          onClick={add}
-        >
-          {t('agents.add.button')}
-        </SetButton>
-      )}
+      <SetButton
+        variant={primary ? 'primary' : 'ghost'}
+        icon={<Icon icon={Add01Icon} size={14} />}
+        onClick={add}
+      >
+        {t('agents.add.button')}
+      </SetButton>
       <AddAgentDialog open={open} onOpenChange={setOpen} harnesses={addable} />
     </>
   )
-}
-
-/** The row at the list's end that adds an agent. */
-export function AddAgentRow() {
-  return <AddAgentButton row />
 }
 
 export function NoAgents() {
   const { t } = useTranslation('settings')
   const addable = useAddable()
   return (
-    <div className="ui-as-empty" data-bare="">
-      <span className="ui-as-empty__icon">
-        <Icon icon={AiBrain01Icon} size={18} />
-      </span>
-      <b className="ui-as-empty__title">{t('agents.empty.title')}</b>
-      <p className="ui-as-empty__text">
-        {t(addable.length > 0 ? 'agents.empty.installed' : 'agents.empty.description')}
-      </p>
-      <span className="k-end k-empty-actions">
-        <AddAgentButton primary />
-        <SetButton variant="ghost" onClick={() => openHarnessSettings(null)}>
-          {t('agents.empty.harnesses')}
-        </SetButton>
-      </span>
-    </div>
+    <EmptyRow
+      title={t('agents.empty.title')}
+      hint={t(addable.length > 0 ? 'agents.empty.installed' : 'agents.empty.description')}
+      action={<AddAgentButton primary />}
+    />
   )
 }
 

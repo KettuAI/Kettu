@@ -791,7 +791,6 @@
       "title": "No agents yet",
       "description": "Add your first agent to get started. If its harness is not installed, Kettu helps you install it first.",
       "installed": "An installed harness is ready. Choose one and use the configuration you already use, or create a separate one.",
-      "harnesses": "View harnesses",
       "keywords": "empty first setup harness install add"
     },
     "remove": {

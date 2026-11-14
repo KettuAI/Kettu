@@ -17,7 +17,7 @@ import { openSettingsItem } from '@renderer/stores/view'
 import { ControlError, SetButton, SettingSelect, SettingSwitch, Skel } from './controls'
 import { useImportScan, writerName } from './memory-data'
 import { MemoryEditor } from './memory-page'
-import { ItemLine, ItemRow, Notice } from './rows'
+import { EmptyRow, ItemLine, ItemRow, Notice } from './rows'
 import {
   SettingsDialogBody,
   SettingsDialogContent,
@@ -119,19 +119,14 @@ export function EmptyLayer({ scope, projectName }: { scope: MemoryScope; project
   const global = scope.layer === 'global'
   return (
     <>
-      <div className="ui-as-empty" data-bare="">
-        <span className="ui-as-empty__icon">
-          <Icon icon={MEMORY_GLYPH} size={18} />
-        </span>
-        <b className="ui-as-empty__title">
-          {global
+      <EmptyRow
+        title={
+          global
             ? t('memory.empty.globalTitle')
-            : t('memory.empty.projectTitle', { project: projectName })}
-        </b>
-        <p className="ui-as-empty__text">
-          {global ? t('memory.empty.globalHint') : t('memory.empty.projectHint')}
-        </p>
-        <span className="k-empty-actions">
+            : t('memory.empty.projectTitle', { project: projectName })
+        }
+        hint={global ? t('memory.empty.globalHint') : t('memory.empty.projectHint')}
+        action={
           <SetButton
             variant="primary"
             icon={<Icon icon={Add01Icon} size={14} />}
@@ -139,8 +134,8 @@ export function EmptyLayer({ scope, projectName }: { scope: MemoryScope; project
           >
             {t('memory.add')}
           </SetButton>
-        </span>
-      </div>
+        }
+      />
       <MemoryEditor
         open={open}
         onOpenChange={setOpen}
@@ -155,13 +150,7 @@ export function EmptyLayer({ scope, projectName }: { scope: MemoryScope; project
 export function NoProjects() {
   const { t } = useTranslation('settings')
   return (
-    <div className="ui-as-empty" data-bare="">
-      <span className="ui-as-empty__icon">
-        <Icon icon={MEMORY_GLYPH} size={18} />
-      </span>
-      <b className="ui-as-empty__title">{t('memory.empty.noProjectsTitle')}</b>
-      <p className="ui-as-empty__text">{t('memory.empty.noProjectsHint')}</p>
-    </div>
+    <EmptyRow title={t('memory.empty.noProjectsTitle')} hint={t('memory.empty.noProjectsHint')} />
   )
 }
 

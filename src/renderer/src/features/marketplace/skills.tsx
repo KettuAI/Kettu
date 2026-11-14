@@ -49,7 +49,6 @@ export function SkillRow({
     <ItemRow
       title={displayTitle(skill.name)}
       subject={skillSubject(skill.name)}
-      official={skill.official}
       tag={showKind ? <KindTag kind="skill" /> : undefined}
       line={skill.description}
       fresh={fresh}

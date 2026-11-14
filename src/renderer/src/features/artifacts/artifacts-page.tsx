@@ -741,7 +741,7 @@ function NoArtifacts() {
           <ImportMenu
             align="start"
             trigger={
-              <Button size="sm" variant="secondary" icon={<Icon icon={Upload04Icon} size={14} />}>
+              <Button size="md" variant="secondary" icon={<Icon icon={Upload04Icon} size={14} />}>
                 {t('page.importEllipsis')}
               </Button>
             }
@@ -808,7 +808,7 @@ function ImportMenu({
         render={
           trigger ?? (
             <Button
-              size="sm"
+              size="md"
               variant="secondary"
               icon={<Icon icon={Upload04Icon} size={14} />}
               aria-label={t('page.import')}
@@ -891,7 +891,7 @@ function NoMatch({ query, onClear }: { query: string; onClear: () => void }) {
             : t('page.noMatchFilters')}
         </p>
       </div>
-      <Button size="sm" variant="secondary" onClick={onClear}>
+      <Button size="md" variant="secondary" onClick={onClear}>
         {t('page.clearFilters')}
       </Button>
     </div>
@@ -907,7 +907,7 @@ function ListError({ error }: { error: string }) {
       mark={<Icon icon={Alert02Icon} size={16} />}
       title={t('page.errorTitle')}
       action={
-        <Button size="sm" variant="secondary" onClick={retryArtifacts}>
+        <Button size="md" variant="secondary" onClick={retryArtifacts}>
           {t('common:actions.retry')}
         </Button>
       }

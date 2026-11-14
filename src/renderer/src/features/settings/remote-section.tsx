@@ -1,11 +1,6 @@
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
-import {
-  Add01Icon,
-  AlertCircleIcon,
-  RefreshIcon,
-  SmartPhone01Icon,
-  Tick02Icon,
-} from '@hugeicons/core-free-icons'
+import { createContext, useContext, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { Add01Icon, AlertCircleIcon, RefreshIcon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { PairedDevice } from '@shared/remote/device'
 import type { RemoteStatus } from '@shared/remote/status'
@@ -43,7 +38,7 @@ import { DeviceIcon, DeviceTile } from './remote-parts'
 import { RelaySignIn, RetryRelay } from './remote-relay'
 import { useRelayLine } from './relay-text'
 import { daysToRemoval, daysUnseen, focusDirectPort, kindLabel, lastSeen } from './remote-text'
-import { GroupNote, ItemLine, ItemRow } from './rows'
+import { EmptyRow, GroupNote, ItemLine, ItemRow } from './rows'
 import { useApply } from './use-apply'
 
 /** Remote access's switch, the first row: whether it runs and the devices online under it. */
@@ -54,6 +49,7 @@ export function RemoteSwitchRow() {
   const enabled = useSettingsStore((s) => s.settings.remote.enabled)
   const [apply, error] = useApply()
   const [asking, setAsking] = useState(false)
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null)
   // A daemon is reached only through remote access, so it has no switch to turn it off.
   const switchable = useHostHas('remoteSwitch')
   // From a browser or another computer, turning it off ends this device's own connection, so it
@@ -65,11 +61,14 @@ export function RemoteSwitchRow() {
   return (
     <>
       <div className="ui-sg-row">
-        <span className="ui-sg-label">
-          <b>{t('remote.switch')}</b>
-          <RemoteStatusLine on={enabled} />
-        </span>
+        <StatusActionsSlot.Provider value={actionsSlot}>
+          <span className="ui-sg-label">
+            <b>{t('remote.switch')}</b>
+            <RemoteStatusLine on={enabled} />
+          </span>
+        </StatusActionsSlot.Provider>
         <span className="ui-sg-control">
+          <span ref={setActionsSlot} className="k-status__actions" />
           <ControlError error={error} />
           {switchable !== false && (
             <SettingSwitch label={t('remote.switch')} checked={enabled} onChange={change} />
@@ -226,6 +225,9 @@ function RetryDirect() {
   )
 }
 
+/** Where the status line's actions go: the row's right, beside its switch. */
+const StatusActionsSlot = createContext<HTMLElement | null>(null)
+
 function StatusLine({
   hint,
   actions,
@@ -237,13 +239,14 @@ function StatusLine({
   failed?: boolean
   children: ReactNode
 }) {
+  const slot = useContext(StatusActionsSlot)
   return (
     <>
       <small className="k-status" data-failed={failed || undefined}>
         {children}
       </small>
       {hint && <small>{hint}</small>}
-      {actions && <span className="k-status__actions">{actions}</span>}
+      {actions && slot && createPortal(actions, slot)}
     </>
   )
 }
@@ -350,13 +353,10 @@ export function NoDevices() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <div className="ui-as-empty" data-bare="">
-        <span className="ui-as-empty__icon">
-          <Icon icon={SmartPhone01Icon} size={18} />
-        </span>
-        <b className="ui-as-empty__title">{t('remote.devices.emptyTitle')}</b>
-        <p className="ui-as-empty__text">{t('remote.devices.emptyHint')}</p>
-        <span className="k-empty-actions">
+      <EmptyRow
+        title={t('remote.devices.emptyTitle')}
+        hint={t('remote.devices.emptyHint')}
+        action={
           <SetButton
             variant="primary"
             icon={<Icon icon={Add01Icon} size={14} />}
@@ -364,8 +364,8 @@ export function NoDevices() {
           >
             {t('remote.devices.add')}
           </SetButton>
-        </span>
-      </div>
+        }
+      />
       <PairDialog open={open} onOpenChange={setOpen} />
     </>
   )

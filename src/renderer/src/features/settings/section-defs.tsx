@@ -24,7 +24,6 @@ import type { AgentStatus, SessionSummary } from '@shared/agent-host'
 import type { ArtifactConsentRow } from '@shared/artifact-capabilities'
 import { originLabel } from '@shared/browser'
 import type { AgentId, HarnessId } from '@shared/thread'
-import { Icon } from '@renderer/components/affect/app-shell'
 import { useCloudOff } from '@renderer/lib/cloud'
 import { basename, mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
@@ -52,7 +51,6 @@ import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, NoUpdates, UpdateRow } from './about-section'
 import {
-  AddAgentRow,
   AgentListItem,
   AgentPage,
   AgentsFooter,
@@ -70,7 +68,7 @@ import { CloudSwitchRow, OtherConnections } from './cloud-section'
 import { useCloudOffHere } from './use-cloud-off-here'
 import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
-import { GroupNote } from './rows'
+import { EmptyCard, GroupNote } from './rows'
 import { BROUGHT_SHOWN, useBroughtSites } from './brought-sites'
 import { BringSignInsRow, BroughtMoreRow, BroughtSiteRow } from './sign-ins-rows'
 import { HostPage } from './host-page'
@@ -673,13 +671,15 @@ export function useAgentsSection(): SectionDef {
         : [
             ...agents.map(row),
             {
+              // Search still finds it; the list's head carries the one Add agent.
               id: 'add-agent',
               name: t('agents.add.button'),
               english: en('agents.add.button'),
               keywords: t('agents.add.keywords'),
               group: list,
+              searchOnly: true,
               layout: 'custom',
-              render: () => <AddAgentRow />,
+              render: () => null,
             },
           ],
     footer: <AgentsFooter />,
@@ -1142,13 +1142,7 @@ export function useArchivedSection(): SectionDef {
       ),
     })),
     footer: archived.length === 0 && (
-      <div className="ui-as-empty">
-        <span className="ui-as-empty__icon">
-          <Icon icon={Archive01Icon} size={18} />
-        </span>
-        <b className="ui-as-empty__title">{t('archived.emptyTitle')}</b>
-        <p className="ui-as-empty__text">{t('archived.emptyHint')}</p>
-      </div>
+      <EmptyCard title={t('archived.emptyTitle')} hint={t('archived.emptyHint')} />
     ),
   }
 }
@@ -1651,7 +1645,7 @@ export function useSharingSection(): SectionDef {
       id: 'published-empty',
       name: t('sharing.groups.published'),
       keywords: t('sharing.published.keywords'),
-      group: group('published', t('sharing.groups.published'), { plain: true }),
+      group: group('published', t('sharing.groups.published')),
       layout: 'custom',
       render: () => <p className="ui-ss-empty">{t('sharing.published.empty')}</p>,
     })

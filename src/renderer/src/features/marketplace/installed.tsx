@@ -35,7 +35,6 @@ import { useAgentName, useBusy, useConnection, useConnectionText } from './hooks
 import {
   catalogEntry,
   catalogPlugin,
-  catalogSkill,
   fromCatalog,
   fromKept,
   homeShort,
@@ -221,7 +220,7 @@ function RetryButton() {
   const [busy, setBusy] = useState(false)
   return (
     <Button
-      size="sm"
+      size="md"
       variant="secondary"
       loading={busy}
       icon={<Icon icon={RefreshIcon} size={14} />}
@@ -255,7 +254,7 @@ function AgentsButton() {
   return (
     <span className="ui-as-anchor">
       <Button
-        size="sm"
+        size="md"
         variant="secondary"
         aria-expanded={open}
         aria-label={t('kettu.agentsLabel')}
@@ -371,7 +370,6 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
     <ItemRow
       title={listing.title}
       subject={serverSubject(listing)}
-      official={listing.official}
       line={line}
       onOpen={() =>
         openMarketplace({ item: itemKey({ kind: 'mcp', id: server.id }), tab: 'installed' })
@@ -401,9 +399,6 @@ function useKeptSkills(query: string): MarketSkill[] {
 function KeptSkillRow({ skill }: { skill: MarketSkill }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
-  // The catalog gives a kept skill its badge once it has answered.
-  scope.useMarketplaceStore((s) => s.skills)
-  const entry = catalogSkill(scope, skill.id)
   const line = [
     skill.on ? null : t('installed.off'),
     skill.agents === 'all' ? null : t('installed.forAgents', { count: skill.agents.length }),
@@ -415,7 +410,6 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
     <ItemRow
       title={displayTitle(skill.name)}
       subject={skillSubject(skill.name)}
-      official={entry?.official ?? false}
       line={line}
       onOpen={() =>
         openMarketplace({ item: itemKey({ kind: 'skill', id: skill.id }), tab: 'installed' })
@@ -481,7 +475,7 @@ function PluginsSection({
         <QuietNote
           action={
             <Button
-              size="sm"
+              size="md"
               variant="ghost"
               icon={<Icon icon={RefreshIcon} size={14} />}
               onClick={() => void useMarketplaceStore.getState().loadPlugins(true)}
@@ -535,7 +529,6 @@ function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
     <ItemRow
       title={title}
       subject={pluginSubject({ ...plugin, category: entry?.category })}
-      official={entry?.official ?? false}
       line={line}
       onOpen={() =>
         openMarketplace({
@@ -642,7 +635,7 @@ function OwnSection({ own, searching }: { own: Own; searching: boolean }) {
         <QuietNote
           action={
             <Button
-              size="sm"
+              size="md"
               variant="ghost"
               icon={<Icon icon={RefreshIcon} size={14} />}
               onClick={() => void useMarketplaceStore.getState().loadSkills(true)}
@@ -811,7 +804,6 @@ function MarketplaceRow({ market }: { market: PluginMarketplace }) {
             <Icon icon={Store01Icon} />
           </PlainTile>
         }
-        official={market.official}
         line={[agentName(market.agentId), homeShort(market.source)].join(' · ')}
         lineTitle={market.source}
         end={

@@ -438,7 +438,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
               ]}
               trigger={({ open, toggle }) => (
                 <Button
-                  size="sm"
+                  size="md"
                   icon={<Icon icon={Add01Icon} size={15} />}
                   aria-expanded={open}
                   aria-haspopup="menu"
@@ -566,7 +566,6 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
     <ItemRow
       title={server.title}
       subject={serverSubject(server)}
-      official={server.official}
       tag={showKind ? <KindTag kind="mcp" /> : undefined}
       line={server.description || null}
       fresh={fresh}
@@ -659,7 +658,7 @@ function Retry({ onRetry }: { onRetry: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   return (
     <Button
-      size="sm"
+      size="md"
       variant="ghost"
       loading={busy}
       icon={<Icon icon={RefreshIcon} size={14} />}

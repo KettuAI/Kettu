@@ -185,7 +185,6 @@ function RelatedRow({ server, tab }: { server: CatalogServer; tab: MarketplaceTa
     <ItemRow
       title={server.title}
       subject={serverSubject(server)}
-      official={server.official}
       line={server.description || null}
       onOpen={open}
       end={<AddButton server={server} onOpen={open} />}

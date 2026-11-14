@@ -180,16 +180,18 @@
   /* The top edge of a raised surface catching the light; only the primary button has one. */
   --highlight: 0 0 #0000;
 
-  /* The primary button: its fill as gradient stops, a ring a shade darker, a highlight along its
-     top edge and its label, which a theme may set; the built-in one is solid ink. */
-  --primary-from: #323137;
-  --primary-to: #201e25;
-  --primary-hover-from: #47464d;
-  --primary-hover-to: #34323a;
-  /* The built-in primary button draws no edge; a theme may give it one. */
-  --primary-ring: #0d0d0d;
-  --primary-highlight: rgb(255 255 255 / 16%);
-  --primary-foreground: #ffffff;
+  /* The primary button: its fill as gradient stops, a ring, a highlight along its top edge and its
+     label, which a theme may set. The built-in one is a flat tint of the control blue with darker
+     blue text, without an edge or a highlight. */
+  --primary-from: rgb(0 96 226 / 9%);
+  --primary-to: rgb(0 96 226 / 9%);
+  --primary-hover-from: rgb(0 96 226 / 14%);
+  --primary-hover-to: rgb(0 96 226 / 14%);
+  --primary-ring: transparent;
+  --primary-highlight: transparent;
+  --primary-foreground: #0a59cc;
+  /* White on the red of a filled destructive button. */
+  --destructive-foreground: #ffffff;
 
   /* On, checked and chosen controls in affectUI's blue: a switch, a check box, a radio, an option
      tile. Each reaches 3:1 on the page; the tint, which follows it, fills a chosen tile. */
@@ -479,7 +481,8 @@
   --shell-on-ink: #ffffff;
   --shell-ink-hover: #3a3a3a;
   --shell-select: rgb(0 0 0 / 5.5%);
-  --shell-toggle-off: #e2e2e2;
+  /* Dark enough to read on a white card. */
+  --shell-toggle-off: #c8c8cc;
   --shell-switch-on: rgb(0 96 226 / 76.5%);
   --shell-logo-bg: #ffffff;
   --shell-scrim: rgb(0 0 0 / 12%);
@@ -744,14 +747,16 @@
     --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
     --highlight: 0 0 #0000;
 
-    /* Inverted: a near-white button with dark text. */
-    --primary-from: #f4f4f5;
-    --primary-to: #e4e4e7;
-    --primary-hover-from: #e6e6e9;
-    --primary-hover-to: #d4d4d8;
-    --primary-ring: rgb(0 0 0 / 60%);
-    --primary-highlight: rgb(255 255 255 / 90%);
-    --primary-foreground: #121213;
+    /* The control blue's tint, a step stronger, with light blue text. */
+    --primary-from: rgb(91 154 255 / 16%);
+    --primary-to: rgb(91 154 255 / 16%);
+    --primary-hover-from: rgb(91 154 255 / 23%);
+    --primary-hover-to: rgb(91 154 255 / 23%);
+    --primary-ring: transparent;
+    --primary-highlight: transparent;
+    --primary-foreground: #a3c6ff;
+    /* On the dark page's lighter red the ink reads, where white falls to 2.4:1. */
+    --destructive-foreground: #121213;
 
     --control-on: #5b9aff;
     --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
@@ -1128,14 +1133,16 @@
   --elevation-media-control: 0 4px 14px rgb(0 0 0 / 25%);
   --highlight: 0 0 #0000;
 
-  /* Inverted: a near-white button with dark text. */
-  --primary-from: #f4f4f5;
-  --primary-to: #e4e4e7;
-  --primary-hover-from: #e6e6e9;
-  --primary-hover-to: #d4d4d8;
-  --primary-ring: rgb(0 0 0 / 60%);
-  --primary-highlight: rgb(255 255 255 / 90%);
-  --primary-foreground: #121213;
+  /* The control blue's tint, a step stronger, with light blue text. */
+  --primary-from: rgb(91 154 255 / 16%);
+  --primary-to: rgb(91 154 255 / 16%);
+  --primary-hover-from: rgb(91 154 255 / 23%);
+  --primary-hover-to: rgb(91 154 255 / 23%);
+  --primary-ring: transparent;
+  --primary-highlight: transparent;
+  --primary-foreground: #a3c6ff;
+  /* On the dark page's lighter red the ink reads, where white falls to 2.4:1. */
+  --destructive-foreground: #121213;
 
   --control-on: #5b9aff;
   --control-on-tint: color-mix(in srgb, var(--control-on) 11%, transparent);
@@ -1580,9 +1587,6 @@
   --attention-foreground: var(--bg-surface);
   --destructive-tint: var(--danger-tint);
   --destructive-tint-hover: color-mix(in srgb, var(--danger) 13%, transparent);
-  /* White on the light page's red, as drawn; on the dark page's lighter red the ink reads, where
-     white falls to 2.4:1. */
-  --destructive-foreground: var(--primary-foreground);
   /* The line a reference points at, in the Files pane's editor. */
   --marked-line: color-mix(in srgb, var(--info) 7%, transparent);
   --sheen: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -1687,8 +1691,7 @@
   --field-shadow: var(--elevation-control), var(--highlight);
   --field-focus-shadow: var(--focus-halo);
   --primary-shadow:
-    inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 1px 0 var(--primary-highlight),
-    var(--elevation-primary);
+    inset 0 0 0 var(--hairline) var(--primary-ring), inset 0 1px 0 var(--primary-highlight);
   /* A filled destructive button is flat; a destructive one in a row has a thin red ring. */
   --destructive-shadow: var(--elevation-primary);
   --destructive-ring: inset 0 0 0 var(--hairline) var(--destructive-ring-color);

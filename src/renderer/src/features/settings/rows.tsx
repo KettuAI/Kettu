@@ -196,6 +196,30 @@ export function BlockLine({ text, children }: { text: ReactNode; children?: Reac
   )
 }
 
+/** A group with nothing in it yet: one row with a title and a line, and at most one action. */
+export function EmptyRow({
+  title,
+  hint,
+  action,
+}: {
+  title: ReactNode
+  hint?: ReactNode
+  action?: ReactNode
+}) {
+  return <RowLine text={<RowText name={title} description={hint} />}>{action}</RowLine>
+}
+
+/** An empty row on a card of its own, for a section with nothing to list. */
+export function EmptyCard(props: { title: ReactNode; hint?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="ui-sg-card k-empty-card">
+      <RowShell>
+        <EmptyRow {...props} />
+      </RowShell>
+    </div>
+  )
+}
+
 /** A row of its own outside the section data, such as a fact on an agent's page. */
 export function RowFrame({ text, children }: { text: ReactNode; children?: ReactNode }) {
   return (

@@ -152,7 +152,7 @@
   background: var(--control-on);
   font-size: calc(11px * var(--unscale));
   line-height: calc(18px * var(--unscale));
-  color: var(--primary-foreground);
+  color: var(--on-fill);
   white-space: nowrap;
   transform: translateX(-50%);
   font-variant-numeric: tabular-nums;
@@ -232,7 +232,7 @@
   height: 22px;
   border-radius: 50%;
   background: var(--success);
-  color: var(--primary-foreground);
+  color: var(--on-fill);
 }
 .k-ce-edit {
   position: absolute;
@@ -297,7 +297,7 @@
 }
 .k-ce-tool[aria-pressed='true'] {
   background: var(--control-on);
-  color: var(--primary-foreground);
+  color: var(--on-fill);
 }
 .k-ce-tool--toggle[aria-pressed='true'] {
   background: var(--hover);

@@ -2,6 +2,61 @@
    theme's tokens, so they follow the chosen theme and color mode. The doubled class outranks the
    component's own rules, which it injects after this sheet. */
 
+/* The button's primary is the theme's primary button, the same as the shadcn one's. */
+.ui-buttonc.ui-buttonc {
+  --ui-btnc-solid: var(--primary-from);
+  --ui-btnc-solid-hover: var(--primary-hover-from);
+  --ui-btnc-on-solid: var(--primary-foreground);
+}
+
+/* The cards' main answers are the same primary button, without the card's own shadow. */
+.ui-prc.ui-prc {
+  --ui-prc-primary: var(--primary-from);
+  --ui-prc-on-primary: var(--primary-foreground);
+}
+.ui-prc.ui-prc .ui-prc__btn--primary:hover {
+  background: var(--primary-hover-from);
+  opacity: 1;
+}
+.ui-prc.ui-prc .ui-prc__btn--primary .ui-prc__kbd {
+  background: color-mix(in srgb, var(--ui-prc-on-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--ui-prc-on-primary) 72%, transparent);
+}
+.ui-prc.ui-prc[data-risk='destructive'] .ui-prc__btn--primary {
+  background: var(--danger);
+  color: var(--destructive-foreground);
+}
+.ui-prc.ui-prc[data-risk='destructive'] .ui-prc__btn--primary .ui-prc__kbd {
+  background: color-mix(in srgb, var(--destructive-foreground) 18%, transparent);
+  color: color-mix(in srgb, var(--destructive-foreground) 75%, transparent);
+}
+.ui-apc.ui-apc {
+  --ui-apc-primary: var(--primary-from);
+  --ui-apc-primary-hover: var(--primary-hover-from);
+  --ui-apc-primary-ink: var(--primary-foreground);
+  --ui-apc-primary-kbd: color-mix(in srgb, var(--primary-foreground) 14%, transparent);
+  --ui-apc-primary-kbd-ink: color-mix(in srgb, var(--primary-foreground) 70%, transparent);
+}
+.ui-apc.ui-apc .ui-apc__btn--primary:not(:focus-visible) {
+  box-shadow: none;
+}
+.ui-xcc.ui-xcc {
+  --ui-xcc-primary: var(--primary-from);
+  --ui-xcc-on-primary: var(--primary-foreground);
+}
+.ui-xcc.ui-xcc .ui-xcc__action:hover {
+  background: var(--primary-hover-from);
+  opacity: 1;
+}
+
+/* Tabs: the gliding pill marks the current tab, so the tabs carry no ring of their own. */
+.ui-as .ui-as-tabs {
+  gap: 2px;
+}
+.ui-as .ui-as-tabs__tab {
+  box-shadow: none;
+}
+
 .ui-ts.ui-ts {
   --ui-ts-card: var(--bg-surface);
   --ui-ts-line: var(--border-subtle);
@@ -1045,13 +1100,12 @@ li[data-row-exit='dust'] > * {
   font-size: 12px;
 }
 .kp-btn--solid {
-  background: var(--text-primary);
+  background: var(--primary-from);
   box-shadow: none;
-  color: var(--bg-surface);
+  color: var(--primary-foreground);
 }
 .kp-btn--solid:hover {
-  background: var(--text-primary);
-  opacity: 0.88;
+  background: var(--primary-hover-from);
 }
 .kp-btn--danger {
   background: var(--danger);
@@ -2523,8 +2577,11 @@ li[data-row-exit='dust'] > * {
   }
 }
 
+/* Every page starts at the same left edge; the wider Harnesses page grows to the right only. */
 .kettu-settings .kettu-settings__body[data-section='harnesses'] {
   max-width: 800px;
+  margin-left: max(0px, calc((100% - 640px) / 2));
+  margin-right: 0;
 }
 .kettu-settings [data-section='harnesses'] .ui-sg-card {
   display: grid;
@@ -2789,6 +2846,28 @@ li[data-row-exit='dust'] > * {
 :is(.kettu-settings, .kettu-sd) .ui-ss-badge {
   white-space: nowrap;
 }
+/* A state that only says all is well: a green dot and its words, not a pill. */
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge[data-tone='ok'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: none;
+  font-weight: 400;
+  color: var(--text);
+}
+:is(.kettu-settings, .kettu-sd) .ui-ss-badge[data-tone='ok']::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+/* An empty section's one row, on its own card. */
+:is(.kettu-settings, .kettu-sd) .k-empty-card {
+  margin-top: 24px;
+}
 :is(.kettu-settings, .kettu-sd) .k-skel {
   display: block;
   height: 12px;
@@ -2882,10 +2961,15 @@ li[data-row-exit='dust'] > * {
   width: 260px;
 }
 :is(.kettu-settings, .kettu-sd) .ui-sg-danger {
-  height: 24px;
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 13px;
+}
+/* A delete on every row of a list: quiet until the pointer is on it. */
+:is(.kettu-settings, .kettu-sd) .k-danger-icon:hover:not(:disabled),
+:is(.kettu-settings, .kettu-sd) .k-danger-icon:hover:not(:disabled) .ui-buttonc__icon {
+  color: var(--danger);
 }
 :is(.kettu-settings, .kettu-sd) .ui-sg-danger[aria-busy='true'] {
   opacity: 0.6;
@@ -3513,7 +3597,7 @@ li[data-row-exit='dust'] > * {
 }
 :is(.kettu-settings, .kettu-sd) .k-theme[aria-pressed='true'] {
   box-shadow:
-    0 0 0 1.5px var(--ink),
+    0 0 0 2px var(--control-on),
     var(--card-shadow);
 }
 :is(.kettu-settings, .kettu-sd) .k-theme b {
@@ -4095,9 +4179,10 @@ li[data-row-exit='dust'] > * {
 }
 :is(.kettu-settings, .kettu-sd) .k-status__actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
-  margin-top: 8px;
+}
+:is(.kettu-settings, .kettu-sd) .k-status__actions:empty {
+  display: none;
 }
 :is(.kettu-settings, .kettu-sd) .ui-sg-card .ui-as-empty[data-bare] {
   margin: 0;
@@ -5374,13 +5459,8 @@ li[data-row-exit='dust'] > * {
   --ui-apc-soft: var(--shell-subtle);
   --ui-apc-tile: var(--bg-subtle);
   --ui-apc-hover: var(--bg-selected);
-  --ui-apc-primary: var(--primary-from);
   --ui-apc-check: var(--control-on);
   --ui-apc-check-ink: var(--on-fill);
-  --ui-apc-primary-hover: var(--primary-hover-from);
-  --ui-apc-primary-ink: var(--primary-foreground);
-  --ui-apc-primary-kbd: color-mix(in srgb, var(--primary-foreground) 14%, transparent);
-  --ui-apc-primary-kbd-ink: color-mix(in srgb, var(--primary-foreground) 70%, transparent);
   --ui-apc-kbd: var(--bg-hover);
   --ui-apc-box: var(--border-strong);
   --ui-apc-box-hover: var(--text-disabled);
@@ -5546,8 +5626,6 @@ li[data-row-exit='dust'] > * {
   --ui-xcc-pick: var(--control-on-tint);
   --ui-xcc-pick-line: color-mix(in srgb, var(--control-on) 40%, transparent);
   --ui-xcc-tile-line: var(--border-default);
-  --ui-xcc-primary: var(--primary-from);
-  --ui-xcc-on-primary: var(--primary-foreground);
   --ui-xcc-c0: var(--border-strong);
   --ui-xcc-c1: var(--context-1);
   --ui-xcc-c2: var(--context-2);
@@ -5676,8 +5754,6 @@ li[data-row-exit='dust'] > * {
   --ui-prc-warn-fg: var(--warning);
   --ui-prc-danger-bg: color-mix(in srgb, var(--danger) 8%, transparent);
   --ui-prc-danger-fg: var(--danger);
-  --ui-prc-primary: var(--primary-from);
-  --ui-prc-on-primary: var(--primary-foreground);
   --ui-prc-focus: var(--focus-ring-color);
   --ui-prc-shadow: 0 0 0 0.5px var(--border-subtle), var(--elevation-card);
 }
@@ -5792,10 +5868,6 @@ li[data-row-exit='dust'] > * {
 [data-installed-theme] .ui-sg-danger.ui-sg-danger--solid:not(:disabled):hover {
   background: var(--shell-danger-hover);
 }
-[data-installed-theme] .ui-ss-badge[data-tone='ok'] {
-  background: color-mix(in srgb, var(--success) 10%, transparent);
-  color: var(--success);
-}
 [data-installed-theme] .ui-segc__icon {
   color: var(--icon-default);
 }
@@ -5807,18 +5879,6 @@ li[data-row-exit='dust'] > * {
 }
 [data-installed-theme] .ui-prc__scope[aria-checked='false']:hover {
   background: var(--bg-selected);
-}
-[data-installed-theme] .ui-prc[data-risk='destructive'] .ui-prc__btn--primary {
-  background: var(--danger);
-  color: var(--destructive-foreground);
-}
-[data-installed-theme] .ui-prc__btn--primary .ui-prc__kbd {
-  background: color-mix(in srgb, var(--ui-prc-on-primary) 16%, transparent);
-  color: color-mix(in srgb, var(--ui-prc-on-primary) 72%, transparent);
-}
-[data-installed-theme] .ui-prc[data-risk='destructive'] .ui-prc__btn--primary .ui-prc__kbd {
-  background: color-mix(in srgb, var(--destructive-foreground) 18%, transparent);
-  color: color-mix(in srgb, var(--destructive-foreground) 75%, transparent);
 }
 [data-installed-theme] .ui-tcc__ok path {
   stroke: var(--ui-tcc-card);

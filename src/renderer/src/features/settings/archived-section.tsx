@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Delete02Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import { unarchiveSession } from '@renderer/app/actions'
@@ -11,7 +12,7 @@ import { mediumAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
 import { sessionTitle } from '@renderer/stores/sessions'
 import { ItemLine, Thing } from './rows'
-import { ControlError, DangerButton, SetButton } from './controls'
+import { ControlError, IconAction, SetButton } from './controls'
 
 /** Rows drawn in full per idle moment: about a frame's work. */
 const IDLE_BATCH = 30
@@ -120,7 +121,12 @@ function FullRow({ summary, where }: { summary: SessionSummary; where: string })
       <ControlError error={error} />
       <span className="ui-sg-control">
         <SetButton onClick={() => void restore()}>{t('archived.restore')}</SetButton>
-        <DangerButton onClick={() => setDeleting(true)}>{t('archived.delete')}</DangerButton>
+        <IconAction
+          label={t('archived.delete')}
+          icon={Delete02Icon}
+          danger
+          onClick={() => setDeleting(true)}
+        />
       </span>
       <DeleteSessionDialog
         sessionId={summary.id}

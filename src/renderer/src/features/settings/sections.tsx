@@ -441,7 +441,8 @@ export function FontSize({ label }: { label: ReactNode }) {
   const [apply, error] = useApply()
   return (
     <>
-      <BlockLine text={label}>
+      <div className="ui-sg-row">
+        {label}
         <ControlError error={error} />
         <Segmented
           label={t('terminal.fontSize.name')}
@@ -453,7 +454,7 @@ export function FontSize({ label }: { label: ReactNode }) {
           ]}
           onChange={(v) => apply({ terminal: { fontSize: v } })}
         />
-      </BlockLine>
+      </div>
       <div aria-hidden className="k-term" style={{ fontSize: value }}>
         <div>
           <span className="k-term__path">~/code/kettu</span>{' '}
