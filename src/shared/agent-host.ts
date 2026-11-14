@@ -32,6 +32,7 @@ import type {
   MarketSearch,
   MarketSkill,
   MarketSkills,
+  McpOAuth,
   PluginDetails,
   PluginLogo,
   PluginMarketplace,
@@ -615,6 +616,12 @@ export interface HostContract {
   // Signs in to a server Kettu keeps that uses OAuth; it must already be in the settings. The window
   // opens the browser page or shows the code; `market.connectionChanged` tells how it ended.
   'market.connect': { params: { serverId: string }; result: ConnectStart }
+  // How a URL the user is adding by hand signs in, asked with the headers they typed: an OAuth flow
+  // Kettu can do, or null when it needs none or offers none Kettu can do.
+  'market.detectSignIn': {
+    params: { url: string; headers: { name: string; value: string }[] }
+    result: { oauth: McpOAuth | null }
+  }
   'market.cancelConnect': { params: { loginId: string }; result: void }
   // Clears a server's tokens and keeps the server; every agent loses it at once.
   'market.disconnect': { params: { serverId: string }; result: void }
@@ -1224,6 +1231,7 @@ export const HOST_METHODS = [
   'market.search',
   'market.keys',
   'market.connect',
+  'market.detectSignIn',
   'market.cancelConnect',
   'market.disconnect',
   'market.connections',

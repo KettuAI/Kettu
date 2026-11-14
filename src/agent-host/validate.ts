@@ -840,6 +840,46 @@ function marketServerId(o: Fields): string {
   return id
 }
 
+// A token as RFC 9110 defines a field name.
+const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
+const PROBE_HEADERS = 64
+const HEADER_VALUE_CHARS = 4_096
+
+/** A URL being added by hand, as the settings would keep it. */
+function serverUrl(o: Fields): string {
+  const url = string(o, 'url', URL_CHARS)
+  const parsed = URL.parse(url)
+  if (
+    !parsed ||
+    (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+    !parsed.hostname ||
+    /\s/.test(url)
+  ) {
+    throw invalidParams('url must be an http or https URL')
+  }
+  return url
+}
+
+/** The headers typed for a server, each named once and on one line, as a request may send them. */
+function probeHeaders(raw: unknown): { name: string; value: string }[] {
+  if (!Array.isArray(raw) || raw.length > PROBE_HEADERS) {
+    throw invalidParams(`headers must list at most ${PROBE_HEADERS} headers`)
+  }
+  const seen = new Set<string>()
+  return raw.map((entry) => {
+    const o = fields(entry)
+    const name = string(o, 'name', 128)
+    if (!HEADER_NAME.test(name)) throw invalidParams('A header name is not a token')
+    if (seen.has(name.toLowerCase())) throw invalidParams(`The header ${name} is named twice`)
+    seen.add(name.toLowerCase())
+    const { value } = o
+    if (typeof value !== 'string' || value.length > HEADER_VALUE_CHARS || /[\0\r\n]/.test(value)) {
+      throw invalidParams(`The header ${name} must have a value of one line`)
+    }
+    return { name, value }
+  })
+}
+
 /** `<name>@<marketplace>`, as Claude Code and Codex name a plugin. */
 function pluginId(o: Fields): string {
   const id = string(o, 'pluginId', ID_CHARS)
@@ -1085,6 +1125,10 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.keys': none,
     'market.connect': (params) => ({ serverId: marketServerId(fields(params)) }),
+    'market.detectSignIn': (params) => {
+      const o = fields(params)
+      return { url: serverUrl(o), headers: probeHeaders(o.headers) }
+    },
     'market.cancelConnect': (params) => {
       const loginId = string(fields(params), 'loginId', ID_CHARS)
       if (!/^[0-9a-f-]{36}$/.test(loginId)) throw invalidParams('loginId is not a login of Connect')

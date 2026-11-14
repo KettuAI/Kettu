@@ -140,7 +140,37 @@ export async function installServer(
   }
 }
 
-/** Adds a server by hand, its secret values to the key store. True once it is kept. */
+/**
+ * The spec of a URL being added, with the OAuth flow it signs in with, if any, as the host finds
+ * by asking it with the headers typed. Only Streamable HTTP is asked, the one the proxy speaks.
+ * When it cannot be asked, the server is kept as typed and a toast says so.
+ */
+async function withSignIn(
+  scope: HostScope,
+  name: string,
+  spec: McpSpec,
+  secrets: Record<string, string>,
+): Promise<McpSpec> {
+  if (spec.type !== 'http' || spec.transport !== 'streamable-http') return spec
+  const headers = spec.headers.flatMap((header) => {
+    if (!('input' in header)) return [{ name: header.name, value: header.value }]
+    const value = secrets[header.name]
+    return value ? [{ name: header.name, value }] : []
+  })
+  try {
+    const { oauth } = await scope.request('market.detectSignIn', { url: spec.url, headers })
+    return oauth ? { ...spec, oauth } : spec
+  } catch (e) {
+    warn(t('toast.signInUnchecked', { name, error: errorMessage(e) }))
+    return spec
+  }
+}
+
+/**
+ * Adds a server by hand, its secret values to the key store. One that signs in with OAuth starts
+ * its Connect at once, and stays kept if that does not finish, since the user typed it in. True
+ * once it is kept.
+ */
 export async function addServer(
   scope: HostScope,
   name: string,
@@ -153,12 +183,14 @@ export async function addServer(
     title: name,
     source: 'manual',
     version: null,
-    spec,
+    spec: await withSignIn(scope, name, spec, secrets),
     agents: 'all',
     on: true,
   }
   await save(scope, [...keptServers(scope), entry])
-  if (await storeValues(scope, entry.id, name, secrets)) readyToast(scope, name, 'all')
+  const stored = await storeValues(scope, entry.id, name, secrets)
+  if (oauthFlow(entry.spec)) void connectServer(scope, entry, 'all')
+  else if (stored) readyToast(scope, name, 'all')
   return true
 }
 

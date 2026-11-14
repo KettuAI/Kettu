@@ -49,6 +49,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'market.search': AGENT_MS,
   'market.keys': HOST_MS,
   'market.connect': NONE,
+  'market.detectSignIn': AGENT_MS,
   'market.cancelConnect': HOST_MS,
   'market.disconnect': AGENT_MS,
   'market.connections': HOST_MS,

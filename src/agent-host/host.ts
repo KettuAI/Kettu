@@ -1911,6 +1911,12 @@ export class AgentHost {
       'market.search': ({ query }) => this.marketCatalog.search(query),
       'market.keys': () => keyState(this.settings.marketplace.mcp, this.marketKeys),
       'market.connect': ({ serverId }) => this.marketConnections.connect(serverId),
+      'market.detectSignIn': async ({ url, headers }) => ({
+        oauth: await this.marketConnections.detect(
+          url,
+          Object.fromEntries(headers.map((header) => [header.name, header.value])),
+        ),
+      }),
       'market.cancelConnect': ({ loginId }) => this.marketConnections.cancel(loginId),
       'market.disconnect': ({ serverId }) => this.marketConnections.disconnect(serverId),
       'market.connections': () => this.marketConnections.view(),

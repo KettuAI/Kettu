@@ -87,6 +87,7 @@
     "ready": "{{name}} 已可供所有 Agent 使用",
     "readyFor": "{{name}} 已可供 {{agents}} 使用",
     "keysNotSaved": "{{name}} 已安装，但它的密钥没有保存：{{error}}",
+    "signInUnchecked": "无法检查 {{name}} 是否需要登录：{{error}}。Agent 会按你填写的原样使用它。",
     "installFailed": "无法安装 {{name}}：{{error}}",
     "changeFailed": "无法修改 {{name}}：{{error}}",
     "uninstalled": "已卸载 {{name}}",
@@ -226,7 +227,7 @@
     },
     "add": {
       "title": "添加 MCP 服务器",
-      "description": "每个 Agent 在会话开始时都会用上它。标为保密的值保存在这台电脑上，之后不会再显示。",
+      "description": "每个 Agent 在会话开始时都会用上它。需要登录的服务器，添加后会在浏览器中打开登录。标为保密的值保存在这台电脑上，之后不会再显示。",
       "name": "名称",
       "namePlaceholder": "my-server",
       "nameHint": "Agent 用这个名字称呼它：小写字母、数字、- 和 _。",

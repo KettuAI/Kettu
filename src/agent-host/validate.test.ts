@@ -92,6 +92,33 @@ describe('createValidators', () => {
     rejects(() => posix['market.connections']({ serverId: 'x' }))
   })
 
+  it('checks a URL being added and the headers its sign-in is asked with', () => {
+    const detect = posix['market.detectSignIn']
+    const url = 'https://mcp.example.com/mcp'
+    const headers = [{ name: 'X-Team', value: 'a' }]
+    expect(detect({ url, headers })).toEqual({ url, headers })
+    expect(detect({ url: 'http://localhost:8788/mcp', headers: [] })).toEqual({
+      url: 'http://localhost:8788/mcp',
+      headers: [],
+    })
+    rejects(() => detect({ url: 'file:///etc/passwd', headers: [] }))
+    rejects(() => detect({ url: 'https://mcp.example.com/a b', headers: [] }))
+    rejects(() => detect({ url }))
+    rejects(() => detect({ url, headers: [{ name: 'X-Team', value: 'a\r\nHost: evil' }] }))
+    rejects(() => detect({ url, headers: [{ name: 'Bad Name', value: 'a' }] }))
+    rejects(() =>
+      detect({
+        url,
+        headers: [
+          { name: 'Authorization', value: 'a' },
+          { name: 'authorization', value: 'b' },
+        ],
+      }),
+    )
+    const many = Array.from({ length: 65 }, (_, i) => ({ name: `X-${i}`, value: '' }))
+    rejects(() => detect({ url, headers: many }))
+  })
+
   it("checks the Marketplace's catalog refresh and search query", () => {
     expect(posix['market.catalog'](undefined)).toEqual({})
     expect(posix['market.catalog']({})).toEqual({})
