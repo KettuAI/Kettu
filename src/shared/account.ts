@@ -71,8 +71,12 @@ export type AccountStatus =
       /** Null until read, or from a service that does not report them. */
       plan: AccountPlan | null
       usage: AccountUsage | null
+      /** The points the account has to spend; null until read or from a service without them. */
+      points: number | null
       /** The account page on the website, in the app's language. */
       manageUrl: string
+      /** The website's points page, in the app's language. */
+      pointsUrl: string
       /** The sign-in is kept without the system's encryption, as on Linux without a keyring. */
       plainText: boolean
     }

@@ -385,6 +385,13 @@
       "keywords": "存储 空间 容量 云端 artifact 发布",
       "used": "{{used}} / {{limit}}"
     },
+    "points": {
+      "name": "积分",
+      "description": "你提交的问题被确认后得到，能在官网兑换。",
+      "keywords": "积分 奖励 问题报告 兑换",
+      "balance_other": "{{count}} 分",
+      "redeem": "兑换积分"
+    },
     "subscription": {
       "name": "订阅",
       "description": "在官网管理。",

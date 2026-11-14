@@ -42,6 +42,7 @@
   "submitted": {
     "title": "报告已提交",
     "body": "把这个编号写进 issue，就能据此找到这份报告。",
+    "points": "确认是问题后，这个账号会得到积分。",
     "copy": "复制",
     "copied": "已复制",
     "openIssue": "在 GitHub 上提 issue"

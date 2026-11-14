@@ -108,6 +108,7 @@ import {
   AccountRow,
   DeviceUsage,
   PlanName,
+  PointsBalance,
   StorageUsage,
   SubscriptionState,
 } from './account-section'
@@ -530,6 +531,18 @@ export function useAccountSection(): SectionDef {
         render: () => <StorageUsage plan={plan} usage={usage} />,
       },
     )
+  }
+  const points = signedIn?.points
+  if (signedIn && points != null) {
+    rows.push({
+      id: 'points',
+      name: t('account.points.name'),
+      english: en('account.points.name'),
+      description: t('account.points.description'),
+      keywords: t('account.points.keywords'),
+      group: card,
+      render: () => <PointsBalance points={points} url={signedIn.pointsUrl} />,
+    })
   }
   if (signedIn && signedIn.subscription !== 'none') {
     rows.push({

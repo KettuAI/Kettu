@@ -41,6 +41,8 @@ interface Stored {
   subscription: string
   plan: AccountPlan | null
   usage: AccountUsage | null
+  /** Missing in a record kept before the service reported points. */
+  points?: number | null
 }
 
 /** A sign-in under way: what the callback checks and where the page goes after it. */
@@ -190,7 +192,9 @@ export class HostedAccount {
       subscription: stored.subscription,
       plan: stored.plan,
       usage: stored.usage,
+      points: stored.points ?? null,
       manageUrl: this.page('/account/'),
+      pointsUrl: this.page('/account/points/'),
       plainText: false,
     }
   }
@@ -336,6 +340,7 @@ export class HostedAccount {
       subscription: me.subscription,
       plan: me.plan,
       usage: me.usage,
+      points: me.points,
     }
     await this.env.record.put(next)
     this.stored = next
