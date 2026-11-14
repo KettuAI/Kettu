@@ -3,6 +3,14 @@
 
 import { isAgentId, type AgentId } from './agents'
 import type { BrowserOriginAnswer } from './browser'
+import {
+  isControlOutcome,
+  isControlStep,
+  isControlSurface,
+  type ControlOutcome,
+  type ControlStep,
+  type ControlSurface,
+} from './control'
 import type { DeviceAccessAnswer } from './device-agent'
 import type { ComputerAppAnswer, ComputerSetupOutcome, ComputerSetupStep } from './computer-use'
 import { isComputerSetupStep } from './computer-use'
@@ -259,6 +267,8 @@ export type ThreadEntry =
   | GitEntry // Kettu's own observation of the repository, see the git design
   | ArtifactEntry // Kettu's own record of a write to the artifacts service
   | BrowserOriginEntry // Kettu's own record of a new site's request and answer
+  | ControlAskEntry // Kettu's own record of a step an agent asked the user to do, and its end
+  | ControlNoteEntry // Kettu's own record of the user taking a surface over and handing it back
   | DeviceAccessEntry // Kettu's own record of an agent asking for a mobile device
   | ComputerAppEntry // Kettu's own record of a session's first use of an app, and the answer
   | ComputerSetupEntry // Kettu's own record of the setup a first call waited on, and its end
@@ -340,6 +350,38 @@ export interface BrowserOriginEntry {
   decision: BrowserOriginAnswer | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/**
+ * An agent asked the user to do a step on a surface it uses that only a person can do: sign in,
+ * enter a code, pass a check. `outcome` is null while it waits, then Done or Skip, or `ended` when
+ * the turn ended first.
+ */
+export interface ControlAskEntry {
+  kind: 'control_ask'
+  id: string
+  surface: ControlSurface
+  step: ControlStep
+  /** Where: the page's site, a device's name; null when the host did not know it. */
+  target: string | null
+  /** The agent's words for why. */
+  reason: string
+  outcome: ControlOutcome | 'ended' | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** The user took a surface over during the turn and handed it back after `durationMs`. */
+export interface ControlNoteEntry {
+  kind: 'control_note'
+  id: string
+  surface: ControlSurface
+  event: 'handed_back'
+  durationMs: number
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
 }
@@ -1121,6 +1163,22 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
           value.decision === 'project' ||
           value.decision === 'deny' ||
           value.decision === 'timeout') &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'control_ask':
+      return (
+        isControlSurface(value.surface) &&
+        isControlStep(value.step) &&
+        (value.target === null || typeof value.target === 'string') &&
+        typeof value.reason === 'string' &&
+        (value.outcome === null || value.outcome === 'ended' || isControlOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'control_note':
+      return (
+        isControlSurface(value.surface) &&
+        value.event === 'handed_back' &&
+        typeof value.durationMs === 'number' &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'device_access':

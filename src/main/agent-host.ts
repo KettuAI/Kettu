@@ -37,6 +37,7 @@ import type {
   MainToHost,
 } from '@shared/host-control'
 import { isComputerApp, type ComputerApp } from '@shared/computer-use'
+import { isControlOutcome, type ControlOutcome } from '@shared/control'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { PortDevice } from '@shared/remote/device'
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
@@ -97,6 +98,10 @@ export interface AgentHostDeps {
   device?: (call: DeviceCall) => Promise<DeviceCallAnswer>
   /** A window's or device's answer to the new origin a page of main's asked for. */
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
+  /** The last running turn that used a page of main's ended. */
+  onBrowserTurnEnded?(sessionId: string): void
+  /** Done or Skip on the card of a step the agent asked for on a page of main's. */
+  onBrowserAskAnswer?(sessionId: string, outcome: ControlOutcome): void
   /** A session's card allowed an app always, for the settings to keep. */
   onComputerAppAllowed?(app: ComputerApp): void
 }
@@ -538,6 +543,15 @@ export class AgentHost {
     this.host.post({ type: 'host:browser-waiting', callId, waiting })
   }
 
+  /** `host:browser-handed-back`: the user handed the page back; the thread says for how long. */
+  browserHandedBack(sessionId: string, durationMs: number): void {
+    this.host.post({
+      type: 'host:browser-handed-back',
+      sessionId,
+      durationMs: Math.max(0, Math.round(durationMs)),
+    })
+  }
+
   /** `host:browser-origin-ask`: the session's thread shows the page's new origin, waiting. */
   originAsked(request: { sessionId: string; id: number; origin: string }): void {
     this.host.post({
@@ -759,6 +773,14 @@ export class AgentHost {
         }
         break
       }
+      case 'host:browser-turn-ended':
+        if (typeof message.sessionId === 'string') this.deps.onBrowserTurnEnded?.(message.sessionId)
+        break
+      case 'host:browser-ask-answer':
+        if (typeof message.sessionId === 'string' && isControlOutcome(message.outcome)) {
+          this.deps.onBrowserAskAnswer?.(message.sessionId, message.outcome)
+        }
+        break
       case 'host:service-port': {
         const port = message.port
         this.deps.onServicePort?.(

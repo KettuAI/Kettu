@@ -112,6 +112,13 @@
     "deviceAccess": "Wants to use {{device}}",
     "computerApp": "Wants to use {{app}}",
     "computerSetup": "Wants to use your computer",
+    "controlAsk": {
+      "sign_in": "Needs you to sign in to {{target}}",
+      "code": "Needs you to enter the code for {{target}}",
+      "check": "Needs you to pass the check on {{target}}",
+      "other": "Needs you to do a step on {{target}}",
+      "nowhere": "Needs you to do a step in the browser"
+    },
     "permission": "Asks for permission",
     "turnEnd": {
       "end_turn": "Finished",

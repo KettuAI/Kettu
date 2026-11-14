@@ -24,6 +24,9 @@ import { isRelayHostId } from '@shared/remote/relay'
 import type { DirectAddress } from '@shared/remote/protocol'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { BrowserBounds, BrowserOriginDecision } from '@shared/browser'
+import { isAgentId } from '@shared/agents'
+import { isControlOutcome, type ControlAgent } from '@shared/control'
+import { isAgentColor } from '@shared/settings'
 import { isComputerPermissionKind } from '@shared/computer-use'
 import type {
   AppInfo,
@@ -77,7 +80,7 @@ import type { DeviceHost } from './device-host'
 import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
-import { isPanel } from './window'
+import { isOverlay, isPanel } from './window'
 
 const log = createLogger('ipc')
 const actionLog = createLogger('action')
@@ -124,6 +127,7 @@ export function isTrusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   return (
     frame !== null &&
     frame === event.sender.mainFrame &&
+    !isOverlay(event.sender) &&
     isRendererUrl(frame.url) &&
     !isRevoked(event.sender) &&
     BrowserWindow.fromWebContents(event.sender) !== null
@@ -215,6 +219,26 @@ function sessionId(value: unknown): string {
     throw new Error(`A session id must be a string of 1 to ${SESSION_ID_MAX_CHARS} characters`)
   }
   return value
+}
+
+const AGENT_NAME_MAX_CHARS = 200
+
+/** The agent a page's pill names: untrusted input from the renderer. */
+function controlAgent(value: unknown): ControlAgent | null {
+  if (value === null) return null
+  const { id, name, dot } = (value ?? {}) as Record<string, unknown>
+  if (
+    typeof id !== 'string' ||
+    id.length === 0 ||
+    id.length > SESSION_ID_MAX_CHARS ||
+    !isAgentId(id) ||
+    typeof name !== 'string' ||
+    name.length > AGENT_NAME_MAX_CHARS ||
+    (dot !== null && !isAgentColor(dot))
+  ) {
+    throw new Error('A page agent must name an agent')
+  }
+  return { id, name, dot }
 }
 
 /** An address the browser may open, and nothing else. */
@@ -821,36 +845,43 @@ export function registerIpcHandlers({
   )
   handle('hosts:retry', 0, () => remoteHost.resume())
 
-  handle('browser:show', 1, (_, id) => browserViews.show(sessionId(id)))
+  handle('browser:show', 2, (_, id, agent) => browserViews.show(sessionId(id), controlAgent(agent)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))
   handle('browser:close', 1, (_, id) => browserViews.close(sessionId(id)))
   handle('browser:bounds', 2, (_, id, bounds) =>
     browserViews.setBounds(sessionId(id), browserBounds(bounds)),
   )
-  // The pane's own controls act for the user: each first takes control from an agent driving.
+  // The pane's own controls act for the user, except while the agent has the page: they are held
+  // back as a click on it is, and only Take over takes it.
   handle('browser:navigate', 2, (_, id, url) => {
-    browserViews.userInput(sessionId(id))
-    browserViews.navigate(sessionId(id), browserUrl(url))
+    const page = sessionId(id)
+    const address = browserUrl(url)
+    if (browserViews.paneControl(page)) browserViews.navigate(page, address)
   })
   handle('browser:back', 1, (_, id) => {
-    browserViews.userInput(sessionId(id))
-    browserViews.back(sessionId(id))
+    if (browserViews.paneControl(sessionId(id))) browserViews.back(sessionId(id))
   })
   handle('browser:forward', 1, (_, id) => {
-    browserViews.userInput(sessionId(id))
-    browserViews.forward(sessionId(id))
+    if (browserViews.paneControl(sessionId(id))) browserViews.forward(sessionId(id))
   })
   handle('browser:reload', 1, (_, id) => {
-    browserViews.userInput(sessionId(id))
-    browserViews.reload(sessionId(id))
+    if (browserViews.paneControl(sessionId(id))) browserViews.reload(sessionId(id))
   })
   handle('browser:stop', 1, (_, id) => browserViews.stop(sessionId(id)))
   handle('browser:open-external', 1, (_, id) => browserViews.openExternal(sessionId(id)))
   handle('browser:freeze', 1, (_, id) => browserViews.freeze(sessionId(id)))
   handle('browser:thaw', 1, (_, id) => browserViews.thaw(sessionId(id)))
   handle('browser:capture', 1, (_, id) => browserViews.capture(sessionId(id)))
-  handle('browser:hand-back', 1, (_, id) => browserViews.handBack(sessionId(id)))
-  handle('browser:stop-driving', 1, (_, id) => browserViews.stopDriving(sessionId(id)))
+  handle('browser:take-over', 1, (_, id) =>
+    browserViews.controlRequest(sessionId(id), { type: 'take-over' }),
+  )
+  handle('browser:hand-back', 1, (_, id) =>
+    browserViews.controlRequest(sessionId(id), { type: 'hand-back' }),
+  )
+  handle('browser:answer-ask', 2, (_, id, outcome) => {
+    if (!isControlOutcome(outcome)) throw new Error('An answer to a step must be done or skipped')
+    browserViews.controlRequest(sessionId(id), { type: 'answer', outcome })
+  })
   // The pane's bar and the thread's card both answer through main, so the page and the thread agree.
   handle('browser:answer-origin', 3, (_, id, requestId, decision) => {
     browserViews.answerOrigin(sessionId(id), originRequestId(requestId), originDecision(decision))

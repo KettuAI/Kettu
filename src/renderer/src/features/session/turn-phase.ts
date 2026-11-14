@@ -1,3 +1,4 @@
+import type { ControlStep } from '@shared/control'
 import type { SessionView, ThreadState, ToolEntry, ToolKind } from '@shared/thread'
 
 /**
@@ -32,7 +33,16 @@ const TOOL_PHASES: Partial<Record<ToolKind, TurnPhase['phase']>> = {
 const WORKING: TurnPhase = { phase: 'working', count: 1 }
 
 // Entries that carry no output of their own, so the phase comes from what is before them.
-const QUIET = new Set(['plan', 'notice', 'git', 'artifact', 'subagent', 'memory'])
+const QUIET = new Set([
+  'plan',
+  'notice',
+  'git',
+  'artifact',
+  'subagent',
+  'memory',
+  'control_ask',
+  'control_note',
+])
 
 // The phase is read on every streamed chunk, so a long run of tool calls is read no further back.
 const LOOKBACK = 64
@@ -71,6 +81,18 @@ export function turnPhase(state: ThreadState | null | undefined): TurnPhase {
   const phase = running[0] && TOOL_PHASES[running[0].toolKind]
   if (!phase) return WORKING
   return { phase, count: running.filter((tool) => TOOL_PHASES[tool.toolKind] === phase).length }
+}
+
+/** The step the agent asked the user to do on a surface, while its card waits; else null. */
+export function askedStep(state: ThreadState | null | undefined): ControlStep | null {
+  if (!state) return null
+  const { order, byId } = state
+  for (let i = order.length - 1; i >= Math.max(0, order.length - LOOKBACK); i--) {
+    const entry = byId[order[i]!]
+    if (entry?.kind === 'control_ask') return entry.outcome === null ? entry.step : null
+    if (entry?.kind === 'user') return null
+  }
+  return null
 }
 
 /**

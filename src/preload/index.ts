@@ -290,7 +290,7 @@ const api: KettuApi = {
     appIcon: (path) => invoke('computer:app-icon', path),
   },
   browser: {
-    show: (id) => invoke('browser:show', id),
+    show: (id, agent) => invoke('browser:show', id, agent),
     hide: (id) => invoke('browser:hide', id),
     close: (id) => invoke('browser:close', id),
     setBounds: (id, bounds) => invoke('browser:bounds', id, bounds),
@@ -303,8 +303,9 @@ const api: KettuApi = {
     freeze: (id) => invoke('browser:freeze', id),
     thaw: (id) => invoke('browser:thaw', id),
     capture: (id) => invoke('browser:capture', id),
+    takeOver: (id) => invoke('browser:take-over', id),
     handBack: (id) => invoke('browser:hand-back', id),
-    stopDriving: (id) => invoke('browser:stop-driving', id),
+    answerAsk: (id, outcome) => invoke('browser:answer-ask', id, outcome),
     answerOrigin: (id, requestId, decision) =>
       invoke('browser:answer-origin', id, requestId, decision),
     allowedSites: () => invoke('browser:allowed-sites'),

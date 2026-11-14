@@ -1271,21 +1271,6 @@ li[data-row-exit='dust'] > * {
 .kp-addr-row--empty .kp-addr {
   margin: 0;
 }
-.kp-addr-row .kp-drive {
-  height: 30px;
-  margin-left: 6px;
-  box-shadow: 0 0 0 var(--hairline) var(--border-default);
-}
-/* At the pane's usual width the address keeps the room; the label stays for screen readers. */
-@container (inline-size < 560px) {
-  .kp-addr-row .kp-drive__label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-}
 .kp-load {
   position: absolute;
   right: 0;
@@ -1380,10 +1365,6 @@ li[data-row-exit='dust'] > * {
   border-radius: 10px;
   background: var(--bg-app);
   box-shadow: 0 0 0 var(--hairline) var(--border-default);
-  transition: box-shadow 260ms ease;
-}
-.kp-view[data-driver='agent'] {
-  box-shadow: var(--pane-drive-glow);
 }
 .kp-view__still {
   position: absolute;

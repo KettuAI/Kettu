@@ -202,6 +202,9 @@ export function settled(entry: ThreadEntry): ThreadEntry {
     case 'computer_setup':
       // A setup still waiting went unfinished: the call that asked ended with the session.
       return entry.outcome === null ? { ...entry, outcome: 'timeout' } : entry
+    case 'control_ask':
+      // A step still waiting ended with the turn that asked for it.
+      return entry.outcome === null ? { ...entry, outcome: 'ended' } : entry
     case 'tool': {
       const open = entry.status === 'pending' || entry.status === 'in_progress'
       if (!open && entry.permission === null) return entry

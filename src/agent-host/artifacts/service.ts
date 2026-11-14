@@ -130,8 +130,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   sessionOf(process: AgentProcess, id: string): string | null
   /** A call of the session's, or of a subagent of it, wrote to an artifact. */
   wrote?(sessionId: string, write: ArtifactWrite): void
-  /** Runs a browser tool call on main; without it every `browser_*` call fails. */
-  browserCall?(request: BrowserCallRequest): Promise<BrowserCallAnswer>
+  /** Runs a browser tool call of `caller`'s on main; without it every `browser_*` call fails. */
+  browserCall?(request: BrowserCallRequest, caller: string): Promise<BrowserCallAnswer>
   /** The session whose browser a call drives: a subagent's use the session it runs under. */
   browserSession?(sessionId: string): string | null
   /** The project whose always-allowed sites the page reads. */
@@ -266,9 +266,9 @@ export class ArtifactService {
       : SERVICE_INSTRUCTIONS
     const browserCall = deps.browserCall
     this.browserTools = new BrowserTools({
-      call: (request) =>
+      call: (request, caller) =>
         browserCall
-          ? browserCall(request)
+          ? browserCall(request, caller)
           : Promise.resolve({
               error: {
                 code: 'no_page',

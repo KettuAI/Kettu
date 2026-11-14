@@ -10,6 +10,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import type { BrowserNotice } from '@shared/browser'
 import { onAppEvent } from '@renderer/app/events'
+import { useControlAgent } from '@renderer/components/control/use-control-agent'
 import {
   PaneEmpty,
   PaneHead,
@@ -29,7 +30,6 @@ import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 import { panelSession, toggleSidePane } from '@renderer/stores/view'
 import { addressText } from './address'
 import { AddressField } from './address-field'
-import { DrivingPill } from './driving-bar'
 import { OriginBar } from './origin-bar'
 
 /** The side panel's Browser pane: one page per session, drawn by main over the pane's page area. */
@@ -43,6 +43,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   const hostId = useSessionsStore((s) =>
     sessionId ? hostOfPath(s.byId[sessionId]?.projectPath ?? '') : null,
   )
+  const agent = useControlAgent(agentId, hostId)
   const overlayOpen = useOverlayOpen()
   const zoom = useSettingsStore((s) => s.settings.appearance.zoom)
   // The frame the page fills.
@@ -80,14 +81,15 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
     if (sessionId) void window.kettu.browser.navigate(sessionId, url)
   }
 
-  // Main shows the session's page while the pane is open, and keeps it while the pane is hidden.
+  // Main shows the session's page while the pane is open, and keeps it while the pane is hidden;
+  // the pill on the page names the session's agent.
   useEffect(() => {
     if (!sessionId) return
-    void window.kettu.browser.show(sessionId)
+    void window.kettu.browser.show(sessionId, agent)
     return () => {
       void window.kettu.browser.hide(sessionId)
     }
-  }, [sessionId])
+  }, [sessionId, agent])
 
   // The page's frame, in the window's own pixels: the renderer's zoom scales CSS pixels. Main
   // rounds the page's corners as the frame's are, since nothing in the renderer can clip a view.
@@ -164,8 +166,6 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   }, [sessionId])
 
   const url = state?.url ?? null
-  const driving = state?.control.kind === 'agent'
-  const userControl = state?.control.kind === 'user'
 
   return (
     <PaneSheet pane="browser" maximized={maximized} data-browser-panel="">
@@ -234,16 +234,6 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                 </PanelButton>
               )}
               <AddressField ref={address} url={url} onNavigate={navigate} />
-              {/* Main draws the page over its frame, so the pill sits beside the address. */}
-              {(driving || userControl) && (
-                <DrivingPill
-                  agent={agentId}
-                  hostId={hostId}
-                  user={userControl}
-                  onTakeOver={() => sessionId && void window.kettu.browser.stopDriving(sessionId)}
-                  onHandBack={() => sessionId && void window.kettu.browser.handBack(sessionId)}
-                />
-              )}
               {state.loading && (
                 <span role="progressbar" aria-label={t('loading')} className="kp-load" />
               )}
@@ -264,7 +254,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
               />
             )}
             {state.notice && <Notice notice={state.notice} sessionId={sessionId} />}
-            <div ref={page} className="kp-view" data-driver={driving ? 'agent' : undefined}>
+            <div ref={page} className="kp-view">
               {still && <img src={still} alt="" aria-hidden className="kp-view__still" />}
             </div>
           </>

@@ -2,9 +2,10 @@ import { memo, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { duration, tokens } from '@renderer/lib/format'
+import { useBrowserStore } from '@renderer/stores/browser'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { TurnDots } from './turn-dots'
-import { turnPhase, turnTokens, writingId } from './turn-phase'
+import { askedStep, turnPhase, turnTokens, writingId } from './turn-phase'
 
 /** The time since `since` in whole seconds, ticking on its own so nothing around it re-renders. */
 function TurnClock({ since }: { since: number }) {
@@ -30,7 +31,8 @@ function TurnClock({ since }: { since: number }) {
 /**
  * The running turn's status, the thread's last line at the left, where the reply will start: how
  * long it has run, its tokens and its phase, with the attention dot in place of the running dots
- * while it waits for you. While the agent writes a message, that message's own label carries the
+ * while it waits for you: to answer, to do a step it asked for, or to hand back the page you took
+ * over. While the agent writes a message, that message's own label carries the
  * turn, so this line steps aside: two turn marks never show at once.
  */
 export const TurnStatus = memo(function TurnStatus({
@@ -40,7 +42,7 @@ export const TurnStatus = memo(function TurnStatus({
   sessionId: string
   afterSent: boolean
 }) {
-  const { t } = useTranslation('session')
+  const { t } = useTranslation(['session', 'control'])
   const startedAt = useThreadsStore(
     (s) => s.replicas[sessionId]?.state?.session.turnStartedAt ?? null,
   )
@@ -49,15 +51,26 @@ export const TurnStatus = memo(function TurnStatus({
     useShallow((s) => turnPhase(s.replicas[sessionId]?.state)),
   )
   const writing = useThreadsStore((s) => writingId(s.replicas[sessionId]?.state) !== null)
+  const asked = useThreadsStore((s) => askedStep(s.replicas[sessionId]?.state))
+  // The session's page on this computer: the user holds it, or a call of the agent's acts on it.
+  const page = useBrowserStore((s) => {
+    const control = s.bySession[sessionId]?.control
+    if (control?.kind === 'you') return 'you'
+    return control?.kind === 'agent' && control.acting ? 'using' : null
+  })
   if (writing) return null
   const separator = <i aria-hidden>·</i>
+  const waiting = phase === 'approval' || asked !== null || page === 'you'
+  const text = asked
+    ? t(`control:status.asks.${asked}`)
+    : page === 'you'
+      ? t('control:status.you.tab')
+      : page === 'using'
+        ? t('control:status.using.browser')
+        : t(`thread.phase.${phase}`, { count })
   return (
     <div role="status" className="ks-status" data-after-sent={afterSent ? '' : undefined}>
-      {phase === 'approval' ? (
-        <span aria-hidden className="ks-status__attn" />
-      ) : (
-        <TurnDots phase={phase} />
-      )}
+      {waiting ? <span aria-hidden className="ks-status__attn" /> : <TurnDots phase={phase} />}
       {/* Only the phase is announced; the clock and the count change too often to read out. */}
       {startedAt !== null && (
         <>
@@ -76,10 +89,10 @@ export const TurnStatus = memo(function TurnStatus({
         </>
       )}
       <span
-        key={phase}
+        key={asked ?? page ?? phase}
         className="min-w-0 animate-in truncate animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
       >
-        {t(`thread.phase.${phase}`, { count })}
+        {text}
       </span>
     </div>
   )

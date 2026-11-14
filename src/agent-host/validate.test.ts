@@ -701,6 +701,26 @@ describe('comment and direct edit requests', () => {
   })
 })
 
+describe('surface control requests', () => {
+  it('takes Done or Skip on a step card and the time a page was held', () => {
+    expect(posix['control.answerAsk']({ sessionId: 's', entryId: 'e:1', outcome: 'done' })).toEqual(
+      { sessionId: 's', entryId: 'e:1', outcome: 'done' },
+    )
+    expect(posix['browser.handedBack']({ sessionId: 's', durationMs: 72_000 })).toEqual({
+      sessionId: 's',
+      durationMs: 72_000,
+    })
+  })
+
+  it('refuses another outcome, a missing entry or a time that is not one', () => {
+    rejects(() => posix['control.answerAsk']({ sessionId: 's', entryId: 'e', outcome: 'ended' }))
+    rejects(() => posix['control.answerAsk']({ sessionId: 's', outcome: 'done' }))
+    rejects(() => posix['browser.handedBack']({ sessionId: 's', durationMs: -1 }))
+    rejects(() => posix['browser.handedBack']({ sessionId: 's', durationMs: 1.5 }))
+    rejects(() => posix['browser.handedBack']({ durationMs: 10 }))
+  })
+})
+
 describe('computer use requests', () => {
   it('takes an answer to an app card and Stop', () => {
     expect(

@@ -17,7 +17,13 @@ import type { RuntimeAnswer } from '@shared/artifact-capabilities'
 import { ARTIFACT_ENTRY, artifactFileType } from '@shared/artifact-files'
 import { type ArtifactImportResult, type ArtifactSummary, NO_SESSION } from '@shared/artifacts'
 import type { AttachmentGrant } from '@shared/attachments'
-import type { BrowserCallAnswer, BrowserCallRequest, BrowserOriginAnswer } from '@shared/browser'
+import {
+  siteOf,
+  type BrowserCallAnswer,
+  type BrowserCallRequest,
+  type BrowserOriginAnswer,
+} from '@shared/browser'
+import { isControlOutcome, isControlStep } from '@shared/control'
 import type {
   AgentProcess,
   AttentionFront,
@@ -75,7 +81,14 @@ import {
   type AgentTimings,
 } from './agents'
 import { buildCatalog, configFolders, type AgentDefinition } from './catalog'
-import { answerOf, BROWSER_GONE, browserTarget, DeviceBrowserCalls } from './device-browser'
+import {
+  answerOf,
+  BROWSER_GONE,
+  browserTarget,
+  DeviceBrowserCalls,
+  type BrowserTarget,
+} from './device-browser'
+import { BrowserTurns } from './browser-turns'
 import { Diagnostics } from './diagnostics'
 import { HostError, invalidParams } from './errors'
 import { setLocale, t } from './i18n'
@@ -347,6 +360,10 @@ export class AgentHost {
   private readonly deviceAccess: DeviceAccessStore
   /** Browser calls sent to the desktop apps that sent their turns. */
   private readonly deviceBrowser: DeviceBrowserCalls
+  /** The running turns that use each session's page, whose end ends the page's agent state. */
+  private readonly browserTurns = new BrowserTurns()
+  /** The site each session's page last showed, from its calls' answers, which an asked step names. */
+  private readonly browserSites = new Map<string, string>()
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
   private marketKeys: MarketKeys = new Map()
   /** The Marketplace's catalog of MCP servers, from the registry. */
@@ -551,7 +568,7 @@ export class AgentHost {
         agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
       },
       wrote: (sessionId, write) => this.sessions.artifactWritten(sessionId, write),
-      browserCall: (request) => this.browserCall(request),
+      browserCall: (request, caller) => this.browserCall(request, caller),
       browserSession: (sessionId) => this.sessions.browserSession(sessionId),
       devices: {
         call: (call) => this.deviceCall(call),
@@ -710,10 +727,12 @@ export class AgentHost {
           this.artifactService.revoke(sessionId)
           this.artifacts.stopUsing(sessionId)
           this.computer?.forget(sessionId)
+          this.browserSites.delete(sessionId)
         },
         turnEnded: (sessionId) => {
           this.artifacts.stopUsing(sessionId)
           this.computer?.turnEnded(sessionId)
+          this.browserTurnEnded(sessionId)
         },
       },
       skills: (agentId) => this.marketSkills.sessionOptions(agentId),
@@ -1020,6 +1039,7 @@ export class AgentHost {
     this.runtimeRequests.portClosed(portId)
     this.consents.portClosed(portId)
     this.deviceBrowser.portClosed(portId)
+    this.browserTurns.portClosed(portId)
     this.sessions.portClosed(portId)
     this.artifacts.portClosed(portId)
     for (const [key, retained] of this.gitRetains) {
@@ -1418,14 +1438,52 @@ export class AgentHost {
 
   /**
    * Sends a browser call to the desktop app that sent the session's turn, or to main, and settles
-   * with its answer, or a failure if the host stops.
+   * with its answer, or a failure if the host stops. The caller's turn uses the page from now until
+   * it ends; a step the agent asks the user for shows in the page's session's thread meanwhile.
    */
-  browserCall(request: BrowserCallRequest): Promise<BrowserCallAnswer> {
-    const target = browserTarget(this.sessions.browserSender(request.sessionId), this.hub)
+  async browserCall(
+    request: BrowserCallRequest,
+    caller = request.sessionId,
+  ): Promise<BrowserCallAnswer> {
+    const page = request.sessionId
+    const target = browserTarget(this.sessions.browserSender(page), this.hub)
     if (target.kind === 'gone') {
-      return Promise.resolve({ error: { code: 'unavailable', message: BROWSER_GONE } })
+      return { error: { code: 'unavailable', message: BROWSER_GONE } }
     }
-    if (target.kind === 'device') return this.deviceBrowser.call(target.portId, request)
+    const left = this.browserTurns.used(caller, page, target)
+    if (left) this.tellTurnEnded(page, left)
+    const asking = request.tool === 'browser_ask_user'
+    if (asking) {
+      const { step, reason } = request.args
+      this.sessions.controlAsked(page, {
+        surface: 'browser',
+        step: isControlStep(step) ? step : 'other',
+        target: this.browserSites.get(page) ?? null,
+        reason: typeof reason === 'string' ? reason : '',
+      })
+    }
+    const answer =
+      target.kind === 'device'
+        ? await this.deviceBrowser.call(target.portId, request)
+        : await this.mainBrowserCall(request)
+    if ('result' in answer) {
+      const site = siteOf(answer.result.value.url)
+      if (site) this.browserSites.set(page, site)
+    }
+    if (asking) {
+      if ('result' in answer) {
+        const outcome = answer.result.value.outcome
+        this.sessions.controlAskSettled(page, isControlOutcome(outcome) ? outcome : 'ended')
+      } else if (answer.error.code !== 'user_has_control') {
+        // Only a wait that goes on keeps the card; anything else ended the step.
+        this.sessions.controlAskSettled(page, 'ended')
+      }
+    }
+    return answer
+  }
+
+  /** Sends a browser call to main, which drives the page of the host's own windows. */
+  private mainBrowserCall(request: BrowserCallRequest): Promise<BrowserCallAnswer> {
     // The tools' id travels to main unchanged, so its report of a site wait names the same call.
     const callId = request.callId
     return new Promise<BrowserCallAnswer>((resolve) => {
@@ -1439,6 +1497,24 @@ export class AgentHost {
         projectPath: request.projectPath,
       })
     })
+  }
+
+  /** A session's turn ended: the pages no running turn uses now are nobody's. */
+  private browserTurnEnded(sessionId: string): void {
+    for (const { page, target } of this.browserTurns.turnEnded(sessionId)) {
+      this.tellTurnEnded(page, target)
+    }
+  }
+
+  private tellTurnEnded(page: string, target: Exclude<BrowserTarget, { kind: 'gone' }>): void {
+    if (target.kind === 'main')
+      this.options.send({ type: 'host:browser-turn-ended', sessionId: page })
+    else this.hub.send([target.portId], { type: 'browser.turnEnded', sessionId: page })
+  }
+
+  /** `host:browser-handed-back`: the user handed main's page back; the thread says for how long. */
+  browserHandedBack(sessionId: string, durationMs: number): void {
+    this.sessions.controlHandedBack(sessionId, 'browser', durationMs)
   }
 
   /**
@@ -2061,6 +2137,24 @@ export class AgentHost {
       'browser.originSettled': ({ requestId, decision }, ctx) => {
         browserApp(ctx)
         sessions.browserOriginSettled(requestId, decision, ctx.portId, fromDevice(ctx.device))
+      },
+      'browser.handedBack': ({ sessionId, durationMs }, ctx) => {
+        browserApp(ctx)
+        const target = this.browserTurns.targetOf(sessionId)
+        if (target?.kind !== 'device' || target.portId !== ctx.portId) {
+          throw new HostError('forbidden', 'This port does not drive the session’s browser')
+        }
+        sessions.controlHandedBack(sessionId, 'browser', durationMs)
+      },
+      // The first answer goes to the page, whose waiting call then settles the card.
+      'control.answerAsk': ({ sessionId, entryId, outcome }, { device }) => {
+        sessions.answerControlAsk(sessionId, entryId, outcome, fromDevice(device))
+        const target = this.browserTurns.targetOf(sessionId)
+        if (!target || target.kind === 'main') {
+          this.options.send({ type: 'host:browser-ask-answer', sessionId, outcome })
+        } else {
+          this.hub.send([target.portId], { type: 'browser.askAnswered', sessionId, outcome })
+        }
       },
       'computer.answerApp': ({ sessionId, entryId, decision }, { device }) => {
         const requestId = sessions.answerComputerApp(

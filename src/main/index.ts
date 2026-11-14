@@ -13,6 +13,7 @@ import {
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { ARTIFACT_ID, parseArtifactRef } from '@shared/artifacts'
 import { BROWSER_PARTITION } from '@shared/browser'
+import { IDLE_CONTROL } from '@shared/control'
 import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
@@ -228,6 +229,8 @@ async function start(): Promise<void> {
   )
   // Made once sharing and the updater are, before remote access starts and a device can ask.
   let hostAdmin: HostAdmin | null = null
+  // The page overlay follows the themes as the window does; the pages are made after them.
+  const browserViewsRef: { current: BrowserViews | null } = { current: null }
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
     dir: themesDir,
     sourcesFile: themeSourcesFile,
@@ -236,6 +239,7 @@ async function start(): Promise<void> {
     changed: (state, chosen) => {
       applyWindowTheme(chosen)
       broadcast('themes:changed', state)
+      browserViewsRef.current?.lookChanged()
       hostAdmin?.themesChanged(themes.hostThemes())
     },
   })
@@ -303,10 +307,16 @@ async function start(): Promise<void> {
     send: (state) => broadcast('browser:state', state),
     dialogOpened: (sessionId, type, accepted) =>
       browserTools?.dialogOpened(sessionId, type, accepted),
-    userInput: (sessionId) => browserTools?.userInput(sessionId),
-    handBack: (sessionId) => browserTools?.handBack(sessionId),
-    stopDriving: (sessionId) => browserTools?.stopDriving(sessionId),
-    control: (sessionId) => browserTools?.control.state(sessionId) ?? { kind: 'none' },
+    control: (sessionId) => browserTools?.control(sessionId) ?? IDLE_CONTROL,
+    isInjecting: (sessionId) => browserTools?.isInjecting(sessionId) ?? false,
+    overlayRequest: (sessionId, request) => {
+      if (request.type === 'take-over') browserTools?.takeOver(sessionId)
+      else if (request.type === 'hand-back') browserTools?.handBack(sessionId)
+      else if (request.type === 'answer') browserTools?.answerAsk(sessionId, request.outcome)
+    },
+    settings: () => settings.get(),
+    themes: () => themes.state(),
+    systemLocale,
     created: (sessionId, contents) => browserTools?.watch(sessionId, contents),
     closed: (sessionId) => browserTools?.forget(sessionId),
     failed: (sessionId, kind, message) => browserTools?.pageFailed(sessionId, kind, message),
@@ -323,9 +333,15 @@ async function start(): Promise<void> {
       else siteIcons.visited(pageUrl)
     },
   })
+  browserViewsRef.current = browserViews
   browserTools = new BrowserTools({
     views: browserViews,
     controlChanged: (sessionId) => browserViews.controlChanged(sessionId),
+    acted: (sessionId, at, click) => browserViews.acted(sessionId, at, click),
+    handedBack: (sessionId, ms) => {
+      if (!remoteBrowser.handedBack(sessionId, ms))
+        hostRef.current?.browserHandedBack(sessionId, ms)
+    },
     opened: (sessionId) => broadcast('browser:opened', { sessionId }),
     log: (level, message) => log[level](`browser: ${message}`),
     waiting: (callId, waiting) => hostRef.current?.browserWaiting(callId, waiting),
@@ -339,6 +355,8 @@ async function start(): Promise<void> {
     answerOrigin: (sessionId, requestId, decision) =>
       browserViews.answerOrigin(sessionId, requestId, decision),
     request: (hostId, method, params) => hostSessions.request(hostId, method, params),
+    turnEnded: (sessionId) => browserTools!.turnEnded(sessionId),
+    askAnswered: (sessionId, outcome) => browserTools!.answerAsk(sessionId, outcome),
     log: (level, message) => log[level](`browser: ${message}`),
   })
   const routinesAwake = new RoutinesAwake()
@@ -392,7 +410,19 @@ async function start(): Promise<void> {
       tray.setConnected(true)
       reconcileSharing?.()
     },
-    onDown: () => tray.setConnected(false),
+    onDown: () => {
+      tray.setConnected(false)
+      // No turn of this computer's host runs now; another host's turns go on with their pages.
+      browserTools?.endTurns(
+        browserTools.controls.keys().filter((sessionId) => !remoteBrowser.isRemote(sessionId)),
+      )
+    },
+    onBrowserTurnEnded: (sessionId) => {
+      if (!remoteBrowser.isRemote(sessionId)) browserTools?.turnEnded(sessionId)
+    },
+    onBrowserAskAnswer: (sessionId, outcome) => {
+      if (!remoteBrowser.isRemote(sessionId)) browserTools?.answerAsk(sessionId, outcome)
+    },
     onServicePort: (port) => browserViews.setServicePort(port),
     onOriginDecided: (sessionId, requestId, decision) =>
       browserViews.answerOrigin(sessionId, requestId, decision),
@@ -524,7 +554,10 @@ async function start(): Promise<void> {
   const hostSessions: HostSessions = new HostSessions({
     browserCall: (hostId, call) => void remoteBrowser.call(hostId, call),
     originDecided: (hostId, event) => remoteBrowser.originDecided(hostId, event),
+    browserEvent: (hostId, event) => remoteBrowser.browserEvent(hostId, event),
     ended: (hostId) => {
+      // The host's turns that used this computer's pages end with its session.
+      browserTools?.endTurns(remoteBrowser.sessionsOf(hostId))
       remoteBrowser.hostClosed(hostId)
       remoteArtifacts.ended(hostId)
     },
@@ -812,6 +845,7 @@ async function start(): Promise<void> {
   applyDiagnostics(settings.get().diagnostics.verboseUntil)
   settings.onChange((next, changed) => {
     broadcast('settings:changed', next)
+    if (changed.has('appearance') || changed.has('general')) browserViews.lookChanged()
     if (changed.has('diagnostics')) applyDiagnostics(next.diagnostics.verboseUntil)
     hostAdmin?.settingsChanged(next)
     const localeChanged = localeOf(next) !== currentLocale()

@@ -6,17 +6,26 @@ import type { Input, Rectangle, WebContents } from 'electron'
 import {
   BROWSER_PARTITION,
   type BrowserBounds,
-  type BrowserControlState,
   type BrowserNotice,
   type BrowserOriginAnswer,
   type BrowserOriginDecision,
   type BrowserState,
 } from '@shared/browser'
+import {
+  IDLE_CONTROL,
+  type ControlAgent,
+  type ControlOverlayRequest,
+  type ControlPoint,
+  type SurfaceControl,
+} from '@shared/control'
+import type { SettingsFile } from '@shared/settings'
+import type { ThemesState } from '@shared/themes'
 import { forwardedKey } from '../artifacts/guards'
 import { sendEvent } from '../events'
 import { createLogger } from '../log'
 import type { AllowedSites } from '@shared/ipc'
 import { originOf, BrowserOrigins, type BrowserOriginStore } from './origins'
+import { PageOverlay, type OverlayParent } from './overlay'
 import { BrowserPolicy, isAllowedNavigation, isHttp, navigateInPlace } from './policy'
 
 const log = createLogger('browser')
@@ -32,6 +41,12 @@ export const NAVIGATION_TIMEOUT_MS = 30_000
 
 /** How long a screenshot for a message may take before it gives up. */
 const CAPTURE_MS = 10_000
+
+/** How long the overlay stays after the turn ended, while its light and pill leave. */
+const OVERLAY_LEAVE_MS = 480
+
+/** How long the overlay's page is kept, off screen, after the last turn that used a page ended. */
+const OVERLAY_KEEP_MS = 60_000
 
 // On macOS a page draws in its window's own compositor, so a view around it clips it: a frame
 // rounds the page's corners as the pane's frame for it is rounded. Elsewhere a page is a native
@@ -63,11 +78,18 @@ interface Page {
   asking: boolean
   /** Restarts the pending navigation's time limit, which a site's wait extends. */
   restartWait: (() => void) | null
+  /** The session's agent, as the pane names it, for the overlay's pill. */
+  agent: ControlAgent | null
 }
 
-/** Whether a mouse event is the user using the page: a click, a wheel or a touch, not a hover. */
-export function isUserMouse(type: string): boolean {
-  return type !== 'mouseMove' && type !== 'mouseEnter' && type !== 'mouseLeave'
+/**
+ * Whether a mouse event on a page is held back while the agent has it: a press, a release or a
+ * click; a hover moves nothing and the wheel goes through.
+ */
+export function isHeldMouse(type: string): boolean {
+  return (
+    type !== 'mouseMove' && type !== 'mouseEnter' && type !== 'mouseLeave' && type !== 'mouseWheel'
+  )
 }
 
 /**
@@ -95,14 +117,16 @@ export interface BrowserViewsDeps {
   send(state: BrowserState): void
   /** A page opened a dialog, which was answered at once; the call in flight says so. */
   dialogOpened?(sessionId: string, type: string, accepted: boolean): void
-  /** The user typed or used the mouse in a page, or used the pane's controls. */
-  userInput?(sessionId: string): void
-  /** The pane's Hand back was pressed. */
-  handBack?(sessionId: string): void
-  /** The driving bar's Stop was pressed. */
-  stopDriving?(sessionId: string): void
-  /** The control state to draw with a page's state. */
-  control?(sessionId: string): BrowserControlState
+  /** Who uses a page, which the pane, the label and the overlay draw. */
+  control?(sessionId: string): SurfaceControl
+  /** Whether an input event a page reports right now is the agent's own. */
+  isInjecting?(sessionId: string): boolean
+  /** The overlay's Take over, Hand back, Done or Skip on a page. */
+  overlayRequest?(sessionId: string, request: ControlOverlayRequest): void
+  /** What the overlay's page reads to look as the window does. */
+  settings?(): SettingsFile
+  themes?(): ThemesState
+  systemLocale?: string
   /** A page's web contents is ready, before its first navigation starts. */
   created?(sessionId: string, contents: WebContents): void
   /** A page's web contents is gone: its next one starts afresh. */
@@ -156,6 +180,11 @@ export class BrowserViews {
     { callId: number; waiting: (on: boolean) => void }
   >()
   readonly origins: BrowserOrigins
+  private readonly overlay: PageOverlay
+  /** Takes the overlay off its page once its leaving has played. */
+  private overlayLeave: ReturnType<typeof setTimeout> | null = null
+  /** Lets the overlay's page go once no turn has used a page for a while. */
+  private overlayDrop: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly deps: BrowserViewsDeps) {
     this.policy = new BrowserPolicy(this.browserSession, {
@@ -170,6 +199,18 @@ export class BrowserViews {
         if (page) this.emit(page)
       },
       ...(deps.originWaitMs !== undefined ? { waitMs: deps.originWaitMs } : {}),
+    })
+    this.overlay = new PageOverlay({
+      window: () => deps.window(),
+      systemLocale: deps.systemLocale ?? 'en',
+      settings: () => deps.settings!(),
+      themes: () => deps.themes!(),
+      zoom: () => deps.settings?.().appearance.zoom ?? 1,
+      request: (sessionId, request) => {
+        if (request.type === 'wheel') this.wheel(sessionId, request)
+        else deps.overlayRequest?.(sessionId, request)
+      },
+      key: (sessionId, input) => this.appKey(sessionId, input),
     })
   }
 
@@ -215,8 +256,9 @@ export class BrowserViews {
     return this.origins.flush()
   }
 
-  show(sessionId: string): void {
+  show(sessionId: string, agent: ControlAgent | null = null): void {
     const page = this.page(sessionId)
+    page.agent = agent
     for (const other of this.pages.values()) {
       if (other !== page && other.shown) {
         other.shown = false
@@ -229,6 +271,7 @@ export class BrowserViews {
     this.place(page)
     this.setVisible(page, true)
     this.emit(page)
+    this.syncOverlay()
   }
 
   hide(sessionId: string): void {
@@ -237,6 +280,7 @@ export class BrowserViews {
     page.shown = false
     page.frozen = false
     this.setVisible(page, false)
+    this.syncOverlay()
   }
 
   /**
@@ -376,6 +420,7 @@ export class BrowserViews {
     if (image.isEmpty()) return null
     page.frozen = true
     this.setVisible(page, false)
+    this.syncOverlay()
     return image.toDataURL()
   }
 
@@ -411,6 +456,7 @@ export class BrowserViews {
     if (!page) return
     page.frozen = false
     if (page.shown) this.setVisible(page, true)
+    this.syncOverlay()
   }
 
   async clearData(): Promise<void> {
@@ -447,6 +493,7 @@ export class BrowserViews {
         pending: null,
         asking: false,
         restartWait: null,
+        agent: null,
       }
       this.pages.set(sessionId, page)
     }
@@ -621,7 +668,8 @@ export class BrowserViews {
     this.setVisible(page, page.shown)
     this.wire(page, view)
     this.deps.created?.(sessionId, view.webContents)
-    this.setDriving(sessionId, this.deps.control?.(sessionId)?.kind === 'agent')
+    this.syncOverlay()
+    this.setDriving(sessionId, (this.deps.control?.(sessionId) ?? IDLE_CONTROL).kind !== 'idle')
     return view
   }
 
@@ -639,6 +687,8 @@ export class BrowserViews {
       view.setBounds({ x, y, width, height })
       view.setBorderRadius(radius)
     }
+    const at = this.overlayParent(page)
+    if (at) this.overlay.move(at)
   }
 
   private setVisible(page: Page, visible: boolean): void {
@@ -668,6 +718,7 @@ export class BrowserViews {
   }
 
   private destroy(page: Page): void {
+    if (this.overlay.sessionId === page.sessionId) this.overlay.hide()
     const view = page.view
     const attached = page.frame ?? view
     page.view = null
@@ -778,25 +829,25 @@ export class BrowserViews {
       return { action: 'deny' }
     })
     contents.on('before-input-event', (event, input) => {
-      // The user typed in the page: they drive from here on, whatever the key was.
-      this.deps.userInput?.(page.sessionId)
-      if (this.shortcut(page, input)) {
+      // The overlay takes the keyboard while the agent has the page; a key that still reaches the
+      // page, before the overlay is up, is held back as well.
+      const held = this.holdsInput(page.sessionId)
+      if (!held && this.shortcut(page, input)) {
         event.preventDefault()
         return
       }
-      // The app's shortcuts still work while the page has focus, as in an artifact's frame.
-      const key = forwardedKey(input, process.platform)
-      if (!key) return
+      if (this.appKey(page.sessionId, input)) {
+        event.preventDefault()
+        return
+      }
+      if (!held) return
       event.preventDefault()
-      const window = this.deps.window()
-      if (!window || window.isDestroyed()) return
-      // Mod+L goes to the pane's address field, which needs the keyboard back from the page.
-      if (key.key.toLowerCase() === 'l' && !key.shiftKey && !key.altKey) window.webContents.focus()
-      sendEvent(window.webContents, 'app:shortcut', { ...key, browserSession: page.sessionId })
+      if (input.type === 'keyDown' && !input.isAutoRepeat) this.held(page.sessionId, null)
     })
-    contents.on('before-mouse-event', (_event, mouse) => {
-      if (!isUserMouse(mouse.type)) return
-      this.deps.userInput?.(page.sessionId)
+    contents.on('before-mouse-event', (event, mouse) => {
+      if (!isHeldMouse(mouse.type) || !this.holdsInput(page.sessionId)) return
+      event.preventDefault()
+      if (mouse.type === 'mouseDown') this.held(page.sessionId, this.toOverlay(page, mouse))
     })
     this.silenceDialogs(contents)
     contents.once('destroyed', () => {
@@ -853,19 +904,173 @@ export class BrowserViews {
     void debuggerSession.sendCommand('Page.enable').catch(() => {})
   }
 
-  /** Typing in the address field or using the pane's own controls takes control, as a click does. */
-  userInput(sessionId: string): void {
-    this.deps.userInput?.(sessionId)
+  /**
+   * The pane's address field, back, forward or reload, which act only while the agent does not
+   * have the page; then they nudge its pill instead. True when they may act.
+   */
+  paneControl(sessionId: string): boolean {
+    if (!this.holdsInput(sessionId)) return true
+    this.held(sessionId, null)
+    return false
   }
 
-  /** The pane's Hand back: the agent may drive the page again. */
-  handBack(sessionId: string): void {
-    this.deps.handBack?.(sessionId)
+  /** Take over, Hand back, Done or Skip from the pane, the label or the thread. */
+  controlRequest(
+    sessionId: string,
+    request: Extract<ControlOverlayRequest, { type: 'take-over' | 'hand-back' | 'answer' }>,
+  ): void {
+    this.deps.overlayRequest?.(sessionId, request)
   }
 
-  /** The driving bar's Stop: the user takes control, and the running call fails. */
-  stopDriving(sessionId: string): void {
-    this.deps.stopDriving?.(sessionId)
+  /** The agent acted on a page, at a point in its CSS pixels or on it as a whole. */
+  acted(sessionId: string, at: ControlPoint | null, click: boolean): void {
+    const page = this.pages.get(sessionId)
+    if (!page || this.overlay.sessionId !== sessionId) return
+    this.overlay.send({ type: 'act', at: at && this.toOverlay(page, at), click })
+  }
+
+  /** The app's settings or themes changed: the overlay's page follows. */
+  lookChanged(): void {
+    this.overlay.lookChanged()
+  }
+
+  /** Whether the user's clicks and keys on a page are held back now. */
+  private holdsInput(sessionId: string): boolean {
+    if (this.deps.isInjecting?.(sessionId)) return false
+    return this.deps.control?.(sessionId).kind === 'agent'
+  }
+
+  /** A click or key of the user's was held back on the page itself: the overlay shows it. */
+  private held(sessionId: string, at: ControlPoint | null): void {
+    if (this.overlay.sessionId === sessionId) this.overlay.send({ type: 'held', at })
+  }
+
+  /** An app shortcut typed in the page or its overlay goes to the window; true when it was one. */
+  private appKey(sessionId: string, input: Input): boolean {
+    // The app's shortcuts still work while the page has focus, as in an artifact's frame.
+    const key = forwardedKey(input, process.platform)
+    if (!key) return false
+    const window = this.deps.window()
+    if (!window || window.isDestroyed()) return true
+    // Mod+L goes to the pane's address field, which needs the keyboard back from the page.
+    if (key.key.toLowerCase() === 'l' && !key.shiftKey && !key.altKey) window.webContents.focus()
+    sendEvent(window.webContents, 'app:shortcut', { ...key, browserSession: sessionId })
+    return true
+  }
+
+  /** A point in a page's CSS pixels, in its overlay's. */
+  private toOverlay(page: Page, at: ControlPoint): ControlPoint {
+    const scale = this.zoomOf(page) / this.overlayZoom()
+    return { x: at.x * scale, y: at.y * scale }
+  }
+
+  private zoomOf(page: Page): number {
+    const contents = page.view?.webContents
+    return contents && !contents.isDestroyed() ? contents.getZoomFactor() || 1 : 1
+  }
+
+  private overlayZoom(): number {
+    return this.deps.settings?.().appearance.zoom ?? 1
+  }
+
+  /** A wheel over the overlay goes through to the page under it, where it would have gone. */
+  private wheel(sessionId: string, wheel: Extract<ControlOverlayRequest, { type: 'wheel' }>): void {
+    const page = this.pages.get(sessionId)
+    const contents = page?.view?.webContents
+    if (!page || !contents || contents.isDestroyed() || !contents.debugger.isAttached()) return
+    const scale = this.overlayZoom() / this.zoomOf(page)
+    void contents.debugger
+      .sendCommand('Input.dispatchMouseEvent', {
+        type: 'mouseWheel',
+        x: wheel.x * scale,
+        y: wheel.y * scale,
+        deltaX: wheel.deltaX * scale,
+        deltaY: wheel.deltaY * scale,
+      })
+      .catch(() => {})
+  }
+
+  /** Where the overlay goes for a page: the page's frame on macOS, beside the page elsewhere. */
+  private overlayParent(page: Page): OverlayParent | null {
+    const window = this.deps.window()
+    const contents = page.view?.webContents
+    if (!page.view || !contents || contents.isDestroyed() || !window || window.isDestroyed()) {
+      return null
+    }
+    const { x, y, width, height, radius } = page.bounds
+    const zoom = this.overlayZoom()
+    if (page.frame) {
+      return {
+        sessionId: page.sessionId,
+        contents,
+        parent: page.frame,
+        bounds: { x: 0, y: 0, width, height },
+        framed: true,
+        radius: radius / zoom,
+      }
+    }
+    return {
+      sessionId: page.sessionId,
+      contents,
+      parent: window.contentView,
+      bounds: { x, y, width, height },
+      framed: false,
+      radius: radius / zoom,
+    }
+  }
+
+  /**
+   * Puts the overlay over the shown page while a turn uses it, in the layout its state needs, and
+   * takes it off once the turn ended and its leaving played.
+   */
+  private syncOverlay(): void {
+    const shown = [...this.pages.values()].find(
+      (page) => page.shown && !page.frozen && page.view !== null,
+    )
+    const control = shown ? (this.deps.control?.(shown.sessionId) ?? IDLE_CONTROL) : IDLE_CONTROL
+    const at = shown ? this.overlayParent(shown) : null
+    if (shown && at && control.kind !== 'idle') {
+      if (this.overlayLeave) clearTimeout(this.overlayLeave)
+      if (this.overlayDrop) clearTimeout(this.overlayDrop)
+      this.overlayLeave = this.overlayDrop = null
+      this.overlay.show(at, {
+        control,
+        agent: shown.agent,
+        scope: 'tab',
+        layout: control.kind === 'agent' ? 'full' : 'pill',
+        radius: at.radius,
+      })
+      return
+    }
+    const covered = this.overlay.sessionId
+    if (covered === null) return
+    // The page it covered is still shown and its turn ended: the light and the pill leave first.
+    if (shown?.sessionId === covered && at && !this.overlayLeave) {
+      this.overlay.show(at, {
+        control: IDLE_CONTROL,
+        agent: shown.agent,
+        scope: 'tab',
+        layout: 'full',
+        radius: at.radius,
+      })
+      this.overlayLeave = setTimeout(() => {
+        this.overlayLeave = null
+        this.overlay.hide()
+        this.dropOverlayLater()
+      }, OVERLAY_LEAVE_MS)
+      return
+    }
+    if (shown?.sessionId === covered && this.overlayLeave) return
+    this.overlay.hide()
+    this.dropOverlayLater()
+  }
+
+  private dropOverlayLater(): void {
+    if (this.overlayDrop) clearTimeout(this.overlayDrop)
+    this.overlayDrop = setTimeout(() => {
+      this.overlayDrop = null
+      if (this.overlay.sessionId === null) this.overlay.destroy()
+    }, OVERLAY_KEEP_MS)
   }
 
   private downloadBlocked(contentsId: number): void {
@@ -889,14 +1094,15 @@ export class BrowserViews {
       canGoBack: contents?.navigationHistory.canGoBack() ?? false,
       canGoForward: contents?.navigationHistory.canGoForward() ?? false,
       notice: page.notice,
-      control: this.deps.control?.(page.sessionId) ?? { kind: 'none' },
+      control: this.deps.control?.(page.sessionId) ?? IDLE_CONTROL,
       originRequest: this.origins.requestOf(page.sessionId),
     })
   }
 
-  /** The pane's control state changed; its page state goes out again with it. */
+  /** Who uses a page changed: its state goes out again, and the overlay follows. */
   controlChanged(sessionId: string): void {
     const page = this.pages.get(sessionId)
     if (page) this.emit(page)
+    this.syncOverlay()
   }
 }

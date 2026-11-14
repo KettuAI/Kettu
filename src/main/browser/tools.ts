@@ -1,22 +1,26 @@
-// Main's side of the browser tools: the pages BrowserViews holds, the control state, and the
+// Main's side of the browser tools: the pages BrowserViews holds, who uses each of them, and the
 // DevTools protocol layer that drives them, as one service the agent host talks to.
 
 import type { WebContents } from 'electron'
-import type {
-  BrowserCallAnswer,
-  BrowserControlState,
-  BrowserToolError,
-  BrowserToolName,
-} from '@shared/browser'
+import type { BrowserCallAnswer, BrowserToolError, BrowserToolName } from '@shared/browser'
 import { BROWSER_TOOL_NAMES } from '@shared/browser'
+import {
+  CONTROL_WAIT_MS,
+  SurfaceControls,
+  type ControlOutcome,
+  type SurfaceControl,
+} from '@shared/control'
 import { BrowserCdp, ToolFailure } from './cdp'
-import { BrowserControl } from './control'
 import type { BrowserViews, NavigateResult } from './views'
 
 export interface BrowserToolsDeps {
   views: BrowserViews
-  /** A page's control state changed, so the pane draws it. */
-  controlChanged(sessionId: string, state: BrowserControlState): void
+  /** Who uses a page changed, so the pane, the label and the overlay draw it. */
+  controlChanged(sessionId: string, state: SurfaceControl): void
+  /** The user handed a page back after holding it for `durationMs`, for the session's thread. */
+  handedBack?(sessionId: string, durationMs: number): void
+  /** The agent acted on a page, at a point or on it as a whole. */
+  acted?(sessionId: string, at: { x: number; y: number } | null, click: boolean): void
   /** The first navigation of a session opened its page: the pane may show it. */
   opened(sessionId: string): void
   log(level: 'warn' | 'error', message: string): void
@@ -29,18 +33,19 @@ function isName(value: string): value is BrowserToolName {
 }
 
 export class BrowserTools {
-  readonly control: BrowserControl
+  readonly controls: SurfaceControls
   readonly cdp: BrowserCdp
   /** Sessions that already had their page opened for an agent's navigation. */
   private readonly opened = new Set<string>()
 
   constructor(private readonly deps: BrowserToolsDeps) {
-    this.control = new BrowserControl({
+    this.controls = new SurfaceControls({
       changed: (sessionId, state) => {
         deps.controlChanged(sessionId, state)
-        // A hidden page an agent drives renders fully; it throttles again once it is idle.
-        deps.views.setDriving(sessionId, state.kind === 'agent')
+        // A hidden page a turn uses renders fully; it throttles again once the turn ended.
+        deps.views.setDriving(sessionId, state.kind !== 'idle')
       },
+      handedBack: (sessionId, ms) => deps.handedBack?.(sessionId, ms),
     })
     this.cdp = new BrowserCdp({
       contents: (sessionId) => deps.views.contents(sessionId),
@@ -60,9 +65,15 @@ export class BrowserTools {
         if (!result.ok) throw refused(result)
         return result
       },
-      control: this.control,
+      controls: this.controls,
+      acted: (sessionId, at, click) => deps.acted?.(sessionId, at, click),
       log: (level, message) => deps.log(level, message),
     })
+  }
+
+  /** The state of a session's page. */
+  control(sessionId: string): SurfaceControl {
+    return this.controls.state(sessionId)
   }
 
   /** A page was made: its debugger's events flow to the page's buffers from here on. */
@@ -70,20 +81,34 @@ export class BrowserTools {
     this.cdp.watch(sessionId, contents)
   }
 
-  /** The pane's Hand back. */
+  /** Take over, from the label, the pill or the bubble: the page is the user's until Hand back. */
+  takeOver(sessionId: string): void {
+    this.controls.takeOver(sessionId)
+  }
+
+  /** Hand back: the agent goes on, and its waiting calls with it. */
   handBack(sessionId: string): void {
-    this.control.handBack(sessionId)
+    this.controls.handBack(sessionId)
   }
 
-  /** The driving bar's Stop: the call in flight fails, and the user drives from here. */
-  stopDriving(sessionId: string): void {
-    this.control.stop(sessionId)
+  /** Done or Skip on the step the agent asked for, from the label, the pill or the thread. */
+  answerAsk(sessionId: string, outcome: ControlOutcome): void {
+    this.controls.answer(sessionId, outcome)
   }
 
-  /** The user typed or used the mouse in a page; an input the agent injected is not theirs. */
-  userInput(sessionId: string): void {
-    if (this.cdp.isInjecting(sessionId)) return
-    this.control.take(sessionId)
+  /** The turn that used the session's page ended: the page is nobody's, and waiting calls end. */
+  turnEnded(sessionId: string): void {
+    this.controls.turnEnded(sessionId)
+  }
+
+  /** The agent host went away: no turn uses any page now. */
+  endTurns(sessionIds: readonly string[] = this.controls.keys()): void {
+    for (const sessionId of sessionIds) this.controls.turnEnded(sessionId)
+  }
+
+  /** Whether an input event a page reports right now is the agent's own. */
+  isInjecting(sessionId: string): boolean {
+    return this.cdp.isInjecting(sessionId)
   }
 
   /** A page opened a dialog, which views.ts answered at once. */
@@ -98,7 +123,7 @@ export class BrowserTools {
 
   /** The session's page is gone: nothing more drives it. */
   forget(sessionId: string): void {
-    this.control.forget(sessionId)
+    this.controls.forget(sessionId)
     this.cdp.forget(sessionId)
     this.opened.delete(sessionId)
   }
@@ -120,13 +145,21 @@ export class BrowserTools {
     }
     // The page's rules read the project its always-allowed sites are stored under.
     this.deps.views.setProject(sessionId, projectPath)
-    this.deps.views.setOriginWait(
-      sessionId,
-      callId,
-      waiting ?? ((on) => this.deps.waiting?.(callId, on)),
-    )
+    // A wait for a new origin and a wait for the user may overlap; the call's limit grows while
+    // either lasts.
+    const report = waiting ?? ((on: boolean) => this.deps.waiting?.(callId, on))
+    let waits = 0
+    const wait = (on: boolean): void => {
+      waits = Math.max(0, waits + (on ? 1 : -1))
+      if (waits === (on ? 1 : 0)) report(on)
+    }
+    this.deps.views.setOriginWait(sessionId, callId, wait)
     try {
-      const result = await this.cdp.call(sessionId, tool, args)
+      const result = await this.cdp.call(sessionId, tool, args, {
+        // Before the harness's own limit for one tool call, from when it reached main.
+        deadline: Date.now() + CONTROL_WAIT_MS,
+        waiting: wait,
+      })
       return {
         result: {
           text: result.text,

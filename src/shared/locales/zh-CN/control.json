@@ -1,0 +1,95 @@
+{
+  "agent": "Agent",
+  "label": {
+    "agent": "{{agent}} 正在使用<b>{{target}}</b>",
+    "you": "<b>你接管了{{held}}</b><i>·</i>{{agent}} 在等",
+    "asks": {
+      "sign_in": "{{agent}} 请你登录 <b>{{target}}</b>",
+      "code": "{{agent}} 请你输入 <b>{{target}}</b> 的验证码",
+      "check": "{{agent}} 请你通过 <b>{{target}}</b> 的验证",
+      "other": "{{agent}} 请你在 <b>{{target}}</b> 上做一步"
+    },
+    "asksHere": {
+      "sign_in": "{{agent}} 请你<b>登录</b>",
+      "code": "{{agent}} 请你<b>输入验证码</b>",
+      "check": "{{agent}} 请你<b>通过验证</b>",
+      "other": "{{agent}} 请你<b>做一步</b>"
+    }
+  },
+  "target": {
+    "browser": "浏览器"
+  },
+  "held": {
+    "tab": "标签"
+  },
+  "scope": {
+    "tab": "这个标签",
+    "device": "这台设备",
+    "terminal": "这个终端",
+    "app": "这个应用"
+  },
+  "pill": {
+    "agent": "{{agent}} 正在使用{{scope}}",
+    "you": "<b>你在用{{scope}}</b> · {{agent}} 在等",
+    "asks": {
+      "sign_in": "<b>在这里登录</b>，然后按完成",
+      "code": "<b>在这里输入验证码</b>，然后按完成",
+      "check": "<b>在这里通过验证</b>，然后按完成",
+      "other": "<b>在这里做完这一步</b>，然后按完成"
+    }
+  },
+  "bubble": {
+    "title": "{{agent}} 正在使用{{scope}}。",
+    "hint": "接管后才能在这里点击和输入。"
+  },
+  "actions": {
+    "takeOver": "接管",
+    "handBack": "交还",
+    "done": "完成",
+    "skip": "跳过"
+  },
+  "note": {
+    "handedBack": {
+      "browser": "你用了浏览器 <b>{{duration}}</b>，然后交还",
+      "device": "你用了设备 <b>{{duration}}</b>，然后交还",
+      "terminal": "你用了终端 <b>{{duration}}</b>，然后交还",
+      "computer": "你用了电脑 <b>{{duration}}</b>，然后交还"
+    }
+  },
+  "status": {
+    "using": {
+      "browser": "正在使用浏览器"
+    },
+    "you": {
+      "tab": "等你交还标签"
+    },
+    "asks": {
+      "sign_in": "等你登录",
+      "code": "等你输入验证码",
+      "check": "等你通过验证",
+      "other": "等你做完这一步"
+    }
+  },
+  "card": {
+    "title": "{{agent}} 请你<b>{{what}}</b>",
+    "what": {
+      "sign_in": "登录",
+      "code": "输入验证码",
+      "check": "通过验证",
+      "other": "做一步"
+    },
+    "where": {
+      "browser": "在会话旁边的浏览器里"
+    },
+    "answer": {
+      "done": {
+        "sign_in": "已登录",
+        "code": "已输入验证码",
+        "check": "已通过验证",
+        "other": "已做完这一步"
+      },
+      "skipped": "已跳过",
+      "ended": "这一轮先结束了"
+    }
+  }
+}

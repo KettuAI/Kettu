@@ -23,7 +23,11 @@ export default defineConfig({
     build: {
       isolatedEntries: true,
       rolldownOptions: {
-        input: { index: resolve('src/preload/index.ts'), tray: resolve('src/preload/tray.ts') },
+        input: {
+          index: resolve('src/preload/index.ts'),
+          tray: resolve('src/preload/tray.ts'),
+          overlay: resolve('src/preload/overlay.ts'),
+        },
       },
     },
   },
@@ -50,6 +54,7 @@ export default defineConfig({
         input: {
           index: resolve('src/renderer/index.html'),
           tray: resolve('src/renderer/tray.html'),
+          overlay: resolve('src/renderer/overlay.html'),
         },
       },
     },

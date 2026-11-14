@@ -1,0 +1,459 @@
+/* A surface an agent and the user share, the same on every surface: the label on the composer's top
+   edge, the pill and the bubble on the surface, the agent's pointer and the light along its edge. */
+
+/* ---------- The label on the composer's top edge ---------- */
+/* It stands on the composer's line, which runs on under it: its own bottom edge is cut away. */
+.ctl-label {
+  position: relative;
+  z-index: 20;
+  display: flex;
+  align-self: center;
+  max-width: calc(100% - 24px);
+  height: 30px;
+  margin-bottom: -1px;
+  overflow: hidden;
+  background: var(--card);
+  box-shadow: 0 0 0 var(--hairline) var(--border-strong);
+  clip-path: inset(-14px -14px 1px -14px);
+  font-size: var(--text-hint);
+  line-height: var(--text-hint--line-height);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.ctl-label[data-control='asks'] {
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-strong),
+    0 0 0 3px var(--tone-amber-halo);
+}
+.ctl-label__in {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  padding: 0 3px 0 11px;
+  animation: ks-rise 280ms var(--ease-out-quint) both;
+}
+.ctl-label__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ctl-label__text b {
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+.ctl-label__text i {
+  margin: 0 6px;
+  font-style: normal;
+  color: var(--text-tertiary);
+}
+.ctl-label__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-primary);
+}
+.ctl-label__mark[data-asks] {
+  color: var(--tone-amber);
+}
+
+/* ---------- The pill on the surface ---------- */
+.ctl-pill {
+  display: inline-flex;
+  height: 36px;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 11px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-strong),
+    var(--elevation-popover);
+  font-size: var(--text-hint);
+  line-height: var(--text-hint--line-height);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.ctl-pill__in {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 5px 0 11px;
+  animation: ks-rise 280ms var(--ease-out-quint) both;
+}
+.ctl-pill__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ctl-pill b {
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+.ctl-pill__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--text-primary);
+}
+.ctl-pill__asks {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--tone-amber-halo);
+  color: var(--tone-amber);
+}
+/* A held-back click or key: the pill bobs and its button lights up for a moment. */
+.ctl-pill-nudge {
+  display: inline-flex;
+  max-width: 100%;
+}
+.ctl-pill-nudge[data-nudged] {
+  animation: ctl-nudge 520ms var(--ease-out-quint);
+}
+.ctl-pill-nudge[data-nudged] [data-control-action] {
+  animation: ctl-flash 900ms ease-out;
+}
+@keyframes ctl-nudge {
+  30% {
+    transform: translateY(-3px) scale(1.035);
+  }
+}
+@keyframes ctl-flash {
+  0%,
+  40% {
+    background: var(--primary-from);
+    color: var(--primary-foreground);
+  }
+}
+
+/* On a surface Kettu draws in an overlay: centred at its bottom, as wide as its content needs and
+   never wider than the surface, so the overlay sized to the pill never squeezes it. */
+.ctl-overlay-pill {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  max-width: calc(var(--surface-width) - 24px);
+  translate: -50% 0;
+}
+
+/* ---------- The bubble at a held-back click ---------- */
+.ctl-bubble {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: 300px;
+  padding: 9px 7px 9px 12px;
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow:
+    0 0 0 var(--hairline) var(--border-strong),
+    var(--elevation-popover);
+  translate: -50% calc(-100% - 14px);
+  animation: ctl-bubble-in 260ms var(--ease-out-quint) both;
+}
+.ctl-bubble[data-below] {
+  translate: -50% 14px;
+}
+.ctl-bubble::after {
+  content: '';
+  position: absolute;
+  left: calc(50% + var(--ctl-bubble-tip, 0px));
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  translate: -50% 0;
+  rotate: 45deg;
+  background: var(--card);
+  box-shadow: var(--hairline) var(--hairline) 0 0 var(--border-strong);
+}
+.ctl-bubble[data-below]::after {
+  top: -5px;
+  bottom: auto;
+  box-shadow: calc(var(--hairline) * -1) calc(var(--hairline) * -1) 0 0 var(--border-strong);
+}
+.ctl-bubble__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: var(--text-hint);
+  line-height: 16px;
+  color: var(--text-secondary);
+}
+.ctl-bubble__text b {
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+}
+.ctl-bubble[data-leaving] {
+  animation: ctl-bubble-out 200ms ease-in both;
+}
+@keyframes ctl-bubble-in {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(6px) scale(0.97);
+  }
+}
+@keyframes ctl-bubble-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+/* Where the click landed. */
+.ctl-click {
+  position: absolute;
+  z-index: 6;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--text-tertiary);
+  pointer-events: none;
+  animation: ctl-click 420ms ease-out forwards;
+}
+@keyframes ctl-click {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* ---------- The agent's pointer ---------- */
+/* affectUI's pointer in the fox, with its flag; a click rings around its tip. */
+.ctl-pointer.ui-agc {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  container-type: normal;
+  pointer-events: none;
+  --ui-agc-glide: 620ms;
+  --ui-agc-flag: var(--pane-fox);
+  --ui-agc-flag-ink: var(--on-fill);
+  --ui-agc-edge: linear-gradient(var(--pane-fox), var(--pane-fox));
+}
+.ctl-pointer__ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 26px;
+  height: 26px;
+  margin: -13px 0 0 -13px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--pane-fox);
+  pointer-events: none;
+  /* It rings as the pointer gets there. */
+  animation: ctl-ring 520ms ease-out 300ms both;
+}
+@keyframes ctl-ring {
+  from {
+    scale: 0.3;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  to {
+    scale: 1.4;
+    opacity: 0;
+  }
+}
+
+/* ---------- The light along a surface an agent uses ---------- */
+/* Inside: along the inner edge of what fills its view, such as a page. Outside: around a thing Kettu
+   shows, such as a phone or an app's window, never over its content. The colors turn on a layer of
+   their own inside each ring, so nothing repaints while they turn. */
+.ctl-light {
+  --ctl-light-w: 10px;
+  --ctl-light-r: 12px;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: var(--ctl-light-r);
+  pointer-events: none;
+  container-type: size;
+}
+.ctl-light[data-place='inside'] {
+  overflow: hidden;
+}
+.ctl-light[data-place='outside'] {
+  --ctl-light-pad: 64px;
+  inset: calc(var(--ctl-light-pad) * -1);
+  border: var(--ctl-light-pad) solid transparent;
+  border-radius: calc(var(--ctl-light-r) + var(--ctl-light-pad));
+  mask:
+    linear-gradient(black 0 0) padding-box,
+    linear-gradient(black 0 0);
+  mask-composite: exclude;
+}
+.ctl-light__part {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--ctl-light-r);
+}
+/* A ring drawn as a border, so its inner edge follows the corner's radius. */
+.ctl-light__ring {
+  position: absolute;
+  inset: 0;
+  border: var(--ctl-light-ring, 1px) solid transparent;
+  border-radius: inherit;
+  mask:
+    linear-gradient(black 0 0) padding-box,
+    linear-gradient(black 0 0);
+  mask-composite: exclude;
+}
+.ctl-light__spin {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(142cqmax + 80px);
+  height: calc(142cqmax + 80px);
+  translate: -50% -50%;
+  background: conic-gradient(
+    var(--control-light-1),
+    var(--control-light-2) 25%,
+    var(--control-light-3) 50%,
+    var(--control-light-4) 75%,
+    var(--control-light-1)
+  );
+  animation: ctl-light-turn 14s linear infinite;
+}
+.ctl-light__glow {
+  opacity: var(--control-light-glow);
+  filter: blur(14px);
+  mix-blend-mode: var(--control-light-blend);
+  --ctl-light-ring: var(--ctl-light-w);
+}
+.ctl-light__core {
+  opacity: var(--control-light-core);
+  filter: blur(3px);
+  mix-blend-mode: var(--control-light-blend);
+  --ctl-light-ring: calc(var(--ctl-light-w) * 0.32);
+}
+.ctl-light__rim {
+  opacity: 0.55;
+  --ctl-light-ring: 1.5px;
+}
+.ctl-light__rim .ctl-light__spin {
+  background: conic-gradient(
+    var(--control-light-1),
+    transparent 12%,
+    transparent 22%,
+    var(--control-light-2) 32%,
+    var(--control-light-3) 42%,
+    transparent 54%,
+    transparent 64%,
+    var(--control-light-4) 76%,
+    var(--control-light-1)
+  );
+}
+/* Each action: a flare where it lands. */
+.ctl-light__flare {
+  filter: blur(14px);
+  mix-blend-mode: var(--control-light-blend);
+  animation: ctl-light-flare 1100ms var(--ease-out-quint) both;
+  --ctl-light-ring: 22px;
+}
+.ctl-light__flare .ctl-light__ring {
+  opacity: 0.7;
+  background: radial-gradient(
+      circle 180px at var(--ctl-light-x, 50%) var(--ctl-light-y, 50%),
+      var(--control-light-1),
+      var(--control-light-2) 40%,
+      transparent 78%
+    )
+    border-box;
+}
+.ctl-light[data-place='outside'] .ctl-light__glow {
+  inset: -6px;
+  border-radius: calc(var(--ctl-light-r) + 6px);
+  opacity: 0.95;
+  filter: blur(18px);
+  --ctl-light-ring: calc(var(--ctl-light-w) * 2.2);
+}
+.ctl-light[data-place='outside'] .ctl-light__core {
+  inset: -2px;
+  border-radius: calc(var(--ctl-light-r) + 2px);
+  opacity: 0.7;
+  filter: blur(5px);
+  --ctl-light-ring: calc(var(--ctl-light-w) * 0.5);
+}
+.ctl-light[data-place='outside'] .ctl-light__rim {
+  inset: -1px;
+  border-radius: calc(var(--ctl-light-r) + 1px);
+  opacity: 0.8;
+}
+.ctl-light[data-place='outside'] .ctl-light__flare {
+  inset: -10px;
+  border-radius: calc(var(--ctl-light-r) + 10px);
+  --ctl-light-ring: 30px;
+}
+.ctl-light[data-place='outside'] .ctl-light__flare .ctl-light__ring {
+  opacity: 0.9;
+}
+@keyframes ctl-light-turn {
+  to {
+    rotate: 1turn;
+  }
+}
+@keyframes ctl-light-flare {
+  0% {
+    opacity: 0;
+  }
+  16% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Reduce motion: the light stands still and flares nowhere; nothing bobs, glides or rings. */
+@media (prefers-reduced-motion: reduce) {
+  .ctl-light,
+  .ctl-light *,
+  .ctl-label__in,
+  .ctl-pill__in,
+  .ctl-pill-nudge,
+  .ctl-pill-nudge *,
+  .ctl-bubble,
+  .ctl-click,
+  .ctl-pointer__ring {
+    animation: none !important;
+  }
+  .ctl-light__flare,
+  .ctl-pointer__ring,
+  .ctl-click {
+    display: none;
+  }
+  .ctl-pointer.ui-agc {
+    --ui-agc-glide: 0ms;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & :is(.ctl-light, .ctl-light *, .ctl-label__in, .ctl-pill__in, .ctl-pill-nudge),
+  & :is(.ctl-pill-nudge *, .ctl-bubble, .ctl-click, .ctl-pointer__ring) {
+    animation: none !important;
+  }
+  & :is(.ctl-light__flare, .ctl-pointer__ring, .ctl-click) {
+    display: none;
+  }
+  & .ctl-pointer.ui-agc {
+    --ui-agc-glide: 0ms;
+  }
+}

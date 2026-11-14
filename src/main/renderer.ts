@@ -1,13 +1,13 @@
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { BrowserWindow } from 'electron'
 import { is } from '@electron-toolkit/utils'
 
 /** Where the renderer loads from: the dev server in development, else the built index.html. */
 export type RendererEntry = { kind: 'dev-server'; url: string } | { kind: 'file'; path: string }
 
-/** The renderer's pages: the main window's, and the menu bar panel's. */
-export type RendererPage = 'index' | 'tray'
+/** The renderer's pages: the main window's, the menu bar panel's and the page overlay's. */
+export type RendererPage = 'index' | 'tray' | 'overlay'
 
 const devServerUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
 
@@ -20,6 +20,14 @@ function entryOf(page: RendererPage): RendererEntry {
 const entries: Record<RendererPage, RendererEntry> = {
   index: entryOf('index'),
   tray: entryOf('tray'),
+  overlay: entryOf('overlay'),
+}
+
+/** The page the overlay over a browser page loads, and its address once loaded. */
+export function overlayEntry(): RendererEntry & { url: string } {
+  const entry = entries.overlay
+  if (entry.kind === 'dev-server') return { ...entry }
+  return { ...entry, url: pathToFileURL(entry.path).href }
 }
 
 export function loadRenderer(window: BrowserWindow, page: RendererPage = 'index'): Promise<void> {
@@ -27,9 +35,13 @@ export function loadRenderer(window: BrowserWindow, page: RendererPage = 'index'
   return entry.kind === 'dev-server' ? window.loadURL(entry.url) : window.loadFile(entry.path)
 }
 
-/** Whether a URL belongs to the app's own renderer, as opposed to remote content. */
+/**
+ * Whether a URL is one of the app's own pages that may call main, as opposed to remote content.
+ * The page overlay is not one: it speaks only over its own channel.
+ */
 export function isRendererUrl(url: string | undefined): boolean {
-  return rendererPage(url) !== null
+  const page = rendererPage(url)
+  return page === 'index' || page === 'tray'
 }
 
 /**
@@ -37,12 +49,14 @@ export function isRendererUrl(url: string | undefined): boolean {
  * shares one origin, so a page there is told by its path.
  */
 export function rendererPage(url: string | undefined): RendererPage | null {
-  if (!matchesRendererEntry(url, entries.index) && !matchesRendererEntry(url, entries.tray)) {
-    return null
-  }
-  if (entries.tray.kind === 'file')
+  const pages: RendererPage[] = ['index', 'tray', 'overlay']
+  if (!pages.some((page) => matchesRendererEntry(url, entries[page]))) return null
+  if (entries.tray.kind === 'file') {
+    if (matchesRendererEntry(url, entries.overlay)) return 'overlay'
     return matchesRendererEntry(url, entries.tray) ? 'tray' : 'index'
-  return URL.parse(url!)?.pathname === '/tray.html' ? 'tray' : 'index'
+  }
+  const path = URL.parse(url!)?.pathname
+  return path === '/tray.html' ? 'tray' : path === '/overlay.html' ? 'overlay' : 'index'
 }
 
 /**
