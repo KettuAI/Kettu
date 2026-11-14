@@ -653,6 +653,9 @@ function baseOid(base: string | null, status: GitStatus, loaded: Loaded): string
   )
 }
 
+// One line, cut short when it doesn't fit: the popover holds the whole of it.
+const NOTE = 'flex h-5 min-w-0 items-center gap-1.5 px-2.75 text-xs text-secondary'
+
 /**
  * Under the tray while New worktree is chosen: the base it is cut from and the branch it starts
  * on, or that Kettu names it when the message is sent.
@@ -662,10 +665,10 @@ export function WorktreeNote({ projectPath, status }: { projectPath: string; sta
   const where = useWorktreeChoice((s) => s.where[projectPath] ?? 'local')
   const picked = useWorktreeChoice((s) => s.base[projectPath] ?? null)
   const branch = useWorktreeChoice((s) => namedBranch(s, projectPath))
-  if (where !== 'worktree') return null
   const current = currentBase(status)
   const base = picked ?? current
-  if (!base) return null
+  // The line stays while Local is chosen, so switching never moves the centered composer.
+  if (where !== 'worktree' || !base) return <p aria-hidden className={NOTE} />
   // Only the current branch's or commit's oid is known here.
   const oid = base === current ? status.head.oid : null
   const detached = !status.head.branch && base === status.head.oid
@@ -679,9 +682,9 @@ export function WorktreeNote({ projectPath, status }: { projectPath: string; sta
       : 'worktree.noteAuto'
   const code = (text: string) => <b className="font-mono text-code font-normal">{text}</b>
   return (
-    <p className="flex min-w-0 items-start gap-1.5 px-2.75 text-xs text-secondary">
-      <Glyph icon={WORKTREE_ICON} size={12} className="mt-0.5 shrink-0 text-icon" />
-      <span className="min-w-0">
+    <p className={NOTE}>
+      <Glyph icon={WORKTREE_ICON} size={12} className="shrink-0 text-icon" />
+      <span className="min-w-0 truncate">
         <Trans
           t={t}
           i18nKey={key}
