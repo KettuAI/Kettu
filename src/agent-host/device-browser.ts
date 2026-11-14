@@ -15,6 +15,7 @@ import type { TurnSender } from './sessions'
 
 const ERROR_CODES = new Set([
   'user_has_control',
+  'stopped',
   'not_allowed',
   'stale_ref',
   'timeout',
