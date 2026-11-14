@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import type { IconSvgElement } from '@hugeicons/react'
 import {
   Cancel01Icon,
+  ComputerIcon,
   ComputerTerminal01Icon,
   DashboardSquare02Icon,
   File01Icon,
@@ -33,7 +34,7 @@ import { formatShortcut, isMac, isWeb } from '@renderer/lib/platform'
 import { useDevicesStore } from '@renderer/stores/devices'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
-import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
   closeSplitPane,
   focusPane,
@@ -83,7 +84,7 @@ export function HeaderTools({
   projectPath: string
   /** The session's side panel, or New session's while it creates one. */
   panel: string
-  /** The session the bar belongs to, which adds its More menu. */
+  /** The session the bar belongs to; with `onRename` it adds its More menu. */
   summary?: SessionSummary
   session?: SessionView
   onRename?: () => void
@@ -114,7 +115,10 @@ export function HeaderTools({
   // The browser runs in the desktop app, for another host's agents too; a web page has no such
   // view. A session has one, so a session still being created does not.
   const browser = !isWeb && !!sessionId
+  // The window an agent uses shows only on the computer whose apps it uses, while it uses them.
+  const computer = !isWeb && !!session?.computer && !!summary && hostOfSession(summary) === null
   const available: Pane[] = [
+    ...(computer ? (['computer'] as const) : []),
     ...(terminal ? (['terminal'] as const) : []),
     ...(browser ? (['browser'] as const) : []),
     ...(sessionId && devices ? (['devices'] as const) : []),
@@ -132,6 +136,14 @@ export function HeaderTools({
         />
       )}
       {board && sessionId && <BoardToggle sessionId={sessionId} />}
+      {computer && (
+        <PaneToggle
+          panel={panel}
+          pane="computer"
+          label={t('headerTools.computer')}
+          icon={ComputerIcon}
+        />
+      )}
       {/* Another host's terminal opens only while its owner allows devices it. */}
       {terminal && (
         <PaneToggle

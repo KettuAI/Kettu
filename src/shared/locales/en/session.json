@@ -246,13 +246,29 @@
     }
   },
   "computerBar": {
-    "using": "{{agent}} is using your computer",
-    "usingApp": "{{agent}} is using <app>{{app}}</app>",
-    "looking": "Looking at <app>{{app}}</app>",
     "waiting": "Waiting for you to allow <app>{{app}}</app>",
     "stopping": "Taking back the computer…",
-    "stop": "Stop using",
     "stopLabel": "Stop using the computer for this turn; the turn goes on"
+  },
+  "computerPane": {
+    "title": "Computer",
+    "live": "Live",
+    "paused": "Paused",
+    "show": "Show {{app}}",
+    "showApp": "Show the app",
+    "note": "Only the window {{agent}} uses shows here. Your other windows stay out of it.",
+    "idle": "{{agent}} is not using the computer",
+    "idleHint": "The window an agent uses shows here, live, while its turn uses the computer.",
+    "noWindow": "{{agent}} has not opened a window yet",
+    "noWindowHint": "Its window shows here as soon as it reads or uses one.",
+    "starting": "Showing the window…",
+    "hiddenHint": "It is minimized, hidden or on another desktop. Show it to see it here.",
+    "failed": "Kettu could not show this window",
+    "noPermission": "Kettu needs Screen Recording to show the window",
+    "noPermissionHint": "Allow it in System Settings, then quit and reopen Kettu.",
+    "allow": "Open System Settings",
+    "retry": "Try again",
+    "elsewhere": "The window shows only on the computer whose apps the agent uses."
   },
   "computerSetup": {
     "label": "Computer use setup",

@@ -174,6 +174,21 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:power':
         withHost((h) => h.power(message.state))
         break
+      case 'host:computer-control':
+        if (
+          typeof message.sessionId === 'string' &&
+          (message.action === 'take-over' ||
+            message.action === 'hand-back' ||
+            message.action === 'stop')
+        ) {
+          withHost((h) => h.computerControl(message.sessionId, message.action))
+        }
+        break
+      case 'host:computer-frame-request':
+        if (Number.isSafeInteger(message.requestId)) {
+          withHost((h) => h.computerFrame(message.requestId))
+        }
+        break
       case 'host:log-level':
         if (message.level === 'debug' || message.level === 'info') setLogLevel(message.level)
         if (typeof message.verbose === 'boolean') setVerboseRecords(message.verbose)

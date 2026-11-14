@@ -1,0 +1,139 @@
+/* Computer use over the desktop: transparent pages in windows of their own. */
+html[data-overlay],
+html[data-overlay] body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ---------- The light's window: the real window, and the light and the pointer on it ---------- */
+.kco-target {
+  position: absolute;
+}
+/* The real window stands on any wallpaper, so its light reaches wider than one in Kettu. */
+.kco-target[data-wide] .ctl-light[data-place='outside'] {
+  --ctl-light-w: 13px;
+}
+
+/* ---------- The label at the top of the screen ---------- */
+.kco-float-room {
+  display: flex;
+  justify-content: center;
+  width: max-content;
+}
+.kco-float {
+  display: inline-flex;
+  overflow: hidden;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--computer-label);
+  box-shadow: var(--computer-float-shadow);
+  font-size: 13px;
+  color: color-mix(in srgb, var(--on-fill) 88%, transparent);
+  white-space: nowrap;
+  animation: kco-float-in 360ms var(--ease-out-quint) both;
+}
+.kco-float[data-control='you'] {
+  background: var(--bg-surface);
+  box-shadow: var(--computer-float-you-shadow);
+  color: var(--text-secondary);
+}
+.kco-float__in {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 5px 0 12px;
+  animation: kco-blur-rise 280ms var(--ease-out-quint) both;
+}
+.kco-float__icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.kco-float__text i {
+  margin: 0 6px;
+  font-style: normal;
+  opacity: 0.6;
+}
+.kco-float__text b {
+  font-weight: 600;
+  color: var(--on-fill);
+}
+.kco-float[data-control='you'] .kco-float__text i {
+  margin: 0 6px;
+  font-style: normal;
+  opacity: 0.6;
+}
+.kco-float__text b {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kco-float__btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--on-fill) 20%, transparent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--on-fill);
+  outline: none;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+}
+.kco-float__btn:hover {
+  background: color-mix(in srgb, var(--on-fill) 30%, transparent);
+}
+.kco-float__btn:active {
+  transform: scale(0.97);
+}
+.kco-float__btn--quiet {
+  background: transparent;
+}
+.kco-float__btn--quiet:hover {
+  background: color-mix(in srgb, var(--on-fill) 14%, transparent);
+}
+.kco-float__btn kbd {
+  margin-left: 3px;
+  font: inherit;
+  font-size: 11.5px;
+  opacity: 0.75;
+}
+.kco-float__btn--solid,
+.kco-float__btn--solid:hover {
+  background: var(--text-primary);
+  color: var(--bg-surface);
+}
+.kco-float__btn--solid:hover {
+  opacity: 0.88;
+}
+@keyframes kco-float-in {
+  from {
+    transform: translateY(-14px);
+    opacity: 0;
+  }
+}
+@keyframes kco-blur-rise {
+  from {
+    transform: translateY(4px);
+    filter: blur(4px);
+    opacity: 0;
+  }
+}
+
+:root[data-reduce-motion='always'] :is(.kco-float, .kco-float__in) {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kco-float,
+  .kco-float__in {
+    animation: none !important;
+    transition: none !important;
+  }
+}

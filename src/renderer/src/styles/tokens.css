@@ -1661,20 +1661,18 @@
   --send-active: color-mix(in srgb, var(--send) 86%, black);
   --send-shadow: 0 1px 2px
     light-dark(color-mix(in srgb, var(--send-active) 28%, transparent), transparent);
-  /* A session using the computer: a fox glow inside its column's edges, the composer's ring in
-     the fox, and the solid label on the composer, darkened so its white text reads at 5:1. */
+  /* A session using the computer: the solid label on the composer, darkened so its white text
+     reads at 5:1, and the fox line of the label that waits for an app's answer. */
   --computer-line: color-mix(in srgb, var(--send) 42%, transparent);
-  /* The dark page swallows a faint glow, so it takes more of the fox there. */
-  --computer-glow:
-    inset 0 0 0 1.5px var(--computer-line),
-    inset 0 0 48px
-      light-dark(
-        color-mix(in srgb, var(--send) 16%, transparent),
-        color-mix(in srgb, var(--send) 26%, transparent)
-      );
   --computer-label: color-mix(in srgb, var(--send) 80%, black);
-  --computer-composer-ring:
-    0 0 0 var(--hairline) var(--computer-line), var(--elevation-float), var(--highlight);
+  /* The floating label over the desktop: its shadow on any wallpaper, in the fox while the agent
+     works and neutral once the user took the app over. */
+  --computer-float-shadow:
+    0 10px 28px -8px color-mix(in srgb, var(--computer-label) 55%, transparent),
+    0 0 0 0.5px rgb(0 0 0 / 10%);
+  --computer-float-you-shadow:
+    0 10px 28px -8px light-dark(rgb(0 0 0 / 30%), rgb(0 0 0 / 60%)),
+    0 0 0 0.5px light-dark(rgb(0 0 0 / 12%), rgb(255 255 255 / 12%));
 
   /* Each layer's 1 px ring sits outside its box, so it takes no layout space, follows the radius
      and shows against the desk. */

@@ -277,6 +277,8 @@ export interface ComputerCall {
   args: Record<string, unknown>
   /** The app the call reads or drives; null for the list of apps. */
   pid: number | null
+  /** The window it reads or drives; null for the lists of apps and windows. */
+  windowId: number | null
   /** Whether it acts on the app rather than reading it. */
   acts: boolean
   /** The element token it names, which must come from a read of this app's window. */
@@ -482,13 +484,13 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
   const read = new Reader(o)
   const driverTool = DRIVER_TOOL[name]
   if (name === 'computer_list_apps') {
-    return { tool: name, driverTool, args: {}, pid: null, acts: false }
+    return { tool: name, driverTool, args: {}, pid: null, windowId: null, acts: false }
   }
   const pid = read.integer('pid', 1, MAX_PID, true)!
   if (name === 'computer_list_windows') {
     const args: Args = { pid }
     put(args, 'on_screen_only', read.flag('on_screen_only'))
-    return { tool: name, driverTool, args, pid, acts: false }
+    return { tool: name, driverTool, args, pid, windowId: null, acts: false }
   }
   const windowId = read.integer('window_id', 0, MAX_PID, true)!
   const target = { kind: 'window', pid, window_id: windowId }
@@ -506,7 +508,7 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
       }
       put(args, 'include_screenshot', screenshot)
       put(args, 'include_accessibility_tree', tree)
-      return { tool: name, driverTool, args, pid, acts: false }
+      return { tool: name, driverTool, args, pid, windowId, acts: false }
     }
     case 'computer_click': {
       const elementToken = read.token('element_token')
@@ -532,6 +534,7 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
         driverTool,
         args,
         pid,
+        windowId,
         acts: true,
         ...(elementToken ? { elementToken } : {}),
       }
@@ -548,6 +551,7 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
         driverTool,
         args,
         pid,
+        windowId,
         acts: true,
         ...(elementToken ? { elementToken } : {}),
       }
@@ -558,11 +562,19 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
       const modifiers = read.modifiers('modifiers')
       const args: Args = { target, key }
       put(args, 'modifiers', modifiers)
-      return { tool: name, driverTool, args, pid, acts: true, keys: [...(modifiers ?? []), key] }
+      return {
+        tool: name,
+        driverTool,
+        args,
+        pid,
+        windowId,
+        acts: true,
+        keys: [...(modifiers ?? []), key],
+      }
     }
     case 'computer_hotkey': {
       const keys = read.strings('keys', 2, MAX_KEYS, 30, true)
-      return { tool: name, driverTool, args: { target, keys }, pid, acts: true, keys }
+      return { tool: name, driverTool, args: { target, keys }, pid, windowId, acts: true, keys }
     }
     case 'computer_scroll': {
       const args: Args = {
@@ -574,7 +586,7 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
       if (args.direction === undefined) throw invalid('direction is needed.')
       put(args, 'amount', read.integer('amount', 1, 50))
       put(args, 'by', read.choice('by', ['line', 'page']))
-      return { tool: name, driverTool, args, pid, acts: true }
+      return { tool: name, driverTool, args, pid, windowId, acts: true }
     }
     case 'computer_drag': {
       const args: Args = {
@@ -588,7 +600,7 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
       put(args, 'modifier', read.modifiers('modifier'))
       put(args, 'duration_ms', read.integer('duration_ms', 0, 10_000))
       put(args, 'steps', read.integer('steps', 1, 200))
-      return { tool: name, driverTool, args, pid, acts: true }
+      return { tool: name, driverTool, args, pid, windowId, acts: true }
     }
     case 'computer_invoke_menu': {
       const path = read.strings('path', 1, MAX_MENU_DEPTH, 200, true)
@@ -597,6 +609,7 @@ export function computerCall(name: string, input: unknown, platform: Platform): 
         driverTool,
         args: { pid, window_id: windowId, path },
         pid,
+        windowId,
         acts: true,
         menuPath: path,
       }

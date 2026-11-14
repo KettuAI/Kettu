@@ -20,7 +20,7 @@ import {
   type TerminalSettings,
   ZOOM_LEVELS,
 } from '@shared/settings'
-import { isComputerApp } from '@shared/computer-use'
+import { isComputerApp, isStopShortcut } from '@shared/computer-use'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import {
   MARKET_NAME,
@@ -91,6 +91,11 @@ const isHostName: Check = (value, path) =>
 
 const isThemeId: Check = (value, path) =>
   typeof value === 'string' && THEME_ID.test(value) ? null : `"${path}" must be a theme id`
+
+const isStopShortcutValue: Check = (value, path) =>
+  isStopShortcut(value)
+    ? null
+    : `"${path}" must be empty or two or more modifiers and a key, such as Control+Alt+Command+.`
 
 /** The sites the "Always open" choice remembers, each a host mapped to where it opens. */
 /** Apps the user always allows, each once, with an identity the host would make. */
@@ -174,7 +179,12 @@ const SECTION_FIELDS = {
   privacy: { hideAccount: isBoolean },
   diagnostics: { verboseUntil: isVerboseUntil },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
-  computerUse: { enabled: isBoolean, allowedApps: isComputerApps },
+  computerUse: {
+    enabled: isBoolean,
+    allowedApps: isComputerApps,
+    pauseOnUse: isBoolean,
+    stopShortcut: isStopShortcutValue,
+  },
   cloud: { enabled: isBoolean },
   onboarding: { done: isBoolean, step: oneOf(...ONBOARDING_STEPS) },
 } as const satisfies Record<string, Record<string, Check>>

@@ -33,10 +33,18 @@ import type {
   ArtifactExportResult,
   BusyCounts,
   BusySession,
+  ComputerControlAction,
   HostToMain,
   MainToHost,
 } from '@shared/host-control'
-import { isComputerApp, type ComputerApp } from '@shared/computer-use'
+import {
+  isComputerApp,
+  isComputerFrame,
+  isComputerHold,
+  type ComputerApp,
+  type ComputerFrame,
+  type ComputerHold,
+} from '@shared/computer-use'
 import { isControlOutcome, type ControlOutcome } from '@shared/control'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { PortDevice } from '@shared/remote/device'
@@ -104,6 +112,8 @@ export interface AgentHostDeps {
   onBrowserAskAnswer?(sessionId: string, outcome: ControlOutcome): void
   /** A session's card allowed an app always, for the settings to keep. */
   onComputerAppAllowed?(app: ComputerApp): void
+  /** The session holding the computer changed, or let go of it, as when the host stopped. */
+  onComputerHold?(hold: ComputerHold | null): void
 }
 
 const MAX_LIST = 10_000
@@ -286,6 +296,8 @@ export class AgentHost {
   private agentProcesses: ProcessId[] = []
   private readonly busyRequests = new Map<number, (sessions: BusySession[]) => void>()
   private nextBusyId = 1
+  private readonly frameRequests = new Map<number, (frame: ComputerFrame | null) => void>()
+  private nextFrameId = 1
   private readonly reportRequests = new Map<number, (result: ReportBuildResult) => void>()
   private nextReportId = 1
   private readonly grants = new GrantRequests(
@@ -416,6 +428,31 @@ export class AgentHost {
       if (!this.host.post({ type: 'host:busy-request', requestId })) {
         this.busyRequests.get(requestId)?.([])
         this.busyRequests.delete(requestId)
+      }
+    })
+  }
+
+  /** The floating label's buttons and the stop shortcut, for the session holding the computer. */
+  computerControl(sessionId: string, action: ComputerControlAction): void {
+    this.host.post({ type: 'host:computer-control', sessionId, action })
+  }
+
+  /** Where the window the session holding the computer uses is now; null when it cannot tell. */
+  computerFrame(timeoutMs = 2_000): Promise<ComputerFrame | null> {
+    if (this.host.state !== 'ready') return Promise.resolve(null)
+    const requestId = this.nextFrameId++
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.frameRequests.delete(requestId)
+        resolve(null)
+      }, timeoutMs)
+      this.frameRequests.set(requestId, (frame) => {
+        clearTimeout(timer)
+        resolve(frame)
+      })
+      if (!this.host.post({ type: 'host:computer-frame-request', requestId })) {
+        this.frameRequests.get(requestId)?.(null)
+        this.frameRequests.delete(requestId)
       }
     })
   }
@@ -677,6 +714,16 @@ export class AgentHost {
       case 'host:computer-app-allow':
         if (isComputerApp(message.app)) this.deps.onComputerAppAllowed?.(message.app)
         break
+      case 'host:computer-hold':
+        this.deps.onComputerHold?.(isComputerHold(message.hold) ? message.hold : null)
+        break
+      case 'host:computer-frame': {
+        const resolve = this.frameRequests.get(message.requestId)
+        if (!resolve) break
+        this.frameRequests.delete(message.requestId)
+        resolve(isComputerFrame(message.frame) ? message.frame : null)
+        break
+      }
       case 'host:attention':
         this.deps.onAttention(message)
         break
@@ -861,6 +908,9 @@ export class AgentHost {
     this.deps.onRoutinesWorking(false)
     this.deps.onBadge(0)
     this.deps.onBusy({ running: 0, waiting: 0 })
+    for (const resolve of this.frameRequests.values()) resolve(null)
+    this.frameRequests.clear()
+    this.deps.onComputerHold?.(null)
     this.deps.onDown?.()
     const roots = this.agentProcesses
     this.agentProcesses = []

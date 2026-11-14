@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import type { ComputerApp, ComputerUseSettings } from '@shared/computer-use'
+import type { ComputerApp, ComputerHold, ComputerUseSettings } from '@shared/computer-use'
 import { COMPUTER_APP_WAIT_MS } from '@shared/computer-use'
-import { ComputerUse, type ComputerUseDeps, type DriverLike } from './service'
+import { CONTROL_WAIT_MS } from '@shared/control'
+import {
+  ComputerUse,
+  PAUSE_POLL_MS,
+  PAUSE_SETTLE_MS,
+  type ComputerUseDeps,
+  type DriverLike,
+} from './service'
 
 const APPS = [
   {
@@ -21,11 +28,17 @@ const APPS = [
 
 class FakeDriver implements DriverLike {
   calls: { tool: string; args: Record<string, unknown> }[] = []
+  /** What `bring_to_front` answers, when not plain success. */
+  front: CallToolResult | null = null
+  /** The process of the app in front, as `list_apps` reports it. */
+  frontPid = 13
 
   async call(tool: string, args: Record<string, unknown>): Promise<CallToolResult> {
     this.calls.push({ tool, args })
+    if (tool === 'bring_to_front' && this.front) return this.front
     if (tool === 'list_apps') {
-      return { content: [{ type: 'text', text: 'apps' }], structuredContent: { apps: APPS } }
+      const apps = APPS.map((app) => ({ ...app, active: app.pid === this.frontPid }))
+      return { content: [{ type: 'text', text: 'apps' }], structuredContent: { apps } }
     }
     if (tool === 'get_window_state') {
       return {
@@ -34,7 +47,14 @@ class FakeDriver implements DriverLike {
           { type: 'image', data: 'iVBOR', mimeType: 'image/png' },
           { type: 'resource_link', uri: 'file:///tmp/x.png', name: 'x' },
         ],
-        structuredContent: { snapshot_id: `s${String(args.pid).padStart(8, '0')}` },
+        structuredContent: {
+          snapshot_id: `s${String(args.pid).padStart(8, '0')}`,
+          window_title: 'Notes.txt',
+          window_bounds: { x: 100, y: 50, width: 400, height: 200 },
+          screenshot_width: 800,
+          screenshot_height: 400,
+          elements: [{ element_index: 1, frame: { x: 140, y: 90, w: 20, h: 20 } }],
+        },
       }
     }
     return { content: [{ type: 'text', text: `${tool} done` }] }
@@ -54,16 +74,20 @@ interface Harness {
   asked: { sessionId: string; requestId: number; app: ComputerApp }[]
   settled: [number, string][]
   always: ComputerApp[]
+  holds: (ComputerHold | null)[]
+  notes: string[]
 }
 
 function harness(): Harness {
   const driver = new FakeDriver()
   const h: Omit<Harness, 'service'> = {
     driver,
-    settings: { enabled: true, allowedApps: [] },
+    settings: { enabled: true, allowedApps: [], pauseOnUse: true, stopShortcut: '' },
     asked: [],
     settled: [],
     always: [],
+    holds: [],
+    notes: [],
   }
   const deps: ComputerUseDeps = {
     platform: 'darwin',
@@ -81,6 +105,10 @@ function harness(): Harness {
     setupDone: () => {},
     setupSettled: () => {},
     stopped: () => {},
+    handedBack: (sessionId) => h.notes.push(`${sessionId} handed back`),
+    paused: (sessionId, app) => h.notes.push(`${sessionId} paused in ${app}`),
+    agent: () => ({ id: 'claude-code', name: 'Claude Code' }),
+    held: (hold) => h.holds.push(hold),
     log: () => {},
   }
   return Object.assign(h, { service: new ComputerUse(deps) })
@@ -243,5 +271,168 @@ describe('what is never touched', () => {
     const h = harness()
     expect(code(await h.service.call('a', 'computer_list_windows', { pid: 99 }))).toBe('invalid')
     expect(h.asked).toEqual([])
+  })
+})
+
+describe('who has the app', () => {
+  const TEXTEDIT = [{ id: 'com.apple.textedit', name: 'TextEdit' }]
+  const last = (h: Harness) => h.holds[h.holds.length - 1]
+
+  it('tells main the window it uses and where each action lands in it', async () => {
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    const read = await h.service.call('a', 'computer_get_window_state', READ)
+    // The frames Kettu asks for are its own; the agent gets the result it always had.
+    expect(h.driver.calls.at(-1)?.args.tree_format).toBe('both')
+    expect((read.structuredContent as Record<string, unknown>).elements).toBeUndefined()
+    expect(last(h)).toMatchObject({
+      sessionId: 'a',
+      agentName: 'Claude Code',
+      app: 'TextEdit',
+      window: { pid: 10, id: 1, title: 'Notes.txt' },
+      control: 'agent',
+      act: null,
+    })
+    await h.service.call('a', 'computer_click', { ...READ, x: 200, y: 100 })
+    expect(last(h)?.act).toEqual({ seq: 1, kind: 'click', x: 0.25, y: 0.25 })
+    // An element's centre, from its frame in screen points.
+    await h.service.call('a', 'computer_click', { ...READ, element_token: 's00000010:1' })
+    expect(last(h)?.act).toEqual({ seq: 2, kind: 'click', x: 0.125, y: 0.25 })
+    // A key has no point of its own: the pointer stays where it was.
+    await h.service.call('a', 'computer_press_key', { ...READ, key: 'return' })
+    expect(last(h)?.act).toEqual({ seq: 3, kind: 'key', x: 0.125, y: 0.25 })
+  })
+
+  it('shows the window when only the light above it keeps the driver from confirming', async () => {
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    await h.service.call('a', 'computer_get_window_state', READ)
+    const unverified = (focused: number): CallToolResult => ({
+      isError: true,
+      content: [{ type: 'text', text: 'bring_to_front: exact window was not verified' }],
+      structuredContent: { process_activated: true, observed: { focused_window_id: focused } },
+    })
+    h.driver.front = unverified(1)
+    await expect(h.service.show('a')).resolves.toBeUndefined()
+    h.driver.front = unverified(2)
+    await expect(h.service.show('a')).rejects.toThrow('not verified')
+    await expect(h.service.show('b')).resolves.toBeUndefined()
+    expect(h.driver.acted().filter((tool) => tool === 'bring_to_front')).toHaveLength(2)
+  })
+
+  it('holds the calls while the user has the app, and goes on when they hand it back', async () => {
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    await h.service.call('a', 'computer_get_window_state', READ)
+    h.service.takeOver('a')
+    expect(last(h)?.control).toBe('you')
+    let done = false
+    const pending = h.service.call('a', 'computer_click', { ...READ, x: 1, y: 1 })
+    void pending.then(() => (done = true))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(done).toBe(false)
+    expect(h.driver.acted()).toEqual(['get_window_state'])
+    h.service.handBack('a')
+    expect((await pending).isError).toBeUndefined()
+    expect(h.driver.acted()).toEqual(['get_window_state', 'click'])
+    expect(last(h)?.control).toBe('agent')
+    expect(h.notes).toEqual(['a handed back'])
+  })
+
+  it('answers a long wait before the harness gives up, without failing', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    await h.service.call('a', 'computer_get_window_state', READ)
+    h.service.takeOver('a')
+    const pending = h.service.call('a', 'computer_click', { ...READ, x: 1, y: 1 })
+    await vi.advanceTimersByTimeAsync(CONTROL_WAIT_MS)
+    const result = await pending
+    expect(result.isError).toBeUndefined()
+    expect(code(result)).toBe('user_has_control')
+    expect(h.driver.acted()).toEqual(['get_window_state'])
+    // Holding the app outlasts the hold's own idle limit.
+    await vi.advanceTimersByTimeAsync(10 * 60_000)
+    expect(last(h)?.control).toBe('you')
+  })
+
+  it('ends the waiting calls as stopped on Stop and at the end of the turn', async () => {
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    await h.service.call('a', 'computer_get_window_state', READ)
+    h.service.takeOver('a')
+    const stopped = h.service.call('a', 'computer_click', { ...READ, x: 1, y: 1 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    h.service.control('a', 'stop')
+    expect(code(await stopped)).toBe('stopped')
+    expect(last(h)).toBeNull()
+
+    h.service.turnEnded('a')
+    await h.service.call('a', 'computer_get_window_state', READ)
+    h.service.takeOver('a')
+    const ended = h.service.call('a', 'computer_click', { ...READ, x: 1, y: 1 })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    h.service.turnEnded('a')
+    expect(code(await ended)).toBe('stopped')
+    expect(h.driver.acted().filter((tool) => tool === 'click')).toEqual([])
+  })
+
+  it('pauses when the user brings the app it uses to the front, and only then', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    h.settings.allowedApps = [...TEXTEDIT, { id: 'com.apple.notes', name: 'Notes' }]
+    await h.service.call('a', 'computer_get_window_state', READ)
+    await vi.advanceTimersByTimeAsync(PAUSE_SETTLE_MS + PAUSE_POLL_MS)
+    // Another app in front leaves the agent alone.
+    h.driver.frontPid = 12
+    await vi.advanceTimersByTimeAsync(PAUSE_POLL_MS * 2)
+    expect(last(h)?.control).toBe('agent')
+    h.driver.frontPid = 10
+    await vi.advanceTimersByTimeAsync(PAUSE_POLL_MS * 2)
+    expect(last(h)?.control).toBe('you')
+    expect(h.notes).toEqual(['a paused in TextEdit'])
+    h.service.handBack('a')
+    expect(last(h)?.control).toBe('agent')
+    // Still in front after Hand back: the app has to leave the front and come back to pause again.
+    await vi.advanceTimersByTimeAsync(PAUSE_POLL_MS * 4)
+    expect(last(h)?.control).toBe('agent')
+  })
+
+  it('does not pause for the app its own call or Show app brought forward, or with the setting off', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    await h.service.call('a', 'computer_get_window_state', READ)
+    await vi.advanceTimersByTimeAsync(PAUSE_POLL_MS * 2)
+    // The app comes forward right after the agent's click.
+    await h.service.call('a', 'computer_click', { ...READ, x: 1, y: 1 })
+    h.driver.frontPid = 10
+    await vi.advanceTimersByTimeAsync(PAUSE_SETTLE_MS + PAUSE_POLL_MS * 2)
+    expect(last(h)?.control).toBe('agent')
+    h.driver.frontPid = 13
+    await vi.advanceTimersByTimeAsync(PAUSE_SETTLE_MS + PAUSE_POLL_MS * 2)
+    await h.service.show('a')
+    h.driver.frontPid = 10
+    await vi.advanceTimersByTimeAsync(PAUSE_POLL_MS * 2)
+    expect(last(h)?.control).toBe('agent')
+    h.driver.frontPid = 13
+    h.settings.pauseOnUse = false
+    h.service.settingsChanged()
+    await vi.advanceTimersByTimeAsync(PAUSE_SETTLE_MS * 3)
+    h.driver.frontPid = 10
+    await vi.advanceTimersByTimeAsync(PAUSE_POLL_MS * 4)
+    expect(last(h)?.control).toBe('agent')
+    expect(h.notes).toEqual([])
+  })
+
+  it('lets only the session holding the computer take it over or hand it back', async () => {
+    const h = harness()
+    h.settings.allowedApps = TEXTEDIT
+    await h.service.call('a', 'computer_get_window_state', READ)
+    h.service.takeOver('b')
+    expect(last(h)?.control).toBe('agent')
+    h.service.takeOver('a')
+    h.service.handBack('b')
+    expect(last(h)?.control).toBe('you')
   })
 })
