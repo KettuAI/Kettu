@@ -968,5 +968,89 @@
     "agentWorktree": "Worked in its own worktree <branch/>",
     "agentWorktreeUnnamed": "Worked in its own worktree",
     "copyPath": "Copy path"
+  },
+  "marketPublish": {
+    "kind": {
+      "skill": "Skill",
+      "plugin": "Plugin",
+      "mcp-server": "MCP server"
+    },
+    "visibility": {
+      "public": "Everyone",
+      "private": "Only me",
+      "unlisted": "Unlisted"
+    },
+    "visibilityHint": {
+      "public": "Listed in the Marketplace for anyone signed in to Kettu.",
+      "private": "Not listed. Installs on the computers signed in to your account."
+    },
+    "harness": {
+      "claude-code": "Claude Code",
+      "codex": "Codex"
+    },
+    "everyAgent": "Every agent",
+    "visibleTo": "Visible to",
+    "asBefore": "as before",
+    "adds": "Adds",
+    "addsGroup": {
+      "skills": "Skill",
+      "commands": "Commands",
+      "agents": "Agents",
+      "hooks": "Hooks",
+      "servers": "MCP server"
+    },
+    "worksWith": "Works with",
+    "runs": "Runs",
+    "changes": "Changes",
+    "change": {
+      "added": "new",
+      "removed": "removed"
+    },
+    "uploads": "Uploads",
+    "filesSize_one": "{{count}} file, {{size}}",
+    "filesSize_other": "{{count}} files, {{size}}",
+    "from": "from {{folder}}",
+    "viewFiles": "View files",
+    "hideFiles": "Hide files",
+    "checks": "Checks",
+    "noSecrets": "No secrets",
+    "runsNothing": "Runs nothing on install",
+    "withinLimits": "Within the limits",
+    "title": {
+      "new": "Publish to the Kettu Marketplace?",
+      "version": "Publish version {{version}} of {{name}}?",
+      "unlist": "Unlist {{name}} from the Kettu Marketplace?"
+    },
+    "description": {
+      "new": "Nothing is uploaded until you publish. Later versions ask you again.",
+      "version_one": "{{count}} person has it. They get {{version}} at their next update.",
+      "version_other": "{{count}} people have it. They get {{version}} at their next update.",
+      "unlist": "It leaves the Marketplace. People who have it keep it and its updates."
+    },
+    "notes": "What’s new · Written by {{agent}}, editable",
+    "notesPlaceholder": "What changed in this version",
+    "publisherName": "Publisher name",
+    "publisherHint": "Your first publish: this name goes on everything you publish. Change it later in Published.",
+    "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
+    "publish": "Publish",
+    "publishVersion": "Publish {{version}}",
+    "unlist": "Unlist",
+    "notNow": "Not now",
+    "keptDraft": "Kept as a draft",
+    "showProblems_one": "Show {{count}} problem",
+    "showProblems_other": "Show {{count}} problems",
+    "hideProblems": "Hide problems",
+    "outcome": {
+      "publishing": "Publishing {{name}}…",
+      "unlisting": "Unlisting {{name}}…",
+      "published": "Published {{name}} {{version}}",
+      "unlisted": "Unlisted {{name}}",
+      "failed": "Couldn’t publish {{name}}",
+      "unlistFailed": "Couldn’t unlist {{name}}",
+      "later": "Not published",
+      "expired": "No answer in time",
+      "ended": "The turn ended first",
+      "interrupted": "Kettu stopped before the Marketplace answered"
+    }
   }
 }

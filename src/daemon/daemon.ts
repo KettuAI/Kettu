@@ -21,13 +21,15 @@ import {
   verboseRecords,
 } from '@shared/log/process-log'
 import { matchLocale } from '@shared/locale'
+import type { MarketAccount } from '@shared/market-publish'
 import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { HostAdmin } from '../main/host-admin'
-import { Account } from '../main/account'
+import { Account, NotSignedIn } from '../main/account'
 import { accountBaseUrl, AccountApi, clientInfo, DAEMON_CLIENT } from '../main/account/service'
 import { accountFile } from '../main/account/store'
+import { MarketUnauthorized, runMarketCall } from '../main/market-api'
 import { createLogger } from '../main/log'
 import { MarketKeys, marketKeysFile } from '../main/market-keys'
 import { RelayToken } from '../main/relay-token'
@@ -352,11 +354,18 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
       changed: () => {
         relayToken?.update()
         hosts?.settingsChanged(new Set(['remote']))
+        hosts?.marketAccountChanged()
       },
       log: createLogger('account'),
     })
   }
   const signedIn = (): boolean => account?.status().state === 'signed-in'
+  const marketAccount = (): MarketAccount | null => {
+    const status = account?.status()
+    return status?.state === 'signed-in'
+      ? { name: status.account.name, email: status.account.email }
+      : null
+  }
 
   // Taken once the socket is this run's, so a second `kettu run` leaves the service's marker be.
   const marked = await takeDebugRun(options.dataPath).catch((error: unknown) => {
@@ -416,6 +425,22 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
     relayUrl,
     pushUrl,
     signedIn,
+    marketAccount,
+    marketCall: (call) => {
+      const signed = account
+      if (!signed || !accountBase) {
+        return Promise.resolve({
+          error: { code: 'signed_out', status: null, message: 'The daemon cannot use an account.' },
+        })
+      }
+      return runMarketCall(call, {
+        base: accountBase,
+        fetch: proxiedFetch(() => settings.get().proxy, options.env),
+        withToken: (run) =>
+          signed.withAccessToken(run, (error) => error instanceof MarketUnauthorized),
+        signedOut: (error) => error instanceof NotSignedIn,
+      })
+    },
     hostName: os.hostname(),
     env: hostEnv,
     inspector: (name, url) => debugPorts?.setInspector(name, url),

@@ -1795,3 +1795,245 @@
   font-size: 13px;
   line-height: 20px;
 }
+
+/* A publish to the Kettu Marketplace on Approval Card: the listing's line, who sees it, a table of
+   what it adds, runs and uploads with the checks, a new version's notes and a first publish's
+   publisher name. */
+.ks-thread .ui-apc.ks-pub {
+  max-width: none;
+}
+.ks-pub .ui-apc__desc {
+  white-space: normal;
+}
+/* The card holds fields and a file list of its own, which the card's scroller would cut. */
+.ks-pub .ui-apc__preview {
+  max-height: none;
+  overflow: visible;
+}
+.ks-pub__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--thread-ink);
+}
+.ks-pub-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--thread-card);
+  box-shadow: inset 0 0 0 0.5px var(--thread-line-strong);
+}
+.ks-pub-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--tile, var(--tile-slate));
+  color: var(--tile-ink);
+}
+.ks-pub-line__text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.ks-pub-line__top {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.ks-pub-line__top b {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-pub-line__version {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.ks-pub-line small {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--thread-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ks-pub-kind {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--thread-muted);
+}
+.ks-pub-faint {
+  color: var(--thread-faint);
+}
+.ks-pub-mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.ks-pub-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.ks-pub-label {
+  font-size: 12px;
+  color: var(--thread-muted);
+}
+.ks-pub-row > .ks-pub-label {
+  width: 96px;
+}
+.ks-pub-hint {
+  font-size: 12px;
+  color: var(--thread-faint);
+}
+.ks-pub-dl {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 7px 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--thread-card);
+  box-shadow: inset 0 0 0 0.5px var(--thread-line-strong);
+  font-size: 12.5px;
+}
+.ks-pub-dl > div {
+  display: contents;
+}
+.ks-pub-dl dt {
+  color: var(--thread-muted);
+}
+.ks-pub-dl dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.ks-pub-adds,
+.ks-pub-runs,
+.ks-pub-files {
+  display: grid !important;
+  gap: 3px !important;
+}
+.ks-pub-files > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ks-pub-agents {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ks-pub-checks {
+  gap: 4px 14px !important;
+}
+.ks-pub-ok,
+.ks-pub-vis {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.ks-pub-ok svg {
+  color: var(--thread-add);
+}
+.ks-pub-vis svg {
+  color: var(--thread-muted);
+}
+.ks-pub-uploads {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.ks-pub-link {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--thread-text);
+}
+.ks-pub-link:hover {
+  text-decoration: underline;
+}
+.ks-pub-filelist {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  max-height: 180px;
+  margin-top: 4px;
+  overflow-y: auto;
+}
+.ks-pub-filelist li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ks-pub-notes {
+  display: grid;
+  gap: 4px;
+}
+.ks-pub-notes textarea,
+.ks-pub-input {
+  border-radius: 8px;
+  background: var(--thread-card);
+  box-shadow: inset 0 0 0 1px var(--thread-line-strong);
+  color: var(--thread-ink);
+  transition: box-shadow 140ms ease;
+}
+.ks-pub-notes textarea {
+  min-height: 64px;
+  padding: 8px 11px;
+  font-size: 13px;
+  line-height: 1.55;
+  outline: none;
+  resize: vertical;
+}
+.ks-pub-notes textarea::placeholder {
+  color: var(--thread-muted);
+}
+.ks-pub-notes textarea:focus,
+.ks-pub-input:focus-within {
+  box-shadow: inset 0 0 0 1px var(--thread-muted);
+}
+.ks-pub-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 30px;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.ks-pub-input:has(input[aria-invalid='true']) {
+  box-shadow: inset 0 0 0 1px var(--danger);
+}
+.ks-pub-input input {
+  width: 22ch;
+  min-width: 0;
+  background: transparent;
+  outline: none;
+}
+.ks-pub-handle .ks-pub-hint {
+  flex-basis: 100%;
+}

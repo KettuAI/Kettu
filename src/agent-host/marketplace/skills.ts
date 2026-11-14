@@ -62,7 +62,7 @@ const SKILL_LIMITS: FolderLimits = { files: 1_000, bytes: 50 * 1024 * 1024 }
 const SKILL_FILE = 'SKILL.md'
 const SKILL_MD_BYTES = 256 * 1024
 // A skill's name as the Agent Skills specification has it.
-const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
+export const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
 const DESCRIPTION_CHARS = 1024
 const PARTIAL = '.partial-'
 

@@ -39,6 +39,7 @@ import type {
   PluginScope,
   SkillSource,
 } from './marketplace'
+import type { PublishDraft, PublishVisibility } from './market-publish'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   MemoryDecision,
@@ -659,6 +660,23 @@ export interface HostContract {
   'market.skills': { params: { refresh?: boolean; cached?: boolean }; result: MarketSkills }
   // Copies a skill's files onto the host; the caller then adds the entry to settings.marketplace.skills.
   'market.addSkill': { params: { source: SkillSource }; result: MarketSkill }
+  // Any window's or device's answer to a Marketplace card: Publish (or Unlist) or Not now; the
+  // first counts. On a first publish, Publish carries the publisher name, which is set before
+  // anything else and refused with the reason when the service does not take it.
+  'market.answerPublish': {
+    params: {
+      sessionId: string
+      entryId: string
+      decision: 'confirm' | 'later'
+      visibility?: PublishVisibility
+      notes?: string
+      handle?: string
+    }
+    result: void
+  }
+  // What was put off or refused, newest first, kept on the host to publish later.
+  'market.publishDrafts': { params: void; result: { drafts: PublishDraft[] } }
+  'market.discardPublishDraft': { params: { id: string }; result: void }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
@@ -1245,6 +1263,9 @@ export const HOST_METHODS = [
   'market.removeMarketplace',
   'market.skills',
   'market.addSkill',
+  'market.answerPublish',
+  'market.publishDrafts',
+  'market.discardPublishDraft',
   'projects.list',
   'projects.add',
   'projects.remove',

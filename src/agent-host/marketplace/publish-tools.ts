@@ -1,0 +1,873 @@
+// The Marketplace tools of Kettu's MCP service: an agent checks a folder, publishes it to the Kettu
+// Marketplace as a new listing or a new version, lists what the user published and unlists one.
+// Every publish and unlisting waits for the user's answer in a card of the session, and nothing is
+// uploaded before Publish; what was put off is kept as a draft.
+
+import path from 'node:path'
+import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
+import {
+  LISTING_NOTES_CHARS,
+  VERSION,
+  nextPatch,
+  suggestHandle,
+  type MarketAccount,
+  type MarketCall,
+  type MarketFailure,
+  type MarketMine,
+  type MarketProblem,
+  type MarketResults,
+  type MineListing,
+  type PublishDraft,
+  type PublishManifest,
+  type PublishVisibility,
+} from '@shared/market-publish'
+import type { MarketPublishChange, MarketPublishEntry, MarketPublishOutcome } from '@shared/thread'
+import type { Caller } from '../artifacts/tools'
+import { checkFolder, type CheckedFile, type FolderCheck } from './publish-check'
+import type { NewDraft } from './publish-drafts'
+
+export const MARKET_CHECK = 'marketplace_check'
+export const MARKET_PUBLISH = 'marketplace_publish'
+export const MARKET_MINE = 'marketplace_mine'
+export const MARKET_UNLIST = 'marketplace_unlist'
+/** Read only, so they run without the agent's permission prompt; publish and unlist ask in a card. */
+export const MARKET_AUTO_ALLOW = [MARKET_CHECK, MARKET_MINE]
+/** How long a card waits before what it asked is put off. */
+export const MARKET_WAIT_MS = 10 * 60_000
+
+const PATH_CHARS = 4096
+const LISTING_REF_CHARS = 80
+// A new version's changed files are compared line by line up to these bounds.
+const COMPARE_FILES = 40
+const COMPARE_BYTES = 256 * 1024
+
+export const MARKET_INSTRUCTIONS =
+  'The marketplace_* tools publish the user’s own skills, plugins and MCP servers to the Kettu ' +
+  'Marketplace. Publish only when the user asks. Check a folder with marketplace_check and fix ' +
+  'what it reports before marketplace_publish; every publish and unlisting waits for the user to ' +
+  'confirm it in this session.'
+
+export const MARKET_TOOLS: Tool[] = [
+  {
+    name: MARKET_CHECK,
+    title: 'Check a folder for the Kettu Marketplace',
+    description:
+      'Checks a folder before it is published to the Kettu Marketplace, uploading nothing. It ' +
+      'tells what the folder is (a skill with SKILL.md, a Claude Code plugin with ' +
+      '.claude-plugin/plugin.json, a Codex plugin with .codex-plugin/plugin.json, an MCP server ' +
+      'with server.json, or an MCP bundle .mcpb file), its name, description and version, the ' +
+      'files that would upload and their size, what an install adds and runs, whether the user ' +
+      'published it before, and every problem that keeps it from being published, such as a ' +
+      'missing field, too many files or a secret in a file. Fix the problems, then check again.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          minLength: 1,
+          maxLength: PATH_CHARS,
+          description: 'The folder or .mcpb file, absolute or from the session’s folder.',
+        },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+  },
+  {
+    name: MARKET_PUBLISH,
+    title: 'Publish to the Kettu Marketplace',
+    description:
+      'Publishes a folder to the Kettu Marketplace, as a new listing or as a new version of one ' +
+      'the user published. Check it with marketplace_check first. The user confirms every ' +
+      'publish in a card in this session, and this call waits for their answer, up to 10 ' +
+      'minutes; nothing is uploaded until they press Publish. If they choose Not now or do not ' +
+      'answer, nothing is uploaded and it is kept as a draft they can publish later: do not call ' +
+      'it again unless they ask. Plugins and MCP servers take the version in their manifest; a ' +
+      'skill gets 1.0.0 first, then the next patch version unless you pass one. For a new ' +
+      'version, write short notes on what changed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          minLength: 1,
+          maxLength: PATH_CHARS,
+          description: 'The folder or .mcpb file, absolute or from the session’s folder.',
+        },
+        visibility: {
+          type: 'string',
+          enum: ['public', 'private'],
+          description:
+            'For a new listing: public lists it for everyone, private only for the user’s own ' +
+            'computers. The user can change it in the card. A new version keeps its listing’s.',
+        },
+        version: {
+          type: 'string',
+          maxLength: 64,
+          description: 'A skill’s version, such as 1.2.0, when the next patch is not right.',
+        },
+        notes: {
+          type: 'string',
+          maxLength: LISTING_NOTES_CHARS,
+          description:
+            'What changed in this version, in a sentence or two. The user can edit them.',
+        },
+      },
+      required: ['path'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+  },
+  {
+    name: MARKET_MINE,
+    title: 'List what the user published',
+    description:
+      'Lists what the user published to the Kettu Marketplace: each listing’s name, kind, who ' +
+      'can see it, versions, installs and whether it was taken down, and the drafts waiting to ' +
+      'be published.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+  },
+  {
+    name: MARKET_UNLIST,
+    title: 'Unlist from the Kettu Marketplace',
+    description:
+      'Takes a listing the user published out of the Kettu Marketplace: it is no longer listed ' +
+      'and gets no new installs, while people who have it keep it and its updates. The user ' +
+      'confirms it in a card in this session, and this call waits for their answer, up to 10 ' +
+      'minutes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        listing: {
+          type: 'string',
+          minLength: 1,
+          maxLength: LISTING_REF_CHARS,
+          description: 'The listing’s id, or its name as @publisher/slug, from marketplace_mine.',
+        },
+      },
+      required: ['listing'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+  },
+]
+
+const NAMES = new Set(MARKET_TOOLS.map((tool) => tool.name))
+
+export function isMarketToolName(name: string): boolean {
+  return NAMES.has(name)
+}
+
+/** What a card shows, as the host adds it to the thread. */
+export type MarketAsk = Omit<
+  MarketPublishEntry,
+  'kind' | 'id' | 'expiresAt' | 'outcome' | 'device' | 'after'
+>
+
+/** The user's answer to a card, or how it ended without one. */
+export type MarketAnswer =
+  | { decision: 'confirm'; visibility: PublishVisibility | null; notes: string | null }
+  | { decision: 'later' | 'expired' | 'ended' }
+
+/** A call the main process or the daemon refused, with the service's reason. */
+export class MarketCallError extends Error {
+  constructor(readonly failure: MarketFailure) {
+    super(failure.message)
+    this.name = 'MarketCallError'
+  }
+}
+
+export interface MarketToolsDeps {
+  /** The host's Kettu account, while it is signed in with Kettu's services on. */
+  account(): MarketAccount | null
+  /** Makes an API call through main or the daemon; throws `MarketCallError`. */
+  call<K extends MarketCall['kind']>(
+    call: Extract<MarketCall, { kind: K }>,
+  ): Promise<MarketResults[K]>
+  /** Adds the card to the session's thread; null for a session Kettu holds no thread for. */
+  ask(sessionId: string, ask: MarketAsk): { entryId: string; answer: Promise<MarketAnswer> } | null
+  /** What became of a card the user answered. */
+  settle(sessionId: string, entryId: string, outcome: MarketPublishOutcome): void
+  drafts: {
+    put(draft: NewDraft): Promise<PublishDraft>
+    published(folder: string): Promise<void>
+    list(): PublishDraft[]
+  }
+  agentOf(sessionId: string): string | null
+  sessionTitle(sessionId: string): string | null | undefined
+  home: string
+}
+
+type Code = 'invalid' | 'signed_out' | 'not_found' | 'not_ready' | 'refused'
+
+class Refusal extends Error {
+  constructor(
+    readonly code: Code,
+    message: string,
+    readonly problems: MarketProblem[] = [],
+  ) {
+    super(message)
+    this.name = 'Refusal'
+  }
+}
+
+function invalid(message: string): Refusal {
+  return new Refusal('invalid', message)
+}
+
+function fields(input: unknown, allowed: readonly string[]): Record<string, unknown> {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw invalid('The arguments must be an object.')
+  }
+  const o = input as Record<string, unknown>
+  const unknown = Object.keys(o).find((key) => !allowed.includes(key))
+  if (unknown !== undefined) throw invalid(`Unknown argument ${unknown}.`)
+  return o
+}
+
+function text(
+  o: Record<string, unknown>,
+  key: string,
+  max: number,
+  required: boolean,
+): string | null {
+  const value = o[key]
+  if (value === undefined && !required) return null
+  if (typeof value !== 'string' || value.trim() === '') {
+    if (!required && value === '') return null
+    throw invalid(`${key} must be a non-empty string.`)
+  }
+  if (value.length > max) throw invalid(`${key} must be at most ${max} characters.`)
+  return value.trim()
+}
+
+export function parsePublishInput(input: unknown): {
+  path: string
+  visibility: PublishVisibility | null
+  version: string | null
+  notes: string | null
+} {
+  const o = fields(input, ['path', 'visibility', 'version', 'notes'])
+  const visibility = o.visibility ?? null
+  if (visibility !== null && visibility !== 'public' && visibility !== 'private') {
+    throw invalid('visibility must be public or private.')
+  }
+  const version = text(o, 'version', 64, false)
+  if (version !== null && !VERSION.test(version)) {
+    throw invalid(`version must be a version such as 1.2.0, not "${version}".`)
+  }
+  return {
+    path: text(o, 'path', PATH_CHARS, true)!,
+    visibility,
+    version,
+    notes: text(o, 'notes', LISTING_NOTES_CHARS, false),
+  }
+}
+
+function sizeText(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function lineList(text: string): string[] {
+  const lines = text.split('\n')
+  if (lines.at(-1) === '') lines.pop()
+  return lines
+}
+
+/** Lines added and removed between two texts, counting a line moved as neither. */
+export function lineChanges(before: string, after: string): { added: number; removed: number } {
+  const left = new Map<string, number>()
+  for (const line of lineList(before)) left.set(line, (left.get(line) ?? 0) + 1)
+  let added = 0
+  for (const line of lineList(after)) {
+    const count = left.get(line) ?? 0
+    if (count > 0) left.set(line, count - 1)
+    else added++
+  }
+  let removed = 0
+  for (const count of left.values()) removed += count
+  return { added, removed }
+}
+
+/** Keys in a fixed order, so two equal objects read the same. */
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
+  if (typeof value === 'object' && value !== null) {
+    const o = value as Record<string, unknown>
+    return `{${Object.keys(o)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stable(o[key])}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+/** What a folder is ready to publish as, or why not, with the user's listing it would update. */
+interface Plan {
+  check: FolderCheck
+  folder: string
+  mine: MarketMine | null
+  /** Why the user's listings could not be read, for a check that goes on without them. */
+  mineError: string | null
+  listing: MineListing | null
+  version: string | null
+  problems: MarketProblem[]
+}
+
+function listingName(listing: Pick<MineListing, 'handle' | 'slug'>): string {
+  return `@${listing.handle}/${listing.slug}`
+}
+
+const KIND_NAMES = { skill: 'skill', plugin: 'plugin', 'mcp-server': 'MCP server' } as const
+
+export class MarketTools {
+  constructor(private readonly deps: MarketToolsDeps) {}
+
+  /** Whether the host is signed in to a Kettu account with Kettu's services on, which lists them. */
+  get on(): boolean {
+    return this.deps.account() !== null
+  }
+
+  /** Serves a call; a refusal becomes a tool error whose text says why. */
+  async call(caller: Caller, name: string, input: unknown): Promise<CallToolResult> {
+    try {
+      if (!this.deps.account()) {
+        throw new Refusal(
+          'signed_out',
+          'The Kettu Marketplace needs this computer signed in to a Kettu account with Kettu’s ' +
+            'cloud services on. Ask the user to sign in in Settings › Account.',
+        )
+      }
+      switch (name) {
+        case MARKET_CHECK:
+          return await this.check(caller, input)
+        case MARKET_PUBLISH:
+          return await this.publish(caller, input)
+        case MARKET_MINE:
+          fields(input ?? {}, [])
+          return await this.mine()
+        case MARKET_UNLIST:
+          return await this.unlist(caller, input)
+        default:
+          throw new Error(`Unknown tool ${name}`)
+      }
+    } catch (error) {
+      if (error instanceof MarketCallError) {
+        return failed(error.failure.code, serviceText(error.failure), error.failure.problems ?? [])
+      }
+      if (error instanceof Refusal) return failed(error.code, error.message, error.problems)
+      throw error
+    }
+  }
+
+  /** Sets the account's publisher name, from the card of a first publish. */
+  async setPublisher(handle: string): Promise<void> {
+    await this.deps.call({ kind: 'set-publisher', handle })
+  }
+
+  private where(caller: Caller): string {
+    return caller.folder ?? caller.project
+  }
+
+  /** The path as the card shows it: from the session's folder, or with `~` for the home folder. */
+  private shown(target: string, base: string): string {
+    const relative = path.relative(base, target)
+    if (relative === '') return '.'
+    if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
+      return relative.split(path.sep).join('/')
+    }
+    const home = this.deps.home
+    return target === home || target.startsWith(home + path.sep)
+      ? `~${target.slice(home.length)}`
+      : target
+  }
+
+  private async plan(caller: Caller, given: string, wanted: string | null): Promise<Plan> {
+    const base = this.where(caller)
+    const target = path.resolve(base, given)
+    const check = await checkFolder(target)
+    const problems = [...check.problems]
+    let mine: MarketMine | null = null
+    let mineError: string | null = null
+    if (check.slug) {
+      try {
+        mine = await this.deps.call({ kind: 'mine' })
+      } catch (error) {
+        if (!(error instanceof MarketCallError)) throw error
+        mineError = serviceText(error.failure)
+      }
+    }
+    const same = mine?.listings.find((listing) => listing.slug === check.slug) ?? null
+    let listing: MineListing | null = null
+    if (same && (same.kind !== check.kind || (same.harness ?? null) !== check.harness)) {
+      problems.push({
+        message: `${listingName(same)} is already one of the user’s listings, as another kind. Give this one another name.`,
+      })
+    } else if (same) {
+      listing = same
+      if (same.takenDown) {
+        problems.push({
+          message: `${listingName(same)} was taken down by Kettu: ${same.takenDown.reason}`,
+        })
+      }
+    }
+    const taken = listing?.versions.map((v) => v.version) ?? []
+    let version: string | null = check.version
+    if (check.kind === 'skill') {
+      version = wanted ?? (listing ? nextPatch(taken) : '1.0.0')
+    } else if (wanted !== null && check.version !== null && wanted !== check.version) {
+      problems.push({
+        path: check.manifest ?? undefined,
+        message: `The version is ${check.version}, as the manifest says; change it there instead of passing ${wanted}.`,
+      })
+    }
+    if (version !== null && taken.includes(version)) {
+      problems.push({
+        path: check.kind === 'skill' ? undefined : (check.manifest ?? undefined),
+        message:
+          check.kind === 'skill'
+            ? `Version ${version} of ${listingName(listing!)} is published already. Pass a higher version.`
+            : `Version ${version} of ${listingName(listing!)} is published already. Raise the version in ${check.manifest}.`,
+      })
+    }
+    return {
+      check,
+      folder: this.shown(target, base),
+      mine,
+      mineError,
+      listing,
+      version,
+      problems,
+    }
+  }
+
+  private async check(caller: Caller, input: unknown): Promise<CallToolResult> {
+    const o = fields(input, ['path'])
+    const plan = await this.plan(caller, text(o, 'path', PATH_CHARS, true)!, null)
+    const { check, listing, problems } = plan
+    const lines: string[] = []
+    if (check.kind && check.name) {
+      const kind = check.harness
+        ? `${check.harness === 'codex' ? 'Codex' : 'Claude Code'} plugin`
+        : KIND_NAMES[check.kind]
+      lines.push(
+        `${problems.length === 0 ? 'Ready to publish' : 'Not ready to publish'}: the ${kind} ` +
+          `"${check.name}" (${check.slug}) ${plan.version ?? ''}, ${check.files.length} files, ` +
+          `${sizeText(check.bytes)}, from ${plan.folder}.`.replace(' ,', ','),
+      )
+      if (listing) {
+        lines.push(
+          `It would be a new version of ${listingName(listing)}, now at ${listing.current ?? 'no live version'}.`,
+        )
+      } else if (plan.mine) {
+        lines.push('It would be a new listing.')
+      } else if (plan.mineError) {
+        lines.push(`Kettu could not read the user’s listings: ${plan.mineError}`)
+      }
+    }
+    if (problems.length > 0) {
+      lines.push('Problems to fix:', ...problems.map(problemLine))
+    }
+    return {
+      content: [{ type: 'text', text: lines.join('\n') }],
+      structuredContent: {
+        ready: problems.length === 0,
+        kind: check.kind,
+        harness: check.harness,
+        name: check.name,
+        slug: check.slug,
+        description: check.description,
+        version: plan.version,
+        listing: listing ? listingName(listing) : null,
+        current: listing?.current ?? null,
+        files: check.files.length,
+        bytes: check.bytes,
+        adds: check.adds,
+        runs: check.runs,
+        problems,
+      },
+    }
+  }
+
+  private async publish(caller: Caller, input: unknown): Promise<CallToolResult> {
+    const args = parsePublishInput(input)
+    const plan = await this.plan(caller, args.path, args.version)
+    const { check, listing } = plan
+    if (plan.problems.length > 0 || !check.kind || !check.slug || !check.name || !plan.version) {
+      throw new Refusal(
+        'not_ready',
+        ['Nothing was uploaded. Fix these first:', ...plan.problems.map(problemLine)].join('\n'),
+        plan.problems,
+      )
+    }
+    if (!plan.mine) {
+      throw new Refusal(
+        'refused',
+        `Nothing was uploaded: ${plan.mineError ?? 'Kettu could not read the user’s listings.'}`,
+      )
+    }
+    const account = this.deps.account()
+    const changes = listing ? await this.changes(listing, check) : null
+    const asked = this.deps.ask(caller.sessionId, {
+      action: 'publish',
+      item: {
+        name: check.name,
+        slug: check.slug,
+        kind: check.kind,
+        harness: check.harness,
+        description: check.description ?? '',
+      },
+      listingId: listing?.id ?? null,
+      version: plan.version,
+      previous: listing?.current ?? null,
+      installs: listing?.installs.total ?? 0,
+      visibility: listing?.visibility ?? args.visibility ?? 'public',
+      notes: args.notes,
+      adds: check.adds,
+      runs: check.runs,
+      manifest: check.manifest,
+      folder: plan.folder,
+      files: check.files.map((file) => ({ path: file.path, size: file.size })),
+      bytes: check.bytes,
+      changes,
+      publisher: plan.mine.publisher || !account ? null : { suggested: suggestHandle(account) },
+    })
+    if (!asked) throw new Refusal('not_found', 'This session is not open, so it shows no card.')
+    const answer = await asked.answer
+    const manifest: PublishManifest = {
+      slug: check.slug,
+      name: check.name,
+      kind: check.kind,
+      ...(check.harness ? { harness: check.harness } : {}),
+      description: check.description ?? '',
+      ...(check.about ? { about: check.about } : {}),
+      version: plan.version,
+      ...(args.notes ? { notes: args.notes } : {}),
+      ...(listing ? {} : { visibility: args.visibility ?? 'public' }),
+      ...(check.server ? { server: check.server } : {}),
+      ...(check.adds.length > 0 ? { adds: check.adds } : {}),
+      ...this.from(caller.sessionId),
+    }
+    const draft = (error: string | null, problems: MarketProblem[] = []) =>
+      this.deps.drafts.put({
+        path: check.path,
+        manifest,
+        listingId: listing?.id ?? null,
+        sessionId: caller.sessionId,
+        sessionTitle: this.deps.sessionTitle(caller.sessionId) ?? null,
+        agentId: this.deps.agentOf(caller.sessionId),
+        error,
+        problems,
+      })
+    if (answer.decision !== 'confirm') {
+      await draft(null)
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              answer.decision === 'later'
+                ? 'The user chose Not now. Nothing was uploaded; it is kept as a draft in Marketplace › Published. Do not publish it again unless they ask.'
+                : answer.decision === 'expired'
+                  ? 'The user did not answer within 10 minutes. Nothing was uploaded; it is kept as a draft in Marketplace › Published.'
+                  : 'The turn ended before the user answered. Nothing was uploaded; it is kept as a draft in Marketplace › Published.',
+          },
+        ],
+        structuredContent: { published: false, draft: true },
+      }
+    }
+    if (answer.notes !== null) manifest.notes = answer.notes
+    else delete manifest.notes
+    if (!listing && answer.visibility) manifest.visibility = answer.visibility
+    let published: MineListing
+    try {
+      published = await this.deps.call({
+        kind: 'publish',
+        manifest,
+        files: check.files.map((file) => ({ path: file.path, data: file.data.toString('base64') })),
+      })
+    } catch (error) {
+      if (!(error instanceof MarketCallError)) throw error
+      const message = serviceText(error.failure)
+      const problems = error.failure.problems ?? []
+      this.deps.settle(caller.sessionId, asked.entryId, { kind: 'failed', message, problems })
+      await draft(message, problems)
+      throw new Refusal(
+        'refused',
+        [
+          `The Kettu Marketplace refused it, and it is kept as a draft: ${message}`,
+          ...problems.map(problemLine),
+        ].join('\n'),
+        problems,
+      )
+    }
+    this.deps.settle(caller.sessionId, asked.entryId, {
+      kind: 'published',
+      listingId: published.id,
+      handle: published.handle,
+      version: plan.version,
+    })
+    await this.deps.drafts.published(check.path)
+    const who =
+      published.visibility === 'public'
+        ? 'listed for everyone'
+        : published.visibility === 'private'
+          ? 'only for the user’s own computers'
+          : 'unlisted, for the people who have it'
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Published ${listingName(published)} ${plan.version}, ${who}.`,
+        },
+      ],
+      structuredContent: {
+        published: true,
+        listing: listingName(published),
+        id: published.id,
+        version: plan.version,
+        visibility: published.visibility,
+      },
+    }
+  }
+
+  /** Who asked, as the version history shows it. */
+  private from(sessionId: string): { agent?: string; session?: string } {
+    const agent = this.deps.agentOf(sessionId)
+    const session = this.deps.sessionTitle(sessionId)
+    return {
+      ...(agent ? { agent: agent.split('~')[0]! } : {}),
+      ...(session ? { session } : {}),
+    }
+  }
+
+  /** The files of a new version against the listing's current one; null when not comparable. */
+  private async changes(
+    listing: MineListing,
+    check: FolderCheck,
+  ): Promise<MarketPublishChange[] | null> {
+    const current = listing.current
+    if (!current) return null
+    try {
+      const old = await this.deps.call({ kind: 'version', id: listing.id, version: current })
+      if (check.kind === 'mcp-server' && check.files.length === 0) {
+        return stable(old.server ?? null) === stable(check.server)
+          ? []
+          : [{ path: 'server.json', status: 'changed', added: null, removed: null }]
+      }
+      const before = new Map(old.files.map((file) => [file.path, file]))
+      const out: MarketPublishChange[] = []
+      let compared = 0
+      for (const file of check.files) {
+        const was = before.get(file.path)
+        before.delete(file.path)
+        if (!was) {
+          const added = file.text ? lineList(file.data.toString('utf8')).length : null
+          out.push({ path: file.path, status: 'added', added, removed: null })
+          continue
+        }
+        if (was.sha256 === file.sha256) continue
+        let lines: { added: number; removed: number } | null = null
+        if (comparable(file, was.size) && compared < COMPARE_FILES) {
+          compared++
+          lines = await this.lines(listing.id, current, file)
+        }
+        out.push({
+          path: file.path,
+          status: 'changed',
+          added: lines?.added ?? null,
+          removed: lines?.removed ?? null,
+        })
+      }
+      for (const was of before.values()) {
+        out.push({ path: was.path, status: 'removed', added: null, removed: null })
+      }
+      return out
+    } catch (error) {
+      if (error instanceof MarketCallError) return null
+      throw error
+    }
+  }
+
+  private async lines(
+    id: string,
+    version: string,
+    file: CheckedFile,
+  ): Promise<{ added: number; removed: number } | null> {
+    try {
+      const old = await this.deps.call({ kind: 'file', id, version, path: file.path })
+      return lineChanges(
+        Buffer.from(old.data, 'base64').toString('utf8'),
+        file.data.toString('utf8'),
+      )
+    } catch (error) {
+      if (error instanceof MarketCallError) return null
+      throw error
+    }
+  }
+
+  private async mine(): Promise<CallToolResult> {
+    const mine = await this.deps.call({ kind: 'mine' })
+    const drafts = this.deps.drafts.list()
+    const listings = mine.listings.map((listing) => ({
+      id: listing.id,
+      listing: listingName(listing),
+      name: listing.name,
+      kind: listing.kind,
+      ...(listing.harness ? { harness: listing.harness } : {}),
+      visibility: listing.visibility,
+      current: listing.current,
+      versions: listing.versions.map((v) => ({
+        version: v.version,
+        status: v.status,
+        publishedAt: v.publishedAt,
+      })),
+      installs: { total: listing.installs.total, week: listing.installs.week },
+      takenDown: listing.takenDown,
+    }))
+    const lines =
+      listings.length === 0
+        ? ['The user has published nothing to the Kettu Marketplace yet.']
+        : listings.map(
+            (l) =>
+              `${l.listing} (${l.id}): ${l.name}, ${l.kind}, ${l.visibility}, version ${l.current ?? 'none live'}, ${l.installs.total} installs${l.takenDown ? ', taken down' : ''}`,
+          )
+    if (drafts.length > 0) {
+      lines.push(
+        'Drafts not published yet:',
+        ...drafts.map(
+          (d) =>
+            `- ${d.manifest.name} ${d.manifest.version} from ${d.path}${d.error ? `, refused: ${d.error}` : ''}`,
+        ),
+      )
+    }
+    return {
+      content: [{ type: 'text', text: lines.join('\n') }],
+      structuredContent: {
+        publisher: mine.publisher?.handle ?? null,
+        listings,
+        drafts: drafts.map((d) => ({
+          name: d.manifest.name,
+          kind: d.manifest.kind,
+          version: d.manifest.version,
+          path: d.path,
+          error: d.error,
+        })),
+      },
+    }
+  }
+
+  private async unlist(caller: Caller, input: unknown): Promise<CallToolResult> {
+    const o = fields(input, ['listing'])
+    const ref = text(o, 'listing', LISTING_REF_CHARS, true)!
+    const mine = await this.deps.call({ kind: 'mine' })
+    const listing =
+      mine.listings.find(
+        (l) => l.id === ref || listingName(l) === ref || `${l.handle}/${l.slug}` === ref,
+      ) ?? null
+    if (!listing) {
+      throw new Refusal(
+        'not_found',
+        `The user has no listing ${ref}. Call marketplace_mine for them.`,
+      )
+    }
+    if (listing.visibility === 'unlisted') {
+      throw new Refusal('refused', `${listingName(listing)} is unlisted already.`)
+    }
+    const asked = this.deps.ask(caller.sessionId, {
+      action: 'unlist',
+      item: {
+        name: listing.name,
+        slug: listing.slug,
+        kind: listing.kind,
+        harness: listing.harness ?? null,
+        description: listing.description,
+      },
+      listingId: listing.id,
+      version: null,
+      previous: listing.current,
+      installs: listing.installs.total,
+      visibility: listing.visibility,
+      notes: null,
+      adds: [],
+      runs: [],
+      manifest: null,
+      folder: '',
+      files: [],
+      bytes: 0,
+      changes: null,
+      publisher: null,
+    })
+    if (!asked) throw new Refusal('not_found', 'This session is not open, so it shows no card.')
+    const answer = await asked.answer
+    if (answer.decision !== 'confirm') {
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              answer.decision === 'later'
+                ? `The user chose Not now; ${listingName(listing)} stays listed.`
+                : `The user did not answer; ${listingName(listing)} stays listed.`,
+          },
+        ],
+        structuredContent: { unlisted: false },
+      }
+    }
+    try {
+      await this.deps.call({ kind: 'update', id: listing.id, change: { visibility: 'unlisted' } })
+    } catch (error) {
+      if (!(error instanceof MarketCallError)) throw error
+      const message = serviceText(error.failure)
+      this.deps.settle(caller.sessionId, asked.entryId, { kind: 'failed', message, problems: [] })
+      throw new Refusal('refused', `The Kettu Marketplace did not unlist it: ${message}`)
+    }
+    this.deps.settle(caller.sessionId, asked.entryId, { kind: 'unlisted' })
+    return {
+      content: [
+        {
+          type: 'text',
+          text: `Unlisted ${listingName(listing)}. People who have it keep it and its updates.`,
+        },
+      ],
+      structuredContent: { unlisted: true, listing: listingName(listing) },
+    }
+  }
+}
+
+function comparable(file: CheckedFile, oldSize: number): boolean {
+  return file.text && file.size <= COMPARE_BYTES && oldSize <= COMPARE_BYTES
+}
+
+function problemLine(problem: MarketProblem): string {
+  return problem.path ? `- ${problem.path}: ${problem.message}` : `- ${problem.message}`
+}
+
+/** A service's failure as an agent reads it. */
+function serviceText(failure: MarketFailure): string {
+  switch (failure.code) {
+    case 'signed_out':
+    case 'unauthorized':
+      return 'This computer is not signed in to a Kettu account, or Kettu’s cloud services are off.'
+    case 'storage_full':
+      return 'The account’s cloud storage is full, which a listing for only the user counts against.'
+    case 'too_many_listings':
+      return 'The account has as many listings as it may have.'
+    case 'rate_limited':
+      return 'Too many versions were published in the last hour. Try again later.'
+    default:
+      return failure.message
+  }
+}
+
+function failed(code: string, message: string, problems: MarketProblem[]): CallToolResult {
+  return {
+    content: [{ type: 'text', text: message }],
+    structuredContent: { code, message, ...(problems.length > 0 ? { problems } : {}) },
+    isError: true,
+  }
+}

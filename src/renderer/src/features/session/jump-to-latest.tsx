@@ -30,6 +30,7 @@ const AFTER_END = new Set([
   'project_hooks',
   'problem_report',
   'memory',
+  'market_publish',
   'session_started',
 ])
 

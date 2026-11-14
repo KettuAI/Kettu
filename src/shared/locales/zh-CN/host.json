@@ -110,6 +110,8 @@
   "attention": {
     "browserOrigin": "想打开 {{site}}",
     "deviceAccess": "想使用 {{device}}",
+    "marketPublish": "想把 {{name}} 发布到 Kettu 的 Marketplace",
+    "marketUnlist": "想把 {{name}} 从 Kettu 的 Marketplace 下架",
     "computerApp": "想使用 {{app}}",
     "computerSetup": "想使用你的电脑",
     "controlAsk": {
@@ -596,5 +598,10 @@
   },
   "artifacts": {
     "formatUpgraded": "已迁移到其类型格式的第 {{format}} 版"
+  },
+  "marketPublish": {
+    "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",
+    "handleTaken": "@{{handle}} 已经有人用了，换一个发布者名。",
+    "publisherFailed": "没能设置发布者名：{{reason}}"
   }
 }
