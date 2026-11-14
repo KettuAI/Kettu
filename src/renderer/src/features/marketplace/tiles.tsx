@@ -43,7 +43,8 @@ export function ItemTile({
   quiet?: boolean
 }) {
   const art = tileArt(subject)
-  const hasLogo = !quiet && art.type === 'glyph' && subject.kind === 'plugin'
+  const hasLogo =
+    !quiet && art.type === 'glyph' && subject.kind === 'plugin' && subject.marks !== false
   const logo = usePluginLogo(hasLogo && subject.harness === 'codex' ? subject.id : null)
   const sized = size === 'row' ? undefined : size
   if (art.type === 'mark') {

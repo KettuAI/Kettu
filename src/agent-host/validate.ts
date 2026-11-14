@@ -27,7 +27,7 @@ import {
   type MemoryScope,
 } from '@shared/memory'
 import type { PluginScope, SkillSource } from '@shared/marketplace'
-import { HANDLE, LISTING_NOTES_CHARS } from '@shared/market-publish'
+import { HANDLE, LISTING_ID, LISTING_NOTES_CHARS } from '@shared/market-publish'
 import {
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
@@ -829,13 +829,20 @@ function marketRead(params: unknown): { refresh?: boolean; cached?: boolean } {
   }
 }
 
+// What a report to the Kettu Marketplace says at most, as the service takes it.
+const REPORT_CHARS = 2_000
+
 // A plugin's or marketplace's name; never one that could pass for a command line flag.
 const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
-/** A server Kettu keeps: a registry name, or `manual:` and a UUID. */
+/** A server Kettu keeps: a registry name, `manual:` and a UUID, or `kettu:` and a listing id. */
 function marketServerId(o: Fields): string {
   const id = string(o, 'serverId', ID_CHARS)
-  if (!/^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/.test(id) && !/^manual:[0-9a-f-]{36}$/.test(id)) {
+  if (
+    !/^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/.test(id) &&
+    !/^manual:[0-9a-f-]{36}$/.test(id) &&
+    !(id.startsWith('kettu:') && LISTING_ID.test(id.slice('kettu:'.length)))
+  ) {
     throw invalidParams('serverId is not a server Kettu keeps')
   }
   return id
@@ -891,21 +898,32 @@ function pluginId(o: Fields): string {
   return id
 }
 
-/** A plugin and where it is installed: for the user, or a project's folder for the others. */
-function pluginChange(
-  o: Fields,
-  platform: Platform,
-): { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string } {
+/** Where a plugin is installed: for the user, or a project's folder for the others. */
+function pluginPlace(o: Fields, platform: Platform): { scope: PluginScope; projectPath?: string } {
   const scope = o.scope as PluginScope
   if (scope !== 'user' && scope !== 'project' && scope !== 'local') {
     throw invalidParams('scope must be user, project or local')
   }
-  const base = { agentId: agentId(o), pluginId: pluginId(o), scope }
   if (scope === 'user') {
     if (o.projectPath !== undefined) throw invalidParams('A user scope takes no projectPath')
-    return base
+    return { scope }
   }
-  return { ...base, projectPath: absolutePath(o, 'projectPath', platform) }
+  return { scope, projectPath: absolutePath(o, 'projectPath', platform) }
+}
+
+/** A plugin and where it is installed. */
+function pluginChange(
+  o: Fields,
+  platform: Platform,
+): { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string } {
+  return { agentId: agentId(o), pluginId: pluginId(o), ...pluginPlace(o, platform) }
+}
+
+/** A listing of the Kettu Marketplace, by its opaque id. */
+function listingId(o: Fields): string {
+  const id = string(o, 'id', ID_CHARS)
+  if (!LISTING_ID.test(id)) throw invalidParams('id is not a listing of the Kettu Marketplace')
+  return id
 }
 
 /** Where a skill to add comes from: the catalog, a github.com URL or a folder on the host. */
@@ -926,7 +944,8 @@ function skillSource(value: unknown, platform: Platform): SkillSource {
     return { kind: 'github', url }
   }
   if (o.kind === 'local') return { kind: 'local', path: absolutePath(o, 'path', platform) }
-  throw invalidParams('source.kind must be catalog, github or local')
+  if (o.kind === 'kettu') return { kind: 'kettu', id: listingId(o) }
+  throw invalidParams('source.kind must be catalog, github, local or kettu')
 }
 
 // What one import names: each agent's memory of each project, and the entries ticked for global.
@@ -1194,6 +1213,41 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.publishDrafts': none,
     'market.discardPublishDraft': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
+    'market.community': (params) => {
+      const o = params === undefined || params === null ? {} : fields(params)
+      const q = optionalString(o, 'q', MARKET_QUERY_MAX)?.trim()
+      if (q !== undefined && /\p{Cc}/u.test(q)) throw invalidParams('q must be on one line')
+      const kind = o.kind
+      if (kind !== undefined && kind !== 'skill' && kind !== 'plugin' && kind !== 'mcp-server') {
+        throw invalidParams('kind must be skill, plugin or mcp-server')
+      }
+      const cursor = optionalString(o, 'cursor', TEXT_CHARS)
+      const refresh = optionalFlag(o, 'refresh')
+      return {
+        ...(q ? { q } : {}),
+        ...(kind !== undefined ? { kind } : {}),
+        ...(cursor ? { cursor } : {}),
+        ...(refresh !== undefined ? { refresh } : {}),
+      }
+    },
+    'market.communityListing': (params) => ({ id: listingId(fields(params)) }),
+    'market.communityInstalled': (params) => {
+      const refresh = optionalFlag(
+        params === undefined || params === null ? {} : fields(params),
+        'refresh',
+      )
+      return refresh === undefined ? {} : { refresh }
+    },
+    'market.installCommunityPlugin': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), agentId: agentId(o), ...pluginPlace(o, platform) }
+    },
+    'market.reportCommunity': (params) => {
+      const o = fields(params)
+      const message = string(o, 'message', REPORT_CHARS).trim()
+      if (message === '') throw invalidParams('message must say what the problem is')
+      return { id: listingId(o), message }
+    },
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)

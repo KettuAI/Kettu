@@ -21,6 +21,8 @@ import type {
   MarketSkills,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
+import type { CommunityDirectory, CommunityItem } from '@shared/market-community'
+import type { PublishKind } from '@shared/market-publish'
 import {
   Dropdown,
   EmptyState,
@@ -32,10 +34,17 @@ import { Button } from '@renderer/components/affect/button'
 import { mediumAgo } from '@renderer/lib/format'
 import { isMac, isWeb } from '@renderer/lib/platform'
 import { useHostScope } from '@renderer/stores/host-scope'
-import { SEARCH_MAX, SEARCH_MIN, type MarketSearchState } from '@renderer/stores/marketplace'
+import { useAccountStore } from '@renderer/stores/account'
+import {
+  SEARCH_MAX,
+  SEARCH_MIN,
+  type CommunitySearchState,
+  type MarketSearchState,
+} from '@renderer/stores/marketplace'
 import { openMarketplace, setMarketplaceTab, type MarketplaceTab } from '@renderer/stores/view'
 import { useHostName, useNamesHosts, useWindowHost } from '@renderer/stores/window-host'
 import { installSkill } from './actions'
+import { CommunityRow, CommunitySignedOut } from './community'
 import { AddMarketplaceDialog, AddServerDialog, AddSkillDialog } from './dialogs'
 import { useAgentName } from './hooks'
 import { MarketAway } from './parts'
@@ -63,7 +72,13 @@ import {
   SkeletonSection,
 } from './rows'
 import { SkillRow } from './skills'
-import { pluginSubject, serverSubject, skillSubject, type TileSubject } from './tile-art'
+import {
+  communitySubject,
+  pluginSubject,
+  serverSubject,
+  skillSubject,
+  type TileSubject,
+} from './tile-art'
 
 const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'installed']
 
@@ -88,6 +103,7 @@ type Entry =
   | { kind: 'mcp'; key: string; title: string; subject: TileSubject; server: CatalogServer }
   | { kind: 'plugin'; key: string; title: string; subject: TileSubject; plugin: CatalogPlugin }
   | { kind: 'skill'; key: string; title: string; subject: TileSubject; skill: CatalogSkill }
+  | { kind: 'community'; key: string; title: string; subject: TileSubject; item: CommunityItem }
 
 interface Section {
   id: string
@@ -96,6 +112,8 @@ interface Section {
   entries: Entry[]
   /** Skeleton rows after the entries, for a source still on its way. */
   pending: number
+  /** A line in place of the rows, such as what signing in would show. */
+  note?: ReactNode
 }
 
 const mcpEntry = (server: CatalogServer): Entry => ({
@@ -120,6 +138,14 @@ const skillEntry = (skill: CatalogSkill): Entry => ({
   skill,
 })
 
+const communityEntry = (item: CommunityItem): Entry => ({
+  kind: 'community',
+  key: itemKey({ kind: 'community', id: item.id }),
+  title: item.name,
+  subject: communitySubject(item),
+  item,
+})
+
 /** The lists taken in turn, one item from each, so a section mixes its kinds. */
 function interleave<T>(...lists: T[][]): T[] {
   const out: T[] = []
@@ -137,6 +163,9 @@ interface Sources {
   skills: MarketSkills | null
   skillsPending: boolean
   search: MarketSearchState | null
+  community: CommunityDirectory | null
+  communityPending: boolean
+  communitySearch: CommunitySearchState | null
 }
 
 function useSources(): Sources {
@@ -148,10 +177,73 @@ function useSources(): Sources {
   const skills = useMarketplaceStore((s) => s.skills)
   const skillsPending = useMarketplaceStore((s) => !s.skills && !s.skillsError)
   const search = useMarketplaceStore((s) => s.search)
+  const community = useMarketplaceStore((s) => s.community)
+  const communityPending = useMarketplaceStore((s) => !s.community && !s.communityError)
+  const communitySearch = useMarketplaceStore((s) => s.communitySearch)
   return useMemo(
-    () => ({ catalog, catalogPending, plugins, pluginsPending, skills, skillsPending, search }),
-    [catalog, catalogPending, plugins, pluginsPending, skills, skillsPending, search],
+    () => ({
+      catalog,
+      catalogPending,
+      plugins,
+      pluginsPending,
+      skills,
+      skillsPending,
+      search,
+      community,
+      communityPending,
+      communitySearch,
+    }),
+    [
+      catalog,
+      catalogPending,
+      plugins,
+      pluginsPending,
+      skills,
+      skillsPending,
+      search,
+      community,
+      communityPending,
+      communitySearch,
+    ],
   )
+}
+
+/**
+ * The account's own Only me items, then the Community's public ones by installs, of `kind` when
+ * given; while signed out, the Community section says what signing in shows.
+ */
+function communitySections(
+  src: Sources,
+  t: TFunction<'marketplace'>,
+  kind: PublishKind | null,
+): Section[] {
+  if (!src.community) {
+    return src.communityPending
+      ? [{ id: 'community', title: t('sections.community'), entries: [], pending: 2 }]
+      : []
+  }
+  if (!src.community.signedIn) {
+    return [
+      {
+        id: 'community',
+        title: t('sections.community'),
+        entries: [],
+        pending: 0,
+        note: <CommunitySignedOut />,
+      },
+    ]
+  }
+  const of = (items: CommunityItem[]) =>
+    items.filter((item) => kind === null || item.kind === kind).map(communityEntry)
+  return [
+    { id: 'yours', title: t('sections.yours'), entries: of(src.community.yours), pending: 0 },
+    {
+      id: 'community',
+      title: t('sections.community'),
+      entries: of(src.community.items),
+      pending: 0,
+    },
+  ]
 }
 
 /** The MCP catalog's own sections, titled from the app's copy by their ids. */
@@ -227,6 +319,7 @@ function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
       pending: src.pluginsPending ? 4 : 0,
     },
     ...mcpSections(src, t, 'featured'),
+    ...communitySections(src, t, null),
   ]
 }
 
@@ -238,7 +331,7 @@ function pluginSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
           { id: 'plugins-pending-1', title: null, entries: [], pending: 6 },
           { id: 'plugins-pending-2', title: null, entries: [], pending: 4 },
         ]
-      : []
+      : communitySections(src, t, 'plugin')
   }
   const plugins = [...src.plugins.catalog].sort(byInstalls)
   const groups = new Map<string, CatalogPlugin[]>()
@@ -262,13 +355,16 @@ function pluginSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
       pending: 0,
     },
     ...categories,
+    ...communitySections(src, t, 'plugin'),
   ]
 }
 
 /** Skills without a query: one section per publisher, the official ones first. */
 function skillSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
   if (!src.skills) {
-    return src.skillsPending ? [{ id: 'skills-pending', title: null, entries: [], pending: 6 }] : []
+    return src.skillsPending
+      ? [{ id: 'skills-pending', title: null, entries: [], pending: 6 }]
+      : communitySections(src, t, 'skill')
   }
   const groups = new Map<string, CatalogSkill[]>()
   for (const skill of src.skills.catalog) {
@@ -276,12 +372,13 @@ function skillSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
   }
   return [...groups]
     .sort(([, a], [, b]) => Number(b.some((s) => s.official)) - Number(a.some((s) => s.official)))
-    .map(([publisher, list]) => ({
+    .map(([publisher, list]): Section => ({
       id: `publisher-${publisher}`,
       title: t('sections.from', { publisher }),
       entries: list.map(skillEntry),
       pending: 0,
     }))
+    .concat(communitySections(src, t, 'skill'))
 }
 
 /** With a query: one section of each kind the tab shows, the registry's for a long one. */
@@ -332,6 +429,18 @@ function foundSections(
       })
     }
   }
+  const kind: PublishKind | null =
+    tab === 'plugins' ? 'plugin' : tab === 'skills' ? 'skill' : tab === 'mcp' ? 'mcp-server' : null
+  const found = src.communitySearch?.query === query ? src.communitySearch : null
+  if (src.community?.signedIn !== false) {
+    const items = found?.result ? [...found.result.yours, ...found.result.items] : []
+    sections.push({
+      id: 'found-community',
+      title: t('sections.community'),
+      entries: items.filter((item) => kind === null || item.kind === kind).map(communityEntry),
+      pending: !found || (!found.result && !found.error) ? 2 : 0,
+    })
+  }
   return sections
 }
 
@@ -368,6 +477,24 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     if (registry === null) store.clearSearch()
     else void store.find(registry)
   }, [registry, useMarketplaceStore])
+
+  // The Kettu Marketplace is searched by the service, as the registry is.
+  const communityQuery = tab !== 'installed' && filter ? filter.slice(0, SEARCH_MAX) : null
+  useEffect(() => {
+    const store = useMarketplaceStore.getState()
+    if (communityQuery === null) store.clearCommunitySearch()
+    else void store.findCommunity(communityQuery)
+  }, [communityQuery, useMarketplaceStore])
+
+  // Signing in or out of this computer's account changes what the Community shows.
+  const accountState = useAccountStore((s) => s.status?.state ?? null)
+  useEffect(() => {
+    if (scope.hostId !== null || accountState === null) return
+    const store = useMarketplaceStore.getState()
+    if (store.community && store.community.signedIn !== (accountState === 'signed-in')) {
+      void store.loadCommunity(true)
+    }
+  }, [accountState, scope.hostId, useMarketplaceStore])
 
   const addFolder = async () => {
     const path = await scope.api.dialogs.openProject()
@@ -498,7 +625,9 @@ function Sections({
           : tab === 'skills'
             ? skillSections(src, t)
             : mcpSections(src, t, null)
-    return built.filter((section) => section.entries.length > 0 || section.pending > 0)
+    return built.filter(
+      (section) => section.entries.length > 0 || section.pending > 0 || section.note,
+    )
   }, [src, t, tab, query, registry])
 
   return (
@@ -525,6 +654,14 @@ function SectionView({
   const { useMarketplaceStore } = useHostScope()
   const extra = useMarketplaceStore((s) => s.more[key] ?? 0)
   if (section.title === null) return <SkeletonSection rows={section.pending} />
+  if (section.note) {
+    return (
+      <section className="ui-as-int-section ui-as-rise" style={{ '--i': index } as CSSProperties}>
+        <h2 className="ui-as-int-section__title">{section.title}</h2>
+        {section.note}
+      </section>
+    )
+  }
   const visible = SECTION_ROWS + extra
   const shown = section.entries.slice(0, visible)
   const rest = section.entries.slice(visible)
@@ -554,6 +691,9 @@ function SectionView({
 
 function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fresh: boolean }) {
   const showKind = tab === 'all'
+  if (entry.kind === 'community') {
+    return <CommunityRow item={entry.item} tab={tab} showKind={showKind} fresh={fresh} />
+  }
   if (entry.kind === 'plugin') {
     return <PluginRow plugin={entry.plugin} tab={tab} showKind={showKind} fresh={fresh} />
   }
@@ -621,6 +761,15 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
           : fetchedAt === null
             ? t('catalog.stale')
             : t('catalog.staleSince', { ago: mediumAgo(fetchedAt) })}
+      </QuietNote>,
+    )
+  }
+  const communityError = useMarketplaceStore((s) => s.communityError)
+  const communityFailure = communityError ?? src.community?.error ?? null
+  if (tab !== 'installed' && communityFailure) {
+    notes.push(
+      <QuietNote key="community" action={<Retry onRetry={() => store().loadCommunity(true)} />}>
+        {t('notes.community', { error: communityFailure })}
       </QuietNote>,
     )
   }

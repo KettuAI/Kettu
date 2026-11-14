@@ -39,7 +39,8 @@ import type {
   PluginScope,
   SkillSource,
 } from './marketplace'
-import type { PublishDraft, PublishVisibility } from './market-publish'
+import type { PublishDraft, PublishKind, PublishVisibility } from './market-publish'
+import type { CommunityDirectory, CommunityInstalled, CommunityListing } from './market-community'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   MemoryDecision,
@@ -689,6 +690,22 @@ export interface HostContract {
   // What was put off or refused, newest first, kept on the host to publish later.
   'market.publishDrafts': { params: void; result: { drafts: PublishDraft[] } }
   'market.discardPublishDraft': { params: { id: string }; result: void }
+  // The Kettu Marketplace's public listings and the account's own Only me ones, matching `q` and
+  // of `kind` when given, read again after a few minutes or on `refresh`. Reads no file of any.
+  'market.community': {
+    params: { q?: string; kind?: PublishKind; cursor?: string; refresh?: boolean }
+    result: CommunityDirectory
+  }
+  'market.communityListing': { params: { id: string }; result: CommunityListing }
+  // The plugins installed from the Kettu Marketplace, and where every installed item stands.
+  'market.communityInstalled': { params: { refresh?: boolean }; result: CommunityInstalled }
+  // Downloads a plugin listing's current version, checks every file, and installs or updates it
+  // in the agent through its harness. Skills come through market.addSkill.
+  'market.installCommunityPlugin': {
+    params: { id: string; agentId: AgentId; scope: PluginScope; projectPath?: string }
+    result: InstalledPlugin
+  }
+  'market.reportCommunity': { params: { id: string; message: string }; result: void }
   'projects.list': { params: void; result: Project[] }
   'projects.add': { params: { path: string }; result: Project }
   'projects.remove': { params: { path: string }; result: void }
@@ -1280,6 +1297,11 @@ export const HOST_METHODS = [
   'market.answerPublish',
   'market.publishDrafts',
   'market.discardPublishDraft',
+  'market.community',
+  'market.communityListing',
+  'market.communityInstalled',
+  'market.installCommunityPlugin',
+  'market.reportCommunity',
   'projects.list',
   'projects.add',
   'projects.remove',

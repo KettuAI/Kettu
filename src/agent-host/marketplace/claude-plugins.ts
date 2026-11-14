@@ -15,6 +15,7 @@ import type {
   PluginScope,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
+import { KETTU_PLUGINS } from '@shared/market-community'
 import {
   programFailure,
   runProgram,
@@ -392,7 +393,8 @@ export interface ClaudePluginList {
  */
 export async function listPlugins(cli: ClaudeCli): Promise<ClaudePluginList> {
   let marketplaces = await listMarketplaces(cli)
-  if (marketplaces.length === 0) {
+  // Kettu's own local marketplace does not count, so a first install from it still gets this.
+  if (marketplaces.every((marketplace) => marketplace.name === KETTU_PLUGINS)) {
     await change(cli, ['marketplace', 'add', OFFICIAL_SOURCE])
     marketplaces = await listMarketplaces(cli)
   }
@@ -503,6 +505,33 @@ export async function addMarketplace(cli: ClaudeCli, source: string): Promise<Pl
     source: added.source,
     official: added.name === OFFICIAL_MARKETPLACE,
   }
+}
+
+/**
+ * Installs a plugin of the Kettu Marketplace's local marketplace at `dir`, or updates one the
+ * scope already has; the agent gets the marketplace first, which reads the folder as it is.
+ */
+export async function installLocalPlugin(
+  cli: ClaudeCli,
+  dir: string,
+  name: string,
+  at: PluginScope,
+  projectPath: string | null,
+): Promise<InstalledPlugin> {
+  const known = (await listMarketplaces(cli)).find((m) => m.name === KETTU_PLUGINS)
+  const same = !!known && path.resolve(known.installLocation ?? known.source) === path.resolve(dir)
+  // One the user's data left behind in another folder.
+  if (known && !same) await change(cli, ['marketplace', 'remove', KETTU_PLUGINS])
+  if (!same) await change(cli, ['marketplace', 'add', dir])
+  const id = `${name}@${KETTU_PLUGINS}`
+  const here = (plugin: InstalledPlugin) =>
+    plugin.id === id && plugin.scope === at && (at === 'user' || plugin.projectPath === projectPath)
+  if ((await installedPlugins(cli)).some(here)) {
+    await change(cli, ['update', id, ...scopeArgs(at)], projectPath ?? undefined)
+    const found = (await installedPlugins(cli)).find(here)
+    if (found) return found
+  }
+  return installPlugin(cli, id, at, projectPath)
 }
 
 export async function removeMarketplace(cli: ClaudeCli, name: string): Promise<void> {

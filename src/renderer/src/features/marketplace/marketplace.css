@@ -897,3 +897,44 @@
   font-size: 11.5px;
   color: var(--text-tertiary);
 }
+
+/* The Kettu Marketplace: who published a row, after its kind, shrinking before the name does */
+.k-mkt-publisher {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A listing's about, as its publisher broke it into lines */
+.k-mkt-about--text {
+  white-space: pre-line;
+}
+.k-mkt-report {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0 -6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.k-mkt-report:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.k-mkt-report:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.k-mkt-unlisted {
+  justify-content: center;
+  margin: 4px 0 24px;
+}

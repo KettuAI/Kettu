@@ -1,0 +1,428 @@
+import { createHash } from 'node:crypto'
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import type {
+  MarketAccount,
+  MarketCall,
+  MarketListing,
+  MineListing,
+  VersionFile,
+} from '@shared/market-publish'
+import type { InstalledPlugin } from '@shared/marketplace'
+import type { AgentId } from '@shared/thread'
+import {
+  communityFile,
+  MarketCommunityService,
+  safeFilePath,
+  writeFolder,
+  type LocalMarketplace,
+} from './community'
+import { MarketCallError } from './publish-tools'
+import { MarketSkillsService, skillsCatalogFile } from './skills'
+
+let root: string
+
+beforeEach(async () => {
+  root = await mkdtemp(path.join(os.tmpdir(), 'kettu-community-'))
+})
+
+afterEach(async () => {
+  await rm(root, { recursive: true, force: true })
+})
+
+const ACCOUNT: MarketAccount = { name: 'Bea', email: 'b@example.com' }
+const log = () => {}
+
+function listing(over: Partial<MarketListing> = {}): MarketListing {
+  return {
+    id: 'abcdefgh23',
+    handle: 'amigoer',
+    slug: 'changelog-writer',
+    name: 'Changelog writer',
+    kind: 'skill',
+    description: 'One line per change.',
+    visibility: 'public',
+    version: '1.0.0',
+    versions: ['1.0.0'],
+    installs: 12,
+    updatedAt: '2026-11-14T00:00:00.000Z',
+    mine: false,
+    ...over,
+  }
+}
+
+function mineListing(over: Partial<MineListing> = {}): MineListing {
+  return {
+    id: 'mineaaaa23',
+    handle: 'bea',
+    slug: 'notes',
+    name: 'Notes',
+    kind: 'skill',
+    description: 'My notes.',
+    visibility: 'private',
+    current: '1.0.0',
+    versions: [],
+    installs: { total: 0, week: 0, days: [] },
+    takenDown: null,
+    createdAt: 'x',
+    updatedAt: 'x',
+    ...over,
+  }
+}
+
+const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
+
+const SKILL = '---\nname: changelog-writer\ndescription: One line per change.\n---\n\nWrite it.\n'
+
+interface Fake {
+  calls: MarketCall[]
+  listings: Record<string, MarketListing | MarketCallError>
+  files: Record<string, string>
+  /** What the version lists, by path, when it differs from the files. */
+  listed?: VersionFile[]
+  /** What the file answer's X-Content-SHA256 says, by path. */
+  sent?: Record<string, string>
+  mine?: MineListing[]
+  directory?: MarketListing[]
+}
+
+function fake(over: Partial<Fake> = {}): Fake {
+  return {
+    calls: [],
+    listings: { abcdefgh23: listing() },
+    files: { 'SKILL.md': SKILL },
+    ...over,
+  }
+}
+
+function service(
+  f: Fake,
+  extra: {
+    account?: MarketAccount | null
+    installs?: { agentId: AgentId; local: LocalMarketplace; name: string }[]
+    installed?: boolean
+  } = {},
+) {
+  return new MarketCommunityService({
+    userDataPath: root,
+    file: communityFile(root, log),
+    log,
+    account: () => (extra.account === undefined ? ACCOUNT : extra.account),
+    kept: () => [],
+    call: (async (call: MarketCall) => {
+      f.calls.push(call)
+      switch (call.kind) {
+        case 'directory':
+          return { items: f.directory ?? [], next: null }
+        case 'mine':
+          return { publisher: null, listings: f.mine ?? [], storage: { bytes: 0, limit: 1 } }
+        case 'listing': {
+          const found = f.listings[call.id]
+          if (!found) {
+            throw new MarketCallError({ code: 'not_found', status: 404, message: 'Not found' })
+          }
+          if (found instanceof MarketCallError) throw found
+          return found
+        }
+        case 'version':
+          return {
+            files:
+              f.listed ??
+              Object.entries(f.files).map(([file, data]) => ({
+                path: file,
+                size: Buffer.byteLength(data),
+                sha256: sha(data),
+              })),
+          }
+        case 'file': {
+          const data = f.files[call.path] ?? ''
+          return {
+            data: Buffer.from(data).toString('base64'),
+            sha256: f.sent?.[call.path] ?? sha(data),
+          }
+        }
+        case 'install':
+        case 'report':
+          return null
+        default:
+          throw new Error(`unexpected ${call.kind}`)
+      }
+    }) as never,
+    installPlugin: (agentId, local, name, scope) => {
+      extra.installs?.push({ agentId, local, name })
+      const plugin: InstalledPlugin = {
+        id: `${name}@kettu-marketplace`,
+        harness: 'claude-code',
+        agentId,
+        version: '1.0.0',
+        scope,
+        enabled: true,
+        projectPath: null,
+      }
+      return Promise.resolve(plugin)
+    },
+    pluginInstalled: () => Promise.resolve(extra.installed ?? false),
+  })
+}
+
+function skills(community: MarketCommunityService) {
+  return new MarketSkillsService({
+    userDataPath: root,
+    file: skillsCatalogFile(root, log),
+    log,
+    platform: 'darwin',
+    home: root,
+    settings: () => [],
+    agents: () => [],
+    configFolder: () => null,
+    codexSkills: () => Promise.resolve(null),
+    kettu: (id) => community.download(id, 'skill'),
+  })
+}
+
+/** Every file under the host's data, by its path there. */
+async function written(): Promise<string[]> {
+  const entries = await readdir(root, { recursive: true, withFileTypes: true })
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.relative(root, path.join(entry.parentPath, entry.name)))
+    .sort()
+}
+
+describe('safeFilePath', () => {
+  it('takes the relative paths a version holds', () => {
+    for (const ok of ['SKILL.md', 'scripts/run.sh', 'a/b/c.txt', '.claude-plugin/plugin.json']) {
+      expect(safeFilePath(ok)).toBe(true)
+    }
+  })
+
+  it('refuses every path that could leave the install folder', () => {
+    for (const bad of [
+      '',
+      '/etc/passwd',
+      '../outside',
+      'a/../../b',
+      'a/./b',
+      'a//b',
+      'a\\..\\b',
+      'C:/Windows/x',
+      'c:x',
+      '.git/config',
+      'a/.git/hooks/pre-commit',
+      'name.',
+      'name ',
+      'a\nb',
+      `a/${'x'.repeat(600)}`,
+    ]) {
+      expect(safeFilePath(bad), bad).toBe(false)
+    }
+  })
+})
+
+describe('writeFolder', () => {
+  it('writes nothing outside the folder, whatever the path says', async () => {
+    const dir = path.join(root, 'plugins', 'x')
+    await expect(
+      writeFolder(dir, [
+        { path: 'ok.txt', data: Buffer.from('ok') },
+        { path: '../../escaped.txt', data: Buffer.from('no') },
+      ]),
+    ).rejects.toThrow()
+    expect(await written()).toEqual([])
+  })
+})
+
+describe('MarketCommunityService', () => {
+  it('reads no file and runs nothing before Install', async () => {
+    const f = fake({ directory: [listing()] })
+    const installs: { agentId: AgentId; local: LocalMarketplace; name: string }[] = []
+    const community = service(f, { installs })
+    await community.directory({})
+    await community.listing('abcdefgh23')
+    expect(f.calls.map((call) => call.kind).sort()).toEqual(['directory', 'listing', 'mine'])
+    expect(installs).toEqual([])
+    expect(await written()).toEqual([])
+  })
+
+  it('lists only public listings, and the account’s own Only me ones as Yours', async () => {
+    const f = fake({
+      directory: [
+        listing(),
+        listing({ id: 'privateaa2', visibility: 'private', mine: false }),
+        listing({ id: 'unlistedaa', visibility: 'unlisted' }),
+      ],
+      mine: [
+        mineListing(),
+        mineListing({ id: 'publicaaa2', visibility: 'public' }),
+        mineListing({ id: 'downaaaaa2', takenDown: { reason: 'x', at: 'x' } }),
+        mineListing({ id: 'emptyaaaa2', current: null }),
+      ],
+    })
+    const result = await service(f).directory({})
+    expect(result.items.map((item) => item.id)).toEqual(['abcdefgh23'])
+    expect(result.yours.map((item) => item.id)).toEqual(['mineaaaa23'])
+    expect(result.yours[0]!.installs).toBeNull()
+  })
+
+  it('lists nothing while signed out, and asks the service nothing', async () => {
+    const f = fake()
+    const result = await service(f, { account: null }).directory({})
+    expect(result.signedIn).toBe(false)
+    expect(f.calls).toEqual([])
+  })
+
+  it('never offers another account’s Only me listing', async () => {
+    const f = fake({
+      listings: { abcdefgh23: listing({ visibility: 'private', mine: false }) },
+    })
+    const community = service(f)
+    expect(await community.listing('abcdefgh23')).toEqual({ state: 'gone' })
+    await expect(community.download('abcdefgh23', 'skill')).rejects.toThrow()
+    expect(f.calls.some((call) => call.kind === 'version' || call.kind === 'file')).toBe(false)
+  })
+
+  it('installs the account’s own Only me listing', async () => {
+    const f = fake({ listings: { abcdefgh23: listing({ visibility: 'private', mine: true }) } })
+    const skill = await skills(service(f)).add({ kind: 'kettu', id: 'abcdefgh23' })
+    expect(skill).toMatchObject({
+      id: 'kettu:abcdefgh23',
+      name: 'changelog-writer',
+      source: 'kettu',
+      origin: '@amigoer/changelog-writer',
+      version: '1.0.0',
+    })
+    const files = await written()
+    expect(files).toHaveLength(1)
+    expect(await readFile(path.join(root, files[0]!), 'utf8')).toBe(SKILL)
+  })
+
+  it('says a taken-down listing is taken down', async () => {
+    const f = fake({
+      listings: {
+        abcdefgh23: new MarketCallError({ code: 'taken_down', status: 410, message: 'Gone' }),
+      },
+    })
+    expect(await service(f).listing('abcdefgh23')).toEqual({ state: 'taken-down' })
+  })
+
+  it('refuses a file whose SHA-256 does not match, and keeps nothing', async () => {
+    const f = fake({
+      files: { 'SKILL.md': SKILL, 'notes.md': 'tampered' },
+      listed: [
+        { path: 'SKILL.md', size: Buffer.byteLength(SKILL), sha256: sha(SKILL) },
+        { path: 'notes.md', size: 8, sha256: sha('original') },
+      ],
+    })
+    await expect(skills(service(f)).add({ kind: 'kettu', id: 'abcdefgh23' })).rejects.toThrow(
+      /notes\.md/,
+    )
+    expect(await written()).toEqual([])
+  })
+
+  it('refuses a file whose answer names another SHA-256 than the version', async () => {
+    const f = fake({ sent: { 'SKILL.md': sha('something else') } })
+    await expect(skills(service(f)).add({ kind: 'kettu', id: 'abcdefgh23' })).rejects.toThrow()
+    expect(await written()).toEqual([])
+  })
+
+  it('downloads nothing of a version that names a path outside its folder', async () => {
+    const f = fake({
+      listed: [
+        { path: 'SKILL.md', size: Buffer.byteLength(SKILL), sha256: sha(SKILL) },
+        { path: '../../evil.sh', size: 1, sha256: sha('x') },
+      ],
+    })
+    await expect(skills(service(f)).add({ kind: 'kettu', id: 'abcdefgh23' })).rejects.toThrow()
+    expect(f.calls.some((call) => call.kind === 'file')).toBe(false)
+    expect(await written()).toEqual([])
+  })
+
+  describe('plugins', () => {
+    const manifest = JSON.stringify({ name: 'hello', version: '1.0.0' })
+    const plugin = () =>
+      fake({
+        listings: {
+          abcdefgh23: listing({ kind: 'plugin', harness: 'claude-code', slug: 'hello' }),
+        },
+        files: { '.claude-plugin/plugin.json': manifest, 'commands/hi.md': 'Say hi' },
+      })
+
+    it('keeps the files in the harness’s local marketplace, which installs it', async () => {
+      const f = plugin()
+      const installs: { agentId: AgentId; local: LocalMarketplace; name: string }[] = []
+      const community = service(f, { installs })
+      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
+      expect(installs).toHaveLength(1)
+      expect(installs[0]!.name).toBe('hello')
+      const local = community.local('claude-code')
+      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
+        name: string
+        plugins: { name: string; source: string; version: string }[]
+      }
+      expect(market.name).toBe('kettu-marketplace')
+      expect(market.plugins).toEqual([
+        expect.objectContaining({ name: 'hello', source: './plugins/hello', version: '1.0.0' }),
+      ])
+      expect(
+        await readFile(path.join(local.dir, 'plugins', 'hello', 'commands', 'hi.md'), 'utf8'),
+      ).toBe('Say hi')
+      await community.flush()
+      const counts = f.calls.filter((call) => call.kind === 'install')
+      expect(counts).toEqual([
+        { kind: 'install', id: 'abcdefgh23', version: '1.0.0', reason: 'install' },
+      ])
+    })
+
+    it('counts a second install of the listing as an update', async () => {
+      const f = plugin()
+      const community = service(f)
+      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
+      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(f.calls.flatMap((call) => (call.kind === 'install' ? [call.reason] : []))).toEqual([
+        'install',
+        'update',
+      ])
+    })
+
+    it('refuses a tampered plugin before its harness or its folder sees it', async () => {
+      const f = plugin()
+      f.sent = { 'commands/hi.md': sha('other') }
+      const installs: { agentId: AgentId; local: LocalMarketplace; name: string }[] = []
+      await expect(
+        service(f, { installs }).installPlugin('abcdefgh23', 'claude-code', 'user', null),
+      ).rejects.toThrow()
+      expect(installs).toEqual([])
+      expect(await written()).toEqual([])
+    })
+
+    it('refuses a plugin for another harness', async () => {
+      const f = plugin()
+      await expect(service(f).installPlugin('abcdefgh23', 'codex', 'user', null)).rejects.toThrow()
+      expect(await written()).toEqual([])
+    })
+
+    it('keeps another listing’s plugin of the same name while an agent has it', async () => {
+      const f = plugin()
+      f.listings.otheraaaa2 = listing({
+        id: 'otheraaaa2',
+        kind: 'plugin',
+        harness: 'claude-code',
+        handle: 'mallory',
+        slug: 'hello',
+      })
+      const community = service(f, { installed: true })
+      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
+      await expect(
+        community.installPlugin('otheraaaa2', 'claude-code', 'user', null),
+      ).rejects.toThrow(/@amigoer\/hello/)
+      const local = community.local('claude-code')
+      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
+        plugins: { author: { name: string } }[]
+      }
+      expect(market.plugins.map((p) => p.author.name)).toEqual(['amigoer'])
+    })
+  })
+})

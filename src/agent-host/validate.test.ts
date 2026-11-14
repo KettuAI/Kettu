@@ -195,6 +195,44 @@ describe('createValidators', () => {
     rejects(() => add({ kind: 'local', path: 'relative/skill' }))
     rejects(() => add({ kind: 'npm', id: 'x' }))
     rejects(() => add('anthropics/skills:pdf'))
+    expect(add({ kind: 'kettu', id: 'abcdefgh23' })).toEqual({
+      source: { kind: 'kettu', id: 'abcdefgh23' },
+    })
+    rejects(() => add({ kind: 'kettu', id: '../../x' }))
+    rejects(() => add({ kind: 'kettu', id: 'ABCDEFGH23' }))
+  })
+
+  it('checks the Kettu Marketplace’s requests', () => {
+    expect(posix['market.community'](undefined)).toEqual({})
+    expect(
+      posix['market.community']({ q: ' notes ', kind: 'skill', cursor: 'c1', refresh: true }),
+    ).toEqual({ q: 'notes', kind: 'skill', cursor: 'c1', refresh: true })
+    rejects(() => posix['market.community']({ kind: 'theme' }))
+    rejects(() => posix['market.community']({ q: 'a\nb' }))
+    rejects(() => posix['market.community']({ q: 'x'.repeat(101) }))
+    expect(posix['market.communityListing']({ id: 'abcdefgh23' })).toEqual({ id: 'abcdefgh23' })
+    rejects(() => posix['market.communityListing']({ id: 'abc/../x' }))
+    expect(posix['market.communityInstalled']({ refresh: true })).toEqual({ refresh: true })
+    const plugin = { id: 'abcdefgh23', agentId: 'claude-code' }
+    expect(posix['market.installCommunityPlugin']({ ...plugin, scope: 'user' })).toEqual({
+      ...plugin,
+      scope: 'user',
+    })
+    expect(
+      posix['market.installCommunityPlugin']({ ...plugin, scope: 'project', projectPath: '/repo' }),
+    ).toEqual({ ...plugin, scope: 'project', projectPath: '/repo' })
+    rejects(() => posix['market.installCommunityPlugin']({ ...plugin, scope: 'project' }))
+    rejects(() => posix['market.installCommunityPlugin']({ ...plugin, id: 'x', scope: 'user' }))
+    expect(posix['market.reportCommunity']({ id: 'abcdefgh23', message: ' Broken. ' })).toEqual({
+      id: 'abcdefgh23',
+      message: 'Broken.',
+    })
+    rejects(() => posix['market.reportCommunity']({ id: 'abcdefgh23', message: '   ' }))
+    rejects(() => posix['market.reportCommunity']({ id: 'abcdefgh23', message: 'x'.repeat(2001) }))
+    expect(posix['market.connect']({ serverId: 'kettu:abcdefgh23' })).toEqual({
+      serverId: 'kettu:abcdefgh23',
+    })
+    rejects(() => posix['market.connect']({ serverId: 'kettu:../x' }))
   })
 
   it('validates provider actions without accepting unrelated credentials', () => {

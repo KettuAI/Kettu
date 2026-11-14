@@ -14,8 +14,29 @@ import {
   type PluginDetails,
   type PluginLogo,
 } from '@shared/marketplace'
+import type {
+  CommunityDirectory,
+  CommunityInstalled,
+  CommunityListing,
+} from '@shared/market-community'
 import type { AgentId } from '@shared/thread'
 import { errorMessage, host, type HostRequest } from '@renderer/lib/host'
+
+/** How long the directory's Community and the installed items' standings are shown before a visit reads them again. */
+const COMMUNITY_MS = 5 * 60_000
+
+/** A search of the Kettu Marketplace, as `MarketSearchState` is of the registry. */
+export interface CommunitySearchState {
+  query: string
+  result: CommunityDirectory | null
+  error: string | null
+}
+
+/** A listing's page of the Kettu Marketplace: what the host said of it, or why it could not. */
+export interface CommunityListingState {
+  listing: CommunityListing | null
+  error: string | null
+}
 
 /** The registry's search shortest and longest query, as the host takes it. */
 export const SEARCH_MIN = 3
@@ -73,6 +94,15 @@ export interface MarketplaceStore {
   skills: MarketSkills | null
   skillsError: string | null
   skillsLoading: boolean
+  /** The Kettu Marketplace's public listings and the account's own; null until the host answers. */
+  community: CommunityDirectory | null
+  communityError: string | null
+  communityLoading: boolean
+  communitySearch: CommunitySearchState | null
+  /** By listing id. */
+  communityListings: Record<string, CommunityListingState>
+  /** What was installed from the Kettu Marketplace and where each stands; null until read. */
+  communityInstalled: CommunityInstalled | null
   /** What is being installed or changed, by `busyKey`. */
   busy: string[]
   /** What the directory's search field holds, kept while a listing shows. */
@@ -95,6 +125,11 @@ export interface MarketplaceStore {
   loadDetails(agentId: AgentId, pluginId: string): Promise<void>
   loadLogo(pluginId: string): Promise<void>
   loadSkills(refresh?: boolean, cached?: boolean): Promise<void>
+  loadCommunity(refresh?: boolean): Promise<void>
+  findCommunity(query: string): Promise<void>
+  clearCommunitySearch(): void
+  loadCommunityListing(id: string, refresh?: boolean): Promise<void>
+  loadCommunityInstalled(refresh?: boolean): Promise<void>
 }
 
 export type MarketplaceStoreHook = UseBoundStore<StoreApi<MarketplaceStore>>
@@ -102,7 +137,8 @@ export type MarketplaceStoreHook = UseBoundStore<StoreApi<MarketplaceStore>>
 export const detailsKey = (agentId: AgentId, pluginId: string): string => `${agentId}|${pluginId}`
 
 /** The key of an install or change under way: an MCP server's, a plugin's or a skill's. */
-export const busyKey = (kind: 'mcp' | 'plugin' | 'skill', id: string): string => `${kind}:${id}`
+export const busyKey = (kind: 'mcp' | 'plugin' | 'skill' | 'community', id: string): string =>
+  `${kind}:${id}`
 
 /** The Marketplace of the host `request` reaches, whose keys `storeKeys` fills or clears. */
 export function createMarketplaceStore(
@@ -116,6 +152,11 @@ export function createMarketplaceStore(
   let connectionsRead = 0
   let pluginsRead = 0
   let skillsRead = 0
+  let communityRead = 0
+  let communitySearchRead = 0
+  let installedRead = 0
+  let communityAt = 0
+  let installedAt = 0
   // When each list was last known to be within the host's keeping time.
   const readAt = { catalog: 0, plugins: 0, skills: 0 }
   const params = (refresh: boolean, cached: boolean) =>
@@ -139,6 +180,12 @@ export function createMarketplaceStore(
     skills: null,
     skillsError: null,
     skillsLoading: false,
+    community: null,
+    communityError: null,
+    communityLoading: false,
+    communitySearch: null,
+    communityListings: {},
+    communityInstalled: null,
     busy: [],
     query: '',
     more: {},
@@ -156,6 +203,15 @@ export function createMarketplaceStore(
       if (!s.skillsLoading) {
         if (!s.skills) void s.loadSkills(false, true)
         else if (s.skills.error || old('skills')) void s.loadSkills()
+      }
+      if (
+        !s.communityLoading &&
+        (!s.community || s.community.error || Date.now() - communityAt >= COMMUNITY_MS)
+      ) {
+        void s.loadCommunity()
+      }
+      if (!s.communityInstalled || Date.now() - installedAt >= COMMUNITY_MS) {
+        void s.loadCommunityInstalled()
       }
     },
     async loadCatalog(refresh = false, cached = false) {
@@ -250,6 +306,58 @@ export function createMarketplaceStore(
         logo = { light: null, dark: null }
       }
       set((s) => ({ logos: { ...s.logos, [pluginId]: logo } }))
+    },
+    async loadCommunity(refresh = false) {
+      const id = ++communityRead
+      set({ communityLoading: true, communityError: null })
+      try {
+        const community = await request('market.community', refresh ? { refresh } : {})
+        if (id !== communityRead) return
+        set({ community, communityLoading: false })
+        if (!community.error) communityAt = Date.now()
+      } catch (e) {
+        if (id === communityRead) set({ communityError: errorMessage(e), communityLoading: false })
+      }
+    },
+    async findCommunity(query) {
+      const id = ++communitySearchRead
+      set({ communitySearch: { query, result: null, error: null } })
+      try {
+        const result = await request('market.community', { q: query })
+        if (id === communitySearchRead) set({ communitySearch: { query, result, error: null } })
+      } catch (e) {
+        if (id === communitySearchRead) {
+          set({ communitySearch: { query, result: null, error: errorMessage(e) } })
+        }
+      }
+    },
+    clearCommunitySearch() {
+      communitySearchRead++
+      if (get().communitySearch) set({ communitySearch: null })
+    },
+    async loadCommunityListing(id, refresh = false) {
+      const known = get().communityListings[id]
+      if (known && !refresh && (known.listing || !known.error)) return
+      const put = (state: CommunityListingState) =>
+        set((s) => ({ communityListings: { ...s.communityListings, [id]: state } }))
+      if (!known?.listing) put({ listing: null, error: null })
+      try {
+        put({ listing: await request('market.communityListing', { id }), error: null })
+      } catch (e) {
+        put({ listing: known?.listing ?? null, error: errorMessage(e) })
+      }
+    },
+    async loadCommunityInstalled(refresh = false) {
+      const id = ++installedRead
+      try {
+        const installed = await request('market.communityInstalled', refresh ? { refresh } : {})
+        if (id !== installedRead) return
+        set({ communityInstalled: installed })
+        installedAt = Date.now()
+      } catch (e) {
+        // The rows then show no update; the reason goes to the console.
+        console.warn(`Could not read what came from the Kettu Marketplace: ${errorMessage(e)}`)
+      }
     },
     async loadSkills(refresh = false, cached = false) {
       const id = ++skillsRead

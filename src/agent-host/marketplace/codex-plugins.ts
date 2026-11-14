@@ -9,6 +9,7 @@ import type {
   PluginMarketplace,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
+import { KETTU_PLUGINS } from '@shared/market-community'
 import type { AgentId } from '@shared/thread'
 import type {
   MarketplaceAddResponse,
@@ -148,6 +149,25 @@ export async function installCodexPlugin(
   marketplacePath: string,
 ): Promise<void> {
   await request('plugin/install', { marketplacePath, pluginName: pluginName(id) })
+}
+
+/**
+ * Installs a plugin of the Kettu Marketplace's local marketplace at `dir`, whose file is `file`, or
+ * updates it, since Codex installs over what it has; the agent gets the marketplace first.
+ */
+export async function installLocalCodexPlugin(
+  request: CodexRequest,
+  agentId: AgentId,
+  dir: string,
+  file: string,
+  name: string,
+): Promise<InstalledPlugin> {
+  await request<MarketplaceAddResponse>('marketplace/add', { source: dir })
+  await request('plugin/install', { marketplacePath: file, pluginName: name })
+  const list = await listCodexPlugins(request, agentId)
+  const installed = list.installed.find((plugin) => plugin.id === `${name}@${KETTU_PLUGINS}`)
+  if (!installed) throw new Error(`Codex did not list ${name}@${KETTU_PLUGINS} as installed`)
+  return installed
 }
 
 export async function uninstallCodexPlugin(request: CodexRequest, id: string): Promise<void> {

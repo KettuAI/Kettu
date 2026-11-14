@@ -42,7 +42,9 @@
     "from": "来自 {{publisher}}",
     "plugins": "插件",
     "skills": "技能",
-    "mcp": "MCP 服务器"
+    "mcp": "MCP 服务器",
+    "community": "社区",
+    "yours": "你的"
   },
   "row": {
     "install": "安装",
@@ -99,7 +101,11 @@
     "skillFailed": "无法添加技能：{{error}}",
     "connected": "已连接 {{name}}，所选的 Agent 都可以使用它",
     "disconnected": "已断开与 {{name}} 的连接",
-    "disconnectFailed": "无法断开 {{name}}：{{error}}"
+    "disconnectFailed": "无法断开 {{name}}：{{error}}",
+    "updated": "{{name}} 已更新到 {{version}}",
+    "updateFailed": "{{name}} 没能更新：{{error}}",
+    "reported": "报告已发给 Kettu 的 Marketplace",
+    "listingFailed": "没能读到这一项：{{error}}"
   },
   "listing": {
     "back": "Marketplace",
@@ -314,7 +320,8 @@
     "agentPlugins": "无法读取 {{agent}} 的插件：{{error}}",
     "skills": "无法读取技能目录，内容可能不是最新的：{{error}}",
     "catalog": "无法连接 MCP Registry：{{error}}",
-    "search": "无法搜索 MCP Registry：{{error}}"
+    "search": "无法搜索 MCP Registry：{{error}}",
+    "community": "没能读到 Kettu 的 Marketplace：{{error}}"
   },
   "empty": {
     "pluginsTitle": "没有可显示的插件",
@@ -406,5 +413,54 @@
     "reconnect": "重新连接",
     "disconnect": "断开连接",
     "remove": "移除…"
+  },
+  "community": {
+    "skillNote": "Kettu 从 Kettu 的 Marketplace 下载它、逐个核对文件，存在这台电脑上，开会话时交给这些 Agent。",
+    "pluginNote": "Kettu 从 Kettu 的 Marketplace 下载它、逐个核对文件，再由 {{harness}} 把它装进这个 Agent 的配置。",
+    "signedOut": "登录 Kettu 后能看到社区发布的。",
+    "servicesOff": "打开 Kettu 的服务后能看到社区发布的。",
+    "signIn": "登录",
+    "openAccount": "账号设置",
+    "readFailed": "没能读到这一项",
+    "gone": "Kettu 的 Marketplace 里已经没有它了。",
+    "goneTitle": "已不在目录里",
+    "goneKept": "Kettu 的 Marketplace 里已经没有 {{name}} 了。你装的照常留着，不再更新。",
+    "takenDown": "它已从 Kettu 的 Marketplace 下架。",
+    "takenDownTitle": "已下架",
+    "takenDownKept": "{{name}} 已从 Kettu 的 Marketplace 下架。你装的留到你移除为止，不再更新。",
+    "byYou": "{{handle}} · 你",
+    "trust": "社区",
+    "source": "Kettu 的 Marketplace",
+    "onlyMe": "只有我",
+    "cannotRun": "Kettu 运行不了这个 MCP 服务器：它没有指向 Kettu 能运行的包或 https 远程地址。",
+    "bundle": "Kettu 还不能安装 MCP 包（.mcpb），所以这里装不了这个服务器。",
+    "pluginFor": "{{harness}} 的插件",
+    "kinds": {
+      "mcp": "MCP 服务器",
+      "plugin": "插件",
+      "skill": "技能"
+    },
+    "side": {
+      "trust": "信任级别",
+      "kind": "种类",
+      "name": "条目"
+    },
+    "adds": {
+      "skills": "技能",
+      "commands": "命令",
+      "agents": "子 Agent",
+      "hooks": "Hook",
+      "servers": "MCP 服务器"
+    },
+    "report": "报告问题",
+    "reportTitle": "报告 {{name}}",
+    "reportDescription": "告诉 Kettu 的 Marketplace 它有什么问题。只发你写的这段话，和你的账号一起。",
+    "reportLabel": "什么问题",
+    "reportPlaceholder": "做的比说的多、用不了、抄了别人的……",
+    "reportSend": "发送报告",
+    "update": "更新到 {{version}}",
+    "updating": "正在更新",
+    "updateLine": "有 {{version}}",
+    "takenDownLine": "已下架"
   }
 }

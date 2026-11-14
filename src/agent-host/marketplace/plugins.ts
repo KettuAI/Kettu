@@ -15,6 +15,7 @@ import {
   type PluginScope,
 } from '@shared/marketplace'
 import type { Platform } from '@shared/platform'
+import { KETTU_PLUGINS } from '@shared/market-community'
 import { harnessOf, type AgentId } from '@shared/thread'
 import type { ProgramOptions, ProgramRun } from '../adapter-install'
 import { HostError } from '../errors'
@@ -23,6 +24,7 @@ import { JsonFile, type LogFn, type Migration } from '../storage'
 import * as claude from './claude-plugins'
 import * as codex from './codex-plugins'
 import type { PluginLogoPaths } from './codex-plugins'
+import type { LocalMarketplace } from './community'
 import { readLogo } from './plugin-logo'
 
 /** What one agent's harness reported, as kept. */
@@ -230,13 +232,15 @@ export class MarketPluginsService {
       if (error !== undefined) out.errors.push({ agentId: agentIds[index]!, message: error })
       if (!entry) return
       for (const plugin of entry.catalog) {
+        // Kettu's own marketplace offers what the directory's Community already lists.
+        if (plugin.marketplace === KETTU_PLUGINS) continue
         const key = `${plugin.harness}\0${plugin.id}`
         if (seen.has(key)) continue
         seen.add(key)
         out.catalog.push(plugin)
       }
       out.installed.push(...entry.installed)
-      out.marketplaces.push(...entry.marketplaces)
+      out.marketplaces.push(...entry.marketplaces.filter((m) => m.name !== KETTU_PLUGINS))
     })
     return out
   }
@@ -292,6 +296,54 @@ export class MarketPluginsService {
       if (!installed) throw new Error(`Codex did not list ${id} as installed`)
       return installed
     })
+  }
+
+  /** Installs, or updates, a plugin of the Kettu Marketplace's local marketplace of the harness. */
+  async installLocal(
+    agentId: AgentId,
+    local: LocalMarketplace,
+    name: string,
+    scope: PluginScope,
+    projectPath: string | null,
+  ): Promise<InstalledPlugin> {
+    const harness = this.harness(agentId)
+    this.checkScope(harness, scope, projectPath)
+    return this.change(agentId, async () =>
+      harness === 'claude-code'
+        ? claude.installLocalPlugin(await this.cli(agentId), local.dir, name, scope, projectPath)
+        : codex.installLocalCodexPlugin(
+            await this.deps.appServer(agentId),
+            agentId,
+            local.dir,
+            local.file,
+            name,
+          ),
+    )
+  }
+
+  /**
+   * Whether any agent of the harness has the plugin, as each harness lists it now; one that could
+   * not be asked counts as having it.
+   */
+  async installedAnywhere(harness: PluginHarness, id: string): Promise<boolean> {
+    const agentIds = (await this.deps.agents()).filter(
+      (agentId) => pluginHarness(agentId) === harness,
+    )
+    const found = await Promise.all(
+      agentIds.map(async (agentId) => {
+        try {
+          const installed =
+            harness === 'claude-code'
+              ? await claude.installedPlugins(await this.cli(agentId))
+              : (await codex.listCodexPlugins(await this.deps.appServer(agentId), agentId))
+                  .installed
+          return installed.some((plugin) => plugin.id === id)
+        } catch {
+          return true
+        }
+      }),
+    )
+    return found.some(Boolean)
   }
 
   async uninstall(

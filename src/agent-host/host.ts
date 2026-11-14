@@ -52,6 +52,7 @@ import type { PortDevice } from '@shared/remote/device'
 import type { MemorySource } from '@shared/memory'
 import type { HostSettings } from '@shared/settings'
 import { serverFor, type MarketConnection, type MarketServer } from '@shared/marketplace'
+import { listingIdOf } from '@shared/market-community'
 import {
   HANDLE,
   type MarketAccount,
@@ -112,6 +113,7 @@ import { MediaService } from './media'
 import { MemoryError, type MemoryErrorCode } from './memory/errors'
 import { MemoryService } from './memory/service'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
+import { communityFile, MarketCommunityService } from './marketplace/community'
 import { MarketConnectionsService } from './marketplace/connections'
 import { parseSignIns } from './marketplace/oauth'
 import { McpProxy } from './marketplace/proxy'
@@ -410,6 +412,8 @@ export class AgentHost {
   private readonly marketPlugins: MarketPluginsService
   /** The skills catalog, the skills Kettu keeps, and what each agent gets of them. */
   private readonly marketSkills: MarketSkillsService
+  /** The Kettu Marketplace's listings, the downloads of their files and its plugins. */
+  private readonly marketCommunity: MarketCommunityService
   /** The host's Kettu account from main, while signed in with Kettu's services on. */
   private marketAccount: MarketAccount | null = null
   /** Marketplace API calls awaiting main's answer. */
@@ -504,6 +508,21 @@ export class AgentHost {
       program: (agentId) => this.agents.harnessProgram(agentId),
       appServer: (agentId) => this.appServer(agentId),
     })
+    this.marketCommunity = new MarketCommunityService({
+      userDataPath: options.userDataPath,
+      file: communityFile(options.userDataPath, log),
+      log,
+      account: () => this.marketAccount,
+      call: (call) => this.marketCall(call),
+      kept: () =>
+        [...this.settings.marketplace.skills, ...this.settings.marketplace.mcp].flatMap(
+          (item) => listingIdOf(item.id) ?? [],
+        ),
+      installPlugin: (agentId, local, name, scope, projectPath) =>
+        this.marketPlugins.installLocal(agentId, local, name, scope, projectPath),
+      pluginInstalled: (harness, pluginId) =>
+        this.marketPlugins.installedAnywhere(harness, pluginId),
+    })
     this.marketSkills = new MarketSkillsService({
       userDataPath: options.userDataPath,
       file: skillsCatalogFile(options.userDataPath, log),
@@ -517,6 +536,7 @@ export class AgentHost {
         if ((await this.installedAgents(['codex'], [agentId])).length === 0) return null
         return (await this.appServer(agentId))<SkillsListResponse>('skills/list', { cwds: [home] })
       },
+      kettu: (id) => this.marketCommunity.download(id, 'skill'),
     })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
@@ -1144,6 +1164,7 @@ export class AgentHost {
     if (JSON.stringify(previous.marketplace.skills) !== JSON.stringify(next.marketplace.skills)) {
       void this.skillsChanged(previous.marketplace.skills)
     }
+    this.countCommunity(previous.marketplace, next.marketplace)
     const removed = await this.agents.settingsChanged(previous, next)
     const turnedOff = next.disabledAgents.filter((id) => !previous.disabledAgents.includes(id))
     const gone = [...removed, ...turnedOff]
@@ -1305,6 +1326,30 @@ export class AgentHost {
     const of = (skills: typeof now, agentId: AgentId): string =>
       JSON.stringify(skills.filter((skill) => skillFor(skill, agentId)).map((s) => [s.id, s.name]))
     this.sessions.libraryChanged((agentId) => of(before, agentId) !== of(now, agentId))
+  }
+
+  /**
+   * The skills and servers from the Kettu Marketplace that the settings now keep, or keep at
+   * another version, are counted once each as an install or an update.
+   */
+  private countCommunity(
+    before: HostSettings['marketplace'],
+    after: HostSettings['marketplace'],
+  ): void {
+    const versions = (list: readonly { id: string; version: string | null }[]) =>
+      new Map(
+        list.flatMap((item) => {
+          const id = listingIdOf(item.id)
+          return id ? [[id, item.version] as const] : []
+        }),
+      )
+    for (const kind of ['skills', 'mcp'] as const) {
+      const was = versions(before[kind])
+      for (const [id, version] of versions(after[kind])) {
+        if (!was.has(id)) void this.marketCommunity.count(id, version, 'install')
+        else if (was.get(id) !== version) void this.marketCommunity.count(id, version, 'update')
+      }
+    }
   }
 
   /** The agents of these harnesses that are turned on and whose program is installed. */
@@ -1834,6 +1879,7 @@ export class AgentHost {
         this.marketCatalog.flush(),
         this.marketPlugins.flush(),
         this.marketSkills.flush(),
+        this.marketCommunity.flush(),
         this.publishDrafts.flush(),
         this.threads?.close(),
         this.usage.close(),
@@ -2042,6 +2088,14 @@ export class AgentHost {
         return { drafts: this.publishDrafts.list() }
       },
       'market.discardPublishDraft': ({ id }) => this.publishDrafts.remove(id),
+      'market.community': ({ refresh, ...query }) =>
+        this.marketCommunity.directory(query, refresh === true),
+      'market.communityListing': ({ id }) => this.marketCommunity.listing(id),
+      'market.communityInstalled': ({ refresh }) =>
+        this.marketCommunity.installed(refresh === true),
+      'market.installCommunityPlugin': ({ id, agentId, scope, projectPath }) =>
+        this.marketCommunity.installPlugin(id, agentId, scope, projectPath ?? null),
+      'market.reportCommunity': ({ id, message }) => this.marketCommunity.report(id, message),
       'mcp.retry': async () => {
         await this.artifactService.start()
         this.options.send({ type: 'host:service-port', port: this.artifactService.listeningPort })
