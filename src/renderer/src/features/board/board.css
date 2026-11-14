@@ -407,6 +407,23 @@
 .kb-art {
   height: 36px;
 }
+/* An artifact's kind colors its mark here: utility classes lose to the unlayered .kb-mark. */
+.kb-mark[data-kind='document'] {
+  background: var(--kind-document-tint);
+  color: var(--kind-document);
+}
+.kb-mark[data-kind='slides'] {
+  background: var(--kind-slides-tint);
+  color: var(--kind-slides);
+}
+.kb-mark[data-kind='web'] {
+  background: var(--kind-web-tint);
+  color: var(--kind-web);
+}
+.kb-mark[data-kind='canvas'] {
+  background: var(--kind-canvas-tint);
+  color: var(--kind-canvas);
+}
 .kb-art__name {
   flex: 1;
   min-width: 0;
