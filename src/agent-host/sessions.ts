@@ -1761,15 +1761,27 @@ export class SessionManager {
 
   /** The user handed a surface back after taking it over: the thread says for how long. */
   controlHandedBack(sessionId: string, surface: ControlSurface, durationMs: number): void {
+    this.controlNote(sessionId, surface, { event: 'handed_back', durationMs })
+  }
+
+  /** The user's own click or key in the app the agent used took it over: the thread says so. */
+  controlPaused(sessionId: string, surface: ControlSurface, app: string): void {
+    this.controlNote(sessionId, surface, { event: 'paused', app })
+  }
+
+  private controlNote(
+    sessionId: string,
+    surface: ControlSurface,
+    note: { event: 'handed_back'; durationMs: number } | { event: 'paused'; app: string },
+  ): void {
     const live = this.live.get(sessionId)
     if (!live) return
     const entry: ControlNoteEntry = {
       kind: 'control_note',
       id: this.nextId(live),
       surface,
-      event: 'handed_back',
-      durationMs,
       after: agentEntryBefore(live.thread),
+      ...note,
     }
     this.emit(live, [{ op: 'entry.add', entry }])
     this.touch(live.id)

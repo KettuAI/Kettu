@@ -89,6 +89,15 @@ export function useComputerUseSection(): SectionDef {
       render: () => <ComputerSwitch label={t('computer.enabled.name')} />,
     },
     {
+      id: 'pause-on-use',
+      name: t('computer.pauseOnUse.name'),
+      english: en('computer.pauseOnUse.name'),
+      description: t('computer.pauseOnUse.description'),
+      keywords: t('computer.pauseOnUse.keywords'),
+      group: main,
+      render: () => <ComputerSwitch label={t('computer.pauseOnUse.name')} setting="pauseOnUse" />,
+    },
+    {
       id: 'stop-shortcut',
       name: t('computer.stopShortcut.name'),
       english: en('computer.stopShortcut.name'),

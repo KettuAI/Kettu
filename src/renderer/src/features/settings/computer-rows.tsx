@@ -19,8 +19,14 @@ import { ControlError, Pill, SetButton, SettingSwitch } from './controls'
 import { ItemLine, Thing } from './rows'
 
 /** The switch, on this computer's own settings whichever host the page shows. */
-export function ComputerSwitch({ label }: { label: string }) {
-  const checked = useSettingsStore((s) => s.settings.computerUse.enabled)
+export function ComputerSwitch({
+  label,
+  setting = 'enabled',
+}: {
+  label: string
+  setting?: 'enabled' | 'pauseOnUse'
+}) {
+  const checked = useSettingsStore((s) => s.settings.computerUse[setting])
   const [error, setError] = useState<string | null>(null)
   return (
     <>
@@ -28,11 +34,11 @@ export function ComputerSwitch({ label }: { label: string }) {
       <SettingSwitch
         label={label}
         checked={checked}
-        onChange={(enabled) => {
+        onChange={(on) => {
           setError(null)
           useSettingsStore
             .getState()
-            .update({ computerUse: { enabled } })
+            .update({ computerUse: { [setting]: on } })
             .catch((e: unknown) => setError(errorMessage(e)))
         }}
       />

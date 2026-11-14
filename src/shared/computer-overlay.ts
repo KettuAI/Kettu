@@ -4,6 +4,8 @@
 import type { ComputerAct, ComputerControl } from './computer-use'
 import type { KettuApi } from './ipc'
 import type { Locale } from './locale'
+import type { SettingsFile } from './settings'
+import type { ThemesState } from './themes'
 
 /** Which of the two windows a page is. */
 export type ComputerOverlayPart = 'light' | 'label'
@@ -18,11 +20,6 @@ export interface ComputerOverlayState {
   appIcon: string | null
   control: ComputerControl
   act: ComputerAct | null
-  /** The stop shortcut as an Electron accelerator. */
-  shortcut: string
-  dark: boolean
-  reduceMotion: boolean
-  locale: Locale
   /**
    * The light's window: the real window's size in points and the room around it the light takes.
    * Inside draws the light along the window's inner edges, for one that fills its screen.
@@ -37,20 +34,35 @@ export function isComputerOverlayAction(value: unknown): value is ComputerOverla
   return value === 'take-over' || value === 'hand-back' || value === 'stop'
 }
 
-/** What the overlay preload exposes as window.kettu. */
+/**
+ * What the overlay preload exposes as window.kettu: the settings and themes it reads to look as
+ * the window does, so the shared settings, theme and language code runs unchanged, and its state.
+ */
 export interface ComputerOverlayApi {
   platform: KettuApi['platform']
   client: 'desktop'
   systemLocale: Locale
   part: ComputerOverlayPart
+  settings: {
+    get(): Promise<SettingsFile>
+    onChanged(listener: (settings: SettingsFile) => void): () => void
+  }
+  themes: {
+    get(): Promise<ThemesState>
+    onChanged(listener: (state: ThemesState) => void): () => void
+  }
   onState(listener: (state: ComputerOverlayState) => void): () => void
   act(action: ComputerOverlayAction): void
   /** The label's size in CSS pixels, which its window takes. */
   resize(width: number, height: number): void
 }
 
-export const OVERLAY_CHANNELS = {
+export const COMPUTER_OVERLAY_CHANNELS = {
   state: 'computer-overlay:state',
   action: 'computer-overlay:action',
   resize: 'computer-overlay:resize',
+  settings: 'computer-overlay:settings',
+  settingsChanged: 'computer-overlay:settings-changed',
+  themes: 'computer-overlay:themes',
+  themesChanged: 'computer-overlay:themes-changed',
 } as const

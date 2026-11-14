@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import {
   ComputerIcon,
   DashboardSquare01Icon,
   LinkSquare02Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { computerControl, type ComputerAct } from '@shared/computer-use'
 import type { ComputerUseView } from '@shared/thread'
+import { ControlPointer } from '@renderer/components/control/control-pointer'
+import { SurfaceLight } from '@renderer/components/control/surface-light'
+import { SurfacePill } from '@renderer/components/control/surface-pill'
+import { useControlAgent } from '@renderer/components/control/use-control-agent'
 import {
   PaneEmpty,
   PaneHead,
@@ -76,22 +82,55 @@ function useWindowCapture(windowId: number | null): { capture: Capture; retry: (
   return { capture, retry: () => setAttempt((n) => n + 1) }
 }
 
-/** The video of the window, its corners rounded as the real window's are. */
-function WindowVideo({ stream, label }: { stream: MediaStream; label: string }) {
+/**
+ * The video of the window, fitted to the stage and never past its own size, its corners rounded
+ * as the real window's are. While the agent has the app, its light runs around the window and its
+ * pointer goes where each action lands.
+ */
+function WindowVideo({
+  stream,
+  label,
+  agent,
+  act,
+  pointer,
+}: {
+  stream: MediaStream
+  label: string
+  /** The agent has the app: its light and pointer show. */
+  agent: boolean
+  act: ComputerAct | null
+  pointer: { id: string; name: string }
+}) {
+  const stage = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
-  const [radius, setRadius] = useState(WINDOW_RADIUS)
-  useEffect(() => {
+  const [box, setBox] = useState<{ width: number; height: number; radius: number } | null>(null)
+
+  useLayoutEffect(() => {
     const element = video.current
-    if (!element) return
+    const frame = stage.current
+    if (!element || !frame) return
     element.srcObject = stream
-    // The picture is the window's pixels: its corner scales with the picture.
+    // The picture is the window's pixels: its size and its corner scale with it.
     const measure = () => {
-      if (!element.videoWidth) return
-      const scale = (element.clientWidth * devicePixelRatio) / element.videoWidth
-      setRadius(Math.max(4, Math.round(WINDOW_RADIUS * scale * 10) / 10))
+      const { videoWidth, videoHeight } = element
+      if (!videoWidth || !videoHeight) return
+      const natural = videoWidth / devicePixelRatio
+      const scale = Math.min(
+        frame.clientWidth / natural,
+        frame.clientHeight / (videoHeight / devicePixelRatio),
+        1,
+      )
+      const width = Math.floor(natural * scale)
+      const height = Math.floor((videoHeight / devicePixelRatio) * scale)
+      const radius = Math.max(4, Math.round(WINDOW_RADIUS * scale * 10) / 10)
+      setBox((last) =>
+        last?.width === width && last.height === height && last.radius === radius
+          ? last
+          : { width, height, radius },
+      )
     }
     const observer = new ResizeObserver(measure)
-    observer.observe(element)
+    observer.observe(frame)
     element.addEventListener('loadedmetadata', measure)
     element.addEventListener('resize', measure)
     return () => {
@@ -101,16 +140,47 @@ function WindowVideo({ stream, label }: { stream: MediaStream; label: string }) 
       element.srcObject = null
     }
   }, [stream])
+
+  const at =
+    box && act && act.x !== null && act.y !== null
+      ? { x: act.x * box.width, y: act.y * box.height }
+      : null
   return (
-    <video
-      ref={video}
-      autoPlay
-      muted
-      playsInline
-      aria-label={label}
-      className="kp-cwin"
-      style={{ borderRadius: radius }}
-    />
+    <div ref={stage} className="kp-cframe">
+      <div
+        className="kp-cwin-box"
+        style={box ? { width: box.width, height: box.height, borderRadius: box.radius } : undefined}
+      >
+        <video
+          ref={video}
+          autoPlay
+          muted
+          playsInline
+          aria-label={label}
+          className="kp-cwin"
+          style={{ borderRadius: box?.radius ?? WINDOW_RADIUS }}
+        />
+        <AnimatePresence>
+          {agent && box && (
+            <SurfaceLight
+              key="light"
+              placement="outside"
+              act={act?.seq ?? 0}
+              at={at}
+              radius={box.radius}
+            />
+          )}
+        </AnimatePresence>
+        {agent && at && (
+          <ControlPointer
+            id={pointer.id}
+            name={pointer.name}
+            at={at}
+            click={act?.kind === 'click' ? act.seq : 0}
+          />
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -132,6 +202,13 @@ export default function ComputerPane({ panel, maximized }: { panel: string; maxi
   const icon = useAppIcon(view?.appPath ?? null)
   const app = view?.app ?? null
   const paused = view?.control === 'you'
+  const controlAgent = useControlAgent(summary?.agentId ?? null, hostId)
+  const { t: tc } = useTranslation('control')
+  const control = (method: 'computer.takeOver' | 'computer.handBack') => {
+    if (!sessionId) return
+    setShowError(null)
+    host(method, { sessionId }).catch((error: unknown) => setShowError(errorMessage(error)))
+  }
 
   const show = () => {
     if (!sessionId) return
@@ -200,9 +277,13 @@ export default function ComputerPane({ panel, maximized }: { panel: string; maxi
     )
   } else {
     body = (
-      <div className="kp-cframe">
-        <WindowVideo stream={capture.stream} label={view.window.title ?? app ?? ''} />
-      </div>
+      <WindowVideo
+        stream={capture.stream}
+        label={view.window.title ?? app ?? ''}
+        agent={!paused}
+        act={view.act ?? null}
+        pointer={{ id: sessionId ?? '', name: agent }}
+      />
     )
   }
 
@@ -251,6 +332,22 @@ export default function ComputerPane({ panel, maximized }: { panel: string; maxi
         )}
         <div className="kp-cstage" data-control={view?.control ?? 'idle'}>
           {body}
+          <span className="kp-cpill">
+            <AnimatePresence>
+              {view && hostId === null && (
+                <SurfacePill
+                  key="pill"
+                  control={computerControl(view.control)}
+                  agent={controlAgent}
+                  agentName={agent}
+                  scope={tc('scope.app')}
+                  onTakeOver={() => control('computer.takeOver')}
+                  onHandBack={() => control('computer.handBack')}
+                  onDone={() => {}}
+                />
+              )}
+            </AnimatePresence>
+          </span>
         </div>
         {view && hostId === null && (
           <p className="kp-cnote">

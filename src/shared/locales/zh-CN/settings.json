@@ -465,6 +465,11 @@
       "description": "在你从这台电脑发出的回合里，Agent 可以读取应用的窗口，并在后台点击和输入。每个应用在一个会话里第一次使用前都会先问你。",
       "keywords": "computer use 电脑 桌面 应用 屏幕 鼠标 键盘 辅助功能 自动化"
     },
+    "pauseOnUse": {
+      "name": "你用同一个应用时暂停",
+      "description": "你在 Agent 正在用的应用里点击或按键时就算接管，Agent 会等着；交还后它接着做。",
+      "keywords": "暂停 接管 点击 同一个应用 电脑 computer use"
+    },
     "stopShortcut": {
       "name": "在任何地方停止",
       "description": "在任何应用里停止使用电脑，Kettu 在后台时也行，那时屏幕顶部会显示一枚标签。",

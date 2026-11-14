@@ -14,13 +14,20 @@
       "code": "{{agent}} needs you to <b>enter a code</b>",
       "check": "{{agent}} needs you to <b>pass a check</b>",
       "other": "{{agent}} needs you to <b>do a step</b>"
+    },
+    "computer": {
+      "agent": "{{agent}} is using <b>{{target}}</b>",
+      "looking": "{{agent}} is looking at <b>{{target}}</b>",
+      "you": "<b>You took over {{held}}</b><i>·</i>{{agent}} is waiting"
     }
   },
   "target": {
-    "browser": "the browser"
+    "browser": "the browser",
+    "computer": "your computer"
   },
   "held": {
-    "tab": "the tab"
+    "tab": "the tab",
+    "computer": "the computer"
   },
   "scope": {
     "tab": "this tab",
@@ -46,7 +53,8 @@
     "takeOver": "Take over",
     "handBack": "Hand back",
     "done": "Done",
-    "skip": "Skip"
+    "skip": "Skip",
+    "stop": "Stop"
   },
   "note": {
     "handedBack": {
@@ -54,14 +62,19 @@
       "device": "You used the device for <b>{{duration}}</b> and handed it back",
       "terminal": "You used the terminal for <b>{{duration}}</b> and handed it back",
       "computer": "You used the computer for <b>{{duration}}</b> and handed it back"
+    },
+    "paused": {
+      "computer": "You clicked in <b>{{app}}</b>, so {{agent}} paused"
     }
   },
   "status": {
     "using": {
-      "browser": "Using the browser"
+      "browser": "Using the browser",
+      "app": "Using {{target}}"
     },
     "you": {
-      "tab": "Waiting for you to hand back the tab"
+      "tab": "Waiting for you to hand back the tab",
+      "app": "Waiting for you to hand {{target}} back"
     },
     "asks": {
       "sign_in": "Waiting for you to sign in",

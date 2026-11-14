@@ -466,6 +466,11 @@
       "description": "Agents read the windows of your apps and click and type in them, in the background, for turns you send from this computer. Each app asks you before its first use in a session.",
       "keywords": "computer use desktop apps screen mouse keyboard accessibility automation"
     },
+    "pauseOnUse": {
+      "name": "Pause when you use the same app",
+      "description": "Your click or key in the app an agent uses takes it over, and the agent waits; Hand back lets it go on.",
+      "keywords": "pause take over click same app computer use"
+    },
     "stopShortcut": {
       "name": "Stop from anywhere",
       "description": "Stops using the computer from any app, also while Kettu is in the background, where a label shows at the top of the screen.",

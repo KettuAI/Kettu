@@ -236,27 +236,9 @@
     }
   },
   "computerBar": {
-    "using": "{{agent}} 正在使用你的电脑",
-    "usingApp": "{{agent}} 正在使用 <app>{{app}}</app>",
-    "looking": "正在查看 <app>{{app}}</app>",
     "waiting": "等你允许使用 <app>{{app}}</app>",
     "stopping": "正在收回电脑…",
-    "stop": "停止使用",
-    "stopLabel": "这一轮不再使用电脑，回合继续",
-    "takeOver": "接管",
-    "tookOver": "<app>你接管了 {{app}}</app> · {{agent}} 在等",
-    "tookOverComputer": "<app>你接管了电脑</app> · {{agent}} 在等",
-    "handBack": "交还"
-  },
-  "computerFloat": {
-    "using": "{{agent}} 正在使用 <app>{{app}}</app>",
-    "usingComputer": "{{agent}} 正在使用你的电脑",
-    "takeOver": "接管",
-    "stop": "停止",
-    "stopLabel": "这一轮不再使用电脑，回合继续",
-    "tookOver": "<app>你接管了 {{app}}</app> · {{agent}} 在等",
-    "tookOverComputer": "<app>你接管了电脑</app> · {{agent}} 在等",
-    "handBack": "交还"
+    "stopLabel": "这一轮不再使用电脑，回合继续"
   },
   "computerPane": {
     "title": "Computer",

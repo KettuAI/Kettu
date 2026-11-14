@@ -2,7 +2,6 @@ import { homedir, hostname } from 'node:os'
 import { join } from 'node:path'
 import {
   app,
-  nativeTheme,
   powerMonitor,
   protocol,
   safeStorage,
@@ -237,8 +236,9 @@ async function start(): Promise<void> {
   )
   // Made once sharing and the updater are, before remote access starts and a device can ask.
   let hostAdmin: HostAdmin | null = null
-  // The page overlay follows the themes as the window does; the pages are made after them.
+  // The overlays follow the themes as the window does; they are made after them.
   const browserViewsRef: { current: BrowserViews | null } = { current: null }
+  const computerOverlayRef: { current: ComputerOverlay | null } = { current: null }
   const themes = new ThemeStore(themeFolder, themeSources, settings.get().appearance.colorTheme, {
     dir: themesDir,
     sourcesFile: themeSourcesFile,
@@ -248,6 +248,7 @@ async function start(): Promise<void> {
       applyWindowTheme(chosen)
       broadcast('themes:changed', state)
       browserViewsRef.current?.lookChanged()
+      computerOverlayRef.current?.settingsChanged()
       hostAdmin?.themesChanged(themes.hostThemes())
     },
   })
@@ -392,19 +393,11 @@ async function start(): Promise<void> {
     control: (sessionId, action) => agentHost.computerControl(sessionId, action),
     frame: () => agentHost.computerFrame(),
     appIcon: (path) => computerAppIcon(path),
-    look: () => {
-      const file = settings.get()
-      const { theme, reduceMotion } = file.appearance
-      return {
-        shortcut: file.computerUse.stopShortcut,
-        dark: theme === 'dark' || (theme === 'system' && nativeTheme.shouldUseDarkColors),
-        reduceMotion: reduceMotion === 'always',
-        locale: localeOf(file),
-      }
-    },
+    settings: () => settings.get(),
+    themes: () => themes.state(),
     systemLocale,
   })
-  nativeTheme.on('updated', () => computerOverlay.settingsChanged())
+  computerOverlayRef.current = computerOverlay
   serveComputerCapture(
     session.defaultSession,
     () => computerHold,
@@ -917,7 +910,7 @@ async function start(): Promise<void> {
     if (changed.has('terminal') || changed.has('remote')) {
       terminalHost.pushSettings(terminalSettings(next))
     }
-    if (changed.has('appearance') || changed.has('computerUse') || localeChanged) {
+    if (changed.has('appearance') || changed.has('general') || changed.has('computerUse')) {
       computerOverlay.settingsChanged()
     }
     if (changed.has('appearance')) {

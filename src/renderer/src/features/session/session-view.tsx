@@ -1,10 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { AlertCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import type { SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import { SurfaceLight } from '@renderer/components/control/surface-light'
 import { Button } from '@renderer/components/ui/button'
 import { BrowserLabel } from '@renderer/features/browser/browser-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
@@ -18,13 +20,13 @@ import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
-import { openAgentSettings, useViewStore } from '@renderer/stores/view'
+import { openAgentSettings, shownPanel, useViewStore } from '@renderer/stores/view'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
 import { readDraft } from './composer/drafts'
 import { preloadRenderers, useRenderersReady } from './markdown/preload'
-import { ComputerGlow, ComputerLabel } from './computer-bar'
+import { ComputerLabel } from './computer-bar'
 import { QueueStack } from './queue-stack'
 import { SessionHeader } from './session-header'
 import {
@@ -73,8 +75,13 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const otherHost = useOtherHost(hostId)
   // Its host is offline: what the thread showed stays, and nothing goes to it.
   const away = otherHost && isAway(otherHost.connection) ? otherHost : null
-  // It holds the computer: the column glows and the composer carries the label.
+  // It holds the computer: the composer carries the label, and while the agent has the app and
+  // the Computer pane is closed, the light runs along the column's edges.
   const computer = !!session?.computer && !archived && !away
+  const paneShown = useViewStore(
+    (s) => shownPanel(s) === sessionId && s.sidePane[sessionId] === 'computer',
+  )
+  const lit = computer && session?.computer?.control !== 'you' && !paneShown
   // The board sits at the right of the thread and the composer; a sub-agent's page has none.
   const board = useViewStore((s) => !!s.boardOpen[sessionId]) && summary.origin !== 'subagent'
 
@@ -251,7 +258,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     {actionError ?? queueError}
                   </p>
                 )}
-                <div className="flex flex-col" {...(computer ? { 'data-computer-using': '' } : {})}>
+                <div className="flex flex-col">
                   {/* Mounted only while something waits; its cards sit behind the composer. */}
                   {session &&
                     !archived &&
@@ -259,8 +266,14 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     session.queue.length > 0 && (
                       <QueueStack session={session} onError={setQueueError} />
                     )}
-                  {computer && session && (
-                    <ComputerLabel session={session} agentName={name} onError={setQueueError} />
+                  {session && (
+                    <ComputerLabel
+                      sessionId={sessionId}
+                      view={computer ? (session.computer ?? null) : null}
+                      agentId={summary.agentId}
+                      hostId={hostId}
+                      onError={setQueueError}
+                    />
                   )}
                   {!archived && !away && summary.origin !== 'subagent' && (
                     <BrowserLabel sessionId={sessionId} agentId={summary.agentId} hostId={hostId} />
@@ -299,7 +312,16 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           </Suspense>
         )}
       </div>
-      {computer && <ComputerGlow />}
+      <AnimatePresence>
+        {lit && (
+          <SurfaceLight
+            key="computer"
+            placement="inside"
+            act={session?.computer?.act?.seq ?? 0}
+            radius={11}
+          />
+        )}
+      </AnimatePresence>
       <Announcer summary={summary} name={name} />
     </div>
   )

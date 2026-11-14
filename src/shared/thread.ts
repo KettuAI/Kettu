@@ -387,16 +387,17 @@ export interface ControlAskEntry {
   after: string | null
 }
 
-/** The user took a surface over during the turn and handed it back after `durationMs`. */
-export interface ControlNoteEntry {
+/**
+ * The user took a surface over during the turn: `handed_back` once they handed it back after
+ * `durationMs`; `paused` when their own click or key in `app`, the app the agent used, took it.
+ */
+export type ControlNoteEntry = {
   kind: 'control_note'
   id: string
   surface: ControlSurface
-  event: 'handed_back'
-  durationMs: number
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
-}
+} & ({ event: 'handed_back'; durationMs: number } | { event: 'paused'; app: string })
 
 /**
  * An agent asked to read or operate a mobile device for the first time in its session. `decision`
@@ -1193,8 +1194,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
     case 'control_note':
       return (
         isControlSurface(value.surface) &&
-        value.event === 'handed_back' &&
-        typeof value.durationMs === 'number' &&
+        ((value.event === 'handed_back' && typeof value.durationMs === 'number') ||
+          (value.event === 'paused' && typeof value.app === 'string')) &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'device_access':

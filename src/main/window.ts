@@ -47,11 +47,11 @@ export function markPanel(window: BrowserWindow): void {
 /** Whether `contents` is the menu bar panel's page. */
 export function isPanel(contents: WebContents): boolean {
   const window = BrowserWindow.fromWebContents(contents)
-  return window !== null && panels.has(window) && !overlays.has(window)
+  return window !== null && panels.has(window) && !computerOverlays.has(window)
 }
 
 // Computer use's windows over the desktop: never the one to talk to, and none of the app's.
-const overlays = new WeakSet<BrowserWindow>()
+const computerOverlays = new WeakSet<BrowserWindow>()
 let creatingOverlay = false
 
 /**
@@ -64,7 +64,7 @@ export function createOverlayWindow(
   creatingOverlay = true
   try {
     const window = new BrowserWindow(options)
-    overlays.add(window)
+    computerOverlays.add(window)
     panels.add(window)
     return window
   } finally {
@@ -74,13 +74,13 @@ export function createOverlayWindow(
 
 /** Whether `window` is one of computer use's windows, or one being created. */
 export function isOverlayWindow(window: BrowserWindow): boolean {
-  return creatingOverlay || overlays.has(window)
+  return creatingOverlay || computerOverlays.has(window)
 }
 
 /** Whether `contents` is the page of one of computer use's windows. */
-export function isOverlay(contents: WebContents): boolean {
+export function isComputerOverlay(contents: WebContents): boolean {
   const window = BrowserWindow.fromWebContents(contents)
-  return window !== null && overlays.has(window)
+  return window !== null && computerOverlays.has(window)
 }
 
 /** Whether one of the app's own windows, not a panel or overlay, has the focus. */

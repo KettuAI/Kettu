@@ -12,18 +12,21 @@ import {
   ipcMain,
   screen,
   type IpcMainEvent,
+  type IpcMainInvokeEvent,
   type Rectangle,
   type WebContents,
 } from 'electron'
 import {
+  COMPUTER_OVERLAY_CHANNELS as CHANNELS,
   isComputerOverlayAction,
-  OVERLAY_CHANNELS,
   type ComputerOverlayAction,
   type ComputerOverlayPart,
   type ComputerOverlayState,
 } from '@shared/computer-overlay'
 import { defaultStopShortcut, type ComputerFrame, type ComputerHold } from '@shared/computer-use'
 import type { Locale } from '@shared/locale'
+import type { SettingsFile } from '@shared/settings'
+import type { ThemesState } from '@shared/themes'
 import { createLogger } from './log'
 import { loadRenderer, rendererPage } from './renderer'
 import { appFocused, createOverlayWindow } from './window'
@@ -44,8 +47,9 @@ export interface ComputerOverlayDeps {
   control(sessionId: string, action: ComputerOverlayAction): void
   frame(): Promise<ComputerFrame | null>
   appIcon(path: string): Promise<string | null>
-  /** The settings the pages follow, read whenever they are sent. */
-  look(): { shortcut: string; dark: boolean; reduceMotion: boolean; locale: Locale }
+  /** The settings and themes the pages look as the window does with. */
+  settings(): SettingsFile
+  themes(): ThemesState
   systemLocale: Locale
 }
 
@@ -83,10 +87,18 @@ export class ComputerOverlay {
   private syncing: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly deps: ComputerOverlayDeps) {
-    ipcMain.on(OVERLAY_CHANNELS.action, (event, action: unknown) => this.onAction(event, action))
-    ipcMain.on(OVERLAY_CHANNELS.resize, (event, width: unknown, height: unknown) =>
+    ipcMain.on(CHANNELS.action, (event, action: unknown) => this.onAction(event, action))
+    ipcMain.on(CHANNELS.resize, (event, width: unknown, height: unknown) =>
       this.onResize(event, width, height),
     )
+    ipcMain.handle(CHANNELS.settings, (event) => {
+      if (!this.ownFrame(event)) throw new Error('Not an overlay page')
+      return this.deps.settings()
+    })
+    ipcMain.handle(CHANNELS.themes, (event) => {
+      if (!this.ownFrame(event)) throw new Error('Not an overlay page')
+      return this.deps.themes()
+    })
     // Focus moves between windows as a blur then a focus: the next turn sees where it went.
     const later = () => this.syncSoon()
     app.on('browser-window-focus', later)
@@ -119,10 +131,14 @@ export class ComputerOverlay {
     this.sync()
   }
 
-  /** The settings changed: the shortcut and the pages' look follow them. */
+  /** The settings or the themes changed: the shortcut and the pages' look follow them. */
   settingsChanged(): void {
     this.syncShortcut()
-    this.send()
+    for (const page of [this.label, this.light]) {
+      if (!page || page.window.isDestroyed()) continue
+      page.window.webContents.send(CHANNELS.settingsChanged, this.deps.settings())
+      page.window.webContents.send(CHANNELS.themesChanged, this.deps.themes())
+    }
   }
 
   /** Whether `contents` is one of the overlay's pages, the only senders of its channels. */
@@ -261,7 +277,6 @@ export class ComputerOverlay {
   private state(part: ComputerOverlayPart): ComputerOverlayState | null {
     const hold = this.hold
     if (!hold) return null
-    const look = this.deps.look()
     let frame: ComputerOverlayState['frame'] = null
     if (part === 'light' && this.frame) {
       const bounds = toDip(this.frame.bounds)
@@ -275,10 +290,6 @@ export class ComputerOverlay {
       appIcon: hold.appPath ? (this.icons.get(hold.appPath) ?? null) : null,
       control: hold.control,
       act: hold.act,
-      shortcut: stopAccelerator(look.shortcut, process.platform),
-      dark: look.dark,
-      reduceMotion: look.reduceMotion,
-      locale: look.locale,
       frame,
     }
   }
@@ -287,7 +298,7 @@ export class ComputerOverlay {
     for (const page of [this.label, this.light]) {
       if (!page || !page.loaded || page.window.isDestroyed()) continue
       const state = this.state(page.part)
-      if (state) page.window.webContents.send(OVERLAY_CHANNELS.state, state)
+      if (state) page.window.webContents.send(CHANNELS.state, state)
     }
   }
 
@@ -354,8 +365,19 @@ export class ComputerOverlay {
     return page
   }
 
+  /** Whether a request comes from the main frame of one of the overlay's own pages. */
+  private ownFrame(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
+    const frame = event.senderFrame
+    return (
+      this.owns(event.sender) &&
+      frame !== null &&
+      frame === event.sender.mainFrame &&
+      rendererPage(frame.url) === 'computer-overlay'
+    )
+  }
+
   private sender(event: IpcMainEvent): Page | null {
-    if (!this.owns(event.sender)) return null
+    if (!this.ownFrame(event)) return null
     return [this.label, this.light].find((page) => page?.window.webContents === event.sender)!
   }
 
@@ -379,7 +401,8 @@ export class ComputerOverlay {
 
   /** The stop shortcut, registered while a session holds the computer and only then. */
   private syncShortcut(): void {
-    const wanted = this.hold ? stopAccelerator(this.deps.look().shortcut, process.platform) : null
+    const shortcut = this.deps.settings().computerUse.stopShortcut
+    const wanted = this.hold ? stopAccelerator(shortcut, process.platform) : null
     if (wanted === this.shortcut) return
     if (this.shortcut) globalShortcut.unregister(this.shortcut)
     this.shortcut = null
