@@ -1,7 +1,7 @@
 import { access, constants } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { app } from 'electron'
-import type { AppUpdater, CancellationToken } from 'electron-updater'
+import type { AppUpdater, CancellationToken, ProgressInfo, UpdateFileInfo } from 'electron-updater'
 import type { SettingsFile } from '@shared/settings'
 import type { UpdateStatus } from '@shared/updates'
 import type { AppStateStore } from './app-state'
@@ -10,6 +10,13 @@ import { broadcast } from './events'
 import { createLogger } from './log'
 import { sessionProxy } from './proxy'
 import type { SettingsSection } from './settings-schema'
+import {
+  GITHUB_SOURCE,
+  SourceRun,
+  SourcesFailed,
+  updaterUserAgent,
+  type SourceChoice,
+} from './update-sources'
 import {
   dismissTarget,
   dmgDownloadUrl,
@@ -29,6 +36,18 @@ import {
 
 const log = createLogger('updater')
 
+// electron-updater's code for an installer whose publisher is not the running app's.
+const INVALID_PUBLISHER = 'ERR_UPDATER_INVALID_SIGNATURE'
+
+function errorCode(error: unknown): unknown {
+  return typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined
+}
+
+/** Whether a check failed because GitHub, its only source, could not be reached. */
+function githubUnreachable(error: unknown): boolean {
+  return error instanceof SourcesFailed && error.githubUnreachable
+}
+
 const FIRST_CHECK_MS = 30_000
 const CHECK_INTERVAL_MS = 60 * 60 * 1000
 // Electron copies the app synchronously, so the window gets a few frames to show the move first.
@@ -45,7 +64,10 @@ export interface UpdaterDeps {
   changed?(status: UpdateStatus): void
 }
 
-/** Checks GitHub Releases through electron-updater, which loads only after the window shows. */
+/**
+ * Checks Kettu's download service and GitHub's releases through electron-updater, which loads only
+ * after the window shows.
+ */
 export class Updater {
   private status: UpdateStatus
   private readonly mode: UpdateMode
@@ -54,12 +76,19 @@ export class Updater {
   private lastCheckedAt: number | null = null
   private lastAvailable: string | null = null
   private lastDownloadUrl: string | null = null
+  private lastFiles: readonly UpdateFileInfo[] = []
+  /** The sources of the last check that found an update; a download moves along them. */
+  private run: SourceRun | null = null
+  /** Stops the download attempt on a source other than GitHub, while one runs. */
+  private leaveSource: (() => void) | null = null
   private checking: Promise<void> | null = null
   private started = false
   private errorEvents = 0
   private startedBy: StartedBy = 'auto'
   /** Set once electron-updater has loaded. */
-  private newToken: (() => CancellationToken) | null = null
+  private Token: typeof CancellationToken | null = null
+  /** While a download runs, its failures are reported once no source is left to move on to. */
+  private downloadActive = false
   /** Stops the download the user started with Update. */
   private cancellation: CancellationToken | null = null
   private shuttingDown = false
@@ -210,15 +239,47 @@ export class Updater {
     if (!this.updater) return
     void this.updater.then((updater) => {
       if (changed.has('proxy')) void this.applyProxy(updater, settings)
+      if (changed.has('updates') || changed.has('cloud')) this.sourceChanged()
       if (!changed.has('updates')) return
-      updater.autoDownload = this.autoDownload(settings)
       this.applyInstallOnQuit(updater, settings)
       const { state } = this.status
-      if (updater.autoDownload && state.kind === 'available') {
+      if (this.autoDownload(settings) && state.kind === 'available') {
         this.manual = false
         void this.startDownload(state.version, 'auto')
       }
     })
+  }
+
+  /** GitHub only, as chosen or because Kettu's services are off on this computer. */
+  private sourceChoice(): SourceChoice {
+    const { cloud, updates } = this.deps.settings()
+    return cloud.enabled ? updates.source : 'github'
+  }
+
+  /**
+   * Once GitHub only is chosen, an update a check found elsewhere downloads from GitHub, and Link
+   * mode's link names GitHub's disk image, so nothing more goes to another source. Once it is not,
+   * a check that GitHub failed runs again.
+   */
+  private sourceChanged(): void {
+    const { state } = this.status
+    // A failure on GitHub alone is stale once other sources may be used, so they are asked.
+    if (state.kind === 'error' && state.githubUnreachable && this.sourceChoice() === 'auto') {
+      void this.check()
+      return
+    }
+    if (this.sourceChoice() !== 'github' || !this.run || this.run.githubOnly) return
+    this.run = SourceRun.githubOnly(this.run.stallMs)
+    this.leaveSource?.()
+    if (state.kind !== 'available' || this.mode !== 'link') return
+    this.lastDownloadUrl = this.linkUrl()
+    this.publish({ ...this.status, state: { ...state, downloadUrl: this.lastDownloadUrl } })
+  }
+
+  /** Link mode's disk image for the update found, on the source that served the check. */
+  private linkUrl(): string | null {
+    if (this.mode !== 'link' || !this.run || !this.lastAvailable) return null
+    return dmgDownloadUrl(this.run.current.url, this.lastAvailable, this.lastFiles, process.arch)
   }
 
   private autoDownload(settings: SettingsFile): boolean {
@@ -278,8 +339,6 @@ export class Updater {
       await this.runCheck(true)
     } finally {
       this.afterMove = null
-      const updater = await this.updater?.catch(() => null)
-      if (updater) updater.autoDownload = this.autoDownload(this.deps.settings())
     }
     // A failed download is in the state and the log, as after any Update.
     if (this.status.state.kind === 'available') await this.download().catch(() => undefined)
@@ -291,63 +350,88 @@ export class Updater {
   }
 
   private load(): Promise<AppUpdater> {
-    this.updater ??= loadAutoUpdater().then(async ({ autoUpdater, CancellationToken }) => {
-      // Automatic downloads depend on where the app runs.
-      await this.located
-      this.newToken = () => new CancellationToken()
-      const settings = this.deps.settings()
-      autoUpdater.logger = {
-        info: (message?: unknown) => log.info(String(message)),
-        warn: (message?: unknown) => log.warn(String(message)),
-        error: (message?: unknown) => log.error(String(message)),
-      }
-      autoUpdater.allowPrerelease = false
-      autoUpdater.allowDowngrade = false
-      autoUpdater.autoDownload = this.autoDownload(settings)
-      this.applyInstallOnQuit(autoUpdater, settings)
-      // Releases carry no NSIS blockmap, so the Windows installer always downloads whole.
-      autoUpdater.disableDifferentialDownload = process.platform === 'win32'
-      autoUpdater.on('checking-for-update', () =>
-        this.dispatch({ type: 'checking', manual: this.manual }),
-      )
-      autoUpdater.on('update-available', (info) => {
-        this.lastAvailable = info.version
-        this.lastDownloadUrl =
-          this.mode === 'link' ? dmgDownloadUrl(info.version, info.files, process.arch) : null
-        // With automatic downloads electron-updater starts one right after this event.
-        this.startedBy = 'auto'
-        this.dispatch({ type: 'available', version: info.version })
-        this.applyInstallOnQuit(autoUpdater, this.deps.settings())
-      })
-      autoUpdater.on('update-not-available', () => {
-        this.lastAvailable = null
-        this.lastDownloadUrl = null
-        this.lastCheckedAt = Date.now()
-        this.dispatch({ type: 'not-available', at: this.lastCheckedAt })
-      })
-      autoUpdater.on('download-progress', (progress) =>
-        this.dispatch({ type: 'progress', percent: progress.percent }),
-      )
-      autoUpdater.on('update-downloaded', (info) => {
-        this.dispatch({
-          type: 'downloaded',
-          version: info.version,
-          notes: releaseHighlights(info.releaseNotes),
+    this.updater ??= Promise.all([loadAutoUpdater(), import('./update-provider')]).then(
+      async ([{ autoUpdater, CancellationToken, Provider }, { sourcesProvider }]) => {
+        // Automatic downloads depend on where the app runs.
+        await this.located
+        this.Token = CancellationToken
+        const settings = this.deps.settings()
+        const current = app.getVersion()
+        autoUpdater.logger = {
+          info: (message?: unknown) => log.info(String(message)),
+          warn: (message?: unknown) => log.warn(String(message)),
+          error: (message?: unknown) => log.error(String(message)),
+        }
+        autoUpdater.setFeedURL({
+          provider: 'custom',
+          updateProvider: sourcesProvider(Provider, CancellationToken, {
+            current,
+            userAgent: updaterUserAgent(current, process.platform, process.arch),
+            log,
+            choice: () => this.sourceChoice(),
+            cachedList: () => this.deps.appState.get().updateSources,
+            saveList: (list) => this.deps.appState.update({ updateSources: list }),
+            checked: (run) => {
+              this.run = run
+            },
+            downloadSource: () => this.run?.current ?? null,
+          }),
         })
-        // electron-updater adds its quit handler right after this event, so the choice applies
-        // once it has.
-        queueMicrotask(() => this.applyInstallOnQuit(autoUpdater, this.deps.settings()))
-        if (this.startedBy === 'user') this.deps.requestRestart()
-      })
-      autoUpdater.on('error', (error) => {
-        this.errorEvents++
-        const message = errorMessage(error)
-        log.warn(`${this.manual ? 'Manual' : 'Automatic'} update step failed: ${message}`)
-        this.dispatch({ type: 'error', message, manual: this.manual })
-      })
-      void this.applyProxy(autoUpdater, settings)
-      return autoUpdater
-    })
+        autoUpdater.allowPrerelease = false
+        autoUpdater.allowDowngrade = false
+        // The updater starts downloads itself, so a failed source hands the download on.
+        autoUpdater.autoDownload = false
+        this.applyInstallOnQuit(autoUpdater, settings)
+        // Releases carry no NSIS blockmap, so the Windows installer always downloads whole.
+        autoUpdater.disableDifferentialDownload = process.platform === 'win32'
+        autoUpdater.on('checking-for-update', () =>
+          this.dispatch({ type: 'checking', manual: this.manual }),
+        )
+        autoUpdater.on('update-available', (info) => {
+          this.lastAvailable = info.version
+          this.lastFiles = info.files
+          this.lastDownloadUrl = this.linkUrl()
+          // An automatic download, which the check starts as it ends, is the updater's own.
+          this.startedBy = 'auto'
+          this.dispatch({ type: 'available', version: info.version })
+          this.applyInstallOnQuit(autoUpdater, this.deps.settings())
+        })
+        autoUpdater.on('update-not-available', () => {
+          this.lastAvailable = null
+          this.lastDownloadUrl = null
+          this.lastCheckedAt = Date.now()
+          this.dispatch({ type: 'not-available', at: this.lastCheckedAt })
+        })
+        autoUpdater.on('download-progress', (progress) =>
+          this.dispatch({ type: 'progress', percent: progress.percent }),
+        )
+        autoUpdater.on('update-downloaded', (info) => {
+          this.dispatch({
+            type: 'downloaded',
+            version: info.version,
+            notes: releaseHighlights(info.releaseNotes),
+          })
+          // electron-updater adds its quit handler right after this event, so the choice applies
+          // once it has.
+          queueMicrotask(() => this.applyInstallOnQuit(autoUpdater, this.deps.settings()))
+          if (this.startedBy === 'user') this.deps.requestRestart()
+        })
+        autoUpdater.on('error', (error) => {
+          if (this.downloadActive) return
+          this.errorEvents++
+          const message = errorMessage(error)
+          log.warn(`${this.manual ? 'Manual' : 'Automatic'} update step failed: ${message}`)
+          this.dispatch({
+            type: 'error',
+            message,
+            manual: this.manual,
+            githubUnreachable: githubUnreachable(error),
+          })
+        })
+        void this.applyProxy(autoUpdater, settings)
+        return autoUpdater
+      },
+    )
     this.updater.catch((error: unknown) => {
       log.error('Could not load electron-updater', error)
       this.updater = null
@@ -388,14 +472,9 @@ export class Updater {
       })
       .then(
         (result) => {
-          // With automatic downloads the check hands back the download, which outlives it.
-          const download = result?.downloadPromise
-          if (!download) return
-          const errorsAtDownload = this.errorEvents
-          download.catch((error: unknown) => {
-            if (this.errorEvents !== errorsAtDownload) return
-            this.dispatch({ type: 'error', message: errorMessage(error), manual: this.manual })
-          })
+          if (!result?.isUpdateAvailable || !this.autoDownload(this.deps.settings())) return
+          // The download outlives the check; its failures reach the state on their own.
+          void this.startDownload(result.updateInfo.version, 'auto').catch(() => undefined)
         },
         (error: unknown) => {
           const message = errorMessage(error)
@@ -404,7 +483,12 @@ export class Updater {
           } else if (this.errorEvents === errorsBefore) {
             // electron-updater reports its own failures through 'error' as well; anything else
             // has to reach the state here.
-            this.dispatch({ type: 'error', message, manual: this.manual })
+            this.dispatch({
+              type: 'error',
+              message,
+              manual: this.manual,
+              githubUnreachable: githubUnreachable(error),
+            })
           }
         },
       )
@@ -415,30 +499,113 @@ export class Updater {
   }
 
   private async startDownload(version: string, startedBy: StartedBy): Promise<void> {
-    const errorsBefore = this.errorEvents
+    if (this.downloadActive) return
+    this.downloadActive = true
     // Before anything waits: a second Update then finds the download started, and the cancel
     // button that shows with it has a token to cancel.
-    const token = startedBy === 'user' ? (this.newToken?.() ?? null) : null
+    const token = startedBy === 'user' && this.Token ? new this.Token() : null
     this.startedBy = startedBy
     this.cancellation = token
     this.dispatch({ type: 'download-started', version, manual: startedBy === 'user' })
     try {
       const updater = await this.load()
       this.applyInstallOnQuit(updater, this.deps.settings())
-      await updater.downloadUpdate(token ?? undefined)
+      await this.downloadFromSources(updater, token)
     } catch (error) {
-      // A cancelled download rejects without an 'error' event.
       if (token?.cancelled) {
         this.dispatch({ type: 'download-cancelled' })
         return
       }
       const message = errorMessage(error)
-      if (this.errorEvents === errorsBefore) {
-        this.dispatch({ type: 'error', message, manual: this.manual })
-      }
+      this.dispatch({ type: 'error', message, manual: this.manual })
       if (this.manual) throw new Error(message, { cause: error })
     } finally {
+      this.downloadActive = false
       if (this.cancellation === token) this.cancellation = null
+    }
+  }
+
+  /**
+   * Downloads the update the check found from the source that served the check, and then from
+   * each source after it: one that fails, or makes no progress for the list's stall time, hands
+   * the same version on to the next.
+   */
+  private async downloadFromSources(
+    updater: AppUpdater,
+    cancellation: CancellationToken | null,
+  ): Promise<void> {
+    const Token = this.Token
+    if (!Token || !this.run) {
+      await updater.downloadUpdate(cancellation ?? undefined)
+      return
+    }
+    let run = this.run.again()
+    for (;;) {
+      // GitHub only, chosen since the check, sends nothing more to any other source.
+      if (this.sourceChoice() === 'github' && !run.githubOnly) {
+        run = SourceRun.githubOnly(run.stallMs)
+      }
+      // The provider resolves the files on this run's source.
+      this.run = run
+      const { current: source, stallMs } = run
+      const attempt = new Token(cancellation ?? undefined)
+      let stalled = false
+      let left = false
+      // GitHub only, chosen during the download, stops this source at once.
+      if (source !== GITHUB_SOURCE) {
+        this.leaveSource = () => {
+          left = true
+          attempt.cancel()
+        }
+      }
+      let downloaded = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const watch = (): void => {
+        clearTimeout(timer)
+        timer = setTimeout(() => {
+          stalled = true
+          attempt.cancel()
+        }, stallMs)
+      }
+      // After the last byte come only the local steps: the checksum, the signature, installing.
+      const onProgress = (progress: ProgressInfo): void => {
+        if (progress.percent >= 100) clearTimeout(timer)
+        else watch()
+      }
+      const onDownloaded = (): void => {
+        downloaded = true
+        clearTimeout(timer)
+      }
+      updater.on('download-progress', onProgress)
+      updater.on('update-downloaded', onDownloaded)
+      log.info(`Downloading the update from ${source.id} (${source.url})`)
+      watch()
+      try {
+        await updater.downloadUpdate(attempt)
+        return
+      } catch (error) {
+        // Squirrel.Mac's and the Windows publisher's checks fail the same on the same bytes.
+        if (cancellation?.cancelled || downloaded || errorCode(error) === INVALID_PUBLISHER) {
+          throw error
+        }
+        if (left) {
+          log.info(`Moving the download from ${source.id} to GitHub, now the only source`)
+          continue
+        }
+        const reason = stalled ? `no progress for ${stallMs / 1000} s` : errorMessage(error)
+        const next = run.next()
+        if (!next) {
+          log.warn(`Could not download from ${source.id}: ${reason}; no source is left`)
+          throw stalled ? new Error(`The download made no progress for ${stallMs / 1000} s`) : error
+        }
+        log.warn(`Could not download from ${source.id}: ${reason}; moving on to ${next.id}`)
+      } finally {
+        this.leaveSource = null
+        clearTimeout(timer)
+        updater.off('download-progress', onProgress)
+        updater.off('update-downloaded', onDownloaded)
+        attempt.dispose()
+      }
     }
   }
 

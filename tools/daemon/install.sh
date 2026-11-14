@@ -3,18 +3,19 @@
 #
 #   curl -fsSL https://kettu.sh/install | sh
 #
-# It downloads the package for this system from Kettu's GitHub releases, checks it against the
-# release's checksums, unpacks it into ~/.local/share/kettu/versions/<version>, links
-# ~/.local/bin/kettu to it and sets up the daemon's service. `kettu update` runs it again for a
-# newer release. Pass options after `sh -s --`:
+# It downloads the package for this system from Kettu's download service, or from Kettu's GitHub
+# releases when that fails, checks it against the checksums from the same place, unpacks it into
+# ~/.local/share/kettu/versions/<version>, links ~/.local/bin/kettu to it and sets up the daemon's
+# service. `kettu update` runs it again for a newer release. Pass options after `sh -s --`:
 #
 #   --version <version>  Install that release instead of the latest
 #   --no-service         Do not set up the service, as in a container; run `kettu run` instead
 #
-# KETTU_RELEASES_URL names another place to download releases from, laid out as GitHub's.
+# KETTU_RELEASES_URL names the one place to download releases from, laid out as GitHub's.
 set -eu
 
-releases=${KETTU_RELEASES_URL:-https://github.com/KettuAI/Kettu/releases}
+downloads=https://download.kettu.sh
+github=https://github.com/KettuAI/Kettu/releases
 wanted=''
 service=1
 
@@ -77,10 +78,13 @@ if [ "$os" = linux ]; then
   esac
 fi
 
+# A place that cannot be reached, or stops sending, gives way to the next one soon.
 if command -v curl > /dev/null 2>&1; then
-  download() { curl -fsSL --retry 3 -o "$2" "$1"; }
+  download() {
+    curl -fsSL --retry 3 --connect-timeout 10 --speed-limit 1 --speed-time 15 -o "$2" "$1"
+  }
 elif command -v wget > /dev/null 2>&1; then
-  download() { wget -q -O "$2" "$1"; }
+  download() { wget -q -T 15 -O "$2" "$1"; }
 else
   fail 'Downloading needs curl or wget'
 fi
@@ -121,20 +125,38 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 file=kettu-daemon-$os-$arch.tar.gz
-if [ -n "$wanted" ]; then
-  from=$releases/download/v$wanted
-else
-  from=$releases/latest/download
-fi
-say "Downloading $file"
-download "$from/$file" "$work/$file" || fail "Could not download $from/$file"
-download "$from/kettu-daemon-sha256sums.txt" "$work/sums" ||
-  fail "Could not download $from/kettu-daemon-sha256sums.txt"
-expected=$(awk -v name="$file" '$2 == name || $2 == "*" name { print $1; exit }' "$work/sums")
-[ -n "$expected" ] || fail "The release's checksums list no $file; nothing was installed"
-actual=$(sha256 "$work/$file")
-if [ "$actual" != "$expected" ]; then
-  fail "$file does not match the release's checksum; nothing was installed"
+# Downloads the package and the checksums from one place and checks them, or sets why not.
+fetch() {
+  if [ -n "$wanted" ]; then
+    from=$1/download/v$wanted
+  else
+    from=$1/latest/download
+  fi
+  say "Downloading $file from $1"
+  if ! download "$from/$file" "$work/$file"; then
+    why="Could not download $from/$file"
+    return 1
+  fi
+  if ! download "$from/kettu-daemon-sha256sums.txt" "$work/sums"; then
+    why="Could not download $from/kettu-daemon-sha256sums.txt"
+    return 1
+  fi
+  expected=$(awk -v name="$file" '$2 == name || $2 == "*" name { print $1; exit }' "$work/sums")
+  if [ -z "$expected" ]; then
+    why="The checksums at $from list no $file"
+    return 1
+  fi
+  if [ "$(sha256 "$work/$file")" != "$expected" ]; then
+    why="$file from $from does not match its checksum"
+    return 1
+  fi
+}
+why=''
+if [ -n "${KETTU_RELEASES_URL:-}" ]; then
+  fetch "$KETTU_RELEASES_URL" || fail "$why; nothing was installed"
+elif ! fetch "$downloads"; then
+  say "$why; trying GitHub" >&2
+  fetch "$github" || fail "$why; nothing was installed"
 fi
 
 tar -xzf "$work/$file" -C "$work"

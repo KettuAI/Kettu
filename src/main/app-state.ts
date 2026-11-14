@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import { JsonFileWriter, quarantineFile, readJsonFile } from './json-file'
 import { createLogger } from './log'
+import type { SignedSourceList } from './update-sources'
 
 const log = createLogger('app-state')
 
@@ -8,20 +9,30 @@ export interface AppState {
   lastRunVersion: string | null // the version that ran last, to tell a launch after an update
   dismissedUpdate: string | null // the version whose update notice was dismissed
   updateAfterMove: string | null // the version Update moved the app to /Applications for
+  updateSources: SignedSourceList | null // the latest source list, checked again when read
 }
 
 interface AppStateFile extends AppState {
   version: 1
 }
 
+function signedList(value: unknown): SignedSourceList | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { payload, signature } = value as Record<string, unknown>
+  return typeof payload === 'string' && typeof signature === 'string'
+    ? { payload, signature }
+    : null
+}
+
 function parseAppState(raw: unknown): AppState | null {
   if (typeof raw !== 'object' || raw === null) return null
-  // Files written before updateAfterMove existed lack it.
+  // Files written before updateAfterMove or updateSources existed lack them.
   const {
     version,
     lastRunVersion,
     dismissedUpdate,
     updateAfterMove = null,
+    updateSources = null,
   } = raw as Record<string, unknown>
   const optionalString = (value: unknown): value is string | null =>
     value === null || (typeof value === 'string' && value.length <= 256)
@@ -33,7 +44,13 @@ function parseAppState(raw: unknown): AppState | null {
   ) {
     return null
   }
-  return { lastRunVersion, dismissedUpdate, updateAfterMove }
+  // A kept list that no longer reads is only dropped: the next check fetches it again.
+  return {
+    lastRunVersion,
+    dismissedUpdate,
+    updateAfterMove,
+    updateSources: signedList(updateSources),
+  }
 }
 
 /** Owns app-state.json: small facts main remembers between launches. */
@@ -45,7 +62,12 @@ export class AppStateStore {
 
   static async load(userDataPath: string): Promise<AppStateStore> {
     const path = join(userDataPath, 'app-state.json')
-    const empty: AppState = { lastRunVersion: null, dismissedUpdate: null, updateAfterMove: null }
+    const empty: AppState = {
+      lastRunVersion: null,
+      dismissedUpdate: null,
+      updateAfterMove: null,
+      updateSources: null,
+    }
     const read = await readJsonFile(path)
     let state = empty
     if (read.kind === 'ok') state = parseAppState(read.value) ?? empty
@@ -69,7 +91,8 @@ export class AppStateStore {
     if (
       next.lastRunVersion === this.state.lastRunVersion &&
       next.dismissedUpdate === this.state.dismissedUpdate &&
-      next.updateAfterMove === this.state.updateAfterMove
+      next.updateAfterMove === this.state.updateAfterMove &&
+      next.updateSources === this.state.updateSources
     ) {
       return
     }

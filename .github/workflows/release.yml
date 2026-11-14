@@ -276,10 +276,18 @@ jobs:
     permissions:
       contents: write
     steps:
-      # The install script goes up with the release, which the daemon's update runs.
+      # The install script goes up with the release, which the daemon's update runs; the update
+      # files are signed with the workflow's script against the app's own keys.
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: tools/daemon
+          sparse-checkout: |
+            tools/daemon
+            tools/workflow
+            src/main/update-keys.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
@@ -287,6 +295,7 @@ jobs:
       - name: Join the update files
         env:
           MAC_SIGNED: ${{ needs.mac-signing.outputs.signed }}
+          NOTES: ${{ inputs.notes }}
         run: |
           mkdir release
           cp artifacts/*/*.dmg artifacts/*/*-setup.exe artifacts/*/*.AppImage release/
@@ -316,9 +325,18 @@ jobs:
               echo "$name lists $count files, expected ${feed#*:}" >&2
               exit 1
             fi
+            # The app reads the release's highlights from its signed update file alone.
+            if [ -n "$NOTES" ]; then
+              yq -i '.releaseNotes = strenv(NOTES)' "release/$name"
+            fi
           done
           ls -l release
           tail -n +1 release/*.yml
+      # Every source serves these files, so the app takes one only with the release key's signature.
+      - name: Sign the update files
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: node tools/workflow/sign-update-files.mjs release/latest*.yml
       # A draft creates no tag: publishing it tags the commit it targets. A run after a fix moves the
       # draft to the newer commit.
       - name: Upload to a draft release

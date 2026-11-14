@@ -4,7 +4,7 @@
 import type { Locale } from '@shared/locale'
 import type { Platform } from '@shared/platform'
 import type { SettingsFile } from '@shared/settings'
-import { RELEASES_URL, type UpdateState, type UpdateStatus } from '@shared/updates'
+import type { UpdateState, UpdateStatus } from '@shared/updates'
 
 export type UpdateMode = 'install' | 'link'
 
@@ -23,10 +23,11 @@ export function installOnQuit({
 }
 
 /**
- * Link mode's download: the release's .dmg for this Mac, picked by the architecture in its name,
- * or null when the update lists none.
+ * Link mode's download: the release's .dmg for this Mac on the source `base` that served the
+ * check, picked by the architecture in its name, or null when the update lists none.
  */
 export function dmgDownloadUrl(
+  base: string,
   version: string,
   files: readonly { url: string }[],
   arch: string,
@@ -35,7 +36,7 @@ export function dmgDownloadUrl(
   const name = files
     .map((file) => file.url.slice(file.url.lastIndexOf('/') + 1))
     .find((file) => file.endsWith(`-${arch}.dmg`))
-  return name ? `${RELEASES_URL}/download/v${version}/${encodeURIComponent(name)}` : null
+  return name ? `${base}/download/v${version}/${encodeURIComponent(name)}` : null
 }
 
 /**
@@ -122,7 +123,8 @@ export type UpdaterEvent =
   | { type: 'moving'; version: string }
   | { type: 'move-cancelled' }
   | { type: 'move-failed'; message: string }
-  | { type: 'error'; message: string; manual: boolean }
+  // githubUnreachable: a check with GitHub as its only source could not reach it.
+  | { type: 'error'; message: string; manual: boolean; githubUnreachable?: boolean }
   | { type: 'load-failed'; message: string; manual: boolean }
 
 export interface TransitionContext {
@@ -160,9 +162,12 @@ export function nextState(
       return { kind: 'idle', checkedAt: event.at }
     case 'download-started':
       return { kind: 'downloading', version: event.version, percent: 0, manual: event.manual }
-    case 'progress':
+    case 'progress': {
       if (state.kind !== 'downloading' || !Number.isFinite(event.percent)) return state
-      return { ...state, percent: Math.max(0, Math.min(100, Math.floor(event.percent))) }
+      // A download that moves on to another source starts that file again; the bar holds.
+      const percent = Math.max(0, Math.min(100, Math.floor(event.percent)))
+      return percent > state.percent ? { ...state, percent } : state
+    }
     case 'downloaded':
       return event.notes && Object.keys(event.notes).length > 0
         ? { kind: 'ready', version: event.version, notes: event.notes }
@@ -177,7 +182,11 @@ export function nextState(
       // Only Update moves the app, so its failure is always the user's to see.
       return { kind: 'error', message: event.message, manual: true, move: true }
     case 'error':
-      if (event.manual) return { kind: 'error', message: event.message, manual: true }
+      if (event.manual) {
+        return event.githubUnreachable
+          ? { kind: 'error', message: event.message, manual: true, githubUnreachable: true }
+          : { kind: 'error', message: event.message, manual: true }
+      }
       // A failure after the download was ready, as Squirrel.Mac's check of it, leaves nothing to
       // install, so Restart goes; the next check tries again.
       if (state.kind === 'ready') return { kind: 'error', message: event.message, manual: false }

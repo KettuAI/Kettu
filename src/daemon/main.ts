@@ -53,7 +53,7 @@ import {
   type CommandResult,
   type ServiceDeps,
 } from './service'
-import { RELEASES, RELEASES_ENV, update, UpdateError } from './update'
+import { daemonUserAgent, RELEASES_ENV, releaseSources, update, UpdateError } from './update'
 
 const SUPPORTED: readonly NodeJS.Platform[] = ['darwin', 'linux']
 const START_WAIT_MS = 20_000
@@ -724,7 +724,8 @@ async function run(command: Exclude<Command, { kind: 'help' | 'version' | 'usage
       return update({
         version,
         bundleDir: __dirname,
-        releases: process.env[RELEASES_ENV]?.trim() || RELEASES,
+        releases: releaseSources(process.env[RELEASES_ENV]),
+        userAgent: daemonUserAgent(version, process.platform, process.arch),
         fetch,
         service: await access(serviceFile(service)).then(
           () => true,

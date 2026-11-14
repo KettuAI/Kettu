@@ -84,7 +84,8 @@ export interface SettingsFile {
   marketplace: { mcp: MarketServer[]; skills: MarketSkill[] }
   // The permission mode each agent's new sessions start in; an agent with none starts as its own.
   startModes: Partial<Record<AgentId, string>>
-  updates: { automatic: 'download' | 'restart' | 'notify' | 'off' }
+  // source: where updates come from; GitHub only never reaches Kettu's download service.
+  updates: { automatic: 'download' | 'restart' | 'notify' | 'off'; source: 'auto' | 'github' }
   privacy: { hideAccount: boolean } // kept so older files still parse; loading turns it off
   // Detailed records are on until this time (ms since the epoch); null when off.
   diagnostics: { verboseUntil: number | null }
@@ -221,7 +222,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   mcp: { kettu: { off: [] } },
   marketplace: { mcp: [], skills: [] },
   startModes: {},
-  updates: { automatic: 'download' },
+  updates: { automatic: 'download', source: 'auto' },
   privacy: { hideAccount: false },
   diagnostics: { verboseUntil: null },
   usage: { fromComputer: false, sidebar: 'today' },
