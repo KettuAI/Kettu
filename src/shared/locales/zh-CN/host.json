@@ -112,6 +112,13 @@
     "deviceAccess": "想使用 {{device}}",
     "computerApp": "想使用 {{app}}",
     "computerSetup": "想使用你的电脑",
+    "controlAsk": {
+      "sign_in": "请你登录 {{target}}",
+      "code": "请你输入 {{target}} 的验证码",
+      "check": "请你通过 {{target}} 的验证",
+      "other": "请你在 {{target}} 上做一步",
+      "nowhere": "请你在浏览器里做一步"
+    },
     "permission": "请求权限",
     "turnEnd": {
       "end_turn": "已完成",

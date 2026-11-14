@@ -12,6 +12,8 @@ import {
 } from './basic'
 import { ArtifactEntry } from './artifact-entry'
 import { BrowserOriginEntry } from './browser-origin-entry'
+import { ControlAskEntry } from './control-ask-entry'
+import { ControlNoteEntry } from './control-note-entry'
 import { DeviceAccessEntry } from './device-access-entry'
 import { MemoryEntry } from './memory-entry'
 import { ComputerAppEntry } from './computer-app-entry'
@@ -83,6 +85,10 @@ export const Entry = memo(function Entry({
       return <ProblemReportEntry {...props} agentName={agentName} />
     case 'memory':
       return <MemoryEntry {...props} agentName={agentName} />
+    case 'control_ask':
+      return <ControlAskEntry {...props} agentName={agentName} />
+    case 'control_note':
+      return <ControlNoteEntry {...props} />
     default:
       return null
   }

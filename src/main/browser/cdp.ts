@@ -3,8 +3,13 @@
 // real input event, so a framework that listens for one behaves as it would for the user.
 
 import type { WebContents } from 'electron'
-import type { BrowserCallResult, BrowserToolName } from '@shared/browser'
-import type { BrowserControl } from './control'
+import { siteOf, type BrowserCallResult, type BrowserToolName } from '@shared/browser'
+import {
+  ControlWait,
+  isControlStep,
+  type ControlWaitOptions,
+  type SurfaceControls,
+} from '@shared/control'
 import { isNeverOpened } from './policy'
 
 /** The outline an agent reads, before its "… N more lines" marker. */
@@ -29,6 +34,7 @@ export class ToolFailure extends Error {
   constructor(
     readonly code:
       | 'user_has_control'
+      | 'stopped'
       | 'not_allowed'
       | 'stale_ref'
       | 'timeout'
@@ -55,7 +61,10 @@ export interface BrowserCdpDeps {
   load(sessionId: string, url: string): Promise<LoadOutcome>
   back(sessionId: string): Promise<LoadOutcome>
   reload(sessionId: string): Promise<LoadOutcome>
-  control: BrowserControl
+  /** Who uses each session's page; a call waits there while the user holds it. */
+  controls: SurfaceControls
+  /** The agent acts on the page, at a point for a click or a field, for its pointer and light. */
+  acted?(sessionId: string, at: { x: number; y: number } | null, click: boolean): void
   log(level: 'warn' | 'error', message: string): void
 }
 
@@ -457,13 +466,39 @@ const sleep = (ms: number): Promise<void> => new Promise((done) => setTimeout(do
 
 function failure(error: unknown): ToolFailure {
   if (error instanceof ToolFailure) return error
+  if (error instanceof ControlWait) return waitFailure(error)
   return new ToolFailure('invalid', (error as Error)?.message ?? String(error))
+}
+
+/** What a call that waited on the user says when it returns without acting. */
+export function waitFailure(wait: ControlWait): ToolFailure {
+  switch (wait.reason) {
+    case 'held':
+      return new ToolFailure(
+        'user_has_control',
+        'The user still has control of the browser; call again to keep waiting.',
+      )
+    case 'asking':
+      return new ToolFailure(
+        'user_has_control',
+        'The user is still doing the step you asked for in the browser; call browser_ask_user again to keep waiting.',
+      )
+    case 'stopped':
+      return new ToolFailure('stopped', 'The user stopped.')
+    case 'gone':
+      return new ToolFailure(
+        'no_page',
+        'The page closed. Open one again with browser_navigate if you still need it.',
+      )
+  }
 }
 
 export class BrowserCdp {
   private readonly pages = new Map<string, PageState>()
   /** Each session's calls in flight, by the function that fails one at once. */
   private readonly running = new Map<string, Set<(failure: ToolFailure) => void>>()
+  /** How each session's latest call waits on the user, for its steps after the first. */
+  private readonly waits = new Map<string, ControlWaitOptions>()
 
   constructor(private readonly deps: BrowserCdpDeps) {}
 
@@ -507,6 +542,7 @@ export class BrowserCdp {
   /** The page is gone, or belongs to a session no longer used. */
   forget(sessionId: string): void {
     this.pages.delete(sessionId)
+    this.waits.delete(sessionId)
   }
 
   /** The ids of the page's frames, the main one first, then its same-origin children. */
@@ -535,15 +571,25 @@ export class BrowserCdp {
     page.dialogs.push(`${noun} dialog was ${accepted ? 'accepted' : 'dismissed'}.`)
   }
 
-  /** Runs a tool call on the session's page and answers its result or throws a ToolFailure. */
+  /**
+   * Runs a tool call on the session's page and answers its result or throws a ToolFailure. The
+   * turn uses the page from the call on; while the user holds it, the call waits as `wait` says.
+   */
   async call(
     sessionId: string,
     tool: BrowserToolName,
     args: Record<string, unknown>,
+    wait: ControlWaitOptions,
   ): Promise<BrowserCallResult> {
+    if (tool === 'browser_ask_user') return this.askUser(sessionId, args, wait)
     if (tool !== 'browser_navigate') this.pageOf(sessionId)
-    const control = this.deps.control
-    control.begin(sessionId)
+    let end: () => void
+    try {
+      end = await this.deps.controls.begin(sessionId, wait)
+    } catch (error) {
+      throw failure(error)
+    }
+    this.waits.set(sessionId, wait)
     let stop!: (failure: ToolFailure) => void
     const stopped = new Promise<never>((_, reject) => (stop = reject))
     const running = this.running.get(sessionId) ?? new Set()
@@ -557,8 +603,41 @@ export class BrowserCdp {
       running.delete(stop)
       if (running.size === 0 && this.running.get(sessionId) === running) {
         this.running.delete(sessionId)
+        if (this.waits.get(sessionId) === wait) this.waits.delete(sessionId)
       }
-      control.end(sessionId)
+      end()
+    }
+  }
+
+  /**
+   * Asks the user to do a step on the page that only a person can, and waits for Done or Skip.
+   * After Done the agent reads the page as the user left it.
+   */
+  private async askUser(
+    sessionId: string,
+    args: Record<string, unknown>,
+    wait: ControlWaitOptions,
+  ): Promise<BrowserCallResult> {
+    const contents = this.contentsOf(sessionId)
+    const step = isControlStep(args.step) ? args.step : 'other'
+    const reason = typeof args.reason === 'string' ? args.reason : ''
+    const target = siteOf(contents.getURL())
+    let outcome
+    try {
+      outcome = await this.deps.controls.ask(sessionId, { step, target, reason }, wait)
+    } catch (error) {
+      throw failure(error)
+    }
+    if (outcome === 'skipped') {
+      return {
+        text: 'The user skipped this step. Go on without it, or say in your reply what you need.',
+        value: { outcome, url: contents.getURL(), title: contents.getTitle() },
+      }
+    }
+    const result = await this.call(sessionId, 'browser_snapshot', {}, wait)
+    return {
+      text: `The user did the step and pressed Done. ${result.text}`,
+      value: { outcome, ...result.value },
     }
   }
 
@@ -606,6 +685,8 @@ export class BrowserCdp {
         return this.networkRequests(sessionId, args)
       case 'browser_evaluate':
         return this.evaluate(sessionId, args)
+      case 'browser_ask_user':
+        throw new ToolFailure('invalid', 'browser_ask_user does not run as a page action.')
     }
   }
 
@@ -638,13 +719,20 @@ export class BrowserCdp {
     return contents
   }
 
-  /** Runs one CDP command, unless the user took control meanwhile. */
+  /** Waits while the user holds the page, as the session's call in flight waits. */
+  private async gate(sessionId: string): Promise<void> {
+    const wait = this.waits.get(sessionId)
+    if (!wait) return
+    await this.deps.controls.gate(sessionId, wait)
+  }
+
+  /** Runs one CDP command, once the page is the agent's: the user may hold it meanwhile. */
   private async send<T = Record<string, unknown>>(
     sessionId: string,
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<T> {
-    this.deps.control.assert(sessionId)
+    await this.gate(sessionId)
     const contents = this.contentsOf(sessionId)
     // Chromium reports an injected input event as it reports the user's, so the pane's input
     // watch must know this one is the agent's.
@@ -779,7 +867,7 @@ export class BrowserCdp {
     const start = Date.now()
     let idleSince: number | null = null
     for (;;) {
-      this.deps.control.assert(sessionId)
+      await this.gate(sessionId)
       if (
         hasSettled({ loading: page.loading, inFlight: page.inFlight.size, idleSince }, Date.now())
       )
@@ -1012,6 +1100,7 @@ export class BrowserCdp {
       )
     }
     const { x, y } = spot
+    this.deps.acted?.(sessionId, { x, y }, true)
     await this.send(sessionId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y })
     const clicks = double ? 2 : 1
     for (let count = 1; count <= clicks; count++) {
@@ -1039,11 +1128,33 @@ export class BrowserCdp {
     )
   }
 
+  /** Where an element's centre is in the page's viewport, for the agent's pointer; null if unknown. */
+  private async centre(
+    sessionId: string,
+    backend: number,
+  ): Promise<{ x: number; y: number } | null> {
+    try {
+      const spot = await this.onElement<{ x: number; y: number } | null>(
+        sessionId,
+        backend,
+        `function () {
+          const rect = this.getBoundingClientRect()
+          if (rect.width <= 0 || rect.height <= 0) return null
+          return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+        }`,
+      )
+      return spot && Number.isFinite(spot.x) && Number.isFinite(spot.y) ? spot : null
+    } catch {
+      return null
+    }
+  }
+
   private async type(sessionId: string, args: Record<string, unknown>): Promise<BrowserCallResult> {
     const page = this.pageOf(sessionId)
     const backend = this.resolveRef(page, String(args.ref ?? ''))
     const text = String(args.text ?? '')
     const slowly = args.slowly === true
+    this.deps.acted?.(sessionId, await this.centre(sessionId, backend), false)
     await this.send(sessionId, 'DOM.focus', { backendNodeId: backend })
     const { object } = await this.send<{ object: { objectId?: string } }>(
       sessionId,
@@ -1093,6 +1204,7 @@ export class BrowserCdp {
   ): Promise<BrowserCallResult> {
     const page = this.pageOf(sessionId)
     const key = String(args.key ?? '')
+    this.deps.acted?.(sessionId, null, false)
     await this.pressKey(sessionId, key)
     return this.afterAction(sessionId, page, `Pressed ${key}.`)
   }
@@ -1127,6 +1239,7 @@ export class BrowserCdp {
     if (!Number.isFinite(amount) || amount <= 0 || amount > 50) {
       throw new ToolFailure('invalid', 'amount must be a number of screens from 0 to 50.')
     }
+    this.deps.acted?.(sessionId, null, false)
     const viewport = await this.viewport(sessionId)
     let x = viewport.width / 2
     let y = viewport.height / 2
@@ -1198,6 +1311,7 @@ export class BrowserCdp {
     const values = Array.isArray(args.values) ? args.values.map(String) : []
     if (values.length === 0)
       throw new ToolFailure('invalid', 'values must list at least one option.')
+    this.deps.acted?.(sessionId, await this.centre(sessionId, backend), true)
     const { object } = await this.send<{ object: { objectId?: string } }>(
       sessionId,
       'DOM.resolveNode',
@@ -1365,7 +1479,7 @@ export class BrowserCdp {
         const body = await this.pageText(sessionId)
         seen = text !== undefined ? body.includes(text) : !body.includes(gone!)
         if (seen || Date.now() >= deadline) break
-        this.deps.control.assert(sessionId)
+        await this.gate(sessionId)
         await sleep(100)
       }
       if (!seen) {
@@ -1379,7 +1493,7 @@ export class BrowserCdp {
     } else {
       const until = Date.now() + (seconds ?? 0) * 1000
       while (Date.now() < until) {
-        this.deps.control.assert(sessionId)
+        await this.gate(sessionId)
         await sleep(Math.min(100, Math.max(1, until - Date.now())))
       }
     }

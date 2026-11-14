@@ -3,6 +3,7 @@
 // new site's card and bar while it waits.
 
 import type { McpServer } from '@agentclientprotocol/sdk/unstable'
+import { steps } from './computer.ts'
 import type { Scenario, Turn } from './turn.ts'
 
 interface CallResult {
@@ -142,5 +143,91 @@ export const deviceTool: Scenario = async (turn) => {
     ),
   })
   await say(turn, answer.length > 1500 ? `${answer.slice(0, 1500)}…` : answer)
+  return 'end_turn'
+}
+
+/** The shortest tool time limit of the harnesses, Codex's for an MCP call. */
+const CALL_LIMIT_MS = 60_000
+
+/**
+ * `/browser <tool> [arguments] ; wait <ms> ; ...` calls Kettu's browser tools in turn, as an agent
+ * would, each shown as a tool call. A call that answers that the user has the page is made again,
+ * under the same row, until it goes through; each call gives up after Codex's 60 s, so a long
+ * takeover shows that the calls return in time.
+ */
+export const browser: Scenario = async (turn) => {
+  const server = kettu(turn.session.mcpServers)
+  const plan = steps(turn.text, 'browser_snapshot')
+  if (typeof plan === 'string') {
+    await say(turn, plan)
+    return 'end_turn'
+  }
+  if (!server) {
+    await say(turn, 'This session has no browser.')
+    return 'end_turn'
+  }
+  const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([
+    import('@modelcontextprotocol/sdk/client/index.js'),
+    import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
+  ])
+  const client = new Client({ name: 'fake-agent', version: '0.1.0' })
+  const headers = Object.fromEntries(server.headers.map((h) => [h.name, h.value]))
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers } }),
+  )
+  const replies: string[] = []
+  for (const [i, step] of plan.entries()) {
+    if (turn.signal.aborted) break
+    if ('wait' in step) {
+      await turn.sleep(step.wait)
+      continue
+    }
+    const callId = `browser-${turn.session.turns}-${i}`
+    await turn.send({
+      sessionUpdate: 'tool_call',
+      toolCallId: callId,
+      title: `mcp__${server.name}__${step.name}`,
+      kind: 'fetch',
+      status: 'in_progress',
+      rawInput: step.args,
+      locations: [],
+      content: [],
+    })
+    let text: string
+    let failed: boolean
+    let calls = 0
+    for (;;) {
+      calls += 1
+      // Stop cancels the call that waits, as an agent's harness does.
+      const result = await client
+        .callTool({ name: step.name, arguments: step.args }, undefined, {
+          timeout: CALL_LIMIT_MS,
+          signal: turn.signal,
+        })
+        .catch((error: unknown) => {
+          if (turn.signal.aborted) return null
+          throw error
+        })
+      if (!result) {
+        text = 'Stopped.'
+        failed = true
+        break
+      }
+      const content = result.content as { type: string; text?: string }[]
+      text = content.find((block) => block.type === 'text')?.text ?? ''
+      failed = result.isError === true
+      const code = (result.structuredContent as { code?: string } | undefined)?.code
+      if (!failed || code !== 'user_has_control' || turn.signal.aborted) break
+    }
+    await turn.send({
+      sessionUpdate: 'tool_call_update',
+      toolCallId: callId,
+      status: failed ? 'failed' : 'completed',
+      content: [{ type: 'content', content: { type: 'text', text } }],
+    })
+    replies.push(`${step.name} (${calls} call${calls === 1 ? '' : 's'}): ${text.slice(0, 600)}`)
+  }
+  await client.close()
+  await say(turn, replies.join('\n\n') || 'Nothing was called.')
   return 'end_turn'
 }

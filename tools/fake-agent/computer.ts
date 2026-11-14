@@ -10,11 +10,11 @@ const MAX_WAIT_MS = 120_000
 type Step = { wait: number } | { name: string; args: Record<string, unknown> }
 
 /** The steps of `<tool> [arguments] ; wait <ms> ; ...`, or why they cannot be read. */
-function steps(text: string): Step[] | string {
-  const parts = text.trim() ? text.split(/\s+;\s+/) : ['computer_list_apps']
+export function steps(text: string, first = 'computer_list_apps'): Step[] | string {
+  const parts = text.trim() ? text.split(/\s+;\s+/) : [first]
   const out: Step[] = []
   for (const part of parts) {
-    const [name = 'computer_list_apps', ...rest] = part.trim().split(/\s+/)
+    const [name = first, ...rest] = part.trim().split(/\s+/)
     if (name === 'wait') {
       const ms = Number(rest[0])
       if (!Number.isFinite(ms) || ms < 0) return 'A wait takes milliseconds, such as wait 5000.'

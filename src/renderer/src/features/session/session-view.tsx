@@ -6,6 +6,7 @@ import type { SessionSummary } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
+import { BrowserLabel } from '@renderer/features/browser/browser-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { usePane } from '@renderer/features/split/pane-context'
@@ -260,6 +261,9 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     )}
                   {computer && session && (
                     <ComputerLabel session={session} agentName={name} onError={setQueueError} />
+                  )}
+                  {!archived && !away && summary.origin !== 'subagent' && (
+                    <BrowserLabel sessionId={sessionId} agentId={summary.agentId} hostId={hostId} />
                   )}
                   {away ? (
                     session && <HostAway host={away} inline />

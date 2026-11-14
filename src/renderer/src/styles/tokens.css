@@ -607,6 +607,15 @@
   --agent-ink: #171717;
   --agent-flag: #141416;
   --agent-flag-ink: #ffffff;
+  /* The light along a surface an agent uses: fox, amber, rose and a soft orange, turning. Dark
+     adds the light to the page under it. */
+  --control-light-1: #ff5a1f;
+  --control-light-2: #ffad33;
+  --control-light-3: #ff4d79;
+  --control-light-4: #ff8a4c;
+  --control-light-blend: normal;
+  --control-light-glow: 0.62;
+  --control-light-core: 0.42;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -984,6 +993,13 @@
     --agent-ink: #e4e4e7;
     --agent-flag: #f4f4f5;
     --agent-flag-ink: #141416;
+    --control-light-1: #ff6a2b;
+    --control-light-2: #ffc24d;
+    --control-light-3: #ff6b93;
+    --control-light-4: #ff9a5c;
+    --control-light-blend: plus-lighter;
+    --control-light-glow: 0.82;
+    --control-light-core: 0.62;
   }
 }
 
@@ -1360,6 +1376,13 @@
   --agent-ink: #e4e4e7;
   --agent-flag: #f4f4f5;
   --agent-flag-ink: #141416;
+  --control-light-1: #ff6a2b;
+  --control-light-2: #ffc24d;
+  --control-light-3: #ff6b93;
+  --control-light-4: #ff9a5c;
+  --control-light-blend: plus-lighter;
+  --control-light-glow: 0.82;
+  --control-light-core: 0.62;
 }
 
 /* themes: an installed theme sets only the tokens a theme file may hold (THEME_TOKENS in
@@ -1605,10 +1628,7 @@
   --terminal-foreground: var(--text-primary);
   --terminal-cursor: var(--pane-fox);
   --terminal-selection: var(--terminal-selection-tint);
-  /* The glow of a page or a device an agent drives, and its tap. */
-  --pane-drive-glow:
-    0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 60%, transparent),
-    0 0 22px -4px color-mix(in srgb, var(--pane-fox) 40%, transparent);
+  /* The glow of a device an agent drives, and its tap. */
   --pane-drive-glow-inset:
     inset 0 0 0 1.5px color-mix(in srgb, var(--pane-fox) 60%, transparent),
     inset 0 0 22px -4px color-mix(in srgb, var(--pane-fox) 40%, transparent);

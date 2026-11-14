@@ -8,6 +8,7 @@ import type { ArtifactExportFormat, ArtifactTypeInfo, ExportedFile } from './art
 import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
 import type { ComputerApp } from './computer-use'
+import type { ControlOutcome } from './control'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { PortError } from './port-rpc'
@@ -140,6 +141,8 @@ export type MainToHost =
   | { type: 'host:browser-origin-ask'; requestId: number; sessionId: string; origin: string }
   // The wait ended, from the pane or the card, so the session's card takes the answer.
   | { type: 'host:browser-origin-answer'; requestId: number; decision: BrowserOriginAnswer }
+  // The user handed the session's page back after taking it over: the thread says for how long.
+  | { type: 'host:browser-handed-back'; sessionId: string; durationMs: number }
   | { type: 'host:shutdown' }
 
 /** A file of an artifact's version: its path in the artifact, and where its bytes lie on disk. */
@@ -285,6 +288,10 @@ export type HostToMain =
       /** The calling session's project, which its always-allowed sites are stored under. */
       projectPath: string
     }
+  // The last running turn that used the session's page ended: the page is nobody's now.
+  | { type: 'host:browser-turn-ended'; sessionId: string }
+  // Done or Skip on the card of a step the agent asked for, which the page's waiting call takes.
+  | { type: 'host:browser-ask-answer'; sessionId: string; outcome: ControlOutcome }
   // An agent's device tool call for the device host; answered by device-result.
   | { type: 'host:device-call'; callId: number; call: DeviceCall }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.

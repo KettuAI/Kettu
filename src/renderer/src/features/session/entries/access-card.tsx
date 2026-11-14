@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Cancel01Icon, Tick02Icon, TickDouble02Icon } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { Trans, useTranslation } from 'react-i18next'
@@ -43,6 +43,7 @@ export function AccessCard({
   words,
   request,
   trailing,
+  title,
 }: {
   sessionId: string
   entryId: string
@@ -67,6 +68,8 @@ export function AccessCard({
   request: (decision: AccessDecision) => Promise<void>
   /** Another action in place of the lasting allow, which answers nothing by itself; null for none. */
   trailing?: { glyph: IconSvgElement; label: string; onClick: () => void } | null
+  /** The card's title in place of "wants to", from the agent's name and the action. */
+  title?: (agent: string, action: string) => ReactNode
 }) {
   const { t } = useTranslation('session')
   const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
@@ -155,14 +158,17 @@ export function AccessCard({
           )
         }
         labels={{
-          title: (name, what) => (
-            <Trans
-              t={t}
-              i18nKey="permission.card.title"
-              values={{ agent: name, action: what }}
-              components={{ b: <b dir="auto" /> }}
-            />
-          ),
+          title: (name, what) =>
+            title ? (
+              title(name, what)
+            ) : (
+              <Trans
+                t={t}
+                i18nKey="permission.card.title"
+                values={{ agent: name, action: what }}
+                components={{ b: <b dir="auto" /> }}
+              />
+            ),
           allow: () => (
             <>
               <Icon icon={Tick02Icon} size={14} />

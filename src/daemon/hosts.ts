@@ -936,6 +936,8 @@ export class Hosts {
       case 'host:media-revoke':
       case 'host:service-port':
       case 'host:browser-origin-decide':
+      case 'host:browser-turn-ended':
+      case 'host:browser-ask-answer':
       case 'host:busy':
       case 'host:granted':
       case 'host:artifact-content':

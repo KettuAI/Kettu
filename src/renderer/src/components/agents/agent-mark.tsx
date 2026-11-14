@@ -1,10 +1,7 @@
-import { useContext } from 'react'
-import { agentColor, type AgentColor } from '@shared/settings'
+import type { AgentColor } from '@shared/settings'
 import { harnessOf, type AgentId } from '@shared/thread'
 import { cn } from '@renderer/lib/utils'
-import { agentsOn, useAgentsStore } from '@renderer/stores/agents'
-import { useSettingsStore } from '@renderer/stores/settings'
-import { AgentMarkHost } from './agent-mark-host'
+import { useAgentDot } from './use-agent-dot'
 import { AGENT_MARKS } from './marks'
 
 interface AgentMarkProps {
@@ -17,21 +14,6 @@ interface AgentMarkProps {
   hostId?: string | null
   /** The dot to draw, in place of the one the agent's host reports; null for none. */
   dot?: AgentColor | null
-}
-
-/** The dot its host gives an added agent; none for a harness's default agent. */
-function useAgentDot(agent: AgentId, hostId: string | null | undefined): AgentColor | null {
-  const scoped = useContext(AgentMarkHost)
-  const host = hostId === undefined ? scoped : hostId
-  const listed = useAgentsStore((s) => {
-    const status = agentsOn(s, host).byId[agent]
-    return status ? (status.color ?? null) : undefined
-  })
-  // This computer's added agents are in the settings, which load before their statuses.
-  const configured = useSettingsStore((s) =>
-    listed === undefined && host === null ? agentColor(s.settings.addedAgents, agent) : null,
-  )
-  return listed === undefined ? configured : listed
 }
 
 /** The ring matches the surface unless an ancestor sets `--agent-dot-ring`. */

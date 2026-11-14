@@ -1,4 +1,5 @@
 import type { AgentStatus, PlanLimit, SessionSummary } from '@shared/agent-host'
+import type { ControlStep } from '@shared/control'
 import type { PendingPermission, ThreadEntry, ToolEntry } from '@shared/thread'
 import { tightestLimit } from '@renderer/features/sidebar/plan-usage'
 
@@ -19,6 +20,8 @@ export type PendingRequest =
   | { kind: 'origin'; entryId: string; origin: string }
   | { kind: 'app'; entryId: string; app: string }
   | { kind: 'setup'; entryId: string }
+  /** A step the agent asked the user to do on a surface, where it is when known. */
+  | { kind: 'step'; entryId: string; step: ControlStep; target: string | null }
 
 /** What the panel reads from a session's thread: its requests, current step and changed files. */
 export interface SessionDetail {
@@ -117,6 +120,8 @@ export function readDetail(
       requests.push({ kind: 'app', entryId: entry.id, app: entry.appName })
     } else if (entry.kind === 'computer_setup' && entry.outcome === null) {
       requests.push({ kind: 'setup', entryId: entry.id })
+    } else if (entry.kind === 'control_ask' && entry.outcome === null) {
+      requests.push({ kind: 'step', entryId: entry.id, step: entry.step, target: entry.target })
     }
   })
   return {

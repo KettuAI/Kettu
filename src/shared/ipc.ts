@@ -5,6 +5,7 @@ import type { SelectMessage } from './artifact-runtime/page-messages'
 import type { ArtifactExportFormat } from './artifact-types'
 import type { GrantedAttachment } from './attachments'
 import type { BrowserBounds, BrowserOriginDecision, BrowserState } from './browser'
+import type { ControlAgent, ControlOutcome } from './control'
 import type { DebugStatus } from './debug'
 import type { ComputerPermissionKind, ComputerUseStatus } from './computer-use'
 import type { EditorApp, EditorList } from './editors'
@@ -402,7 +403,8 @@ export interface IpcInvokeContract {
   'hosts:remove': { args: [id: string]; result: 'unknown_host' | null }
   // Tries the hosts not connected now, without waiting for the next try.
   'hosts:retry': { args: []; result: void }
-  'browser:show': { args: [sessionId: string]; result: void }
+  // The session's agent names the page's pill while a turn uses it.
+  'browser:show': { args: [sessionId: string, agent: ControlAgent | null]; result: void }
   'browser:hide': { args: [sessionId: string]; result: void }
   // Destroys the page. The session stays, unlike a session leaving the list.
   'browser:close': { args: [sessionId: string]; result: void }
@@ -418,10 +420,12 @@ export interface IpcInvokeContract {
   'browser:freeze': { args: [sessionId: string]; result: string | null }
   'browser:capture': { args: [sessionId: string]; result: Uint8Array | null }
   'browser:thaw': { args: [sessionId: string]; result: void }
-  /** The user hands the page back to the agent, after taking control. */
+  /** Take over: the page is the user's, and the agent's calls wait, until Hand back. */
+  'browser:take-over': { args: [sessionId: string]; result: void }
+  /** Hand back: the agent goes on with the page. */
   'browser:hand-back': { args: [sessionId: string]; result: void }
-  /** The pane's Stop: the user takes control, and the call in flight fails. */
-  'browser:stop-driving': { args: [sessionId: string]; result: void }
+  /** Done or Skip on a step the agent asked the user to do on the page. */
+  'browser:answer-ask': { args: [sessionId: string, outcome: ControlOutcome]; result: void }
   /** The pane's bar or the thread's card: what the user answered a new site's request. */
   'browser:answer-origin': {
     args: [sessionId: string, requestId: number, decision: BrowserOriginDecision]
@@ -864,8 +868,8 @@ export interface KettuApi {
   }
   /** The page in the side panel's browser, one per session, all in one profile. */
   browser: {
-    /** Shows a session's page, or nothing when it has none yet. */
-    show(sessionId: string): Promise<void>
+    /** Shows a session's page, or nothing when it has none yet; `agent` names its pill. */
+    show(sessionId: string, agent: ControlAgent | null): Promise<void>
     /** Hides the page, keeping it alive for when the pane shows again. */
     hide(sessionId: string): Promise<void>
     /** Destroys the page and forgets its address. The session stays. */
@@ -884,10 +888,12 @@ export interface KettuApi {
     thaw(sessionId: string): Promise<void>
     /** The page as PNG bytes, for attaching to a message; null when there is none to capture. */
     capture(sessionId: string): Promise<Uint8Array | null>
-    /** Takes the page back from the user, so the agent may drive it again. */
+    /** Take over: the page is the user's until Hand back; the agent's calls wait meanwhile. */
+    takeOver(sessionId: string): Promise<void>
+    /** Hand back: the agent goes on with the page. */
     handBack(sessionId: string): Promise<void>
-    /** The driving bar's Stop: the user takes control, and the running call fails. */
-    stopDriving(sessionId: string): Promise<void>
+    /** Done or Skip on a step the agent asked the user to do on the page. */
+    answerAsk(sessionId: string, outcome: ControlOutcome): Promise<void>
     /** The pane's bar or the thread's card: what the user answered a new site's request. */
     answerOrigin(
       sessionId: string,

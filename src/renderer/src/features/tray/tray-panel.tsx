@@ -92,6 +92,9 @@ function requestTarget(
   if (request.kind === 'origin') return { text: request.origin, code: false }
   if (request.kind === 'app') return { text: request.app, code: false }
   if (request.kind === 'setup') return { text: i18n.t('tray:setupTarget'), code: false }
+  if (request.kind === 'step') {
+    return { text: request.target ?? i18n.t('control:target.browser'), code: false }
+  }
   const { tool } = request
   if (request.permission.questions && tool.question !== undefined) {
     return { text: tool.question, code: false }
@@ -333,6 +336,7 @@ function waitingLine(summary: SessionSummary, detail: SessionDetail | undefined)
   if (!request) return ''
   if (request.kind === 'app') return request.app
   if (request.kind === 'setup') return i18n.t('tray:setupTarget')
+  if (request.kind === 'step') return request.target ?? i18n.t('control:target.browser')
   return request.kind === 'origin' ? request.origin : toolLine(request.tool, summary.projectPath)
 }
 
@@ -676,10 +680,12 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
       0,
     ),
   )
-  // Questions, MCP requests and the computer use setup are answered in the window: the panel has
-  // no room for their steps, text and fields, and a page request's Open has to open the page.
+  // Questions, MCP requests, the computer use setup and a step the agent asked for are answered in
+  // the window: the panel has no room for their steps, text and fields, and a page request's Open
+  // has to open the page.
   const asks =
     request.kind === 'setup' ||
+    request.kind === 'step' ||
     (request.kind === 'tool' &&
       (request.permission.questions !== undefined || request.permission.elicitation !== undefined))
   const options: { label: string; choice: AnswerChoice | null }[] = asks
@@ -709,13 +715,15 @@ function Review({ summary, request }: { summary: SessionSummary; request: Pendin
   const wants =
     request.kind === 'setup'
       ? t('wants.setup')
-      : asks
-        ? t('wants.question')
-        : request.kind === 'origin'
-          ? t('wants.origin')
-          : request.kind === 'app'
-            ? t('wants.app')
-            : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
+      : request.kind === 'step'
+        ? t('wants.step')
+        : asks
+          ? t('wants.question')
+          : request.kind === 'origin'
+            ? t('wants.origin')
+            : request.kind === 'app'
+              ? t('wants.app')
+              : t(`wants.${WANTS_KEY[request.tool.toolKind]}`)
 
   const choose = (index: number) => {
     const option = options[index]

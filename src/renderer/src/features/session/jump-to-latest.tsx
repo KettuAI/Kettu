@@ -24,6 +24,8 @@ const AFTER_END = new Set([
   'device_access',
   'computer_app',
   'computer_setup',
+  'control_ask',
+  'control_note',
   'project_mcp',
   'project_hooks',
   'problem_report',

@@ -13,6 +13,7 @@ import { ARTIFACT_ID, ARTIFACT_TITLE_CHARS, longer } from '@shared/artifacts'
 import { CanvasError, parseCanvasOps, type CanvasOp } from '@shared/canvas-doc'
 import { PARAMS_MAX, type ParamValue } from '@shared/artifact-params'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
+import { isControlOutcome } from '@shared/control'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
 import {
@@ -1797,6 +1798,23 @@ export function createValidators(platform: Platform): Validators {
       return {
         requestId: callId(o, 'requestId'),
         decision: o.decision as BrowserOriginAnswer,
+      }
+    },
+    'browser.handedBack': (params) => {
+      const o = fields(params)
+      const durationMs = o.durationMs
+      if (typeof durationMs !== 'number' || !Number.isSafeInteger(durationMs) || durationMs < 0) {
+        throw invalidParams('durationMs must be a whole number of milliseconds')
+      }
+      return { sessionId: sessionId(o), durationMs }
+    },
+    'control.answerAsk': (params) => {
+      const o = fields(params)
+      if (!isControlOutcome(o.outcome)) throw invalidParams('outcome must be done or skipped')
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        outcome: o.outcome,
       }
     },
     'browser.answerOrigin': (params) => {

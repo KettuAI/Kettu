@@ -1,3 +1,5 @@
+import type { SurfaceControl } from './control'
+
 /** The partition every page in the side panel's browser uses, shared by all sessions. */
 export const BROWSER_PARTITION = 'persist:kettu-browser'
 
@@ -22,9 +24,6 @@ export type BrowserNotice =
   | { kind: 'crashed' }
   | { kind: 'unresponsive' }
 
-/** Who drives a page: nobody, an agent's running call, or the user until they hand back. */
-export type BrowserControlState = { kind: 'none' } | { kind: 'agent' } | { kind: 'user' }
-
 /** What the user answered a request to open a new origin. */
 export type BrowserOriginDecision = 'session' | 'project' | 'deny'
 
@@ -46,6 +45,14 @@ export interface BrowserOriginRequest {
   decision: BrowserOriginAnswer | null
 }
 
+/** The site a page shows, as a step asked for there names it: an http(s) address's host. */
+export function siteOf(url: unknown): string | null {
+  if (typeof url !== 'string') return null
+  const parsed = URL.parse(url)
+  if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) return null
+  return parsed.host || null
+}
+
 /** An origin without its scheme, as the pane and the thread name it to the user. */
 export function originLabel(origin: string): string {
   return origin.replace(/^[a-z]+:\/\//, '') || origin
@@ -60,7 +67,8 @@ export interface BrowserState {
   canGoBack: boolean
   canGoForward: boolean
   notice: BrowserNotice | null
-  control: BrowserControlState
+  /** Who uses the page in the turn that runs. */
+  control: SurfaceControl
   /** A new site that waits for the user, or the answer just given, for the pane's bar. */
   originRequest: BrowserOriginRequest | null
 }
@@ -81,12 +89,15 @@ export const BROWSER_TOOL_NAMES = [
   'browser_console_messages',
   'browser_network_requests',
   'browser_evaluate',
+  'browser_ask_user',
 ] as const
 
 export type BrowserToolName = (typeof BROWSER_TOOL_NAMES)[number]
 
 export type BrowserToolErrorCode =
   | 'user_has_control'
+  // The turn ended, or the user stopped it, while the call waited on them.
+  | 'stopped'
   | 'not_allowed'
   | 'stale_ref'
   | 'timeout'

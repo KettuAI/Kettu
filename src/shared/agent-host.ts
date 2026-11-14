@@ -17,6 +17,7 @@ import type {
   BrowserOriginDecision,
 } from './browser'
 import type { ComputerAppDecision } from './computer-use'
+import type { ControlOutcome } from './control'
 import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile } from './host-control'
@@ -1064,6 +1065,14 @@ export interface HostContract {
     params: { requestId: number; decision: BrowserOriginAnswer }
     result: void
   }
+  // The desktop app's user handed its page back after taking it over in the session's turn.
+  'browser.handedBack': { params: { sessionId: string; durationMs: number }; result: void }
+  // Any window's or device's Done or Skip on the card of a step an agent asked the user to do,
+  // which goes to the page; the first counts.
+  'control.answerAsk': {
+    params: { sessionId: string; entryId: string; outcome: ControlOutcome }
+    result: void
+  }
   // Any window's or device's answer to a new site's card, `entryId`, which goes to the page that
   // asked; the first counts, as for `permissions.respond`.
   'browser.answerOrigin': {
@@ -1331,6 +1340,8 @@ export const HOST_METHODS = [
   'browser.waiting',
   'browser.origin',
   'browser.originSettled',
+  'browser.handedBack',
+  'control.answerAsk',
   'browser.answerOrigin',
   'devices.answerAccess',
   'devices.allowed',
@@ -1421,6 +1432,10 @@ export type HostEvent =
       requestId: number
       decision: BrowserOriginDecision
     }
+  // To that port: the last running turn that used the session's page ended.
+  | { type: 'browser.turnEnded'; sessionId: string }
+  // To that port: Done or Skip on the card of the step the agent asked for on the page.
+  | { type: 'browser.askAnswered'; sessionId: string; outcome: ControlOutcome }
 
 export interface AgentsApi {
   request<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>

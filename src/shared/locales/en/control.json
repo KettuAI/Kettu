@@ -1,0 +1,95 @@
+{
+  "agent": "The agent",
+  "label": {
+    "agent": "{{agent}} is using <b>{{target}}</b>",
+    "you": "<b>You took over {{held}}</b><i>·</i>{{agent}} is waiting",
+    "asks": {
+      "sign_in": "{{agent}} needs you to sign in to <b>{{target}}</b>",
+      "code": "{{agent}} needs you to enter the code for <b>{{target}}</b>",
+      "check": "{{agent}} needs you to pass the check on <b>{{target}}</b>",
+      "other": "{{agent}} needs you to do a step on <b>{{target}}</b>"
+    },
+    "asksHere": {
+      "sign_in": "{{agent}} needs you to <b>sign in</b>",
+      "code": "{{agent}} needs you to <b>enter a code</b>",
+      "check": "{{agent}} needs you to <b>pass a check</b>",
+      "other": "{{agent}} needs you to <b>do a step</b>"
+    }
+  },
+  "target": {
+    "browser": "the browser"
+  },
+  "held": {
+    "tab": "the tab"
+  },
+  "scope": {
+    "tab": "this tab",
+    "device": "this device",
+    "terminal": "this terminal",
+    "app": "this app"
+  },
+  "pill": {
+    "agent": "{{agent}} is using {{scope}}",
+    "you": "<b>You have {{scope}}</b> · {{agent}} is waiting",
+    "asks": {
+      "sign_in": "<b>Sign in here</b>, then press Done",
+      "code": "<b>Enter the code here</b>, then press Done",
+      "check": "<b>Pass the check here</b>, then press Done",
+      "other": "<b>Do the step here</b>, then press Done"
+    }
+  },
+  "bubble": {
+    "title": "{{agent}} is using {{scope}}.",
+    "hint": "Take over to click and type here."
+  },
+  "actions": {
+    "takeOver": "Take over",
+    "handBack": "Hand back",
+    "done": "Done",
+    "skip": "Skip"
+  },
+  "note": {
+    "handedBack": {
+      "browser": "You used the browser for <b>{{duration}}</b> and handed it back",
+      "device": "You used the device for <b>{{duration}}</b> and handed it back",
+      "terminal": "You used the terminal for <b>{{duration}}</b> and handed it back",
+      "computer": "You used the computer for <b>{{duration}}</b> and handed it back"
+    }
+  },
+  "status": {
+    "using": {
+      "browser": "Using the browser"
+    },
+    "you": {
+      "tab": "Waiting for you to hand back the tab"
+    },
+    "asks": {
+      "sign_in": "Waiting for you to sign in",
+      "code": "Waiting for you to enter the code",
+      "check": "Waiting for you to pass the check",
+      "other": "Waiting for you to do the step"
+    }
+  },
+  "card": {
+    "title": "{{agent}} needs you to <b>{{what}}</b>",
+    "what": {
+      "sign_in": "sign in",
+      "code": "enter a code",
+      "check": "pass a check",
+      "other": "do a step"
+    },
+    "where": {
+      "browser": "In the browser beside the session"
+    },
+    "answer": {
+      "done": {
+        "sign_in": "Signed in",
+        "code": "Entered the code",
+        "check": "Passed the check",
+        "other": "Did the step"
+      },
+      "skipped": "Skipped",
+      "ended": "The turn ended first"
+    }
+  }
+}

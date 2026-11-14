@@ -23,7 +23,7 @@ vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
 const { isTrusted, mayUse, whenSettled } = await import('./ipc')
 const { watchSubframes } = await import('./subframes')
-const { markPanel } = await import('./window')
+const { markOverlay, markPanel } = await import('./window')
 
 const ARTIFACT = 'kettu-artifact://0123456789abcdef0123456789/'
 
@@ -92,6 +92,20 @@ describe('isTrusted', () => {
     contents.mainFrame.frames = []
     contents.emit('did-navigate', {}, contents.mainFrame.url, -1, '')
     expect(isTrusted(eventFrom(contents))).toBe(true)
+  })
+})
+
+describe('isTrusted for the page overlay', () => {
+  it("refuses a page overlay's page, whatever URL it shows", () => {
+    const contents = new FakeContents()
+    watch(contents)
+    contents.mainFrame.url = 'http://localhost:5173/overlay.html'
+    expect(isTrusted(eventFrom(contents))).toBe(false)
+    // history.pushState can give it the window page's URL; the contents still tells it apart.
+    const moved = new FakeContents()
+    watch(moved)
+    markOverlay(moved as unknown as WebContents)
+    expect(isTrusted(eventFrom(moved))).toBe(false)
   })
 })
 

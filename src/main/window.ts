@@ -50,6 +50,19 @@ export function isPanel(contents: WebContents): boolean {
   return window !== null && panels.has(window)
 }
 
+// The overlays over the browser's pages: the app's own page in a view, which may call main only
+// over its own channel.
+const overlays = new WeakSet<WebContents>()
+
+export function markOverlay(contents: WebContents): void {
+  overlays.add(contents)
+}
+
+/** Whether `contents` is a page overlay's, whatever URL its page shows. */
+export function isOverlay(contents: WebContents): boolean {
+  return overlays.has(contents)
+}
+
 /** The app's own windows, without the menu bar panel. */
 function appWindows(): BrowserWindow[] {
   return BrowserWindow.getAllWindows().filter(

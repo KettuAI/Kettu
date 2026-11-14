@@ -49,7 +49,8 @@
     "origin": "Wants to open",
     "app": "Wants to use",
     "setup": "Wants to use",
-    "question": "Asks you"
+    "question": "Asks you",
+    "step": "Needs you on"
   },
   "setupTarget": "your computer",
   "answerGroup": "Answer",

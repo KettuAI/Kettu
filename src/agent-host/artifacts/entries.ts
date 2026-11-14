@@ -15,6 +15,8 @@ type OwnEntry = Extract<
       | 'turn_end'
       | 'notice'
       | 'browser_origin'
+      | 'control_ask'
+      | 'control_note'
       | 'device_access'
       | 'computer_app'
       | 'computer_setup'
@@ -143,6 +145,8 @@ function isOwn(entry: ThreadEntry): entry is OwnEntry {
   switch (entry.kind) {
     case 'artifact':
     case 'browser_origin':
+    case 'control_ask':
+    case 'control_note':
     case 'device_access':
     case 'computer_app':
     case 'computer_setup':

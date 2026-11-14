@@ -15,6 +15,7 @@ import {
   type BrowserOriginDecision,
   type BrowserToolName,
 } from '@shared/browser'
+import { isControlOutcome, type ControlOutcome } from '@shared/control'
 import { DEVICE_ID } from '@shared/remote/device'
 
 const MAX_ID_CHARS = 256
@@ -106,6 +107,10 @@ export interface RemoteBrowserDeps {
   answerOrigin(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** Main's own request to the host; false while its session is not open. */
   request(hostId: string, method: string, params: unknown): boolean
+  /** The last running turn on the host that used the session's page ended. */
+  turnEnded(sessionId: string): void
+  /** Done or Skip on the host's card of a step its agent asked for on the session's page. */
+  askAnswered(sessionId: string, outcome: ControlOutcome): void
   log(level: 'info' | 'warn', message: string): void
 }
 
@@ -184,6 +189,40 @@ export class RemoteBrowser {
       return
     }
     this.deps.answerOrigin(sessionId, requestId, decision)
+  }
+
+  /** The user handed a host's session's page back: its thread says for how long. */
+  handedBack(sessionId: string, durationMs: number): boolean {
+    const hostId = this.hosts.get(sessionId)
+    if (!hostId) return false
+    this.deps.request(hostId, 'browser.handedBack', {
+      sessionId,
+      durationMs: Math.max(0, Math.round(durationMs)),
+    })
+    return true
+  }
+
+  /** A host's `browser.turnEnded` or `browser.askAnswered`, for a page of its session's. */
+  browserEvent(hostId: string, value: unknown): void {
+    const { type, sessionId, outcome } = (value ?? {}) as Record<string, unknown>
+    if (typeof sessionId !== 'string' || this.hosts.get(sessionId) !== hostId) {
+      this.deps.log('warn', `Ignored a browser event from host ${hostId} for another page`)
+      return
+    }
+    if (type === 'browser.turnEnded') this.deps.turnEnded(sessionId)
+    else if (type === 'browser.askAnswered' && isControlOutcome(outcome)) {
+      this.deps.askAnswered(sessionId, outcome)
+    }
+  }
+
+  /** The sessions of `hostId`'s whose pages this computer has. */
+  sessionsOf(hostId: string): string[] {
+    return [...this.hosts].filter(([, owner]) => owner === hostId).map(([sessionId]) => sessionId)
+  }
+
+  /** Whether another host's session has the page. */
+  isRemote(sessionId: string): boolean {
+    return this.hosts.has(sessionId)
   }
 
   /** The session's page is gone with its session: its forwards close. */

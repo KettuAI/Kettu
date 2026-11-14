@@ -25,6 +25,7 @@ import { PROMPT_BYTES, promptShare } from '@shared/attachments'
 import { CONTEXT_REFRESH_MS } from '@shared/context'
 import { firstLine, outlineText } from '@shared/outline'
 import { originLabel, type BrowserOriginAnswer, type BrowserOriginDecision } from '@shared/browser'
+import type { ControlOutcome, ControlStep, ControlSurface } from '@shared/control'
 import type {
   ComputerApp,
   ComputerAppAnswer,
@@ -78,6 +79,8 @@ import {
   type StopReason,
   type Attachment,
   type BrowserOriginEntry,
+  type ControlAskEntry,
+  type ControlNoteEntry,
   type DeviceAccessEntry,
   type ComputerAppEntry,
   type ComputerSetupEntry,
@@ -538,6 +541,11 @@ interface Live {
   appsAnswered: Map<string, FromDevice | null>
   /** Each setup a call waits on: its entry, by the request's id. */
   setups: Map<number, string>
+  /** The step the agent asked the user to do on its page, and the first answer a client gave. */
+  ask: {
+    entryId: string
+    answer: { outcome: ControlOutcome; device: FromDevice | null } | null
+  } | null
   /** Who sent the latest turn: a window's or a device's port, and the device it serves. */
   sender: TurnSender | null
   failure: Failure | null
@@ -650,7 +658,13 @@ function originKey(owner: string, requestId: number): string {
 
 /** The requests that wait for the user: permissions, new sites, first uses of apps and setups. */
 function waitingCount(live: Live): number {
-  return live.permissions.size + live.origins.size + live.apps.size + live.setups.size
+  return (
+    live.permissions.size +
+    live.origins.size +
+    live.apps.size +
+    live.setups.size +
+    (live.ask ? 1 : 0)
+  )
 }
 
 /** The ids of what waits: each permission's request id, and the entry id of the others. */
@@ -660,6 +674,7 @@ function waitingIds(live: Live): string[] {
     ...live.origins.values(),
     ...live.apps.values(),
     ...live.setups.values(),
+    ...(live.ask ? [live.ask.entryId] : []),
   ]
 }
 
@@ -1642,6 +1657,103 @@ export class SessionManager {
   }
 
   /**
+   * The agent asked the user to do a step on the session's page: the thread shows it, waiting, and
+   * the session waits as for a permission. A call made again for the same step adds nothing.
+   */
+  controlAsked(
+    sessionId: string,
+    step: { surface: ControlSurface; step: ControlStep; target: string | null; reason: string },
+  ): void {
+    const live = this.live.get(sessionId)
+    if (!live || live.ask) return
+    const entry: ControlAskEntry = {
+      kind: 'control_ask',
+      id: this.nextId(live),
+      ...step,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.ask = { entryId: entry.id, answer: null }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      step.target === null
+        ? t('attention.controlAsk.nowhere')
+        : t(`attention.controlAsk.${step.step}`, { target: step.target }),
+      { id: entry.id },
+    )
+  }
+
+  /**
+   * The step ended, with the outcome its call returned or with the turn: the card takes it, labelled
+   * with the device that answered it first, if one did.
+   */
+  controlAskSettled(sessionId: string, outcome: ControlOutcome | 'ended'): void {
+    const live = this.live.get(sessionId)
+    const ask = live?.ask
+    if (!live || !ask) return
+    live.ask = null
+    const device = outcome !== 'ended' && ask.answer?.outcome === outcome ? ask.answer.device : null
+    if (live.thread.byId[ask.entryId]?.kind === 'control_ask') {
+      this.emit(live, [
+        {
+          op: 'entry.update',
+          id: ask.entryId,
+          changes: { outcome, ...(device ? { device } : {}) },
+        },
+      ])
+    }
+    this.stopWaiting(live)
+    this.touch(live.id)
+    this.updateBadge()
+  }
+
+  /**
+   * A window's or a device's Done or Skip on a step's card. The first one counts and goes to the
+   * page, whose waiting call then settles the card; a later one hears where the first was given.
+   */
+  answerControlAsk(
+    sessionId: string,
+    entryId: string,
+    outcome: ControlOutcome,
+    device?: FromDevice,
+  ): void {
+    this.recordOf(sessionId)
+    const ask = this.live.get(sessionId)?.ask
+    if (!ask || ask.entryId !== entryId) throw notFound(`No step waits in ${entryId}`)
+    if (ask.answer) {
+      throw new HostError('not_found', `The step of ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: ask.answer.device,
+      })
+    }
+    ask.answer = { outcome, device: device ?? null }
+  }
+
+  /** The user handed a surface back after taking it over: the thread says for how long. */
+  controlHandedBack(sessionId: string, surface: ControlSurface, durationMs: number): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const entry: ControlNoteEntry = {
+      kind: 'control_note',
+      id: this.nextId(live),
+      surface,
+      event: 'handed_back',
+      durationMs,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    this.touch(live.id)
+  }
+
+  /**
    * A window's or a device's answer to a new origin's card. The first one counts and goes to the
    * page that asked, whose wait then settles the card; a later one hears where the first was given.
    */
@@ -2438,6 +2550,7 @@ export class SessionManager {
       apps: new Map(),
       appsAnswered: new Map(),
       setups: new Map(),
+      ask: null,
       sender: null,
       failure: null,
       unread: this.persistedUnread(record),
@@ -7097,6 +7210,8 @@ export class SessionManager {
         this.emit(live, [{ op: 'entry.update', id: entryId, changes: { decision: 'timeout' } }])
       }
     }
+    // A step the agent asked for ends with its turn.
+    if (live.ask) this.controlAskSettled(live.id, 'ended')
     // So does a first use of an app: the call that asked has no agent left to answer.
     for (const [requestId, entryId] of [...live.apps]) {
       live.apps.delete(requestId)

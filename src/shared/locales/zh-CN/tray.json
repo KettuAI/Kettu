@@ -48,7 +48,8 @@
     "origin": "想打开",
     "app": "想使用",
     "setup": "想使用",
-    "question": "在问你"
+    "question": "在问你",
+    "step": "需要你操作"
   },
   "setupTarget": "你的电脑",
   "answerGroup": "回答",

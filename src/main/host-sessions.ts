@@ -77,6 +77,8 @@ export interface HostSessionsOptions {
   browserCall?(hostId: string, call: unknown): void
   /** A host's `browser.originDecided` event, for that page too. */
   originDecided?(hostId: string, event: unknown): void
+  /** A host's `browser.turnEnded` or `browser.askAnswered` event, for that page too. */
+  browserEvent?(hostId: string, event: unknown): void
   /** The host's session ended. */
   ended?(hostId: string): void
   /**
@@ -396,6 +398,13 @@ export class HostSessions {
     }
     if (message.type === 'event' && event?.type === 'browser.originDecided') {
       this.options.originDecided?.(hostId, event)
+      return
+    }
+    if (
+      message.type === 'event' &&
+      (event?.type === 'browser.turnEnded' || event?.type === 'browser.askAnswered')
+    ) {
+      this.options.browserEvent?.(hostId, event)
       return
     }
     if (
