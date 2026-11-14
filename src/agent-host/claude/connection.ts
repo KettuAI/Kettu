@@ -36,6 +36,7 @@ import { t } from '../i18n'
 import {
   addTokenTotals,
   firstUserMessage,
+  mergeConfig,
   repeatsFirstMessage,
   type MapperContext,
   type MapperEffect,
@@ -92,6 +93,7 @@ import type {
   ModelUsage,
   PermissionMode,
   PermissionResult,
+  PostModelSwitchHookInput,
   Query,
   QueryOptions,
   ResultMessage,
@@ -943,6 +945,18 @@ export class ClaudeConnection implements AgentConnection {
         this.canUseTool(session, name, toolInput, permission),
       onElicitation: (request, { signal, requestId }) =>
         this.elicit(session, request, requestId, signal),
+      hooks: {
+        PostModelSwitch: [
+          {
+            hooks: [
+              async (switched) => {
+                this.modelSwitched(session, switched)
+                return {}
+              },
+            ],
+          },
+        ],
+      },
       ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       ...(plugins.length > 0 ? { plugins } : {}),
       ...(Object.keys(flags).length > 0 ? { settings: flags } : {}),
@@ -1791,6 +1805,34 @@ export class ClaudeConnection implements AgentConnection {
       )
     }
     return session.ultracodeDefault
+  }
+
+  /** A model the user switched to in Claude Code, with `/model` or its picker, is their choice. */
+  private modelSwitched(session: Session, switched: PostModelSwitchHookInput): void {
+    if (switched.source !== 'command' && switched.source !== 'picker') return
+    const model = settingsModel(session.models, switched.requested_model)
+    if (session.choices.model === model) return
+    session.choices.model = model
+    session.config = buildConfig(
+      session.models,
+      session.choices,
+      session.modes,
+      session.ultracodeDefault,
+      session.inheritedEffort,
+    )
+    const config = session.config
+    this.deliver({
+      sessionId: session.id,
+      map: (ctx) => ({
+        patches: [
+          {
+            op: 'session.update',
+            changes: { config: mergeConfig(ctx.thread.session.config, config) },
+          },
+        ],
+        effects: [],
+      }),
+    })
   }
 
   /** Records a choice Claude Code made or took, such as the mode a plan's approval set. */
