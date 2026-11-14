@@ -2,23 +2,28 @@ import {
   Analytics01Icon,
   BotIcon,
   DashboardSquare02Icon,
+  FlowIcon,
   PencilEdit02Icon,
   RepeatIcon,
   Settings01Icon,
   Store01Icon,
 } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
+import { TaskRing } from '@renderer/features/tasks/task-ring'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
+import { useTasksStore } from '@renderer/stores/tasks'
 import type { HistoryPlace } from '@renderer/stores/view'
 import { Glyph } from './glyph'
 import { usePlaceTitle } from './place-title'
 
-/** A place's mark in the history's lists: its session's agent, or the page's own icon. */
+/** A place's mark in the history's lists: its session's agent, a task's ring, or the page's icon. */
 export function PlaceIcon({ place }: { place: HistoryPlace }) {
   return (
     <span aria-hidden className="grid size-4 shrink-0 place-items-center text-icon">
       {place.kind === 'session' ? (
         <SessionMark sessionId={place.sessionId} />
+      ) : place.kind === 'task' ? (
+        <TaskMark taskId={place.taskId} />
       ) : (
         <PageIcon place={place} />
       )}
@@ -30,6 +35,11 @@ function SessionMark({ sessionId }: { sessionId: string }) {
   const summary = useSessionsStore((s) => s.byId[sessionId])
   if (!summary || summary.origin === 'subagent') return <Glyph icon={BotIcon} size={15} />
   return <AgentMark agent={summary.agentId} size={15} hostId={hostOfSession(summary)} />
+}
+
+function TaskMark({ taskId }: { taskId: string }) {
+  const task = useTasksStore((s) => s.summaries[taskId])
+  return task ? <TaskRing task={task} size={15} /> : <Glyph icon={FlowIcon} size={15} />
 }
 
 function PageIcon({ place }: { place: HistoryPlace }) {

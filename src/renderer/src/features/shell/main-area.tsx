@@ -7,7 +7,14 @@ import { focusedPane } from '@renderer/features/split/layout'
 import { cn } from '@renderer/lib/utils'
 import { showProjects } from '@renderer/stores/git'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { panelOf, shownLayoutSessions, shownProjects, useViewStore } from '@renderer/stores/view'
+import {
+  panelOf,
+  shownLayoutSessions,
+  shownProjects,
+  taskPanel,
+  useViewStore,
+} from '@renderer/stores/view'
+import { useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 
@@ -17,11 +24,12 @@ const RoutinePage = lazy(() => import('@renderer/features/routines/routine-page'
 const ArtifactsPage = lazy(() => import('@renderer/features/artifacts/artifacts-page'))
 const ArtifactViewer = lazy(() => import('@renderer/features/artifacts/artifact-viewer'))
 const MarketplacePage = lazy(() => import('@renderer/features/marketplace/marketplace-page'))
+const TaskPage = lazy(() => import('@renderer/features/tasks/task-page'))
 
 /**
  * What the main area shows: the split of sessions and New session, the usage page, the routines
- * pages, the Artifacts page, an artifact, or the Marketplace. A page shows alone, and the split
- * waits as it was.
+ * pages, the Artifacts page, an artifact, the Marketplace or a task. A page shows alone, and the
+ * split waits as it was.
  */
 export function MainArea() {
   const projects = useProjectsStore((s) => s.projects)
@@ -42,6 +50,11 @@ export function MainArea() {
   )
   const focused = focusedPane(layout).view
   const focusedFolder = useSessionFolder(focused.kind === 'session' ? focused.sessionId : null)
+  const taskFolder = useTasksStore((s) => {
+    if (main.kind !== 'task') return null
+    const task = s.summaries[main.taskId]
+    return task ? (task.worktreePath ?? task.projectPath) : null
+  })
 
   // Every project or worktree a pane in view works in keeps its git status live.
   useEffect(() => {
@@ -105,6 +118,23 @@ export function MainArea() {
           <MarketplacePage item={main.item ?? null} tab={main.tab ?? 'all'} />
         </Suspense>
       </PageSheet>
+    )
+  }
+  if (main.kind === 'task') {
+    const page = (
+      <PageSheet>
+        <Suspense fallback={null}>
+          <TaskPage key={main.taskId} taskId={main.taskId} flow={main.flow === true} />
+        </Suspense>
+      </PageSheet>
+    )
+    // The documents its steps hand in open beside it, in a side panel of its own.
+    return taskFolder ? (
+      <SidePanelArea projectPath={taskFolder} panel={taskPanel(main.taskId)}>
+        {page}
+      </SidePanelArea>
+    ) : (
+      page
     )
   }
   if (main.kind === 'launch') {

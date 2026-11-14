@@ -1,3 +1,203 @@
 {
-  "title": "Tasks"
+  "title": "Tasks",
+  "progress": "{{at}}/{{total}}",
+  "round": "Round {{n}}",
+  "separator": " · ",
+  "list": ", ",
+  "or": " or ",
+  "and": " and ",
+  "row": {
+    "collapse": "Collapse steps",
+    "expand": "Expand steps",
+    "stepOf": "Step {{at}} of {{total}}",
+    "step": "{{step}}, a step of {{task}}"
+  },
+  "card": {
+    "agents": "Agents",
+    "branch": "Branch",
+    "lastActivity": "Last activity"
+  },
+  "state": {
+    "done": "Done",
+    "running": "Running",
+    "review": "Your review",
+    "yourTurn": "Your turn",
+    "asking": "Needs your answer",
+    "blocked": "Can’t start",
+    "needsYou": "Needs you",
+    "failed": "Stuck",
+    "waiting": "Waiting"
+  },
+  "ended": {
+    "running": "Running",
+    "done": "Done",
+    "dropped": "Not worth doing",
+    "cancelled": "Cancelled"
+  },
+  "menu": {
+    "cancel": "Cancel task…",
+    "cancelTitle": "Cancel “{{title}}”?",
+    "cancelBody": "The steps at work stop. Their sessions stay, so you can read what was done.",
+    "cancelBodyBranch": "The steps at work stop. Their sessions, the task’s worktree and its branch stay.",
+    "cancelConfirm": "Cancel task",
+    "keepRunning": "Keep running",
+    "deleteBody": "The task and its steps’ sessions can’t be restored. Archive keeps them.",
+    "deleteBodyBranch": "The task and its steps’ sessions can’t be restored. The branch {{branch}} and its worktree stay.",
+    "renameTitle": "Rename task",
+    "archived": "Archived “{{title}}”"
+  },
+  "crumb": {
+    "back": "Back to {{title}}"
+  },
+  "sentBack": {
+    "byYou": "Sent back by you",
+    "byStep": "Sent back by {{step}}",
+    "left_one": "Can be sent back {{count}} more time",
+    "left_other": "Can be sent back {{count}} more times",
+    "last": "The last time it can be sent back",
+    "more": "Show all",
+    "less": "Show less"
+  },
+  "picked": {
+    "first": "First step",
+    "taskPin": "Pinned for this task",
+    "sopPin": "Pinned on this workflow",
+    "agent": "Picked by {{step}}",
+    "previous": "Same as round {{n}}",
+    "previousAny": "Same as before",
+    "person": "You"
+  },
+  "picks": {
+    "by": "Picked by {{step}}",
+    "join": "Picked at the join"
+  },
+  "page": {
+    "more": "More actions",
+    "view": "View",
+    "timeline": "Timeline",
+    "flowchart": "Flowchart",
+    "needsYou": "Needs you",
+    "stuck": "Stuck",
+    "unavailable": "Couldn’t open this task",
+    "hostAway": "Its computer isn’t connected. It shows again once it is.",
+    "retry": "Try again",
+    "missing": "This task is gone",
+    "missingBody": "It was deleted, or its computer no longer lists it.",
+    "newSession": "New session"
+  },
+  "timeline": {
+    "started": "Started with {{sop}} · {{time}}",
+    "startedFrom": "Started from “{{session}}” · {{sop}} · {{time}}",
+    "noteAdded": "Added for the steps · {{time}}",
+    "round": "{{step}} · Round {{n}}",
+    "why": "Why: “{{reason}}”",
+    "youSaid": "You: “{{note}}”",
+    "noNote": "Sent back without a note",
+    "document": "{{title}} · Version {{version}}",
+    "sentBack": "Sent back",
+    "stopped": "Stopped",
+    "picking": "Picking who’s next",
+    "next": "Next:",
+    "youReview": "You review",
+    "pinned": "Pinned"
+  },
+  "review": {
+    "title": "{{step}} is waiting for your review",
+    "reported": "{{agent}} reported {{outcome}}.",
+    "reportedNote": "{{agent}} reported {{outcome}}: {{note}}",
+    "version": "Version {{version}} · Opens on the right",
+    "comments_one": "Your comment on the document goes back to {{agent}} with a send back",
+    "comments_other": "Your {{count}} comments on the document go back to {{agent}} with a send back",
+    "notePlaceholder": "A note for {{agent}} (optional)",
+    "approve": "Approve",
+    "approveNext": "Approve, go to {{next}}",
+    "sendBack": "Send back"
+  },
+  "person": {
+    "title": "Your turn: {{step}}",
+    "notePlaceholder": "A note with your answer (optional)"
+  },
+  "asking": {
+    "title": "{{agent}} in {{step}} is asking you",
+    "body": "Its session waits for a permission or an answer.",
+    "open": "Open session"
+  },
+  "blocked": {
+    "title": "{{step}} can’t start",
+    "limit": "{{agent}} has reached its plan limit.",
+    "limitAt": "{{agent}} has reached its plan limit. The step starts at {{time}} unless you pin someone else.",
+    "disabled": "{{agent}} is turned off.",
+    "removed": "{{agent}} was removed.",
+    "harness": "{{agent}} can’t do steps; only Claude Code and Codex can.",
+    "model": "{{agent}} no longer lists the model it was pinned with.",
+    "effort": "{{agent}} no longer offers the effort it was pinned with.",
+    "no_kettu": "{{agent}} doesn’t have Kettu’s tools, which a step reports with.",
+    "not_ready": "{{agent}} isn’t ready yet.",
+    "noAgent": "No agent is allowed for Auto. Turn one on in Settings › Agents, or pin someone.",
+    "noPicker": "No step handed off to it, so it needs someone pinned.",
+    "picking": "It waits for the step before it to pick who does it.",
+    "pin": "Pin someone else…"
+  },
+  "stuckTitle": "{{step}} is stuck",
+  "stuck": {
+    "send_back_limit": "{{step}} was sent back as often as the workflow allows.",
+    "no_report": "Its session stopped without reporting, after one reminder.",
+    "no_pick": "Its session stopped without picking who does the next step, after one reminder.",
+    "picks_refused": "Three picks in a row didn’t hold.",
+    "session_gone": "Its session was deleted.",
+    "start_failed": "Its session couldn’t start.",
+    "merge_failed": "Merging the branches at the join failed."
+  },
+  "merge": {
+    "title": "The task’s branch didn’t merge at the end",
+    "body_one": "{{count}} file conflicts. Resolve it in the task’s worktree, then retry.",
+    "body_other": "{{count}} files conflict. Resolve them in the task’s worktree, then retry."
+  },
+  "retry": {
+    "button": "Retry",
+    "notePlaceholder": "A note for the step’s agent (optional)"
+  },
+  "pin": {
+    "confirm": "Pin for this task",
+    "auto": "Back to Auto",
+    "onlySteps": "Only Claude Code and Codex agents can do steps."
+  },
+  "flow": {
+    "auto": "Auto",
+    "you": "You",
+    "yourCall": "You choose the outcome",
+    "youSendBack": "You send back",
+    "taken": "{{taken}} of {{limit}} used",
+    "upTo": "up to {{limit}}",
+    "notStarted": "Not started",
+    "waitingOn": "Waiting on {{steps}}",
+    "end": {
+      "done": "Done",
+      "dropped": "Not worth doing"
+    }
+  },
+  "details": {
+    "label": "{{step}} details",
+    "agent": "Agent and model",
+    "picked": "Who picked",
+    "picks": "Who picks",
+    "why": "Why",
+    "quoted": "“{{text}}”",
+    "status": "Status",
+    "outcome": "Reported {{outcome}}",
+    "branch": "Branch",
+    "reviews": "Reviews",
+    "hint": "Hint for the pick",
+    "sentBack": "Sent back with",
+    "pin": "Pin for this task…",
+    "changePin": "Change the pin…"
+  },
+  "composer": {
+    "label": "Add to the task",
+    "placeholder": "Add to the task for the running step and every step after it",
+    "ended": "This task has ended",
+    "noAdvance": "Adding doesn’t advance the flow",
+    "send": "Add",
+    "textOnly": "Notes are text only"
+  }
 }

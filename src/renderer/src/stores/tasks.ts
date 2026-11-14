@@ -2,9 +2,10 @@
 // full view of each task a page or card has read. The host sends the full view on every change.
 
 import { create } from 'zustand'
-import type { HostParams } from '@shared/agent-host'
-import type { TaskSummary, TaskView } from '@shared/sop'
+import type { HostParams, SessionSummary } from '@shared/agent-host'
+import type { TaskStepSummary, TaskSummary, TaskView } from '@shared/sop'
 import { errorMessage, hostAt, learnTaskHost, taskHost } from '@renderer/lib/host'
+import { useSessionsStore } from './sessions'
 
 interface TasksStore {
   summaries: Record<string, TaskSummary>
@@ -110,4 +111,75 @@ export function tasksHostClosed(hostId: string): void {
 /** The task a step's session works for, from its summary. */
 export function stepTask(taskId: string | undefined | null): TaskSummary | undefined {
   return taskId ? useTasksStore.getState().summaries[taskId] : undefined
+}
+
+/** The tasks a project's group lists: neither pinned nor archived, the latest first. */
+export function listedTasks(
+  summaries: Record<string, TaskSummary>,
+  projectPath: string,
+): TaskSummary[] {
+  return Object.values(summaries)
+    .filter((task) => task.projectPath === projectPath && !task.pinnedAt && !task.archivedAt)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/** The pinned tasks across the projects, in the order they were pinned. */
+export function pinnedTasks(summaries: Record<string, TaskSummary>): TaskSummary[] {
+  return Object.values(summaries)
+    .filter((task) => !!task.pinnedAt && !task.archivedAt)
+    .sort((a, b) => (a.pinnedAt ?? 0) - (b.pinnedAt ?? 0))
+}
+
+/** The tasks that wait for the person or are stuck, the latest first. */
+export function needingTasks(summaries: Record<string, TaskSummary>): TaskSummary[] {
+  return Object.values(summaries)
+    .filter((task) => !task.archivedAt && task.status === 'running' && task.needsYou)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/** A started step under its task's row: its session's id, or the step's own for a person's step. */
+export interface StepRow {
+  id: string
+  step: TaskStepSummary
+}
+
+/** The steps that started, in the order they started, as rows under their task. */
+export function startedSteps(task: TaskSummary): StepRow[] {
+  return task.steps
+    .filter((step) => step.rounds > 0 && step.startedAt !== null)
+    .sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0))
+    .map((step) => ({ id: step.sessionId ?? `${task.id}/${step.id}`, step }))
+}
+
+/** Whether the main area shows the task's page or one of its steps' sessions. */
+export function taskShown(
+  main: { kind: string; taskId?: string; sessionId?: string },
+  taskId: string,
+  byId: Record<string, SessionSummary>,
+): boolean {
+  if (main.kind === 'task') return main.taskId === taskId
+  if (main.kind !== 'session' || !main.sessionId) return false
+  return byId[main.sessionId]?.task?.taskId === taskId
+}
+
+/** Whether a task's row shows its steps: as the user left it, else while it is in front. */
+export function taskExpanded(
+  view: {
+    main: { kind: string; taskId?: string; sessionId?: string }
+    expandedParents: Record<string, boolean>
+  },
+  taskId: string,
+  byId: Record<string, SessionSummary>,
+): boolean {
+  return view.expandedParents[taskId] ?? taskShown(view.main, taskId, byId)
+}
+
+/**
+ * Reads the summaries of a task's step sessions into the session list, which leaves them out, so
+ * their rows show their state and open them.
+ */
+export async function loadTaskSessions(taskId: string): Promise<void> {
+  const summaries = await hostAt(taskHost(taskId), 'tasks.sessions', { taskId })
+  const store = useSessionsStore.getState()
+  for (const summary of summaries) store.upsert(summary)
 }

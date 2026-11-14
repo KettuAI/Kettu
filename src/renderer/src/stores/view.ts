@@ -59,6 +59,8 @@ type PageView =
   // The Marketplace, opened from the sidebar: its directory on a tab, or with `item`, the listing
   // of the server with that id, a step of the history of its own.
   | { kind: 'marketplace'; item?: string; tab?: MarketplaceTab }
+  // A task's page, opened from its row in the sidebar: its timeline, or with `flow`, its flowchart.
+  | { kind: 'task'; taskId: string; flow?: true }
 
 /** The Marketplace directory's tabs. */
 export type MarketplaceTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'installed'
@@ -599,6 +601,28 @@ function marketplaceView(item: string | undefined, tab: MarketplaceTab | undefin
   }
 }
 
+/** A task's page, on its timeline unless `flow` asks for its flowchart. */
+export function openTask(taskId: string, { flow = false }: { flow?: boolean } = {}): void {
+  useViewStore.setState((s) => ({
+    main: flow ? { kind: 'task', taskId, flow: true } : { kind: 'task', taskId },
+    settings: { ...s.settings, open: false },
+  }))
+}
+
+/** Switches the task's page between its timeline and its flowchart, as the same step. */
+export function setTaskFlow(taskId: string, flow: boolean): void {
+  useViewStore.setState((s) =>
+    s.main.kind === 'task' && s.main.taskId === taskId
+      ? { main: flow ? { kind: 'task', taskId, flow: true } : { kind: 'task', taskId } }
+      : s,
+  )
+}
+
+/** The side panel of a task's page, where the documents its steps hand in open. */
+export function taskPanel(taskId: string): string {
+  return `task:${taskId}`
+}
+
 /** The Artifacts page from the sidebar, with its whole list. */
 export function openArtifacts(): void {
   useArtifactsStore.setState({ filter: '', kindFilter: null, projectFilter: [], opened: null })
@@ -938,6 +962,8 @@ export function viewKey(view: HistoryView): string {
       return view.item ? `marketplace:${view.item}` : 'marketplace'
     case 'artifact':
       return `artifact:${view.id}`
+    case 'task':
+      return `task:${view.taskId}`
     default:
       return view.kind
   }
