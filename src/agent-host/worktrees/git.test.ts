@@ -177,6 +177,120 @@ describe('createWorktreeGit', () => {
     await expect(worktrees.recreate(project, record)).rejects.toMatchObject({ code: 'not_found' })
   })
 
+  describe('renaming a new branch', () => {
+    const rename = (
+      record: WorktreeRecord,
+      slug: string,
+      extra: Partial<Parameters<WorktreeGit['renameBranch']>[0]> = {},
+    ) =>
+      worktrees.renameBranch({
+        projectPath: project,
+        record,
+        template: 'kettu/{slug}',
+        slug,
+        ...extra,
+      })
+    const current = (record: WorktreeRecord): string =>
+      git(record.path, 'branch', '--show-current').trim()
+
+    it('renames it with its worktree, keeping the folder', async () => {
+      const record = await create('修复订阅里其他时区文章的日期')
+      expect(record.branch).toMatch(/^kettu\/session-abcdef/)
+      expect(await rename(record, 'Fix RSS feed timezones')).toBe('kettu/fix-rss-feed-timezones')
+      expect(current(record)).toBe('kettu/fix-rss-feed-timezones')
+      expect(git(project, 'branch', '--list', record.branch)).toBe('')
+      expect(await isThere(record.path)).toBe(true)
+      expect(git(project, 'worktree', 'list', '--porcelain')).toContain(
+        'branch refs/heads/kettu/fix-rss-feed-timezones',
+      )
+    })
+
+    it("fills the project's template", async () => {
+      const record = await create('template one')
+      const name = await rename(record, 'templated name', {
+        template: '{type}/{issue}-{slug}',
+        type: 'fix',
+        issue: '12',
+      })
+      expect(name).toBe('fix/12-templated-name')
+      expect(current(record)).toBe(name)
+    })
+
+    it('keeps only a slug of what the model wrote', async () => {
+      const record = await create('hostile one')
+      expect(await rename(record, '--force ../HEAD@{1} refs/heads/main')).toBe(
+        'kettu/force-head-1-refs-heads-main',
+      )
+      expect(current(record)).toBe('kettu/force-head-1-refs-heads-main')
+      const other = await create('nothing usable')
+      for (const slug of ['', '修复登录', '---']) {
+        expect(await rename(other, slug)).toBeNull()
+        expect(current(other)).toBe(other.branch)
+      }
+    })
+
+    it('moves past names taken locally, on a remote or by a pull request', async () => {
+      git(project, 'branch', 'kettu/taken-local', 'main')
+      const local = await create('local one')
+      expect(await rename(local, 'taken local')).toBe('kettu/taken-local-2')
+      git(project, 'push', '-q', 'origin', 'main:refs/heads/kettu/remote-only')
+      git(project, 'fetch', '-q', 'origin')
+      const remote = await create('remote one')
+      expect(await rename(remote, 'remote only')).toBe('kettu/remote-only-2')
+      const proposed = await create('proposed one')
+      expect(
+        await rename(proposed, 'proposed name', {
+          takenByPullRequest: (name) => name === 'kettu/proposed-name',
+        }),
+      ).toBe('kettu/proposed-name-2')
+    })
+
+    it('keeps a name the model repeats, with or without a suffix', async () => {
+      const record = await create('Repeat me')
+      expect(await rename(record, 'repeat me')).toBeNull()
+      const second = await create('Repeat me')
+      expect(second.branch).toBe('kettu/repeat-me-2')
+      expect(await rename(second, 'repeat me')).toBeNull()
+      expect(current(second)).toBe('kettu/repeat-me-2')
+    })
+
+    it('never touches a branch that moved, was pushed or is proposed', async () => {
+      const moved = await create('moved one')
+      await commit(moved.path, 'moved.txt', 'x\n')
+      expect(await rename(moved, 'new name')).toBeNull()
+      expect(current(moved)).toBe(moved.branch)
+
+      const upstream = await create('upstream one')
+      git(upstream.path, 'push', '-q', '-u', 'origin', upstream.branch)
+      git(project, 'update-ref', '-d', `refs/remotes/origin/${upstream.branch}`)
+      expect(await rename(upstream, 'new name')).toBeNull()
+      expect(current(upstream)).toBe(upstream.branch)
+
+      const pushed = await create('pushed one')
+      git(pushed.path, 'push', '-q', 'origin', pushed.branch)
+      expect(await rename(pushed, 'new name')).toBeNull()
+      expect(current(pushed)).toBe(pushed.branch)
+
+      const proposed = await create('pull request one')
+      expect(
+        await rename(proposed, 'new name', {
+          takenByPullRequest: (name) => name === proposed.branch,
+        }),
+      ).toBeNull()
+      expect(current(proposed)).toBe(proposed.branch)
+
+      expect(git(project, 'branch', '--list', 'kettu/new-name*')).toBe('')
+    })
+
+    it('never touches a branch its worktree left', async () => {
+      const record = await create('switched one')
+      git(record.path, 'switch', '-q', '-c', 'kettu/elsewhere')
+      expect(await rename(record, 'new name')).toBeNull()
+      expect(git(project, 'branch', '--list', record.branch)).not.toBe('')
+      expect(current(record)).toBe('kettu/elsewhere')
+    })
+  })
+
   it('puts worktrees under the given root', async () => {
     const root = path.join(dir, 'chosen', 'root')
     const record = await create('rooted one', { root })

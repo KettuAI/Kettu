@@ -14,9 +14,21 @@ const MAX_FOLDER_PREFIX = 24
 
 /** The leading ASCII words of `text` as a slug, or '' when none is usable. */
 export function slugOf(text: string): string {
+  return joinWords(text.split(/\s+/).map((raw) => raw.toLowerCase().replace(/[^a-z0-9]/g, '')))
+}
+
+/**
+ * The slug in a model's reply, which is untrusted: its ASCII letters and digits, lowercased, with
+ * single dashes between the words they make; '' when none is left.
+ */
+export function cleanSlug(reply: string): string {
+  return joinWords(reply.replace(/[A-Z]/g, (letter) => letter.toLowerCase()).split(/[^a-z0-9]+/))
+}
+
+/** Whole words joined by dashes up to MAX_SLUG_LENGTH; only a lone first word is cut. */
+function joinWords(words: readonly string[]): string {
   let slug = ''
-  for (const raw of text.split(/\s+/)) {
-    const word = raw.toLowerCase().replace(/[^a-z0-9]/g, '')
+  for (const word of words) {
     if (word === '') continue
     if (slug === '') {
       slug = word.slice(0, MAX_SLUG_LENGTH)

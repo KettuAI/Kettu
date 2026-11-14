@@ -78,6 +78,29 @@ export class WorktreeManager {
   }
 
   /**
+   * Names a new worktree's branch again from a slug its agent wrote, with the other values it was
+   * made with, while the git side finds it untouched; resolves to the new name or null.
+   */
+  renameBranch(
+    projectPath: string,
+    record: WorktreeRecord,
+    values: { slug: string; type?: string; issue?: string },
+  ): Promise<string | null> {
+    const { takenByPullRequest } = this.deps
+    return this.deps.git.renameBranch({
+      projectPath,
+      record,
+      template: this.settings(projectPath).branchTemplate,
+      slug: values.slug,
+      ...(values.type === undefined ? {} : { type: values.type }),
+      ...(values.issue === undefined ? {} : { issue: values.issue }),
+      ...(takenByPullRequest
+        ? { takenByPullRequest: (branch: string) => takenByPullRequest(projectPath, branch) }
+        : {}),
+    })
+  }
+
+  /**
    * Copies the project's local files, then runs its setup command, once per worktree at a time.
    * Never rejects: a failure is a state, with the stage and the end of the output.
    */

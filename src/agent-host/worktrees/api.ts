@@ -21,6 +21,18 @@ export interface WorktreeRequest {
   takenByPullRequest?: (branch: string) => boolean
 }
 
+/** A new worktree's branch to name again, from a slug a model wrote. */
+export interface BranchRename {
+  projectPath: string
+  record: WorktreeRecord
+  template: string
+  /** Untrusted: only its ASCII letters and digits are kept. */
+  slug: string
+  type?: string
+  issue?: string
+  takenByPullRequest?: (branch: string) => boolean
+}
+
 export interface SetupRun {
   exitCode: number | null // null when it was stopped or ran out of time
   timedOut: boolean
@@ -47,6 +59,13 @@ export interface WorktreeGit {
   rootFor(projectPath: string, root: string | null): Promise<string>
   /** Creates the branch and the worktree; rejects with `invalid_params` on a bad name or base. */
   create(request: WorktreeRequest): Promise<WorktreeRecord>
+  /**
+   * Renames the branch to the template filled with the slug, or the first of `-2`, `-3`, ... that
+   * is free, only while nothing has used it yet: it is still at the commit it was cut from and
+   * checked out in the worktree, with no upstream, on no remote and with no pull request. Resolves
+   * to the new name, or null when the branch keeps its own; the folder keeps its name.
+   */
+  renameBranch(request: BranchRename): Promise<string | null>
   /** Copies the project's local files that `.worktreeinclude` and `extra` name. */
   copyLocalFiles(projectPath: string, worktreePath: string, extra: string[]): Promise<CopyResult>
   runSetup(command: string, options: SetupOptions): Promise<SetupRun>
