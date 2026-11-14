@@ -13,6 +13,7 @@ import { openSettings, THIS_COMPUTER, useViewStore } from '@renderer/stores/view
 import { AccountMenu } from './account-menu'
 import { RemoteButton } from './remote-button'
 import { identityOf } from './model'
+import { PlanRing } from './plan-ring'
 import { useSettingsAttention, useThisComputerName } from './use-account'
 
 /** The host this window controls, as the row's second line names it. */
@@ -88,7 +89,12 @@ export function useAccountShell(): Pick<
       onClick: () => openSettings(),
       dot: attention,
     },
-    userTools: <RemoteButton />,
+    userTools: (
+      <>
+        <PlanRing />
+        <RemoteButton />
+      </>
+    ),
   }
 }
 

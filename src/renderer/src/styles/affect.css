@@ -443,14 +443,175 @@ li[data-row-exit='dust'] > * {
 .kettu-account .ui-pmc__side .ui-pmc__heading {
   padding: 6px 8px 4px;
 }
-/* A plan card in the account menu, a tile as on the Usage page; Profile Menu clears its buttons'
-   padding and background, so the card sets its own. */
-.kettu-account .kettu-plan-card {
-  padding: 8px 8px 9px;
-  background: var(--bg-subtle);
-  cursor: default;
+/* Tighter than Profile Menu's own: 30 px rows, rounder corners, lighter shortcuts and dividers. */
+.kettu-account .ui-pmc__card,
+.kettu-account .ui-pmc__side {
+  border-radius: 12px;
 }
-.kettu-account .kettu-plan-card:is(:hover, :focus-visible) {
+.kettu-account .ui-pmc__item {
+  height: 30px;
+  border-radius: 7px;
+}
+.kettu-account .ui-pmc__check {
+  width: 14px;
+  height: 14px;
+}
+.kettu-account .ui-pmc__kbd {
+  color: var(--text-disabled);
+}
+.kettu-account .ui-pmc__divider {
+  background: var(--border-default);
+}
+.kettu-account .ui-pmc__heading {
+  font-size: 11.5px;
+  font-weight: 500;
+}
+/* Theme: one row like the others, its icon segments at the end. */
+.kettu-theme-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 30px;
+  color: var(--ui-pmc-ink);
+}
+.kettu-theme-row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.kettu-account .ui-pmc__control:has(.kettu-theme-row) {
+  padding: 0 4px 0 8px;
+}
+/* A host's state as a dot on its icon's corner, cut out of the card. */
+.kettu-host-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.kettu-host-mark__dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--ui-pmc-card);
+}
+.kettu-host-mark__dot[data-state='online'] {
+  background: var(--success);
+}
+.kettu-host-mark__dot[data-state='connecting'] {
+  background: var(--limit-warn);
+  animation: kettu-host-dot 1.2s ease-in-out infinite;
+}
+@keyframes kettu-host-dot {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kettu-host-mark__dot[data-state='connecting'] {
+    animation: none;
+  }
+}
+
+/* The account row's plan ring (features/account/plan-ring.tsx). Its wrapper lays out no box, so
+   the popover opens against the row, where the account menu opens. */
+.kettu-plan-ring {
+  display: contents;
+}
+.kettu-plan-ring__button[aria-expanded='true'] {
+  background: var(--bg-selected);
+}
+.kettu-plan-pop {
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--shell-card);
+  box-shadow:
+    0 0 0 0.5px var(--border-subtle),
+    var(--elevation-popover);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-primary);
+}
+.kettu-plan-pop__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--text-tertiary);
+}
+.kettu-plan-pop__host {
+  min-width: 0;
+  margin-left: auto;
+  overflow: hidden;
+  font-weight: 400;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* The cards lie on an inset panel, darker than the card in both modes. */
+.kettu-plan-pop__well {
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--menu-well);
+}
+.kettu-plan-pop .kettu-plan-card {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 8px 9px;
+  background: var(--bg-surface);
+  box-shadow:
+    0 0 0 0.5px var(--border-subtle),
+    var(--elevation-card);
+  text-align: left;
+  cursor: default;
+  transition: box-shadow 140ms ease;
+}
+.kettu-plan-pop .kettu-plan-card:is(:hover, :focus-visible) {
+  box-shadow:
+    0 0 0 1.5px var(--focus-ring-color),
+    var(--elevation-card);
+}
+.kettu-plan-pop__more,
+.kettu-plan-pop__row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border-radius: 7px;
+  outline: none;
+  cursor: default;
+  transition: background-color 140ms ease;
+}
+.kettu-plan-pop__more {
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.kettu-plan-pop__count {
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.kettu-plan-pop__row {
+  gap: 10px;
+  height: 30px;
+  margin-top: 4px;
+  padding: 0 8px;
+  color: var(--text-primary);
+}
+.kettu-plan-pop__row > :is(.hgi, svg) {
+  color: var(--icon-default);
+}
+.kettu-plan-pop__more:is(:hover, :focus-visible),
+.kettu-plan-pop__row:is(:hover, :focus-visible) {
   background: var(--bg-selected);
 }
 .ui-as-user-action__dot.kettu-remote-dot {

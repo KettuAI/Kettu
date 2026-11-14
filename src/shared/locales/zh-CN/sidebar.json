@@ -261,6 +261,10 @@
     "limits": "套餐限额",
     "allLimits": "全部套餐限额",
     "limitUsed": "{{window}}：已用 {{percent}}%",
+    "ring": "{{account}} · {{window}} 已用 {{percent}}%",
+    "ringNone": "{{agent}} 不报告套餐限额",
+    "ringButton": "套餐限额：{{limit}}",
+    "openUsage": "打开用量",
     "theme": "主题",
     "themes": {
       "system": "跟随系统",

@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { AgentTile } from '@renderer/components/agents/agent-mark'
+import { AgentMark, AgentTile } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { PlanPart } from '@renderer/features/session/composer/usage'
@@ -53,21 +53,24 @@ function CardFace({ card }: { card: PlanCard }) {
   const count = card.windows.length
   return (
     <>
-      <span className="flex h-4.5 min-w-0 items-center gap-1.5">
-        <AgentTile agent={card.agentId} hostId={card.hostId} size={18} />
-        <span className="min-w-0 truncate text-small font-semibold text-primary">{card.name}</span>
+      <span className="flex h-4 min-w-0 items-center gap-1.25">
+        <AgentMark agent={card.agentId} hostId={card.hostId} size={14} />
+        <span className="min-w-0 truncate text-small font-medium text-primary">{card.name}</span>
         {card.tier && (
-          <span className="ml-auto shrink-0 rounded-sm bg-popover px-1.25 text-badge leading-3.75 text-secondary shadow-[0_0_0_var(--hairline)_var(--border-subtle)]">
+          <span className="ml-auto shrink-0 text-badge leading-3.75 font-medium text-tertiary">
             {card.tier}
           </span>
         )}
       </span>
-      <span className="mt-1.5 flex items-center gap-2">
+      <span className="mt-1.75 flex items-center gap-2.25">
         <PlanRings
           rings={card.windows.map((w) => ({ id: w.id, percent: w.percent, level: w.level }))}
-          size={40}
-          {...(count > 3 ? ringStroke(count, 40) : { stroke: count > 2 ? 4 : 5, gap: 1.5 })}
-          className="size-10"
+          size={36}
+          {...(count > 3
+            ? ringStroke(count, 36)
+            : { stroke: count > 2 ? 3.5 : count > 1 ? 4 : 4.5, gap: count > 2 ? 1.5 : 2 })}
+          track="neutral"
+          className="size-9"
         />
         <span className="flex min-w-0 flex-1 flex-col gap-px">
           {[...card.windows].reverse().map((w) => {

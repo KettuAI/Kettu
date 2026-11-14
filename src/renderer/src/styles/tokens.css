@@ -449,6 +449,8 @@
   --shell-tray: #f4f4f4;
   /* A card a shade from the page toward the surface: white in light, #1b1b1e in dark. */
   --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  /* An inset panel in a menu card, sunk below the card in both themes. */
+  --menu-well: var(--bg-subtle);
   --shell-line-soft: rgb(0 0 0 / 4%);
   --shell-strong: #000000;
   --shell-ink: rgb(0 0 0 / 88%);
@@ -866,6 +868,7 @@
     /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
     --shell-tray: #1d1d20;
     --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+    --menu-well: var(--bg-app);
     --shell-line-soft: rgb(255 255 255 / 5%);
     --shell-strong: #ffffff;
     --shell-ink: rgb(255 255 255 / 90%);
@@ -1249,6 +1252,7 @@
   /* shell: the window frame, AffectUI's App Shell: its rows, cards, lines and shadows. */
   --shell-tray: #1d1d20;
   --shell-card: color-mix(in srgb, var(--bg-surface) 57.5%, var(--bg-app));
+  --menu-well: var(--bg-app);
   --shell-line-soft: rgb(255 255 255 / 5%);
   --shell-strong: #ffffff;
   --shell-ink: rgb(255 255 255 / 90%);

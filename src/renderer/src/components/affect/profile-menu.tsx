@@ -15,6 +15,10 @@ export type ProfileMenuItem = {
   icon?: ReactNode;
   /** Small pill on the right, e.g. "New" */
   badge?: string;
+  /** Plain gray words at the end, e.g. "Offline" */
+  note?: string;
+  /** "quiet" draws the row a step lighter; "away" grays its label and fades its icon */
+  tone?: "quiet" | "away";
   onSelect?: () => void;
   /** A keyboard shortcut at the end, e.g. "⌘," */
   shortcut?: string;
@@ -51,6 +55,10 @@ export type ProfileMenuProps = {
   footer?: ReactNode;
   /** Words the menu says to screen readers, for translation */
   labels?: { menu?: string };
+  /** Makes the header a button, e.g. to edit the profile, with an arrow that shows on hover */
+  onUser?: () => void;
+  /** The header button's name and tooltip */
+  userLabel?: string;
   className?: string;
 };
 
@@ -66,6 +74,8 @@ export function ProfileMenu({
   setup,
   footer,
   labels,
+  onUser,
+  userLabel,
   className,
 }: ProfileMenuProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -157,6 +167,7 @@ export function ProfileMenu({
             aria-haspopup={opens ? "menu" : undefined}
             aria-expanded={opens ? sub?.id === item.id : undefined}
             data-sub={opens ? item.id : undefined}
+            data-tone={item.tone}
             className="ui-pmc__item"
             onClick={(e) => (opens ? (sub?.id === item.id ? setSub(null) : openSub(item.id, e.currentTarget)) : item.onSelect?.())}
             onPointerEnter={(e) => {
@@ -175,6 +186,11 @@ export function ProfileMenu({
                 {item.badge}
               </span>
             )}
+            {item.note && (
+              <span className="ui-pmc__note" dir="auto">
+                {item.note}
+              </span>
+            )}
             {item.shortcut && <kbd className="ui-pmc__kbd">{item.shortcut}</kbd>}
             {opens ? <ChevronIcon /> : item.checked ? <CheckIcon /> : end && <span className="ui-pmc__end" aria-hidden="true" />}
           </button>
@@ -183,6 +199,24 @@ export function ProfileMenu({
     );
   };
 
+  const who = (
+    <>
+      <span className="ui-pmc__avatar" onErrorCapture={() => setBroken(true)}>
+        {avatar && !broken ? avatar : <DefaultAvatar />}
+      </span>
+      <span className="ui-pmc__who">
+        {shownName && (
+          <span className="ui-pmc__name" dir="auto" title={onUser ? undefined : shownName}>
+            {shownName}
+          </span>
+        )}
+        <span className="ui-pmc__email" dir="auto" title={onUser ? undefined : email}>
+          {email}
+        </span>
+      </span>
+    </>
+  );
+
   return (
     <>
       <style href="ui-profile-menu-clean" precedence="default">
@@ -190,20 +224,15 @@ export function ProfileMenu({
       </style>
       <section ref={rootRef} className={["ui-pmc", className].filter(Boolean).join(" ")} data-filled={filled || undefined}>
         <div className="ui-pmc__card">
-        <header className="ui-pmc__user">
-          <span className="ui-pmc__avatar" onErrorCapture={() => setBroken(true)}>
-            {avatar && !broken ? avatar : <DefaultAvatar />}
-          </span>
-          <span className="ui-pmc__who">
-            {shownName && (
-              <span className="ui-pmc__name" dir="auto" title={shownName}>
-                {shownName}
-              </span>
-            )}
-            <span className="ui-pmc__email" dir="auto" title={email}>
-              {email}
-            </span>
-          </span>
+        <header className="ui-pmc__user" data-button={onUser ? "" : undefined}>
+          {onUser ? (
+            <button type="button" className="ui-pmc__user-button" onClick={onUser} aria-label={userLabel} title={userLabel}>
+              {who}
+              <GoIcon />
+            </button>
+          ) : (
+            who
+          )}
         </header>
 
         <div ref={listRef} className="ui-pmc__items" role="menu" aria-label={labels?.menu ?? "Account"} onKeyDown={onKey}>
@@ -331,6 +360,11 @@ const CheckIcon = () => (
   </svg>
 );
 
+const GoIcon = () => (
+  <svg className="ui-pmc__go" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M8 16 16 8M9 8h7v7" />
+  </svg>
+);
 const ChevronIcon = () => (
   <svg className="ui-pmc__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="m9 6 6 6-6 6" />
@@ -464,6 +498,27 @@ const css = /* css */ `
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The header as a button, e.g. to edit the profile: a hover fill, and an arrow that fades in */
+.ui-pmc__user[data-button] { padding: 4px; }
+.ui-pmc__user-button {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background-color 140ms ease;
+}
+.ui-pmc__user-button:hover, .ui-pmc__user-button:focus-visible { background: var(--ui-pmc-hover); outline: none; transition-duration: 60ms; }
+.ui-pmc__go { flex: none; width: 14px; height: 14px; margin-left: auto; color: var(--ui-pmc-muted); opacity: 0; transition: opacity 140ms ease; }
+.ui-pmc__user-button:is(:hover, :focus-visible) .ui-pmc__go { opacity: 1; }
+.ui-pmc__go * { vector-effect: non-scaling-stroke; }
+.ui-pmc__note { flex: none; font-size: 12px; color: var(--ui-pmc-muted); }
+.ui-pmc__item[data-tone="quiet"] { color: var(--ui-pmc-text); }
+.ui-pmc__item[data-tone="quiet"] .ui-pmc__icon { color: var(--ui-pmc-muted); }
+.ui-pmc__item[data-tone="away"] .ui-pmc__label { color: var(--ui-pmc-muted); }
+.ui-pmc__item[data-tone="away"] .ui-pmc__icon { opacity: 0.55; }
 .ui-pmc__badge {
   flex: none;
   max-width: 50%;
