@@ -6,6 +6,7 @@ import type { BrowserState, BrowserTab } from '@shared/browser'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
@@ -191,25 +192,27 @@ export function TabCountMenu({
         <PaneIcon icon={ArrowDown01Icon} size={12} />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="kp-tablist">
-        <DropdownMenuLabel>{t('tabs.count', { count: state.tabs.length })}</DropdownMenuLabel>
-        {state.tabs.map((tab) => {
-          const address = tab.url ? (addressText(tab.url) ?? tab.url) : null
-          const who =
-            tab.id === state.agentTab ? agentName : tab.released ? t('tabs.released') : null
-          const description = [who, address].filter(Boolean).join(' · ')
-          return (
-            <DropdownMenuItem key={tab.id} onClick={() => onSelect(tab.id)}>
-              <SiteMark url={tab.url} />
-              <span className="kp-tablist__text">
-                <span className="kp-tablist__name">{nameOf(tab)}</span>
-                {description && <span className="kp-tablist__note">{description}</span>}
-              </span>
-              {tab.id === state.selected && (
-                <PaneIcon icon={Tick02Icon} size={14} className="kp-tablist__check" />
-              )}
-            </DropdownMenuItem>
-          )
-        })}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{t('tabs.count', { count: state.tabs.length })}</DropdownMenuLabel>
+          {state.tabs.map((tab) => {
+            const address = tab.url ? (addressText(tab.url) ?? tab.url) : null
+            const who =
+              tab.id === state.agentTab ? agentName : tab.released ? t('tabs.released') : null
+            const description = [who, address].filter(Boolean).join(' · ')
+            return (
+              <DropdownMenuItem key={tab.id} onClick={() => onSelect(tab.id)}>
+                <SiteMark url={tab.url} />
+                <span className="kp-tablist__text">
+                  <span className="kp-tablist__name">{nameOf(tab)}</span>
+                  {description && <span className="kp-tablist__note">{description}</span>}
+                </span>
+                {tab.id === state.selected && (
+                  <PaneIcon icon={Tick02Icon} size={14} className="kp-tablist__check" />
+                )}
+              </DropdownMenuItem>
+            )
+          })}
+        </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   )

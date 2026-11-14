@@ -287,9 +287,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                   <SignInChip
                     url={url}
                     sessionId={sessionId}
-                    hidden={
-                      state.control.kind === 'agent' && state.selected === state.agentTab
-                    }
+                    hidden={state.control.kind === 'agent' && state.selected === state.agentTab}
                   />
                 }
               />

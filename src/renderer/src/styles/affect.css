@@ -1399,7 +1399,7 @@ li[data-row-exit='dust'] > * {
   display: none;
 }
 .kp-btabs[data-collapsed] .kp-btab[data-selected] {
-  flex-shrink: 1;
+  flex-shrink: 0;
   max-width: 168px;
 }
 .kp-btab[data-released] :is(.kp-sitemark, .kp-tab__icon) {
