@@ -169,7 +169,13 @@ import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
-import { REPORT_LIMIT, reportText, type ToolMode, type ToolSession } from './session-tools'
+import {
+  REPORT_LIMIT,
+  reportText,
+  type ToolDelivery,
+  type ToolMode,
+  type ToolSession,
+} from './session-tools'
 import {
   isRanked,
   modeLabel,
@@ -5724,7 +5730,11 @@ export class SessionManager {
    */
   async steer(sessionId: string, itemId: string): Promise<void> {
     this.assertRegistered(sessionId)
-    const live = await this.revive(sessionId)
+    await this.steerItem(await this.revive(sessionId), itemId)
+  }
+
+  /** Steers a queued prompt; false when the turn was ending and the prompt stays first. */
+  private async steerItem(live: Live, itemId: string): Promise<boolean> {
     const item = live.thread.session.queue.find((i) => i.id === itemId)
     if (!item) throw notFound(`No queued prompt ${itemId}`)
     if (!this.deps.agents.status(live.record.agentId).capabilities.steering) {
@@ -5748,7 +5758,7 @@ export class SessionManager {
       this.update(live, { queue: [item, ...queue.filter((i) => i.id !== itemId)] })
       this.persist(live)
       if (canSend(live.thread.session.status)) this.drainQueue(live)
-      return
+      return false
     }
     this.emit(live, [
       {
@@ -5759,6 +5769,7 @@ export class SessionManager {
           content: resolved.shown,
           at: this.now(),
           steered: true,
+          ...(item.from ? { from: item.from } : {}),
           ...(item.device ? { device: item.device } : {}),
         },
       },
@@ -5769,6 +5780,7 @@ export class SessionManager {
     this.update(live, { queue: queue.filter((i) => i.id !== itemId) })
     this.persist(live)
     this.touch(live.id)
+    return true
   }
 
   /**
@@ -5777,9 +5789,16 @@ export class SessionManager {
    */
   async sendNow(sessionId: string, itemId: string): Promise<void> {
     this.assertRegistered(sessionId)
-    const live = await this.revive(sessionId)
+    await this.sendItemNow(await this.revive(sessionId), itemId)
+  }
+
+  /** Send now on a live session; `queued` when the turn was ending and the prompt stays first. */
+  private async sendItemNow(
+    live: Live,
+    itemId: string,
+  ): Promise<'steered' | 'interrupted' | 'queued'> {
     if (this.deps.agents.status(live.record.agentId).capabilities.steering) {
-      return this.steer(sessionId, itemId)
+      return (await this.steerItem(live, itemId)) ? 'steered' : 'queued'
     }
     const { queue } = live.thread.session
     const item = queue.find((i) => i.id === itemId)
@@ -5789,12 +5808,13 @@ export class SessionManager {
     this.persist(live)
     live.sendNext = true
     try {
-      await this.cancel(sessionId)
+      await this.cancel(live.id)
     } catch (error) {
       // The stop did not go out, so the turn's end pauses the queue as before.
       live.sendNext = false
       throw error
     }
+    return 'interrupted'
   }
 
   async resumeQueue(sessionId: string): Promise<void> {
@@ -7565,23 +7585,32 @@ export class SessionManager {
     sessionId: string,
     text: string,
     from: FromSession,
-  ): Promise<'sent' | 'queued'> {
+    now: boolean,
+  ): Promise<ToolDelivery> {
     const content: UserContent[] = [{ type: 'text', text }]
     await this.unarchive(sessionId)
     const live = await this.revive(sessionId)
     const { status, queue, queuePaused } = live.thread.session
     if (canSend(status) && (queue.length === 0 || queuePaused)) {
       this.sendPrompt(live, content, from)
-      return 'sent'
+      return { delivered: 'sent' }
     }
-    if (!canSend(status) && status !== 'running' && status !== 'awaiting_permission') {
-      throw busyError(status)
-    }
+    const working = status === 'running' || status === 'awaiting_permission'
+    if (!canSend(status) && !working) throw busyError(status)
     const item = { id: randomUUID(), content, at: this.now(), from }
     this.update(live, { queue: [...queue, item] })
     this.persist(live)
     this.touch(live.id)
-    return 'queued'
+    if (!now || !working) return { delivered: 'queued' }
+    // Queued first, so a prompt that cannot go in now still goes once the turn ends.
+    try {
+      const delivered = await this.sendItemNow(live, item.id)
+      return delivered === 'queued' ? { delivered, reason: 'its turn was ending' } : { delivered }
+    } catch (error) {
+      const reason = (error as Error).message
+      this.deps.diagnostics.log('warn', `Could not send a session's message now: ${reason}`)
+      return { delivered: 'queued', reason }
+    }
   }
 
   /**

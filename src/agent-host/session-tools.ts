@@ -83,8 +83,11 @@ export interface SessionToolsDeps {
     callerId: string,
     params: { prompt: string; title?: string; agentId?: AgentId; mode?: string; report: boolean },
   ): Promise<string>
-  /** Prompts a session the caller started, or queues the prompt while it works. */
-  send(sessionId: string, text: string, from: FromSession): Promise<'sent' | 'queued'>
+  /**
+   * Prompts a session the caller started, or queues the prompt while it works; with `now`, sends
+   * a queued prompt on at once as Send now does.
+   */
+  send(sessionId: string, text: string, from: FromSession, now: boolean): Promise<ToolDelivery>
   /** The sessions the caller started, for the limits. */
   started(callerId: string): ToolSession[]
   /** The caller's title for a label in another thread, "Untitled session" when it has none. */
@@ -102,6 +105,12 @@ export interface SessionToolsDeps {
   /** The mode the user set for an agent's new sessions in Settings › Agent. */
   startMode(agentId: AgentId): string | undefined
   now?(): number
+}
+
+/** How a message reached a session; `reason` says why one asked to go now was queued instead. */
+export interface ToolDelivery {
+  delivered: 'sent' | 'queued' | 'steered' | 'interrupted'
+  reason?: string
 }
 
 /** The tool's view of a status; a session waiting to sign in reads as failed, which needs the user. */
@@ -226,7 +235,9 @@ export const SESSION_INSTRUCTIONS =
   'read-only mode for a review that must leave the files alone. Archive your own ' +
   'session only when the user asked you to or your work is clearly done. A session you start ' +
   'runs on its own: when a turn you asked it for ends, Kettu sends you a message saying so and ' +
-  'you read its reply with get_session, so never wait for it in a loop. When you took a session ' +
+  'you read its reply with get_session, so never wait for it in a loop. A follow-up waits in its ' +
+  'queue while it works; send_message with now puts it into the running turn, only for a session ' +
+  'that must change course at once. When you took a session ' +
   `over from another agent, ${HISTORY_TOOL} reads the earlier turns it was given only in part; ` +
   'it also reads the turns of a session you started, such as a reply get_session cut short.'
 
@@ -290,6 +301,14 @@ const REPORT: Schema = {
   default: true,
   description:
     'Whether Kettu tells you when this turn ends; false for work whose result you do not need.',
+}
+const NOW: Schema = {
+  type: 'boolean',
+  default: false,
+  description:
+    'Sends it into the running turn, or stops that turn and sends it next where the agent cannot ' +
+    'take it mid-turn. Only when the session must change course at once: it is heading the wrong ' +
+    'way, must stop, or needs a decision now. Ordinary follow-ups wait in its queue.',
 }
 const TIME: Schema = { type: 'string', format: 'date-time' }
 
@@ -465,10 +484,14 @@ export const SESSION_TOOLS: Tool[] = [
     name: 'send_message',
     title: 'Send message',
     description:
-      'Sends a prompt to a session you started, or queues it while that session works. Kettu ' +
-      'tells you when the turn it begins ends.',
-    inputSchema: object({ id: ID, text: TEXT, report: REPORT }, ['id', 'text']),
-    outputSchema: output({ id: ID, delivered: { type: 'string', enum: ['sent', 'queued'] } }),
+      'Sends a prompt to a session you started, or queues it while that session works; with now, ' +
+      'it goes into the running turn instead. Kettu tells you when the turn it begins ends.',
+    inputSchema: object({ id: ID, text: TEXT, report: REPORT, now: NOW }, ['id', 'text']),
+    outputSchema: output({
+      id: ID,
+      delivered: { type: 'string', enum: ['sent', 'queued', 'steered', 'interrupted'] },
+      reason: { type: 'string' },
+    }),
     annotations: { destructiveHint: false, openWorldHint: true },
   },
 ]
@@ -604,6 +627,13 @@ function report(o: Args): boolean {
   return value
 }
 
+function now(o: Args): boolean {
+  const value = o.now
+  if (value === undefined) return false
+  if (typeof value !== 'boolean') throw invalid('now must be true or false.')
+  return value
+}
+
 function titleOf(session: Pick<ToolSession, 'title'>): string {
   return session.title ?? 'Untitled session'
 }
@@ -692,7 +722,7 @@ export class SessionTools {
       case 'start_session':
         return this.start(caller, args(input, ['prompt', 'title', 'agent', 'mode', 'report']))
       case 'send_message':
-        return this.send(caller, args(input, ['id', 'text', 'report']))
+        return this.send(caller, args(input, ['id', 'text', 'report', 'now']))
       case HISTORY_TOOL:
         return this.history(caller, args(input, ['id', 'before_turn', 'limit']))
       default:
@@ -952,20 +982,32 @@ export class SessionTools {
     const session = this.target(caller, id(o, true))
     const value = text(o, 'text')
     const reported = report(o)
+    const urgent = now(o)
     if (session.id === caller.sessionId || !canTarget(session, caller.sessionId)) {
       throw notAllowed()
     }
-    const delivered = await this.deps.send(session.id, value, {
-      sessionId: caller.sessionId,
-      title: this.deps.name(caller.sessionId),
-      ...(reported ? {} : { report: false }),
-    })
-    return result(
-      delivered === 'sent'
-        ? `Sent to "${titleOf(session)}".`
-        : `Queued for "${titleOf(session)}"; it goes when its turn ends.`,
-      { id: session.id, delivered },
+    const { delivered, reason } = await this.deps.send(
+      session.id,
+      value,
+      {
+        sessionId: caller.sessionId,
+        title: this.deps.name(caller.sessionId),
+        ...(reported ? {} : { report: false }),
+      },
+      urgent,
     )
+    const title = titleOf(session)
+    const message =
+      delivered === 'sent'
+        ? `Sent to "${title}".`
+        : delivered === 'steered'
+          ? `Sent into the running turn of "${title}".`
+          : delivered === 'interrupted'
+            ? `Stopped the running turn of "${title}"; your message goes first in its next one.`
+            : reason
+              ? `Could not send it now (${reason}); queued for "${title}", it goes when its turn ends.`
+              : `Queued for "${title}"; it goes when its turn ends.`
+    return result(message, { id: session.id, delivered, ...(reason ? { reason } : {}) })
   }
 }
 
