@@ -171,3 +171,49 @@ describe('where worktrees go', () => {
     }
   })
 })
+
+describe('items from the Kettu Marketplace in a patch', () => {
+  const skill = {
+    id: 'kettu:abcdefgh23',
+    name: 'greeter',
+    description: 'Greets the user.',
+    source: 'kettu',
+    origin: '@amigoer/greeter',
+    version: '1.0.0',
+    agents: 'all',
+    on: true,
+  }
+  const server = {
+    id: 'kettu:abcdefgh23',
+    name: 'memory-notes',
+    title: 'Memory Notes',
+    source: 'kettu',
+    version: '2.1.1',
+    spec: { type: 'stdio', command: 'npx', args: ['-y', 'pkg@2.1.1'], env: [] },
+    agents: 'all',
+    on: true,
+  }
+
+  it('keeps a skill and a server by their listing', () => {
+    expect(validateSettingsPatch({ marketplace: { skills: [skill] } })).toEqual({
+      marketplace: { skills: [skill] },
+    })
+    expect(validateSettingsPatch({ marketplace: { mcp: [server] } })).toEqual({
+      marketplace: { mcp: [server] },
+    })
+  })
+
+  it('refuses an id or origin that names no listing', () => {
+    for (const bad of [
+      { ...skill, id: 'kettu:../x' },
+      { ...skill, id: 'local:abcdefgh23' },
+      { ...skill, origin: 'https://example.com/greeter' },
+      { ...skill, origin: '@amigoer/../x' },
+    ]) {
+      expect(() => validateSettingsPatch({ marketplace: { skills: [bad] } })).toThrow()
+    }
+    expect(() =>
+      validateSettingsPatch({ marketplace: { mcp: [{ ...server, id: 'kettu:ABC' }] } }),
+    ).toThrow()
+  })
+})

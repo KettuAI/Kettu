@@ -8,7 +8,8 @@ import { busyKey } from '@renderer/stores/marketplace'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { count } from '@renderer/lib/format'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { pluginInstalls } from './model'
+import { listingIdOf } from '@shared/market-community'
+import { pluginInstalls, updateFor } from './model'
 
 /** An agent's name on the host the page shows. */
 export function useAgentName(): (agentId: AgentId) => string {
@@ -98,4 +99,21 @@ export function useConnectionText(): (connection: MarketConnection | null) => st
     if (connection.state === 'error') return t('connection.error', { message: connection.message })
     return t('connection.disconnected')
   }
+}
+
+/**
+ * For an item installed from the Kettu Marketplace, by its kept id: the newer version its listing
+ * has, or that it was taken down; null for any other item, or one that is current.
+ */
+export function useCommunityLine(id: string, installed: string | null): string | null {
+  const { t } = useTranslation('marketplace')
+  const { useMarketplaceStore } = useHostScope()
+  const listing = listingIdOf(id)
+  const standing = useMarketplaceStore((s) =>
+    listing ? s.communityInstalled?.standings[listing] : undefined,
+  )
+  if (!standing) return null
+  if (standing.state === 'taken-down') return t('community.takenDownLine')
+  const update = updateFor(standing, installed)
+  return update ? t('community.updateLine', { version: update }) : null
 }

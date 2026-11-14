@@ -603,5 +603,19 @@
     "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",
     "handleTaken": "@{{handle}} 已经有人用了，换一个发布者名。",
     "publisherFailed": "没能设置发布者名：{{reason}}"
+  },
+  "marketCommunity": {
+    "signedOut": "登录 Kettu 账号并开着 Kettu 的服务，才能从 Kettu 的 Marketplace 安装。",
+    "takenDown": "它已从 Kettu 的 Marketplace 下架。",
+    "gone": "Kettu 的 Marketplace 里已经没有它了。",
+    "withdrawn": "发布者撤回了这个版本。再试一次会拿到当前版本。",
+    "failed": "连不上 Kettu 的 Marketplace：{{reason}}",
+    "mismatch": "{{path}} 和 Kettu 的 Marketplace 给的校验值对不上，所以什么都没装。",
+    "badPath": "Kettu 的 Marketplace 给了一个 Kettu 不会写入的文件 {{path}}，所以什么都没装。",
+    "tooLarge": "这个版本超过了一个版本的大小上限，所以什么都没装。",
+    "otherKind": "这一项是另一种东西。",
+    "otherHarness": "这个插件是给另一种 Agent 的。",
+    "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
+    "nameTaken": "已经装了 Kettu 的 Marketplace 里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。"
   }
 }

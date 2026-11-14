@@ -30,6 +30,7 @@ import { currentLocale, i18n } from '@renderer/lib/i18n'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installServer, setServerOn } from './actions'
+import { CommunityListingPage } from './community'
 import { ConnectButton, ConnectionControls } from './connect'
 import { AgentsDialog, KeysDialog, UninstallDialog } from './dialogs'
 import {
@@ -76,6 +77,7 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
     return <PluginListing harness={ref.harness} id={ref.id} tab={tab} back={back} />
   }
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
+  if (ref?.kind === 'community') return <CommunityListingPage id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'mcp') return <McpListing id={ref.id} tab={tab} back={back} />
   return (
     <ListingFrame back={back}>
@@ -193,7 +195,7 @@ function RelatedRow({ server, tab }: { server: CatalogServer; tab: MarketplaceTa
 }
 
 /** Install, at once or through the install form when the server asks for values. */
-function InstallButton({ server }: { server: CatalogServer }) {
+export function InstallButton({ server }: { server: CatalogServer }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const [open, setOpen] = useState(false)
@@ -231,7 +233,7 @@ function InstallButton({ server }: { server: CatalogServer }) {
 }
 
 /** An installed server's controls: Installed, its switch and the menu of what else it takes. */
-function KeptControls({
+export function KeptControls({
   server,
   onUninstalled,
 }: {
@@ -352,7 +354,7 @@ function Facts({ listing, server }: { listing: Listing; server: MarketServer | n
 }
 
 /** What the server runs or connects to, how it signs in, and each value it is given or asks for. */
-function Runs({
+export function Runs({
   spec,
   serverId,
   service,

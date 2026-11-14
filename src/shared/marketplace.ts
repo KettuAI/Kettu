@@ -63,8 +63,8 @@ export interface MarketServer {
   id: string // the registry's name, such as io.github.github/github-mcp-server, or manual:<uuid>
   name: string // what agents call it: lowercase letters, digits, - and _, unique among Kettu's
   title: string
-  source: 'registry' | 'manual'
-  version: string | null // the registry's version; null when added by hand
+  source: 'registry' | 'manual' | 'kettu' // kettu: the Kettu Marketplace, by id kettu:<listing>
+  version: string | null // the registry's or the listing's version; null when added by hand
   spec: McpSpec
   agents: 'all' | AgentId[] // the agents that get it; 'all' takes in agents added later
   on: boolean
@@ -140,12 +140,12 @@ export const MARKET_NAME = /^[a-z0-9][a-z0-9_-]{0,47}$/
 
 /** A skill Kettu keeps, stored in the host settings' `marketplace.skills`; its files live on the host. */
 export interface MarketSkill {
-  id: string // anthropics/skills:pdf, github:<owner>/<repo>/<path>, or local:<uuid>
+  id: string // anthropics/skills:pdf, github:<owner>/<repo>/<path>, local:<uuid> or kettu:<listing>
   name: string // the skill's own name, from its SKILL.md
   description: string
-  source: 'catalog' | 'github' | 'local'
-  origin: string // the repository URL, or the folder it was copied from
-  version: string | null // the commit it was copied at; null for a local folder
+  source: 'catalog' | 'github' | 'local' | 'kettu'
+  origin: string // the repository URL, the folder it was copied from, or @<publisher>/<slug>
+  version: string | null // the commit or the listing's version it was copied at; null for a folder
   agents: 'all' | AgentId[]
   on: boolean
 }
@@ -167,6 +167,7 @@ export type SkillSource =
   | { kind: 'catalog'; id: string }
   | { kind: 'github'; url: string } // a repository or one folder in it, on github.com
   | { kind: 'local'; path: string } // a folder on the host with a SKILL.md
+  | { kind: 'kettu'; id: string } // a listing of the Kettu Marketplace, at its current version
 
 /** A skill an agent has of its own, read only. */
 export interface AgentOwnSkill {

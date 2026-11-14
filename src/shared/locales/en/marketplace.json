@@ -42,7 +42,9 @@
     "from": "From {{publisher}}",
     "plugins": "Plugins",
     "skills": "Skills",
-    "mcp": "MCP servers"
+    "mcp": "MCP servers",
+    "community": "Community",
+    "yours": "Yours"
   },
   "row": {
     "install": "Install",
@@ -99,7 +101,11 @@
     "skillFailed": "Couldn’t add the skill: {{error}}",
     "connected": "Connected to {{name}}; every chosen agent can use it",
     "disconnected": "Disconnected from {{name}}",
-    "disconnectFailed": "Couldn’t disconnect {{name}}: {{error}}"
+    "disconnectFailed": "Couldn’t disconnect {{name}}: {{error}}",
+    "updated": "{{name}} updated to {{version}}",
+    "updateFailed": "Couldn’t update {{name}}: {{error}}",
+    "reported": "Report sent to the Kettu Marketplace",
+    "listingFailed": "Couldn’t read the listing: {{error}}"
   },
   "listing": {
     "back": "Marketplace",
@@ -314,7 +320,8 @@
     "agentPlugins": "Couldn’t read {{agent}}’s plugins: {{error}}",
     "skills": "Couldn’t read the skills catalog, so it may be out of date: {{error}}",
     "catalog": "Couldn’t reach the MCP Registry: {{error}}",
-    "search": "Couldn’t search the MCP Registry: {{error}}"
+    "search": "Couldn’t search the MCP Registry: {{error}}",
+    "community": "Couldn’t read the Kettu Marketplace: {{error}}"
   },
   "empty": {
     "pluginsTitle": "No plugins to show",
@@ -406,5 +413,54 @@
     "reconnect": "Reconnect",
     "disconnect": "Disconnect",
     "remove": "Remove…"
+  },
+  "community": {
+    "skillNote": "Kettu downloads it from the Kettu Marketplace, checks every file, keeps it on this computer and hands it to these agents when a session starts.",
+    "pluginNote": "Kettu downloads it from the Kettu Marketplace and checks every file, then {{harness}} installs it into the agent’s configuration.",
+    "signedOut": "Sign in to Kettu to see what the community published.",
+    "servicesOff": "Turn on Kettu’s services to see what the community published.",
+    "signIn": "Sign in",
+    "openAccount": "Account settings",
+    "readFailed": "Couldn’t read this listing",
+    "gone": "This is no longer in the Kettu Marketplace.",
+    "goneTitle": "No longer listed",
+    "goneKept": "{{name}} is no longer in the Kettu Marketplace. What you installed stays, without updates.",
+    "takenDown": "This was taken down from the Kettu Marketplace.",
+    "takenDownTitle": "Taken down",
+    "takenDownKept": "{{name}} was taken down from the Kettu Marketplace. What you installed stays until you remove it, without updates.",
+    "byYou": "{{handle}} · you",
+    "trust": "Community",
+    "source": "Kettu Marketplace",
+    "onlyMe": "Only me",
+    "cannotRun": "Kettu can’t run this MCP server: it names no package or https remote that Kettu runs.",
+    "bundle": "Kettu doesn’t install MCP bundles (.mcpb) yet, so this server can’t be installed here.",
+    "pluginFor": "Plugin for {{harness}}",
+    "kinds": {
+      "mcp": "MCP server",
+      "plugin": "Plugin",
+      "skill": "Skill"
+    },
+    "side": {
+      "trust": "Trust level",
+      "kind": "Kind",
+      "name": "Listing"
+    },
+    "adds": {
+      "skills": "Skills",
+      "commands": "Commands",
+      "agents": "Subagents",
+      "hooks": "Hooks",
+      "servers": "MCP servers"
+    },
+    "report": "Report a problem",
+    "reportTitle": "Report {{name}}",
+    "reportDescription": "Tell the Kettu Marketplace what’s wrong with it. Only your message goes, with your account.",
+    "reportLabel": "What’s wrong",
+    "reportPlaceholder": "It does more than it says, it doesn’t work, it copies someone else’s…",
+    "reportSend": "Send report",
+    "update": "Update to {{version}}",
+    "updating": "Updating",
+    "updateLine": "{{version}} available",
+    "takenDownLine": "Taken down"
   }
 }

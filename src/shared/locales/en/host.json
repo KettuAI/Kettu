@@ -606,5 +606,19 @@
     "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
     "handleTaken": "@{{handle}} is taken. Choose another publisher name.",
     "publisherFailed": "Could not set the publisher name: {{reason}}"
+  },
+  "marketCommunity": {
+    "signedOut": "Sign in to a Kettu account, with Kettu’s services on, to install from the Kettu Marketplace.",
+    "takenDown": "This was taken down from the Kettu Marketplace.",
+    "gone": "This is no longer in the Kettu Marketplace.",
+    "withdrawn": "Its publisher withdrew this version. Try again to get the current one.",
+    "failed": "Couldn’t reach the Kettu Marketplace: {{reason}}",
+    "mismatch": "{{path}} didn’t match the checksum the Kettu Marketplace gave for it, so nothing was installed.",
+    "badPath": "The Kettu Marketplace named a file Kettu won’t write, {{path}}, so nothing was installed.",
+    "tooLarge": "This version is larger than a version may be, so nothing was installed.",
+    "otherKind": "This listing is another kind of item.",
+    "otherHarness": "This plugin is for another agent.",
+    "noManifest": "The plugin has no {{file}} with a name, so it can’t be installed.",
+    "nameTaken": "Another plugin named {{name}} from the Kettu Marketplace is installed ({{other}}). Uninstall it first."
   }
 }

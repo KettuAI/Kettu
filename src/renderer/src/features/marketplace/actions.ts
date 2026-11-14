@@ -16,6 +16,8 @@ import type {
   SkillSource,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
+import { listingIdOf } from '@shared/market-community'
+import type { PublishHarness } from '@shared/market-publish'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale, i18n } from '@renderer/lib/i18n'
@@ -36,6 +38,16 @@ const t = i18n.getFixedT(null, 'marketplace')
 
 /** Which agents a server goes to. */
 export type AgentChoice = MarketServer['agents']
+
+/** Where a catalog server comes from: the Kettu Marketplace by its id, else the registry. */
+function sourceOf(server: CatalogServer): MarketServer['source'] {
+  return listingIdOf(server.id) ? 'kettu' : 'registry'
+}
+
+/** The name agents call a server by, from its registry name, or its title for a listing's. */
+function nameOf(server: CatalogServer, kept: MarketServer[]): string {
+  return serverName(listingIdOf(server.id) ? server.title : server.id, kept)
+}
 
 export function keptServers(scope: HostScope): MarketServer[] {
   return scope.useSettingsStore.getState().settings.marketplace.mcp
@@ -115,9 +127,9 @@ export async function installServer(
     const kept = keptServers(scope).filter((s) => s.id !== server.id)
     const entry: MarketServer = {
       id: server.id,
-      name: serverName(server.id, kept),
+      name: nameOf(server, kept),
       title: server.title,
-      source: 'registry',
+      source: sourceOf(server),
       version: server.version,
       spec: server.spec,
       agents,
@@ -555,9 +567,9 @@ export async function connectServer(
         ...others,
         {
           id: serverId,
-          name: serverName(serverId, others),
+          name: nameOf(server, others),
           title: server.title,
-          source: 'registry',
+          source: sourceOf(server),
           version: server.version,
           spec: server.spec,
           agents,
@@ -643,4 +655,142 @@ export async function disconnectServer(scope: HostScope, server: MarketServer): 
   } catch (e) {
     warn(t('toast.disconnectFailed', { name: server.title, error: errorMessage(e) }))
   }
+}
+
+/** Reads again where what came from the Kettu Marketplace stands, after it changed. */
+function communityChanged(scope: HostScope): void {
+  void scope.useMarketplaceStore.getState().loadCommunityInstalled(true)
+}
+
+/**
+ * Installs, or updates, a plugin of the Kettu Marketplace in one agent: the host downloads and
+ * checks its files, then the agent's harness installs it. True once installed.
+ */
+export async function installCommunityPlugin(
+  scope: HostScope,
+  listing: { id: string; name: string; harness: PublishHarness },
+  agentId: AgentId,
+  pluginScope: PluginScope,
+  projectPath: string | null,
+  update = false,
+): Promise<boolean> {
+  const busy = busyKey('community', listing.id)
+  const market = scope.useMarketplaceStore
+  if (market.getState().busy.includes(busy)) return false
+  setBusy(market, busy, true)
+  try {
+    const installed = await scope.request('market.installCommunityPlugin', {
+      id: listing.id,
+      agentId,
+      scope: pluginScope,
+      ...(projectPath ? { projectPath } : {}),
+    })
+    updatePlugins(market, (p) => ({
+      ...p,
+      installed: [...p.installed.filter((x) => !samePlace(x, installed)), installed],
+    }))
+    communityChanged(scope)
+    toast(
+      update
+        ? t('toast.updated', { name: listing.name, version: installed.version ?? '' })
+        : t('toast.pluginReady', { name: listing.name, agent: agentName(agentId, scope.hostId) }),
+      undefined,
+      { tone: 'success' },
+    )
+    return true
+  } catch (e) {
+    warnRetry(
+      t(update ? 'toast.updateFailed' : 'toast.installFailed', {
+        name: listing.name,
+        error: errorMessage(e),
+      }),
+      () => void installCommunityPlugin(scope, listing, agentId, pluginScope, projectPath, update),
+    )
+    return false
+  } finally {
+    setBusy(market, busy, false)
+  }
+}
+
+/** Updates a plugin of the Kettu Marketplace in every agent and place that has it. */
+export async function updateCommunityPlugin(
+  scope: HostScope,
+  listing: { id: string; name: string; harness: PublishHarness },
+  installs: InstalledPlugin[],
+): Promise<void> {
+  for (const plugin of installs) {
+    const done = await installCommunityPlugin(
+      scope,
+      listing,
+      plugin.agentId,
+      plugin.scope,
+      plugin.projectPath,
+      true,
+    )
+    if (!done) return
+  }
+}
+
+/** Updates a skill from the Kettu Marketplace to its listing's version, keeping its choices. */
+export async function updateCommunitySkill(scope: HostScope, kept: MarketSkill): Promise<void> {
+  const listing = listingIdOf(kept.id)
+  if (!listing) return
+  const busy = busyKey('community', listing)
+  const market = scope.useMarketplaceStore
+  if (market.getState().busy.includes(busy)) return
+  setBusy(market, busy, true)
+  try {
+    const skill = await scope.request('market.addSkill', { source: { kind: 'kettu', id: listing } })
+    await saveSkills(
+      scope,
+      keptSkills(scope).map((s) =>
+        s.id === kept.id ? { ...skill, agents: s.agents, on: s.on } : s,
+      ),
+    )
+    communityChanged(scope)
+    toast(t('toast.updated', { name: skill.name, version: skill.version ?? '' }), undefined, {
+      tone: 'success',
+    })
+  } catch (e) {
+    warnRetry(
+      t('toast.updateFailed', { name: kept.name, error: errorMessage(e) }),
+      () => void updateCommunitySkill(scope, kept),
+    )
+  } finally {
+    setBusy(market, busy, false)
+  }
+}
+
+/** Updates a server from the Kettu Marketplace to what its listing now runs, keeping its choices. */
+export async function updateCommunityServer(
+  scope: HostScope,
+  kept: MarketServer,
+  server: CatalogServer,
+): Promise<void> {
+  try {
+    await save(
+      scope,
+      keptServers(scope).map((s) =>
+        s.id === kept.id
+          ? { ...s, title: server.title, version: server.version, spec: server.spec }
+          : s,
+      ),
+    )
+    communityChanged(scope)
+    toast(t('toast.updated', { name: server.title, version: server.version }), undefined, {
+      tone: 'success',
+    })
+  } catch (e) {
+    warn(t('toast.updateFailed', { name: kept.title, error: errorMessage(e) }))
+  }
+}
+
+/** Sends a short report on a listing to the Kettu Marketplace. Throws when it could not. */
+export async function reportCommunity(
+  scope: HostScope,
+  id: string,
+  message: string,
+): Promise<void> {
+  await scope.request('market.reportCommunity', { id, message })
+  toast(t('toast.reported'), undefined, { tone: 'success' })
 }
