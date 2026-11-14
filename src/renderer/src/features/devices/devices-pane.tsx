@@ -373,7 +373,11 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
             {recording ? (
               <>
                 <Elapsed since={recording.since} />
-                <PanelButton label={t('actions.stopRecording')} onClick={stopRecording}>
+                <PanelButton
+                  label={t('actions.stopRecording')}
+                  className="kp-tool--stop"
+                  onClick={stopRecording}
+                >
                   <PaneIcon icon={StopIcon} />
                 </PanelButton>
               </>

@@ -76,7 +76,7 @@ export function TaskDetail({
       {notes.length > 0 && <p className="kb-detail__note">{notes.join(' ')}</p>}
       <div className="kb-detail__acts">
         {live && onStop && (
-          <Button variant="outline" size="xs" disabled={stopping} onClick={onStop}>
+          <Button variant="destructive-tint" size="xs" disabled={stopping} onClick={onStop}>
             <PaneIcon icon={StopIcon} size={12} />
             {t('actions.stop')}
           </Button>
