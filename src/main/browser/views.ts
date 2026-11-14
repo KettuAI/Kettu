@@ -1139,7 +1139,8 @@ export class BrowserViews {
     })
     this.silenceDialogs(tab.id, contents)
     contents.once('destroyed', () => {
-      if (tab.view?.webContents !== contents) return
+      // The view drops its contents once they are destroyed, so it is compared itself.
+      if (tab.view !== view) return
       const window = this.deps.window()
       const attached = tab.frame ?? tab.view
       if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
