@@ -1,29 +1,28 @@
 import { create } from 'zustand'
-import type { AgentId } from '@shared/agents'
-import { CONTROL_WAIT_MS, SurfaceControls, type ActiveControl } from '@shared/control'
+import { IDLE_CONTROL, type ActiveControl } from '@shared/control'
 import type { PortConnectionState } from '@shared/port-rpc'
 import type { TerminalCommand, TerminalEvent, TerminalInfo } from '@shared/terminal-host'
 import { emitAppEvent } from '@renderer/app/events'
-import { errorMessage, host, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
+import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
-import { useSessionsStore } from '@renderer/stores/sessions'
-import { newSessionPanel, panelSession, toggleTerminal } from '@renderer/stores/view'
+import {
+  newSessionPanel,
+  panelSession,
+  shownLayoutSessions,
+  toggleTerminal,
+  useViewStore,
+} from '@renderer/stores/view'
 
 // The terminals the renderer knows, this computer's and other hosts' alike, each in the side panel
 // of its session or of its project's New session. Output goes straight to the xterm.js instances
 // through `sinks`, never through this store, so a flood of output re-renders nothing.
 
-/** The agent that started a terminal, and the session it started it from. */
-export interface TerminalOwner {
-  agentId: AgentId
-  sessionId: string | null
-}
+export type { TerminalOwner } from '@shared/terminal-host'
 
 export interface TerminalState extends TerminalInfo {
   activity: boolean // printed while its tab was not shown
   stale: boolean // the terminal host restarted without it; its output stays, with Restart
   name: string | null // the user's name for the tab; null follows the process title
-  owner: TerminalOwner | null // the agent that started it
   localUrl: string | null // the last local address with a port it printed
 }
 
@@ -40,7 +39,8 @@ interface TerminalsStore {
   focusing: string | null
   connection: PortConnectionState
   errors: Record<string, string> // panel -> its last failure, until a terminal starts there
-  // Who has each terminal an agent's running turn uses: the agent, or the user who took it over.
+  // Who has each terminal an agent's running turn uses, as its host says: the agent, or the user
+  // who took it over.
   controls: Record<string, ActiveControl>
 }
 
@@ -56,63 +56,26 @@ export const useTerminalsStore = create<TerminalsStore>()(() => ({
   controls: {},
 }))
 
-// A terminal an agent started is the agent's while the turn that started it runs: the user's
-// typing is held back, Ctrl+C aside, until they take it over, and they can hand it back.
-const controls = new SurfaceControls({
-  changed: (id, state) =>
-    useTerminalsStore.setState((s) => {
-      const next = { ...s.controls }
-      if (state.kind === 'idle') delete next[id]
-      else next[id] = state
-      return { controls: next }
-    }),
-  handedBack: (id, durationMs) => {
-    const t = useTerminalsStore.getState().byId[id]
-    const sessionId = t?.owner?.sessionId ?? t?.sessionId
-    if (!sessionId) return
-    void host('terminal.handedBack', { sessionId, durationMs: Math.round(durationMs) }).catch(
-      (error: unknown) => console.warn('Could not note the hand back', error),
-    )
-  },
-})
-
-/** Whether a session's turn runs: from its prompt until it ends, waiting on the user included. */
-function turnRuns(sessionId: string): boolean {
-  const status = useSessionsStore.getState().byId[sessionId]?.status
-  return status === 'running' || status === 'awaiting_permission'
-}
-
-/** An agent started the terminal in its running turn, which uses it until the turn ends. */
-function agentUses(id: string, owner: TerminalOwner): void {
-  if (!owner.sessionId || !turnRuns(owner.sessionId)) return
-  void controls.begin(id, { deadline: Date.now() + CONTROL_WAIT_MS }).then(
-    (end) => end(),
-    () => undefined,
-  )
-}
+// A terminal an agent started is the agent's while its turn runs: the user's typing is held back,
+// Ctrl+C aside, until they take it over. Its host keeps who has it, for every window and device.
 
 /** Whether the user's typing into the terminal is held back now. */
 export function holdsTerminalInput(id: string): boolean {
-  return controls.holdsInput(id)
+  return useTerminalsStore.getState().controls[id]?.kind === 'agent'
 }
 
 /** The user's Take over: the terminal is theirs until they hand it back or the turn ends. */
 export function takeOverTerminal(id: string): void {
-  controls.takeOver(id)
+  void terminals('terminals.takeOver', { id }).catch((error: unknown) =>
+    setError(panelsOf([id]), error),
+  )
 }
 
 /** The user's Hand back: the agent's turn has the terminal again. */
 export function handBackTerminal(id: string): void {
-  controls.handBack(id)
-}
-
-/** The turns that ended no longer use the terminals their agents started. */
-function endTerminalTurns(ended: (sessionId: string) => boolean): void {
-  const { byId } = useTerminalsStore.getState()
-  for (const id of controls.keys()) {
-    const sessionId = byId[id]?.owner?.sessionId
-    if (!sessionId || ended(sessionId)) controls.turnEnded(id)
-  }
+  void terminals('terminals.handBack', { id }).catch((error: unknown) =>
+    setError(panelsOf([id]), error),
+  )
 }
 
 /** Records a failure in the side panels it happened in, or clears theirs with null. */
@@ -193,10 +156,15 @@ export function terminalsOf(
   )
 }
 
-/** Adds or updates a terminal; `owner` is given only by the call that started it. */
-function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
-  // A host before terminals had sessions sends none: its terminals go to New session.
-  info = { ...info, sessionId: info.sessionId ?? null }
+/** Adds or updates a terminal as its host describes it. */
+function upsert(info: TerminalInfo): void {
+  // A host before terminals had sessions, owners or control sends none of them.
+  info = {
+    ...info,
+    sessionId: info.sessionId ?? null,
+    owner: info.owner ?? null,
+    control: info.control ?? IDLE_CONTROL,
+  }
   const panel = terminalPanel(info)
   const known = info.id in useTerminalsStore.getState().byId
   useTerminalsStore.setState((s) => {
@@ -209,14 +177,15 @@ function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
           activity: previous?.activity ?? false,
           stale: false,
           name: previous?.name ?? null,
-          owner: owner === undefined ? (previous?.owner ?? null) : owner,
           localUrl: previous?.localUrl ?? null,
         },
       },
       active: s.active[panel] ? s.active : { ...s.active, [panel]: info.id },
+      controls: withControl(s.controls, info.id, info.control),
     }
   })
   if (!known && showOnArrival.delete(panel)) showTerminal(panel, info.id)
+  else if (!known && info.owner) agentTerminalArrived(panel, info.id, info.owner.sessionId)
   const signIn = signIns.get(info.id)
   if (signIn) {
     if (info.busy) signIn.sawBusy = true
@@ -225,6 +194,32 @@ function upsert(info: TerminalInfo, owner?: TerminalOwner | null): void {
       emitAppEvent({ kind: 'sign-in-finished', agentId: signIn.agentId, hostId: signIn.hostId })
     }
   }
+}
+
+function withControl(
+  controls: Record<string, ActiveControl>,
+  id: string,
+  control: TerminalInfo['control'],
+): Record<string, ActiveControl> {
+  if (control.kind === 'idle') {
+    if (!(id in controls)) return controls
+    const next = { ...controls }
+    delete next[id]
+    return next
+  }
+  return controls[id] === control ? controls : { ...controls, [id]: control }
+}
+
+/**
+ * An agent's new terminal: in a session on screen the pane opens on its tab, without taking the
+ * keyboard; elsewhere it only joins the tabs.
+ */
+function agentTerminalArrived(panel: string, id: string, sessionId: string): void {
+  if (!shownLayoutSessions(useViewStore.getState()).includes(sessionId)) return
+  useTerminalsStore.setState((s) =>
+    s.split[panel] === id ? s : { active: { ...s.active, [panel]: id } },
+  )
+  toggleTerminal(panel, true)
 }
 
 /**
@@ -303,7 +298,6 @@ export function forgetTerminal(id: string): void {
   replays.delete(id)
   signIns.delete(id)
   urlTails.delete(id)
-  controls.forget(id)
   const known = useTerminalsStore.getState().byId[id]
   const removedFrom = known ? terminalPanel(known) : null
   useTerminalsStore.setState((s) => {
@@ -312,6 +306,7 @@ export function forgetTerminal(id: string): void {
     const panel = terminalPanel(gone)
     const byId = { ...s.byId }
     delete byId[id]
+    const controls = withControl(s.controls, id, IDLE_CONTROL)
     const order = { ...s.order }
     const kept = order[panel]?.filter((other) => other !== id)
     if (kept?.length) order[panel] = kept
@@ -321,14 +316,14 @@ export function forgetTerminal(id: string): void {
     // Either side going ends the split; the one that stays shows alone.
     if (right === id || (right && active[panel] === id)) {
       if (right !== id) active[panel] = right
-      return { byId, active, order, ...unsplit(s, panel) }
+      return { byId, active, order, controls, ...unsplit(s, panel) }
     }
     if (active[panel] === id) {
       const next = terminalsOf(byId, panel, order[panel]).at(-1)
       if (next) active[panel] = next.id
       else delete active[panel]
     }
-    return { byId, active, order }
+    return { byId, active, order, controls }
   })
   if (!removedFrom || createInFlight(removedFrom)) return
   if (terminalsOf(useTerminalsStore.getState().byId, removedFrom).length === 0) {
@@ -414,11 +409,6 @@ export function takeTerminalEvent(event: TerminalEvent): void {
 }
 
 export function initTerminals(): void {
-  // A turn that ends, however it ends, hands back the terminals it used.
-  useSessionsStore.subscribe((state, previous) => {
-    if (state.byId === previous.byId || controls.keys().length === 0) return
-    endTerminalTurns((sessionId) => !turnRuns(sessionId))
-  })
   const api = window.kettu.terminals
   api.onEvent(takeTerminalEvent)
   api.onConnection((connection) => {
@@ -449,8 +439,6 @@ export async function loadTerminals(projectPath: string, panel?: string): Promis
 
 export interface CreateTerminalOptions extends Partial<TerminalCommand> {
   signInAgent?: string
-  /** The agent starting it, which uses it until the user types into it. */
-  owner?: TerminalOwner
 }
 
 type Size = { cols: number; rows: number }
@@ -499,8 +487,7 @@ async function startTerminal(
         sawBusy: false,
       })
     }
-    upsert(info, options?.owner ?? null)
-    if (options?.owner) agentUses(info.id, options.owner)
+    upsert(info)
     return info
   } catch (error) {
     setError([panel], error)
@@ -652,10 +639,9 @@ export async function restartTerminal(id: string): Promise<void> {
     const info = await terminals('terminals.restart', { id })
     // A new shell the user started: no agent's, with none of the old one's output.
     urlTails.delete(id)
-    controls.forget(id)
     useTerminalsStore.setState((s) => {
       const t = s.byId[id]
-      return t ? { byId: { ...s.byId, [id]: { ...t, owner: null, localUrl: null } } } : s
+      return t ? { byId: { ...s.byId, [id]: { ...t, localUrl: null } } } : s
     })
     upsert(info)
   } catch (error) {

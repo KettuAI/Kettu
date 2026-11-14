@@ -4,6 +4,7 @@
 // and so are its direct connections.
 
 import type { DeviceCall } from '@shared/device-agent'
+import type { TerminalCall } from '@shared/terminal-agent'
 import path from 'node:path'
 import type {
   AdminAnswer,
@@ -236,7 +237,26 @@ export class Hosts {
       shutdownMessage: { type: 'terminal-host:shutdown' },
       readyType: 'terminal-host:ready',
       stoppedType: 'terminal-host:stopped',
-      onMessage: (message) => log.warn(`Ignored terminal host message "${message.type}"`),
+      onMessage: (message) => {
+        if (message.type === 'terminal-host:answer') {
+          this.agent.post({
+            type: 'terminal-result',
+            callId: message.callId,
+            answer: message.answer,
+          })
+        } else if (message.type === 'terminal-host:handed-back') {
+          const { sessionId, durationMs } = message
+          if (
+            typeof sessionId === 'string' &&
+            Number.isSafeInteger(durationMs) &&
+            durationMs >= 0
+          ) {
+            this.agent.post({ type: 'host:terminal-handed-back', sessionId, durationMs })
+          }
+        } else {
+          log.warn(`Ignored terminal host message "${message.type}"`)
+        }
+      },
     })
     // Mobile devices: started by the first agent call or paired device that needs one.
     this.deviceHost = new ForkedHost<MainToDeviceHost, DeviceHostToMain>({
@@ -747,6 +767,21 @@ export class Hosts {
     })
   }
 
+  /** Runs an agent's terminal call on the terminal host, starting it on the first one. */
+  private async terminalCall(callId: number, call: TerminalCall): Promise<void> {
+    try {
+      await this.terminal.ready()
+      if (this.terminal.post({ type: 'terminal-host:call', callId, call })) return
+    } catch (error) {
+      log.warn(`A terminal call cannot run: the terminal host is ${(error as Error).message}`)
+    }
+    this.agent.post({
+      type: 'terminal-result',
+      callId,
+      answer: { error: { code: 'unavailable', message: 'The terminal host is not running' } },
+    })
+  }
+
   /** The device host's socket for a paired device's mobile devices, starting it. */
   private async openDevices(requestId: number): Promise<void> {
     let socketPath: string | null = null
@@ -908,6 +943,16 @@ export class Hosts {
           this.deviceHost.post({ type: 'device-host:turn-ended', sessionId: message.sessionId })
         }
         break
+      case 'host:terminal-call':
+        if (Number.isSafeInteger(message.callId) && typeof message.call === 'object') {
+          void this.terminalCall(message.callId, message.call)
+        }
+        break
+      case 'host:terminal-turn-ended':
+        if (typeof message.sessionId === 'string') {
+          this.terminal.post({ type: 'terminal-host:turn-ended', sessionId: message.sessionId })
+        }
+        break
       case 'host:auth-commands':
         if (isStringList(message.commands)) {
           this.authCommands = message.commands
@@ -964,8 +1009,9 @@ export class Hosts {
   }
 
   private agentExited(clean: boolean): void {
-    // No turn of the agent host runs now, so none uses a device.
+    // No turn of the agent host runs now, so none uses a device or a terminal.
     this.deviceHost.post({ type: 'device-host:turn-ended', sessionId: null })
+    this.terminal.post({ type: 'terminal-host:turn-ended', sessionId: null })
     for (const answer of [...this.reportRequests.values()]) {
       answer({ ok: false, reason: 'failed', message: 'The agent host exited' })
     }

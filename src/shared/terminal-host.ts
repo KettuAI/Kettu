@@ -1,7 +1,15 @@
 // The contract between the renderer and the terminal host, over the terminal host port, which a
 // paired device's terminal port speaks too.
 
+import type { SurfaceControl } from './control'
 import type { PortConnectionState } from './port-rpc'
+import type { AgentId } from './thread'
+
+/** The agent that started a terminal with its tools, and the session it started it from. */
+export interface TerminalOwner {
+  agentId: AgentId
+  sessionId: string
+}
 
 export interface TerminalInfo {
   id: string
@@ -13,6 +21,10 @@ export interface TerminalInfo {
   busy: boolean // a process other than the shell is in the foreground
   exitCode: number | null // set once the shell has exited
   createdAt: number
+  /** Null for a terminal the user opened; cleared when its shell is restarted. */
+  owner: TerminalOwner | null
+  /** Who uses it in the owner's running turn; idle for every terminal no turn uses. */
+  control: SurfaceControl
 }
 
 export interface TerminalContract {
@@ -35,6 +47,9 @@ export interface TerminalContract {
   'terminals.ack': { params: { id: string; chars: number }; result: void }
   'terminals.kill': { params: { id: string }; result: void }
   'terminals.restart': { params: { id: string }; result: TerminalInfo }
+  /** Take over and Hand back of a terminal an agent's turn uses; false when no turn has it. */
+  'terminals.takeOver': { params: { id: string }; result: boolean }
+  'terminals.handBack': { params: { id: string }; result: boolean }
 }
 
 /**
@@ -60,6 +75,8 @@ export const TERMINAL_METHODS = [
   'terminals.ack',
   'terminals.kill',
   'terminals.restart',
+  'terminals.takeOver',
+  'terminals.handBack',
 ] as const satisfies readonly TerminalMethod[]
 
 export type TerminalEvent =

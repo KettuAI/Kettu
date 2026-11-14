@@ -380,7 +380,10 @@ async function start(): Promise<void> {
     log: (level, message) => log[level](`browser: ${message}`),
   })
   const routinesAwake = new RoutinesAwake()
-  const terminalHost = new TerminalHost({ settings: () => terminalSettings(settings.get()) })
+  const terminalHost = new TerminalHost({
+    settings: () => terminalSettings(settings.get()),
+    onHandedBack: (sessionId, ms) => hostRef.current?.terminalHandedBack(sessionId, ms),
+  })
   const deviceHost = new DeviceHost({
     allowDevices: () => true,
     onHandedBack: (sessionId, ms) => hostRef.current?.deviceHandedBack(sessionId, ms),
@@ -454,8 +457,11 @@ async function start(): Promise<void> {
         browserTools.controls.keys().filter((sessionId) => !remoteBrowser.isRemote(sessionId)),
       )
       deviceHost.turnEnded(null)
+      terminalHost.turnEnded(null)
     },
     onDeviceTurnEnded: (sessionId) => deviceHost.turnEnded(sessionId),
+    onTerminalTurnEnded: (sessionId) => terminalHost.turnEnded(sessionId),
+    terminal: (call) => terminalHost.call(call),
     onBrowserTurnEnded: (sessionId) => {
       if (!remoteBrowser.isRemote(sessionId)) browserTools?.turnEnded(sessionId)
     },

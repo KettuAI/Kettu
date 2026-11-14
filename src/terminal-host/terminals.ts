@@ -1,11 +1,19 @@
 import { randomUUID } from 'node:crypto'
+import { CONTROL_WAIT_MS, ControlWait, SurfaceControls } from '@shared/control'
 import type { BusyTerminal } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortErrorCode } from '@shared/port-rpc'
+import type {
+  AgentTerminal,
+  TerminalCall,
+  TerminalCallAnswer,
+  TerminalCallErrorCode,
+} from '@shared/terminal-agent'
 import type { TerminalCommand, TerminalInfo, TerminalParams } from '@shared/terminal-host'
 import { TERMINAL_FLOW } from '@shared/terminal-host'
 import { DeviceFlow, FlowControl } from './flow'
 import { OutputScanner } from './output-scanner'
+import { plainTail } from './plain-text'
 import type { ProjectRegistry } from './projects'
 import { ReplayBuffer } from './replay'
 import {
@@ -67,6 +75,9 @@ export interface TerminalManagerOptions {
   consoleProcesses?: (pty: PtyProcess) => Promise<number[] | null>
   /** Whether a port serves a paired device, which never pauses the pty; none do when absent. */
   isDevicePort?: (port: string) => boolean
+  /** The user handed back a terminal an agent's turn uses, after holding it for `durationMs`. */
+  handedBack?: (sessionId: string, durationMs: number) => void
+  now?: () => number
 }
 
 const TITLE_CHECK_MS = 100
@@ -74,6 +85,10 @@ const READY_QUIET_MS = 150
 const READY_LIMIT_MS = 3000
 const BRACKETED_PASTE_START = '\x1b[200~'
 const BRACKETED_PASTE_END = '\x1b[201~'
+const CTRL_C = '\x03'
+// An agent's command and text are typed as they are; a control character could act as a key.
+// eslint-disable-next-line no-control-regex
+const AGENT_CONTROL = /[\x00-\x08\x0a-\x1f\x7f]/
 
 interface Terminal {
   info: TerminalInfo
@@ -93,6 +108,7 @@ interface Terminal {
   titleTimer: NodeJS.Timeout | null
   shellProcess: string | null // the foreground name at the shell's first output
   command: TerminalCommand | null // typed once the shell is ready
+  agentCommand: boolean // the command is an agent's, which runs: Enter follows it
   readyTimer: NodeJS.Timeout | null
   readyLimit: NodeJS.Timeout | null
 }
@@ -127,9 +143,22 @@ export class TerminalManager {
   private authCommands = new Set<string>()
   private spawnPty: Promise<PtySpawn> | null = null
   private readonly findOnPath: FindOnPath
+  // Who uses each terminal an agent started, by terminal id, for the owner's running turn.
+  private readonly controls: SurfaceControls
 
   constructor(private readonly options: TerminalManagerOptions) {
     this.findOnPath = options.findOnPath ?? pathLookup(options.env, options.platform)
+    this.controls = new SurfaceControls({
+      changed: (id) => {
+        const terminal = this.terminals.get(id)
+        if (terminal) this.options.sink.info(this.view(terminal))
+      },
+      handedBack: (id, durationMs) => {
+        const sessionId = this.terminals.get(id)?.info.owner?.sessionId
+        if (sessionId) this.options.handedBack?.(sessionId, durationMs)
+      },
+      now: options.now,
+    })
   }
 
   /** Loads node-pty ahead of the first terminal; resolves to why it cannot load, or null. */
@@ -150,7 +179,16 @@ export class TerminalManager {
     this.authCommands = new Set(commands)
   }
 
-  async create(port: string, params: TerminalParams<'terminals.create'>): Promise<TerminalInfo> {
+  create(port: string, params: TerminalParams<'terminals.create'>): Promise<TerminalInfo> {
+    return this.open(params, port, null)
+  }
+
+  /** Starts a terminal for a window's or device's port, or for an agent when `owner` is set. */
+  private async open(
+    params: TerminalParams<'terminals.create'>,
+    port: string | null,
+    owner: TerminalInfo['owner'],
+  ): Promise<TerminalInfo> {
     const project = await this.options.projects.match(params.projectPath)
     if (!project) {
       throw new TerminalError('restricted', 'Terminals open only in a known project folder')
@@ -171,6 +209,8 @@ export class TerminalManager {
         busy: false,
         exitCode: null,
         createdAt: Date.now(),
+        owner,
+        control: { kind: 'idle' },
       },
       cwd: project.cwd,
       shell,
@@ -182,23 +222,24 @@ export class TerminalManager {
       flow: new FlowControl(),
       devices: new DeviceFlow(),
       scanner: new OutputScanner(),
-      ports: new Set([port]),
+      ports: new Set(port === null ? [] : [port]),
       pending: '',
       batchTimer: null,
       titleTimer: null,
       shellProcess: null,
       command: params.command ?? null,
+      agentCommand: owner !== null && params.command !== undefined,
       readyTimer: null,
       readyLimit: null,
     }
     await this.spawn(terminal)
     this.terminals.set(terminal.info.id, terminal)
-    this.options.sink.info({ ...terminal.info })
-    return { ...terminal.info }
+    this.options.sink.info(this.view(terminal))
+    return this.view(terminal)
   }
 
   async list(projectPath?: string): Promise<TerminalInfo[]> {
-    const all = [...this.terminals.values()].map((terminal) => ({ ...terminal.info }))
+    const all = [...this.terminals.values()].map((terminal) => this.view(terminal))
     if (projectPath === undefined) return all
     const project = await this.options.projects.match(projectPath)
     return project ? all.filter((info) => info.projectPath === project.projectPath) : []
@@ -213,7 +254,7 @@ export class TerminalManager {
         continue
       }
       terminal.info.sessionId = sessionId
-      this.options.sink.info({ ...terminal.info })
+      this.options.sink.info(this.view(terminal))
     }
   }
 
@@ -236,9 +277,141 @@ export class TerminalManager {
     return { replay: terminal.replay.snapshot() }
   }
 
+  /** A window's or device's keys: while an agent's turn uses the terminal, only Ctrl+C goes in. */
   input(id: string, data: string): void {
     const terminal = this.get(id)
+    if (this.controls.holdsInput(id) && data !== CTRL_C) return
     terminal.pty?.write(data)
+  }
+
+  /** The user's Take over; false when no agent's turn uses the terminal. */
+  takeOver(id: string): boolean {
+    this.get(id)
+    return this.controls.takeOver(id)
+  }
+
+  /** The user's Hand back: the agent's waiting calls go on. */
+  handBack(id: string): boolean {
+    this.get(id)
+    return this.controls.handBack(id)
+  }
+
+  /** The turn of `sessionId` ended, or every turn when null: its terminals are nobody's now. */
+  turnEnded(sessionId: string | null): void {
+    for (const id of this.controls.keys()) {
+      const owner = this.terminals.get(id)?.info.owner
+      if (sessionId === null || !owner || owner.sessionId === sessionId) {
+        this.controls.turnEnded(id)
+      }
+    }
+  }
+
+  /**
+   * An agent's tool call. It reaches only terminals its own session started, and comes only over
+   * main's control channel, never from a window's or device's port.
+   */
+  async agentCall(call: TerminalCall): Promise<TerminalCallAnswer> {
+    try {
+      switch (call.kind) {
+        case 'run':
+          return await this.agentRun(call)
+        case 'read': {
+          const terminal = this.owned(call.sessionId, call.terminalId)
+          this.flush(terminal)
+          const output = plainTail(terminal.replay.snapshot(), call.lines)
+          return { result: { kind: 'output', terminal: agentView(terminal), output } }
+        }
+        case 'input': {
+          if (AGENT_CONTROL.test(call.text)) {
+            return failure('failed', 'The text must not contain control characters')
+          }
+          const data = call.enter ? `${call.text}\r` : call.text
+          return await this.agentAct(call.sessionId, call.terminalId, (terminal) => {
+            if (!terminal.pty) throw new TerminalError('internal', 'The shell has exited')
+            terminal.pty.write(data)
+            return { kind: 'terminal', terminal: agentView(terminal) }
+          })
+        }
+        case 'stop':
+          return await this.agentAct(call.sessionId, call.terminalId, (terminal) => {
+            if (call.close) {
+              this.kill(terminal.info.id)
+              return { kind: 'closed' }
+            }
+            terminal.pty?.write(CTRL_C)
+            return { kind: 'terminal', terminal: agentView(terminal) }
+          })
+      }
+    } catch (error) {
+      const code = error instanceof TerminalError ? error.code : null
+      return failure(
+        code === 'restricted' || code === 'not_found' ? code : 'failed',
+        (error as Error).message,
+      )
+    }
+  }
+
+  private async agentRun(
+    call: Extract<TerminalCall, { kind: 'run' }>,
+  ): Promise<TerminalCallAnswer> {
+    if (call.command.length === 0 || AGENT_CONTROL.test(call.command)) {
+      return failure('failed', 'The command must be one line without control characters')
+    }
+    const info = await this.open(
+      {
+        projectPath: call.folder,
+        sessionId: call.sessionId,
+        cols: 100,
+        rows: 24,
+        command: { text: call.command, run: true },
+      },
+      null,
+      { agentId: call.agentId, sessionId: call.sessionId },
+    )
+    // A new terminal is the turn's from the start, so the user's first keys are held back too.
+    const end = await this.controls.begin(info.id, { deadline: this.now() + CONTROL_WAIT_MS })
+    end()
+    return { result: { kind: 'terminal', terminal: agentView(this.get(info.id)) } }
+  }
+
+  /** Acts on an agent's own terminal once the user does not hold it, or answers `held`. */
+  private async agentAct(
+    sessionId: string,
+    id: string,
+    act: (terminal: Terminal) => Extract<TerminalCallAnswer, { result: unknown }>['result'],
+  ): Promise<TerminalCallAnswer> {
+    this.owned(sessionId, id)
+    let end: () => void
+    try {
+      end = await this.controls.begin(id, { deadline: this.now() + CONTROL_WAIT_MS })
+    } catch (error) {
+      if (!(error instanceof ControlWait)) throw error
+      if (error.reason === 'held' || error.reason === 'asking') return { result: { kind: 'held' } }
+      return failure('stopped', 'The turn ended before the user handed the terminal back')
+    }
+    try {
+      return { result: act(this.owned(sessionId, id)) }
+    } finally {
+      end()
+    }
+  }
+
+  /** A terminal `sessionId`'s agent started; any other reads as missing. */
+  private owned(sessionId: string, id: string): Terminal {
+    const terminal = this.terminals.get(id)
+    if (!terminal || terminal.info.owner?.sessionId !== sessionId) {
+      throw new TerminalError('not_found', `This session started no terminal "${id}"`)
+    }
+    return terminal
+  }
+
+  private now(): number {
+    return this.options.now?.() ?? Date.now()
+  }
+
+  /** The terminal's info as clients see it, with who uses it now. */
+  private view(terminal: Terminal): TerminalInfo {
+    return { ...terminal.info, control: this.controls.state(terminal.info.id) }
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -264,6 +437,7 @@ export class TerminalManager {
     const terminal = this.get(id)
     this.stopPty(terminal)
     this.terminals.delete(id)
+    this.controls.forget(id)
     this.options.sink.removed(id)
   }
 
@@ -281,13 +455,17 @@ export class TerminalManager {
       title: terminal.shell.name,
       busy: false,
       exitCode: null,
+      owner: null,
     })
+    // The new shell is the user's: no agent started it.
+    this.controls.forget(id)
+    terminal.agentCommand = false
     terminal.shellProcess = null
     terminal.flow = new FlowControl()
     terminal.devices = new DeviceFlow()
     await this.spawn(terminal)
-    this.options.sink.info({ ...terminal.info })
-    return { ...terminal.info }
+    this.options.sink.info(this.view(terminal))
+    return this.view(terminal)
   }
 
   /** A port went away: it no longer receives data or holds back a paused pty. */
@@ -429,7 +607,7 @@ export class TerminalManager {
     if (title === info.title && busy === info.busy) return
     info.title = title
     info.busy = busy
-    this.options.sink.info({ ...info })
+    this.options.sink.info(this.view(terminal))
   }
 
   private typeCommand(terminal: Terminal): void {
@@ -440,7 +618,7 @@ export class TerminalManager {
     const { command, pty } = terminal
     terminal.command = null
     if (!command || !pty) return
-    if (command.run && this.authCommands.has(command.text)) {
+    if (terminal.agentCommand || (command.run && this.authCommands.has(command.text))) {
       pty.write(`${command.text}\r`)
       return
     }
@@ -466,7 +644,7 @@ export class TerminalManager {
     terminal.info.exitCode = signal ? 128 + signal : exitCode
     terminal.info.busy = false
     terminal.info.title = terminal.shell.name
-    this.options.sink.info({ ...terminal.info })
+    this.options.sink.info(this.view(terminal))
   }
 
   private clearTimers(terminal: Terminal): void {
@@ -494,4 +672,13 @@ export class TerminalManager {
       this.options.warn?.(`Could not kill a shell: ${(error as Error).message}`)
     }
   }
+}
+
+function agentView(terminal: Terminal): AgentTerminal {
+  const { id, title, busy, exitCode } = terminal.info
+  return { id, title, busy, exitCode }
+}
+
+function failure(code: TerminalCallErrorCode, message: string): TerminalCallAnswer {
+  return { error: { code, message } }
 }
