@@ -2197,6 +2197,10 @@ export class AgentHost {
       },
       'tasks.list': () => this.tasks.list(),
       'tasks.get': ({ taskId }) => this.tasks.get(taskId),
+      'tasks.sessions': ({ taskId }) => {
+        const ids = new Set(this.tasks.get(taskId).rounds.flatMap((round) => round.sessionId ?? []))
+        return [...ids].flatMap((id) => (sessions.has(id) ? [sessions.summary(id)] : []))
+      },
       'tasks.start': ({ from, ...params }) => this.tasks.start(params, from),
       'tasks.review': ({ taskId, roundId, approve, note }) =>
         this.tasks.review(taskId, roundId, approve, note ?? null),

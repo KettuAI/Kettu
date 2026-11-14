@@ -84,6 +84,7 @@
       "artifacts": "Artifacts",
       "recentlyDeleted": "Artifacts › Recently deleted",
       "artifact": "Artifact",
+      "task": "Task",
       "marketplace": "Marketplace",
       "marketplaceItem": "Marketplace › {{item}}",
       "settings": "Settings › {{section}}",

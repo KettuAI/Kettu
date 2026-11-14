@@ -6,11 +6,13 @@ import { isMac, isMod, platform } from '@renderer/lib/platform'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { awayHosts, sidebarHosts } from '@renderer/stores/hosts'
 import { useSessionsStore, visibleOrder } from '@renderer/stores/sessions'
+import { useTasksStore } from '@renderer/stores/tasks'
 import { useSettingsStore } from '@renderer/stores/settings'
 import {
   focusPaneAt,
   openSession,
   openSettings,
+  openTask,
   sessionsShown,
   shownPanel,
   toggleSearch,
@@ -312,18 +314,31 @@ function shown(selector: string): boolean {
   )
 }
 
-/** Previous or next session in sidebar order, across Pinned, the projects and No project. */
+/**
+ * Previous or next row in sidebar order, across Pinned, the projects and No project: a session, a
+ * task's page or one of its steps.
+ */
 function stepSession(delta: -1 | 1): void {
   const view = useViewStore.getState()
   const { byId } = useSessionsStore.getState()
+  const tasks = useTasksStore.getState().summaries
   const order = visibleOrder(
     { ...view, hosts: sidebarHosts(), away: awayHosts() },
     byId,
     useProjectsStore.getState().projects,
+    tasks,
   )
   if (!order.length) return
-  const currentId = view.main.kind === 'session' ? view.main.sessionId : null
+  const currentId =
+    view.main.kind === 'session'
+      ? view.main.sessionId
+      : view.main.kind === 'task'
+        ? view.main.taskId
+        : null
   const at = currentId ? order.indexOf(currentId) : -1
   const next = order[(at + delta + order.length) % order.length]!
-  openSession(next, byId[next]!.projectPath)
+  const summary = byId[next]
+  if (summary) openSession(next, summary.projectPath)
+  // A task's row, or a person's step, which has no session and opens its task.
+  else openTask(tasks[next] ? next : next.slice(0, next.indexOf('/')))
 }

@@ -1541,6 +1541,7 @@ export function createValidators(platform: Platform): Validators {
     'sops.setSettings': sopSettingsChange,
     'tasks.list': none,
     'tasks.get': (params) => ({ taskId: taskId(fields(params)) }),
+    'tasks.sessions': (params) => ({ taskId: taskId(fields(params)) }),
     'tasks.start': (params) => taskStart(params, platform),
     'tasks.review': (params) => {
       const o = fields(params)

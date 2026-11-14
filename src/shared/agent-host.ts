@@ -737,6 +737,8 @@ export interface HostContract {
   // Tasks: a requirement run through an SOP, one session per step.
   'tasks.list': { params: void; result: TaskSummary[] }
   'tasks.get': { params: { taskId: string }; result: TaskView }
+  // The summaries of its steps' sessions still there, which the session list leaves out.
+  'tasks.sessions': { params: { taskId: string }; result: SessionSummary[] }
   // `from` is the session whose agent suggested it.
   'tasks.start': { params: TaskStart & { from?: { sessionId: string } }; result: TaskView }
   // Approves what a step handed in, or sends it back to the same step with a note.
@@ -1380,6 +1382,7 @@ export const HOST_METHODS = [
   'sops.setSettings',
   'tasks.list',
   'tasks.get',
+  'tasks.sessions',
   'tasks.start',
   'tasks.review',
   'tasks.answer',

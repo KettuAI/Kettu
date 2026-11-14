@@ -15,22 +15,30 @@ import { Glyph } from '@renderer/features/shell/glyph'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useHostsStore, useOtherHost, type OtherHost } from '@renderer/stores/hosts'
+import { hostOfPath } from '@renderer/lib/host-paths'
 import {
+  byActivity,
   hostGroup,
   hostOfSession,
   needsYouTree,
+  sidebarRows,
   useSessionsStore,
   type SidebarTabStop,
 } from '@renderer/stores/sessions'
+import { needingTasks, useTasksStore } from '@renderer/stores/tasks'
 import { useHostLabel } from './host-label'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
 import { SessionRow } from './session-row'
+import { TaskRow } from './task-row'
 
 // Its rows' group, for the rename keys at its end; no project path looks like it.
 const NEEDS_YOU_GROUP = 'needs-you'
 
-/** The sessions on the hosts shown that wait for you or failed, each naming its host. */
+/**
+ * The sessions and tasks on the hosts shown that wait for you or failed, each naming its host; a
+ * task stands alone there, without its steps.
+ */
 export function NeedsYouGroup({
   hosts,
   away,
@@ -55,27 +63,42 @@ export function NeedsYouGroup({
       return [...found]
     }),
   )
-  const tree = useMemo(
-    () =>
-      needsYouTree(Object.fromEntries(summaries.map((x) => [x.id, x]))).filter((node) => {
-        const host = hostOfSession(node.summary)
-        return hosts.includes(host) && !(host !== null && away.includes(host))
-      }),
-    [summaries, hosts, away],
+  const shown = (host: string | null) =>
+    hosts.includes(host) && !(host !== null && away.includes(host))
+  const tasks = useTasksStore(
+    useShallow((s) =>
+      needingTasks(s.summaries).filter((task) => shown(hostOfPath(task.projectPath))),
+    ),
   )
-  if (tree.length === 0) return null
+  const rows = useMemo(
+    () =>
+      sidebarRows(
+        needsYouTree(Object.fromEntries(summaries.map((x) => [x.id, x]))).filter((node) => {
+          const host = hostOfSession(node.summary)
+          return hosts.includes(host) && !(host !== null && away.includes(host))
+        }),
+        tasks,
+        byActivity,
+      ),
+    [summaries, hosts, away, tasks],
+  )
+  if (rows.length === 0) return null
   return (
     <section aria-label={t('needsYou.label')} className="ui-as-side__group">
       <div className="ui-as-side__label kettu-host-label">
         <h3>{t('needsYou.label')}</h3>
-        <span className="tabular-nums">{tree.length}</span>
+        <span className="tabular-nums">{rows.length}</span>
       </div>
       <ul className="flex flex-col">
         <RenameScope value={NEEDS_YOU_GROUP}>
           <AnimatePresence initial={false}>
-            {tree.map((node) => (
-              <SessionRow key={node.summary.id} node={node} tabStopId={null} showHost />
-            ))}
+            {rows.map((row) =>
+              row.kind === 'session' ? (
+                <SessionRow key={row.id} node={row.node} tabStopId={null} showHost />
+              ) : (
+                <TaskRow key={row.id} task={row.task} tabStopId={null} showHost flat />
+              ),
+            )}
           </AnimatePresence>
         </RenameScope>
         <GroupRenameHints scope={NEEDS_YOU_GROUP} />

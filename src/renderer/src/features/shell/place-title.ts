@@ -10,6 +10,7 @@ import { otherHosts, useHostsStore } from '@renderer/stores/hosts'
 import { useRemoteStore } from '@renderer/stores/remote'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
+import { useTasksStore } from '@renderer/stores/tasks'
 import type { HistoryPlace, SettingsPlace } from '@renderer/stores/view'
 import { useWindowScope, windowHost } from '@renderer/stores/window-host'
 
@@ -46,6 +47,8 @@ export function placeTitle(place: HistoryPlace): string {
         ? t('history.places.marketplaceItem', { item: title })
         : t('history.places.marketplace')
     }
+    case 'task':
+      return useTasksStore.getState().summaries[place.taskId]?.title ?? t('history.places.task')
     case 'artifact': {
       const { list, deleted } = useArtifactsStore.getState()
       const found = [...(list ?? []), ...(deleted ?? [])].find((a) => a.id === place.id)
@@ -63,7 +66,7 @@ export function placeTitle(place: HistoryPlace): string {
   }
 }
 
-/** A place's name, kept current as its session, routine, artifact or listing is renamed. */
+/** A place's name, kept current as its session, routine, task, artifact or listing is renamed. */
 export function usePlaceTitle(place: HistoryPlace): string {
   useTranslation('shell')
   useSessionsStore((s) => (place.kind === 'session' ? s.byId[place.sessionId]?.title : null))
@@ -71,6 +74,7 @@ export function usePlaceTitle(place: HistoryPlace): string {
     place.kind === 'routine' && place.routineId ? s.byId[place.routineId]?.name : null,
   )
   useArtifactsStore((s) => (place.kind === 'artifact' ? s.list : null))
+  useTasksStore((s) => (place.kind === 'task' ? s.summaries[place.taskId]?.title : null))
   useWindowScope().useMarketplaceStore((s) =>
     place.kind === 'marketplace' && place.item ? s.catalog : null,
   )

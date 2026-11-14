@@ -14,6 +14,7 @@ import { TerminalLabel } from '@renderer/features/terminal/terminal-label'
 import { ProjectPathContext } from '@renderer/features/files/file-refs'
 import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { usePane } from '@renderer/features/split/pane-context'
+import { StepSentBack } from '@renderer/features/tasks/step-crumb'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
@@ -192,6 +193,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           <ProjectPathContext value={folder}>
             {/* The drop zone covers the thread and leaves the composer in view. */}
             <div className="relative flex min-h-0 flex-1 flex-col">
+              {summary.task && <StepSentBack summary={summary} />}
               {body}
               <DropOverlay shown={drop.over} starting={status === 'starting'} agentName={name} />
             </div>
