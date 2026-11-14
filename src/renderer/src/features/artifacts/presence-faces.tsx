@@ -109,20 +109,20 @@ export function PresenceFaces({
   )
 }
 
-/** The most faces a card shows. */
+/** The most agents a card shows. */
 const CARD_FACES = 3
 
 /**
- * The agents writing an artifact, as a card shows them: the same faces a size smaller, at most
- * three, and not buttons, since the whole card is one.
+ * Who is at an artifact, as its card shows it: the agents writing it, whose ring turns, then the
+ * people on its published page as one face; the bar's faces a size smaller, and not buttons, since
+ * the whole card is one.
  */
 export function CardFaces({
   sessions,
-  fallback,
+  visitors,
 }: {
   sessions: readonly string[]
-  /** Shown when this window knows none of the sessions. */
-  fallback: React.ReactNode
+  visitors: number | null
 }) {
   // Flat values, so a running session's other changes do not render the card again.
   const flat = useSessionsStore(
@@ -137,7 +137,7 @@ export function CardFaces({
     agentId: flat[i * 2] as AgentId,
     hostId: flat[i * 2 + 1] as string | null,
   }))
-  if (agents.length === 0) return fallback
+  if (agents.length === 0 && !visitors) return null
   const more = agents.length - CARD_FACES
   return (
     <span className="ui-agc k-art-faces" aria-hidden>
@@ -150,6 +150,7 @@ export function CardFaces({
         </span>
       ))}
       {more > 0 && <span className="ui-agc__face ui-agc__face-more">{`+${more}`}</span>}
+      {visitors ? <span className="ui-agc__face ui-agc__face-more">{visitors}</span> : null}
     </span>
   )
 }

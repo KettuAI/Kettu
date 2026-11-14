@@ -514,6 +514,8 @@ export const Thread = memo(function Thread({
                     // content-visibility's paint containment clips at the item's edge, but fold
                     // lines and tool rows reach 6 px past the column and their focus ring 4 px more.
                     '[overflow-clip-margin:10px]',
+                    // A menu or panel open in it, as an artifact card's, reaches past its edge.
+                    'has-[.ui-as-popover]:[content-visibility:visible]',
                     index > 0 && spacing(item, items[index - 1]!),
                     // A reply's action tooltips float outside its row, which paint containment
                     // would clip; they show only while it is pointed at or focused.

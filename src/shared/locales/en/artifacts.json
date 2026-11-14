@@ -107,14 +107,20 @@
     "noPreview": "No preview",
     "more": "More for {{title}}",
     "when": "Version {{version}} · {{time}}",
-    "daysLeft_one": "{{project}} · {{count}} day left",
-    "daysLeft_other": "{{project}} · {{count}} days left",
-    "editing": "Editing",
-    "shared": "Shared online"
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "writing": "Writing…",
+    "deleted": "Deleted",
+    "erased": "Deleted permanently",
+    "access": {
+      "code": "Published, open with its access code",
+      "public": "Published, open to anyone with the link"
+    }
   },
   "menu": {
     "open": "Open",
     "openInBrowser": "Open in browser",
+    "share": "Share…",
     "export": "Export…",
     "exportAs": {
       "docx": "Export as Word…",

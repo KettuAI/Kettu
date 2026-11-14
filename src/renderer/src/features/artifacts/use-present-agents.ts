@@ -58,10 +58,10 @@ export function noteAuthor(
 const VISITORS_EVERY_MS = 30_000
 
 /**
- * How many people look at the artifact's page on Kettu now, asked while it is shown; null when it
- * is not published there or nobody can say.
+ * How many people look at the artifact's page on Kettu now, asked while it is shown and `asking`;
+ * null when it is not published there or nobody can say.
  */
-export function useVisitors(id: string): number | null {
+export function useVisitors(id: string, asking = true): number | null {
   // Self-hosted, nothing asks Kettu's service.
   const cloudOff = useCloudOff() && artifactHost(id) === null
   const published = artifactSharing(id).useSharingStore(
@@ -69,7 +69,7 @@ export function useVisitors(id: string): number | null {
       s.status?.published.some((p) => p.id === id && p.target === 'kettu' && !p.otherAccount) ??
       false,
   )
-  const onKettu = published && !cloudOff
+  const onKettu = published && !cloudOff && asking
   const [counted, setCounted] = useState<{ id: string; count: number | null } | null>(null)
   useEffect(() => {
     if (!onKettu) return

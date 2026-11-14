@@ -106,13 +106,19 @@
     "noPreview": "无预览",
     "more": "{{title}} 的更多操作",
     "when": "版本 {{version}} · {{time}}",
-    "daysLeft_other": "{{project}} · 剩 {{count}} 天",
-    "editing": "编辑中",
-    "shared": "已在线分享"
+    "daysLeft_other": "剩 {{count}} 天",
+    "writing": "正在写入…",
+    "deleted": "已删除",
+    "erased": "已永久删除",
+    "access": {
+      "code": "已发布，凭访问码打开",
+      "public": "已发布，有链接的人都能打开"
+    }
   },
   "menu": {
     "open": "打开",
     "openInBrowser": "在浏览器中打开",
+    "share": "分享…",
     "export": "导出…",
     "exportAs": {
       "docx": "导出为 Word…",

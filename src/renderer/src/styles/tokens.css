@@ -365,6 +365,10 @@
   --artifact-card-shadow-hover: 0 1px 2px rgb(0 0 0 / 6%), 0 16px 36px rgb(0 0 0 / 9%);
   --artifact-page-lift:
     0 0 0 0.5px rgb(0 0 0 / 10%), 0 10px 22px -8px rgb(0 0 0 / 18%), 0 2px 4px -1px rgb(0 0 0 / 6%);
+  /* A card open beside the thread, pressed into the page; and the earlier sheet an update's new
+     page lies on, faint behind it. */
+  --artifact-card-pressed: inset 0 1px 2px rgb(0 0 0 / 6%);
+  --artifact-sheet-behind: 0.55;
 
   /* Usage charts: each agent's series, and the empty day the heatmap deepens from. */
   --agent-opencode: oklch(0.6 0 0);
@@ -785,6 +789,8 @@
     --artifact-page-lift:
       0 0 0 0.5px rgb(255 255 255 / 16%), 0 12px 24px -8px rgb(0 0 0 / 70%),
       0 2px 4px rgb(0 0 0 / 40%);
+    --artifact-card-pressed: inset 0 1px 2px rgb(0 0 0 / 30%);
+    --artifact-sheet-behind: 0.8;
 
     --agent-opencode: oklch(0.74 0 0);
     /* Pi's yellow mixed 86% with the dark surface. */
@@ -1159,6 +1165,8 @@
   --artifact-page-lift:
     0 0 0 0.5px rgb(255 255 255 / 16%), 0 12px 24px -8px rgb(0 0 0 / 70%),
     0 2px 4px rgb(0 0 0 / 40%);
+  --artifact-card-pressed: inset 0 1px 2px rgb(0 0 0 / 30%);
+  --artifact-sheet-behind: 0.8;
 
   --agent-opencode: oklch(0.74 0 0);
   /* Pi's yellow mixed 86% with the dark surface. */

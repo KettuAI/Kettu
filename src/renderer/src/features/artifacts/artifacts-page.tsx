@@ -75,12 +75,13 @@ import {
 import { useProjectsStore } from '@renderer/stores/projects'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import {
+  openArtifact,
   openRecentlyDeleted,
   openSession,
   setArtifactsView,
   useViewStore,
 } from '@renderer/stores/view'
-import { ArtifactCard, CardSkeleton, type CardTime } from './artifact-card'
+import { ArtifactCard, CardSkeleton } from './artifact-card'
 import { askForArtifact } from './ask'
 import { isEditable } from './keys'
 import { KIND_ICON } from './kinds'
@@ -88,7 +89,6 @@ import {
   agentsOf,
   ARTIFACT_KINDS,
   artifactKind,
-  daysLeft,
   filterArtifacts,
   groupArtifacts,
   GROUPINGS,
@@ -109,6 +109,23 @@ interface SessionInfo {
   agentId: AgentId
 }
 
+/** Opens the viewer; Back returns to the page with this card focused. */
+function openFromPage(id: string, history = false): void {
+  useArtifactsStore.setState({ opened: id })
+  openArtifact(id, { history })
+}
+
+/** In the tooltip only, so it reads the time as it opens. */
+function VersionTime({ artifact }: { artifact: ArtifactSummary }) {
+  const { t } = useTranslation('artifacts')
+  const now = useNow()
+  return (
+    <span>
+      {t('card.when', { version: artifact.version, time: longAgo(artifact.updatedAt, now) })}
+    </span>
+  )
+}
+
 /** Where the list was scrolled when the viewer opened, for Back. */
 let scrolledTo = 0
 
@@ -127,9 +144,11 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
   const windowHost = useWindowHost()
   const namesHosts = useNamesHosts()
   const hostName = useHostName()
-  // Every host side by side: each card says which one it is on.
-  const hostOf = (id: string): string | null =>
-    namesHosts && windowHost.kind === 'all' ? hostName(artifactHost(id)) : null
+  // Every host side by side: each card of another host says which one it is on.
+  const hostOf = (id: string): string | null => {
+    const hostId = artifactHost(id)
+    return namesHosts && windowHost.kind === 'all' && hostId !== null ? hostName(hostId) : null
+  }
   const error = useArtifactsStore((s) => s.error)
   const filter = useArtifactsStore((s) => s.filter)
   const kindFilter = useArtifactsStore((s) => s.kindFilter)
@@ -245,31 +264,45 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
     return info.title ?? t('common:untitledSession')
   }
   // The time the order goes by: when it was opened here or written, or when it was written.
-  const timeOf = (artifact: ArtifactSummary): CardTime => {
+  const timeOf = (artifact: ArtifactSummary): number => {
     const opened = openedAt[artifact.id] ?? 0
-    return { at: sort !== 'updated' && opened > artifact.updatedAt ? opened : artifact.updatedAt }
+    return sort !== 'updated' && opened > artifact.updatedAt ? opened : artifact.updatedAt
   }
   // "Page", "Document", or "Canvas · 6 pages".
   const kindLine = (artifact: ArtifactSummary): string => {
     const kind = artifactKind(artifact)
     return kind === 'canvas' ? t('card.canvas', { count: artifact.pages }) : t(`page.kinds.${kind}`)
   }
-  const card = (
-    artifact: ArtifactSummary,
-    meta: string,
-    time: CardTime | null,
-    tabbable: string | null,
-  ) => (
+  const card = (artifact: ArtifactSummary, tabbable: string | null) => (
     <ArtifactCard
       key={artifact.id}
-      artifact={artifact}
+      id={artifact.id}
+      title={artifact.title}
+      summary={artifact}
+      standing={artifact.deletedAt === null ? 'live' : 'deleted'}
+      form="tile"
+      still={artifact.version}
       agent={agentOf(artifact.sessionId)}
       agentHost={hostOfPath(sessions.get(artifact.sessionId)?.projectPath ?? '')}
-      meta={[meta, hostOf(artifact.id)].filter(Boolean).join(' · ')}
-      time={time}
-      project={projectName(artifact)}
-      session={sessionName(artifact.sessionId)}
-      tabbable={artifact.id === tabbable}
+      what={t('card.kindVersion', { kind: kindLine(artifact), version: artifact.version })}
+      at={timeOf(artifact)}
+      host={hostOf(artifact.id)}
+      current
+      onOpen={() => openFromPage(artifact.id)}
+      menu={{
+        onOpen: () => openFromPage(artifact.id),
+        onVersionHistory: () => openFromPage(artifact.id, true),
+      }}
+      page={{
+        tabbable: artifact.id === tabbable,
+        tip: (
+          <>
+            <span>{projectName(artifact)}</span>
+            <span>{sessionName(artifact.sessionId)}</span>
+            <VersionTime artifact={artifact} />
+          </>
+        ),
+      }}
     />
   )
   const cardsProps = {
@@ -303,17 +336,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
         <>
           {error && <ListError error={error} />}
           <div {...cardsProps} className="k-arts__grid">
-            {trash.map((artifact) =>
-              card(
-                artifact,
-                t('card.daysLeft', {
-                  project: projectName(artifact),
-                  count: daysLeft(artifact.deletedAt ?? now, now),
-                }),
-                null,
-                tabbable,
-              ),
-            )}
+            {trash.map((artifact) => card(artifact, tabbable))}
           </div>
         </>
       )
@@ -338,19 +361,7 @@ export default function ArtifactsPage({ deleted }: { deleted: boolean }) {
                 grouping={group}
                 sessions={sessions}
                 now={now}
-                render={(artifact) =>
-                  card(
-                    artifact,
-                    group === 'project-session'
-                      ? t('card.kindVersion', {
-                          kind: kindLine(artifact),
-                          version: artifact.version,
-                        })
-                      : kindLine(artifact),
-                    group === 'project-session' ? null : timeOf(artifact),
-                    tabbable,
-                  )
-                }
+                render={(artifact) => card(artifact, tabbable)}
               />
             ))}
           </div>
