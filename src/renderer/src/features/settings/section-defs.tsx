@@ -49,7 +49,7 @@ import { useWebHostStore } from '@renderer/stores/web-host'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
-import { AboutHero, AutomaticUpdates, NoUpdates, UpdateRow } from './about-section'
+import { AboutHero, AutomaticUpdates, DownloadSource, NoUpdates, UpdateRow } from './about-section'
 import {
   AgentListItem,
   AgentPage,
@@ -66,6 +66,7 @@ import {
 import { ArchivedRow } from './archived-section'
 import { CloudSwitchRow, OtherConnections } from './cloud-section'
 import { useCloudOffHere } from './use-cloud-off-here'
+import { useGitHubOnly } from './use-github-only'
 import { DebugModeRow } from './debug-mode'
 import { ConsentRow, ConsentsState } from './artifacts-section'
 import { EmptyCard, GroupNote } from './rows'
@@ -1068,6 +1069,8 @@ export function useAboutSection(): SectionDef {
   const info = useAppInfo()
   // A host whose Kettu Settings cannot update, as the daemon's, says so in the row.
   const updatable = useHostHas('updates')
+  const githubOnly = useGitHubOnly()
+  const cloudOffHere = useCloudOffHere()
   const updates = group('updates', t('about.groups.updates'))
   return {
     id: 'about',
@@ -1095,6 +1098,19 @@ export function useAboutSection(): SectionDef {
               description: t('about.automatic.description'),
               group: updates,
               render: () => <AutomaticUpdates />,
+            },
+            {
+              id: 'source',
+              name: t('about.source.name'),
+              english: en('about.source.name'),
+              description: cloudOffHere
+                ? t('about.source.local')
+                : githubOnly
+                  ? t('about.source.githubDetail')
+                  : t('about.source.autoDetail'),
+              keywords: t('about.source.keywords'),
+              group: updates,
+              render: () => <DownloadSource />,
             },
           ]),
       {

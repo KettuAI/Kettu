@@ -175,7 +175,10 @@ const SECTION_FIELDS = {
     badge: isBoolean,
   },
   git: { backgroundFetch: isBoolean, worktreeRoot: isWorktreeRoot },
-  updates: { automatic: oneOf('download', 'restart', 'notify', 'off') },
+  updates: {
+    automatic: oneOf('download', 'restart', 'notify', 'off'),
+    source: oneOf('auto', 'github'),
+  },
   privacy: { hideAccount: isBoolean },
   diagnostics: { verboseUntil: isVerboseUntil },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },

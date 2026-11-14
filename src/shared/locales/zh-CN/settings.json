@@ -955,6 +955,8 @@
       "movesFirst": "Kettu 无法在当前位置更新，「更新」会先把它移到“应用程序”文件夹。",
       "moving": "正在把 Kettu 移到“应用程序”…",
       "failed": "无法检查更新",
+      "githubUnreachable": "连不上 GitHub",
+      "githubUnreachableDetail": "现在只从 GitHub 检查更新。把下载来源改回「自动」，就能同时使用 Kettu 的下载服务。",
       "moveFailed": "无法把 Kettu 移到“应用程序”",
       "offDevelopment": "开发版本中不提供更新",
       "offPackageManager": "更新由你的包管理器安装",
@@ -979,6 +981,15 @@
       "off": "关闭：仅在我要求时检查",
       "linkNotify": "有新版本时通知我",
       "linkOff": "关闭"
+    },
+    "source": {
+      "name": "下载来源",
+      "keywords": "下载 来源 线路 镜像 下载服务 download source mirror github service update",
+      "auto": "自动",
+      "github": "仅 GitHub",
+      "autoDetail": "按最快的线路下载，连不上时退回 GitHub。下载服务会记录版本、系统、地区和 IP，用来统计下载量。",
+      "githubDetail": "只从 GitHub 检查和下载，不连 Kettu 的下载服务。连不上 GitHub 时收不到更新。",
+      "local": "本地模式下只从 GitHub 检查和下载更新，不连 Kettu 的服务。"
     },
     "github": {
       "name": "GitHub",

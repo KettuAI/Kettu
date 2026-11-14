@@ -12,7 +12,8 @@ export type UpdateState =
   | { kind: 'downloading'; version: string; percent: number; manual: boolean } // manual: Update
   // Downloaded and verified; notes: the release's highlights in each language it has them in.
   | { kind: 'ready'; version: string; notes?: Partial<Record<Locale, string[]>> }
-  | { kind: 'error'; message: string; manual: boolean; move?: true } // move: the move failed
+  // move: the move failed; githubUnreachable: GitHub, the only source, could not be reached.
+  | { kind: 'error'; message: string; manual: boolean; move?: true; githubUnreachable?: true }
 
 export interface UpdateStatus {
   state: UpdateState

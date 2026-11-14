@@ -1,10 +1,11 @@
 // A test runs this file unbuilt in Electron, so it keeps to erasable syntax and type-only imports.
 
-import type { AppUpdater, CancellationToken } from 'electron-updater'
+import type { AppUpdater, CancellationToken, Provider } from 'electron-updater'
 
 interface UpdaterExports {
   autoUpdater: AppUpdater
   CancellationToken: typeof CancellationToken
+  Provider: typeof Provider
 }
 
 type UpdaterNamespace = Partial<UpdaterExports> & { default?: Partial<UpdaterExports> }
@@ -20,5 +21,7 @@ export async function loadAutoUpdater(): Promise<UpdaterExports> {
   if (!autoUpdater) throw new Error('electron-updater has no autoUpdater export')
   const CancellationToken = loaded.CancellationToken ?? loaded.default?.CancellationToken
   if (!CancellationToken) throw new Error('electron-updater has no CancellationToken export')
-  return { autoUpdater, CancellationToken }
+  const Provider = loaded.Provider ?? loaded.default?.Provider
+  if (!Provider) throw new Error('electron-updater has no Provider export')
+  return { autoUpdater, CancellationToken, Provider }
 }

@@ -16,6 +16,8 @@ import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
 import { ControlError, LinkButton, SetButton, SettingSelect, Skel, Spin } from './controls'
 import { FlashMark, PageHeader, RowText } from './rows'
 import { useApply } from './use-apply'
+import { useCloudOffHere } from './use-cloud-off-here'
+import { useGitHubOnly } from './use-github-only'
 
 const SOURCE_URL = 'https://github.com/KettuAI/Kettu'
 
@@ -59,6 +61,8 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
   const justChecked = useUpdatesStore((s) => s.justChecked)
   const now = useNow()
   const refresh = useRefresh({ busy: status?.state.kind === 'checking' })
+  const cloudOff = useCloudOffHere()
+  const githubOnly = useGitHubOnly()
   const [error, setError] = useState<string | null>(null)
   const run = (action: () => Promise<unknown>) => {
     setError(null)
@@ -170,8 +174,18 @@ export function UpdateRow({ status }: { status: UpdateStatus | null }) {
       title = t('about.updates.moving')
       break
     case 'error':
-      title = state.move ? t('about.updates.moveFailed') : t('about.updates.failed')
-      detail = <span data-selectable="">{state.message}</span>
+      title = state.move
+        ? t('about.updates.moveFailed')
+        : state.githubUnreachable
+          ? t('about.updates.githubUnreachable')
+          : t('about.updates.failed')
+      // Local mode leaves no other source to suggest.
+      detail =
+        state.githubUnreachable && githubOnly && !cloudOff ? (
+          t('about.updates.githubUnreachableDetail')
+        ) : (
+          <span data-selectable="">{state.message}</span>
+        )
       action = (
         <SetButton onClick={() => run(checkForUpdates)}>{t('about.updates.tryAgain')}</SetButton>
       )
@@ -239,6 +253,36 @@ export function AutomaticUpdates() {
         value={value}
         options={options}
         onChange={(v) => apply({ updates: { automatic: v } })}
+        className="k-select--wide"
+      />
+    </>
+  )
+}
+
+type SourceChoice = SettingsFile['updates']['source']
+
+/**
+ * Where updates come from. A list rather than a switch, so more sources can join it; Local mode
+ * holds it on GitHub only, since Kettu's services are off.
+ */
+export function DownloadSource() {
+  const { t } = useTranslation('settings')
+  const githubOnly = useGitHubOnly()
+  const cloudOff = useCloudOffHere()
+  const [apply, error] = useApply()
+  const options: { value: SourceChoice; label: string }[] = [
+    { value: 'auto', label: t('about.source.auto') },
+    { value: 'github', label: t('about.source.github') },
+  ]
+  return (
+    <>
+      <ControlError error={error} />
+      <SettingSelect
+        label={t('about.source.name')}
+        value={githubOnly ? 'github' : 'auto'}
+        options={options}
+        disabled={cloudOff}
+        onChange={(v) => apply({ updates: { source: v } })}
         className="k-select--wide"
       />
     </>

@@ -961,6 +961,8 @@
       "movesFirst": "Kettu can’t update where it is, so Update moves it to Applications first.",
       "moving": "Moving Kettu to Applications…",
       "failed": "Couldn’t check for updates",
+      "githubUnreachable": "Couldn’t reach GitHub",
+      "githubUnreachableDetail": "Updates come only from GitHub now. Set Download source to Automatic to use Kettu’s download service too.",
       "moveFailed": "Couldn’t move Kettu to Applications",
       "offDevelopment": "Updates are off in development builds",
       "offPackageManager": "Updates are installed by your package manager",
@@ -985,6 +987,15 @@
       "off": "Off: check only when I ask",
       "linkNotify": "Tell me about new versions",
       "linkOff": "Off"
+    },
+    "source": {
+      "name": "Download source",
+      "keywords": "download source mirror github service update",
+      "auto": "Automatic",
+      "github": "GitHub only",
+      "autoDetail": "Downloads from the fastest source and falls back to GitHub. Kettu’s download service records the version, system, region and IP address to count downloads.",
+      "githubDetail": "Checks and downloads from GitHub only, without Kettu’s download service. Updates stop if GitHub can’t be reached.",
+      "local": "In Local mode, updates come only from GitHub and Kettu’s services are never contacted."
     },
     "github": {
       "name": "GitHub",
