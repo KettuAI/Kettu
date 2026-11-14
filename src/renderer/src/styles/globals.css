@@ -1507,14 +1507,14 @@
   font-synthesis-style: auto;
 }
 
-/* The frame for code, shell output, SVG and diagrams in a reply, with a
-   34 px header that names the block on the left and holds its actions on the right
-   (block-frame.tsx). */
+/* The frame for code, shell output, SVG and diagrams in a reply: a white card, with a 34 px
+   header that names the block on the left and holds its actions on the right (block-frame.tsx). */
 .block-frame {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-code);
-  background: var(--bg-code-block);
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 12.5px;
@@ -1524,7 +1524,6 @@
   user-select: text;
 }
 /* The frame's edge, drawn over its content so a preview's ground cannot cover it. */
-.block-frame::after,
 .markdown [data-table-frame]::after {
   content: '';
   position: absolute;
@@ -1539,9 +1538,13 @@
   gap: 8px;
   height: 34px;
   padding: 0 6px 0 12px;
-  box-shadow: inset 0 -1px 0 var(--border-subtle);
+  box-shadow: inset 0 calc(var(--hairline) * -1) 0 var(--border-default);
   color: var(--text-secondary);
   white-space: nowrap;
+}
+.block-frame-icon {
+  width: 14px;
+  height: 14px;
 }
 .block-frame-lang {
   flex-shrink: 0;
@@ -1553,7 +1556,13 @@
 .block-frame-name {
   min-width: 0;
   overflow: hidden;
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
   text-overflow: ellipsis;
+}
+.block-frame-dir {
+  color: var(--text-disabled);
+  font-weight: var(--font-weight-normal);
 }
 .block-frame-action {
   flex-shrink: 0;
@@ -1680,6 +1689,311 @@
 .block-frame[data-wrap] [data-streamdown='code-block-body'] pre {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* A shell block of an agent's reply, on the same white card: no header, the code beside Copy and
+   Run, each line after a faint `$` and wrapped, so all of it shows before it runs. Once run, the
+   run's state and its terminal's last lines grow underneath (command-bar.tsx). */
+.command-bar {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-code);
+  background: var(--thread-card);
+  box-shadow: var(--thread-card-shadow);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-style: normal;
+  line-height: normal;
+  overflow-wrap: normal;
+  user-select: text;
+}
+.command-bar-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 7px 7px 7px 0;
+}
+.command-bar-code {
+  flex: 1;
+  min-width: 0;
+}
+.command-bar-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+.command-bar [data-streamdown='code-block'] {
+  margin: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+.command-bar [data-streamdown='code-block-header'],
+.command-bar [data-streamdown='code-block'] > div:not([data-streamdown]) {
+  display: none;
+}
+/* Its first line sits level with the 26 px buttons beside it. */
+.command-bar [data-streamdown='code-block-body'] {
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 3px 0;
+  font-family: var(--font-mono);
+  font-size: calc(var(--prose-size) - 2.5px);
+  font-variant-ligatures: none;
+  line-height: 1.7;
+}
+.command-bar [data-streamdown='code-block-body'] pre {
+  margin: 0;
+  background: transparent !important;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.command-bar [data-streamdown='code-block-body'] code > span {
+  position: relative;
+  display: block;
+  padding-left: calc(24px + 1ch);
+}
+.command-bar:not([data-transcript]) [data-streamdown='code-block-body'] code > span::before {
+  content: '$';
+  position: absolute;
+  left: 14px;
+  color: var(--text-disabled);
+  user-select: none;
+}
+/* A transcript writes its own prompts. */
+.command-bar[data-transcript] [data-streamdown='code-block-body'] code > span {
+  padding-left: 14px;
+}
+
+/* Why the last run failed, or that the agent could not be told, under the bar. */
+.command-bar-problem {
+  margin: 0;
+  padding: 8px 14px 10px;
+  box-shadow: inset 0 var(--hairline) 0 var(--border-default);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* Run: a white button with a green play mark, its options behind the chevron. */
+.command-run-button {
+  display: inline-flex;
+  flex: none;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  box-shadow:
+    inset 0 0 0 var(--hairline) var(--border-strong),
+    var(--elevation-card);
+  transition: opacity var(--duration-fast) ease;
+  & > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: var(--font-weight-medium);
+    outline: none;
+    transition: background-color var(--duration-fast) ease;
+    &:hover:not(:disabled),
+    &[aria-expanded='true'] {
+      background: var(--bg-hover);
+    }
+    &:focus-visible {
+      outline: 1.5px solid var(--focus-ring-color);
+      outline-offset: -1px;
+    }
+    & svg {
+      width: 12px;
+      height: 12px;
+    }
+  }
+  &[data-starting] {
+    opacity: 0.6;
+  }
+}
+.command-run-button__go {
+  padding: 0 9px 0 8px;
+  border-radius: 8px 0 0 8px;
+  & svg {
+    color: var(--success);
+  }
+}
+.command-run-button__more {
+  justify-content: center;
+  width: 22px;
+  border-radius: 0 8px 8px 0;
+  box-shadow: inset var(--hairline) 0 0 var(--border-strong);
+  color: var(--text-tertiary);
+}
+
+/* What a run is doing, on a light ground under the bar; fox while it waits for a password. */
+.command-run {
+  padding-bottom: 8px;
+  background: var(--bg-code-block);
+  box-shadow: inset 0 var(--hairline) 0 var(--border-default);
+  animation: command-run-in var(--duration-fast) ease-out;
+}
+.command-run:is([data-state='ended'], [data-state='gone']) {
+  padding-bottom: 0;
+}
+.command-run[data-state='password'] {
+  background: color-mix(in srgb, var(--thread-fox) 7%, var(--thread-card));
+  box-shadow: inset 0 var(--hairline) 0 color-mix(in srgb, var(--thread-fox) 26%, transparent);
+}
+@keyframes command-run-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+.command-run-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 7px 0 14px;
+  container-type: inline-size;
+}
+/* In a narrow column the state keeps its words and the actions keep only their icons. */
+@container (inline-size < 480px) {
+  .command-run-action {
+    width: 26px;
+    justify-content: center;
+    padding: 0;
+  }
+  .command-run-action__label {
+    display: none;
+  }
+}
+.command-run-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  & b {
+    color: var(--text-primary);
+    font-weight: var(--font-weight-medium);
+  }
+  & svg {
+    flex: none;
+    width: 13px;
+    height: 13px;
+  }
+}
+.command-run[data-state='ended'] .command-run-state svg {
+  color: var(--success);
+}
+.command-run[data-failed] .command-run-state :is(b, svg) {
+  color: var(--danger);
+}
+.command-run[data-state='password'] .command-run-state {
+  color: var(--attention);
+  & b {
+    color: var(--attention);
+  }
+  & svg {
+    color: var(--thread-fox);
+  }
+}
+.command-run[data-state='gone'] .command-run-state svg {
+  color: var(--text-disabled);
+}
+.command-run-state__time,
+.command-run-state__sep {
+  color: var(--text-disabled);
+  font-variant-numeric: tabular-nums;
+}
+.command-run-state__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.command-run-state__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background: var(--pane-live);
+  animation: command-run-pulse 1.6s ease-out infinite;
+}
+@keyframes command-run-pulse {
+  from {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--pane-live) 45%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .command-run,
+  .command-run-state__dot {
+    animation: none;
+  }
+}
+.command-run-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  outline: none;
+  transition:
+    color var(--duration-fast) ease,
+    background-color var(--duration-fast) ease;
+  & svg {
+    width: 13px;
+    height: 13px;
+  }
+  &:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  &[data-danger]:hover {
+    color: var(--danger);
+  }
+  &[data-ask],
+  &[data-ask]:hover {
+    color: var(--attention);
+  }
+  &:focus-visible {
+    outline: 1.5px solid var(--focus-ring-color);
+    outline-offset: -1px;
+  }
+}
+.command-run-tail {
+  margin: 0;
+  padding: 0 14px;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-ligatures: none;
+  line-height: 19px;
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+.command-run[data-state='password'] .command-run-tail {
+  color: var(--attention);
 }
 
 /* Diffs keep the code surface while the library styles the changes. */

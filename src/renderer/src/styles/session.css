@@ -32,6 +32,56 @@
   line-height: 1.55;
   color: var(--thread-ink);
 }
+/* A code block's run the agent was told of: one line, the command opening its terminal. */
+.ks-run-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  color: var(--thread-ink);
+  font: inherit;
+  text-align: left;
+  outline: none;
+  &:disabled {
+    cursor: default;
+  }
+  &:not(:disabled):hover .ks-run-chip__text {
+    text-decoration: underline var(--border-strong);
+    text-underline-offset: 4px;
+  }
+  &:focus-visible {
+    outline: 1.5px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+}
+.ks-run-chip__icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--success);
+}
+.ks-run-chip__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  & code {
+    padding: 0.0667em 0.3333em;
+    border-radius: var(--radius-sm);
+    background: var(--bg-code-inline);
+    color: var(--code-inline);
+    font-family: var(--font-mono);
+    font-size: 0.8667em;
+    font-variant-ligatures: none;
+  }
+}
+.ks-run-chip__more {
+  flex: none;
+  color: var(--thread-muted);
+  font-size: 12px;
+}
 .markdown-user {
   font-family: inherit;
   font-size: inherit;

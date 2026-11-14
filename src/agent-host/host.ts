@@ -3,7 +3,12 @@
 // shell and git.
 
 import { DEVICE_ACCESS_WAIT_MS, type DeviceCall, type DeviceCallAnswer } from '@shared/device-agent'
-import type { TerminalCall, TerminalCallAnswer } from '@shared/terminal-agent'
+import {
+  replyRunNotice,
+  type TerminalCall,
+  type TerminalCallAnswer,
+  type TerminalCallErrorCode,
+} from '@shared/terminal-agent'
 import { DeviceAccessStore } from './devices/access'
 import os from 'node:os'
 import path from 'node:path'
@@ -301,6 +306,15 @@ async function moveHarnessInstalls(
       log(`Could not move ${legacy} to ${target}: ${(copyError as Error).message}`)
     }
   }
+}
+
+const REPLY_RUN_ERRORS: Record<TerminalCallErrorCode, PortErrorCode> = {
+  not_found: 'not_found',
+  restricted: 'restricted',
+  not_allowed: 'terminal_not_allowed',
+  stopped: 'busy',
+  unavailable: 'unavailable',
+  failed: 'conflict',
 }
 
 export class AgentHost {
@@ -1594,9 +1608,52 @@ export class AgentHost {
     this.sessions.controlHandedBack(sessionId, 'device', durationMs)
   }
 
+  /**
+   * The user's Run on a shell code block of a session's reply: a new terminal of the session's
+   * agent runs it, the way the agent's own terminal tool does, and unless `notify` is false the
+   * session is told which, queued while a turn runs. A subagent's reply runs for the session it
+   * runs under, which has the terminals and takes prompts.
+   */
+  private async runReplyCommand(
+    params: { sessionId: string; command: string; notify: boolean },
+    portId: string,
+    device: PortDevice | null,
+  ): Promise<{ terminalId: string; notified: boolean }> {
+    const sessionId = this.sessions.browserSession(params.sessionId)
+    const agentId = sessionId ? this.sessions.sessionAgent(sessionId) : null
+    if (!sessionId || !agentId) throw new HostError('not_found', `No session ${params.sessionId}`)
+    const folder = this.sessions.sessionFolder(sessionId) ?? this.sessions.sessionProject(sessionId)
+    if (!folder) throw new HostError('restricted', 'This session has no folder to run in')
+    const answer = await this.terminalCall({
+      kind: 'reply',
+      sessionId,
+      agentId,
+      folder,
+      command: params.command,
+      fromDevice: device !== null,
+    })
+    if ('error' in answer) {
+      throw new HostError(REPLY_RUN_ERRORS[answer.error.code], answer.error.message)
+    }
+    if (answer.result.kind !== 'terminal') throw new HostError('internal', 'No terminal opened')
+    const terminalId = answer.result.terminal.id
+    if (!params.notify) return { terminalId, notified: false }
+    try {
+      const text = replyRunNotice(terminalId, params.command)
+      await this.sessions.queue(sessionId, [{ type: 'text', text }], portId, fromDevice(device))
+      return { terminalId, notified: true }
+    } catch (error) {
+      writeLog('warn', 'host', `A reply's run could not be told: ${(error as Error).message}`)
+      return { terminalId, notified: false }
+    }
+  }
+
   /** Sends an agent's terminal call to its parent, which hands it to the terminal host. */
   terminalCall(call: TerminalCall): Promise<TerminalCallAnswer> {
-    if (call.kind !== 'read') this.terminalTurns.add(call.sessionId)
+    // Only these take the terminal for the turn; the terminal host frees it when the turn ends.
+    if (call.kind === 'run' || call.kind === 'input' || call.kind === 'stop') {
+      this.terminalTurns.add(call.sessionId)
+    }
     const callId = this.nextTerminalCall++
     return new Promise<TerminalCallAnswer>((resolve) => {
       this.terminalCalls.set(callId, resolve)
@@ -1939,6 +1996,8 @@ export class AgentHost {
       'sessions.context': ({ sessionId }) => sessions.context(sessionId),
       'sessions.queue': ({ sessionId, content }, { portId, device }) =>
         sessions.queue(sessionId, content, portId, fromDevice(device)),
+      'sessions.runCommand': (params, { portId, device }) =>
+        this.runReplyCommand(params, portId, device),
       'sessions.unqueue': ({ sessionId, itemId }) => sessions.unqueue(sessionId, itemId),
       'sessions.steer': ({ sessionId, itemId }) => sessions.steer(sessionId, itemId),
       'sessions.sendNow': ({ sessionId, itemId }) => sessions.sendNow(sessionId, itemId),

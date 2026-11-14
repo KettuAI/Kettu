@@ -948,7 +948,7 @@ li[data-row-exit='dust'] > * {
   border-radius: 50%;
   background: var(--pane-live);
 }
-.kp-tab__dot[data-dot='output'] {
+.kp-tab__dot:is([data-dot='output'], [data-dot='password']) {
   background: var(--pane-fox);
 }
 .kp-tab__dot[data-dot='unsaved'] {
@@ -1293,6 +1293,34 @@ li[data-row-exit='dust'] > * {
 }
 .kp-texit[data-failed] > span {
   color: var(--danger);
+}
+/* While its program waits for a password: type it here, at the terminal's foot. */
+.kp-tpassword {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 16px;
+  background: color-mix(in srgb, var(--pane-fox) 8%, var(--terminal-background));
+  box-shadow: inset 0 var(--hairline) 0 color-mix(in srgb, var(--pane-fox) 26%, transparent);
+  color: var(--attention);
+  font-size: 12px;
+  & svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+    color: var(--pane-fox);
+  }
+  & b {
+    font-weight: var(--font-weight-medium);
+  }
+}
+.kp-tpassword__text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 /* While a turn uses the terminal: who has it, at its foot. */
 .kp-tbox__pill {

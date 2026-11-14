@@ -54,7 +54,7 @@ import {
   type TerminalSide,
   type TerminalState,
 } from '@renderer/stores/terminals'
-import { OwnerBar, TerminalControl } from './terminal-owner'
+import { OwnerBar, PasswordStrip, TerminalControl } from './terminal-owner'
 import { TerminalView } from './terminal-view'
 
 // The two sides of a split panel; alone, the left one fills it.
@@ -324,6 +324,7 @@ function TerminalSideView({
         <TerminalView key={terminal.id} terminal={terminal} focused={focused} />
         {terminal.owner && <TerminalControl terminal={terminal} owner={terminal.owner} box={box} />}
       </div>
+      {terminal.waiting === 'password' && !terminal.stale && <PasswordStrip terminal={terminal} />}
     </div>
   )
 }
@@ -361,8 +362,15 @@ export function TerminalTab({
   const running = terminal.busy && !exited
   const owner = terminal.owner
   const ownerName = owner ? agentName(owner.agentId, hostOfPath(terminal.projectPath)) : null
-  // New output waits on a tab out of view; a running one shows that it runs.
-  const dot = terminal.activity && !selected ? 'output' : running ? 'running' : null
+  // A password prompt shows first; new output waits on a tab out of view; a running one runs.
+  const dot =
+    terminal.waiting === 'password' && !terminal.stale
+      ? 'password'
+      : terminal.activity && !selected
+        ? 'output'
+        : running
+          ? 'running'
+          : null
 
   // A full strip scrolls; a tab selected out of sight, such as one an agent starts, comes into view.
   useEffect(() => {
@@ -431,7 +439,13 @@ export function TerminalTab({
           {dot && (
             <span
               role="img"
-              aria-label={dot === 'output' ? t('tab.newOutput') : t('tab.running')}
+              aria-label={t(
+                dot === 'password'
+                  ? 'tab.password'
+                  : dot === 'output'
+                    ? 'tab.newOutput'
+                    : 'tab.running',
+              )}
               className="kp-tab__dot"
               data-dot={dot}
             />

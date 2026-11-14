@@ -2,6 +2,7 @@
 // params object with only the known fields, or throws `invalid_params` before anything runs.
 
 import type { AgentInstallMethod, HostMethod, HostParams } from '@shared/agent-host'
+import { MAX_TERMINAL_COMMAND, replyCommandProblem } from '@shared/terminal-agent'
 import { COMMENT_CHARS, THREAD_ID, type CommentAnchor } from '@shared/artifact-comments'
 import { artifactPathProblem, isHtmlPath } from '@shared/artifact-files'
 import {
@@ -1285,6 +1286,13 @@ export function createValidators(platform: Platform): Validators {
     'sessions.queue': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), content: promptContent(o.content) }
+    },
+    'sessions.runCommand': (params) => {
+      const o = fields(params)
+      const command = string(o, 'command', MAX_TERMINAL_COMMAND)
+      const problem = replyCommandProblem(command)
+      if (problem) throw invalidParams(`command cannot run: ${problem}`)
+      return { sessionId: sessionId(o), command, notify: flag(o, 'notify') }
     },
     'sessions.unqueue': queueItem,
     'sessions.steer': queueItem,

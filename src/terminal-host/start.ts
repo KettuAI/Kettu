@@ -8,6 +8,7 @@ import type { ControlChannel, PortChannel } from '@shared/port-channel'
 import type { FromPort } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import type { TerminalEvent } from '@shared/terminal-host'
+import { readTtyModes } from './password'
 import { ProjectRegistry } from './projects'
 import { PortServer } from './server'
 import { type PtyProcess, type PtySpawn, TerminalManager } from './terminals'
@@ -56,6 +57,7 @@ export function startTerminalHost(
   let manager: TerminalManager | null = null
   let server: PortServer | null = null
   let projects: ProjectRegistry | null = null
+  let allowDevices = false
 
   function init(message: Extract<MainToTerminalHost, { type: 'terminal-host:init' }>): void {
     projects = new ProjectRegistry(message.platform)
@@ -71,6 +73,8 @@ export function startTerminalHost(
       isDevicePort: (port) => server?.isDevice(port) ?? false,
       handedBack: (sessionId, durationMs) =>
         send({ type: 'terminal-host:handed-back', sessionId, durationMs: Math.round(durationMs) }),
+      ttyModes: (pty) =>
+        pty.ptsName ? readTtyModes(message.platform, pty.ptsName) : Promise.resolve(null),
       sink: {
         data: (id, data, ports) => {
           for (const port of ports) server?.send(port, { type: 'terminal.data', id, data })
@@ -100,7 +104,8 @@ export function startTerminalHost(
       (port) => terminals.detach(port),
       warn,
     )
-    server.setAllowDevices(message.settings.allowDevices === true)
+    allowDevices = message.settings.allowDevices === true
+    server.setAllowDevices(allowDevices)
     send({ type: 'terminal-host:ready' })
     // The host starts with the first terminal anyway, so loading node-pty now costs nothing and
     // reports a broken native module before anyone types.
@@ -117,7 +122,8 @@ export function startTerminalHost(
         break
       case 'terminal-host:settings':
         manager?.setShellPath(message.settings.shellPath)
-        server?.setAllowDevices(message.settings.allowDevices === true)
+        allowDevices = message.settings.allowDevices === true
+        server?.setAllowDevices(allowDevices)
         break
       case 'terminal-host:projects':
         projects?.set(message.paths)
@@ -135,6 +141,19 @@ export function startTerminalHost(
         break
       case 'terminal-host:call': {
         const { callId, call } = message
+        if (call.kind === 'reply' && call.fromDevice && !allowDevices) {
+          send({
+            type: 'terminal-host:answer',
+            callId,
+            answer: {
+              error: {
+                code: 'not_allowed',
+                message: 'This computer does not allow devices to use its terminal',
+              },
+            },
+          })
+          break
+        }
         void (
           manager?.agentCall(call) ??
           Promise.resolve({

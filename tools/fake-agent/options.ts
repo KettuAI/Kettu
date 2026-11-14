@@ -22,6 +22,7 @@ export const SCENARIOS = [
   'thinking',
   'reasoning',
   'svg',
+  'shell',
   'usage',
   'status',
   'context',
@@ -99,6 +100,9 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
     hint: '--summaries',
   },
   svg: { description: 'A reply with svg code blocks: a diagram, a badge and bare path data' },
+  shell: {
+    description: 'A reply with shell blocks to run: one line, several lines and a password prompt',
+  },
   usage: {
     description: "The plan limits, as Claude Code's /usage reports them",
     hint: '--plain',

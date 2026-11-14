@@ -713,6 +713,33 @@
     "columns_one": "{{count}} column",
     "columns_other": "{{count}} columns"
   },
+  "command": {
+    "run": "Run",
+    "more": "More ways to run",
+    "runNote": "In a new terminal; {{agent}} follows the output",
+    "runOnly": "Run only",
+    "runOnlyNote": "In a new terminal, without telling {{agent}}",
+    "put": "Put in terminal",
+    "putNote": "Without Enter, for you to check and press it",
+    "openTerminal": "Open terminal",
+    "goType": "Type password",
+    "stop": "Stop",
+    "runAgain": "Run again",
+    "state": {
+      "running": "Running",
+      "password": "Waiting for your password",
+      "ended": "Ended",
+      "shellExited": "Shell exited with code {{code}}",
+      "gone": "Terminal closed"
+    },
+    "failed": "Could not run the block: {{message}}",
+    "notNotified": "The block runs, but {{agent}} could not be told",
+    "chip": "Ran <code>{{command}}</code> in a terminal",
+    "chipMore_one": "and {{count}} more line",
+    "chipMore_other": "and {{count}} more lines",
+    "chipOpen": "Open its terminal",
+    "chipGone": "Its terminal is closed"
+  },
   "media": {
     "openImage": "Open image {{name}}",
     "openImageMore_one": "Open image {{name}} and {{count}} more",

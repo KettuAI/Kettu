@@ -6,6 +6,12 @@ import { emitAppEvent } from '@renderer/app/events'
 import { errorMessage, terminalHost, terminals, terminalsAt } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import {
+  replyRunClosed,
+  replyRunData,
+  replyRunInfo,
+  replyRunTerminal,
+} from '@renderer/stores/reply-runs'
+import {
   newSessionPanel,
   panelSession,
   shownLayoutSessions,
@@ -158,15 +164,18 @@ export function terminalsOf(
 
 /** Adds or updates a terminal as its host describes it. */
 function upsert(info: TerminalInfo): void {
-  // A host before terminals had sessions, owners or control sends none of them.
+  // A host before terminals had sessions, owners, control or password prompts sends none of them.
   info = {
     ...info,
     sessionId: info.sessionId ?? null,
     owner: info.owner ?? null,
     control: info.control ?? IDLE_CONTROL,
+    waiting: info.waiting ?? null,
   }
   const panel = terminalPanel(info)
-  const known = info.id in useTerminalsStore.getState().byId
+  const before = useTerminalsStore.getState().byId[info.id]
+  const known = before !== undefined
+  if (info.owner?.fromReply) replyRunTerminal(info.id)
   useTerminalsStore.setState((s) => {
     const previous = s.byId[info.id]
     return {
@@ -186,6 +195,8 @@ function upsert(info: TerminalInfo): void {
   })
   if (!known && showOnArrival.delete(panel)) showTerminal(panel, info.id)
   else if (!known && info.owner) agentTerminalArrived(panel, info.id, info.owner.sessionId)
+  if (info.waiting === 'password' && before?.waiting !== 'password') passwordAsked(panel, info)
+  replyRunInfo(info.id, info.busy, info.exitCode)
   const signIn = signIns.get(info.id)
   if (signIn) {
     if (info.busy) signIn.sawBusy = true
@@ -220,6 +231,26 @@ function agentTerminalArrived(panel: string, id: string, sessionId: string): voi
     s.split[panel] === id ? s : { active: { ...s.active, [panel]: id } },
   )
   toggleTerminal(panel, true)
+}
+
+/**
+ * A terminal of a session on screen asks for a password: the pane opens on it and the keyboard
+ * goes to it, for the user to type it there.
+ */
+function passwordAsked(panel: string, info: TerminalInfo): void {
+  const sessionId = info.owner?.sessionId ?? info.sessionId
+  if (!sessionId || !shownLayoutSessions(useViewStore.getState()).includes(sessionId)) return
+  toggleTerminal(panel, true)
+  showTerminal(panel, info.id)
+}
+
+/** Opens a terminal's pane on it and gives it the keyboard, such as from a code block's run. */
+export function revealTerminal(id: string): void {
+  const t = useTerminalsStore.getState().byId[id]
+  if (!t) return
+  const panel = terminalPanel(t)
+  toggleTerminal(panel, true)
+  showTerminal(panel, id)
 }
 
 /**
@@ -294,6 +325,7 @@ export function finishTerminalLoad(
 
 /** Drops a terminal from the renderer, such as a stale tab the user restarts or closes. */
 export function forgetTerminal(id: string): void {
+  replyRunClosed(id)
   sinks.delete(id)
   replays.delete(id)
   signIns.delete(id)
@@ -377,6 +409,7 @@ export function takeTerminalEvent(event: TerminalEvent): void {
   switch (event.type) {
     case 'terminal.data': {
       scanForLocalUrl(event.id, event.data)
+      replyRunData(event.id, event.data)
       const sink = sinks.get(event.id)
       if (sink) {
         sink(event.data)
@@ -650,13 +683,17 @@ export async function restartTerminal(id: string): Promise<void> {
 }
 
 function markStale(test: (id: string) => boolean): void {
+  const ended: string[] = []
   useTerminalsStore.setState((s) => {
     let byId = s.byId
     for (const [id, t] of Object.entries(s.byId)) {
-      if (!t.stale && test(id)) byId = { ...byId, [id]: { ...t, stale: true, busy: false } }
+      if (t.stale || !test(id)) continue
+      byId = { ...byId, [id]: { ...t, stale: true, busy: false, waiting: null } }
+      ended.push(id)
     }
     return byId === s.byId ? s : { byId }
   })
+  for (const id of ended) replyRunClosed(id)
 }
 
 /** Another host's terminal host stopped or restarted: these terminals ended with it. */
@@ -772,4 +809,18 @@ export function terminalInUse(
     found = { id, name: t.name ?? (t.title || t.shell), control }
   }
   return found
+}
+
+/** A terminal of the session whose program waits for the user's password, for the composer. */
+export function terminalAskingPassword(
+  s: Pick<TerminalsStore, 'byId'>,
+  sessionId: string,
+): { id: string; name: string } | null {
+  for (const t of Object.values(s.byId)) {
+    if (t.waiting !== 'password' || t.stale || (t.owner?.sessionId ?? t.sessionId) !== sessionId) {
+      continue
+    }
+    return { id: t.id, name: t.name ?? (t.title || t.shell) }
+  }
+  return null
 }

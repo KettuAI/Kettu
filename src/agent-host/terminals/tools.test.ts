@@ -19,6 +19,12 @@ describe('terminal tool arguments', () => {
       terminalId: 't',
       lines: 200,
     })
+    expect(terminalCallOf('terminal_wait', 's1', { terminalId: 't', lines: 20 }, context)).toEqual({
+      kind: 'wait',
+      sessionId: 's1',
+      terminalId: 't',
+      lines: 20,
+    })
     expect(terminalCallOf('terminal_input', 's1', { terminalId: 't', text: '' }, context)).toEqual({
       kind: 'input',
       sessionId: 's1',

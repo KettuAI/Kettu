@@ -1,7 +1,8 @@
 import { useEffect, type RefObject } from 'react'
-import { Globe02Icon } from '@hugeicons/core-free-icons'
+import { Globe02Icon, LockPasswordIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { AnimatePresence } from 'motion/react'
-import { useTranslation } from 'react-i18next'
+import { Trans, useTranslation } from 'react-i18next'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { HeldBubble } from '@renderer/components/control/held-bubble'
 import { SurfaceLight } from '@renderer/components/control/surface-light'
@@ -15,6 +16,7 @@ import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { isMac } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { agentName } from '@renderer/stores/agents'
+import { useSessionsStore } from '@renderer/stores/sessions'
 import {
   handBackTerminal,
   interruptTerminal,
@@ -47,7 +49,7 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
       <AgentMark agent={owner.agentId} size={14} hostId={hostId} />
       {/* One line, so the folder at its end is cut before who started it and when. */}
       <span className="kp-towner__text">
-        {t('owner.startedBy', {
+        {t(owner.fromReply ? 'owner.fromReply' : 'owner.startedBy', {
           agent: agentName(owner.agentId, hostId),
           time: longAgo(terminal.createdAt, now),
         })}
@@ -77,6 +79,31 @@ export function OwnerBar({ terminal, owner }: { terminal: TerminalState; owner: 
           {t('owner.stop')}
         </button>
       )}
+    </div>
+  )
+}
+
+/**
+ * At a terminal's foot while its program waits for a password: type it here, unseen by the agent.
+ */
+export function PasswordStrip({ terminal }: { terminal: TerminalState }) {
+  const { t } = useTranslation('terminal')
+  const hostId = hostOfPath(terminal.projectPath)
+  const sessionAgent = useSessionsStore((s) =>
+    terminal.sessionId ? s.byId[terminal.sessionId]?.agentId : undefined,
+  )
+  const agentId = terminal.owner?.agentId ?? sessionAgent
+  return (
+    <div className="kp-tpassword" role="status">
+      <HugeiconsIcon icon={LockPasswordIcon} strokeWidth={1.9} aria-hidden />
+      <span className="kp-tpassword__text">
+        <Trans
+          t={t}
+          i18nKey={agentId ? 'password.strip' : 'password.stripNoAgent'}
+          values={agentId ? { agent: agentName(agentId, hostId) } : {}}
+          components={{ b: <b /> }}
+        />
+      </span>
     </div>
   )
 }

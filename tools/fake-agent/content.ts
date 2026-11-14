@@ -72,6 +72,39 @@ export const REASONING_MESSAGES = [
   'Done: each request reads the clock once, and a fake-timer test guards it. The login and clock tests pass.',
 ]
 
+// Shell blocks a reply asks the user to run: a quick one, several lines, one that runs on, a
+// password prompt with no sudo needed, and a transcript whose output lines do not run.
+export const SHELL_REPLY = `Check where you are first:
+
+\`\`\`sh
+pwd && ls
+\`\`\`
+
+Then a step that takes a few seconds:
+
+\`\`\`bash
+echo "installing..." && sleep 2
+for i in 1 2 3; do echo "tick $i"; sleep 1; done
+\`\`\`
+
+This one asks for a password the way \`sudo\` does, without echoing what you type:
+
+\`\`\`zsh
+sh -c 'stty -echo; printf "Password: "; read s; stty echo; echo; echo "got \${#s} characters"'
+\`\`\`
+
+\`\`\`console
+$ node --version
+v24.0.0
+\`\`\`
+
+A file it changed, for comparison:
+
+\`\`\`ts title="src/usage/day-key.ts"
+export const dayKey = (at: number) => new Date(at).toISOString().slice(0, 10)
+\`\`\`
+`
+
 // A diagram with a title and Chinese text, one without `xmlns` and with `&nbsp;` as agents
 // write SVG for a web page, and path data with no `<svg>` around it.
 export const SVG_REPLY = `Here is the release flow as a diagram:

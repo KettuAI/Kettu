@@ -1022,4 +1022,25 @@ describe('worktree requests', () => {
     rejects(() => set({ ...settings, waitForSetup: 'yes' }))
     rejects(() => posix['projects.setWorktreeSettings']({ path: 'repo', settings }))
   })
+
+  it("runs only a reply's code block that shows all it runs", () => {
+    expect(
+      posix['sessions.runCommand']({
+        sessionId: 's',
+        command: 'sudo true\npnpm dev',
+        notify: true,
+      }),
+    ).toEqual({ sessionId: 's', command: 'sudo true\npnpm dev', notify: true })
+    for (const command of ['', ' \n ', 'ls\r', 'ls\x1b[A', 'rm -rf a\u202e', 'cd\u200b/tmp']) {
+      rejects(() => posix['sessions.runCommand']({ sessionId: 's', command, notify: false }))
+    }
+    rejects(() =>
+      posix['sessions.runCommand']({
+        sessionId: 's',
+        command: 'a'.repeat(16 * 1024 + 1),
+        notify: false,
+      }),
+    )
+    rejects(() => posix['sessions.runCommand']({ sessionId: 's', command: 'ls' }))
+  })
 })

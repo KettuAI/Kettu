@@ -16,7 +16,8 @@
     "newOutput": "有新输出",
     "running": "正在运行",
     "close": "关闭 {{name}}",
-    "owner": "· {{agent}}"
+    "owner": "· {{agent}}",
+    "password": "在等密码"
   },
   "closeDialog": {
     "title": "结束此终端？",
@@ -36,6 +37,13 @@
   "owner": {
     "startedBy": "由 {{agent}} 启动 · {{time}}",
     "openInBrowser": "在浏览器中打开",
-    "stop": "停止"
+    "stop": "停止",
+    "fromReply": "从 {{agent}} 的回复运行 · {{time}}"
+  },
+  "password": {
+    "strip": "<b>在这里输入密码，按回车</b> · 输入时不显示，{{agent}} 也看不到",
+    "stripNoAgent": "<b>在这里输入密码，按回车</b> · 输入时不显示",
+    "label": "{{agent}} 请你在 <b>{{terminal}}</b> 输入密码",
+    "go": "去输入"
   }
 }
