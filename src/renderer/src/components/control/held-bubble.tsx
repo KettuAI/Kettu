@@ -17,6 +17,7 @@ export function HeldBubble({
   at,
   agentName,
   scope,
+  hint,
   leaving,
   onTakeOver,
 }: {
@@ -24,6 +25,8 @@ export function HeldBubble({
   agentName: string
   /** What the user cannot use now, as the bubble names it: "this tab", "this device". */
   scope: string
+  /** What else it says, in place of how to take over. */
+  hint?: string
   leaving?: boolean
   onTakeOver: () => void
 }) {
@@ -48,7 +51,7 @@ export function HeldBubble({
     <span ref={bubble} role="status" className="ctl-bubble" data-leaving={leaving ? '' : undefined}>
       <span className="ctl-bubble__text">
         <b>{t('bubble.title', { agent: agentName, scope })}</b>
-        <span>{t('bubble.hint')}</span>
+        <span>{hint ?? t('bubble.hint')}</span>
       </span>
       <Button size="dialog" onClick={onTakeOver}>
         {t('actions.takeOver')}

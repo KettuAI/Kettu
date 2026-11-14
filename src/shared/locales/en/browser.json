@@ -132,12 +132,6 @@
     "crashed": "This page crashed",
     "unresponsive": "This page stopped responding"
   },
-  "control": {
-    "using": "{{agent}} is driving",
-    "you": "You’re driving",
-    "handBack": "Hand back",
-    "takeOver": "Take over"
-  },
   "origin": {
     "decision": {
       "deny": "Deny",

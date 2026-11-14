@@ -710,6 +710,10 @@ describe('surface control requests', () => {
       sessionId: 's',
       durationMs: 72_000,
     })
+    expect(posix['terminal.handedBack']({ sessionId: 's', durationMs: 0 })).toEqual({
+      sessionId: 's',
+      durationMs: 0,
+    })
   })
 
   it('refuses another outcome, a missing entry or a time that is not one', () => {
@@ -718,6 +722,8 @@ describe('surface control requests', () => {
     rejects(() => posix['browser.handedBack']({ sessionId: 's', durationMs: -1 }))
     rejects(() => posix['browser.handedBack']({ sessionId: 's', durationMs: 1.5 }))
     rejects(() => posix['browser.handedBack']({ durationMs: 10 }))
+    rejects(() => posix['terminal.handedBack']({ sessionId: 's', durationMs: '10' }))
+    rejects(() => posix['terminal.handedBack']({ durationMs: 10 }))
   })
 })
 

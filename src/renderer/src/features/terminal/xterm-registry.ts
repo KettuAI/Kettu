@@ -5,7 +5,8 @@ import { emitAppEvent } from '@renderer/app/events'
 import { terminals } from '@renderer/lib/host'
 import { isMac, isMod } from '@renderer/lib/platform'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { setSink, takeOverTerminal, useTerminalsStore } from '@renderer/stores/terminals'
+import { holdsTerminalInput, setSink, useTerminalsStore } from '@renderer/stores/terminals'
+import { passesHeld } from './held-keys'
 import { onColorsChange } from '@renderer/stores/themes'
 
 // One xterm.js instance per terminal for the terminal's whole life. A tab that is hidden, or a
@@ -176,12 +177,30 @@ async function create(id: string): Promise<Instance> {
   term.attachCustomKeyEventHandler((event) => keyHandler(instance, event))
   // Input, acks and resizes fail only for a terminal that has ended, which its tab already shows.
   term.onData((data) => void terminals('terminals.input', { id, data }).catch(() => undefined))
-  // What the user types takes an agent's terminal over. onData also carries xterm.js's answers to
-  // the program, such as focus and cursor reports, so keys, IME text and pastes are read instead;
-  // xterm.js stops a paste event's propagation, hence the capture phase.
-  term.onKey(() => takeOverTerminal(id))
-  element.addEventListener('compositionend', () => takeOverTerminal(id), true)
-  element.addEventListener('paste', () => takeOverTerminal(id), true)
+  // While an agent's turn uses the terminal, keys are held back in keyHandler. onData also carries
+  // xterm.js's answers to the program, such as focus and cursor reports, so IME text and pastes are
+  // held back as they start instead; xterm.js stops a paste event's propagation, hence the capture.
+  element.addEventListener(
+    'paste',
+    (event) => {
+      if (!holdsTerminalInput(id)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      held(instance)
+    },
+    true,
+  )
+  element.addEventListener(
+    'compositionstart',
+    (event) => {
+      if (!holdsTerminalInput(id)) return
+      // Leaving the field ends the composition before any of its text is sent.
+      ;(event.target as HTMLElement | null)?.blur()
+      held(instance)
+      requestAnimationFrame(() => term.focus())
+    },
+    true,
+  )
 
   // Output written before the replay arrives would be duplicated by it, so it waits.
   let unacked = 0
@@ -314,10 +333,36 @@ export async function copySelection(instance: Instance): Promise<void> {
 }
 
 export async function pasteClipboard(instance: Instance): Promise<void> {
+  if (holdsTerminalInput(instance.id)) return held(instance)
   const text = await navigator.clipboard.readText()
   if (!text) return
-  takeOverTerminal(instance.id)
   instance.term.paste(text)
+}
+
+/** Typing an agent's turn held back, at the terminal's cursor in the window's coordinates. */
+export type HeldListener = (at: { x: number; y: number }) => void
+const heldListeners = new Map<string, HeldListener>()
+
+/** Hears the typing held back in a terminal, for the bubble at its cursor; returns the unsubscribe. */
+export function onHeld(id: string, listener: HeldListener): () => void {
+  heldListeners.set(id, listener)
+  return () => {
+    if (heldListeners.get(id) === listener) heldListeners.delete(id)
+  }
+}
+
+function held(instance: Instance): void {
+  const { term, element } = instance
+  const box = element.getBoundingClientRect()
+  const cell = {
+    width: box.width / Math.max(1, term.cols),
+    height: box.height / Math.max(1, term.rows),
+  }
+  const cursor = term.buffer.active
+  heldListeners.get(instance.id)?.({
+    x: box.left + (cursor.cursorX + 0.5) * cell.width,
+    y: box.top + cursor.cursorY * cell.height,
+  })
 }
 
 /** The selection as a fenced block for the composer. */
@@ -337,6 +382,10 @@ export function askAboutSelection(instance: Instance): boolean {
 // Keys the app keeps while the terminal has focus: Ctrl+` and Ctrl+Shift+` everywhere, the
 // clipboard keys of the platform, and Mod+L while text is selected.
 function keyHandler(instance: Instance, event: KeyboardEvent): boolean {
+  if (holdsTerminalInput(instance.id) && !passesHeld(event, isMac)) {
+    if (event.type === 'keydown' && !event.repeat) held(instance)
+    return false
+  }
   if (event.type !== 'keydown') return true
   if (event.ctrlKey && !event.metaKey && event.code === 'Backquote') return false
   if (

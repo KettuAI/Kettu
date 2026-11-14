@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { duration, tokens } from '@renderer/lib/format'
 import { useBrowserStore } from '@renderer/stores/browser'
+import { deviceInUse, useDevicesStore } from '@renderer/stores/devices'
+import { terminalInUse, useTerminalsStore } from '@renderer/stores/terminals'
 import { useThreadsStore } from '@renderer/stores/threads'
 import { TurnDots } from './turn-dots'
 import { askedStep, turnPhase, turnTokens, writingId } from './turn-phase'
@@ -63,23 +65,49 @@ export const TurnStatus = memo(function TurnStatus({
   })
   // The app the session uses on its computer: the user holds it, or the agent works in it.
   const computer = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.computer ?? null)
+  // A device of the session's: the user holds it, or a call of the agent's acts on it.
+  const device = useDevicesStore(
+    useShallow((s) => {
+      const used = deviceInUse(s.devices, sessionId)
+      const control = used?.operator.control
+      const state =
+        control?.kind === 'you'
+          ? 'you'
+          : control?.kind === 'agent' && control.acting
+            ? 'using'
+            : null
+      return { state, name: used?.name ?? '' }
+    }),
+  )
+  // A terminal its agent started that the user took over.
+  const terminal = useTerminalsStore((s) => {
+    const used = terminalInUse(s, sessionId)
+    return used?.control.kind === 'you' ? used.name : null
+  })
   if (writing) return null
   const separator = <i aria-hidden>·</i>
   const app = computer?.app ?? null
   const appHeld = computer?.control === 'you'
   const appUsed = !!app && !appHeld && !QUIET_PHASES.has(phase)
-  const waiting = phase === 'approval' || asked !== null || page === 'you' || appHeld
+  // The device or terminal the user holds, which the turn waits for.
+  const holding = device.state === 'you' ? device.name : terminal
+  const waiting =
+    phase === 'approval' || asked !== null || page === 'you' || appHeld || holding !== null
   const text = asked
     ? t(`control:status.asks.${asked}`)
     : page === 'you'
       ? t('control:status.you.tab')
       : appHeld
         ? t('control:status.you.app', { target: app ?? t('control:held.computer') })
-        : page === 'using'
-          ? t('control:status.using.browser')
-          : appUsed
-            ? t('control:status.using.app', { target: app })
-            : t(`thread.phase.${phase}`, { count })
+        : holding !== null
+          ? t('control:status.you.app', { target: holding })
+          : page === 'using'
+            ? t('control:status.using.browser')
+            : appUsed
+              ? t('control:status.using.app', { target: app })
+              : device.state === 'using'
+                ? t('control:status.using.app', { target: device.name })
+                : t(`thread.phase.${phase}`, { count })
   return (
     <div role="status" className="ks-status" data-after-sent={afterSent ? '' : undefined}>
       {waiting ? <span aria-hidden className="ks-status__attn" /> : <TurnDots phase={phase} />}
@@ -101,7 +129,12 @@ export const TurnStatus = memo(function TurnStatus({
         </>
       )}
       <span
-        key={asked ?? page ?? (appHeld ? 'app-held' : appUsed ? 'app' : phase)}
+        key={
+          asked ??
+          page ??
+          (appHeld ? 'app-held' : holding !== null ? 'held' : appUsed ? 'app' : device.state) ??
+          phase
+        }
         className="min-w-0 animate-in truncate animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
       >
         {text}

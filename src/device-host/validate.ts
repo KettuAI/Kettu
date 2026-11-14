@@ -193,8 +193,9 @@ export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M
     const params = object(raw, ['deviceId', 'sessionId', 'input'])
     return { deviceId: deviceId(params), sessionId: sessionId(params), input: input(params.input) }
   },
-  'devices.handBack': (raw) => held(raw),
+  'devices.takeOver': (raw) => held(raw),
   'devices.stopAgent': (raw) => held(raw),
+  'devices.handBack': (raw) => held(raw),
   'devices.screenshot': (raw) => held(raw),
   'devices.appearance': (raw) => held(raw),
   'devices.setAppearance': (raw) => {

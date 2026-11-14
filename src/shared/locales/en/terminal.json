@@ -36,8 +36,6 @@
   "owner": {
     "startedBy": "Started by {{agent}} · {{time}}",
     "openInBrowser": "Open in browser",
-    "stop": "Stop",
-    "notice": "{{agent}} is using this terminal. Typing here takes it over.",
-    "stops": "stops it."
+    "stop": "Stop"
   }
 }

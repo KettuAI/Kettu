@@ -150,6 +150,8 @@ export type MainToHost =
   | { type: 'host:computer-control'; sessionId: string; action: ComputerControlAction }
   // Where the window the holding session uses is now; answered by host:computer-frame.
   | { type: 'host:computer-frame-request'; requestId: number }
+  // The user handed a device back after taking it over in the session's turn.
+  | { type: 'host:device-handed-back'; sessionId: string; durationMs: number }
   | { type: 'host:shutdown' }
 
 /** A file of an artifact's version: its path in the artifact, and where its bytes lie on disk. */
@@ -301,6 +303,8 @@ export type HostToMain =
   | { type: 'host:browser-ask-answer'; sessionId: string; outcome: ControlOutcome }
   // An agent's device tool call for the device host; answered by device-result.
   | { type: 'host:device-call'; callId: number; call: DeviceCall }
+  // The turn of a session whose agent used a device ended: its devices are nobody's now.
+  | { type: 'host:device-turn-ended'; sessionId: string }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
   // A session's card allowed an app always: main keeps it in the settings, which come back.
@@ -356,11 +360,15 @@ export type MainToDeviceHost =
   | { type: 'device-host:sessions-ended'; sessionIds: string[] }
   /** An agent's device tool call, which the agent host sent its parent. */
   | { type: 'device-host:call'; callId: number; call: DeviceCall }
+  /** The turn of a session whose agent used devices ended; null: every turn, as the host stopped. */
+  | { type: 'device-host:turn-ended'; sessionId: string | null }
   | { type: 'device-host:shutdown' }
 
 export type DeviceHostToMain =
   | { type: 'device-host:ready' }
   | { type: 'device-host:answer'; callId: number; answer: DeviceCallAnswer }
+  /** The user handed a device back to the turn of `sessionId` after holding it for `durationMs`. */
+  | { type: 'device-host:handed-back'; sessionId: string; durationMs: number }
   | { type: 'device-host:stopped' }
 
 export type RemoteHostStopReason = 'remote_off' | 'stopping'

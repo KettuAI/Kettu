@@ -25,6 +25,7 @@ import {
   VolumeLowIcon,
 } from '@hugeicons/core-free-icons'
 import type { TFunction } from 'i18next'
+import { AnimatePresence } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import {
   SESSION_DEVICE_LIMIT,
@@ -54,7 +55,8 @@ import {
   EmptyTitle,
 } from '@renderer/components/ui/empty'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { DrivingPill } from '@renderer/features/browser/driving-bar'
+import { SurfacePill } from '@renderer/components/control/surface-pill'
+import { useControlAgent } from '@renderer/components/control/use-control-agent'
 import {
   PaneHead,
   PaneIcon,
@@ -70,6 +72,7 @@ import { cn } from '@renderer/lib/utils'
 import { toast } from '@renderer/components/ui/toast'
 import {
   closeDevice,
+  controlDevice,
   devicesOf,
   loadDevices,
   moveDevice,
@@ -502,43 +505,55 @@ function Elapsed({ since }: { since: number }) {
   )
 }
 
-/** The device on its stage: who drives it on top, the screen, and its hardware buttons under it. */
+/**
+ * The device on its stage: the screen, and its hardware buttons under it; while a turn uses it,
+ * the pill over the buttons says who has it.
+ */
 function Stage({ device, sessionId }: { device: DeviceInfo; sessionId: string }) {
   const { t } = useTranslation('devices')
+  const { t: tc } = useTranslation('control')
   const operator = device.operator
+  const control = operator?.control ?? null
   const agentId = useSessionsStore((s) =>
     operator?.sessionId ? (s.byId[operator.sessionId]?.agentId ?? null) : null,
   )
   const hostId = useSessionsStore((s) =>
     operator?.sessionId ? hostOfPath(s.byId[operator.sessionId]?.projectPath ?? '') : null,
   )
+  const agent = useControlAgent(agentId, hostId)
+  const agentName = agent?.name ?? operator?.agentName ?? tc('agent')
+  const [nudge, setNudge] = useState(0)
+  const held = () => setNudge((n) => n + 1)
+  const takeOver = () => controlDevice('devices.takeOver', device.id, sessionId)
   return (
     <div className="kp-stage">
       <DeviceScreen
         key={device.id}
         device={device}
         sessionId={sessionId}
-        driven={!!operator && !operator.user}
+        control={control}
+        agentName={agentName}
+        onHeld={held}
+        onTakeOver={takeOver}
       />
-      {operator && (
-        <DrivingPill
-          agent={agentId}
-          hostId={hostId}
-          user={operator.user}
-          onTakeOver={() =>
-            void window.kettu.devices.request('devices.stopAgent', {
-              deviceId: device.id,
-              sessionId,
-            })
-          }
-          onHandBack={() =>
-            void window.kettu.devices.request('devices.handBack', {
-              deviceId: device.id,
-              sessionId,
-            })
-          }
-        />
-      )}
+      <div className="kp-stage__pill">
+        <AnimatePresence>
+          {control && (
+            <SurfacePill
+              key="pill"
+              control={control}
+              agent={agent}
+              agentName={agentName}
+              scope={tc('scope.device')}
+              nudge={nudge}
+              onTakeOver={takeOver}
+              onHandBack={() => controlDevice('devices.handBack', device.id, sessionId)}
+              // No step is asked on a device; Done hands it back all the same.
+              onDone={() => controlDevice('devices.handBack', device.id, sessionId)}
+            />
+          )}
+        </AnimatePresence>
+      </div>
       <div role="toolbar" aria-label={t('buttons.label')} className="kp-hw">
         {BUTTONS.map((group, index) => {
           const shown = group.filter((entry) => entry.platforms.includes(device.platform))
@@ -551,13 +566,15 @@ function Stage({ device, sessionId }: { device: DeviceInfo; sessionId: string })
                     key={button}
                     label={t(`buttons.${button}`)}
                     onClick={() =>
-                      void window.kettu.devices
-                        .request('devices.input', {
-                          deviceId: device.id,
-                          sessionId,
-                          input: { type: 'button', button },
-                        })
-                        .catch(() => undefined)
+                      control?.kind === 'agent'
+                        ? held()
+                        : void window.kettu.devices
+                            .request('devices.input', {
+                              deviceId: device.id,
+                              sessionId,
+                              input: { type: 'button', button },
+                            })
+                            .catch(() => undefined)
                     }
                   >
                     <PaneIcon icon={icon} />

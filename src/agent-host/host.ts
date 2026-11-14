@@ -358,6 +358,8 @@ export class AgentHost {
   /** Browser calls awaiting main's answer, by the id the call was given. */
   private readonly browserCalls = new Map<number, (answer: BrowserCallAnswer) => void>()
   private readonly deviceCalls = new Map<number, (answer: DeviceCallAnswer) => void>()
+  /** Sessions whose running turn acted on a device, which the device host hears the end of. */
+  private readonly deviceTurns = new Set<string>()
   private nextDeviceCall = 1
   private readonly deviceAccess: DeviceAccessStore
   /** Browser calls sent to the desktop apps that sent their turns. */
@@ -744,6 +746,9 @@ export class AgentHost {
           this.artifacts.stopUsing(sessionId)
           this.computer?.turnEnded(sessionId)
           this.browserTurnEnded(sessionId)
+          if (this.deviceTurns.delete(sessionId)) {
+            this.options.send({ type: 'host:device-turn-ended', sessionId })
+          }
         },
       },
       skills: (agentId) => this.marketSkills.sessionOptions(agentId),
@@ -1564,11 +1569,17 @@ export class AgentHost {
 
   /** Sends an agent's device call to its parent, which hands it to the device host. */
   deviceCall(call: DeviceCall): Promise<DeviceCallAnswer> {
+    if (call.kind === 'action') this.deviceTurns.add(call.sessionId)
     const callId = this.nextDeviceCall++
     return new Promise<DeviceCallAnswer>((resolve) => {
       this.deviceCalls.set(callId, resolve)
       this.options.send({ type: 'host:device-call', callId, call })
     })
+  }
+
+  /** `host:device-handed-back`: the user handed a device back; the thread says for how long. */
+  deviceHandedBack(sessionId: string, durationMs: number): void {
+    this.sessions.controlHandedBack(sessionId, 'device', durationMs)
   }
 
   /** `device-result`: the device host's answer to a call this host forwarded. */
@@ -2172,6 +2183,9 @@ export class AgentHost {
           throw new HostError('forbidden', 'This port does not drive the session’s browser')
         }
         sessions.controlHandedBack(sessionId, 'browser', durationMs)
+      },
+      'terminal.handedBack': ({ sessionId, durationMs }) => {
+        sessions.controlHandedBack(sessionId, 'terminal', durationMs)
       },
       // The first answer goes to the page, whose waiting call then settles the card.
       'control.answerAsk': ({ sessionId, entryId, outcome }, { device }) => {

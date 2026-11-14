@@ -1,6 +1,7 @@
 // The contract between the device host and its clients: a window's renderer, a paired device's
 // channel through the remote host, and the agent host running agents' device tools.
 
+import type { ActiveControl } from './control'
 import type { Platform } from './platform'
 import type { PortConnectionState } from './port-rpc'
 
@@ -31,12 +32,15 @@ export type DeviceProblem =
   | 'usb-debugging-unauthorized'
   | 'offline'
 
+/** The turn that uses a device, from its agent's first call on it until the turn ends. */
 export interface DeviceOperator {
-  /** The session whose agent is acting on the device right now, or null when the user took over. */
+  /** The session whose turn uses the device. */
   sessionId: string | null
   agentName: string | null
-  /** The user's input took over; agents' calls fail until they hand back. */
+  /** The user took over; the agent's calls wait until they hand it back. */
   user: boolean
+  /** Who uses it now, by the rules every surface an agent and the user share follows. */
+  control: ActiveControl
 }
 
 export interface DeviceInfo {
@@ -179,10 +183,15 @@ export interface DeviceContract {
     params: { deviceId: DeviceId; sessionId: string; input: DeviceInput }
     result: void
   }
-  /** Hands the device back to the agent after the user took over. */
-  'devices.handBack': { params: { deviceId: DeviceId; sessionId: string }; result: void }
-  /** Cancels the agent's current call and gives the user control. */
+  /**
+   * The user's input while a turn uses the device is held back, scrolling aside; only this gives
+   * them the device, until they hand it back or the turn ends. The agent's calls wait meanwhile.
+   */
+  'devices.takeOver': { params: { deviceId: DeviceId; sessionId: string }; result: void }
+  /** The same as `devices.takeOver`, under the name clients built before it still send. */
   'devices.stopAgent': { params: { deviceId: DeviceId; sessionId: string }; result: void }
+  /** Hands the device back to the agent's turn, whose waiting calls go on. */
+  'devices.handBack': { params: { deviceId: DeviceId; sessionId: string }; result: void }
   'devices.screenshot': {
     params: { deviceId: DeviceId; sessionId: string }
     result: { png: ArrayBuffer }
@@ -218,8 +227,9 @@ export const DEVICE_METHODS = [
   'devices.unwatch',
   'devices.ack',
   'devices.input',
-  'devices.handBack',
+  'devices.takeOver',
   'devices.stopAgent',
+  'devices.handBack',
   'devices.screenshot',
   'devices.appearance',
   'devices.setAppearance',
@@ -241,6 +251,11 @@ export type DeviceEvent =
   | { type: 'devices.restarted' }
   /** A session's agent opened a device, so a window shows it if that session's panel is free. */
   | { type: 'device.opened'; deviceId: DeviceId; sessionId: string }
+  /**
+   * To the device's watchers: the agent acted on it, at a point of its screen as it is shown, from
+   * 0 to 1, or on it as a whole.
+   */
+  | { type: 'device.act'; deviceId: DeviceId; at: { x: number; y: number } | null }
 
 export interface DevicesApi {
   request<M extends DeviceMethod>(method: M, params: DeviceParams<M>): Promise<DeviceResult<M>>

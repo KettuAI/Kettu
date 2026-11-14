@@ -132,12 +132,6 @@
     "crashed": "此页面已崩溃",
     "unresponsive": "此页面没有响应"
   },
-  "control": {
-    "using": "{{agent}} 正在操作",
-    "you": "由你操作",
-    "handBack": "交还",
-    "takeOver": "接管"
-  },
   "origin": {
     "decision": {
       "deny": "拒绝",

@@ -108,6 +108,8 @@ export interface AgentHostDeps {
   onOriginDecided?(sessionId: string, requestId: number, decision: BrowserOriginDecision): void
   /** The last running turn that used a page of main's ended. */
   onBrowserTurnEnded?(sessionId: string): void
+  /** The turn of a session whose agent acted on a device ended. */
+  onDeviceTurnEnded?(sessionId: string): void
   /** Done or Skip on the card of a step the agent asked for on a page of main's. */
   onBrowserAskAnswer?(sessionId: string, outcome: ControlOutcome): void
   /** A session's card allowed an app always, for the settings to keep. */
@@ -580,6 +582,15 @@ export class AgentHost {
     this.host.post({ type: 'host:browser-waiting', callId, waiting })
   }
 
+  /** `host:device-handed-back`: the user handed a device back; the thread says for how long. */
+  deviceHandedBack(sessionId: string, durationMs: number): void {
+    this.host.post({
+      type: 'host:device-handed-back',
+      sessionId,
+      durationMs: Math.max(0, Math.round(durationMs)),
+    })
+  }
+
   /** `host:browser-handed-back`: the user handed the page back; the thread says for how long. */
   browserHandedBack(sessionId: string, durationMs: number): void {
     this.host.post({
@@ -820,6 +831,9 @@ export class AgentHost {
         }
         break
       }
+      case 'host:device-turn-ended':
+        if (typeof message.sessionId === 'string') this.deps.onDeviceTurnEnded?.(message.sessionId)
+        break
       case 'host:browser-turn-ended':
         if (typeof message.sessionId === 'string') this.deps.onBrowserTurnEnded?.(message.sessionId)
         break

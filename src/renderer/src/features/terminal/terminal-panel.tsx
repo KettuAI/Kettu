@@ -54,7 +54,7 @@ import {
   type TerminalSide,
   type TerminalState,
 } from '@renderer/stores/terminals'
-import { OwnerBar, TakeoverNotice } from './terminal-owner'
+import { OwnerBar, TerminalControl } from './terminal-owner'
 import { TerminalView } from './terminal-view'
 
 // The two sides of a split panel; alone, the left one fills it.
@@ -310,6 +310,7 @@ function TerminalSideView({
   focused: boolean
 }) {
   const focus = side ? () => focusTerminalSide(panel, side) : undefined
+  const box = useRef<HTMLDivElement>(null)
   return (
     <div
       className="kp-tview"
@@ -319,9 +320,9 @@ function TerminalSideView({
       onFocusCapture={focus}
     >
       {terminal.owner && <OwnerBar terminal={terminal} owner={terminal.owner} />}
-      <div className="kp-tbox">
+      <div ref={box} className="kp-tbox">
         <TerminalView key={terminal.id} terminal={terminal} focused={focused} />
-        {terminal.owner && <TakeoverNotice terminal={terminal} owner={terminal.owner} />}
+        {terminal.owner && <TerminalControl terminal={terminal} owner={terminal.owner} box={box} />}
       </div>
     </div>
   )

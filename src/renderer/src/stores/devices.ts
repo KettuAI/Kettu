@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { DeviceEnvironment, DeviceInfo } from '@shared/device-host'
+import type { DeviceEnvironment, DeviceInfo, DeviceOperator } from '@shared/device-host'
 import { toast } from '@renderer/components/ui/toast'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
@@ -111,6 +111,17 @@ export async function moveDevice(sessionId: string, deviceId: string): Promise<v
   }
 }
 
+/** Take over or Hand back a device a turn uses, from the session's pane or its composer's label. */
+export function controlDevice(
+  method: 'devices.takeOver' | 'devices.handBack',
+  deviceId: string,
+  sessionId: string,
+): void {
+  void window.kettu.devices
+    .request(method, { deviceId, sessionId })
+    .catch((error: unknown) => toast(errorMessage(error)))
+}
+
 /** Shuts a simulator or emulator down; its tab stays, to start it again. */
 export async function shutDownDevice(sessionId: string, deviceId: string): Promise<void> {
   try {
@@ -172,4 +183,27 @@ export function initDevices(): void {
   window.kettu.devices.onConnection((state) => {
     if (state === 'connected' && useDevicesStore.getState().loaded) void loadDevices()
   })
+}
+
+/**
+ * The device a turn of the session uses that the composer's label and the status line name: the
+ * one the user holds first, then the one the agent acts on, then any; null when none is used.
+ */
+export function deviceInUse(
+  devices: DeviceInfo[],
+  sessionId: string,
+): (DeviceInfo & { operator: DeviceOperator }) | null {
+  let found: (DeviceInfo & { operator: DeviceOperator }) | null = null
+  const rank = (operator: DeviceOperator): number =>
+    operator.control.kind === 'you'
+      ? 2
+      : operator.control.kind === 'agent' && operator.control.acting
+        ? 1
+        : 0
+  for (const device of devices) {
+    const operator = device.operator
+    if (!operator || device.sessionId !== sessionId) continue
+    if (!found || rank(operator) > rank(found.operator)) found = { ...device, operator }
+  }
+  return found
 }

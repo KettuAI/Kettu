@@ -2,7 +2,13 @@
 // host's out, and each client's port as it connects. index.ts runs it in Electron's utility
 // process, node-main.ts under Node.js.
 
-import type { DeviceCall, DeviceCallAnswer, DeviceCallErrorCode } from '@shared/device-agent'
+import { CONTROL_WAIT_MS, ControlWait } from '@shared/control'
+import type {
+  DeviceAction,
+  DeviceCall,
+  DeviceCallAnswer,
+  DeviceCallErrorCode,
+} from '@shared/device-agent'
 import type { DeviceEvent } from '@shared/device-host'
 import type { DeviceHostToMain, MainToDeviceHost } from '@shared/host-control'
 import { writeLog } from '@shared/log/process-log'
@@ -15,8 +21,8 @@ import { ActionError, AgentActions } from './agent'
 import { DeviceError, DeviceManager } from './devices'
 import { PortServer } from './server'
 
-/** The bar that names the agent stays this long after its last call. */
-const OPERATOR_LINGER_MS = 5_000
+/** The point agent-device reports a tap by reference at, in the device's points. */
+const TAPPED_AT = /^Tapped @\S+ \((-?[\d.]+), (-?[\d.]+)\)/m
 
 export interface StartedDeviceHost {
   connect(
@@ -38,7 +44,6 @@ export function startDeviceHost(
   let manager: DeviceManager | null = null
   let actions: AgentActions | null = null
   const running = new Map<string, AbortController>()
-  const lingering = new Map<string, ReturnType<typeof setTimeout>>()
 
   function init(message: Extract<MainToDeviceHost, { type: 'device-host:init' }>): void {
     let env: Promise<Env> | null = null
@@ -56,6 +61,12 @@ export function startDeviceHost(
       env: loadEnv,
       resourcesPath: message.resourcesPath,
       emit: (port, event) => (port ? server?.send(port, event) : server?.broadcast(event)),
+      handedBack: (sessionId, durationMs) =>
+        send({
+          type: 'device-host:handed-back',
+          sessionId,
+          durationMs: Math.max(0, Math.round(durationMs)),
+        }),
       log: (line) => console.log(line),
     })
     const devices = manager
@@ -86,12 +97,17 @@ export function startDeviceHost(
           devices.unwatch(port, params.deviceId, params.sessionId),
         'devices.ack': (port, params) =>
           devices.ack(port, params.deviceId, params.seq, params.sessionId),
-        'devices.input': (_, params) =>
-          devices.input(params.deviceId, params.input, params.sessionId),
-        'devices.handBack': (_, params) => devices.handBack(params.deviceId, params.sessionId),
+        'devices.input': (_, params) => {
+          devices.input(params.deviceId, params.input, params.sessionId)
+        },
+        'devices.takeOver': (_, params) => {
+          devices.takeOver(params.deviceId, params.sessionId)
+        },
         'devices.stopAgent': (_, params) => {
           devices.takeOver(params.deviceId, params.sessionId)
-          running.get(params.deviceId)?.abort()
+        },
+        'devices.handBack': (_, params) => {
+          devices.handBack(params.deviceId, params.sessionId)
         },
         'devices.screenshot': async (_, params) => {
           const png = await devices.screenshot(params.deviceId, params.sessionId)
@@ -167,23 +183,25 @@ export function startDeviceHost(
       if (devices.holder(request.deviceId) !== request.sessionId) {
         return failure('not_open', 'Open the device in this session with device_open first.')
       }
-      const operator = devices.operator(request.deviceId)
-      if (operator?.user) {
-        return failure(
-          'user_has_control',
-          'The user is operating this device. Wait until they hand it back.',
+      // The turn uses the device from its first call; while the user holds it, the call waits,
+      // returning before the harness's own limit for one tool call so the agent calls again.
+      let end: () => void
+      try {
+        end = await devices.begin(
+          request.deviceId,
+          { sessionId: request.sessionId, agentName: request.agentName },
+          { deadline: Date.now() + CONTROL_WAIT_MS },
         )
+      } catch (error) {
+        if (error instanceof ControlWait) return waitFailure(error)
+        throw error
       }
-      if (running.has(request.deviceId))
+      if (running.has(request.deviceId)) {
+        end()
         return failure('busy', 'Another action is running on this device.')
+      }
       const controller = new AbortController()
       running.set(request.deviceId, controller)
-      clearTimeout(lingering.get(request.deviceId))
-      devices.setOperator(request.deviceId, {
-        sessionId: request.sessionId,
-        agentName: request.agentName,
-        user: false,
-      })
       try {
         const action = request.action
         if (action.type === 'install' && request.projectPath && !action.path.startsWith('/')) {
@@ -195,19 +213,15 @@ export function startDeviceHost(
           action.type === 'rotate' &&
           (await devices.orient(request.deviceId, action.orientation))
         ) {
+          devices.acted(request.deviceId, null)
           return { result: { text: `Rotated to ${action.orientation.replace(/_/g, '-')}` } }
         }
-        return { result: await agent.run(request.sessionId, target, action, controller.signal) }
+        const result = await agent.run(request.sessionId, target, action, controller.signal)
+        void actedOn(devices, request.deviceId, action, result.text)
+        return { result }
       } finally {
         running.delete(request.deviceId)
-        lingering.set(
-          request.deviceId,
-          setTimeout(() => {
-            lingering.delete(request.deviceId)
-            const current = devices.operator(request.deviceId)
-            if (current && !current.user) devices.setOperator(request.deviceId, null)
-          }, OPERATOR_LINGER_MS),
-        )
+        end()
       }
     } catch (error) {
       if (error instanceof ActionError) {
@@ -236,6 +250,11 @@ export function startDeviceHost(
           .catch((error: unknown) => warn(`Cannot let go of ended sessions' devices: ${error}`))
         break
       }
+      case 'device-host:turn-ended':
+        if (typeof message.sessionId === 'string' || message.sessionId === null) {
+          manager?.turnEnded(message.sessionId)
+        }
+        break
       case 'device-host:call':
         void call(message.call).then((answer) =>
           send({ type: 'device-host:answer', callId: message.callId, answer }),
@@ -255,6 +274,57 @@ export function startDeviceHost(
       if (server) server.attach(port, windowId, device)
       else port.close()
     },
+  }
+}
+
+/** The agent acted on the device: where its watchers draw it, for an action they can see. */
+async function actedOn(
+  devices: DeviceManager,
+  id: string,
+  action: DeviceAction,
+  text: string,
+): Promise<void> {
+  let point: { x: number; y: number } | null = null
+  switch (action.type) {
+    case 'tap':
+      if ('x' in action) point = { x: action.x, y: action.y }
+      else {
+        const tapped = TAPPED_AT.exec(text)
+        if (tapped) point = { x: Number(tapped[1]), y: Number(tapped[2]) }
+      }
+      break
+    case 'swipe':
+      point = action.from
+      break
+    case 'fill':
+    case 'type':
+    case 'scroll':
+    case 'button':
+    case 'launch':
+    case 'terminate':
+    case 'open_url':
+      break
+    default:
+      // Reading the screen, logs or settings shows nothing on it.
+      return
+  }
+  const at = point ? await devices.pointOnScreen(id, point.x, point.y).catch(() => null) : null
+  devices.acted(id, at)
+}
+
+/** What a call that waited on the user says when it returns without acting. */
+function waitFailure(wait: ControlWait): DeviceCallAnswer {
+  switch (wait.reason) {
+    case 'held':
+    case 'asking':
+      return failure(
+        'user_has_control',
+        'The user took over this device and still has it; call again to keep waiting.',
+      )
+    case 'stopped':
+      return failure('stopped', 'The user stopped.')
+    case 'gone':
+      return failure('not_open', 'The device was closed or moved to another session.')
   }
 }
 
