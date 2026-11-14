@@ -247,6 +247,17 @@
   --ui-agc-flag-ink: var(--on-fill);
   --ui-agc-edge: linear-gradient(var(--pane-fox), var(--pane-fox));
 }
+/* A small name tag rather than affectUI's card, so it hides little of the page. */
+.ctl-pointer.ui-agc .ui-agc__flag {
+  top: 17px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  box-shadow: 0 2px 6px -2px color-mix(in srgb, var(--pane-fox) 50%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+}
 .ctl-pointer__ring {
   position: absolute;
   top: 0;
