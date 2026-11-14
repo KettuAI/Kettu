@@ -21,7 +21,7 @@ import { forgetHostAgentOptions, readHostAgentOptions } from '@renderer/stores/a
 import { forgetHostAgents, readHostAgents, useAgentsStore } from '@renderer/stores/agents'
 import { useHostsStore } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
-import { useSessionsStore } from '@renderer/stores/sessions'
+import { listedOrigin, useSessionsStore } from '@renderer/stores/sessions'
 import { endTerminals, reattachTerminals, takeTerminalEvent } from '@renderer/stores/terminals'
 
 const CACHE_KEY = 'hosts.sessions'
@@ -52,8 +52,8 @@ export function hostLists(
   const of = (hostId: string) => (lists[hostId] ??= { sessions: [], projects: [] })
   for (const summary of Object.values(byId)) {
     const hostId = hostOfPath(summary.projectPath)
-    // A run is listed under the routine on its own host, which the window does not show.
-    if (hostId !== null && summary.origin !== 'routine' && !summary.prepared) {
+    // A run is listed under the routine on its own host, a step under its task.
+    if (hostId !== null && listedOrigin(summary) && !summary.prepared) {
       of(hostId).sessions.push(summary)
     }
   }

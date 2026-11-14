@@ -63,6 +63,9 @@ const routineHosts = new Map<string, string>()
 /** The routines this computer keeps, which no other host may claim. */
 const ownRoutines = new Set<string>()
 
+/** The other host a task runs on, learned from that host's lists and events. */
+const taskHosts = new Map<string, string>()
+
 /** The other hosts that last heard which of their sessions the window shows. */
 let showing = new Set<string>()
 
@@ -102,6 +105,7 @@ export function forgetHostSessions(hostId: string): void {
     if (on === hostId && artifactHosts.delete(id)) saveArtifactHosts()
   }
   for (const [id, on] of routineHosts) if (on === hostId) routineHosts.delete(id)
+  for (const [id, on] of taskHosts) if (on === hostId) taskHosts.delete(id)
   showing.delete(hostId)
 }
 
@@ -149,6 +153,17 @@ export function learnRoutineHost(id: string, hostId: string | null): boolean {
   return true
 }
 
+/** The other host a task runs on, or null for this computer's and the unknown. */
+export function taskHost(id: string): string | null {
+  return taskHosts.get(id) ?? null
+}
+
+/** Remembers where a task runs: on this computer when `hostId` is null. */
+export function learnTaskHost(id: string, hostId: string | null): void {
+  if (hostId === null) taskHosts.delete(id)
+  else taskHosts.set(id, hostId)
+}
+
 /** How main names the artifact: its id, with its host before it when another host keeps it. */
 export function artifactRefOf(id: string): string {
   return artifactRef(artifactHost(id), id)
@@ -167,6 +182,9 @@ export function routeOf(method: string, params: unknown): string | null {
   }
   if (method.startsWith('routines.') && typeof fields.routineId === 'string') {
     return routineHost(fields.routineId)
+  }
+  if (method.startsWith('tasks.') && typeof fields.taskId === 'string') {
+    return taskHost(fields.taskId)
   }
   if (typeof fields.sessionId === 'string') return sessionHost(fields.sessionId)
   if (method.startsWith('attachments.') && typeof fields.id === 'string') {

@@ -32,6 +32,11 @@ function listed(summary: SessionSummary): SessionSummary {
   return at === undefined || summary.archivedAt ? summary : { ...summary, archivedAt: at }
 }
 
+/** Sessions listed under their projects: a routine's runs and a task's steps are listed elsewhere. */
+export function listedOrigin(summary: Pick<SessionSummary, 'origin'>): boolean {
+  return summary.origin !== 'routine' && summary.origin !== 'task'
+}
+
 export const useSessionsStore = create<SessionsStore>()((set) => ({
   byId: {},
   loaded: false,
@@ -40,8 +45,7 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
     // The list leaves out a routine's run sessions; one that is open stays for its view, which
     // the host still knows, and its removal comes as a session.removed event.
     const kept = (summary: SessionSummary) =>
-      hostOfPath(summary.projectPath) !== hostId ||
-      (hostId === null && summary.origin === 'routine')
+      hostOfPath(summary.projectPath) !== hostId || (hostId === null && !listedOrigin(summary))
     set((state) => ({
       byId: {
         ...Object.fromEntries(Object.entries(state.byId).filter(([, summary]) => kept(summary))),
@@ -131,7 +135,7 @@ export function sessionTree(
   return buildTree(
     byId,
     (s) =>
-      s.origin !== 'routine' &&
+      listedOrigin(s) &&
       (projectPath === null
         ? s.scratch && hostOfSession(s) === hostId
         : s.projectPath === projectPath),
@@ -143,7 +147,7 @@ export function sessionTree(
 export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] {
   return buildTree(
     byId,
-    (s) => s.origin !== 'routine',
+    (s) => listedOrigin(s),
     (s) => !!s.pinnedAt && !s.archivedAt,
   ).sort((a, b) => (a.summary.pinnedAt ?? 0) - (b.summary.pinnedAt ?? 0))
 }
@@ -156,7 +160,7 @@ export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[
   return (
     buildTree(
       byId,
-      (s) => s.origin !== 'routine',
+      (s) => listedOrigin(s),
       (s) => !s.archivedAt,
     )
       .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
@@ -197,10 +201,7 @@ export function archivedSessions(
   return Object.values(byId)
     .filter(
       (s) =>
-        s.origin !== 'routine' &&
-        s.parentId === null &&
-        !!s.archivedAt &&
-        hostOfSession(s) === hostId,
+        listedOrigin(s) && s.parentId === null && !!s.archivedAt && hostOfSession(s) === hostId,
     )
     .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
 }

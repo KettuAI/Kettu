@@ -42,6 +42,7 @@ import {
   sidebarTabStop,
   type SessionNode,
   type SidebarTabStop,
+  listedOrigin,
   useSessionsStore,
 } from '@renderer/stores/sessions'
 import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
@@ -195,7 +196,7 @@ function HostSection({
   const own = projects.filter((project) => hostOfPath(project.path) === hostId)
   const scratch = useSessionsStore((s) =>
     Object.values(s.byId).some(
-      (x) => x.scratch && x.origin !== 'routine' && !x.archivedAt && hostOfSession(x) === hostId,
+      (x) => x.scratch && listedOrigin(x) && !x.archivedAt && hostOfSession(x) === hostId,
     ),
   )
   const key = hostGroup(hostId)

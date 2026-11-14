@@ -54,6 +54,8 @@ import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/mar
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
+import { useSopsStore } from '@renderer/stores/sops'
+import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { initSettings, useSettingsStore } from '@renderer/stores/settings'
 import { hostScopeEvent, hostScopeOpened } from '@renderer/stores/host-scope'
@@ -147,6 +149,15 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'routine.run':
       useRoutinesStore.getState().receiveRun(event.run, hostId)
       return
+    case 'task.changed':
+      useTasksStore.getState().receive(event.task, hostId)
+      return
+    case 'task.removed':
+      useTasksStore.getState().removed(event.taskId)
+      return
+    case 'sops.changed':
+      useSopsStore.getState().changed(hostId)
+      return
   }
   receiveArtifactEvent(event, hostId)
   if (event.type === 'artifacts.changed') artifactsChanged(hostId)
@@ -182,6 +193,7 @@ function loadSessionState(): Promise<unknown> {
     useProjectsStore.getState().refresh(),
     useSessionsStore.getState().refresh(),
     useRoutinesStore.getState().load(),
+    useTasksStore.getState().load(),
     loadAgentOptions(),
   ])
 }
@@ -359,6 +371,7 @@ export function bootstrap(): Promise<unknown> {
       opened: (hostId) => {
         artifactsHostOpened(hostId)
         routinesHostOpened(hostId)
+        tasksHostOpened(hostId)
         hostScopeOpened(hostId)
         hostRestarted(hostId)
         rewatchAll((sessionId) => sessionHost(sessionId) === hostId)
@@ -369,6 +382,7 @@ export function bootstrap(): Promise<unknown> {
       closed: (hostId) => {
         artifactsHostClosed(hostId)
         routinesHostClosed(hostId)
+        tasksHostClosed(hostId)
       },
       resync: (hostId) => rewatchAll((sessionId) => sessionHost(sessionId) === hostId),
     })
