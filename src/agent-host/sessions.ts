@@ -122,7 +122,10 @@ import {
 } from './attachments'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
 import { OPTION_IDS as CLAUDE_OPTION_IDS } from './claude/config'
-import { MODE_ID as CODEX_MODE_ID } from './codex/config'
+import {
+  COLLABORATION_ID as CODEX_COLLABORATION_ID,
+  MODE_ID as CODEX_MODE_ID,
+} from './codex/config'
 import { CONFIG as DSH_CONFIG } from './dsh/options'
 import { carryMode, lostValues, lostValuesNotice, type LostValue } from './config-notice'
 import {
@@ -166,7 +169,17 @@ import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
-import { REPORT_LIMIT, reportText, type ToolSession } from './session-tools'
+import { REPORT_LIMIT, reportText, type ToolMode, type ToolSession } from './session-tools'
+import {
+  isRanked,
+  modeLabel,
+  modeRank,
+  startableModes,
+  startedCeiling,
+  startedMode,
+  starterRank,
+  type ModeRank,
+} from './started-mode'
 import type { RoutineSessionHooksRef, RoutineSessionStart } from './routines/hooks'
 import { scopeAnswer } from './routines/scope'
 import { CONTEXT_REPORT, runReport } from './reports'
@@ -479,6 +492,16 @@ interface PendingRequest {
   answer(answer: PermissionAnswer): void
 }
 
+/**
+ * The mode of a session another session's agent started: the starter's rank, null for one Kettu
+ * cannot rank, the mode it asked for, and the ceiling, known once the agent's own mode is.
+ */
+interface StartedModeHold {
+  starter: ModeRank | null
+  wanted: string | null
+  ceiling: ModeRank | null
+}
+
 interface Live {
   id: string
   record: SessionRecord
@@ -585,6 +608,8 @@ interface Live {
   routineScope: PermissionScope | null
   routineTurnStarted: boolean
   routineTurnEnded: boolean
+  /** A session another session's agent started: what its mode is held to. */
+  startedMode: StartedModeHold | null
   /** Since when nothing has needed its agent, and since when no port has shown it in front. */
   idleSince: number | null
   hiddenSince: number | null
@@ -2447,6 +2472,7 @@ export class SessionManager {
       routineScope: null,
       routineTurnStarted: false,
       routineTurnEnded: false,
+      startedMode: null,
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
@@ -3269,6 +3295,8 @@ export class SessionManager {
       preparedId?: string
       /** The session whose agent started it through the session tools. */
       startedBy?: string
+      /** What the mode of a session an agent starts is held to. */
+      startedMode?: { starter: ModeRank | null; wanted: string | null }
       /** Whose prompt the first message is, when another session's agent sends it. */
       from?: FromSession
       /** The paired device that sent the first message. */
@@ -3348,6 +3376,7 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
+    if (params.startedMode) live.startedMode = { ...params.startedMode, ceiling: null }
     // The message shows at once and goes out as the session's first turn, so it never enters the
     // index without it.
     if (prompt) {
@@ -3793,6 +3822,7 @@ export class SessionManager {
       if (failed.code === 'auth_required' && live.first) this.signInNotice(live, failed)
       throw failed
     }
+    if (live.startedMode) this.holdStartedMode(live, setup.config)
     if (gone()) {
       // It never reached the index, so the agent's new session goes the way a hidden one does.
       await this.removeUnlisted(live.id, runtime, setup.sessionId)
@@ -3859,6 +3889,7 @@ export class SessionManager {
     }
     // A run starts in the strictest mode that still asks, before anything is sent.
     if (live.record.origin === 'routine') await this.applyRoutineMode(live, runtime.connection)
+    if (live.startedMode) await this.applyStartedMode(live, runtime.connection)
     this.update(live, { status: 'ready' })
     this.deps.agents.signedIn(agentId)
     this.touch(live.id)
@@ -4055,26 +4086,86 @@ export class SessionManager {
     }
     if (option.value === wanted) return
     try {
-      let config: ConfigOption[]
-      if (option.id === SYNTHETIC_MODE_ID) {
-        await connection.setMode(live.record.acpSessionId, wanted)
-        config = live.thread.session.config.map((current) =>
-          current.id === option.id ? { ...current, value: wanted } : current,
-        )
-      } else {
-        config = mergeConfig(
-          live.thread.session.config,
-          await connection.setConfigOption(live.record.acpSessionId, option.id, wanted),
-        )
-      }
-      this.update(live, { config })
-      this.save(live)
+      await this.setModeBeforeStart(live, connection, option, wanted)
     } catch {
       throw new HostError(
         'restricted',
         t('routines.modeFailed', { agent: this.deps.agents.name(live.record.agentId) }),
       )
     }
+  }
+
+  /** Sets a starting session's mode option before its first prompt; the agent's refusal throws. */
+  private async setModeBeforeStart(
+    live: Live,
+    connection: AgentConnection,
+    option: ConfigOption,
+    value: string,
+  ): Promise<void> {
+    let config: ConfigOption[]
+    if (option.id === SYNTHETIC_MODE_ID) {
+      await connection.setMode(live.record.acpSessionId, value)
+      config = live.thread.session.config.map((current) =>
+        current.id === option.id ? { ...current, value } : current,
+      )
+    } else {
+      config = mergeConfig(
+        live.thread.session.config,
+        await connection.setConfigOption(live.record.acpSessionId, option.id, value),
+      )
+    }
+    this.update(live, { config })
+    this.save(live)
+  }
+
+  /**
+   * Sets the start value of a started session's mode once the agent's own is known: the mode asked
+   * for, else the start mode or the agent's own, held to the ceiling.
+   */
+  private holdStartedMode(live: Live, config: readonly ConfigOption[]): void {
+    const hold = live.startedMode
+    const { agentId } = live.record
+    const harness = harnessOf(agentId)
+    const optionId = modeOptionId(agentId)
+    if (!hold || optionId === null || !isRanked(harness)) return
+    const own = config.find((option) => option.id === optionId)?.value
+    const agentMode =
+      startModeIn(this.deps.settings(), agentId) ?? (typeof own === 'string' ? own : '')
+    hold.ceiling = startedCeiling(hold.starter, harness, agentMode)
+    live.startValues[optionId] = startedMode(harness, hold.wanted ?? agentMode, hold.ceiling)
+  }
+
+  /**
+   * A started session keeps a mode under its ceiling, the widest the agent takes when the one held
+   * is refused; one it leaves wider fails the start before anything is sent.
+   */
+  private async applyStartedMode(live: Live, connection: AgentConnection): Promise<void> {
+    const ceiling = live.startedMode?.ceiling ?? null
+    const { agentId } = live.record
+    const harness = harnessOf(agentId)
+    const optionId = modeOptionId(agentId)
+    if (ceiling === null || optionId === null || !isRanked(harness)) return
+    const option = live.thread.session.config.find(
+      (candidate) => candidate.id === optionId && candidate.type === 'select',
+    )
+    const allowed = startableModes(harness, ceiling)
+    if (option && typeof option.value === 'string' && allowed.includes(option.value)) return
+    const held = live.startValues[optionId]
+    const limit = Math.min(ceiling, typeof held === 'string' ? (modeRank(harness, held) ?? 1) : 1)
+    const offered = option?.choices?.map((choice) => choice.value) ?? []
+    for (const mode of startableModes(harness, limit as ModeRank).reverse()) {
+      if (!option || !offered.includes(mode)) continue
+      try {
+        await this.setModeBeforeStart(live, connection, option, mode)
+        return
+      } catch {
+        // The next narrower mode may still be taken.
+      }
+    }
+    throw new HostError(
+      'restricted',
+      t('session.startedModeFailed', { agent: this.deps.agents.name(agentId) }),
+    )
   }
 
   /** Records why a start failed; auth goes to `auth_required`, the rest to `failed`. */
@@ -7266,6 +7357,43 @@ export class SessionManager {
     return out
   }
 
+  /**
+   * The rank the caller's mode holds the sessions it starts to: planning counts as asking. Null
+   * for an agent whose modes Kettu cannot rank.
+   */
+  starterRank(sessionId: string): ModeRank | null {
+    const record = this.recordOf(sessionId)
+    const harness = harnessOf(record.agentId)
+    const config = this.live.get(sessionId)?.thread.session.config ?? []
+    const optionId = modeOptionId(record.agentId)
+    const mode = config.find((option) => option.id === optionId)?.value
+    // Codex plans in its collaboration mode, beside its permission mode.
+    const planning =
+      harness === 'codex' &&
+      config.some((option) => option.id === CODEX_COLLABORATION_ID && option.value === 'plan')
+    return starterRank(harness, typeof mode === 'string' ? mode : undefined, planning)
+  }
+
+  /** A session's permission mode, from memory or its stored thread; null when it has none. */
+  async toolMode(sessionId: string): Promise<ToolMode | null> {
+    const record = this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const config = live
+      ? live.thread.session.config
+      : ((await this.readThread(record))?.session.config ?? [])
+    const optionId = modeOptionId(record.agentId)
+    const option = config.find((candidate) =>
+      optionId === null
+        ? candidate.category === 'mode' && candidate.type === 'select'
+        : candidate.id === optionId,
+    )
+    if (typeof option?.value !== 'string') return null
+    const harness = harnessOf(record.agentId)
+    if (isRanked(harness)) return { id: option.value, name: modeLabel(harness, option.value).name }
+    const name = option.choices?.find((choice) => choice.value === option.value)?.name
+    return { id: option.value, name: name ?? option.value }
+  }
+
   /** The latest agent message of a session's thread, from memory or the stored one. */
   async lastReply(sessionId: string): Promise<string | null> {
     const live = this.live.get(sessionId)
@@ -7384,12 +7512,12 @@ export class SessionManager {
 
   /**
    * Starts a sub-session of the caller with its first prompt, as New sub-session would: the
-   * caller's project and parent, and with the caller's agent its model and level. The mode is the
-   * start mode, never the caller's, which may give full access.
+   * caller's project and parent, and with the caller's agent its model and level. Its mode is the
+   * one asked for or the start mode, never wider than the caller's or than full access allows.
    */
   async startFromTool(
     callerId: string,
-    params: { prompt: string; title?: string; agentId?: AgentId; report: boolean },
+    params: { prompt: string; title?: string; agentId?: AgentId; mode?: string; report: boolean },
   ): Promise<string> {
     const caller = this.recordOf(callerId)
     const agentId = params.agentId ?? caller.agentId
@@ -7417,6 +7545,7 @@ export class SessionManager {
       options,
       prompt: [{ type: 'text', text: params.prompt }],
       startedBy: callerId,
+      startedMode: { starter: this.starterRank(callerId), wanted: params.mode ?? null },
       from,
       ...(params.title === undefined ? {} : { title: params.title }),
     })

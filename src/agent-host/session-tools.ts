@@ -4,6 +4,7 @@
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { AgentStatus } from '@shared/agent-host'
+import { harnessOf, START_MODE_CHARS } from '@shared/agents'
 import { longer } from '@shared/artifacts'
 import {
   isAgentId,
@@ -14,6 +15,15 @@ import {
 } from '@shared/thread'
 import { folded, type Caller } from './artifacts/tools'
 import { cutStart, historyPage, HISTORY_TOOL, type RenderedTurn } from './carried-context'
+import {
+  defaultMode,
+  isRanked,
+  modeLabel,
+  startableModes,
+  startedCeiling,
+  STARTED_MAX,
+  type ModeRank,
+} from './started-mode'
 
 export const TITLE_CHARS = 120
 export const TEXT_CHARS = 100_000
@@ -31,6 +41,12 @@ const HISTORY_DEFAULT = 5
 /** One turn, and one page, of the history tool at most. */
 const HISTORY_TURN_BYTES = 24 * 1024
 const HISTORY_PAGE_BYTES = 64 * 1024
+
+/** A session's permission mode as the tools show it. */
+export interface ToolMode {
+  id: string
+  name: string
+}
 
 /** What the tools show of a session; the manager's record and live view, narrowed. */
 export interface ToolSession {
@@ -65,7 +81,7 @@ export interface SessionToolsDeps {
   /** Starts a sub-session of the caller with its first prompt; returns its id. */
   start(
     callerId: string,
-    params: { prompt: string; title?: string; agentId?: AgentId; report: boolean },
+    params: { prompt: string; title?: string; agentId?: AgentId; mode?: string; report: boolean },
   ): Promise<string>
   /** Prompts a session the caller started, or queues the prompt while it works. */
   send(sessionId: string, text: string, from: FromSession): Promise<'sent' | 'queued'>
@@ -79,6 +95,12 @@ export interface SessionToolsDeps {
   agentLabel(agentId: AgentId): string
   /** The host's agents as Settings lists them, for list_agents and the agent a start names. */
   agents(): AgentStatus[]
+  /** A session's permission mode, from memory or its stored thread. */
+  mode(sessionId: string): Promise<ToolMode | null>
+  /** The rank the caller's mode holds the sessions it starts to; null when Kettu cannot rank it. */
+  starterRank(sessionId: string): ModeRank | null
+  /** The mode the user set for an agent's new sessions in Settings › Agent. */
+  startMode(agentId: AgentId): string | undefined
   now?(): number
 }
 
@@ -200,7 +222,8 @@ export const SESSION_INSTRUCTIONS =
   'reply, rename or archive your own session or one you started, start a session for a separate ' +
   'task with its first prompt, and send a session you started a follow-up. A session you start ' +
   "can run another of the user's agents, which list_agents shows, for example to review your " +
-  'work. Archive your own ' +
+  'work. Its permission mode is never wider than yours; ask for a narrower one, such as a ' +
+  'read-only mode for a review that must leave the files alone. Archive your own ' +
   'session only when the user asked you to or your work is clearly done. A session you start ' +
   'runs on its own: when a turn you asked it for ends, Kettu sends you a message saying so and ' +
   'you read its reply with get_session, so never wait for it in a loop. When you took a session ' +
@@ -253,6 +276,15 @@ const AGENT: Schema = {
   type: 'string',
   description: 'The agent to run it with, as list_agents names it; yours by default.',
 }
+const MODE: Schema = {
+  type: 'string',
+  minLength: 1,
+  maxLength: START_MODE_CHARS,
+  description:
+    'The permission mode to start it in, one list_agents gives for the agent; without it, the ' +
+    'mode the user set for its new sessions. Kettu starts it no wider than yours.',
+}
+const MODE_INFO = object({ id: { type: 'string' }, name: { type: 'string' } }, ['id', 'name'])
 const REPORT: Schema = {
   type: 'boolean',
   default: true,
@@ -297,6 +329,7 @@ const INFO: Record<string, Schema> = {
   started_by_you: { type: 'boolean' },
   is_you: { type: 'boolean' },
   archived: { type: 'boolean' },
+  mode: MODE_INFO,
 }
 
 const INFO_REQUIRED = [
@@ -316,8 +349,8 @@ export const SESSION_TOOLS: Tool[] = [
     name: 'list_agents',
     title: 'List agents',
     description:
-      "Lists the user's agents on this computer that start_session can run, and whether each " +
-      'can start now.',
+      "Lists the user's agents on this computer that start_session can run, whether each " +
+      'can start now, and the permission modes you can start it in.',
     inputSchema: object({}),
     outputSchema: output({
       agents: {
@@ -328,6 +361,13 @@ export const SESSION_TOOLS: Tool[] = [
           harness: { type: 'string' },
           is_you: { type: 'boolean' },
           status: { type: 'string', enum: [...AGENT_STATUSES] },
+          modes: {
+            type: 'array',
+            items: object(
+              { id: { type: 'string' }, name: { type: 'string' }, description: { type: 'string' } },
+              ['id', 'name', 'description'],
+            ),
+          },
         }),
       },
     }),
@@ -383,8 +423,11 @@ export const SESSION_TOOLS: Tool[] = [
     description:
       'Starts a session of your own in this project with its first prompt. It runs on its own, ' +
       'and Kettu tells you when its turn ends; do not wait for it in a loop.',
-    inputSchema: object({ prompt: PROMPT, title: TITLE, agent: AGENT, report: REPORT }, ['prompt']),
-    outputSchema: output(INFO, INFO_REQUIRED),
+    inputSchema: object(
+      { prompt: PROMPT, title: TITLE, agent: AGENT, mode: MODE, report: REPORT },
+      ['prompt'],
+    ),
+    outputSchema: output({ ...INFO, mode_lowered: { type: 'boolean' } }, INFO_REQUIRED),
     annotations: { destructiveHint: false, openWorldHint: true },
   },
   {
@@ -545,6 +588,15 @@ function agent(o: Args): AgentId | undefined {
   return value
 }
 
+function mode(o: Args): string | undefined {
+  const value = o.mode
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || value.length === 0 || longer(value, START_MODE_CHARS)) {
+    throw invalid('mode must be a mode id, as list_agents gives it.')
+  }
+  return value
+}
+
 function report(o: Args): boolean {
   const value = o.report
   if (value === undefined) return true
@@ -582,10 +634,15 @@ function failure(error: SessionToolError): CallToolResult {
   }
 }
 
+function modeText(mode: ToolMode | null): string {
+  return mode ? ` in ${mode.name} (${mode.id})` : ''
+}
+
 function infoOf(
   session: ToolSession,
   callerId: string,
   lastReply?: string | null,
+  mode?: ToolMode | null,
 ): Record<string, unknown> {
   return {
     id: session.id,
@@ -597,6 +654,7 @@ function infoOf(
     started_by_you: session.startedBy === callerId,
     is_you: session.id === callerId,
     archived: session.archived,
+    ...(mode ? { mode } : {}),
     ...(lastReply ? { last_reply: lastReply } : {}),
   }
 }
@@ -632,7 +690,7 @@ export class SessionTools {
       case 'archive_session':
         return this.archive(caller, args(input, ['id']))
       case 'start_session':
-        return this.start(caller, args(input, ['prompt', 'title', 'agent', 'report']))
+        return this.start(caller, args(input, ['prompt', 'title', 'agent', 'mode', 'report']))
       case 'send_message':
         return this.send(caller, args(input, ['id', 'text', 'report']))
       case HISTORY_TOOL:
@@ -652,6 +710,7 @@ export class SessionTools {
 
   private async listAgents(caller: Caller): Promise<CallToolResult> {
     const own = this.deps.info(caller.sessionId)?.agentId
+    const starter = this.deps.starterRank(caller.sessionId)
     const agents = this.deps.agents().flatMap((agent) => {
       const status = toolAgentStatus(agent)
       if (!status) return []
@@ -662,6 +721,7 @@ export class SessionTools {
           harness: agent.harnessName,
           is_you: agent.id === own,
           status,
+          modes: this.modesOf(agent.id, starter),
         },
       ]
     })
@@ -672,10 +732,50 @@ export class SessionTools {
             .map(
               (agent) =>
                 `${agent.id}: ${agent.name} (${agent.harness}), ${agent.status}` +
-                (agent.is_you ? ', yours' : ''),
+                (agent.is_you ? ', yours' : '') +
+                (agent.modes.length > 0
+                  ? `; modes ${agent.modes.map((item) => item.id).join(', ')}`
+                  : ''),
             )
             .join('\n')
     return result(text, { agents })
+  }
+
+  /**
+   * The modes a caller can start an agent in now: none for an agent whose modes Kettu cannot rank.
+   * Claude Code reads its own mode at the start, so one of these may still start narrower.
+   */
+  private modesOf(
+    agentId: AgentId,
+    starter: ModeRank | null,
+  ): { id: string; name: string; description: string }[] {
+    const harness = harnessOf(agentId)
+    if (!isRanked(harness)) return []
+    const ceiling = startedCeiling(
+      starter,
+      harness,
+      this.deps.startMode(agentId) ?? defaultMode(harness),
+    )
+    return startableModes(harness, ceiling).map((id) => ({ id, ...modeLabel(harness, id) }))
+  }
+
+  /** Refuses a mode no started session of the agent can have. */
+  private checkMode(agentId: AgentId, value: string): void {
+    const harness = harnessOf(agentId)
+    const name = this.deps.agents().find((status) => status.id === agentId)?.name ?? agentId
+    if (!isRanked(harness)) {
+      throw new SessionToolError(
+        'not_allowed',
+        `The mode of ${name} cannot be chosen here. Leave mode out.`,
+      )
+    }
+    if (!startableModes(harness, STARTED_MAX).includes(value)) {
+      throw new SessionToolError(
+        'not_allowed',
+        `${name} has no mode ${value} that a session you start can have. ` +
+          'list_agents gives the modes you can choose.',
+      )
+    }
   }
 
   /** Refuses an agent the user cannot start a session with here. */
@@ -723,13 +823,17 @@ export class SessionTools {
     const whole = await this.deps.lastReply(session.id)
     const reply = whole === null ? null : cutReply(whole)
     const cut = whole !== null && reply !== null && reply.length < whole.length
+    const current = await this.deps.mode(session.id)
     return result(
-      `${titleOf(session)} (${session.agentId}), ${toolStatus(session.status)}, ` +
-        `updated ${iso(session.updatedAt)}.` +
+      `${titleOf(session)} (${session.agentId}), ${toolStatus(session.status)}` +
+        `${modeText(current)}, updated ${iso(session.updatedAt)}.` +
         (cut
           ? ` Its latest reply is cut to 8 KB here; ${HISTORY_TOOL} with this id reads more of it.`
           : ''),
-      { ...infoOf(session, caller.sessionId, reply), ...(cut ? { reply_cut: true } : {}) },
+      {
+        ...infoOf(session, caller.sessionId, reply, current),
+        ...(cut ? { reply_cut: true } : {}),
+      },
     )
   }
 
@@ -762,6 +866,7 @@ export class SessionTools {
     const prompt = text(o, 'prompt')
     const value = o.title === undefined ? undefined : title(o)
     const agentId = agent(o)
+    const wanted = mode(o)
     const reported = report(o)
     const callerInfo = this.deps.info(caller.sessionId)
     if (!callerInfo) throw notFound(caller.sessionId)
@@ -774,15 +879,26 @@ export class SessionTools {
     const limit = startLimit(caller.sessionId, this.deps.started(caller.sessionId), this.now())
     if (limit) throw limitError(limit)
     if (agentId !== undefined && agentId !== callerInfo.agentId) this.checkAgent(agentId)
+    if (wanted !== undefined) this.checkMode(agentId ?? callerInfo.agentId, wanted)
     const started = await this.deps.start(caller.sessionId, {
       prompt,
       ...(value === undefined ? {} : { title: value }),
       ...(agentId === undefined ? {} : { agentId }),
+      ...(wanted === undefined ? {} : { mode: wanted }),
       report: reported,
     })
     const session = this.deps.info(started)
     if (!session) throw notFound(started)
-    return result(`Started "${titleOf(session)}".`, infoOf(session, caller.sessionId))
+    const current = await this.deps.mode(started)
+    const lowered = wanted !== undefined && current !== null && current.id !== wanted
+    return result(
+      `Started "${titleOf(session)}"${modeText(current)}.` +
+        (lowered ? ' That is narrower than asked, to stay within your permissions.' : ''),
+      {
+        ...infoOf(session, caller.sessionId, undefined, current),
+        ...(lowered ? { mode_lowered: true } : {}),
+      },
+    )
   }
 
   /** The caller's turns or a started session's: no other conversation is the agent's to read. */

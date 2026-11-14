@@ -10,6 +10,7 @@
       "closed": "closed"
     },
     "busy": "The session is {{status}}",
+    "startedModeFailed": "{{agent}} would not take a mode within the permissions of the session that started it",
     "openFirst": "Open the session first",
     "removedWhileStarting": "The session was removed before it started",
     "noTurn": "No turn is running",

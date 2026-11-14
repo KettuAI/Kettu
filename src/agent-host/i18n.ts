@@ -10,6 +10,9 @@ void i18next.init(i18nOptions('en', { en: { host: en }, 'zh-CN': { host: zhCN } 
 
 export const t = i18next.getFixedT(null, 'host')
 
+/** Text for agents, which reads the same whatever the user's language. */
+export const tEnglish = i18next.getFixedT('en', 'host')
+
 export type HostKey = ParseKeys<'host'>
 
 /** A message kept untranslated, for text that is shown again after the language changes. */
