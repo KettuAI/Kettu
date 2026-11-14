@@ -14,9 +14,13 @@ import type {
   DeviceOrientation,
   DeviceScreen as Screen,
 } from '@shared/device-host'
-import { PaneSpinner } from '@renderer/features/shell/panel-button'
+import { RefreshIcon } from '@hugeicons/core-free-icons'
+import { Button } from '@renderer/components/affect/button'
+import { PaneIcon, PaneSpinner } from '@renderer/features/shell/panel-button'
 import { errorCode, errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
+import { setDeviceStream } from '@renderer/stores/devices'
+import { shareCanvas } from './device-capture'
 import { DeviceFrame } from './device-frame'
 
 type StreamState = 'starting' | 'live' | 'stopped' | 'error'
@@ -106,6 +110,10 @@ export function DeviceScreen({
   const id = device.id
   const ownFrame = device.platform === 'ios' && device.kind === 'simulator'
   const ready = room !== null && (!ownFrame || frame !== undefined)
+
+  // The pane's head and tab say how the stream is doing, and its Record takes this canvas.
+  useEffect(() => setDeviceStream(id, { ...stream, drawn }), [id, stream, drawn])
+  useEffect(() => (canvas.current ? shareCanvas(id, canvas.current) : undefined), [id])
 
   // The device keeps its aspect ratio inside whatever room the pane gives it.
   useEffect(() => {
@@ -375,18 +383,21 @@ export function DeviceScreen({
     setStream({ state: 'starting', error: null })
     setAttempt((n) => n + 1)
   }
+  const ended = stream.state === 'stopped' || stream.state === 'error'
   // A simulator's frame can take seconds the first time its model's pictures are drawn. A stream
-  // that ended says so over its last picture, which stays; a reconnect waits over it too.
+  // that ended says so over its last picture, which stays; a reconnect waits over it too. One
+  // that never showed a picture is the pane's to tell, in the screen's place.
   const status =
-    stream.state === 'stopped' || stream.state === 'error' ? (
-      <>
-        <span className="max-w-60 px-4">
-          {stream.state === 'error' ? (stream.error ?? t('screen.error')) : t('screen.stopped')}
-        </span>
-        <button type="button" className="kp-btn" onClick={reconnect}>
-          {t('actions.reconnect')}
-        </button>
-      </>
+    ended && !drawn ? null : ended ? (
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={<PaneIcon icon={RefreshIcon} size={14} />}
+        title={stream.error ?? t('screen.stopped', { name: device.name })}
+        onClick={reconnect}
+      >
+        {t('actions.reconnect')}
+      </Button>
     ) : drawn && ready && !(attempt > 0 && stream.state === 'starting') ? null : (
       <>
         <PaneSpinner />
@@ -460,6 +471,7 @@ export function DeviceScreen({
               className="kp-device-screen__status"
               data-on-screen=""
               data-over-picture={drawn || undefined}
+              data-lost={ended || undefined}
             >
               {status}
             </div>

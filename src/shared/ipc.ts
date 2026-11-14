@@ -32,7 +32,7 @@ import type {
   SharingTarget,
 } from './sharing'
 import type { TerminalMethod, TerminalsApi } from './terminal-host'
-import type { DevicesApi } from './device-host'
+import type { DeviceCaptureKind, DevicesApi } from './device-host'
 import type { PreparedReport, ReportFileView, ReportRequest, ReportSubmitResult } from './report'
 import type { CatalogInstallResult, CatalogState, ThemeInstallResult, ThemesState } from './themes'
 import type { AgentId, HarnessId } from './thread'
@@ -290,6 +290,11 @@ export interface IpcInvokeContract {
   'terminal-host:restart': { args: []; result: void }
   'terminal-host:running': { args: []; result: boolean }
   'device-host:restart': { args: []; result: void }
+  // A screenshot or recording of a mobile device, kept in Downloads; the path it was written to.
+  'devices:save-capture': {
+    args: [device: string, kind: DeviceCaptureKind, data: ArrayBuffer]
+    result: string
+  }
   'artifact:open': { args: [id: string]; result: ArtifactOpenResult }
   'artifact:close': { args: [url: string]; result: void }
   'artifact:thumbnail': {
@@ -936,5 +941,10 @@ export interface KettuApi {
   /** The mobile devices of this computer, through the device host. */
   devices: DevicesApi & {
     onOpened(listener: (event: { sessionId: string; deviceId: string }) => void): () => void
+    /**
+     * Keeps a screenshot or recording of `device` in Downloads. The path it was written to, or
+     * null where the browser saves it and the page never learns where.
+     */
+    saveCapture(device: string, kind: DeviceCaptureKind, data: ArrayBuffer): Promise<string | null>
   }
 }

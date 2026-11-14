@@ -362,6 +362,7 @@ const api: KettuApi = {
     onConnection: (listener) => devices.onConnection(listener),
     restart: () => invoke('device-host:restart'),
     onOpened: onDeviceOpened,
+    saveCapture: (device, kind, data) => invoke('devices:save-capture', device, kind, data),
   } as KettuApi['devices'],
 }
 

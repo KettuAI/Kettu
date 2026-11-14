@@ -2,12 +2,13 @@
   "tabs": "设备",
   "actions": {
     "addDevice": "添加设备",
-    "closeDevice": "关闭设备",
     "boot": "启动",
     "reconnect": "重新连接",
-    "maximize": "最大化",
-    "restore": "还原",
-    "close": "关闭"
+    "retry": "重试",
+    "screenshot": "截图",
+    "record": "录屏",
+    "stopRecording": "停止录屏",
+    "more": "更多"
   },
   "kind": {
     "simulator": "模拟器",
@@ -16,7 +17,11 @@
   },
   "state": {
     "shutdown": "已关机",
-    "unavailable": "未连接"
+    "unavailable": "未连接",
+    "notReady": "未就绪",
+    "starting": "启动中",
+    "lost": "画面断开",
+    "error": "出错"
   },
   "connection": {
     "network": "Wi-Fi"
@@ -31,20 +36,22 @@
     "noSession": "设备属于会话，先发一条消息。",
     "opening": "正在启动设备…",
     "openingHint": "模拟器启动可能要一分钟。",
-    "noTools": "这台电脑运行不了移动设备"
+    "starting": "正在启动 {{name}}…",
+    "failed": "列不出设备"
   },
   "screen": {
     "label": "{{name}} 的屏幕",
     "keyboard": "{{name}} 的键盘",
     "starting": "正在等画面…",
-    "stopped": "画面已停止。",
+    "stopped": "Kettu 收不到 {{name}} 的画面了，它还在运行。",
     "error": "画面显示不了。",
     "forbidden": "这台设备在另一个会话里打开着，这个会话不能查看或操作它。",
-    "shutdown": "这台设备已关机。",
-    "limited": "这里的画面每秒更新一次。用 https 或在 localhost 上打开这个页面才有实时画面。"
-  },
-  "checklist": {
-    "title": "用这台设备之前还要"
+    "shutdown": "{{name}} 已关机",
+    "limited": "这里的画面每秒更新一次。用 https 或在 localhost 上打开这个页面才有实时画面。",
+    "shutdownHint": "启动后才能看到和操作它的屏幕。",
+    "unavailable": "{{name}} 没有连接",
+    "unavailableHint": "把它重新连到这台电脑。",
+    "failed": "显示不了 {{name}}"
   },
   "problem": {
     "xcode-missing": "从 App Store 装上 Xcode，才能用 iOS 模拟器和 iPhone。",
@@ -73,5 +80,100 @@
     "side": "侧边按钮",
     "action": "操作按钮",
     "other": "硬件按钮"
+  },
+  "title": "移动设备",
+  "add": {
+    "title": "添加设备 · 已打开 {{open}} / {{limit}}",
+    "full": "这个会话已经开了 {{count}} 台设备，先断开一台。"
+  },
+  "row": {
+    "shutdown": "已关机",
+    "unavailable": "未连接",
+    "plugIn": "插上线",
+    "notAllowed": "还没允许",
+    "elsewhere": "在另一个会话",
+    "move": "移到这里"
+  },
+  "more": {
+    "appearance": "外观",
+    "light": "浅色",
+    "dark": "深色",
+    "disconnect": "断开",
+    "disconnectShutsDown": "它是 Kettu 启动的，会一起关机",
+    "disconnectStaysOn": "它会继续开着",
+    "disconnectStaysConnected": "它会继续连着",
+    "shutDown": "关机"
+  },
+  "capture": {
+    "screenshotSaved": "截图已存到下载文件夹",
+    "recordingSaved": "录屏已存到下载文件夹",
+    "show": "显示",
+    "recording": "正在录屏，{{time}}"
+  },
+  "request": {
+    "action": "使用 {{name}}",
+    "where": "截图会交给它的模型服务商。",
+    "whereUntil": "截图会交给它的模型服务商。{{time}} 后自动拒绝。",
+    "deny": "拒绝",
+    "always": "始终允许",
+    "untilTurnEnds": "到这一轮结束",
+    "revoke": "撤回"
+  },
+  "setup": {
+    "thisMac": "这台 Mac",
+    "thisComputer": "这台电脑",
+    "deviceTitle": "准备 {{name}}",
+    "deviceDescription": "你做完一步，Kettu 会重新检查。",
+    "hostTitleMac": "为移动设备准备这台 Mac",
+    "hostTitleComputer": "为移动设备准备这台电脑",
+    "hostDescription": "Kettu 不替你安装这些；每一步都带官方的下载链接。",
+    "minimize": "收起",
+    "expand": "展开",
+    "check": {
+      "xcode-missing": {
+        "label": "Xcode",
+        "todo": "iOS 模拟器和 iPhone 需要这台 Mac 上装有 Xcode。",
+        "done": "已安装 Xcode。",
+        "link": "在 App Store 获取 Xcode"
+      },
+      "android-sdk-missing": {
+        "label": "Android SDK",
+        "todo": "模拟器和 Android 手机需要 Android SDK，它随 Android Studio 一起安装。",
+        "done": "已找到，带 adb。",
+        "link": "获取 Android Studio"
+      },
+      "usb-required": {
+        "label": "用数据线连接",
+        "todo": "把它插到这台电脑上，才能看到和操作它的屏幕。",
+        "done": "已用数据线连接。"
+      },
+      "not-paired": {
+        "label": "信任这台电脑",
+        "todo": "解锁设备，在弹出的提示上点“信任”。",
+        "done": "它信任这台电脑。"
+      },
+      "developer-mode-off": {
+        "label": "开发者模式",
+        "todo": "在 设置 › 隐私与安全性 › 开发者模式 里打开。",
+        "done": "已打开。",
+        "link": "Apple 的步骤"
+      },
+      "ddi-not-mounted": {
+        "label": "开发者磁盘映像",
+        "todo": "设备解锁后 Kettu 会挂载它；保持解锁。",
+        "done": "已挂载。"
+      },
+      "offline": {
+        "label": "连接",
+        "todo": "手机离线了，重新插一下数据线。",
+        "done": "在线。"
+      },
+      "usb-debugging-unauthorized": {
+        "label": "USB 调试",
+        "todo": "解锁手机，在“允许 USB 调试吗？”的提示上点“允许”。",
+        "done": "已允许这台电脑。",
+        "link": "Android 的步骤"
+      }
+    }
   }
 }

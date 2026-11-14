@@ -1,7 +1,7 @@
 // affectUI Pro - licensed under https://www.affectui.com/license, not under this project's open-source license. Don't copy it out of this project.
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 /*
  * Setup Guide – an onboarding panel with a progress bar and collapsible task groups, in a single self-contained file.
@@ -14,6 +14,10 @@ import { useState } from "react";
 export type SetupTask = {
   id: string;
   label: string;
+  /** A second, quieter line under the label, e.g. where to do it */
+  detail?: ReactNode;
+  /** A link under the task, e.g. the vendor's own steps */
+  link?: { label: string; href: string };
   done?: boolean;
 };
 
@@ -25,7 +29,13 @@ export type SetupGroup = {
 
 export type SetupGuideProps = {
   title?: string;
+  /** A line under the title on what the guide is for */
+  description?: ReactNode;
   groups: SetupGroup[];
+  /** Tasks follow their `done` and can't be ticked by hand, e.g. where something else checks them */
+  readOnly?: boolean;
+  /** The words of the minimize button, for a translation */
+  labels?: { minimize: string; expand: string };
   /** Shows an "Edit" link in the header */
   onEdit?: () => void;
   /** Shows a close button in the header */
@@ -37,10 +47,10 @@ export type SetupGuideProps = {
 
 const count = new Intl.NumberFormat("en");
 
-export function SetupGuide({ title = "Setup guide", groups, onEdit, onClose, onChange, className }: SetupGuideProps) {
-  const [done, setDone] = useState(
-    () => new Set(groups.flatMap((g) => g.tasks.filter((t) => t.done).map((t) => t.id))),
-  );
+export function SetupGuide({ title = "Setup guide", description, groups, readOnly = false, labels, onEdit, onClose, onChange, className }: SetupGuideProps) {
+  const given = () => new Set(groups.flatMap((g) => g.tasks.filter((t) => t.done).map((t) => t.id)));
+  const [ticked, setDone] = useState(given);
+  const done = readOnly ? given() : ticked;
   const firstOpen = groups.find((g) => g.tasks.some((t) => !done.has(t.id)));
   const [open, setOpen] = useState<string | null>(firstOpen?.id ?? null);
   const [minimized, setMinimized] = useState(false);
@@ -82,7 +92,7 @@ export function SetupGuide({ title = "Setup guide", groups, onEdit, onClose, onC
             <button
               type="button"
               className="ui-sgc__icon-btn"
-              aria-label={minimized ? "Expand setup guide" : "Minimize setup guide"}
+              aria-label={minimized ? (labels?.expand ?? "Expand setup guide") : (labels?.minimize ?? "Minimize setup guide")}
               aria-expanded={!minimized}
               onClick={() => setMinimized((m) => !m)}
             >
@@ -95,6 +105,7 @@ export function SetupGuide({ title = "Setup guide", groups, onEdit, onClose, onC
             )}
           </div>
         </header>
+        {description && <p className="ui-sgc__desc">{description}</p>}
 
         <div className="ui-sgc__progress">
           <span
@@ -147,17 +158,26 @@ export function SetupGuide({ title = "Setup guide", groups, onEdit, onClose, onC
                               type="button"
                               className="ui-sgc__task"
                               data-state={state}
-                              disabled={locked}
-                              aria-pressed={isDone}
+                              disabled={locked || readOnly}
+                              aria-pressed={readOnly ? undefined : isDone}
                               onClick={() => toggle(group, task.id)}
                             >
                               <span className="ui-sgc__mark" aria-hidden="true">
                                 {state === "done" ? <CheckIcon /> : state === "locked" ? <LockedIcon /> : null}
                               </span>
-                              <span className="ui-sgc__task-label" dir="auto">
-                                {task.label}
+                              <span className="ui-sgc__task-text">
+                                <span className="ui-sgc__task-label" dir="auto">
+                                  {task.label}
+                                </span>
+                                {task.detail && <span className="ui-sgc__task-detail">{task.detail}</span>}
                               </span>
                             </button>
+                            {task.link && (
+                              <a className="ui-sgc__task-link" href={task.link.href} target="_blank" rel="noreferrer">
+                                {task.link.label}
+                                <LinkIcon />
+                              </a>
+                            )}
                           </li>
                         );
                       })}
@@ -203,6 +223,12 @@ const CheckIcon = () => (
   <svg viewBox="0 0 16 16" aria-hidden="true">
     <circle cx="8" cy="8" r="7" fill="currentColor" />
     <path d="m5.2 8.2 1.9 1.9 3.7-3.9" fill="none" stroke="var(--ui-sgc-on-accent)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const LinkIcon = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M6.5 3.5H4.25a1 1 0 0 0-1 1v7.25a1 1 0 0 0 1 1h7.25a1 1 0 0 0 1-1V9.5M9.5 3h3.5v3.5M13 3 7.5 8.5" />
   </svg>
 );
 
@@ -463,6 +489,27 @@ const css = /* css */ `
   transition: text-decoration-color 260ms ease;
 }
 .ui-sgc__task[data-state="done"] .ui-sgc__task-label { text-decoration-color: currentColor; }
+
+/* A task's second line and its link, lined up with the label */
+.ui-sgc__desc { margin: 2px 0 0; padding: 0 16px; font-size: 12px; line-height: 18px; color: var(--ui-sgc-muted); text-wrap: pretty; }
+.ui-sgc__task-text { display: grid; gap: 1px; min-width: 0; }
+.ui-sgc__task-detail { font-size: 12px; line-height: 17px; color: var(--ui-sgc-muted); overflow-wrap: anywhere; }
+.ui-sgc__task-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 6px 34px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--ui-sgc-accent);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+.ui-sgc__task-link:hover { text-decoration: underline; }
+.ui-sgc__task-link svg { width: 12px; height: 12px; }
+.ui-sgc__group[data-open] .ui-sgc__task-link { opacity: 1; transition-delay: 80ms; }
 
 @keyframes ui-sgc-pop {
   from { transform: scale(0.5); opacity: 0; }

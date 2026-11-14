@@ -592,6 +592,10 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
         link.wake()
       },
       onOpened: never,
+      saveCapture: async (device, kind, data) => {
+        downloadFile(new Blob([data]), `${safeName(device, 'Device')}.${kind}`)
+        return null
+      },
     },
   }
 }
