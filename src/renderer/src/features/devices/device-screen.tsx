@@ -137,7 +137,7 @@ export function DeviceScreen({
       if (framed) return
       framed = true
       window.kettu.devices
-        .request('devices.frame', { deviceId: id })
+        .request('devices.frame', { deviceId: id, sessionId })
         .then((result) => {
           if (!closed) setFrame(result.frame)
         })
@@ -319,7 +319,9 @@ export function DeviceScreen({
       stopConnection()
       stopRestarted()
       decoder?.close()
-      void window.kettu.devices.request('devices.unwatch', { deviceId: id }).catch(() => undefined)
+      void window.kettu.devices
+        .request('devices.unwatch', { deviceId: id, sessionId })
+        .catch(() => undefined)
     }
   }, [id, sessionId, attempt])
 

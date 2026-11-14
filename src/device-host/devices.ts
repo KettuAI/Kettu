@@ -322,7 +322,12 @@ export class DeviceManager {
     return { screen: live.screen }
   }
 
-  unwatch(port: string, id: DeviceId): void {
+  unwatch(port: string, id: DeviceId, sessionId: string): void {
+    this.checkHolder(id, sessionId)
+    this.stopWatching(port, id)
+  }
+
+  private stopWatching(port: string, id: DeviceId): void {
     this.watching.get(port)?.delete(id)
     const live = this.live.get(id)
     if (!live) return
@@ -333,7 +338,7 @@ export class DeviceManager {
   }
 
   portClosed(port: string): void {
-    for (const id of this.watching.get(port) ?? []) this.unwatch(port, id)
+    for (const id of this.watching.get(port) ?? []) this.stopWatching(port, id)
     this.watching.delete(port)
   }
 
@@ -380,7 +385,9 @@ export class DeviceManager {
   }
 
   /** The frame of a device that is streaming, or null when it is not or has none of its own. */
-  async frame(id: DeviceId): Promise<DeviceFrame | null> {
+  async frame(id: DeviceId, sessionId: string): Promise<DeviceFrame | null> {
+    await this.restored
+    this.checkHolder(id, sessionId)
     const live = this.live.get(id)
     if (!live) return null
     await live.starting
@@ -397,7 +404,14 @@ export class DeviceManager {
     this.broadcastList()
   }
 
-  handBack(id: DeviceId): void {
+  /** The user takes the device from the agent; the caller stops the agent's running call. */
+  takeOver(id: DeviceId, sessionId: string): void {
+    this.checkHolder(id, sessionId)
+    this.setOperator(id, { sessionId: null, agentName: null, user: true })
+  }
+
+  handBack(id: DeviceId, sessionId: string): void {
+    this.checkHolder(id, sessionId)
     const operator = this.operators.get(id)
     if (!operator) return
     if (operator.sessionId) this.setOperator(id, { ...operator, user: false })
@@ -594,7 +608,7 @@ export class DeviceManager {
     live.driver.requestKeyframe()
   }
 
-  /** A client's screen and input reach a device only for the session that holds it. */
+  /** A client sees and operates a device only for the session that holds it. */
   private checkHolder(id: DeviceId, sessionId: string): void {
     if (this.leases.get(id) !== sessionId) {
       throw new DeviceError('forbidden', 'This device is not open in this session')
@@ -604,7 +618,7 @@ export class DeviceManager {
   /** Stops sending a device to the ports that watched it for the session that let it go. */
   private dropWatchers(id: DeviceId): void {
     for (const port of this.portsOf(id)) {
-      this.unwatch(port, id)
+      this.stopWatching(port, id)
       this.deps.emit(port, { type: 'device.stream', deviceId: id, state: 'stopped' })
     }
   }

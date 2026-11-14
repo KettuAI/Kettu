@@ -226,10 +226,16 @@ function Stage({ device, sessionId }: { device: DeviceInfo; sessionId: string })
           hostId={hostId}
           user={operator.user}
           onTakeOver={() =>
-            void window.kettu.devices.request('devices.stopAgent', { deviceId: device.id })
+            void window.kettu.devices.request('devices.stopAgent', {
+              deviceId: device.id,
+              sessionId,
+            })
           }
           onHandBack={() =>
-            void window.kettu.devices.request('devices.handBack', { deviceId: device.id })
+            void window.kettu.devices.request('devices.handBack', {
+              deviceId: device.id,
+              sessionId,
+            })
           }
         />
       )}

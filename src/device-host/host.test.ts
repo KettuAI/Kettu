@@ -2,10 +2,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { DeviceCall, DeviceCallAnswer } from '@shared/device-agent'
 import type { DeviceEvent, DeviceInput } from '@shared/device-host'
+import type { MainToDeviceHost } from '@shared/host-control'
+import type { FromPort } from '@shared/port-rpc'
 import type { DriverEvents } from './driver'
 import type { FoundDevice } from './discovery'
 import { DeviceError, DeviceManager } from './devices'
+import { startDeviceHost, type StartedDeviceHost } from './start'
 import { ValidationError, validators } from './validate'
 
 const fake = vi.hoisted(() => ({
@@ -41,6 +45,31 @@ vi.mock('./ios-simulator', () => ({
     fake.shutdowns.push(udid)
   },
 }))
+
+vi.mock('../agent-host/shell-env', () => ({
+  resolveShellEnvironment: async () => ({ env: {} }),
+}))
+
+vi.mock('./agent', () => {
+  class ActionError extends Error {
+    code: string
+    constructor(code: string, message: string) {
+      super(message)
+      this.code = code
+    }
+  }
+  return {
+    ActionError,
+    // An agent's action that runs until it is stopped.
+    AgentActions: class {
+      run(_session: string, _target: unknown, _action: unknown, signal: AbortSignal) {
+        return new Promise((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(new ActionError('stopped', 'Stopped'))),
+        )
+      }
+    },
+  }
+})
 
 vi.mock('./android', () => ({
   bootEmulator: async () => 'emulator-5554',
@@ -137,6 +166,10 @@ describe('device host request validators', () => {
       ['devices.ack', { deviceId: 'ios-sim:x', seq: 1 }],
       ['devices.input', { deviceId: 'ios-sim:x', input: { type: 'button', button: 'home' } }],
       ['devices.screenshot', { deviceId: 'ios-sim:x' }],
+      ['devices.unwatch', { deviceId: 'ios-sim:x' }],
+      ['devices.handBack', { deviceId: 'ios-sim:x' }],
+      ['devices.stopAgent', { deviceId: 'ios-sim:x' }],
+      ['devices.frame', { deviceId: 'ios-sim:x' }],
       ['devices.close', { deviceId: 'ios-sim:x', sessionId: 's1', shutdown: 'yes' }],
     ]
     for (const [method, params] of bad) {
@@ -328,5 +361,108 @@ describe('simulators the host booted', () => {
     await devices.open(SIMULATOR.id, 's1')
     await devices.close(SIMULATOR.id, 's1', false)
     expect(fake.shutdowns).toEqual([])
+  })
+})
+
+/** The device host as main runs it, its agent calls in and a port per client. */
+function startHost(): {
+  call(request: DeviceCall): Promise<DeviceCallAnswer>
+  port(): { request(method: string, params: unknown): Promise<unknown> }
+} {
+  const answers = new Map<number, (answer: DeviceCallAnswer) => void>()
+  let control: ((message: MainToDeviceHost) => void) | null = null
+  const host: StartedDeviceHost = startDeviceHost({
+    send: (message) => {
+      if (message.type === 'device-host:answer') answers.get(message.callId)?.(message.answer)
+    },
+    onMessage: (listener) => (control = listener),
+  })
+  control!({
+    type: 'device-host:init',
+    platform: 'darwin',
+    appVersion: '0.0.0',
+    nodeRuntime: { command: 'node', env: {} },
+    // No folder, so the leases stay in memory.
+    dataDir: '',
+    resourcesPath: null,
+    allowDevices: true,
+  })
+  let calls = 0
+  return {
+    call: (request) =>
+      new Promise((resolve) => {
+        const callId = ++calls
+        answers.set(callId, resolve)
+        control!({ type: 'device-host:call', callId, call: request })
+      }),
+    port: () => {
+      const waiting = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>()
+      let toHost: ((data: unknown) => void) | null = null
+      let requests = 0
+      host.connect(
+        {
+          send: (message: FromPort<DeviceEvent>) => {
+            if (message.type === 'response') waiting.get(message.id)?.resolve(message.result)
+            if (message.type === 'error') waiting.get(message.id)?.reject(message.error)
+          },
+          onMessage: (listener) => (toHost = listener),
+          onClose: () => undefined,
+          close: () => undefined,
+        },
+        1,
+      )
+      return {
+        request: (method, params) =>
+          new Promise((resolve, reject) => {
+            const id = ++requests
+            waiting.set(id, { resolve, reject })
+            toHost!({ type: 'request', id, method, params })
+          }),
+      }
+    },
+  }
+}
+
+describe('device operations by session', () => {
+  it('lets only the session holding a device stop its agent, hand it back or take its frames', async () => {
+    const host = startHost()
+    const own = host.port()
+    const other = host.port()
+    expect(
+      await host.call({ kind: 'open', sessionId: 's1', agentName: 'Agent', deviceId: EMULATOR.id }),
+    ).toHaveProperty('result')
+    const acting = host.call({
+      kind: 'action',
+      sessionId: 's1',
+      agentName: 'Agent',
+      deviceId: EMULATOR.id,
+      action: { type: 'snapshot' },
+      projectPath: null,
+    })
+
+    const asOther: [string, Record<string, unknown>][] = [
+      ['devices.stopAgent', {}],
+      ['devices.handBack', {}],
+      ['devices.frame', {}],
+      ['devices.ack', { seq: 1 }],
+      ['devices.unwatch', {}],
+    ]
+    for (const [method, params] of asOther) {
+      await expect(
+        other.request(method, { deviceId: EMULATOR.id, sessionId: 's2', ...params }),
+        method,
+      ).rejects.toMatchObject({ code: 'forbidden' })
+    }
+    const running = await Promise.race([
+      acting,
+      new Promise((resolve) => setTimeout(() => resolve('running'), 20)),
+    ])
+    expect(running).toBe('running')
+
+    await own.request('devices.stopAgent', { deviceId: EMULATOR.id, sessionId: 's1' })
+    expect(await acting).toMatchObject({ error: { code: 'stopped' } })
+    await own.request('devices.handBack', { deviceId: EMULATOR.id, sessionId: 's1' })
+    await own.request('devices.frame', { deviceId: EMULATOR.id, sessionId: 's1' })
+    await own.request('devices.unwatch', { deviceId: EMULATOR.id, sessionId: 's1' })
   })
 })
