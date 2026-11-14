@@ -1,4 +1,5 @@
 import type { ThreadEntry, ThreadState } from '@shared/thread'
+import { sopCardOf } from './entries/sop-tools'
 import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
 
 // One character per entry, so the thread re-renders only when its shape changes, not on every
@@ -43,6 +44,8 @@ function charOf(entry: ThreadEntry | undefined): string {
     return 'o'
   }
   if (entry.permission) return 'w'
+  // A call of Kettu's SOP tools that ended is a card of its own, like a question.
+  if (sopCardOf(entry)) return 'o'
   // An answered request keeps its folded card, so it stands on its own as the request did; a
   // routine's own answer is the routine's, and folds as work.
   const result = entry.permissionResult

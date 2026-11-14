@@ -1122,6 +1122,14 @@
   max-height: none;
   overflow: visible;
 }
+/* A suggestion to run the work as a workflow, its steps' rows open under it. */
+.ks-thread .ui-apc.ks-suggest {
+  max-width: none;
+}
+.ks-suggest .ui-apc__preview {
+  max-height: none;
+  overflow: visible;
+}
 .ks-plan__preview {
   display: flex;
   flex-direction: column;
