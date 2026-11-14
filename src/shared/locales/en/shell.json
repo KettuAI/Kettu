@@ -6,7 +6,8 @@
     "terminal": "Terminal",
     "browser": "Browser",
     "devices": "Mobile devices",
-    "closePane": "Close pane"
+    "closePane": "Close pane",
+    "leaveSession": "Leave session"
   },
   "hostBanner": {
     "restarting": "Restarting the agent host. Your sessions come back by themselves.",

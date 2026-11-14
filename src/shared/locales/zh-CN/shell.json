@@ -6,7 +6,8 @@
     "terminal": "终端",
     "browser": "浏览器",
     "devices": "移动设备",
-    "closePane": "关闭窗格"
+    "closePane": "关闭窗格",
+    "leaveSession": "离开会话"
   },
   "hostBanner": {
     "restarting": "正在重启 Agent 后台进程，会话会自动恢复。",
