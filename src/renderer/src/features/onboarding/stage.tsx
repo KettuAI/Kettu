@@ -24,7 +24,6 @@ import driftDay from '@renderer/assets/onboarding/snow-drift-day.webp'
 import driftNight from '@renderer/assets/onboarding/snow-drift-night.webp'
 import foxLookingUp from '@renderer/assets/onboarding/fox-looking-up.webp'
 import foxWaving from '@renderer/assets/onboarding/fox-waving.webp'
-import siteFox from '@renderer/assets/onboarding/site-fox.webp'
 import { Icon } from '@renderer/components/affect/app-shell'
 import { AgentTile } from '@renderer/components/agents/agent-mark'
 import { BrandFox, BrandIcon } from '@renderer/components/brand'
@@ -230,7 +229,7 @@ export function BrowserStage({ page }: { page: 'sign-in' | 'confirm' | 'devices'
           </span>
         </div>
         <div className="kob-pic__page">
-          <img className="kob-pic__logo" src={siteFox} alt="" draggable={false} />
+          <BrandFox className="kob-pic__logo" />
           <Line width={164} strong />
           <Line width={214} />
           {page === 'sign-in' && (

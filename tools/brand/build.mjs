@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { lockupGeometry, WORDMARK } from '../../src/shared/brand.ts'
 import { DMG_LAYOUT } from './dmg-layout.mjs'
-import { FLAT_GROUNDS, foxFlatSvg, foxSvg, GLYPH_CANVAS, glyphSvg } from './fox.mjs'
+import { foxMarkSvg, foxSvg, GLYPH_CANVAS, glyphSvg } from './fox.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
 const INK = '#1c1b18'
@@ -208,13 +208,8 @@ async function main() {
   write(join(assets, 'lockup-horizontal.svg'), lockupSvg('horizontal', 100, INK))
   write(join(assets, 'lockup-horizontal-dark.svg'), lockupSvg('horizontal', 100, PAPER))
   writeFileSync(join(root, 'src/renderer/src/assets/kettu-icon.svg'), foxSvg('tile'))
-  // The greeting's flat fox, one for each ground.
-  for (const ground of FLAT_GROUNDS) {
-    writeFileSync(
-      join(root, `src/renderer/src/assets/kettu-fox-flat-on-${ground}.svg`),
-      foxFlatSvg(ground),
-    )
-  }
+  // The fox without its tile, one drawing for light and dark grounds.
+  writeFileSync(join(root, 'src/renderer/src/assets/kettu-fox.svg'), foxMarkSvg())
   // The launch cover's fox, masks the renderer fills with the theme's text color.
   for (const ground of ['dark', 'light']) {
     writeFileSync(
