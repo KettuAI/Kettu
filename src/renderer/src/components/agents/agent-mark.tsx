@@ -71,7 +71,10 @@ export function AgentMark({
   )
 }
 
-/** A flat avatar with consistent mark and dot proportions across sizes. */
+/**
+ * A flat avatar with consistent mark and dot proportions across sizes. A one-color mark is in the
+ * primary text color, like the name beside it.
+ */
 export function AgentTile({
   agent,
   mono,
@@ -91,7 +94,7 @@ export function AgentTile({
     <span
       aria-hidden
       style={{ width: size, height: size }}
-      className="relative grid shrink-0 place-items-center text-icon"
+      className="relative grid shrink-0 place-items-center text-primary"
     >
       <AgentMark agent={agent} size={Math.round(size * 0.75)} mono={mono} dot={null} />
       {color && <AgentDot color={color} size={size} />}
