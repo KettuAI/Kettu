@@ -182,6 +182,7 @@ const SECTION_FIELDS = {
   computerUse: {
     enabled: isBoolean,
     allowedApps: isComputerApps,
+    pauseOnUse: isBoolean,
     stopShortcut: isStopShortcutValue,
   },
   cloud: { enabled: isBoolean },

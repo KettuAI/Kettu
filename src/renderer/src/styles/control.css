@@ -58,6 +58,49 @@
 .ctl-label__mark[data-asks] {
   color: var(--tone-amber);
 }
+/* The computer is the whole machine: while the agent has it the label is solid fox. */
+.ctl-label[data-surface='computer'][data-control='agent'] {
+  background: var(--computer-label);
+  box-shadow: 0 -3px 12px -6px color-mix(in srgb, var(--computer-label) 50%, transparent);
+  color: color-mix(in srgb, var(--on-fill) 86%, transparent);
+}
+.ctl-label[data-surface='computer'][data-control='agent'] .ctl-label__text b {
+  font-weight: var(--weight-semibold);
+  color: var(--on-fill);
+}
+.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button'] {
+  background: color-mix(in srgb, var(--on-fill) 20%, transparent);
+  color: var(--on-fill);
+}
+.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button']:hover {
+  background: color-mix(in srgb, var(--on-fill) 30%, transparent);
+}
+.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button'][data-quiet] {
+  background: transparent;
+}
+.ctl-label[data-surface='computer'][data-control='agent'] [data-slot='button'][data-quiet]:hover {
+  background: color-mix(in srgb, var(--on-fill) 14%, transparent);
+}
+/* A new app waits for the user's answer: the label is outlined in the fox and names it. */
+.ctl-label[data-surface='computer'][data-control='waiting'] {
+  box-shadow: 0 0 0 var(--hairline) var(--computer-line);
+  color: var(--attention);
+}
+.ctl-label[data-surface='computer'][data-control='waiting'] .ctl-label__text b {
+  color: var(--attention);
+}
+/* The app's own icon, as the system draws it. */
+.ctl-app-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+}
+.ctl-app-icon img {
+  width: 16px;
+  height: 16px;
+}
 
 /* ---------- The pill on the surface ---------- */
 .ctl-pill {

@@ -246,27 +246,9 @@
     }
   },
   "computerBar": {
-    "using": "{{agent}} is using your computer",
-    "usingApp": "{{agent}} is using <app>{{app}}</app>",
-    "looking": "Looking at <app>{{app}}</app>",
     "waiting": "Waiting for you to allow <app>{{app}}</app>",
     "stopping": "Taking back the computer…",
-    "stop": "Stop using",
-    "stopLabel": "Stop using the computer for this turn; the turn goes on",
-    "takeOver": "Take over",
-    "tookOver": "<app>You took over {{app}}</app> · {{agent}} is waiting",
-    "tookOverComputer": "<app>You took over the computer</app> · {{agent}} is waiting",
-    "handBack": "Hand back"
-  },
-  "computerFloat": {
-    "using": "{{agent}} is using <app>{{app}}</app>",
-    "usingComputer": "{{agent}} is using your computer",
-    "takeOver": "Take over",
-    "stop": "Stop",
-    "stopLabel": "Stop using the computer for this turn; the turn goes on",
-    "tookOver": "<app>You took over {{app}}</app> · {{agent}} is waiting",
-    "tookOverComputer": "<app>You took over the computer</app> · {{agent}} is waiting",
-    "handBack": "Hand back"
+    "stopLabel": "Stop using the computer for this turn; the turn goes on"
   },
   "computerPane": {
     "title": "Computer",

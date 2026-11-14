@@ -233,7 +233,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
     relay: true,
     discoverable: true,
   },
-  computerUse: { enabled: false, allowedApps: [], stopShortcut: '' },
+  computerUse: { enabled: false, allowedApps: [], pauseOnUse: true, stopShortcut: '' },
   cloud: { enabled: true },
   onboarding: { done: false, step: 'welcome' },
 }

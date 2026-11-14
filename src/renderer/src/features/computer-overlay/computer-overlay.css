@@ -10,67 +10,9 @@ html[data-overlay] body {
 .kco-target {
   position: absolute;
 }
-
-.kco-pointer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 5;
-  display: flex;
-  align-items: flex-start;
-  gap: 2px;
-  pointer-events: none;
-  transition: transform 620ms var(--ease-out-quint);
-  animation: kco-pointer-in 200ms ease both;
-}
-.kco-pointer__mark {
-  /* The tip of the arrow is the point it acts on. */
-  margin: -2px 0 0 -3px;
-  filter: drop-shadow(0 1px 2px var(--agent-pointer-shadow));
-}
-.kco-pointer__mark path {
-  fill: var(--agent-pointer);
-  stroke: var(--agent-pointer-edge);
-  stroke-width: 1.2;
-  stroke-linejoin: round;
-}
-.kco-pointer__name {
-  margin-top: 14px;
-  padding: 1px 6px;
-  border-radius: 5px;
-  background: var(--agent-pointer);
-  box-shadow: 0 2px 6px -2px var(--agent-pointer-tag-shadow);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 17px;
-  color: var(--on-fill);
-  white-space: nowrap;
-}
-/* It rings where it clicks, once it has arrived there. */
-.kco-pointer__ring {
-  position: absolute;
-  top: -13px;
-  left: -13px;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--agent-pointer);
-  animation: kco-ring 520ms ease-out 560ms both;
-}
-@keyframes kco-ring {
-  from {
-    transform: scale(0.3);
-    opacity: 1;
-  }
-  to {
-    transform: scale(1.4);
-    opacity: 0;
-  }
-}
-@keyframes kco-pointer-in {
-  from {
-    opacity: 0;
-  }
+/* The real window stands on any wallpaper, so its light reaches wider than one in Kettu. */
+.kco-target[data-wide] .ctl-light[data-place='outside'] {
+  --ctl-light-w: 13px;
 }
 
 /* ---------- The label at the top of the screen ---------- */
@@ -108,11 +50,21 @@ html[data-overlay] body {
   height: 16px;
   flex: none;
 }
+.kco-float__text i {
+  margin: 0 6px;
+  font-style: normal;
+  opacity: 0.6;
+}
 .kco-float__text b {
   font-weight: 600;
   color: var(--on-fill);
 }
-.kco-float[data-control='you'] .kco-float__text b {
+.kco-float[data-control='you'] .kco-float__text i {
+  margin: 0 6px;
+  font-style: normal;
+  opacity: 0.6;
+}
+.kco-float__text b {
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -174,22 +126,14 @@ html[data-overlay] body {
   }
 }
 
-:root[data-reduce-motion='always']
-  :is(.kco-float, .kco-float__in, .kco-pointer, .kco-pointer__ring) {
+:root[data-reduce-motion='always'] :is(.kco-float, .kco-float__in) {
   animation: none !important;
   transition: none !important;
 }
-:root[data-reduce-motion='always'] .kco-pointer__ring {
-  display: none;
-}
 @media (prefers-reduced-motion: reduce) {
   .kco-float,
-  .kco-float__in,
-  .kco-pointer {
+  .kco-float__in {
     animation: none !important;
     transition: none !important;
-  }
-  .kco-pointer__ring {
-    display: none;
   }
 }

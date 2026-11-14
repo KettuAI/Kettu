@@ -1,6 +1,8 @@
 // Computer use: agents reading and driving the desktop apps of the computer the desktop app runs
 // on, through the `computer_*` tools of the `kettu` MCP server.
 
+import type { ActiveControl, SurfaceControl } from './control'
+
 /** The tools the `kettu` MCP server offers, which the agent host runs through Cua Driver. */
 export const COMPUTER_TOOL_NAMES = [
   'computer_list_apps',
@@ -95,6 +97,8 @@ export interface ComputerUseSettings {
   enabled: boolean
   /** Apps the user allowed for every session. */
   allowedApps: ComputerApp[]
+  /** A click or key of the user's in the app an agent uses takes it over, and the agent waits. */
+  pauseOnUse: boolean
   /** The global shortcut that stops using the computer from anywhere, as an Electron accelerator. */
   stopShortcut: string
 }
@@ -107,6 +111,7 @@ export function defaultStopShortcut(platform: string): string {
 export const DEFAULT_COMPUTER_USE: ComputerUseSettings = {
   enabled: false,
   allowedApps: [],
+  pauseOnUse: true,
   stopShortcut: '',
 }
 
@@ -140,8 +145,22 @@ export function acceleratorKeys(accelerator: string, platform: string): string[]
   return accelerator.split('+').map((part) => names[part] ?? part)
 }
 
-/** Who has the app a session uses: the agent, or the user, who took it over. */
-export type ComputerControl = 'agent' | 'you'
+/** The stop shortcut as a label writes it, `⌃⌥⌘.` or `Ctrl+Alt+Shift+.`; empty is the default. */
+export function stopShortcutText(shortcut: string, platform: string): string {
+  const keys = acceleratorKeys(shortcut || defaultStopShortcut(platform), platform)
+  return keys.join(platform === 'darwin' ? '' : '+')
+}
+
+/**
+ * Who has the app a session uses, as the shared control model's states name it: the agent, or the
+ * user, who took it over. Computer use asks the user for no step, so it has no `asks`.
+ */
+export type ComputerControl = Extract<SurfaceControl['kind'], 'agent' | 'you'>
+
+/** Who has the app as the shared control state the label and the pill draw. */
+export function computerControl(control: ComputerControl | undefined): ActiveControl {
+  return control === 'you' ? { kind: 'you', since: 0 } : { kind: 'agent', acting: false }
+}
 
 /**
  * Where the agent acted last in the window it uses, as a share of the window's width and height

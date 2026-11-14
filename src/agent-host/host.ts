@@ -542,6 +542,9 @@ export class AgentHost {
           setupSettled: (requestId, outcome) =>
             this.sessions.computerSetupSettled(requestId, outcome),
           stopped: (sessionId) => this.sessions.computerStopped(sessionId),
+          handedBack: (sessionId, durationMs) =>
+            this.sessions.controlHandedBack(sessionId, 'computer', durationMs),
+          paused: (sessionId, app) => this.sessions.controlPaused(sessionId, 'computer', app),
           agent: (sessionId) => ({
             id: this.sessions.sessionAgent(sessionId) ?? '',
             name: this.sessions.agentName(sessionId),

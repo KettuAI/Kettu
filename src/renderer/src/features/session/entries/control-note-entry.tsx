@@ -5,27 +5,46 @@ import { Trans, useTranslation } from 'react-i18next'
 import { Marker, MarkerContent, MarkerIcon } from '@renderer/components/ui/marker'
 import { duration } from '@renderer/lib/format'
 import { cn } from '@renderer/lib/utils'
+import { agentName } from '@renderer/stores/agents'
+import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import type { EntryProps } from './basic'
 
-/** A quiet line across the thread where the user took a surface over and handed it back. */
+/**
+ * A quiet line across the thread where the user took a surface over: handed back after a while,
+ * or paused by their own click in the app the agent used.
+ */
 export const ControlNoteEntry = memo(function ControlNoteEntry({ sessionId, entryId }: EntryProps) {
   const { t } = useTranslation('control')
   const entry = useEntry(sessionId, entryId, 'control_note')
   const animation = useEntryAnimation(sessionId, entryId)
+  const agent = useSessionsStore((s) => {
+    const summary = s.byId[sessionId]
+    return summary ? agentName(summary.agentId, hostOfSession(summary)) : null
+  })
   if (!entry) return null
+  const b = <b className="font-medium text-secondary" dir="auto" />
   return (
     <Marker variant="separator" className={cn('text-xs', animation)}>
       <MarkerIcon className="size-3.5">
         <HugeiconsIcon icon={Cursor02Icon} strokeWidth={1.9} aria-hidden className="size-3.5" />
       </MarkerIcon>
       <MarkerContent>
-        <Trans
-          t={t}
-          i18nKey={`note.handedBack.${entry.surface}`}
-          values={{ duration: duration(entry.durationMs) }}
-          components={{ b: <b className="font-medium text-secondary" /> }}
-        />
+        {entry.event === 'paused' ? (
+          <Trans
+            t={t}
+            i18nKey="note.paused.computer"
+            values={{ app: entry.app, agent: agent ?? t('agent') }}
+            components={{ b }}
+          />
+        ) : (
+          <Trans
+            t={t}
+            i18nKey={`note.handedBack.${entry.surface}`}
+            values={{ duration: duration(entry.durationMs) }}
+            components={{ b }}
+          />
+        )}
       </MarkerContent>
     </Marker>
   )

@@ -22,6 +22,7 @@ import {
   COMPUTER_SETUP_POLL_MS,
   COMPUTER_SETUP_WAIT_MS,
 } from '@shared/computer-use'
+import { CONTROL_WAIT_MS, ControlWait, SurfaceControls } from '@shared/control'
 import type { Platform } from '@shared/platform'
 import type { ComputerUseView } from '@shared/thread'
 import type { LogFn } from '../storage'
@@ -44,11 +45,13 @@ const APPS_FRESH_MS = 3_000
 const SNAPSHOTS_KEPT = 256
 /** Windows whose last read is remembered, for placing the agent's actions in them. */
 const WINDOWS_KEPT = 32
+/** How often the app the agent uses is checked for coming to the front, which pauses the agent. */
+export const PAUSE_POLL_MS = 500
 /**
- * How long a call waits while the user holds the app before it answers that they still do, so
- * the agent calls again: under the harnesses' own limits on a tool call, such as Codex's 60 s.
+ * How long after the agent's own call, or Show app, the app coming to the front is not the user's:
+ * an action may bring its app forward.
  */
-export const TAKEN_OVER_WAIT_MS = 45_000
+export const PAUSE_SETTLE_MS = 1_500
 
 /** What runs the driver's tools: `ComputerDriver`, or a stand-in in tests. */
 export interface DriverLike {
@@ -88,6 +91,10 @@ export interface ComputerUseDeps {
   setupSettled(requestId: number, outcome: ComputerSetupOutcome): void
   /** The user pressed Stop using: the thread says so. */
   stopped(sessionId: string): void
+  /** The user handed the app back after holding it for `durationMs`: the thread says so. */
+  handedBack(sessionId: string, durationMs: number): void
+  /** The user's own click or key in `app` took it over: the thread says so. */
+  paused(sessionId: string, app: string): void
   /** The session's agent, which the floating label names. */
   agent(sessionId: string): { id: string; name: string }
   /** The hold changed in any way main draws, or ended. */
@@ -108,11 +115,17 @@ interface Hold {
   appPath: string | null
   action: 'read' | 'act' | null
   window: ComputerWindowRef | null
+  /** Who has the app, as last told; the session's surface in `controls` decides it. */
   control: ComputerControl
   act: ComputerAct | null
   timer: ReturnType<typeof setTimeout> | null
-  /** Calls waiting while the user holds the app, woken by Hand back or the hold's end. */
-  waiters: Set<() => void>
+}
+
+/** The check for the user bringing the app the agent uses to the front, while the agent has it. */
+interface PauseWatch {
+  timer: ReturnType<typeof setTimeout> | null
+  /** Whether the app was in front at the last check; null before a check counts. */
+  front: boolean | null
 }
 
 interface Bounds {
@@ -203,6 +216,14 @@ function passed(result: CallToolResult): CallToolResult {
 
 export class ComputerUse {
   private hold: Hold | null = null
+  /**
+   * Who has the app each session uses, by session, under the shared control model: from the
+   * session's first call until the hold ends, the agent's, until the user takes it over.
+   */
+  private readonly controls: SurfaceControls
+  private watch: PauseWatch | null = null
+  /** When the agent's last call ended, or Show app brought the window forward. */
+  private quietSince = 0
   private nextRequest = 1
   private readonly waiting = new Map<number, Waiting>()
   /** One question per session and app at a time; later calls wait on the same answer. */
@@ -228,7 +249,22 @@ export class ComputerUse {
   private poll: ReturnType<typeof setTimeout> | null = null
   private polling = false
 
-  constructor(private readonly deps: ComputerUseDeps) {}
+  constructor(private readonly deps: ComputerUseDeps) {
+    this.controls = new SurfaceControls({
+      changed: (sessionId, state) => {
+        const hold = this.hold
+        if (hold?.sessionId !== sessionId || (state.kind !== 'agent' && state.kind !== 'you')) {
+          return
+        }
+        // A call starting or ending changes nothing the views draw.
+        if (state.kind === hold.control) return
+        hold.control = state.kind
+        this.arm(hold)
+        this.emit(hold)
+      },
+      handedBack: (sessionId, durationMs) => deps.handedBack(sessionId, durationMs),
+    })
+  }
 
   /** Serves a tool call of `sessionId`, a subagent's already counted as the session above it. */
   async call(sessionId: string, name: string, input: unknown): Promise<CallToolResult> {
@@ -292,6 +328,7 @@ export class ComputerUse {
   settingsChanged(): void {
     // A setup waiting on the switch goes on at once rather than at its next check.
     if (this.setups.size > 0) void this.check()
+    this.syncWatch()
     if (this.deps.settings().enabled) return
     for (const requestId of [...this.waiting.keys()]) this.settle(requestId, 'timeout')
     if (this.hold) this.release(this.hold.sessionId)
@@ -300,23 +337,12 @@ export class ComputerUse {
 
   /** Take over: the session's calls to its app wait until the user hands it back. */
   takeOver(sessionId: string): void {
-    const hold = this.hold
-    if (hold?.sessionId !== sessionId || hold.control === 'you') return
-    hold.control = 'you'
-    // The user may hold the app as long as they like; the hold lasts until the turn ends.
-    if (hold.timer) clearTimeout(hold.timer)
-    hold.timer = null
-    this.emit(hold)
+    if (this.hold?.sessionId === sessionId) this.controls.takeOver(sessionId)
   }
 
   /** Hand back: the calls that waited go on, and so does the agent. */
   handBack(sessionId: string): void {
-    const hold = this.hold
-    if (hold?.sessionId !== sessionId || hold.control === 'agent') return
-    hold.control = 'agent'
-    this.arm(hold)
-    this.emit(hold)
-    this.wake(hold)
+    if (this.hold?.sessionId === sessionId) this.controls.handBack(sessionId)
   }
 
   /** What the floating label and the stop shortcut ask for the session holding the computer. */
@@ -332,6 +358,8 @@ export class ComputerUse {
     const driver = this.deps.driver
     if (hold?.sessionId !== sessionId || !hold.window || !driver) return
     const { pid, id } = hold.window
+    // The app coming forward now is the user's wish to look at it, not their taking it over.
+    this.quietSince = Date.now() + PAUSE_SETTLE_MS
     const result = await driver.call('bring_to_front', { pid, window_id: id })
     if (result.isError && !cameForward(result, id)) {
       throw new Error(firstText(result) || 'The app could not come to the front.')
@@ -410,46 +438,36 @@ export class ComputerUse {
     await this.approve(sessionId, app)
     // The user may have pressed Stop, or another session taken over, while the card waited.
     if (this.stopped.has(sessionId)) throw stoppedError()
-    if (this.hold?.sessionId === sessionId && this.hold.control === 'you') {
-      const waited = await this.waitForHandBack(this.hold)
-      if (this.stopped.has(sessionId) || waited === 'released') throw stoppedError()
-      if (waited === 'later') return stillTheirs(this.hold?.app ?? app.name)
+    const using: Using = { name: app.name, path, action: call.acts ? 'act' : 'read' }
+    this.take(sessionId, using, call)
+    // While the user holds the app, the call waits in segments under the harnesses' time limits.
+    let end: () => void
+    try {
+      end = await this.controls.begin(sessionId, { deadline: Date.now() + CONTROL_WAIT_MS })
+    } catch (error) {
+      if (!(error instanceof ControlWait)) throw error
+      if (error.reason === 'held') return stillTheirs(this.hold?.app ?? app.name)
+      throw stoppedError()
     }
-    this.take(sessionId, { name: app.name, path, action: call.acts ? 'act' : 'read' }, call)
-    const read = call.tool === 'computer_get_window_state'
-    // Every row's frame comes back too, for placing the agent's pointer; the agent sees none.
-    const args =
-      read && call.args.include_accessibility_tree !== false
-        ? { ...call.args, tree_format: 'both' }
-        : call.args
-    const result = await driver.call(call.driverTool, args)
-    if (read && call.windowId !== null) {
-      this.remember(result, call.pid, call.windowId, call.args.since !== undefined)
-      this.titled(call.pid, call.windowId)
-    }
-    return passed(result)
-  }
-
-  /**
-   * Waits while the user holds the app: `handed` once they hand it back, `released` when the hold
-   * ends, as on Stop or the turn's end, and `later` when the wait runs past its limit.
-   */
-  private waitForHandBack(hold: Hold): Promise<'handed' | 'released' | 'later'> {
-    return new Promise((resolve) => {
-      const done = (outcome: 'handed' | 'released' | 'later') => {
-        clearTimeout(timer)
-        hold.waiters.delete(wake)
-        resolve(outcome)
+    try {
+      if (this.stopped.has(sessionId)) throw stoppedError()
+      if (call.acts) this.acted(sessionId, call)
+      const read = call.tool === 'computer_get_window_state'
+      // Every row's frame comes back too, for placing the agent's pointer; the agent sees none.
+      const args =
+        read && call.args.include_accessibility_tree !== false
+          ? { ...call.args, tree_format: 'both' }
+          : call.args
+      const result = await driver.call(call.driverTool, args)
+      if (read && call.windowId !== null) {
+        this.remember(result, call.pid, call.windowId, call.args.since !== undefined)
+        this.titled(call.pid, call.windowId)
       }
-      const wake = () => done(this.hold === hold ? 'handed' : 'released')
-      const timer = setTimeout(() => done('later'), TAKEN_OVER_WAIT_MS)
-      timer.unref?.()
-      hold.waiters.add(wake)
-    })
-  }
-
-  private wake(hold: Hold): void {
-    for (const wake of [...hold.waiters]) wake()
+      return passed(result)
+    } finally {
+      this.quietSince = Math.max(this.quietSince, Date.now())
+      end()
+    }
   }
 
   /**
@@ -568,7 +586,6 @@ export class ComputerUse {
       control: 'agent',
       act: null,
       timer: null,
-      waiters: new Set(),
     }
     this.arm(next)
     let changed =
@@ -586,20 +603,24 @@ export class ComputerUse {
         next.window = { pid: call.pid, id: call.windowId, title: known?.title ?? null }
         changed = true
       }
-      if (call.acts) {
-        next.act = this.actOf(call, next.act)
-        changed = true
-      }
     }
     this.hold = next
     if (changed) this.emit(next)
+  }
+
+  /** An action of the agent's goes ahead: its pointer and its light show where it lands. */
+  private acted(sessionId: string, call: ComputerCall): void {
+    const hold = this.hold
+    if (hold?.sessionId !== sessionId || call.pid === null || call.windowId === null) return
+    hold.act = this.actOf(call, hold.act)
+    this.emit(hold)
   }
 
   /** The hold ends after a while without calls, unless the user holds the app. */
   private arm(hold: Hold): void {
     if (hold.timer) clearTimeout(hold.timer)
     hold.timer = null
-    if (hold.control === 'you') return
+    if (this.controls.state(hold.sessionId).kind === 'you') return
     const { sessionId } = hold
     hold.timer = setTimeout(() => this.release(sessionId), HOLD_IDLE_MS)
     hold.timer.unref?.()
@@ -608,6 +629,7 @@ export class ComputerUse {
   /** Tells the session's views and main what the hold is now. */
   private emit(hold: Hold): void {
     if (this.hold !== hold) return
+    this.syncWatch()
     this.deps.using(hold.sessionId, {
       app: hold.app,
       appPath: hold.appPath,
@@ -634,9 +656,62 @@ export class ComputerUse {
     if (hold?.sessionId !== sessionId) return
     if (hold.timer) clearTimeout(hold.timer)
     this.hold = null
-    this.wake(hold)
+    this.syncWatch()
+    // Calls waiting on the user end as stopped.
+    this.controls.turnEnded(sessionId)
     this.deps.using(sessionId, null)
     this.deps.held(null)
+  }
+
+  /**
+   * Checks for the user bringing the app the agent uses to the front while the agent has it, which
+   * takes it over as their click or key would: the driver acts in the background, so the app
+   * comes forward only when the user clicks in it or switches to it. Off while the setting is.
+   */
+  private syncWatch(): void {
+    const hold = this.hold
+    const wanted =
+      !!hold?.window &&
+      !!this.deps.driver &&
+      this.deps.settings().pauseOnUse &&
+      this.controls.state(hold.sessionId).kind === 'agent'
+    if (!wanted) {
+      if (this.watch?.timer) clearTimeout(this.watch.timer)
+      this.watch = null
+      return
+    }
+    if (this.watch) return
+    this.watch = { timer: null, front: null }
+    this.nextCheck(this.watch)
+  }
+
+  private nextCheck(watch: PauseWatch): void {
+    watch.timer = setTimeout(() => {
+      watch.timer = null
+      void this.checkFront(watch).finally(() => {
+        if (this.watch === watch) this.nextCheck(watch)
+      })
+    }, PAUSE_POLL_MS)
+    watch.timer.unref?.()
+  }
+
+  private async checkFront(watch: PauseWatch): Promise<void> {
+    const hold = this.hold
+    const driver = this.deps.driver
+    if (!hold?.window || !driver) return
+    let front: boolean
+    try {
+      front = frontApp(await driver.call('list_apps', {})) === hold.window.pid
+    } catch {
+      return
+    }
+    if (this.watch !== watch || this.hold !== hold) return
+    const before = watch.front
+    watch.front = front
+    const state = this.controls.state(hold.sessionId)
+    const quiet = Date.now() - this.quietSince > PAUSE_SETTLE_MS
+    if (before !== false || !front || state.kind !== 'agent' || state.acting || !quiet) return
+    if (this.controls.takeOver(hold.sessionId)) this.deps.paused(hold.sessionId, hold.app ?? '')
   }
 
   /** Where an action lands in its window, as shares of the window, kept from the last one else. */
@@ -826,6 +901,15 @@ export class ComputerUse {
     this.windows.set(key, read)
     if (this.windows.size > WINDOWS_KEPT) this.windows.delete(this.windows.keys().next().value!)
   }
+}
+
+/** The process of the app in front, from a `list_apps` result; null when none says it is. */
+function frontApp(result: CallToolResult): number | null {
+  const apps = (result.structuredContent as { apps?: unknown } | undefined)?.apps
+  if (!Array.isArray(apps)) return null
+  const found = apps.find((item) => (item as { active?: unknown } | null)?.active === true) as
+    { pid?: unknown } | undefined
+  return typeof found?.pid === 'number' ? found.pid : null
 }
 
 const ACT_KINDS: Partial<Record<ComputerCall['tool'], ComputerAct['kind']>> = {
