@@ -18,6 +18,7 @@ import { Textarea } from '@renderer/components/ui/textarea'
 import { errorCode, errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { useTerminalAllowed } from '@renderer/stores/hosts'
+import { keepTemplate } from '@renderer/stores/worktree-choice'
 import { useWorktreeSettings } from './worktree-settings-model'
 
 /**
@@ -117,6 +118,7 @@ function SettingsForm({
     }
     try {
       await host('projects.setWorktreeSettings', { path: projectPath, settings })
+      keepTemplate(projectPath, settings.branchTemplate)
       onClose()
     } catch (failure) {
       const code = errorCode(failure)

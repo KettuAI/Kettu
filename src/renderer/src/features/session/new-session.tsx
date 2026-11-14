@@ -50,7 +50,7 @@ import { shownHosts, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
+import { branchHold, useWorktreeChoice, worktreeRequest } from '@renderer/stores/worktree-choice'
 import { refreshLimits } from '@renderer/stores/usage'
 import {
   chooseNewSessionHost,
@@ -98,7 +98,7 @@ import { useGuideStatuses } from './new-session/guide-statuses'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
 import { WorktreeTrayTag } from './worktree/worktree-tag'
-import { branchNameInvalid, currentBase, useWorktreeStatus } from './new-session/worktree-base'
+import { currentBase, useWorktreeStatus } from './new-session/worktree-base'
 import { WorktreeMenu, WorktreeNote } from './new-session/worktree-menu'
 import { ParentLink } from './session-header'
 import { ColumnScroller } from './session-states'
@@ -305,14 +305,15 @@ function DraftComposer({
   // A sub-session works in its parent's worktree, so only a top-level session in a repository
   // with a commit chooses one.
   const gitStatus = useWorktreeStatus(!parent && !inScratch && project ? project.path : '')
-  const badBranch = useWorktreeChoice(
-    (s) =>
-      !!gitStatus &&
-      !!project &&
-      s.where[project.path] === 'worktree' &&
-      branchNameInvalid(s.branch),
+  const branchHeld = useWorktreeChoice((s) =>
+    gitStatus && project && s.where[project.path] === 'worktree'
+      ? branchHold(s, project.path)
+      : null,
   )
-  const canSend = !!agentId && ready && holdsMessage && !held && !badBranch
+  const templateError = useWorktreeChoice((s) =>
+    project ? (s.templateError[project.path] ?? null) : null,
+  )
+  const canSend = !!agentId && ready && holdsMessage && !held && !branchHeld
   const config = useStartConfig(agentId, undefined, hostId)
   const model = config?.find((o) => o.category === 'model' && isSelect(o))
   // A used-up window of another model does not hold the picked one back.
@@ -393,9 +394,13 @@ function DraftComposer({
       ? t('newSession.chooseProjectFirst')
       : project?.missing && !inScratch
         ? t('newSession.missingLine')
-        : badBranch
+        : branchHeld === 'invalid'
           ? t('worktree.branchInvalid')
-          : (held?.message ?? null)
+          : branchHeld === 'failed'
+            ? t('worktree.templateFailed', { message: templateError })
+            : branchHeld === 'reading'
+              ? t('worktree.templateReading')
+              : (held?.message ?? null)
   const blockedEnter = useBlockedEnter({
     // A missing folder is said under the box already.
     reason: project?.missing && !inScratch ? null : blocked,

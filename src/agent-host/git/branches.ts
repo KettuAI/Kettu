@@ -1,7 +1,7 @@
-// The local branches and the remotes, as the branch switcher lists them.
+// The local and remote-tracking branches and the remotes, as the branch pickers list them.
 
 import { realpath } from 'node:fs/promises'
-import type { BranchInfo, GitRemote } from '@shared/git'
+import type { BranchInfo, GitRemote, RemoteBranchInfo } from '@shared/git'
 import type { Platform } from '@shared/platform'
 import { canonicalizePath, samePath } from '../paths'
 import { expectOk, GIT_TIMEOUT_MS, type Exec, type ExecResult } from './exec'
@@ -9,6 +9,7 @@ import { parseConfigEntries, parseGithubRemote } from './parse'
 
 const PLATFORM = process.platform as Platform
 const HEADS = 'refs/heads/'
+const REMOTES = 'refs/remotes/'
 
 function git(exec: Exec, cwd: string, args: string[]): Promise<ExecResult> {
   return exec('git', args, { cwd, timeoutMs: GIT_TIMEOUT_MS })
@@ -50,7 +51,7 @@ export async function readBranches(exec: Exec, root: string): Promise<BranchInfo
     git(exec, root, [
       'for-each-ref',
       '--sort=-committerdate',
-      '--format=%(refname)%00%(committerdate:unix)%00%(worktreepath)%00',
+      '--format=%(refname)%00%(objectname)%00%(committerdate:unix)%00%(worktreepath)%00',
       HEADS,
     ]),
   ])
@@ -65,12 +66,13 @@ export async function readBranches(exec: Exec, root: string): Promise<BranchInfo
       .stdout.split('\0\n')
       .filter((record) => record.startsWith(HEADS))
       .map(async (record): Promise<BranchInfo> => {
-        const [refname = '', time = '', path = ''] = record.split('\0')
+        const [refname = '', oid = '', time = '', path = ''] = record.split('\0')
         const name = refname.slice(HEADS.length)
         const seconds = time === '' ? Number.NaN : Number(time)
         const folder = path === '' ? null : await canonical(path)
         return {
           name,
+          oid: oid || null,
           committedAt: Number.isFinite(seconds) ? seconds * 1000 : null,
           current: name === current,
           worktree: folder !== null && !samePath(folder, here, PLATFORM) ? folder : null,
@@ -78,7 +80,31 @@ export async function readBranches(exec: Exec, root: string): Promise<BranchInfo
       }),
   )
   if (current !== null && !branches.some((branch) => branch.name === current)) {
-    branches.unshift({ name: current, committedAt: null, current: true, worktree: null })
+    branches.unshift({ name: current, oid: null, committedAt: null, current: true, worktree: null })
   }
   return branches
+}
+
+/** The remote-tracking branches, the most recently committed first, skipping `<remote>/HEAD`. */
+export async function readRemoteBranches(exec: Exec, root: string): Promise<RemoteBranchInfo[]> {
+  const refs = await git(exec, root, [
+    'for-each-ref',
+    '--sort=-committerdate',
+    '--format=%(refname)%00%(objectname)%00%(committerdate:unix)%00%(symref)',
+    REMOTES,
+  ])
+  return expectOk('git for-each-ref', refs)
+    .stdout.split('\n')
+    .flatMap((record): RemoteBranchInfo[] => {
+      const [refname = '', oid = '', time = '', symref = ''] = record.split('\0')
+      if (!refname.startsWith(REMOTES) || symref !== '') return []
+      const seconds = time === '' ? Number.NaN : Number(time)
+      return [
+        {
+          name: refname.slice(REMOTES.length),
+          oid,
+          committedAt: Number.isFinite(seconds) ? seconds * 1000 : null,
+        },
+      ]
+    })
 }
