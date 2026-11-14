@@ -1,9 +1,36 @@
-// MiniMax Code mark: ACP Registry, https://github.com/agentclientprotocol/registry (Apache-2.0).
-const MINIMAX = 'M2 3h3l3 5 3-5h3v10h-2V6.5l-4 6-4-6V13H2V3Z'
+import { useId } from 'react'
+import type { MarkBodyProps } from './index'
 
-export const viewBox = '0 0 16 16'
+// MiniMax Code mark: the symbol in https://code.minimax.io's header, colored after its app icon,
+// https://agent.minimax.io/assets/logo/apple-touch_v2.png, whose mesh gradient this approximates.
+const BLOB =
+  'M26.1139 4.97856C27.0309 5.3238 27.9237 4.03738 26.646 3.1182C24.6317 1.66905 23.1936 2.46289 22.4987 3.03243C22.4723 3.05442 21.7246 2.46069 21.2277 2.15283C19.6422 1.16987 17.8984 0.470588 16.0578 0.178119C15.3585 0.0681688 14.6526 0.0131941 13.9467 0V0.00879121C13.0364 -0.00880087 12.1238 0.048375 11.2244 0.189112C9.3838 0.479381 7.63998 1.17867 6.0545 2.16383C5.55532 2.47389 4.80986 3.06542 4.78347 3.04343C4.08858 2.47169 2.64823 1.67784 0.636135 3.12919C-0.64149 4.04837 0.251308 5.337 1.1683 4.98956C1.79941 4.75206 2.60645 4.16712 3.20898 4.64431C1.53113 6.70258 0.526185 9.31941 0.526185 12.1693C0.526185 15.0192 1.46076 17.4491 3.03086 19.47L2.77797 19.6658C1.22987 20.8686 0.957189 23.083 2.16664 24.6201C3.3739 26.155 5.6103 26.4255 7.1562 25.2271L8.87582 23.8922C9.06274 23.7471 9.28264 23.7075 9.48495 23.7493C9.51134 23.7559 9.53773 23.7625 9.56412 23.7691C9.85439 23.8615 10.0853 24.1253 10.0853 24.475C10.0853 26.4189 11.6708 27.9934 13.6301 28H13.6477C15.607 27.9934 17.1947 26.4189 17.1925 24.475C17.1925 24.1319 17.4146 23.8725 17.6961 23.7757C17.7334 23.7669 17.7708 23.7559 17.8082 23.7471C18.0039 23.7119 18.2172 23.7537 18.3997 23.8945L20.1194 25.2292C21.6653 26.4299 23.9017 26.1572 25.1089 24.6245C26.3184 23.0874 26.0457 20.873 24.4976 19.6701L24.2491 19.4744C25.0539 18.4365 25.6917 17.2666 26.1227 16C26.1315 15.9736 26.1403 15.9472 26.1491 15.9208C26.1886 15.8021 26.2282 15.6811 26.2634 15.5602C26.281 15.5008 26.2964 15.4414 26.314 15.3821C26.3382 15.2919 26.3646 15.2018 26.3887 15.1116C26.4151 15.0104 26.4371 14.9093 26.4613 14.8081C26.4723 14.7576 26.4855 14.707 26.4965 14.6542C26.668 13.8494 26.7604 13.0159 26.7604 12.1605C26.7604 9.31061 25.7554 6.69159 24.0776 4.63551C24.6801 4.15613 25.4872 4.74107 26.1183 4.98076L26.1139 4.97856Z'
 
-/** The mark in `currentColor`, as the ACP Registry ships it. */
-export function Body() {
-  return <path fill="currentColor" d={MINIMAX} />
+export const viewBox = '-1.86 -1.5 31 31'
+
+export function Body({ mono }: MarkBodyProps) {
+  const id = useId()
+  if (mono) return <path fill="currentColor" d={BLOB} />
+  return (
+    <>
+      <defs>
+        <radialGradient id={`${id}-base`} cx=".45" cy=".25" r=".85">
+          <stop stopColor="var(--brand-minimax-1)" />
+          <stop offset=".6" stopColor="var(--brand-minimax-2)" />
+          <stop offset="1" stopColor="var(--brand-minimax-3)" />
+        </radialGradient>
+        <linearGradient id={`${id}-cyan`} x1="0" y1="1" x2=".55" y2=".45">
+          <stop stopColor="var(--brand-minimax-3)" />
+          <stop offset="1" stopColor="var(--brand-minimax-3)" stopOpacity="0" />
+        </linearGradient>
+        <radialGradient id={`${id}-glow`} cx=".5" cy=".88" r=".38">
+          <stop stopColor="var(--brand-minimax-glow)" stopOpacity=".9" />
+          <stop offset="1" stopColor="var(--brand-minimax-glow)" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+      <path fill={`url(#${id}-base)`} d={BLOB} />
+      <path fill={`url(#${id}-cyan)`} d={BLOB} />
+      <path fill={`url(#${id}-glow)`} d={BLOB} />
+    </>
+  )
 }

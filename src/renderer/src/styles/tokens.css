@@ -308,6 +308,35 @@
   --brand-mistral-5: #c4001d;
   --brand-poolside: #4137ff;
   --brand-qwen: #082dff;
+  --brand-agoragentic: #e8613a;
+  --brand-agoragentic-core: #0c1222;
+  --brand-amp-tile-1: #2c3a2a;
+  --brand-amp-tile-2: #13261c;
+  --brand-amp-tile-3: #071c17;
+  --brand-amp-tile-4: #061615;
+  --brand-amp-ink: #dfdfc1;
+  --brand-corust: #f74c00;
+  --brand-deepagents: #7fc8ff;
+  --brand-deepagents-tile: #161f34;
+  --brand-kimi: #1783ff;
+  --brand-minimax-1: #0071ff;
+  --brand-minimax-2: #00b2ff;
+  --brand-minimax-3: #00e0ff;
+  --brand-minimax-glow: #b0fbff;
+  --brand-nova-1: #6b46c1;
+  --brand-nova-2: #8b5cf6;
+  --brand-nova-3: #4f46e5;
+  --brand-nova-arrow-1: #a78bfa;
+  --brand-nova-arrow-2: #6366f1;
+  --brand-nova-core: #e0e7ff;
+  --brand-sigit-tile-1: #ffffff;
+  --brand-sigit-tile-2: #808080;
+  --brand-sigit-tile-3: #020202;
+  --brand-sigit-line: #b8472e;
+  --brand-sigit-glow: #ff8759;
+  --brand-sigit-ink: #ffffff;
+  --brand-sigit-shadow: #000000;
+  --brand-stakpak: #1883a0;
   /* The marks of the services the Marketplace features, in Simple Icons' colors in both variants:
      a tile in the brand's color under a light mark, or the mark alone in its color. */
   --brand-tile-ink: #ffffff;

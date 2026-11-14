@@ -1,11 +1,13 @@
 Artwork adapted as themed SVG components with monochrome variants.
 
-Harn, Kimchi, Gemini CLI, Qwen Code and fast-agent artwork: Apache-2.0.
+Harn, Kimchi, Gemini CLI, Qwen Code, fast-agent, Cline and siGit Code artwork: Apache-2.0.
 Copyright 2025 llmindset.co.uk
 Copyright 2026 Burin Labs, LLC
 Copyright 2024-2026 CAST AI Group, Inc.
 Copyright 2025 Google LLC
 Copyright 2025 Qwen
+Copyright 2026 Cline Bot Inc.
+Copyright 2026 Seto Elkahfi, trading as siGit Code & Deploy
 
 Apache License
                         Version 2.0, January 2004
@@ -207,11 +209,13 @@ APPENDIX: How to apply the Apache License to your work.
    See the License for the specific language governing permissions and
    limitations under the License.
 
-CodeBuddy artwork: MIT.
+CodeBuddy, DeepAgents and Nova artwork: MIT.
 
 MIT License
 
 Copyright (c) 2023 LobeHub
+Copyright (c) LangChain, Inc.
+Copyright (c) 2026 Compass Agentic Platform
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
