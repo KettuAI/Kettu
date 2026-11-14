@@ -29,10 +29,12 @@ import type { HostAdminEvent } from '@shared/remote/host-admin'
 import { isPairingState, type PairingState } from '@shared/remote/pairing'
 import { parseRelayStatuses } from '@shared/remote/relay-host'
 import type { RelayReport, RemoteStatus } from '@shared/remote/status'
+import type { MarketAccount, MarketCall, MarketCallAnswer } from '@shared/market-publish'
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
 import type { DirectSettings, SettingsFile } from '@shared/settings'
 import { processControl, stopTrees, type ProcessId } from '../agent-host/process-tree'
 import { createLogger } from '../main/log'
+import { marketCallOf } from '../main/market-api'
 import type { MarketKeysPush } from '../main/market-keys'
 import {
   hostSettings,
@@ -113,6 +115,10 @@ export interface HostsOptions {
   marketKeys(): MarketKeysPush
   /** The agent host asks to keep or clear a server's OAuth sign-in, checked against the settings. */
   marketOAuth?(serverId: unknown, state: unknown): void
+  /** The Kettu account the Marketplace tools publish with, which follows the agent host's init. */
+  marketAccount(): MarketAccount | null
+  /** Makes a Marketplace API call of the agent host's with the account's access token. */
+  marketCall?(call: MarketCall): Promise<MarketCallAnswer>
   /** The agent host's first start found the programs of these harnesses; the daemon adds their agents. */
   firstStart?(harnesses: unknown): void
   /** The host's X25519 private key, in base64, for the remote host alone. */
@@ -208,7 +214,10 @@ export class Hosts {
         settings: hostSettings(options.settings(), options.systemLocale),
         socketPath: socketPath ?? undefined,
       }),
-      startMessages: () => [{ type: 'host:market-keys', ...options.marketKeys() }],
+      startMessages: () => [
+        { type: 'host:market-keys', ...options.marketKeys() },
+        { type: 'host:market-account', account: options.marketAccount() },
+      ],
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
       stoppedType: 'host:stopped',
@@ -511,6 +520,11 @@ export class Hosts {
     this.remote.post({ type: 'remote-host:admin-event', event, deviceId })
   }
 
+  /** The sign-in changed, so the Marketplace tools are listed or not. */
+  marketAccountChanged(): void {
+    this.agent.post({ type: 'host:market-account', account: this.options.marketAccount() })
+  }
+
   /** The Marketplace's key store changed; all of it goes to the agent host. */
   marketKeysChanged(contents: MarketKeysPush): void {
     this.agent.post({ type: 'host:market-keys', ...contents })
@@ -767,6 +781,25 @@ export class Hosts {
     })
   }
 
+  /** Makes the agent host's Marketplace call with the daemon's sign-in. */
+  private async marketCall(callId: number, raw: unknown): Promise<void> {
+    const call = marketCallOf(raw)
+    const run = this.options.marketCall
+    const answer: MarketCallAnswer =
+      call && run
+        ? await run(call)
+        : {
+            error: {
+              code: call ? 'signed_out' : 'unavailable',
+              status: null,
+              message: call
+                ? 'The daemon is not signed in to a Kettu account.'
+                : 'Not a Marketplace call.',
+            },
+          }
+    this.agent.post({ type: 'market-result', callId, answer })
+  }
+
   /** Runs an agent's terminal call on the terminal host, starting it on the first one. */
   private async terminalCall(callId: number, call: TerminalCall): Promise<void> {
     try {
@@ -958,6 +991,9 @@ export class Hosts {
           this.authCommands = message.commands
           this.terminal.post({ type: 'terminal-host:auth-commands', commands: message.commands })
         }
+        break
+      case 'host:market-call':
+        if (Number.isSafeInteger(message.callId)) void this.marketCall(message.callId, message.call)
         break
       case 'host:browser-call':
         if (Number.isSafeInteger(message.callId)) {

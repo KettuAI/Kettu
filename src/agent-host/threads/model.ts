@@ -205,6 +205,12 @@ export function settled(entry: ThreadEntry): ThreadEntry {
     case 'control_ask':
       // A step still waiting ended with the turn that asked for it.
       return entry.outcome === null ? { ...entry, outcome: 'ended' } : entry
+    case 'market_publish':
+      // A card still waiting ended with the turn that asked; one on its way never heard back.
+      if (entry.outcome === null) return { ...entry, outcome: { kind: 'ended' } }
+      return entry.outcome.kind === 'publishing' || entry.outcome.kind === 'unlisting'
+        ? { ...entry, outcome: { kind: 'interrupted' } }
+        : entry
     case 'tool': {
       const open = entry.status === 'pending' || entry.status === 'in_progress'
       if (!open && entry.permission === null) return entry

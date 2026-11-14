@@ -26,6 +26,13 @@ import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import { isComputerToolName } from '@shared/computer-use'
 import type { McpServer } from '../connection'
 import { PROXY_PREFIX } from '../marketplace/proxy'
+import {
+  isMarketToolName,
+  MARKET_AUTO_ALLOW,
+  MARKET_INSTRUCTIONS,
+  MARKET_TOOLS,
+  type MarketTools,
+} from '../marketplace/publish-tools'
 import { SERVICE_NAME } from '../service-name'
 import type { LogFn } from '../storage'
 import {
@@ -162,6 +169,11 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   terminals?: Omit<TerminalToolDeps, 'sessionOf' | 'folderOf'>
   /** The computer use tools; without it the service lists none. */
   computer?: ComputerCalls
+  /**
+   * The Marketplace tools, listed only while the host is signed in to a Kettu account with Kettu's
+   * services on; without them none.
+   */
+  market?: MarketTools
   /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
   proxy?: {
     handle(req: http.IncomingMessage, res: http.ServerResponse, path: string): Promise<void>
@@ -202,13 +214,15 @@ function entry(url: string, token: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      // Kettu's own tools, which reach no further than its thread, memory and the project's
-      // sessions; the browser, computer use, devices, terminals and artifacts still ask.
+      // Kettu's own tools, which reach no further than its thread, memory, the project's sessions
+      // and reading the user's Marketplace listings; the browser, computer use, devices,
+      // terminals and artifacts still ask, and publishing waits for the user in a card.
       autoAllow: [
         PLAN_TOOL,
         REPORT_TOOL,
         ...MEMORY_TOOL_NAMES,
         ...SESSION_TOOLS.map((tool) => tool.name),
+        ...MARKET_AUTO_ALLOW,
       ],
       prompt: PLAN_PROMPT,
       secret: true,
@@ -384,9 +398,18 @@ export class ArtifactService {
     return this.memoryTools !== null && this.deps.memory?.service.enabled === true
   }
 
+  /** Whether the host's Kettu account is signed in with Kettu's services on, for the Marketplace. */
+  private get marketOn(): boolean {
+    return this.deps.market?.on === true
+  }
+
   /** The tools `tools/list` answers now. */
   private listedTools(): Tool[] {
-    return this.memoryOn ? [...this.serviceTools, ...MEMORY_TOOLS] : this.serviceTools
+    return [
+      ...this.serviceTools,
+      ...(this.memoryOn ? MEMORY_TOOLS : []),
+      ...(this.marketOn ? MARKET_TOOLS : []),
+    ]
   }
 
   /** Each tool's name and the first sentence of its description, for Settings › MCP servers. */
@@ -623,9 +646,11 @@ export class ArtifactService {
   /** A server for one request with the token, as a stateless transport needs. */
   private mcpServer(sdk: Sdk, grant: Grant): Server {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
-    const instructions = this.memoryOn
-      ? `${this.instructions} ${MEMORY_INSTRUCTIONS}`
-      : this.instructions
+    const instructions = [
+      this.instructions,
+      ...(this.memoryOn ? [MEMORY_INSTRUCTIONS] : []),
+      ...(this.marketOn ? [MARKET_INSTRUCTIONS] : []),
+    ].join(' ')
     const server = new sdk.Server(
       { name: SERVICE_NAME, title: 'Kettu', version: this.deps.appVersion },
       { capabilities: { tools: {} }, instructions },
@@ -676,6 +701,16 @@ export class ArtifactService {
         // While memory is off they are not listed, and a call answers that it is off.
         try {
           return await this.memoryTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      const market = this.deps.market
+      if (market && isMarketToolName(name)) {
+        // While signed out they are not listed, and a call answers why.
+        try {
+          return await market.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

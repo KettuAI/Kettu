@@ -97,6 +97,18 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
       case 'host:market-keys':
         withHost((h) => h.setMarketKeys(message.values, message.oauth))
         break
+      case 'host:market-account':
+        withHost((h) => h.setMarketAccount(message.account))
+        break
+      case 'market-result':
+        if (
+          Number.isSafeInteger(message.callId) &&
+          typeof message.answer === 'object' &&
+          message.answer !== null
+        ) {
+          withHost((h) => h.marketResult(message.callId, message.answer))
+        }
+        break
       case 'host:busy-request':
         withHost((h) => h.busy(message.requestId))
         break

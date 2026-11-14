@@ -47,6 +47,7 @@ import {
   type ComputerHold,
 } from '@shared/computer-use'
 import { isControlOutcome, type ControlOutcome } from '@shared/control'
+import type { MarketAccount, MarketCall, MarketCallAnswer } from '@shared/market-publish'
 import { isMediaType, MEDIA_TOKEN, type MediaGrantRecord } from '@shared/media'
 import type { PortDevice } from '@shared/remote/device'
 import { reportBuildResult, type ReportBuildResult } from '@shared/report'
@@ -61,6 +62,7 @@ import { ContentCache } from './artifacts/content-cache'
 import { computerHostOptions } from './computer-use'
 import { GrantRequests } from './grant-requests'
 import type { MarketKeysPush } from './market-keys'
+import { marketCallOf } from './market-api'
 import { t } from './i18n'
 import { createLogger } from './log'
 import { UtilityHost, type UtilityHostEvent, type UtilityHostState } from './utility-host'
@@ -73,6 +75,10 @@ export interface AgentHostDeps {
   marketKeys(): MarketKeysPush
   /** The host asks to keep or clear a server's OAuth sign-in; main checks it against the settings. */
   onMarketOAuth?(serverId: unknown, state: unknown): void
+  /** The Kettu account the Marketplace tools publish with, which follows init at each start. */
+  marketAccount(): MarketAccount | null
+  /** Makes a Marketplace API call of the host's with the account's access token. */
+  market?: (call: MarketCall) => Promise<MarketCallAnswer>
   /** The host's first start found the programs of these harnesses; main adds their agents. */
   onFirstStart?(harnesses: unknown): void
   onAttention(message: Extract<HostToMain, { type: 'host:attention' }>): void
@@ -345,7 +351,10 @@ export class AgentHost {
         settings: deps.settings(),
         computer: computerHostOptions(),
       }),
-      startMessages: () => [{ type: 'host:market-keys', ...deps.marketKeys() }],
+      startMessages: () => [
+        { type: 'host:market-keys', ...deps.marketKeys() },
+        { type: 'host:market-account', account: deps.marketAccount() },
+      ],
       connectMessage: (windowId) => ({ type: 'host:connect', windowId }),
       shutdownMessage: { type: 'host:shutdown' },
       readyType: 'host:ready',
@@ -400,6 +409,11 @@ export class AgentHost {
   /** The Marketplace's key store, whole; a host started later gets it too. */
   pushMarketKeys(contents: MarketKeysPush): void {
     this.host.post({ type: 'host:market-keys', ...contents })
+  }
+
+  /** The Kettu account the Marketplace tools publish with, after a sign-in or a switch changed it. */
+  pushMarketAccount(account: MarketAccount | null): void {
+    this.host.post({ type: 'host:market-account', account })
   }
 
   /** Allow once from a request's notification, which the host answers as its own window would. */
@@ -704,6 +718,26 @@ export class AgentHost {
                 error: { code: 'unavailable', message: 'This build has no device host.' },
               })
         ).then((answer) => this.host.post({ type: 'device-result', callId, answer }))
+        break
+      }
+      case 'host:market-call': {
+        const { callId } = message
+        const call = marketCallOf(message.call)
+        if (!Number.isSafeInteger(callId)) break
+        const run = this.deps.market
+        void (
+          run && call
+            ? run(call)
+            : Promise.resolve<MarketCallAnswer>({
+                error: {
+                  code: 'unavailable',
+                  status: null,
+                  message: call
+                    ? 'This build reaches no Kettu Marketplace.'
+                    : 'Not a Marketplace call.',
+                },
+              })
+        ).then((answer) => this.host.post({ type: 'market-result', callId, answer }))
         break
       }
       case 'host:terminal-call': {

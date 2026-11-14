@@ -110,6 +110,8 @@
   "attention": {
     "browserOrigin": "Wants to open {{site}}",
     "deviceAccess": "Wants to use {{device}}",
+    "marketPublish": "Wants to publish {{name}} to the Kettu Marketplace",
+    "marketUnlist": "Wants to unlist {{name}} from the Kettu Marketplace",
     "computerApp": "Wants to use {{app}}",
     "computerSetup": "Wants to use your computer",
     "controlAsk": {
@@ -599,5 +601,10 @@
   },
   "artifacts": {
     "formatUpgraded": "Moved to version {{format}} of its type’s format"
+  },
+  "marketPublish": {
+    "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
+    "handleTaken": "@{{handle}} is taken. Choose another publisher name.",
+    "publisherFailed": "Could not set the publisher name: {{reason}}"
   }
 }

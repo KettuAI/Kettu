@@ -929,5 +929,86 @@
     "agentWorktree": "在自己的 worktree <branch/> 里工作过",
     "agentWorktreeUnnamed": "在自己的 worktree 里工作过",
     "copyPath": "复制路径"
+  },
+  "marketPublish": {
+    "kind": {
+      "skill": "Skill",
+      "plugin": "插件",
+      "mcp-server": "MCP 服务器"
+    },
+    "visibility": {
+      "public": "所有人",
+      "private": "只有我",
+      "unlisted": "已下架"
+    },
+    "visibilityHint": {
+      "public": "列进 Marketplace，登录 Kettu 的人都能看到。",
+      "private": "不列出，只有登录你账号的电脑能装。"
+    },
+    "harness": {
+      "claude-code": "Claude Code",
+      "codex": "Codex"
+    },
+    "everyAgent": "所有 Agent",
+    "visibleTo": "谁能看到",
+    "asBefore": "和之前一样",
+    "adds": "会加",
+    "addsGroup": {
+      "skills": "Skill",
+      "commands": "命令",
+      "agents": "Agent",
+      "hooks": "Hook",
+      "servers": "MCP 服务器"
+    },
+    "worksWith": "适用于",
+    "runs": "会运行",
+    "changes": "改动",
+    "change": {
+      "added": "新文件",
+      "removed": "已删除"
+    },
+    "uploads": "上传",
+    "filesSize_other": "{{count}} 个文件，{{size}}",
+    "from": "来自 {{folder}}",
+    "viewFiles": "看文件",
+    "hideFiles": "收起文件",
+    "checks": "检查",
+    "noSecrets": "没有密钥",
+    "runsNothing": "安装时不运行任何东西",
+    "withinLimits": "没有超出上限",
+    "title": {
+      "new": "发布到 Kettu 的 Marketplace？",
+      "version": "发布 {{name}} 的 {{version}}？",
+      "unlist": "把 {{name}} 从 Kettu 的 Marketplace 下架？"
+    },
+    "description": {
+      "new": "点发布之前什么都不上传。以后的新版本还会再问你。",
+      "version_other": "{{count}} 人装着它，他们下次更新时拿到 {{version}}。",
+      "unlist": "它会从 Marketplace 里去掉。已经装了的人照常能用，也照常收到新版本。"
+    },
+    "notes": "更新说明 · {{agent}} 写的，能改",
+    "notesPlaceholder": "这个版本改了什么",
+    "publisherName": "发布者名",
+    "publisherHint": "这是你第一次发布：你发布的每一项都会写着这个名字。以后能在“已发布”里改。",
+    "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",
+    "publish": "发布",
+    "publishVersion": "发布 {{version}}",
+    "unlist": "下架",
+    "notNow": "以后再说",
+    "keptDraft": "已留成草稿",
+    "showProblems_other": "显示 {{count}} 个问题",
+    "hideProblems": "收起问题",
+    "outcome": {
+      "publishing": "正在发布 {{name}}…",
+      "unlisting": "正在下架 {{name}}…",
+      "published": "已发布 {{name}} {{version}}",
+      "unlisted": "已下架 {{name}}",
+      "failed": "没能发布 {{name}}",
+      "unlistFailed": "没能下架 {{name}}",
+      "later": "没有发布",
+      "expired": "没有及时回答",
+      "ended": "这一轮先结束了",
+      "interrupted": "Marketplace 回复之前 Kettu 停止了"
+    }
   }
 }

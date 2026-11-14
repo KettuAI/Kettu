@@ -21,6 +21,13 @@ import type {
 } from './computer-use'
 import { isComputerSetupStep } from './computer-use'
 import type { ContextReport } from './context'
+import type {
+  ListingVisibility,
+  MarketProblem,
+  PublishAdds,
+  PublishHarness,
+  PublishKind,
+} from './market-publish'
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
 import type { RoutineRef } from './routines'
 
@@ -288,6 +295,7 @@ export type ThreadEntry =
   | ProjectHooksEntry // Kettu's own record of a folder's hooks held for the user, and the answer
   | ProblemReportEntry // Kettu's own record of a problem report an agent drafted, and its outcome
   | MemoryWriteEntry // Kettu's own record of an agent's write to Kettu's memory, and its answer
+  | MarketPublishEntry // Kettu's own record of a publish to the Kettu Marketplace, and its outcome
 
 /**
  * Where another agent took the session over: from here on its turns are that agent's. `turns` of
@@ -533,6 +541,75 @@ export interface ProblemReportEntry {
   /** When the agent drafted it, in Unix milliseconds, for the daily limit. */
   at: number
   outcome: ProblemReportOutcome | null
+  /** Set when a paired device gave the answer; the host's own windows give none. */
+  device?: FromDevice
+  /** The agent's entry before it, to put it back after a replay. */
+  after: string | null
+}
+
+/** A file of a new version against the current one; lines are null where they were not counted. */
+export interface MarketPublishChange {
+  path: string
+  status: 'added' | 'changed' | 'removed'
+  added: number | null
+  removed: number | null
+}
+
+/**
+ * What became of a publish or an unlisting: on its way after the user's answer, done, refused by
+ * the service, or not done: Not now, no answer within the wait, the turn ending first, or Kettu
+ * stopping before the service answered. A publish not done is kept as a draft.
+ */
+export type MarketPublishOutcome =
+  | { kind: 'publishing' | 'unlisting' }
+  | { kind: 'published'; listingId: string; handle: string; version: string }
+  | { kind: 'unlisted' }
+  | { kind: 'failed'; message: string; problems: MarketProblem[] }
+  | { kind: 'later' | 'expired' | 'ended' | 'interrupted' }
+
+/**
+ * An agent asked to publish a folder to the Kettu Marketplace, as a new listing or a new version
+ * of one, or to unlist one; nothing goes to the service before the user answers. `outcome` is null
+ * while it waits.
+ */
+export interface MarketPublishEntry {
+  kind: 'market_publish'
+  id: string
+  action: 'publish' | 'unlist'
+  item: {
+    name: string
+    slug: string
+    kind: PublishKind
+    harness: PublishHarness | null
+    description: string
+  }
+  /** The listing it is a new version of, or the one to unlist; null for a new listing. */
+  listingId: string | null
+  /** The version to publish, and the listing's current one before it. */
+  version: string | null
+  previous: string | null
+  /** How many people have the listing. */
+  installs: number
+  /** Who sees it: proposed for a new listing, the listing's own for the others. */
+  visibility: ListingVisibility
+  /** The agent's notes for the version; once answered, the ones the user sent. */
+  notes: string | null
+  adds: PublishAdds[]
+  /** What the install runs: commands and servers' command lines or URLs. */
+  runs: string[]
+  /** The file Kettu read what it is from, such as `SKILL.md`. */
+  manifest: string | null
+  /** Where the folder is, from the session's folder or with `~` for the home folder. */
+  folder: string
+  files: { path: string; size: number }[]
+  bytes: number
+  /** A new version's files against the current one; null when they could not be compared. */
+  changes: MarketPublishChange[] | null
+  /** The publisher name a first publish suggests; null once the account has one. */
+  publisher: { suggested: string } | null
+  /** When an unanswered card counts as put off, in the host's milliseconds. */
+  expiresAt: number
+  outcome: MarketPublishOutcome | null
   /** Set when a paired device gave the answer; the host's own windows give none. */
   device?: FromDevice
   /** The agent's entry before it, to put it back after a replay. */
@@ -1239,6 +1316,28 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
         (value.error === null || typeof value.error === 'string') &&
         typeof value.at === 'number' &&
         (value.outcome === null || isProblemReportOutcome(value.outcome)) &&
+        (value.after === null || typeof value.after === 'string')
+      )
+    case 'market_publish':
+      return (
+        (value.action === 'publish' || value.action === 'unlist') &&
+        isRecord(value.item) &&
+        typeof value.item.name === 'string' &&
+        typeof value.item.slug === 'string' &&
+        typeof value.item.kind === 'string' &&
+        (value.version === null || typeof value.version === 'string') &&
+        (value.previous === null || typeof value.previous === 'string') &&
+        typeof value.installs === 'number' &&
+        (value.notes === null || typeof value.notes === 'string') &&
+        isListOf(value.adds, isRecord) &&
+        isListOf(value.runs, (item): item is string => typeof item === 'string') &&
+        typeof value.folder === 'string' &&
+        isListOf(value.files, isRecord) &&
+        typeof value.bytes === 'number' &&
+        (value.changes === null || isListOf(value.changes, isRecord)) &&
+        (value.publisher === null || isRecord(value.publisher)) &&
+        (value.outcome === null ||
+          (isRecord(value.outcome) && typeof value.outcome.kind === 'string')) &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'computer_setup':

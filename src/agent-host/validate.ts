@@ -27,6 +27,7 @@ import {
   type MemoryScope,
 } from '@shared/memory'
 import type { PluginScope, SkillSource } from '@shared/marketplace'
+import { HANDLE, LISTING_NOTES_CHARS } from '@shared/market-publish'
 import {
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
@@ -1164,6 +1165,35 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.skills': marketRead,
     'market.addSkill': (params) => ({ source: skillSource(fields(params).source, platform) }),
+    'market.answerPublish': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'confirm' && o.decision !== 'later') {
+        throw invalidParams('decision must be confirm or later')
+      }
+      if (o.visibility !== undefined && o.visibility !== 'public' && o.visibility !== 'private') {
+        throw invalidParams('visibility must be public or private')
+      }
+      if (
+        o.notes !== undefined &&
+        (typeof o.notes !== 'string' || o.notes.length > LISTING_NOTES_CHARS)
+      ) {
+        throw invalidParams(`notes must be a string of at most ${LISTING_NOTES_CHARS} characters`)
+      }
+      const handle = optionalString(o, 'handle', 32)
+      if (handle !== undefined && !HANDLE.test(handle)) {
+        throw invalidParams('handle must be lowercase letters, digits and hyphens')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+        ...(o.visibility !== undefined ? { visibility: o.visibility } : {}),
+        ...(o.notes !== undefined ? { notes: o.notes as string } : {}),
+        ...(handle !== undefined ? { handle } : {}),
+      }
+    },
+    'market.publishDrafts': none,
+    'market.discardPublishDraft': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)

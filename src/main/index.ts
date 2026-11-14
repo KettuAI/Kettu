@@ -16,6 +16,7 @@ import { BROWSER_PARTITION } from '@shared/browser'
 import { IDLE_CONTROL } from '@shared/control'
 import { guardKettuFetch } from '@shared/kettu-hosts'
 import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
+import type { MarketAccount } from '@shared/market-publish'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
 import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
@@ -23,7 +24,7 @@ import type { RemoteStatus } from '@shared/remote/status'
 import type { ComputerHold } from '@shared/computer-use'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
 import { AGENTS_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
-import { Account } from './account'
+import { Account, NotSignedIn } from './account'
 import { ACCOUNT_URL, AccountApi, accountBaseUrl, clientInfo } from './account/service'
 import { accountFile } from './account/store'
 import { AgentFolders } from './agent-folders'
@@ -80,6 +81,7 @@ import { watchPresence } from './presence'
 import { RelayToken } from './relay-token'
 import { readJsonFile } from './json-file'
 import { MarketKeys, marketKeysFile } from './market-keys'
+import { MarketUnauthorized, runMarketCall } from './market-api'
 import { computerModelForRun } from './system-model'
 import { ComputerOverlay } from './computer-overlay'
 import { computerAppIcon, serveComputerCapture } from './computer-use'
@@ -488,6 +490,15 @@ async function start(): Promise<void> {
         : Promise.resolve({
             error: { code: 'no_page', message: 'Another host’s session has this page.' },
           }),
+    marketAccount: () => marketAccount(),
+    market: (call) =>
+      runMarketCall(call, {
+        base: accountBase,
+        fetch: accountFetch,
+        withToken: (run) =>
+          account.withAccessToken(run, (error) => error instanceof MarketUnauthorized),
+        signedOut: (error) => error instanceof NotSignedIn,
+      }),
     device: (call) =>
       deviceHost.call(call).then((answer) => {
         const opened =
@@ -540,10 +551,18 @@ async function start(): Promise<void> {
       broadcast('account:changed', status)
       sharingKettuChanged?.()
       accountChanged()
+      agentHost.pushMarketAccount(marketAccount())
     },
     log: createLogger('account'),
   })
   const signedIn = (): boolean => account.status().state === 'signed-in'
+  /** The account the Marketplace tools publish with: a sign-in with Kettu's services on. */
+  function marketAccount(): MarketAccount | null {
+    const status = account.status()
+    return cloudOn() && status.state === 'signed-in'
+      ? { name: status.account.name, email: status.account.email }
+      : null
+  }
   // What the relay, push and the account's hosts go by: a sign-in with Kettu's services on.
   const accountInUse = (): boolean => cloudOn() && signedIn()
   const relayOn = (): boolean => settings.get().remote.relay && cloudOn()
@@ -928,6 +947,7 @@ async function start(): Promise<void> {
       remoteHost.directChanged()
       sharing.kettuChanged()
       remoteChanged()
+      agentHost.pushMarketAccount(marketAccount())
     }
     // After the remote host, so devices hear why their terminals close; it reads `remote.terminal`.
     if (changed.has('terminal') || changed.has('remote')) {
