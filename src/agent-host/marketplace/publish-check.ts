@@ -70,14 +70,26 @@ const CODEX_PLUGIN = '.codex-plugin/plugin.json'
 const SKILL_FILE = 'SKILL.md'
 const SERVER_FILE = 'server.json'
 
+/**
+ * A private key: its header and then its body, on the next lines or after an escaped `\n` as in a
+ * JSON string. The header alone is how documentation shows one, which the Marketplace takes too.
+ */
+const PRIVATE_KEY =
+  /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----(?:\r?\n|(?:\\r)?\\n)(?:[A-Za-z-]+:[^\r\n\\]*(?:\r?\n|(?:\\r)?\\n))*(?:\s|\\[rn])*[A-Za-z0-9+/=]{40,}/g
+
 /** What a secret looks like in a text file, in the order a line is tried. */
 const SECRETS: { what: string; pattern: RegExp }[] = [
-  { what: 'a private key', pattern: /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/ },
   {
     what: 'a GitHub token',
     pattern: /(?<![A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{22,})/,
   },
   { what: 'an Anthropic API key', pattern: /(?<![A-Za-z0-9_-])sk-ant-[A-Za-z0-9_-]{20,}/ },
+  { what: 'an OpenRouter API key', pattern: /(?<![A-Za-z0-9_-])sk-or-v1-[a-f0-9]{64}/ },
+  // DeepSeek's and others' keys: `sk-` and 32 hex digits.
+  {
+    what: 'a DeepSeek-style API key',
+    pattern: /(?<![A-Za-z0-9_-])sk-[a-f0-9]{32}(?![A-Za-z0-9_-])/,
+  },
   {
     what: 'an OpenAI API key',
     pattern: /(?<![A-Za-z0-9_-])sk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{32,}/,
@@ -89,6 +101,9 @@ const SECRETS: { what: string; pattern: RegExp }[] = [
   { what: 'a Slack token', pattern: /(?<![A-Za-z0-9_])xox[abposr]-[A-Za-z0-9-]{10,}/ },
   { what: 'a Stripe key', pattern: /(?<![A-Za-z0-9_])(?:sk|rk)_live_[A-Za-z0-9]{20,}/ },
   { what: 'a Google API key', pattern: /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}(?![A-Za-z0-9_-])/ },
+  { what: 'an npm token', pattern: /(?<![A-Za-z0-9_])npm_[A-Za-z0-9]{36}(?![A-Za-z0-9])/ },
+  { what: 'a GitLab token', pattern: /(?<![A-Za-z0-9_])glpat-[A-Za-z0-9_-]{20,}/ },
+  { what: 'a Hugging Face token', pattern: /(?<![A-Za-z0-9_])hf_[A-Za-z0-9]{34,}/ },
 ]
 
 /** A run of one character, or AWS's documented example key, which no real secret is. */
@@ -101,9 +116,17 @@ function placeholder(match: string): boolean {
  * secret itself.
  */
 export function findSecrets(text: string): { line: number; what: string }[] {
+  const keys = new Set<number>()
+  for (const match of text.matchAll(PRIVATE_KEY)) {
+    if (!placeholder(match[0])) keys.add(lineAt(text, match.index))
+  }
   const found: { line: number; what: string }[] = []
   const lines = text.split('\n')
   for (let index = 0; index < lines.length && found.length < SECRETS_PER_FILE; index++) {
+    if (keys.has(index + 1)) {
+      found.push({ line: index + 1, what: 'a private key' })
+      continue
+    }
     const line = lines[index]!
     for (const { what, pattern } of SECRETS) {
       const match = pattern.exec(line)
@@ -114,6 +137,13 @@ export function findSecrets(text: string): { line: number; what: string }[] {
     }
   }
   return found
+}
+
+function lineAt(text: string, offset: number): number {
+  let line = 1
+  for (let at = text.indexOf('\n'); at !== -1 && at < offset; at = text.indexOf('\n', at + 1))
+    line++
+  return line
 }
 
 function isText(data: Buffer): boolean {
