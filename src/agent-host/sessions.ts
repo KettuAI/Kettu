@@ -17,6 +17,7 @@ import {
   type OutlineTitle,
   type ReturnedMessage,
   type SessionAttention,
+  type SessionOutputs,
   type SessionPullRequest,
   type SessionSummary,
   type StartNotice,
@@ -2605,6 +2606,26 @@ export class SessionManager {
       })
     }
     return { rows, model: modelOf(current.thread.session.config) }
+  }
+
+  /** What the session made, for its card in the sidebar, a live session's latest entries included. */
+  async outputs(sessionId: string): Promise<SessionOutputs> {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.recordOf(sessionId)
+    if (live) this.checkpoint(live)
+    const store = this.deps.threads
+    const none: SessionOutputs = { artifacts: [], references: [], reply: null, turnMs: null }
+    if (!store || !record.acpSessionId) return none
+    try {
+      const stored = await store.outputs(record.id)
+      return stored && this.isCurrent(record, stored.head) ? stored.outputs : none
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read what session ${record.id} made: ${(error as Error).message}`,
+      )
+      return none
+    }
   }
 
   private async readOutline(record: SessionRecord): Promise<StoredOutline | null> {

@@ -1,6 +1,7 @@
 // The stored form of a session's thread: what is kept beside the entries, where turns start,
 // and the content refs that large images are moved out of.
 
+import type { SessionOutputs } from '@shared/agent-host'
 import type { ContextBreakdown } from '@shared/context'
 import type {
   AgentId,
@@ -169,6 +170,11 @@ export interface StoredOutline {
   head: ThreadHead
   session: StoredSession
   entries: OutlineRow[]
+}
+
+export interface StoredOutputs {
+  head: ThreadHead
+  outputs: SessionOutputs
 }
 
 export interface StoredThread {

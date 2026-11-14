@@ -1286,6 +1286,7 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'sessions.outline': session,
+    'sessions.outputs': session,
     'sessions.outlineTitles': session,
     'sessions.watch': session,
     'sessions.unwatch': session,

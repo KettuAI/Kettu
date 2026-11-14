@@ -73,6 +73,8 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.mentions(request.sessionId, request.text)
     case 'outline':
       return db.outline(request.sessionId)
+    case 'outputs':
+      return db.outputs(request.sessionId)
     case 'setOutlineTitles':
       return db.setOutlineTitles(request.sessionId, request.titles)
     case 'routine':
