@@ -13,6 +13,7 @@ import {
 import { ArtifactEntry } from './artifact-entry'
 import { BrowserOriginEntry } from './browser-origin-entry'
 import { DeviceAccessEntry } from './device-access-entry'
+import { MemoryEntry } from './memory-entry'
 import { ComputerAppEntry } from './computer-app-entry'
 import { ProblemReportEntry } from './problem-report-entry'
 import { ProjectHooksEntry } from './project-hooks-entry'
@@ -80,6 +81,8 @@ export const Entry = memo(function Entry({
       return <ProjectHooksEntry {...props} agentName={agentName} />
     case 'problem_report':
       return <ProblemReportEntry {...props} agentName={agentName} />
+    case 'memory':
+      return <MemoryEntry {...props} agentName={agentName} />
     default:
       return null
   }

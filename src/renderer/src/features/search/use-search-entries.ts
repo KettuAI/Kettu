@@ -36,6 +36,7 @@ const SECTIONS: readonly SettingsSection[] = [
   'browser',
   'agents',
   'harnesses',
+  'memory',
   'usage',
   'git',
   'archived',

@@ -27,6 +27,7 @@ const AFTER_END = new Set([
   'project_mcp',
   'project_hooks',
   'problem_report',
+  'memory',
   'session_started',
 ])
 

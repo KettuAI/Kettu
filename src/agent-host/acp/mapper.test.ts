@@ -319,6 +319,69 @@ describe('user message chunks', () => {
   })
 })
 
+describe("Kettu's memory in a replay", () => {
+  const index = '<kettu-memory>\nKettu keeps this memory.\n- [run] How to run\n</kettu-memory>'
+
+  it('leaves the memory index sent ahead of a prompt out of its user message', () => {
+    const { entries } = run(
+      [
+        {
+          sessionUpdate: 'user_message_chunk',
+          content: { type: 'text', text: `${index}\n\nFix the build` },
+        },
+        text('Done'),
+        {
+          sessionUpdate: 'user_message_chunk',
+          messageId: 'u2',
+          content: { type: 'text', text: `${index}\n\n` },
+        },
+        {
+          sessionUpdate: 'user_message_chunk',
+          messageId: 'u2',
+          content: { type: 'text', text: 'And the tests' },
+        },
+        text('Done too'),
+        { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: `Quote ${index}` } },
+      ],
+      { replaying: true },
+    )
+    expect(entries.filter((e) => e.kind === 'user').map((e) => e.content)).toEqual([
+      [{ type: 'text', text: 'Fix the build' }],
+      [{ type: 'text', text: 'And the tests' }],
+      [{ type: 'text', text: `Quote ${index}` }],
+    ])
+  })
+
+  it("holds back Kettu's memory writes, whose row the host adds, unless they fail", () => {
+    const call = (id: string, tool: string): SessionUpdate => ({
+      sessionUpdate: 'tool_call',
+      toolCallId: id,
+      title: `mcp__kettu__${tool}`,
+      kind: 'other',
+      status: 'in_progress',
+      rawInput: { title: 'Run tests with pnpm test' },
+    })
+    const { entries } = run([
+      call('c1', 'remember'),
+      { sessionUpdate: 'tool_call_update', toolCallId: 'c1', status: 'completed' },
+      call('c2', 'update_memory'),
+      {
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'c2',
+        status: 'failed',
+        content: [{ type: 'content', content: { type: 'text', text: 'No memory run-tests' } }],
+      },
+      call('c3', 'read_memory'),
+      { sessionUpdate: 'tool_call_update', toolCallId: 'c3', status: 'completed' },
+    ])
+    expect(entries.map((e) => [e.id, e.kind === 'tool' ? e.status : null])).toEqual([
+      ['t:c2', 'failed'],
+      ['t:c3', 'completed'],
+    ])
+    expect(entries[0]).toMatchObject({ title: 'mcp__kettu__update_memory', content: [{}] })
+  })
+})
+
 describe('replayed attachments', () => {
   const fixture = (updates: unknown): SessionUpdate[] => updates as SessionUpdate[]
   const userOf = (entries: ThreadEntry[]) => {

@@ -6,6 +6,7 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
 import { longer } from '@shared/artifacts'
 import type { PlanItem } from '@shared/thread'
 import type { Caller } from './artifacts/tools'
+import { FORGET_MEMORY_TOOL, REMEMBER_TOOL, UPDATE_MEMORY_TOOL } from './memory/tools'
 import { REPORT_TOOL } from './report-tool'
 import { SERVICE_NAME } from './service-name'
 
@@ -88,18 +89,39 @@ export function isPlanToolName(name: string): boolean {
   return name === PLAN_TOOL
 }
 
-/** Kettu's tools whose calls show no row: the plan and the drafted report are their display. */
-const ROWLESS_TOOLS: ReadonlySet<string> = new Set([PLAN_TOOL, REPORT_TOOL])
+/**
+ * Kettu's memory writes, whose row or card in the thread is their display once they succeed; a
+ * call that fails wrote nothing, so it shows as a failed row instead.
+ */
+const MEMORY_WRITE_TOOLS: ReadonlySet<string> = new Set([
+  REMEMBER_TOOL,
+  UPDATE_MEMORY_TOOL,
+  FORGET_MEMORY_TOOL,
+])
+
+/** Kettu's tools whose calls show no row: the plan, the drafted report and memory writes. */
+const ROWLESS_TOOLS: ReadonlySet<string> = new Set([PLAN_TOOL, REPORT_TOOL, ...MEMORY_WRITE_TOOLS])
+
+const CLAUDE_PREFIX = `mcp__${SERVICE_NAME}__`
 
 /** A call of one of those tools, by Claude Code's name for it. */
 export function isClaudeRowlessCall(name: string): boolean {
-  const prefix = `mcp__${SERVICE_NAME}__`
-  return name.startsWith(prefix) && ROWLESS_TOOLS.has(name.slice(prefix.length))
+  return name.startsWith(CLAUDE_PREFIX) && ROWLESS_TOOLS.has(name.slice(CLAUDE_PREFIX.length))
 }
 
 /** A call of one of those tools, as Codex names its MCP calls by server and tool. */
 export function isCodexRowlessCall(server: string, tool: string): boolean {
   return server === SERVICE_NAME && ROWLESS_TOOLS.has(tool)
+}
+
+/** Of those calls, by Claude Code's name, one that shows as a failed row when it fails. */
+export function isClaudeRowWhenFailed(name: string): boolean {
+  return name.startsWith(CLAUDE_PREFIX) && MEMORY_WRITE_TOOLS.has(name.slice(CLAUDE_PREFIX.length))
+}
+
+/** Of those calls, by Codex's server and tool, one that shows as a failed row when it fails. */
+export function isCodexRowWhenFailed(server: string, tool: string): boolean {
+  return server === SERVICE_NAME && MEMORY_WRITE_TOOLS.has(tool)
 }
 
 export interface PlanToolsDeps {

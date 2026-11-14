@@ -17,6 +17,7 @@
     "thought": "思考",
     "thoughtFor": "思考了 {{duration}}",
     "plan": "更新了计划",
+    "memory_other": "更新了 {{count}} 次记忆",
     "execute_other": "运行了 {{count}} 条命令",
     "search_other": "搜索了 {{count}} 次",
     "fetch_other": "获取了 {{count}} 个网页",
@@ -198,6 +199,39 @@
       "sent": "已提交 · 报告 {{id}}",
       "saved": "已存到本地",
       "skipped": "未提交"
+    }
+  },
+  "memory": {
+    "action": {
+      "remember": "记住了",
+      "update": "改了记忆",
+      "forget": "忘掉了"
+    },
+    "undo": "撤销",
+    "undoLabel": "撤销“{{title}}”",
+    "undone": "已撤销",
+    "proposal": {
+      "remember": {
+        "action": "记住一件关于你的事",
+        "allow": "记住",
+        "deny": "不记",
+        "accepted": "已记进全局记忆",
+        "declined": "没有记"
+      },
+      "update": {
+        "action": "改一条关于你的记忆",
+        "allow": "改",
+        "deny": "不改",
+        "accepted": "已改好全局记忆",
+        "declined": "没有改"
+      },
+      "forget": {
+        "action": "忘掉一条关于你的记忆",
+        "allow": "忘掉",
+        "deny": "留着",
+        "accepted": "已从全局记忆里忘掉",
+        "declined": "留着了"
+      }
     }
   },
   "computerBar": {

@@ -250,7 +250,35 @@ export interface SessionOptions {
   projectMcp?: ProjectMcpGate
   /** The user's answers about the hooks the folder declares itself; without it none run. */
   projectHooks?: ProjectHooksGate
+  /**
+   * Kettu's memory, set while it is on: an agent with `ownInstructions` puts `text` in the
+   * session's own instructions, and every agent turns its harness's own memory off.
+   */
+  memory?: SessionMemory
+  /**
+   * Kettu's MCP service for an agent with `kettuExtension`, which takes it only through Kettu's
+   * extension in the agent; the session's own token, so its calls need not name the session.
+   */
+  kettuService?: KettuService
 }
+
+/** Kettu's memory as a session starts with it. */
+export interface SessionMemory {
+  /** The index of both layers and how to use them, marked as reference data. */
+  text: string
+}
+
+/** Where a session reaches Kettu's MCP service, and its bearer token there. */
+export interface KettuService {
+  url: string
+  token: string
+}
+
+/**
+ * Where ACP's `session/new` and `session/load` carry a session's `KettuService` to the session
+ * router, which takes it out into that session's process environment for Kettu's extension.
+ */
+export const KETTU_SERVICE_META = 'sh.kettu/mcp'
 
 /** Decides which of the MCP servers a session's folder declares itself may start. */
 export interface ProjectMcpGate {
@@ -287,6 +315,16 @@ export interface ProjectHooksGate {
 export interface AgentConnection {
   /** Settles once the connection has closed, from either side. */
   readonly closed: Promise<void>
+  /**
+   * Whether it hands `SessionOptions.memory` to the agent in the session's own instructions;
+   * otherwise the host sends that text ahead of the session's first prompt.
+   */
+  readonly ownInstructions?: boolean
+  /**
+   * Whether the agent runs Kettu's extension, which reaches Kettu's MCP service with
+   * `SessionOptions.kettuService` though the agent takes no MCP server over ACP (Pi).
+   */
+  readonly kettuExtension?: boolean
   readonly isClosed: boolean
   close(): void
 

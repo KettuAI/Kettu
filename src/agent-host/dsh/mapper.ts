@@ -13,7 +13,7 @@ import type {
 } from '@shared/thread'
 import { fenced } from '../codex/mapper'
 import { t } from '../i18n'
-import { isClaudeRowlessCall } from '../plan-tool'
+import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
 import {
   addEntry,
   commandDescription,
@@ -426,12 +426,19 @@ export class SessionMapper {
     const callId = data.message.toolCallId ?? (data.message.source as { callId?: string })?.callId
     if (!callId) return
     const call = this.calls.get(callId)
-    if (!call || hidden(call.name)) return
+    if (!call) return
     const id = `t:${callId}`
     const text = data.message.content
       .flatMap((block) => (block.type === 'text' ? [block.text] : []))
       .join('\n')
     const failed = data.message.isError === true
+    if (hidden(call.name)) {
+      // A memory write that failed wrote nothing, so its call shows as a failed row.
+      if (failed && isClaudeRowWhenFailed(call.name) && !ctx.thread.byId[id]) {
+        this.failedCall(ctx, out, callId, call, data, text)
+      }
+      return
+    }
     if (SUBAGENT_TOOLS.has(call.name)) {
       // No subagent started, so the call shows as a row with its reason.
       if (failed && !ctx.thread.byId[id]) this.failedCall(ctx, out, callId, call, data, text)

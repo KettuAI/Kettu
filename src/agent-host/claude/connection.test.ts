@@ -309,6 +309,52 @@ describe('the Claude Agent SDK driver', () => {
     ])
   })
 
+  it("appends Kettu's memory to the system prompt and turns Claude Code's own memory off", async () => {
+    const { sdk, connection } = await setup()
+    const memory = { text: 'Memory index.' }
+    const kettu = {
+      type: 'http' as const,
+      name: 'kettu',
+      url: 'http://127.0.0.1:9/mcp',
+      headers: [],
+      prompt: 'Plan first.',
+    }
+    const opened = await connection.newSession('/repo', { mcpServers: [kettu], memory })
+    const withMemory = {
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: 'Plan first.\n\nMemory index.',
+      },
+      env: expect.objectContaining({ CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1' }),
+    }
+    expect(sdk.last.options).toMatchObject(withMemory)
+    await connection.closeSession(opened.sessionId)
+    await connection.resumeSession(opened.sessionId, '/repo', { mcpServers: [kettu], memory })
+    expect(sdk.last.options).toMatchObject({ resume: opened.sessionId, ...withMemory })
+    await connection.forkSession(opened.sessionId, '/repo', { mcpServers: [kettu], memory })
+    expect(sdk.last.options).toMatchObject({ resume: `fork-of-${opened.sessionId}`, ...withMemory })
+
+    await connection.newSession('/repo', { memory: { text: 'Only memory.' } })
+    expect(sdk.last.options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Only memory.',
+    })
+    // A page's question starts with no prompt of Kettu's at all.
+    await connection.newSession('/repo', { hidden: 'sample', memory })
+    expect(sdk.last.options.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' })
+
+    await connection.newSession('/repo', { mcpServers: [kettu] })
+    expect(sdk.last.options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Plan first.',
+    })
+    expect(sdk.last.options.env).not.toHaveProperty('CLAUDE_CODE_DISABLE_AUTO_MEMORY')
+    expect(connection.ownInstructions).toBe(true)
+  })
+
   it('keeps a server that holds a key off the command line and adds it once the query starts', async () => {
     const { sdk, connection } = await setup()
     await connection.newSession('/repo', {
@@ -944,6 +990,33 @@ describe('a turn', () => {
     }
     await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
     expect(target.entries()).toEqual([])
+  })
+
+  it('shows no row for a memory write, unless it failed and so wrote nothing', async () => {
+    const result = (id: string, content: string, failed: boolean) =>
+      ({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: id, content, is_error: failed }],
+        },
+        parent_tool_use_id: null,
+        session_id: sessionId,
+      }) as SdkMessage
+    s.sdk.script = (query) => {
+      query.running()
+      query.emit(
+        assistant(query, 'msg_1', [
+          { type: 'tool_use', id: 'toolu_4', name: 'mcp__kettu__remember', input: { title: 'a' } },
+          { type: 'tool_use', id: 'toolu_5', name: 'mcp__kettu__remember', input: { title: 'b' } },
+        ]),
+      )
+      query.emit(result('toolu_4', 'Saved to project memory as a.', false))
+      query.emit(result('toolu_5', 'This looks like a secret.', true))
+      query.finish()
+    }
+    await s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    expect(target.entries()).toMatchObject([{ kind: 'tool', id: 't:toolu_5', status: 'failed' }])
   })
 
   it('fails a turn that needs a sign-in, and reads the sign-in again before the next one', async () => {

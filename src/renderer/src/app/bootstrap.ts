@@ -51,6 +51,7 @@ import {
   useGitStore,
 } from '@renderer/stores/git'
 import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
+import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -149,6 +150,7 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
   }
   receiveArtifactEvent(event, hostId)
   if (event.type === 'artifacts.changed') artifactsChanged(hostId)
+  if (event.type === 'memory.changed') memoryChanged(hostId)
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
   if (hostId !== null && event.type === 'usage.changed') usageChanged(hostId)
   if (hostId !== null) return hostScopeEvent(hostId, event)

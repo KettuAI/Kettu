@@ -65,8 +65,8 @@ export function AccessCard({
     answer: (answer: string) => string
   }
   request: (decision: AccessDecision) => Promise<void>
-  /** Another action in place of the lasting allow, which answers nothing by itself. */
-  trailing?: { glyph: IconSvgElement; label: string; onClick: () => void }
+  /** Another action in place of the lasting allow, which answers nothing by itself; null for none. */
+  trailing?: { glyph: IconSvgElement; label: string; onClick: () => void } | null
 }) {
   const { t } = useTranslation('session')
   const agentId = useSessionsStore((s) => s.byId[sessionId]?.agentId ?? null)
@@ -132,7 +132,7 @@ export function AccessCard({
         revocable={false}
         disabled={answering !== null}
         trailingActions={
-          trailing ? (
+          trailing === null ? undefined : trailing ? (
             <button
               type="button"
               className="ui-prc__btn"

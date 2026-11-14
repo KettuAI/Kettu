@@ -4,8 +4,9 @@ import { FOLDED_LINES, FOLD_OVER } from './markdown/code-meta'
 // One character per entry, so the thread re-renders only when its shape changes, not on every
 // streamed token: u user, s user message steered into a running turn, a agent, h thought, g
 // groupable lookup, t other tool, w tool waiting for permission, r tool whose request was answered,
-// p compaction, n plan, which the thread leaves out for the top bar, e turn end, o anything else,
-// which a new site's request and an agent's question are: of their own, never folded into a run.
+// p compaction, n plan, which the thread leaves out for the top bar, e turn end, m an agent's write
+// to project memory, which folds as work, o anything else, which a new site's request, an agent's
+// question and a proposed write to global memory are: of their own, never folded into a run.
 export function signatureOf(state: ThreadState | null | undefined): string {
   if (!state) return ''
   let signature = ''
@@ -31,6 +32,7 @@ function charOf(entry: ThreadEntry | undefined): string {
   if (entry.kind === 'thought') return 'h'
   if (entry.kind === 'plan') return 'n'
   if (entry.kind === 'compaction') return 'p'
+  if (entry.kind === 'memory') return entry.layer === 'project' ? 'm' : 'o'
   // A question, a plan and an MCP server's request are the user's to answer, never folded work.
   if (
     entry.kind !== 'tool' ||
@@ -56,15 +58,21 @@ function charOf(entry: ThreadEntry | undefined): string {
 
 /** Work, as opposed to what an agent says: what a reply's answer comes after. */
 const isWork = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't' || char === 'w' || char === 'r' || char === 'p'
+  char === 'h' ||
+  char === 'g' ||
+  char === 't' ||
+  char === 'w' ||
+  char === 'r' ||
+  char === 'p' ||
+  char === 'm'
 
 /**
- * Tool calls and thoughts fold into a run. A request for permission ends it, since it waits for
- * the user below the work before it, and keeps standing apart once answered; so does a
- * compaction, which divides the thread.
+ * Tool calls, thoughts and project memory writes fold into a run. A request for permission ends
+ * it, since it waits for the user below the work before it, and keeps standing apart once
+ * answered; so does a compaction, which divides the thread.
  */
 const foldsIntoRun = (char: string | undefined): boolean =>
-  char === 'h' || char === 'g' || char === 't'
+  char === 'h' || char === 'g' || char === 't' || char === 'm'
 
 /** A step on its own, or a run of completed lookups ("Read a.ts and 2 more"). */
 export type Step =

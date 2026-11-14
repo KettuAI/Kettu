@@ -39,6 +39,15 @@ import type {
 } from './marketplace'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
+  MemoryDecision,
+  MemoryDraft,
+  MemoryEntry,
+  MemoryImportResult,
+  MemoryImportScan,
+  MemoryOverview,
+  MemoryScope,
+} from './memory'
+import type {
   BranchList,
   ChangedFile,
   CommitDetails,
@@ -1092,6 +1101,39 @@ export interface HostContract {
     params: { sessionId: string; entryId: string; outcome: ProblemReportOutcome }
     result: void
   }
+  // The answer to an agent's proposed write to global memory, from the window or device that gave
+  // it first; `remember` writes it.
+  'sessions.answerMemory': {
+    params: { sessionId: string; entryId: string; decision: MemoryDecision }
+    result: void
+  }
+  // Takes an agent's project memory write back, while the entry is as that write left it.
+  'sessions.undoMemory': {
+    params: { sessionId: string; entryId: string }
+    result: void
+  }
+  // Settings › Memory: the switch, global memory, the projects with their counts, and how many
+  // entries the agents' own memories hold that could be imported.
+  'memory.overview': { params: void; result: MemoryOverview }
+  'memory.list': { params: { scope: MemoryScope }; result: MemoryEntry[] }
+  // Writes the user's entry: a new one when `id` is null, else that entry changed.
+  'memory.save': {
+    params: { scope: MemoryScope; id: string | null; draft: MemoryDraft }
+    result: MemoryEntry
+  }
+  'memory.remove': { params: { scope: MemoryScope; id: string }; result: void }
+  // Moves a project's entry to global memory; the user asking is the consent global writes need.
+  'memory.moveToGlobal': { params: { project: string; id: string }; result: MemoryEntry }
+  // Off: no index and no memory tools, and each harness keeps its own memory as it had it.
+  'memory.setEnabled': { params: { enabled: boolean }; result: void }
+  // What the agents' own memories hold for projects Kettu knows, not yet imported.
+  'memory.importScan': { params: void; result: MemoryImportScan }
+  // Copies those sources into their projects' memory; `global` names the entries the user ticked
+  // to go to global memory instead. The originals stay as they are.
+  'memory.import': {
+    params: { sources: { agentId: AgentId; project: string }[]; global: string[] }
+    result: MemoryImportResult
+  }
   // The label's Stop using: the session stops using the computer for the rest of its turn.
   'computer.stop': {
     params: { sessionId: string }
@@ -1297,6 +1339,16 @@ export const HOST_METHODS = [
   'sessions.answerProjectMcp',
   'sessions.answerProjectHooks',
   'sessions.answerReport',
+  'sessions.answerMemory',
+  'sessions.undoMemory',
+  'memory.overview',
+  'memory.list',
+  'memory.save',
+  'memory.remove',
+  'memory.moveToGlobal',
+  'memory.setEnabled',
+  'memory.importScan',
+  'memory.import',
   'computer.stop',
   'computer.declineSetup',
 ] as const satisfies readonly HostMethod[]
@@ -1323,6 +1375,7 @@ export type HostEvent =
   | { type: 'git.tools'; tools: GitTools }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
+  | { type: 'memory.changed' } // Kettu's memory or its switch changed; a page showing it reads again
   // A server's sign-in changed; `loginId` and `error` close a Connect the window started.
   | {
       type: 'market.connectionChanged'

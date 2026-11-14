@@ -61,6 +61,38 @@ function quoteCmd(arg: string): string {
   return arg !== '' && !CMD_UNSAFE.test(arg) ? arg : `"${arg.replace(/"/g, '""')}"`
 }
 
+// Where `session/new` and `session/load` name a session's Kettu MCP service, as
+// `KETTU_SERVICE_META` in the host's connection contract.
+const SERVICE_META = 'sh.kettu/mcp'
+// The variables Kettu's extension in the agent reads it from (`SERVICE_URL_VARIABLE` and
+// `SERVICE_TOKEN_VARIABLE`); this file imports nothing of Kettu's.
+const SERVICE_URL = 'KETTU_MCP_URL'
+const SERVICE_TOKEN = 'KETTU_MCP_TOKEN'
+const ENV_VALUE = /^[^\0\r\n]{1,2048}$/
+
+/**
+ * Takes the session's Kettu MCP service out of a `session/new` or `session/load`: the request to
+ * pass on without it, and the variables that session's child alone starts with.
+ */
+function takeService(params: unknown): { params: unknown; env: Record<string, string> } {
+  if (typeof params !== 'object' || params === null) return { params, env: {} }
+  const meta = (params as { _meta?: unknown })._meta
+  if (typeof meta !== 'object' || meta === null || !(SERVICE_META in meta)) {
+    return { params, env: {} }
+  }
+  const { [SERVICE_META]: service, ...rest } = meta as Record<string, unknown>
+  const forward: Record<string, unknown> = { ...(params as Record<string, unknown>) }
+  if (Object.keys(rest).length > 0) forward._meta = rest
+  else delete forward._meta
+  const { url, token } = (typeof service === 'object' && service !== null ? service : {}) as {
+    url?: unknown
+    token?: unknown
+  }
+  if (typeof url !== 'string' || typeof token !== 'string') return { params: forward, env: {} }
+  if (!ENV_VALUE.test(url) || !ENV_VALUE.test(token)) return { params: forward, env: {} }
+  return { params: forward, env: { [SERVICE_URL]: url, [SERVICE_TOKEN]: token } }
+}
+
 /** The `sessionId` a message names, or null. */
 function sessionIdOf(params: unknown): string | null {
   if (typeof params !== 'object' || params === null) return null
@@ -204,8 +236,9 @@ export class SessionRouter {
   private async newSession(id: JsonRpcId, params: unknown): Promise<void> {
     let child: Child | null = null
     try {
-      child = await this.startSessionChild()
-      const answer = await this.request(child, 'session/new', params)
+      const taken = takeService(params)
+      child = await this.startSessionChild(taken.env)
+      const answer = await this.request(child, 'session/new', taken.params)
       if (answer.error) {
         this.endChild(child)
         return this.sendError(id, answer.error)
@@ -241,8 +274,9 @@ export class SessionRouter {
         this.sessions.delete(sessionId)
         await this.endChildAndWait(existing, REPLACE_KILL_MS)
       }
-      child = await this.startSessionChild()
-      const answer = await this.request(child, 'session/load', params)
+      const taken = takeService(params)
+      child = await this.startSessionChild(taken.env)
+      const answer = await this.request(child, 'session/load', taken.params)
       if (answer.error) {
         this.endChild(child)
         return this.sendError(id, answer.error)
@@ -285,10 +319,13 @@ export class SessionRouter {
     }
   }
 
-  /** A child for a session, initialized with the parameters the host gave the control child. */
-  private async startSessionChild(): Promise<Child> {
+  /**
+   * A child for a session, initialized with the parameters the host gave the control child, with
+   * `env` added to its environment.
+   */
+  private async startSessionChild(env: Record<string, string>): Promise<Child> {
     if (this.initializeParams === null) throw new Error('The router is not initialized')
-    const child = this.spawnChild()
+    const child = this.spawnChild(env)
     const answer = await this.request(child, 'initialize', this.initializeParams)
     if (answer.error) {
       this.endChild(child)
@@ -299,11 +336,15 @@ export class SessionRouter {
 
   // Child processes.
 
-  private spawnChild(): Child {
+  private spawnChild(env: Record<string, string> = {}): Child {
     const { command, args } = this.spawnWords(this.childCommand, this.childArgs)
+    // A session's service reaches its own child only, never one inherited from the router's.
+    const base = { ...process.env }
+    delete base[SERVICE_URL]
+    delete base[SERVICE_TOKEN]
     const proc = spawn(command, args, {
       cwd: process.cwd(),
-      env: process.env,
+      env: { ...base, ...env },
       stdio: ['pipe', 'pipe', 'pipe'],
       shell: this.childShell,
       windowsHide: true,

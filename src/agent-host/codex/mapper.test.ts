@@ -211,6 +211,17 @@ describe('the plan tool', () => {
     ])
     expect(entries.map((entry) => entry.id)).toEqual(['t:b'])
   })
+
+  it('shows no row for a memory write, unless it failed and so wrote nothing', () => {
+    const refused = { message: 'This looks like a secret' }
+    const { entries } = run([
+      completed(call('a', 'kettu', 'remember')),
+      completed({ ...call('b', 'kettu', 'update_memory'), status: 'failed', error: refused }),
+      completed({ ...call('c', 'kettu', 'set_plan'), status: 'failed', error: refused }),
+    ])
+    expect(entries.map((entry) => entry.id)).toEqual(['t:b'])
+    expect(entries[0]).toMatchObject({ status: 'failed' })
+  })
 })
 
 describe('other items', () => {

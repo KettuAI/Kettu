@@ -5,6 +5,7 @@ import { ToolCallCard, type ToolCallLabels } from '@renderer/components/affect/t
 import { cn } from '@renderer/lib/utils'
 import { isFresh } from '@renderer/stores/threads'
 import { thoughtTitle, toolLabel } from './helpers'
+import { MemoryStep } from './memory-entry'
 import { entryPictures } from './row-pictures'
 import { RowThumbs } from './row-thumbs'
 import { ThoughtBody, ToolBody, ToolSummary } from './tool-call-parts'
@@ -21,7 +22,8 @@ export function StepStub(props: Omit<StepFacts, 'glyph'> & { icon: ReactNode }):
 }
 
 /**
- * A step of the thread's work on affectUI's Tool Call Card: a tool call or a thought. Its facts come as props of their own (tool-call-model.ts), which a group reads.
+ * A step of the thread's work on affectUI's Tool Call Card: a tool call, a thought or a project
+ * memory write. Its facts come as props of their own (tool-call-model.ts), which a group reads.
  * `note` follows a tool call's target; a call a routine allowed says so by default. Its content
  * renders once the card first opens; until then the body is null, since false would leave the card
  * without one. A step on its own leads with its chevron, as the runs around it do; on a run's
@@ -99,6 +101,9 @@ export function StepCard({
         )}
       </ToolCallCard>
     )
+  }
+  if (entry.kind === 'memory') {
+    return <MemoryStep sessionId={sessionId} entry={entry} card={facts} />
   }
   if (entry.kind === 'thought') {
     return (

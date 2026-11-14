@@ -17,6 +17,8 @@
     "thought": "Thought",
     "thoughtFor": "Thought for {{duration}}",
     "plan": "Updated the plan",
+    "memory_one": "Updated memory",
+    "memory_other": "Updated memory {{count}} times",
     "execute_one": "Ran a command",
     "execute_other": "Ran {{count}} commands",
     "search_one": "Searched once",
@@ -207,6 +209,39 @@
       "sent": "Sent · report {{id}}",
       "saved": "Saved locally",
       "skipped": "Not sent"
+    }
+  },
+  "memory": {
+    "action": {
+      "remember": "Remembered",
+      "update": "Updated memory",
+      "forget": "Forgot"
+    },
+    "undo": "Undo",
+    "undoLabel": "Undo “{{title}}”",
+    "undone": "Undone",
+    "proposal": {
+      "remember": {
+        "action": "remember something about you",
+        "allow": "Remember",
+        "deny": "Don’t remember",
+        "accepted": "Saved to global memory",
+        "declined": "Not remembered"
+      },
+      "update": {
+        "action": "change something it remembers about you",
+        "allow": "Change",
+        "deny": "Don’t change",
+        "accepted": "Global memory updated",
+        "declined": "Not changed"
+      },
+      "forget": {
+        "action": "forget something it remembers about you",
+        "allow": "Forget",
+        "deny": "Keep it",
+        "accepted": "Forgotten from global memory",
+        "declined": "Kept"
+      }
     }
   },
   "computerBar": {

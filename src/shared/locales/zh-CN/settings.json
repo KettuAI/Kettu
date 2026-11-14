@@ -15,6 +15,7 @@
     "remote": "远程访问",
     "browser": "浏览器",
     "harnesses": "Harness",
+    "memory": "记忆",
     "hosts": "主机",
     "devices": "移动设备",
     "computer-use": "Computer use"
@@ -981,6 +982,8 @@
     "browser": "侧边面板里的浏览器为所有会话保留同一个配置，网站只需登录一次。",
     "browserWeb": "Agent 回复中的链接会在新标签页中打开。",
     "harnesses": "Agent 跑在上面的程序：Claude Code、Codex 等。Kettu 会替你安装和更新它们。",
+    "memory": "Agent 记下的关于你和各个项目的事，存在这台电脑上，交给每个 Agent。",
+    "memory_web": "Agent 记下的关于你和各个项目的事，存在 {{host}} 上，交给那里的每个 Agent。",
     "hosts": "这台电脑连接的、运行 Kettu 的其他电脑。它们的会话会显示在侧边栏中。",
     "hostsWeb": "这个页面连着的电脑。会话、项目和 Agent 都在那台电脑上，这里只管这个浏览器怎么连它。",
     "devices": "Agent 不用先问就能使用的模拟器和手机。",
@@ -1659,6 +1662,109 @@
       "body": "Kettu 会删除为 {{name}} 安装的包，并移除你在这里添加的 Agent；正在运行的回合会停止。它们的会话仍保留、能查看。你自己的程序、登录和配置目录都不动。",
       "program": "同时用这条命令卸载程序",
       "installAgain": "重新安装后即可使用；配置和会话都保留着。"
+    }
+  },
+  "memory": {
+    "keywords": "记忆 记住 忘掉 笔记 偏好 全局 项目 memory remember forget notes global project",
+    "switch": {
+      "name": "使用记忆",
+      "on": "打开时，每个 Agent 开会话都会拿到记忆，也能往里记。在 Kettu 的会话里，Harness 自己的记忆会关掉。",
+      "off": "已关上：各 Agent 回到自己原来的记忆，由各自的 Harness 保存。",
+      "keywords": "记忆 打开 关闭 自动记忆 memory auto memory"
+    },
+    "global": {
+      "group": "全局"
+    },
+    "project": {
+      "group": "项目",
+      "picker": "项目",
+      "count_other": "{{count}} 条"
+    },
+    "you": "你",
+    "line": "{{who}} · {{when}}",
+    "add": "添加",
+    "empty": {
+      "globalTitle": "全局记忆里还没有内容",
+      "globalHint": "Agent 会在工作中记下关于你的事，记之前会先问你。你也可以自己添加。",
+      "projectTitle": "还没有记下 {{project}} 的事",
+      "projectHint": "Agent 会在工作中记下怎么运行它、踩过的坑和做过的决定。你也可以自己添加。",
+      "noProjectsTitle": "还没有项目",
+      "noProjectsHint": "打开项目后，Agent 会在工作中记下关于它的事。"
+    },
+    "loading": "正在读取记忆",
+    "loadFailed": "没能读取记忆：{{error}}",
+    "retry": "重试",
+    "import": {
+      "agents_other": "{{count}} 个 Agent",
+      "found_other": "在 {{agents}} 里找到 {{count}} 条记忆",
+      "foundSome_other": "在 Agent 自己的记忆里找到 {{count}} 条",
+      "hint": "把它们导入 Kettu 的记忆，每个 Agent 都能用上。原来的记忆保持不变。",
+      "button": "导入…",
+      "title": "导入 Agent 的记忆",
+      "body": "这些是各 Agent 自己记下的、关于 Kettu 里已有项目的事。每条会放进它所属项目的记忆，原来的保持不变。",
+      "sources": "按 Agent 和项目",
+      "source": "{{agent}} · {{project}}",
+      "entries_other": "{{count}} 条",
+      "aboutYou": "关于你本人的",
+      "aboutYouHint": "勾选的会放进全局记忆，每个会话都会用到；其余的放进所属项目的记忆。",
+      "putGlobal": "放进全局",
+      "import": "导入",
+      "nothing": "没有要导入的了。",
+      "scanFailed": "没能读取 Agent 的记忆：{{error}}",
+      "imported_other": "导入了 {{count}} 条",
+      "importedSkipped_other": "导入了 {{count}} 条，跳过了 {{skipped}} 条重复的"
+    },
+    "entry": {
+      "global": "全局记忆",
+      "project": "项目记忆 · {{project}}",
+      "edit": "编辑…",
+      "body": "正文",
+      "noBody": "只有标题和摘要。",
+      "details": "详情",
+      "writtenBy": "写它的",
+      "session": "会话",
+      "openSession": "回到会话",
+      "sessionGone": "已经不在了",
+      "created": "创建于",
+      "updated": "最后修改",
+      "gone": "这条记忆已经不在了。",
+      "move": {
+        "name": "移到全局",
+        "description": "每个会话都会用到它，不只是这个项目的。",
+        "button": "移到全局",
+        "done": "已移到全局记忆"
+      },
+      "remove": {
+        "name": "删除这一条",
+        "description": "Agent 之后不会再拿到它。",
+        "button": "删除…",
+        "title": "删除“{{title}}”？",
+        "body": "它会从 Kettu 的记忆里删掉，Agent 之后不会再拿到它。",
+        "confirm": "删除",
+        "done": "已删除"
+      }
+    },
+    "editor": {
+      "addGlobal": "添加到全局记忆",
+      "addProject": "添加到 {{project}} 的记忆",
+      "edit": "编辑记忆",
+      "addBody": "每个 Agent 开会话时都会拿到它。",
+      "title": "标题",
+      "titlePlaceholder": "简短的名字，例如“用 pnpm”",
+      "description": "摘要",
+      "descriptionHint": "一行，Agent 在 Kettu 的记忆列表里看到的就是它。",
+      "body": "正文",
+      "bodyHint": "用 Markdown 写。一条只写一件事，并写明为什么。",
+      "save": "保存",
+      "add": "添加"
+    },
+    "errors": {
+      "secret": "这里面像是有密钥或密码之类的机密，记忆不保存这些。",
+      "full": "这里的记忆已满，先删掉一些再加。",
+      "changed": "这次写入之后记忆又被改过，所以保持原样。",
+      "gone": "这次写入已经不能撤销了。",
+      "off": "记忆已关上。",
+      "notFound": "这条记忆已经不在了。"
     }
   },
   "devices": {

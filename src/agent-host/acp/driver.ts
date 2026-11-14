@@ -5,12 +5,13 @@ import { AcpConnection } from './connection'
 
 export const ACP_DRIVER: ProcessDriver = {
   kind: 'process',
-  connect: (transport, { def, hooks }) =>
+  connect: (transport, { def, hooks, spec }) =>
     AcpConnection.connect(transport, {
       ...hooks,
       agentId: def.id,
       name: def.name,
       levelsAsModes: def.levelsAsModes ?? false,
       startupNote: def.startupNote ?? false,
+      kettuExtension: spec?.kettuExtension === true,
     }),
 }

@@ -352,6 +352,7 @@ const WHOLE_STATES: ReadonlySet<string> = new Set([
   'usage.changed',
   'usage.status',
   'artifacts.changed',
+  'memory.changed',
   'remote.changed',
   'sharing.changed',
   'updates.changed',

@@ -15,6 +15,15 @@ import { PARAMS_MAX, type ParamValue } from '@shared/artifact-params'
 import type { BrowserCallAnswer, BrowserOriginAnswer, BrowserOriginDecision } from '@shared/browser'
 import { isComputerAppDecision } from '@shared/computer-use'
 import { FILE_READ_LIMIT } from '@shared/files'
+import {
+  isMemoryScope,
+  MEMORY_BODY_CHARS,
+  MEMORY_DESCRIPTION_CHARS,
+  MEMORY_ID,
+  MEMORY_TITLE_CHARS,
+  type MemoryDraft,
+  type MemoryScope,
+} from '@shared/memory'
 import type { PluginScope, SkillSource } from '@shared/marketplace'
 import {
   GITHUB_LOGIN,
@@ -875,6 +884,43 @@ function skillSource(value: unknown, platform: Platform): SkillSource {
   }
   if (o.kind === 'local') return { kind: 'local', path: absolutePath(o, 'path', platform) }
   throw invalidParams('source.kind must be catalog, github or local')
+}
+
+// What one import names: each agent's memory of each project, and the entries ticked for global.
+const MEMORY_IMPORT_SOURCES = 1_000
+const MEMORY_IMPORT_KEYS = 10_000
+
+function memoryScope(value: unknown, platform: Platform): MemoryScope {
+  if (!isMemoryScope(value)) {
+    throw invalidParams('scope must be { layer: global } or { layer: project, project }')
+  }
+  if (value.layer === 'global') return { layer: 'global' }
+  return { layer: 'project', project: absolutePath(value, 'project', platform) }
+}
+
+function memoryId(o: Fields, key = 'id'): string {
+  const value = o[key]
+  if (typeof value !== 'string' || !MEMORY_ID.test(value)) {
+    throw invalidParams(`${key} is not a memory id`)
+  }
+  return value
+}
+
+function memoryText(o: Fields, key: string, max: number, blank: boolean): string {
+  const value = o[key]
+  if (typeof value !== 'string' || longer(value, max) || (!blank && value.trim() === '')) {
+    throw invalidParams(`${key} must be ${blank ? 0 : 1} to ${max} characters`)
+  }
+  return value
+}
+
+function memoryDraft(value: unknown): MemoryDraft {
+  const o = fields(value)
+  return {
+    title: memoryText(o, 'title', MEMORY_TITLE_CHARS, false),
+    description: memoryText(o, 'description', MEMORY_DESCRIPTION_CHARS, true),
+    body: memoryText(o, 'body', MEMORY_BODY_CHARS, true),
+  }
 }
 
 export function createValidators(platform: Platform): Validators {
@@ -1835,6 +1881,64 @@ export function createValidators(platform: Platform): Validators {
         sessionId: sessionId(o),
         entryId: string(o, 'entryId', ID_CHARS),
         outcome: parsed,
+      }
+    },
+    'sessions.answerMemory': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'remember' && o.decision !== 'skip') {
+        throw invalidParams('decision must be remember or skip')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+      }
+    },
+    'sessions.undoMemory': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), entryId: string(o, 'entryId', ID_CHARS) }
+    },
+    'memory.overview': none,
+    'memory.list': (params) => ({ scope: memoryScope(fields(params).scope, platform) }),
+    'memory.save': (params) => {
+      const o = fields(params)
+      if (o.id !== null && o.id !== undefined && typeof o.id !== 'string') {
+        throw invalidParams('id must be a memory id or null')
+      }
+      return {
+        scope: memoryScope(o.scope, platform),
+        id: o.id === null || o.id === undefined ? null : memoryId(o),
+        draft: memoryDraft(o.draft),
+      }
+    },
+    'memory.remove': (params) => {
+      const o = fields(params)
+      return { scope: memoryScope(o.scope, platform), id: memoryId(o) }
+    },
+    'memory.moveToGlobal': (params) => {
+      const o = fields(params)
+      return { project: absolutePath(o, 'project', platform), id: memoryId(o) }
+    },
+    'memory.setEnabled': (params) => ({ enabled: flag(fields(params), 'enabled') }),
+    'memory.importScan': none,
+    'memory.import': (params) => {
+      const o = fields(params)
+      const { sources, global } = o
+      if (!Array.isArray(sources) || sources.length > MEMORY_IMPORT_SOURCES) {
+        throw invalidParams(`sources must be an array of at most ${MEMORY_IMPORT_SOURCES}`)
+      }
+      if (!Array.isArray(global) || global.length > MEMORY_IMPORT_KEYS) {
+        throw invalidParams(`global must be an array of at most ${MEMORY_IMPORT_KEYS} keys`)
+      }
+      return {
+        sources: sources.map((item: unknown) => {
+          const source = fields(item)
+          return {
+            agentId: agentId(source),
+            project: absolutePath(source, 'project', platform),
+          }
+        }),
+        global: global.map((key: unknown) => string({ key }, 'key', ID_CHARS)),
       }
     },
     'computer.stop': (params) => ({ sessionId: sessionId(fields(params)) }),

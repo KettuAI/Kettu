@@ -1,11 +1,17 @@
 import { useSettingsHostStore } from '@renderer/stores/host-scope'
-import { openSettings, useViewStore, type SettingsSection } from '@renderer/stores/view'
+import {
+  openSettings,
+  openSettingsItem,
+  useViewStore,
+  type SettingsSection,
+} from '@renderer/stores/view'
 import { windowHost } from '@renderer/stores/window-host'
 
 /** The sections that belong to a host, which the host picker switches. */
 export const HOST_SECTIONS: ReadonlySet<SettingsSection> = new Set([
   'agents',
   'harnesses',
+  'memory',
   'usage',
   'git',
   'archived',
@@ -34,4 +40,15 @@ export function openHostSettings(hostId: string | null): void {
   useSettingsHostStore.setState({ hostId })
   const { section } = useViewStore.getState().settings
   openSettings(section && HOST_SECTIONS.has(section) ? section : 'agents')
+}
+
+/** Opens one of the host's sections at an item's own page, as a link from its thread does. */
+export function openHostSettingsItem(
+  hostId: string | null,
+  section: SettingsSection,
+  item: string | null,
+): void {
+  if (!useViewStore.getState().settings.open) picked = true
+  useSettingsHostStore.setState({ hostId })
+  openSettingsItem(section, item)
 }

@@ -7,7 +7,8 @@ export const PI: AgentDefinition = {
   // pi-acp keeps one live session per process, so every session gets an adapter process of its own.
   launch: { kind: 'package', package: 'pi-acp', version: '0.0.34', perSession: true },
   requiresNode: '>=22',
-  requires: { command: 'pi', minimum: '0.81.0', variable: 'PI_ACP_PI_COMMAND' },
+  // From pi 1.0.0 Kettu's extension gives its sessions Kettu's memory tools over Pi's own MCP.
+  requires: { command: 'pi', minimum: '0.81.0', variable: 'PI_ACP_PI_COMMAND', extension: '1.0.0' },
   // pi-acp 0.0.34 advertises embedded context only with this set, so attached files keep their text.
   env: { PI_ACP_ENABLE_EMBEDDED_CONTEXT: 'true' },
   // pi-acp 0.0.34's one auth method just runs `pi`, so the sign-in command is `pi` alone.

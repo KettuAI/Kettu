@@ -809,6 +809,91 @@ describe('computer use requests', () => {
   })
 })
 
+describe('memory requests', () => {
+  const project = { layer: 'project', project: '/repo' }
+  const draft = { title: 'Runs tests with pnpm', description: '', body: 'pnpm test <file>' }
+
+  it('takes a scope of the global layer or of a project by its absolute path', () => {
+    expect(posix['memory.list']({ scope: { layer: 'global' } })).toEqual({
+      scope: { layer: 'global' },
+    })
+    expect(posix['memory.list']({ scope: project })).toEqual({ scope: project })
+    rejects(() => posix['memory.list']({ scope: { layer: 'project', project: 'repo' } }))
+    rejects(() => posix['memory.list']({ scope: { layer: 'project' } }))
+    rejects(() => posix['memory.list']({ scope: { layer: 'global', project: '/repo' } }))
+    rejects(() => posix['memory.list']({ scope: { layer: 'user' } }))
+    expect(windows['memory.list']({ scope: { layer: 'project', project: 'C:\\repo' } })).toEqual({
+      scope: { layer: 'project', project: 'C:\\repo' },
+    })
+  })
+
+  it('saves a draft within the limits, as a new entry or an existing one by its id', () => {
+    expect(posix['memory.save']({ scope: project, id: null, draft })).toEqual({
+      scope: project,
+      id: null,
+      draft,
+    })
+    expect(posix['memory.save']({ scope: project, id: 'runs-tests', draft })).toEqual({
+      scope: project,
+      id: 'runs-tests',
+      draft,
+    })
+    rejects(() => posix['memory.save']({ scope: project, id: '../x', draft }))
+    rejects(() =>
+      posix['memory.save']({ scope: project, id: null, draft: { ...draft, title: ' ' } }),
+    )
+    rejects(() =>
+      posix['memory.save']({
+        scope: project,
+        id: null,
+        draft: { ...draft, title: 'x'.repeat(81) },
+      }),
+    )
+    rejects(() =>
+      posix['memory.save']({
+        scope: project,
+        id: null,
+        draft: { ...draft, body: 'x'.repeat(8001) },
+      }),
+    )
+    rejects(() => posix['memory.save']({ scope: project, id: null, draft: { title: 'x' } }))
+    rejects(() => posix['memory.remove']({ scope: project, id: 'A' }))
+    rejects(() => posix['memory.moveToGlobal']({ project: 'repo', id: 'runs-tests' }))
+  })
+
+  it('takes an answer to a proposed global write and an Undo', () => {
+    for (const decision of ['remember', 'skip']) {
+      expect(posix['sessions.answerMemory']({ sessionId: 's', entryId: 'e:1', decision })).toEqual({
+        sessionId: 's',
+        entryId: 'e:1',
+        decision,
+      })
+    }
+    rejects(() =>
+      posix['sessions.answerMemory']({ sessionId: 's', entryId: 'e:1', decision: 'accept' }),
+    )
+    expect(posix['sessions.undoMemory']({ sessionId: 's', entryId: 'e:1', other: 1 })).toEqual({
+      sessionId: 's',
+      entryId: 'e:1',
+    })
+    rejects(() => posix['sessions.undoMemory']({ sessionId: 's' }))
+  })
+
+  it('imports only known agents and absolute project paths', () => {
+    const sources = [{ agentId: 'claude-code', project: '/repo' }]
+    expect(posix['memory.import']({ sources, global: ['k1'] })).toEqual({
+      sources,
+      global: ['k1'],
+    })
+    rejects(() => posix['memory.import']({ sources: [{ agentId: 'other', project: '/repo' }] }))
+    rejects(() =>
+      posix['memory.import']({ sources: [{ agentId: 'codex', project: 'repo' }], global: [] }),
+    )
+    rejects(() => posix['memory.import']({ sources, global: [7] }))
+    rejects(() => posix['memory.setEnabled']({ enabled: 'yes' }))
+  })
+})
+
 describe('worktree requests', () => {
   const settings = {
     branchTemplate: '{type}/{issue}-{slug}',

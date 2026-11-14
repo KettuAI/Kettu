@@ -38,6 +38,15 @@ import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
 import type { HostSettings } from '@shared/settings'
 import {
+  MEMORY_PROPOSALS_WAITING,
+  type MemoryAction,
+  type MemoryDecision,
+  type MemoryDraft,
+  type MemoryEntry,
+  type MemoryScope,
+  type MemorySource,
+} from '@shared/memory'
+import {
   applyPatchInPlace,
   coalescePatches,
   entryMessageId,
@@ -51,6 +60,7 @@ import {
   type FormValues,
   type FromDevice,
   type FromSession,
+  type MemoryWriteEntry,
   type OlderPage,
   type Patch,
   type PatchBatch,
@@ -128,6 +138,8 @@ import {
   type ProjectHooksGate,
   type ProjectMcpGate,
   type PromptBlock,
+  type KettuService,
+  type SessionMemory,
   type SessionOptions,
   type SessionTarget,
 } from './connection'
@@ -305,6 +317,37 @@ export interface SessionMcp {
   turnEnded(sessionId: string): void
 }
 
+/** Kettu's memory as sessions hand it to their agents and write what their agents propose. */
+export interface SessionMemoryDeps {
+  readonly enabled: boolean
+  index(project: string | null, tools: boolean): Promise<string>
+  save(
+    scope: MemoryScope,
+    id: string | null,
+    draft: MemoryDraft,
+    by: MemorySource,
+  ): Promise<{ entry: MemoryEntry; undo: string }>
+  remove(scope: MemoryScope, id: string, by: MemorySource): Promise<{ undo: string; title: string }>
+  undo(undoId: string): Promise<'undone' | 'changed' | 'gone'>
+}
+
+/** A project memory write an agent made, as its thread records it. */
+export interface MemoryWritten {
+  layer: 'project'
+  action: MemoryAction
+  memoryId: string
+  title: string
+  undo: string
+}
+
+/** A global memory write an agent proposed, which waits in its thread for the user. */
+export interface MemoryProposal {
+  action: MemoryAction
+  memoryId: string | null
+  title: string
+  draft: MemoryDraft | null
+}
+
 export interface SessionManagerDeps {
   platform: Platform
   agents: AgentManager
@@ -346,6 +389,8 @@ export interface SessionManagerDeps {
   mcp?: SessionMcp
   /** The Marketplace's skills an attach of the agent's session passes; without it none. */
   skills?: (agentId: AgentId) => Pick<SessionOptions, 'skillRoots' | 'localPlugins'>
+  /** Kettu's memory; without it no session is handed any. */
+  memory?: SessionMemoryDeps
   /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
   prepared?: PreparedRecords
   /** What to watch for changes to the agent's options in a folder; without it nothing is. */
@@ -744,6 +789,8 @@ export class SessionManager {
     string,
     { entryId: string; folder: string; digest: string }
   >()
+  /** Memory proposals and writes being answered or taken back, by session and entry, with who. */
+  private readonly memoryAnswers = new Map<string, FromDevice | null>()
   /** Each setup that waits, by the computer use service's request id, with who said Not now. */
   private readonly setupRequests = new Map<
     number,
@@ -1253,6 +1300,142 @@ export class SessionManager {
     const live = this.live.get(sessionId)
     if (!live) return
     this.emit(live, [writePatch(live.thread, write, () => this.nextId(live, 'a'))])
+  }
+
+  /** A project memory write the session's agent made goes in its thread, with its Undo. */
+  memoryWritten(sessionId: string, write: MemoryWritten): void {
+    const live = this.live.get(sessionId)
+    if (!live) return
+    const entry: MemoryWriteEntry = {
+      kind: 'memory',
+      id: this.nextId(live),
+      layer: write.layer,
+      action: write.action,
+      memoryId: write.memoryId,
+      title: write.title,
+      status: 'written',
+      undo: write.undo,
+      draft: null,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+  }
+
+  /**
+   * A global memory write the agent proposed waits in its thread for the user, unless the session
+   * is not in memory or enough proposals wait already. It does not mark the session as waiting:
+   * the agent carries on meanwhile.
+   */
+  memoryProposed(sessionId: string, proposal: MemoryProposal): 'added' | 'closed' | 'full' {
+    const live = this.live.get(sessionId)
+    if (!live) return 'closed'
+    let waiting = 0
+    for (const item of Object.values(live.thread.byId)) {
+      if (item.kind === 'memory' && item.status === 'proposed') waiting++
+    }
+    if (waiting >= MEMORY_PROPOSALS_WAITING) return 'full'
+    const entry: MemoryWriteEntry = {
+      kind: 'memory',
+      id: this.nextId(live),
+      layer: 'global',
+      action: proposal.action,
+      memoryId: proposal.memoryId,
+      title: proposal.title,
+      status: 'proposed',
+      undo: null,
+      draft: proposal.draft,
+      after: agentEntryBefore(live.thread),
+    }
+    this.emit(live, [{ op: 'entry.add', entry }])
+    return 'added'
+  }
+
+  /**
+   * The answer to a proposed global memory write, from the window or device that answered first:
+   * `remember` writes it in global memory as the session's agent's.
+   */
+  async answerMemory(
+    sessionId: string,
+    entryId: string,
+    decision: MemoryDecision,
+    device?: FromDevice,
+  ): Promise<void> {
+    const memory = this.deps.memory
+    this.recordOf(sessionId)
+    const live = await this.revive(sessionId)
+    const entry = live.thread.byId[entryId]
+    if (!memory || entry?.kind !== 'memory' || entry.layer !== 'global') {
+      throw notFound(`No memory proposal waits in ${entryId}`)
+    }
+    const key = `${sessionId}\n${entryId}`
+    const answering = this.memoryAnswers.get(key)
+    if (entry.status !== 'proposed' || answering !== undefined) {
+      throw new HostError('not_found', `The memory proposal ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: answering !== undefined ? answering : (entry.device ?? null),
+      })
+    }
+    const from = device ? { device } : {}
+    if (decision === 'skip') {
+      this.emit(live, [
+        { op: 'entry.update', id: entryId, changes: { status: 'declined', ...from } },
+      ])
+      return
+    }
+    this.memoryAnswers.set(key, device ?? null)
+    try {
+      const scope: MemoryScope = { layer: 'global' }
+      const by: MemorySource = { agentId: live.record.agentId, sessionId }
+      let memoryId = entry.memoryId
+      if (entry.action === 'forget') {
+        if (memoryId === null) throw invalidParams(`${entryId} names no memory to forget`)
+        await memory.remove(scope, memoryId, by)
+      } else {
+        if (entry.draft === null) throw invalidParams(`${entryId} holds nothing to remember`)
+        const id = entry.action === 'update' ? memoryId : null
+        memoryId = (await memory.save(scope, id, entry.draft, by)).entry.id
+      }
+      const changes = { status: 'accepted' as const, memoryId, ...from }
+      this.emit(live, [{ op: 'entry.update', id: entryId, changes }])
+    } finally {
+      this.memoryAnswers.delete(key)
+    }
+  }
+
+  /** Takes an agent's project memory write back, while the entry is as that write left it. */
+  async undoMemory(sessionId: string, entryId: string): Promise<void> {
+    const memory = this.deps.memory
+    this.recordOf(sessionId)
+    const live = await this.revive(sessionId)
+    const entry = live.thread.byId[entryId]
+    if (!memory || entry?.kind !== 'memory' || entry.status !== 'written' || entry.undo === null) {
+      throw notFound(`No memory write to take back in ${entryId}`)
+    }
+    const key = `${sessionId}\n${entryId}`
+    if (this.memoryAnswers.has(key)) throw notFound(`The write in ${entryId} is being taken back`)
+    this.memoryAnswers.set(key, null)
+    let result: 'undone' | 'changed' | 'gone'
+    try {
+      result = await memory.undo(entry.undo)
+    } finally {
+      this.memoryAnswers.delete(key)
+    }
+    if (result === 'undone') {
+      this.emit(live, [
+        { op: 'entry.update', id: entryId, changes: { status: 'undone', undo: null } },
+      ])
+      return
+    }
+    if (result === 'changed') {
+      throw new HostError('conflict', 'The memory changed after this write, so it stays as it is', {
+        reason: 'memory_changed',
+      })
+    }
+    // Its record is gone for good, so the thread offers Undo no more.
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { undo: null } }])
+    throw new HostError('not_found', 'This write can no longer be taken back', {
+      reason: 'memory_gone',
+    })
   }
 
   /**
@@ -2296,23 +2479,52 @@ export class SessionManager {
   }
 
   /**
-   * What an attach of the session hands its agent: the Marketplace's skills, and the MCP servers,
-   * the artifacts service to an agent that takes MCP over HTTP while Kettu's server is on for it,
-   * then the Marketplace's servers meant for its agent.
+   * What an attach of the session hands its agent: the Marketplace's skills, the MCP servers, the
+   * artifacts service to an agent that takes MCP over HTTP while Kettu's server is on for it, then
+   * the Marketplace's servers meant for its agent, and Kettu's memory while it is on.
    */
-  private attachOptions(
+  private async attachOptions(
     sessionId: string,
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
-  ): SessionOptions {
+  ): Promise<SessionOptions> {
     const skills = this.deps.skills?.(record.agentId) ?? {}
     const projectMcp = this.projectMcpGate(sessionId)
     const projectHooks = this.projectHooksGate(sessionId)
+    const own = this.kettuServers(sessionId, record, runtime)
+    const kettuService = this.kettuService(sessionId, record, runtime)
+    const memory = await this.memoryFor(sessionId, record, own.length > 0 || kettuService !== null)
     return {
-      mcpServers: this.mcpServers(sessionId, record, runtime),
+      mcpServers: [...own, ...this.libraryServers(sessionId, record, runtime, own)],
       ...skills,
       ...(projectMcp ? { projectMcp } : {}),
       ...(projectHooks ? { projectHooks } : {}),
+      ...(memory ? { memory } : {}),
+      ...(kettuService ? { kettuService } : {}),
+    }
+  }
+
+  /**
+   * Kettu's memory as the session starts with it, while memory is on: the index of its project's
+   * memory and global memory, or global memory alone for a session outside Kettu's projects.
+   * `tools`: the agent reaches Kettu's server, and with it the memory tools.
+   */
+  private async memoryFor(
+    sessionId: string,
+    record: SessionRecord,
+    tools: boolean,
+  ): Promise<SessionMemory | null> {
+    const memory = this.deps.memory
+    if (!memory?.enabled) return null
+    const project = this.deps.projects.find(record.projectPath)?.path ?? null
+    try {
+      return { text: await memory.index(project, tools) }
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read Kettu's memory for ${sessionId}: ${(error as Error).message}`,
+      )
+      return null
     }
   }
 
@@ -2503,25 +2715,52 @@ export class SessionManager {
     }
   }
 
-  private mcpServers(
+  /** The artifacts service, for an agent that takes MCP over HTTP while Kettu's server is on for it. */
+  private kettuServers(
     sessionId: string,
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
   ): McpServer[] {
     if (!this.deps.mcp || !runtime) return []
-    const transports = runtime.init.capabilities
-    const own =
-      transports.mcpHttp && runtime.kettu
-        ? this.deps.mcp.servers(sessionId, record, runtime.connection)
-        : []
-    const library = this.deps.mcp.library(
+    return runtime.init.capabilities.mcpHttp && runtime.kettu
+      ? this.deps.mcp.servers(sessionId, record, runtime.connection)
+      : []
+  }
+
+  /**
+   * Kettu's MCP service for an agent that reaches it only through Kettu's extension, as Pi does,
+   * while Kettu's server is on for it: the URL and token of the session's own server.
+   */
+  private kettuService(
+    sessionId: string,
+    record: SessionRecord,
+    runtime: AgentRuntime | null | undefined,
+  ): KettuService | null {
+    if (!this.deps.mcp || !runtime?.kettu || !runtime.connection.kettuExtension) return null
+    if (runtime.init.capabilities.mcpHttp) return null
+    for (const server of this.deps.mcp.servers(sessionId, record, runtime.connection)) {
+      if (server.type !== 'http') continue
+      const header = server.headers.find((h) => h.name.toLowerCase() === 'authorization')
+      const token = /^Bearer (\S+)$/.exec(header?.value ?? '')?.[1]
+      if (token) return { url: server.url, token }
+    }
+    return null
+  }
+
+  private libraryServers(
+    sessionId: string,
+    record: SessionRecord,
+    runtime: AgentRuntime | null | undefined,
+    own: McpServer[],
+  ): McpServer[] {
+    if (!this.deps.mcp || !runtime) return []
+    return this.deps.mcp.library(
       sessionId,
       record,
       runtime.connection,
-      transports,
+      runtime.init.capabilities,
       own.map((server) => server.name),
     )
-    return [...own, ...library]
   }
 
   private dropLive(live: Live): void {
@@ -2599,6 +2838,15 @@ export class SessionManager {
   private applyOutput(live: Live, output: MapperOutput): void {
     if (live.closing) return
     if (output.patches.length > 0) this.emit(live, output.patches)
+    // A compacted context lost the memory sent ahead of a prompt, so the next prompt sends it again.
+    if (
+      !live.replaying &&
+      live.record.memorySentTo !== undefined &&
+      output.patches.some((patch) => compacted(live.thread, patch))
+    ) {
+      delete live.record.memorySentTo
+      this.persist(live)
+    }
     for (const effect of output.effects) this.applyEffect(live, effect)
     if (
       !live.replaying &&
@@ -3355,7 +3603,7 @@ export class SessionManager {
     try {
       setup = await runtime.connection.newSession(
         workDir(live.record),
-        this.attachOptions(live.id, live.record, runtime),
+        await this.attachOptions(live.id, live.record, runtime),
       )
     } catch (error) {
       if (gone()) throw removedWhileStarting()
@@ -3532,7 +3780,7 @@ export class SessionManager {
     try {
       setup = await runtime.connection.newSession(
         await this.cwdOf(live),
-        this.attachOptions(live.id, live.record, runtime),
+        await this.attachOptions(live.id, live.record, runtime),
       )
     } catch (error) {
       // Its failure, such as the agent's exit, no longer belongs to a session that went meanwhile.
@@ -3913,8 +4161,8 @@ export class SessionManager {
         { action: 'load' },
       )
     }
+    const attach = await this.attachOptions(live.id, live.record, runtime)
     this.attach(live, connection)
-    const attach = this.attachOptions(live.id, live.record, runtime)
     try {
       if (useLoad) {
         this.prepareReplay(live, connection)
@@ -4015,6 +4263,11 @@ export class SessionManager {
   /** The agent's start mode changed: its prepared sessions started in the old one. */
   startModeChanged(agentId: AgentId): void {
     this.configChanged(agentId)
+  }
+
+  /** Kettu's memory was turned on or off: every prepared session started with the old setting. */
+  memorySwitched(): void {
+    for (const live of [...this.live.values()]) if (live.prepared) void this.dropPrepared(live)
   }
 
   /**
@@ -4386,14 +4639,18 @@ export class SessionManager {
     let config: ConfigOption[]
     if (record.acpSessionId === '') {
       // An agent taking the session over that never had it.
-      config = await this.renew(live, connection, this.attachOptions(live.id, record, runtime))
+      config = await this.renew(
+        live,
+        connection,
+        await this.attachOptions(live.id, record, runtime),
+      )
       this.deps.options?.started(
         record.agentId,
         config,
         pathKey(record.projectPath, this.deps.platform),
       )
     } else if (caps.resumeSession) {
-      const attach = this.attachOptions(live.id, record, runtime)
+      const attach = await this.attachOptions(live.id, record, runtime)
       try {
         config = (
           await connection.resumeSession(record.acpSessionId, await this.cwdOf(live), attach)
@@ -4414,7 +4671,7 @@ export class SessionManager {
         }
       }
     } else if (caps.loadSession) {
-      const attach = this.attachOptions(live.id, record, runtime)
+      const attach = await this.attachOptions(live.id, record, runtime)
       try {
         config = (await this.loadQuietly(live, connection, attach)).config
       } catch (error) {
@@ -5072,6 +5329,21 @@ export class SessionManager {
     return out
   }
 
+  /**
+   * The memory text that goes ahead of the prompt, before anything carried, for an agent that
+   * takes it in no instructions of the session's own: with the first prompt its own session gets,
+   * and again after its context was compacted. The thread shows the message as the user wrote it.
+   */
+  private async memoryAhead(live: Live, connection: AgentConnection): Promise<string | null> {
+    const { record } = live
+    if (connection.ownInstructions || record.memorySentTo === record.acpSessionId) return null
+    const runtime = this.deps.agents.runtime(record.agentId)
+    const tools =
+      this.kettuServers(live.id, record, runtime).length > 0 ||
+      this.kettuService(live.id, record, runtime) !== null
+    return (await this.memoryFor(live.id, record, tools))?.text ?? null
+  }
+
   /** The agent that had the session before any takeover. */
   private firstAgentOf(record: SessionRecord): AgentId {
     return record.earlier?.[0]?.agentId ?? record.agentId
@@ -5691,7 +5963,7 @@ export class SessionManager {
       setup = await runtime.connection.forkSession(
         source.record.acpSessionId,
         own?.path ?? workDir(source.record),
-        this.attachOptions(forkId, source.record, runtime),
+        await this.attachOptions(forkId, source.record, runtime),
         cut?.point,
       )
     } catch (error) {
@@ -5906,10 +6178,20 @@ export class SessionManager {
         }
       }
       const carry = live.record.carry
-      const wire = carry
+      const carried = carry
         ? await this.withCarried(live, connection, carry, resolved.wire)
         : resolved.wire
+      // A slash command must open the prompt to be one, so memory waits for the next prompt.
+      const memory = opensWithCommand(resolved.wire)
+        ? null
+        : await this.memoryAhead(live, connection)
       if (turn.ended) return
+      let wire = carried
+      if (memory) {
+        live.record.memorySentTo = live.record.acpSessionId
+        this.persist(live)
+        wire = [{ type: 'text', text: `${memory}\n\n` }, ...carried]
+      }
       const sending = connection.prompt(live.record.acpSessionId, wire).finally(() => {
         if (live.unansweredCancel === turn) live.unansweredCancel = null
       })
@@ -7005,6 +7287,11 @@ export class SessionManager {
     return record ? this.deps.agents.name(record.agentId) : ''
   }
 
+  /** The session's agent now, null for a session Kettu does not hold. */
+  sessionAgent(sessionId: string): AgentId | null {
+    return (this.live.get(sessionId)?.record ?? this.records.get(sessionId))?.agentId ?? null
+  }
+
   /** The session's title as another thread's label shows it, "Untitled session" when it has none. */
   toolName(sessionId: string): string {
     const record = this.live.get(sessionId)?.record ?? this.records.get(sessionId)
@@ -7954,6 +8241,24 @@ function removedWhileStarting(): HostError {
   return new HostError('not_found', t('session.removedWhileStarting'), {
     reason: REMOVED_WHILE_STARTING,
   })
+}
+
+function opensWithCommand(wire: readonly PromptBlock[]): boolean {
+  const first = wire[0]
+  return first?.type === 'text' && first.text.startsWith('/')
+}
+
+/** Whether the patch, applied to `thread`, completes a compaction of the agent's context. */
+function compacted(thread: Pick<ThreadState, 'byId'>, patch: Patch): boolean {
+  if (patch.op === 'entry.add') {
+    return patch.entry.kind === 'compaction' && patch.entry.status === 'completed'
+  }
+  return (
+    patch.op === 'entry.update' &&
+    thread.byId[patch.id]?.kind === 'compaction' &&
+    'status' in patch.changes &&
+    patch.changes.status === 'completed'
+  )
 }
 
 /** Whether a session in this status takes a prompt: an attached one that is free, or one to attach. */

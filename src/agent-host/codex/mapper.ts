@@ -14,7 +14,7 @@ import type {
 import { replayedBlock } from '../acp/mapper'
 import { hasMessage, t } from '../i18n'
 import { planMarkdown, planRevision } from '../plan-revision'
-import { isCodexRowlessCall } from '../plan-tool'
+import { isCodexRowlessCall, isCodexRowWhenFailed } from '../plan-tool'
 import { parseReplayedText } from '../replayed-content'
 import {
   addEntry,
@@ -365,8 +365,14 @@ export class ThreadMapper {
         })
         break
       case 'mcpToolCall': {
-        // The host wrote the plan or the report from the call itself, so the call shows no row.
-        if (isCodexRowlessCall(item.server, item.tool)) break
+        // The host wrote the plan, the report or the memory from the call itself, so the call
+        // shows no row; a memory write that failed wrote nothing, so it shows as failed.
+        if (
+          isCodexRowlessCall(item.server, item.tool) &&
+          !(done && item.status === 'failed' && isCodexRowWhenFailed(item.server, item.tool))
+        ) {
+          break
+        }
         const raw = rawInputText(item.arguments)
         this.tool(ctx, out, item.id, {
           title: t('codex.tool.mcp', { server: item.server, tool: item.tool }),

@@ -391,6 +391,17 @@ describe('the host files', () => {
     })
   })
 
+  it("keeps which agent session was handed Kettu's memory, and drops one that does not read", () => {
+    const sent = { ...session, memorySentTo: 'acp-1' }
+    expect(parseSessionsFile({ sessions: [sent] })).toEqual({ version: 1, sessions: [sent] })
+    for (const memorySentTo of ['', 3, null]) {
+      expect(parseSessionsFile({ sessions: [{ ...session, memorySentTo }] })).toEqual({
+        version: 1,
+        sessions: [session],
+      })
+    }
+  })
+
   it("keeps a project's worktree settings key by key", () => {
     const project = { path: '/repo', name: 'repo', addedAt: 1, lastOpenedAt: 2 }
     const worktree = {

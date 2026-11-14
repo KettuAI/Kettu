@@ -63,6 +63,7 @@ import {
   useUsageSection,
 } from './section-defs'
 import { useComputerUseSection } from './computer-section'
+import { useMemorySection } from './memory-section'
 
 const FLASH_MS = 1200
 
@@ -207,7 +208,13 @@ function SettingsLayout({
   // The list in clusters: what belongs to this client first, then the host's, then About.
   const all: SectionDef[][] = [
     client,
-    [useAgentsSection(), useHarnessesSection(), useUsageSection(), useGitSection()],
+    [
+      useAgentsSection(),
+      useHarnessesSection(),
+      useMemorySection(),
+      useUsageSection(),
+      useGitSection(),
+    ],
     [useArchivedSection(), useArtifactsSection(), useSharingSection(), useTerminalSection()],
     [useRemoteSection(), useAdvancedSection()],
     [about],
