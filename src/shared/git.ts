@@ -145,6 +145,8 @@ export interface FileDiff {
 /** A local branch, as the branch switcher lists it. */
 export interface BranchInfo {
   name: string
+  /** Its tip's commit, or null on an unborn branch. */
+  oid: string | null
   /** Its tip's commit time, or null on an unborn branch. */
   committedAt: number | null
   current: boolean
@@ -159,8 +161,18 @@ export interface GitRemote {
 }
 
 /** The local branches, the most recently committed first, and the repository's remotes. */
+/** A remote-tracking branch, such as `origin/main`. */
+export interface RemoteBranchInfo {
+  name: string
+  oid: string
+  /** Its tip's commit time. */
+  committedAt: number | null
+}
+
 export interface BranchList {
   branches: BranchInfo[]
+  /** The remote-tracking branches, the most recently committed first, without `<remote>/HEAD`. */
+  remoteBranches: RemoteBranchInfo[]
   remotes: GitRemote[]
 }
 

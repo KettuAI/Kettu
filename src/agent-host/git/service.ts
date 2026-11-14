@@ -19,7 +19,7 @@ import type { ToolKind } from '@shared/thread'
 import type { BranchPullRequest, GitEventDraft, GitServiceApi, GitServiceDeps } from './api'
 import { HostError } from '../errors'
 import { t } from '../i18n'
-import { readBranches, readRemotes } from './branches'
+import { readBranches, readRemoteBranches, readRemotes } from './branches'
 import { createCoalescer } from './coalesce'
 import { readChanges, readCommitDetails, readFileDiff, readIncoming } from './details'
 import { canChangeRepository, computeGitEvents, listNewCommits } from './events'
@@ -1054,11 +1054,12 @@ export function createGitService(
       const state = projectFor(projectPath)
       const status = await knownStatus(state)
       if (!status.repo) throw new Error(t('git.notRepository'))
-      const [branches, remotes] = await Promise.all([
+      const [branches, remoteBranches, remotes] = await Promise.all([
         readBranches(exec, status.repo.root),
+        readRemoteBranches(exec, status.repo.root),
         readRemotes(exec, status.repo.root),
       ])
-      return { branches, remotes }
+      return { branches, remoteBranches, remotes }
     },
 
     async pullRequest(url) {

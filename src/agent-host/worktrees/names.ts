@@ -3,12 +3,16 @@
 
 import { createHash } from 'node:crypto'
 import path from 'node:path'
-import { DEFAULT_BRANCH_TEMPLATE } from '@shared/git'
+import {
+  branchProblem,
+  fillBranchTemplate,
+  unknownPlaceholder,
+  type TemplateValues,
+} from '@shared/branch-name'
 import type { Platform } from '@shared/platform'
 import { invalidParams } from '../errors'
 import { pathKey } from '../paths'
 
-export const MAX_BRANCH_LENGTH = 100
 const MAX_SLUG_LENGTH = 40
 const MAX_FOLDER_PREFIX = 24
 
@@ -40,33 +44,13 @@ function joinWords(words: readonly string[]): string {
   return slug
 }
 
-export interface TemplateValues {
-  slug: string
-  type?: string
-  issue?: string
-}
-
-const PLACEHOLDER = /\{([^{}]*)\}/g
-const KNOWN = new Set(['slug', 'type', 'issue'])
-
 /** Fills the template's `{slug}`, `{type}` and `{issue}`; the result is not yet checked. */
 export function branchFromTemplate(template: string, values: TemplateValues): string {
-  const source = template.trim() === '' ? DEFAULT_BRANCH_TEMPLATE : template
-  for (const match of source.matchAll(PLACEHOLDER)) {
-    if (!KNOWN.has(match[1]!))
-      throw invalidParams(`Unknown placeholder in branch template: ${match[0]}`)
+  const filled = fillBranchTemplate(template, values)
+  if (filled === null) {
+    throw invalidParams(`Unknown placeholder in branch template: ${unknownPlaceholder(template)}`)
   }
-  const issue = values.issue?.trim() ?? ''
-  let filled = source
-  if (issue === '') {
-    // Drop one dash beside the missing issue, preferring the one after it.
-    filled = filled.replace(/\{issue\}-|-\{issue\}|\{issue\}/g, '')
-  }
-  return filled.replace(PLACEHOLDER, (_, name: string) => {
-    if (name === 'slug') return values.slug
-    if (name === 'type') return values.type?.trim() || 'feat'
-    return issue
-  })
+  return filled
 }
 
 /**
@@ -78,27 +62,6 @@ export function checkWorktreeBranch(name: string): string {
   if (reason !== null)
     throw invalidParams(`Unusable branch name ${JSON.stringify(name)}: ${reason}`)
   return name
-}
-
-function branchProblem(name: string): string | null {
-  if (name === '') return 'it is empty'
-  if (name.length > MAX_BRANCH_LENGTH) return `it is longer than ${MAX_BRANCH_LENGTH} characters`
-  if (name.startsWith('-')) return 'it starts with "-"'
-  if (name === '@' || name === 'HEAD') return 'it is reserved'
-  // eslint-disable-next-line no-control-regex
-  if (/[\x00-\x20\x7f~^:?*[\\]/.test(name))
-    return 'it has a space, a control or a special character'
-  if (name.includes('..')) return 'it has ".."'
-  if (name.includes('@{')) return 'it has "@{"'
-  if (name.startsWith('/') || name.endsWith('/') || name.includes('//')) {
-    return 'it has an empty path component'
-  }
-  if (name.endsWith('.')) return 'it ends with "."'
-  for (const component of name.split('/')) {
-    if (component.startsWith('.')) return 'a path component starts with "."'
-    if (component.endsWith('.lock')) return 'a path component ends with ".lock"'
-  }
-  return null
 }
 
 /**
