@@ -124,6 +124,18 @@
   --mark: oklch(0.88 0.14 92 / 55%);
   /* The squares behind a transparent picture, so a dark or light one shows on either theme. */
   --checker: rgb(20 26 34 / 5%);
+  /* macOS's keychain prompt, drawn small before it shows so the user knows it: in the system's
+     own light colors in both themes, as the user will recognize it, not the app's. */
+  --keychain-prompt: #ececec;
+  --keychain-prompt-ink: #1d1d1f;
+  --keychain-prompt-muted: #3c3c43;
+  --keychain-prompt-icon: #636366;
+  --keychain-prompt-field: #ffffff;
+  --keychain-prompt-edge: rgb(0 0 0 / 18%);
+  --keychain-prompt-shade: rgb(0 0 0 / 35%);
+  --keychain-prompt-default: #0a7aff;
+  --keychain-prompt-default-ink: #ffffff;
+  --keychain-prompt-default-ring: rgb(10 122 255 / 28%);
   /* Drawn over a picture or a clip, the same in both themes: a clip's play button and its glyph,
      the white of its time and bar, the shade under them, a grid's +N and a preview's Open pill. */
   --media-control: rgb(255 255 255 / 92%);

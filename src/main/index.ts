@@ -38,6 +38,7 @@ import { BrowserViews } from './browser/views'
 import { BrowserTools } from './browser/tools'
 import { BrowserOriginStore } from './browser/origins'
 import { SiteIcons } from './browser/site-icons'
+import { startSignIns } from './browser/signins'
 import { asksForDebug, isDebugRun, lockData, startDebugMode } from './debug-mode'
 import { broadcast, sendCommand } from './events'
 import { HostAdmin } from './host-admin'
@@ -45,7 +46,13 @@ import { HostMedia } from './host-media'
 import { HostSessions } from './host-sessions'
 import { locale as currentLocale, setLocale, t } from './i18n'
 import { mainDiagnostics } from './diagnostics'
-import { appInfo, launchToInteractive, registerIpcHandlers, registerTrayIpc } from './ipc'
+import {
+  appInfo,
+  launchToInteractive,
+  registerIpcHandlers,
+  registerSignInIpc,
+  registerTrayIpc,
+} from './ipc'
 import { Reports } from './report'
 import { MediaGrants, mediaScheme, serveMedia } from './media'
 import { createLogger } from './log'
@@ -297,6 +304,10 @@ async function start(): Promise<void> {
     fetch: (url, init) => browserSession.fetch(url, init) as unknown as Promise<Response>,
     changed: (event) => broadcast('browser:site-icon', event),
   })
+  const signIns = await startSignIns(userDataPath, browserSession.cookies, (sites) =>
+    broadcast('sign-ins:changed', sites),
+  )
+  registerSignInIpc(signIns.signIns)
   // The browser tools need the host to answer them, and the pages need the window, so each takes
   // the other's work through this one late binding.
   let browserTools: BrowserTools | null = null
@@ -743,6 +754,7 @@ async function start(): Promise<void> {
         sharing.flush(),
         marketKeys.flush(),
         browserOrigins.flush(),
+        signIns.store.flush(),
         siteIcons.flush(),
       ])
     },

@@ -50,6 +50,8 @@ import { ReportError, type Reports } from './report'
 import type { BrowserViews } from './browser/views'
 import type { SiteIcons } from './browser/site-icons'
 import { originOf } from './browser/origins'
+import type { SignIns } from './browser/signins/service'
+import { offerUrl, signInChoice, signInRequest, signInSite } from './browser/signins/validate'
 import { defaultBrowser } from './default-browser'
 import { debugStatus, prepareRelaunch } from './debug-mode'
 import { Editors } from './editors'
@@ -970,4 +972,15 @@ export function registerTrayIpc(panel: TrayPanel): void {
   on('tray:resize', (event, height) => {
     if (panel.owns(event.sender)) panel.resize(height)
   })
+}
+
+/** Bringing sign-ins from the user's own browsers; nothing these answer holds a cookie's value. */
+export function registerSignInIpc(signIns: SignIns): void {
+  handle('sign-ins:sources', 0, () => signIns.sources())
+  handle('sign-ins:sites', 1, (_, choice) => signIns.sites(signInChoice(choice)))
+  handle('sign-ins:bring', 1, (_, request) => signIns.bring(signInRequest(request)))
+  handle('sign-ins:cancel', 0, () => signIns.cancel())
+  handle('sign-ins:brought', 0, () => signIns.brought())
+  handle('sign-ins:remove', 1, (_, site) => signIns.remove(signInSite(site)))
+  handle('sign-ins:offer', 1, (_, url) => signIns.offer(offerUrl(url)))
 }

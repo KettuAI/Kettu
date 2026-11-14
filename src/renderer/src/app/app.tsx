@@ -26,6 +26,7 @@ import { RemoveWorktreeDialog } from '@renderer/features/worktrees/remove-worktr
 import { WorktreeSettingsDialog } from '@renderer/features/worktrees/worktree-settings-dialog'
 import { SearchDialog } from '@renderer/features/search/search-dialog'
 import { ReportDialog } from '@renderer/features/report/report-dialog'
+import { SignInsDialog } from '@renderer/features/browser/sign-ins-dialog'
 import { DiscoveryRequestDialog } from '@renderer/features/settings/discovery-request'
 import { useReportNotices } from '@renderer/features/report/report-notices'
 import { formatShortcut, hasBand, isWeb } from '@renderer/lib/platform'
@@ -117,6 +118,8 @@ export function App() {
         <RemoveWorktreeDialog />
         <WorktreeSettingsDialog />
         <ReportDialog />
+        {/* Kettu's browser, which sign-ins are brought into, runs in the desktop app alone. */}
+        {!isWeb && <SignInsDialog />}
         {/* Devices of the account ask the host's own windows; a browser is never asked. */}
         {!isWeb && cloud && <DiscoveryRequestDialog />}
         {pathPicker && (

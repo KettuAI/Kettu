@@ -406,9 +406,21 @@
     }
   },
   "browser": {
+    "signIns": {
+      "name": "Bring sign-ins from another browser",
+      "description": "Copies the sign-ins of the sites you pick. Passwords and passkeys stay where they are.",
+      "keywords": "sign in login cookies import chrome edge brave arc firefox browser session",
+      "button": "Bring sign-ins…",
+      "from": "From {{browser}} · {{profile}} · {{date}}",
+      "remove": "Remove",
+      "removed": "Signed Kettu’s browser out of {{site}}",
+      "removeFailed": "Couldn’t remove {{site}}: {{reason}}",
+      "showAll": "Show all {{count}} sites",
+      "showFewer": "Show fewer"
+    },
     "clearData": {
       "name": "Clear browsing data",
-      "description": "Cookies, storage and cache for every site the browser has opened.",
+      "description": "Sign-ins, cookies, storage and cache of Kettu’s browser, the ones brought from other browsers too.",
       "keywords": "browser cookies cache storage site data privacy",
       "button": "Clear…",
       "dialogTitle": "Clear browsing data?",
@@ -417,6 +429,7 @@
       "cleared": "Browsing data cleared"
     },
     "groups": {
+      "signIns": "Sign-ins",
       "links": "Links from agents",
       "siteData": "Site data",
       "allowedSites": "Always allowed"
@@ -985,7 +998,7 @@
     "sharing": "Publish artifacts to links, on Kettu or through your own Cloudflare account; choose who can open a page on Kettu.",
     "remote": "Use this computer’s sessions from Kettu on an iPhone, an iPad or another computer.",
     "remote_web": "Use {{host}}’s sessions from Kettu on an iPhone, an iPad or another computer.",
-    "browser": "The browser in the side panel keeps one profile for every session, so you sign in to a site once.",
+    "browser": "Sign-ins, how links from agents open, and the sites they may use.",
     "browserWeb": "Links in agents’ replies open in a new tab.",
     "harnesses": "The programs agents run on: Claude Code, Codex and the rest. Kettu installs and updates them for you.",
     "memory": "What agents learn about you and about each project, kept on this computer and handed to every agent.",

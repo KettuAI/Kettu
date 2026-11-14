@@ -91,6 +91,7 @@ const onBrowserState = subscribe('browser:state')
 const onBrowserOpened = subscribe('browser:opened')
 const onDeviceOpened = subscribe('devices:opened')
 const onSiteIcon = subscribe('browser:site-icon')
+const onSignInsChanged = subscribe('sign-ins:changed')
 
 const pathOf = (file: File) => webUtils.getPathForFile(file)
 
@@ -319,6 +320,16 @@ const api: KettuApi = {
     setSessions: (ids) => send('browser:sessions', ids),
     onState: onBrowserState,
     onOpened: onBrowserOpened,
+  },
+  signIns: {
+    sources: () => invoke('sign-ins:sources'),
+    sites: (choice) => invoke('sign-ins:sites', choice),
+    bring: (request) => invoke('sign-ins:bring', request),
+    cancel: () => invoke('sign-ins:cancel'),
+    brought: () => invoke('sign-ins:brought'),
+    remove: (site) => invoke('sign-ins:remove', site),
+    offer: (url) => invoke('sign-ins:offer', url),
+    onChanged: onSignInsChanged,
   },
   attachments: {
     pick: (kind, defaultPath) => invoke('dialog:add-attachments', kind, defaultPath),

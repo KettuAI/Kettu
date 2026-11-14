@@ -50,6 +50,7 @@ import { useProjectsStore } from '@renderer/stores/projects'
 import { openReport, useReportStore } from '@renderer/stores/report'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
 import { loadSiteIcons, useDefaultBrowser } from '@renderer/stores/site-icons'
+import { loadBrought } from '@renderer/stores/sign-ins'
 import { browserNotifications, notificationsProblem } from '@renderer/web/notifications'
 import {
   CONFIRM,
@@ -966,6 +967,8 @@ export function ClearBrowsingData() {
     setError(null)
     try {
       await window.kettu.browser.clearData()
+      // The brought sites went with the cookies.
+      loadBrought()
       toast(t('browser.clearData.cleared'))
     } catch (e) {
       setError(errorMessage(e))

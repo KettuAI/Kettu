@@ -8,8 +8,108 @@
     "title": "No page open",
     "noSession": "No session is showing",
     "noSessionHint": "Open a session to use the browser.",
-    "hint": "Pages {{agent}} opens show here too, with the sign-ins you make in this browser.",
+    "hint": "Pages {{agent}} opens show here too, with the sign-ins you make or bring into this browser.",
     "agent": "the agent"
+  },
+  "signIns": {
+    "title": "Bring sign-ins from another browser",
+    "titleOne": "Use the sign-in from {{browser}}",
+    "steps": {
+      "label": "Step {{step}} of 3",
+      "browser": "Browser",
+      "sites": "Sites",
+      "import": "Import"
+    },
+    "lead": "Kettu copies the sign-ins of the sites you pick into its own browser, so agents find you signed in there. Passwords, passkeys, history and bookmarks stay where they are.",
+    "browsers": "Browsers",
+    "sites_one": "{{count}} site with sign-ins",
+    "sites_other": "{{count}} sites with sign-ins",
+    "unavailable": {
+      "safari": "Safari keeps its sign-ins where only apps with Full Disk Access can read them. Not supported yet.",
+      "windowsLocked": "{{browser}} locks its sign-ins to itself on Windows, so no other app can read them.",
+      "linuxKeyring": "{{browser}} keeps the key to its sign-ins in the system keyring, which Kettu can’t read."
+    },
+    "noBrowsers": "No browser with sign-ins was found on this computer.",
+    "readFailed": "Couldn’t read your browsers: {{error}}",
+    "nothingUnlocked": "Nothing is unlocked until you pick the sites.",
+    "search": "Search {{count}} sites",
+    "searchLabel": "Search sites",
+    "noMatch": "No site matches “{{query}}”.",
+    "noSites": "{{browser}} has no sign-ins in this profile.",
+    "groups": {
+      "recent": "Used in the last 30 days",
+      "recentNote": "Picked for you",
+      "held": "Left out unless you pick them",
+      "heldNote": "Email, banking and sites that sign you in to others",
+      "google": "Can’t be brought"
+    },
+    "kind": {
+      "email": "Email",
+      "banking": "Banking",
+      "sso": "Signs you in to other sites"
+    },
+    "google": "{{browser}} ties Google’s sign-in to this computer. Sign in to Google in Kettu’s browser once instead.",
+    "more_one": "{{count}} more site",
+    "more_other": "{{count}} more sites",
+    "used": {
+      "today": "Used today",
+      "yesterday": "Used yesterday",
+      "days": "{{count}} days ago",
+      "lastWeek": "Last week",
+      "weeks": "{{count}} weeks ago"
+    },
+    "picked": "<b>{{picked}}</b> of {{total}} sites",
+    "pickedKeychain": "<b>{{picked}}</b> of {{total}} sites · macOS asks for your password next",
+    "bring_one": "Bring {{count}} site",
+    "bring_other": "Bring {{count}} sites",
+    "unlock": {
+      "title": "macOS asks for your Mac password",
+      "body": "Enter it in the window macOS shows and choose Allow. Kettu reads the sign-ins of the {{count}} sites you picked and nothing else.",
+      "bodyOne": "Enter it in the window macOS shows and choose Allow. Only this site’s sign-in is read.",
+      "always": "Always Allow would let any app on this Mac read {{browser}}’s sign-ins without asking."
+    },
+    "prompt": {
+      "label": "The window macOS shows",
+      "ask": "{{app}} wants to use your confidential information stored in “{{item}}” in your keychain.",
+      "password": "To allow this, enter the “login” keychain password.",
+      "field": "Password:",
+      "alwaysAllow": "Always Allow",
+      "deny": "Deny",
+      "allow": "Allow"
+    },
+    "waiting": "Waiting for macOS…",
+    "bringing": "Bringing sign-ins…",
+    "from": "from {{browser}} · {{profile}}",
+    "done": {
+      "title_one": "{{count}} site signed in",
+      "title_other": "{{count}} sites signed in",
+      "body": "Agents find you signed in on them in Kettu’s browser. If a site signs you out later, sign in there or bring it again.",
+      "note": "Bring more any time from Settings › Browser.",
+      "none": "Nothing came over",
+      "noneBody": "{{browser}} has no sign-in for these sites any more. Sign in to them in Kettu’s browser."
+    },
+    "denied": {
+      "title": "{{browser}}’s sign-ins stayed locked",
+      "body": "macOS was told Deny, so nothing came over. Try again and choose Allow, or sign in to each site in Kettu’s browser."
+    },
+    "failed": {
+      "title": "Couldn’t read {{browser}}’s sign-ins",
+      "body": "Nothing came over. Try again, or sign in to the site in Kettu’s browser."
+    },
+    "actions": {
+      "continue": "Continue",
+      "back": "Back",
+      "cancel": "Cancel",
+      "close": "Close",
+      "done": "Done",
+      "tryAgain": "Try again",
+      "signInHere": "Sign in in Kettu"
+    },
+    "signedIn": "Signed in to {{site}} with {{browser}}’s sign-in",
+    "chip": "Use sign-in from {{browser}}",
+    "chipTitle": "Use the sign-in for {{site}} from {{browser}}’s {{profile}} profile",
+    "offer": "Bring your sign-ins from {{browser}}",
+    "offerNote": "Pick the sites. Passwords stay in {{browser}}."
   },
   "loading": "Loading",
   "actions": {
