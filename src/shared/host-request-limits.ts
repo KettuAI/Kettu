@@ -79,6 +79,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.snapshot': HOST_MS,
   'sessions.page': HOST_MS,
   'sessions.outline': HOST_MS,
+  'sessions.outputs': HOST_MS,
   'sessions.outlineTitles': AGENT_MS,
   'sessions.watch': HOST_MS,
   'sessions.unwatch': HOST_MS,

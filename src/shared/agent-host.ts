@@ -474,6 +474,18 @@ export interface SessionSummary {
   agentWorktree?: { path: string; branch: string | null } // one its agent made for this subagent
 }
 
+/** What a session made, read from its stored thread for its card in the sidebar. */
+export interface SessionOutputs {
+  /** The artifacts its turns wrote and did not delete, by their latest write, latest first. */
+  artifacts: { id: string; title: string }[]
+  /** The github.com pull requests and issues its replies link, canonical, latest first. */
+  references: string[]
+  /** The start of its last reply, in Markdown. */
+  reply: string | null
+  /** How long its last ended turn took, in ms. */
+  turnMs: number | null
+}
+
 /**
  * Why a prepared session starts with another value than the one chosen: the agent does not offer
  * it, refused it, or a change outside Kettu replaced a remembered one. Names, not values.
@@ -731,6 +743,8 @@ export interface HostContract {
     result: OlderPage
   }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
+  // What the session made, for its card in the sidebar; empty for a session without a thread.
+  'sessions.outputs': { params: { sessionId: string }; result: SessionOutputs }
   // Summarizes the messages without a title; empty while a summary of the session runs.
   'sessions.outlineTitles': { params: { sessionId: string }; result: { titles: OutlineTitle[] } }
   'sessions.watch': { params: { sessionId: string }; result: void }
@@ -1261,6 +1275,7 @@ export const HOST_METHODS = [
   'sessions.snapshot',
   'sessions.page',
   'sessions.outline',
+  'sessions.outputs',
   'sessions.outlineTitles',
   'sessions.watch',
   'sessions.unwatch',

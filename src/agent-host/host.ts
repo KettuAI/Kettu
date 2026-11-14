@@ -1978,6 +1978,7 @@ export class AgentHost {
       'sessions.page': ({ sessionId, before, from }, { device }) =>
         sessions.page(sessionId, before, from, imagesFor(device)),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
+      'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),

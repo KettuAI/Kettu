@@ -16,6 +16,8 @@ import {
 } from '@shared/artifact-comments'
 import { type ArtifactState, NO_SESSION } from '@shared/artifacts'
 import { type ArtifactTypeInfo, isArtifactTypeName } from '@shared/artifact-types'
+import type { SessionOutputs } from '@shared/agent-host'
+import { githubReferenceFromLink } from '@shared/git'
 import { OUTLINE_TEXT } from '@shared/outline'
 import { isRoutineRun, type RoutineRun } from '@shared/routines'
 import { isThreadEntry, type ThreadEntry } from '@shared/thread'
@@ -49,6 +51,7 @@ import {
   type PositionedEntry,
   type StoredBlob,
   type StoredOutline,
+  type StoredOutputs,
   type StoredSession,
   type StoredThread,
   type ThreadHead,
@@ -235,6 +238,22 @@ const SQLITE_CONSTRAINT = 19
 const SQLITE_NOTADB = 26
 // Above every position; SQLite compares it as a 64-bit integer.
 const END = Number.MAX_SAFE_INTEGER
+// What a session's card shows at most: the references it counts and the start of its last reply.
+const OUTPUT_REFERENCES = 50
+const OUTPUT_REPLY = 600
+// A github.com address in a reply, in ASCII so CJK punctuation right after it stays out.
+const GITHUB_LINK = /https:\/\/(?:www\.)?github\.com\/[\w\-./?#=&%~+:@!$*,;]+/g
+
+/** The canonical pull request and issue addresses a reply links, in their order. */
+function githubLinks(markdown: string): string[] {
+  const links: string[] = []
+  for (const [match] of markdown.matchAll(GITHUB_LINK)) {
+    const ref = githubReferenceFromLink(match.replace(/[.,;:!?]+$/, ''))
+    if (ref) links.push(ref.url)
+  }
+  return links
+}
+
 // The content refs that carry bytes, which a large one keeps in the blobs table.
 const CARRIED_KINDS: ReadonlySet<string> = new Set(['image', 'audio', 'video'])
 
@@ -390,6 +409,22 @@ function prepareAll(db: DatabaseSync) {
       FROM entries e LEFT JOIN outline_titles t ON t.session_id = e.session_id AND t.pos = e.pos
       WHERE e.session_id = ?1 AND e.kind = 'user'
         AND json_extract(e.json, '$.from') IS NULL ORDER BY e.pos`),
+    // What a session made, latest first, for its card in the sidebar.
+    artifactWrites: sql(`
+      SELECT json_extract(json, '$.artifactId') AS id, json_extract(json, '$.title') AS title,
+        json_extract(json, '$.action') AS action
+      FROM entries WHERE session_id = ? AND kind = 'artifact' ORDER BY pos DESC`),
+    linkingReplies: sql(`
+      SELECT json_extract(json, '$.markdown') AS markdown FROM entries
+      WHERE session_id = ? AND kind = 'agent' AND instr(json, 'github.com/') > 0
+      ORDER BY pos DESC`),
+    lastReply: sql(`
+      SELECT substr(json_extract(json, '$.markdown'), 1, ?2) AS markdown FROM entries
+      WHERE session_id = ?1 AND kind = 'agent' AND json_extract(json, '$.markdown') <> ''
+      ORDER BY pos DESC LIMIT 1`),
+    lastTurnMs: sql(`
+      SELECT json_extract(json, '$.durationMs') AS ms FROM entries
+      WHERE session_id = ? AND kind = 'turn_end' ORDER BY pos DESC LIMIT 1`),
     titles: sql('SELECT pos, title FROM outline_titles WHERE session_id = ?'),
     userAt: sql("SELECT 1 FROM entries WHERE session_id = ? AND pos = ? AND kind = 'user'"),
     putTitle: sql(`
@@ -898,6 +933,42 @@ export class ThreadDb {
       }))
       const { session, ...rest } = head
       return { head: rest, session, entries }
+    }, null)
+  }
+
+  /** What the session made, from its stored thread; null without one. */
+  outputs(sessionId: string): StoredOutputs | null {
+    return this.guard((sql) => {
+      const stored = this.headOf(sql, sessionId)
+      if (!stored) return null
+      const artifacts: SessionOutputs['artifacts'] = []
+      const seen = new Set<string>()
+      for (const row of sql.artifactWrites.all(sessionId)) {
+        const id = optionalText(row.id)
+        if (!id || seen.has(id)) continue
+        seen.add(id)
+        // The latest write decides: a deleted artifact is gone even if earlier turns wrote it.
+        if (row.action !== 'delete') artifacts.push({ id, title: optionalText(row.title) ?? '' })
+      }
+      const references: string[] = []
+      for (const row of sql.linkingReplies.all(sessionId)) {
+        const links = githubLinks(optionalText(row.markdown) ?? '')
+        for (let i = links.length - 1; i >= 0; i--) {
+          if (!references.includes(links[i]!)) references.push(links[i]!)
+        }
+        if (references.length >= OUTPUT_REFERENCES) break
+      }
+      const reply = optionalText(sql.lastReply.get(sessionId, OUTPUT_REPLY)?.markdown)
+      const ms = sql.lastTurnMs.get(sessionId)?.ms
+      return {
+        head: { agentId: stored.agentId, acpSessionId: stored.acpSessionId },
+        outputs: {
+          artifacts,
+          references: references.slice(0, OUTPUT_REFERENCES),
+          reply,
+          turnMs: typeof ms === 'number' || typeof ms === 'bigint' ? Number(ms) : null,
+        },
+      }
     }, null)
   }
 
