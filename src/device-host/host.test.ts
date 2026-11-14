@@ -556,6 +556,22 @@ describe('emulators the host booted', () => {
     expect(fake.shutdowns).toEqual([started.id.slice('android:'.length)])
   })
 
+  it('still shuts one down that was offline for a while', async () => {
+    const devices = manager()
+    const started = await devices.open(AVD.id, 's1')
+    const running = fake.devices.find((device) => device.id === started.id)!
+    // adb lists an offline emulator without reading its AVD, so the AVD is listed as well.
+    running.state = 'unavailable'
+    fake.devices.push({ ...AVD })
+    await devices.list()
+    running.state = 'booted'
+    fake.devices = fake.devices.filter((device) => device.id !== AVD.id)
+    await devices.list()
+
+    await devices.close(started.id, 's1', false)
+    expect(fake.shutdowns).toEqual([started.id.slice('android:'.length)])
+  })
+
   it('leaves one on that the user started again under the same serial', async () => {
     let devices = manager()
     const started = await devices.open(AVD.id, 's1')

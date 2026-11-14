@@ -478,10 +478,12 @@ export class DeviceManager {
     const next = new Map<DeviceId, FoundDevice>()
     for (const device of lists.flat()) next.set(device.id, device)
     this.found = next
-    // One that went down is no longer ours: started again by the user, it stays on.
+    // One that went down is no longer ours: started again by the user, it stays on. An emulator
+    // is down once its AVD is listed and its serial is not; adb lists an offline one as both.
     let forgot = false
     for (const [id, down] of this.booted) {
-      if (next.get(down)?.state === 'shutdown' && !this.booting.has(id)) {
+      const shutDown = next.get(down)?.state === 'shutdown' && (down === id || !next.has(id))
+      if (shutDown && !this.booting.has(id)) {
         this.booted.delete(id)
         forgot = true
       }
