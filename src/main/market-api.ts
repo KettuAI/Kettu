@@ -23,12 +23,14 @@ import {
   type PublishHarness,
   type PublishKind,
   type PublishManifest,
+  type VersionCheck,
   type VersionFile,
 } from '@shared/market-publish'
 
 const TIMEOUT_MS = 120_000
 const MAX_MESSAGE = 500
 const MAX_PROBLEMS = 100
+const MAX_CHECKS = 50
 
 export type Fetch = (url: string, init: RequestInit) => Promise<Response>
 
@@ -145,6 +147,25 @@ function listingBase(value: unknown, what: string) {
   }
 }
 
+function parseChecks(value: unknown): VersionCheck[] {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, MAX_CHECKS).flatMap((item: unknown) => {
+    const fields = record(item)
+    const check = text(fields?.check)
+    if (check === null || (fields?.result !== 'passed' && fields?.result !== 'skipped')) return []
+    const target = text(fields.target)
+    const note = text(fields.note)
+    return [
+      {
+        check: check.slice(0, MAX_MESSAGE),
+        ...(target !== null ? { target: target.slice(0, MAX_MESSAGE) } : {}),
+        result: fields.result,
+        ...(note !== null ? { note: note.slice(0, MAX_MESSAGE) } : {}),
+      },
+    ]
+  })
+}
+
 function parseVersion(value: unknown): MineVersion {
   const fields = record(value)
   const version = text(fields?.version)
@@ -156,6 +177,7 @@ function parseVersion(value: unknown): MineVersion {
     status: fields.status === 'withdrawn' ? 'withdrawn' : 'live',
     bytes: isCount(fields.bytes) ? fields.bytes : 0,
     files: isCount(fields.files) ? fields.files : 0,
+    checks: parseChecks(fields.checks),
     ...(typeof fields.agent === 'string' ? { agent: fields.agent } : {}),
     ...(typeof fields.session === 'string' ? { session: fields.session } : {}),
     publishedAt,
@@ -227,19 +249,18 @@ function parseProblems(value: unknown): MarketProblem[] | undefined {
   })
 }
 
-/** The service's error body, `{ error: { code, message, ... } }`, as a failure. */
+/** The service's error body, `{ error: <code>, message, ... }`, as a failure. */
 function failureOf(status: number, body: Fields | null): MarketFailure {
-  const error = record(body?.error)
-  const code = text(error?.code) ?? (status === 404 ? 'not_found' : 'failed')
-  const message = text(error?.message)?.slice(0, MAX_MESSAGE) ?? `Kettu answered ${status}`
-  const problems = parseProblems(error?.problems)
+  const code = text(body?.error) ?? (status === 404 ? 'not_found' : 'failed')
+  const message = text(body?.message)?.slice(0, MAX_MESSAGE) ?? `Kettu answered ${status}`
+  const problems = parseProblems(body?.problems)
   return {
     code,
     status,
     message,
     ...(problems ? { problems } : {}),
-    ...(isCount(error?.bytes) ? { bytes: error.bytes } : {}),
-    ...(isCount(error?.limit) ? { limit: error.limit } : {}),
+    ...(isCount(body?.bytes) ? { bytes: body.bytes } : {}),
+    ...(isCount(body?.limit) ? { limit: body.limit } : {}),
   }
 }
 

@@ -49,6 +49,8 @@ import { AddMarketplaceDialog, AddServerDialog, AddSkillDialog } from './dialogs
 import { useAgentName } from './hooks'
 import { MarketAway } from './parts'
 import { InstalledView } from './installed'
+import { PublishedView, PublishMenu } from './published'
+import { usePublishedStore, useShowsPublished } from './published-hooks'
 import {
   byInstalls,
   categoryTitle,
@@ -81,6 +83,8 @@ import {
 } from './tile-art'
 
 const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'installed']
+/** With Published last, while the host's Kettu account is signed in with Kettu's services on. */
+const SIGNED_IN_TABS: readonly MarketplaceTab[] = [...TABS, 'published']
 
 /** Rows a section shows before it folds the rest into "… and N more", and how many more a click shows. */
 const SECTION_ROWS = 6
@@ -453,13 +457,23 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   const namesHosts = useNamesHosts()
   const windowHost = useWindowHost()
   const hostName = useHostName()
+  const showsPublished = useShowsPublished()
+  const tabs = showsPublished ? SIGNED_IN_TABS : TABS
+  const published = tab === 'published'
   const labels: Record<MarketplaceTab, string> = {
     all: t('page.tabs.all'),
     plugins: t('page.tabs.plugins'),
     skills: t('page.tabs.skills'),
     mcp: t('page.tabs.mcp'),
     installed: t('page.tabs.installed'),
+    published: t('page.tabs.published'),
   }
+  const publishedStore = usePublishedStore()
+  const account = publishedStore((s) => s.account)
+  // Signed out or Local mode takes the tab away, and the page back to All.
+  useEffect(() => {
+    if (published && account === null) setMarketplaceTab('all')
+  }, [published, account])
   const q = query.trim()
   // The lists are long, so they filter once typing rests, as the registry is asked.
   const [filter, setFilter] = useState(q)
@@ -516,68 +530,76 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
       <MarketAway>
         <div className="ui-as-toolbar ui-as-integrations__bar">
           <Tabs
-            items={TABS.map((id) => labels[id])}
+            items={tabs.map((id) => labels[id])}
             value={labels[tab]}
             onChange={(label) =>
-              setMarketplaceTab(TABS.find((id) => labels[id] === label) ?? 'all')
+              setMarketplaceTab(tabs.find((id) => labels[id] === label) ?? 'all')
             }
           />
           <div className="ui-as-toolbar__right">
             <SearchField
-              placeholder={t('page.search')}
+              placeholder={published ? t('page.searchPublished') : t('page.search')}
               width={230}
               value={query}
               onChange={(next) => useMarketplaceStore.setState({ query: next })}
             />
-            <Dropdown
-              align="end"
-              className="k-mkt-add"
-              items={[
-                { label: t('add.heading'), heading: true },
-                {
-                  label: t('add.marketplace'),
-                  description: t('add.marketplaceLine'),
-                  icon: Store01Icon,
-                  onSelect: () => setDialog('marketplace'),
-                },
-                {
-                  label: t('add.skillGithub'),
-                  description: t('add.skillGithubLine'),
-                  icon: GithubIcon,
-                  onSelect: () => setDialog('skill'),
-                },
-                ...(isWeb
-                  ? []
-                  : [
-                      {
-                        label: t('add.skillFolder'),
-                        description: t('add.skillFolderLine'),
-                        icon: Folder01Icon,
-                        onSelect: () => void addFolder(),
-                      },
-                    ]),
-                {
-                  label: t('add.mcp'),
-                  description: t('add.mcpLine'),
-                  icon: PlugSocketIcon,
-                  onSelect: () => setDialog('mcp'),
-                },
-              ]}
-              trigger={({ open, toggle }) => (
-                <Button
-                  size="md"
-                  icon={<Icon icon={Add01Icon} size={15} />}
-                  aria-expanded={open}
-                  aria-haspopup="menu"
-                  onClick={toggle}
-                >
-                  {t('add.button')}
-                </Button>
-              )}
-            />
+            {published ? (
+              <PublishMenu />
+            ) : (
+              <Dropdown
+                align="end"
+                className="k-mkt-add"
+                items={[
+                  { label: t('add.heading'), heading: true },
+                  {
+                    label: t('add.marketplace'),
+                    description: t('add.marketplaceLine'),
+                    icon: Store01Icon,
+                    onSelect: () => setDialog('marketplace'),
+                  },
+                  {
+                    label: t('add.skillGithub'),
+                    description: t('add.skillGithubLine'),
+                    icon: GithubIcon,
+                    onSelect: () => setDialog('skill'),
+                  },
+                  ...(isWeb
+                    ? []
+                    : [
+                        {
+                          label: t('add.skillFolder'),
+                          description: t('add.skillFolderLine'),
+                          icon: Folder01Icon,
+                          onSelect: () => void addFolder(),
+                        },
+                      ]),
+                  {
+                    label: t('add.mcp'),
+                    description: t('add.mcpLine'),
+                    icon: PlugSocketIcon,
+                    onSelect: () => setDialog('mcp'),
+                  },
+                ]}
+                trigger={({ open, toggle }) => (
+                  <Button
+                    size="md"
+                    icon={<Icon icon={Add01Icon} size={15} />}
+                    aria-expanded={open}
+                    aria-haspopup="menu"
+                    onClick={toggle}
+                  >
+                    {t('add.button')}
+                  </Button>
+                )}
+              />
+            )}
           </div>
         </div>
-        {tab === 'installed' ? (
+        {published ? (
+          <div key="published">
+            <PublishedView query={filter} />
+          </div>
+        ) : tab === 'installed' ? (
           <div key="installed">
             <InstalledView query={filter} />
           </div>

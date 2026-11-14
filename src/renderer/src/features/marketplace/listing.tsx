@@ -53,6 +53,9 @@ import {
 } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { PluginListing } from './plugins'
+import { BuiltinServerPage } from './builtin'
+import { PublishedListingPage } from './published-listing'
+import { KETTU_ITEM, publishedIdOf } from './published-keys'
 import { AddButton, ItemRow, OfficialBadge } from './rows'
 import { SkillListing } from './skills'
 import { serverSubject } from './tile-art'
@@ -73,6 +76,9 @@ function leave(tab: MarketplaceTab): void {
 export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }) {
   const ref = parseItem(item)
   const back = () => leave(tab)
+  if (item === KETTU_ITEM) return <BuiltinServerPage tab={tab} back={back} />
+  const publishedId = publishedIdOf(item)
+  if (publishedId) return <PublishedListingPage id={publishedId} back={back} />
   if (ref?.kind === 'plugin') {
     return <PluginListing harness={ref.harness} id={ref.id} tab={tab} back={back} />
   }

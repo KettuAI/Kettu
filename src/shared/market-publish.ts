@@ -11,6 +11,7 @@ export type PublishVisibility = Exclude<ListingVisibility, 'unlisted'>
 
 /** A version's limits, the same as the service's. */
 export const PUBLISH_LIMITS = { files: 400, bytes: 10 * 1024 * 1024 } as const
+export const LISTING_NAME_CHARS = 80
 export const LISTING_DESCRIPTION_CHARS = 120
 export const LISTING_ABOUT_CHARS = 4000
 export const LISTING_NOTES_CHARS = 4000
@@ -55,12 +56,24 @@ export interface PublishManifest {
   session?: string
 }
 
+/** One check the service ran on a version, kept with it for its publisher. */
+export interface VersionCheck {
+  /** Such as `paths`, `skill`, `plugin`, `secrets`, `package` or `remote`. */
+  check: string
+  /** What it checked, such as `SKILL.md` or `npm name@1.0.0`. */
+  target?: string
+  result: 'passed' | 'skipped'
+  /** Why it was skipped. */
+  note?: string
+}
+
 export interface MineVersion {
   version: string
   notes: string
   status: 'live' | 'withdrawn'
   bytes: number
   files: number
+  checks: VersionCheck[]
   agent?: string
   session?: string
   publishedAt: string
@@ -200,6 +213,29 @@ export type MarketCallAnswer = { result: unknown } | { error: MarketFailure }
 export interface MarketAccount {
   name: string | null
   email: string
+}
+
+/**
+ * Where a listing was last published from on this host, and the session each version came from,
+ * kept on the host since the service knows neither.
+ */
+export interface PublishOrigin {
+  path: string
+  /** Session ids by version. */
+  sessions: Record<string, string>
+}
+
+/** What Marketplace › Published shows of a host. */
+export interface MarketPublished {
+  /** Null while the host is signed out or Kettu's services are off, which hides the tab. */
+  account: MarketAccount | null
+  /** Null while signed out, or when the service could not be read. */
+  mine: MarketMine | null
+  /** Why the service could not be read. */
+  error: string | null
+  drafts: PublishDraft[]
+  /** By listing id. */
+  origins: Record<string, PublishOrigin>
 }
 
 /** A version the user put off, or the service refused, kept on the host to publish later. */

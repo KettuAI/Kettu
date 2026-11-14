@@ -987,6 +987,7 @@
       "unlist": "它会从 Marketplace 里去掉。已经装了的人照常能用，也照常收到新版本。"
     },
     "notes": "更新说明 · {{agent}} 写的，能改",
+    "notesYours": "更新说明",
     "notesPlaceholder": "这个版本改了什么",
     "publisherName": "发布者名",
     "publisherHint": "这是你第一次发布：你发布的每一项都会写着这个名字。以后能在“已发布”里改。",

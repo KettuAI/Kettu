@@ -602,7 +602,25 @@
   "marketPublish": {
     "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",
     "handleTaken": "@{{handle}} 已经有人用了，换一个发布者名。",
-    "publisherFailed": "没能设置发布者名：{{reason}}"
+    "publisherFailed": "没能设置发布者名：{{reason}}",
+    "notReady": "没有上传：先改好检查发现的问题。",
+    "failure": {
+      "signed_out": "登录 Kettu 账号并打开 Kettu 云服务后才能发布。",
+      "unauthorized": "请重新登录 Kettu 账号后再发布。",
+      "network": "连不上 Kettu 的 Marketplace。检查网络后再试一次。",
+      "unreadable": "读不到你发布的内容。",
+      "storage_full": "云端存储已满，只有你能看到的条目算在里面。",
+      "too_many_listings": "这个账号的条目数已经到上限了。",
+      "rate_limited": "最近一小时发布的版本太多了，稍后再试。",
+      "last_version": "这是剩下的唯一一个版本。先发一个新版本再撤回它，或者删掉这一项。",
+      "handle_taken": "这个发布者名已经有人用了，换一个。",
+      "taken_down": "它已被 Kettu 下架，不能再发新版本。",
+      "version_exists": "这个版本已经发布过了。提高版本号后再试。",
+      "no_publisher": "先定一个发布者名。",
+      "not_found": "它已经不在 Kettu 的 Marketplace 里了。",
+      "check_failed": "没有通过 Kettu Marketplace 的检查。",
+      "conflict": "同时有别的改动，再试一次。"
+    }
   },
   "marketCommunity": {
     "signedOut": "登录 Kettu 账号并开着 Kettu 的服务，才能从 Kettu 的 Marketplace 安装。",

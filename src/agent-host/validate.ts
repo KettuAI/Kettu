@@ -27,7 +27,17 @@ import {
   type MemoryScope,
 } from '@shared/memory'
 import type { PluginScope, SkillSource } from '@shared/marketplace'
-import { HANDLE, LISTING_ID, LISTING_NOTES_CHARS } from '@shared/market-publish'
+import {
+  HANDLE,
+  LISTING_ABOUT_CHARS,
+  LISTING_DESCRIPTION_CHARS,
+  LISTING_ID,
+  LISTING_NAME_CHARS,
+  LISTING_NOTES_CHARS,
+  VERSION,
+  type ListingChange,
+  type ListingVisibility,
+} from '@shared/market-publish'
 import {
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
@@ -948,6 +958,54 @@ function skillSource(value: unknown, platform: Platform): SkillSource {
   throw invalidParams('source.kind must be catalog, github, local or kettu')
 }
 
+function listingVersion(o: Fields): string {
+  const version = string(o, 'version', 64)
+  if (!VERSION.test(version)) throw invalidParams('version is not a version such as 1.2.0')
+  return version
+}
+
+function publisherHandle(o: Fields, key: string): string | undefined {
+  const handle = optionalString(o, key, 32)
+  if (handle !== undefined && !HANDLE.test(handle)) {
+    throw invalidParams(`${key} must be lowercase letters, digits and hyphens`)
+  }
+  return handle
+}
+
+/** One line of a listing, such as its name: not empty, without a line break. */
+function listingLine(o: Fields, key: string, max: number): string | undefined {
+  const value = optionalString(o, key, max)
+  if (value !== undefined && (value.trim() === '' || /[\r\n]/.test(value))) {
+    throw invalidParams(`${key} must be one line of text`)
+  }
+  return value
+}
+
+const LISTING_VISIBILITIES: readonly unknown[] = ['public', 'private', 'unlisted']
+
+function listingChange(value: unknown): ListingChange {
+  const o = fields(value)
+  const name = listingLine(o, 'name', LISTING_NAME_CHARS)
+  const description = listingLine(o, 'description', LISTING_DESCRIPTION_CHARS)
+  if (
+    o.about !== undefined &&
+    (typeof o.about !== 'string' || o.about.length > LISTING_ABOUT_CHARS)
+  ) {
+    throw invalidParams(`about must be a string of at most ${LISTING_ABOUT_CHARS} characters`)
+  }
+  if (o.visibility !== undefined && !LISTING_VISIBILITIES.includes(o.visibility)) {
+    throw invalidParams('visibility must be public, private or unlisted')
+  }
+  const change: ListingChange = {
+    ...(name !== undefined ? { name } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(o.about !== undefined ? { about: o.about as string } : {}),
+    ...(o.visibility !== undefined ? { visibility: o.visibility as ListingVisibility } : {}),
+  }
+  if (Object.keys(change).length === 0) throw invalidParams('change names nothing to change')
+  return change
+}
+
 // What one import names: each agent's memory of each project, and the entries ticked for global.
 const MEMORY_IMPORT_SOURCES = 1_000
 const MEMORY_IMPORT_KEYS = 10_000
@@ -1247,6 +1305,55 @@ export function createValidators(platform: Platform): Validators {
       const message = string(o, 'message', REPORT_CHARS).trim()
       if (message === '') throw invalidParams('message must say what the problem is')
       return { id: listingId(o), message }
+    },
+    'market.account': none,
+    'market.published': none,
+    'market.setPublisher': (params) => {
+      const handle = publisherHandle(fields(params), 'handle')
+      if (handle === undefined) throw invalidParams('handle must be a string')
+      return { handle }
+    },
+    'market.updateListing': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), change: listingChange(o.change) }
+    },
+    'market.withdrawVersion': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), version: listingVersion(o) }
+    },
+    'market.deleteListing': (params) => ({ id: listingId(fields(params)) }),
+    'market.versionFiles': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), version: listingVersion(o) }
+    },
+    'market.checkFolder': (params) => {
+      const o = fields(params)
+      const draftId = optionalString(o, 'draftId', ID_CHARS)
+      return {
+        path: absolutePath(o, 'path', platform),
+        ...(draftId !== undefined ? { draftId } : {}),
+      }
+    },
+    'market.publishFolder': (params) => {
+      const o = fields(params)
+      const draftId = optionalString(o, 'draftId', ID_CHARS)
+      if (o.visibility !== undefined && o.visibility !== 'public' && o.visibility !== 'private') {
+        throw invalidParams('visibility must be public or private')
+      }
+      if (
+        o.notes !== undefined &&
+        (typeof o.notes !== 'string' || o.notes.length > LISTING_NOTES_CHARS)
+      ) {
+        throw invalidParams(`notes must be a string of at most ${LISTING_NOTES_CHARS} characters`)
+      }
+      const handle = publisherHandle(o, 'handle')
+      return {
+        path: absolutePath(o, 'path', platform),
+        ...(draftId !== undefined ? { draftId } : {}),
+        ...(o.visibility !== undefined ? { visibility: o.visibility } : {}),
+        ...(o.notes !== undefined ? { notes: o.notes as string } : {}),
+        ...(handle !== undefined ? { handle } : {}),
+      }
     },
     'agents.listSessions': (params) => {
       const o = fields(params)

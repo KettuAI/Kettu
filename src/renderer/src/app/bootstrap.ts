@@ -51,6 +51,7 @@ import {
   useGitStore,
 } from '@renderer/stores/git'
 import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
+import { marketPublishedChanged } from '@renderer/stores/market-published'
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
@@ -172,6 +173,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       break
     case 'market.connectionChanged':
       marketConnectionChanged(event)
+      break
+    case 'market.publishedChanged':
+      marketPublishedChanged(null)
       break
   }
 }

@@ -616,6 +616,12 @@ export interface MarketPublishEntry {
   after: string | null
 }
 
+/** What a publish or an unlisting asks the user, whether in a session's card or a dialog. */
+export type MarketPublishAsk = Omit<
+  MarketPublishEntry,
+  'kind' | 'id' | 'expiresAt' | 'outcome' | 'device' | 'after'
+>
+
 /**
  * An agent's write to Kettu's memory, at its tool call. A project write is done when it appears and
  * `undo` names the record that takes it back, null once undone; a global write is only proposed,

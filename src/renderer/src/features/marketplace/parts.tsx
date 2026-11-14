@@ -28,13 +28,15 @@ export function MarketAway({ children }: { children: ReactNode }) {
   )
 }
 
-/** A listing's frame: the column, and Back to the directory. */
+/** A listing's frame: the column, and Back to the directory, or to `label` when given. */
 export function ListingFrame({
   back,
+  label,
   rise,
   children,
 }: {
   back: () => void
+  label?: string
   rise?: boolean
   children: ReactNode
 }) {
@@ -47,7 +49,7 @@ export function ListingFrame({
     >
       <button type="button" className="k-mkt-back" onClick={back}>
         <Icon icon={ArrowLeft01Icon} size={15} />
-        {t('listing.back')}
+        {label ?? t('listing.back')}
       </button>
       <MarketAway>{children}</MarketAway>
     </div>

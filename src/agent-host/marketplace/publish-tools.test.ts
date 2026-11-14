@@ -53,7 +53,15 @@ function listing(over: Partial<MineListing> = {}): MineListing {
     visibility: 'public',
     current: '1.0.0',
     versions: [
-      { version: '1.0.0', notes: '', status: 'live', bytes: 1, files: 1, publishedAt: 'x' },
+      {
+        version: '1.0.0',
+        notes: '',
+        status: 'live',
+        bytes: 1,
+        files: 1,
+        checks: [],
+        publishedAt: 'x',
+      },
     ],
     installs: { total: 598, week: 10, days: [] },
     takenDown: null,
@@ -69,13 +77,21 @@ interface Harness {
   asks: MarketAsk[]
   outcomes: MarketPublishOutcome[]
   drafts: NewDraft[]
+  /** Each version that reached the service, with its folder. */
+  published: {
+    folder: string
+    listingId: string
+    version: string
+    sessionId: string | null
+    path: string
+  }[]
   /** Answers the card the tools are waiting on. */
   answer(answer: MarketAnswer): void
   account: { current: MarketAccount | null }
 }
 
 /** What the service answers a publish: the listing at the version sent. */
-function published(call: MarketCall): unknown {
+function publishedListing(call: MarketCall): unknown {
   if (call.kind !== 'publish') return null
   return listing({
     current: call.manifest.version,
@@ -85,12 +101,14 @@ function published(call: MarketCall): unknown {
 
 function harness(
   mine: MarketMine = { publisher: null, listings: [], storage: { bytes: 0, limit: 1 } },
-  serve: (call: MarketCall) => unknown = published,
+  serve: (call: MarketCall) => unknown = publishedListing,
+  kept: PublishDraft[] = [],
 ): Harness {
   const calls: MarketCall[] = []
   const asks: MarketAsk[] = []
   const outcomes: MarketPublishOutcome[] = []
   const drafts: NewDraft[] = []
+  const published: Harness['published'] = []
   const account = { current: ACCOUNT as MarketAccount | null }
   let resolve: ((answer: MarketAnswer) => void) | null = null
   const tools = new MarketTools({
@@ -115,9 +133,14 @@ function harness(
         drafts.push(draft)
         return { ...draft, id: 'd', createdAt: 0, problems: [] } as PublishDraft
       },
-      published: async () => {},
-      list: () => [],
+      published: async (folder, version) => {
+        if (version) published.push({ folder, ...version })
+      },
+      list: () => kept,
+      origins: () => ({}),
+      forget: async () => {},
     },
+    changed: () => {},
     agentOf: () => 'claude-code',
     sessionTitle: () => 'Publish the changelog skill',
     home: os.homedir(),
@@ -128,6 +151,7 @@ function harness(
     asks,
     outcomes,
     drafts,
+    published,
     account,
     answer: (answer) => resolve?.(answer),
   }
@@ -230,7 +254,7 @@ describe('marketplace_publish', () => {
           }
         }
         if (call.kind === 'file') return { data: Buffer.from(old).toString('base64'), sha256: null }
-        return published(call)
+        return publishedListing(call)
       },
     )
     const call = h.tools.call(caller(), MARKET_PUBLISH, {
@@ -301,6 +325,121 @@ describe('marketplace_unlist', () => {
       { kind: 'update', id: 'abcdefgh23', change: { visibility: 'unlisted' } },
     ])
     expect(h.outcomes).toEqual([{ kind: 'unlisted' }])
+  })
+})
+
+describe('publishing from a folder', () => {
+  const folder = () => path.join(root, 'skills', 'changelog-writer')
+
+  it('uploads nothing while the check finds a problem, nor while signed out', async () => {
+    await writeFile(path.join(folder(), 'SKILL.md'), '---\nname: changelog-writer\n---\n')
+    const h = harness()
+    const plan = await h.tools.checkFolder(folder(), null)
+    expect(plan.problems.length).toBeGreaterThan(0)
+    await expect(
+      h.tools.publishFolder(folder(), { draftId: null, visibility: null, notes: null }),
+    ).rejects.toMatchObject({ code: 'invalid_params' })
+    h.account.current = null
+    await expect(h.tools.checkFolder(folder(), null)).rejects.toMatchObject({
+      code: 'auth_required',
+    })
+    expect(h.calls.filter((c) => c.kind === 'publish')).toEqual([])
+  })
+
+  it('publishes a draft with its session and visibility, and keeps a refusal as a draft', async () => {
+    const draft: PublishDraft = {
+      id: 'd1',
+      path: folder(),
+      manifest: {
+        slug: 'changelog-writer',
+        name: 'Changelog writer',
+        kind: 'skill',
+        description: 'One line per change.',
+        version: '1.0.0',
+        visibility: 'private',
+        agent: 'codex',
+        session: 'Publish the changelog skill',
+      },
+      listingId: null,
+      sessionId: 's9',
+      sessionTitle: 'Publish the changelog skill',
+      agentId: 'codex',
+      createdAt: 0,
+      error: null,
+      problems: [],
+    }
+    const h = harness(undefined, publishedListing, [draft])
+    const plan = await h.tools.checkFolder(folder(), 'd1')
+    expect(plan).toMatchObject({ problems: [], ask: { visibility: 'private', version: '1.0.0' } })
+    await h.tools.publishFolder(folder(), { draftId: 'd1', visibility: null, notes: null })
+    const sent = h.calls.find((c) => c.kind === 'publish')
+    expect(sent).toMatchObject({
+      manifest: { visibility: 'private', agent: 'codex', session: 'Publish the changelog skill' },
+    })
+    expect(h.published).toEqual([
+      {
+        folder: expect.any(String),
+        listingId: 'abcdefgh23',
+        version: '1.0.0',
+        sessionId: 's9',
+        path: folder(),
+      },
+    ])
+
+    const refused = harness(undefined, () => {
+      throw new MarketCallError({
+        code: 'check_failed',
+        status: 422,
+        message: 'Refused',
+        problems: [{ message: 'Bad' }],
+      })
+    })
+    await expect(
+      refused.tools.publishFolder(folder(), { draftId: null, visibility: null, notes: null }),
+    ).rejects.toMatchObject({ code: 'invalid_params', data: { problems: [{ message: 'Bad' }] } })
+    expect(refused.drafts).toEqual([
+      expect.objectContaining({ path: folder(), problems: [{ message: 'Bad' }] }),
+    ])
+    expect(refused.published).toEqual([])
+  })
+})
+
+describe('publishing a draft from a folder whose manifest moved on', () => {
+  it('takes the version an MCP server’s server.json now says, not the draft’s', async () => {
+    const server = path.join(root, 'servers', 'everything')
+    await mkdir(server, { recursive: true })
+    const json = (version: string) =>
+      JSON.stringify({
+        name: 'io.github.someone/everything',
+        description: 'Every feature.',
+        version,
+        packages: [
+          { registryType: 'npm', identifier: 'everything', version, transport: { type: 'stdio' } },
+        ],
+      })
+    await writeFile(path.join(server, 'server.json'), json('2.0.0'))
+    const draft: PublishDraft = {
+      id: 'd2',
+      path: server,
+      manifest: {
+        slug: 'everything',
+        name: 'everything',
+        kind: 'mcp-server',
+        description: 'Every feature.',
+        version: '1.9.0',
+      },
+      listingId: null,
+      sessionId: null,
+      sessionTitle: null,
+      agentId: null,
+      createdAt: 0,
+      error: 'Refused',
+      problems: [],
+    }
+    const h = harness(undefined, publishedListing, [draft])
+    const plan = await h.tools.checkFolder(server, 'd2')
+    expect(plan.problems).toEqual([])
+    expect(plan.ask).toMatchObject({ version: '2.0.0' })
   })
 })
 

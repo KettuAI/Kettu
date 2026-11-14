@@ -467,6 +467,7 @@ export class AgentHost {
       settle: (sessionId, entryId, outcome) =>
         this.sessions.marketSettled(sessionId, entryId, outcome),
       drafts: this.publishDrafts,
+      changed: () => this.hub.broadcast({ type: 'market.publishedChanged' }),
       agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
       sessionTitle: (sessionId) => this.sessions.title(sessionId),
       home: options.homeDir ?? os.homedir(),
@@ -1174,6 +1175,7 @@ export class AgentHost {
   /** `host:market-account`: the Kettu account the Marketplace tools publish with, or none. */
   setMarketAccount(account: unknown): void {
     const value = account as Record<string, unknown> | null
+    const before = this.marketAccount
     this.marketAccount =
       value !== null &&
       typeof value === 'object' &&
@@ -1181,6 +1183,9 @@ export class AgentHost {
       (value.name === null || typeof value.name === 'string')
         ? { name: value.name as string | null, email: value.email }
         : null
+    if (JSON.stringify(before) !== JSON.stringify(this.marketAccount)) {
+      this.hub.broadcast({ type: 'market.publishedChanged' })
+    }
   }
 
   /** Makes a Marketplace API call through main or the daemon, which hold the access token. */
@@ -2087,7 +2092,34 @@ export class AgentHost {
         await this.publishDrafts.ready
         return { drafts: this.publishDrafts.list() }
       },
-      'market.discardPublishDraft': ({ id }) => this.publishDrafts.remove(id),
+      'market.discardPublishDraft': async ({ id }) => {
+        await this.publishDrafts.remove(id)
+        this.hub.broadcast({ type: 'market.publishedChanged' })
+      },
+      'market.account': () => ({ account: this.marketAccount }),
+      'market.published': async () => {
+        await this.publishDrafts.ready
+        return this.marketTools.published()
+      },
+      'market.setPublisher': ({ handle }) => this.marketTools.renamePublisher(handle),
+      'market.updateListing': ({ id, change }) => this.marketTools.updateListing(id, change),
+      'market.withdrawVersion': ({ id, version }) => this.marketTools.withdrawVersion(id, version),
+      'market.deleteListing': ({ id }) => this.marketTools.deleteListing(id),
+      'market.versionFiles': ({ id, version }) => this.marketTools.versionFiles(id, version),
+      'market.checkFolder': async ({ path: folder, draftId }) => {
+        await this.publishDrafts.ready
+        return this.marketTools.checkFolder(folder, draftId ?? null)
+      },
+      'market.publishFolder': async ({ path: folder, draftId, visibility, notes, handle }) => {
+        await this.publishDrafts.ready
+        // A first publish sets the publisher name before anything is uploaded, as the card does.
+        if (handle !== undefined) await this.setPublisher(handle)
+        return this.marketTools.publishFolder(folder, {
+          draftId: draftId ?? null,
+          visibility: visibility ?? null,
+          notes: notes ?? null,
+        })
+      },
       'market.community': ({ refresh, ...query }) =>
         this.marketCommunity.directory(query, refresh === true),
       'market.communityListing': ({ id }) => this.marketCommunity.listing(id),

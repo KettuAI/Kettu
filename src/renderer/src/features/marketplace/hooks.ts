@@ -1,14 +1,16 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import type { InstalledPlugin, MarketConnection, PluginHarness } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
-import { agentName, menuAgents } from '@renderer/stores/agents'
+import { agentName, menuAgents, usableAgents } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { busyKey } from '@renderer/stores/marketplace'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { count } from '@renderer/lib/format'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { listingIdOf } from '@shared/market-community'
+import { errorMessage } from '@renderer/lib/host'
 import { pluginInstalls, updateFor } from './model'
 
 /** An agent's name on the host the page shows. */
@@ -116,4 +118,21 @@ export function useCommunityLine(id: string, installed: string | null): string |
   if (standing.state === 'taken-down') return t('community.takenDownLine')
   const update = updateFor(standing, installed)
   return update ? t('community.updateLine', { version: update }) : null
+}
+
+/** The agents that may get Kettu's tools, those turned off, and the switch that changes one. */
+export function useKettuSwitches() {
+  const { useAgentsStore, useSettingsStore } = useHostScope()
+  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  const off = useSettingsStore((s) => s.settings.mcp.kettu.off)
+  const [error, setError] = useState<string | null>(null)
+  const set = (agentId: AgentId, enabled: boolean) => {
+    const next = enabled ? off.filter((id) => id !== agentId) : [...off, agentId]
+    setError(null)
+    useSettingsStore
+      .getState()
+      .update({ mcp: { kettu: { off: next } } })
+      .catch((e: unknown) => setError(errorMessage(e)))
+  }
+  return { agents, off, error, set }
 }

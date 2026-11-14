@@ -235,6 +235,65 @@ describe('createValidators', () => {
     rejects(() => posix['market.connect']({ serverId: 'kettu:../x' }))
   })
 
+  it('checks the listing ids, versions and changes of Marketplace › Published', () => {
+    expect(posix['market.account'](undefined)).toBeUndefined()
+    expect(posix['market.published']({})).toBeUndefined()
+    expect(posix['market.setPublisher']({ handle: 'amigoer' })).toEqual({ handle: 'amigoer' })
+    rejects(() => posix['market.setPublisher']({ handle: 'Amigoer' }))
+    rejects(() => posix['market.setPublisher']({ handle: '-x' }))
+
+    const id = 'abcdefgh23'
+    expect(posix['market.deleteListing']({ id, extra: 1 })).toEqual({ id })
+    rejects(() => posix['market.deleteListing']({ id: '../mine' }))
+    rejects(() => posix['market.deleteListing']({ id: 'ABCDEFGH23' }))
+    expect(posix['market.withdrawVersion']({ id, version: '1.0.0-beta.1' })).toEqual({
+      id,
+      version: '1.0.0-beta.1',
+    })
+    rejects(() => posix['market.withdrawVersion']({ id, version: '../1.0.0' }))
+    rejects(() => posix['market.versionFiles']({ id, version: 'latest' }))
+
+    const update = (change: unknown) => posix['market.updateListing']({ id, change })
+    expect(update({ visibility: 'unlisted', other: 'x' })).toEqual({
+      id,
+      change: { visibility: 'unlisted' },
+    })
+    expect(update({ name: 'Changelog writer', description: 'One line.', about: '' })).toEqual({
+      id,
+      change: { name: 'Changelog writer', description: 'One line.', about: '' },
+    })
+    rejects(() => update({}))
+    rejects(() => update({ visibility: 'everyone' }))
+    rejects(() => update({ name: '' }))
+    rejects(() => update({ name: 'Two\nlines' }))
+    rejects(() => update({ description: 'x'.repeat(121) }))
+    rejects(() => update({ about: 'x'.repeat(4001) }))
+  })
+
+  it('takes only an absolute folder and a publish card’s own answers to publish from a folder', () => {
+    expect(posix['market.checkFolder']({ path: '/home/me/skill' })).toEqual({
+      path: '/home/me/skill',
+    })
+    expect(windows['market.checkFolder']({ path: 'C:\\skills\\x', draftId: 'd1' })).toEqual({
+      path: 'C:\\skills\\x',
+      draftId: 'd1',
+    })
+    rejects(() => posix['market.checkFolder']({ path: 'skills/x' }))
+    rejects(() => posix['market.checkFolder']({ path: '/a\0b' }))
+    const publish = (params: Record<string, unknown>) =>
+      posix['market.publishFolder']({ path: '/home/me/skill', ...params })
+    expect(publish({ visibility: 'private', notes: 'Fixes', handle: 'me', extra: 1 })).toEqual({
+      path: '/home/me/skill',
+      visibility: 'private',
+      notes: 'Fixes',
+      handle: 'me',
+    })
+    rejects(() => publish({ visibility: 'unlisted' }))
+    rejects(() => publish({ notes: 'x'.repeat(4001) }))
+    rejects(() => publish({ handle: 'Not A Handle' }))
+    rejects(() => posix['market.publishFolder']({ path: 'relative' }))
+  })
+
   it('validates provider actions without accepting unrelated credentials', () => {
     const base = { agentId: 'opencode', providerId: 'deepseek' }
     expect(posix['agents.providerAction']({ ...base, action: 'set-key', key: 'secret' })).toEqual({

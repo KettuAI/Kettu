@@ -142,15 +142,36 @@ describe('MarketApi requests', () => {
   })
 })
 
+describe('MarketApi listings', () => {
+  it('reads each version’s checks for its publisher, leaving out what is not a check', async () => {
+    const checks = [
+      { check: 'skill', target: 'SKILL.md', result: 'passed' },
+      { check: 'package', target: 'npm x@1.0.0', result: 'skipped', note: 'npm did not answer' },
+      { check: 'secrets', result: 'unknown' },
+      'paths',
+    ]
+    const { fetch } = fake(() =>
+      json(200, {
+        publisher: { handle: 'amigoer', since: 'x' },
+        listings: [{ ...LISTING, versions: [{ ...LISTING.versions[0], checks }] }],
+        storage: { bytes: 1, limit: 2 },
+      }),
+    )
+    const mine = await api(fetch).mine()
+    expect(mine.listings[0]!.versions[0]!.checks).toEqual([
+      { check: 'skill', target: 'SKILL.md', result: 'passed' },
+      { check: 'package', target: 'npm x@1.0.0', result: 'skipped', note: 'npm did not answer' },
+    ])
+  })
+})
+
 describe('MarketApi errors', () => {
   it('carries the service’s code, problems and limits', async () => {
     const checked = fake(() =>
       json(422, {
-        error: {
-          code: 'check_failed',
-          message: 'The version did not pass its checks',
-          problems: [{ path: 'SKILL.md', message: 'No description' }, { message: 'Too big' }],
-        },
+        error: 'check_failed',
+        message: 'The version did not pass its checks',
+        problems: [{ path: 'SKILL.md', message: 'No description' }, { message: 'Too big' }],
       }),
     )
     await expect(api(checked.fetch).publish({} as PublishManifest, [])).rejects.toMatchObject({
@@ -161,19 +182,19 @@ describe('MarketApi errors', () => {
       },
     })
     const full = fake(() =>
-      json(403, { error: { code: 'storage_full', message: 'Full', bytes: 5, limit: 4 } }),
+      json(403, { error: 'storage_full', message: 'Full', bytes: 5, limit: 4 }),
     )
     await expect(api(full.fetch).mine()).rejects.toMatchObject({
       failure: { code: 'storage_full', bytes: 5, limit: 4 },
     })
-    const taken = fake(() => json(409, { error: { code: 'version_exists', message: 'Exists' } }))
+    const taken = fake(() => json(409, { error: 'version_exists', message: 'Exists' }))
     await expect(api(taken.fetch).publisher()).rejects.toMatchObject({
-      failure: { code: 'version_exists', status: 409 },
+      failure: { code: 'version_exists', status: 409, message: 'Exists' },
     })
   })
 
   it('tells a refused token apart, and a network failure or an answer not understood', async () => {
-    const refused = fake(() => json(401, { error: { code: 'unauthorized', message: 'No' } }))
+    const refused = fake(() => json(401, { error: 'unauthorized', message: 'No' }))
     await expect(api(refused.fetch).mine()).rejects.toBeInstanceOf(MarketUnauthorized)
     const down: Fetch = () => Promise.reject(new Error('offline'))
     await expect(api(down).mine()).rejects.toMatchObject({ failure: { code: 'network' } })
@@ -193,7 +214,7 @@ describe('runMarketCall', () => {
       const token = (init.headers as Record<string, string>).authorization
       tokens.push(token)
       return token === 'Bearer old'
-        ? json(401, { error: { code: 'unauthorized', message: 'Expired' } })
+        ? json(401, { error: 'unauthorized', message: 'Expired' })
         : json(200, { publisher: null, listings: [LISTING], storage: { bytes: 1, limit: 2 } })
     })
     const answer = await runMarketCall(
@@ -234,9 +255,7 @@ describe('runMarketCall', () => {
   })
 
   it('sends a publish’s files from base64, and answers a service error as an error', async () => {
-    const { fetch, sent } = fake(() =>
-      json(409, { error: { code: 'version_exists', message: 'Exists' } }),
-    )
+    const { fetch, sent } = fake(() => json(409, { error: 'version_exists', message: 'Exists' }))
     const answer = await runMarketCall(
       {
         kind: 'publish',
