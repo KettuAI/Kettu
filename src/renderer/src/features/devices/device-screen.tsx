@@ -15,7 +15,8 @@ import type {
   DeviceScreen as Screen,
 } from '@shared/device-host'
 import { PaneSpinner } from '@renderer/features/shell/panel-button'
-import { errorMessage } from '@renderer/lib/host'
+import { errorCode, errorMessage } from '@renderer/lib/host'
+import { i18n } from '@renderer/lib/i18n'
 import { DeviceFrame } from './device-frame'
 
 type StreamState = 'starting' | 'live' | 'stopped' | 'error'
@@ -49,15 +50,36 @@ function avcCodec(description: Uint8Array): string {
   return `avc1.${hex(description[1] ?? 0x42)}${hex(description[2] ?? 0xe0)}${hex(description[3] ?? 0x1e)}`
 }
 
-function send(deviceId: string, input: DeviceInput, failed: (reason: unknown) => void): void {
-  void window.kettu.devices.request('devices.input', { deviceId, input }).catch(failed)
+/** Why the host refused a request, in the user's language when it is the session check. */
+function refusal(reason: unknown): string {
+  return errorCode(reason) === 'forbidden'
+    ? i18n.t('devices:screen.forbidden')
+    : errorMessage(reason)
+}
+
+function send(
+  deviceId: string,
+  sessionId: string,
+  input: DeviceInput,
+  failed: (reason: unknown) => void,
+): void {
+  void window.kettu.devices.request('devices.input', { deviceId, sessionId, input }).catch(failed)
 }
 
 /**
  * One device's live screen: the host's encoded frames decoded on the GPU and drawn to a canvas,
  * acknowledged as they are drawn, with the pointer as a finger and the keyboard as the device's.
  */
-export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: boolean }) {
+export function DeviceScreen({
+  device,
+  sessionId,
+  driven,
+}: {
+  device: DeviceInfo
+  /** The session whose pane shows the device; the host serves it to that session alone. */
+  sessionId: string
+  driven: boolean
+}) {
   const { t } = useTranslation('devices')
   const canvas = useRef<HTMLCanvasElement>(null)
   const field = useRef<HTMLTextAreaElement>(null)
@@ -144,7 +166,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
         ackQueued = false
         if (!closed) {
           void window.kettu.devices
-            .request('devices.ack', { deviceId: id, seq: ackSeq })
+            .request('devices.ack', { deviceId: id, sessionId, seq: ackSeq })
             .catch(() => undefined)
         }
       }, 0)
@@ -232,7 +254,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
     if (!canDecode) {
       const still = (): void => {
         void window.kettu.devices
-          .request('devices.screenshot', { deviceId: id })
+          .request('devices.screenshot', { deviceId: id, sessionId })
           .then(async ({ png }) => {
             if (closed) return
             const bitmap = await createImageBitmap(new Blob([png], { type: 'image/png' }))
@@ -244,7 +266,11 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
               setDrawn(true)
             }
           })
-          .catch(() => undefined)
+          .catch((reason: unknown) => {
+            if (closed || errorCode(reason) !== 'forbidden') return
+            if (stills) clearInterval(stills)
+            setStream({ state: 'error', error: refusal(reason) })
+          })
       }
       still()
       stills = setInterval(still, STILL_EVERY_MS)
@@ -257,7 +283,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
 
     const watch = (): void => {
       window.kettu.devices
-        .request('devices.watch', { deviceId: id })
+        .request('devices.watch', { deviceId: id, sessionId })
         .then((result) => {
           if (result.screen) {
             screen = result.screen
@@ -266,7 +292,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
           loadFrame()
         })
         .catch((reason: unknown) => {
-          setStream({ state: 'error', error: errorMessage(reason) })
+          setStream({ state: 'error', error: refusal(reason) })
         })
     }
     watch()
@@ -295,13 +321,11 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
       decoder?.close()
       void window.kettu.devices.request('devices.unwatch', { deviceId: id }).catch(() => undefined)
     }
-  }, [id, attempt])
+  }, [id, sessionId, attempt])
 
   // Input the host refuses means the stream is gone, even before the host says so.
   const inputFailed = (reason: unknown): void =>
-    setStream((now) =>
-      now.state === 'live' ? { state: 'error', error: errorMessage(reason) } : now,
-    )
+    setStream((now) => (now.state === 'live' ? { state: 'error', error: refusal(reason) } : now))
 
   const point = (event: PointerEvent<HTMLCanvasElement> | WheelEvent<HTMLCanvasElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -316,10 +340,10 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
 
   const touch = (event: PointerEvent<HTMLCanvasElement>, phase: 'begin' | 'move' | 'end'): void => {
     const { x, y } = point(event)
-    send(id, { type: 'touch', phase, x, y, finger: 0 }, inputFailed)
+    send(id, sessionId, { type: 'touch', phase, x, y, finger: 0 }, inputFailed)
     // Option and a drag pinch: a second finger mirrored around the screen's center.
     if (pointer.current?.pinch) {
-      send(id, { type: 'touch', phase, x: 1 - x, y: 1 - y, finger: 1 }, inputFailed)
+      send(id, sessionId, { type: 'touch', phase, x: 1 - x, y: 1 - y, finger: 1 }, inputFailed)
     }
   }
 
@@ -328,20 +352,20 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
     if (event.metaKey || event.ctrlKey) return
     if (KEY_CODES.has(event.code)) {
       event.preventDefault()
-      send(id, { type: 'key', phase: 'down', code: event.code }, inputFailed)
+      send(id, sessionId, { type: 'key', phase: 'down', code: event.code }, inputFailed)
     }
   }
 
   const onKeyUp = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.nativeEvent.isComposing || event.metaKey || event.ctrlKey) return
     if (KEY_CODES.has(event.code))
-      send(id, { type: 'key', phase: 'up', code: event.code }, inputFailed)
+      send(id, sessionId, { type: 'key', phase: 'up', code: event.code }, inputFailed)
   }
 
   const flushText = (): void => {
     const element = field.current
     if (!element || !element.value) return
-    send(id, { type: 'text', text: element.value }, inputFailed)
+    send(id, sessionId, { type: 'text', text: element.value }, inputFailed)
     element.value = ''
   }
 
@@ -387,7 +411,9 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
           room={room ?? NO_ROOM}
           focused={focused}
           glow={driven}
-          onButton={(name, phase) => send(id, { type: 'frameButton', name, phase }, inputFailed)}
+          onButton={(name, phase) =>
+            send(id, sessionId, { type: 'frameButton', name, phase }, inputFailed)
+          }
         >
           <canvas
             ref={canvas}
@@ -419,7 +445,12 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
             }}
             onWheel={(event) => {
               const { x, y } = point(event)
-              send(id, { type: 'scroll', x, y, dx: event.deltaX, dy: event.deltaY }, inputFailed)
+              send(
+                id,
+                sessionId,
+                { type: 'scroll', x, y, dx: event.deltaX, dy: event.deltaY },
+                inputFailed,
+              )
             }}
           />
           {ready && status && (
@@ -458,7 +489,7 @@ export function DeviceScreen({ device, driven }: { device: DeviceInfo; driven: b
         onPaste={(event) => {
           event.preventDefault()
           const text = event.clipboardData.getData('text/plain')
-          if (text) send(id, { type: 'text', text }, inputFailed)
+          if (text) send(id, sessionId, { type: 'text', text }, inputFailed)
         }}
       />
     </div>

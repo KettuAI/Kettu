@@ -72,17 +72,19 @@ export function startDeviceHost(
         'devices.open': (_, params) => devices.open(params.deviceId, params.sessionId),
         'devices.close': (_, params) =>
           devices.close(params.deviceId, params.sessionId, params.shutdown === true),
-        'devices.watch': (port, params) => devices.watch(port, params.deviceId),
+        'devices.watch': (port, params) => devices.watch(port, params.deviceId, params.sessionId),
         'devices.unwatch': (port, params) => devices.unwatch(port, params.deviceId),
-        'devices.ack': (port, params) => devices.ack(port, params.deviceId, params.seq),
-        'devices.input': (_, params) => devices.input(params.deviceId, params.input),
+        'devices.ack': (port, params) =>
+          devices.ack(port, params.deviceId, params.seq, params.sessionId),
+        'devices.input': (_, params) =>
+          devices.input(params.deviceId, params.input, params.sessionId),
         'devices.handBack': (_, params) => devices.handBack(params.deviceId),
         'devices.stopAgent': (_, params) => {
           running.get(params.deviceId)?.abort()
           devices.setOperator(params.deviceId, { sessionId: null, agentName: null, user: true })
         },
         'devices.screenshot': async (_, params) => {
-          const png = await devices.screenshot(params.deviceId)
+          const png = await devices.screenshot(params.deviceId, params.sessionId)
           return { png: png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) }
         },
         'devices.frame': async (_, params) => ({ frame: await devices.frame(params.deviceId) }),

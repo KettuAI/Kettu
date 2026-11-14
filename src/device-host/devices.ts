@@ -78,6 +78,7 @@ export class DeviceManager {
   private listing: Promise<DeviceInfo[]> | null = null
   private poll: ReturnType<typeof setInterval> | null = null
   private lastList = ''
+  private saving: Promise<void> = Promise.resolve()
 
   private readonly restored: Promise<void>
 
@@ -109,7 +110,9 @@ export class DeviceManager {
     const file = this.leasesFile()
     if (!file) return
     const body = JSON.stringify({ leases: Object.fromEntries(this.leases) })
-    void mkdir(path.dirname(file), { recursive: true })
+    // One write at a time, so an older one never lands last; dispose waits for the last.
+    this.saving = this.saving
+      .then(() => mkdir(path.dirname(file), { recursive: true }))
       .then(() => writeFile(`${file}.tmp`, body))
       .then(() => rename(`${file}.tmp`, file))
       .catch((error: unknown) => this.deps.log(`Cannot save device-leases.json: ${String(error)}`))
@@ -213,6 +216,7 @@ export class DeviceManager {
     this.leases.delete(id)
     this.saveLeases()
     this.operators.delete(id)
+    this.dropWatchers(id)
     const found = this.found.get(id)
     await this.stopLive(id)
     if (shutdown && found) {
@@ -234,6 +238,7 @@ export class DeviceManager {
       if (!ended.has(sessionId)) continue
       this.leases.delete(id)
       this.operators.delete(id)
+      this.dropWatchers(id)
     }
     this.saveLeases()
     this.broadcastList()
@@ -243,12 +248,20 @@ export class DeviceManager {
     return this.leases.get(id) ?? null
   }
 
-  async watch(port: string, id: DeviceId): Promise<{ screen: DeviceScreen | null }> {
+  async watch(
+    port: string,
+    id: DeviceId,
+    sessionId: string,
+  ): Promise<{ screen: DeviceScreen | null }> {
+    await this.restored
+    this.checkHolder(id, sessionId)
     // A host that just started has not listed yet.
     if (!this.found.has(id)) await this.list()
     const found = this.found.get(id)
     if (!found) throw new DeviceError('not_found', 'No such device on this host')
     const live = await this.ensureLive(found)
+    // The session may have let go of the device while its stream started.
+    this.checkHolder(id, sessionId)
     let set = this.watching.get(port)
     if (!set) this.watching.set(port, (set = new Set()))
     set.add(id)
@@ -278,11 +291,13 @@ export class DeviceManager {
     this.watching.delete(port)
   }
 
-  ack(port: string, id: DeviceId, seq: number): void {
+  ack(port: string, id: DeviceId, seq: number, sessionId: string): void {
+    this.checkHolder(id, sessionId)
     this.live.get(id)?.fanout.ack(port, seq)
   }
 
-  input(id: DeviceId, input: DeviceInput): void {
+  input(id: DeviceId, input: DeviceInput, sessionId: string): void {
+    this.checkHolder(id, sessionId)
     const live = this.live.get(id)
     if (!live) throw new DeviceError('unavailable', 'The device is not streaming')
     const operator = this.operators.get(id)
@@ -292,7 +307,9 @@ export class DeviceManager {
     live.driver.send(input)
   }
 
-  async screenshot(id: DeviceId): Promise<Uint8Array> {
+  async screenshot(id: DeviceId, sessionId: string): Promise<Uint8Array> {
+    await this.restored
+    this.checkHolder(id, sessionId)
     const found = this.found.get(id)
     if (!found) throw new DeviceError('not_found', 'No such device on this host')
     const live = await this.ensureLive(found)
@@ -344,6 +361,7 @@ export class DeviceManager {
   async dispose(): Promise<void> {
     this.setPolling(false)
     await Promise.all([...this.live.keys()].map((id) => this.stopLive(id)))
+    await this.saving
   }
 
   /** Where the tools are, which agent-device needs on its PATH as well. */
@@ -519,6 +537,21 @@ export class DeviceManager {
       if (this.live.get(id) === live && live.fanout.starved) this.wantKeyframe(id)
     }, 1_000)
     live.driver.requestKeyframe()
+  }
+
+  /** A client's screen and input reach a device only for the session that holds it. */
+  private checkHolder(id: DeviceId, sessionId: string): void {
+    if (this.leases.get(id) !== sessionId) {
+      throw new DeviceError('forbidden', 'This device is not open in this session')
+    }
+  }
+
+  /** Stops sending a device to the ports that watched it for the session that let it go. */
+  private dropWatchers(id: DeviceId): void {
+    for (const port of this.portsOf(id)) {
+      this.unwatch(port, id)
+      this.deps.emit(port, { type: 'device.stream', deviceId: id, state: 'stopped' })
+    }
   }
 
   private portsOf(id: DeviceId): string[] {

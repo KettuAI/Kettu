@@ -39,6 +39,7 @@
     "starting": "Waiting for the screen…",
     "stopped": "The stream stopped.",
     "error": "The screen could not be shown.",
+    "forbidden": "This device is open in another session, so this session cannot show or control it.",
     "shutdown": "This device is shut down.",
     "limited": "The picture updates once a second here. Open this page over https or on localhost for live video."
   },

@@ -171,22 +171,28 @@ export const validators: { [M in DeviceMethod]: (raw: unknown) => DeviceParams<M
       ...(params.shutdown !== undefined ? { shutdown: params.shutdown as boolean } : {}),
     }
   },
-  'devices.watch': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
+  'devices.watch': (raw) => {
+    const params = object(raw, ['deviceId', 'sessionId'])
+    return { deviceId: deviceId(params), sessionId: sessionId(params) }
+  },
   'devices.unwatch': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
   'devices.ack': (raw) => {
-    const params = object(raw, ['deviceId', 'seq'])
+    const params = object(raw, ['deviceId', 'sessionId', 'seq'])
     const seq = params.seq
     if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 0 || seq > MAX_SEQ) {
       throw new ValidationError('"seq" must be a sequence number')
     }
-    return { deviceId: deviceId(params), seq }
+    return { deviceId: deviceId(params), sessionId: sessionId(params), seq }
   },
   'devices.input': (raw) => {
-    const params = object(raw, ['deviceId', 'input'])
-    return { deviceId: deviceId(params), input: input(params.input) }
+    const params = object(raw, ['deviceId', 'sessionId', 'input'])
+    return { deviceId: deviceId(params), sessionId: sessionId(params), input: input(params.input) }
   },
   'devices.handBack': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
   'devices.stopAgent': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
-  'devices.screenshot': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
+  'devices.screenshot': (raw) => {
+    const params = object(raw, ['deviceId', 'sessionId'])
+    return { deviceId: deviceId(params), sessionId: sessionId(params) }
+  },
   'devices.frame': (raw) => ({ deviceId: deviceId(object(raw, ['deviceId'])) }),
 }

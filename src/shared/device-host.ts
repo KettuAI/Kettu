@@ -140,17 +140,29 @@ export interface DeviceContract {
     params: { deviceId: DeviceId; sessionId: string; shutdown?: boolean }
     result: void
   }
-  /** Starts sending the device's frames to this port, starting at a keyframe. */
-  'devices.watch': { params: { deviceId: DeviceId }; result: { screen: DeviceScreen | null } }
+  /**
+   * Starts sending the device's frames to this port, starting at a keyframe. Watching, `ack`,
+   * `input` and `screenshot` are served only for the session that holds the device.
+   */
+  'devices.watch': {
+    params: { deviceId: DeviceId; sessionId: string }
+    result: { screen: DeviceScreen | null }
+  }
   'devices.unwatch': { params: { deviceId: DeviceId }; result: void }
   /** The client has decoded frames up to `seq`; the host sends more only as these arrive. */
-  'devices.ack': { params: { deviceId: DeviceId; seq: number }; result: void }
-  'devices.input': { params: { deviceId: DeviceId; input: DeviceInput }; result: void }
+  'devices.ack': { params: { deviceId: DeviceId; sessionId: string; seq: number }; result: void }
+  'devices.input': {
+    params: { deviceId: DeviceId; sessionId: string; input: DeviceInput }
+    result: void
+  }
   /** Hands the device back to the agent after the user took over. */
   'devices.handBack': { params: { deviceId: DeviceId }; result: void }
   /** Cancels the agent's current call and gives the user control. */
   'devices.stopAgent': { params: { deviceId: DeviceId }; result: void }
-  'devices.screenshot': { params: { deviceId: DeviceId }; result: { png: ArrayBuffer } }
+  'devices.screenshot': {
+    params: { deviceId: DeviceId; sessionId: string }
+    result: { png: ArrayBuffer }
+  }
   /** The frame to draw the screen in, or null where the client draws a plain one. */
   'devices.frame': { params: { deviceId: DeviceId }; result: { frame: DeviceFrame | null } }
 }

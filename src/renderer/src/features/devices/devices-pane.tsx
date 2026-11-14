@@ -123,7 +123,7 @@ export function DevicesPane({ panel, maximized }: { panel: string; maximized: bo
           // The host refuses to stream a device until it has booted.
           <Starting />
         ) : (
-          <Stage device={selected} />
+          <Stage device={selected} sessionId={sessionId} />
         )}
       </>
     )
@@ -203,7 +203,7 @@ function DeviceLogo({ device, size = 14 }: { device: DeviceInfo; size?: number }
 }
 
 /** The device on its stage: who drives it on top, the screen, and its hardware buttons under it. */
-function Stage({ device }: { device: DeviceInfo }) {
+function Stage({ device, sessionId }: { device: DeviceInfo; sessionId: string }) {
   const { t } = useTranslation('devices')
   const operator = device.operator
   const agentId = useSessionsStore((s) =>
@@ -214,7 +214,12 @@ function Stage({ device }: { device: DeviceInfo }) {
   )
   return (
     <div className="kp-stage">
-      <DeviceScreen key={device.id} device={device} driven={!!operator && !operator.user} />
+      <DeviceScreen
+        key={device.id}
+        device={device}
+        sessionId={sessionId}
+        driven={!!operator && !operator.user}
+      />
       {operator && (
         <DrivingPill
           agent={agentId}
@@ -243,6 +248,7 @@ function Stage({ device }: { device: DeviceInfo }) {
                       void window.kettu.devices
                         .request('devices.input', {
                           deviceId: device.id,
+                          sessionId,
                           input: { type: 'button', button },
                         })
                         .catch(() => undefined)
