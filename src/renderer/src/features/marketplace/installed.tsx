@@ -24,6 +24,7 @@ import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
 import { errorMessage } from '@renderer/lib/host'
+import { currentLocale } from '@renderer/lib/i18n'
 import { usableAgents } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { busyKey } from '@renderer/stores/marketplace'
@@ -49,6 +50,9 @@ import {
   type Listing,
 } from './model'
 import { ItemRow, MoreButton, QuietNote, SkeletonRows } from './rows'
+import { sopMatches } from './sop-model'
+import { useSops } from './sop-actions'
+import { InstalledSops } from './sops'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
 import { PlainTile } from './tiles'
 
@@ -70,11 +74,12 @@ export function InstalledView({ query }: { query: string }) {
   const plugins = useInstalledPlugins(query)
   const own = useOwn(query)
   const markets = useMarketplaces(query)
+  const sops = useSops().entries.filter((entry) => sopMatches(entry, query, currentLocale()))
   const searching = query.trim() !== ''
   const nothing =
     searching &&
     !matchesText(['Kettu'], query) &&
-    servers.length + skills.length + (plugins?.length ?? 0) === 0 &&
+    servers.length + skills.length + sops.length + (plugins?.length ?? 0) === 0 &&
     own.folders.length + own.places.length + markets.length === 0
   if (nothing) {
     return (
@@ -108,6 +113,7 @@ export function InstalledView({ query }: { query: string }) {
           </div>
         )}
       </Section>
+      <InstalledSops query={query} index={3} />
       <PluginsSection plugins={plugins} searching={searching} />
       <OwnSection own={own} searching={searching} />
       <MarketplacesSection markets={markets} />

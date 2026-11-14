@@ -1,19 +1,20 @@
 {
   "page": {
     "title": "Marketplace",
-    "description": "Plugins, skills and MCP servers for your agents, from the makers of the tools you use and from the community.",
-    "descriptionThisMac": "Plugins, skills and MCP servers for the agents on this Mac, from the makers of the tools you use and from the community.",
-    "descriptionThisComputer": "Plugins, skills and MCP servers for the agents on this computer, from the makers of the tools you use and from the community.",
-    "descriptionOn": "Plugins, skills and MCP servers for the agents on {{host}}, from the makers of the tools you use and from the community.",
-    "descriptionAllMac": "With all hosts shown, this page manages this Mac. Choose one host to manage its plugins, skills and MCP servers.",
-    "descriptionAllComputer": "With all hosts shown, this page manages this computer. Choose one host to manage its plugins, skills and MCP servers.",
+    "description": "Plugins, skills, MCP servers and workflows for your agents, from the makers of the tools you use and from the community.",
+    "descriptionThisMac": "Plugins, skills, MCP servers and workflows for the agents on this Mac, from the makers of the tools you use and from the community.",
+    "descriptionThisComputer": "Plugins, skills, MCP servers and workflows for the agents on this computer, from the makers of the tools you use and from the community.",
+    "descriptionOn": "Plugins, skills, MCP servers and workflows for the agents on {{host}}, from the makers of the tools you use and from the community.",
+    "descriptionAllMac": "With all hosts shown, this page manages this Mac. Choose one host to manage its plugins, skills, MCP servers and workflows.",
+    "descriptionAllComputer": "With all hosts shown, this page manages this computer. Choose one host to manage its plugins, skills, MCP servers and workflows.",
     "search": "Search the Marketplace",
     "tabs": {
       "all": "All",
       "mcp": "MCP servers",
       "installed": "Installed",
       "plugins": "Plugins",
-      "skills": "Skills"
+      "skills": "Skills",
+      "sop": "Workflows"
     }
   },
   "add": {
@@ -26,7 +27,11 @@
     "skillGithub": "A skill from GitHub…",
     "skillGithubLine": "A repository, or a folder in one",
     "skillFolder": "A skill from a folder…",
-    "skillFolderLine": "A folder with a SKILL.md"
+    "skillFolderLine": "A folder with a SKILL.md",
+    "sopGithub": "A workflow from GitHub…",
+    "sopGithubLine": "A file in a GitHub repository",
+    "sopFile": "A workflow from a file…",
+    "sopFileLine": "A .yaml file on this computer"
   },
   "sections": {
     "featured": "Featured",
@@ -42,7 +47,8 @@
     "from": "From {{publisher}}",
     "plugins": "Plugins",
     "skills": "Skills",
-    "mcp": "MCP servers"
+    "mcp": "MCP servers",
+    "sop": "Workflows"
   },
   "row": {
     "install": "Install",
@@ -172,7 +178,8 @@
     "ownNote": "The skills and MCP servers each agent keeps itself. Kettu shows them; change them in the agent.",
     "mcpConfig": "MCP configuration",
     "offIn": "Off in {{agents}}",
-    "notCreated": "{{path}} · not created yet"
+    "notCreated": "{{path}} · not created yet",
+    "sops": "Workflows"
   },
   "kettu": {
     "note": "Artifacts, sessions and the browser reach every agent through Kettu’s own server.",
@@ -307,7 +314,8 @@
   "kind": {
     "mcp": "MCP",
     "plugin": "Plugin",
-    "skill": "Skill"
+    "skill": "Skill",
+    "sop": "Workflow"
   },
   "notes": {
     "plugins": "Couldn’t list the plugins: {{error}}",
@@ -406,5 +414,175 @@
     "reconnect": "Reconnect",
     "disconnect": "Disconnect",
     "remove": "Remove…"
+  },
+  "sop": {
+    "intro": "A workflow is a flowchart that has several agents carry out one piece of work. Who does each step is picked when it starts, by the agent handing off to it, unless you pin one. The workflows you can use show up in New session, and agents can suggest them in a conversation.",
+    "by": {
+      "kettu": "Kettu",
+      "github": "{{owner}} · Community",
+      "file": "From a file",
+      "agent": "Made by an agent",
+      "you": "Written by you"
+    },
+    "yours": "Yours",
+    "state": {
+      "pending": "Needs approval",
+      "changed": "Changed",
+      "problems": "Has problems",
+      "unreadable": "Can’t be read"
+    },
+    "stateTitle": {
+      "pending": "It can start tasks once you approve it.",
+      "changed": "It changed since you approved it; approve it again to use it.",
+      "problems": "It can start tasks once its problems are fixed.",
+      "unreadable": "Its file doesn’t read as a workflow."
+    },
+    "groups": {
+      "official": "Official",
+      "added": "Added from GitHub",
+      "addedOrFile": "Added from GitHub or a file",
+      "yours": "Yours"
+    },
+    "yoursEmpty": "None yet. Ask an agent in any session to write one for you; it waits here for your approval.",
+    "readFailed": "Couldn’t read the workflows: {{error}}",
+    "readFailedTitle": "Couldn’t read the workflows",
+    "missingTitle": "This workflow isn’t here",
+    "missingText": "It may have been deleted.",
+    "related": {
+      "official": "More official workflows",
+      "added": "More workflows you added",
+      "yours": "More of yours"
+    },
+    "add": {
+      "rowTitle": "Add a workflow someone shared",
+      "rowLine": "Paste a GitHub file URL or choose a .yaml file",
+      "rowButton": "Add…",
+      "title": "Add workflow",
+      "description": "Paste the address of a workflow file on GitHub, or choose a .yaml file. It can start tasks once you approve it.",
+      "url": "GitHub file URL",
+      "urlHint": "The file’s page or its raw address on GitHub.",
+      "urlInvalid": "Enter the address of a file in a GitHub repository.",
+      "urlPlaceholder": "https://github.com/owner/repo/blob/main/workflow.yaml",
+      "chooseFile": "Choose a file…",
+      "submit": "Add",
+      "failed": "Couldn’t add the workflow: {{error}}",
+      "notYaml": "Choose a .yaml or .yml file.",
+      "tooLarge": "The file is larger than {{size}} KB."
+    },
+    "update": {
+      "check": "Check for update",
+      "checking": "Checking…",
+      "changed": "{{name}} changed; approve the new version to use it",
+      "same": "{{name}} is up to date",
+      "failed": "Couldn’t check {{name}} for an update: {{error}}"
+    },
+    "remove": {
+      "menu": "Delete…",
+      "title": "Delete {{name}}?",
+      "body": "Its file and its pins are removed. Tasks already running through it carry on with their own copy.",
+      "confirm": "Delete"
+    },
+    "approval": {
+      "title": "You can use this workflow once you approve it",
+      "agentTitle": "An agent made this workflow. You can use it once you approve it.",
+      "changedTitle": "This workflow changed since you approved it",
+      "changedText": "It can’t start tasks until you approve this version. Look at each step and its file again, then decide.",
+      "agentText": "{{agent}} wrote it with create_sop in a session.",
+      "agentInBefore": "{{agent}} wrote it with create_sop in the session “",
+      "agentInAfter": "”.",
+      "untitled": "Untitled session",
+      "githubText": "Added from {{repo}} on GitHub.",
+      "fileText": "Added from {{file}}.",
+      "userText": "A file put in this host’s workflow folder.",
+      "check": "Look at what each step does, the tools it uses and where it waits for you, then decide. You approve this version; any later change needs approval again.",
+      "approve": "Approve",
+      "delete": "Delete",
+      "fileNote": "The version you approve",
+      "notRead": "The file is still being read.",
+      "changedWhileShown": "The file changed while you were looking at it. This is the new version; look at it again before you approve.",
+      "failed": "Couldn’t approve it: {{error}}"
+    },
+    "file": {
+      "title": "File",
+      "show": "Show",
+      "hide": "Hide",
+      "failed": "Couldn’t read the file: {{error}}",
+      "gone": "The file is gone."
+    },
+    "problems": {
+      "title_one": "{{count}} problem keeps it from starting tasks",
+      "title_other": "{{count}} problems keep it from starting tasks",
+      "unreadable": "The file doesn’t read as a workflow"
+    },
+    "from": {
+      "official": "Kettu’s workflows",
+      "agent": "Made by {{agent}}",
+      "you": "Written by you"
+    },
+    "facts": {
+      "runBy": "Steps run by",
+      "added": "Added",
+      "steps": "Steps",
+      "stepsWait_one": "{{steps}} · {{count}} waits for you",
+      "stepsWait_other": "{{steps}} · {{count}} wait for you",
+      "sendBack": "Sends back",
+      "sendBackLimit_one": "Up to {{count}} time each",
+      "sendBackLimit_other": "Up to {{count}} times each"
+    },
+    "flow": {
+      "title": "Flow",
+      "back_one": "{{from}} can send it back to {{to}} ({{outcome}}), up to {{count}} time.",
+      "back_other": "{{from}} can send it back to {{to}} ({{outcome}}), up to {{count}} times.",
+      "dropped": "{{from}} can end the task: {{outcome}}."
+    },
+    "you": "You",
+    "youReview": "You review",
+    "end": {
+      "done": "Done",
+      "dropped": "Dropped"
+    },
+    "auto": "Auto",
+    "steps": {
+      "title": "Steps",
+      "autoAgents": "Agents Auto can pick",
+      "step": "Step",
+      "forPicker": "For whoever picks",
+      "who": "Who does it",
+      "more": "More",
+      "less": "Less",
+      "outcomes": "Outcomes",
+      "upTo_one": "up to {{count}} time",
+      "upTo_other": "up to {{count}} times",
+      "yourStep": "Your step: Kettu asks you and waits for your answer",
+      "first": "First step: the agent you start with",
+      "reviews": "Reviews {{steps}}; never the same agent and model",
+      "hint": "“{{hint}}”",
+      "uses": "Uses {{tools}}"
+    },
+    "pin": {
+      "afterApproval": "Pin once it’s approved",
+      "notStepAgent": "Only Claude Code and Codex agents can do a step.",
+      "failed": "Couldn’t pin it: {{error}}",
+      "autoLabel": "Who does {{step}}: Auto",
+      "backToAuto": "Back to Auto",
+      "pinnedLabel": "Who does {{step}}: pinned"
+    },
+    "needs": {
+      "title": "It lets agents",
+      "titlePending": "Once approved, it lets agents",
+      "work": "Edit files and run commands in the task’s folder",
+      "tools": "Use these MCP servers and Skills",
+      "wait": "Stop and wait for you"
+    },
+    "side": {
+      "none": "None",
+      "you": "You",
+      "kind": "Kind",
+      "file": "File",
+      "mcp": "MCP servers",
+      "skills": "Skills",
+      "madeIn": "Made in",
+      "sessionGone": "A session that is gone"
+    }
   }
 }

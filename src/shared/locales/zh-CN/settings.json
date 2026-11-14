@@ -934,7 +934,27 @@
       }
     },
     "signInCopied": "当前没有打开项目，已复制登录命令。",
-    "signInCopyFailed": "当前没有打开项目，也无法复制登录命令。"
+    "signInCopyFailed": "当前没有打开项目，也无法复制登录命令。",
+    "sop": {
+      "group": "工作流",
+      "keywords": "工作流 建议 Auto 选人 步骤 需求 流程",
+      "suggest": {
+        "name": "Agent 能建议工作流",
+        "description": "在普通会话里，Agent 觉得这件事需要工作流时会提出来，你确认后才开始。关掉后，Agent 看不到这个功能。"
+      },
+      "auto": {
+        "group": "Auto 能选的 Agent",
+        "note": "步骤是 Auto 时，交棒给它的 Agent 从这些里选一个，连同模型和推理强度。你仍可以在 Marketplace 里工作流的页面上把其中任何一个固定到某一步。",
+        "apiKeys": "只有 Claude Code 和 Codex 的 Agent 能做步骤，所以别的 Agent 不在这里。用 API key 登录的 Agent 默认关着，因为它做的每一步都按 token 付费。",
+        "noneTitle": "没有 Claude Code 或 Codex 的 Agent",
+        "noneHint": "步骤由 Claude Code 和 Codex 来做。添加其中一个，Auto 才能选它。",
+        "rowName": "Auto 能选 {{agent}}",
+        "switch": "Auto 能选 {{agent}}",
+        "offByDefault": "默认关：按 token 付费",
+        "reset": "恢复默认",
+        "readFailed": "无法读取工作流设置"
+      }
+    }
   },
   "about": {
     "version": {

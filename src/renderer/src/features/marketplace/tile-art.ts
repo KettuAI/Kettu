@@ -10,6 +10,7 @@ import {
   BookOpen01Icon,
   BrowserIcon,
   Briefcase01Icon,
+  BugIcon,
   Calculator01Icon,
   CheckListIcon,
   CodeIcon,
@@ -18,8 +19,11 @@ import {
   Database01Icon,
   Doc01Icon,
   FlashIcon,
+  Flowchart01Icon,
+  GitForkIcon,
   GitPullRequestIcon,
   Image01Icon,
+  LicenseDraftIcon,
   Location01Icon,
   Mail01Icon,
   Message01Icon,
@@ -40,6 +44,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import type { PluginHarness } from '@shared/marketplace'
+import type { SopSource } from '@shared/sop'
 import { brandMark, type Mark } from './brand-marks'
 import { pluginName } from './model'
 
@@ -48,6 +53,7 @@ export type TileSubject =
   | { kind: 'mcp'; id: string; brand: string | null }
   | { kind: 'plugin'; harness: PluginHarness; id: string; category: string | null }
   | { kind: 'skill'; name: string }
+  | { kind: 'sop'; id: string; source: SopSource }
 
 export type TileSize = 'small' | 'row' | 'big'
 
@@ -69,6 +75,12 @@ export const pluginSubject = (plugin: {
 })
 
 export const skillSubject = (name: string): TileSubject => ({ kind: 'skill', name })
+
+export const sopSubject = (sop: { id: string; source: SopSource }): TileSubject => ({
+  kind: 'sop',
+  id: sop.id,
+  source: sop.source,
+})
 
 interface Glyph {
   icon: IconSvgElement
@@ -139,6 +151,23 @@ const CATEGORIES: [RegExp, IconSvgElement][] = [
   [/develop|engineer|code/, CodeIcon],
 ]
 
+// Kettu's own SOPs, on the fox's tile.
+const OFFICIAL_SOPS: Record<string, IconSvgElement> = {
+  'feature-development': Flowchart01Icon,
+  'fix-a-bug': BugIcon,
+  'frontend-backend': GitForkIcon,
+  'technical-design': LicenseDraftIcon,
+}
+
+// The user's SOPs, colored by how they came.
+const SOP_COLOR: Record<SopSource, string> = {
+  official: 'var(--brand-kettu-tile)',
+  github: 'var(--tile-sky)',
+  file: 'var(--tile-slate)',
+  agent: 'var(--tile-cyan)',
+  user: 'var(--tile-violet)',
+}
+
 const HARNESS_COLOR: Record<PluginHarness, string> = {
   'claude-code': 'var(--brand-claude)',
   codex: 'var(--brand-codex-3)',
@@ -159,6 +188,10 @@ export function tileArt(subject: TileSubject): Art {
     return glyph
       ? { type: 'glyph', icon: glyph.icon, color: glyph.color ?? 'var(--tile-slate)' }
       : { type: 'glyph', icon: PlugSocketIcon, color: 'var(--tile-slate)' }
+  }
+  if (subject.kind === 'sop') {
+    const icon = subject.source === 'official' ? OFFICIAL_SOPS[subject.id] : undefined
+    return { type: 'glyph', icon: icon ?? Flowchart01Icon, color: SOP_COLOR[subject.source] }
   }
   if (subject.kind === 'skill') {
     const glyph = SKILLS[subject.name]

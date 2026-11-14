@@ -54,6 +54,7 @@ import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { PluginListing } from './plugins'
 import { AddButton, ItemRow, OfficialBadge } from './rows'
 import { SkillListing } from './skills'
+import { SopListing } from './sop-listing'
 import { serverSubject } from './tile-art'
 import { ItemTile } from './tiles'
 
@@ -68,7 +69,7 @@ function leave(tab: MarketplaceTab): void {
   backTo({ kind: 'marketplace', ...(tab !== 'all' ? { tab } : {}) }, () => openMarketplace({ tab }))
 }
 
-/** A listing by its view's `item`: an MCP server's, a plugin's or a skill's. */
+/** A listing by its view's `item`: an MCP server's, a plugin's, a skill's or an SOP's. */
 export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }) {
   const ref = parseItem(item)
   const back = () => leave(tab)
@@ -76,6 +77,7 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
     return <PluginListing harness={ref.harness} id={ref.id} tab={tab} back={back} />
   }
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
+  if (ref?.kind === 'sop') return <SopListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'mcp') return <McpListing id={ref.id} tab={tab} back={back} />
   return (
     <ListingFrame back={back}>

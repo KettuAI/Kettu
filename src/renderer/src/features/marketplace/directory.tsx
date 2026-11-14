@@ -1,9 +1,11 @@
-// The Marketplace's directory: its tabs, search and Add over sections of plugins, skills and MCP
-// servers. Each source fills its sections as it answers; the rest show at once.
+// The Marketplace's directory: its tabs, search and Add over sections of plugins, skills, MCP
+// servers and SOPs. Each source fills its sections as it answers; the rest show at once.
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Add01Icon,
+  File02Icon,
+  Flowchart01Icon,
   Folder01Icon,
   GithubIcon,
   PlugSocketIcon,
@@ -21,6 +23,7 @@ import type {
   MarketSkills,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
+import type { SopEntry } from '@shared/sop'
 import {
   Dropdown,
   EmptyState,
@@ -30,6 +33,7 @@ import {
 } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { mediumAgo } from '@renderer/lib/format'
+import { currentLocale } from '@renderer/lib/i18n'
 import { isMac, isWeb } from '@renderer/lib/platform'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { SEARCH_MAX, SEARCH_MIN, type MarketSearchState } from '@renderer/stores/marketplace'
@@ -63,9 +67,18 @@ import {
   SkeletonSection,
 } from './rows'
 import { SkillRow } from './skills'
-import { pluginSubject, serverSubject, skillSubject, type TileSubject } from './tile-art'
+import { sopMatches, sopName } from './sop-model'
+import { addSopFromFile, retrySops, useSops } from './sop-actions'
+import { AddSopDialog, SopRow, SopSections } from './sops'
+import {
+  pluginSubject,
+  serverSubject,
+  skillSubject,
+  sopSubject,
+  type TileSubject,
+} from './tile-art'
 
-const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'installed']
+const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'sop', 'installed']
 
 /** Rows a section shows before it folds the rest into "… and N more", and how many more a click shows. */
 const SECTION_ROWS = 6
@@ -88,6 +101,7 @@ type Entry =
   | { kind: 'mcp'; key: string; title: string; subject: TileSubject; server: CatalogServer }
   | { kind: 'plugin'; key: string; title: string; subject: TileSubject; plugin: CatalogPlugin }
   | { kind: 'skill'; key: string; title: string; subject: TileSubject; skill: CatalogSkill }
+  | { kind: 'sop'; key: string; title: string; subject: TileSubject; sop: SopEntry }
 
 interface Section {
   id: string
@@ -120,6 +134,14 @@ const skillEntry = (skill: CatalogSkill): Entry => ({
   skill,
 })
 
+const sopEntry = (sop: SopEntry): Entry => ({
+  kind: 'sop',
+  key: itemKey({ kind: 'sop', id: sop.id }),
+  title: sopName(sop, currentLocale()),
+  subject: sopSubject(sop),
+  sop,
+})
+
 /** The lists taken in turn, one item from each, so a section mixes its kinds. */
 function interleave<T>(...lists: T[][]): T[] {
   const out: T[] = []
@@ -136,6 +158,8 @@ interface Sources {
   pluginsPending: boolean
   skills: MarketSkills | null
   skillsPending: boolean
+  sops: SopEntry[]
+  sopsPending: boolean
   search: MarketSearchState | null
 }
 
@@ -148,9 +172,31 @@ function useSources(): Sources {
   const skills = useMarketplaceStore((s) => s.skills)
   const skillsPending = useMarketplaceStore((s) => !s.skills && !s.skillsError)
   const search = useMarketplaceStore((s) => s.search)
+  const { entries: sops, loaded: sopsLoaded } = useSops()
+  const sopsPending = !sopsLoaded
   return useMemo(
-    () => ({ catalog, catalogPending, plugins, pluginsPending, skills, skillsPending, search }),
-    [catalog, catalogPending, plugins, pluginsPending, skills, skillsPending, search],
+    () => ({
+      catalog,
+      catalogPending,
+      plugins,
+      pluginsPending,
+      skills,
+      skillsPending,
+      sops,
+      sopsPending,
+      search,
+    }),
+    [
+      catalog,
+      catalogPending,
+      plugins,
+      pluginsPending,
+      skills,
+      skillsPending,
+      sops,
+      sopsPending,
+      search,
+    ],
   )
 }
 
@@ -186,7 +232,7 @@ function sectionTitle(id: string, t: TFunction<'marketplace'>): string {
   }
 }
 
-/** All without a query: Featured, From Anthropic and For Codex, then the MCP categories. */
+/** All without a query: Featured, From Anthropic, For Codex and SOP, then the MCP categories. */
 function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
   const plugins = [...(src.plugins?.catalog ?? [])].sort(byInstalls)
   const skills = src.skills?.catalog ?? []
@@ -225,6 +271,12 @@ function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
       title: t('sections.codex'),
       entries: plugins.filter((p) => p.harness === 'codex').map(pluginEntry),
       pending: src.pluginsPending ? 4 : 0,
+    },
+    {
+      id: 'sops',
+      title: t('sections.sop'),
+      entries: src.sops.map(sopEntry),
+      pending: src.sopsPending ? 2 : 0,
     },
     ...mcpSections(src, t, 'featured'),
   ]
@@ -312,6 +364,14 @@ function foundSections(
       pending: src.skillsPending ? 2 : 0,
     })
   }
+  if (tab === 'all') {
+    sections.push({
+      id: 'found-sops',
+      title: t('sections.sop'),
+      entries: src.sops.filter((s) => sopMatches(s, query, currentLocale())).map(sopEntry),
+      pending: src.sopsPending ? 2 : 0,
+    })
+  }
   if (tab === 'all' || tab === 'mcp') {
     if (registry !== null) {
       const search = src.search?.query === registry ? src.search : null
@@ -340,7 +400,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   const scope = useHostScope()
   const { useMarketplaceStore } = scope
   const query = useMarketplaceStore((s) => s.query)
-  const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | null>(null)
+  const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | 'sop' | null>(null)
   const namesHosts = useNamesHosts()
   const windowHost = useWindowHost()
   const hostName = useHostName()
@@ -349,6 +409,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     plugins: t('page.tabs.plugins'),
     skills: t('page.tabs.skills'),
     mcp: t('page.tabs.mcp'),
+    sop: t('page.tabs.sop'),
     installed: t('page.tabs.installed'),
   }
   const q = query.trim()
@@ -435,6 +496,18 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
                   icon: PlugSocketIcon,
                   onSelect: () => setDialog('mcp'),
                 },
+                {
+                  label: t('add.sopGithub'),
+                  description: t('add.sopGithubLine'),
+                  icon: Flowchart01Icon,
+                  onSelect: () => setDialog('sop'),
+                },
+                {
+                  label: t('add.sopFile'),
+                  description: t('add.sopFileLine'),
+                  icon: File02Icon,
+                  onSelect: () => addSopFromFile(scope),
+                },
               ]}
               trigger={({ open, toggle }) => (
                 <Button
@@ -454,6 +527,10 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           <div key="installed">
             <InstalledView query={filter} />
           </div>
+        ) : tab === 'sop' ? (
+          <div key={`sop|${filter}`}>
+            <SopSections query={filter} />
+          </div>
         ) : (
           <div key={`${tab}|${filter}`}>
             <Sections tab={tab} query={filter} registry={registry} />
@@ -471,6 +548,10 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
         <AddSkillDialog
           open={dialog === 'skill'}
           onOpenChange={(open) => setDialog(open ? 'skill' : null)}
+        />
+        <AddSopDialog
+          open={dialog === 'sop'}
+          onOpenChange={(open) => setDialog(open ? 'sop' : null)}
         />
       </MarketAway>
     </div>
@@ -560,6 +641,9 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
   if (entry.kind === 'skill') {
     return <SkillRow skill={entry.skill} tab={tab} showKind={showKind} fresh={fresh} />
   }
+  if (entry.kind === 'sop') {
+    return <SopRow entry={entry.sop} tab={tab} showKind={showKind} fresh={fresh} />
+  }
   const server = entry.server
   const open = () => openMarketplace({ item: entry.key, tab })
   return (
@@ -585,6 +669,8 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
   const pluginsError = useMarketplaceStore((s) => s.pluginsError)
   const skillsError = useMarketplaceStore((s) => s.skillsError)
   const store = useMarketplaceStore.getState
+  const scope = useHostScope()
+  const sops = useSops()
   const notes: ReactNode[] = []
   const plugins = tab === 'all' || tab === 'plugins'
   const skills = tab === 'all' || tab === 'skills'
@@ -621,6 +707,13 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
           : fetchedAt === null
             ? t('catalog.stale')
             : t('catalog.staleSince', { ago: mediumAgo(fetchedAt) })}
+      </QuietNote>,
+    )
+  }
+  if (tab === 'all' && sops.error && sops.entries.length === 0) {
+    notes.push(
+      <QuietNote key="sops" action={<Retry onRetry={() => retrySops(scope)} />}>
+        {t('sop.readFailed', { error: sops.error })}
       </QuietNote>,
     )
   }
