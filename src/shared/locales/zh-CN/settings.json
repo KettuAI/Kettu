@@ -1742,48 +1742,36 @@
       "importedSkipped_other": "导入了 {{count}} 条，跳过了 {{skipped}} 条重复的"
     },
     "entry": {
-      "global": "全局记忆",
-      "project": "项目记忆 · {{project}}",
-      "edit": "编辑…",
-      "body": "正文",
+      "edit": "编辑",
       "noBody": "只有标题和摘要。",
-      "details": "详情",
-      "writtenBy": "写它的",
-      "session": "会话",
-      "openSession": "回到会话",
-      "sessionGone": "已经不在了",
-      "created": "创建于",
-      "updated": "最后修改",
       "gone": "这条记忆已经不在了。",
       "move": {
-        "name": "移到全局",
-        "description": "每个会话都会用到它，不只是这个项目的。",
         "button": "移到全局",
         "done": "已移到全局记忆"
       },
       "remove": {
-        "name": "删除这一条",
-        "description": "Agent 之后不会再拿到它。",
         "button": "删除…",
         "title": "删除“{{title}}”？",
         "body": "它会从 Kettu 的记忆里删掉，Agent 之后不会再拿到它。",
         "confirm": "删除",
         "done": "已删除"
-      }
+      },
+      "more": "更多",
+      "globalTag": "全局",
+      "written": "{{when}}写下",
+      "changed": "{{when}}改过",
+      "openSession": "回到写它的会话：{{title}}"
     },
     "editor": {
-      "addGlobal": "添加到全局记忆",
-      "addProject": "添加到 {{project}} 的记忆",
-      "edit": "编辑记忆",
-      "addBody": "每个 Agent 开会话时都会拿到它。",
       "title": "标题",
       "titlePlaceholder": "简短的名字，例如“用 pnpm”",
       "description": "摘要",
-      "descriptionHint": "一行，Agent 在 Kettu 的记忆列表里看到的就是它。",
       "body": "正文",
-      "bodyHint": "用 Markdown 写。一条只写一件事，并写明为什么。",
       "save": "保存",
-      "add": "添加"
+      "descriptionPlaceholder": "一行摘要，Agent 在记忆列表里看到的就是它",
+      "bodyPlaceholder": "用 Markdown 写。一条只写一件事，并写明为什么。",
+      "markdown": "Markdown",
+      "keys": "Esc 取消 · {{mod}}Enter 保存"
     },
     "errors": {
       "secret": "这里面像是有密钥或密码之类的机密，记忆不保存这些。",
@@ -1792,7 +1780,12 @@
       "gone": "这次写入已经不能撤销了。",
       "off": "记忆已关上。",
       "notFound": "这条记忆已经不在了。"
-    }
+    },
+    "search": {
+      "placeholder": "搜索记忆",
+      "none": "没有和“{{query}}”匹配的记忆"
+    },
+    "showMore": "再显示 {{count}} 条"
   },
   "devices": {
     "groups": {

@@ -1765,48 +1765,36 @@
       "importedSkipped_other": "Imported {{count}} memories and skipped {{skipped}} already in Kettu’s memory"
     },
     "entry": {
-      "global": "Global memory",
-      "project": "Project memory · {{project}}",
-      "edit": "Edit…",
-      "body": "Content",
+      "edit": "Edit",
       "noBody": "Only the title and summary.",
-      "details": "Details",
-      "writtenBy": "Written by",
-      "session": "Session",
-      "openSession": "Go to session",
-      "sessionGone": "No longer here",
-      "created": "Created",
-      "updated": "Last changed",
       "gone": "This memory entry is no longer here.",
       "move": {
-        "name": "Move to global",
-        "description": "Use it in every session, not only in this project’s.",
         "button": "Move to global",
         "done": "Moved to global memory"
       },
       "remove": {
-        "name": "Delete this entry",
-        "description": "Agents are not handed it again.",
         "button": "Delete…",
         "title": "Delete “{{title}}”?",
         "body": "It is removed from Kettu’s memory, and agents are not handed it again.",
         "confirm": "Delete",
         "done": "Deleted"
-      }
+      },
+      "more": "More",
+      "globalTag": "Global",
+      "written": "Written {{when}}",
+      "changed": "Changed {{when}}",
+      "openSession": "Go to the session that wrote it: {{title}}"
     },
     "editor": {
-      "addGlobal": "Add to global memory",
-      "addProject": "Add to {{project}}’s memory",
-      "edit": "Edit memory",
-      "addBody": "Every agent is handed it when a session starts.",
       "title": "Title",
       "titlePlaceholder": "A short name, such as “Prefers pnpm”",
       "description": "Summary",
-      "descriptionHint": "One line, what agents see in the list of what Kettu remembers.",
       "body": "Content",
-      "bodyHint": "Markdown. One thing per entry, with why it holds.",
       "save": "Save",
-      "add": "Add"
+      "descriptionPlaceholder": "One line, which agents see in the memory list",
+      "bodyPlaceholder": "Write in Markdown. One thing per entry, with why.",
+      "markdown": "Markdown",
+      "keys": "Esc to cancel · {{mod}}Enter to save"
     },
     "errors": {
       "secret": "This looks like it holds a secret, such as a key or a password. Memory never keeps those.",
@@ -1815,7 +1803,13 @@
       "gone": "This write can no longer be undone.",
       "off": "Memory is turned off.",
       "notFound": "This memory entry is no longer here."
-    }
+    },
+    "search": {
+      "placeholder": "Search memory",
+      "none": "No memory matches “{{query}}”"
+    },
+    "showMore_one": "Show {{count}} more",
+    "showMore_other": "Show {{count}} more"
   },
   "devices": {
     "groups": {
