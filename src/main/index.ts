@@ -305,10 +305,9 @@ async function start(): Promise<void> {
   const browserViews = new BrowserViews({
     window: currentWindow,
     send: (state) => broadcast('browser:state', state),
-    dialogOpened: (sessionId, type, accepted) =>
-      browserTools?.dialogOpened(sessionId, type, accepted),
+    dialogOpened: (tabId, type, accepted) => browserTools?.dialogOpened(tabId, type, accepted),
     control: (sessionId) => browserTools?.control(sessionId) ?? IDLE_CONTROL,
-    isInjecting: (sessionId) => browserTools?.isInjecting(sessionId) ?? false,
+    isInjecting: (tabId) => browserTools?.isInjecting(tabId) ?? false,
     overlayRequest: (sessionId, request) => {
       if (request.type === 'take-over') browserTools?.takeOver(sessionId)
       else if (request.type === 'hand-back') browserTools?.handBack(sessionId)
@@ -317,8 +316,9 @@ async function start(): Promise<void> {
     settings: () => settings.get(),
     themes: () => themes.state(),
     systemLocale,
-    created: (sessionId, contents) => browserTools?.watch(sessionId, contents),
-    closed: (sessionId) => browserTools?.forget(sessionId),
+    created: (tabId, contents) => browserTools?.watch(tabId, contents),
+    closed: (tabId) => browserTools?.forgetTab(tabId),
+    ended: (sessionId) => browserTools?.forget(sessionId),
     failed: (sessionId, kind, message) => browserTools?.pageFailed(sessionId, kind, message),
     origins: browserOrigins,
     originAsked: (request) => {

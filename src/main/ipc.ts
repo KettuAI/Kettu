@@ -221,6 +221,14 @@ function sessionId(value: unknown): string {
   return value
 }
 
+/** A browser tab's id, as main named it: untrusted input from the renderer. */
+export function browserTabId(value: unknown): string {
+  if (typeof value !== 'string' || !/^t[0-9]{1,15}$/.test(value)) {
+    throw new Error('A browser tab id must be a tab main named')
+  }
+  return value
+}
+
 const AGENT_NAME_MAX_CHARS = 200
 
 /** The agent a page's pill names: untrusted input from the renderer. */
@@ -848,6 +856,13 @@ export function registerIpcHandlers({
   handle('browser:show', 2, (_, id, agent) => browserViews.show(sessionId(id), controlAgent(agent)))
   handle('browser:hide', 1, (_, id) => browserViews.hide(sessionId(id)))
   handle('browser:close', 1, (_, id) => browserViews.close(sessionId(id)))
+  handle('browser:new-tab', 1, (_, id) => browserViews.newTab(sessionId(id)))
+  handle('browser:select-tab', 2, (_, id, tab) =>
+    browserViews.selectTab(sessionId(id), browserTabId(tab)),
+  )
+  handle('browser:close-tab', 2, (_, id, tab) =>
+    browserViews.closeTab(sessionId(id), browserTabId(tab)),
+  )
   handle('browser:bounds', 2, (_, id, bounds) =>
     browserViews.setBounds(sessionId(id), browserBounds(bounds)),
   )

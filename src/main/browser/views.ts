@@ -1,15 +1,24 @@
-// One page per session in the side panel's browser. Main owns every page, since only it holds web
-// contents; the renderer draws the pane's frame and tells main where the page sits.
+// The tabs of each session's browser in the side panel. Main owns every page, since only it holds
+// web contents; the renderer draws the pane's frame and tab strip and tells main where the page
+// sits.
 
 import { BrowserWindow, session as electronSession, shell, View, WebContentsView } from 'electron'
-import type { Input, Rectangle, WebContents } from 'electron'
+import type {
+  HandlerDetails,
+  Input,
+  Rectangle,
+  WebContents,
+  WindowOpenHandlerResponse,
+} from 'electron'
 import {
   BROWSER_PARTITION,
+  MAX_SESSION_TABS,
   type BrowserBounds,
   type BrowserNotice,
   type BrowserOriginAnswer,
   type BrowserOriginDecision,
   type BrowserState,
+  type BrowserTab,
 } from '@shared/browser'
 import {
   IDLE_CONTROL,
@@ -26,12 +35,10 @@ import { createLogger } from '../log'
 import type { AllowedSites } from '@shared/ipc'
 import { originOf, BrowserOrigins, type BrowserOriginStore } from './origins'
 import { PageOverlay, type OverlayParent } from './overlay'
-import { BrowserPolicy, isAllowedNavigation, isHttp, navigateInPlace } from './policy'
+import { BrowserPolicy, isAllowedNavigation, isHttp } from './policy'
+import { MAX_LIVE_TABS, TabStrip, tabsToRelease } from './tabs'
 
 const log = createLogger('browser')
-
-/** Pages kept alive at once; the least recently used goes when one more is made. */
-export const MAX_LIVE_PAGES = 4
 
 /** What a page gets before the pane reports its bounds. */
 export const DEFAULT_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 1280, height: 800, radius: 0 }
@@ -59,25 +66,42 @@ export type NavigateResult =
   // `not_allowed`: the user refused a new origin, or did not answer in time.
   | { ok: false; error: string; code?: 'not_allowed' }
 
-interface Page {
+/** A tab as the agent's `browser_tabs` lists it. */
+export interface AgentTabInfo {
+  id: string
+  url: string | null
+  title: string | null
+  released: boolean
+}
+
+interface Tab {
+  id: string
   sessionId: string
   view: WebContentsView | null
-  /** The view around the page that rounds its lower corners, on macOS. */
+  /** The view around the page that rounds its corners, on macOS. */
   frame: View | null
-  bounds: BrowserBounds
   lastUrl: string | null
   lastTitle: string | null
   notice: BrowserNotice | null
-  lastUsed: number
-  shown: boolean
-  frozen: boolean
+  /** When the pane last showed it, which the live limit releases by. */
+  lastShown: number
   loading: boolean
+  /** Its page was released to stay within the live limit; showing it loads it again. */
+  released: boolean
   /** The navigation that has not ended yet, by the page's promise handlers. */
   pending: ((result: NavigateResult) => void) | null
   /** A navigation waits for the user to answer a new origin. */
   asking: boolean
   /** Restarts the pending navigation's time limit, which a site's wait extends. */
   restartWait: (() => void) | null
+}
+
+interface Browser {
+  sessionId: string
+  strip: TabStrip
+  bounds: BrowserBounds
+  shown: boolean
+  frozen: boolean
   /** The session's agent, as the pane names it, for the overlay's pill. */
   agent: ControlAgent | null
 }
@@ -93,13 +117,13 @@ export function isHeldMouse(type: string): boolean {
 }
 
 /**
- * The page's own keys: `Mod+[`, `Mod+]` and `Mod+R`, and outside macOS `Alt+Left` and `Alt+Right`
- * as well, the platform's back and forward in a browser.
+ * The page's own keys: `Mod+[`, `Mod+]`, `Mod+R` and `Mod+T`, and outside macOS `Alt+Left` and
+ * `Alt+Right` as well, the platform's back and forward in a browser.
  */
 export function pageKey(
   input: Input,
   platform: NodeJS.Platform,
-): 'back' | 'forward' | 'reload' | null {
+): 'back' | 'forward' | 'reload' | 'new-tab' | null {
   if (input.type !== 'keyDown' || input.isAutoRepeat) return null
   if (input.alt) {
     if (platform === 'darwin' || input.control || input.meta || input.shift) return null
@@ -108,41 +132,43 @@ export function pageKey(
   if (!(platform === 'darwin' ? input.meta : input.control)) return null
   if (input.key === '[') return 'back'
   if (input.key === ']') return 'forward'
-  return input.key.toLowerCase() === 'r' ? 'reload' : null
+  const key = input.key.toLowerCase()
+  if (key === 't' && !input.shift) return 'new-tab'
+  return key === 'r' ? 'reload' : null
 }
 
 export interface BrowserViewsDeps {
   /** The window the pages sit over; null while none exists. */
   window(): BrowserWindow | null
   send(state: BrowserState): void
-  /** A page opened a dialog, which was answered at once; the call in flight says so. */
-  dialogOpened?(sessionId: string, type: string, accepted: boolean): void
-  /** Who uses a page, which the pane, the label and the overlay draw. */
+  /** A tab's page opened a dialog, which was answered at once; the call in flight says so. */
+  dialogOpened?(tabId: string, type: string, accepted: boolean): void
+  /** Who uses a session's browser, which the pane, the label and the overlay draw. */
   control?(sessionId: string): SurfaceControl
-  /** Whether an input event a page reports right now is the agent's own. */
-  isInjecting?(sessionId: string): boolean
+  /** Whether an input event a tab's page reports right now is the agent's own. */
+  isInjecting?(tabId: string): boolean
   /** The overlay's Take over, Hand back, Done or Skip on a page. */
   overlayRequest?(sessionId: string, request: ControlOverlayRequest): void
   /** What the overlay's page reads to look as the window does. */
   settings?(): SettingsFile
   themes?(): ThemesState
   systemLocale?: string
-  /** A page's web contents is ready, before its first navigation starts. */
-  created?(sessionId: string, contents: WebContents): void
-  /** A page's web contents is gone: its next one starts afresh. */
-  closed?(sessionId: string): void
-  /** A page's renderer crashed or stopped responding: a call waiting on it fails with `message`. */
+  /** A tab's web contents is ready, before its first navigation starts. */
+  created?(tabId: string, contents: WebContents): void
+  /** A tab's web contents is gone: its next one starts afresh. */
+  closed?(tabId: string): void
+  /** The agent's tab crashed or stopped responding: a call waiting on it fails with `message`. */
   failed?(sessionId: string, kind: 'crashed' | 'unresponsive', message: string): void
-  /** An agent's call started or ended, so a hidden page keeps or gives up rendering. */
-  driving?(sessionId: string, driving: boolean): void
   /** The projects' always-allowed origins, which the pages ask for before opening a site. */
   origins: BrowserOriginStore
   /** A page asked for a new origin, for the session's thread. */
   originAsked?(request: { id: number; sessionId: string; origin: string }): void
   /** The wait ended, so the session's card takes the answer too; from either place it is one. */
   originAnswered?(request: { id: number; sessionId: string; decision: BrowserOriginAnswer }): void
-  /** A page went with its session, which the renderer no longer lists. */
+  /** A browser went with its session, which the renderer no longer lists. */
   removed?(sessionId: string): void
+  /** A session's browser closed its last tab: nothing drives it now. */
+  ended?(sessionId: string): void
   /** A page opened a site, and later named its icons, which links in replies show. */
   siteOpened?(pageUrl: string, favicons?: string[]): void
   /** How long a new origin waits for the user; set only by tests, which cannot wait 2 minutes. */
@@ -157,21 +183,11 @@ export function framePage(bounds: BrowserBounds): { frame: Rectangle; page: Rect
   }
 }
 
-/** The least recently used page among those with a live view, other than `keep`. */
-export function leastRecentlyUsed(
-  pages: Iterable<{ sessionId: string; lastUsed: number; live: boolean }>,
-  keep: string,
-): string | null {
-  let oldest: { sessionId: string; lastUsed: number } | null = null
-  for (const page of pages) {
-    if (!page.live || page.sessionId === keep) continue
-    if (!oldest || page.lastUsed < oldest.lastUsed) oldest = page
-  }
-  return oldest?.sessionId ?? null
-}
+let nextTab = 1
 
 export class BrowserViews {
-  private readonly pages = new Map<string, Page>()
+  private readonly browsers = new Map<string, Browser>()
+  private readonly tabs = new Map<string, Tab>()
   private readonly policy: BrowserPolicy
   private readonly browserSession = electronSession.fromPartition(BROWSER_PARTITION)
   /** The running call of each session, which an origin wait holds up. */
@@ -181,6 +197,8 @@ export class BrowserViews {
   >()
   readonly origins: BrowserOrigins
   private readonly overlay: PageOverlay
+  /** The tab the overlay covers or last covered. */
+  private overlayTab: string | null = null
   /** Takes the overlay off its page once its leaving has played. */
   private overlayLeave: ReturnType<typeof setTimeout> | null = null
   /** Lets the overlay's page go once no turn has used a page for a while. */
@@ -195,8 +213,8 @@ export class BrowserViews {
       asked: (request) => deps.originAsked?.(request),
       settled: (request) => deps.originAnswered?.(request),
       changed: (sessionId) => {
-        const page = this.pages.get(sessionId)
-        if (page) this.emit(page)
+        const browser = this.browsers.get(sessionId)
+        if (browser) this.emit(browser)
       },
       ...(deps.originWaitMs !== undefined ? { waitMs: deps.originWaitMs } : {}),
     })
@@ -219,7 +237,7 @@ export class BrowserViews {
     this.policy.setServicePort(port)
   }
 
-  /** The project a session's page belongs to, from the agent's call that drives it. */
+  /** The project a session's browser belongs to, from the agent's call that drives it. */
   setProject(sessionId: string, projectPath: string): void {
     this.origins.setProject(sessionId, projectPath)
   }
@@ -257,169 +275,260 @@ export class BrowserViews {
   }
 
   show(sessionId: string, agent: ControlAgent | null = null): void {
-    const page = this.page(sessionId)
-    page.agent = agent
-    for (const other of this.pages.values()) {
-      if (other !== page && other.shown) {
+    const browser = this.browser(sessionId)
+    browser.agent = agent
+    for (const other of this.browsers.values()) {
+      if (other !== browser && other.shown) {
         other.shown = false
-        this.setVisible(other, false)
+        this.present(other)
       }
     }
-    page.shown = true
-    page.frozen = false
-    page.lastUsed = Date.now()
-    this.place(page)
-    this.setVisible(page, true)
-    this.emit(page)
+    browser.shown = true
+    browser.frozen = false
+    this.present(browser)
+    this.emit(browser)
     this.syncOverlay()
   }
 
   hide(sessionId: string): void {
-    const page = this.pages.get(sessionId)
-    if (!page) return
-    page.shown = false
-    page.frozen = false
-    this.setVisible(page, false)
+    const browser = this.browsers.get(sessionId)
+    if (!browser) return
+    browser.shown = false
+    browser.frozen = false
+    this.present(browser)
     this.syncOverlay()
   }
 
   /**
-   * Destroys the session's page and forgets its address. The session stays, so the next navigation
-   * starts a new page; hiding still only takes a live page off screen.
+   * Destroys every tab of the session's browser. The session stays, so the next navigation starts
+   * a new tab; hiding still only takes the pages off screen.
    */
   close(sessionId: string): void {
-    const page = this.pages.get(sessionId)
-    if (!page) return
-    // destroy clears the view before the web contents is gone, so its destroyed listener cannot
-    // settle a navigation that is still waiting.
-    this.endNavigation(page, { ok: false, error: 'The page closed.' })
-    this.destroy(page)
-    page.lastUrl = null
-    page.lastTitle = null
-    page.notice = null
-    page.shown = false
-    page.frozen = false
-    this.emit(page)
-    this.pages.delete(sessionId)
+    const browser = this.browsers.get(sessionId)
+    if (!browser) return
+    for (const tab of this.tabsOf(browser)) this.dropTab(tab)
+    browser.strip.clear()
+    this.origins.close(sessionId)
+    this.emit(browser)
+    this.browsers.delete(sessionId)
+    this.deps.ended?.(sessionId)
+    this.syncOverlay()
+  }
+
+  /** A blank tab the user opened, at the end of the strip and selected. */
+  newTab(sessionId: string): string | null {
+    const browser = this.browser(sessionId)
+    if (browser.strip.size >= MAX_SESSION_TABS) return null
+    const tab = this.addTab(browser, { select: true, agent: false })
+    this.present(browser)
+    this.emit(browser)
+    this.syncOverlay()
+    return tab.id
+  }
+
+  /** The user picked a tab: the pane shows it, and the agent keeps its own. */
+  selectTab(sessionId: string, tabId: string): void {
+    const browser = this.browsers.get(sessionId)
+    if (!browser?.strip.select(tabId)) return
+    this.present(browser)
+    this.emit(browser)
+    this.syncOverlay()
+  }
+
+  /** Closes one tab; closing the last one closes the browser. */
+  closeTab(sessionId: string, tabId: string): void {
+    const browser = this.browsers.get(sessionId)
+    if (!browser?.strip.has(tabId)) return
+    if (browser.strip.size === 1) return this.close(sessionId)
+    const tab = this.tabs.get(tabId)
+    if (tab) this.dropTab(tab)
+    browser.strip.remove(tabId)
+    this.present(browser)
+    this.emit(browser)
+    this.syncOverlay()
   }
 
   setBounds(sessionId: string, bounds: BrowserBounds): void {
-    const page = this.page(sessionId)
-    page.bounds = bounds
-    if (page.shown) this.place(page)
+    const browser = this.browser(sessionId)
+    browser.bounds = bounds
+    for (const tab of this.tabsOf(browser)) this.place(tab)
   }
 
+  /** The user's own navigation, in the selected tab, or a new one when the browser has none. */
   navigate(sessionId: string, url: string): void {
     if (!isHttp(url)) throw new Error('A browser page opens an http or https address only')
-    const page = this.page(sessionId)
-    this.open(page, url)
+    const browser = this.browser(sessionId)
+    const tab = this.selectedTab(browser) ?? this.addTab(browser, { select: true, agent: false })
+    this.open(tab, url)
   }
 
-  /** The web contents of a session's page, or null when it has none yet. */
+  /** The tab the agent's calls act on, which it keeps from then on; null when there is none. */
+  agentTab(sessionId: string): string | null {
+    return this.browsers.get(sessionId)?.strip.agentTarget() ?? null
+  }
+
+  /** The web contents of the agent's tab, or null when it has none now. */
   contents(sessionId: string): WebContents | null {
-    const view = this.pages.get(sessionId)?.view
-    const contents = view?.webContents
-    return contents && !contents.isDestroyed() ? contents : null
+    const id = this.agentTab(sessionId)
+    return id ? this.contentsOf(this.tabs.get(id)) : null
   }
 
   /** Whether the contents is one of the session pages. */
   owns(contents: WebContents): boolean {
-    return [...this.pages.values()].some((page) => page.view?.webContents === contents)
+    return [...this.tabs.values()].some((tab) => tab.view?.webContents === contents)
   }
 
   /**
-   * A page an agent drives keeps rendering timers and animations while it is hidden or behind the
-   * pane; once idle it throttles as any background page does.
+   * The pages of a browser an agent drives keep rendering timers and animations while hidden or
+   * behind the pane; once idle they throttle as any background page does.
    */
   setDriving(sessionId: string, driving: boolean): void {
-    const contents = this.contents(sessionId)
-    if (!contents) return
-    contents.setBackgroundThrottling(!driving)
+    const browser = this.browsers.get(sessionId)
+    if (!browser) return
+    for (const tab of this.tabsOf(browser)) {
+      this.contentsOf(tab)?.setBackgroundThrottling(!driving)
+    }
   }
 
   /**
-   * Opens `url` in the session's page, making one when it has none, and settles when the
+   * Opens `url` in the agent's tab, making one when the browser has none, and settles when the
    * navigation has ended: the page's address and title, or Chromium's error. An origin the page
    * may not open yet is asked for first, and the call fails `not_allowed` without an answer.
    */
   async load(sessionId: string, url: string): Promise<NavigateResult> {
-    const page = this.page(sessionId)
-    const asked = await this.askFor(page, url)
+    const browser = this.browser(sessionId)
+    const id = browser.strip.agentTarget()
+    const tab =
+      (id ? this.tabs.get(id) : undefined) ?? this.addTab(browser, { select: true, agent: true })
+    const asked = await this.askFor(tab, url)
     if (asked) return asked
-    return this.navigateAndWait(page, url)
+    return this.navigateAndWait(tab, url)
   }
 
-  /** One step back in the session's history, settled as `load` is. */
+  /** One step back in the agent's tab, settled as `load` is. */
   async backAndWait(sessionId: string): Promise<NavigateResult> {
-    const page = this.page(sessionId)
-    const history = page.view?.webContents.navigationHistory
-    if (!history?.canGoBack()) {
+    const tab = this.agentTabOf(sessionId)
+    const history = tab?.view?.webContents.navigationHistory
+    if (!tab || !history?.canGoBack()) {
       throw new Error('There is no page before this one.')
     }
     const target = history.getEntryAtIndex(history.getActiveIndex() - 1)?.url
     if (target !== undefined) {
-      const asked = await this.askFor(page, target)
+      const asked = await this.askFor(tab, target)
       if (asked) return asked
     }
-    const wait = this.waitForNavigation(page)
+    const wait = this.waitForNavigation(tab)
     history.goBack()
     return wait
   }
 
-  /** Reloads the session's page, settled as `load` is. */
+  /** Reloads the agent's tab, settled as `load` is. */
   async reloadAndWait(sessionId: string): Promise<NavigateResult> {
-    const page = this.page(sessionId)
-    if (!page.view) {
-      if (!page.lastUrl) throw new Error('The page has no address to reload.')
-      return this.load(sessionId, page.lastUrl)
+    const tab = this.agentTabOf(sessionId)
+    if (!tab) throw new Error('The page has no address to reload.')
+    if (!tab.view) {
+      if (!tab.lastUrl) throw new Error('The page has no address to reload.')
+      return this.load(sessionId, tab.lastUrl)
     }
-    const target = page.view.webContents.getURL()
+    const target = tab.view.webContents.getURL()
     if (target) {
-      const asked = await this.askFor(page, target)
+      const asked = await this.askFor(tab, target)
       if (asked) return asked
     }
-    const wait = this.waitForNavigation(page)
-    page.view.webContents.reload()
+    const wait = this.waitForNavigation(tab)
+    tab.view.webContents.reload()
     return wait
   }
 
+  /** The agent's tab was released: it loads its page again before a call acts on it. */
+  async reviveAgentTab(sessionId: string): Promise<void> {
+    const tab = this.agentTabOf(sessionId)
+    if (!tab?.released || tab.view || !tab.lastUrl) return
+    await this.navigateAndWait(tab, tab.lastUrl)
+  }
+
+  /** The session's tabs in the strip's order, the agent's current one and the selected one. */
+  agentTabs(sessionId: string): {
+    tabs: AgentTabInfo[]
+    current: string | null
+    selected: string | null
+  } {
+    const browser = this.browsers.get(sessionId)
+    if (!browser) return { tabs: [], current: null, selected: null }
+    return {
+      tabs: this.tabsOf(browser).map((tab) => ({
+        id: tab.id,
+        url: this.urlOf(tab),
+        title: tab.lastTitle,
+        released: tab.released,
+      })),
+      current: browser.strip.agent,
+      selected: browser.strip.selected,
+    }
+  }
+
+  /**
+   * A blank tab the agent opened, which becomes its current tab. The pane follows it only when it
+   * showed the agent's tab, so a user reading another tab keeps it.
+   */
+  agentNewTab(sessionId: string): string | null {
+    const browser = this.browser(sessionId)
+    if (browser.strip.size >= MAX_SESSION_TABS) return null
+    const tab = this.addTab(browser, { select: this.following(browser), agent: true })
+    this.present(browser)
+    this.emit(browser)
+    this.syncOverlay()
+    return tab.id
+  }
+
+  /** The agent switched to another tab, which loads again when it was released. */
+  async agentSelectTab(sessionId: string, tabId: string): Promise<void> {
+    const browser = this.browsers.get(sessionId)
+    const tab = this.tabs.get(tabId)
+    if (!browser || !tab || !browser.strip.has(tabId)) return
+    const follow = this.following(browser)
+    browser.strip.setAgent(tabId)
+    if (follow) browser.strip.select(tabId)
+    this.present(browser)
+    this.emit(browser)
+    this.syncOverlay()
+    if (tab.released && !tab.view && tab.lastUrl) await this.navigateAndWait(tab, tab.lastUrl)
+  }
+
   back(sessionId: string): void {
-    const history = this.pages.get(sessionId)?.view?.webContents.navigationHistory
+    const history = this.selected(sessionId)?.view?.webContents.navigationHistory
     if (history?.canGoBack()) history.goBack()
   }
 
   forward(sessionId: string): void {
-    const history = this.pages.get(sessionId)?.view?.webContents.navigationHistory
+    const history = this.selected(sessionId)?.view?.webContents.navigationHistory
     if (history?.canGoForward()) history.goForward()
   }
 
   reload(sessionId: string): void {
-    const page = this.pages.get(sessionId)
-    if (!page) return
-    page.notice = null
-    if (page.view) page.view.webContents.reload()
-    else if (page.lastUrl) this.open(page, page.lastUrl)
-    else this.emit(page)
+    const tab = this.selected(sessionId)
+    if (tab) this.reloadTab(tab)
   }
 
   stop(sessionId: string): void {
-    this.pages.get(sessionId)?.view?.webContents.stop()
+    this.selected(sessionId)?.view?.webContents.stop()
   }
 
   openExternal(sessionId: string): void {
-    const page = this.pages.get(sessionId)
-    const url = page?.view?.webContents.getURL() || page?.lastUrl
+    const tab = this.selected(sessionId)
+    const url = tab?.view?.webContents.getURL() || tab?.lastUrl
     if (url && isHttp(url)) void shell.openExternal(url)
   }
 
-  /** Captures the page and hides the view, so the pane can show the still in its place. */
+  /** Captures the shown page and hides the view, so the pane can show the still in its place. */
   async freeze(sessionId: string): Promise<string | null> {
-    const page = this.pages.get(sessionId)
-    if (!page?.view || !page.shown || page.frozen) return null
-    const image = await page.view.webContents.capturePage()
+    const browser = this.browsers.get(sessionId)
+    const tab = browser ? this.selectedTab(browser) : null
+    if (!browser || !tab?.view || !browser.shown || browser.frozen) return null
+    const image = await tab.view.webContents.capturePage()
     if (image.isEmpty()) return null
-    page.frozen = true
-    this.setVisible(page, false)
+    browser.frozen = true
+    this.present(browser)
     this.syncOverlay()
     return image.toDataURL()
   }
@@ -430,9 +539,9 @@ export class BrowserViews {
    * page's debugger, which reads the page's own frame.
    */
   async capture(sessionId: string): Promise<Uint8Array | null> {
-    const page = this.pages.get(sessionId)
-    const contents = page?.view?.webContents
-    if (!page?.shown || page.frozen || !contents || contents.isDestroyed()) return null
+    const browser = this.browsers.get(sessionId)
+    const contents = browser ? this.contentsOf(this.selectedTab(browser)) : null
+    if (!browser?.shown || browser.frozen || !contents) return null
     if (contents.isCrashed() || !contents.getURL() || !contents.debugger.isAttached()) return null
     let timer: NodeJS.Timeout | undefined
     try {
@@ -452,10 +561,10 @@ export class BrowserViews {
   }
 
   thaw(sessionId: string): void {
-    const page = this.pages.get(sessionId)
-    if (!page) return
-    page.frozen = false
-    if (page.shown) this.setVisible(page, true)
+    const browser = this.browsers.get(sessionId)
+    if (!browser) return
+    browser.frozen = false
+    this.present(browser)
     this.syncOverlay()
   }
 
@@ -464,46 +573,124 @@ export class BrowserViews {
     await this.browserSession.clearCache()
   }
 
-  /** Closes the page of every session that no longer exists in the renderer's list. */
+  /** Closes the browser of every session that no longer exists in the renderer's list. */
   setSessions(sessionIds: readonly string[]): void {
     const live = new Set(sessionIds)
-    for (const [sessionId, page] of this.pages) {
+    for (const [sessionId, browser] of this.browsers) {
       if (live.has(sessionId)) continue
-      this.destroy(page)
-      this.pages.delete(sessionId)
+      for (const tab of this.tabsOf(browser)) this.dropTab(tab)
+      this.origins.close(sessionId)
+      this.browsers.delete(sessionId)
+      this.deps.ended?.(sessionId)
       this.deps.removed?.(sessionId)
     }
+    this.syncOverlay()
   }
 
-  private page(sessionId: string): Page {
-    let page = this.pages.get(sessionId)
-    if (!page) {
-      page = {
+  private browser(sessionId: string): Browser {
+    let browser = this.browsers.get(sessionId)
+    if (!browser) {
+      browser = {
         sessionId,
-        view: null,
-        frame: null,
+        strip: new TabStrip(),
         bounds: DEFAULT_BOUNDS,
-        lastUrl: null,
-        lastTitle: null,
-        notice: null,
-        lastUsed: Date.now(),
         shown: false,
         frozen: false,
-        loading: false,
-        pending: null,
-        asking: false,
-        restartWait: null,
         agent: null,
       }
-      this.pages.set(sessionId, page)
+      this.browsers.set(sessionId, browser)
     }
-    return page
+    return browser
   }
 
-  /** Loads `url` in the session's page, making one when there is none, and waits for its end. */
-  private navigateAndWait(page: Page, url: string): Promise<NavigateResult> {
-    const wait = this.waitForNavigation(page)
-    this.open(page, url)
+  private tabsOf(browser: Browser): Tab[] {
+    return browser.strip.tabs.flatMap((entry) => this.tabs.get(entry.id) ?? [])
+  }
+
+  private selectedTab(browser: Browser): Tab | null {
+    const id = browser.strip.selected
+    return id ? (this.tabs.get(id) ?? null) : null
+  }
+
+  private selected(sessionId: string): Tab | null {
+    const browser = this.browsers.get(sessionId)
+    return browser ? this.selectedTab(browser) : null
+  }
+
+  private agentTabOf(sessionId: string): Tab | null {
+    const id = this.agentTab(sessionId)
+    return id ? (this.tabs.get(id) ?? null) : null
+  }
+
+  private contentsOf(tab: Tab | null | undefined): WebContents | null {
+    const contents = tab?.view?.webContents
+    return contents && !contents.isDestroyed() ? contents : null
+  }
+
+  /** Whether the pane shows the agent's tab, or nothing, so what the agent opens may take it. */
+  private following(browser: Browser): boolean {
+    const { selected, agent } = browser.strip
+    return selected === null || agent === null || selected === agent
+  }
+
+  private addTab(
+    browser: Browser,
+    how: { select: boolean; agent: boolean; after?: string; opener?: string },
+  ): Tab {
+    const tab: Tab = {
+      id: `t${nextTab++}`,
+      sessionId: browser.sessionId,
+      view: null,
+      frame: null,
+      lastUrl: null,
+      lastTitle: null,
+      notice: null,
+      lastShown: Date.now(),
+      loading: false,
+      released: false,
+      pending: null,
+      asking: false,
+      restartWait: null,
+    }
+    this.tabs.set(tab.id, tab)
+    browser.strip.add(tab.id, how)
+    return tab
+  }
+
+  /** Destroys a tab's page and forgets the tab; the strip is the caller's to update. */
+  private dropTab(tab: Tab): void {
+    // destroy clears the view before the web contents is gone, so its destroyed listener cannot
+    // settle a navigation that is still waiting.
+    this.endNavigation(tab, { ok: false, error: 'The page closed.' })
+    this.destroy(tab)
+    this.tabs.delete(tab.id)
+  }
+
+  /**
+   * Shows the selected tab's page while the browser is shown and not frozen, and hides every
+   * other; a released tab coming into view loads again.
+   */
+  private present(browser: Browser): void {
+    const selected = browser.strip.selected
+    const visible = browser.shown && !browser.frozen
+    for (const tab of this.tabsOf(browser)) {
+      const on = visible && tab.id === selected
+      if (on) {
+        tab.lastShown = Date.now()
+        if (tab.released && !tab.view && tab.lastUrl) {
+          this.open(tab, tab.lastUrl)
+          continue
+        }
+        this.place(tab)
+      }
+      this.setVisible(tab, on)
+    }
+  }
+
+  /** Loads `url` in the tab, making its page when it has none, and waits for its end. */
+  private navigateAndWait(tab: Tab, url: string): Promise<NavigateResult> {
+    const wait = this.waitForNavigation(tab)
+    this.open(tab, url)
     return wait
   }
 
@@ -511,13 +698,13 @@ export class BrowserViews {
    * Asks for a new origin an agent's navigation wants, and settles with the refusal when the user
    * denies it or does not answer; null when it may open, so the caller goes on.
    */
-  private async askFor(page: Page, url: string): Promise<NavigateResult | null> {
-    if (!this.origins.needsAsking(page.sessionId, url)) return null
+  private async askFor(tab: Tab, url: string): Promise<NavigateResult | null> {
+    if (!this.origins.needsAsking(tab.sessionId, url)) return null
     const origin = originOf(url)
     if (origin === null) return null
-    this.originWaiters(page.sessionId, true)
-    const decision = await this.origins.ask(page.sessionId, origin)
-    this.originWaiters(page.sessionId, false)
+    this.originWaiters(tab.sessionId, true)
+    const decision = await this.origins.ask(tab.sessionId, origin)
+    this.originWaiters(tab.sessionId, false)
     if (decision === 'session' || decision === 'project') return null
     return {
       ok: false,
@@ -529,44 +716,45 @@ export class BrowserViews {
     }
   }
 
-  /** Tells the call that drives the session's page that a site wait started or ended. */
+  /** Tells the call that drives the session's browser that a site wait started or ended. */
   private originWaiters(sessionId: string, waiting: boolean): void {
     this.originWaits.get(sessionId)?.waiting(waiting)
   }
 
-  /** Whether an agent's call drives the session's page, so its navigation is the agent's. */
+  /** Whether an agent's turn has the session's browser, so its navigation is the agent's. */
   private agentDrives(sessionId: string): boolean {
     return this.deps.control?.(sessionId)?.kind === 'agent'
   }
 
+  /** Whether one of the agent's calls acts on the session's browser right now. */
+  private agentActing(sessionId: string): boolean {
+    const control = this.deps.control?.(sessionId)
+    return control?.kind === 'agent' && control.acting
+  }
+
   /**
-   * A link or a redirect in the page wants to open `url` while an agent drives: a new origin is
+   * A link or a redirect in the tab wants to open `url` while an agent drives: a new origin is
    * asked for, and the navigation waits for the answer.
    */
-  private navigationWanted(page: Page, url: string): void {
-    if (!this.agentDrives(page.sessionId) || !this.origins.needsAsking(page.sessionId, url)) return
-    if (page.asking) return
-    page.asking = true
+  private navigationWanted(tab: Tab, url: string): void {
+    if (!this.agentDrives(tab.sessionId) || !this.origins.needsAsking(tab.sessionId, url)) return
+    if (tab.asking) return
+    tab.asking = true
     // Chromium reports the held-up navigation as finished; it settles when the answer comes.
-    page.loading = false
-    this.originWaiters(page.sessionId, true)
+    tab.loading = false
+    this.originWaiters(tab.sessionId, true)
     const origin = originOf(url)
     if (origin === null) return
-    void this.origins.ask(page.sessionId, origin).then((decision) => {
-      page.asking = false
-      page.restartWait?.()
-      this.originWaiters(page.sessionId, false)
-      const contents = this.contents(page.sessionId)
-      if (!contents) return
+    void this.origins.ask(tab.sessionId, origin).then((decision) => {
+      tab.asking = false
+      tab.restartWait?.()
+      this.originWaiters(tab.sessionId, false)
+      if (!this.tabs.has(tab.id)) return
       if (decision === 'session' || decision === 'project') {
-        page.loading = true
-        void contents.loadURL(url).catch((error: unknown) => {
-          log.warn(`Could not load ${url}: ${(error as Error).message}`)
-        })
-        this.emit(page)
+        this.open(tab, url)
         return
       }
-      this.endNavigation(page, {
+      this.endNavigation(tab, {
         ok: false,
         code: 'not_allowed',
         error:
@@ -574,7 +762,7 @@ export class BrowserViews {
             ? `The user did not allow ${origin}.`
             : `${origin} was not opened: the user did not answer in time.`,
       })
-      this.emit(page)
+      this.emitTab(tab)
     })
   }
 
@@ -582,8 +770,8 @@ export class BrowserViews {
    * Settles with what the page ends at, or the error that stopped it, whichever comes first:
    * `did-stop-loading`, `did-fail-load`, or the time limit.
    */
-  private waitForNavigation(page: Page): Promise<NavigateResult> {
-    page.pending?.({ ok: false, error: 'The navigation was replaced.' })
+  private waitForNavigation(tab: Tab): Promise<NavigateResult> {
+    tab.pending?.({ ok: false, error: 'The navigation was replaced.' })
     let done = false
     let timer: ReturnType<typeof setTimeout>
     let resolve!: (result: NavigateResult) => void
@@ -592,8 +780,8 @@ export class BrowserViews {
       if (done) return
       done = true
       clearTimeout(timer)
-      if (page.pending === finish) page.pending = null
-      if (page.restartWait === restart) page.restartWait = null
+      if (tab.pending === finish) tab.pending = null
+      if (tab.restartWait === restart) tab.restartWait = null
       resolve(result)
     }
     // A site that waits for the user takes longer than a page load, so the limit starts afresh
@@ -607,76 +795,123 @@ export class BrowserViews {
       )
     }
     restart()
-    page.pending = finish
-    page.restartWait = restart
+    tab.pending = finish
+    tab.restartWait = restart
     return promise
   }
 
-  private resultOf(page: Page, result: NavigateResult): NavigateResult {
+  private resultOf(tab: Tab, result: NavigateResult): NavigateResult {
     if (!result.ok) return result
-    const contents = this.contents(page.sessionId)
+    const contents = this.contentsOf(tab)
     return {
       ok: true,
-      url: contents?.getURL() || page.lastUrl || result.url,
-      title: contents?.getTitle() || page.lastTitle || result.title,
+      url: contents?.getURL() || tab.lastUrl || result.url,
+      title: contents?.getTitle() || tab.lastTitle || result.title,
     }
   }
 
   /** The page settled after a navigation, successfully or not. */
-  private endNavigation(page: Page, result: NavigateResult): void {
-    page.pending?.(this.resultOf(page, result))
-    page.pending = null
+  private endNavigation(tab: Tab, result: NavigateResult): void {
+    tab.pending?.(this.resultOf(tab, result))
+    tab.pending = null
   }
 
-  /** Loads `url` in the session's page, making one when there is none. */
-  private open(page: Page, url: string): void {
-    const view = page.view ?? this.create(page.sessionId)
-    page.lastUrl = url
-    page.lastTitle = null
-    page.notice = null
-    page.lastUsed = Date.now()
-    page.loading = true
-    this.place(page)
-    if (page.shown && !page.frozen) this.setVisible(page, true)
+  private reloadTab(tab: Tab): void {
+    tab.notice = null
+    if (tab.view) tab.view.webContents.reload()
+    else if (tab.lastUrl) this.open(tab, tab.lastUrl)
+    else this.emitTab(tab)
+  }
+
+  /** Loads `url` in the tab, making its page when it has none. */
+  private open(tab: Tab, url: string): void {
+    const view = tab.view ?? this.create(tab)
+    tab.lastUrl = url
+    tab.lastTitle = null
+    tab.notice = null
+    tab.loading = true
+    this.place(tab)
+    this.setVisible(tab, this.isShown(tab))
     void view.webContents.loadURL(url).catch((error: unknown) => {
       log.warn(`Could not load ${url}: ${(error as Error).message}`)
     })
-    this.emit(page)
+    this.emitTab(tab)
   }
 
-  private create(sessionId: string): WebContentsView {
+  /** Whether the pane shows this tab now. */
+  private isShown(tab: Tab): boolean {
+    const browser = this.browsers.get(tab.sessionId)
+    return !!browser && browser.shown && !browser.frozen && browser.strip.selected === tab.id
+  }
+
+  /** Makes the tab's page, adopting a popup's contents that Chromium made for `window.open`. */
+  private create(tab: Tab, adopt?: WebContents): WebContentsView {
     const window = this.deps.window()
     if (!window) throw new Error('The browser has no window to sit over')
-    this.evictFor(sessionId)
-    const view = new WebContentsView({
-      webPreferences: {
-        partition: BROWSER_PARTITION,
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        webSecurity: true,
-      },
-    })
-    const page = this.page(sessionId)
-    page.view = view
+    this.releaseFor(tab)
+    const view = adopt
+      ? new WebContentsView({ webContents: adopt })
+      : new WebContentsView({
+          webPreferences: {
+            partition: BROWSER_PARTITION,
+            sandbox: true,
+            contextIsolation: true,
+            nodeIntegration: false,
+            webSecurity: true,
+          },
+        })
+    tab.view = view
+    tab.released = false
     if (FRAMED) {
-      page.frame = new View()
-      page.frame.addChildView(view)
+      tab.frame = new View()
+      tab.frame.addChildView(view)
     }
-    window.contentView.addChildView(page.frame ?? view)
-    this.place(page)
-    this.setVisible(page, page.shown)
-    this.wire(page, view)
-    this.deps.created?.(sessionId, view.webContents)
+    window.contentView.addChildView(tab.frame ?? view)
+    this.place(tab)
+    this.setVisible(tab, this.isShown(tab))
+    this.wire(tab, view)
+    this.deps.created?.(tab.id, view.webContents)
     this.syncOverlay()
-    this.setDriving(sessionId, (this.deps.control?.(sessionId) ?? IDLE_CONTROL).kind !== 'idle')
+    const driving = (this.deps.control?.(tab.sessionId) ?? IDLE_CONTROL).kind !== 'idle'
+    view.webContents.setBackgroundThrottling(!driving)
     return view
   }
 
+  /**
+   * Releases the least recently shown pages so that one more fits under the live limit. A page on
+   * screen, or the agent's in a turn that uses it, stays.
+   */
+  private releaseFor(making: Tab): void {
+    const candidates = [...this.tabs.values()].map((tab) => {
+      const browser = this.browsers.get(tab.sessionId)
+      const onScreen = !!browser?.shown && browser.strip.selected === tab.id
+      const agentInTurn =
+        browser?.strip.agent === tab.id &&
+        (this.deps.control?.(tab.sessionId) ?? IDLE_CONTROL).kind !== 'idle'
+      return {
+        id: tab.id,
+        live: tab.view !== null,
+        lastShown: tab.lastShown,
+        keep: tab === making || onScreen || agentInTurn,
+      }
+    })
+    for (const id of tabsToRelease(candidates, MAX_LIVE_TABS)) {
+      const tab = this.tabs.get(id)
+      if (!tab) continue
+      const url = this.urlOf(tab)
+      this.endNavigation(tab, { ok: false, error: 'The page was released to save memory.' })
+      this.destroy(tab)
+      tab.released = url !== null
+      tab.lastUrl = url
+      this.emitTab(tab)
+    }
+  }
+
   /** Puts the page where the pane reported it, its corners rounded as the pane's frame is. */
-  private place(page: Page): void {
-    const { view, frame, bounds } = page
+  private place(tab: Tab): void {
+    const { view, frame } = tab
     if (!view) return
+    const bounds = this.boundsOf(tab)
     const { x, y, width, height, radius } = bounds
     if (frame) {
       const framed = framePage(bounds)
@@ -687,73 +922,130 @@ export class BrowserViews {
       view.setBounds({ x, y, width, height })
       view.setBorderRadius(radius)
     }
-    const at = this.overlayParent(page)
-    if (at) this.overlay.move(at)
+    const at = this.overlayParent(tab)
+    if (at && this.overlayTab === tab.id) this.overlay.move(at)
   }
 
-  private setVisible(page: Page, visible: boolean): void {
-    const shown = page.frame ?? page.view
+  private boundsOf(tab: Tab): BrowserBounds {
+    return this.browsers.get(tab.sessionId)?.bounds ?? DEFAULT_BOUNDS
+  }
+
+  private setVisible(tab: Tab, visible: boolean): void {
+    const shown = tab.frame ?? tab.view
     shown?.setVisible(visible)
   }
 
-  /** Closes the least recently used page when a new one would be the fifth. */
-  private evictFor(sessionId: string): void {
-    const live = [...this.pages.values()].filter((page) => page.view !== null)
-    if (live.length < MAX_LIVE_PAGES) return
-    const oldest = leastRecentlyUsed(
-      live.map((page) => ({
-        sessionId: page.sessionId,
-        lastUsed: page.lastUsed,
-        // The page in front of the user is never closed to make room.
-        live: page.view !== null && !page.shown,
-      })),
-      sessionId,
-    )
-    if (!oldest) return
-    const evicted = this.pages.get(oldest)
-    if (!evicted) return
-    this.destroy(evicted)
-    evicted.notice = { kind: 'evicted' }
-    this.emit(evicted)
-  }
-
-  private destroy(page: Page): void {
-    if (this.overlay.sessionId === page.sessionId) this.overlay.hide()
-    const view = page.view
-    const attached = page.frame ?? view
-    page.view = null
-    page.frame = null
-    page.loading = false
-    page.asking = false
-    this.origins.close(page.sessionId)
+  private destroy(tab: Tab): void {
+    if (this.overlayTab === tab.id) {
+      this.overlay.hide()
+      this.overlayTab = null
+    }
+    const view = tab.view
+    const attached = tab.frame ?? view
+    tab.view = null
+    tab.frame = null
+    tab.loading = false
+    tab.asking = false
     if (!view || !attached) return
     const window = this.deps.window()
     if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
     if (!view.webContents.isDestroyed()) view.webContents.close()
-    this.deps.closed?.(page.sessionId)
+    this.deps.closed?.(tab.id)
   }
 
-  private wire(page: Page, view: WebContentsView): void {
+  /**
+   * A page's `window.open`: a tab right after its opener, with the opener kept, so a sign-in in a
+   * popup reaches the page that asked for it. A popup of the agent's call becomes its tab; one to
+   * a new site the agent may not open yet asks first and opens without its opener.
+   */
+  private windowOpen(opener: Tab, details: HandlerDetails): WindowOpenHandlerResponse {
+    const { url, disposition } = details
+    const browser = this.browsers.get(opener.sessionId)
+    if (!browser || (url !== '' && !isAllowedNavigation(url)) || url === 'about:srcdoc') {
+      return { action: 'deny' }
+    }
+    if (browser.strip.size >= MAX_SESSION_TABS) {
+      if (url !== '') this.open(opener, url)
+      return { action: 'deny' }
+    }
+    const byAgent = this.agentActing(opener.sessionId)
+    const select = byAgent
+      ? browser.strip.selected === opener.id
+      : disposition !== 'background-tab' || browser.strip.selected === null
+    if (byAgent && url !== '' && this.origins.needsAsking(opener.sessionId, url)) {
+      const tab = this.addTab(browser, { after: opener.id, select, agent: true })
+      this.create(tab)
+      this.present(browser)
+      this.emit(browser)
+      this.navigationWanted(tab, url)
+      return { action: 'deny' }
+    }
+    return {
+      action: 'allow',
+      // The popup stays when its opener tab closes, as in a browser.
+      outlivesOpener: true,
+      createWindow: (options) => {
+        const tab = this.addTab(browser, {
+          after: opener.id,
+          opener: opener.id,
+          select,
+          agent: byAgent,
+        })
+        if (url !== '' && url !== 'about:blank') tab.lastUrl = url
+        tab.loading = true
+        // Electron hands the popup's own contents in `options`, though its types leave them out.
+        const guest = (options as { webContents?: WebContents }).webContents
+        const view = this.create(tab, guest)
+        this.present(browser)
+        this.emit(browser)
+        this.syncOverlay()
+        return view.webContents
+      },
+    }
+  }
+
+  /**
+   * A tab's page closed itself, as a popup does once its sign-in is done: the tab goes, and the
+   * pane and the agent go back to its opener.
+   */
+  private closedItself(tab: Tab): void {
+    const browser = this.browsers.get(tab.sessionId)
+    if (!browser || !browser.strip.has(tab.id)) return
+    this.tabs.delete(tab.id)
+    browser.strip.remove(tab.id)
+    if (browser.strip.size === 0) {
+      this.origins.close(tab.sessionId)
+      this.emit(browser)
+      this.browsers.delete(tab.sessionId)
+      this.deps.ended?.(tab.sessionId)
+    } else {
+      this.present(browser)
+      this.emit(browser)
+    }
+    this.syncOverlay()
+  }
+
+  private wire(tab: Tab, view: WebContentsView): void {
     const contents = view.webContents
-    const emit = () => this.emit(page)
+    const emit = () => this.emitTab(tab)
     contents.on('did-start-loading', () => {
-      page.loading = true
+      tab.loading = true
       emit()
     })
     contents.on('did-stop-loading', () => {
-      page.loading = false
+      tab.loading = false
       emit()
       // A navigation held for the user's answer settles when the answer comes.
-      if (page.asking) return
-      this.endNavigation(page, { ok: true, url: contents.getURL(), title: contents.getTitle() })
+      if (tab.asking) return
+      this.endNavigation(tab, { ok: true, url: contents.getURL(), title: contents.getTitle() })
     })
     contents.on('did-start-navigation', (details) => {
       if (!details.isMainFrame) return
-      page.notice = null
+      tab.notice = null
       emit()
     })
     contents.on('did-navigate', (_event, url, code) => {
-      if (isAllowedNavigation(url)) page.lastUrl = url
+      if (isAllowedNavigation(url)) tab.lastUrl = url
       // A page that failed to load commits too, with no response.
       if (code > 0 && isHttp(url)) this.deps.siteOpened?.(url)
       emit()
@@ -763,34 +1055,36 @@ export class BrowserViews {
       if (isHttp(url)) this.deps.siteOpened?.(url, favicons)
     })
     contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
-      if (isMainFrame && isAllowedNavigation(url)) page.lastUrl = url
+      if (isMainFrame && isAllowedNavigation(url)) tab.lastUrl = url
       emit()
     })
     contents.on('page-title-updated', (_event, title) => {
-      page.lastTitle = title
+      tab.lastTitle = title
       emit()
     })
     contents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
       // -3 is ERR_ABORTED, which a cancelled or replaced navigation reports.
       if (!isMainFrame || code === -3) return
       log.warn(`A page failed to load: ${description} (${code})`)
-      page.notice = { kind: 'load-failed', description }
-      page.loading = false
+      tab.notice = { kind: 'load-failed', description }
+      tab.loading = false
       emit()
-      if (page.asking) return
-      this.endNavigation(page, { ok: false, error: description })
+      if (tab.asking) return
+      this.endNavigation(tab, { ok: false, error: description })
     })
     // A crashed or hung page shows as it was; the pane says so, with Reload.
     const fail = (kind: 'crashed' | 'unresponsive', message: string): void => {
-      page.notice = { kind }
-      page.loading = false
+      tab.notice = { kind }
+      tab.loading = false
       emit()
-      this.endNavigation(page, { ok: false, error: message })
-      this.deps.failed?.(page.sessionId, kind, message)
+      this.endNavigation(tab, { ok: false, error: message })
+      if (this.browsers.get(tab.sessionId)?.strip.agent === tab.id) {
+        this.deps.failed?.(tab.sessionId, kind, message)
+      }
     }
     contents.on('render-process-gone', (_event, details) => {
       // A page closed on purpose is gone before its renderer.
-      if (page.view?.webContents !== contents) return
+      if (tab.view?.webContents !== contents) return
       log.warn(`A page's renderer is gone: ${details.reason} (${details.exitCode})`)
       fail('crashed', 'The page crashed.')
     })
@@ -799,80 +1093,85 @@ export class BrowserViews {
       fail('unresponsive', 'The page stopped responding.')
     })
     contents.on('responsive', () => {
-      if (page.notice?.kind !== 'unresponsive') return
-      page.notice = null
+      if (tab.notice?.kind !== 'unresponsive') return
+      tab.notice = null
       emit()
     })
-    contents.on('will-navigate', (event, url) => {
+    const guard = (event: Electron.Event, url: string): void => {
       if (!isAllowedNavigation(url)) {
         event.preventDefault()
         return
       }
-      if (!this.origins.needsAsking(page.sessionId, url) || !this.agentDrives(page.sessionId))
-        return
+      if (!this.origins.needsAsking(tab.sessionId, url) || !this.agentDrives(tab.sessionId)) return
       event.preventDefault()
-      this.navigationWanted(page, url)
-    })
-    contents.on('will-redirect', (event, url) => {
-      if (!isAllowedNavigation(url)) {
-        event.preventDefault()
-        return
-      }
-      if (!this.origins.needsAsking(page.sessionId, url) || !this.agentDrives(page.sessionId))
-        return
-      event.preventDefault()
-      this.navigationWanted(page, url)
-    })
+      this.navigationWanted(tab, url)
+    }
+    contents.on('will-navigate', guard)
+    contents.on('will-redirect', guard)
     contents.on('will-prevent-unload', (event) => event.preventDefault())
-    contents.setWindowOpenHandler(({ url }) => {
-      navigateInPlace(contents, url)
-      return { action: 'deny' }
-    })
+    contents.setWindowOpenHandler((details) => this.windowOpen(tab, details))
     contents.on('before-input-event', (event, input) => {
+      // A new tab is the user's own, whoever has this one.
+      if (pageKey(input, process.platform) === 'new-tab') {
+        event.preventDefault()
+        this.newTabFromKey(tab.sessionId)
+        return
+      }
       // The overlay takes the keyboard while the agent has the page; a key that still reaches the
       // page, before the overlay is up, is held back as well.
-      const held = this.holdsInput(page.sessionId)
-      if (!held && this.shortcut(page, input)) {
+      const held = this.holdsInput(tab)
+      if (!held && this.shortcut(tab, input)) {
         event.preventDefault()
         return
       }
-      if (this.appKey(page.sessionId, input)) {
+      if (this.appKey(tab.sessionId, input)) {
         event.preventDefault()
         return
       }
       if (!held) return
       event.preventDefault()
-      if (input.type === 'keyDown' && !input.isAutoRepeat) this.held(page.sessionId, null)
+      if (input.type === 'keyDown' && !input.isAutoRepeat) this.held(tab, null)
     })
     contents.on('before-mouse-event', (event, mouse) => {
-      if (!isHeldMouse(mouse.type) || !this.holdsInput(page.sessionId)) return
+      if (!isHeldMouse(mouse.type) || !this.holdsInput(tab)) return
       event.preventDefault()
-      if (mouse.type === 'mouseDown') this.held(page.sessionId, this.toOverlay(page, mouse))
+      if (mouse.type === 'mouseDown') this.held(tab, this.toOverlay(tab, mouse))
     })
-    this.silenceDialogs(contents)
+    this.silenceDialogs(tab.id, contents)
     contents.once('destroyed', () => {
-      if (page.view?.webContents === contents) {
-        const window = this.deps.window()
-        if (page.frame && window && !window.isDestroyed()) {
-          window.contentView.removeChildView(page.frame)
-        }
-        page.view = null
-        page.frame = null
-        page.loading = false
-        page.asking = false
-        this.origins.close(page.sessionId)
-        this.endNavigation(page, { ok: false, error: 'The page closed.' })
-        this.deps.closed?.(page.sessionId)
+      if (tab.view?.webContents !== contents) return
+      const window = this.deps.window()
+      const attached = tab.frame ?? tab.view
+      if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
+      if (this.overlayTab === tab.id) {
+        this.overlay.hide()
+        this.overlayTab = null
       }
+      tab.view = null
+      tab.frame = null
+      tab.loading = false
+      tab.asking = false
+      this.endNavigation(tab, { ok: false, error: 'The page closed.' })
+      this.deps.closed?.(tab.id)
+      // Nothing of Kettu's closed it, so the page did: `window.close()`.
+      this.closedItself(tab)
     })
   }
 
+  /** Mod+T typed in a page or its overlay: a new tab, whose address field takes the keys. */
+  private newTabFromKey(sessionId: string): void {
+    if (this.newTab(sessionId) === null) return
+    const window = this.deps.window()
+    if (window && !window.isDestroyed()) window.webContents.focus()
+  }
+
   /** Back, forward and reload while the page has focus; the app keeps the rest. */
-  private shortcut(page: Page, input: Input): boolean {
+  private shortcut(tab: Tab, input: Input): boolean {
     const key = pageKey(input, process.platform)
-    if (key === 'back') this.back(page.sessionId)
-    else if (key === 'forward') this.forward(page.sessionId)
-    else if (key === 'reload') this.reload(page.sessionId)
+    const history = tab.view?.webContents.navigationHistory
+    if (key === 'back' && history?.canGoBack()) history.goBack()
+    else if (key === 'forward' && history?.canGoForward()) history.goForward()
+    else if (key === 'reload') this.reloadTab(tab)
     return key !== null
   }
 
@@ -880,7 +1179,7 @@ export class BrowserViews {
    * Answers alert, confirm and prompt at once, so a page that opens one never holds up an agent
    * or the pane. Chromium reports them only over the DevTools protocol.
    */
-  private silenceDialogs(contents: WebContentsView['webContents']): void {
+  private silenceDialogs(tabId: string, contents: WebContents): void {
     const debuggerSession = contents.debugger
     try {
       if (!debuggerSession.isAttached()) debuggerSession.attach('1.3')
@@ -888,7 +1187,6 @@ export class BrowserViews {
       log.warn(`Could not watch a page's dialogs: ${(error as Error).message}`)
       return
     }
-    let sessionId: string | null = null
     debuggerSession.on('message', (_event, method, params) => {
       if (method !== 'Page.javascriptDialogOpening') return
       const type = (params as { type?: string }).type
@@ -896,21 +1194,19 @@ export class BrowserViews {
       void debuggerSession
         .sendCommand('Page.handleJavaScriptDialog', { accept: accepted })
         .catch(() => {})
-      sessionId ??=
-        [...this.pages.values()].find((page) => page.view?.webContents === contents)?.sessionId ??
-        null
-      if (sessionId) this.deps.dialogOpened?.(sessionId, type ?? 'alert', accepted)
+      this.deps.dialogOpened?.(tabId, type ?? 'alert', accepted)
     })
     void debuggerSession.sendCommand('Page.enable').catch(() => {})
   }
 
   /**
-   * The pane's address field, back, forward or reload, which act only while the agent does not
-   * have the page; then they nudge its pill instead. True when they may act.
+   * The pane's address field, back, forward or reload, which act on the selected tab only while
+   * the agent does not have it; then they nudge its pill instead. True when they may act.
    */
   paneControl(sessionId: string): boolean {
-    if (!this.holdsInput(sessionId)) return true
-    this.held(sessionId, null)
+    const tab = this.selected(sessionId)
+    if (!tab || !this.holdsInput(tab)) return true
+    this.held(tab, null)
     return false
   }
 
@@ -922,11 +1218,11 @@ export class BrowserViews {
     this.deps.overlayRequest?.(sessionId, request)
   }
 
-  /** The agent acted on a page, at a point in its CSS pixels or on it as a whole. */
+  /** The agent acted on its tab, at a point in its CSS pixels or on it as a whole. */
   acted(sessionId: string, at: ControlPoint | null, click: boolean): void {
-    const page = this.pages.get(sessionId)
-    if (!page || this.overlay.sessionId !== sessionId) return
-    this.overlay.send({ type: 'act', at: at && this.toOverlay(page, at), click })
+    const tab = this.overlayTab ? this.tabs.get(this.overlayTab) : undefined
+    if (!tab || tab.sessionId !== sessionId) return
+    this.overlay.send({ type: 'act', at: at && this.toOverlay(tab, at), click })
   }
 
   /** The app's settings or themes changed: the overlay's page follows. */
@@ -934,19 +1230,24 @@ export class BrowserViews {
     this.overlay.lookChanged()
   }
 
-  /** Whether the user's clicks and keys on a page are held back now. */
-  private holdsInput(sessionId: string): boolean {
-    if (this.deps.isInjecting?.(sessionId)) return false
-    return this.deps.control?.(sessionId).kind === 'agent'
+  /** Whether the user's clicks and keys on a tab are held back now: only the agent's, in turn. */
+  private holdsInput(tab: Tab): boolean {
+    if (this.browsers.get(tab.sessionId)?.strip.agent !== tab.id) return false
+    if (this.deps.isInjecting?.(tab.id)) return false
+    return this.deps.control?.(tab.sessionId).kind === 'agent'
   }
 
   /** A click or key of the user's was held back on the page itself: the overlay shows it. */
-  private held(sessionId: string, at: ControlPoint | null): void {
-    if (this.overlay.sessionId === sessionId) this.overlay.send({ type: 'held', at })
+  private held(tab: Tab, at: ControlPoint | null): void {
+    if (this.overlayTab === tab.id) this.overlay.send({ type: 'held', at })
   }
 
   /** An app shortcut typed in the page or its overlay goes to the window; true when it was one. */
   private appKey(sessionId: string, input: Input): boolean {
+    if (pageKey(input, process.platform) === 'new-tab') {
+      this.newTabFromKey(sessionId)
+      return true
+    }
     // The app's shortcuts still work while the page has focus, as in an artifact's frame.
     const key = forwardedKey(input, process.platform)
     if (!key) return false
@@ -959,14 +1260,13 @@ export class BrowserViews {
   }
 
   /** A point in a page's CSS pixels, in its overlay's. */
-  private toOverlay(page: Page, at: ControlPoint): ControlPoint {
-    const scale = this.zoomOf(page) / this.overlayZoom()
+  private toOverlay(tab: Tab, at: ControlPoint): ControlPoint {
+    const scale = this.zoomOf(tab) / this.overlayZoom()
     return { x: at.x * scale, y: at.y * scale }
   }
 
-  private zoomOf(page: Page): number {
-    const contents = page.view?.webContents
-    return contents && !contents.isDestroyed() ? contents.getZoomFactor() || 1 : 1
+  private zoomOf(tab: Tab): number {
+    return this.contentsOf(tab)?.getZoomFactor() || 1
   }
 
   private overlayZoom(): number {
@@ -975,10 +1275,10 @@ export class BrowserViews {
 
   /** A wheel over the overlay goes through to the page under it, where it would have gone. */
   private wheel(sessionId: string, wheel: Extract<ControlOverlayRequest, { type: 'wheel' }>): void {
-    const page = this.pages.get(sessionId)
-    const contents = page?.view?.webContents
-    if (!page || !contents || contents.isDestroyed() || !contents.debugger.isAttached()) return
-    const scale = this.overlayZoom() / this.zoomOf(page)
+    const tab = this.overlayTab ? this.tabs.get(this.overlayTab) : undefined
+    const contents = this.contentsOf(tab)
+    if (!tab || tab.sessionId !== sessionId || !contents || !contents.debugger.isAttached()) return
+    const scale = this.overlayZoom() / this.zoomOf(tab)
     void contents.debugger
       .sendCommand('Input.dispatchMouseEvent', {
         type: 'mouseWheel',
@@ -990,27 +1290,25 @@ export class BrowserViews {
       .catch(() => {})
   }
 
-  /** Where the overlay goes for a page: the page's frame on macOS, beside the page elsewhere. */
-  private overlayParent(page: Page): OverlayParent | null {
+  /** Where the overlay goes for a tab: the page's frame on macOS, beside the page elsewhere. */
+  private overlayParent(tab: Tab): OverlayParent | null {
     const window = this.deps.window()
-    const contents = page.view?.webContents
-    if (!page.view || !contents || contents.isDestroyed() || !window || window.isDestroyed()) {
-      return null
-    }
-    const { x, y, width, height, radius } = page.bounds
+    const contents = this.contentsOf(tab)
+    if (!tab.view || !contents || !window || window.isDestroyed()) return null
+    const { x, y, width, height, radius } = this.boundsOf(tab)
     const zoom = this.overlayZoom()
-    if (page.frame) {
+    if (tab.frame) {
       return {
-        sessionId: page.sessionId,
+        sessionId: tab.sessionId,
         contents,
-        parent: page.frame,
+        parent: tab.frame,
         bounds: { x: 0, y: 0, width, height },
         framed: true,
         radius: radius / zoom,
       }
     }
     return {
-      sessionId: page.sessionId,
+      sessionId: tab.sessionId,
       contents,
       parent: window.contentView,
       bounds: { x, y, width, height },
@@ -1020,35 +1318,39 @@ export class BrowserViews {
   }
 
   /**
-   * Puts the overlay over the shown page while a turn uses it, in the layout its state needs, and
-   * takes it off once the turn ended and its leaving played.
+   * Puts the overlay over the agent's tab while a turn uses it and the pane shows that tab, in
+   * the layout its state needs, and takes it off once the turn ended and its leaving played. The
+   * user's other tabs never get it.
    */
   private syncOverlay(): void {
-    const shown = [...this.pages.values()].find(
-      (page) => page.shown && !page.frozen && page.view !== null,
-    )
-    const control = shown ? (this.deps.control?.(shown.sessionId) ?? IDLE_CONTROL) : IDLE_CONTROL
+    const browser = [...this.browsers.values()].find((b) => b.shown && !b.frozen)
+    const agentId = browser?.strip.agent ?? null
+    const shown =
+      browser && agentId !== null && browser.strip.selected === agentId
+        ? this.tabs.get(agentId)
+        : undefined
     const at = shown ? this.overlayParent(shown) : null
+    const control = shown ? (this.deps.control?.(shown.sessionId) ?? IDLE_CONTROL) : IDLE_CONTROL
     if (shown && at && control.kind !== 'idle') {
       if (this.overlayLeave) clearTimeout(this.overlayLeave)
       if (this.overlayDrop) clearTimeout(this.overlayDrop)
       this.overlayLeave = this.overlayDrop = null
+      this.overlayTab = shown.id
       this.overlay.show(at, {
         control,
-        agent: shown.agent,
+        agent: browser!.agent,
         scope: 'tab',
         layout: control.kind === 'agent' ? 'full' : 'pill',
         radius: at.radius,
       })
       return
     }
-    const covered = this.overlay.sessionId
-    if (covered === null) return
-    // The page it covered is still shown and its turn ended: the light and the pill leave first.
-    if (shown?.sessionId === covered && at && !this.overlayLeave) {
+    if (this.overlay.sessionId === null) return
+    // The tab it covered is still shown and its turn ended: the light and the pill leave first.
+    if (shown && shown.id === this.overlayTab && at && !this.overlayLeave) {
       this.overlay.show(at, {
         control: IDLE_CONTROL,
-        agent: shown.agent,
+        agent: browser!.agent,
         scope: 'tab',
         layout: 'full',
         radius: at.radius,
@@ -1056,12 +1358,16 @@ export class BrowserViews {
       this.overlayLeave = setTimeout(() => {
         this.overlayLeave = null
         this.overlay.hide()
+        this.overlayTab = null
         this.dropOverlayLater()
       }, OVERLAY_LEAVE_MS)
       return
     }
-    if (shown?.sessionId === covered && this.overlayLeave) return
+    if (shown && shown.id === this.overlayTab && this.overlayLeave) return
+    if (this.overlayLeave) clearTimeout(this.overlayLeave)
+    this.overlayLeave = null
     this.overlay.hide()
+    this.overlayTab = null
     this.dropOverlayLater()
   }
 
@@ -1074,35 +1380,56 @@ export class BrowserViews {
   }
 
   private downloadBlocked(contentsId: number): void {
-    for (const page of this.pages.values()) {
-      if (page.view?.webContents.id !== contentsId) continue
-      page.notice = { kind: 'download-blocked' }
-      this.emit(page)
+    for (const tab of this.tabs.values()) {
+      if (tab.view?.webContents.id !== contentsId) continue
+      tab.notice = { kind: 'download-blocked' }
+      this.emitTab(tab)
       return
     }
   }
 
-  private emit(page: Page): void {
-    const view = page.view
-    const contents = view?.webContents
-    const url = (contents && !contents.isDestroyed() ? contents.getURL() : '') || page.lastUrl
+  private urlOf(tab: Tab): string | null {
+    const contents = this.contentsOf(tab)
+    const url = contents?.getURL() || tab.lastUrl
+    return url && url !== 'about:blank' ? url : null
+  }
+
+  private emitTab(tab: Tab): void {
+    const browser = this.browsers.get(tab.sessionId)
+    if (browser?.strip.has(tab.id)) this.emit(browser)
+  }
+
+  private emit(browser: Browser): void {
+    const tabs: BrowserTab[] = this.tabsOf(browser).map((tab) => ({
+      id: tab.id,
+      url: this.urlOf(tab),
+      title: tab.lastTitle,
+      loading: tab.loading,
+      released: tab.released,
+      opener: browser.strip.opener(tab.id),
+    }))
+    const selected = this.selectedTab(browser)
+    const contents = this.contentsOf(selected)
     this.deps.send({
-      sessionId: page.sessionId,
-      url: url || null,
-      title: page.lastTitle,
-      loading: page.loading,
+      sessionId: browser.sessionId,
+      tabs,
+      selected: browser.strip.selected,
+      agentTab: browser.strip.agent,
+      url: selected ? this.urlOf(selected) : null,
+      title: selected?.lastTitle ?? null,
+      loading: selected?.loading ?? false,
       canGoBack: contents?.navigationHistory.canGoBack() ?? false,
       canGoForward: contents?.navigationHistory.canGoForward() ?? false,
-      notice: page.notice,
-      control: this.deps.control?.(page.sessionId) ?? IDLE_CONTROL,
-      originRequest: this.origins.requestOf(page.sessionId),
+      notice: selected?.notice ?? null,
+      control: this.deps.control?.(browser.sessionId) ?? IDLE_CONTROL,
+      originRequest: this.origins.requestOf(browser.sessionId),
     })
   }
 
-  /** Who uses a page changed: its state goes out again, and the overlay follows. */
+  /** Who uses a session's browser changed: its state goes out again, and the overlay follows. */
   controlChanged(sessionId: string): void {
-    const page = this.pages.get(sessionId)
-    if (page) this.emit(page)
+    const browser = this.browsers.get(sessionId)
+    if (browser) this.emit(browser)
     this.syncOverlay()
   }
 }

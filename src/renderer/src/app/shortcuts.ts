@@ -24,6 +24,7 @@ import { newSession, openProjectDialog } from './actions'
 import { closeCurrent } from './close'
 import { emitAppEvent } from './events'
 import { back, forward, historyKey, toggleHistory } from './history'
+import { usedPane } from './used-pane'
 
 const client = window.kettu.client
 
@@ -106,6 +107,10 @@ export function useKeyboardShortcuts(): void {
       }
 
       const key = event.key.toLowerCase()
+      // A new tab in the browser the user used last; elsewhere the key is left alone.
+      if (key === 't' && !event.shiftKey && usedPane()?.kind === 'browser' && !layerOpen()) {
+        return run(event, () => emitAppEvent({ kind: 'new-browser-tab' }))
+      }
       // A terminal on Windows and Linux never reaches here: Ctrl+K deletes to the end of the line.
       if (key === 'k' && !event.shiftKey && !event.repeat) {
         return run(event, () => toggleSearch(layerOpen()))

@@ -55,12 +55,16 @@ export interface LoadOutcome {
 }
 
 export interface BrowserCdpDeps {
-  /** The page's web contents, or null when the session has none. */
+  /** The agent's tab in the session's browser, which its calls act on; null when none is open. */
+  tab(sessionId: string): string | null
+  /** The web contents of the agent's tab, or null when it has none. */
   contents(sessionId: string): WebContents | null
-  /** Loads a URL in the session's page, making the page when it has none. */
+  /** Loads a URL in the agent's tab, making a tab when the browser has none. */
   load(sessionId: string, url: string): Promise<LoadOutcome>
   back(sessionId: string): Promise<LoadOutcome>
   reload(sessionId: string): Promise<LoadOutcome>
+  /** `browser_tabs`: lists, opens, selects or closes the session's tabs. */
+  tabs(sessionId: string, args: Record<string, unknown>): Promise<BrowserCallResult>
   /** Who uses each session's page; a call waits there while the user holds it. */
   controls: SurfaceControls
   /** The agent acts on the page, at a point for a click or a field, for its pointer and light. */
@@ -502,9 +506,9 @@ export class BrowserCdp {
 
   constructor(private readonly deps: BrowserCdpDeps) {}
 
-  /** A page's debugger starts handing its events here; the debugger stays attached as it was. */
-  watch(sessionId: string, contents: WebContents): void {
-    if (this.pages.has(sessionId)) return
+  /** A tab's debugger starts handing its events here; the debugger stays attached as it was. */
+  watch(tabId: string, contents: WebContents): void {
+    if (this.pages.has(tabId)) return
     const page: PageState = {
       nav: 0,
       loading: false,
@@ -517,7 +521,7 @@ export class BrowserCdp {
       status: null,
       frameId: null,
     }
-    this.pages.set(sessionId, page)
+    this.pages.set(tabId, page)
     for (const method of [
       'DOM.enable',
       'Runtime.enable',
@@ -539,10 +543,9 @@ export class BrowserCdp {
     })
   }
 
-  /** The page is gone, or belongs to a session no longer used. */
-  forget(sessionId: string): void {
-    this.pages.delete(sessionId)
-    this.waits.delete(sessionId)
+  /** A tab's page is gone. */
+  forget(tabId: string): void {
+    this.pages.delete(tabId)
   }
 
   /** The ids of the page's frames, the main one first, then its same-origin children. */
@@ -563,9 +566,9 @@ export class BrowserCdp {
     return ids.length > 0 ? ids : ['']
   }
 
-  /** A dialog the page opened, which views.ts answered at once. */
-  dialogOpened(sessionId: string, type: string, accepted: boolean): void {
-    const page = this.pages.get(sessionId)
+  /** A dialog a tab's page opened, which views.ts answered at once. */
+  dialogOpened(tabId: string, type: string, accepted: boolean): void {
+    const page = this.pages.get(tabId)
     if (!page) return
     const noun = type === 'alert' ? 'An alert' : `A ${type}`
     page.dialogs.push(`${noun} dialog was ${accepted ? 'accepted' : 'dismissed'}.`)
@@ -582,7 +585,7 @@ export class BrowserCdp {
     wait: ControlWaitOptions,
   ): Promise<BrowserCallResult> {
     if (tool === 'browser_ask_user') return this.askUser(sessionId, args, wait)
-    if (tool !== 'browser_navigate') this.pageOf(sessionId)
+    if (tool !== 'browser_navigate' && tool !== 'browser_tabs') this.pageOf(sessionId)
     let end: () => void
     try {
       end = await this.deps.controls.begin(sessionId, wait)
@@ -685,13 +688,17 @@ export class BrowserCdp {
         return this.networkRequests(sessionId, args)
       case 'browser_evaluate':
         return this.evaluate(sessionId, args)
+      case 'browser_tabs':
+        return this.deps.tabs(sessionId, args)
       case 'browser_ask_user':
         throw new ToolFailure('invalid', 'browser_ask_user does not run as a page action.')
     }
   }
 
+  /** The state of the agent's tab. */
   private pageOf(sessionId: string): PageState {
-    const page = this.pages.get(sessionId)
+    const tab = this.deps.tab(sessionId)
+    const page = tab === null ? undefined : this.pages.get(tab)
     if (!page) {
       throw new ToolFailure(
         'no_page',
@@ -737,7 +744,8 @@ export class BrowserCdp {
     // Chromium reports an injected input event as it reports the user's, so the pane's input
     // watch must know this one is the agent's.
     const injecting = method.startsWith('Input.')
-    const state = this.pages.get(sessionId)
+    const tab = this.deps.tab(sessionId)
+    const state = tab === null ? undefined : this.pages.get(tab)
     if (injecting && state) state.injecting += 1
     try {
       return (await contents.debugger.sendCommand(method, params)) as T
@@ -746,9 +754,9 @@ export class BrowserCdp {
     }
   }
 
-  /** Whether an input event the page reports right now is the agent's own. */
-  isInjecting(sessionId: string): boolean {
-    return (this.pages.get(sessionId)?.injecting ?? 0) > 0
+  /** Whether an input event a tab's page reports right now is the agent's own. */
+  isInjecting(tabId: string): boolean {
+    return (this.pages.get(tabId)?.injecting ?? 0) > 0
   }
 
   private event(page: PageState, method: string, params: Record<string, unknown>): void {
@@ -926,13 +934,18 @@ export class BrowserCdp {
     text: string,
   ): Promise<BrowserCallResult> {
     await this.settle(sessionId, page)
+    // The action opened a popup, which became the agent's tab: the result is that tab's.
+    const current = this.pageOf(sessionId)
+    const switched = current !== page
+    if (switched) await this.settle(sessionId, current)
     const contents = this.contentsOf(sessionId)
-    const { outline } = await this.capture(sessionId, page)
+    const { outline } = await this.capture(sessionId, current)
     const url = contents.getURL()
     const title = contents.getTitle()
     const dialogs = page.dialogs.splice(0)
+    const opened = switched ? ['It opened a new tab, which is now your current tab.'] : []
     return {
-      text: [text, ...dialogs].join(' '),
+      text: [text, ...dialogs, ...opened].join(' '),
       value: { url, title, snapshot: outline },
     }
   }

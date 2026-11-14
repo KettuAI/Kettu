@@ -22,11 +22,12 @@
     "maximize": "最大化",
     "restore": "还原",
     "closeBrowser": "关闭浏览器",
-    "closePage": "关闭页面"
+    "closePage": "关闭页面",
+    "newTab": "新标签页",
+    "closeTab": "关闭 {{name}}"
   },
   "notice": {
     "downloadBlocked": "Kettu 的浏览器会拦截下载",
-    "evicted": "为节省内存，此页面已关闭",
     "loadFailed": "此页面未能加载：{{error}}",
     "crashed": "此页面已崩溃",
     "unresponsive": "此页面没有响应"
@@ -51,6 +52,19 @@
     },
     "asks": "{{agent}} 想要打开"
   },
-  "tabs": "页面",
+  "tabs": {
+    "label": "标签页",
+    "all": "所有标签页",
+    "count_one": "{{count}} 个标签页",
+    "count_other": "{{count}} 个标签页",
+    "blank": "新标签页",
+    "released": "已释放",
+    "releasedNote": "为节省内存已释放",
+    "openedBy": "由 {{name}} 打开",
+    "agentUsing": "{{agent}} 正在使用这个标签页",
+    "agentWaiting": "由你操作 · {{agent}} 在等待",
+    "agentAsks": "{{agent}} 在等你操作这里",
+    "agentTab": "{{agent}} 的标签页"
+  },
   "title": "浏览器"
 }

@@ -21,7 +21,7 @@ vi.mock('electron', () => ({
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173')
 
-const { isTrusted, mayUse, whenSettled } = await import('./ipc')
+const { browserTabId, isTrusted, mayUse, whenSettled } = await import('./ipc')
 const { watchSubframes } = await import('./subframes')
 const { markOverlay, markPanel } = await import('./window')
 
@@ -183,4 +183,18 @@ describe('whenSettled', () => {
     await call
     expect(order).toEqual(['call', 'message', 'call answered'])
   })
+})
+
+describe('browserTabId', () => {
+  it('takes the ids main names its tabs', () => {
+    expect(browserTabId('t1')).toBe('t1')
+    expect(browserTabId('t123456')).toBe('t123456')
+  })
+
+  it.each([undefined, null, 1, '', 't', 'x1', 't1 ', 't-1', '../t1', 't1\0', 't'.padEnd(20, '1')])(
+    'refuses %j',
+    (value) => {
+      expect(() => browserTabId(value)).toThrow()
+    },
+  )
 })

@@ -22,11 +22,12 @@
     "maximize": "Maximize",
     "restore": "Restore",
     "closeBrowser": "Close browser",
-    "closePage": "Close page"
+    "closePage": "Close page",
+    "newTab": "New tab",
+    "closeTab": "Close {{name}}"
   },
   "notice": {
     "downloadBlocked": "Downloads are blocked in Kettu's browser",
-    "evicted": "This page was closed to save memory",
     "loadFailed": "This page did not load: {{error}}",
     "crashed": "This page crashed",
     "unresponsive": "This page stopped responding"
@@ -51,6 +52,19 @@
     },
     "asks": "{{agent}} wants to open"
   },
-  "tabs": "Pages",
+  "tabs": {
+    "label": "Tabs",
+    "all": "All tabs",
+    "count_one": "{{count}} tab",
+    "count_other": "{{count}} tabs",
+    "blank": "New tab",
+    "released": "Released",
+    "releasedNote": "Released to save memory",
+    "openedBy": "Opened by {{name}}",
+    "agentUsing": "{{agent}} is using this tab",
+    "agentWaiting": "You have this tab · {{agent}} is waiting",
+    "agentAsks": "{{agent}} is waiting for you here",
+    "agentTab": "{{agent}}’s tab"
+  },
   "title": "Browser"
 }

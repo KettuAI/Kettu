@@ -14,12 +14,11 @@ export interface BrowserBounds {
 }
 
 /**
- * Something the pane says under its header: a download it refused, a page it lost to make room,
- * a page that did not load, or one whose renderer crashed or stopped responding.
+ * Something the pane says under its header: a download it refused, a page that did not load, or
+ * one whose renderer crashed or stopped responding.
  */
 export type BrowserNotice =
   | { kind: 'download-blocked' }
-  | { kind: 'evicted' }
   | { kind: 'load-failed'; description: string }
   | { kind: 'crashed' }
   | { kind: 'unresponsive' }
@@ -58,16 +57,39 @@ export function originLabel(origin: string): string {
   return origin.replace(/^[a-z]+:\/\//, '') || origin
 }
 
-/** What the pane draws for one session's page. */
+/** A tab in a session's browser, as the strip draws it. */
+export interface BrowserTab {
+  id: string
+  url: string | null
+  title: string | null
+  loading: boolean
+  /** Released to stay within the live limit: it loads again when shown. */
+  released: boolean
+  /** The tab whose page opened this one as a popup, while that tab is open. */
+  opener: string | null
+}
+
+/** The most tabs one session's browser holds. */
+export const MAX_SESSION_TABS = 50
+
+/**
+ * What the pane draws for one session's browser: its tabs, and the selected tab's page in the
+ * fields after them.
+ */
 export interface BrowserState {
   sessionId: string
+  tabs: BrowserTab[]
+  /** The tab the pane shows; null when the browser has none. */
+  selected: string | null
+  /** The tab the agent works in; null until it uses one. */
+  agentTab: string | null
   url: string | null
   title: string | null
   loading: boolean
   canGoBack: boolean
   canGoForward: boolean
   notice: BrowserNotice | null
-  /** Who uses the page in the turn that runs. */
+  /** Who uses the agent's tab in the turn that runs. */
   control: SurfaceControl
   /** A new site that waits for the user, or the answer just given, for the pane's bar. */
   originRequest: BrowserOriginRequest | null
@@ -90,7 +112,12 @@ export const BROWSER_TOOL_NAMES = [
   'browser_network_requests',
   'browser_evaluate',
   'browser_ask_user',
+  'browser_tabs',
 ] as const
+
+/** What `browser_tabs` does. */
+export const BROWSER_TAB_ACTIONS = ['list', 'new', 'select', 'close'] as const
+export type BrowserTabAction = (typeof BROWSER_TAB_ACTIONS)[number]
 
 export type BrowserToolName = (typeof BROWSER_TOOL_NAMES)[number]
 

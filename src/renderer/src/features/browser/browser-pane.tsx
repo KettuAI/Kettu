@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Cancel01Icon,
   Globe02Icon,
   LinkSquare02Icon,
+  PlusSignIcon,
   ReloadIcon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
@@ -16,7 +17,6 @@ import {
   PaneHead,
   PaneIcon,
   PaneSheet,
-  PaneTabClose,
   PanelButton,
 } from '@renderer/features/shell/panel-button'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -26,13 +26,15 @@ import { useSessionsStore } from '@renderer/stores/sessions'
 import { useBrowserStore } from '@renderer/stores/browser'
 import { useOverlayOpen } from '@renderer/stores/overlays'
 import { useSettingsStore } from '@renderer/stores/settings'
-import { loadSiteIcons, useSiteIcon } from '@renderer/stores/site-icons'
 import { panelSession, toggleSidePane } from '@renderer/stores/view'
-import { addressText } from './address'
 import { AddressField } from './address-field'
+import { BrowserTabs, TabCountMenu } from './browser-tabs'
 import { OriginBar } from './origin-bar'
 
-/** The side panel's Browser pane: one page per session, drawn by main over the pane's page area. */
+/**
+ * The side panel's Browser pane: a session's tabs, the selected one's page drawn by main over the
+ * pane's page area.
+ */
 export function BrowserPane({ panel, maximized }: { panel: string; maximized: boolean }) {
   const { t } = useTranslation(['browser', 'common'])
   const sessionId = panelSession(panel)
@@ -49,6 +51,8 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   // The frame the page fills.
   const page = useRef<HTMLDivElement>(null)
   const address = useRef<HTMLInputElement>(null)
+  const [collapsed, setCollapsed] = useState(false)
+  const name = agentId ? agentName(agentId, hostId) : t('empty.agent')
 
   // The pane shows the page, so the toggle's dot has done its work.
   useEffect(() => {
@@ -62,7 +66,23 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
       .catch((error: unknown) => console.error('Could not close the page', error))
   }, [sessionId])
 
-  // Mod+W destroys the page and folds the pane away; Mod+L in the page goes to its address.
+  const newTab = useCallback(() => {
+    if (!sessionId) return
+    void window.kettu.browser
+      .newTab(sessionId)
+      .catch((error: unknown) => console.error('Could not open a tab', error))
+  }, [sessionId])
+
+  const selectTab = (tabId: string) => {
+    if (sessionId) void window.kettu.browser.selectTab(sessionId, tabId)
+  }
+
+  const closeTab = (tabId: string) => {
+    if (sessionId) void window.kettu.browser.closeTab(sessionId, tabId)
+  }
+
+  // Mod+W closes the selected tab, and with the last one the browser, folding the pane away;
+  // Mod+T opens a tab; Mod+L in the page goes to its address.
   useEffect(
     () =>
       onAppEvent((event) => {
@@ -70,11 +90,20 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
           if (event.sessionId === sessionId) address.current?.focus()
           return
         }
+        if (event.kind === 'new-browser-tab') {
+          newTab()
+          return
+        }
         if (event.kind !== 'close-browser') return
+        const current = sessionId ? useBrowserStore.getState().bySession[sessionId] : undefined
+        if (sessionId && current?.selected && current.tabs.length > 1) {
+          void window.kettu.browser.closeTab(sessionId, current.selected)
+          return
+        }
         closePage()
         toggleSidePane(panel, 'browser', false)
       }),
-    [closePage, panel, sessionId],
+    [closePage, newTab, panel, sessionId],
   )
 
   const navigate = (url: string) => {
@@ -166,6 +195,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
   }, [sessionId])
 
   const url = state?.url ?? null
+  const hasTabs = !!state && state.tabs.length > 0
 
   return (
     <PaneSheet pane="browser" maximized={maximized} data-browser-panel="">
@@ -174,27 +204,41 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
         pane="browser"
         maximized={maximized}
         tools={
-          <PanelButton
-            label={t('actions.openExternal')}
-            disabled={!url}
-            onClick={() => sessionId && void window.kettu.browser.openExternal(sessionId)}
-          >
-            <PaneIcon icon={LinkSquare02Icon} />
-          </PanelButton>
+          <>
+            {hasTabs && collapsed && (
+              <TabCountMenu state={state} agentName={name} onSelect={selectTab} />
+            )}
+            <PanelButton
+              label={t('actions.openExternal')}
+              disabled={!url}
+              onClick={() => sessionId && void window.kettu.browser.openExternal(sessionId)}
+            >
+              <PaneIcon icon={LinkSquare02Icon} />
+            </PanelButton>
+          </>
         }
       >
-        {url && state ? (
-          <div role="tablist" aria-label={t('tabs')} className="kp-head__tabs">
-            <span className="kp-tab" data-selected="">
-              <span role="tab" aria-selected title={url} className="kp-tab__btn">
-                <SiteMark url={url} />
-                <span className="kp-tab__name">{state.title || addressText(url) || url}</span>
-              </span>
-              <PaneTabClose label={t('actions.closePage')} onClick={closePage} />
-            </span>
-          </div>
+        {hasTabs ? (
+          <BrowserTabs
+            state={state}
+            agentName={name}
+            onSelect={selectTab}
+            onClose={(tabId) => (state.tabs.length > 1 ? closeTab(tabId) : closePage())}
+            onCollapsed={setCollapsed}
+          />
         ) : (
           <span className="kp-head__title">{t('title')}</span>
+        )}
+        {sessionId && (
+          <PanelButton
+            label={t('actions.newTab')}
+            shortcut={isMac ? '⌘T' : 'Ctrl+T'}
+            size="icon-xs"
+            className="kp-bnew"
+            onClick={newTab}
+          >
+            <PaneIcon icon={PlusSignIcon} size={14} />
+          </PanelButton>
         )}
       </PaneHead>
       <div className="kp-body">
@@ -233,7 +277,7 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
                   <PaneIcon icon={ReloadIcon} />
                 </PanelButton>
               )}
-              <AddressField ref={address} url={url} onNavigate={navigate} />
+              <AddressField key={state.selected} ref={address} url={url} onNavigate={navigate} />
               {state.loading && (
                 <span role="progressbar" aria-label={t('loading')} className="kp-load" />
               )}
@@ -263,17 +307,17 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
             <PaneEmpty
               icon={<PaneIcon icon={Globe02Icon} size={20} />}
               title={sessionId ? t('empty.title') : t('empty.noSession')}
-              text={
-                sessionId
-                  ? t('empty.hint', {
-                      agent: agentId ? agentName(agentId, hostId) : t('empty.agent'),
-                    })
-                  : t('empty.noSessionHint')
-              }
+              text={sessionId ? t('empty.hint', { agent: name }) : t('empty.noSessionHint')}
             >
               {sessionId && (
                 <div className="kp-addr-row kp-addr-row--empty">
-                  <AddressField url={null} onNavigate={navigate} autoFocus />
+                  <AddressField
+                    key={state?.selected ?? ''}
+                    ref={address}
+                    url={null}
+                    onNavigate={navigate}
+                    autoFocus
+                  />
                 </div>
               )}
             </PaneEmpty>
@@ -284,14 +328,6 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
       </div>
     </PaneSheet>
   )
-}
-
-/** The page's site icon, as recorded when it opened, else a globe. */
-function SiteMark({ url }: { url: string }) {
-  useEffect(loadSiteIcons, [])
-  const icon = useSiteIcon(url)
-  if (icon) return <img src={icon} alt="" aria-hidden className="kp-sitemark" />
-  return <PaneIcon icon={Globe02Icon} size={14} className="kp-tab__icon" />
 }
 
 /** A blocked download, a page lost to make room, or a page that did not load, crashed or hangs. */
@@ -305,7 +341,6 @@ function Notice({ notice, sessionId }: { notice: BrowserNotice; sessionId: strin
       <span className="kp-origin__text">
         <span className="truncate">
           {notice.kind === 'download-blocked' && t('notice.downloadBlocked')}
-          {notice.kind === 'evicted' && t('notice.evicted')}
           {notice.kind === 'load-failed' && t('notice.loadFailed', { error: notice.description })}
           {notice.kind === 'crashed' && t('notice.crashed')}
           {notice.kind === 'unresponsive' && t('notice.unresponsive')}

@@ -1,4 +1,4 @@
-// The fourteen browser tools of the `kettu` MCP server: what agents are told, the schemas, the
+// The sixteen browser tools of the `kettu` MCP server: what agents are told, the schemas, the
 // checks, and the forwarding to main, which drives the calling session's page.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
@@ -8,7 +8,12 @@ import type {
   BrowserToolErrorCode,
   BrowserToolName,
 } from '@shared/browser'
-import { BROWSER_TOOL_NAMES, ORIGIN_WAIT_MS } from '@shared/browser'
+import {
+  BROWSER_TAB_ACTIONS,
+  BROWSER_TOOL_NAMES,
+  MAX_SESSION_TABS,
+  ORIGIN_WAIT_MS,
+} from '@shared/browser'
 import { CONTROL_STEPS, CONTROL_WAIT_MS, isControlStep } from '@shared/control'
 import type { Caller } from './tools'
 
@@ -33,7 +38,9 @@ export const BROWSER_INSTRUCTIONS =
   'user may take the browser over while you use it: a call then waits for them, and if it says ' +
   'the user still has control, call it again to keep waiting. When a page needs something only ' +
   'the user can do, such as signing in, entering a code or passing a check, use ' +
-  'browser_ask_user and wait for their answer; never ask for passwords or codes in the thread.'
+  'browser_ask_user and wait for their answer; never ask for passwords or codes in the thread. ' +
+  'The browser has tabs, which the user shares: your tools act on your current tab, which ' +
+  'browser_tabs lists, opens, switches and closes, and a popup a page of yours opens becomes it.'
 
 export type BrowserToolDeps = {
   /** Runs a call on main, which drives the session's page; `caller` is the calling session. */
@@ -102,6 +109,17 @@ function output(properties: Record<string, Schema>): Tool['outputSchema'] {
 }
 
 const READ_ONLY = { readOnlyHint: true } as const
+
+const TAB = object(
+  {
+    index: { type: 'integer' },
+    url: { type: 'string' },
+    title: { type: 'string' },
+    current: { type: 'boolean', description: 'Your current tab, which your other tools act on.' },
+    released: { type: 'boolean', description: 'Released to save memory; it loads when selected.' },
+  },
+  ['index', 'url', 'title', 'current', 'released'],
+)
 
 export const BROWSER_TOOLS: Tool[] = [
   {
@@ -384,6 +402,29 @@ export const BROWSER_TOOLS: Tool[] = [
     }),
     annotations: { openWorldHint: false },
   },
+  {
+    name: 'browser_tabs',
+    title: 'Tabs',
+    description:
+      'Lists the browser’s tabs, opens a blank one, switches to one or closes one. Your other ' +
+      'browser tools act on your current tab; a tab you open or switch to becomes it, and a tab ' +
+      'the user selects does not. Answers the tabs with their indexes.',
+    inputSchema: object(
+      {
+        action: { type: 'string', enum: [...BROWSER_TAB_ACTIONS] },
+        index: {
+          type: 'integer',
+          minimum: 0,
+          maximum: MAX_SESSION_TABS - 1,
+          description:
+            'The tab to select or close, from the list; close takes your current tab by default.',
+        },
+      },
+      ['action'],
+    ),
+    outputSchema: output({ tabs: { type: 'array', items: TAB } }),
+    annotations: { openWorldHint: false },
+  },
 ]
 
 const NAMES = new Set<string>(BROWSER_TOOL_NAMES)
@@ -436,6 +477,7 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
     browser_network_requests: ['since_navigation'],
     browser_evaluate: ['function', 'ref'],
     browser_ask_user: ['step', 'reason'],
+    browser_tabs: ['action', 'index'],
   }
   for (const key of Object.keys(o)) {
     if (!allowed[name].includes(key)) throw invalid(`Unknown argument ${key}.`)
@@ -569,6 +611,29 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
       args.reason = reason
       break
     }
+    case 'browser_tabs': {
+      if (!(BROWSER_TAB_ACTIONS as readonly unknown[]).includes(o.action)) {
+        throw invalid('action must be list, new, select or close.')
+      }
+      args.action = o.action
+      if (o.index !== undefined) {
+        if (
+          typeof o.index !== 'number' ||
+          !Number.isInteger(o.index) ||
+          o.index < 0 ||
+          o.index >= MAX_SESSION_TABS
+        ) {
+          throw invalid(`index must be a whole number from 0 to ${MAX_SESSION_TABS - 1}.`)
+        }
+        if (o.action === 'list' || o.action === 'new') {
+          throw invalid(`index is for select and close, not ${String(o.action)}.`)
+        }
+        args.index = o.index
+      } else if (o.action === 'select') {
+        throw invalid('index is needed to select a tab.')
+      }
+      break
+    }
     case 'browser_evaluate': {
       const source = text('function', true, MAX_SCRIPT_CHARS)!
       if (source.trim() === '') throw invalid('function must be JavaScript.')
@@ -587,7 +652,13 @@ function checked(name: BrowserToolName, value: unknown): BrowserCall {
 export function timeoutFor(tool: BrowserToolName, args: Args): number {
   // It returns once the user answers, or to be called again before the harness's own limit.
   if (tool === 'browser_ask_user') return CONTROL_WAIT_MS + WAIT_EXTRA_MS
-  if (tool === 'browser_navigate' || tool === 'browser_navigate_back' || tool === 'browser_reload')
+  // Selecting a released tab loads its page again.
+  if (
+    tool === 'browser_navigate' ||
+    tool === 'browser_navigate_back' ||
+    tool === 'browser_reload' ||
+    tool === 'browser_tabs'
+  )
     return NAVIGATION_TIMEOUT_MS
   if (tool === 'browser_wait_for') {
     const seconds = typeof args.time === 'number' ? args.time : MAX_WAIT_SECONDS

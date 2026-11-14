@@ -408,6 +408,11 @@ export interface IpcInvokeContract {
   'browser:hide': { args: [sessionId: string]; result: void }
   // Destroys the page. The session stays, unlike a session leaving the list.
   'browser:close': { args: [sessionId: string]; result: void }
+  /** A blank tab, selected; null when the browser holds all the tabs it may. */
+  'browser:new-tab': { args: [sessionId: string]; result: string | null }
+  'browser:select-tab': { args: [sessionId: string, tabId: string]; result: void }
+  /** Closing the last tab closes the browser. */
+  'browser:close-tab': { args: [sessionId: string, tabId: string]; result: void }
   'browser:bounds': { args: [sessionId: string, bounds: BrowserBounds]; result: void }
   // A URL the renderer normalised; only http(s) ever reaches the page.
   'browser:navigate': { args: [sessionId: string, url: string]; result: void }
@@ -866,14 +871,20 @@ export interface KettuApi {
     /** The icon of the app at `path`, the bundle on macOS, as a data URL; null when none. */
     appIcon(path: string): Promise<string | null>
   }
-  /** The page in the side panel's browser, one per session, all in one profile. */
+  /** The side panel's browser, one per session with its tabs, all in one profile. */
   browser: {
-    /** Shows a session's page, or nothing when it has none yet; `agent` names its pill. */
+    /** Shows a session's selected tab, or nothing when it has none yet; `agent` names its pill. */
     show(sessionId: string, agent: ControlAgent | null): Promise<void>
-    /** Hides the page, keeping it alive for when the pane shows again. */
+    /** Hides the pages, keeping them alive for when the pane shows again. */
     hide(sessionId: string): Promise<void>
-    /** Destroys the page and forgets its address. The session stays. */
+    /** Destroys every tab and forgets their addresses. The session stays. */
     close(sessionId: string): Promise<void>
+    /** Opens a blank tab and selects it; null when the browser holds all the tabs it may. */
+    newTab(sessionId: string): Promise<string | null>
+    /** Shows another tab; the agent keeps its own. */
+    selectTab(sessionId: string, tabId: string): Promise<void>
+    /** Closes a tab; closing the last one closes the browser. */
+    closeTab(sessionId: string, tabId: string): Promise<void>
     /** Where the pane's page sits, in device-independent pixels; null while it is not shown. */
     setBounds(sessionId: string, bounds: BrowserBounds): Promise<void>
     navigate(sessionId: string, url: string): Promise<void>
