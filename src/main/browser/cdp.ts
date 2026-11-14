@@ -55,12 +55,16 @@ export interface LoadOutcome {
 }
 
 export interface BrowserCdpDeps {
-  /** The page's web contents, or null when the session has none. */
-  contents(sessionId: string): WebContents | null
-  /** Loads a URL in the session's page, making the page when it has none. */
+  /** The agent's tab in the session's browser, which its calls act on; null when none is open. */
+  tab(sessionId: string): string | null
+  /** A tab's web contents, or null when it has none now. */
+  tabContents(tabId: string): WebContents | null
+  /** Loads a URL in the agent's tab, making a tab when the browser has none. */
   load(sessionId: string, url: string): Promise<LoadOutcome>
   back(sessionId: string): Promise<LoadOutcome>
   reload(sessionId: string): Promise<LoadOutcome>
+  /** `browser_tabs`: lists, opens, selects or closes the session's tabs. */
+  tabs(sessionId: string, args: Record<string, unknown>): Promise<BrowserCallResult>
   /** Who uses each session's page; a call waits there while the user holds it. */
   controls: SurfaceControls
   /** The agent acts on the page, at a point for a click or a field, for its pointer and light. */
@@ -499,12 +503,17 @@ export class BrowserCdp {
   private readonly running = new Map<string, Set<(failure: ToolFailure) => void>>()
   /** How each session's latest call waits on the user, for its steps after the first. */
   private readonly waits = new Map<string, ControlWaitOptions>()
+  /**
+   * The tab each session's running call acts on, held for the call so that a popup its click
+   * opens takes over only once the action is done.
+   */
+  private readonly acting = new Map<string, string>()
 
   constructor(private readonly deps: BrowserCdpDeps) {}
 
-  /** A page's debugger starts handing its events here; the debugger stays attached as it was. */
-  watch(sessionId: string, contents: WebContents): void {
-    if (this.pages.has(sessionId)) return
+  /** A tab's debugger starts handing its events here; the debugger stays attached as it was. */
+  watch(tabId: string, contents: WebContents): void {
+    if (this.pages.has(tabId)) return
     const page: PageState = {
       nav: 0,
       loading: false,
@@ -517,7 +526,7 @@ export class BrowserCdp {
       status: null,
       frameId: null,
     }
-    this.pages.set(sessionId, page)
+    this.pages.set(tabId, page)
     for (const method of [
       'DOM.enable',
       'Runtime.enable',
@@ -539,10 +548,9 @@ export class BrowserCdp {
     })
   }
 
-  /** The page is gone, or belongs to a session no longer used. */
-  forget(sessionId: string): void {
-    this.pages.delete(sessionId)
-    this.waits.delete(sessionId)
+  /** A tab's page is gone. */
+  forget(tabId: string): void {
+    this.pages.delete(tabId)
   }
 
   /** The ids of the page's frames, the main one first, then its same-origin children. */
@@ -563,9 +571,9 @@ export class BrowserCdp {
     return ids.length > 0 ? ids : ['']
   }
 
-  /** A dialog the page opened, which views.ts answered at once. */
-  dialogOpened(sessionId: string, type: string, accepted: boolean): void {
-    const page = this.pages.get(sessionId)
+  /** A dialog a tab's page opened, which views.ts answered at once. */
+  dialogOpened(tabId: string, type: string, accepted: boolean): void {
+    const page = this.pages.get(tabId)
     if (!page) return
     const noun = type === 'alert' ? 'An alert' : `A ${type}`
     page.dialogs.push(`${noun} dialog was ${accepted ? 'accepted' : 'dismissed'}.`)
@@ -582,7 +590,7 @@ export class BrowserCdp {
     wait: ControlWaitOptions,
   ): Promise<BrowserCallResult> {
     if (tool === 'browser_ask_user') return this.askUser(sessionId, args, wait)
-    if (tool !== 'browser_navigate') this.pageOf(sessionId)
+    if (tool !== 'browser_navigate' && tool !== 'browser_tabs') this.pageOf(sessionId)
     let end: () => void
     try {
       end = await this.deps.controls.begin(sessionId, wait)
@@ -590,6 +598,9 @@ export class BrowserCdp {
       throw failure(error)
     }
     this.waits.set(sessionId, wait)
+    const tab = this.deps.tab(sessionId)
+    const pinned = !this.acting.has(sessionId) && tab !== null
+    if (pinned) this.acting.set(sessionId, tab)
     let stop!: (failure: ToolFailure) => void
     const stopped = new Promise<never>((_, reject) => (stop = reject))
     const running = this.running.get(sessionId) ?? new Set()
@@ -600,6 +611,7 @@ export class BrowserCdp {
     } catch (error) {
       throw failure(error)
     } finally {
+      if (pinned) this.acting.delete(sessionId)
       running.delete(stop)
       if (running.size === 0 && this.running.get(sessionId) === running) {
         this.running.delete(sessionId)
@@ -685,13 +697,17 @@ export class BrowserCdp {
         return this.networkRequests(sessionId, args)
       case 'browser_evaluate':
         return this.evaluate(sessionId, args)
+      case 'browser_tabs':
+        return this.deps.tabs(sessionId, args)
       case 'browser_ask_user':
         throw new ToolFailure('invalid', 'browser_ask_user does not run as a page action.')
     }
   }
 
+  /** The state of the agent's tab. */
   private pageOf(sessionId: string): PageState {
-    const page = this.pages.get(sessionId)
+    const tab = this.tabOf(sessionId)
+    const page = tab === null ? undefined : this.pages.get(tab)
     if (!page) {
       throw new ToolFailure(
         'no_page',
@@ -703,7 +719,8 @@ export class BrowserCdp {
 
   private contentsOf(sessionId: string): WebContents {
     this.pageOf(sessionId)
-    const contents = this.deps.contents(sessionId)
+    const tab = this.tabOf(sessionId)
+    const contents = tab === null ? null : this.deps.tabContents(tab)
     if (!contents || contents.isDestroyed()) {
       throw new ToolFailure(
         'no_page',
@@ -717,6 +734,11 @@ export class BrowserCdp {
       )
     }
     return contents
+  }
+
+  /** The tab the session's call acts on: the one held for the running call, else the agent's. */
+  private tabOf(sessionId: string): string | null {
+    return this.acting.get(sessionId) ?? this.deps.tab(sessionId)
   }
 
   /** Waits while the user holds the page, as the session's call in flight waits. */
@@ -737,7 +759,8 @@ export class BrowserCdp {
     // Chromium reports an injected input event as it reports the user's, so the pane's input
     // watch must know this one is the agent's.
     const injecting = method.startsWith('Input.')
-    const state = this.pages.get(sessionId)
+    const tab = this.tabOf(sessionId)
+    const state = tab === null ? undefined : this.pages.get(tab)
     if (injecting && state) state.injecting += 1
     try {
       return (await contents.debugger.sendCommand(method, params)) as T
@@ -746,9 +769,9 @@ export class BrowserCdp {
     }
   }
 
-  /** Whether an input event the page reports right now is the agent's own. */
-  isInjecting(sessionId: string): boolean {
-    return (this.pages.get(sessionId)?.injecting ?? 0) > 0
+  /** Whether an input event a tab's page reports right now is the agent's own. */
+  isInjecting(tabId: string): boolean {
+    return (this.pages.get(tabId)?.injecting ?? 0) > 0
   }
 
   private event(page: PageState, method: string, params: Record<string, unknown>): void {
@@ -829,7 +852,13 @@ export class BrowserCdp {
         break
       }
       case 'Page.frameStoppedLoading': {
-        if (this.isMainFrame(page, params.frameId)) page.loading = false
+        if (!this.isMainFrame(page, params.frameId)) break
+        page.loading = false
+        // A popup's document request shows on both pages and ends on one only; once the page
+        // stopped loading, no document of its own is still on its way.
+        for (const entry of page.requests) {
+          if (entry.type === 'Document') page.inFlight.delete(entry.id)
+        }
         break
       }
       case 'Page.frameNavigated': {
@@ -863,11 +892,12 @@ export class BrowserCdp {
     }
   }
 
-  private async settle(sessionId: string, page: PageState): Promise<void> {
+  private async settle(sessionId: string, page: PageState, stop?: () => boolean): Promise<void> {
     const start = Date.now()
     let idleSince: number | null = null
     for (;;) {
       await this.gate(sessionId)
+      if (stop?.()) return
       if (
         hasSettled({ loading: page.loading, inFlight: page.inFlight.size, idleSince }, Date.now())
       )
@@ -925,14 +955,32 @@ export class BrowserCdp {
     page: PageState,
     text: string,
   ): Promise<BrowserCallResult> {
-    await this.settle(sessionId, page)
+    // A popup the action opened becomes the agent's tab, and the result is that tab's. Its first
+    // request shows on the opener too and never ends there, so the opener is not waited for.
+    const held = this.acting.get(sessionId)
+    const moved = (): string | null => {
+      const now = this.deps.tab(sessionId)
+      return held !== undefined && now !== null && now !== held ? now : null
+    }
+    await this.settle(sessionId, page, () => moved() !== null)
+    const now = moved()
+    const switched = now !== null
+    if (switched) this.acting.set(sessionId, now)
+    const current = this.pageOf(sessionId)
+    if (switched) await this.settle(sessionId, current)
     const contents = this.contentsOf(sessionId)
-    const { outline } = await this.capture(sessionId, page)
+    const { outline } = await this.capture(sessionId, current)
     const url = contents.getURL()
     const title = contents.getTitle()
     const dialogs = page.dialogs.splice(0)
+    // A popup that closed itself is gone; its opener is the agent's tab again.
+    const opened = !switched
+      ? []
+      : held !== undefined && this.pages.has(held)
+        ? ['It opened a new tab, which is now your current tab.']
+        : ['The page closed itself, and the tab that opened it is your current tab again.']
     return {
-      text: [text, ...dialogs].join(' '),
+      text: [text, ...dialogs, ...opened].join(' '),
       value: { url, title, snapshot: outline },
     }
   }
