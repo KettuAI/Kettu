@@ -1,0 +1,135 @@
+/* ---------- panes: Computer ---------- */
+/* The head names the app, its window and whether the picture is live or paused. */
+.kp-cph {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding-left: 6px;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+.kp-cph > * {
+  flex: none;
+}
+.kp-cph > span:not(.kp-cph__live) {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kp-cph b {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.kp-cph__icon {
+  width: 15px;
+  height: 15px;
+}
+.kp-cph__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--pane-fox) 10%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--attention);
+  text-transform: uppercase;
+}
+.kp-cph__live i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pane-fox);
+  animation: kp-live 1400ms ease-in-out infinite;
+}
+.kp-cph__live[data-paused] {
+  background: var(--bg-subtle);
+  color: var(--text-tertiary);
+}
+.kp-cph__live[data-paused] i {
+  background: var(--text-disabled);
+  animation: none;
+}
+@keyframes kp-live {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* The window on its stage, with room around it for its light and under it for the pill. */
+.kp-cstage {
+  position: relative;
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 0;
+  padding: 34px 40px 72px;
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(45deg, transparent 0 10px, var(--shell-line-soft) 10px 11px),
+    var(--shell-tray);
+  box-shadow: inset 0 0 0 0.5px var(--border-strong);
+  overflow: hidden;
+}
+.kp-cstage > .kp-empty {
+  align-self: stretch;
+}
+.kp-cframe {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+/* Sized to the fitted picture, so the light and the pointer lie on the window itself. */
+.kp-cwin-box {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+}
+.kp-cwin {
+  display: block;
+  width: 100%;
+  height: 100%;
+  box-shadow:
+    0 0 0 0.5px var(--border-strong),
+    var(--elevation-page-drop);
+  background: transparent;
+}
+/* The pill at the stage's bottom, as wide as its content and never wider than the stage. */
+.kp-cpill {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  translate: -50% 0;
+}
+.kp-cnote {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kp-cph__live i {
+    animation: none;
+  }
+}
+:root[data-reduce-motion='always'] .kp-cph__live i {
+  animation: none;
+}

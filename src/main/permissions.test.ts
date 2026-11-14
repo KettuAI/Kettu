@@ -90,6 +90,37 @@ describe('isPermissionAllowed', () => {
     const unknown = { url: undefined, isMainFrame: true }
     expect(isPermissionAllowed('clipboard-read', unknown, isOwnUrl)).toBe(false)
   })
+
+  it('lets the app capture a window only while an agent uses the computer', () => {
+    const capture = { ...own, mediaTypes: [] }
+    expect(isPermissionAllowed('media', capture, isOwnUrl, true)).toBe(true)
+    expect(isPermissionAllowed('media', capture, isOwnUrl, false)).toBe(false)
+  })
+
+  it('never grants a camera or a microphone, even while an agent uses the computer', () => {
+    for (const mediaTypes of [['video'], ['audio'], ['audio', 'video']]) {
+      expect(isPermissionAllowed('media', { ...own, mediaTypes }, isOwnUrl, true)).toBe(false)
+    }
+    expect(isPermissionAllowed('media', own, isOwnUrl, true)).toBe(false)
+  })
+
+  it('denies a capture to any other page and to a frame inside the app', () => {
+    for (const context of [
+      { url: 'https://example.com/', isMainFrame: true, mediaTypes: [] },
+      { url: 'kettu-artifact://0123456789abcdef0123456789/', isMainFrame: true, mediaTypes: [] },
+      { url: 'kettu-artifact://0123456789abcdef0123456789/', isMainFrame: false, mediaTypes: [] },
+      { url: APP_URL, isMainFrame: false, mediaTypes: [] },
+    ]) {
+      expect(isPermissionAllowed('media', context, isOwnUrl, true)).toBe(false)
+    }
+  })
+
+  it('grants nothing more while an agent uses the computer', () => {
+    const capture = { ...own, mediaTypes: [] }
+    for (const permission of DENIED.filter((name) => name !== 'media')) {
+      expect(isPermissionAllowed(permission, capture, isOwnUrl, true)).toBe(false)
+    }
+  })
 })
 
 interface Handlers {
@@ -98,14 +129,17 @@ interface Handlers {
   device: () => boolean
 }
 
-function installed(isFramed: (webContents: WebContents) => boolean = () => false): Handlers {
+function installed(
+  isFramed: (webContents: WebContents) => boolean = () => false,
+  capturing?: () => boolean,
+): Handlers {
   const handlers: Partial<Handlers> = {}
   const session = {
     setPermissionRequestHandler: (handler: Handlers['request']) => (handlers.request = handler),
     setPermissionCheckHandler: (handler: Handlers['check']) => (handlers.check = handler),
     setDevicePermissionHandler: (handler: Handlers['device']) => (handlers.device = handler),
   }
-  restrictPermissions(session as unknown as Session, isOwnUrl, isFramed)
+  restrictPermissions(session as unknown as Session, isOwnUrl, isFramed, capturing)
   return handlers as Handlers
 }
 
@@ -137,6 +171,25 @@ describe('restrictPermissions', () => {
     const { check } = installed()
     const details = { isMainFrame: true, requestingUrl: APP_URL }
     expect(check(null, 'clipboard-read', APP_URL, details)).toBe(false)
+  })
+
+  it('answers a capture by its devices and whether an agent uses the computer', () => {
+    let holding = false
+    const { request, check } = installed(undefined, () => holding)
+    const answers: boolean[] = []
+    const ask = (mediaTypes: string[]) =>
+      request(webContents, 'media', (granted: boolean) => answers.push(granted), {
+        isMainFrame: true,
+        requestingUrl: APP_URL,
+        mediaTypes,
+      })
+    ask([])
+    holding = true
+    ask([])
+    ask(['video'])
+    expect(answers).toEqual([false, true, false])
+    const details = { isMainFrame: true, requestingUrl: APP_URL }
+    expect(check(webContents, 'media', APP_URL, details)).toBe(false)
   })
 
   it('never grants a device', () => {

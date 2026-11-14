@@ -1150,6 +1150,20 @@ export interface HostContract {
     params: { sessionId: string }
     result: void
   }
+  // Take over: the user holds the app the session uses, and its calls wait until Hand back.
+  'computer.takeOver': {
+    params: { sessionId: string }
+    result: void
+  }
+  'computer.handBack': {
+    params: { sessionId: string }
+    result: void
+  }
+  // Show app: brings the window the session uses to the front; from this computer's windows only.
+  'computer.show': {
+    params: { sessionId: string }
+    result: void
+  }
   // Not now on a setup card, `entryId`, from any window or device: the call that waits on it fails.
   'computer.declineSetup': {
     params: { sessionId: string; entryId: string }
@@ -1364,6 +1378,9 @@ export const HOST_METHODS = [
   'memory.importScan',
   'memory.import',
   'computer.stop',
+  'computer.takeOver',
+  'computer.handBack',
+  'computer.show',
   'computer.declineSetup',
 ] as const satisfies readonly HostMethod[]
 

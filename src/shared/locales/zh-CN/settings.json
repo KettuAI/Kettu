@@ -478,6 +478,21 @@
       "description": "在你从这台电脑发出的回合里，Agent 可以读取应用的窗口，并在后台点击和输入。每个应用在一个会话里第一次使用前都会先问你。",
       "keywords": "computer use 电脑 桌面 应用 屏幕 鼠标 键盘 辅助功能 自动化"
     },
+    "pauseOnUse": {
+      "name": "你用同一个应用时暂停",
+      "description": "你在 Agent 正在用的应用里点击或按键时就算接管，Agent 会等着；交还后它接着做。",
+      "keywords": "暂停 接管 点击 同一个应用 电脑 computer use"
+    },
+    "stopShortcut": {
+      "name": "在任何地方停止",
+      "description": "在任何应用里停止使用电脑，Kettu 在后台时也行，那时屏幕顶部会显示一枚标签。",
+      "keywords": "快捷键 全局 停止 电脑 computer use shortcut",
+      "change": "更改快捷键",
+      "recording": "按下新的快捷键",
+      "reset": "恢复默认",
+      "invalidMac": "用 Control、Option、Command、Shift 中的两个或更多，加一个键。",
+      "invalid": "用 Ctrl、Alt、Shift 中的两个或更多，加一个键。"
+    },
     "blocked": "密码管理器、终端、系统设置、浏览器和 Kettu 自己永远不会被使用。网页请在 Kettu 的浏览器里打开。",
     "noDriver": "这个版本没有带 Cua Driver，Agent 无法使用电脑。在开发目录里运行 pnpm fetch:cua-driver。",
     "accessibility": {

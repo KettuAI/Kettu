@@ -12,7 +12,13 @@ import {
   type ControlSurface,
 } from './control'
 import type { DeviceAccessAnswer } from './device-agent'
-import type { ComputerAppAnswer, ComputerSetupOutcome, ComputerSetupStep } from './computer-use'
+import type {
+  ComputerAct,
+  ComputerAppAnswer,
+  ComputerControl,
+  ComputerSetupOutcome,
+  ComputerSetupStep,
+} from './computer-use'
 import { isComputerSetupStep } from './computer-use'
 import type { ContextReport } from './context'
 import type { MemoryAction, MemoryDraft, MemoryLayer, MemoryWriteStatus } from './memory'
@@ -97,6 +103,12 @@ export interface ComputerUseView {
   appPath?: string | null
   /** Whether its latest call to that app only read the window or acted on it. */
   action?: 'read' | 'act' | null
+  /** The agent, or the user once they took the app over: the agent's calls then wait. */
+  control?: ComputerControl
+  /** The window it last read or drove, for the Computer pane; null before its first. */
+  window?: { id: number; title: string | null } | null
+  /** Its latest action in that window, where the pane draws its pointer. */
+  act?: ComputerAct | null
 }
 
 export interface QueuedPrompt {
@@ -375,16 +387,17 @@ export interface ControlAskEntry {
   after: string | null
 }
 
-/** The user took a surface over during the turn and handed it back after `durationMs`. */
-export interface ControlNoteEntry {
+/**
+ * The user took a surface over during the turn: `handed_back` once they handed it back after
+ * `durationMs`; `paused` when their own click or key in `app`, the app the agent used, took it.
+ */
+export type ControlNoteEntry = {
   kind: 'control_note'
   id: string
   surface: ControlSurface
-  event: 'handed_back'
-  durationMs: number
   /** The agent's entry before it, to put it back after a replay. */
   after: string | null
-}
+} & ({ event: 'handed_back'; durationMs: number } | { event: 'paused'; app: string })
 
 /**
  * An agent asked to read or operate a mobile device for the first time in its session. `decision`
@@ -1181,8 +1194,8 @@ export function isThreadEntry(value: unknown): value is ThreadEntry {
     case 'control_note':
       return (
         isControlSurface(value.surface) &&
-        value.event === 'handed_back' &&
-        typeof value.durationMs === 'number' &&
+        ((value.event === 'handed_back' && typeof value.durationMs === 'number') ||
+          (value.event === 'paused' && typeof value.app === 'string')) &&
         (value.after === null || typeof value.after === 'string')
       )
     case 'device_access':

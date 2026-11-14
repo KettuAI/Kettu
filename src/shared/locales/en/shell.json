@@ -2,6 +2,7 @@
   "headerTools": {
     "board": "Board",
     "files": "Files",
+    "computer": "Computer",
     "terminal": "Terminal",
     "browser": "Browser",
     "devices": "Mobile devices",

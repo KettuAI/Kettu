@@ -7,6 +7,9 @@ import { useThreadsStore } from '@renderer/stores/threads'
 import { TurnDots } from './turn-dots'
 import { askedStep, turnPhase, turnTokens, writingId } from './turn-phase'
 
+/** Phases in which the agent thinks or writes rather than works in the app it uses. */
+const QUIET_PHASES = new Set(['thinking', 'writing', 'compacting', 'approval'])
+
 /** The time since `since` in whole seconds, ticking on its own so nothing around it re-renders. */
 function TurnClock({ since }: { since: number }) {
   useTranslation()
@@ -31,8 +34,8 @@ function TurnClock({ since }: { since: number }) {
 /**
  * The running turn's status, the thread's last line at the left, where the reply will start: how
  * long it has run, its tokens and its phase, with the attention dot in place of the running dots
- * while it waits for you: to answer, to do a step it asked for, or to hand back the page you took
- * over. While the agent writes a message, that message's own label carries the
+ * while it waits for you: to answer, to do a step it asked for, or to hand back the page or the
+ * app you took over. While the agent writes a message, that message's own label carries the
  * turn, so this line steps aside: two turn marks never show at once.
  */
 export const TurnStatus = memo(function TurnStatus({
@@ -58,16 +61,25 @@ export const TurnStatus = memo(function TurnStatus({
     if (control?.kind === 'you') return 'you'
     return control?.kind === 'agent' && control.acting ? 'using' : null
   })
+  // The app the session uses on its computer: the user holds it, or the agent works in it.
+  const computer = useThreadsStore((s) => s.replicas[sessionId]?.state?.session.computer ?? null)
   if (writing) return null
   const separator = <i aria-hidden>·</i>
-  const waiting = phase === 'approval' || asked !== null || page === 'you'
+  const app = computer?.app ?? null
+  const appHeld = computer?.control === 'you'
+  const appUsed = !!app && !appHeld && !QUIET_PHASES.has(phase)
+  const waiting = phase === 'approval' || asked !== null || page === 'you' || appHeld
   const text = asked
     ? t(`control:status.asks.${asked}`)
     : page === 'you'
       ? t('control:status.you.tab')
-      : page === 'using'
-        ? t('control:status.using.browser')
-        : t(`thread.phase.${phase}`, { count })
+      : appHeld
+        ? t('control:status.you.app', { target: app ?? t('control:held.computer') })
+        : page === 'using'
+          ? t('control:status.using.browser')
+          : appUsed
+            ? t('control:status.using.app', { target: app })
+            : t(`thread.phase.${phase}`, { count })
   return (
     <div role="status" className="ks-status" data-after-sent={afterSent ? '' : undefined}>
       {waiting ? <span aria-hidden className="ks-status__attn" /> : <TurnDots phase={phase} />}
@@ -89,7 +101,7 @@ export const TurnStatus = memo(function TurnStatus({
         </>
       )}
       <span
-        key={asked ?? page ?? phase}
+        key={asked ?? page ?? (appHeld ? 'app-held' : appUsed ? 'app' : phase)}
         className="min-w-0 animate-in truncate animation-duration-(--duration-base) fade-in slide-in-from-bottom-1"
       >
         {text}

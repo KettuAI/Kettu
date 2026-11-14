@@ -170,8 +170,6 @@
   --color-send: var(--send);
   --color-send-hover: var(--send-hover);
   --color-send-active: var(--send-active);
-  --color-computer-label: var(--computer-label);
-  --color-computer-line: var(--computer-line);
   --color-limit-ok: var(--limit-ok);
   --color-limit-warn: var(--limit-warn);
   --color-limit-bad: var(--limit-bad);
@@ -264,7 +262,6 @@
   --shadow-composer: var(--composer-ring);
   --shadow-composer-hover: var(--composer-hover);
   --shadow-composer-focus: var(--composer-focus);
-  --shadow-computer-glow: var(--computer-glow);
   --shadow-attention: var(--attention-ring-shadow);
   --shadow-tile: var(--tile-ring);
   --shadow-tile-on: var(--tile-on-ring);
@@ -846,27 +843,6 @@
   animation: attention-pulse var(--duration-slower) var(--ease-out-quart) 1;
 }
 
-/* A session using the computer: the glow along its column brightens and fades, slowly. */
-@keyframes computer-glow {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-@utility animate-computer-glow {
-  animation: computer-glow 2.8s ease-in-out infinite;
-}
-
-/* Its composer takes the fox ring, under the label that sits on its edge. */
-[data-computer-using] {
-  --composer-ring: var(--computer-composer-ring);
-  --composer-hover: var(--computer-composer-ring);
-  --composer-focus: var(--computer-composer-ring);
-}
-
 /* The launch cover's fox breathes while Kettu starts: firmer and a little larger, then back. */
 @keyframes breathe {
   0%,
@@ -986,7 +962,6 @@
   .animate-spin,
   .animate-attention,
   .animate-breathe,
-  .animate-computer-glow,
   .shimmer,
   [data-caret],
   [data-sd-animate],

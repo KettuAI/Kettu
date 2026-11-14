@@ -4136,9 +4136,6 @@ li[data-row-exit='dust'] > * {
 .kettu-composer > .ui-ccc {
   max-width: none;
 }
-[data-computer-using] .kettu-composer .ui-ccc {
-  --ui-ccc-shadow: var(--computer-composer-ring);
-}
 /* Kettu's editor in the Chat Composer's type: the size of the message it sends, its caret blue. */
 .kettu-prompt .cm-editor {
   color: var(--ui-ccc-strong);

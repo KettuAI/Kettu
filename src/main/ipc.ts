@@ -83,7 +83,7 @@ import type { DeviceHost } from './device-host'
 import { exportThemeFile, installThemeFile, revealThemeFile } from './theme-dialogs'
 import type { ThemeStore } from './themes'
 import type { Updater } from './updater'
-import { isOverlay, isPanel } from './window'
+import { isComputerOverlay, isOverlay, isPanel } from './window'
 
 const log = createLogger('ipc')
 const actionLog = createLogger('action')
@@ -131,6 +131,7 @@ export function isTrusted(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
     frame !== null &&
     frame === event.sender.mainFrame &&
     !isOverlay(event.sender) &&
+    !isComputerOverlay(event.sender) &&
     isRendererUrl(frame.url) &&
     !isRevoked(event.sender) &&
     BrowserWindow.fromWebContents(event.sender) !== null
@@ -167,7 +168,11 @@ const PANEL_CHANNELS = new Set<string>([
  * The panel is told by its window, since a page can change its URL with history.pushState.
  */
 export function mayUse(event: IpcMainInvokeEvent | IpcMainEvent, channel: string): boolean {
-  const panel = isPanel(event.sender) || rendererPage(event.senderFrame?.url) === 'tray'
+  // The overlays' pages talk only to their own channels, which each checks itself.
+  const page = rendererPage(event.senderFrame?.url)
+  if (isOverlay(event.sender) || isComputerOverlay(event.sender)) return false
+  if (page === 'overlay' || page === 'computer-overlay') return false
+  const panel = isPanel(event.sender) || page === 'tray'
   return !panel || PANEL_CHANNELS.has(channel)
 }
 

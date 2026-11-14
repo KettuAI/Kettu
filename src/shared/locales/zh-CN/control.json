@@ -14,13 +14,20 @@
       "code": "{{agent}} 请你<b>输入验证码</b>",
       "check": "{{agent}} 请你<b>通过验证</b>",
       "other": "{{agent}} 请你<b>做一步</b>"
+    },
+    "computer": {
+      "agent": "{{agent}} 正在使用 <b>{{target}}</b>",
+      "looking": "{{agent}} 正在查看 <b>{{target}}</b>",
+      "you": "<b>你接管了 {{held}}</b><i>·</i>{{agent}} 在等"
     }
   },
   "target": {
-    "browser": "浏览器"
+    "browser": "浏览器",
+    "computer": "你的电脑"
   },
   "held": {
-    "tab": "标签"
+    "tab": "标签",
+    "computer": "电脑"
   },
   "scope": {
     "tab": "这个标签",
@@ -46,7 +53,8 @@
     "takeOver": "接管",
     "handBack": "交还",
     "done": "完成",
-    "skip": "跳过"
+    "skip": "跳过",
+    "stop": "停止"
   },
   "note": {
     "handedBack": {
@@ -54,14 +62,19 @@
       "device": "你用了设备 <b>{{duration}}</b>，然后交还",
       "terminal": "你用了终端 <b>{{duration}}</b>，然后交还",
       "computer": "你用了电脑 <b>{{duration}}</b>，然后交还"
+    },
+    "paused": {
+      "computer": "你点了 <b>{{app}}</b>，{{agent}} 暂停了"
     }
   },
   "status": {
     "using": {
-      "browser": "正在使用浏览器"
+      "browser": "正在使用浏览器",
+      "app": "正在使用 {{target}}"
     },
     "you": {
-      "tab": "等你交还标签"
+      "tab": "等你交还标签",
+      "app": "等你交还 {{target}}"
     },
     "asks": {
       "sign_in": "等你登录",
