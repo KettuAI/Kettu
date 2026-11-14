@@ -574,7 +574,8 @@ export class AgentHost {
           this.sessions.archiveWhenIdle(sessionId, agentName),
         archiveNow: (sessionId, agentName) => this.sessions.archiveByAgent(sessionId, agentName),
         start: (callerId, params) => this.sessions.startFromTool(callerId, params),
-        send: (sessionId, text, from) => this.sessions.sendFromTool(sessionId, text, from),
+        send: (sessionId, text, from, now) =>
+          this.sessions.sendFromTool(sessionId, text, from, now),
         started: (callerId) => this.sessions.startedBy(callerId),
         name: (sessionId) => this.sessions.toolName(sessionId),
         agentName: (sessionId) => this.sessions.agentName(sessionId),
