@@ -34,7 +34,7 @@ import { FakeChild, FakeClaudeSdk, type FakeQuery } from '../testing/fake-claude
 import { ClaudeConnection, promptContent } from './connection'
 import { claudeSdkDriver } from './driver'
 import { ANSWER_IN_REPLY, QUESTION_UNREADABLE, QUESTIONS_SKIPPED } from './permissions'
-import type { SdkMessage, StoredMessage } from './sdk'
+import type { PostModelSwitchHookInput, SdkMessage, StoredMessage } from './sdk'
 
 const baseSession: SessionView = {
   id: 'k1',
@@ -1231,6 +1231,42 @@ describe('a turn', () => {
     await expect(s.connection.setConfigOption(sessionId, 'mode', 'nope')).rejects.toBeInstanceOf(
       AgentRequestError,
     )
+  })
+
+  it('takes the model the user switches to in Claude Code, by /model or its picker', async () => {
+    const switched = s.sdk.last.options.hooks?.PostModelSwitch?.[0]?.hooks[0]
+    expect(switched).toBeDefined()
+    const signal = new AbortController().signal
+    const fire = (requested: string | null, source: PostModelSwitchHookInput['source']) =>
+      switched!(
+        {
+          hook_event_name: 'PostModelSwitch',
+          session_id: sessionId,
+          requested_model: requested,
+          source,
+        },
+        undefined,
+        { signal },
+      )
+    const model = (config: readonly ConfigOption[]) =>
+      config.find((option) => option.id === 'model')
+
+    await fire('haiku', 'command')
+    expect(model(target.thread.session.config)?.value).toBe('haiku')
+    expect(model((await s.connection.resumeSession(sessionId, '/repo')).config)?.value).toBe(
+      'haiku',
+    )
+    await fire('claude-fable-5-2', 'picker')
+    expect(model(target.thread.session.config)).toMatchObject({
+      value: 'claude-fable-5-2',
+      choices: expect.arrayContaining([{ value: 'claude-fable-5-2', name: 'claude-fable-5-2' }]),
+    })
+    await fire(null, 'command')
+    expect(model(target.thread.session.config)?.value).toBe('default')
+    // Kettu's own setModel sets the choice itself, and a fallback is not the user's choice.
+    await fire('opus', 'sdk')
+    await fire('opus', 'auto')
+    expect(model(target.thread.session.config)?.value).toBe('default')
   })
 
   /** Claude Code runs a turn of its own, as when a command it ran in the background ends. */

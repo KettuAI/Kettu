@@ -62,6 +62,22 @@ export type CanUseTool = (
   context: ToolPermissionContext,
 ) => Promise<PermissionResult>
 
+/** Claude Code switched the session's model. */
+export interface PostModelSwitchHookInput {
+  hook_event_name: 'PostModelSwitch'
+  session_id: string
+  /** What was asked for: an alias such as `opus`, a model id, or null for the default. */
+  requested_model: string | null
+  /** `command` is `/model`, `picker` its picker, `sdk` a `setModel()` and `auto` a fallback. */
+  source: 'command' | 'picker' | 'sdk' | 'auto' | 'resume'
+}
+
+export type PostModelSwitchHook = (
+  input: PostModelSwitchHookInput,
+  toolUseId: string | undefined,
+  options: { signal: AbortSignal },
+) => Promise<Record<string, never>>
+
 /** A request from an MCP server for the user: a form to fill in, or a page to open. */
 export interface ElicitationRequest {
   serverName: string
@@ -162,6 +178,8 @@ export interface QueryOptions {
   canUseTool?: CanUseTool
   /** Without it the SDK declines every MCP server's request that no hook answers. */
   onElicitation?: OnElicitation
+  /** Callbacks Claude Code runs on its hook events, even with `disableAllHooks`. */
+  hooks?: { PostModelSwitch?: { hooks: PostModelSwitchHook[] }[] }
   mcpServers?: Record<string, McpServerConfig>
   /** Plugin folders loaded for the session beside the user's own plugins. */
   plugins?: { type: 'local'; path: string }[]
