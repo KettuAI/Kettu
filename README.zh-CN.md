@@ -9,9 +9,10 @@
 
 [![版本](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=%E7%89%88%E6%9C%AC&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
 [![下载量](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
-[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#安装)
+[![平台](https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#安装)
 [![Agent](https://img.shields.io/badge/Agent-47-0f766e?style=flat-square&labelColor=3f3f46)](#支持的-agent)
 [![许可证](https://img.shields.io/github/license/KettuAI/Kettu?label=%E8%AE%B8%E5%8F%AF%E8%AF%81&style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
+[![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 
 <h3>颜值也是生产力。</h3>
 
@@ -51,6 +52,9 @@
 - **分叉**：从任意一条回复分出新会话，Agent 还在干活时也行。
 - **Pull Request 和 Issue**：回复里的 GitHub 链接显示当前状态，会话的 Pull Request 显示在侧边栏。
 - **通知**：会话需要你时提醒你。
+- **交接**：一个会话可以把活交给另一个 Agent，比如让 Codex 审查 Claude Code 写的代码，再拿回结果。
+- **工作流**：让一个任务按流程一步步走，比如调研、设计、实现和审查，每一步一个 Agent 会话，在该你看的地方停下来。
+- **总览**：一个页面看全所有会话和任务的状态、进行到哪一步、有什么等你看。
 - **用量**：按天、模型和项目统计 token 和费用，每个账号的套餐额度画成圆环。
 
 ### 工作台
@@ -64,11 +68,13 @@
 - **文件**：用标签页查看、预览和编辑项目文件。
 - **终端**：每个会话都有自己的终端。
 - **Git**：分支、改动和 Pull Request 的检查状态。
+- **Worktree**：会话可以在自己的 Git worktree 里干活，由 Kettu 创建和清理。
 - **内置浏览器**：Agent 能打开页面、点击、输入和截图，你随时可以接手。
 - **Artifacts**：Agent 做的网页、文档、幻灯片和画布。画布上的画框可以排版、标注后交给 Agent，也可以留言、自己编辑，或导出成 Word 和 PowerPoint。
 - **发布到 Kettu**：给 Artifact 一个 kettu.page 上的页面，可以只有自己能看、凭访问码看或公开。
 - **Computer use**：打开之后，Agent 能操作你电脑上的应用。
 - **Routines**：按时让 Agent 干活，每次运行都留成会话。
+- **Marketplace**：在一个地方发现、安装和管理给 Agent 用的插件、Skills、MCP 服务器和工作流。
 - **搜索**：在一个命令面板里搜会话、Artifacts、Routines、项目、设置和操作。
 
 ### 移动设备
@@ -95,14 +101,20 @@
 - **开发机**：填 SSH 地址就能加进来，Kettu 会在那边自己装好。
 - **端到端加密**：中间经过的任何一方都读不到你的会话，中继也一样。
 
+### iPhone 和 iPad
+
+- **会话装进口袋**：每台电脑上的会话都在一个列表里，需要你处理的排在最前面。正在 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。
+- **随时随地回应**：允许或拒绝一条命令，回答 Agent 的问题，批准它的计划，回复，或者新建会话。
+- **通知**：会话需要你时提醒你，在锁屏上就能回应。
+- **Artifacts、Routines 和用量**：打开 Agent 做的东西，运行一个 Routine，查看套餐额度。
+
 ### 外观
 
 - 跟着系统切换、整个窗口一起平滑过渡的浅色和深色模式，主题库里的主题或你自己的主题，简体中文和英文，macOS 毛玻璃侧边栏。
 
 ### 即将推出
 
-- **iPhone 和 iPad 应用**：会话装进口袋，在锁屏上就能回应请求。
-- **手机通知**：不在电脑前时，会话需要你也能知道。
+- **Android 应用**：排在 iPhone 和 iPad 应用之后。
 
 ## 隐私
 
@@ -119,6 +131,8 @@
 - **macOS**（Apple 芯片）：`.dmg`
 - **Windows**（x64 和 Arm）：`setup.exe`。还没有签名，SmartScreen 提示时点「更多信息」，再点「仍要运行」。
 - **Linux**（x64 和 Arm）：`.AppImage`，加上执行权限后运行；需要 FUSE 2（`libfuse2`，Ubuntu 24.04 起为 `libfuse2t64`）。
+
+在 iPhone 或 iPad 上：加入 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。需要 iOS 26 或更高版本，电脑上需要有 Kettu。
 
 在浏览器里：[app.kettu.sh](https://app.kettu.sh)，登录和你电脑上的 Kettu 同一个 Kettu 账号。
 

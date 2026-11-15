@@ -9,9 +9,10 @@
 
 [![Release](https://img.shields.io/github/v/release/KettuAI/Kettu?include_prereleases&label=release&style=flat-square&labelColor=3f3f46&color=fa5615)](https://github.com/KettuAI/Kettu/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/KettuAI/Kettu/total?label=downloads&style=flat-square&labelColor=3f3f46&color=15803d)](https://github.com/KettuAI/Kettu/releases)
-[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#install)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20iOS%20%7C%20Web-2563eb?style=flat-square&labelColor=3f3f46)](#install)
 [![Agents](https://img.shields.io/badge/agents-47-0f766e?style=flat-square&labelColor=3f3f46)](#agents)
 [![License](https://img.shields.io/github/license/KettuAI/Kettu?style=flat-square&labelColor=3f3f46&color=71717a)](./LICENSE)
+[![LINUX DO](https://img.shields.io/badge/LINUX-DO-ffb003?style=flat-square&labelColor=3f3f46)](https://linux.do)
 
 <h3>Beauty is productivity.</h3>
 
@@ -51,6 +52,9 @@ All your coding agents, side by side in one window that looks good and feels rig
 - **Forks**: branch a new session off any reply, even while the agent is still working.
 - **Pull requests and issues**: GitHub links in replies show their current state, and a session's pull requests show in the sidebar.
 - **Notifications**: know when a session needs you.
+- **Hand-offs**: a session can give work to another agent, such as Codex reviewing what Claude Code wrote, and gets the result back.
+- **Workflows**: run a task through a flow of steps, such as research, design, build and review, with an agent session for each step and a stop wherever you should look.
+- **Overview**: one page for the state of every session and task, the step it is at and what is ready for you.
 - **Usage**: tokens and cost by day, model and project, and each account's plan limits as rings.
 
 ### Workbench
@@ -64,11 +68,13 @@ All your coding agents, side by side in one window that looks good and feels rig
 - **Files**: read, preview and edit project files in tabs.
 - **Terminal**: every session has its own.
 - **Git**: the branch, changes and pull request checks.
+- **Worktrees**: a session can work in a Git worktree of its own, which Kettu creates and cleans up.
 - **Built-in browser**: agents open pages, click, type and take screenshots; take over at any time.
 - **Artifacts**: the pages, documents, slides and canvases agents make. Lay out a canvas's frames and mark them up for the agent, comment, edit them yourself, or export them to Word and PowerPoint.
 - **Publish to Kettu**: give an artifact its own page on kettu.page, private, behind an access code or public.
 - **Computer use**: once you turn it on, agents use the apps on your computer.
 - **Routines**: run an agent on a schedule; every run is kept as a session.
+- **Marketplace**: discover, install and manage plugins, skills, MCP servers and workflows for your agents in one place.
 - **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
 
 ### Mobile devices
@@ -95,14 +101,20 @@ All your coding agents, side by side in one window that looks good and feels rig
 - **Development machines**: add one by its SSH address, and Kettu sets itself up there.
 - **End-to-end encrypted**: nothing in between can read your sessions, the relay included.
 
+### iPhone and iPad
+
+- **Your sessions in your pocket**: every session on every computer in one list, with the ones that need you first. In [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ).
+- **Answer from anywhere**: allow or deny a command, answer an agent's questions, approve its plan, reply, or start a new session.
+- **Notifications**: know when a session needs you, and answer from the lock screen.
+- **Artifacts, Routines and usage**: open what your agents made, run a routine and see your plan limits.
+
 ### Looks
 
 - Light and dark modes that follow your system and fade across the whole window at once, themes from the catalog or your own, English and Simplified Chinese, and the frosted macOS sidebar.
 
 ### Coming soon
 
-- **iPhone and iPad app**: your sessions in your pocket, with requests answered from the lock screen.
-- **Notifications on your phone**: know when a session needs you while you are away.
+- **Android app**: after the iPhone and iPad app.
 
 ## Privacy
 
@@ -119,6 +131,8 @@ Download from [Releases](https://github.com/KettuAI/Kettu/releases/latest):
 - **macOS** (Apple silicon): the `.dmg`
 - **Windows** (x64 and Arm): the `setup.exe`. It is not signed yet, so when SmartScreen appears, choose **More info**, then **Run anyway**.
 - **Linux** (x64 and Arm): the `.AppImage`; make it executable and run it. It needs FUSE 2 (`libfuse2`, or `libfuse2t64` on Ubuntu 24.04 and later).
+
+On an iPhone or iPad: join the [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ). It needs iOS 26 or later, and Kettu on a computer.
 
 In a browser: [app.kettu.sh](https://app.kettu.sh), signed in to the same Kettu account as Kettu on your computer.
 
