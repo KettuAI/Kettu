@@ -22,10 +22,7 @@
 
 </div>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshot-dark.webp">
-  <img src="./assets/screenshot-light.webp" alt="Kettu 界面：Codex 会话修好了 streak 的 bug，正在请求运行测试；侧边栏里一个 Claude Code 会话在干活，其他会话在等你">
-</picture>
+<img src="./assets/picture-cover.webp" alt="Kettu 界面：两个 Claude Code 会话并排，一个请求编辑文件并显示 diff，另一个用带选项的卡片提问">
 
 > [!NOTE]
 > Kettu 还是早期预览版。桌面应用的样子已经定下来，细节还在快速变化，欢迎[反馈问题](https://github.com/KettuAI/Kettu/issues)。
@@ -34,10 +31,11 @@
 
 ### Agent 与会话
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-sessions-dark.webp">
-  <img src="./assets/feature-sessions-light.webp" alt="两个 Codex 会话并排：一个在问题卡片里问一周从哪天开始，另一个做完了深色模式，改了一个文件">
-</picture>
+<img src="./assets/picture-sessions.webp" alt="两个会话并排在一个窗口里，侧边栏标出哪些会话在等你">
+
+<img src="./assets/picture-control.webp" alt="授权卡片显示 Claude Code 想编辑的文件的 diff，有拒绝、允许一次和始终允许">
+
+<img src="./assets/picture-workflows.webp" alt="「功能开发」工作流的流程图：调研、设计、计划、实现、代码审查和发布">
 
 - **47 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。暂时不用的可以关掉，会话不会丢。
 - **并排**：多个会话同时跑，窗口最多分成九格。侧边栏标出哪个在干活、哪个在等你、哪个做完了。
@@ -59,10 +57,9 @@
 
 ### 工作台
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-workbench-dark.webp">
-  <img src="./assets/feature-workbench-light.webp" alt="Codex 会话旁边是画布编辑器，打开着 Agent 做的每周习惯报告">
-</picture>
+<img src="./assets/picture-artifacts.webp" alt="会话旁边是 Agent 做的每周习惯报告页面">
+
+<img src="./assets/picture-marketplace.webp" alt="Marketplace 列出可以安装的插件、Skills 和 MCP 服务器">
 
 - **Diff**：Agent 改了哪些文件、改了什么，一目了然。
 - **文件**：用标签页查看、预览和编辑项目文件。
@@ -103,12 +100,16 @@
 
 ### iPhone 和 iPad
 
+<img src="./assets/picture-ios.webp" alt="两台 iPhone 上的 Kettu：需要你处理的排在最前的会话列表，和一个请求编辑文件的会话">
+
 - **会话装进口袋**：每台电脑上的会话都在一个列表里，需要你处理的排在最前面。正在 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。
 - **随时随地回应**：允许或拒绝一条命令，回答 Agent 的问题，批准它的计划，回复，或者新建会话。
 - **通知**：会话需要你时提醒你，在锁屏上就能回应。
 - **Artifacts、Routines 和用量**：打开 Agent 做的东西，运行一个 Routine，查看套餐额度。
 
 ### 外观
+
+<img src="./assets/picture-dark.webp" alt="深色模式下并排的同样两个会话">
 
 - 跟着系统切换、整个窗口一起平滑过渡的浅色和深色模式，主题库里的主题或你自己的主题，简体中文和英文，macOS 毛玻璃侧边栏。
 
