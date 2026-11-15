@@ -43,6 +43,11 @@ export const PREFERRED_REGIONS = 2
 export const PREFERENCE_TTL_MS = 30 * 24 * 60 * 60_000
 /** A device measures its regions again this long after the last time. */
 export const MEASURE_EVERY_MS = 4 * 60 * 60_000
+/**
+ * A region that said it drains is passed over this long. A region emptied for good is gone from
+ * the list within a minute; one that drained to restart is used again soon after.
+ */
+export const DRAINED_MS = 2 * 60_000
 
 /** The channel feature of hosts that send `relay.regions` and devices that read it. */
 export const REGIONS_CHANNEL_FEATURE = 'relay-regions'

@@ -29,6 +29,7 @@ import {
   type RelayRefusal,
   type RelayRegion,
 } from './relay'
+import { DRAINED_MS } from './relay-regions'
 
 /** Why the last try on a relay ended. */
 export type RelayHostError =
@@ -85,7 +86,7 @@ export const RELAY_HOST_TIMINGS: RelayHostTimings = {
   conflictWindowMs: 10 * 60_000,
   regionsMs: 6 * 60 * 60_000,
   leaveMs: 10 * 60_000,
-  drainedMs: 30 * 60_000,
+  drainedMs: DRAINED_MS,
   rttSamples: 5,
 }
 

@@ -11,6 +11,7 @@ import {
   REGIONS_RETRY_GAP_MS,
   RegionSerial,
   asRelay,
+  DRAINED_MS,
   fastestRegions,
   parseSignedRegionList,
   rankRegions,
@@ -327,7 +328,7 @@ export class DeviceRegions {
 
   /** A region said it drains: tried last for a while. */
   drain(url: string): void {
-    this.drained.set(url, this.now() + (this.options.drainedMs ?? 10 * 60_000))
+    this.drained.set(url, this.now() + (this.options.drainedMs ?? DRAINED_MS))
   }
 
   forget(host: string): void {
