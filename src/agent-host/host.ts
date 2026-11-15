@@ -60,7 +60,7 @@ import {
   type MarketCallAnswer,
   type MarketResults,
 } from '@shared/market-publish'
-import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
+import { HARNESSES_FOLDER, KETTU_HOME_FOLDER, PLUGINS_FOLDER } from '@shared/storage'
 import type { AgentId, DigestedThreadEntry, FromDevice, ThreadEntry } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
 import { listedModels } from './claude/user-settings'
@@ -541,6 +541,7 @@ export class AgentHost {
     })
     this.marketCommunity = new MarketCommunityService({
       userDataPath: options.userDataPath,
+      pluginsRoot: path.join(home, KETTU_HOME_FOLDER, PLUGINS_FOLDER),
       file: communityFile(options.userDataPath, log),
       log,
       account: () => this.marketAccount,
@@ -1165,6 +1166,7 @@ export class AgentHost {
     await host.tasks.load()
     host.agents.restore(remembered)
     host.agents.restoreUpdates(updates)
+    void host.moveLocalMarketplaces()
     host.routines.start()
     void host.marketSkills.sync()
     host.sendFolders()
@@ -1585,6 +1587,27 @@ export class AgentHost {
       for (const [id, version] of versions(after[kind])) {
         if (!was.has(id)) void this.marketCommunity.count(id, version, 'install')
         else if (was.get(id) !== version) void this.marketCommunity.count(id, version, 'update')
+      }
+    }
+  }
+
+  /**
+   * Moves the Kettu Marketplace's local marketplaces out of the app's data, once, then points the
+   * agents that registered them at the new place.
+   */
+  private async moveLocalMarketplaces(): Promise<void> {
+    for (const harness of await this.marketCommunity.moveLegacy()) {
+      try {
+        await this.marketPlugins.pointLocal(
+          harness,
+          await this.marketCommunity.resolvedLocal(harness),
+        )
+      } catch (error) {
+        writeLog(
+          'warn',
+          'host',
+          `Could not point the agents at the moved ${harness} marketplace: ${(error as Error).message}`,
+        )
       }
     }
   }

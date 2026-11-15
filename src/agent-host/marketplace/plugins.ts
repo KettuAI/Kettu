@@ -186,6 +186,11 @@ export interface PluginsDeps {
   now?: () => number
 }
 
+/** Whether a plugin id is of the Kettu Marketplace's local marketplace. */
+function fromKettu(id: string): boolean {
+  return id.endsWith(`@${KETTU_PLUGINS}`)
+}
+
 function pluginHarness(agentId: AgentId): PluginHarness | null {
   const harness = harnessOf(agentId)
   return harness === 'claude-code' || harness === 'codex' ? harness : null
@@ -356,11 +361,78 @@ export class MarketPluginsService {
     this.checkScope(harness, scope, projectPath)
     return this.change(agentId, async () => {
       if (harness === 'claude-code') {
-        await claude.uninstallPlugin(await this.cli(agentId), id, scope, projectPath)
+        const cli = await this.cli(agentId)
+        await claude.uninstallPlugin(cli, id, scope, projectPath)
+        if (fromKettu(id)) {
+          await this.dropLocal(
+            agentId,
+            () => claude.installedPlugins(cli),
+            () => claude.removeMarketplace(cli, KETTU_PLUGINS),
+          )
+        }
       } else {
-        await codex.uninstallCodexPlugin(await this.deps.appServer(agentId), id)
+        const request = await this.deps.appServer(agentId)
+        await codex.uninstallCodexPlugin(request, id)
+        if (fromKettu(id)) {
+          await this.dropLocal(
+            agentId,
+            async () => (await codex.listCodexPlugins(request, agentId)).installed,
+            () => codex.removeCodexMarketplace(request, KETTU_PLUGINS),
+          )
+        }
       }
     })
+  }
+
+  /**
+   * Removes the Kettu Marketplace's local marketplace from an agent that has none of its plugins
+   * left, in any scope or project, so no registration stays behind. The plugin is gone either way,
+   * so a failure here is only logged.
+   */
+  private async dropLocal(
+    agentId: AgentId,
+    installed: () => Promise<InstalledPlugin[]>,
+    remove: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      if ((await installed()).some((plugin) => fromKettu(plugin.id))) return
+      await remove()
+    } catch (error) {
+      this.deps.log(
+        'warn',
+        `Could not remove ${KETTU_PLUGINS} from ${agentId}: ${(error as Error).message}`,
+      )
+    }
+  }
+
+  /**
+   * Points every agent of the harness whose registration of the Kettu Marketplace's local
+   * marketplace names another folder at `local`, as after it moved; an agent that cannot be asked
+   * is only logged, and the link left at the old folder keeps it working.
+   */
+  async pointLocal(harness: PluginHarness, local: LocalMarketplace): Promise<void> {
+    const agentIds = (await this.deps.agents()).filter(
+      (agentId) => pluginHarness(agentId) === harness,
+    )
+    for (const agentId of agentIds) {
+      try {
+        const moved =
+          harness === 'claude-code'
+            ? await claude.pointLocalMarketplace(await this.cli(agentId), local.dir, false)
+            : await codex.pointLocalCodexMarketplace(
+                await this.deps.appServer(agentId),
+                agentId,
+                local.dir,
+                local.file,
+              )
+        if (moved) this.forget(agentId)
+      } catch (error) {
+        this.deps.log(
+          'warn',
+          `Could not point ${agentId}'s ${KETTU_PLUGINS} at ${local.dir}: ${(error as Error).message}`,
+        )
+      }
+    }
   }
 
   async setEnabled(
@@ -468,10 +540,15 @@ export class MarketPluginsService {
     try {
       return await this.harnessCall(run)
     } finally {
-      if (this.kept?.agents[agentId]) {
-        delete this.kept.agents[agentId]
-        this.deps.file.save(this.kept)
-      }
+      this.forget(agentId)
+    }
+  }
+
+  /** Drops the agent's kept lists, which a change made out of date. */
+  private forget(agentId: AgentId): void {
+    if (this.kept?.agents[agentId]) {
+      delete this.kept.agents[agentId]
+      this.deps.file.save(this.kept)
     }
   }
 
