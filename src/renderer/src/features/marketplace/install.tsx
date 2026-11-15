@@ -73,12 +73,20 @@ export function AgentPicker({
   )
 }
 
-/** The input's label: its name in mono, marked when it must be filled. */
-export function InputLabel({ name, required }: { name: string; required: boolean }) {
+/** The input's label: its title, else its name in mono, marked when it must be filled. */
+export function InputLabel({
+  name,
+  title,
+  required,
+}: {
+  name: string
+  title?: string
+  required: boolean
+}) {
   const { t } = useTranslation('marketplace')
   return (
     <span className="k-mkt-input-label">
-      <span className="k-mkt-mono">{name}</span>
+      {title ? <span>{title}</span> : <span className="k-mkt-mono">{name}</span>}
       {required && <span className="k-mkt-required">{t('install.required')}</span>}
     </span>
   )
@@ -122,7 +130,7 @@ export function InstallForm({
           autoComplete="off"
           spellCheck={false}
           prefix={input.prefix}
-          label={<InputLabel name={input.name} required={input.required} />}
+          label={<InputLabel name={input.name} title={input.title} required={input.required} />}
           hint={
             input.description || (input.secret ? t('install.secretHint') : t('install.valueHint'))
           }

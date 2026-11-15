@@ -766,6 +766,7 @@ export async function updateCommunityServer(
   scope: HostScope,
   kept: MarketServer,
   server: CatalogServer,
+  values: Record<string, string> = {},
 ): Promise<void> {
   try {
     await save(
@@ -777,6 +778,7 @@ export async function updateCommunityServer(
       ),
     )
     communityChanged(scope)
+    if (!(await storeValues(scope, kept.id, server.title, values))) return
     toast(t('toast.updated', { name: server.title, version: server.version }), undefined, {
       tone: 'success',
     })

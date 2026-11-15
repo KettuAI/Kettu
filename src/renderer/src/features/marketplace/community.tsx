@@ -22,6 +22,7 @@ import { useShallow } from 'zustand/react/shallow'
 import {
   KETTU_PLUGINS,
   kettuId,
+  type BundleRef,
   type CommunityItem,
   type CommunityPlugin,
 } from '@shared/market-community'
@@ -75,6 +76,7 @@ import {
   useKeptSkill,
   usePluginInstalls,
 } from './hooks'
+import { BundleInstallButton, BundleNote, BundleUpdateButton } from './bundle-install'
 import { AgentPicker } from './install'
 import { InstallButton, KeptControls, Runs } from './listing'
 import { asksFirst, itemKey, oauthFlow, updateFor } from './model'
@@ -463,7 +465,13 @@ export function CommunityListingPage({
   }
   return (
     <ListingFrame back={back} rise>
-      <Listed listing={page.listing.listing} server={page.listing.server} tab={tab} back={back} />
+      <Listed
+        listing={page.listing.listing}
+        server={page.listing.server}
+        bundle={page.listing.bundle}
+        tab={tab}
+        back={back}
+      />
     </ListingFrame>
   )
 }
@@ -531,6 +539,7 @@ export function CommunityPreviewPage({ id, tab }: { id: string; tab: Marketplace
     <Listed
       listing={page.listing.listing}
       server={page.listing.server}
+      bundle={page.listing.bundle}
       tab={tab}
       back={own}
       preview
@@ -652,12 +661,14 @@ function Unlisted({ id, takenDown, back }: { id: string; takenDown: boolean; bac
 function Listed({
   listing,
   server,
+  bundle,
   tab,
   back,
   preview = false,
 }: {
   listing: MarketListing
   server: CatalogServer | null
+  bundle: BundleRef | null
   tab: MarketplaceTab
   back: () => void
   /** As others see it: no sign of the owner, nothing installed here, Install and Report off. */
@@ -688,7 +699,7 @@ function Listed({
           {preview ? (
             <PreviewInstall listing={listing} />
           ) : (
-            <Actions listing={listing} server={server} back={back} />
+            <Actions listing={listing} server={server} bundle={bundle} back={back} />
           )}
         </span>
       </header>
@@ -703,10 +714,10 @@ function Listed({
           {listing.kind === 'mcp-server' &&
             (server ? (
               <ServerRuns listing={listing} server={server} />
+            ) : bundle ? (
+              <BundleRuns listing={listing} bundle={bundle} />
             ) : (
-              <p className="k-mkt-section-note">
-                {isBundle(listing.server) ? t('community.bundle') : t('community.cannotRun')}
-              </p>
+              <p className="k-mkt-section-note">{t('community.cannotRun')}</p>
             ))}
         </div>
         <aside className="k-mkt-side">
@@ -763,17 +774,6 @@ function useInstalledHere(listing: MarketListing): boolean {
   )
   const { installs } = useCommunityPlugin(listing.id, listing.harness)
   return kept || installs.length > 0
-}
-
-/** Whether a server's `server.json` runs an MCP bundle, which Kettu does not install yet. */
-function isBundle(server: Record<string, unknown> | undefined): boolean {
-  const packages = Array.isArray(server?.packages) ? (server.packages as unknown[]) : []
-  return packages.some(
-    (item) =>
-      typeof item === 'object' &&
-      item !== null &&
-      (item as { registryType?: unknown }).registryType === 'mcpb',
-  )
 }
 
 /** Others of the same publisher, else of the same kind, from the directory. */
@@ -895,6 +895,19 @@ function Adds({
   )
 }
 
+/** A bundle's page: what it runs once installed, before that how it installs. */
+function BundleRuns({ listing, bundle }: { listing: MarketListing; bundle: BundleRef }) {
+  const { useSettingsStore } = useHostScope()
+  const kept = useSettingsStore((s) =>
+    s.settings.marketplace.mcp.find((x) => x.id === kettuId(listing.id)),
+  )
+  return kept ? (
+    <Runs spec={kept.spec} serverId={kept.id} service={listing.name} />
+  ) : (
+    <BundleNote bundle={bundle} />
+  )
+}
+
 function ServerRuns({ listing, server }: { listing: MarketListing; server: CatalogServer }) {
   const { useSettingsStore } = useHostScope()
   const kept = useSettingsStore((s) =>
@@ -909,10 +922,12 @@ function ServerRuns({ listing, server }: { listing: MarketListing; server: Catal
 function Actions({
   listing,
   server,
+  bundle,
   back,
 }: {
   listing: MarketListing
   server: CatalogServer | null
+  bundle: BundleRef | null
   back: () => void
 }) {
   const { t } = useTranslation('marketplace')
@@ -1014,6 +1029,16 @@ function Actions({
     )
   }
 
+  if (!server && bundle) {
+    if (!kept) return <BundleInstallButton listing={listing} />
+    const update = updateFor(standing, kept.version)
+    return (
+      <>
+        {update && <BundleUpdateButton kept={kept} version={update} />}
+        <KeptControls server={kept} onUninstalled={back} />
+      </>
+    )
+  }
   if (!server) return null
   if (!kept)
     return oauthFlow(server.spec) ? (

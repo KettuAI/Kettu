@@ -336,6 +336,63 @@
 .k-mkt-install .ui-ss-select.k-select {
   width: 100%;
 }
+/* A bundle's form: what it runs, a switch row and a field with Choose beside it */
+.k-mkt-install__runs {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--card);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  color: var(--muted);
+}
+.k-mkt-install__runs > svg {
+  flex: none;
+  margin-top: 2px;
+}
+.k-mkt-install__runs > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.k-mkt-install__runs small {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.k-mkt-install__runs code {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.k-mkt-install__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.k-mkt-install__switch > span {
+  display: grid;
+  gap: 2px;
+  font-size: 12.5px;
+}
+.k-mkt-install__switch small {
+  font-size: 12px;
+  color: var(--muted);
+}
+.k-mkt-install__input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
+}
+.k-mkt-install__input > :only-child {
+  grid-column: 1 / -1;
+}
+.k-mkt-install__input > button {
+  margin-top: 29px;
+}
 
 /* Connect: the wait while the user signs in at the service, the device code, and why it failed */
 .k-mkt-connect {
