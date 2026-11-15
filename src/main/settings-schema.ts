@@ -1172,6 +1172,9 @@ export function parseSettingsFile(raw: unknown): LoadedSettings {
   if (raw.agentRegistrationVersion !== undefined && raw.agentRegistrationVersion !== 1) {
     problems.push('"agentRegistrationVersion" must be 1')
   }
+  if (raw.remoteDirectVersion !== undefined && raw.remoteDirectVersion !== 1) {
+    problems.push('"remoteDirectVersion" must be 1')
+  }
   for (const section of FIELD_SECTIONS) {
     const value = raw[section]
     if (value === undefined) continue
@@ -1511,14 +1514,28 @@ export function terminalSettings(settings: SettingsFile): TerminalSettings {
   }
 }
 
-export type SettingsSection = Exclude<keyof SettingsFile, 'version' | 'agentRegistrationVersion'>
+/** The keys of the file that only mark it, which no section holds. */
+const SETTINGS_MARKERS: ReadonlySet<string> = new Set([
+  'version',
+  'agentRegistrationVersion',
+  'remoteDirectVersion',
+])
+
+function isSection(key: keyof SettingsFile): key is SettingsSection {
+  return !SETTINGS_MARKERS.has(key)
+}
+
+export type SettingsSection = Exclude<
+  keyof SettingsFile,
+  'version' | 'agentRegistrationVersion' | 'remoteDirectVersion'
+>
 
 /** The sections whose values differ, so each consumer is told only about what it uses. */
 /** The sections whose values differ, so each consumer is told only about what it uses. */
 export function changedSections(before: SettingsFile, after: SettingsFile): Set<SettingsSection> {
   const changed = new Set<SettingsSection>()
   for (const key of Object.keys(after) as (keyof SettingsFile)[]) {
-    if (key === 'version' || key === 'agentRegistrationVersion') continue
+    if (!isSection(key)) continue
     if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) changed.add(key)
   }
   return changed
