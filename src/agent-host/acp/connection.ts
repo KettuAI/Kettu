@@ -857,6 +857,11 @@ export class AcpConnection implements AgentConnection {
     await this.call(() => this.connection.agent.request(methods.agent.logout, {}))
   }
 
+  /** Sends a vendor-specific ACP extension request on this connection. */
+  async request<T>(method: string, params?: unknown): Promise<T> {
+    return this.call(() => this.connection.agent.request(method, params ?? {})) as Promise<T>
+  }
+
   get hiddenSessions(): boolean {
     return this.removal !== null
   }

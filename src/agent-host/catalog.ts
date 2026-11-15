@@ -146,6 +146,7 @@ export interface AgentDefinition {
   startupNote?: true
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
+  limitsReason?: string
   /**
    * Its agent sign-in methods that send their page as a URL elicitation, which opens on the client
    * that asked, so a paired device may run them.

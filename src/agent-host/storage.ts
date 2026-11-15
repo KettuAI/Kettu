@@ -919,6 +919,15 @@ function limitOf(value: unknown): PlanLimit | null {
   ) {
     return null
   }
+  const amount =
+    isRecord(value.amount) &&
+    typeof value.amount.used === 'number' &&
+    Number.isFinite(value.amount.used) &&
+    typeof value.amount.total === 'number' &&
+    Number.isFinite(value.amount.total) &&
+    isString(value.amount.unit)
+      ? { used: value.amount.used, total: value.amount.total, unit: value.amount.unit }
+      : undefined
   return {
     window: value.window,
     label: value.label,
@@ -926,6 +935,7 @@ function limitOf(value: unknown): PlanLimit | null {
     resetsAt: value.resetsAt,
     state: value.state as PlanLimit['state'],
     observedAt: value.observedAt,
+    ...(amount ? { amount } : {}),
   }
 }
 

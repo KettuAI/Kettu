@@ -153,6 +153,7 @@ export interface PlanLimit {
   resetsAt: number | null
   state: 'ok' | 'warning' | 'reached' // from `status`: allowed, allowed_warning, rejected
   observedAt: number
+  amount?: { used: number; total: number; unit: string }
 }
 
 export interface ProviderBalance {
@@ -310,6 +311,8 @@ export interface AgentStatus {
   providersError?: string | null
   /** A harness's balance at its vendor, read on its own: DeepSeek Harness on an API key. */
   balance?: AgentProvider['usage']
+  balances?: ProviderBalance[]
+  limitsReason?: string
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   installUrl: string | null

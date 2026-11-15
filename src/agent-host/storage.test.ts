@@ -504,6 +504,7 @@ describe('the host files', () => {
       resetsAt: 1_000,
       state: 'ok',
       observedAt: 500,
+      amount: { used: 1_240, total: 2_000, unit: 'credits' },
     }
     expect(
       parseAgentsFile({

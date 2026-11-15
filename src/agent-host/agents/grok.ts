@@ -4,6 +4,7 @@ export const GROK: AgentDefinition = {
   id: 'grok',
   name: 'Grok',
   registryId: 'grok-build',
+  reportsAccount: true,
   launch: {
     kind: 'package',
     package: '@xai-official/grok',

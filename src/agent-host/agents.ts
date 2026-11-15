@@ -21,7 +21,15 @@ import type {
   InstalledCli,
   McpStatus,
   PlanLimit,
+  ProviderBalance,
 } from '@shared/agent-host'
+import { parseGrokBilling } from './vendor-usage/grok'
+import { parseMistralAccount } from './vendor-usage/mistral-vibe'
+import { readAuggieAccount } from './vendor-usage/auggie'
+import { readCopilotQuota } from './vendor-usage/copilot'
+import { readKiloProfile } from './vendor-usage/kilo'
+import { readQoderUsage } from './vendor-usage/qoder'
+import type { VendorUsage } from './vendor-usage/common'
 import type { AgentProcess, NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import { agentColor, type AddedAgent, type HostSettings } from '@shared/settings'
@@ -352,6 +360,7 @@ class Slot {
   balanceRun: Promise<void> | null = null
   balanceReadAt = 0
   limits = new Map<string, PlanLimit>()
+  balances: ProviderBalance[] = []
   /** Kettu handed the harness an API key for this agent, which it never reads back. */
   apiKey = false
   /** The capabilities of the last `initialize`, from this run or an earlier one. */
@@ -2473,6 +2482,7 @@ export class AgentManager {
       !!slot &&
       (slot.def.id === 'opencode' ||
         limitsReport(slot.def.id) !== null ||
+        ['grok', 'mistral-vibe', 'copilot', 'qoder', 'kilo', 'auggie'].includes(slot.def.id) ||
         this.driver(slot).reads?.limits === true)
     )
   }
@@ -2487,6 +2497,62 @@ export class AgentManager {
   private async readLimits(slot: Slot): Promise<void> {
     const runtime = await this.ensureReady(slot.id)
     const { connection } = runtime
+    if (connection.request && ['grok', 'mistral-vibe'].includes(slot.def.id)) {
+      const now = Date.now()
+      const version = runtime.init.version ?? slot.h.binaryVersion
+      if (slot.def.id === 'grok' && version !== '1.0.72') return
+      if (slot.def.id === 'mistral-vibe' && (!version || compareVersions(version, '3.1.0') < 0))
+        return
+      let hiddenSession: string | null = null
+      let reply: unknown
+      try {
+        if (slot.def.id === 'grok' && slot.signIn !== 'required') {
+          const cached = runtime.init.authMethods.find((method) => method.id === 'grok.com')
+          if (cached?.type === 'agent') await connection.authenticate?.(cached.id)
+        }
+        if (slot.def.id === 'mistral-vibe') {
+          hiddenSession = (await connection.newSession(os.homedir(), { hidden: 'limits' }))
+            .sessionId
+        }
+        reply = await connection.request<unknown>(
+          slot.def.id === 'grok' ? '_x.ai/billing' : 'account/read',
+          hiddenSession ? { sessionId: hiddenSession } : {},
+        )
+      } finally {
+        if (hiddenSession) await connection.closeSession(hiddenSession).catch(() => {})
+      }
+      const usage =
+        slot.def.id === 'grok' ? parseGrokBilling(reply, now) : parseMistralAccount(reply, now)
+      if (!usage)
+        throw this.limitsError(slot, new Error('The vendor returned an unknown usage reply'))
+      this.applyVendorUsage(slot, usage, now)
+      return
+    }
+    if (['copilot', 'qoder', 'kilo', 'auggie'].includes(slot.def.id)) {
+      const version = runtime.init.version ?? slot.h.binaryVersion
+      if (slot.def.id === 'copilot' && version !== '1.0.112') return
+      if (slot.def.id === 'qoder' && version !== '1.1.89') return
+      if (slot.def.id === 'auggie' && version !== '0.36.0') return
+      if (slot.def.id === 'kilo' && (!version || compareVersions(version, '7.8.28') < 0)) return
+      const command = this.display(slot)
+      const env = { ...this.deps.env.agentEnv(slot.id), ...command.env } as NodeJS.ProcessEnv
+      const args = command.args.filter((arg) => arg !== '--acp')
+      const now = Date.now()
+      let usage: VendorUsage | null
+      if (slot.def.id === 'copilot') {
+        usage = await readCopilotQuota(command.command, [...args, '--stdio'], env, now)
+      } else if (slot.def.id === 'qoder') {
+        usage = await readQoderUsage(command.command, [...args, '--sdk'], env, now)
+      } else if (slot.def.id === 'kilo') {
+        usage = await readKiloProfile(command.command, args, env)
+      } else {
+        usage = await readAuggieAccount(command.command, args, env, os.homedir(), now)
+      }
+      if (!usage)
+        throw this.limitsError(slot, new Error(`${slot.name} returned an unknown account reply`))
+      this.applyVendorUsage(slot, usage, now)
+      return
+    }
     const report = limitsReport(slot.def.id)
     let limits: PlanLimit[]
     let now: number
@@ -2509,6 +2575,23 @@ export class AgentManager {
     const merged = mergeReadLimits([...slot.limits.values()], limits, now)
     slot.limits.clear()
     for (const limit of merged) slot.limits.set(limit.window, limit)
+    this.emit(slot)
+  }
+
+  private applyVendorUsage(slot: Slot, usage: VendorUsage, now: number): void {
+    slot.balances = usage.balances
+    if (usage.tier) {
+      slot.account = slot.account
+        ? { ...slot.account, label: usage.tier }
+        : { kind: 'account', label: usage.tier, email: null }
+    }
+    slot.limitsReadAt = now
+    slot.limits = new Map(
+      mergeReadLimits([...slot.limits.values()], usage.limits, now).map((item) => [
+        item.window,
+        item,
+      ]),
+    )
     this.emit(slot)
   }
 
@@ -3322,6 +3405,8 @@ export class AgentManager {
           }
         : {}),
       ...(slot.def.id === 'deepseek' ? { balance: slot.balance } : {}),
+      ...(slot.balances.length ? { balances: slot.balances } : {}),
+      ...(slot.def.limitsReason ? { limitsReason: slot.def.limitsReason } : {}),
       limits: [...slot.limits.values()],
       detail: slot.detail ?? h.adapterNote,
       installNotice: slot.def.install.notice ? t(slot.def.install.notice) : null,
