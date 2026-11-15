@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Add01Icon } from '@hugeicons/core-free-icons'
+import { Add01Icon, ArrowRight01Icon, Search01Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { MemoryEntry, MemoryImportScan, MemoryProject, MemoryScope } from '@shared/memory'
 import { Icon } from '@renderer/components/affect/app-shell'
@@ -16,8 +16,8 @@ import { chooseMemoryProject } from '@renderer/stores/memory'
 import { openSettingsItem } from '@renderer/stores/view'
 import { ControlError, SetButton, SettingSelect, SettingSwitch, Skel } from './controls'
 import { useImportScan, writerName } from './memory-data'
-import { MemoryEditor } from './memory-page'
-import { EmptyRow, ItemLine, ItemRow, Notice } from './rows'
+import { memoryItemKey, NEW_MEMORY } from './memory-items'
+import { EmptyRow, Notice } from './rows'
 import {
   SettingsDialogBody,
   SettingsDialogContent,
@@ -65,85 +65,123 @@ export function MemorySwitch({ enabled }: { enabled: boolean }) {
   )
 }
 
-/** An entry's row: its title and summary, who wrote it last and when; the row opens its page. */
+/** An entry's row: its title and summary, then who wrote it last and when; the row opens its page. */
 export function EntryRow({ item, entry }: { item: string; entry: MemoryEntry }) {
   const { t } = useTranslation('settings')
   const { hostId } = useHostScope()
   const now = useNow()
   const who = writerName(entry, hostId) ?? t('memory.you')
   return (
-    <ItemRow
-      item={item}
-      label={entry.title}
-      tile={<Icon icon={MEMORY_GLYPH} size={20} />}
-      name={<span className="k-name">{entry.title}</span>}
-      right={
-        <span className="k-head-meta k-muted k-num">
-          {t('memory.line', { who, when: mediumAgo(entry.updatedAt, now) })}
+    <div className="ui-sg-row k-item k-mem-row">
+      <button
+        type="button"
+        data-item-row={item}
+        aria-label={entry.title}
+        onClick={() => openSettingsItem('memory', item)}
+        className="k-hit"
+      />
+      <span className="ui-sg-label k-lines k-mem-row__text">
+        <b className="k-row-title">{entry.title}</b>
+        {entry.description && <small>{entry.description}</small>}
+      </span>
+      <span className="k-end k-mem-row__end">
+        <span className="k-mem-row__who" title={who}>
+          {entry.source.agentId !== null ? (
+            <AgentMark agent={entry.source.agentId} size={14} hostId={hostId} mono />
+          ) : (
+            <Icon icon={UserIcon} size={14} />
+          )}
         </span>
-      }
-      onOpen={() => openSettingsItem('memory', item)}
-    >
-      {entry.description && <ItemLine>{entry.description}</ItemLine>}
-    </ItemRow>
+        <span className="k-num">{mediumAgo(entry.updatedAt, now)}</span>
+        <span className="k-chevron">
+          <Icon icon={ArrowRight01Icon} size={14} />
+        </span>
+      </span>
+    </div>
   )
 }
 
-/** The row at a layer's end that adds an entry. */
-export function AddRow({ scope, projectName }: { scope: MemoryScope; projectName: string }) {
+const add = (scope: MemoryScope) => openSettingsItem('memory', memoryItemKey(scope, NEW_MEMORY))
+
+/** Add, at a layer's heading, so it stays in reach however long the list is. */
+export function AddButton({ scope }: { scope: MemoryScope }) {
   const { t } = useTranslation('settings')
-  const [open, setOpen] = useState(false)
   return (
-    <>
-      <button type="button" onClick={() => setOpen(true)} className="ui-sg-row k-add-row">
-        <span className="k-mark">
-          <Icon icon={Add01Icon} size={16} />
-        </span>
-        {t('memory.add')}
-      </button>
-      <MemoryEditor
-        open={open}
-        onOpenChange={setOpen}
-        scope={scope}
-        entry={null}
-        projectName={projectName}
-      />
-    </>
+    <SetButton icon={<Icon icon={Add01Icon} size={14} />} onClick={() => add(scope)}>
+      {t('memory.add')}
+    </SetButton>
   )
+}
+
+/** Searches both layers' titles, summaries and text. */
+export function MemorySearch({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (value: string) => void
+}) {
+  const { t } = useTranslation('settings')
+  return (
+    <label className="k-mem-search">
+      <Icon icon={Search01Icon} size={15} />
+      <input
+        type="search"
+        value={value}
+        autoComplete="off"
+        placeholder={t('memory.search.placeholder')}
+        aria-label={t('memory.search.placeholder')}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          // Esc clears the search before it closes Settings.
+          if (event.key === 'Escape' && value !== '') {
+            event.stopPropagation()
+            onChange('')
+          }
+        }}
+      />
+    </label>
+  )
+}
+
+/** The last row of a long layer cut short: how many more there are, all of them on a click. */
+export function ShowMoreRow({ count, onClick }: { count: number; onClick: () => void }) {
+  const { t } = useTranslation('settings')
+  return (
+    <button type="button" onClick={onClick} className="ui-sg-row k-add-row k-mem-more">
+      {t('memory.showMore', { count })}
+    </button>
+  )
+}
+
+/** Where a search finds nothing in either layer. */
+export function NoMatches({ query }: { query: string }) {
+  const { t } = useTranslation('settings')
+  return <EmptyRow title={t('memory.search.none', { query })} />
 }
 
 /** A layer with nothing in it yet: agents note things as they work, and the user can add some. */
 export function EmptyLayer({ scope, projectName }: { scope: MemoryScope; projectName: string }) {
   const { t } = useTranslation('settings')
-  const [open, setOpen] = useState(false)
   const global = scope.layer === 'global'
   return (
-    <>
-      <EmptyRow
-        title={
-          global
-            ? t('memory.empty.globalTitle')
-            : t('memory.empty.projectTitle', { project: projectName })
-        }
-        hint={global ? t('memory.empty.globalHint') : t('memory.empty.projectHint')}
-        action={
-          <SetButton
-            variant="primary"
-            icon={<Icon icon={Add01Icon} size={14} />}
-            onClick={() => setOpen(true)}
-          >
-            {t('memory.add')}
-          </SetButton>
-        }
-      />
-      <MemoryEditor
-        open={open}
-        onOpenChange={setOpen}
-        scope={scope}
-        entry={null}
-        projectName={projectName}
-      />
-    </>
+    <EmptyRow
+      title={
+        global
+          ? t('memory.empty.globalTitle')
+          : t('memory.empty.projectTitle', { project: projectName })
+      }
+      hint={global ? t('memory.empty.globalHint') : t('memory.empty.projectHint')}
+      action={
+        <SetButton
+          variant="primary"
+          icon={<Icon icon={Add01Icon} size={14} />}
+          onClick={() => add(scope)}
+        >
+          {t('memory.add')}
+        </SetButton>
+      }
+    />
   )
 }
 
@@ -175,15 +213,10 @@ export function ProjectPicker({ projects, value }: { projects: MemoryProject[]; 
 /** An entry's row while the list is read. */
 export function PendingRow() {
   return (
-    <div className="ui-sg-row" aria-busy="true">
-      <span className="k-thing">
-        <span className="k-mark">
-          <Skel width={24} className="k-skel--mark" />
-        </span>
-        <span className="ui-sg-label k-lines">
-          <Skel width={160} />
-          <Skel width={240} />
-        </span>
+    <div className="ui-sg-row k-mem-row" aria-busy="true">
+      <span className="ui-sg-label k-lines">
+        <Skel width={160} />
+        <Skel width={240} />
       </span>
     </div>
   )

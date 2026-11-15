@@ -33,7 +33,10 @@ import type { SessionOptions } from '../connection'
 import { HostError } from '../errors'
 import type { Env } from '../find-command'
 import { JsonFile, type LogFn } from '../storage'
+import { kettuId } from '@shared/market-community'
+import type { MarketListing } from '@shared/market-publish'
 import { codexOwnSkills } from './codex-plugins'
+import { modeOf, type DownloadedFile } from './community'
 import { frontmatter } from './frontmatter'
 import {
   downloadTarball,
@@ -62,7 +65,7 @@ const SKILL_LIMITS: FolderLimits = { files: 1_000, bytes: 50 * 1024 * 1024 }
 const SKILL_FILE = 'SKILL.md'
 const SKILL_MD_BYTES = 256 * 1024
 // A skill's name as the Agent Skills specification has it.
-const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
+export const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
 const DESCRIPTION_CHARS = 1024
 const PARTIAL = '.partial-'
 
@@ -209,6 +212,8 @@ export interface SkillsDeps {
   configFolder(agentId: AgentId): string | null
   /** Codex's own skills from the agent's app-server; null when it is not installed. */
   codexSkills(agentId: AgentId): Promise<SkillsListResponse | null>
+  /** A skill listing of the Kettu Marketplace, its current version downloaded and checked. */
+  kettu(id: string): Promise<{ listing: MarketListing; files: DownloadedFile[] }>
   fetch?: typeof fetch
   now?: () => number
 }
@@ -268,6 +273,7 @@ export class MarketSkillsService {
   async add(source: SkillSource): Promise<MarketSkill> {
     if (source.kind === 'catalog') return this.addFromCatalog(source.id)
     if (source.kind === 'github') return this.addFromGithub(source.url)
+    if (source.kind === 'kettu') return this.addFromKettu(source.id)
     return this.addFromFolder(source.path)
   }
 
@@ -441,6 +447,25 @@ export class MarketSkillsService {
       source: 'github',
       origin: `https://github.com/${source.owner}/${source.repo}`,
       version: tarball.commit ?? source.ref,
+      agents: 'all',
+      on: true,
+    }
+  }
+
+  /** Nothing is written unless every file of the version matched what the service listed. */
+  private async addFromKettu(listingId: string): Promise<MarketSkill> {
+    const { listing, files } = await this.deps.kettu(listingId)
+    const copied = files.map((file) => ({ ...file, mode: modeOf(file.data) }))
+    const info = skillInfo(skillText(copied), listing.slug)
+    const id = kettuId(listing.id)
+    await this.keep(id, info.name, copied)
+    return {
+      id,
+      name: info.name,
+      description: info.description,
+      source: 'kettu',
+      origin: `@${listing.handle}/${listing.slug}`,
+      version: listing.version,
       agents: 'all',
       on: true,
     }
@@ -631,8 +656,12 @@ function skillText(files: SkillFiles): string {
 }
 
 async function writeFiles(dir: string, files: SkillFiles): Promise<void> {
+  const root = path.resolve(dir)
   for (const file of files) {
-    const target = path.join(dir, ...file.path.split('/'))
+    const target = path.resolve(root, ...file.path.split('/'))
+    if (!target.startsWith(root + path.sep)) {
+      throw new HostError('invalid_params', `The skill names a file outside it: ${file.path}`)
+    }
     await mkdir(path.dirname(target), { recursive: true })
     // Scripts keep their run bit; nothing else of the archive's modes comes along.
     await writeFile(target, file.data, { mode: file.mode & 0o111 ? 0o755 : 0o644 })

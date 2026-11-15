@@ -13,6 +13,7 @@ import type {
   ImageMode,
   StoredBlob,
   StoredOutline,
+  StoredOutputs,
   StoredThread,
   ThreadPage,
   ThreadWrite,
@@ -349,6 +350,11 @@ export class ThreadStore {
   /** The user messages of the stored thread, with their titles; null when it has none. */
   outline(sessionId: string): Promise<StoredOutline | null> {
     return this.read({ op: 'outline', sessionId }, sessionId)
+  }
+
+  /** What the stored thread made; null when there is none. */
+  outputs(sessionId: string): Promise<StoredOutputs | null> {
+    return this.read({ op: 'outputs', sessionId }, sessionId)
   }
 
   /** Stores outline titles; false when the session has no stored thread to keep them with. */

@@ -52,6 +52,14 @@ import type { PortDevice } from '@shared/remote/device'
 import type { MemorySource } from '@shared/memory'
 import type { HostSettings } from '@shared/settings'
 import { serverFor, type MarketConnection, type MarketServer } from '@shared/marketplace'
+import { listingIdOf } from '@shared/market-community'
+import {
+  HANDLE,
+  type MarketAccount,
+  type MarketCall,
+  type MarketCallAnswer,
+  type MarketResults,
+} from '@shared/market-publish'
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
 import type { AgentId, FromDevice } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
@@ -105,12 +113,15 @@ import { MediaService } from './media'
 import { MemoryError, type MemoryErrorCode } from './memory/errors'
 import { MemoryService } from './memory/service'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
+import { communityFile, MarketCommunityService } from './marketplace/community'
 import { MarketConnectionsService } from './marketplace/connections'
 import { parseSignIns } from './marketplace/oauth'
 import { McpProxy } from './marketplace/proxy'
 import type { CodexRequest } from './marketplace/codex-plugins'
 import { MarketPluginsService, pluginsFile } from './marketplace/plugins'
 import { MarketSkillsService, skillFor, skillsCatalogFile } from './marketplace/skills'
+import { PublishDrafts } from './marketplace/publish-drafts'
+import { MARKET_WAIT_MS, MarketCallError, MarketTools } from './marketplace/publish-tools'
 import {
   ALL_TRANSPORTS,
   keyState,
@@ -411,6 +422,17 @@ export class AgentHost {
   private readonly marketPlugins: MarketPluginsService
   /** The skills catalog, the skills Kettu keeps, and what each agent gets of them. */
   private readonly marketSkills: MarketSkillsService
+  /** The Kettu Marketplace's listings, the downloads of their files and its plugins. */
+  private readonly marketCommunity: MarketCommunityService
+  /** The host's Kettu account from main, while signed in with Kettu's services on. */
+  private marketAccount: MarketAccount | null = null
+  /** Marketplace API calls awaiting main's answer. */
+  private readonly marketCalls = new Map<number, (answer: MarketCallAnswer) => void>()
+  private nextMarketCall = 1
+  /** What was put off or refused, to publish later. */
+  private readonly publishDrafts: PublishDrafts
+  /** The Marketplace tools of Kettu's MCP service. */
+  private readonly marketTools: MarketTools
   private lastProcesses = '[]'
   private sentFolders: string | null = null
   private stopping: Promise<void> | null = null
@@ -447,6 +469,19 @@ export class AgentHost {
       describeMedia: (real, info) => this.media.describe(real, info),
     })
     this.deviceAccess = new DeviceAccessStore(options.userDataPath, log)
+    this.publishDrafts = new PublishDrafts(options.userDataPath, log)
+    this.marketTools = new MarketTools({
+      account: () => this.marketAccount,
+      call: (call) => this.marketCall(call),
+      ask: (sessionId, ask) => this.sessions.marketAsked(sessionId, ask, MARKET_WAIT_MS),
+      settle: (sessionId, entryId, outcome) =>
+        this.sessions.marketSettled(sessionId, entryId, outcome),
+      drafts: this.publishDrafts,
+      changed: () => this.hub.broadcast({ type: 'market.publishedChanged' }),
+      agentOf: (sessionId) => this.sessions.sessionAgent(sessionId),
+      sessionTitle: (sessionId) => this.sessions.title(sessionId),
+      home: options.homeDir ?? os.homedir(),
+    })
     this.projects = new Projects({ file: projectsFile(options.userDataPath, log), platform })
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
@@ -484,6 +519,21 @@ export class AgentHost {
       program: (agentId) => this.agents.harnessProgram(agentId),
       appServer: (agentId) => this.appServer(agentId),
     })
+    this.marketCommunity = new MarketCommunityService({
+      userDataPath: options.userDataPath,
+      file: communityFile(options.userDataPath, log),
+      log,
+      account: () => this.marketAccount,
+      call: (call) => this.marketCall(call),
+      kept: () =>
+        [...this.settings.marketplace.skills, ...this.settings.marketplace.mcp].flatMap(
+          (item) => listingIdOf(item.id) ?? [],
+        ),
+      installPlugin: (agentId, local, name, scope, projectPath) =>
+        this.marketPlugins.installLocal(agentId, local, name, scope, projectPath),
+      pluginInstalled: (harness, pluginId) =>
+        this.marketPlugins.installedAnywhere(harness, pluginId),
+    })
     this.marketSkills = new MarketSkillsService({
       userDataPath: options.userDataPath,
       file: skillsCatalogFile(options.userDataPath, log),
@@ -497,6 +547,7 @@ export class AgentHost {
         if ((await this.installedAgents(['codex'], [agentId])).length === 0) return null
         return (await this.appServer(agentId))<SkillsListResponse>('skills/list', { cwds: [home] })
       },
+      kettu: (id) => this.marketCommunity.download(id, 'skill'),
     })
     this.trees = new AgentTrees({
       file: agentProcessesFile(options.userDataPath, log),
@@ -643,6 +694,7 @@ export class AgentHost {
       sessionProject: (sessionId) => this.sessions.sessionProject(sessionId),
       sessionFolder: (sessionId) => this.sessions.sessionFolder(sessionId),
       ...(this.computer ? { computer: this.computer } : {}),
+      market: this.marketTools,
       proxy: this.mcpProxy,
       sessions: {
         info: (sessionId) => this.sessions.sessionInfo(sessionId),
@@ -1259,10 +1311,68 @@ export class AgentHost {
     if (JSON.stringify(previous.marketplace.skills) !== JSON.stringify(next.marketplace.skills)) {
       void this.skillsChanged(previous.marketplace.skills)
     }
+    this.countCommunity(previous.marketplace, next.marketplace)
     const removed = await this.agents.settingsChanged(previous, next)
     const turnedOff = next.disabledAgents.filter((id) => !previous.disabledAgents.includes(id))
     const gone = [...removed, ...turnedOff]
     if (gone.length > 0) await this.sessions.agentsRemoved(gone)
+  }
+
+  /** `host:market-account`: the Kettu account the Marketplace tools publish with, or none. */
+  setMarketAccount(account: unknown): void {
+    const value = account as Record<string, unknown> | null
+    const before = this.marketAccount
+    this.marketAccount =
+      value !== null &&
+      typeof value === 'object' &&
+      typeof value.email === 'string' &&
+      (value.name === null || typeof value.name === 'string')
+        ? { name: value.name as string | null, email: value.email }
+        : null
+    if (JSON.stringify(before) !== JSON.stringify(this.marketAccount)) {
+      this.hub.broadcast({ type: 'market.publishedChanged' })
+    }
+  }
+
+  /** Makes a Marketplace API call through main or the daemon, which hold the access token. */
+  private marketCall<K extends MarketCall['kind']>(
+    call: Extract<MarketCall, { kind: K }>,
+  ): Promise<MarketResults[K]> {
+    const callId = this.nextMarketCall++
+    return new Promise<MarketCallAnswer>((resolve) => {
+      this.marketCalls.set(callId, resolve)
+      this.options.send({ type: 'host:market-call', callId, call })
+    }).then((answer) => {
+      if ('error' in answer) throw new MarketCallError(answer.error)
+      return answer.result as MarketResults[K]
+    })
+  }
+
+  /** A first publish's publisher name; a name the service refuses keeps the card waiting. */
+  private async setPublisher(handle: string): Promise<void> {
+    if (!HANDLE.test(handle))
+      throw new HostError('invalid_params', t('marketPublish.handleInvalid'))
+    try {
+      await this.marketTools.setPublisher(handle)
+    } catch (error) {
+      if (!(error instanceof MarketCallError)) throw error
+      const { code, message } = error.failure
+      if (code === 'handle_taken') {
+        throw new HostError('conflict', t('marketPublish.handleTaken', { handle }))
+      }
+      if (code === 'invalid_request') {
+        throw new HostError('invalid_params', t('marketPublish.handleInvalid'))
+      }
+      throw new HostError('unavailable', t('marketPublish.publisherFailed', { reason: message }))
+    }
+  }
+
+  /** `market-result`: main's or the daemon's answer to a Marketplace call. */
+  marketResult(callId: number, answer: MarketCallAnswer): void {
+    const resolve = this.marketCalls.get(callId)
+    if (!resolve) return
+    this.marketCalls.delete(callId)
+    resolve(answer)
   }
 
   /**
@@ -1367,6 +1477,30 @@ export class AgentHost {
     const of = (skills: typeof now, agentId: AgentId): string =>
       JSON.stringify(skills.filter((skill) => skillFor(skill, agentId)).map((s) => [s.id, s.name]))
     this.sessions.libraryChanged((agentId) => of(before, agentId) !== of(now, agentId))
+  }
+
+  /**
+   * The skills and servers from the Kettu Marketplace that the settings now keep, or keep at
+   * another version, are counted once each as an install or an update.
+   */
+  private countCommunity(
+    before: HostSettings['marketplace'],
+    after: HostSettings['marketplace'],
+  ): void {
+    const versions = (list: readonly { id: string; version: string | null }[]) =>
+      new Map(
+        list.flatMap((item) => {
+          const id = listingIdOf(item.id)
+          return id ? [[id, item.version] as const] : []
+        }),
+      )
+    for (const kind of ['skills', 'mcp'] as const) {
+      const was = versions(before[kind])
+      for (const [id, version] of versions(after[kind])) {
+        if (!was.has(id)) void this.marketCommunity.count(id, version, 'install')
+        else if (was.get(id) !== version) void this.marketCommunity.count(id, version, 'update')
+      }
+    }
   }
 
   /** The agents of these harnesses that are turned on and whose program is installed. */
@@ -1856,6 +1990,12 @@ export class AgentHost {
       })
     }
     this.terminalCalls.clear()
+    for (const resolve of this.marketCalls.values()) {
+      resolve({
+        error: { code: 'network', status: null, message: 'Kettu stopped before it answered.' },
+      })
+    }
+    this.marketCalls.clear()
   }
 
   /** Stops every agent with the documented sequence, flushes the state files, then reports. */
@@ -1890,6 +2030,8 @@ export class AgentHost {
         this.marketCatalog.flush(),
         this.marketPlugins.flush(),
         this.marketSkills.flush(),
+        this.marketCommunity.flush(),
+        this.publishDrafts.flush(),
         this.threads?.close(),
         this.usage.close(),
       ])
@@ -2084,6 +2226,54 @@ export class AgentHost {
       'market.skills': ({ refresh, cached }) =>
         this.marketSkills.skills(refresh === true, cached === true),
       'market.addSkill': ({ source }) => this.marketSkills.add(source),
+      'market.answerPublish': ({ sessionId, entryId, ...answer }, { device }) =>
+        this.sessions.answerMarket(
+          sessionId,
+          entryId,
+          answer,
+          (handle) => this.setPublisher(handle),
+          fromDevice(device),
+        ),
+      'market.publishDrafts': async () => {
+        await this.publishDrafts.ready
+        return { drafts: this.publishDrafts.list() }
+      },
+      'market.discardPublishDraft': async ({ id }) => {
+        await this.publishDrafts.remove(id)
+        this.hub.broadcast({ type: 'market.publishedChanged' })
+      },
+      'market.account': () => ({ account: this.marketAccount }),
+      'market.published': async () => {
+        await this.publishDrafts.ready
+        return this.marketTools.published()
+      },
+      'market.setPublisher': ({ handle }) => this.marketTools.renamePublisher(handle),
+      'market.updateListing': ({ id, change }) => this.marketTools.updateListing(id, change),
+      'market.withdrawVersion': ({ id, version }) => this.marketTools.withdrawVersion(id, version),
+      'market.deleteListing': ({ id }) => this.marketTools.deleteListing(id),
+      'market.versionFiles': ({ id, version }) => this.marketTools.versionFiles(id, version),
+      'market.checkFolder': async ({ path: folder, draftId }) => {
+        await this.publishDrafts.ready
+        return this.marketTools.checkFolder(folder, draftId ?? null)
+      },
+      'market.publishFolder': async ({ path: folder, draftId, visibility, notes, handle }) => {
+        await this.publishDrafts.ready
+        // A first publish sets the publisher name before anything is uploaded, as the card does.
+        if (handle !== undefined) await this.setPublisher(handle)
+        return this.marketTools.publishFolder(folder, {
+          draftId: draftId ?? null,
+          visibility: visibility ?? null,
+          notes: notes ?? null,
+        })
+      },
+      'market.community': ({ refresh, ...query }) =>
+        this.marketCommunity.directory(query, refresh === true),
+      'market.communityListing': ({ id }) => this.marketCommunity.listing(id),
+      'market.communityInstalled': ({ refresh }) =>
+        this.marketCommunity.installed(refresh === true),
+      'market.installCommunityPlugin': ({ id, agentId, scope, projectPath }) =>
+        this.marketCommunity.installPlugin(id, agentId, scope, projectPath ?? null),
+      'market.reportCommunity': ({ id, message }) => this.marketCommunity.report(id, message),
       'mcp.retry': async () => {
         await this.artifactService.start()
         this.options.send({ type: 'host:service-port', port: this.artifactService.listeningPort })
@@ -2124,6 +2314,7 @@ export class AgentHost {
       'sessions.page': ({ sessionId, before, from }, { device }) =>
         sessions.page(sessionId, before, from, imagesFor(device)),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
+      'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
       'sessions.watch': ({ sessionId }, { portId }) => sessions.watch(sessionId, portId),
       'sessions.unwatch': ({ sessionId }, { portId }) => sessions.unwatch(sessionId, portId),

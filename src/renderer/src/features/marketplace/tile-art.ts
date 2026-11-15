@@ -45,13 +45,21 @@ import {
 import type { IconSvgElement } from '@hugeicons/react'
 import type { PluginHarness } from '@shared/marketplace'
 import type { WorkflowSource } from '@shared/workflow'
+import { KETTU_PLUGINS, kettuId, type CommunityItem } from '@shared/market-community'
 import { brandMark, type Mark } from './brand-marks'
 import { pluginName } from './model'
 
 /** What a tile stands for. `name` is a skill's or a server's name as its source gives it. */
 export type TileSubject =
   | { kind: 'mcp'; id: string; brand: string | null }
-  | { kind: 'plugin'; harness: PluginHarness; id: string; category: string | null }
+  | {
+      kind: 'plugin'
+      harness: PluginHarness
+      id: string
+      category: string | null
+      /** False for a plugin anyone may publish, whose name earns it no maker's mark. */
+      marks?: boolean
+    }
   | { kind: 'skill'; name: string }
   | { kind: 'workflow'; id: string; source: WorkflowSource }
 
@@ -67,11 +75,13 @@ export const pluginSubject = (plugin: {
   harness: PluginHarness
   id: string
   category?: string | null
+  marks?: boolean
 }): TileSubject => ({
   kind: 'plugin',
   harness: plugin.harness,
   id: plugin.id,
   category: plugin.category ?? null,
+  ...(plugin.marks === false ? { marks: false } : {}),
 })
 
 export const skillSubject = (name: string): TileSubject => ({ kind: 'skill', name })
@@ -81,6 +91,21 @@ export const workflowSubject = (workflow: { id: string; source: WorkflowSource }
   id: workflow.id,
   source: workflow.source,
 })
+
+/** A listing's tile: its kind's glyph, never a maker's mark, since anyone may take a name. */
+export function communitySubject(
+  item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug'>,
+): TileSubject {
+  if (item.kind === 'skill') return skillSubject(item.slug)
+  if (item.kind === 'plugin') {
+    return pluginSubject({
+      harness: item.harness ?? 'claude-code',
+      id: `${item.slug}@${KETTU_PLUGINS}`,
+      marks: false,
+    })
+  }
+  return serverSubject({ id: kettuId(item.id), brand: null })
+}
 
 interface Glyph {
   icon: IconSvgElement
@@ -200,9 +225,10 @@ export function tileArt(subject: TileSubject): Art {
       : { type: 'glyph', icon: SparklesIcon, color: 'var(--tile-violet)' }
   }
   const name = pluginName(subject.id)
-  const mark = brandMark(name)
+  const marks = subject.marks !== false
+  const mark = marks ? brandMark(name) : null
   if (mark) return { type: 'mark', mark }
-  const glyph = PLUGINS[name]
+  const glyph = marks ? PLUGINS[name] : undefined
   return {
     type: 'glyph',
     icon: glyph?.icon ?? categoryGlyph(subject.category),

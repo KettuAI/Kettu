@@ -356,9 +356,9 @@ export const SessionRow = memo(function SessionRow({
                   align="start"
                   sideOffset={10}
                   alignOffset={-4}
-                  className="pointer-events-none w-[272px] px-3.5 py-3"
+                  className="pointer-events-none w-[340px] p-0"
                 >
-                  <SessionCard summary={summary} cache={cache} />
+                  <SessionCard summary={summary} cache={cache} status={status} />
                 </HoverCardContent>
               </HoverCard>
               <ContextMenuContent

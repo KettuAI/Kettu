@@ -385,6 +385,13 @@
       "keywords": "存储 空间 容量 云端 artifact 发布",
       "used": "{{used}} / {{limit}}"
     },
+    "points": {
+      "name": "积分",
+      "description": "你提交的问题被确认后得到，能在官网兑换。",
+      "keywords": "积分 奖励 问题报告 兑换",
+      "balance_other": "{{count}} 分",
+      "redeem": "兑换积分"
+    },
     "subscription": {
       "name": "订阅",
       "description": "在官网管理。",
@@ -975,6 +982,9 @@
       "movesFirst": "Kettu 无法在当前位置更新，「更新」会先把它移到“应用程序”文件夹。",
       "moving": "正在把 Kettu 移到“应用程序”…",
       "failed": "无法检查更新",
+      "githubUnreachable": "连不上 GitHub",
+      "githubUnreachableDetail": "现在只从 GitHub 检查更新。把下载来源改回「自动」，就能同时使用 Kettu 的下载服务。",
+      "githubUnreachableLocal": "本地模式下只从 GitHub 检查更新。",
       "moveFailed": "无法把 Kettu 移到“应用程序”",
       "offDevelopment": "开发版本中不提供更新",
       "offPackageManager": "更新由你的包管理器安装",
@@ -999,6 +1009,15 @@
       "off": "关闭：仅在我要求时检查",
       "linkNotify": "有新版本时通知我",
       "linkOff": "关闭"
+    },
+    "source": {
+      "name": "下载来源",
+      "keywords": "下载 来源 线路 镜像 下载服务 download source mirror github service update",
+      "auto": "自动",
+      "github": "仅 GitHub",
+      "autoDetail": "按最快的线路下载，连不上时退回 GitHub。下载服务会记录版本、系统、地区和 IP，用来统计下载量。",
+      "githubDetail": "只从 GitHub 检查和下载，不连 Kettu 的下载服务。连不上 GitHub 时收不到更新。",
+      "local": "本地模式下只从 GitHub 检查和下载更新，不连 Kettu 的服务。"
     },
     "github": {
       "name": "GitHub",
@@ -1762,48 +1781,36 @@
       "importedSkipped_other": "导入了 {{count}} 条，跳过了 {{skipped}} 条重复的"
     },
     "entry": {
-      "global": "全局记忆",
-      "project": "项目记忆 · {{project}}",
-      "edit": "编辑…",
-      "body": "正文",
+      "edit": "编辑",
       "noBody": "只有标题和摘要。",
-      "details": "详情",
-      "writtenBy": "写它的",
-      "session": "会话",
-      "openSession": "回到会话",
-      "sessionGone": "已经不在了",
-      "created": "创建于",
-      "updated": "最后修改",
       "gone": "这条记忆已经不在了。",
       "move": {
-        "name": "移到全局",
-        "description": "每个会话都会用到它，不只是这个项目的。",
         "button": "移到全局",
         "done": "已移到全局记忆"
       },
       "remove": {
-        "name": "删除这一条",
-        "description": "Agent 之后不会再拿到它。",
         "button": "删除…",
         "title": "删除“{{title}}”？",
         "body": "它会从 Kettu 的记忆里删掉，Agent 之后不会再拿到它。",
         "confirm": "删除",
         "done": "已删除"
-      }
+      },
+      "more": "更多",
+      "globalTag": "全局",
+      "written": "{{when}}写下",
+      "changed": "{{when}}改过",
+      "openSession": "回到写它的会话：{{title}}"
     },
     "editor": {
-      "addGlobal": "添加到全局记忆",
-      "addProject": "添加到 {{project}} 的记忆",
-      "edit": "编辑记忆",
-      "addBody": "每个 Agent 开会话时都会拿到它。",
       "title": "标题",
       "titlePlaceholder": "简短的名字，例如“用 pnpm”",
       "description": "摘要",
-      "descriptionHint": "一行，Agent 在 Kettu 的记忆列表里看到的就是它。",
       "body": "正文",
-      "bodyHint": "用 Markdown 写。一条只写一件事，并写明为什么。",
       "save": "保存",
-      "add": "添加"
+      "descriptionPlaceholder": "一行摘要，Agent 在记忆列表里看到的就是它",
+      "bodyPlaceholder": "用 Markdown 写。一条只写一件事，并写明为什么。",
+      "markdown": "Markdown",
+      "keys": "Esc 取消 · {{mod}}Enter 保存"
     },
     "errors": {
       "secret": "这里面像是有密钥或密码之类的机密，记忆不保存这些。",
@@ -1812,7 +1819,12 @@
       "gone": "这次写入已经不能撤销了。",
       "off": "记忆已关上。",
       "notFound": "这条记忆已经不在了。"
-    }
+    },
+    "search": {
+      "placeholder": "搜索记忆",
+      "none": "没有和“{{query}}”匹配的记忆"
+    },
+    "showMore": "再显示 {{count}} 条"
   },
   "devices": {
     "groups": {

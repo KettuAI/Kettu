@@ -326,6 +326,66 @@ describe('the thread database', () => {
     db.close()
   })
 
+  it('reads what a session made from its stored thread', () => {
+    const db = open()
+    const reply = (id: string, markdown: string): ThreadEntry => ({
+      kind: 'agent',
+      id,
+      markdown,
+      attachments: [],
+      streaming: false,
+    })
+    const artifact = (
+      id: string,
+      artifactId: string,
+      title: string,
+      action: 'create' | 'update' | 'delete',
+    ): ThreadEntry => ({
+      kind: 'artifact',
+      id,
+      artifactId,
+      title,
+      action,
+      version: action === 'delete' ? null : 1,
+      writes: 1,
+      after: null,
+    })
+    const entries: ThreadEntry[] = [
+      user('u0'),
+      artifact('w0', 'art_a', 'Plan', 'create'),
+      artifact('w1', 'art_b', 'Sketch', 'create'),
+      reply(
+        'a0',
+        'Opened https://github.com/KettuAI/Kettu/issues/12 and ' +
+          '[the fix](https://github.com/KettuAI/cloud/pull/7/files#diff-1).',
+      ),
+      { kind: 'turn_end', id: 'end0', stopReason: 'end_turn', durationMs: 4000 },
+      user('u1'),
+      artifact('w2', 'art_a', 'Plan v2', 'update'),
+      artifact('w3', 'art_b', 'Sketch', 'delete'),
+      reply('a1', 'Merged https://github.com/KettuAI/cloud/pull/7 and https://example.com/x.'),
+      reply('a2', 'Also see https://github.com/KettuAI/Kettu/pull/30'),
+      { kind: 'turn_end', id: 'end1', stopReason: 'end_turn', durationMs: 9000 },
+      user('u2'),
+    ]
+    db.write('s1', { head, entries: entries.map((entry, pos) => ({ pos, entry })) })
+    expect(db.outputs('s1')).toEqual({
+      head,
+      outputs: {
+        artifacts: [{ id: 'art_a', title: 'Plan v2' }],
+        references: [
+          'https://github.com/KettuAI/Kettu/pull/30',
+          'https://github.com/KettuAI/cloud/pull/7',
+          'https://github.com/KettuAI/Kettu/issues/12',
+        ],
+        reply: 'Also see https://github.com/KettuAI/Kettu/pull/30',
+        turnMs: 9000,
+      },
+    })
+    expect(db.outputs('missing')).toBeNull()
+    db.close()
+  })
+
   it('keeps only user input in the outline across a reopen', () => {
     const file = tempFile()
     const db = open(file)

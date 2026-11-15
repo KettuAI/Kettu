@@ -73,8 +73,8 @@ export function SubagentBar({
         </p>
         {canStop && (
           <Button
-            variant="outline"
-            className="ks-btn"
+            variant="destructive-tint"
+            className="ks-btn ks-btn--stop"
             disabled={stopping}
             onClick={() => void stop()}
           >

@@ -28,6 +28,17 @@ import {
 } from '@shared/memory'
 import type { PluginScope, SkillSource } from '@shared/marketplace'
 import {
+  HANDLE,
+  LISTING_ABOUT_CHARS,
+  LISTING_DESCRIPTION_CHARS,
+  LISTING_ID,
+  LISTING_NAME_CHARS,
+  LISTING_NOTES_CHARS,
+  VERSION,
+  type ListingChange,
+  type ListingVisibility,
+} from '@shared/market-publish'
+import {
   GITHUB_LOGIN,
   GITHUB_PULL_REQUEST_URL,
   githubReferenceOf,
@@ -943,13 +954,20 @@ function marketRead(params: unknown): { refresh?: boolean; cached?: boolean } {
   }
 }
 
+// What a report to the Kettu Marketplace says at most, as the service takes it.
+const REPORT_CHARS = 2_000
+
 // A plugin's or marketplace's name; never one that could pass for a command line flag.
 const PLUGIN_PART = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 
-/** A server Kettu keeps: a registry name, or `manual:` and a UUID. */
+/** A server Kettu keeps: a registry name, `manual:` and a UUID, or `kettu:` and a listing id. */
 function marketServerId(o: Fields): string {
   const id = string(o, 'serverId', ID_CHARS)
-  if (!/^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/.test(id) && !/^manual:[0-9a-f-]{36}$/.test(id)) {
+  if (
+    !/^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/.test(id) &&
+    !/^manual:[0-9a-f-]{36}$/.test(id) &&
+    !(id.startsWith('kettu:') && LISTING_ID.test(id.slice('kettu:'.length)))
+  ) {
     throw invalidParams('serverId is not a server Kettu keeps')
   }
   return id
@@ -1005,21 +1023,32 @@ function pluginId(o: Fields): string {
   return id
 }
 
-/** A plugin and where it is installed: for the user, or a project's folder for the others. */
-function pluginChange(
-  o: Fields,
-  platform: Platform,
-): { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string } {
+/** Where a plugin is installed: for the user, or a project's folder for the others. */
+function pluginPlace(o: Fields, platform: Platform): { scope: PluginScope; projectPath?: string } {
   const scope = o.scope as PluginScope
   if (scope !== 'user' && scope !== 'project' && scope !== 'local') {
     throw invalidParams('scope must be user, project or local')
   }
-  const base = { agentId: agentId(o), pluginId: pluginId(o), scope }
   if (scope === 'user') {
     if (o.projectPath !== undefined) throw invalidParams('A user scope takes no projectPath')
-    return base
+    return { scope }
   }
-  return { ...base, projectPath: absolutePath(o, 'projectPath', platform) }
+  return { scope, projectPath: absolutePath(o, 'projectPath', platform) }
+}
+
+/** A plugin and where it is installed. */
+function pluginChange(
+  o: Fields,
+  platform: Platform,
+): { agentId: AgentId; pluginId: string; scope: PluginScope; projectPath?: string } {
+  return { agentId: agentId(o), pluginId: pluginId(o), ...pluginPlace(o, platform) }
+}
+
+/** A listing of the Kettu Marketplace, by its opaque id. */
+function listingId(o: Fields): string {
+  const id = string(o, 'id', ID_CHARS)
+  if (!LISTING_ID.test(id)) throw invalidParams('id is not a listing of the Kettu Marketplace')
+  return id
 }
 
 /** Where a skill to add comes from: the catalog, a github.com URL or a folder on the host. */
@@ -1040,7 +1069,56 @@ function skillSource(value: unknown, platform: Platform): SkillSource {
     return { kind: 'github', url }
   }
   if (o.kind === 'local') return { kind: 'local', path: absolutePath(o, 'path', platform) }
-  throw invalidParams('source.kind must be catalog, github or local')
+  if (o.kind === 'kettu') return { kind: 'kettu', id: listingId(o) }
+  throw invalidParams('source.kind must be catalog, github, local or kettu')
+}
+
+function listingVersion(o: Fields): string {
+  const version = string(o, 'version', 64)
+  if (!VERSION.test(version)) throw invalidParams('version is not a version such as 1.2.0')
+  return version
+}
+
+function publisherHandle(o: Fields, key: string): string | undefined {
+  const handle = optionalString(o, key, 32)
+  if (handle !== undefined && !HANDLE.test(handle)) {
+    throw invalidParams(`${key} must be lowercase letters, digits and hyphens`)
+  }
+  return handle
+}
+
+/** One line of a listing, such as its name: not empty, without a line break. */
+function listingLine(o: Fields, key: string, max: number): string | undefined {
+  const value = optionalString(o, key, max)
+  if (value !== undefined && (value.trim() === '' || /[\r\n]/.test(value))) {
+    throw invalidParams(`${key} must be one line of text`)
+  }
+  return value
+}
+
+const LISTING_VISIBILITIES: readonly unknown[] = ['public', 'private', 'unlisted']
+
+function listingChange(value: unknown): ListingChange {
+  const o = fields(value)
+  const name = listingLine(o, 'name', LISTING_NAME_CHARS)
+  const description = listingLine(o, 'description', LISTING_DESCRIPTION_CHARS)
+  if (
+    o.about !== undefined &&
+    (typeof o.about !== 'string' || o.about.length > LISTING_ABOUT_CHARS)
+  ) {
+    throw invalidParams(`about must be a string of at most ${LISTING_ABOUT_CHARS} characters`)
+  }
+  if (o.visibility !== undefined && !LISTING_VISIBILITIES.includes(o.visibility)) {
+    throw invalidParams('visibility must be public, private or unlisted')
+  }
+  const change: ListingChange = {
+    ...(name !== undefined ? { name } : {}),
+    ...(description !== undefined ? { description } : {}),
+    ...(o.about !== undefined ? { about: o.about as string } : {}),
+    ...(o.visibility !== undefined ? { visibility: o.visibility as ListingVisibility } : {}),
+  }
+  if (Object.keys(change).length === 0) throw invalidParams('change names nothing to change')
+  return change
 }
 
 // What one import names: each agent's memory of each project, and the entries ticked for global.
@@ -1279,6 +1357,119 @@ export function createValidators(platform: Platform): Validators {
     },
     'market.skills': marketRead,
     'market.addSkill': (params) => ({ source: skillSource(fields(params).source, platform) }),
+    'market.answerPublish': (params) => {
+      const o = fields(params)
+      if (o.decision !== 'confirm' && o.decision !== 'later') {
+        throw invalidParams('decision must be confirm or later')
+      }
+      if (o.visibility !== undefined && o.visibility !== 'public' && o.visibility !== 'private') {
+        throw invalidParams('visibility must be public or private')
+      }
+      if (
+        o.notes !== undefined &&
+        (typeof o.notes !== 'string' || o.notes.length > LISTING_NOTES_CHARS)
+      ) {
+        throw invalidParams(`notes must be a string of at most ${LISTING_NOTES_CHARS} characters`)
+      }
+      const handle = optionalString(o, 'handle', 32)
+      if (handle !== undefined && !HANDLE.test(handle)) {
+        throw invalidParams('handle must be lowercase letters, digits and hyphens')
+      }
+      return {
+        sessionId: sessionId(o),
+        entryId: string(o, 'entryId', ID_CHARS),
+        decision: o.decision,
+        ...(o.visibility !== undefined ? { visibility: o.visibility } : {}),
+        ...(o.notes !== undefined ? { notes: o.notes as string } : {}),
+        ...(handle !== undefined ? { handle } : {}),
+      }
+    },
+    'market.publishDrafts': none,
+    'market.discardPublishDraft': (params) => ({ id: string(fields(params), 'id', ID_CHARS) }),
+    'market.community': (params) => {
+      const o = params === undefined || params === null ? {} : fields(params)
+      const q = optionalString(o, 'q', MARKET_QUERY_MAX)?.trim()
+      if (q !== undefined && /\p{Cc}/u.test(q)) throw invalidParams('q must be on one line')
+      const kind = o.kind
+      if (kind !== undefined && kind !== 'skill' && kind !== 'plugin' && kind !== 'mcp-server') {
+        throw invalidParams('kind must be skill, plugin or mcp-server')
+      }
+      const cursor = optionalString(o, 'cursor', TEXT_CHARS)
+      const refresh = optionalFlag(o, 'refresh')
+      return {
+        ...(q ? { q } : {}),
+        ...(kind !== undefined ? { kind } : {}),
+        ...(cursor ? { cursor } : {}),
+        ...(refresh !== undefined ? { refresh } : {}),
+      }
+    },
+    'market.communityListing': (params) => ({ id: listingId(fields(params)) }),
+    'market.communityInstalled': (params) => {
+      const refresh = optionalFlag(
+        params === undefined || params === null ? {} : fields(params),
+        'refresh',
+      )
+      return refresh === undefined ? {} : { refresh }
+    },
+    'market.installCommunityPlugin': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), agentId: agentId(o), ...pluginPlace(o, platform) }
+    },
+    'market.reportCommunity': (params) => {
+      const o = fields(params)
+      const message = string(o, 'message', REPORT_CHARS).trim()
+      if (message === '') throw invalidParams('message must say what the problem is')
+      return { id: listingId(o), message }
+    },
+    'market.account': none,
+    'market.published': none,
+    'market.setPublisher': (params) => {
+      const handle = publisherHandle(fields(params), 'handle')
+      if (handle === undefined) throw invalidParams('handle must be a string')
+      return { handle }
+    },
+    'market.updateListing': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), change: listingChange(o.change) }
+    },
+    'market.withdrawVersion': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), version: listingVersion(o) }
+    },
+    'market.deleteListing': (params) => ({ id: listingId(fields(params)) }),
+    'market.versionFiles': (params) => {
+      const o = fields(params)
+      return { id: listingId(o), version: listingVersion(o) }
+    },
+    'market.checkFolder': (params) => {
+      const o = fields(params)
+      const draftId = optionalString(o, 'draftId', ID_CHARS)
+      return {
+        path: absolutePath(o, 'path', platform),
+        ...(draftId !== undefined ? { draftId } : {}),
+      }
+    },
+    'market.publishFolder': (params) => {
+      const o = fields(params)
+      const draftId = optionalString(o, 'draftId', ID_CHARS)
+      if (o.visibility !== undefined && o.visibility !== 'public' && o.visibility !== 'private') {
+        throw invalidParams('visibility must be public or private')
+      }
+      if (
+        o.notes !== undefined &&
+        (typeof o.notes !== 'string' || o.notes.length > LISTING_NOTES_CHARS)
+      ) {
+        throw invalidParams(`notes must be a string of at most ${LISTING_NOTES_CHARS} characters`)
+      }
+      const handle = publisherHandle(o, 'handle')
+      return {
+        path: absolutePath(o, 'path', platform),
+        ...(draftId !== undefined ? { draftId } : {}),
+        ...(o.visibility !== undefined ? { visibility: o.visibility } : {}),
+        ...(o.notes !== undefined ? { notes: o.notes as string } : {}),
+        ...(handle !== undefined ? { handle } : {}),
+      }
+    },
     'agents.listSessions': (params) => {
       const o = fields(params)
       const cursor = optionalString(o, 'cursor', TEXT_CHARS)
@@ -1371,6 +1562,7 @@ export function createValidators(platform: Platform): Validators {
       }
     },
     'sessions.outline': session,
+    'sessions.outputs': session,
     'sessions.outlineTitles': session,
     'sessions.watch': session,
     'sessions.unwatch': session,

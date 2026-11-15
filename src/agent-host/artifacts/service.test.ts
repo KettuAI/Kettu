@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import type { MarketTools } from '../marketplace/publish-tools'
 import { ArtifactService, type AgentProcess, type ArtifactServiceDeps } from './service'
 
 const services: ArtifactService[] = []
@@ -29,7 +30,7 @@ describe('the servers a session attaches with', () => {
   })
 
   // Allowed tools run without asking the user, so none may reach past Kettu's own data.
-  it("allow without asking only Kettu's plan, report, memory, session and workflow tools", async () => {
+  it("allow without asking only Kettu's plan, report, memory, session and workflow tools and reading the Marketplace", async () => {
     const service = await started()
     const process = { closed: new Promise<void>(() => {}) } as AgentProcess
     const expected = [
@@ -53,6 +54,8 @@ describe('the servers a session attaches with', () => {
       'create_workflow',
       'report_step',
       'pick_step_agents',
+      'marketplace_check',
+      'marketplace_mine',
     ]
     for (const server of [
       ...service.servers('s1', '/repo'),
@@ -62,5 +65,32 @@ describe('the servers a session attaches with', () => {
         [...expected].sort(),
       )
     }
+  })
+})
+
+describe('the Marketplace tools', () => {
+  // Publishing needs the host's Kettu account, so agents see the tools only while it is in use.
+  it('are listed only while the host is signed in with Kettu’s services on', () => {
+    const signedIn = { current: false }
+    const market = {
+      get on() {
+        return signedIn.current
+      },
+    } as unknown as MarketTools
+    const deps = { log: () => {}, plan: {}, sessions: {}, market } as unknown as ArtifactServiceDeps
+    const service = new ArtifactService(deps)
+    const listed = () =>
+      service
+        .toolSummaries()
+        .map((tool) => tool.name)
+        .filter((name) => name.startsWith('marketplace_'))
+    expect(listed()).toEqual([])
+    signedIn.current = true
+    expect(listed()).toEqual([
+      'marketplace_check',
+      'marketplace_publish',
+      'marketplace_mine',
+      'marketplace_unlist',
+    ])
   })
 })

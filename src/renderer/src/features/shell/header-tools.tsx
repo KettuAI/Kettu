@@ -19,6 +19,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@renderer/components/ui/dropdown-menu'
+import { leaveSession } from '@renderer/app/actions'
 import { Kbd } from '@renderer/components/ui/kbd'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { summaryParts } from '@renderer/features/board/board-model'
@@ -179,15 +180,32 @@ export function HeaderTools({
   )
 }
 
-/** **Close pane**, in a split. */
+/**
+ * **Close pane** in a split. A session's only pane has **Leave session** in its place, which does
+ * what Mod+W does there: New session, with the session kept and its turn running.
+ */
 export function ClosePaneButton() {
   const { t } = useTranslation('shell')
   const pane = usePane()
-  if (!pane?.split) return null
+  if (!pane) return null
+  if (pane.split) {
+    return (
+      <BarButton
+        label={t('headerTools.closePane')}
+        onClick={() => closeSplitPane(pane.paneId, pane.focused)}
+      >
+        <PaneIcon icon={Cancel01Icon} size={15} />
+      </BarButton>
+    )
+  }
+  const { view } = pane
+  if (view.kind !== 'session') return null
   return (
     <BarButton
-      label={t('headerTools.closePane')}
-      onClick={() => closeSplitPane(pane.paneId, pane.focused)}
+      label={t('headerTools.leaveSession')}
+      // A browser keeps Mod+W for its own tab.
+      shortcut={isWeb ? undefined : 'Mod+W'}
+      onClick={() => leaveSession(useSessionsStore.getState().byId[view.sessionId])}
     >
       <PaneIcon icon={Cancel01Icon} size={15} />
     </BarButton>

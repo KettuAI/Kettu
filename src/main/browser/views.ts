@@ -2,14 +2,8 @@
 // web contents; the renderer draws the pane's frame and tab strip and tells main where the page
 // sits.
 
-import { BrowserWindow, session as electronSession, shell, View, WebContentsView } from 'electron'
-import type {
-  HandlerDetails,
-  Input,
-  Rectangle,
-  WebContents,
-  WindowOpenHandlerResponse,
-} from 'electron'
+import { BrowserWindow, session as electronSession, shell, WebContentsView } from 'electron'
+import type { HandlerDetails, Input, WebContents, WindowOpenHandlerResponse } from 'electron'
 import {
   BROWSER_PARTITION,
   MAX_SESSION_TABS,
@@ -55,11 +49,6 @@ const OVERLAY_LEAVE_MS = 480
 /** How long the overlay's page is kept, off screen, after the last turn that used a page ended. */
 const OVERLAY_KEEP_MS = 60_000
 
-// On macOS a page draws in its window's own compositor, so a view around it clips it: a frame
-// rounds the page's corners as the pane's frame for it is rounded. Elsewhere a page is a native
-// window of its own that only its own radius clips, on all four corners alike.
-const FRAMED = process.platform === 'darwin'
-
 /** A navigation that ended, or the Chromium error that stopped it. */
 export type NavigateResult =
   | { ok: true; url: string; title: string | null }
@@ -78,8 +67,6 @@ interface Tab {
   id: string
   sessionId: string
   view: WebContentsView | null
-  /** The view around the page that rounds its corners, on macOS. */
-  frame: View | null
   lastUrl: string | null
   lastTitle: string | null
   notice: BrowserNotice | null
@@ -173,14 +160,6 @@ export interface BrowserViewsDeps {
   siteOpened?(pageUrl: string, favicons?: string[]): void
   /** How long a new origin waits for the user; set only by tests, which cannot wait 2 minutes. */
   originWaitMs?: number
-}
-
-/** A page's frame and the page inside it: the frame is the page's own box, all four corners round. */
-export function framePage(bounds: BrowserBounds): { frame: Rectangle; page: Rectangle } {
-  return {
-    frame: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height },
-    page: { x: 0, y: 0, width: bounds.width, height: bounds.height },
-  }
 }
 
 let nextTab = 1
@@ -640,7 +619,6 @@ export class BrowserViews {
       id: `t${nextTab++}`,
       sessionId: browser.sessionId,
       view: null,
-      frame: null,
       lastUrl: null,
       lastTitle: null,
       notice: null,
@@ -861,11 +839,7 @@ export class BrowserViews {
         })
     tab.view = view
     tab.released = false
-    if (FRAMED) {
-      tab.frame = new View()
-      tab.frame.addChildView(view)
-    }
-    window.contentView.addChildView(tab.frame ?? view)
+    window.contentView.addChildView(view)
     this.place(tab)
     this.setVisible(tab, this.isShown(tab))
     this.wire(tab, view)
@@ -906,21 +880,16 @@ export class BrowserViews {
     }
   }
 
-  /** Puts the page where the pane reported it, its corners rounded as the pane's frame is. */
+  /**
+   * Puts the page where the pane reported it, its corners rounded as the pane's frame is. Only the
+   * page's own radius clips it: a view around it leaves its corners square on macOS.
+   */
   private place(tab: Tab): void {
-    const { view, frame } = tab
+    const { view } = tab
     if (!view) return
-    const bounds = this.boundsOf(tab)
-    const { x, y, width, height, radius } = bounds
-    if (frame) {
-      const framed = framePage(bounds)
-      frame.setBounds(framed.frame)
-      frame.setBorderRadius(radius)
-      view.setBounds(framed.page)
-    } else {
-      view.setBounds({ x, y, width, height })
-      view.setBorderRadius(radius)
-    }
+    const { x, y, width, height, radius } = this.boundsOf(tab)
+    view.setBounds({ x, y, width, height })
+    view.setBorderRadius(radius)
     const at = this.overlayParent(tab)
     if (at && this.overlayTab === tab.id) this.overlay.move(at)
   }
@@ -930,8 +899,7 @@ export class BrowserViews {
   }
 
   private setVisible(tab: Tab, visible: boolean): void {
-    const shown = tab.frame ?? tab.view
-    shown?.setVisible(visible)
+    tab.view?.setVisible(visible)
   }
 
   private destroy(tab: Tab): void {
@@ -940,14 +908,12 @@ export class BrowserViews {
       this.overlayTab = null
     }
     const view = tab.view
-    const attached = tab.frame ?? view
     tab.view = null
-    tab.frame = null
     tab.loading = false
     tab.asking = false
-    if (!view || !attached) return
+    if (!view) return
     const window = this.deps.window()
-    if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
+    if (window && !window.isDestroyed()) window.contentView.removeChildView(view)
     if (!view.webContents.isDestroyed()) view.webContents.close()
     this.deps.closed?.(tab.id)
   }
@@ -1141,14 +1107,12 @@ export class BrowserViews {
       // The view drops its contents once they are destroyed, so it is compared itself.
       if (tab.view !== view) return
       const window = this.deps.window()
-      const attached = tab.frame ?? tab.view
-      if (window && !window.isDestroyed()) window.contentView.removeChildView(attached)
+      if (window && !window.isDestroyed()) window.contentView.removeChildView(view)
       if (this.overlayTab === tab.id) {
         this.overlay.hide()
         this.overlayTab = null
       }
       tab.view = null
-      tab.frame = null
       tab.loading = false
       tab.asking = false
       this.endNavigation(tab, { ok: false, error: 'The page closed.' })
@@ -1290,30 +1254,18 @@ export class BrowserViews {
       .catch(() => {})
   }
 
-  /** Where the overlay goes for a tab: the page's frame on macOS, beside the page elsewhere. */
+  /** Where the overlay goes for a tab: beside the page, over the same box. */
   private overlayParent(tab: Tab): OverlayParent | null {
     const window = this.deps.window()
     const contents = this.contentsOf(tab)
     if (!tab.view || !contents || !window || window.isDestroyed()) return null
     const { x, y, width, height, radius } = this.boundsOf(tab)
-    const zoom = this.overlayZoom()
-    if (tab.frame) {
-      return {
-        sessionId: tab.sessionId,
-        contents,
-        parent: tab.frame,
-        bounds: { x: 0, y: 0, width, height },
-        framed: true,
-        radius: radius / zoom,
-      }
-    }
     return {
       sessionId: tab.sessionId,
       contents,
       parent: window.contentView,
       bounds: { x, y, width, height },
-      framed: false,
-      radius: radius / zoom,
+      radius: radius / this.overlayZoom(),
     }
   }
 

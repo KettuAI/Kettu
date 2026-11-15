@@ -88,10 +88,8 @@ export class Account {
   }
   private avatar: { url: string; picture: string | null } | null = null
   /** From the last read of the account; not written down, since it changes on the service. */
-  private limits: { plan: AccountPlan | null; usage: AccountUsage | null } = {
-    plan: null,
-    usage: null,
-  }
+  private limits: { plan: AccountPlan | null; usage: AccountUsage | null; points: number | null } =
+    { plan: null, usage: null, points: null }
   /** Changes whenever the stored sign-in is replaced or forgotten, so late answers are dropped. */
   private generation = 0
   private readonly now: () => number
@@ -140,6 +138,7 @@ export class Account {
       subscription: stored.subscription,
       ...this.limits,
       manageUrl: this.page('/account/'),
+      pointsUrl: this.page('/account/points/'),
       plainText: stored.plainText,
     }
   }
@@ -402,7 +401,7 @@ export class Account {
     await writeAccount(this.options.file, stored)
     this.generation++
     this.stored = stored
-    this.limits = { plan: me.plan, usage: me.usage }
+    this.limits = { plan: me.plan, usage: me.usage, points: me.points }
     this.access = { token: tokens.accessToken, expiresAt: tokens.accessExpiresAt }
   }
 
@@ -411,7 +410,7 @@ export class Account {
     const stored = this.stored
     if (!stored) return
     const { profile, subscription } = stored
-    const limits = { plan: me.plan, usage: me.usage }
+    const limits = { plan: me.plan, usage: me.usage, points: me.points }
     const limitsChanged = JSON.stringify(limits) !== JSON.stringify(this.limits)
     this.limits = limits
     if (
@@ -544,7 +543,7 @@ export class Account {
     this.stored = null
     this.access = null
     this.avatar = null
-    this.limits = { plan: null, usage: null }
+    this.limits = { plan: null, usage: null, points: null }
     this.signedOut = { reason, failure: null }
     this.emit()
     await removeAccount(this.options.file).catch((error: unknown) =>

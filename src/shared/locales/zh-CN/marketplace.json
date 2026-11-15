@@ -14,8 +14,10 @@
       "installed": "已安装",
       "plugins": "插件",
       "skills": "技能",
-      "workflow": "工作流"
-    }
+      "workflow": "工作流",
+      "published": "已发布"
+    },
+    "searchPublished": "搜索你发布的"
   },
   "add": {
     "button": "添加",
@@ -48,7 +50,9 @@
     "plugins": "插件",
     "skills": "技能",
     "mcp": "MCP 服务器",
-    "workflow": "工作流"
+    "workflow": "工作流",
+    "community": "社区",
+    "yours": "你的"
   },
   "row": {
     "install": "安装",
@@ -105,7 +109,11 @@
     "skillFailed": "无法添加技能：{{error}}",
     "connected": "已连接 {{name}}，所选的 Agent 都可以使用它",
     "disconnected": "已断开与 {{name}} 的连接",
-    "disconnectFailed": "无法断开 {{name}}：{{error}}"
+    "disconnectFailed": "无法断开 {{name}}：{{error}}",
+    "updated": "{{name}} 已更新到 {{version}}",
+    "updateFailed": "{{name}} 没能更新：{{error}}",
+    "reported": "报告已发给 Kettu 的 Marketplace",
+    "listingFailed": "没能读到这一项：{{error}}"
   },
   "listing": {
     "back": "Marketplace",
@@ -322,7 +330,8 @@
     "agentPlugins": "无法读取 {{agent}} 的插件：{{error}}",
     "skills": "无法读取技能目录，内容可能不是最新的：{{error}}",
     "catalog": "无法连接 MCP Registry：{{error}}",
-    "search": "无法搜索 MCP Registry：{{error}}"
+    "search": "无法搜索 MCP Registry：{{error}}",
+    "community": "没能读到 Kettu 的 Marketplace：{{error}}"
   },
   "empty": {
     "pluginsTitle": "没有可显示的插件",
@@ -583,6 +592,318 @@
       "skills": "技能",
       "madeIn": "创建它的会话",
       "sessionGone": "已不在的会话"
+    }
+  },
+  "community": {
+    "skillNote": "Kettu 从 Kettu 的 Marketplace 下载它、逐个核对文件，存在这台电脑上，开会话时交给这些 Agent。",
+    "pluginNote": "Kettu 从 Kettu 的 Marketplace 下载它、逐个核对文件，再由 {{harness}} 把它装进这个 Agent 的配置。",
+    "signedOut": "登录 Kettu 后能看到社区发布的。",
+    "servicesOff": "打开 Kettu 的服务后能看到社区发布的。",
+    "signIn": "登录",
+    "openAccount": "账号设置",
+    "readFailed": "没能读到这一项",
+    "gone": "Kettu 的 Marketplace 里已经没有它了。",
+    "goneTitle": "已不在目录里",
+    "goneKept": "Kettu 的 Marketplace 里已经没有 {{name}} 了。你装的照常留着，不再更新。",
+    "takenDown": "它已从 Kettu 的 Marketplace 下架。",
+    "takenDownTitle": "已下架",
+    "takenDownKept": "{{name}} 已从 Kettu 的 Marketplace 下架。你装的留到你移除为止，不再更新。",
+    "byYou": "{{handle}} · 你",
+    "trust": "社区",
+    "source": "Kettu 的 Marketplace",
+    "onlyMe": "只有我",
+    "cannotRun": "Kettu 运行不了这个 MCP 服务器：它没有指向 Kettu 能运行的包或 https 远程地址。",
+    "bundle": "Kettu 还不能安装 MCP 包（.mcpb），所以这里装不了这个服务器。",
+    "pluginFor": "{{harness}} 的插件",
+    "kinds": {
+      "mcp": "MCP 服务器",
+      "plugin": "插件",
+      "skill": "技能"
+    },
+    "side": {
+      "trust": "信任级别",
+      "kind": "种类",
+      "name": "条目"
+    },
+    "adds": {
+      "skills": "技能",
+      "commands": "命令",
+      "agents": "子 Agent",
+      "hooks": "Hook",
+      "servers": "MCP 服务器"
+    },
+    "report": "报告问题",
+    "reportTitle": "报告 {{name}}",
+    "reportDescription": "告诉 Kettu 的 Marketplace 它有什么问题。只发你写的这段话，和你的账号一起。",
+    "reportLabel": "什么问题",
+    "reportPlaceholder": "做的比说的多、用不了、抄了别人的……",
+    "reportSend": "发送报告",
+    "update": "更新到 {{version}}",
+    "updating": "正在更新",
+    "updateLine": "有 {{version}}",
+    "takenDownLine": "已下架"
+  },
+  "published": {
+    "publish": "发布",
+    "ask": "让 Agent 发布",
+    "askLine": "开一个会话来发布一个文件夹",
+    "folder": "从文件夹发布…",
+    "folderLine": "Kettu 检查后请你确认",
+    "askPrompt": "检查这个项目里的 Skill、插件或 MCP 服务器，把它发布到 Kettu 的 Marketplace。",
+    "askVersionPrompt": "从 {{folder}} 把 {{name}} 的新版本发布到 Kettu 的 Marketplace，并写几句更新说明。",
+    "askVersionPromptAnywhere": "把 {{name}} 的新版本发布到 Kettu 的 Marketplace，并写几句更新说明。",
+    "fromOrigin": "从 {{folder}} 发布",
+    "fromOriginLine": "上次发布用的文件夹",
+    "me": {
+      "since": "{{date}}开始发布",
+      "noHandle": "第一次发布时定发布者名",
+      "editProfile": "编辑资料",
+      "published": "已发布",
+      "installs": "安装",
+      "week": "近 7 天"
+    },
+    "needs": {
+      "title": "需要处理",
+      "notPublished": "未发布",
+      "needsFix": "需要修改",
+      "asked": "{{agent}} 在<ref>{{session}}</ref>里要发布 {{version}}，还没有发布。",
+      "askedNoSession": "{{agent}} 要发布 {{version}}，还没有发布。",
+      "kept": "{{folder}} 的 {{version}} 还没有发布。",
+      "stays": "{{version}} 照常在架。",
+      "discard": "丢弃",
+      "review": "检查并发布",
+      "withdraw": "撤回 {{version}}",
+      "checkAgain": "重新检查"
+    },
+    "table": {
+      "title": "已发布",
+      "label": "你发布的",
+      "name": "名字",
+      "visibleTo": "谁能看到",
+      "version": "版本",
+      "installs": "安装",
+      "updated": "更新",
+      "yourComputers": "你的电脑",
+      "week": "近 7 天 +{{count}}",
+      "noNew": "近 7 天没有新安装",
+      "needsFix": "{{version}} 需要修改",
+      "more": "{{name}} 的更多操作",
+      "noMatch": "你发布的里没有和“{{query}}”匹配的。"
+    },
+    "visibility": {
+      "public": "所有人",
+      "private": "只有我",
+      "unlisted": "已下架",
+      "takenDown": "已被下架"
+    },
+    "state": {
+      "public": "已上架",
+      "private": "只有我",
+      "unlisted": "已下架",
+      "takenDown": "已被下架"
+    },
+    "menu": {
+      "newVersion": "新版本…",
+      "newVersionHeading": "新版本",
+      "editDetails": "编辑资料…",
+      "editDetailsLine": "名字、一句话描述、介绍和谁能看到",
+      "unlist": "下架…",
+      "unlistLine": "装了的人照常能用",
+      "listAgain": "重新上架",
+      "delete": "删除…"
+    },
+    "foot": "Agent 用 Kettu 内置 MCP 服务器的 Marketplace 工具发布，每次都等你在会话里确认。",
+    "seeTools": "看这些工具",
+    "empty": {
+      "title": "分享你为 Agent 做的东西",
+      "text": "让 Agent 发布一个 Skill、插件或 MCP 服务器。它用 Kettu 内置的工具检查文件夹，你在会话里确认之前什么都不会发出去。",
+      "start": "开一个会话",
+      "or": "或者<ref>自己选一个文件夹</ref>",
+      "who": "所有人，或者只有你",
+      "whoLine": "只有你：只在登录了你账号的电脑上能装，别处都没有。",
+      "checked": "上架前先检查",
+      "checkedLine": "清单、文件里留下的密钥，以及它会运行什么。",
+      "versions": "版本",
+      "versionsLine": "每个新版本在装了它的人下次更新时送到。"
+    },
+    "readFailed": "读不到你发布的内容：{{error}}",
+    "toast": {
+      "published": "已发布 {{name}} {{version}}",
+      "unlisted": "已下架 {{name}}",
+      "listed": "{{name}} 已重新上架",
+      "deleted": "已删除 {{name}}",
+      "withdrawn": "已撤回 {{name}} 的 {{version}}",
+      "saved": "已保存 {{name}}",
+      "profile": "发布者名已改成 @{{handle}}",
+      "discarded": "已丢弃 {{name}} 的草稿"
+    },
+    "dialogs": {
+      "folder": {
+        "checking": "正在检查 {{folder}}…",
+        "nothing": "这里没有能发布的",
+        "nothingText": "Kettu 能发布带 SKILL.md、.claude-plugin 或 .codex-plugin 文件夹、或 server.json 的文件夹。",
+        "problems": "先改好这些，再重新检查：",
+        "checkAgain": "重新检查",
+        "failed": "没能发布：{{error}}"
+      },
+      "profile": {
+        "title": "编辑发布者资料",
+        "description": "发布者名写在你发布的每一项上。已经装了的照常能用。",
+        "name": "发布者名",
+        "save": "保存"
+      },
+      "details": {
+        "title": "编辑 {{name}}",
+        "description": "大家在 Marketplace 里看到的样子。文件只能随新版本改。",
+        "name": "名字",
+        "line": "一句话描述",
+        "about": "介绍",
+        "aboutHint": "显示在它的页上。留空就不显示。",
+        "visibleTo": "谁能看到",
+        "hint": {
+          "public": "列进 Marketplace，登录 Kettu 的人都能看到。",
+          "private": "不进目录，只在登录了你账号的电脑上安装，算进云端存储。",
+          "unlisted": "不在 Marketplace 里了。装了的人照常能用，也照常收到更新。"
+        },
+        "lineInvalid": "一行，最多 {{count}} 个字。",
+        "save": "保存"
+      },
+      "unlist": {
+        "title": "下架 {{name}}？",
+        "body_zero": "它会离开 Marketplace，不再有新的安装。还没有人装过它。",
+        "body_one": "它会离开 Marketplace，不再有新的安装。装了它的 1 个人照常能用，也照常收到更新。",
+        "body_other": "它会离开 Marketplace，不再有新的安装。装了它的 {{count}} 个人照常能用，也照常收到更新。",
+        "confirm": "下架"
+      },
+      "delete": {
+        "title": "删除 {{name}}？",
+        "body": "它会永久离开 Marketplace，不能再下载，文件会被删掉。已经装了的人留着自己的那份。",
+        "confirm": "删除"
+      },
+      "withdraw": {
+        "title": "撤回 {{version}}？",
+        "body": "它的文件会被删掉，装着它的人下次更新时换到 {{current}}。",
+        "confirm": "撤回"
+      },
+      "files": {
+        "title": "{{name}} {{version}} 的文件",
+        "description": "这个版本上传的文件，安装时就下载这些。",
+        "none": "这个版本没有上传文件，它指向它的服务器。"
+      }
+    },
+    "listing": {
+      "back": "已发布",
+      "you": "你 · 社区",
+      "facts": {
+        "installs": "安装",
+        "week": "近 7 天",
+        "version": "版本",
+        "updated": "更新",
+        "visibleTo": "谁能看到"
+      },
+      "installs": "安装",
+      "chartWeek": "近 7 天的安装",
+      "chartRange": "近 30 天",
+      "today": "今天",
+      "chartLabel": "近 30 天每天的安装数",
+      "versions": "版本",
+      "current": "当前版本",
+      "withdrawn": "已撤回",
+      "noNotes": "没有更新说明",
+      "by": "{{agent}} 在<ref>{{session}}</ref>里发布",
+      "byAgent": "{{agent}} 发布",
+      "bySession": "在<ref>{{session}}</ref>里发布",
+      "byYou": "你发布的",
+      "versionMore": "{{version}} 的更多操作",
+      "viewFiles": "看文件",
+      "openSession": "打开会话",
+      "withdraw": "撤回 {{version}}…",
+      "withdrawLine": "装着它的人换到 {{current}}",
+      "checks": "{{version}} 的检查",
+      "side": {
+        "publisher": "发布者",
+        "kind": "种类",
+        "folder": "文件夹",
+        "folderIn": "在 {{project}} 里",
+        "worksWith": "适用于"
+      },
+      "countsOnly": "安装数只是数字，Kettu 不告诉你是谁装的。",
+      "takenDown": "Kettu 已把它下架：{{reason}} 它不在 Marketplace 里了，也不能再发新版本；你仍能修改它、撤回版本或删除它。",
+      "missingTitle": "这不是你发布的",
+      "missingText": "它可能已被删除。",
+      "backToPublished": "回到已发布"
+    },
+    "checks": {
+      "paths": {
+        "title": "文件路径",
+        "detail": "都是相对路径，没有 .git 文件夹"
+      },
+      "skill": {
+        "title": "SKILL.md",
+        "detail": "有名字和描述"
+      },
+      "plugin": {
+        "title": "plugin.json",
+        "detail": "{{harness}} 插件的清单"
+      },
+      "secrets": {
+        "title": "没有密钥",
+        "detail_one": "文件里没有密钥和令牌",
+        "detail_other": "{{count}} 个文件里没有密钥和令牌"
+      },
+      "package": {
+        "title": "包"
+      },
+      "remote": {
+        "title": "远程地址"
+      },
+      "size": {
+        "title": "大小"
+      },
+      "skipped": "跳过：{{note}}"
+    }
+  },
+  "builtin": {
+    "line": "Kettu 给 Agent 的自带工具。一直都在，能按 Agent 关掉，不能卸载。",
+    "facts": {
+      "from": "来自",
+      "builtInto": "Kettu 内置",
+      "tools": "工具"
+    },
+    "about": "Agent 用它和 Kettu 本身打交道：会话、Artifacts、浏览器、你的电脑和设备、终端、记忆和计划。Kettu 开的每个会话都会带上它，在你装的东西之外。",
+    "tools": "工具",
+    "groups": {
+      "marketplace": "Marketplace",
+      "sessions": "会话",
+      "artifacts": "Artifacts",
+      "browser": "浏览器",
+      "computer": "电脑",
+      "devices": "移动设备",
+      "terminal": "终端",
+      "memory": "记忆",
+      "reports": "问题报告",
+      "workflows": "工作流"
+    },
+    "new": "新",
+    "whileSignedIn": "登录 Kettu 时提供",
+    "waits": "等你确认",
+    "more": "+ 其他 {{count}} 个",
+    "marketTools": {
+      "marketplace_check": "读一个文件夹，认出它是什么，跑一遍发布时的检查。不上传。",
+      "marketplace_publish": "把一个文件夹发布成新的一项，或者你已有一项的新版本。",
+      "marketplace_mine": "列出你发布的：版本、谁能看到、安装数和问题。",
+      "marketplace_unlist": "把你的一项从 Marketplace 下架，装了的人照常能用。"
+    },
+    "useIn": "用在",
+    "useInNote": "关掉后，这个 Agent 的会话拿不到这些工具，Marketplace 的也一样。",
+    "side": {
+      "kindValue": "MCP 服务器",
+      "runs": "在哪运行",
+      "runsMac": "在这台 Mac 上的 Kettu 里",
+      "runsComputer": "在这台电脑上的 Kettu 里",
+      "runsOn": "在 {{host}} 上的 Kettu 里",
+      "signedIn": "登录的账号",
+      "notSignedIn": "还没登录"
     }
   }
 }

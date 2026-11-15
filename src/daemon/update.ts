@@ -4,9 +4,24 @@
 
 import path from 'node:path'
 
-/** Names another place to download releases from, laid out as GitHub's, as for install.sh. */
+/** Names the one place to download releases from, laid out as GitHub's, as for install.sh. */
 export const RELEASES_ENV = 'KETTU_RELEASES_URL'
+export const DOWNLOADS = 'https://download.kettu.sh'
 export const RELEASES = 'https://github.com/KettuAI/Kettu/releases'
+
+// The latest release's redirect and its install script are small; a place this slow is down.
+const REQUEST_TIMEOUT_MS = 20_000
+
+/** Kettu's download service and then GitHub, or only the place `pinned` names. */
+export function releaseSources(pinned: string | undefined): string[] {
+  const one = pinned?.trim()
+  return one ? [one] : [DOWNLOADS, RELEASES]
+}
+
+/** What `kettu update`'s requests say they are, which tells the service an update from a download. */
+export function daemonUserAgent(version: string, platform: string, arch: string): string {
+  return `Kettu-daemon/${version} (${platform}; ${arch})`
+}
 
 /**
  * The versions folder of a package the install script installed, which runs from
@@ -46,7 +61,9 @@ export interface UpdateDeps {
   version: string
   /** The folder of the running daemon's bundle. */
   bundleDir: string
-  releases: string
+  /** The places to try in order, laid out as GitHub's releases. */
+  releases: string[]
+  userAgent: string
   fetch: typeof fetch
   /** Whether the daemon's service is installed, so the install sets it up again. */
   service: boolean
@@ -57,17 +74,70 @@ export interface UpdateDeps {
   write(text: string): void
 }
 
-export async function latestVersion(deps: Pick<UpdateDeps, 'releases' | 'fetch'>) {
+type Requests = Pick<UpdateDeps, 'userAgent' | 'fetch'>
+type Releases = Requests & { releases: string }
+
+function request(deps: Requests, url: string, init: RequestInit = {}): Promise<Response> {
+  return deps.fetch(url, {
+    ...init,
+    headers: { 'User-Agent': deps.userAgent },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+}
+
+export async function latestVersion(deps: Releases) {
   const url = `${deps.releases}/latest`
   let location: string | null
   try {
-    location = (await deps.fetch(url, { redirect: 'manual' })).headers.get('location')
+    location = (await request(deps, url, { redirect: 'manual' })).headers.get('location')
   } catch (error) {
     throw new UpdateError(`Could not reach ${url}: ${(error as Error).message}`)
   }
   const version = location ? releaseVersion(location) : null
   if (!version) throw new UpdateError(`${url} names no release`)
   return version
+}
+
+/**
+ * The latest release, with its install script when it is newer than the one running, from the
+ * first place that answers with both. A place whose latest is older than the one running lags
+ * behind, so the next is asked, and only when every place that answered has nothing newer is
+ * there no update.
+ */
+async function latestRelease(
+  deps: UpdateDeps,
+): Promise<{ version: string; script: string | null }> {
+  let failure: unknown = new UpdateError('No place to download releases from')
+  let stale: string | null = null
+  for (const [index, releases] of deps.releases.entries()) {
+    try {
+      const version = await latestVersion({ ...deps, releases })
+      if (isNewer(deps.version, version)) {
+        stale = version
+        const next = deps.releases[index + 1]
+        if (next)
+          deps.write(`${releases} offers ${version}, older than ${deps.version}; trying ${next}\n`)
+        continue
+      }
+      if (!isNewer(version, deps.version)) return { version, script: null }
+      const url = `${releases}/download/v${version}/install.sh`
+      let script: string
+      try {
+        const response = await request(deps, url)
+        if (!response.ok) throw new Error(`it answered ${response.status}`)
+        script = await response.text()
+      } catch (error) {
+        throw new UpdateError(`Could not download ${url}: ${(error as Error).message}`)
+      }
+      return { version, script }
+    } catch (error) {
+      failure = error
+      const next = deps.releases[index + 1]
+      if (next) deps.write(`${(error as Error).message}; trying ${next}\n`)
+    }
+  }
+  if (stale) return { version: stale, script: null }
+  throw failure
 }
 
 /** Updates to the latest release and resolves to the exit code. */
@@ -78,21 +148,13 @@ export async function update(deps: UpdateDeps): Promise<number> {
         path.dirname(deps.bundleDir),
     )
   }
-  const latest = await latestVersion(deps)
-  if (!isNewer(latest, deps.version)) {
+  const { version: latest, script } = await latestRelease(deps)
+  if (script === null) {
     deps.write(`The Kettu daemon ${deps.version} is up to date.\n`)
     return 0
   }
   deps.write(`Updating the Kettu daemon from ${deps.version} to ${latest}\n`)
-  const url = `${deps.releases}/download/v${latest}/install.sh`
-  let script: string
-  try {
-    const response = await deps.fetch(url)
-    if (!response.ok) throw new Error(`it answered ${response.status}`)
-    script = await response.text()
-  } catch (error) {
-    throw new UpdateError(`Could not download ${url}: ${(error as Error).message}`)
-  }
+  // The script tries the same places in the same order for the package and its checksums.
   const code = await deps.install(script, [
     '--version',
     latest,

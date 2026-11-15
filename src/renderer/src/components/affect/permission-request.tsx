@@ -54,7 +54,7 @@ export type PermissionRequestProps = {
   toolIcon?: ReactNode;
   risk?: PermissionRisk;
   /** The agent's own words on why it needs this */
-  reason?: string;
+  reason?: ReactNode;
   /** What will happen if you allow it – files, recipients, amounts */
   preview?: PermissionPreviewItem[];
   previewTitle?: string;
@@ -596,9 +596,9 @@ export function PermissionRequest({
               </header>
 
               {reason && (
-                <p className="ui-prc__why" id={`${uid}-why`} dir="auto">
+                <div className="ui-prc__why" id={`${uid}-why`} dir="auto">
                   {reason}
-                </p>
+                </div>
               )}
 
               {/* ----- Exactly what will happen ----- */}

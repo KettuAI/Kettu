@@ -175,7 +175,10 @@ const SECTION_FIELDS = {
     badge: isBoolean,
   },
   git: { backgroundFetch: isBoolean, worktreeRoot: isWorktreeRoot },
-  updates: { automatic: oneOf('download', 'restart', 'notify', 'off') },
+  updates: {
+    automatic: oneOf('download', 'restart', 'notify', 'off'),
+    source: oneOf('auto', 'github'),
+  },
   privacy: { hideAccount: isBoolean },
   diagnostics: { verboseUntil: isVerboseUntil },
   usage: { fromComputer: isBoolean, sidebar: oneOf('today', 'cost', 'limit', 'off') },
@@ -274,6 +277,10 @@ const MAX_INPUT_DESCRIPTION = 1000
 // The registry's own pattern for a server's name.
 const REGISTRY_NAME = /^[A-Za-z0-9.-]+\/[A-Za-z0-9._-]+$/
 const MANUAL_ID = /^manual:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+// A listing of the Kettu Marketplace, as a kept server's or skill's id.
+const KETTU_ID = /^kettu:[a-z2-7]{10}$/
+// Where a skill from it came from: `@<publisher>/<slug>`.
+const KETTU_ORIGIN = /^@[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?\/[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/
 // A token as RFC 9110 defines a field name.
 const HEADER_NAME = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
@@ -455,13 +462,15 @@ function parseMarketServer(raw: unknown, path: string, strict: boolean): MarketS
   const extra = extraKey(raw, allowed, path, strict)
   if (extra) return extra
   const { id, name, title, source, version, agents, on } = raw
-  const sourceProblem = oneOf('registry', 'manual')(source, `${path}.source`)
+  const sourceProblem = oneOf('registry', 'manual', 'kettu')(source, `${path}.source`)
   if (sourceProblem) return sourceProblem
-  const idPattern = source === 'manual' ? MANUAL_ID : REGISTRY_NAME
+  const idPattern = source === 'manual' ? MANUAL_ID : source === 'kettu' ? KETTU_ID : REGISTRY_NAME
   if (typeof id !== 'string' || id.length > MAX_MARKET_ID || !idPattern.test(id)) {
     return source === 'manual'
       ? `"${path}.id" must be manual: and a UUID`
-      : `"${path}.id" must be a registry name of at most ${MAX_MARKET_ID} characters`
+      : source === 'kettu'
+        ? `"${path}.id" must be kettu: and a listing id`
+        : `"${path}.id" must be a registry name of at most ${MAX_MARKET_ID} characters`
   }
   if (typeof name !== 'string' || !MARKET_NAME.test(name) || name === 'kettu') {
     return `"${path}.name" must be lowercase letters, digits, - and _, and not "kettu"`
@@ -519,6 +528,7 @@ const SKILL_IDS = {
   catalog: `${CATALOG_SKILL_PREFIX} and a skill's name`,
   github: `${GITHUB_SKILL_PREFIX} and owner/repo, with a folder in it or not`,
   local: 'local: and a UUID',
+  kettu: 'kettu: and a listing id',
 } as const
 
 /** A folder's name in a skill's id: no `.` or `..`, which would leave the repository. */
@@ -529,6 +539,7 @@ function isIdSegment(part: string): boolean {
 function isSkillId(id: string, source: MarketSkill['source']): boolean {
   if (id.length > MAX_SKILL_ID || hasControl(id)) return false
   if (source === 'local') return LOCAL_SKILL_ID.test(id)
+  if (source === 'kettu') return KETTU_ID.test(id)
   if (source === 'catalog') {
     return (
       id.startsWith(CATALOG_SKILL_PREFIX) && SKILL_NAME.test(id.slice(CATALOG_SKILL_PREFIX.length))
@@ -557,7 +568,7 @@ function parseMarketSkill(raw: unknown, path: string, strict: boolean): MarketSk
   const extra = extraKey(raw, allowed, path, strict)
   if (extra) return extra
   const { id, name, description, source, origin, version, on } = raw
-  const sourceProblem = oneOf('catalog', 'github', 'local')(source, `${path}.source`)
+  const sourceProblem = oneOf('catalog', 'github', 'local', 'kettu')(source, `${path}.source`)
   if (sourceProblem) return sourceProblem
   const from = source as MarketSkill['source']
   if (typeof id !== 'string' || !isSkillId(id, from))
@@ -578,6 +589,10 @@ function parseMarketSkill(raw: unknown, path: string, strict: boolean): MarketSk
     if (problem) return problem
     if (!isAbsolutePath(origin as string, process.platform)) {
       return `"${path}.origin" must be an absolute path`
+    }
+  } else if (from === 'kettu') {
+    if (typeof origin !== 'string' || !KETTU_ORIGIN.test(origin)) {
+      return `"${path}.origin" must be @<publisher>/<slug>`
     }
   } else if (!isHttpsUrl(origin)) {
     return `"${path}.origin" must be an https URL of at most ${MAX_URL_LENGTH} characters`

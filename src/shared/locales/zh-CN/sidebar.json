@@ -300,17 +300,17 @@
     "showLess": "收起"
   },
   "card": {
-    "model": "模型",
-    "branch": "分支",
     "cache": "提示缓存",
-    "lastTurn": "上一轮",
     "cacheNone": "无",
     "cacheExpired": "已过期",
     "cacheLikelyExpired": "可能已过期",
     "minutesLeft_other": "还剩 {{count}} 分钟",
     "minutesLeftAbout_other": "大约还剩 {{count}} 分钟",
     "timeLeft": "还剩 {{time}}",
-    "timeLeftAbout": "大约还剩 {{time}}"
+    "timeLeftAbout": "大约还剩 {{time}}",
+    "done": "已完成",
+    "took": "用时 {{time}}",
+    "moreReferences_other": "还有 {{count}} 个 issue 和 PR"
   },
   "subagents": {
     "title": "这个会话的子 Agent",

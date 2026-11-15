@@ -16,6 +16,8 @@ import { hostOfPath, hostPath } from '@renderer/lib/host-paths'
 import { memoryErrorText, memoryRefusal } from '@renderer/lib/memory-errors'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { Clamp } from '../clamp'
+import { Markdown } from '../markdown'
 import { useEntry, useEntryAnimation } from '../use-thread'
 import { AccessCard, type AccessDecision } from './access-card'
 import { MEMORY_GLYPH, stepFacts, useToolCallLabels } from './tool-call-model'
@@ -148,6 +150,15 @@ export function MemoryStep({
   )
 }
 
+/** A proposed entry's text as it will read in Settings, folded after about six lines. */
+function MemoryText({ markdown }: { markdown: string }) {
+  return (
+    <Clamp maxHeight={120} buttonClassName="-mx-1.5">
+      <Markdown markdown={markdown} className="markdown-compact ks-memory-text" />
+    </Clamp>
+  )
+}
+
 /** How the card reads the proposal's answer: accepted as allowed, declined as denied. */
 function shown(entry: MemoryWriteEntry): string | null {
   if (entry.status === 'proposed') return null
@@ -172,6 +183,7 @@ function MemoryProposal({
 }) {
   const { t } = useTranslation('session')
   const action = entry.action
+  const body = entry.draft?.body ?? ''
   const request = async (decision: AccessDecision): Promise<void> => {
     try {
       await host('sessions.answerMemory', {
@@ -194,7 +206,7 @@ function MemoryProposal({
       action={t(`memory.proposal.${action}.action`)}
       target={entry.draft?.title ?? entry.title}
       glyph={MEMORY_GLYPH}
-      reason={entry.draft?.body ?? ''}
+      reason={body ? <MemoryText markdown={body} /> : undefined}
       answer={shown(entry)}
       device={entry.device}
       words={{

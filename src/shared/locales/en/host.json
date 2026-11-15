@@ -135,7 +135,9 @@
     "asks": "Asks: {{question}}",
     "done": "{{title}} · done",
     "withChanges_one": "{{text}} {{count}} file changed.",
-    "withChanges_other": "{{text}} {{count}} files changed."
+    "withChanges_other": "{{text}} {{count}} files changed.",
+    "marketPublish": "Wants to publish {{name}} to the Kettu Marketplace",
+    "marketUnlist": "Wants to unlist {{name}} from the Kettu Marketplace"
   },
   "routines": {
     "busy": "This routine already has a run working",
@@ -632,5 +634,42 @@
     "done": "{{title}} is done",
     "dropped": "{{title}} ended without being done",
     "endedBody": "{{workflow}} · {{steps}} steps"
+  },
+  "marketPublish": {
+    "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",
+    "handleTaken": "@{{handle}} is taken. Choose another publisher name.",
+    "publisherFailed": "Could not set the publisher name: {{reason}}",
+    "notReady": "Nothing was uploaded: fix what the check found first.",
+    "failure": {
+      "signed_out": "Sign in to a Kettu account with Kettu’s cloud services on to publish.",
+      "unauthorized": "Sign in to your Kettu account again to publish.",
+      "network": "Couldn’t reach the Kettu Marketplace. Check the connection and try again.",
+      "unreadable": "Couldn’t read what you published.",
+      "storage_full": "Your cloud storage is full, and something only you can see counts against it.",
+      "too_many_listings": "Your account has as many listings as it can have.",
+      "rate_limited": "Too many versions in the last hour. Try again later.",
+      "last_version": "It’s the only version left. Publish a new one before you withdraw this one, or delete the listing.",
+      "handle_taken": "That publisher name is taken. Choose another.",
+      "taken_down": "Kettu took it down, so it takes no new versions.",
+      "version_exists": "This version is published already. Raise the version and try again.",
+      "no_publisher": "Choose a publisher name first.",
+      "not_found": "It’s no longer in the Kettu Marketplace.",
+      "check_failed": "The Kettu Marketplace’s check didn’t pass.",
+      "conflict": "Something else changed it at the same time. Try again."
+    }
+  },
+  "marketCommunity": {
+    "signedOut": "Sign in to a Kettu account, with Kettu’s services on, to install from the Kettu Marketplace.",
+    "takenDown": "This was taken down from the Kettu Marketplace.",
+    "gone": "This is no longer in the Kettu Marketplace.",
+    "withdrawn": "Its publisher withdrew this version. Try again to get the current one.",
+    "failed": "Couldn’t reach the Kettu Marketplace: {{reason}}",
+    "mismatch": "{{path}} didn’t match the checksum the Kettu Marketplace gave for it, so nothing was installed.",
+    "badPath": "The Kettu Marketplace named a file Kettu won’t write, {{path}}, so nothing was installed.",
+    "tooLarge": "This version is larger than a version may be, so nothing was installed.",
+    "otherKind": "This listing is another kind of item.",
+    "otherHarness": "This plugin is for another agent.",
+    "noManifest": "The plugin has no {{file}} with a name, so it can’t be installed.",
+    "nameTaken": "Another plugin named {{name}} from the Kettu Marketplace is installed ({{other}}). Uninstall it first."
   }
 }

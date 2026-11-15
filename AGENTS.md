@@ -87,7 +87,7 @@ src/
                        model, the encrypted channel and the host link
 tools/
 ├── fake-agent/        Scripted ACP agent for development and tests
-└── workflow/          The macOS signing steps of the release run
+└── workflow/          The release run's signing steps: macOS and the update files
 ```
 
 ### Adding an IPC call

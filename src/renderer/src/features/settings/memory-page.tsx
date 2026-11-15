@@ -1,5 +1,15 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
-import { Edit02Icon, RefreshIcon } from '@hugeicons/core-free-icons'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import {
+  ArrowLeft01Icon,
+  ArrowUpRight01Icon,
+  Delete02Icon,
+  Edit02Icon,
+  Folder01Icon,
+  Globe02Icon,
+  MoreHorizontalIcon,
+  RefreshIcon,
+  UserIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   MEMORY_BODY_CHARS,
@@ -8,7 +18,8 @@ import {
   type MemoryEntry,
   type MemoryScope,
 } from '@shared/memory'
-import { Icon } from '@renderer/components/affect/app-shell'
+import { Dropdown, Icon, type MenuItem } from '@renderer/components/affect/app-shell'
+import { AgentMark } from '@renderer/components/agents/agent-mark'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,82 +30,69 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@renderer/components/ui/alert-dialog'
-import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { toast } from '@renderer/components/ui/toast'
-import { MEMORY_GLYPH } from '@renderer/features/session/entries/tool-call-model'
+import { Markdown } from '@renderer/features/session/markdown'
 import { fullTime, mediumAgo } from '@renderer/lib/format'
 import { memoryErrorText } from '@renderer/lib/memory-errors'
+import { modLabel } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { chooseMemoryProject } from '@renderer/stores/memory'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession, openSettingsItem } from '@renderer/stores/view'
-import { Fact } from './agent-parts'
-import { CONFIRM, ControlError, DangerButton, SetButton, Skel } from './controls'
+import { CONFIRM, ControlError, SetButton, Skel } from './controls'
 import { useMemoryEntries, useProjectName, writerName } from './memory-data'
-import { memoryItemKey, parseMemoryItem } from './memory-items'
-import { GroupLabel, ItemPageHeader, Notice, RowFrame, RowGroup, RowText } from './rows'
-import {
-  DIALOG_FIELD,
-  SettingsDialogBody,
-  SettingsDialogContent,
-  SettingsDialogFooter,
-  SettingsDialogHeader,
-  SettingsField,
-} from './settings-dialog'
+import { memoryItemKey, NEW_MEMORY, parseMemoryItem } from './memory-items'
+import { Notice } from './rows'
 
 const back = () => openSettingsItem('memory', null)
 
-/** A memory entry's page: its text, who wrote it and in which session, and what to do with it. */
+/**
+ * A memory entry's page, read as a short document: its layer, title, summary, who wrote it and
+ * its text; or, for `NEW_MEMORY`, an empty one being written.
+ */
 export function MemoryEntryPage({ item }: { item: string }) {
   const { t } = useTranslation('settings')
   const { hostId } = useHostScope()
   const parsed = useMemo(() => parseMemoryItem(item), [item])
-  const read = useMemoryEntries(parsed?.scope ?? null)
+  const adding = parsed?.id === NEW_MEMORY
+  const read = useMemoryEntries(parsed && !adding ? parsed.scope : null)
   const project = parsed?.scope.layer === 'project' ? parsed.scope.project : null
   // Back on the list, the project of the entry shown is the one listed.
   useEffect(() => {
     if (project !== null) chooseMemoryProject(hostId, project)
   }, [hostId, project])
-  const entry = read.value?.find((one) => one.id === parsed?.id) ?? null
-  if (parsed && entry) return <EntryPage item={item} scope={parsed.scope} entry={entry} />
-  const header = (title: ReactNode) => (
-    <ItemPageHeader
-      back={t('sections.memory')}
-      onBack={back}
-      item={item}
-      icon={<Icon icon={MEMORY_GLYPH} size={24} />}
-      title={title}
-    />
-  )
-  if (parsed && read.value === null && read.error === null) {
+  if (parsed && adding) {
     return (
-      <>
-        {header(<Skel width={180} className="mt-1.5" />)}
-        <div className="ui-sg-card k-pending" aria-busy="true">
-          <div className="ui-sg-row">
-            <span className="ui-sg-label k-lines">
-              <Skel width="70%" />
-              <Skel width="45%" />
-            </span>
-          </div>
-        </div>
-      </>
+      <Page item={item} scope={parsed.scope}>
+        <Editor scope={parsed.scope} entry={null} onDone={back} />
+      </Page>
     )
   }
-  if (parsed && read.value === null) {
+  const entry = read.value?.find((one) => one.id === parsed?.id) ?? null
+  if (parsed && entry) return <EntryPage item={item} scope={parsed.scope} entry={entry} />
+  if (parsed && read.value === null && read.error === null) {
     return (
-      <>
-        {header(null)}
-        <ReadFailed error={read.error ?? ''} onRetry={read.retry} />
-      </>
+      <Page item={item} scope={parsed.scope}>
+        <div className="k-mem__pending" aria-busy="true">
+          <Skel width={320} className="k-mem__skel-title" />
+          <Skel width="60%" />
+          <div className="k-mem__body">
+            <Skel width="90%" />
+            <Skel width="75%" />
+          </div>
+        </div>
+      </Page>
     )
   }
   return (
-    <>
-      {header(null)}
-      <p className="ui-sg-hint">{t('memory.entry.gone')}</p>
-    </>
+    <Page item={item} scope={parsed?.scope ?? null}>
+      {parsed && read.value === null ? (
+        <ReadFailed error={read.error ?? ''} onRetry={read.retry} />
+      ) : (
+        <p className="ui-sg-hint">{t('memory.entry.gone')}</p>
+      )}
+    </Page>
   )
 }
 
@@ -115,6 +113,48 @@ export function ReadFailed({ error, onRetry }: { error: string; onRetry: () => v
   )
 }
 
+/** The way back, then the page with its layer's tag and what sits at its top right. */
+function Page({
+  item,
+  scope,
+  actions,
+  children,
+}: {
+  item: string
+  scope: MemoryScope | null
+  actions?: ReactNode
+  children: ReactNode
+}) {
+  const { t } = useTranslation('settings')
+  return (
+    <>
+      <button type="button" onClick={back} className="k-back">
+        <Icon icon={ArrowLeft01Icon} size={14} />
+        {t('sections.memory')}
+      </button>
+      <article data-setting-row={item} className="k-mem">
+        <div className="k-mem__bar">
+          {scope ? <LayerTag scope={scope} /> : <span />}
+          {actions && <span className="k-mem__actions">{actions}</span>}
+        </div>
+        {children}
+      </article>
+    </>
+  )
+}
+
+function LayerTag({ scope }: { scope: MemoryScope }) {
+  const { t } = useTranslation('settings')
+  const { hostId } = useHostScope()
+  const projectName = useProjectName(hostId, scope.layer === 'project' ? scope.project : null)
+  return (
+    <span className="k-mem__layer">
+      <Icon icon={scope.layer === 'global' ? UserIcon : Folder01Icon} size={13} />
+      {scope.layer === 'global' ? t('memory.entry.globalTag') : projectName}
+    </span>
+  )
+}
+
 function EntryPage({
   item,
   scope,
@@ -125,134 +165,132 @@ function EntryPage({
   entry: MemoryEntry
 }) {
   const { t } = useTranslation('settings')
-  const { hostId } = useHostScope()
+  const { hostId, request } = useHostScope()
   const now = useNow()
   const [editing, setEditing] = useState(false)
-  const projectName = useProjectName(hostId, scope.layer === 'project' ? scope.project : null)
+  const [removing, setRemoving] = useState(false)
   const who = writerName(entry, hostId) ?? t('memory.you')
-  const layer =
-    scope.layer === 'global'
-      ? t('memory.entry.global')
-      : t('memory.entry.project', { project: projectName })
-  return (
-    <>
-      <ItemPageHeader
-        back={t('sections.memory')}
-        onBack={back}
-        item={item}
-        icon={<Icon icon={MEMORY_GLYPH} size={24} />}
-        title={entry.title}
-        subtitle={entry.description || undefined}
-        actions={
-          <SetButton icon={<Icon icon={Edit02Icon} size={14} />} onClick={() => setEditing(true)}>
-            {t('memory.entry.edit')}
-          </SetButton>
-        }
-      >
-        <span className="k-name">
-          {layer} · {t('memory.line', { who, when: mediumAgo(entry.updatedAt, now) })}
-        </span>
-      </ItemPageHeader>
-
-      <div className="k-groups">
-        <section aria-label={t('memory.entry.body')} className="k-group">
-          <GroupLabel group={{ id: 'body', label: t('memory.entry.body') }} />
-          <RowGroup>
-            <div className="ui-sg-row">
-              <p className="k-memory-text" data-empty={!entry.body || undefined} data-selectable="">
-                {entry.body || t('memory.entry.noBody')}
-              </p>
-            </div>
-          </RowGroup>
-        </section>
-        <section aria-label={t('memory.entry.details')} className="k-group">
-          <GroupLabel group={{ id: 'details', label: t('memory.entry.details') }} />
-          <RowGroup>
-            <Fact name={t('memory.entry.writtenBy')}>{who}</Fact>
-            {entry.source.sessionId !== null && <SessionRow sessionId={entry.source.sessionId} />}
-            <Fact name={t('memory.entry.created')}>{fullTime(entry.createdAt)}</Fact>
-            <Fact name={t('memory.entry.updated')}>{fullTime(entry.updatedAt)}</Fact>
-          </RowGroup>
-        </section>
-        <section aria-label={t('memory.entry.remove.name')} className="k-group">
-          <RowGroup>
-            {scope.layer === 'project' && <MoveToGlobal project={scope.project} entry={entry} />}
-            <RemoveEntry scope={scope} entry={entry} />
-          </RowGroup>
-        </section>
-      </div>
-      <MemoryEditor
-        open={editing}
-        onOpenChange={setEditing}
-        scope={scope}
-        entry={entry}
-        projectName={projectName}
-      />
-    </>
-  )
-}
-
-/** The session that wrote the entry, and the way back to it while the window knows it. */
-function SessionRow({ sessionId }: { sessionId: string }) {
-  const { t } = useTranslation('settings')
-  const summary = useSessionsStore((s) => s.byId[sessionId])
-  return (
-    <RowFrame
-      text={
-        <RowText
-          name={t('memory.entry.session')}
-          description={summary ? sessionTitle(summary) : t('memory.entry.sessionGone')}
-        />
-      }
-    >
-      {summary && (
-        <SetButton onClick={() => openSession(summary.id, summary.projectPath)}>
-          {t('memory.entry.openSession')}
-        </SetButton>
-      )}
-    </RowFrame>
-  )
-}
-
-/** Moves a project's entry to global memory and shows it there; asking is the user's consent. */
-function MoveToGlobal({ project, entry }: { project: string; entry: MemoryEntry }) {
-  const { t } = useTranslation('settings')
-  const { request } = useHostScope()
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const move = async (): Promise<void> => {
-    setBusy(true)
-    setError(null)
+  const moveToGlobal = async (project: string): Promise<void> => {
     try {
       const moved = await request('memory.moveToGlobal', { project, id: entry.id })
       toast(t('memory.entry.move.done'), undefined, { tone: 'success' })
       openSettingsItem('memory', memoryItemKey({ layer: 'global' }, moved.id))
     } catch (failure) {
-      setError(memoryErrorText(failure))
-      setBusy(false)
+      toast(memoryErrorText(failure))
     }
   }
-  return (
-    <RowFrame
-      text={
-        <RowText
-          name={t('memory.entry.move.name')}
-          description={t('memory.entry.move.description')}
-        />
-      }
-    >
-      <ControlError error={error} />
-      <SetButton loading={busy} onClick={() => void move()}>
-        {t('memory.entry.move.button')}
+  const items: MenuItem[] = []
+  // Moving is the user's own consent, which a global write needs.
+  if (scope.layer === 'project')
+    items.push({
+      label: t('memory.entry.move.button'),
+      icon: Globe02Icon,
+      onSelect: () => void moveToGlobal(scope.project),
+    })
+  items.push({
+    label: t('memory.entry.remove.button'),
+    icon: Delete02Icon,
+    danger: true,
+    divider: items.length > 0,
+    onSelect: () => setRemoving(true),
+  })
+  // An entry saved once has both times a moment apart; only a later change counts as one.
+  const changed = entry.updatedAt - entry.createdAt > 60_000
+  const actions = editing ? undefined : (
+    <>
+      <SetButton icon={<Icon icon={Edit02Icon} size={14} />} onClick={() => setEditing(true)}>
+        {t('memory.entry.edit')}
       </SetButton>
-    </RowFrame>
+      <Dropdown
+        align="end"
+        items={items}
+        trigger={({ open, toggle }) => (
+          <button
+            type="button"
+            className="ui-as-icon-btn"
+            aria-label={t('memory.entry.more')}
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={toggle}
+          >
+            <Icon icon={MoreHorizontalIcon} size={16} />
+          </button>
+        )}
+      />
+    </>
+  )
+  return (
+    <Page item={item} scope={scope} actions={actions}>
+      {editing ? (
+        <Editor scope={scope} entry={entry} onDone={() => setEditing(false)} />
+      ) : (
+        <>
+          <h1 className="k-mem__title">{entry.title}</h1>
+          {entry.description && <p className="k-mem__summary">{entry.description}</p>}
+          <p className="k-mem__meta">
+            {entry.source.agentId !== null ? (
+              <AgentMark agent={entry.source.agentId} size={14} hostId={hostId} />
+            ) : (
+              <Icon icon={UserIcon} size={14} />
+            )}
+            <span>{who}</span>
+            <span className="k-mem__dot">·</span>
+            <span title={fullTime(entry.updatedAt)}>
+              {t(changed ? 'memory.entry.changed' : 'memory.entry.written', {
+                when: mediumAgo(entry.updatedAt, now),
+              })}
+            </span>
+            {entry.source.sessionId !== null && <SessionLink sessionId={entry.source.sessionId} />}
+          </p>
+          <div className="k-mem__body" data-selectable="">
+            {entry.body ? (
+              <Markdown markdown={entry.body} className="k-mem__prose" />
+            ) : (
+              <p className="k-mem__empty">{t('memory.entry.noBody')}</p>
+            )}
+          </div>
+        </>
+      )}
+      <RemoveDialog scope={scope} entry={entry} open={removing} onOpenChange={setRemoving} />
+    </Page>
   )
 }
 
-function RemoveEntry({ scope, entry }: { scope: MemoryScope; entry: MemoryEntry }) {
+/** The session that wrote the entry, as a link while the window still knows it. */
+function SessionLink({ sessionId }: { sessionId: string }) {
+  const { t } = useTranslation('settings')
+  const summary = useSessionsStore((s) => s.byId[sessionId])
+  if (!summary) return null
+  const title = sessionTitle(summary)
+  return (
+    <>
+      <span className="k-mem__dot">·</span>
+      <button
+        type="button"
+        className="k-mem__session"
+        aria-label={t('memory.entry.openSession', { title })}
+        onClick={() => openSession(summary.id, summary.projectPath)}
+      >
+        <span>{title}</span>
+        <Icon icon={ArrowUpRight01Icon} size={12} />
+      </button>
+    </>
+  )
+}
+
+function RemoveDialog({
+  scope,
+  entry,
+  open,
+  onOpenChange,
+}: {
+  scope: MemoryScope
+  entry: MemoryEntry
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const { t } = useTranslation(['settings', 'common'])
   const { request } = useHostScope()
-  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const remove = async (): Promise<void> => {
@@ -260,7 +298,7 @@ function RemoveEntry({ scope, entry }: { scope: MemoryScope; entry: MemoryEntry 
     setError(null)
     try {
       await request('memory.remove', { scope, id: entry.id })
-      setOpen(false)
+      onOpenChange(false)
       toast(t('memory.entry.remove.done'))
       back()
     } catch (failure) {
@@ -269,86 +307,47 @@ function RemoveEntry({ scope, entry }: { scope: MemoryScope; entry: MemoryEntry 
     }
   }
   return (
-    <RowFrame
-      text={
-        <RowText
-          name={t('memory.entry.remove.name')}
-          description={t('memory.entry.remove.description')}
-        />
-      }
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setError(null)
+        onOpenChange(next)
+      }}
     >
-      <DangerButton
-        onClick={() => {
-          setError(null)
-          setOpen(true)
-        }}
-      >
-        {t('memory.entry.remove.button')}
-      </DangerButton>
-      <AlertDialog open={open} onOpenChange={setOpen}>
-        <AlertDialogContent className={CONFIRM}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t('memory.entry.remove.title', { title: entry.title })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>{t('memory.entry.remove.body')}</AlertDialogDescription>
-          </AlertDialogHeader>
-          {error && <p className="text-xs text-danger">{error}</p>}
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" disabled={busy} onClick={() => void remove()}>
-              {t('memory.entry.remove.confirm')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </RowFrame>
+      <AlertDialogContent className={CONFIRM}>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {t('memory.entry.remove.title', { title: entry.title })}
+          </AlertDialogTitle>
+          <AlertDialogDescription>{t('memory.entry.remove.body')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        {error && <p className="text-xs text-danger">{error}</p>}
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('common:actions.cancel')}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" disabled={busy} onClick={() => void remove()}>
+            {t('memory.entry.remove.confirm')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
-/** Adds an entry to a layer, or with `entry` changes that one: its title, summary and text. */
-export function MemoryEditor({
-  open,
-  onOpenChange,
+/**
+ * An entry written where it is read: the title and summary as fields in place, the text as its
+ * Markdown source. With no entry it adds one and shows its page.
+ */
+function Editor({
   scope,
   entry,
-  projectName,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  scope: MemoryScope
-  entry: MemoryEntry | null
-  projectName: string
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SettingsDialogContent className="sm:max-w-140">
-        <EditorBody
-          scope={scope}
-          entry={entry}
-          projectName={projectName}
-          onDone={() => onOpenChange(false)}
-        />
-      </SettingsDialogContent>
-    </Dialog>
-  )
-}
-
-/** The editor's fields, mounted with each opening so they start from the entry as it is. */
-function EditorBody({
-  scope,
-  entry,
-  projectName,
   onDone,
 }: {
   scope: MemoryScope
   entry: MemoryEntry | null
-  projectName: string
   onDone: () => void
 }) {
   const { t } = useTranslation(['settings', 'common'])
   const { request } = useHostScope()
-  const id = useId()
   const [title, setTitle] = useState(entry?.title ?? '')
   const [description, setDescription] = useState(entry?.description ?? '')
   const [body, setBody] = useState(entry?.body ?? '')
@@ -365,74 +364,72 @@ function EditorBody({
     setBusy(true)
     setError(null)
     try {
-      await request('memory.save', {
+      const saved = await request('memory.save', {
         scope,
         id: entry?.id ?? null,
         draft: { title, description, body },
       })
-      onDone()
+      if (entry === null) openSettingsItem('memory', memoryItemKey(scope, saved.id))
+      else onDone()
     } catch (failure) {
       setError(memoryErrorText(failure))
       setBusy(false)
     }
   }
-  const heading = entry
-    ? t('memory.editor.edit')
-    : scope.layer === 'global'
-      ? t('memory.editor.addGlobal')
-      : t('memory.editor.addProject', { project: projectName })
   return (
-    <>
-      <SettingsDialogHeader title={heading}>
-        {entry ? undefined : t('memory.editor.addBody')}
-      </SettingsDialogHeader>
-      <SettingsDialogBody>
-        <SettingsField label={t('memory.editor.title')} htmlFor={`${id}-title`}>
-          <input
-            id={`${id}-title`}
-            value={title}
-            autoFocus
-            autoComplete="off"
-            maxLength={MEMORY_TITLE_CHARS}
-            placeholder={t('memory.editor.titlePlaceholder')}
-            className={DIALOG_FIELD}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </SettingsField>
-        <SettingsField
-          label={t('memory.editor.description')}
-          htmlFor={`${id}-description`}
-          hint={t('memory.editor.descriptionHint')}
-        >
-          <input
-            id={`${id}-description`}
-            value={description}
-            autoComplete="off"
-            maxLength={MEMORY_DESCRIPTION_CHARS}
-            className={DIALOG_FIELD}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </SettingsField>
-        <SettingsField
-          label={t('memory.editor.body')}
-          htmlFor={`${id}-body`}
-          hint={t('memory.editor.bodyHint')}
-        >
-          <textarea
-            id={`${id}-body`}
-            value={body}
-            rows={8}
-            maxLength={MEMORY_BODY_CHARS}
-            className={DIALOG_FIELD}
-            onChange={(event) => setBody(event.target.value)}
-          />
-        </SettingsField>
-        <ControlError error={error} wrap />
-      </SettingsDialogBody>
-      <SettingsDialogFooter>
-        <DialogClose render={<SetButton size="md" variant="ghost" />}>
+    <div
+      className="k-mem__edit"
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return
+        if (event.key === 'Escape') {
+          event.stopPropagation()
+          onDone()
+        }
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault()
+          void save()
+        }
+      }}
+    >
+      <input
+        value={title}
+        autoFocus
+        autoComplete="off"
+        aria-label={t('memory.editor.title')}
+        placeholder={t('memory.editor.titlePlaceholder')}
+        maxLength={MEMORY_TITLE_CHARS}
+        className="k-mem__title k-mem__field"
+        onChange={(event) => setTitle(event.target.value)}
+      />
+      <textarea
+        value={description}
+        rows={1}
+        aria-label={t('memory.editor.description')}
+        placeholder={t('memory.editor.descriptionPlaceholder')}
+        maxLength={MEMORY_DESCRIPTION_CHARS}
+        className="k-mem__summary k-mem__field k-mem__field--grow"
+        // The summary is one line in the index agents read, so a pasted break becomes a space.
+        onChange={(event) => setDescription(event.target.value.replace(/\s*\n\s*/g, ' '))}
+      />
+      <div className="k-mem__body k-mem__body--edit">
+        <span className="k-mem__hint" aria-hidden>
+          {t('memory.editor.markdown')}
+        </span>
+        <textarea
+          value={body}
+          aria-label={t('memory.editor.body')}
+          placeholder={t('memory.editor.bodyPlaceholder')}
+          maxLength={MEMORY_BODY_CHARS}
+          className="k-mem__source"
+          onChange={(event) => setBody(event.target.value)}
+        />
+      </div>
+      <div className="k-mem__savebar">
+        <span className="k-mem__keys">{t('memory.editor.keys', { mod: modLabel })}</span>
+        <ControlError error={error} />
+        <SetButton size="md" variant="ghost" onClick={onDone}>
           {t('common:actions.cancel')}
-        </DialogClose>
+        </SetButton>
         <SetButton
           size="md"
           variant="primary"
@@ -440,9 +437,9 @@ function EditorBody({
           disabled={!ready}
           onClick={() => void save()}
         >
-          {entry ? t('memory.editor.save') : t('memory.editor.add')}
+          {entry ? t('memory.editor.save') : t('memory.add')}
         </SetButton>
-      </SettingsDialogFooter>
-    </>
+      </div>
+    </div>
   )
 }

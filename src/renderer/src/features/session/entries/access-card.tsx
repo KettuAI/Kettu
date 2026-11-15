@@ -53,7 +53,7 @@ export function AccessCard({
   action: string
   target: string
   glyph: IconSvgElement
-  reason: string
+  reason: ReactNode
   /** What an allow starts, listed under the reason. */
   preview?: PermissionPreviewItem[]
   previewTitle?: string

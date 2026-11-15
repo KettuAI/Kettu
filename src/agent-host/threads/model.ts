@@ -1,6 +1,7 @@
 // The stored form of a session's thread: what is kept beside the entries, where turns start,
 // and the content refs that large images are moved out of.
 
+import type { SessionOutputs } from '@shared/agent-host'
 import type { ContextBreakdown } from '@shared/context'
 import type {
   AgentId,
@@ -171,6 +172,11 @@ export interface StoredOutline {
   entries: OutlineRow[]
 }
 
+export interface StoredOutputs {
+  head: ThreadHead
+  outputs: SessionOutputs
+}
+
 export interface StoredThread {
   head: ThreadHead
   session: StoredSession
@@ -205,6 +211,12 @@ export function settled(entry: ThreadEntry): ThreadEntry {
     case 'control_ask':
       // A step still waiting ended with the turn that asked for it.
       return entry.outcome === null ? { ...entry, outcome: 'ended' } : entry
+    case 'market_publish':
+      // A card still waiting ended with the turn that asked; one on its way never heard back.
+      if (entry.outcome === null) return { ...entry, outcome: { kind: 'ended' } }
+      return entry.outcome.kind === 'publishing' || entry.outcome.kind === 'unlisting'
+        ? { ...entry, outcome: { kind: 'interrupted' } }
+        : entry
     case 'tool': {
       const open = entry.status === 'pending' || entry.status === 'in_progress'
       if (!open && entry.permission === null) return entry

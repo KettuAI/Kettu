@@ -9,6 +9,7 @@ import type { AttachmentGrant } from './attachments'
 import type { BrowserForward, BrowserOriginAnswer, BrowserOriginDecision } from './browser'
 import type { ComputerApp, ComputerFrame, ComputerHold } from './computer-use'
 import type { ControlOutcome } from './control'
+import type { MarketAccount, MarketCall, MarketCallAnswer } from './market-publish'
 import type { MediaGrantRecord } from './media'
 import type { Platform } from './platform'
 import type { PortError } from './port-rpc'
@@ -141,6 +142,11 @@ export type MainToHost =
   | { type: 'device-result'; callId: number; answer: DeviceCallAnswer }
   // The answer to a host:terminal-call, from the terminal host.
   | { type: 'terminal-result'; callId: number; answer: TerminalCallAnswer }
+  // The host's Kettu account while it is signed in with Kettu's services on, which lists the
+  // Marketplace tools: right after host:init at every start, and whenever it changes.
+  | { type: 'host:market-account'; account: MarketAccount | null }
+  // The answer to a host:market-call.
+  | { type: 'market-result'; callId: number; answer: MarketCallAnswer }
   // A browser call now waits for the user to answer a new origin, so its limit grows to that wait.
   | { type: 'host:browser-waiting'; callId: number; waiting: boolean }
   // A page waits for a new origin: the session's thread shows it, waiting for the user.
@@ -314,6 +320,9 @@ export type HostToMain =
   | { type: 'host:terminal-call'; callId: number; call: TerminalCall }
   // The turn of a session whose agent used a terminal ended: its terminals are nobody's now.
   | { type: 'host:terminal-turn-ended'; sessionId: string }
+  // A Marketplace API call, which main or the daemon makes with the account's access token;
+  // answered by market-result.
+  | { type: 'host:market-call'; callId: number; call: MarketCall }
   // The artifacts service's port, which the browser's pages must never reach; null when it is down.
   | { type: 'host:service-port'; port: number | null }
   // A session's card allowed an app always: main keeps it in the settings, which come back.

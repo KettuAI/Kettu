@@ -319,10 +319,7 @@
     "showLess": "Show less"
   },
   "card": {
-    "model": "Model",
-    "branch": "Branch",
     "cache": "Prompt cache",
-    "lastTurn": "Last turn",
     "cacheNone": "None",
     "cacheExpired": "Expired",
     "cacheLikelyExpired": "Probably expired",
@@ -331,7 +328,11 @@
     "minutesLeftAbout_one": "About {{count}} min left",
     "minutesLeftAbout_other": "About {{count}} min left",
     "timeLeft": "{{time}} left",
-    "timeLeftAbout": "About {{time}} left"
+    "timeLeftAbout": "About {{time}} left",
+    "done": "Done",
+    "took": "took {{time}}",
+    "moreReferences_one": "{{count}} more issue or pull request",
+    "moreReferences_other": "{{count}} more issues and pull requests"
   },
   "subagents": {
     "title": "Sub-agents of this session",

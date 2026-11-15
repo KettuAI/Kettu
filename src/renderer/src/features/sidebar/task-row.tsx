@@ -32,6 +32,7 @@ import {
   taskRowStatus,
 } from '@renderer/features/tasks/model'
 import { TaskCard } from '@renderer/features/tasks/task-card'
+import type { RowStatus } from './row-status'
 import {
   CancelTaskDialog,
   DeleteTaskDialog,
@@ -422,14 +423,22 @@ function StepRowItem({
     >
       <div className="ui-as-chat-row" data-indent={indent || undefined}>
         <TreeLine last={last} left={base + 7} />
-        {summary ? <StepHover summary={summary} button={button} /> : button}
+        {summary ? <StepHover summary={summary} status={status} button={button} /> : button}
       </div>
     </motion.li>
   )
 }
 
 /** A step's row with its session's hover card, as a session row has. */
-function StepHover({ summary, button }: { summary: SessionSummary; button: ReactElement }) {
+function StepHover({
+  summary,
+  status,
+  button,
+}: {
+  summary: SessionSummary
+  status: RowStatus
+  button: ReactElement
+}) {
   const cache = useSessionCache(summary)
   return (
     <HoverCard>
@@ -441,7 +450,7 @@ function StepHover({ summary, button }: { summary: SessionSummary; button: React
         alignOffset={-4}
         className="pointer-events-none w-[272px] px-3.5 py-3"
       >
-        <SessionCard summary={summary} cache={cache} />
+        <SessionCard summary={summary} cache={cache} status={status} />
       </HoverCardContent>
     </HoverCard>
   )

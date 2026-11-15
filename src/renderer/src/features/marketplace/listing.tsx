@@ -30,6 +30,7 @@ import { currentLocale, i18n } from '@renderer/lib/i18n'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installServer, setServerOn } from './actions'
+import { CommunityListingPage } from './community'
 import { ConnectButton, ConnectionControls } from './connect'
 import { AgentsDialog, KeysDialog, UninstallDialog } from './dialogs'
 import {
@@ -52,6 +53,9 @@ import {
 } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { PluginListing } from './plugins'
+import { BuiltinServerPage } from './builtin'
+import { PublishedListingPage } from './published-listing'
+import { KETTU_ITEM, publishedIdOf } from './published-keys'
 import { AddButton, ItemRow, OfficialBadge } from './rows'
 import { SkillListing } from './skills'
 import { WorkflowListing } from './workflow-listing'
@@ -73,11 +77,15 @@ function leave(tab: MarketplaceTab): void {
 export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }) {
   const ref = parseItem(item)
   const back = () => leave(tab)
+  if (item === KETTU_ITEM) return <BuiltinServerPage tab={tab} back={back} />
+  const publishedId = publishedIdOf(item)
+  if (publishedId) return <PublishedListingPage id={publishedId} back={back} />
   if (ref?.kind === 'plugin') {
     return <PluginListing harness={ref.harness} id={ref.id} tab={tab} back={back} />
   }
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'workflow') return <WorkflowListing id={ref.id} tab={tab} back={back} />
+  if (ref?.kind === 'community') return <CommunityListingPage id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'mcp') return <McpListing id={ref.id} tab={tab} back={back} />
   return (
     <ListingFrame back={back}>
@@ -195,7 +203,7 @@ function RelatedRow({ server, tab }: { server: CatalogServer; tab: MarketplaceTa
 }
 
 /** Install, at once or through the install form when the server asks for values. */
-function InstallButton({ server }: { server: CatalogServer }) {
+export function InstallButton({ server }: { server: CatalogServer }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const [open, setOpen] = useState(false)
@@ -233,7 +241,7 @@ function InstallButton({ server }: { server: CatalogServer }) {
 }
 
 /** An installed server's controls: Installed, its switch and the menu of what else it takes. */
-function KeptControls({
+export function KeptControls({
   server,
   onUninstalled,
 }: {
@@ -354,7 +362,7 @@ function Facts({ listing, server }: { listing: Listing; server: MarketServer | n
 }
 
 /** What the server runs or connects to, how it signs in, and each value it is given or asks for. */
-function Runs({
+export function Runs({
   spec,
   serverId,
   service,

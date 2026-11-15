@@ -5,7 +5,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Delete02Icon, RefreshIcon, Store01Icon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import { useShallow } from 'zustand/react/shallow'
 import type { McpStatus } from '@shared/agent-host'
 import {
   displayTitle,
@@ -17,22 +16,28 @@ import {
   type PluginMarketplace,
 } from '@shared/marketplace'
 import type { AgentId } from '@shared/thread'
+import { KETTU_PLUGINS, kettuId } from '@shared/market-community'
 import { EmptyState, Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
-import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
-import { usableAgents } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { busyKey } from '@renderer/stores/marketplace'
 import { openMarketplace } from '@renderer/stores/view'
 import { removeMarketplace, setPluginEnabled, setServerOn, setSkillOn } from './actions'
 import { ConnectionControls } from './connect'
 import { ConfirmDialog } from './dialogs'
-import { useAgentName, useBusy, useConnection, useConnectionText } from './hooks'
+import {
+  useAgentName,
+  useBusy,
+  useCommunityLine,
+  useConnection,
+  useConnectionText,
+  useKettuSwitches,
+} from './hooks'
 import {
   catalogEntry,
   catalogPlugin,
@@ -40,6 +45,7 @@ import {
   fromKept,
   homeShort,
   itemKey,
+  keptItemKey,
   matchesQuery,
   matchesText,
   oauthFlow,
@@ -49,6 +55,7 @@ import {
   skillMatches,
   type Listing,
 } from './model'
+import { KETTU_ITEM } from './published-keys'
 import { ItemRow, MoreButton, QuietNote, SkeletonRows } from './rows'
 import { workflowMatches } from './workflow-model'
 import { useWorkflows } from './workflow-actions'
@@ -175,6 +182,7 @@ function KettuSection() {
                 t('kettu.tools', { count: server.tools.length }),
               ].join(' · ')}
               lineTitle={t('kettu.note')}
+              onOpen={() => openMarketplace({ item: KETTU_ITEM, tab: 'installed' })}
               end={<AgentsButton />}
             />
           </div>
@@ -245,20 +253,9 @@ function RetryButton() {
 /** "5 agents", or "3 of 5 agents", opening a switch per agent: whether it gets Kettu's tools. */
 function AgentsButton() {
   const { t } = useTranslation('marketplace')
-  const { useAgentsStore, useSettingsStore } = useHostScope()
-  const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
-  const off = useSettingsStore((s) => s.settings.mcp.kettu.off)
+  const { agents, off, error, set } = useKettuSwitches()
   const [open, setOpen] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const on = agents.filter((agent) => !off.includes(agent.id)).length
-  const set = (agentId: AgentId, enabled: boolean) => {
-    const next = enabled ? off.filter((id) => id !== agentId) : [...off, agentId]
-    setError(null)
-    useSettingsStore
-      .getState()
-      .update({ mcp: { kettu: { off: next } } })
-      .catch((e: unknown) => setError(errorMessage(e)))
-  }
   return (
     <span className="ui-as-anchor">
       <Button
@@ -302,7 +299,7 @@ function AgentsButton() {
   )
 }
 
-function AgentSwitchRow({
+export function AgentSwitchRow({
   agentId,
   off,
   set,
@@ -366,7 +363,9 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
   const connection = useConnection(server.id)
   const connectionText = useConnectionText()
   const agents = server.agents === 'all' ? null : server.agents
+  const standing = useCommunityLine(server.id, server.version)
   const line = [
+    standing,
     oauth ? connectionText(connection) : null,
     server.on ? null : t('installed.off'),
     agents ? t('installed.forAgents', { count: agents.length }) : null,
@@ -379,9 +378,7 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
       title={listing.title}
       subject={serverSubject(listing)}
       line={line}
-      onOpen={() =>
-        openMarketplace({ item: itemKey({ kind: 'mcp', id: server.id }), tab: 'installed' })
-      }
+      onOpen={() => openMarketplace({ item: keptItemKey('mcp', server.id), tab: 'installed' })}
       end={
         oauth ? (
           <ConnectionControls server={server} compact />
@@ -407,7 +404,9 @@ function useKeptSkills(query: string): MarketSkill[] {
 function KeptSkillRow({ skill }: { skill: MarketSkill }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
+  const standing = useCommunityLine(skill.id, skill.version)
   const line = [
+    standing,
     skill.on ? null : t('installed.off'),
     skill.agents === 'all' ? null : t('installed.forAgents', { count: skill.agents.length }),
     skill.description,
@@ -419,9 +418,7 @@ function KeptSkillRow({ skill }: { skill: MarketSkill }) {
       title={displayTitle(skill.name)}
       subject={skillSubject(skill.name)}
       line={line}
-      onOpen={() =>
-        openMarketplace({ item: itemKey({ kind: 'skill', id: skill.id }), tab: 'installed' })
-      }
+      onOpen={() => openMarketplace({ item: keptItemKey('skill', skill.id), tab: 'installed' })}
       end={
         <SettingSwitch
           label={t('listing.switch', { name: skill.name })}
@@ -448,6 +445,17 @@ function useSkillsRead(): void {
     const store = useMarketplaceStore.getState()
     if (!store.skills && !store.skillsLoading) void store.loadSkills(false, true)
   }, [useMarketplaceStore])
+}
+
+/** The listing a plugin of the Kettu Marketplace's local marketplace was installed from. */
+function communityRecord(scope: HostScope, plugin: InstalledPlugin) {
+  return (
+    scope.useMarketplaceStore
+      .getState()
+      .communityInstalled?.plugins.find(
+        (p) => p.harness === plugin.harness && `${p.name}@${KETTU_PLUGINS}` === plugin.id,
+      ) ?? null
+  )
 }
 
 const pluginTitle = (scope: HostScope, plugin: InstalledPlugin): string =>
@@ -525,7 +533,15 @@ function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
   const entry = catalogPlugin(scope, plugin.harness, plugin.id)
   const title = pluginTitle(scope, plugin)
   const busy = useBusy(busyKey('plugin', `${plugin.agentId}|${plugin.id}|${plugin.scope}`))
+  // Read again whenever the host says what came from the Kettu Marketplace.
+  scope.useMarketplaceStore((s) => s.communityInstalled)
+  const record = communityRecord(scope, plugin)
+  const standing = useCommunityLine(
+    record ? kettuId(record.listingId) : '',
+    record?.version ?? null,
+  )
   const line = [
+    standing,
     agentName(plugin.agentId),
     plugin.scope === 'user' ? null : scopeLine(plugin, t),
     plugin.version,
@@ -536,11 +552,15 @@ function PluginRow({ plugin }: { plugin: InstalledPlugin }) {
   return (
     <ItemRow
       title={title}
-      subject={pluginSubject({ ...plugin, category: entry?.category })}
+      subject={pluginSubject({ ...plugin, category: entry?.category, marks: !record })}
       line={line}
       onOpen={() =>
         openMarketplace({
-          item: itemKey({ kind: 'plugin', harness: plugin.harness, id: plugin.id }),
+          item: itemKey(
+            record
+              ? { kind: 'community', id: record.listingId }
+              : { kind: 'plugin', harness: plugin.harness, id: plugin.id },
+          ),
           tab: 'installed',
         })
       }

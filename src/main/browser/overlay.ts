@@ -39,7 +39,7 @@ export interface PageOverlayDeps {
   key(sessionId: string, input: Input): boolean
 }
 
-/** The views the overlay sits over: the page's own, and the frame around it on macOS. */
+/** The page the overlay sits over, and the view both are added to. */
 export interface OverlayParent {
   sessionId: string
   /** The page's own contents. */
@@ -48,8 +48,7 @@ export interface OverlayParent {
   parent: View
   /** The page's box in `parent`'s coordinates. */
   bounds: Rectangle
-  /** Whether `parent` clips the corners, so the overlay needs no radius of its own. */
-  framed: boolean
+  /** The page's corner radius, in the overlay's CSS pixels. */
   radius: number
 }
 
@@ -227,7 +226,7 @@ export class PageOverlay {
     const { bounds } = at
     if (this.state.layout === 'full') {
       view.setBounds(bounds)
-      view.setBorderRadius(at.framed ? 0 : at.radius)
+      view.setBorderRadius(Math.round(at.radius * this.deps.zoom()))
       return
     }
     const zoom = this.deps.zoom()

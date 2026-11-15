@@ -134,7 +134,9 @@
     "wantsToUse": "想使用 {{tool}}",
     "asks": "在问：{{question}}",
     "done": "{{title}} · 已完成",
-    "withChanges_other": "{{text}}改动了 {{count}} 个文件。"
+    "withChanges_other": "{{text}}改动了 {{count}} 个文件。",
+    "marketPublish": "想把 {{name}} 发布到 Kettu 的 Marketplace",
+    "marketUnlist": "想把 {{name}} 从 Kettu 的 Marketplace 下架"
   },
   "routines": {
     "busy": "此例程已经有一个运行正在工作",
@@ -629,5 +631,42 @@
     "done": "{{title}} 做完了",
     "dropped": "{{title}} 结束了，没有做",
     "endedBody": "{{workflow}} · {{steps}} 步"
+  },
+  "marketPublish": {
+    "handleInvalid": "发布者名是 1 到 32 个小写字母、数字和连字符，开头和结尾是字母或数字。",
+    "handleTaken": "@{{handle}} 已经有人用了，换一个发布者名。",
+    "publisherFailed": "没能设置发布者名：{{reason}}",
+    "notReady": "没有上传：先改好检查发现的问题。",
+    "failure": {
+      "signed_out": "登录 Kettu 账号并打开 Kettu 云服务后才能发布。",
+      "unauthorized": "请重新登录 Kettu 账号后再发布。",
+      "network": "连不上 Kettu 的 Marketplace。检查网络后再试一次。",
+      "unreadable": "读不到你发布的内容。",
+      "storage_full": "云端存储已满，只有你能看到的条目算在里面。",
+      "too_many_listings": "这个账号的条目数已经到上限了。",
+      "rate_limited": "最近一小时发布的版本太多了，稍后再试。",
+      "last_version": "这是剩下的唯一一个版本。先发一个新版本再撤回它，或者删掉这一项。",
+      "handle_taken": "这个发布者名已经有人用了，换一个。",
+      "taken_down": "它已被 Kettu 下架，不能再发新版本。",
+      "version_exists": "这个版本已经发布过了。提高版本号后再试。",
+      "no_publisher": "先定一个发布者名。",
+      "not_found": "它已经不在 Kettu 的 Marketplace 里了。",
+      "check_failed": "没有通过 Kettu Marketplace 的检查。",
+      "conflict": "同时有别的改动，再试一次。"
+    }
+  },
+  "marketCommunity": {
+    "signedOut": "登录 Kettu 账号并开着 Kettu 的服务，才能从 Kettu 的 Marketplace 安装。",
+    "takenDown": "它已从 Kettu 的 Marketplace 下架。",
+    "gone": "Kettu 的 Marketplace 里已经没有它了。",
+    "withdrawn": "发布者撤回了这个版本。再试一次会拿到当前版本。",
+    "failed": "连不上 Kettu 的 Marketplace：{{reason}}",
+    "mismatch": "{{path}} 和 Kettu 的 Marketplace 给的校验值对不上，所以什么都没装。",
+    "badPath": "Kettu 的 Marketplace 给了一个 Kettu 不会写入的文件 {{path}}，所以什么都没装。",
+    "tooLarge": "这个版本超过了一个版本的大小上限，所以什么都没装。",
+    "otherKind": "这一项是另一种东西。",
+    "otherHarness": "这个插件是给另一种 Agent 的。",
+    "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
+    "nameTaken": "已经装了 Kettu 的 Marketplace 里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。"
   }
 }

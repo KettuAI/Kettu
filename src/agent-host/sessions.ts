@@ -2,6 +2,7 @@
 // session lifecycle, sub-sessions, and the session index.
 
 import type { DeviceAccessAnswer, DeviceAccessDecision } from '@shared/device-agent'
+import type { PublishVisibility } from '@shared/market-publish'
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
@@ -16,6 +17,7 @@ import {
   type OutlineTitle,
   type ReturnedMessage,
   type SessionAttention,
+  type SessionOutputs,
   type SessionPullRequest,
   type SessionSummary,
   type StartNotice,
@@ -83,6 +85,8 @@ import {
   type ControlAskEntry,
   type ControlNoteEntry,
   type DeviceAccessEntry,
+  type MarketPublishEntry,
+  type MarketPublishOutcome,
   type ComputerAppEntry,
   type ComputerSetupEntry,
   type ComputerUseView,
@@ -106,6 +110,7 @@ import {
   type ArtifactWrite,
 } from './artifacts/entries'
 import { allowOnceOption, changedFiles, replySummary, requestText } from './attention'
+import type { MarketAnswer, MarketAsk } from './marketplace/publish-tools'
 import { parseContextReport } from './acp/claude-reports'
 import {
   isValueOf,
@@ -843,6 +848,10 @@ export class SessionManager {
   private readonly originRequests = new Map<string, OriginRequest>()
   /** Each device card's answer, by its entry id, which the waiting tool call takes. */
   private readonly deviceWaits = new Map<string, (answer: DeviceAccessAnswer) => void>()
+  /** Marketplace cards that wait for the user, by entry id. */
+  private readonly marketWaits = new Map<string, (answer: MarketAnswer) => void>()
+  /** Cards whose Publish is setting the account's publisher name, which a second answer waits out. */
+  private readonly marketAnswering = new Set<string>()
   /** Each first use of an app that waits, by the computer use service's request id. */
   private readonly appRequests = new Map<number, AppRequest>()
   /** Each session's card holding its folder's own MCP servers while it waits, with the folder. */
@@ -1702,6 +1711,149 @@ export class SessionManager {
   }
 
   /**
+   * An agent wants to publish to the Kettu Marketplace, or to unlist a listing: a card in the
+   * thread that waits for the user as a device's first use does, and settles with their answer,
+   * `expired` after `waitMs`, or `ended` with the turn.
+   */
+  marketAsked(
+    sessionId: string,
+    ask: MarketAsk,
+    waitMs: number,
+  ): { entryId: string; answer: Promise<MarketAnswer> } | null {
+    const live = this.live.get(sessionId)
+    if (!live) return null
+    const entry: MarketPublishEntry = {
+      kind: 'market_publish',
+      id: this.nextId(live),
+      ...ask,
+      expiresAt: Date.now() + waitMs,
+      outcome: null,
+      after: agentEntryBefore(live.thread),
+    }
+    live.origins.set(`market:${entry.id}`, entry.id)
+    this.emit(live, [{ op: 'entry.add', entry }])
+    const status = live.thread.session.status
+    if (status === 'running' || status === 'ready')
+      this.update(live, { status: 'awaiting_permission' })
+    this.touch(live.id)
+    this.updateBadge()
+    this.deps.events.attention(
+      live.id,
+      'permission',
+      this.titleOf(live),
+      t(ask.action === 'unlist' ? 'attention.marketUnlist' : 'attention.marketPublish', {
+        name: ask.item.name,
+      }),
+      { id: entry.id },
+    )
+    const answer = new Promise<MarketAnswer>((resolve) => {
+      const timer = setTimeout(
+        () => this.settleMarket(sessionId, entry.id, { decision: 'expired' }),
+        waitMs,
+      )
+      this.marketWaits.set(entry.id, (given) => {
+        clearTimeout(timer)
+        resolve(given)
+      })
+    })
+    return { entryId: entry.id, answer }
+  }
+
+  /**
+   * A window's or a device's answer to a Marketplace card; the first one counts. Publish on a first
+   * publish sets the publisher name before anything else, and a name the service refuses keeps the
+   * card waiting with the reason.
+   */
+  async answerMarket(
+    sessionId: string,
+    entryId: string,
+    given: {
+      decision: 'confirm' | 'later'
+      visibility?: PublishVisibility
+      notes?: string
+      handle?: string
+    },
+    setPublisher: (handle: string) => Promise<void>,
+    device?: FromDevice,
+  ): Promise<void> {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    const entry = live?.thread.byId[entryId]
+    if (!live || entry?.kind !== 'market_publish') throw notFound(`No Marketplace card ${entryId}`)
+    const answered = (): HostError =>
+      new HostError('not_found', `The Marketplace card ${entryId} was already answered`, {
+        reason: ALREADY_ANSWERED,
+        device: entry.device ?? null,
+      })
+    if (
+      entry.outcome !== null ||
+      !this.marketWaits.has(entryId) ||
+      this.marketAnswering.has(entryId)
+    )
+      throw answered()
+    if (given.decision === 'confirm' && entry.action === 'publish' && entry.publisher) {
+      if (!given.handle) throw invalidParams('A first publish needs a publisher name')
+      this.marketAnswering.add(entryId)
+      try {
+        await setPublisher(given.handle)
+      } finally {
+        this.marketAnswering.delete(entryId)
+      }
+      if (!this.marketWaits.has(entryId)) throw answered()
+    }
+    const notes = given.notes === undefined ? entry.notes : given.notes.trim() || null
+    this.settleMarket(
+      sessionId,
+      entryId,
+      given.decision === 'later'
+        ? { decision: 'later' }
+        : { decision: 'confirm', visibility: given.visibility ?? null, notes },
+      device,
+    )
+  }
+
+  /** What became of a card the user answered: published, unlisted or refused. */
+  marketSettled(sessionId: string, entryId: string, outcome: MarketPublishOutcome): void {
+    const live = this.live.get(sessionId)
+    if (live?.thread.byId[entryId]?.kind !== 'market_publish') return
+    this.emit(live, [{ op: 'entry.update', id: entryId, changes: { outcome } }])
+  }
+
+  private settleMarket(
+    sessionId: string,
+    entryId: string,
+    answer: MarketAnswer,
+    device?: FromDevice,
+  ): void {
+    const resolve = this.marketWaits.get(entryId)
+    this.marketWaits.delete(entryId)
+    const live = this.live.get(sessionId)
+    if (live) {
+      live.origins.delete(`market:${entryId}`)
+      const entry = live.thread.byId[entryId]
+      if (entry?.kind === 'market_publish' && entry.outcome === null) {
+        const outcome: MarketPublishOutcome =
+          answer.decision === 'confirm'
+            ? { kind: entry.action === 'unlist' ? 'unlisting' : 'publishing' }
+            : { kind: answer.decision }
+        const changes = {
+          outcome,
+          ...(answer.decision === 'confirm' ? { notes: answer.notes } : {}),
+          ...(answer.decision === 'confirm' && answer.visibility
+            ? { visibility: answer.visibility }
+            : {}),
+          ...(device ? { device } : {}),
+        }
+        this.emit(live, [{ op: 'entry.update', id: entryId, changes }])
+      }
+      this.stopWaiting(live)
+      this.touch(live.id)
+      this.updateBadge()
+    }
+    resolve?.(answer)
+  }
+
+  /**
    * The agent asked the user to do a step on the session's page: the thread shows it, waiting, and
    * the session waits as for a permission. A call made again for the same step adds nothing.
    */
@@ -2468,6 +2620,26 @@ export class SessionManager {
       })
     }
     return { rows, model: modelOf(current.thread.session.config) }
+  }
+
+  /** What the session made, for its card in the sidebar, a live session's latest entries included. */
+  async outputs(sessionId: string): Promise<SessionOutputs> {
+    const live = this.live.get(sessionId)
+    const record = live?.record ?? this.recordOf(sessionId)
+    if (live) this.checkpoint(live)
+    const store = this.deps.threads
+    const none: SessionOutputs = { artifacts: [], references: [], reply: null, turnMs: null }
+    if (!store || !record.acpSessionId) return none
+    try {
+      const stored = await store.outputs(record.id)
+      return stored && this.isCurrent(record, stored.head) ? stored.outputs : none
+    } catch (error) {
+      this.deps.diagnostics.log(
+        'warn',
+        `Could not read what session ${record.id} made: ${(error as Error).message}`,
+      )
+      return none
+    }
   }
 
   private async readOutline(record: SessionRecord): Promise<StoredOutline | null> {
@@ -7389,6 +7561,11 @@ export class SessionManager {
     for (const [requestId, entryId] of [...live.origins]) {
       if (requestId.startsWith('device:')) {
         this.settleDeviceAccess(live.id, entryId, 'timeout')
+        continue
+      }
+      // A publish put off this way is kept as a draft, as by Not now.
+      if (requestId.startsWith('market:')) {
+        this.settleMarket(live.id, entryId, { decision: 'ended' })
         continue
       }
       live.origins.delete(requestId)

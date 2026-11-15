@@ -17,6 +17,8 @@ import {
   type PluginHarness,
 } from '@shared/marketplace'
 import type { TFunction } from 'i18next'
+import { listingIdOf, type CommunityItem, type CommunityStanding } from '@shared/market-community'
+import { compareVersions } from '@shared/market-publish'
 import { harnessOf } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
@@ -24,6 +26,8 @@ import { currentLocale } from '@renderer/lib/i18n'
 import type { HostScope } from '@renderer/stores/host-scope'
 import { workflowsKey, useWorkflowsStore } from '@renderer/stores/workflows'
 import { workflowName } from './workflow-model'
+import { publishedStore } from '@renderer/stores/market-published'
+import { publishedTitle } from './published-keys'
 
 /** A server as its listing shows it; what only the catalog knows is null for one added by hand. */
 export interface Listing {
@@ -124,14 +128,21 @@ export function findListing(scope: HostScope, id: string, kept: MarketServer[]):
   return server ? fromKept(server) : null
 }
 
-/** What a listing shows: an MCP server, a harness's plugin, a skill or a workflow, by its id. */
+/**
+ * What a listing shows: an MCP server, a harness's plugin, a skill or a workflow, by its id, or a
+ * listing of the Kettu Marketplace, by the listing's.
+ */
 export type ItemRef =
   | { kind: 'mcp'; id: string }
   | { kind: 'plugin'; harness: PluginHarness; id: string }
   | { kind: 'skill'; id: string }
   | { kind: 'workflow'; id: string }
+  | { kind: 'community'; id: string }
 
-/** The `item` of a listing's view: `mcp:<id>`, `plugin:<harness>/<id>`, `skill:<id>` or `workflow:<id>`. */
+/**
+ * The `item` of a listing's view: `mcp:<id>`, `plugin:<harness>/<id>`, `skill:<id>`,
+ * `workflow:<id>` or `community:<listing>`.
+ */
 export function itemKey(ref: ItemRef): string {
   return ref.kind === 'plugin' ? `plugin:${ref.harness}/${ref.id}` : `${ref.kind}:${ref.id}`
 }
@@ -141,7 +152,9 @@ export function parseItem(key: string): ItemRef | null {
   const kind = key.slice(0, colon)
   const rest = key.slice(colon + 1)
   if (colon < 0 || !rest) return null
-  if (kind === 'mcp' || kind === 'skill' || kind === 'workflow') return { kind, id: rest }
+  if (kind === 'mcp' || kind === 'skill' || kind === 'workflow' || kind === 'community') {
+    return { kind, id: rest }
+  }
   if (kind !== 'plugin') return null
   const slash = rest.indexOf('/')
   const harness = rest.slice(0, slash)
@@ -151,6 +164,8 @@ export function parseItem(key: string): ItemRef | null {
 
 /** A listing's name for the history, where the stores know it. */
 export function listingTitle(scope: HostScope, key: string): string | null {
+  const own = publishedTitle(publishedStore(scope.hostId, scope.request).getState().published, key)
+  if (own !== undefined) return own
   const ref = parseItem(key)
   if (!ref) return null
   if (ref.kind === 'workflow') {
@@ -160,10 +175,48 @@ export function listingTitle(scope: HostScope, key: string): string | null {
     return entry ? workflowName(entry, currentLocale()) : null
   }
   const { mcp, skills } = scope.useSettingsStore.getState().settings.marketplace
+  if (ref.kind === 'community') return communityItem(scope, ref.id)?.name ?? null
   if (ref.kind === 'mcp') return findListing(scope, ref.id, mcp)?.title ?? null
   if (ref.kind === 'plugin') return catalogPlugin(scope, ref.harness, ref.id)?.title ?? null
   const name = catalogSkill(scope, ref.id)?.name ?? skills.find((s) => s.id === ref.id)?.name
   return name ? displayTitle(name) : null
+}
+
+/** A listing of the Kettu Marketplace, from its page or the directory the host last gave. */
+export function communityItem(
+  scope: HostScope,
+  id: string,
+): Pick<CommunityItem, 'name' | 'kind'> | null {
+  const { community, communityListings } = scope.useMarketplaceStore.getState()
+  const page = communityListings[id]?.listing
+  if (page?.state === 'listed') return page.listing
+  return (
+    community?.items.find((item) => item.id === id) ??
+    community?.yours.find((item) => item.id === id) ??
+    null
+  )
+}
+
+/**
+ * The key of a kept item's listing: the Kettu Marketplace's page for what came from it, else
+ * the item's own.
+ */
+export function keptItemKey(kind: 'mcp' | 'skill', id: string): string {
+  const listing = listingIdOf(id)
+  return itemKey(listing ? { kind: 'community', id: listing } : { kind, id })
+}
+
+/** Whether a listing's current version is newer than, or replaces, the one installed. */
+export function updateFor(
+  standing: CommunityStanding | undefined,
+  installed: string | null,
+): string | null {
+  if (!standing || (standing.state !== 'listed' && standing.state !== 'unlisted')) return null
+  if (installed === null || standing.current === installed) return null
+  // A withdrawn version moves its installs to the current one, even a lower one.
+  return compareVersions(standing.current, installed) > 0 || !standing.versions.includes(installed)
+    ? standing.current
+    : null
 }
 
 /** A plugin of the harnesses' marketplaces, as the host last listed them. */

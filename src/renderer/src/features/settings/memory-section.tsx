@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { MemoryEntry, MemoryScope } from '@shared/memory'
 import { MEMORY_GLYPH } from '@renderer/features/session/entries/tool-call-model'
@@ -10,20 +10,26 @@ import { useMemoryEntries, useMemoryOverview } from './memory-data'
 import { memoryItemKey } from './memory-items'
 import { MemoryEntryPage, ReadFailed } from './memory-page'
 import {
-  AddRow,
+  AddButton,
   EmptyLayer,
   EntryRow,
   ImportNotice,
   ListFailed,
   MemoryPending,
   MemorySwitch,
+  MemorySearch,
+  NoMatches,
   NoProjects,
   PendingRow,
   ProjectPicker,
+  ShowMoreRow,
 } from './memory-rows'
 import { english, type GroupDef, type RowDef, type SectionDef } from './model'
 
 const GLOBAL: MemoryScope = { layer: 'global' }
+/** A layer longer than this lists its latest `SHORT` entries and a row that shows the rest. */
+const LONG = 12
+const SHORT = 10
 
 function group(id: string, label: string, extra?: Omit<GroupDef, 'id' | 'label'>): GroupDef {
   return { id, label, ...extra }
@@ -52,6 +58,13 @@ export function useMemorySection(): SectionDef {
     [path],
   )
   const list = useMemoryEntries(projectScope)
+  const [query, setQuery] = useState('')
+  // Kept per project, so another project's list starts short again.
+  const [allOf, setAllOf] = useState<string | null>(null)
+  const needle = query.trim().toLowerCase()
+  const matches = (entry: MemoryEntry): boolean =>
+    needle === '' ||
+    `${entry.title}\n${entry.description}\n${entry.body}`.toLowerCase().includes(needle)
 
   const base = {
     id: 'memory' as const,
@@ -92,6 +105,12 @@ export function useMemorySection(): SectionDef {
       open: () => openSettingsItem('memory', item),
     }
   }
+  // Entries the page leaves out, cut short or filtered away, stay findable in Settings' search.
+  const hiddenRow = (scope: MemoryScope, entry: MemoryEntry, within: GroupDef): RowDef => ({
+    ...entryRow(scope, entry, within),
+    searchOnly: true,
+    render: () => null,
+  })
 
   const rows: RowDef[] = [
     {
@@ -105,27 +124,43 @@ export function useMemorySection(): SectionDef {
     },
   ]
 
+  const searchGroup = group('search', t('memory.search.placeholder'), {
+    unlabeled: true,
+    plain: true,
+  })
+  rows.push({
+    id: 'search',
+    name: t('memory.search.placeholder'),
+    group: searchGroup,
+    layout: 'custom',
+    render: () => <MemorySearch value={query} onChange={setQuery} />,
+  })
   const globalGroup = group('global', t('memory.global.group'), {
     count: read.global.length > 0 ? read.global.length : undefined,
+    actions: read.global.length > 0 && <AddButton scope={GLOBAL} />,
   })
-  rows.push(...read.global.map((entry) => entryRow(GLOBAL, entry, globalGroup)))
-  rows.push({
-    id: 'global-add',
-    name: t('memory.add'),
-    group: globalGroup,
-    layout: 'custom',
-    render: () =>
-      read.global.length === 0 ? (
-        <EmptyLayer scope={GLOBAL} projectName="" />
-      ) : (
-        <AddRow scope={GLOBAL} projectName="" />
-      ),
-  })
-
+  rows.push(
+    ...read.global.map((entry) =>
+      matches(entry) ? entryRow(GLOBAL, entry, globalGroup) : hiddenRow(GLOBAL, entry, globalGroup),
+    ),
+  )
+  if (read.global.length === 0 && needle === '')
+    rows.push({
+      id: 'global-add',
+      name: t('memory.add'),
+      group: globalGroup,
+      layout: 'custom',
+      render: () => <EmptyLayer scope={GLOBAL} projectName="" />,
+    })
   const entries = list.value
   const projectGroup = group('project', t('memory.project.group'), {
     count: entries && entries.length > 0 ? entries.length : undefined,
-    actions: project && <ProjectPicker projects={projects} value={project.path} />,
+    actions: project && (
+      <>
+        <ProjectPicker projects={projects} value={project.path} />
+        {projectScope && entries && entries.length > 0 && <AddButton scope={projectScope} />}
+      </>
+    ),
   })
   if (!project || !projectScope) {
     rows.push({
@@ -152,18 +187,44 @@ export function useMemorySection(): SectionDef {
     })
     return { ...base, rows }
   }
-  rows.push(...entries.map((entry) => entryRow(projectScope, entry, projectGroup)))
-  rows.push({
-    id: 'project-add',
-    name: t('memory.add'),
-    group: projectGroup,
-    layout: 'custom',
-    render: () =>
-      entries.length === 0 ? (
-        <EmptyLayer scope={projectScope} projectName={project.name} />
-      ) : (
-        <AddRow scope={projectScope} projectName={project.name} />
+  if (entries.length === 0) {
+    rows.push({
+      id: 'project-add',
+      name: t('memory.add'),
+      group: projectGroup,
+      layout: 'custom',
+      render: () => <EmptyLayer scope={projectScope} projectName={project.name} />,
+    })
+    return { ...base, rows }
+  }
+  const found = entries.filter(matches)
+  // The project's group stays while searching, so its picker can switch to another project.
+  const hidden = (some: MemoryEntry[]): RowDef[] =>
+    some.map((entry) => hiddenRow(projectScope, entry, projectGroup))
+  if (found.length === 0 && needle !== '') {
+    rows.push(...hidden(entries))
+    rows.push({
+      id: 'no-matches',
+      name: t('memory.search.none', { query: query.trim() }),
+      group: projectGroup,
+      layout: 'custom',
+      render: () => <NoMatches query={query.trim()} />,
+    })
+    return { ...base, rows }
+  }
+  const short = needle === '' && allOf !== project.path && found.length > LONG
+  const shown = short ? found.slice(0, SHORT) : found
+  rows.push(...shown.map((entry) => entryRow(projectScope, entry, projectGroup)))
+  rows.push(...hidden(entries.filter((entry) => !shown.includes(entry))))
+  if (short)
+    rows.push({
+      id: 'project-more',
+      name: t('memory.showMore', { count: found.length - shown.length }),
+      group: projectGroup,
+      layout: 'custom',
+      render: () => (
+        <ShowMoreRow count={found.length - shown.length} onClick={() => setAllOf(project.path)} />
       ),
-  })
+    })
   return { ...base, rows }
 }

@@ -59,6 +59,8 @@ export interface Me {
   /** Null from a service that does not report them. */
   plan: AccountPlan | null
   usage: AccountUsage | null
+  /** The points balance; null from a service that does not report it. */
+  points: number | null
 }
 
 export interface DeviceCode {
@@ -132,6 +134,11 @@ function usageOf(value: unknown): AccountUsage | null {
   const usage = record(value)
   if (!usage || !isCount(usage.devices) || !isCount(usage.storageBytes)) return null
   return { devices: usage.devices, storageBytes: usage.storageBytes }
+}
+
+function pointsOf(value: unknown): number | null {
+  const balance = record(value)?.balance
+  return isCount(balance) ? balance : null
 }
 
 function parseJson(text: string): Record<string, unknown> | null {
@@ -243,6 +250,7 @@ export class AccountApi {
       subscription: subscription.status,
       plan: planOf(body?.plan),
       usage: usageOf(body?.usage),
+      points: pointsOf(body?.points),
     }
   }
 

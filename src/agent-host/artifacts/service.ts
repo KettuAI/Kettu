@@ -26,6 +26,16 @@ import type { BrowserCallAnswer, BrowserCallRequest } from '@shared/browser'
 import { isComputerToolName } from '@shared/computer-use'
 import type { McpServer } from '../connection'
 import { PROXY_PREFIX } from '../marketplace/proxy'
+import type { McpToolGroup, McpToolSummary } from '@shared/agent-host'
+import {
+  isMarketToolName,
+  MARKET_AUTO_ALLOW,
+  MARKET_INSTRUCTIONS,
+  MARKET_PUBLISH,
+  MARKET_TOOLS,
+  MARKET_UNLIST,
+  type MarketTools,
+} from '../marketplace/publish-tools'
 import { SERVICE_NAME } from '../service-name'
 import type { LogFn } from '../storage'
 import {
@@ -54,6 +64,7 @@ import {
   isWorkflowToolName,
   WORKFLOW_INSTRUCTIONS,
   WORKFLOW_TOOL_NAMES,
+  WORKFLOW_TOOLS,
   WorkflowTools,
   type WorkflowToolsDeps,
 } from '../workflow/tools'
@@ -110,6 +121,28 @@ const SERVICE_TOOLS: Tool[] = [
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
 const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS} ${WORKFLOW_INSTRUCTIONS}`
+
+/** The group each of Kettu's tools is listed in on its server's page in the Marketplace. */
+const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
+  (
+    [
+      [MARKET_TOOLS, 'marketplace'],
+      [SESSION_TOOLS, 'sessions'],
+      [PLAN_TOOLS, 'sessions'],
+      [TOOLS, 'artifacts'],
+      [DATA_TOOLS, 'artifacts'],
+      [BROWSER_TOOLS, 'browser'],
+      [COMPUTER_TOOLS, 'computer'],
+      [DEVICE_TOOLS, 'devices'],
+      [TERMINAL_TOOLS, 'terminal'],
+      [MEMORY_TOOLS, 'memory'],
+      [REPORT_TOOLS, 'reports'],
+      [WORKFLOW_TOOLS, 'workflows'],
+    ] as const
+  ).flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const)),
+)
+/** The tools that wait for the user's answer in the session before they act. */
+const ASKING_TOOLS: ReadonlySet<string> = new Set([MARKET_PUBLISH, MARKET_UNLIST])
 
 /** Serves the computer use tools, on a host that carries the driver. */
 export interface ComputerCalls {
@@ -171,6 +204,11 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   computer?: ComputerCalls
   /** The workflow tools; without them the service lists none. */
   workflow?: WorkflowToolsDeps
+  /**
+   * The Marketplace tools, listed only while the host is signed in to a Kettu account with Kettu's
+   * services on; without them none.
+   */
+  market?: MarketTools
   /** The proxy to the Marketplace's OAuth servers, under its own paths; without it none. */
   proxy?: {
     handle(req: http.IncomingMessage, res: http.ServerResponse, path: string): Promise<void>
@@ -211,14 +249,16 @@ function entry(url: string, token: string): McpServer[] {
       name: SERVICE_NAME,
       url,
       headers: [{ name: 'Authorization', value: `Bearer ${token}` }],
-      // Kettu's own tools, which reach no further than its thread, memory and the project's
-      // sessions; the browser, computer use, devices, terminals and artifacts still ask.
+      // Kettu's own tools, which reach no further than its thread, memory, the project's sessions
+      // and reading the user's Marketplace listings; the browser, computer use, devices,
+      // terminals and artifacts still ask, and publishing waits for the user in a card.
       autoAllow: [
         PLAN_TOOL,
         REPORT_TOOL,
         ...MEMORY_TOOL_NAMES,
         ...SESSION_TOOLS.map((tool) => tool.name),
         ...WORKFLOW_TOOL_NAMES,
+        ...MARKET_AUTO_ALLOW,
       ],
       prompt: PLAN_PROMPT,
       secret: true,
@@ -396,20 +436,29 @@ export class ArtifactService {
     return this.memoryTools !== null && this.deps.memory?.service.enabled === true
   }
 
-  /** The tools `tools/list` answers now. */
-  /** What `tools/list` answers; a step's session alone gets the step's tools. */
-  private listedTools(grant?: Grant): Tool[] {
-    const tools = this.memoryOn ? [...this.serviceTools, ...MEMORY_TOOLS] : this.serviceTools
-    if (!this.workflowTools) return tools
-    const sessionId = grant && 'sessionId' in grant ? grant.sessionId : null
-    return [...tools, ...this.workflowTools.listed(sessionId)]
+  /** Whether the host's Kettu account is signed in with Kettu's services on, for the Marketplace. */
+  private get marketOn(): boolean {
+    return this.deps.market?.on === true
   }
 
-  /** Each tool's name and the first sentence of its description, for Settings › MCP servers. */
-  toolSummaries(): { name: string; description: string }[] {
+  /** What `tools/list` answers now; a step's session alone gets the step's tools. */
+  private listedTools(grant?: Grant): Tool[] {
+    const sessionId = grant && 'sessionId' in grant ? grant.sessionId : null
+    return [
+      ...this.serviceTools,
+      ...(this.memoryOn ? MEMORY_TOOLS : []),
+      ...(this.marketOn ? MARKET_TOOLS : []),
+      ...(this.workflowTools?.listed(sessionId) ?? []),
+    ]
+  }
+
+  /** Each tool's name, the first sentence of its description and its group, for the Marketplace. */
+  toolSummaries(): McpToolSummary[] {
     return this.listedTools().map((tool) => ({
       name: tool.name,
       description: firstSentence(tool.description ?? ''),
+      group: TOOL_GROUPS.get(tool.name) ?? 'sessions',
+      asks: ASKING_TOOLS.has(tool.name),
     }))
   }
 
@@ -639,9 +688,11 @@ export class ArtifactService {
   /** A server for one request with the token, as a stateless transport needs. */
   private mcpServer(sdk: Sdk, grant: Grant): Server {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
-    const instructions = this.memoryOn
-      ? `${this.instructions} ${MEMORY_INSTRUCTIONS}`
-      : this.instructions
+    const instructions = [
+      this.instructions,
+      ...(this.memoryOn ? [MEMORY_INSTRUCTIONS] : []),
+      ...(this.marketOn ? [MARKET_INSTRUCTIONS] : []),
+    ].join(' ')
     const server = new sdk.Server(
       { name: SERVICE_NAME, title: 'Kettu', version: this.deps.appVersion },
       { capabilities: { tools: {} }, instructions },
@@ -700,6 +751,16 @@ export class ArtifactService {
         // While memory is off they are not listed, and a call answers that it is off.
         try {
           return await this.memoryTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      const market = this.deps.market
+      if (market && isMarketToolName(name)) {
+        // While signed out they are not listed, and a call answers why.
+        try {
+          return await market.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
