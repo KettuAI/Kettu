@@ -169,7 +169,9 @@
     "backToDirectory": "返回 Marketplace",
     "signsIn": "在浏览器中登录 {{service}}",
     "signsInDevice": "在 {{service}} 输入验证码连接",
-    "signsInNote": "登录信息由 Kettu 保管，Agent 看不到令牌"
+    "signsInNote": "登录信息由 Kettu 保管，Agent 看不到令牌",
+    "verified": "认证发布者",
+    "community": "社区"
   },
   "installed": {
     "builtIn": "内置",
@@ -337,7 +339,9 @@
     "catalog": "无法连接 MCP Registry：{{error}}",
     "search": "无法搜索 MCP Registry：{{error}}",
     "community": "没能读到 Kettu 的 Marketplace：{{error}}",
-    "communityMore": "没能读到 Kettu 的 Marketplace 后面的内容：{{error}}"
+    "communityMore": "没能读到 Kettu 的 Marketplace 后面的内容：{{error}}",
+    "skillRepository": "无法读取 {{repository}}：{{error}}",
+    "skillRepositoryStale": "无法重新读取 {{repository}}，下面的可能不是最新的：{{error}}"
   },
   "empty": {
     "pluginsTitle": "没有可显示的插件",
@@ -397,9 +401,13 @@
     "howItWorks": "Agent 只在任务需要时才读取技能，在那之前几乎不占用上下文。",
     "side": {
       "path": "文件夹",
-      "folder": "复制自"
+      "folder": "复制自",
+      "license": "许可证"
     },
-    "remove": "移除…"
+    "remove": "移除…",
+    "tools": "让 Agent 不经询问就能使用这些工具",
+    "toolsShort": "不经询问就能用的工具",
+    "nameTaken": "已经添加过名为 {{name}} 的技能，来自 {{from}}。先移除它：同名的两个技能，Agent 只会保留一个。"
   },
   "connect": {
     "title": "连接 {{name}}",

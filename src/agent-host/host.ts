@@ -2345,6 +2345,8 @@ export class AgentHost {
         this.marketPlugins.removeMarketplace(agentId, name),
       'market.skills': ({ refresh, cached }) =>
         this.marketSkills.skills(refresh === true, cached === true),
+      'market.skillRepository': ({ id, refresh }) =>
+        this.marketSkills.repository(id, refresh === true),
       'market.addSkill': ({ source }) => this.marketSkills.add(source),
       'market.answerPublish': ({ sessionId, entryId, ...answer }, { device }) =>
         this.sessions.answerMarket(

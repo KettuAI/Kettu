@@ -1,7 +1,7 @@
-// The Marketplace's skills: the catalog of Anthropic's skills repository, unpacked into the host's
-// data and kept for a day; the skills Kettu keeps on the host, copied from that catalog, a GitHub
-// folder or a local one; what each agent is handed at a session's start; and the skills the agents
-// have of their own, read only.
+// The Marketplace's skills: the catalog of the skill repositories the app lists, each unpacked into
+// the host's data and checked again a day on; the skills Kettu keeps on the host, copied from that
+// catalog, a GitHub folder or a local one; what each agent is handed at a session's start; and the
+// skills the agents have of their own, read only.
 
 import { createHash, randomUUID } from 'node:crypto'
 import {
@@ -20,10 +20,15 @@ import {
 import path from 'node:path'
 import {
   MARKET_KEPT_MS,
+  SKILL_NAME,
+  catalogSkillId,
+  skillRepositoryId,
   type AgentOwnSkill,
   type CatalogSkill,
   type MarketSkill,
+  type MarketSkillRepository,
   type MarketSkills,
+  type SkillRepository,
   type SkillSource,
 } from '@shared/marketplace'
 import type { Platform } from '@shared/platform'
@@ -32,6 +37,7 @@ import type { SkillsListResponse } from '../codex/protocol'
 import type { SessionOptions } from '../connection'
 import { HostError } from '../errors'
 import type { Env } from '../find-command'
+import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
 import { kettuId } from '@shared/market-community'
 import type { MarketListing } from '@shared/market-publish'
@@ -39,6 +45,18 @@ import { codexOwnSkills } from './codex-plugins'
 import { modeOf, type DownloadedFile } from './community'
 import { frontmatter } from './frontmatter'
 import {
+  SKILL_FILE,
+  SKILL_MD_BYTES,
+  SKILL_REPOSITORIES,
+  repositoryId,
+  repositorySkills,
+  repositoryUrl,
+  skillFields,
+  type CatalogEntry,
+  type SkillRepositorySpec,
+} from './skill-catalog'
+import {
+  branchHead,
   downloadTarball,
   folderFiles,
   githubSource,
@@ -50,10 +68,8 @@ import {
   type TarLimits,
 } from './tarball'
 
-const CATALOG_URL = 'https://codeload.github.com/anthropics/skills/tar.gz/refs/heads/main'
-const CATALOG_REPOSITORY = 'https://github.com/anthropics/skills'
-const CATALOG_PREFIX = 'anthropics/skills:'
-const CATALOG_FOLDER = 'skills'
+export { SKILL_NAME }
+
 /** A copied skill's folder stays this long without an entry, which the settings add after it. */
 export const PRUNE_GRACE_MS = 10 * 60_000
 const TAR_LIMITS: TarLimits = {
@@ -62,47 +78,101 @@ const TAR_LIMITS: TarLimits = {
   timeoutMs: 120_000,
 }
 const SKILL_LIMITS: FolderLimits = { files: 1_000, bytes: 50 * 1024 * 1024 }
-const SKILL_FILE = 'SKILL.md'
-const SKILL_MD_BYTES = 256 * 1024
-// A skill's name as the Agent Skills specification has it.
-export const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
-const DESCRIPTION_CHARS = 1024
 const PARTIAL = '.partial-'
+const MAX_PATH = 512
+const MAX_LICENSE = 512
+const MAX_TOOLS = 64
+const MAX_TOOL = 200
 
-/** The catalog as last unpacked: the skills of the repository at one commit. */
-export interface SkillsCatalogFile {
-  version: 1
+/** A repository's copy as last unpacked: its skills at one commit. */
+export interface RepositoryCopy {
+  /** When the copy was last known to be its branch's: read, or the branch found where it was. */
   fetchedAt: number | null
   commit: string | null
-  /** The folder under the catalog's own that holds this copy. */
+  /** GitHub's ETag for the branch's commit, sent back with the next check. */
+  etag: string | null
+  /** The folder under the repository's catalog folder that holds the copy. */
   dir: string | null
-  skills: { name: string; description: string }[]
+  skills: CatalogEntry[]
 }
 
-export function parseSkillsCatalogFile(data: Record<string, unknown>): SkillsCatalogFile | string {
-  const { fetchedAt, commit, dir, skills } = data
+/** The catalog as last read: each repository's copy, by `<owner>/<repo>`. */
+export interface SkillsCatalogFile {
+  version: 2
+  repositories: Record<string, RepositoryCopy>
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const isText = (value: unknown, max: number): value is string =>
+  typeof value === 'string' && value.length <= max && !/\p{Cc}/u.test(value)
+
+export const SKILLS_CATALOG_MIGRATIONS = {
+  // Version 1 kept Anthropic's repository alone, without licenses or tools: its copy stays listed,
+  // and with no commit the next read downloads it again.
+  1: (data: Record<string, unknown>): Record<string, unknown> => ({
+    repositories: {
+      'anthropics/skills': {
+        fetchedAt: null,
+        commit: null,
+        etag: null,
+        dir: data.dir ?? null,
+        skills: Array.isArray(data.skills)
+          ? data.skills.map((item: unknown) =>
+              isRecord(item)
+                ? { ...item, path: `skills/${String(item.name)}`, license: null, allowedTools: [] }
+                : item,
+            )
+          : data.skills,
+      },
+    },
+  }),
+}
+
+function parseCopy(raw: unknown): RepositoryCopy | string {
+  if (!isRecord(raw)) return 'is not an object'
+  const { fetchedAt, commit, etag, dir, skills } = raw
   if (fetchedAt !== null && typeof fetchedAt !== 'number') return 'fetchedAt is not a time'
   if (commit !== null && typeof commit !== 'string') return 'commit is not a string'
+  if (etag !== null && !isText(etag, MAX_PATH)) return 'etag is not a string'
   if (dir !== null && (typeof dir !== 'string' || !/^[A-Za-z0-9-]+$/.test(dir))) {
     return 'dir is not a folder name'
   }
   if (!Array.isArray(skills)) return 'skills is not a list'
-  const kept = skills.flatMap((item: unknown) => {
-    const { name, description } = (item ?? {}) as Record<string, unknown>
-    return typeof name === 'string' && SKILL_NAME.test(name) && typeof description === 'string'
-      ? [{ name, description }]
-      : []
+  const kept = skills.flatMap((item: unknown): CatalogEntry[] => {
+    if (!isRecord(item)) return []
+    const { name, description, path: folder, license, allowedTools } = item
+    if (typeof name !== 'string' || !SKILL_NAME.test(name) || typeof description !== 'string') {
+      return []
+    }
+    if (!isText(folder, MAX_PATH) || (license !== null && !isText(license, MAX_LICENSE))) return []
+    if (!Array.isArray(allowedTools) || allowedTools.length > MAX_TOOLS) return []
+    if (!allowedTools.every((tool) => isText(tool, MAX_TOOL))) return []
+    return [{ name, description, path: folder, license, allowedTools: allowedTools as string[] }]
   })
-  return { version: 1, fetchedAt, commit, dir, skills: kept }
+  return { fetchedAt, commit, etag, dir, skills: kept }
+}
+
+export function parseSkillsCatalogFile(data: Record<string, unknown>): SkillsCatalogFile | string {
+  if (!isRecord(data.repositories)) return 'repositories is not an object'
+  const repositories: Record<string, RepositoryCopy> = {}
+  for (const [id, raw] of Object.entries(data.repositories)) {
+    if (!skillRepositoryId(id)) return `${id} is not a repository`
+    const copy = parseCopy(raw)
+    if (typeof copy === 'string') return `${id} ${copy}`
+    repositories[id] = copy
+  }
+  return { version: 2, repositories }
 }
 
 export function skillsCatalogFile(userDataPath: string, log: LogFn): JsonFile<SkillsCatalogFile> {
   return new JsonFile<SkillsCatalogFile>({
     file: path.join(userDataPath, 'state', 'market-skills.json'),
-    version: 1,
-    migrations: {},
+    version: 2,
+    migrations: SKILLS_CATALOG_MIGRATIONS,
     parse: parseSkillsCatalogFile,
-    empty: () => ({ version: 1, fetchedAt: null, commit: null, dir: null, skills: [] }),
+    empty: () => ({ version: 2, repositories: {} }),
     log,
   })
 }
@@ -152,18 +222,16 @@ export function skillDirs(tarball: Tarball, under: string): string[] {
 
 /** A skill's name and description from its SKILL.md, or why it is not a skill Kettu keeps. */
 export function skillInfo(text: string, fallback: string): { name: string; description: string } {
-  const fields = frontmatter(text)
-  const name = (fields.name ?? fallback).trim()
-  const description = (fields.description ?? '').replace(/\s+/g, ' ').trim()
-  if (!SKILL_NAME.test(name)) {
-    throw new HostError(
-      'invalid_params',
-      `"${name}" is not a skill name: lowercase letters, digits and hyphens`,
-    )
+  try {
+    return skillFields(text, fallback)
+  } catch (error) {
+    throw new HostError('invalid_params', (error as Error).message)
   }
-  if (description === '')
-    throw new HostError('invalid_params', `The skill ${name} has no description`)
-  return { name, description: description.slice(0, DESCRIPTION_CHARS) }
+}
+
+/** The skill Kettu keeps under another id with this name, which an agent would take for it. */
+function sameName(kept: readonly MarketSkill[], id: string, name: string): MarketSkill | null {
+  return kept.find((skill) => skill.name === name && skill.id !== id) ?? null
 }
 
 /**
@@ -214,8 +282,16 @@ export interface SkillsDeps {
   codexSkills(agentId: AgentId): Promise<SkillsListResponse | null>
   /** A skill listing of the Kettu Marketplace, its current version downloaded and checked. */
   kettu(id: string): Promise<{ listing: MarketListing; files: DownloadedFile[] }>
+  /** The catalog's repositories; the app's list when not given. */
+  repositories?: readonly SkillRepositorySpec[]
   fetch?: typeof fetch
   now?: () => number
+}
+
+/** What a read of a repository left: whether there is a copy, and whether it is old. */
+interface CopyState {
+  read: boolean
+  stale: boolean
 }
 
 /** A copied skill's files, each by its path inside the skill's folder. */
@@ -224,7 +300,10 @@ type SkillFiles = Pick<TarFile, 'path' | 'data' | 'mode'>[]
 export class MarketSkillsService {
   private kept: SkillsCatalogFile | null = null
   private loading: Promise<SkillsCatalogFile> | null = null
-  private reading: Promise<string | null> | null = null
+  /** The reads under way, by repository. */
+  private readonly reading = new Map<string, Promise<void>>()
+  /** Why each repository's last read failed, until one succeeds. */
+  private readonly failures = new Map<string, string>()
   /** The kept skills' folders on disk, by folder name. */
   private present = new Set<string>()
   /** Each agent's generated Claude Code plugin. */
@@ -244,29 +323,76 @@ export class MarketSkillsService {
     return path.join(this.root, 'skills')
   }
 
-  private catalogDir(dir: string): string {
-    return path.join(this.root, 'catalog', 'anthropics-skills', dir)
+  private get specs(): readonly SkillRepositorySpec[] {
+    return this.deps.repositories ?? SKILL_REPOSITORIES
+  }
+
+  private catalogDir(spec: SkillRepositorySpec, dir: string): string {
+    return path.join(this.root, 'catalog', `${spec.owner}-${spec.repo}`, dir)
   }
 
   /**
-   * The catalog and the agents' own skills; the catalog is read again a day on, or on `refresh`.
-   * `cached` takes any copy of the catalog there is, however old, and says whether it is.
+   * The catalog and the agents' own skills; every repository is read at once, each again a day on
+   * or on `refresh`. `cached` reads none and takes the copies there are, however old, saying
+   * which are, and which repositories have none yet.
    */
   async skills(refresh = false, cached = false): Promise<MarketSkills> {
-    const [read, own] = await Promise.all([this.readCatalog(refresh, cached), this.ownSkills()])
-    const { error, stale } = read
+    const [states, own] = await Promise.all([
+      Promise.all(this.specs.map((spec) => this.readRepository(spec, refresh, cached))),
+      this.ownSkills(),
+    ])
     const kept = await this.load()
-    const catalog = kept.skills.map((skill): CatalogSkill => ({
-      id: `${CATALOG_PREFIX}${skill.name}`,
+    const repositories = this.specs.map((spec, i) => this.repositoryOf(spec, states[i]!))
+    const catalog = this.specs.flatMap((spec, i) => this.catalogOf(spec, kept, states[i]!))
+    const failed = repositories.filter((repository) => repository.error !== null)
+    const error =
+      failed.length === 0 ? null : failed.map((r) => `${r.id}: ${r.error ?? ''}`).join('; ')
+    const stale = states.some((state) => state.stale || !state.read)
+    return { catalog, own, error, ...(cached && { stale }), repositories }
+  }
+
+  /** One repository of the catalog, read as `skills` reads each. */
+  async repository(id: string, refresh = false): Promise<MarketSkillRepository> {
+    const spec = this.specs.find((item) => repositoryId(item) === id)
+    if (!spec) throw new HostError('not_found', `${id} is not in the skills catalog`)
+    const state = await this.readRepository(spec, refresh, false)
+    const kept = await this.load()
+    return { repository: this.repositoryOf(spec, state), skills: this.catalogOf(spec, kept, state) }
+  }
+
+  private repositoryOf(spec: SkillRepositorySpec, state: CopyState): SkillRepository {
+    const id = repositoryId(spec)
+    return {
+      id,
+      publisher: spec.publisher,
+      trust: spec.trust,
+      url: repositoryUrl(spec),
+      read: state.read,
+      error: this.failures.get(id) ?? null,
+      ...(state.stale && { stale: true }),
+    }
+  }
+
+  private catalogOf(
+    spec: SkillRepositorySpec,
+    kept: SkillsCatalogFile,
+    state: CopyState,
+  ): CatalogSkill[] {
+    const copy = kept.repositories[repositoryId(spec)]
+    if (!copy || !state.read) return []
+    return copy.skills.map((skill) => ({
+      id: `${repositoryId(spec)}:${skill.name}`,
       name: skill.name,
       description: skill.description,
-      publisher: 'Anthropic',
-      official: true,
-      repository: CATALOG_REPOSITORY,
-      path: `${CATALOG_FOLDER}/${skill.name}`,
-      version: kept.commit,
+      publisher: spec.publisher,
+      official: spec.trust === 'official',
+      trust: spec.trust,
+      repository: repositoryUrl(spec),
+      path: skill.path,
+      version: copy.commit,
+      license: skill.license,
+      allowedTools: skill.allowedTools,
     }))
-    return { catalog, own, error, ...(cached && { stale }) }
   }
 
   /** Copies a skill's files onto the host and returns the entry the settings then keep. */
@@ -395,27 +521,29 @@ export class MarketSkillsService {
   }
 
   private async addFromCatalog(id: string): Promise<MarketSkill> {
-    if (!id.startsWith(CATALOG_PREFIX))
-      throw new HostError('invalid_params', `${id} is not in the catalog`)
-    let kept = await this.load()
-    if (kept.dir === null) {
-      await this.readCatalog(false, false)
-      kept = await this.load()
+    const parsed = catalogSkillId(id)
+    const spec = parsed && this.specs.find((item) => repositoryId(item) === parsed.repository)
+    if (!parsed || !spec) throw new HostError('invalid_params', `${id} is not in the catalog`)
+    const state = await this.readRepository(spec, false, false)
+    const copy = (await this.load()).repositories[parsed.repository]
+    const listed = state.read ? copy?.skills.find((skill) => skill.name === parsed.name) : undefined
+    if (!copy?.dir || !listed) {
+      const failure = this.failures.get(parsed.repository)
+      throw new HostError(
+        failure ? 'unavailable' : 'not_found',
+        failure ?? `The catalog has no skill ${parsed.name}`,
+      )
     }
-    const name = id.slice(CATALOG_PREFIX.length)
-    const listed = kept.skills.find((skill) => skill.name === name)
-    if (!listed || kept.dir === null)
-      throw new HostError('not_found', `The catalog has no skill ${name}`)
-    const files = await readFolder(path.join(this.catalogDir(kept.dir), name))
-    const info = skillInfo(skillText(files), name)
+    const files = await readFolder(path.join(this.catalogDir(spec, copy.dir), listed.name))
+    const info = skillInfo(skillText(files), listed.name)
     await this.keep(id, info.name, files)
     return {
       id,
       name: info.name,
       description: info.description,
       source: 'catalog',
-      origin: CATALOG_REPOSITORY,
-      version: kept.commit,
+      origin: repositoryUrl(spec),
+      version: copy.commit,
       agents: 'all',
       on: true,
     }
@@ -493,8 +621,15 @@ export class MarketSkillsService {
     }
   }
 
-  /** Writes a skill's files as `<store>/<folder of id>/<name>/`, in place of any copy before. */
+  /**
+   * Writes a skill's files as `<store>/<folder of id>/<name>/`, in place of any copy before; none
+   * when another skill Kettu keeps has its name, since an agent keeps only one of the two.
+   */
   private async keep(id: string, name: string, files: SkillFiles): Promise<void> {
+    const other = sameName(this.deps.settings(), id, name)
+    if (other) {
+      throw new HostError('conflict', t('marketSkills.nameTaken', { name, from: other.origin }))
+    }
     const dir = skillFolder(id)
     const partial = path.join(this.store, `${PARTIAL}${randomUUID()}`)
     try {
@@ -526,60 +661,97 @@ export class MarketSkillsService {
   }
 
   /**
-   * Reads the catalog again when it is a day old or `refresh` asks, unless `cached` takes the copy
-   * there is; the reason when it could not, and whether the copy is old.
+   * Reads a repository again when its copy is a day old or `refresh` asks; `cached` never reads.
+   * One read of a repository runs at a time, and a failure is kept for its listing.
    */
-  private async readCatalog(
+  private async readRepository(
+    spec: SkillRepositorySpec,
     refresh: boolean,
     cached: boolean,
-  ): Promise<{ error: string | null; stale: boolean }> {
-    const kept = await this.load()
-    const there =
-      kept.fetchedAt !== null &&
-      kept.dir !== null &&
-      (await stat(this.catalogDir(kept.dir)).catch(() => null)) !== null
-    const old = kept.fetchedAt === null || this.now() - kept.fetchedAt >= MARKET_KEPT_MS.skills
-    if (there && !refresh && (!old || cached)) return { error: null, stale: old }
-    this.reading ??= this.readCatalogNow().finally(() => (this.reading = null))
-    return { error: await this.reading, stale: false }
+  ): Promise<CopyState> {
+    const id = repositoryId(spec)
+    const copy = (await this.load()).repositories[id]
+    const there = await this.hasCopy(spec, copy)
+    const old = !copy?.fetchedAt || this.now() - copy.fetchedAt >= MARKET_KEPT_MS.skills
+    if (cached || (there && !refresh && !old)) return { read: there, stale: there && old }
+    let reading = this.reading.get(id)
+    if (!reading) {
+      reading = this.readRepositoryNow(spec).finally(() => this.reading.delete(id))
+      this.reading.set(id, reading)
+    }
+    await reading
+    return { read: await this.hasCopy(spec, (await this.load()).repositories[id]), stale: false }
   }
 
-  private async readCatalogNow(): Promise<string | null> {
-    const kept = await this.load()
-    const partial = this.catalogDir(`${PARTIAL.slice(1)}${randomUUID()}`)
+  private async hasCopy(spec: SkillRepositorySpec, copy: RepositoryCopy | undefined) {
+    if (!copy?.dir) return false
+    return (await stat(this.catalogDir(spec, copy.dir)).catch(() => null)) !== null
+  }
+
+  /**
+   * Checks the branch's commit and downloads the tarball only when it moved, or when GitHub would
+   * not say; the skills are unpacked beside the copy before, which goes once they are in place.
+   */
+  private async readRepositoryNow(spec: SkillRepositorySpec): Promise<void> {
+    const id = repositoryId(spec)
+    const copy = (await this.load()).repositories[id]
+    let head: { commit: string; etag: string | null } | null = null
+    const partial = this.catalogDir(spec, `${PARTIAL.slice(1)}${randomUUID()}`)
     try {
-      const tarball = await this.download(CATALOG_URL)
-      const dir = tarball.commit ?? `at-${this.now()}`
-      const skills: SkillsCatalogFile['skills'] = []
-      for (const folder of skillDirs(tarball, CATALOG_FOLDER)) {
-        const name = folder.slice(CATALOG_FOLDER.length + 1)
-        if (name.includes('/')) continue
-        try {
-          const files = folderFiles(tarball, folder, SKILL_LIMITS)
-          const info = skillInfo(skillText(files), name)
-          if (info.name !== name) throw new Error(`its SKILL.md names it ${info.name}`)
-          await writeFiles(path.join(partial, name), files)
-          skills.push(info)
-        } catch (error) {
-          this.deps.log('warn', `The skills catalog left out ${name}: ${(error as Error).message}`)
+      if (copy?.commit && (await this.hasCopy(spec, copy))) {
+        const answer = await branchHead(spec, copy.etag, this.deps.fetch)
+        if (
+          answer.kind === 'unchanged' ||
+          (answer.kind === 'commit' && answer.commit === copy.commit)
+        ) {
+          const etag = answer.kind === 'commit' ? answer.etag : copy.etag
+          this.saveCopy(id, { ...copy, fetchedAt: this.now(), etag })
+          this.failures.delete(id)
+          return
         }
+        if (answer.kind === 'commit') head = answer
+        else
+          this.deps.log(
+            'info',
+            `Downloading ${id}, since GitHub did not say its commit: ${answer.reason}`,
+          )
       }
-      await rm(this.catalogDir(dir), { recursive: true, force: true })
+      const tarball = await this.download(
+        tarballUrl({ owner: spec.owner, repo: spec.repo, ref: spec.branch, path: '' }),
+      )
+      const dir = tarball.commit ?? `at-${this.now()}`
+      const { skills, left } = repositorySkills(tarball, spec, SKILL_LIMITS)
+      for (const skill of left) {
+        this.deps.log('warn', `The skills catalog left out ${id}/${skill.path}: ${skill.reason}`)
+      }
+      for (const skill of skills)
+        await writeFiles(path.join(partial, skill.entry.name), skill.files)
+      await rm(this.catalogDir(spec, dir), { recursive: true, force: true })
       await mkdir(partial, { recursive: true })
-      await rename(partial, this.catalogDir(dir))
-      const previous = kept.dir
-      this.kept = { version: 1, fetchedAt: this.now(), commit: tarball.commit, dir, skills }
-      this.deps.file.save(this.kept)
-      if (previous !== null && previous !== dir) {
-        await rm(this.catalogDir(previous), { recursive: true, force: true })
+      await rename(partial, this.catalogDir(spec, dir))
+      this.saveCopy(id, {
+        fetchedAt: this.now(),
+        commit: tarball.commit,
+        etag: head && head.commit === tarball.commit ? head.etag : null,
+        dir,
+        skills: skills.map((skill) => skill.entry),
+      })
+      if (copy?.dir && copy.dir !== dir) {
+        await rm(this.catalogDir(spec, copy.dir), { recursive: true, force: true })
       }
-      return null
+      this.failures.delete(id)
     } catch (error) {
       await rm(partial, { recursive: true, force: true })
       const message = (error as Error).message
-      this.deps.log('warn', `The skills catalog is from before: ${message}`)
-      return message
+      this.failures.set(id, message)
+      this.deps.log('warn', `The skills of ${id} are from before: ${message}`)
     }
+  }
+
+  private saveCopy(id: string, copy: RepositoryCopy): void {
+    const kept = this.kept ?? { version: 2, repositories: {} }
+    this.kept = { version: 2, repositories: { ...kept.repositories, [id]: copy } }
+    this.deps.file.save(this.kept)
   }
 
   /** The skills each agent that is turned on has of its own, read only. */
@@ -642,7 +814,7 @@ export class MarketSkillsService {
       (file) => (this.kept = file),
       (error: unknown) => {
         this.deps.log('warn', `Could not read the skills catalog: ${(error as Error).message}`)
-        return (this.kept = { version: 1, fetchedAt: null, commit: null, dir: null, skills: [] })
+        return (this.kept = { version: 2, repositories: {} })
       },
     )
     return this.loading

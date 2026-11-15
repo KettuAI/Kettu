@@ -23,6 +23,7 @@ import {
 import { isComputerApp, isStopShortcut } from '@shared/computer-use'
 import { LANGUAGE_SETTINGS, resolveLocale, type Locale } from '@shared/locale'
 import {
+  catalogSkillId,
   MARKET_NAME,
   type MarketServer,
   type MarketSkill,
@@ -569,13 +570,12 @@ const MAX_SKILL_ID = 512
 const MAX_SKILL_DESCRIPTION = 1024
 // A skill's name as the Agent Skills specification has it.
 const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
-const CATALOG_SKILL_PREFIX = 'anthropics/skills:'
 const GITHUB_SKILL_PREFIX = 'github:'
 const LOCAL_SKILL_ID = /^local:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const GITHUB_OWNER = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/
 const GITHUB_REPO = /^[A-Za-z0-9._-]{1,100}$/
 const SKILL_IDS = {
-  catalog: `${CATALOG_SKILL_PREFIX} and a skill's name`,
+  catalog: "owner/repo: and a skill's name",
   github: `${GITHUB_SKILL_PREFIX} and owner/repo, with a folder in it or not`,
   local: 'local: and a UUID',
   kettu: 'kettu: and a listing id',
@@ -590,11 +590,7 @@ function isSkillId(id: string, source: MarketSkill['source']): boolean {
   if (id.length > MAX_SKILL_ID || hasControl(id)) return false
   if (source === 'local') return LOCAL_SKILL_ID.test(id)
   if (source === 'kettu') return KETTU_ID.test(id)
-  if (source === 'catalog') {
-    return (
-      id.startsWith(CATALOG_SKILL_PREFIX) && SKILL_NAME.test(id.slice(CATALOG_SKILL_PREFIX.length))
-    )
-  }
+  if (source === 'catalog') return catalogSkillId(id) !== null
   if (!id.startsWith(GITHUB_SKILL_PREFIX)) return false
   const [owner = '', repo = '', ...folder] = id.slice(GITHUB_SKILL_PREFIX.length).split('/')
   return (

@@ -44,6 +44,49 @@ export function tarballUrl(source: GithubSource): string {
   return `https://codeload.github.com/${source.owner}/${source.repo}/tar.gz/${ref.split('/').map(encodeURIComponent).join('/')}`
 }
 
+/** What GitHub says of a branch's commit: the one it is at, unchanged since `etag`, or nothing. */
+export type BranchHead =
+  | { kind: 'commit'; commit: string; etag: string | null }
+  | { kind: 'unchanged' }
+  | { kind: 'unknown'; reason: string }
+
+const HEAD_TIMEOUT_MS = 15_000
+
+/**
+ * The commit a branch is at, from GitHub's API. Unauthenticated it allows 60 requests an hour, so
+ * the last answer's ETag goes back with the next; a refusal or any failure says nothing, and the
+ * caller then downloads the tarball instead.
+ */
+export async function branchHead(
+  source: { owner: string; repo: string; branch: string },
+  etag: string | null,
+  fetcher: typeof fetch = fetch,
+): Promise<BranchHead> {
+  const url = `https://api.github.com/repos/${source.owner}/${source.repo}/commits/${encodeURIComponent(source.branch)}`
+  let response: Response
+  try {
+    response = await fetcher(url, {
+      signal: AbortSignal.timeout(HEAD_TIMEOUT_MS),
+      headers: {
+        accept: 'application/vnd.github.sha',
+        'user-agent': 'Kettu',
+        'x-github-api-version': '2022-11-28',
+        ...(etag ? { 'if-none-match': etag } : {}),
+      },
+    })
+  } catch (error) {
+    return { kind: 'unknown', reason: (error as Error).message }
+  }
+  if (response.status === 304) return { kind: 'unchanged' }
+  if (!response.ok) {
+    void response.body?.cancel()
+    return { kind: 'unknown', reason: `GitHub answered ${response.status}` }
+  }
+  const commit = (await response.text().catch(() => '')).trim()
+  if (!/^[0-9a-f]{40}$/.test(commit)) return { kind: 'unknown', reason: 'GitHub sent no commit' }
+  return { kind: 'commit', commit, etag: response.headers.get('etag') }
+}
+
 export interface TarLimits {
   /** Of the compressed download. */
   downloadBytes: number

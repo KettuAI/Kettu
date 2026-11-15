@@ -10,6 +10,7 @@ import {
   type MarketKeysPatch,
   type MarketPlugins,
   type MarketSearch,
+  type MarketSkillRepository,
   type MarketSkills,
   type PluginDetails,
   type PluginLogo,
@@ -140,7 +141,10 @@ export interface MarketplaceStore {
   loadPlugins(refresh?: boolean, cached?: boolean): Promise<void>
   loadDetails(agentId: AgentId, pluginId: string): Promise<void>
   loadLogo(pluginId: string): Promise<void>
+  /** A `cached` answer that lacks a repository, or holds an old one, has each read on its own. */
   loadSkills(refresh?: boolean, cached?: boolean): Promise<void>
+  /** Reads one repository of the skills catalog into the skills shown, such as on Retry. */
+  loadSkillRepository(id: string, refresh?: boolean): Promise<void>
   /** Reads a scope's first page again, dropping the later ones. */
   loadCommunity(scope: CommunityScope, refresh?: boolean): Promise<void>
   /** Reads a scope's first page unless a fresh one is shown or on its way. */
@@ -156,6 +160,21 @@ export interface MarketplaceStore {
 export type MarketplaceStoreHook = UseBoundStore<StoreApi<MarketplaceStore>>
 
 export const detailsKey = (agentId: AgentId, pluginId: string): string => `${agentId}|${pluginId}`
+
+/** The skills shown with one repository's as just read, in the catalog's order. */
+function withRepository(skills: MarketSkills, read: MarketSkillRepository): MarketSkills {
+  const repositories = (skills.repositories ?? []).map((r) =>
+    r.id === read.repository.id ? read.repository : r,
+  )
+  const of = (id: string) => skills.catalog.filter((skill) => skill.id.startsWith(`${id}:`))
+  const failed = repositories.filter((r) => r.error !== null)
+  return {
+    ...skills,
+    repositories,
+    catalog: repositories.flatMap((r) => (r.id === read.repository.id ? read.skills : of(r.id))),
+    error: failed.length === 0 ? null : failed.map((r) => `${r.id}: ${r.error ?? ''}`).join('; '),
+  }
+}
 
 /** The key of an install or change under way: an MCP server's, a plugin's or a skill's. */
 export const busyKey = (kind: 'mcp' | 'plugin' | 'skill' | 'community', id: string): string =>
@@ -461,11 +480,41 @@ export function createMarketplaceStore(
         const skills = await request('market.skills', params(refresh, cached))
         if (id !== skillsRead) return
         set({ skills, skillsLoading: !!skills.stale })
-        if (skills.stale) void get().loadSkills()
-        else readAt.skills = Date.now()
+        if (!skills.stale) {
+          readAt.skills = Date.now()
+          return
+        }
+        // Each repository is listed as soon as it is read, instead of once the slowest is.
+        const behind = skills.repositories?.filter((r) => !r.read || r.stale)
+        if (!behind) {
+          void get().loadSkills()
+          return
+        }
+        await Promise.all(behind.map((r) => get().loadSkillRepository(r.id)))
+        if (id !== skillsRead) return
+        set({ skillsLoading: false })
+        readAt.skills = Date.now()
       } catch (e) {
         if (id === skillsRead) set({ skillsError: errorMessage(e), skillsLoading: false })
       }
+    },
+    async loadSkillRepository(repositoryId, refresh = false) {
+      let read: MarketSkillRepository
+      try {
+        read = await request('market.skillRepository', {
+          id: repositoryId,
+          ...(refresh && { refresh }),
+        })
+      } catch (e) {
+        const shown = get().skills?.repositories?.find((r) => r.id === repositoryId)
+        if (!shown) return
+        read = {
+          repository: { ...shown, error: errorMessage(e) },
+          skills: (get().skills?.catalog ?? []).filter((s) => s.id.startsWith(`${repositoryId}:`)),
+        }
+      }
+      const skills = get().skills
+      if (skills) set({ skills: withRepository(skills, read) })
     },
   }))
 }

@@ -32,6 +32,7 @@ import type {
   MarketPlugins,
   MarketSearch,
   MarketSkill,
+  MarketSkillRepository,
   MarketSkills,
   McpOAuth,
   PluginDetails,
@@ -771,6 +772,11 @@ export interface HostContract {
   'market.removeMarketplace': { params: { agentId: AgentId; name: string }; result: void }
   // The skills catalog and each agent's own skills.
   'market.skills': { params: { refresh?: boolean; cached?: boolean }; result: MarketSkills }
+  // One repository of the skills catalog, `<owner>/<repo>`, read as market.skills reads each.
+  'market.skillRepository': {
+    params: { id: string; refresh?: boolean }
+    result: MarketSkillRepository
+  }
   // Copies a skill's files onto the host; the caller then adds the entry to settings.marketplace.skills.
   'market.addSkill': { params: { source: SkillSource }; result: MarketSkill }
   // Any window's or device's answer to a Marketplace card: Publish (or Unlist) or Not now; the
@@ -1511,6 +1517,7 @@ export const HOST_METHODS = [
   'market.addMarketplace',
   'market.removeMarketplace',
   'market.skills',
+  'market.skillRepository',
   'market.addSkill',
   'market.answerPublish',
   'market.publishDrafts',

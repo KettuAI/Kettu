@@ -63,6 +63,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'market.addMarketplace': NONE,
   'market.removeMarketplace': AGENT_MS,
   'market.skills': AGENT_MS,
+  'market.skillRepository': AGENT_MS,
   'market.addSkill': NONE,
   // Publish on a first publish sets the publisher name on Kettu's service first.
   'market.answerPublish': AGENT_MS,
