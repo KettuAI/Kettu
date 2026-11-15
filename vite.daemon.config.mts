@@ -1,6 +1,6 @@
 // The daemon's build: the `kettu` CLI and the three hosts it forks, for Node.js, into
-// out/daemon/. Every package is bundled except node-pty, which is native and loads from beside
-// the bundle.
+// out/daemon/. Every package is bundled except node-pty and node-datachannel, which are native and
+// load from beside the bundle.
 
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
@@ -30,7 +30,7 @@ export default defineConfig({
   ssr: { noExternal: true },
   plugins: [
     noElectron(),
-    standaloneThirdPartyNotices(root, ['node-pty']),
+    standaloneThirdPartyNotices(root, ['node-pty', 'node-datachannel']),
     pageRuntime(source('src/shared/artifact-runtime/runtime.ts')),
   ],
   build: {
@@ -49,7 +49,7 @@ export default defineConfig({
         'usage-worker': source('src/agent-host/usage/worker.ts'),
         'session-router': source('src/agent-host/session-router/router.ts'),
       },
-      external: [/^node:/, 'node-pty'],
+      external: [/^node:/, 'node-pty', /^node-datachannel(\/|$)/],
       output: {
         format: 'cjs',
         entryFileNames: '[name].cjs',

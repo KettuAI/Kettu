@@ -1177,7 +1177,8 @@
       "lanAt": "同一网络 · {{address}}",
       "ssh": "SSH",
       "sshAt": "SSH · {{target}}",
-      "relay": "Kettu 中继"
+      "relay": "Kettu 中继",
+      "p2p": "点对点"
     },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",

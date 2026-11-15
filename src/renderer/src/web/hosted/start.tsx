@@ -15,6 +15,7 @@ import type { Hello } from '@shared/remote/protocol'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { deviceName, type BrowserDevice } from '../device-name'
 import { launchApp } from '../launch'
+import { browserPeers } from '../peers'
 import type { HostLink } from '@shared/remote/link'
 import type { Paired, PairFailure, PairProgress } from '@shared/remote/pair'
 import type { PairingNotice } from '../pairing-page'
@@ -341,6 +342,7 @@ async function showApp(
       client: base.client,
       settings: base.settings,
       address: null,
+      peers: browserPeers(() => []),
       storage: localStore(),
       forget: async (link) => {
         link.stop()

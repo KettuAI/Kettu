@@ -66,11 +66,12 @@ export type HostConnection =
   /** Trying the addresses, until the first try since the host was last online settles. */
   | { state: 'connecting' }
   /**
-   * Welcomed, through the address whose handshake finished first, or through the relay at
-   * `relay`; `terminal` while its owner allows devices the terminal.
+   * Welcomed, through the address whose handshake finished first, through the relay at `relay`,
+   * or peer to peer; `terminal` while its owner allows devices the terminal.
    */
   | { state: 'online'; address: DirectAddress; terminal?: true }
   | { state: 'online'; relay: string; terminal?: true }
+  | { state: 'online'; p2p: true; terminal?: true }
   /** Not reached; tried again with backoff. `relay` says what the relay answered, if anything. */
   | { state: 'offline'; relay?: RelayProblem }
   | { state: 'stopped'; reason: HostStop }

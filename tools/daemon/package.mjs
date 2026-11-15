@@ -5,7 +5,8 @@
 //   node tools/daemon/package.mjs --out <folder> [--node <folder>] [--build <folder>]
 //
 // The package holds the Node.js release pinned below, the daemon and the web client it serves,
-// node-pty as this checkout built it, and bin/kettu, which runs the CLI on that Node.js. --node takes
+// node-pty as this checkout built it, node-datachannel with its prebuilt addon for this platform,
+// and bin/kettu, which runs the CLI on that Node.js. --node takes
 // an unpacked Node.js release in place of downloading the pinned one; --build reads the builds from a
 // folder other than out/.
 
@@ -160,13 +161,17 @@ export async function packageDaemon({
     ]
     const copied = new Set()
     /** @param {string} name @param {string} from */
-    const copyPackage = async (name, from) => {
-      if (copied.has(name)) return
+    const installed = (name, from) => {
       const resolve = createRequire(path.join(from, 'package.json'))
       const paths = resolve.resolve.paths(name) ?? []
-      const source = paths
+      return paths
         .map((dir) => path.join(dir, name))
         .find((dir) => existsSync(path.join(dir, 'package.json')))
+    }
+    /** @param {string} name @param {string} from */
+    const copyPackage = async (name, from) => {
+      if (copied.has(name)) return
+      const source = installed(name, from)
       if (!source) throw new Error(`${name} is not installed`)
       copied.add(name)
       await cp(realpathSync(source), path.join(dir, 'daemon', 'node_modules', name), {
@@ -179,6 +184,18 @@ export async function packageDaemon({
       }
     }
     for (const name of runtime) await copyPackage(name, root)
+    // The remote host's WebRTC: its loader, and the one prebuilt addon pnpm installed for this
+    // platform among its optional dependencies.
+    await copyPackage('node-datachannel', root)
+    const datachannel = realpathSync(/** @type {string} */ (installed('node-datachannel', root)))
+    const { optionalDependencies = {} } = JSON.parse(
+      readFileSync(path.join(datachannel, 'package.json'), 'utf8'),
+    )
+    const addons = Object.keys(optionalDependencies).filter((name) => installed(name, datachannel))
+    if (addons.length !== 1) {
+      throw new Error(`node-datachannel has ${addons.length} prebuilt addons installed, not one`)
+    }
+    await copyPackage(/** @type {string} */ (addons[0]), datachannel)
     // The device host's helpers, which tools/install/device-helpers.mjs puts in out/helpers.
     if (existsSync(path.join(build, 'helpers'))) {
       await cp(path.join(build, 'helpers'), path.join(dir, 'helpers'), { recursive: true })

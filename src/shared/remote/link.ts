@@ -7,6 +7,8 @@
 // receives, resumes with the welcome's token, and sends again the requests the host did not read.
 // Given several routes, as a relay's regions, it races them to a finished handshake, says hello on
 // the winner alone, and later moves the session to a route clearly faster than the one it is on.
+// Through the relay it also tries a peer-to-peer path while the page is in front, keeping the
+// relay connection as the session's standby once it moves there.
 
 import type { PortError, PortErrorCode } from '../port-rpc'
 import { Acknowledger } from './acks'
@@ -23,7 +25,8 @@ import {
   type Pong,
 } from './keepalive'
 import type { KeyPair } from './noise'
-import { PathTimes, PROBE_TIMEOUT_MS, rankPaths, shouldMove } from './paths'
+import { isP2pMessage, P2P_FEATURE, parseP2p, PeerOffer, type PeerSystem } from './p2p'
+import { PathTimes, PROBE_TIMEOUT_MS, rankPaths, shouldMove, type PathRef } from './paths'
 import { bytesOf, isBinary } from './places'
 import {
   IMAGE_REFS_FEATURE,
@@ -31,6 +34,7 @@ import {
   PROTOCOL_VERSION,
   RESUME_MS,
   RESUME_VERSION,
+  STANDBY_FEATURE,
   parseClosing,
   parseWelcome,
   type ClosingReason,
@@ -50,6 +54,12 @@ const WELCOME_TIMEOUT_MS = 15_000
 
 /** How long a connection kept aside has to answer its promotion with a welcome. */
 const PROMOTE_TIMEOUT_MS = 5_000
+
+/** How long after a welcome on the relay a peer-to-peer path is first tried. */
+const COMPARE_AFTER_MS = 3_000
+
+/** How long after a peer-to-peer path failed to open none is tried, unless the network changes. */
+const PEER_RETRY_MS = 5 * 60_000
 
 /** The longest wait between tries. */
 const MAX_RETRY_MS = 30_000
@@ -111,6 +121,13 @@ export interface LinkRoute {
   key: string
   relay: boolean
   dial: Dial
+}
+
+/** The peer-to-peer path, which opens through the session's own signaling, never by a dial. */
+const PEER_ROUTE: LinkRoute = {
+  key: 'p2p',
+  relay: false,
+  dial: () => Promise.reject(new Error('A peer-to-peer path opens through the session')),
 }
 
 export function dialWebSocket(url: string): Dial {
@@ -238,6 +255,10 @@ export interface HostLinkOptions {
   retryDelay?: (failures: number) => number
   /** When a quiet host is pinged and given up, DEVICE_KEEPALIVE unless a test shortens it. */
   keepalive?: KeepaliveTimings
+  /** Peer-to-peer paths, tried through the relay while the page is in front; none when absent. */
+  peers?(): PeerSystem | null
+  /** A peer-to-peer path was tried, and whether it opened, for the daily report. */
+  punched?(opened: boolean): void
 }
 
 /** The host protocol over the channel, kept connected. */
@@ -278,8 +299,18 @@ export class HostLink {
   private comparing = false
   private compareTimer: ReturnType<typeof setTimeout> | null = null
   private compareAt = 0
-  /** The connection a move left, until its move is welcomed or it takes the session back. */
+  /** The connection a move left, until the host makes it the standby or it ends. */
   private aside: Aside | null = null
+  /** Whether the move asked the host to keep that connection as the standby. */
+  private keepAside = false
+  /** The relay connection kept beside a session on a peer-to-peer path, once the host took it. */
+  private standby: Aside | null = null
+  /** What the last welcome's host offers: a standby for the session, and peer-to-peer paths. */
+  private standbys = false
+  private offersP2p = false
+  /** The peer-to-peer path being opened, and when another may be tried after one failed. */
+  private peerOffer: PeerOffer | null = null
+  private peerAfter = 0
 
   constructor(private readonly options: HostLinkOptions) {}
 
@@ -308,11 +339,24 @@ export class HostLink {
     const session = this.session
     if (session) {
       session.keepalive?.pingNow()
+      this.peerAfter = 0
       return this.compareSoon(0)
     }
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     void this.connect()
+  }
+
+  /**
+   * The page went to the back, where nothing keeps a peer-to-peer path's NAT mapping: a session on
+   * one goes back to the relay standby, and none is tried until the page is in front again.
+   */
+  background(): void {
+    this.closePeerOffer()
+    const session = this.session
+    const standby = this.standby?.standby ? this.standby : null
+    if (this.stopped || this.taking || session?.route !== PEER_ROUTE || !standby) return
+    this.takeOver(session, standby)
   }
 
   stop(): void {
@@ -321,9 +365,12 @@ export class HostLink {
     if (this.compareTimer) clearTimeout(this.compareTimer)
     this.acks.pause()
     if (this.keptTimer) clearTimeout(this.keptTimer)
+    this.closePeerOffer()
     this.session?.channel.close()
     this.aside?.close()
     this.aside = null
+    this.standby?.close()
+    this.standby = null
   }
 
   /** How often the host may send patches, in milliseconds; 0 as they come. */
@@ -539,9 +586,14 @@ export class HostLink {
     const resumed = askedResume && welcome.resumed !== undefined
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.keptTimer = null
-    // A move's welcome: the connection it left goes, the host having dropped it too.
-    this.aside?.close()
-    this.aside = null
+    this.standbys = welcome.features.includes(STANDBY_FEATURE)
+    this.offersP2p = welcome.features.includes(P2P_FEATURE)
+    // A standby is kept only beside a session the host resumed on a path without a relay.
+    if (!resumed || route.relay) {
+      this.standby?.close()
+      this.standby = null
+    }
+    this.settleAside(resumed)
     if (!resumed) {
       // The host has none of the last session, so what was in flight on it is lost.
       this.lose(linkError('host_restarted', 'The connection to the host ended'))
@@ -563,6 +615,7 @@ export class HostLink {
     if (resumable(session) && this.paceMs !== 0) {
       this.send({ type: 'pace', ms: this.paceMs } satisfies Pace)
     }
+    if (route.relay && this.mayOfferPeer(session)) this.compareSoon(COMPARE_AFTER_MS)
     this.setState({ kind: 'connected', welcome })
     // The host read the requests up to the one it names; the rest go again, as new ones.
     const read = resumed ? welcome.resumed!.request : 0
@@ -589,6 +642,11 @@ export class HostLink {
       return this.end(reason)
     }
     if (reason === null) this.times.failed(session.route.key)
+    // The connection a move left, or the relay standby, takes the session over at once.
+    const aside = this.aside?.open ? this.aside : this.standby?.standby ? this.standby : null
+    if (reason === null && aside && resumable(session) && this.resumeToken !== null) {
+      return void this.promote(aside)
+    }
     this.dropped(reason, resumable(session))
   }
 
@@ -627,8 +685,13 @@ export class HostLink {
     const session = this.session
     if (this.stopped || this.connecting || this.taking || this.comparing || !session) return
     if (!resumable(session) || this.resumeToken === null) return
-    const others = this.routes().filter((route) => route.key !== session.route.key)
-    if (others.length === 0) return
+    if (this.mayOfferPeer(session)) void this.offerPeer(session)
+    // The standby's pings time its route already.
+    const standby = this.standby?.standby ? this.standby : null
+    const others = this.routes().filter(
+      (route) => route.key !== session.route.key && route.key !== standby?.via.route.key,
+    )
+    if (others.length === 0 && !standby) return
     this.comparing = true
     const probed = await Promise.all(others.map((route) => this.probe(route)))
     this.comparing = false
@@ -637,13 +700,142 @@ export class HostLink {
       if (path.opened) this.times.sample(path.key, path.opened.channel.handshakeMs)
       else this.times.failed(path.key)
     }
-    const current = { key: session.route.key, relay: session.route.relay }
-    const ranked: { key: string; relay: boolean }[] = rankPaths([current, ...opened], this.times)
-    const best = opened.find((path) => path === ranked[0])
+    const current: PathRef = { key: session.route.key, relay: session.route.relay }
+    const kept: PathRef[] = standby ? [standby.via.route] : []
+    const [best] = rankPaths<PathRef>([current, ...kept, ...opened], this.times)
     const moving = this.session === session && !this.taking && !this.stopped
-    const target = moving && best && shouldMove(current, best, this.times, false) ? best : null
+    const move = moving && best && shouldMove(current, best, this.times, false) ? best : null
+    const target = opened.find((path) => path === move) ?? null
     for (const path of opened) if (path !== target) path.opened.channel.close()
-    if (target) await this.move(target.opened, target)
+    if (target) return this.move(target.opened, target)
+    // The standby is the faster path: it takes the session over and the peer-to-peer path goes.
+    if (move && standby && move === kept[0] && standby.standby) this.takeOver(session, standby)
+  }
+
+  /** Whether to try a peer-to-peer path for a session on the relay. */
+  private mayOfferPeer(session: Session): boolean {
+    return (
+      this.offersP2p &&
+      this.standbys &&
+      session.route.relay &&
+      this.peerOffer === null &&
+      Date.now() >= this.peerAfter &&
+      (this.options.visible?.() ?? true) &&
+      (this.options.peers?.() ?? null) !== null
+    )
+  }
+
+  /**
+   * Opens a peer-to-peer path through the session's own signaling, finishes its handshake and
+   * moves the session to it when it is clearly faster, the relay connection kept as the standby.
+   */
+  private async offerPeer(session: Session): Promise<void> {
+    const system = this.options.peers?.()
+    if (!system) return
+    let offer: PeerOffer
+    try {
+      offer = new PeerOffer({ system, send: (message) => this.send({ ...message }) })
+    } catch {
+      this.peerAfter = Date.now() + PEER_RETRY_MS
+      return
+    }
+    this.peerOffer = offer
+    let reached = false
+    let opened: Opened | null = null
+    try {
+      const transport = await offer.opened
+      reached = true
+      const timer = setTimeout(() => transport.close(), PROBE_TIMEOUT_MS)
+      try {
+        const started = await startDeviceChannel({
+          transport,
+          hostKey: this.options.hostKey,
+          key: this.options.key,
+          hello: null,
+        })
+        opened = { channel: await started.opened, transport }
+      } finally {
+        clearTimeout(timer)
+      }
+    } catch {
+      // The path did not open, or its handshake did not finish.
+    } finally {
+      if (this.peerOffer === offer) this.peerOffer = null
+    }
+    this.options.punched?.(reached)
+    if (!opened) {
+      this.times.failed(PEER_ROUTE.key)
+      this.peerAfter = Date.now() + PEER_RETRY_MS
+      return
+    }
+    this.times.sample(PEER_ROUTE.key, opened.channel.handshakeMs)
+    const front = this.options.visible?.() ?? true
+    if (this.stopped || this.session !== session || this.taking || !front) {
+      return opened.channel.close()
+    }
+    const current: PathRef = { key: session.route.key, relay: session.route.relay }
+    const [best] = rankPaths<PathRef>([current, PEER_ROUTE], this.times)
+    if (best === PEER_ROUTE && shouldMove(current, PEER_ROUTE, this.times, false)) {
+      return this.move(opened, PEER_ROUTE)
+    }
+    opened.channel.close()
+  }
+
+  private closePeerOffer(): void {
+    const offer = this.peerOffer
+    this.peerOffer = null
+    offer?.close()
+  }
+
+  /** Leaves the session's connection for a connection kept aside, which takes the session over. */
+  private takeOver(session: Session, aside: Aside): void {
+    session.keepalive?.stop()
+    this.session = null
+    this.acks.pause()
+    session.channel.close()
+    void this.promote(aside)
+  }
+
+  /** A connection kept aside, whose pings time its route, and which the host may make the standby. */
+  private setAside(channel: DeviceChannel, route: LinkRoute, transport: Transport): Aside {
+    const aside: Aside = new AsideConnection(
+      channel,
+      { route, transport },
+      {
+        ...(this.options.keepalive ? { timings: this.options.keepalive } : {}),
+        rtt: (ms) => this.times.sample(route.key, ms),
+        standingBy: () => {
+          if (aside !== this.aside || this.taking) return
+          this.aside = null
+          this.setStandby(aside)
+        },
+        ended: () => {
+          if (aside === this.aside) this.aside = null
+          if (aside === this.standby) this.standby = null
+        },
+      },
+    )
+    return aside
+  }
+
+  private setStandby(aside: Aside): void {
+    const before = this.standby
+    this.standby = aside
+    if (before && before !== aside) before.close()
+  }
+
+  /** A welcome after a move: the connection it left becomes the standby once the host says so. */
+  private settleAside(resumed: boolean): void {
+    const aside = this.aside
+    if (!aside) return
+    if (!resumed || !this.keepAside) {
+      this.aside = null
+      aside.close()
+      return
+    }
+    if (!aside.standby) return
+    this.aside = null
+    this.setStandby(aside)
   }
 
   /** A route's connection past its handshake, without a hello, or null within the probe's time. */
@@ -722,13 +914,17 @@ export class HostLink {
     from.keepalive?.stop()
     this.session = null
     this.acks.pause()
-    this.aside = new AsideConnection(
-      from.channel,
-      { route: from.route, transport: from.transport },
-      { ...(this.options.keepalive ? { timings: this.options.keepalive } : {}) },
-    )
+    // Leaving the relay for a path without one, the relay connection stays as the standby.
+    const keep = this.standbys && from.route.relay && !route.relay
+    this.keepAside = keep
+    this.aside?.close()
+    this.aside = this.setAside(from.channel, from.route, from.transport)
     void opened.channel
-      .send({ ...this.options.hello, resume: { token, received: this.acks.received } })
+      .send({
+        ...this.options.hello,
+        resume: { token, received: this.acks.received },
+        ...(keep ? { standby: 'keep' as const } : {}),
+      } satisfies Hello)
       .catch(() => opened.channel.close())
     const answer = await awaitWelcome(opened, WELCOME_TIMEOUT_MS)
     this.taking = false
@@ -752,6 +948,8 @@ export class HostLink {
 
   /** Takes the session over on a connection kept aside; nothing shows a drop meanwhile. */
   private async promote(aside: Aside): Promise<void> {
+    if (aside === this.aside) this.aside = null
+    if (aside === this.standby) this.standby = null
     this.taking = true
     const opened: Opened = {
       channel: aside.promote(this.acks.received),
@@ -865,6 +1063,11 @@ export class HostLink {
     }
     const message = value as Record<string, unknown>
     if (message.type !== 'closing' && resumable(session)) this.acks.counted()
+    if (isP2pMessage(message)) {
+      const signal = parseP2p(message)
+      if (signal) this.peerOffer?.signal(signal)
+      return
+    }
     switch (message.type) {
       case 'response': {
         const outgoing = this.takeOutgoing(message.id)

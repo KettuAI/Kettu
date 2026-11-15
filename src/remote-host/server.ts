@@ -51,6 +51,13 @@ import {
   type Pong,
 } from '@shared/remote/keepalive'
 import { Handshake, type KeyPair, type TransportCiphers } from '@shared/remote/noise'
+import {
+  isP2pMessage,
+  P2P_FEATURE,
+  parseP2p,
+  PeerAnswers,
+  type PeerSystem,
+} from '@shared/remote/p2p'
 import { bytesOf, findPlaces, isBinary } from '@shared/remote/places'
 import {
   BACKGROUND_PACE_MS,
@@ -166,6 +173,8 @@ export interface RemoteServerOptions {
   relay?(): HostRelay | null
   /** The devices' notifications, which a host without its signing key has none of. */
   notifications?(): DeviceNotifications | null
+  /** Peer-to-peer paths, where the host's WebRTC loads; offered only while it uses the relay. */
+  peers?(): PeerSystem | null
   /** A port to the terminal host for a device's terminals, or null while it cannot have one. */
   openTerminalPort?(device: PortDevice): Promise<PortChannel | null>
   /** A port to the device host for a device's mobile devices, or null while it cannot have one. */
@@ -220,7 +229,7 @@ export class RemoteServer {
    * Takes a device's connection, which ends at its first message unless that names a device.
    * Only one the relay joined, and so signed in to the host's account, may ask to be added.
    */
-  accept(transport: Transport, via: 'direct' | 'relay' = 'direct'): void {
+  accept(transport: Transport, via: 'direct' | 'relay' | 'p2p' = 'direct'): void {
     if (this.stopped) return transport.close()
     this.connections.add(new DeviceConnection(transport, this, via === 'relay'))
   }
@@ -229,6 +238,11 @@ export class RemoteServer {
   relay(): { relay?: HostRelay } {
     const relay = this.options.relay?.() ?? null
     return relay ? { relay } : {}
+  }
+
+  /** Peer-to-peer paths, while the host uses the relay and its WebRTC loads. */
+  peers(): PeerSystem | null {
+    return this.options.relay?.() ? (this.options.peers?.() ?? null) : null
   }
 
   /** Connections refused, at their first message or by the direct listener's limits. */
@@ -1013,6 +1027,9 @@ class DeviceSession {
   /** The sessions the device last said it shows in front, and the pace it last asked for. */
   private shown = new Set<string>()
   private paceMs = 0
+  /** Whether a welcome offered peer-to-peer paths, and the attempts to open one. */
+  private offersP2p = false
+  private p2p: PeerAnswers | null = null
 
   constructor(
     private readonly server: RemoteServer,
@@ -1218,6 +1235,8 @@ class DeviceSession {
     this.uploads.closeAll()
     this.downloads.closeAll()
     this.forwards.close()
+    this.p2p?.close()
+    this.p2p = null
     for (const asked of this.asking.values()) asked.reject(ENDED)
     this.asking.clear()
     const port = this.port
@@ -1282,6 +1301,8 @@ class DeviceSession {
   /** The welcome, straight on the channel ahead of everything the outbox sends again. */
   private welcome(connection: DeviceConnection, resumed: Welcome['resumed'] | null): void {
     if (this.resumable) this.token = this.server.issueToken(this, this.token)
+    // Paths it opens take the session over as any connection does, so it needs the standby too.
+    this.offersP2p = this.standbys && this.server.peers() !== null
     const welcome: Welcome = {
       type: 'welcome',
       protocol: this.version,
@@ -1292,6 +1313,7 @@ class DeviceSession {
           ? [PUSH_FEATURE]
           : []),
         ...(this.standbys ? [STANDBY_FEATURE] : []),
+        ...(this.offersP2p ? [P2P_FEATURE] : []),
       ],
       role: this.role,
       device: { id: this.device.id, name: this.device.name },
@@ -1307,6 +1329,7 @@ class DeviceSession {
   /** A message from the device once welcomed. */
   private fromDevice(value: unknown): void {
     if (typeof value !== 'object' || value === null) return
+    if (isP2pMessage(value)) return this.signal(value)
     const { type, id, name, stream, size, received, ms } = value as Record<string, unknown>
     if (type === 'request' && typeof id === 'number' && Number.isSafeInteger(id)) {
       this.lastRequest = Math.max(this.lastRequest, id)
@@ -1346,6 +1369,23 @@ class DeviceSession {
         return
     }
     this.toHost(value)
+  }
+
+  /** A peer-to-peer signaling message, which the agent host never sees. */
+  private signal(value: unknown): void {
+    const message = parseP2p(value)
+    if (!message || !this.offersP2p) return
+    const system = this.server.peers()
+    if (!system) {
+      if (message.type === 'p2p.offer') this.send({ type: 'p2p.close', id: message.id })
+      return
+    }
+    this.p2p ??= new PeerAnswers({
+      system,
+      send: (answer) => this.send(answer),
+      accept: (transport) => this.server.accept(transport, 'p2p'),
+    })
+    this.p2p.signal(message)
   }
 
   /** The device's terminals, whose port to the terminal host opens at its first request. */

@@ -10,8 +10,11 @@ import type { Transport } from '@shared/remote/transport'
 /** Opens a connection to an address; rejects when it cannot, or once `signal` aborts. */
 export type Connect = (address: DirectAddress, signal: AbortSignal) => Promise<Transport>
 
-/** How a session reached its host: at a direct address, or through the relay at an origin. */
-export type Via = { address: DirectAddress } | { relay: string }
+/**
+ * How a session reached its host: at a direct address, through the relay at an origin, or over a
+ * peer-to-peer DataChannel set up through the relay.
+ */
+export type Via = { address: DirectAddress } | { relay: string } | { p2p: true }
 
 /** The relay did not join the host, and why. */
 export class RelayMissed extends Error {
@@ -205,5 +208,6 @@ export function probe(
 
 /** The key that names a path when ranking. */
 export function pathKey(via: Via): string {
+  if ('p2p' in via) return 'p2p'
   return 'relay' in via ? `relay ${via.relay}` : `direct ${via.address.host}:${via.address.port}`
 }

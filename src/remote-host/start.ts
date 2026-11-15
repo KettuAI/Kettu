@@ -17,6 +17,7 @@ import { isPortError } from '@shared/port-rpc'
 import type { PortDevice } from '@shared/remote/device'
 import { isHostAdminEvent, type HostAdminMethod } from '@shared/remote/host-admin'
 import { importKeyPair } from '@shared/remote/noise'
+import type { PeerSystem, RtcFactory } from '@shared/remote/p2p'
 import { parseSshTarget } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { PUSH_URL } from '@shared/remote/push'
@@ -36,6 +37,7 @@ import { HostStore, uniqueAddresses } from './hosts'
 import { LoopbackListener } from './loopback'
 import { DeviceNotifications, parseAttention, parseWaiting } from './notifications'
 import { PairingCodes } from './pairing'
+import { loadPeers } from './peers'
 import { RelaySwitch } from './relay-switch'
 import { RemoteServer } from './server'
 import { clearUploads } from './uploads'
@@ -143,6 +145,9 @@ export function startRemoteHost(
   let discoverable = false
   const adminCalls = new Map<number, (answer: AdminAnswer) => void>()
   let nextAdminCall = 1
+  // WebRTC for peer-to-peer paths once it loaded, used only while the relay may be.
+  let rtc: RtcFactory | null = null
+  const peers = (): PeerSystem | null => (rtc ? { create: rtc, stun: () => [] } : null)
 
   /** Asks the parent to run an owner's call; answered with an error when it does not in time. */
   function admin(deviceId: string, method: HostAdminMethod, params: unknown): Promise<AdminAnswer> {
@@ -224,6 +229,7 @@ export function startRemoteHost(
       log,
       relay: onRelay,
       notifications: () => notifications,
+      peers,
     })
     const notifications =
       relayKey && relayId
@@ -331,6 +337,7 @@ export function startRemoteHost(
       },
       pairing: (pairId, pairing) => send({ type: 'remote-host:host-pairing', pairId, pairing }),
       log,
+      peers,
     })
     started.start()
     const report = (): void => {
@@ -352,6 +359,9 @@ export function startRemoteHost(
       relayUrl = message.relay.url
       relayEnabled = message.relay.enabled === true
       relayToken = typeof message.relay.token === 'string' ? message.relay.token : null
+      void loadPeers(log).then((loaded) => {
+        rtc = loaded
+      })
     }
     // Without its own key the app still serves devices, and the other way round.
     let reportHosts: (() => void) | null = null

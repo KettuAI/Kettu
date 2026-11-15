@@ -47,6 +47,7 @@ import {
   type SshRoute,
 } from '@shared/remote/hosts'
 import type { KeyPair } from '@shared/remote/noise'
+import { isP2pMessage, P2P_FEATURE, parseP2p, PeerOffer, type PeerSystem } from '@shared/remote/p2p'
 import type { PairingPayload } from '@shared/remote/pairing'
 import {
   HOSTS_FEATURE,
@@ -132,6 +133,9 @@ const COMPARE_AFTER_MS = 3_000
 /** How long after a standby ended another is joined. */
 const REJOIN_MS = 10_000
 
+/** How long after a peer-to-peer path failed to open none is tried, unless the network changes. */
+const PEER_RETRY_MS = 5 * 60_000
+
 /** The longest wait between tries, which a host that needs an update also waits. */
 const MAX_RETRY_MS = 60_000
 
@@ -202,6 +206,10 @@ export interface HostClientOptions {
   keepalive?: KeepaliveTimings
   /** How often the network interfaces are read for a change; null reads them never. */
   networkCheckMs?: number | null
+  /** Peer-to-peer paths, where this computer's WebRTC loads; tried only through the relay. */
+  peers?(): PeerSystem | null
+  /** A peer-to-peer path was tried, and whether it opened, for the daily report. */
+  punched?(opened: boolean): void
 }
 
 type SessionEnd = { welcomed: boolean; reason: ClosingReason | null }
@@ -441,6 +449,11 @@ class HostLink {
   private compareTimer: ReturnType<typeof setTimeout> | null = null
   private compareAt = 0
   private joinTimer: ReturnType<typeof setTimeout> | null = null
+  /** Whether the last welcome's host answers peer-to-peer offers. */
+  private offersP2p = false
+  /** The peer-to-peer path being opened, and when another may be tried after one failed. */
+  private peerOffer: PeerOffer | null = null
+  private peerAfter = 0
 
   constructor(
     private readonly client: HostClient,
@@ -487,6 +500,7 @@ class HostLink {
     const session = this.session
     if (this.closed || !session?.open) return this.retry()
     session.pingNow()
+    this.peerAfter = 0
     this.compareSoon(0)
   }
 
@@ -539,8 +553,11 @@ class HostLink {
    */
   leaveRelay(): void {
     if (this.closed) return
-    for (const kept of [this.aside, this.standby]) if (kept && 'relay' in kept.via) kept.close()
-    if (this.session && 'relay' in this.session.via) return this.session.close()
+    // A peer-to-peer path was set up through the relay, and goes with it.
+    for (const kept of [this.aside, this.standby])
+      if (kept && !('address' in kept.via)) kept.close()
+    this.closePeerOffer()
+    if (this.session && !('address' in this.session.via)) return this.session.close()
     if (this.trying) {
       this.cancel()
       this.retry()
@@ -551,6 +568,7 @@ class HostLink {
   close(): void {
     this.closed = true
     this.cancel()
+    this.closePeerOffer()
     if (this.compareTimer) clearTimeout(this.compareTimer)
     if (this.joinTimer) clearTimeout(this.joinTimer)
     this.compareTimer = null
@@ -659,6 +677,7 @@ class HostLink {
     const host = this.host
     if (this.closed || this.comparing || this.taking || !session?.open || !host || host.ssh) return
     if (!this.resumable || this.resumeToken === null) return
+    if (this.mayOfferPeer(session)) void this.offerPeer(session)
     const candidates = this.candidates(host, session.via)
     const standby = this.standby?.standby ? this.standby : null
     if (candidates.length === 0 && !standby) return
@@ -748,10 +767,7 @@ class HostLink {
       resume: { token, received: this.acks.received },
       ...(keep ? { standby: 'keep' as const } : {}),
     } satisfies Hello)
-    this.client.options.log(
-      'info',
-      `Moving to host ${this.id} over ${'relay' in via ? 'the relay' : 'a direct address'}`,
-    )
+    this.client.options.log('info', `Moving to host ${this.id} ${over(via)}`)
   }
 
   /**
@@ -944,18 +960,103 @@ class HostLink {
     if (!resumed) void this.openPort(session, ++this.sessions)
     this.resumable = welcome.protocol >= RESUME_VERSION
     this.standbys = welcome.features.includes(STANDBY_FEATURE)
+    this.offersP2p = welcome.features.includes(P2P_FEATURE)
     const moved = this.taking === session
     if (moved) this.taking = null
     if (moved) {
-      this.client.options.log(
-        'info',
-        `Host ${this.id}'s session is on ${'relay' in session.via ? 'the relay' : 'a direct address'}`,
-      )
+      this.client.options.log('info', `Host ${this.id}'s session is ${over(session.via)} now`)
     }
     this.settleAside(resumed)
     // A session on a path without a relay keeps one on standby; one on the relay tries the rest.
     if (!('relay' in session.via)) void this.joinStandby(session)
-    else if (this.host?.addresses.length) this.compareSoon(COMPARE_AFTER_MS)
+    else if (this.host?.addresses.length || this.mayOfferPeer(session)) {
+      this.compareSoon(COMPARE_AFTER_MS)
+    }
+  }
+
+  /** Whether to try a peer-to-peer path for a session on the relay. */
+  private mayOfferPeer(session: HostSession): boolean {
+    return (
+      this.offersP2p &&
+      this.standbys &&
+      'relay' in session.via &&
+      this.peerOffer === null &&
+      Date.now() >= this.peerAfter &&
+      this.client.peers() !== null
+    )
+  }
+
+  /**
+   * Opens a peer-to-peer path through the session's own signaling, finishes its handshake and
+   * moves the session to it when it is clearly faster, the relay connection kept as the standby.
+   */
+  private async offerPeer(session: HostSession): Promise<void> {
+    const system = this.client.peers()
+    const host = this.host
+    if (!system || !host) return
+    const { options } = this.client
+    let offer: PeerOffer
+    try {
+      offer = new PeerOffer({
+        system,
+        send: (message) => {
+          if (this.session?.open) this.session.send(message)
+        },
+      })
+    } catch (error) {
+      options.log('warn', `A peer-to-peer path could not be set up: ${(error as Error).message}`)
+      this.peerAfter = Date.now() + PEER_RETRY_MS
+      return
+    }
+    this.peerOffer = offer
+    const key = pathKey({ p2p: true })
+    let opened = false
+    let channel: DeviceChannel | null = null
+    try {
+      const transport = await offer.opened
+      opened = true
+      const timer = setTimeout(() => transport.close(), PROBE_TIMEOUT_MS)
+      try {
+        const hostKey = publicKeyBytes(host.publicKey)!
+        const started = await startDeviceChannel({
+          transport,
+          hostKey,
+          key: options.key,
+          hello: null,
+        })
+        channel = await started.opened
+      } finally {
+        clearTimeout(timer)
+      }
+    } catch {
+      // The path did not open, or its handshake did not finish.
+    } finally {
+      if (this.peerOffer === offer) this.peerOffer = null
+    }
+    options.punched?.(opened)
+    if (!channel) {
+      options.log('info', `No peer-to-peer path to host ${this.id} opened`)
+      this.times.failed(key)
+      this.peerAfter = Date.now() + PEER_RETRY_MS
+      return
+    }
+    this.times.sample(key, channel.handshakeMs)
+    if (this.closed || this.session !== session || !session.open || this.taking) {
+      return channel.close()
+    }
+    const current: PathRef = { key: pathKey(session.via), relay: 'relay' in session.via }
+    const peer: PathRef = { key, relay: false }
+    const [best] = rankPaths([current, peer], this.times)
+    if (best === peer && shouldMove(current, peer, this.times, false)) {
+      return this.move(channel, { p2p: true })
+    }
+    channel.close()
+  }
+
+  private closePeerOffer(): void {
+    const offer = this.peerOffer
+    this.peerOffer = null
+    offer?.close()
   }
 
   /** A welcome after a move: the connection it left becomes the standby once the host says so. */
@@ -1000,6 +1101,11 @@ class HostLink {
     }
     const value = message.value
     if (typeof value !== 'object' || value === null) return
+    if (isP2pMessage(value)) {
+      const signal = parseP2p(value)
+      if (signal) this.peerOffer?.signal(signal)
+      return
+    }
     const { type, allowed } = value as { type?: unknown; allowed?: unknown }
     // The owner allowed devices the terminal, or stopped allowing it.
     if (type === 'terminal' && this.connection.state === 'online') {
@@ -1073,6 +1179,7 @@ class HostLink {
   /** The host's session is gone, or no longer to be resumed: main's port for it closes. */
   private lose(): void {
     this.closeAsides()
+    this.closePeerOffer()
     this.sessions++
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.keptTimer = null
@@ -1137,7 +1244,14 @@ function online(via: Via, terminal: boolean): HostConnection {
 }
 
 function viaOf(connection: Extract<HostConnection, { state: 'online' }>): Via {
+  if ('p2p' in connection) return { p2p: true }
   return 'relay' in connection ? { relay: connection.relay } : { address: connection.address }
+}
+
+/** How a session reaches its host, for the log. */
+function over(via: Via): string {
+  if ('p2p' in via) return 'peer to peer'
+  return 'relay' in via ? 'through the relay' : 'at a direct address'
 }
 
 /**
@@ -1677,6 +1791,13 @@ export class HostClient {
           throw new RelayMissed('unreachable')
       }
     }
+  }
+
+  /** Peer-to-peer paths, while this computer may use the relay and its WebRTC loads. */
+  peers(): PeerSystem | null {
+    const relay = this.options.relay
+    if (!relay || relay.token() === null) return null
+    return this.options.peers?.() ?? null
   }
 
   /** Starts a connection to each known host, and watches the network for a change. */

@@ -3,6 +3,7 @@
 
 import type { KettuApi } from '@shared/ipc'
 import type { KeyPair } from '@shared/remote/noise'
+import type { PeerSystem } from '@shared/remote/p2p'
 import {
   BACKGROUND_PACE_MS,
   parseHostRenamed,
@@ -31,6 +32,10 @@ export interface LaunchOptions {
   settings: WebSettings
   /** Where this browser reaches the host directly; null through the relay. */
   address: DirectAddress | null
+  /** Peer-to-peer paths through the relay; none when absent. */
+  peers?: () => PeerSystem | null
+  /** A peer-to-peer path was tried, and whether it opened, for the daily report. */
+  punched?(opened: boolean): void
   storage: Pick<Storage, 'getItem' | 'setItem'> | null
   /** Clears what this browser keeps for the host, and goes back to pairing. */
   forget(link: HostLink): Promise<void>
@@ -56,6 +61,8 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
     hello: hello(options.client),
     ...(options.paired ? { adopt: options.paired } : {}),
     visible: () => document.visibilityState === 'visible',
+    ...(options.peers ? { peers: options.peers } : {}),
+    ...(options.punched ? { punched: options.punched } : {}),
   })
   options.settings.attach(link)
   const api = webApi(link, options.settings, {
@@ -74,6 +81,7 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
   document.addEventListener('visibilitychange', () => {
     pace()
     if (document.visibilityState === 'visible') link.wake()
+    else link.background()
   })
   window.addEventListener('online', () => link.wake())
   // Another network, as Wi-Fi joined or left: the routes are compared again.

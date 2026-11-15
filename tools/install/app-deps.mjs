@@ -1,11 +1,12 @@
 // @ts-check
-// The postinstall step that readies node-pty, the app's only native module, for Electron. It is a
-// Node-API module, so a binary built for Node.js loads in Electron as it is. On Windows the app uses
-// the prebuilt binaries node-pty ships, which spares a compile of one and a half to three minutes
-// per install. Elsewhere electron-builder install-app-deps compiles it: node-pty 1.1.0 ships no
-// Linux binaries, and its prebuilt macOS spawn-helper lacks its execute bit, so no shell would start
-// (microsoft/node-pty#919). app-deps.test.ts fails once a second native module ships, which would
-// need its own Electron build on Windows. No dependencies.
+// The postinstall step that readies node-pty for Electron. It is a Node-API module, so a binary
+// built for Node.js loads in Electron as it is. On Windows the app uses the prebuilt binaries
+// node-pty ships, which spares a compile of one and a half to three minutes per install. Elsewhere
+// electron-builder install-app-deps compiles it: node-pty 1.1.0 ships no Linux binaries, and its
+// prebuilt macOS spawn-helper lacks its execute bit, so no shell would start
+// (microsoft/node-pty#919). node-datachannel, the other native module, needs nothing here: pnpm
+// installs its prebuilt Node-API addon for the platform, which install-app-deps leaves alone.
+// No dependencies.
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'

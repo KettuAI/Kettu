@@ -94,22 +94,39 @@ function locate(from: string, name: string): string | null {
  */
 export function packedPackages(root: string): string[] {
   const found = new Set<string>()
-  const visit = (from: string, required: string[], optional: string[]): void => {
-    for (const name of [...required, ...optional]) {
-      const dir = locate(from, name)
-      if (!dir) {
-        if (required.includes(name)) throw new Error(`${name}, a dependency, is not installed`)
-        continue
-      }
-      if (found.has(dir)) continue
-      found.add(dir)
-      const pkg = readPackage(dir)
-      visit(dir, Object.keys(pkg.dependencies ?? {}), Object.keys(pkg.optionalDependencies ?? {}))
-    }
-  }
   const pkg = readPackage(root)
-  visit(root, Object.keys(pkg.dependencies ?? {}), Object.keys(pkg.optionalDependencies ?? {}))
+  addInstalled(
+    found,
+    root,
+    Object.keys(pkg.dependencies ?? {}),
+    Object.keys(pkg.optionalDependencies ?? {}),
+  )
   return [...found]
+}
+
+/** Adds to `found` the named packages as installed from `from`, with what each depends on. */
+function addInstalled(
+  found: Set<string>,
+  from: string,
+  required: readonly string[],
+  optional: readonly string[] = [],
+): void {
+  for (const name of [...required, ...optional]) {
+    const dir = locate(from, name)
+    if (!dir) {
+      if (required.includes(name)) throw new Error(`${name}, a dependency, is not installed`)
+      continue
+    }
+    if (found.has(dir)) continue
+    found.add(dir)
+    const pkg = readPackage(dir)
+    addInstalled(
+      found,
+      dir,
+      Object.keys(pkg.dependencies ?? {}),
+      Object.keys(pkg.optionalDependencies ?? {}),
+    )
+  }
 }
 
 function licenseOf(pkg: PackageJson): string | null {
@@ -200,7 +217,7 @@ export function collectNotices(root: string, bundled: Iterable<string>): Notice[
 
 /**
  * The notices for a build that ships outside the app: its bundled packages and the `external` ones
- * it loads from beside the bundle, each package once.
+ * it loads from beside the bundle, with what they depend on as installed, each package once.
  */
 export function standaloneNotices(
   root: string,
@@ -209,10 +226,11 @@ export function standaloneNotices(
 ): Notice[] {
   const dirs = new Set([...bundled].map((dir) => realpathSync(dir)))
   for (const name of external) {
-    const dir = locate(root, name)
-    if (!dir) throw new Error(`${name}, which the build loads from beside it, is not installed`)
-    dirs.add(dir)
+    if (!locate(root, name)) {
+      throw new Error(`${name}, which the build loads from beside it, is not installed`)
+    }
   }
+  addInstalled(dirs, root, external)
   return [...dirs].map(readNotice)
 }
 

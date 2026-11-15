@@ -29,6 +29,8 @@ asarUnpack:
   # serve-sim's runtime dependency, which it cannot import from inside app.asar.
   - node_modules/ws/**
   - node_modules/agent-device/**
+  # The remote host's WebRTC loads its prebuilt addon from the real file system.
+  - node_modules/@node-datachannel/**
   - out/main/chunks/router-*.js
 # The postinstall step (tools/install/app-deps.mjs) already readied node-pty for Electron: its
 # prebuilt binaries on Windows, a build from source on macOS and Linux.
@@ -83,6 +85,9 @@ mac:
     - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
     - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
     - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+    # node-datachannel ships its C++ sources and build files; only its loader runs.
+    - '!node_modules/node-datachannel/{src,CMakeLists.txt,*.md,*.config.*,tsconfig.json}{,/**/*}'
+    - '!node_modules/node-datachannel/**/*.map'
     - '!out/third-party-notices.txt'
     # The daemon's build, which ships as a package of its own.
     - '!out/daemon{,/**/*}'
@@ -113,6 +118,9 @@ win:
     - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
     - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
     - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+    # node-datachannel ships its C++ sources and build files; only its loader runs.
+    - '!node_modules/node-datachannel/{src,CMakeLists.txt,*.md,*.config.*,tsconfig.json}{,/**/*}'
+    - '!node_modules/node-datachannel/**/*.map'
     - '!out/third-party-notices.txt'
     # The daemon's build, which ships as a package of its own.
     - '!out/daemon{,/**/*}'
@@ -132,6 +140,9 @@ linux:
     - '!node_modules/node-pty/build/{Makefile,*.mk,config.gypi,gyp-mac-tool,node_gyp_bins}{,/**/*}'
     - '!node_modules/node-pty/build/Release/{obj.target,.deps,node-addon-api@*}{,/**/*}'
     - '!node_modules/node-pty/**/*.{pdb,test.js,map}'
+    # node-datachannel ships its C++ sources and build files; only its loader runs.
+    - '!node_modules/node-datachannel/{src,CMakeLists.txt,*.md,*.config.*,tsconfig.json}{,/**/*}'
+    - '!node_modules/node-datachannel/**/*.map'
     - '!out/third-party-notices.txt'
     # The daemon's build, which ships as a package of its own.
     - '!out/daemon{,/**/*}'
