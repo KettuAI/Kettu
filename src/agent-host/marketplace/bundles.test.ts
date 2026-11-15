@@ -259,6 +259,30 @@ describe('MarketBundlesService', () => {
     expect(spawned.calls).toBe(0)
   })
 
+  it('commits nothing for a value that leads out of the folder past an =', async () => {
+    const zip = await JSZip.loadAsync(await bundle())
+    zip.file(
+      'manifest.json',
+      JSON.stringify({
+        ...MANIFEST,
+        server: {
+          ...MANIFEST.server,
+          mcp_config: { command: 'node', args: ['${__dirname}/${user_config.dir}'] },
+        },
+        user_config: { dir: { type: 'string', required: true } },
+      }),
+    )
+    const bundles = service(await zip.generateAsync({ type: 'nodebuffer' }))
+    const plan = await bundles.prepare('abcdefgh23')
+    const dir = path.join(root, mcpb('abcdefgh23', '1.0.0'))
+    await expect(
+      bundles.commit(plan.token!, { dir: `../../outside=${dir}/server/index.js` }),
+    ).rejects.toThrow(/path/)
+    await expect(stat(dir)).rejects.toThrow()
+    await bundles.flush()
+    await expect(stat(path.join(root, 'state/market-bundles.json'))).rejects.toThrow()
+  })
+
   it('removes a staged bundle on cancel', async () => {
     const bundles = service(await bundle())
     const plan = await bundles.prepare('abcdefgh23')

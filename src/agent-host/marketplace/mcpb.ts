@@ -388,8 +388,11 @@ export interface BundleSetup {
   program: string | null
   /** Where the bundle is installed. */
   dir: string
-  /** The arguments that name a path in the bundle's folder, by index, checked again once filled. */
-  bound: number[]
+  /**
+   * The arguments that name a path in the bundle's folder, checked again once filled: by index,
+   * with the fixed text the manifest puts before the folder, such as `--config=`.
+   */
+  bound: { index: number; prefix: string }[]
   runs: string
   blocked: string | null
 }
@@ -400,9 +403,13 @@ function within(dir: string, file: string): boolean {
   return target === root || target.startsWith(root + path.sep)
 }
 
-/** Whether an argument that named the bundle's folder, such as `--root=<dir>/x`, stays in it. */
-function insideArg(dir: string, value: string): boolean {
-  return within(dir, value.split('=').at(-1)!)
+/**
+ * Whether an argument that named the bundle's folder still has the fixed text the manifest put
+ * before it, and the path after that text stays in the folder. The path is never looked for in
+ * the value itself: a value may hold `=` or anything else.
+ */
+function insideArg(dir: string, value: string, prefix: string): boolean {
+  return value.startsWith(prefix) && within(dir, value.slice(prefix.length))
 }
 
 /** `>=x.y.z` against a version; any other range is not checked. */
@@ -455,13 +462,6 @@ export async function planBundle(manifest: BundleManifest, ctx: PlanContext): Pr
       if (user && manifest.userConfig.has(user[1]!)) return whole
       throw bad(t('marketBundle.variable', { variable: whole, where }))
     })
-  // A value that named the bundle's folder stays inside it.
-  const inside = (raw: string, value: string): string => {
-    if (raw.includes('${__dirname}') && !insideArg(dir, value)) {
-      throw bad(t('marketBundle.unsafePath', { path: raw.slice(0, 200) }))
-    }
-    return value
-  }
   // A bare path of a file in the bundle, such as `server/index.js`, is read from its folder.
   const own = (value: string): string =>
     !value.includes('${') && ctx.files.has(value) ? path.join(dir, ...value.split('/')) : value
@@ -551,11 +551,19 @@ export async function planBundle(manifest: BundleManifest, ctx: PlanContext): Pr
   }
 
   const outArgs: string[] = []
-  const bound: number[] = []
+  const bound: BundleSetup['bound'] = []
   for (const [i, raw] of args.entries()) {
-    if (raw.includes('${__dirname}')) bound.push(i)
     const where = `server.mcp_config.args[${i}]`
-    const value = inside(raw, own(fill(raw, where)))
+    const value = own(fill(raw, where))
+    // An argument that names the bundle's folder stays inside it; only fixed text may come first.
+    const at = raw.indexOf('${__dirname}')
+    if (at >= 0) {
+      const prefix = raw.slice(0, at)
+      if (prefix.includes('${') || !insideArg(dir, value, prefix)) {
+        throw bad(t('marketBundle.unsafePath', { path: raw.slice(0, 200) }))
+      }
+      bound.push({ index: i, prefix })
+    }
     for (const match of value.matchAll(VARIABLE)) {
       const key = USER.exec(match[1]!)![1]!
       const made = input(key)
@@ -686,13 +694,14 @@ export function fillArgs(setup: BundleSetup, values: Readonly<Record<string, str
         only?.[0] === name ? only[1] : lists.get(name)!.join(' '),
       )
     const filled = fillWith()
-    if (setup.bound.includes(i)) {
+    const bound = setup.bound.find((b) => b.index === i)
+    if (bound) {
       // Each value of a list on its own too: joined, one could undo another's `..`.
       const tries = [
         filled,
         ...[...lists].flatMap(([name, list]) => list.map((v) => fillWith([name, v]))),
       ]
-      if (!tries.every((value) => insideArg(setup.dir, value))) {
+      if (!tries.every((value) => insideArg(setup.dir, value, bound.prefix))) {
         throw refuse(t('marketBundle.outside', { path: filled.slice(0, 200) }))
       }
     }

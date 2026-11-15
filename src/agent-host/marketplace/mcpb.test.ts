@@ -393,6 +393,36 @@ describe('fillArgs', () => {
     expect(() => fillArgs(listed, { files: 'a.js\n../../b.js' })).toThrow(/path/)
   })
 
+  it('checks the path after the fixed text before the folder, never after an = in a value', async () => {
+    const sneaky = `../../outside=${DIR}/safe.js`
+    for (const template of [
+      '${__dirname}/${user_config.file}',
+      '--config=${__dirname}/${user_config.file}',
+    ]) {
+      const read = manifest(
+        { user_config: { file: { type: 'string', required: false, default: sneaky } } },
+        { mcp_config: { command: 'node', args: [template] } },
+      )
+      const setup = await planBundle(read, context())
+      expect(setup.blocked).toBeNull()
+      expect(() => fillArgs(setup, {}), template).toThrow(/path/)
+      expect(() => fillArgs(setup, { file: sneaky }), template).toThrow(/path/)
+      expect(() => fillArgs(setup, { file: '../../x.js' }), template).toThrow(/path/)
+      const prefix = template.startsWith('--config=') ? '--config=' : ''
+      expect(fillArgs(setup, { file: 'server/a=b.js' })).toEqual([
+        prefix + path.join(DIR, 'server/a=b.js'),
+      ])
+    }
+  })
+
+  it('refuses a bundle whose text before its folder holds a variable', async () => {
+    const read = manifest(
+      { user_config: { opt: { type: 'string', required: true } } },
+      { mcp_config: { command: 'node', args: ['${user_config.opt}${__dirname}/server/index.js'] } },
+    )
+    await expect(planBundle(read, context())).rejects.toThrow(/path/)
+  })
+
   it('expands a list into one argument each and checks numbers', async () => {
     const read = manifest(
       {
