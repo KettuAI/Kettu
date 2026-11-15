@@ -48,6 +48,27 @@ export function addressKey(address: DirectAddress): string {
 }
 
 /** An address as devices dial it: an IPv6 address in brackets, then the port. */
+/**
+ * Whether a host is on a network of its own rather than the internet: a private or Tailscale
+ * IPv4 address, a unique or link-local IPv6 one, or a `.local` name.
+ */
+export function isLocalHost(host: string): boolean {
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host)
+  if (v4) {
+    const a = Number(v4[1])
+    const b = Number(v4[2])
+    return (
+      a === 10 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127)
+    )
+  }
+  const lower = host.toLowerCase()
+  if (lower.includes(':')) return /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower)
+  return lower.endsWith('.local')
+}
+
 export function addressText({ host, port }: DirectAddress): string {
   return `${host.includes(':') ? `[${host}]` : host}:${port}`
 }

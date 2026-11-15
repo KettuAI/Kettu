@@ -133,6 +133,21 @@ export class SettingsStore {
     if (!(read.kind === 'ok' && isRecord(read.value) && 'onboarding' in read.value)) {
       loaded.settings.onboarding = { done: true, step: 'welcome' }
     }
+    // Direct connections now come on with remote access, so the same network is not routed through
+    // the relay. Off was the old default, so a file from before turns them on once, whether remote
+    // access is on now or later; the owner may turn them off again.
+    const needsDirect = !(
+      read.kind === 'ok' &&
+      isRecord(read.value) &&
+      read.value.remoteDirectVersion === 1
+    )
+    if (needsDirect) {
+      if (!loaded.settings.remote.direct.enabled) {
+        loaded.settings.remote.direct.enabled = true
+        log.info('Turned direct connections on, which now come with remote access')
+      }
+      loaded.settings.remoteDirectVersion = 1
+    }
     // A file that turns direct connections on by hand gets its port as a change would.
     const settings = withDirectPort(loaded.settings, randomDirectPort)
     if (loaded.readOnly) {
@@ -169,7 +184,7 @@ export class SettingsStore {
         return new SettingsStore(settings, null)
       }
       store.save()
-    } else if (settings !== loaded.settings || needsRegistration || clearedHide) {
+    } else if (settings !== loaded.settings || needsRegistration || needsDirect || clearedHide) {
       store.save()
     }
     if (needsRegistration) await store.flush()

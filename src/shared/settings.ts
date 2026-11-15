@@ -23,6 +23,8 @@ export interface OnboardingState {
 export interface SettingsFile {
   version: 1
   agentRegistrationVersion?: 1
+  /** Set once direct connections were turned on for a host that already had remote access on. */
+  remoteDirectVersion?: 1
   initialSetup: InitialSetup
   general: {
     language: LanguageSetting
@@ -186,6 +188,7 @@ export type ProxySettings =
 export const DEFAULT_SETTINGS: SettingsFile = {
   version: 1,
   agentRegistrationVersion: 1,
+  remoteDirectVersion: 1,
   initialSetup: { done: false },
   general: {
     language: 'system',
@@ -229,7 +232,7 @@ export const DEFAULT_SETTINGS: SettingsFile = {
   remote: {
     enabled: false,
     name: null,
-    direct: { enabled: false, port: null, addresses: [] },
+    direct: { enabled: true, port: null, addresses: [] },
     terminal: false,
     relay: true,
     discoverable: true,
