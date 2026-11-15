@@ -172,4 +172,4 @@ curl -fsSL https://kettu.sh/install | sh
 
 ## 许可证
 
-[AGPL-3.0](./LICENSE)，并为 `src/renderer/src/components/affect` 中的 affectUI 组件给出了一项[附加许可](./LICENSE-EXCEPTION)。这些组件仍遵循 [affectUI 的许可](https://www.affectui.com/license)。
+[AGPL-3.0](./LICENSE)。
