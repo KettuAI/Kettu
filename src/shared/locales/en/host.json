@@ -182,6 +182,8 @@
     "stillRunning": "{{agent}} did not stop and is still running; try again once it has exited",
     "noLogout": "{{agent}} does not support signing out",
     "keyInSettings": "{{method}} is set on {{agent}}'s page in Settings › Agents",
+    "signInOnComputer": "{{agent}} signs in through a browser on the computer it runs on, so sign in there.",
+    "signInCancelled": "The sign-in to {{agent}} was cancelled.",
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
     "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",

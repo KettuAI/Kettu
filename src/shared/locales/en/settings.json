@@ -624,6 +624,7 @@
     "signOut": "Sign out",
     "needsSignIn": "{{name}} needs you to sign in.",
     "signInTitle": "Sign in to {{name}} to use it",
+    "signInOnComputer": "{{method}} opens a browser on the computer {{name}} runs on, so sign in there.",
     "launch": "Launch",
     "copyLaunch": "Copy launch command",
     "reinstall": "Reinstall",

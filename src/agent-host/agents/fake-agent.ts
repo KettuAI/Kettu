@@ -11,5 +11,6 @@ export function fakeAgent(script: string): AgentDefinition {
       url: 'https://agentclientprotocol.com',
     },
     reportsAccount: true,
+    pageSignIns: ['fake-page-login'],
   }
 }

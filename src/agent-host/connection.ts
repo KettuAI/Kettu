@@ -86,6 +86,13 @@ export interface AuthMethodInfo {
   env: Record<string, string>
 }
 
+/** The client a sign-in runs for: where a page the agent hands over opens, and its Cancel. */
+export interface SignInClient {
+  /** Opens the agent's sign-in page on the client that asked, a web address only. */
+  openLink(url: string): void
+  signal: AbortSignal
+}
+
 /** How an agent's session titles arrive: as `session_info_update`, or only through `session/list`. */
 export type OwnTitles = 'sent' | 'listed'
 
@@ -332,7 +339,7 @@ export interface AgentConnection {
   close(): void
 
   initialize(appVersion: string, signal?: AbortSignal): Promise<AgentInit>
-  authenticate(methodId: string): Promise<void>
+  authenticate(methodId: string, client?: SignInClient): Promise<void>
   readAuthStatus?(): Promise<void>
   logout(): Promise<void>
 

@@ -42,6 +42,7 @@ import {
   type SessionOptions,
   type SessionSetup,
   type SessionTarget,
+  type SignInClient,
 } from '../connection'
 import type { AgentTransport, MessageTransport } from '../driver'
 import { isStopReason } from '../session-updates'
@@ -59,6 +60,7 @@ import {
 import { forkPointMeta, forksAtMessage } from './fork-point'
 import { DELETE_AGAIN_MS, hiddenRemoval, sessionMeta, type Removal } from './hidden-sessions'
 import { ownTitles } from './own-titles'
+import { DELEGATED_SIGN_IN, delegatedSignInStart, requestUrlElicitation } from './sign-in'
 
 /** A message-level stream to an agent, from a process's stdio or an in-process agent. */
 export interface AcpTransport {
@@ -121,8 +123,11 @@ const CLIENT_CAPABILITIES = {
   auth: { terminal: true },
   session: { notices: {}, compaction: {}, configOptions: { boolean: {} } },
   subagents: {},
-  // Kilo publishes its terminal sign-in command only to a client that advertises this.
-  _meta: { 'terminal-auth': true },
+  // Only pages a sign-in hands over: Kettu opens them on the client that asked for the sign-in.
+  elicitation: { url: {} },
+  // Kilo publishes its terminal sign-in command only to a client that advertises this, and Mistral
+  // Vibe its sign-in whose page the client opens.
+  _meta: { 'terminal-auth': true, [DELEGATED_SIGN_IN]: true },
 }
 
 type AuthMethodMeta = {
@@ -272,6 +277,10 @@ export class AcpConnection implements AgentConnection {
   private readonly pendingStartup = new Map<string, string>()
   /** How its hidden sessions go, once `initialize` has answered. */
   private removal: Removal | null = null
+  /** The sign-in in progress, which the next `authenticate` written out runs for. */
+  private signIn: SignInClient | null = null
+  /** The sign-in each `authenticate` in flight runs for, by its JSON-RPC id as a string. */
+  private readonly signInRequests = new Map<string, SignInClient>()
 
   private constructor(
     private readonly transport: AcpTransport,
@@ -303,6 +312,24 @@ export class AcpConnection implements AgentConnection {
           ? { outcome: { outcome: 'cancelled' } }
           : { outcome: { outcome: 'selected', optionId: picked.optionId } }
       })
+      .onRequest(methods.client.elicitation.create, (ctx) => {
+        // Only a sign-in's page is taken, on the client that asked for that sign-in.
+        const page = requestUrlElicitation(ctx.params)
+        const signIn = page ? this.signInRequests.get(page.requestId) : undefined
+        if (!page || !signIn) {
+          const sessionId = (ctx.params as { sessionId?: unknown }).sessionId
+          hooks.ignored(
+            typeof sessionId === 'string' ? sessionId : null,
+            `elicitation/create (${String(ctx.params.mode)}) outside a sign-in`,
+          )
+          return { action: 'decline' }
+        }
+        if (signIn.signal.aborted) return { action: 'cancel' }
+        signIn.openLink(page.url)
+        return { action: 'accept' }
+      })
+      // The sign-in's own `authenticate` answers once it is done.
+      .onNotification(methods.client.elicitation.complete, () => {})
       .onNotification(
         'auth/status_update',
         (params: unknown) => params,
@@ -359,6 +386,9 @@ export class AcpConnection implements AgentConnection {
     const writable = new WritableStream<AnyMessage>({
       write: (message) => {
         hooks.traffic('out', message)
+        if (this.signIn && 'method' in message && message.method === methods.agent.authenticate) {
+          if ('id' in message) this.signInRequests.set(String(message.id), this.signIn)
+        }
         return writer.write(message)
       },
       close: () => writer.close(),
@@ -778,8 +808,36 @@ export class AcpConnection implements AgentConnection {
     return this.config(response.configOptions, null)
   }
 
-  async authenticate(methodId: string): Promise<void> {
-    await this.call(() => this.connection.agent.request(methods.agent.authenticate, { methodId }))
+  async authenticate(methodId: string, client?: SignInClient): Promise<void> {
+    const options = client
+      ? { cancellationSignal: client.signal, stopWaitingOnCancel: true }
+      : undefined
+    const request = (meta?: Record<string, unknown>) =>
+      this.call(() =>
+        this.connection.agent.request(
+          methods.agent.authenticate,
+          meta ? { methodId, _meta: meta } : { methodId },
+          options,
+        ),
+      )
+    this.signIn = client ?? null
+    try {
+      if (methodId !== DELEGATED_SIGN_IN || !client) {
+        await request()
+        return
+      }
+      // Mistral Vibe: `start` answers with the page and an attempt; `complete` waits for the
+      // browser to finish it.
+      const started = delegatedSignInStart(await request({ action: 'start' }))
+      if (!started) throw new AgentRequestError('agent_error', 'The agent gave no sign-in page')
+      client.openLink(started.url)
+      await request({ action: 'complete', attemptId: started.attemptId })
+    } finally {
+      if (this.signIn === client) this.signIn = null
+      for (const [id, signIn] of this.signInRequests) {
+        if (signIn === client) this.signInRequests.delete(id)
+      }
+    }
   }
 
   async readAuthStatus(): Promise<void> {

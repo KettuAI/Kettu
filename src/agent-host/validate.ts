@@ -1204,6 +1204,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { agentId: agentId(o), methodId: string(o, 'methodId', ID_CHARS) }
     },
+    'agents.cancelSignIn': agent,
     'agents.logout': agent,
     'agents.providerAction': (params) => {
       const o = fields(params)

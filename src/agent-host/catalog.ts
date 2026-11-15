@@ -147,6 +147,11 @@ export interface AgentDefinition {
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
   /**
+   * Its agent sign-in methods that send their page as a URL elicitation, which opens on the client
+   * that asked, so a paired device may run them.
+   */
+  pageSignIns?: readonly string[]
+  /**
    * Keeps MCP servers by name for each folder rather than each session, and names the session on
    * each tool call, so the artifacts service gives its process one token per folder.
    */

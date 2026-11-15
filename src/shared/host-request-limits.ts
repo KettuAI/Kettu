@@ -20,6 +20,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'agents.detectedPrograms': AGENT_MS,
   'agents.environment': HOST_MS,
   'agents.authenticate': NONE,
+  'agents.cancelSignIn': HOST_MS,
   'agents.logout': AGENT_MS,
   'agents.providerAction': NONE,
   'agents.retry': NONE,

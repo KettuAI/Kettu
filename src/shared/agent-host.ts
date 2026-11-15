@@ -222,6 +222,8 @@ export interface AgentAuthMethod {
   type: 'agent' | 'terminal' | 'env'
   envVars?: { name: string; optional: boolean; set: boolean }[]
   command?: string // for terminal methods: the agent's named command or its launch, quoted
+  // For agent methods: hands its sign-in page to the client that asked, which opens it there.
+  delegated?: boolean
 }
 
 /** A newer adapter or CLI than the installed one, found by `agents.checkUpdates`. */
@@ -656,7 +658,11 @@ export interface HostContract {
   // Detects again, then names the harnesses whose user program is found, in the order to add them.
   'agents.detectedPrograms': { params: void; result: HarnessId[] }
   'agents.environment': { params: void; result: EnvironmentInfo }
+  // Its page, when it hands one over, comes to the asking port as `agents.signInLink`. A paired
+  // device may not run an agent method that opens a browser on this computer instead.
   'agents.authenticate': { params: { agentId: AgentId; methodId: string }; result: void }
+  // Stops the agent's sign-in in progress, whose `agents.authenticate` then rejects.
+  'agents.cancelSignIn': { params: { agentId: AgentId }; result: void }
   'agents.logout': { params: { agentId: AgentId }; result: void }
   'agents.providerAction': { params: AgentProviderAction; result: void }
   'agents.retry': { params: { agentId: AgentId }; result: void }
@@ -1462,6 +1468,7 @@ export const HOST_METHODS = [
   'agents.detectedPrograms',
   'agents.environment',
   'agents.authenticate',
+  'agents.cancelSignIn',
   'agents.logout',
   'agents.providerAction',
   'agents.retry',
@@ -1725,6 +1732,8 @@ export type HostEvent =
   | { type: 'agent.status'; status: AgentStatus }
   | { type: 'agent.removed'; agentId: AgentId }
   | { type: 'agent.options'; options: AgentOptions }
+  // To the port whose `agents.authenticate` runs: the agent's sign-in page, for its device to open.
+  | { type: 'agents.signInLink'; agentId: AgentId; url: string }
   | { type: 'projects.changed'; projects: Project[] }
   | { type: 'environment.changed'; info: EnvironmentInfo }
   | { type: 'git.changed'; status: GitStatus }
