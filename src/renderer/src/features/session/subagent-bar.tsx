@@ -11,9 +11,14 @@ import { errorMessage, host } from '@renderer/lib/host'
 import { agentName } from '@renderer/stores/agents'
 import { hostOfSession, sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { openSession } from '@renderer/stores/view'
+import { TrayStyles } from './composer/affect-styles'
+import { ContextButton } from './composer/usage'
 import { AgentWorktreeLine } from './worktree/worktree-tag'
 
-/** In place of the composer: the agent drives a sub-agent, so you can only stop it or go back. */
+/**
+ * In place of the composer: the agent drives a sub-agent, so you can only stop it or go back. Its
+ * context shows under it, where the composer's tray shows a session's.
+ */
 export function SubagentBar({
   summary,
   session,
@@ -28,6 +33,7 @@ export function SubagentBar({
   const running = summary.status === 'running' || summary.status === 'awaiting_permission'
   const canStop = running && !!session?.subagent?.canCancel
   const parentTitle = parent ? sessionTitle(parent) : ''
+  const usage = session?.usage && session.usage.size > 0 ? session.usage : null
   const agent = agentName(summary.agentId, hostOfSession(summary))
 
   const stop = async () => {
@@ -113,12 +119,33 @@ export function SubagentBar({
           </Button>
         )}
       </div>
-      <div className="flex min-h-9 flex-col">
-        {summary.agentWorktree && <AgentWorktreeLine worktree={summary.agentWorktree} />}
-        {error && (
-          <p role="alert" className="animate-in truncate px-2 pt-1 text-xs text-danger fade-in">
-            {error}
-          </p>
+      <div className="flex min-h-9 items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-col">
+          {summary.agentWorktree && <AgentWorktreeLine worktree={summary.agentWorktree} />}
+          {error && (
+            <p role="alert" className="animate-in truncate px-2 pt-1 text-xs text-danger fade-in">
+              {error}
+            </p>
+          )}
+        </div>
+        {usage && (
+          <span className="kettu-tray__group kettu-tray__group--end pt-1">
+            <TrayStyles />
+            <ContextButton
+              sessionId={summary.id}
+              agentId={summary.agentId}
+              idle={!running}
+              closed={summary.status === 'closed'}
+              reports={false}
+              direct={false}
+              live={false}
+              usage={usage}
+              limits={[]}
+              holding={[]}
+              account={null}
+              model={null}
+            />
+          </span>
         )}
       </div>
     </div>
