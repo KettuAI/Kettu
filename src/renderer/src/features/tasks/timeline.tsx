@@ -10,6 +10,9 @@ import { useTranslation } from 'react-i18next'
 import { isBackArrow, type RoundView, type TaskView } from '@shared/workflow'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Badge } from '@renderer/components/ui/badge'
+import { ProjectPathContext } from '@renderer/features/files/file-refs'
+import { UserContentView } from '@renderer/features/session/entries/user-content'
+import { Markdown } from '@renderer/features/session/markdown'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { clockTime, runningFor } from '@renderer/lib/format'
@@ -41,19 +44,21 @@ export function Timeline({ view }: { view: TaskView }) {
     ...view.notes.map((note): Item => ({ kind: 'note', at: note.at, text: note.text })),
   ].sort((a, b) => a.at - b.at)
   return (
-    <div className="flex flex-col gap-2.5">
-      <Asked view={view} />
-      {items.map((item) =>
-        item.kind === 'round' ? (
-          <RoundCard key={item.round.id} view={view} round={item.round} />
-        ) : (
-          <NoteBubble key={`note:${item.at}`} text={item.text} at={item.at} />
-        ),
-      )}
-      <NeedCards view={view} />
-      <Upcoming view={view} />
-      <Ended view={view} />
-    </div>
+    <ProjectPathContext value={view.worktreePath ?? view.projectPath}>
+      <div className="flex flex-col gap-2.5">
+        <Asked view={view} />
+        {items.map((item) =>
+          item.kind === 'round' ? (
+            <RoundCard key={item.round.id} view={view} round={item.round} />
+          ) : (
+            <NoteBubble key={`note:${item.at}`} text={item.text} at={item.at} />
+          ),
+        )}
+        <NeedCards view={view} />
+        <Upcoming view={view} />
+        <Ended view={view} />
+      </div>
+    </ProjectPathContext>
   )
 }
 
@@ -63,9 +68,7 @@ function Asked({ view }: { view: TaskView }) {
   const from = useSessionsStore((s) => (view.from ? s.byId[view.from.sessionId] : undefined))
   return (
     <div className="ks-user mb-2">
-      <p className="ks-user__bubble whitespace-pre-wrap" data-selectable="" dir="auto">
-        {view.text}
-      </p>
+      <SentText text={view.text} />
       <span className="flex items-center gap-1.5 text-hint text-(--thread-faint)">
         <Glyph icon={Message01Icon} size={12} />
         {from ? (
@@ -91,13 +94,20 @@ function Asked({ view }: { view: TaskView }) {
   )
 }
 
+/** Text you wrote, in the bubble and Markdown a message you sent has in a session. */
+function SentText({ text }: { text: string }) {
+  return (
+    <div className="ks-user__bubble">
+      <UserContentView content={[{ type: 'text', text }]} />
+    </div>
+  )
+}
+
 function NoteBubble({ text, at }: { text: string; at: number }) {
   const { t } = useTranslation('tasks')
   return (
     <div className="ks-user my-1">
-      <p className="ks-user__bubble whitespace-pre-wrap" data-selectable="" dir="auto">
-        {text}
-      </p>
+      <SentText text={text} />
       <span className="text-hint text-(--thread-faint)">
         {t('timeline.noteAdded', { time: clockTime(at) })}
       </span>
@@ -138,9 +148,6 @@ function RoundCard({ view, round }: { view: TaskView; round: RoundView }) {
   ]
     .filter(Boolean)
     .join(t('separator'))
-  const summary = back
-    ? t('timeline.youSaid', { note: back.note ?? t('timeline.noNote') })
-    : round.note
   return (
     <article className="flex flex-col gap-2 rounded-xl bg-(--thread-card) px-3.5 py-3 shadow-(--thread-card-shadow)">
       <header className="flex min-w-0 items-center gap-2.5">
@@ -175,10 +182,16 @@ function RoundCard({ view, round }: { view: TaskView; round: RoundView }) {
           {t('timeline.why', { reason: round.reason })}
         </p>
       )}
-      {summary && (
+      {back ? (
         <p className="text-small whitespace-pre-wrap text-(--thread-text)" data-selectable="">
-          {summary}
+          {t('timeline.youSaid', { note: back.note ?? t('timeline.noNote') })}
         </p>
+      ) : (
+        round.note && (
+          <div data-selectable="">
+            <Markdown markdown={round.note} className="markdown-compact" />
+          </div>
+        )
       )}
       {round.document && (
         <DocumentChip

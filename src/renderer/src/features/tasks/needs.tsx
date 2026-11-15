@@ -12,6 +12,8 @@ import type { TaskNeed, TaskView } from '@shared/workflow'
 import { ApprovalCard } from '@renderer/components/affect/approval-card'
 import { Button } from '@renderer/components/ui/button'
 import { useComments } from '@renderer/features/artifacts/use-comments'
+import { Clamp } from '@renderer/features/session/clamp'
+import { Markdown } from '@renderer/features/session/markdown'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
@@ -411,12 +413,12 @@ function Card({
         >
           <Glyph icon={icon} size={16} />
         </span>
-        <span className="flex min-w-0 flex-col gap-0.5">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-label font-medium text-(--thread-ink)">{title}</span>
-          <span className="text-small text-(--thread-text)" data-selectable="">
+          <div className="text-small text-(--thread-text)" data-selectable="">
             {body}
-          </span>
-        </span>
+          </div>
+        </div>
       </header>
       {children}
       {error && <CardError text={error} />}
@@ -427,23 +429,15 @@ function Card({
 /** A person's step's prompt, cut to a few lines until opened. */
 function Prompt({ text }: { text: string }) {
   const { t } = useTranslation('tasks')
-  const [open, setOpen] = useState(false)
-  const long = text.length > 280 || text.split('\n').length > 4
   return (
-    <>
-      <span className={cn('block whitespace-pre-wrap', !open && long && 'line-clamp-4')}>
-        {text}
-      </span>
-      {long && (
-        <button
-          type="button"
-          className="mt-1 text-hint text-(--thread-muted) hover:text-(--thread-ink) hover:underline"
-          onClick={() => setOpen(!open)}
-        >
-          {open ? t('sentBack.less') : t('sentBack.more')}
-        </button>
-      )}
-    </>
+    <Clamp
+      maxHeight={120}
+      more={t('sentBack.more')}
+      less={t('sentBack.less')}
+      buttonClassName="-mx-1.5 mt-1"
+    >
+      <Markdown markdown={text} className="markdown-compact" />
+    </Clamp>
   )
 }
 
