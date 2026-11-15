@@ -309,6 +309,45 @@ function extraKey(
   return extra === undefined ? null : `Unknown setting "${path}.${extra}"`
 }
 
+// What an input from an MCP bundle's manifest adds: its label, kind, default and bounds.
+const BUNDLE_INPUT_KEYS = ['title', 'kind', 'default', 'min', 'max'] as const
+const INPUT_KINDS = ['string', 'number', 'boolean', 'directory', 'file'] as const
+
+function parseBundleInput(
+  raw: Record<string, unknown>,
+  path: string,
+): Partial<Extract<McpValue, { input: true }>> | string {
+  const out: Partial<Extract<McpValue, { input: true }>> = {}
+  const { title, kind, min, max } = raw
+  if (title !== undefined) {
+    if (!isText(title, 200)) return `"${path}.title" must be a string of at most 200 characters`
+    out.title = title
+  }
+  if (kind !== undefined) {
+    const problem = oneOf(...INPUT_KINDS)(kind, `${path}.kind`)
+    if (problem) return problem
+    out.kind = kind as (typeof INPUT_KINDS)[number]
+  }
+  if (raw.default !== undefined) {
+    const value = raw.default
+    if (typeof value !== 'string' || value.length > MAX_SPEC_TEXT || value.includes('\0')) {
+      return `"${path}.default" must be a string of at most ${MAX_SPEC_TEXT} characters`
+    }
+    out.default = value
+  }
+  for (const [key, value] of [
+    ['min', min],
+    ['max', max],
+  ] as const) {
+    if (value === undefined) continue
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return `"${path}.${key}" must be a number`
+    }
+    out[key] = value
+  }
+  return out
+}
+
 /** A header or environment variable of a server's spec, or why it is not one. */
 function parseMcpValue(
   raw: unknown,
@@ -325,7 +364,7 @@ function parseMcpValue(
   if ('input' in raw) {
     const extra = extraKey(
       raw,
-      ['name', 'input', 'secret', 'required', 'description', 'prefix'],
+      ['name', 'input', 'secret', 'required', 'description', 'prefix', ...BUNDLE_INPUT_KEYS],
       path,
       strict,
     )
@@ -357,7 +396,9 @@ function parseMcpValue(
       }
       value.prefix = prefix
     }
-    return value
+    const bundled = parseBundleInput(raw, path)
+    if (typeof bundled === 'string') return bundled
+    return { ...value, ...bundled }
   }
   const extra = extraKey(raw, ['name', 'value'], path, strict)
   if (extra) return extra
@@ -428,7 +469,7 @@ function parseMcpSpec(raw: unknown, path: string, strict: boolean): McpSpec | st
     return { ...spec, oauth: { flow: oauth.flow as 'browser' | 'device' } }
   }
   if (raw.type === 'stdio') {
-    const extra = extraKey(raw, ['type', 'command', 'args', 'env'], path, strict)
+    const extra = extraKey(raw, ['type', 'command', 'args', 'env', 'runtime'], path, strict)
     if (extra) return extra
     const { command, args } = raw
     if (
@@ -450,7 +491,16 @@ function parseMcpSpec(raw: unknown, path: string, strict: boolean): McpSpec | st
     }
     const env = parseMcpValues(raw.env, `${path}.env`, 'env', strict)
     if (typeof env === 'string') return env
-    return { type: 'stdio', command, args: [...(args as string[])], env }
+    if (raw.runtime !== undefined && raw.runtime !== 'node') {
+      return `"${path}.runtime" must be "node"`
+    }
+    return {
+      type: 'stdio',
+      command,
+      args: [...(args as string[])],
+      env,
+      ...(raw.runtime === 'node' ? { runtime: 'node' as const } : {}),
+    }
   }
   return `"${path}.type" must be one of "http", "stdio"`
 }

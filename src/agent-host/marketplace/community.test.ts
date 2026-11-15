@@ -246,6 +246,44 @@ describe('MarketCommunityService', () => {
     expect(await written()).toEqual([])
   })
 
+  it('finds a server’s bundle from the version’s list alone, downloading nothing', async () => {
+    const server = listing({ kind: 'mcp-server', server: { name: 'echo', version: '1.0.0' } })
+    const f = fake({ listings: { abcdefgh23: server }, files: { 'echo.mcpb': 'zip' } })
+    const page = await service(f).listing('abcdefgh23')
+    expect(page).toMatchObject({
+      state: 'listed',
+      server: null,
+      bundle: { from: 'upload', path: 'echo.mcpb', size: 3, sha256: sha('zip') },
+    })
+    expect(f.calls.map((call) => call.kind)).toEqual(['listing', 'version'])
+    expect(await written()).toEqual([])
+  })
+
+  it('takes an https mcpb package with its SHA-256, the upload first', async () => {
+    const pkg = (over: Record<string, unknown>) => ({
+      registryType: 'mcpb',
+      identifier: 'https://example.com/echo.mcpb',
+      fileSha256: 'a'.repeat(64),
+      ...over,
+    })
+    const page = async (packages: unknown[], files: Record<string, string> = {}) => {
+      const server = listing({ kind: 'mcp-server', server: { name: 'echo', packages } })
+      const got = await service(fake({ listings: { abcdefgh23: server }, files })).listing(
+        'abcdefgh23',
+      )
+      return got.state === 'listed' ? got.bundle : undefined
+    }
+    expect(await page([pkg({})])).toEqual({
+      from: 'url',
+      url: 'https://example.com/echo.mcpb',
+      sha256: 'a'.repeat(64),
+    })
+    expect(await page([pkg({ identifier: 'http://example.com/echo.mcpb' })])).toBeNull()
+    expect(await page([pkg({ fileSha256: undefined })])).toBeNull()
+    expect(await page([pkg({ fileSha256: 'abc' })])).toBeNull()
+    expect(await page([pkg({})], { 'echo.mcpb': 'zip' })).toMatchObject({ from: 'upload' })
+  })
+
   it('lists only public listings, and the account’s own Only me ones as Yours', async () => {
     const f = fake({
       directory: [

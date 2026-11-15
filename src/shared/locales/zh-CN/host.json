@@ -668,5 +668,33 @@
     "otherHarness": "这个插件是给另一种 Agent 的。",
     "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
     "nameTaken": "已经装了 Kettu 的 Marketplace 里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。"
+  },
+  "marketBundle": {
+    "invalid": "这个 MCP 包装不了：{{reason}}",
+    "notZip": "它不是 zip 压缩包。",
+    "tooMany": "它的文件数超过了一个包的上限。",
+    "tooLarge": "它解开后超过了一个包的大小上限。",
+    "unsafePath": "它带了一个 Kettu 不会写入的路径 {{path}}。",
+    "notFile": "{{path}} 是链接或别的不是普通文件的东西。",
+    "noManifest": "它没有能读的 manifest.json。",
+    "field": "它的 manifest 里 {{field}} 不对。",
+    "noEntry": "它里面没有 {{path}}。",
+    "variable": "{{where}} 用了 Kettu 不认识的 {{variable}}。",
+    "platform": "它只能在 {{platforms}} 上运行。",
+    "node": "它要 Node.js {{range}}，Kettu 带的是 {{version}}。",
+    "needsPython": "它要 Python 3，这台电脑上没有。从 https://www.python.org 安装后再试。",
+    "needsUv": "它要 uv，这台电脑上没有。从 https://docs.astral.sh/uv 安装后再试。",
+    "needsCommand": "它要 {{command}}，这台电脑上没有。",
+    "secretArg": "它会把 {{title}} 这个密钥放到命令行上，这台电脑的其他用户能看到。",
+    "mixed": "它的 {{name}} 变量把要填的值和别的文字混在一起，Kettu 没法存进钥匙串。",
+    "missing": "请填写 {{title}}。",
+    "badValue": "{{title}} 的值不对。",
+    "expired": "这次安装等得太久了。再点一次安装。",
+    "noBundle": "这一项没有 MCP 包。",
+    "downloadFailed": "下载这个包失败：{{reason}}",
+    "tooBig": "这个包超过 {{mb}} MB，什么都没装。",
+    "mismatch": "这个包和它的校验值对不上，什么都没装。",
+    "outside": "Kettu 不会运行这个包文件夹以外的路径 {{path}}。",
+    "changed": "下载时这个条目有了新版本，请再点一次安装。"
   }
 }

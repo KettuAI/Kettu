@@ -627,7 +627,6 @@
     "source": "Kettu Marketplace",
     "onlyMe": "Only me",
     "cannotRun": "Kettu can’t run this MCP server: it names no package or https remote that Kettu runs.",
-    "bundle": "Kettu doesn’t install MCP bundles (.mcpb) yet, so this server can’t be installed here.",
     "pluginFor": "Plugin for {{harness}}",
     "kinds": {
       "mcp": "MCP server",
@@ -922,5 +921,19 @@
       "signedIn": "Signed in",
       "notSignedIn": "Not signed in"
     }
+  },
+  "bundle": {
+    "kind": "MCP bundle (.mcpb)",
+    "from": "from {{host}}",
+    "note": "Downloaded only when you click Install. Before anything runs, Kettu shows what it runs and what you fill in.",
+    "preparing": "Checking",
+    "runs": "Will run",
+    "nodeRuntime": "Kettu’s Node.js",
+    "blockedTitle": "Can’t install {{name}} here",
+    "addValue": "Add another",
+    "choose": "Choose…",
+    "multipleHint": "Add as many as you need.",
+    "keepHint": "Leave empty to keep the value you set before.",
+    "updateSubmit": "Update"
   }
 }

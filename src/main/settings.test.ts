@@ -203,6 +203,47 @@ describe('items from the Kettu Marketplace in a patch', () => {
     })
   })
 
+  it('keeps a bundle’s server on Kettu’s Node.js with its inputs’ labels and kinds', () => {
+    const bundled = {
+      ...server,
+      spec: {
+        type: 'stdio',
+        command: 'node',
+        args: ['/data/marketplace/mcpb/abcdefgh23/1.0.0/server/index.js'],
+        env: [
+          {
+            name: 'ECHO_KEY',
+            input: true,
+            secret: false,
+            required: true,
+            title: 'Port',
+            kind: 'number',
+            default: '8080',
+            min: 1,
+            max: 65535,
+          },
+        ],
+        runtime: 'node',
+      },
+    }
+    expect(validateSettingsPatch({ marketplace: { mcp: [bundled] } })).toEqual({
+      marketplace: { mcp: [bundled] },
+    })
+    const env = (over: Record<string, unknown>) => ({
+      ...bundled,
+      spec: { ...bundled.spec, env: [{ ...bundled.spec.env[0], ...over }] },
+    })
+    for (const bad of [
+      { ...bundled, spec: { ...bundled.spec, runtime: '/Applications/Kettu.app' } },
+      env({ kind: 'color' }),
+      env({ min: 'one' }),
+      env({ title: 'a\nb' }),
+      env({ default: 1 }),
+    ]) {
+      expect(() => validateSettingsPatch({ marketplace: { mcp: [bad] } })).toThrow()
+    }
+  })
+
   it('refuses an id or origin that names no listing', () => {
     for (const bad of [
       { ...skill, id: 'kettu:../x' },

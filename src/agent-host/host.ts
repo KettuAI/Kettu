@@ -113,6 +113,7 @@ import { MediaService } from './media'
 import { MemoryError, type MemoryErrorCode } from './memory/errors'
 import { MemoryService } from './memory/service'
 import { catalogFile, MarketCatalogService } from './marketplace/catalog'
+import { bundlesFile, MarketBundlesService } from './marketplace/bundles'
 import { communityFile, MarketCommunityService } from './marketplace/community'
 import { MarketConnectionsService } from './marketplace/connections'
 import { parseSignIns } from './marketplace/oauth'
@@ -130,7 +131,7 @@ import {
   serverHeaders,
   type MarketKeys,
 } from './marketplace/servers'
-import type { Env } from './find-command'
+import { findCommand, isExecutableFile, type Env } from './find-command'
 import type { GitServiceApi, GitServiceDeps } from './git/api'
 import { createExec, type ExecRunner } from './git/exec'
 import type { SkillsListResponse } from './codex/protocol'
@@ -426,6 +427,7 @@ export class AgentHost {
   private readonly marketSkills: MarketSkillsService
   /** The Kettu Marketplace's listings, the downloads of their files and its plugins. */
   private readonly marketCommunity: MarketCommunityService
+  private readonly marketBundles: MarketBundlesService
   /** The host's Kettu account from main, while signed in with Kettu's services on. */
   private marketAccount: MarketAccount | null = null
   /** Marketplace API calls awaiting main's answer. */
@@ -542,6 +544,24 @@ export class AgentHost {
       pluginInstalled: (harness, pluginId) =>
         this.marketPlugins.installedAnywhere(harness, pluginId),
     })
+    this.marketBundles = new MarketBundlesService({
+      userDataPath: options.userDataPath,
+      file: bundlesFile(options.userDataPath, log),
+      log,
+      platform,
+      home,
+      nodeVersion: process.versions.node,
+      listing: (id) => this.marketCommunity.listing(id),
+      download: (id, kind) => this.marketCommunity.download(id, kind),
+      find: (command) =>
+        findCommand(command, {
+          platform,
+          env: this.env.agentEnv() as Env,
+          isExecutable: (file) => isExecutableFile(file, platform),
+        }),
+      servers: () => this.settings.marketplace.mcp,
+    })
+    void this.marketBundles.sweep()
     this.marketSkills = new MarketSkillsService({
       userDataPath: options.userDataPath,
       file: skillsCatalogFile(options.userDataPath, log),
@@ -837,6 +857,7 @@ export class AgentHost {
             {
               platform,
               taken,
+              node: options.nodeRuntime,
               oauth: {
                 access: (server) => this.marketConnections.access(server),
                 bearer: () =>
@@ -1320,6 +1341,9 @@ export class AgentHost {
     this.env.setConfigFolders(configFolders(this.catalog, next))
     this.startModesChanged(previous, next)
     this.marketChanged(previous.marketplace.mcp, this.marketKeys)
+    if (JSON.stringify(previous.marketplace.mcp) !== JSON.stringify(next.marketplace.mcp)) {
+      void this.marketBundles.sweep()
+    }
     if (JSON.stringify(previous.marketplace.skills) !== JSON.stringify(next.marketplace.skills)) {
       void this.skillsChanged(previous.marketplace.skills)
     }
@@ -1469,7 +1493,7 @@ export class AgentHost {
       access: (server: MarketServer) => this.marketConnections.access(server),
       bearer: () => ({ origin: '', token: '' }),
     }
-    const options = { platform: this.options.platform, oauth }
+    const options = { platform: this.options.platform, oauth, node: this.options.nodeRuntime }
     const of = (list: typeof servers, held: MarketKeys, agentId: AgentId): string =>
       JSON.stringify(libraryServers(list, held, agentId, ALL_TRANSPORTS, options))
     const now = this.settings.marketplace.mcp
@@ -2044,6 +2068,7 @@ export class AgentHost {
         this.marketPlugins.flush(),
         this.marketSkills.flush(),
         this.marketCommunity.flush(),
+        this.marketBundles.flush(),
         this.publishDrafts.flush(),
         this.threads?.close(),
         this.usage.close(),
@@ -2287,6 +2312,9 @@ export class AgentHost {
       'market.installCommunityPlugin': ({ id, agentId, scope, projectPath }) =>
         this.marketCommunity.installPlugin(id, agentId, scope, projectPath ?? null),
       'market.reportCommunity': ({ id, message }) => this.marketCommunity.report(id, message),
+      'market.bundlePrepare': ({ id }) => this.marketBundles.prepare(id),
+      'market.bundleCommit': ({ token, values }) => this.marketBundles.commit(token, values),
+      'market.bundleCancel': ({ token }) => this.marketBundles.cancel(token),
       'mcp.retry': async () => {
         await this.artifactService.start()
         this.options.send({ type: 'host:service-port', port: this.artifactService.listeningPort })

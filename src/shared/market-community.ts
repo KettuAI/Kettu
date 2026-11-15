@@ -64,6 +64,8 @@ export type CommunityListing =
       listing: MarketListing
       /** An MCP server's spec, as it would be installed; null when Kettu cannot run it. */
       server: CatalogServer | null
+      /** An MCP server's bundle, installed in two steps; null when it has none. */
+      bundle: BundleRef | null
     }
   | { state: 'taken-down' }
   // Deleted, never there, or another account's Only me listing.
@@ -90,4 +92,50 @@ export interface CommunityInstalled {
   plugins: CommunityPlugin[]
   /** By listing id, for every skill, MCP server and plugin installed from the Kettu Marketplace. */
   standings: Record<string, CommunityStanding>
+}
+
+/**
+ * An MCP bundle (`.mcpb`) a server listing installs from: the version's own uploaded file, or an
+ * https `mcpb` package its `server.json` names with the SHA-256 the file must have.
+ */
+export type BundleRef =
+  | { from: 'upload'; path: string; size: number; sha256: string }
+  | { from: 'url'; url: string; sha256: string }
+
+/** What a bundle runs as. */
+export type BundleType = 'node' | 'python' | 'uv' | 'binary'
+
+/** A value the bundle asks for, from its manifest's `user_config`, in the manifest's order. */
+export interface BundleInput {
+  /** Its key in the manifest. */
+  key: string
+  title: string
+  description?: string
+  type: 'string' | 'number' | 'boolean' | 'directory' | 'file'
+  secret: boolean
+  required: boolean
+  multiple: boolean
+  default?: string
+  min?: number
+  max?: number
+  /** The environment variable it fills, whose value the key store keeps; null when it fills none. */
+  env: string | null
+  /** Whether it is written into the stored arguments; never for a secret. */
+  args: boolean
+}
+
+/** A bundle unpacked on the host and checked, waiting for Install; nothing of it has run. */
+export interface BundlePlan {
+  /** Names the unpacked folder for bundleCommit or bundleCancel; null when it cannot install. */
+  token: string | null
+  name: string
+  version: string
+  type: BundleType
+  /** What will run, without any value the user fills in. */
+  runs: string
+  inputs: BundleInput[]
+  /** Why it cannot run on this host; Install stays off. */
+  blocked: string | null
+  /** The values the arguments were given last time, by key, for an update. */
+  previous: Record<string, string> | null
 }

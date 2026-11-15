@@ -627,7 +627,6 @@
     "source": "Kettu 的 Marketplace",
     "onlyMe": "只有我",
     "cannotRun": "Kettu 运行不了这个 MCP 服务器：它没有指向 Kettu 能运行的包或 https 远程地址。",
-    "bundle": "Kettu 还不能安装 MCP 包（.mcpb），所以这里装不了这个服务器。",
     "pluginFor": "{{harness}} 的插件",
     "kinds": {
       "mcp": "MCP 服务器",
@@ -922,5 +921,19 @@
       "signedIn": "登录的账号",
       "notSignedIn": "还没登录"
     }
+  },
+  "bundle": {
+    "kind": "MCP 包（.mcpb）",
+    "from": "来自 {{host}}",
+    "note": "点安装后才下载。运行任何东西之前，Kettu 会先列出它要运行什么、要你填什么。",
+    "preparing": "正在检查",
+    "runs": "将运行",
+    "nodeRuntime": "Kettu 自带的 Node.js",
+    "blockedTitle": "这台电脑装不了 {{name}}",
+    "addValue": "再加一个",
+    "choose": "选择…",
+    "multipleHint": "需要几个就加几个。",
+    "keepHint": "留空就沿用之前填的值。",
+    "updateSubmit": "更新"
   }
 }

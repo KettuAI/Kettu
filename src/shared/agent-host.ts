@@ -22,6 +22,7 @@ import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile } from './host-control'
 import type {
+  CatalogServer,
   ConnectStart,
   InstalledPlugin,
   MarketCatalog,
@@ -51,7 +52,12 @@ import type {
   PublishKind,
   PublishVisibility,
 } from './market-publish'
-import type { CommunityDirectory, CommunityInstalled, CommunityListing } from './market-community'
+import type {
+  BundlePlan,
+  CommunityDirectory,
+  CommunityInstalled,
+  CommunityListing,
+} from './market-community'
 import type { MediaAuthorization, MediaOpenResult } from './media'
 import type {
   MemoryDecision,
@@ -772,6 +778,15 @@ export interface HostContract {
     result: InstalledPlugin
   }
   'market.reportCommunity': { params: { id: string; message: string }; result: void }
+  // A server listing's MCP bundle, in two steps: prepare downloads, checks and stages it and says
+  // what it runs and asks for, running nothing; commit moves it into place with the values its
+  // arguments take and gives the server to keep; cancel removes what was staged.
+  'market.bundlePrepare': { params: { id: string }; result: BundlePlan }
+  'market.bundleCommit': {
+    params: { token: string; values: Record<string, string> }
+    result: CatalogServer
+  }
+  'market.bundleCancel': { params: { token: string }; result: void }
   // Marketplace › Published: the host's Kettu account while it is signed in with Kettu's services
   // on, which alone shows the tab; then what it published, its drafts and where each came from.
   'market.account': { params: void; result: { account: MarketAccount | null } }
@@ -1459,6 +1474,9 @@ export const HOST_METHODS = [
   'market.communityInstalled',
   'market.installCommunityPlugin',
   'market.reportCommunity',
+  'market.bundlePrepare',
+  'market.bundleCommit',
+  'market.bundleCancel',
   'market.account',
   'market.published',
   'market.setPublisher',
