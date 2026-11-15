@@ -67,10 +67,11 @@ export type HostConnection =
   | { state: 'connecting' }
   /**
    * Welcomed, through the address whose handshake finished first, or through the relay at
-   * `relay`; `terminal` while its owner allows devices the terminal.
+   * `relay`, in the `region` its signed list names; `terminal` while its owner allows devices the
+   * terminal.
    */
   | { state: 'online'; address: DirectAddress; terminal?: true }
-  | { state: 'online'; relay: string; terminal?: true }
+  | { state: 'online'; relay: string; region?: string; terminal?: true }
   /** Not reached; tried again with backoff. `relay` says what the relay answered, if anything. */
   | { state: 'offline'; relay?: RelayProblem }
   | { state: 'stopped'; reason: HostStop }

@@ -1186,7 +1186,8 @@
       "lanAt": "Same network · {{address}}",
       "ssh": "SSH",
       "sshAt": "SSH · {{target}}",
-      "relay": "Kettu relay"
+      "relay": "Kettu relay",
+      "relayAt": "Kettu relay · {{region}}"
     },
     "failed": {
       "not_connected": "{{name}} is not connected. Try again once it is online.",

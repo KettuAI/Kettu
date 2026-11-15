@@ -477,6 +477,11 @@ export class RemoteRegions {
     this.regionFailed()
   }
 
+  /** The name the signed list gives the region at `url`, or null. */
+  regionName(url: string): string | null {
+    return this.source.list?.regions.find((region) => region.url === url)?.name ?? null
+  }
+
   // Peer to peer.
 
   /** The STUN servers of the verified list, as `host:port`; none while the relay is not in use. */

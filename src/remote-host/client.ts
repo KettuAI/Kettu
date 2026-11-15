@@ -29,6 +29,7 @@ import {
   type Pong,
 } from '@shared/remote/keepalive'
 import {
+  MOVE_RATIO,
   PathTimes,
   PROBE_TIMEOUT_MS,
   rankPaths,
@@ -134,6 +135,9 @@ const NETWORK_CHECK_MS = 5_000
 /** How long after a welcome on the relay the direct addresses are tried. */
 const COMPARE_AFTER_MS = 3_000
 
+/** The most other relay regions a comparison tries. */
+const MAX_REGION_CANDIDATES = 2
+
 /** How long after a standby ended another is joined. */
 const REJOIN_MS = 10_000
 
@@ -155,6 +159,12 @@ export function retryDelay(failures: number): number {
   return Math.round(base * (0.8 + Math.random() * 0.4))
 }
 
+/**
+ * A relay region that a connection joined through says it drains; `leave` closes that connection,
+ * whose session then reconnects through another region.
+ */
+export type RegionDrained = (url: string, leave: () => void) => void
+
 /** The relay regions as this computer reaches hosts through them. */
 export interface ClientRegions {
   /** A host's `relay.regions`. */
@@ -172,6 +182,8 @@ export interface ClientRegions {
    * with a relay token or where the main relay takes none, else the main relay alone.
    */
   allowed(urls: string[]): string[]
+  /** The name the signed list gives the region at `url`, or null. */
+  regionName?(url: string): string | null
 }
 
 /** The Kettu relay, as this computer reaches hosts through it. */
@@ -262,6 +274,7 @@ class HostSession {
   /** From version 3, notices a host that stopped answering on an open connection. */
   private keepalive: Keepalive | null = null
   private pingedAt: number | null = null
+  private takenOver = false
 
   constructor(
     readonly channel: DeviceChannel,
@@ -279,10 +292,13 @@ class HostSession {
   /**
    * Reads the host's messages from here on, the ones already waiting first, so `handlers` are set
    * before any arrives. Without a welcome within `welcomeTimeoutMs` the connection ends; null
-   * waits as long as the host's owner takes to decide on a pairing.
+   * waits as long as the host's owner takes to decide on a pairing. A connection taken over from
+   * aside skips what came on it before the welcome: the host's standby notice, or what the session
+   * sent there before, which the host sends again after it.
    */
-  start(handlers: SessionHandlers, welcomeTimeoutMs: number | null): void {
+  start(handlers: SessionHandlers, welcomeTimeoutMs: number | null, takenOver = false): void {
     this.handlers = handlers
+    this.takenOver = takenOver
     if (welcomeTimeoutMs !== null) {
       this.timer = setTimeout(() => {
         if (!this.welcome) this.channel.close()
@@ -363,6 +379,7 @@ class HostSession {
     if (!this.welcome) {
       const welcome = parseWelcome(value)
       if (!welcome) {
+        if (this.takenOver) return
         this.log('warn', 'A host answered the hello with something that is no welcome')
         return this.channel.close()
       }
@@ -474,7 +491,7 @@ class HostLink {
   /** What the last welcome's host offers: resuming the session, and keeping a standby for it. */
   private resumable = false
   private standbys = false
-  private comparing = false
+  private comparing: Promise<boolean> | null = null
   private joining = false
   private compareTimer: ReturnType<typeof setTimeout> | null = null
   private compareAt = 0
@@ -631,7 +648,7 @@ class HostLink {
     const hello = { ...this.client.hello(), ...(resume ? { resume } : {}) }
     const route = host.ssh ?? null
     const forward = route ? new SshForward(this.client.ssh, route.target) : null
-    const relay = route ? null : this.client.relayRoute(host.relay, this.lastRelay, this.id)
+    const relay = route ? null : this.relayRoute(host)
     const result = await dial({
       addresses: route ? [{ host: SSH_LOOPBACK, port: route.port }] : host.addresses,
       connect: forward?.connect ?? this.client.connect,
@@ -688,19 +705,28 @@ class HostLink {
     }, delay)
   }
 
+  /** One comparison at a time: one asked while another runs gets false. */
+  private compare(failing = false): Promise<boolean> {
+    if (this.comparing) return Promise.resolve(false)
+    const comparing = this.compareNow(failing).finally(() => {
+      this.comparing = null
+    })
+    this.comparing = comparing
+    return comparing
+  }
+
   /**
    * Tries the host's other paths, each to a finished handshake, and moves the session to the best
    * when it is clearly faster than the one it is on.
    */
-  private async compare(): Promise<void> {
+  private async compareNow(failing: boolean): Promise<boolean> {
     const session = this.session
     const host = this.host
-    if (this.closed || this.comparing || this.taking || !session?.open || !host || host.ssh) return
-    if (!this.resumable || this.resumeToken === null) return
+    if (this.closed || this.taking || !session?.open || !host || host.ssh) return false
+    if (!this.resumable || this.resumeToken === null) return false
     const candidates = this.candidates(host, session.via)
     const standby = this.standby?.standby ? this.standby : null
-    if (candidates.length === 0 && !standby) return
-    this.comparing = true
+    if (candidates.length === 0 && !standby) return false
     const { options } = this.client
     const hostKey = publicKeyBytes(host.publicKey)!
     const probed = await probe(
@@ -708,7 +734,6 @@ class HostLink {
       (transport) => startDeviceChannel({ transport, hostKey, key: options.key, hello: null }),
       PROBE_TIMEOUT_MS,
     )
-    this.comparing = false
     for (const { via, key, channel } of probed) {
       if (channel && via) this.times.sample(pathKey(via), channel.handshakeMs)
       else this.times.failed(key)
@@ -718,22 +743,32 @@ class HostLink {
     )
     if (this.session !== session || !session.open || this.taking) {
       for (const { channel } of opened) channel.close()
-      return
+      return false
     }
     const current: PathRef = { key: pathKey(session.via), relay: 'relay' in session.via }
     const kept: PathRef[] = standby
       ? [{ key: pathKey(standby.via), relay: 'relay' in standby.via }]
       : []
-    const [best] = rankPaths([current, ...kept, ...opened], this.times)
-    const move = best && shouldMove(current, best, this.times, false) ? best : null
+    const ranked = rankPaths([current, ...kept, ...opened], this.times)
+    // Off a failing path, the best of the others will do.
+    const best = failing ? ranked.find((path) => path !== current) : ranked[0]
+    const move = best && shouldMove(current, best, this.times, failing) ? best : null
     const target = opened.find((path) => path === move) ?? null
     for (const path of opened) if (path !== target) path.channel.close()
-    if (target) return this.move(target.channel, target.via)
+    if (target) {
+      this.move(target.channel, target.via)
+      return true
+    }
     // The standby is the faster path: it takes the session over and the direct path goes.
-    if (move && standby && move === kept[0]) this.promote(standby)
+    if (!move || !standby || move !== kept[0]) return false
+    this.promote(standby)
+    return true
   }
 
-  /** The paths to try beside `current`: the other direct addresses, and the relay without a standby. */
+  /**
+   * The paths to try beside `current`: the other direct addresses, the relay without a standby,
+   * and from the relay the regions that may be clearly faster.
+   */
   private candidates(host: KnownHost, current: Via): Candidate[] {
     const list: Candidate[] = []
     for (const address of host.addresses) {
@@ -746,8 +781,8 @@ class HostLink {
         }),
       })
     }
-    const relay =
-      'relay' in current || this.standby ? null : this.client.relayRoute(host.relay, this.lastRelay)
+    if ('relay' in current) return [...list, ...this.regionCandidates(host, current.relay)]
+    const relay = this.standby ? null : this.relayRoute(host)
     if (typeof relay === 'function') {
       list.push({
         key: pathKey({ relay: this.lastRelay ?? this.client.options.relay?.main ?? '' }),
@@ -758,6 +793,59 @@ class HostLink {
       })
     }
     return list
+  }
+
+  /**
+   * The host's other ranked regions for a session on the relay at `current`: the best two whose
+   * whole path's round trip, as timed to each leg, is unknown or may be clearly faster.
+   */
+  private regionCandidates(host: KnownHost, current: string): Candidate[] {
+    const now = this.times.rtt(pathKey({ relay: current }))
+    return this.client
+      .regionRoutes(host.relay, this.id, (url, leave) => this.regionDrained(url, leave))
+      .filter(
+        ({ url, rtt }) =>
+          url !== current && (rtt === null || now === null || rtt <= now * MOVE_RATIO),
+      )
+      .slice(0, MAX_REGION_CANDIDATES)
+      .map(({ url, route }) => ({
+        key: pathKey({ relay: url }),
+        open: async (signal) => {
+          const joined = await route(signal)
+          return { transport: joined.transport, via: { relay: joined.relay } }
+        },
+      }))
+  }
+
+  /** The route through the host's relay regions, best first, which leaves a draining one. */
+  private relayRoute(host: KnownHost): RelayRoute | RelayProblem | null {
+    return this.client.relayRoute(host.relay, this.lastRelay, this.id, (url, leave) =>
+      this.regionDrained(url, leave),
+    )
+  }
+
+  /**
+   * A region one of this link's connections goes through drains: the session moves off it to
+   * another path, or reconnects to resume elsewhere when none opens; any other connection leaves.
+   */
+  private regionDrained(url: string, leave: () => void): void {
+    const session = this.session
+    if (!session?.open || !('relay' in session.via) || session.via.relay !== url || this.taking) {
+      return leave()
+    }
+    this.times.failed(pathKey(session.via))
+    void (async () => {
+      // A comparison under way may move the session already; a failing one follows it.
+      while (this.comparing) await this.comparing
+      const moved = this.session === session && (await this.compare(true))
+      if (!moved && this.session === session) leave()
+    })()
+  }
+
+  /** The host's regions or this computer's legs to them changed: a session on the relay compares. */
+  regionsChanged(): void {
+    const session = this.session
+    if (session?.open && 'relay' in session.via) this.compareSoon(COMPARE_AFTER_MS)
   }
 
   /**
@@ -807,7 +895,7 @@ class HostLink {
     const session = this.newSession(aside.promote(this.acks.received), aside.via)
     this.session = session
     this.taking = session
-    session.start(this.handlersFor(session, true), PROMOTE_TIMEOUT_MS)
+    session.start(this.handlersFor(session, true), PROMOTE_TIMEOUT_MS, true)
     this.client.options.log('info', `Taking the session to host ${this.id} over on the standby`)
   }
 
@@ -870,7 +958,7 @@ class HostLink {
     const token = this.resumeToken
     if (this.joining || this.standby || this.aside || !this.standbys || token === null) return
     if (!host || host.ssh || 'relay' in session.via) return
-    const relay = this.client.relayRoute(host.relay, this.lastRelay)
+    const relay = this.relayRoute(host)
     if (typeof relay !== 'function') return
     this.joining = true
     const { options } = this.client
@@ -976,7 +1064,7 @@ class HostLink {
       removed: false,
     })
     this.failures = 0
-    this.set(online(session.via, welcome.terminal))
+    this.set(this.online(session.via, welcome.terminal))
     // The host read main's requests up to the one it names; the rest go again.
     this.requests.attach(session.wire(), resumed ? welcome.resumed!.request : 0)
     if (!resumed) void this.openPort(session, ++this.sessions)
@@ -1051,15 +1139,16 @@ class HostLink {
     if (type === 'relay.regions') {
       const regions = this.client.options.relay?.regions
       if (regions && session.welcome!.features.includes(REGIONS_CHANNEL_FEATURE)) {
-        void regions
-          .hostRegions(this.id, value)
-          .then(() => this.client.options.regionsChanged?.(this.id))
+        void regions.hostRegions(this.id, value).then(() => {
+          this.regionsChanged()
+          this.client.options.regionsChanged?.(this.id)
+        })
       }
       return
     }
     // The owner allowed devices the terminal, or stopped allowing it.
     if (type === 'terminal' && this.connection.state === 'online') {
-      return this.set(online(viaOf(this.connection), allowed === true))
+      return this.set(this.online(viaOf(this.connection), allowed === true))
     }
     if (OWN.has(type) || this.forwards.message(value)) return
     this.requests.received(value as Record<string, unknown>)
@@ -1170,6 +1259,14 @@ class HostLink {
     this.connection = connection
     this.client.options.changed()
   }
+
+  /** Online through `via`, naming the relay's region when the signed list names it. */
+  private online(via: Via, terminal: boolean): HostConnection {
+    const allowed = terminal ? { terminal: true as const } : {}
+    if (!('relay' in via)) return { state: 'online', address: via.address, ...allowed }
+    const region = this.client.options.relay?.regions?.regionName?.(via.relay) ?? null
+    return { state: 'online', relay: via.relay, ...(region ? { region } : {}), ...allowed }
+  }
 }
 
 /** The addresses of this computer's interfaces, which change with the network it is on. */
@@ -1186,10 +1283,6 @@ function networkPrint(): string {
   } catch {
     return ''
   }
-}
-
-function online(via: Via, terminal: boolean): HostConnection {
-  return terminal ? { state: 'online', ...via, terminal } : { state: 'online', ...via }
 }
 
 function viaOf(connection: Extract<HostConnection, { state: 'online' }>): Via {
@@ -1705,6 +1798,7 @@ export class HostClient {
     relay: HostRelay | undefined,
     last: string | null,
     hostId?: string,
+    drained?: RegionDrained,
   ): RelayRoute | RelayProblem | null {
     const client = this.options.relay
     if (!relay || !client) return null
@@ -1724,7 +1818,31 @@ export class HostClient {
       ),
       ...urls.filter((url) => !ranked.some((region) => region.url === url)).map((url) => ({ url })),
     ]
-    return this.relayVia(relay.id, token, relays)
+    return this.relayVia(relay.id, token, relays, drained)
+  }
+
+  /**
+   * A route through each of a host's ranked regions, best first, with the whole path's round trip
+   * when known; none before the host said its regions, or while signed in to no account.
+   */
+  regionRoutes(
+    relay: HostRelay | undefined,
+    hostId: string,
+    drained?: RegionDrained,
+  ): { url: string; rtt: number | null; route: RelayRoute }[] {
+    const token = this.options.relay?.token()
+    const ranked = this.relayRegions(hostId)
+    if (!relay || !token || !ranked) return []
+    return ranked.map((region) => ({
+      url: region.url,
+      rtt: region.rtt,
+      route: this.relayVia(
+        relay.id,
+        token,
+        [region.pin ? { url: region.url, pin: region.pin } : { url: region.url }],
+        drained,
+      ),
+    }))
   }
 
   /**
@@ -1743,12 +1861,21 @@ export class HostClient {
   regionsChanged(prefer: boolean): void {
     for (const link of this.links.values()) {
       if (prefer) link.sendPreference()
+      link.regionsChanged()
       this.options.regionsChanged?.(link.id)
     }
   }
 
-  /** Joins the host with relay id `id` through the first of `relays` that can. */
-  relayVia(id: string, token: string, relays: RelayEndpoint[]): RelayRoute {
+  /**
+   * Joins the host with relay id `id` through the first of `relays` that can. A region that
+   * drains is left by closing the connection, unless `drained` decides when.
+   */
+  relayVia(
+    id: string,
+    token: string,
+    relays: RelayEndpoint[],
+    drained: RegionDrained = (_url, leave) => leave(),
+  ): RelayRoute {
     const client = this.options.relay!
     const regions = client.regions
     return async (signal) => {
@@ -1761,10 +1888,9 @@ export class HostClient {
         timeoutMs: this.timeoutMs,
         signal,
         attempted: (url, outcome) => regions?.dialed(url, outcome),
-        // Until a session can move to another path, a region that drains is left by reconnecting.
         drained: (url) => {
           regions?.drained(url)
-          joined?.close()
+          drained(url, () => joined?.close())
         },
       })
       switch (result.kind) {

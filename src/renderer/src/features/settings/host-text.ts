@@ -28,8 +28,8 @@ function directAt(t: TFunction<'settings'>, address: DirectAddress): string {
 }
 
 /**
- * How a host is reached: over SSH at the address the user typed, or direct, with the address that
- * answered while it is online.
+ * How a host is reached: over SSH at the address the user typed, through the relay with its
+ * region, or direct, with the address that answered while it is online.
  */
 export function routeText(
   t: TFunction<'settings'>,
@@ -38,7 +38,10 @@ export function routeText(
   if (host.ssh) return t('hosts.via.sshAt', { target: host.ssh.target })
   const { connection } = host
   if (connection.state !== 'online') return t('hosts.via.direct')
-  return 'relay' in connection ? t('hosts.via.relay') : directAt(t, connection.address)
+  if (!('relay' in connection)) return directAt(t, connection.address)
+  return connection.region
+    ? t('hosts.via.relayAt', { region: connection.region })
+    : t('hosts.via.relay')
 }
 
 /** The route alone, as the sidebar names it beside a host online. */

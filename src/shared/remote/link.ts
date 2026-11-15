@@ -275,7 +275,7 @@ export class HostLink {
   private readonly times = new PathTimes()
   /** Moving the session to another route, or taking it over on a connection kept aside. */
   private taking = false
-  private comparing = false
+  private comparing: Promise<boolean> | null = null
   private compareTimer: ReturnType<typeof setTimeout> | null = null
   private compareAt = 0
   /** The connection a move left, until its move is welcomed or it takes the session back. */
@@ -619,19 +619,27 @@ export class HostLink {
     }, delay)
   }
 
+  /** One comparison at a time: one asked while another runs gets false. */
+  private compare(failing = false): Promise<boolean> {
+    if (this.comparing) return Promise.resolve(false)
+    const comparing = this.compareNow(failing).finally(() => {
+      this.comparing = null
+    })
+    this.comparing = comparing
+    return comparing
+  }
+
   /**
    * Opens the other routes to a finished handshake each, for their round trips, and moves the
    * session to the best when it is clearly faster than the one it is on.
    */
-  private async compare(): Promise<void> {
+  private async compareNow(failing: boolean): Promise<boolean> {
     const session = this.session
-    if (this.stopped || this.connecting || this.taking || this.comparing || !session) return
-    if (!resumable(session) || this.resumeToken === null) return
+    if (this.stopped || this.connecting || this.taking || !session) return false
+    if (!resumable(session) || this.resumeToken === null) return false
     const others = this.routes().filter((route) => route.key !== session.route.key)
-    if (others.length === 0) return
-    this.comparing = true
+    if (others.length === 0) return false
     const probed = await Promise.all(others.map((route) => this.probe(route)))
-    this.comparing = false
     const opened = probed.flatMap(({ opened, ...route }) => (opened ? [{ ...route, opened }] : []))
     for (const path of probed) {
       if (path.opened) this.times.sample(path.key, path.opened.channel.handshakeMs)
@@ -639,11 +647,32 @@ export class HostLink {
     }
     const current = { key: session.route.key, relay: session.route.relay }
     const ranked: { key: string; relay: boolean }[] = rankPaths([current, ...opened], this.times)
-    const best = opened.find((path) => path === ranked[0])
+    // Off a failing route, the best of the others will do.
+    const best = opened.find(
+      (path) => path === (failing ? ranked.find((r) => r !== current) : ranked[0]),
+    )
     const moving = this.session === session && !this.taking && !this.stopped
-    const target = moving && best && shouldMove(current, best, this.times, false) ? best : null
+    const target = moving && best && shouldMove(current, best, this.times, failing) ? best : null
     for (const path of opened) if (path !== target) path.opened.channel.close()
-    if (target) await this.move(target.opened, target)
+    if (!target) return false
+    await this.move(target.opened, target)
+    return true
+  }
+
+  /**
+   * The relay region the route `key` goes through drains: a session on it moves to another route,
+   * or leaves it and resumes elsewhere when none opens; any other connection through it leaves.
+   */
+  drained(key: string, leave: () => void): void {
+    const session = this.session
+    if (!session || session.route.key !== key || this.taking) return leave()
+    this.times.failed(key)
+    void (async () => {
+      // A comparison under way may move the session already; a failing one follows it.
+      while (this.comparing) await this.comparing
+      const moved = this.session === session && (await this.compare(true))
+      if (!moved && this.session === session) leave()
+    })()
   }
 
   /** A route's connection past its handshake, without a hello, or null within the probe's time. */
