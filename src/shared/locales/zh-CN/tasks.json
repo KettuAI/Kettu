@@ -158,6 +158,8 @@
     "notePlaceholder": "给这一步 Agent 的说明（可选）"
   },
   "pin": {
+    "open": "为这条需求固定…",
+    "change": "更改固定…",
     "confirm": "为这条需求固定",
     "auto": "改回 Auto",
     "onlySteps": "只有 Claude Code 和 Codex 的 Agent 能做步骤。"
@@ -174,23 +176,19 @@
     "end": {
       "done": "完成",
       "dropped": "不值得做"
-    }
-  },
-  "details": {
-    "label": "{{step}} 的详情",
-    "agent": "Agent 和模型",
-    "picked": "谁选的",
-    "picks": "谁来选",
-    "why": "理由",
-    "quoted": "“{{text}}”",
-    "status": "状态",
-    "outcome": "上报了 {{outcome}}",
-    "branch": "分支",
-    "reviews": "审查",
-    "hint": "给选人的提示",
-    "sentBack": "退回时收到",
-    "pin": "为这条需求固定…",
-    "changePin": "更改固定…"
+    },
+    "kind": {
+      "agent": "Agent",
+      "review": "审查",
+      "auto": "Auto",
+      "you": "你"
+    },
+    "reported": "上报了 {{outcome}}",
+    "reviews": "审查 {{steps}}",
+    "picksAtStart": "开始时再选",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fit": "适应窗口"
   },
   "composer": {
     "label": "补充需求",

@@ -68,7 +68,7 @@ export default function TaskPage({ taskId, flow }: { taskId: string; flow: boole
   const ready = !!view
   useLayoutEffect(() => {
     const element = scroller.current
-    if (ready && element) element.scrollTop = flow ? 0 : element.scrollHeight
+    if (ready && element) element.scrollTop = element.scrollHeight
   }, [ready, flow])
 
   // Shown, it counts as read.
@@ -113,16 +113,14 @@ export default function TaskPage({ taskId, flow }: { taskId: string; flow: boole
   return (
     <div className="ks-session flex h-full min-h-0 flex-col">
       <TaskBar task={task} view={view} flow={flow} />
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
-        <div
-          className={cn(
-            'mx-auto w-full px-8 pt-4 pb-6',
-            flow ? 'max-w-[min(100%,1080px)]' : 'ks-thread ks-thread__column',
-          )}
-        >
-          {body}
+      {flow ? (
+        // The flowchart's canvas fills the room and pans itself.
+        <div className="flex min-h-0 flex-1 flex-col px-8 pt-4 pb-4">{body}</div>
+      ) : (
+        <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
+          <div className="ks-thread ks-thread__column mx-auto w-full px-8 pt-4 pb-6">{body}</div>
         </div>
-      </div>
+      )}
       <div className="px-8 pb-6">
         <div className="mx-auto w-full max-w-(--thread-column)">
           <NotesComposer task={task} view={view} disabled={away} />

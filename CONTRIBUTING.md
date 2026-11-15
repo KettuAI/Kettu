@@ -74,6 +74,7 @@ Each concern has exactly one library. Build with these instead of adding an alte
 | Animation                   | [Motion](https://motion.dev) (`motion/react`)                                                                         |
 | Resizable layout            | [react-resizable-panels](https://github.com/bvaughn/react-resizable-panels), through the shadcn `Resizable` component |
 | Drag and drop               | [dnd-kit](https://dndkit.com) (`@dnd-kit/react`)                                                                      |
+| Node graphs                 | [React Flow](https://reactflow.dev) (`@xyflow/react`)                                                                 |
 | State management            | [Zustand](https://zustand.docs.pmnd.rs)                                                                               |
 | Markdown                    | [Streamdown](https://streamdown.ai) and its code, CJK and Mermaid plugins; KaTeX for maths                            |
 | Syntax highlighting         | [Shiki](https://shiki.style)                                                                                          |

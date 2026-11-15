@@ -52,6 +52,7 @@ Claude Code's `@anthropic-ai/claude-agent-sdk` is never a dependency: Kettu inst
 | Animation                   | Motion (`motion/react`)                                               |
 | Resizable layout            | react-resizable-panels, through `components/ui/resizable.tsx`         |
 | Drag and drop               | dnd-kit, the new `@dnd-kit/react` API only                            |
+| Node graphs                 | React Flow (`@xyflow/react`): the task Flowchart's canvas             |
 | State management            | Zustand, stores in `src/renderer/src/stores`, one store per domain    |
 | Markdown                    | Streamdown and its code, CJK and Mermaid plugins; KaTeX for maths     |
 | Syntax highlighting         | Shiki                                                                 |

@@ -4,18 +4,18 @@
 
 import { isBackArrow, type Workflow, type TaskEnd } from '@shared/workflow'
 
-export const NODE_W = 204
-export const NODE_H = 100
+export const NODE_W = 268
+export const NODE_H = 140
 export const END_SIZE = 28
-export const COL_GAP = 28
-const ROW_GAP = 64
+export const COL_GAP = 36
+const ROW_GAP = 90
 /** From the rows to the first lane, and between lanes. */
-const LANE_START = 28
-const LANE_GAP = 16
+const LANE_START = 36
+const LANE_GAP = 20
 /** Beyond the outermost lane, room for the labels that start at their lanes. */
-const LABEL_ROOM = 196
+const LABEL_ROOM = 220
 /** Between arrows back that leave or enter one side of a step. */
-const SLOT = 18
+const SLOT = 22
 const PAD = 12
 
 export type Point = [number, number]
