@@ -428,19 +428,12 @@ async function readBundle(check: FolderCheck, file: CheckedFile): Promise<void> 
   check.name = text(manifest.display_name) ?? displayTitle(check.slug)
   check.adds = [{ label: 'servers', items: [check.name] }]
   if (description) Object.assign(check, describe(description))
+  // No packages: the bundle is the version's own file, and an mcpb package names an https URL.
   check.server = {
     name: check.slug,
     title: check.name,
     description: description ?? '',
     version: check.version,
-    packages: [
-      {
-        registryType: 'mcpb',
-        identifier: file.path,
-        version: check.version,
-        transport: { type: 'stdio' },
-      },
-    ],
   }
 }
 

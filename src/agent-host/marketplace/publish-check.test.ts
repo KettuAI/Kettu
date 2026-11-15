@@ -176,6 +176,13 @@ describe('checkFolder', () => {
       runs: ['node server/index.js'],
     })
     expect(check.files.map((f) => f.path)).toEqual(['files.mcpb'])
+    // The bundle is the version's file; an mcpb package would need an https URL.
+    expect(check.server).toEqual({
+      name: 'files-server',
+      title: 'Files',
+      description: 'Files for agents.',
+      version: '2.0.0',
+    })
   })
 
   it('refuses links, and stops at the version’s limits', async () => {

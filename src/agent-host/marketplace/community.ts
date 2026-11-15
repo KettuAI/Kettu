@@ -8,6 +8,7 @@ import { mkdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   KETTU_PLUGINS,
+  type BundleRef,
   type CommunityDirectory,
   type CommunityInstalled,
   type CommunityItem,
@@ -289,6 +290,32 @@ export function communityServer(
   }
 }
 
+const BUNDLE = '.mcpb'
+
+/** The version's one uploaded MCP bundle, when its files are that and nothing else. */
+export function uploadedBundle(files: readonly VersionFile[]): BundleRef | null {
+  if (files.length !== 1) return null
+  const [file] = files as [VersionFile]
+  if (!file.path.toLowerCase().endsWith(BUNDLE) || !safeFilePath(file.path)) return null
+  if (!SHA256.test(file.sha256.toLowerCase())) return null
+  return { from: 'upload', path: file.path, size: file.size, sha256: file.sha256.toLowerCase() }
+}
+
+/** The https `mcpb` package a `server.json` names with its file's SHA-256; null without one. */
+export function urlBundle(server: Record<string, unknown> | undefined): BundleRef | null {
+  const packages = Array.isArray(server?.packages) ? (server.packages as unknown[]) : []
+  for (const item of packages) {
+    if (typeof item !== 'object' || item === null) continue
+    const { registryType, identifier, fileSha256 } = item as Record<string, unknown>
+    if (registryType !== 'mcpb' || typeof identifier !== 'string') continue
+    if (typeof fileSha256 !== 'string' || !SHA256.test(fileSha256.toLowerCase())) continue
+    const url = identifier.length <= 2048 ? URL.parse(identifier) : null
+    if (url?.protocol !== 'https:') continue
+    return { from: 'url', url: url.toString(), sha256: fileSha256.toLowerCase() }
+  }
+  return null
+}
+
 export class MarketCommunityService {
   private readonly directories = new Map<string, { at: number; result: CommunityDirectory }>()
   private readonly standings = new Map<string, { at: number; standing: CommunityStanding }>()
@@ -375,11 +402,16 @@ export class MarketCommunityService {
     const found = await this.read(id)
     if (found.state !== 'listed') return found
     const { listing } = found
-    return {
-      state: 'listed',
-      listing,
-      server: listing.kind === 'mcp-server' ? communityServer(listing, listing.server) : null,
+    const server = listing.kind === 'mcp-server' ? communityServer(listing, listing.server) : null
+    let bundle: BundleRef | null = null
+    if (listing.kind === 'mcp-server' && !server) {
+      // Only the version's list of files is read: nothing is downloaded before Install.
+      const version = await this.api(() =>
+        this.deps.call({ kind: 'version', id: listing.id, version: listing.version }),
+      )
+      bundle = uploadedBundle(version.files) ?? urlBundle(listing.server)
     }
+    return { state: 'listed', listing, server, bundle }
   }
 
   /**

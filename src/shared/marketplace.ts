@@ -16,6 +16,12 @@ export type McpValue =
       description?: string
       // Sent before the value, such as `Bearer ` for a header that wants a bearer token.
       prefix?: string
+      // From an MCP bundle's manifest: the label, the kind of value and its default and bounds.
+      title?: string
+      kind?: 'string' | 'number' | 'boolean' | 'directory' | 'file'
+      default?: string
+      min?: number
+      max?: number
     }
 
 /** How an agent reaches a server: a URL, or a program it starts and talks to over stdio. */
@@ -28,7 +34,14 @@ export type McpSpec =
       // Signs in with OAuth: Kettu keeps the tokens and agents reach the server through its proxy.
       oauth?: McpOAuth
     }
-  | { type: 'stdio'; command: string; args: string[]; env: McpValue[] }
+  | {
+      type: 'stdio'
+      command: string
+      args: string[]
+      env: McpValue[]
+      // Runs on the host's own Node.js, resolved when a session starts, so no app path is stored.
+      runtime?: 'node'
+    }
 
 /** How Kettu signs in to a remote server with OAuth. */
 export interface McpOAuth {
