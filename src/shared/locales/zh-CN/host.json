@@ -693,6 +693,8 @@
     "noBundle": "这一项没有 MCP 包。",
     "downloadFailed": "下载这个包失败：{{reason}}",
     "tooBig": "这个包超过 {{mb}} MB，什么都没装。",
-    "mismatch": "这个包和它的校验值对不上，什么都没装。"
+    "mismatch": "这个包和它的校验值对不上，什么都没装。",
+    "outside": "Kettu 不会运行这个包文件夹以外的路径 {{path}}。",
+    "changed": "下载时这个条目有了新版本，请再点一次安装。"
   }
 }

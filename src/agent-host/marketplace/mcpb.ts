@@ -5,6 +5,7 @@
 
 import path from 'node:path'
 import type { Readable } from 'node:stream'
+import { crc32 } from 'node:zlib'
 import JSZip from 'jszip'
 import type { BundleInput, BundleType } from '@shared/market-community'
 import type { McpValue } from '@shared/marketplace'
@@ -43,8 +44,13 @@ const USER = /^user_config\.(.+)$/
 const TYPE_BITS = 0o170000
 const REGULAR = 0o100000
 const DIRECTORY = 0o040000
-// A signed bundle carries its signature after the zip, between these marks.
+// A signed bundle carries a block after the zip: this mark, the signature's length as a
+// little-endian uint32, the signature and the end mark.
 const SIGNATURE = Buffer.from('MCPB_SIG_V1')
+const SIGNATURE_END = Buffer.from('MCPB_SIG_END')
+// The zip's end of central directory record: its mark, then 22 bytes and a comment.
+const ZIP_END = Buffer.from([0x50, 0x4b, 0x05, 0x06])
+const ZIP_END_SIZE = 22
 
 /** A file of an unpacked bundle, with the mode it is written with. */
 export interface BundleFile {
@@ -61,20 +67,83 @@ function bad(reason: string): HostError {
   return refuse(t('marketBundle.invalid', { reason }))
 }
 
+/** The zip of a bundle: without its signature block when a whole one follows the zip's end. */
+function zipPart(data: Buffer): Buffer {
+  if (!data.subarray(-SIGNATURE_END.byteLength).equals(SIGNATURE_END)) return data
+  let at = data.lastIndexOf(SIGNATURE)
+  while (at >= 0) {
+    const head = at + SIGNATURE.byteLength
+    if (
+      head + 4 <= data.byteLength &&
+      head + 4 + data.readUInt32LE(head) + SIGNATURE_END.byteLength === data.byteLength &&
+      endsZip(data, at)
+    ) {
+      return data.subarray(0, at)
+    }
+    at = at > 0 ? data.lastIndexOf(SIGNATURE, at - 1) : -1
+  }
+  return data
+}
+
+/** Whether a zip's end of central directory record, with its comment, ends right at `end`. */
+function endsZip(data: Buffer, end: number): boolean {
+  const from = Math.max(0, end - ZIP_END_SIZE - 0xffff)
+  for (let at = end - ZIP_END_SIZE; at >= from; at--) {
+    if (data[at] === ZIP_END[0] && data.subarray(at, at + 4).equals(ZIP_END)) {
+      if (at + ZIP_END_SIZE + data.readUInt16LE(at + 20) === end) return true
+    }
+  }
+  return false
+}
+
+// What JSZip read from the central directory for an entry; its typings leave it out. JSZip's
+// readInt gives a CRC with the top bit set as a negative number.
+interface Declared {
+  _data?: { uncompressedSize?: number; crc32?: number }
+}
+
+/** Inflates one entry, stopping as soon as `budget` bytes are out, and checks its CRC. */
+function inflate(entry: JSZip.JSZipObject, budget: number): Promise<Buffer> {
+  const expected = (entry as unknown as Declared)._data?.crc32
+  const chunks: Buffer[] = []
+  let size = 0
+  let crc = 0
+  const stream = entry.nodeStream('nodebuffer') as unknown as Readable
+  return new Promise<Buffer>((resolve, reject) => {
+    stream.on('data', (chunk: Buffer) => {
+      size += chunk.byteLength
+      if (size > budget) {
+        // JSZip stops feeding its inflater once the stream it pushes to is gone.
+        stream.destroy()
+        reject(bad(t('marketBundle.tooLarge')))
+        return
+      }
+      crc = crc32(chunk, crc)
+      chunks.push(chunk)
+    })
+    stream.on('error', () => reject(bad(t('marketBundle.notZip'))))
+    stream.on('end', () => {
+      if (typeof expected !== 'number' || expected >>> 0 !== crc >>> 0) {
+        reject(bad(t('marketBundle.notZip')))
+      } else resolve(Buffer.concat(chunks))
+    })
+  })
+}
+
 /**
- * The bundle's files and manifest, checked entry by entry before any is inflated: a path that
+ * The bundle's files and manifest. Every entry is checked before any is inflated: a path that
  * could leave its folder, two names that differ only in case, a link or any other entry that is
- * not a plain file or folder, too many entries or too much once inflated refuse it whole.
+ * not a plain file or folder, too many entries or larger sizes than the limit refuse it whole.
+ * Inflating then stops part-way once more comes out than the sizes allow.
  */
 export async function unpackBundle(
   data: Buffer,
   limits: { entries: number; unpacked: number } = BUNDLE_LIMITS,
 ): Promise<{ files: BundleFile[]; manifest: Record<string, unknown> }> {
-  const signed = data.lastIndexOf(SIGNATURE)
-  const zipped = signed > 0 ? data.subarray(0, signed) : data
   let zip: JSZip
   try {
-    zip = await JSZip.loadAsync(zipped, { checkCRC32: true })
+    // Without a CRC check JSZip only reads the entries; a check would inflate every one first.
+    zip = await JSZip.loadAsync(zipPart(data), { checkCRC32: false })
   } catch {
     throw bad(t('marketBundle.notZip'))
   }
@@ -82,6 +151,7 @@ export async function unpackBundle(
   if (entries.length > limits.entries) throw bad(t('marketBundle.tooMany'))
   const seen = new Set<string>()
   const wanted: JSZip.JSZipObject[] = []
+  let declared = 0
   for (const entry of entries) {
     // JSZip renames an entry with `..` in it; the name it came with is what is checked.
     const name = (entry.unsafeOriginalName ?? entry.name).replace(/\/$/, '')
@@ -96,32 +166,20 @@ export async function unpackBundle(
     const key = name.toLowerCase()
     if (seen.has(key)) throw bad(t('marketBundle.unsafePath', { path: name }))
     seen.add(key)
-    if (!entry.dir) wanted.push(entry)
+    if (entry.dir) continue
+    const size = (entry as unknown as Declared)._data?.uncompressedSize
+    if (typeof size !== 'number' || size < 0) throw bad(t('marketBundle.notZip'))
+    declared += size
+    if (declared > limits.unpacked) throw bad(t('marketBundle.tooLarge'))
+    wanted.push(entry)
   }
   const files: BundleFile[] = []
   let total = 0
   for (const entry of wanted) {
-    const chunks: Buffer[] = []
-    const stream = entry.nodeStream('nodebuffer') as unknown as Readable
-    await new Promise<void>((resolve, reject) => {
-      stream.on('data', (chunk: Buffer) => {
-        total += chunk.byteLength
-        if (total > limits.unpacked) {
-          stream.destroy()
-          reject(bad(t('marketBundle.tooLarge')))
-          return
-        }
-        chunks.push(chunk)
-      })
-      stream.on('error', () => reject(bad(t('marketBundle.notZip'))))
-      stream.on('end', () => resolve())
-    })
+    const data = await inflate(entry, limits.unpacked - total)
+    total += data.byteLength
     const mode = typeof entry.unixPermissions === 'number' ? entry.unixPermissions : 0o644
-    files.push({
-      path: entry.name,
-      data: Buffer.concat(chunks),
-      mode: mode & 0o111 ? 0o755 : 0o644,
-    })
+    files.push({ path: entry.name, data, mode: mode & 0o111 ? 0o755 : 0o644 })
   }
   const manifestFile = files.find((file) => file.path === MANIFEST)
   if (!manifestFile) throw bad(t('marketBundle.noManifest'))
@@ -328,6 +386,10 @@ export interface BundleSetup {
   inputs: BundleInput[]
   /** A file the bundle runs as a program, which is written runnable. */
   program: string | null
+  /** Where the bundle is installed. */
+  dir: string
+  /** The arguments that name a path in the bundle's folder, by index, checked again once filled. */
+  bound: number[]
   runs: string
   blocked: string | null
 }
@@ -336,6 +398,11 @@ function within(dir: string, file: string): boolean {
   const root = path.resolve(dir)
   const target = path.resolve(file)
   return target === root || target.startsWith(root + path.sep)
+}
+
+/** Whether an argument that named the bundle's folder, such as `--root=<dir>/x`, stays in it. */
+function insideArg(dir: string, value: string): boolean {
+  return within(dir, value.split('=').at(-1)!)
 }
 
 /** `>=x.y.z` against a version; any other range is not checked. */
@@ -390,7 +457,7 @@ export async function planBundle(manifest: BundleManifest, ctx: PlanContext): Pr
     })
   // A value that named the bundle's folder stays inside it.
   const inside = (raw: string, value: string): string => {
-    if (raw.includes('${__dirname}') && !within(dir, value.split(/[=]/).at(-1)!)) {
+    if (raw.includes('${__dirname}') && !insideArg(dir, value)) {
       throw bad(t('marketBundle.unsafePath', { path: raw.slice(0, 200) }))
     }
     return value
@@ -484,7 +551,9 @@ export async function planBundle(manifest: BundleManifest, ctx: PlanContext): Pr
   }
 
   const outArgs: string[] = []
+  const bound: number[] = []
   for (const [i, raw] of args.entries()) {
+    if (raw.includes('${__dirname}')) bound.push(i)
     const where = `server.mcp_config.args[${i}]`
     const value = inside(raw, own(fill(raw, where)))
     for (const match of value.matchAll(VARIABLE)) {
@@ -547,6 +616,8 @@ export async function planBundle(manifest: BundleManifest, ctx: PlanContext): Pr
     env,
     inputs: [...manifest.userConfig.keys()].flatMap((key) => inputs.get(key) ?? []),
     program,
+    dir,
+    bound,
     runs: [runCommand, ...shown].join(' '),
     blocked,
   }
@@ -555,7 +626,8 @@ export async function planBundle(manifest: BundleManifest, ctx: PlanContext): Pr
 /**
  * The arguments with the user's values in place of `${user_config.KEY}`: a value the user left
  * empty takes its default, an argument with nothing to fill is left out, and a list fills one
- * argument per value. Refused when a required value is missing or one is not of its kind.
+ * argument per value. Refused when a required value is missing, one is not of its kind, or one
+ * leads an argument that names the bundle's folder out of it.
  */
 export function fillArgs(setup: BundleSetup, values: Readonly<Record<string, string>>): string[] {
   const byKey = new Map(setup.inputs.map((input) => [input.key, input]))
@@ -596,7 +668,7 @@ export function fillArgs(setup: BundleSetup, values: Readonly<Record<string, str
     return kept
   }
   const out: string[] = []
-  for (const arg of setup.args) {
+  for (const [i, arg] of setup.args.entries()) {
     const vars = [...arg.matchAll(VARIABLE)]
     if (vars.length === 0) {
       out.push(arg)
@@ -607,13 +679,24 @@ export function fillArgs(setup: BundleSetup, values: Readonly<Record<string, str
       out.push(...valuesOf(USER.exec(vars[0]![1]!)![1]!))
       continue
     }
-    let empty = false
-    const filled = arg.replace(VARIABLE, (_, name: string) => {
-      const list = valuesOf(USER.exec(name)![1]!)
-      if (list.length === 0) empty = true
-      return list.join(' ')
-    })
-    if (!empty) out.push(filled)
+    const lists = new Map(vars.map((v) => [v[1]!, valuesOf(USER.exec(v[1]!)![1]!)]))
+    if ([...lists.values()].some((list) => list.length === 0)) continue
+    const fillWith = (only?: [string, string]): string =>
+      arg.replace(VARIABLE, (_, name: string) =>
+        only?.[0] === name ? only[1] : lists.get(name)!.join(' '),
+      )
+    const filled = fillWith()
+    if (setup.bound.includes(i)) {
+      // Each value of a list on its own too: joined, one could undo another's `..`.
+      const tries = [
+        filled,
+        ...[...lists].flatMap(([name, list]) => list.map((v) => fillWith([name, v]))),
+      ]
+      if (!tries.every((value) => insideArg(setup.dir, value))) {
+        throw refuse(t('marketBundle.outside', { path: filled.slice(0, 200) }))
+      }
+    }
+    out.push(filled)
   }
   if (out.length > MAX_ARGS) throw refuse(t('marketBundle.badValue', { title: 'args' }))
   return out

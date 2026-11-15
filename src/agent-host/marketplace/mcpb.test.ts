@@ -1,6 +1,9 @@
+import { randomBytes } from 'node:crypto'
+import { createRequire } from 'node:module'
 import path from 'node:path'
+import { crc32, deflateRawSync } from 'node:zlib'
 import JSZip from 'jszip'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   BUNDLE_LIMITS,
   fillArgs,
@@ -49,6 +52,73 @@ async function rawName(name: string): Promise<Buffer> {
   // Both the local header and the central directory hold the name.
   return Buffer.from(data.toString('latin1').split(placeholder).join(name), 'latin1')
 }
+
+interface RawEntry {
+  name: string
+  data: Buffer
+  /** The sizes and CRC the zip claims, when they should not be the real ones. */
+  size?: number
+  crc?: number
+}
+
+/** A deflated zip written by hand, so its declared sizes and CRCs can lie. */
+function rawZip(entries: RawEntry[]): Buffer {
+  const locals: Buffer[] = []
+  const centrals: Buffer[] = []
+  let offset = 0
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name)
+    const packed = deflateRawSync(entry.data)
+    const crc = entry.crc ?? crc32(entry.data)
+    const size = entry.size ?? entry.data.byteLength
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50, 0)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(8, 8)
+    local.writeUInt32LE(crc >>> 0, 14)
+    local.writeUInt32LE(packed.byteLength, 18)
+    local.writeUInt32LE(size, 22)
+    local.writeUInt16LE(name.byteLength, 26)
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE((3 << 8) | 20, 4)
+    central.writeUInt16LE(20, 6)
+    central.writeUInt16LE(8, 10)
+    central.writeUInt32LE(crc >>> 0, 16)
+    central.writeUInt32LE(packed.byteLength, 20)
+    central.writeUInt32LE(size, 24)
+    central.writeUInt16LE(name.byteLength, 28)
+    central.writeUInt32LE((0o100644 << 16) >>> 0, 38)
+    central.writeUInt32LE(offset, 42)
+    locals.push(local, name, packed)
+    centrals.push(central, name)
+    offset += local.byteLength + name.byteLength + packed.byteLength
+  }
+  const directory = Buffer.concat(centrals)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(entries.length, 8)
+  end.writeUInt16LE(entries.length, 10)
+  end.writeUInt32LE(directory.byteLength, 12)
+  end.writeUInt32LE(offset, 16)
+  return Buffer.concat([...locals, directory, end])
+}
+
+/** A signature block as the mcpb tool appends it: marks around a length and the signature. */
+function signatureBlock(signature: Buffer): Buffer {
+  const length = Buffer.alloc(4)
+  length.writeUInt32LE(signature.byteLength)
+  return Buffer.concat([Buffer.from('MCPB_SIG_V1'), length, signature, Buffer.from('MCPB_SIG_END')])
+}
+
+// The inflater JSZip itself loads, to count how much of an entry it was asked to inflate.
+const pako = createRequire(createRequire(import.meta.url).resolve('jszip'))('pako') as {
+  Inflate: { prototype: { push(...args: unknown[]): boolean } }
+}
+
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 const DIR = path.resolve('/kettu/marketplace/mcpb/abcdefgh23/1.0.0')
 
@@ -128,16 +198,57 @@ describe('unpackBundle', () => {
     await expect(unpackBundle(Buffer.from('not a zip'))).rejects.toThrow(/zip/)
   })
 
-  it('reads a signed bundle, its signature cut off', async () => {
+  it('reads a signed bundle, its signature block after the zip cut off', async () => {
     const data = await zip({ 'manifest.json': JSON.stringify(MANIFEST) })
-    const signed = Buffer.concat([
-      data,
-      Buffer.from('MCPB_SIG_V1'),
-      Buffer.alloc(4),
-      Buffer.from('sig'),
-      Buffer.from('MCPB_SIG_END'),
-    ])
+    const signed = Buffer.concat([data, signatureBlock(randomBytes(300))])
     expect((await unpackBundle(signed)).manifest.name).toBe('echo')
+  })
+
+  it('reads an unsigned bundle whose files hold the signature mark', async () => {
+    const z = new JSZip()
+    z.file('manifest.json', JSON.stringify(MANIFEST))
+    z.file('server/index.js', 'const mark = "MCPB_SIG_V1"; const end = "MCPB_SIG_END"')
+    const data = await z.generateAsync({ type: 'nodebuffer', compression: 'STORE' })
+    const { files } = await unpackBundle(data)
+    expect(files.find((f) => f.path === 'server/index.js')!.data.toString()).toContain(
+      'MCPB_SIG_V1',
+    )
+  })
+
+  it('refuses a bigger bundle than its limit by its declared sizes, inflating nothing', async () => {
+    const push = vi.spyOn(pako.Inflate.prototype, 'push')
+    const data = rawZip([
+      { name: 'manifest.json', data: Buffer.from('{}') },
+      { name: 'big.bin', data: Buffer.alloc(2 * 1024 * 1024) },
+    ])
+    await expect(unpackBundle(data, { entries: 10, unpacked: 1024 * 1024 })).rejects.toThrow(
+      /larger/,
+    )
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('stops inflating part-way through an entry that lies about its size', async () => {
+    const push = vi.spyOn(pako.Inflate.prototype, 'push')
+    // Random bytes barely deflate, so each piece fed to the inflater gives about as much out.
+    const data = rawZip([
+      { name: 'manifest.json', data: Buffer.from('{}') },
+      { name: 'big.bin', data: randomBytes(4 * 1024 * 1024), size: 100 },
+    ])
+    // JSZip feeds its inflater 16 KiB of the deflated entry at a time.
+    const chunks = Math.ceil(data.byteLength / (16 * 1024))
+    expect(chunks).toBeGreaterThan(200)
+    await expect(unpackBundle(data, { entries: 10, unpacked: 1024 * 1024 })).rejects.toThrow(
+      /larger/,
+    )
+    expect(push.mock.calls.length).toBeLessThan(chunks / 2)
+  })
+
+  it('refuses an entry whose CRC is wrong', async () => {
+    const data = rawZip([
+      { name: 'manifest.json', data: Buffer.from(JSON.stringify(MANIFEST)) },
+      { name: 'server/index.js', data: Buffer.from('console.log(1)'), crc: 1234 },
+    ])
+    await expect(unpackBundle(data)).rejects.toThrow(/zip/)
   })
 })
 
@@ -254,6 +365,32 @@ describe('fillArgs', () => {
     expect(() => fillArgs(setup, { dir: 'a\nb' })).toThrow()
     // A secret never goes on the command line, whatever is sent.
     expect(() => fillArgs({ ...setup, args: ['${user_config.key}'] }, { key: 'x' })).toThrow()
+  })
+
+  it('refuses a value or default that leads a bundle path out of its folder', async () => {
+    const read = manifest(
+      { user_config: { file: { type: 'string', required: false, default: '../../outside.js' } } },
+      {
+        mcp_config: {
+          command: 'node',
+          args: ['${__dirname}/${user_config.file}', '--at=${__dirname}/${user_config.file}'],
+        },
+      },
+    )
+    const setup = await planBundle(read, context())
+    expect(() => fillArgs(setup, {})).toThrow(/path/)
+    expect(() => fillArgs(setup, { file: '../../../etc/x.js' })).toThrow(/path/)
+    expect(() => fillArgs(setup, { file: 'server/../../x.js' })).toThrow(/path/)
+    expect(fillArgs(setup, { file: 'server/index.js' })).toEqual([
+      path.join(DIR, 'server/index.js'),
+      `--at=${path.join(DIR, 'server/index.js')}`,
+    ])
+    const list = manifest(
+      { user_config: { files: { type: 'string', multiple: true, required: true } } },
+      { mcp_config: { command: 'node', args: ['${__dirname}/${user_config.files}'] } },
+    )
+    const listed = await planBundle(list, context())
+    expect(() => fillArgs(listed, { files: 'a.js\n../../b.js' })).toThrow(/path/)
   })
 
   it('expands a list into one argument each and checks numbers', async () => {

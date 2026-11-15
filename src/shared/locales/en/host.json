@@ -696,6 +696,8 @@
     "noBundle": "This listing has no MCP bundle.",
     "downloadFailed": "Couldn’t download the bundle: {{reason}}",
     "tooBig": "The bundle is larger than {{mb}} MB, so nothing was installed.",
-    "mismatch": "The bundle didn’t match its checksum, so nothing was installed."
+    "mismatch": "The bundle didn’t match its checksum, so nothing was installed.",
+    "outside": "Kettu won’t run a path outside the bundle’s folder, {{path}}.",
+    "changed": "The listing changed while the bundle was downloading. Click Install again."
   }
 }
