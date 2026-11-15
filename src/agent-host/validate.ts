@@ -28,6 +28,7 @@ import {
 } from '@shared/memory'
 import type { PluginScope, SkillSource } from '@shared/marketplace'
 import {
+  DIRECTORY_CURSOR,
   HANDLE,
   LISTING_ABOUT_CHARS,
   LISTING_DESCRIPTION_CHARS,
@@ -1394,7 +1395,10 @@ export function createValidators(platform: Platform): Validators {
       if (kind !== undefined && kind !== 'skill' && kind !== 'plugin' && kind !== 'mcp-server') {
         throw invalidParams('kind must be skill, plugin or mcp-server')
       }
-      const cursor = optionalString(o, 'cursor', TEXT_CHARS)
+      const cursor = optionalString(o, 'cursor', 256)
+      if (cursor !== undefined && !DIRECTORY_CURSOR.test(cursor)) {
+        throw invalidParams('cursor must be one the directory gave')
+      }
       const refresh = optionalFlag(o, 'refresh')
       return {
         ...(q ? { q } : {}),

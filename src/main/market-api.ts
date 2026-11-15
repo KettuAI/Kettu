@@ -3,6 +3,7 @@
 // never leaves them.
 
 import {
+  DIRECTORY_CURSOR,
   HANDLE,
   LISTING_ID,
   VERSION,
@@ -514,7 +515,8 @@ export function marketCallOf(value: unknown): MarketCall | null {
       return id() ? (call as MarketCall) : null
     case 'directory':
       return (call.q === undefined || typeof call.q === 'string') &&
-        (call.cursor === undefined || typeof call.cursor === 'string') &&
+        (call.cursor === undefined ||
+          (typeof call.cursor === 'string' && DIRECTORY_CURSOR.test(call.cursor))) &&
         (call.listingKind === undefined || kindOf(call.listingKind) !== null)
         ? (call as MarketCall)
         : null

@@ -48,7 +48,7 @@ import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
 import { AGENT_NAMES } from '@renderer/stores/agents'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
-import { busyKey } from '@renderer/stores/marketplace'
+import { busyKey, communityScopeKey } from '@renderer/stores/marketplace'
 import { openMarketplace, openSettings, type MarketplaceTab } from '@renderer/stores/view'
 import {
   installCommunityPlugin,
@@ -428,7 +428,9 @@ export function CommunityListingPage({
   const { useMarketplaceStore } = useHostScope()
   // A page opened shows the listing as it is now, since a new version may have come since.
   const page = useCommunityListing(id, true)
-  const signedOut = useMarketplaceStore((s) => s.community?.signedIn === false)
+  const signedOut = useMarketplaceStore(
+    (s) => s.communityPages[communityScopeKey({})]?.signedIn === false,
+  )
   if (!page.listing) {
     return (
       <ListingFrame back={back}>
@@ -640,7 +642,9 @@ function isBundle(server: Record<string, unknown> | undefined): boolean {
 function Related({ listing, tab }: { listing: MarketListing; tab: MarketplaceTab }) {
   const { t } = useTranslation('marketplace')
   const { useMarketplaceStore } = useHostScope()
-  const items = useMarketplaceStore(useShallow((s) => s.community?.items ?? []))
+  const items = useMarketplaceStore(
+    useShallow((s) => s.communityPages[communityScopeKey({})]?.items ?? []),
+  )
   const others = items.filter((item) => item.id !== listing.id)
   const same = others.filter((item) => item.handle === listing.handle)
   const shown = (

@@ -67,7 +67,10 @@
   "more": {
     "two": "{{first}}和{{second}}",
     "many_one": "{{first}}、{{second}}等另外 {{count}} 个",
-    "many_other": "{{first}}、{{second}}等另外 {{count}} 个"
+    "many_other": "{{first}}、{{second}}等另外 {{count}} 个",
+    "oneOpen": "{{first}}和更多",
+    "twoOpen": "{{first}}、{{second}}和更多",
+    "load": "显示更多"
   },
   "catalog": {
     "failedTitle": "无法连接 MCP Registry",
@@ -331,7 +334,8 @@
     "skills": "无法读取技能目录，内容可能不是最新的：{{error}}",
     "catalog": "无法连接 MCP Registry：{{error}}",
     "search": "无法搜索 MCP Registry：{{error}}",
-    "community": "没能读到 Kettu 的 Marketplace：{{error}}"
+    "community": "没能读到 Kettu 的 Marketplace：{{error}}",
+    "communityMore": "没能读到 Kettu 的 Marketplace 后面的内容：{{error}}"
   },
   "empty": {
     "pluginsTitle": "没有可显示的插件",

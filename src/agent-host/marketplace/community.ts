@@ -312,7 +312,14 @@ export class MarketCommunityService {
   ): Promise<CommunityDirectory> {
     const account = this.deps.account()
     if (!account) return { signedIn: false, items: [], next: null, yours: [], error: null }
-    const key = [account.email, query.q ?? '', query.kind ?? '', query.cursor ?? ''].join('\0')
+    const group = [account.email, query.q ?? '', query.kind ?? ''].join('\0')
+    const key = `${group}\0${query.cursor ?? ''}`
+    // A refreshed first page drops the group's later pages, so no page mixes old and new orders.
+    if (refresh && !query.cursor) {
+      for (const cached of [...this.directories.keys()]) {
+        if (cached.startsWith(`${group}\0`) && cached !== key) this.directories.delete(cached)
+      }
+    }
     const hit = this.directories.get(key)
     if (hit && !refresh && this.now() - hit.at < DIRECTORY_MS) return hit.result
     const [page, mine] = await Promise.allSettled([

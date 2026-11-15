@@ -14,22 +14,41 @@ import {
   type PluginDetails,
   type PluginLogo,
 } from '@shared/marketplace'
-import type {
-  CommunityDirectory,
-  CommunityInstalled,
-  CommunityListing,
-} from '@shared/market-community'
+import type { CommunityInstalled, CommunityItem, CommunityListing } from '@shared/market-community'
+import type { PublishKind } from '@shared/market-publish'
 import type { AgentId } from '@shared/thread'
 import { errorMessage, host, type HostRequest } from '@renderer/lib/host'
 
 /** How long the directory's Community and the installed items' standings are shown before a visit reads them again. */
 const COMMUNITY_MS = 5 * 60_000
 
-/** A search of the Kettu Marketplace, as `MarketSearchState` is of the registry. */
-export interface CommunitySearchState {
-  query: string
-  result: CommunityDirectory | null
+/** What a part of the Kettu Marketplace's directory is read for: a kind, a search, or both. */
+export interface CommunityScope {
+  kind?: PublishKind
+  q?: string
+}
+
+export const communityScopeKey = (scope: CommunityScope): string =>
+  `${scope.kind ?? 'all'}\0${scope.q ?? ''}`
+
+/** The directory's pages read so far for one scope, appended in order. */
+export interface CommunityPages {
+  /** False while the host is not signed in to a Kettu account with Kettu's services on. */
+  signedIn: boolean
+  /** Public listings, most installed first, each once. */
+  items: CommunityItem[]
+  /** The account's own Only me listings, from the first page. */
+  yours: CommunityItem[]
+  /** The cursor of the next page; null on the last. */
+  next: string | null
+  /** The first page or a further one is on its way. */
+  loading: boolean
+  /** Why the first page, or the account's own listings, could not be read. */
   error: string | null
+  /** Why the last further page could not be read; the rows already shown stay. */
+  moreError: string | null
+  /** When the first page was read. */
+  at: number
 }
 
 /** A listing's page of the Kettu Marketplace: what the host said of it, or why it could not. */
@@ -94,11 +113,8 @@ export interface MarketplaceStore {
   skills: MarketSkills | null
   skillsError: string | null
   skillsLoading: boolean
-  /** The Kettu Marketplace's public listings and the account's own; null until the host answers. */
-  community: CommunityDirectory | null
-  communityError: string | null
-  communityLoading: boolean
-  communitySearch: CommunitySearchState | null
+  /** The Kettu Marketplace's directory, by `communityScopeKey`; a scope is absent until read. */
+  communityPages: Record<string, CommunityPages>
   /** By listing id. */
   communityListings: Record<string, CommunityListingState>
   /** What was installed from the Kettu Marketplace and where each stands; null until read. */
@@ -125,8 +141,13 @@ export interface MarketplaceStore {
   loadDetails(agentId: AgentId, pluginId: string): Promise<void>
   loadLogo(pluginId: string): Promise<void>
   loadSkills(refresh?: boolean, cached?: boolean): Promise<void>
-  loadCommunity(refresh?: boolean): Promise<void>
-  findCommunity(query: string): Promise<void>
+  /** Reads a scope's first page again, dropping the later ones. */
+  loadCommunity(scope: CommunityScope, refresh?: boolean): Promise<void>
+  /** Reads a scope's first page unless a fresh one is shown or on its way. */
+  ensureCommunity(scope: CommunityScope): void
+  /** Reads the page after the last one read, if there is one. */
+  loadMoreCommunity(scope: CommunityScope): Promise<void>
+  /** Forgets every search's pages. */
   clearCommunitySearch(): void
   loadCommunityListing(id: string, refresh?: boolean): Promise<void>
   loadCommunityInstalled(refresh?: boolean): Promise<void>
@@ -152,10 +173,11 @@ export function createMarketplaceStore(
   let connectionsRead = 0
   let pluginsRead = 0
   let skillsRead = 0
-  let communityRead = 0
-  let communitySearchRead = 0
+  // By scope key; a first page read voids any read of the same scope still on its way.
+  const communityReads = new Map<string, number>()
+  // The search asked for last; an answer to an earlier one is dropped, never kept over it.
+  let searchKey: string | null = null
   let installedRead = 0
-  let communityAt = 0
   let installedAt = 0
   // When each list was last known to be within the host's keeping time.
   const readAt = { catalog: 0, plugins: 0, skills: 0 }
@@ -180,10 +202,7 @@ export function createMarketplaceStore(
     skills: null,
     skillsError: null,
     skillsLoading: false,
-    community: null,
-    communityError: null,
-    communityLoading: false,
-    communitySearch: null,
+    communityPages: {},
     communityListings: {},
     communityInstalled: null,
     busy: [],
@@ -204,12 +223,7 @@ export function createMarketplaceStore(
         if (!s.skills) void s.loadSkills(false, true)
         else if (s.skills.error || old('skills')) void s.loadSkills()
       }
-      if (
-        !s.communityLoading &&
-        (!s.community || s.community.error || Date.now() - communityAt >= COMMUNITY_MS)
-      ) {
-        void s.loadCommunity()
-      }
+      s.ensureCommunity({})
       if (!s.communityInstalled || Date.now() - installedAt >= COMMUNITY_MS) {
         void s.loadCommunityInstalled()
       }
@@ -307,33 +321,114 @@ export function createMarketplaceStore(
       }
       set((s) => ({ logos: { ...s.logos, [pluginId]: logo } }))
     },
-    async loadCommunity(refresh = false) {
-      const id = ++communityRead
-      set({ communityLoading: true, communityError: null })
+    async loadCommunity(scope, refresh = false) {
+      const key = communityScopeKey(scope)
+      const id = (communityReads.get(key) ?? 0) + 1
+      communityReads.set(key, id)
+      if (scope.q) searchKey = key
+      const put = (pages: CommunityPages) =>
+        set((s) => {
+          if (scope.q && searchKey !== key) return {}
+          const all = { ...s.communityPages, [key]: pages }
+          // One search is kept at a time, the one typed last.
+          if (scope.q) {
+            for (const other of Object.keys(all)) {
+              if (other !== key && !other.endsWith('\0')) delete all[other]
+            }
+          }
+          return { communityPages: all }
+        })
+      const known = get().communityPages[key]
+      put({
+        signedIn: known?.signedIn ?? true,
+        items: known?.items ?? [],
+        yours: known?.yours ?? [],
+        next: known?.next ?? null,
+        loading: true,
+        error: null,
+        moreError: null,
+        at: known?.at ?? 0,
+      })
       try {
-        const community = await request('market.community', refresh ? { refresh } : {})
-        if (id !== communityRead) return
-        set({ community, communityLoading: false })
-        if (!community.error) communityAt = Date.now()
+        const page = await request('market.community', {
+          ...(scope.kind ? { kind: scope.kind } : {}),
+          ...(scope.q ? { q: scope.q } : {}),
+          ...(refresh ? { refresh } : {}),
+        })
+        if (communityReads.get(key) !== id || (scope.q && searchKey !== key)) return
+        put({
+          signedIn: page.signedIn,
+          items: page.items,
+          yours: page.yours,
+          next: page.next,
+          loading: false,
+          error: page.error,
+          moreError: null,
+          at: page.error ? 0 : Date.now(),
+        })
+        // A first page read again starts the section over at its first rows.
+        set((s) => ({
+          more: Object.fromEntries(
+            Object.entries(s.more).filter(([section]) => !section.endsWith('community')),
+          ),
+        }))
       } catch (e) {
-        if (id === communityRead) set({ communityError: errorMessage(e), communityLoading: false })
+        if (communityReads.get(key) !== id || (scope.q && searchKey !== key)) return
+        put({ ...get().communityPages[key]!, loading: false, error: errorMessage(e), at: 0 })
       }
     },
-    async findCommunity(query) {
-      const id = ++communitySearchRead
-      set({ communitySearch: { query, result: null, error: null } })
+    ensureCommunity(scope) {
+      const known = get().communityPages[communityScopeKey(scope)]
+      if (known?.loading) return
+      if (known && !known.error && Date.now() - known.at < COMMUNITY_MS) return
+      void get().loadCommunity(scope)
+    },
+    async loadMoreCommunity(scope) {
+      const key = communityScopeKey(scope)
+      const known = get().communityPages[key]
+      if (!known || known.loading || !known.next) return
+      const id = communityReads.get(key) ?? 0
+      const update = (change: Partial<CommunityPages>) =>
+        set((s) => {
+          const pages = s.communityPages[key]
+          return pages
+            ? { communityPages: { ...s.communityPages, [key]: { ...pages, ...change } } }
+            : {}
+        })
+      update({ loading: true, moreError: null })
       try {
-        const result = await request('market.community', { q: query })
-        if (id === communitySearchRead) set({ communitySearch: { query, result, error: null } })
-      } catch (e) {
-        if (id === communitySearchRead) {
-          set({ communitySearch: { query, result: null, error: errorMessage(e) } })
+        const page = await request('market.community', {
+          ...(scope.kind ? { kind: scope.kind } : {}),
+          ...(scope.q ? { q: scope.q } : {}),
+          cursor: known.next,
+        })
+        if (communityReads.get(key) !== id) return
+        const current = get().communityPages[key]
+        if (!current) return
+        if (page.error || !page.signedIn) {
+          update({ loading: false, moreError: page.error ?? null })
+          return
         }
+        const seen = new Set(current.items.map((item) => item.id))
+        update({
+          items: [...current.items, ...page.items.filter((item) => !seen.has(item.id))],
+          next: page.next,
+          loading: false,
+        })
+      } catch (e) {
+        if (communityReads.get(key) === id) update({ loading: false, moreError: errorMessage(e) })
       }
     },
     clearCommunitySearch() {
-      communitySearchRead++
-      if (get().communitySearch) set({ communitySearch: null })
+      searchKey = null
+      // Counts only go up, so a read still on its way never matches one made after this.
+      for (const [key, id] of communityReads) {
+        if (!key.endsWith('\0')) communityReads.set(key, id + 1)
+      }
+      const pages = get().communityPages
+      const kept = Object.fromEntries(Object.entries(pages).filter(([key]) => key.endsWith('\0')))
+      if (Object.keys(kept).length === Object.keys(pages).length) return
+      set({ communityPages: kept })
     },
     async loadCommunityListing(id, refresh = false) {
       const known = get().communityListings[id]

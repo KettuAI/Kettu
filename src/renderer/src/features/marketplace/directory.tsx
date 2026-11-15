@@ -24,7 +24,7 @@ import type {
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
 import type { WorkflowEntry } from '@shared/workflow'
-import type { CommunityDirectory, CommunityItem } from '@shared/market-community'
+import type { CommunityItem } from '@shared/market-community'
 import type { PublishKind } from '@shared/market-publish'
 import {
   Dropdown,
@@ -42,7 +42,9 @@ import { useAccountStore } from '@renderer/stores/account'
 import {
   SEARCH_MAX,
   SEARCH_MIN,
-  type CommunitySearchState,
+  communityScopeKey,
+  type CommunityPages,
+  type CommunityScope,
   type MarketSearchState,
 } from '@renderer/stores/marketplace'
 import { openMarketplace, setMarketplaceTab, type MarketplaceTab } from '@renderer/stores/view'
@@ -127,6 +129,15 @@ interface Section {
   pending: number
   /** A line in place of the rows, such as what signing in would show. */
   note?: ReactNode
+  /** The service's further pages, for a section read a page at a time. */
+  more?: SectionMore
+}
+
+interface SectionMore {
+  next: boolean
+  loading: boolean
+  error: string | null
+  load(): void
 }
 
 const mcpEntry = (server: CatalogServer): Entry => ({
@@ -186,9 +197,19 @@ interface Sources {
   workflows: WorkflowEntry[]
   workflowsPending: boolean
   search: MarketSearchState | null
-  community: CommunityDirectory | null
-  communityPending: boolean
-  communitySearch: CommunitySearchState | null
+  communityPages: Record<string, CommunityPages>
+  loadMoreCommunity(scope: CommunityScope): void
+}
+
+/** The Community kind a tab lists; null for all of them. */
+const tabKind = (tab: MarketplaceTab): PublishKind | null =>
+  tab === 'plugins' ? 'plugin' : tab === 'skills' ? 'skill' : tab === 'mcp' ? 'mcp-server' : null
+
+/** The part of the Kettu Marketplace's directory a tab shows for a query, or without one. */
+function communityScope(tab: MarketplaceTab, query: string): CommunityScope {
+  const kind = tabKind(tab)
+  const q = query.slice(0, SEARCH_MAX)
+  return { ...(kind ? { kind } : {}), ...(q ? { q } : {}) }
 }
 
 function useSources(): Sources {
@@ -202,9 +223,7 @@ function useSources(): Sources {
   const search = useMarketplaceStore((s) => s.search)
   const { entries: workflows, loaded: workflowsLoaded } = useWorkflows()
   const workflowsPending = !workflowsLoaded
-  const community = useMarketplaceStore((s) => s.community)
-  const communityPending = useMarketplaceStore((s) => !s.community && !s.communityError)
-  const communitySearch = useMarketplaceStore((s) => s.communitySearch)
+  const communityPages = useMarketplaceStore((s) => s.communityPages)
   return useMemo(
     () => ({
       catalog,
@@ -216,9 +235,9 @@ function useSources(): Sources {
       workflows,
       workflowsPending,
       search,
-      community,
-      communityPending,
-      communitySearch,
+      communityPages,
+      loadMoreCommunity: (scope: CommunityScope) =>
+        void useMarketplaceStore.getState().loadMoreCommunity(scope),
     }),
     [
       catalog,
@@ -230,9 +249,8 @@ function useSources(): Sources {
       workflows,
       workflowsPending,
       search,
-      community,
-      communityPending,
-      communitySearch,
+      communityPages,
+      useMarketplaceStore,
     ],
   )
 }
@@ -246,12 +264,12 @@ function communitySections(
   t: TFunction<'marketplace'>,
   kind: PublishKind | null,
 ): Section[] {
-  if (!src.community) {
-    return src.communityPending
-      ? [{ id: 'community', title: t('sections.community'), entries: [], pending: 2 }]
-      : []
+  const scope: CommunityScope = kind ? { kind } : {}
+  const pages = src.communityPages[communityScopeKey(scope)]
+  if (!pages || (pages.at === 0 && pages.loading)) {
+    return [{ id: 'community', title: t('sections.community'), entries: [], pending: 2 }]
   }
-  if (!src.community.signedIn) {
+  if (!pages.signedIn) {
     return [
       {
         id: 'community',
@@ -262,17 +280,30 @@ function communitySections(
       },
     ]
   }
-  const of = (items: CommunityItem[]) =>
-    items.filter((item) => kind === null || item.kind === kind).map(communityEntry)
   return [
-    { id: 'yours', title: t('sections.yours'), entries: of(src.community.yours), pending: 0 },
+    {
+      id: 'yours',
+      title: t('sections.yours'),
+      entries: pages.yours.map(communityEntry),
+      pending: 0,
+    },
     {
       id: 'community',
       title: t('sections.community'),
-      entries: of(src.community.items),
+      entries: pages.items.map(communityEntry),
       pending: 0,
+      more: moreOf(src, scope, pages),
     },
   ]
+}
+
+function moreOf(src: Sources, scope: CommunityScope, pages: CommunityPages): SectionMore {
+  return {
+    next: pages.next !== null,
+    loading: pages.loading,
+    error: pages.moreError,
+    load: () => src.loadMoreCommunity(scope),
+  }
 }
 
 /** The MCP catalog's own sections, titled from the app's copy by their ids. */
@@ -474,16 +505,16 @@ function foundSections(
       })
     }
   }
-  const kind: PublishKind | null =
-    tab === 'plugins' ? 'plugin' : tab === 'skills' ? 'skill' : tab === 'mcp' ? 'mcp-server' : null
-  const found = src.communitySearch?.query === query ? src.communitySearch : null
-  if (src.community?.signedIn !== false) {
-    const items = found?.result ? [...found.result.yours, ...found.result.items] : []
+  const scope = communityScope(tab, query)
+  const found = src.communityPages[communityScopeKey(scope)]
+  if (src.communityPages[communityScopeKey({})]?.signedIn !== false && found?.signedIn !== false) {
+    const first = !found || (found.at === 0 && found.loading)
     sections.push({
       id: 'found-community',
       title: t('sections.community'),
-      entries: items.filter((item) => kind === null || item.kind === kind).map(communityEntry),
-      pending: !found || (!found.result && !found.error) ? 2 : 0,
+      entries: first ? [] : [...found.yours, ...found.items].map(communityEntry),
+      pending: first ? 2 : 0,
+      ...(found && !first ? { more: moreOf(src, scope, found) } : {}),
     })
   }
   return sections
@@ -534,22 +565,32 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     else void store.find(registry)
   }, [registry, useMarketplaceStore])
 
-  // The Kettu Marketplace is searched by the service, as the registry is.
-  const communityQuery = tab !== 'installed' && filter ? filter.slice(0, SEARCH_MAX) : null
+  // The Kettu Marketplace is read by the service a page at a time, each kind and search on its own.
+  const lists = tab !== 'installed' && tab !== 'workflow' && tab !== 'published'
+  const communityKey = lists ? communityScopeKey(communityScope(tab, filter)) : null
   useEffect(() => {
     const store = useMarketplaceStore.getState()
-    if (communityQuery === null) store.clearCommunitySearch()
-    else void store.findCommunity(communityQuery)
-  }, [communityQuery, useMarketplaceStore])
+    if (!filter) store.clearCommunitySearch()
+    if (communityKey !== null) store.ensureCommunity(communityScope(tab, filter))
+    // communityKey stands for tab and filter together.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [communityKey, useMarketplaceStore])
 
   // Signing in or out of this computer's account changes what the Community shows.
   const accountState = useAccountStore((s) => s.status?.state ?? null)
   useEffect(() => {
     if (scope.hostId !== null || accountState === null) return
     const store = useMarketplaceStore.getState()
-    if (store.community && store.community.signedIn !== (accountState === 'signed-in')) {
-      void store.loadCommunity(true)
+    const all = store.communityPages[communityScopeKey({})]
+    if (all && all.signedIn !== (accountState === 'signed-in')) {
+      useMarketplaceStore.setState({ communityPages: {} })
+      void store.loadCommunity({}, true)
+      if (communityKey !== null && communityKey !== communityScopeKey({})) {
+        void store.loadCommunity(communityScope(tab, filter), true)
+      }
     }
+    // Only a change of account reads again; the tab's own reads are the effect above's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountState, scope.hostId, useMarketplaceStore])
 
   const addFolder = async () => {
@@ -708,7 +749,7 @@ function Sections({
           ? pluginSections(src, t)
           : tab === 'skills'
             ? skillSections(src, t)
-            : mcpSections(src, t, null)
+            : [...mcpSections(src, t, null), ...communitySections(src, t, 'mcp-server')]
     return built.filter(
       (section) => section.entries.length > 0 || section.pending > 0 || section.note,
     )
@@ -716,7 +757,7 @@ function Sections({
 
   return (
     <>
-      <Notes tab={tab} registry={registry} />
+      <Notes tab={tab} registry={registry} query={query} />
       {sections.length === 0 && <Empty tab={tab} query={query} />}
       {sections.map((section, i) => (
         <SectionView key={section.id} tab={tab} section={section} index={i} />
@@ -734,6 +775,7 @@ function SectionView({
   section: Section
   index: number
 }) {
+  const { t } = useTranslation('marketplace')
   const key = `${tab}:${section.id}`
   const { useMarketplaceStore } = useHostScope()
   const extra = useMarketplaceStore((s) => s.more[key] ?? 0)
@@ -749,6 +791,15 @@ function SectionView({
   const visible = SECTION_ROWS + extra
   const shown = section.entries.slice(0, visible)
   const rest = section.entries.slice(visible)
+  const more = section.more
+  // Rows asked for that the service has yet to send.
+  const awaited = more?.loading && rest.length === 0 && shown.length > SECTION_ROWS ? 2 : 0
+  const showMore = () => {
+    useMarketplaceStore.setState((s) => ({
+      more: { ...s.more, [key]: (s.more[key] ?? 0) + MORE_STEP },
+    }))
+    if (more?.next && rest.length < MORE_STEP) more.load()
+  }
   return (
     <section className="ui-as-int-section ui-as-rise" style={{ '--i': index } as CSSProperties}>
       <h2 className="ui-as-int-section__title">{section.title}</h2>
@@ -757,16 +808,21 @@ function SectionView({
           <EntryRow key={entry.key} entry={entry} tab={tab} fresh={i >= SECTION_ROWS} />
         ))}
         {rest.length === 0 &&
-          Array.from({ length: section.pending }, (_, i) => <SkeletonRow key={`pending-${i}`} />)}
+          Array.from({ length: section.pending + awaited }, (_, i) => (
+            <SkeletonRow key={`pending-${i}`} />
+          ))}
       </div>
-      {rest.length > 0 && (
+      {more?.error && (
+        <QuietNote action={<Retry onRetry={async () => more.load()} />}>
+          {t('notes.communityMore', { error: more.error })}
+        </QuietNote>
+      )}
+      {(rest.length > 0 || (more?.next && !more.error && !awaited)) && (
         <MoreButton
           items={rest}
-          onClick={() =>
-            useMarketplaceStore.setState((s) => ({
-              more: { ...s.more, [key]: (s.more[key] ?? 0) + MORE_STEP },
-            }))
-          }
+          open={!!more?.next}
+          loading={!!more?.loading && rest.length === 0}
+          onClick={showMore}
         />
       )}
     </section>
@@ -803,7 +859,15 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
 }
 
 /** What could not be read, quietly over the sections of the tab it concerns, with Retry. */
-function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null }) {
+function Notes({
+  tab,
+  registry,
+  query,
+}: {
+  tab: MarketplaceTab
+  registry: string | null
+  query: string
+}) {
   const { t } = useTranslation('marketplace')
   const src = useSources()
   const { useMarketplaceStore } = useHostScope()
@@ -860,11 +924,14 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
       </QuietNote>,
     )
   }
-  const communityError = useMarketplaceStore((s) => s.communityError)
-  const communityFailure = communityError ?? src.community?.error ?? null
+  const community = communityScope(tab, query)
+  const communityFailure = src.communityPages[communityScopeKey(community)]?.error ?? null
   if (tab !== 'installed' && communityFailure) {
     notes.push(
-      <QuietNote key="community" action={<Retry onRetry={() => store().loadCommunity(true)} />}>
+      <QuietNote
+        key="community"
+        action={<Retry onRetry={() => store().loadCommunity(community, true)} />}
+      >
         {t('notes.community', { error: communityFailure })}
       </QuietNote>,
     )
