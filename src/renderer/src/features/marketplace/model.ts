@@ -187,14 +187,15 @@ export function communityItem(
   scope: HostScope,
   id: string,
 ): Pick<CommunityItem, 'name' | 'kind'> | null {
-  const { community, communityListings } = scope.useMarketplaceStore.getState()
+  const { communityPages, communityListings } = scope.useMarketplaceStore.getState()
   const page = communityListings[id]?.listing
   if (page?.state === 'listed') return page.listing
-  return (
-    community?.items.find((item) => item.id === id) ??
-    community?.yours.find((item) => item.id === id) ??
-    null
-  )
+  for (const pages of Object.values(communityPages)) {
+    const found =
+      pages.items.find((item) => item.id === id) ?? pages.yours.find((item) => item.id === id)
+    if (found) return found
+  }
+  return null
 }
 
 /**

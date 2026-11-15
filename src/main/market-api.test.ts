@@ -205,6 +205,17 @@ describe('MarketApi errors', () => {
   })
 })
 
+describe('MarketApi directory', () => {
+  it('puts the cursor only in the directory’s cursor parameter', async () => {
+    const { fetch, sent } = fake(() => json(200, { items: [], next: null }))
+    await api(fetch).directory({ q: 'notes', kind: 'skill', cursor: 'a+b/c=' })
+    const url = new URL(sent[0]!.url)
+    expect(url.origin + url.pathname).toBe(`${BASE}/api/v1/marketplace/directory`)
+    expect(url.searchParams.get('cursor')).toBe('a+b/c=')
+    expect([...url.searchParams.keys()].sort()).toEqual(['cursor', 'kind', 'q'])
+  })
+})
+
 describe('runMarketCall', () => {
   class SignedOut extends Error {}
 
@@ -278,5 +289,12 @@ describe('marketCallOf', () => {
     expect(marketCallOf({ kind: 'update', id: 'x' })).toBeNull()
     expect(marketCallOf({ kind: 'drop-tables' })).toBeNull()
     expect(marketCallOf('mine')).toBeNull()
+  })
+
+  it('takes a directory cursor only as the service gives it', () => {
+    expect(marketCallOf({ kind: 'directory', cursor: 'MTIuYWJjZGVmZ2gyMw' })).not.toBeNull()
+    for (const cursor of ['a?b', 'a&b=c', 'a#b', 'a%2F', 'a b', '..', '../x', 'x'.repeat(257)]) {
+      expect(marketCallOf({ kind: 'directory', cursor })).toBeNull()
+    }
   })
 })

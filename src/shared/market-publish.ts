@@ -20,6 +20,8 @@ export const LISTING_NOTES_CHARS = 4000
 export const HANDLE = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/
 /** A listing's opaque id, 10 base32 characters as a share's. */
 export const LISTING_ID = /^[a-z2-7]{10}$/
+/** A directory page's cursor as the service gives it, base64; passed on only as it came. */
+export const DIRECTORY_CURSOR = /^[A-Za-z0-9+/=_-]{1,256}$/
 export const VERSION =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/
 

@@ -266,6 +266,23 @@ describe('MarketCommunityService', () => {
     expect(result.yours[0]!.installs).toBeNull()
   })
 
+  it('reads a group’s later pages again once its first page is refreshed', async () => {
+    const f = fake({ directory: [listing()] })
+    const community = service(f)
+    await community.directory({ kind: 'skill' })
+    await community.directory({ kind: 'skill', cursor: 'c2' })
+    await community.directory({ kind: 'plugin', cursor: 'c2' })
+    const pages = () => f.calls.filter((call) => call.kind === 'directory').length
+    await community.directory({ kind: 'skill', cursor: 'c2' })
+    expect(pages()).toBe(3)
+    await community.directory({ kind: 'skill' }, true)
+    expect(pages()).toBe(4)
+    await community.directory({ kind: 'skill', cursor: 'c2' })
+    expect(pages()).toBe(5)
+    await community.directory({ kind: 'plugin', cursor: 'c2' })
+    expect(pages()).toBe(5)
+  })
+
   it('lists nothing while signed out, and asks the service nothing', async () => {
     const f = fake()
     const result = await service(f, { account: null }).directory({})

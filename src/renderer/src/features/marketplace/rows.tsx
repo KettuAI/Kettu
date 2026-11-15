@@ -9,6 +9,7 @@ import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Skeleton } from '@renderer/components/ui/skeleton'
+import { Spinner } from '@renderer/components/ui/spinner'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { installServer } from './actions'
 import { ConnectButton } from './connect'
@@ -209,9 +210,15 @@ export function AddButton({ server, onOpen }: { server: CatalogServer; onOpen: (
 }
 
 /** "Stripe", "Stripe and Zapier", or "Stripe, Zapier and 3 more". */
-export function MoreLabel({ names }: { names: string[] }) {
+export function MoreLabel({ names, open }: { names: string[]; open?: boolean }) {
   const { t } = useTranslation('marketplace')
   const [first = '', second = ''] = names
+  // Open: the service has more pages, so how many is not known.
+  if (open) {
+    if (names.length === 0) return <>{t('more.load')}</>
+    if (names.length === 1) return <>{t('more.oneOpen', { first })}</>
+    return <>{t('more.twoOpen', { first, second })}</>
+  }
   if (names.length === 1) return <>{first}</>
   if (names.length === 2) return <>{t('more.two', { first, second })}</>
   return <>{t('more.many', { first, second, count: names.length - 2 })}</>
@@ -221,21 +228,34 @@ export function MoreLabel({ names }: { names: string[] }) {
 export function MoreButton({
   items,
   quiet,
+  open,
+  loading,
   onClick,
 }: {
   items: { key: string; title: string; subject: TileSubject }[]
   quiet?: boolean
+  /** More is still to be read from the service. */
+  open?: boolean
+  loading?: boolean
   onClick: () => void
 }) {
   return (
-    <button type="button" className="ui-as-int-more" onClick={onClick}>
-      <span className="ui-as-int-more__logos" aria-hidden="true">
-        {items.slice(0, 3).map((item) => (
-          <ItemTile key={item.key} subject={item.subject} size="small" quiet={quiet} />
-        ))}
-      </span>
-      <MoreLabel names={items.map((item) => item.title)} />
-      <Icon icon={ArrowRight01Icon} size={14} />
+    <button
+      type="button"
+      className="ui-as-int-more"
+      onClick={onClick}
+      disabled={loading}
+      aria-busy={loading || undefined}
+    >
+      {items.length > 0 && (
+        <span className="ui-as-int-more__logos" aria-hidden="true">
+          {items.slice(0, 3).map((item) => (
+            <ItemTile key={item.key} subject={item.subject} size="small" quiet={quiet} />
+          ))}
+        </span>
+      )}
+      <MoreLabel names={items.map((item) => item.title)} open={open} />
+      {loading ? <Spinner className="size-3.5" /> : <Icon icon={ArrowRight01Icon} size={14} />}
     </button>
   )
 }

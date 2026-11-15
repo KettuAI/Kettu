@@ -218,6 +218,13 @@ describe('createValidators', () => {
     rejects(() => posix['market.community']({ kind: 'theme' }))
     rejects(() => posix['market.community']({ q: 'a\nb' }))
     rejects(() => posix['market.community']({ q: 'x'.repeat(101) }))
+    expect(posix['market.community']({ cursor: 'MTIuYWJjZGVmZ2gyMw' })).toEqual({
+      cursor: 'MTIuYWJjZGVmZ2gyMw',
+    })
+    expect(posix['market.community']({ cursor: 'a+b/c=' })).toEqual({ cursor: 'a+b/c=' })
+    for (const cursor of ['a?b', 'a&b=c', 'a#b', 'a%2F', 'a b', '..', '../x', 'x'.repeat(257)]) {
+      rejects(() => posix['market.community']({ cursor }))
+    }
     expect(posix['market.communityListing']({ id: 'abcdefgh23' })).toEqual({ id: 'abcdefgh23' })
     rejects(() => posix['market.communityListing']({ id: 'abc/../x' }))
     expect(posix['market.communityInstalled']({ refresh: true })).toEqual({ refresh: true })

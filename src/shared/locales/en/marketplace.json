@@ -67,7 +67,10 @@
   "more": {
     "two": "{{first}} and {{second}}",
     "many_one": "{{first}}, {{second}} and {{count}} more",
-    "many_other": "{{first}}, {{second}} and {{count}} more"
+    "many_other": "{{first}}, {{second}} and {{count}} more",
+    "oneOpen": "{{first}} and more",
+    "twoOpen": "{{first}}, {{second}} and more",
+    "load": "Show more"
   },
   "catalog": {
     "failedTitle": "Couldn’t reach the MCP Registry",
@@ -331,7 +334,8 @@
     "skills": "Couldn’t read the skills catalog, so it may be out of date: {{error}}",
     "catalog": "Couldn’t reach the MCP Registry: {{error}}",
     "search": "Couldn’t search the MCP Registry: {{error}}",
-    "community": "Couldn’t read the Kettu Marketplace: {{error}}"
+    "community": "Couldn’t read the Kettu Marketplace: {{error}}",
+    "communityMore": "Couldn’t read more of the Kettu Marketplace: {{error}}"
   },
   "empty": {
     "pluginsTitle": "No plugins to show",
