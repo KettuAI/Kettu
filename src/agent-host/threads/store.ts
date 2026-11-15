@@ -12,6 +12,7 @@ import type { LogFn } from '../storage'
 import type {
   ImageMode,
   StoredBlob,
+  StoredEntry,
   StoredOutline,
   StoredOutputs,
   StoredThread,
@@ -322,6 +323,15 @@ export class ThreadStore {
   /** Everything from `from` on; null when the session has no thread. */
   tail(sessionId: string, from: number, images: ImageMode = 'refs'): Promise<ThreadPage | null> {
     return this.read({ op: 'tail', sessionId, from, images }, sessionId)
+  }
+
+  /** One entry by its id; null when the session has no thread, or the thread no such entry. */
+  entry(
+    sessionId: string,
+    entryId: string,
+    images: ImageMode = 'refs',
+  ): Promise<StoredEntry | null> {
+    return this.read({ op: 'entry', sessionId, entryId, images }, sessionId)
   }
 
   /** The whole thread; null when the session has none, or part of it does not parse. */

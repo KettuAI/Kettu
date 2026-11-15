@@ -43,6 +43,7 @@ const READS = new Set([
   'context',
   'currentPullRequest',
   'details',
+  'entry',
   'environment',
   'file',
   'fileDiff',

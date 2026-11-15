@@ -59,6 +59,8 @@ function run(db: ThreadDb, request: ThreadRequest): unknown {
       return db.page(request.sessionId, request.before, request.from, request.images)
     case 'tail':
       return db.tail(request.sessionId, request.from, request.images)
+    case 'entry':
+      return db.entry(request.sessionId, request.entryId, request.images)
     case 'load':
       return db.load(request.sessionId)
     case 'write':

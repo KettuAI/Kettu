@@ -246,6 +246,7 @@ import {
   type OutlineRow,
   type PositionedEntry,
   type StoredBlob,
+  type StoredEntry,
   type StoredOutline,
   type StoredThread,
   type ThreadPage,
@@ -2573,6 +2574,48 @@ export class SessionManager {
     return page
       ? { entries: page.entries.map(settled), older: page.older }
       : { entries: [], older: null }
+  }
+
+  /** One entry of the thread whole, as a device opens a step its page held as a digest. */
+  async entry(
+    sessionId: string,
+    entryId: string,
+    images: ImageMode = 'refs',
+  ): Promise<ThreadEntry> {
+    const live = this.live.get(sessionId)
+    if (live) {
+      const { entries } = await this.withBytes(live, images, () => {
+        // Patches go out first, so the patches after the entry are the ones it does not hold.
+        this.flushPatches(live)
+        const entry = live.thread.byId[entryId]
+        return { entries: entry ? [entry] : [] }
+      })
+      if (!entries[0]) throw notFound(`Session ${sessionId} has no entry ${entryId}`)
+      return entries[0]
+    }
+    const record = this.recordOf(sessionId)
+    const store = this.deps.threads
+    let stored: StoredEntry | null = null
+    if (store && record.acpSessionId) {
+      try {
+        stored = await store.entry(sessionId, entryId, images)
+      } catch (error) {
+        this.deps.diagnostics.log(
+          'warn',
+          `Could not read the thread of session ${record.id}: ${(error as Error).message}`,
+        )
+      }
+    }
+    if (this.live.has(sessionId) || !this.has(sessionId)) {
+      return this.entry(sessionId, entryId, images)
+    }
+    // A tool entry stored with an artifact link comes as the page gives it, without the link.
+    const entry =
+      stored && this.isCurrent(record, stored.head)
+        ? (splitLinks([stored.entry]) ?? [stored.entry]).find(({ id }) => id === entryId)
+        : undefined
+    if (!entry) throw notFound(`Session ${sessionId} has no entry ${entryId}`)
+    return settled(entry)
   }
 
   // The message outline.
