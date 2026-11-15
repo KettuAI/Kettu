@@ -837,6 +837,7 @@ export class AgentHost {
             {
               platform,
               taken,
+              node: options.nodeRuntime,
               oauth: {
                 access: (server) => this.marketConnections.access(server),
                 bearer: () =>
@@ -1469,7 +1470,7 @@ export class AgentHost {
       access: (server: MarketServer) => this.marketConnections.access(server),
       bearer: () => ({ origin: '', token: '' }),
     }
-    const options = { platform: this.options.platform, oauth }
+    const options = { platform: this.options.platform, oauth, node: this.options.nodeRuntime }
     const of = (list: typeof servers, held: MarketKeys, agentId: AgentId): string =>
       JSON.stringify(libraryServers(list, held, agentId, ALL_TRANSPORTS, options))
     const now = this.settings.marketplace.mcp

@@ -96,6 +96,51 @@ describe('libraryServers with OAuth servers', () => {
   })
 })
 
+describe('libraryServers with a bundle on Kettu’s Node.js', () => {
+  const echo: MarketServer = {
+    id: 'kettu:abcdefgh23',
+    name: 'echo',
+    title: 'Echo',
+    source: 'kettu',
+    version: '1.0.0',
+    spec: {
+      type: 'stdio',
+      command: 'node',
+      args: ['/data/marketplace/mcpb/abcdefgh23/1.0.0/server/index.js'],
+      env: [{ name: 'ECHO_KEY', input: true, secret: true, required: true }],
+      runtime: 'node',
+    },
+    agents: 'all',
+    on: true,
+  }
+  const node = {
+    command: '/Applications/Kettu.app/Contents/MacOS/Kettu',
+    env: { ELECTRON_RUN_AS_NODE: '1' },
+  }
+
+  it('starts it with the runtime the session has, never a stored app path', () => {
+    const held = keys({ [echo.id]: { ECHO_KEY: 'k' } })
+    expect(
+      libraryServers([echo], held, 'claude-code', ALL_TRANSPORTS, { platform: 'darwin', node }),
+    ).toEqual([
+      {
+        type: 'stdio',
+        name: 'echo',
+        command: node.command,
+        args: echo.spec.type === 'stdio' ? echo.spec.args : [],
+        env: [
+          { name: 'ELECTRON_RUN_AS_NODE', value: '1' },
+          { name: 'ECHO_KEY', value: 'k' },
+        ],
+        secret: true,
+      },
+    ])
+    expect(
+      libraryServers([echo], held, 'claude-code', ALL_TRANSPORTS, { platform: 'darwin' }),
+    ).toEqual([])
+  })
+})
+
 describe('keyState', () => {
   it('names the inputs that have a value, never the values', () => {
     const held = keys({

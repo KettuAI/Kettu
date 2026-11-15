@@ -9,6 +9,7 @@ import {
   type MarketServer,
   type McpValue,
 } from '@shared/marketplace'
+import type { NodeRuntime } from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { AgentId } from '@shared/thread'
 import type { AgentInit, McpServer } from '../connection'
@@ -125,7 +126,13 @@ export function libraryServers(
   keys: MarketKeys,
   agentId: AgentId,
   transports: McpTransports,
-  options: { platform: Platform; taken?: readonly string[]; oauth?: OAuthAccess },
+  options: {
+    platform: Platform
+    taken?: readonly string[]
+    oauth?: OAuthAccess
+    /** Kettu's own Node.js, for the servers that run on it. */
+    node?: NodeRuntime
+  },
 ): McpServer[] {
   const used = new Set(options.taken ?? [])
   const out: McpServer[] = []
@@ -159,7 +166,7 @@ export function libraryServers(
     if (spec.type === 'http') {
       const speaks = spec.transport === 'sse' ? transports.mcpSse : transports.mcpHttp
       if (!speaks) continue
-    } else if (!transports.mcpStdio) {
+    } else if (!transports.mcpStdio || (spec.runtime === 'node' && !options.node)) {
       continue
     }
     const values = filled(spec.type === 'http' ? spec.headers : spec.env, keys.get(server.id))
@@ -174,13 +181,20 @@ export function libraryServers(
         ...(values.secret ? { secret: true } : {}),
       })
     } else {
-      const [command, args] = program(spec.command, spec.args, options.platform)
+      const node = spec.runtime === 'node' ? options.node : undefined
+      const [command, args] = node
+        ? [node.command, spec.args]
+        : program(spec.command, spec.args, options.platform)
+      const runtimeEnv = Object.entries(node?.env ?? {}).map(([key, value]) => ({
+        name: key,
+        value,
+      }))
       out.push({
         type: 'stdio',
         name,
         command,
         args,
-        env: values.values,
+        env: [...runtimeEnv, ...values.values],
         ...(values.secret ? { secret: true } : {}),
       })
     }
