@@ -114,6 +114,8 @@ import type {
   HarnessId,
   Attachment,
   ConfigOption,
+  DigestedPage,
+  DigestedSnapshot,
   OlderPage,
   PatchBatch,
   PromptCache,
@@ -125,6 +127,7 @@ import type {
   MarketPublishAsk,
   SessionSnapshot,
   SessionStatus,
+  ThreadEntry,
   UserContent,
 } from './thread'
 
@@ -933,14 +936,25 @@ export interface HostContract {
     params: { agentId: AgentId; projectPath: string; acpSessionId: string }
     result: SessionSummary
   }
-  'sessions.open': { params: { sessionId: string }; result: SessionSnapshot }
+  'sessions.open': {
+    params: { sessionId: string }
+    result: SessionSnapshot
+    deviceResult: SessionSnapshot | DigestedSnapshot
+  }
   // With `from`, every entry from that position on, as a replica that holds older pages needs.
-  'sessions.snapshot': { params: { sessionId: string; from?: number }; result: SessionSnapshot }
+  'sessions.snapshot': {
+    params: { sessionId: string; from?: number }
+    result: SessionSnapshot
+    deviceResult: SessionSnapshot | DigestedSnapshot
+  }
   // With `from`, reaching back to the turn holding that position, for a jump in the outline.
   'sessions.page': {
     params: { sessionId: string; before: number; from?: number }
     result: OlderPage
+    deviceResult: OlderPage | DigestedPage
   }
+  // One entry whole, as a device whose page held its tool output as a digest opens it.
+  'sessions.entry': { params: { sessionId: string; entryId: string }; result: ThreadEntry }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
   // What the session made, for its card in the sidebar; empty for a session without a thread.
   'sessions.outputs': { params: { sessionId: string }; result: SessionOutputs }
@@ -1501,6 +1515,7 @@ export const HOST_METHODS = [
   'sessions.open',
   'sessions.snapshot',
   'sessions.page',
+  'sessions.entry',
   'sessions.outline',
   'sessions.outputs',
   'sessions.outlineTitles',

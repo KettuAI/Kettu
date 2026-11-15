@@ -873,6 +873,52 @@ export interface OlderPage {
   older: number | null
 }
 
+/**
+ * What stands for a tool output too long to send in the pages of a device that sent
+ * `TOOL_DIGESTS_FEATURE`; `sessions.entry` reads the entry whole. `size` is the left-out text's
+ * length in UTF-8 bytes, a diff's old and new text together.
+ */
+export type ToolContentDigest =
+  | { type: 'digest'; of: 'markdown'; size: number; lines: number }
+  | {
+      type: 'digest'
+      of: 'diff'
+      path: string
+      size: number
+      /** Lines added and removed; null when the change is too large to compare quickly. */
+      added: number | null
+      removed: number | null
+    }
+
+/** What stands for a tool call's input too long to send, in place of `rawInput`. */
+export interface ToolInputDigest {
+  size: number
+  lines: number
+}
+
+/**
+ * A tool entry in such a device's pages. A call that waits for an answer is always whole. A later
+ * patch may set `rawInput` beside `rawInputDigest`, and then it is the input.
+ */
+export type DigestedToolEntry = Omit<ToolEntry, 'content' | 'rawInput'> & {
+  content: (ToolContent | ToolContentDigest)[]
+  rawInput?: string
+  rawInputDigest?: ToolInputDigest
+}
+
+export type DigestedThreadEntry = Exclude<ThreadEntry, ToolEntry> | DigestedToolEntry
+
+/** `SessionSnapshot` as a device that sent `TOOL_DIGESTS_FEATURE` gets it. */
+export type DigestedSnapshot = Omit<SessionSnapshot, 'entries'> & {
+  entries: DigestedThreadEntry[]
+}
+
+/** `OlderPage` as a device that sent `TOOL_DIGESTS_FEATURE` gets it. */
+export interface DigestedPage {
+  entries: DigestedThreadEntry[]
+  older: number | null
+}
+
 /** A session's thread, normalized so one entry can change without touching the others. */
 export interface ThreadState {
   session: SessionView

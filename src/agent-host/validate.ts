@@ -1599,6 +1599,10 @@ export function createValidators(platform: Platform): Validators {
         ...(o.from === undefined ? {} : { from: position(o, 'from') }),
       }
     },
+    'sessions.entry': (params) => {
+      const o = fields(params)
+      return { sessionId: sessionId(o), entryId: string(o, 'entryId', ACP_ID_CHARS) }
+    },
     'sessions.outline': session,
     'sessions.outputs': session,
     'sessions.outlineTitles': session,

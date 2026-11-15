@@ -158,6 +158,11 @@ export interface ThreadPage {
   plan: Extract<ThreadEntry, { kind: 'plan' }> | null
 }
 
+export interface StoredEntry {
+  head: ThreadHead
+  entry: ThreadEntry
+}
+
 export interface OutlineRow {
   pos: number
   entryId: string

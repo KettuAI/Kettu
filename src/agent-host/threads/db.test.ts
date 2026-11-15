@@ -326,6 +326,27 @@ describe('the thread database', () => {
     db.close()
   })
 
+  it('reads one entry by its id, its images by hash or with bytes', () => {
+    const db = open()
+    const bytes = Buffer.alloc(INLINE_MEDIA_LIMIT, 7)
+    const data = bytes.toString('base64')
+    const hash = createHash('sha256').update(bytes).digest('hex')
+    const shot: ThreadEntry = {
+      ...(tool('shot') as Extract<ThreadEntry, { kind: 'tool' }>),
+      content: [{ type: 'ref', ref: { kind: 'image', mimeType: 'image/png', data } }],
+    }
+    db.write('s1', { head, entries: [...turns(2, 1), { pos: 8, entry: shot }] })
+    expect(db.entry('s1', 't1.0')).toEqual({ head, entry: tool('t1.0') })
+    expect(db.entry('s1', 'shot', 'inline')!.entry).toEqual(shot)
+    expect(db.entry('s1', 'shot')!.entry).toEqual({
+      ...shot,
+      content: [{ type: 'ref', ref: { kind: 'image', mimeType: 'image/png', blob: hash } }],
+    })
+    expect(db.entry('s1', 'missing')).toBeNull()
+    expect(db.entry('s2', 't1.0')).toBeNull()
+    db.close()
+  })
+
   it('reads what a session made from its stored thread', () => {
     const db = open()
     const reply = (id: string, markdown: string): ThreadEntry => ({

@@ -56,6 +56,13 @@ export const BROWSER_FEATURE = 'browser'
  */
 export const IMAGE_REFS_FEATURE = 'image-refs'
 
+/**
+ * The hello's feature of a client that draws tool calls folded: in the pages `sessions.open`,
+ * `sessions.snapshot` and `sessions.page` give it, a long tool output or input stands as a digest
+ * (`ToolContentDigest`, `ToolInputDigest`), and `sessions.entry` reads the entry whole.
+ */
+export const TOOL_DIGESTS_FEATURE = 'tool-digests'
+
 /** The most features a hello names that the host reads. */
 const MAX_FEATURES = 16
 

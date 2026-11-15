@@ -54,6 +54,7 @@ export type ThreadRequest =
       images?: ImageMode
     }
   | { id: number; op: 'tail'; sessionId: string; from: number; images?: ImageMode }
+  | { id: number; op: 'entry'; sessionId: string; entryId: string; images?: ImageMode }
   | { id: number; op: 'load'; sessionId: string }
   | { id: number; op: 'write'; sessionId: string; change: ThreadWrite }
   | { id: number; op: 'remove'; sessionIds: string[] }

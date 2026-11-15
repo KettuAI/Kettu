@@ -51,6 +51,7 @@ import {
   type OutlineRow,
   type PositionedEntry,
   type StoredBlob,
+  type StoredEntry,
   type StoredOutline,
   type StoredOutputs,
   type StoredSession,
@@ -406,6 +407,7 @@ function prepareAll(db: DatabaseSync) {
       "SELECT pos, json FROM entries WHERE session_id = ? AND kind = 'plan' ORDER BY pos DESC LIMIT 1",
     ),
     byId: sql('SELECT pos FROM entries WHERE session_id = ? AND entry_id = ?'),
+    entryById: sql('SELECT pos, json FROM entries WHERE session_id = ? AND entry_id = ?'),
     turnFrom: sql(
       'SELECT turn FROM entries WHERE session_id = ? AND pos >= ? ORDER BY pos LIMIT 1',
     ),
@@ -939,6 +941,23 @@ export class ThreadDb {
   /** Everything from `from` to the end, for a window the renderer holds already. */
   tail(sessionId: string, from: number, images: ImageMode = 'refs'): ThreadPage | null {
     return this.guard((sql) => this.pageOf(sql, sessionId, from, END, images), null)
+  }
+
+  /**
+   * One entry by its id, as a page gives it; null when the session has no stored thread, the
+   * thread no such entry, or the entry does not parse.
+   */
+  entry(sessionId: string, entryId: string, images: ImageMode = 'refs'): StoredEntry | null {
+    return this.guard((sql) => {
+      const head = this.headOf(sql, sessionId)
+      if (!head) return null
+      const row = sql.entryById.get(sessionId, entryId)
+      if (!row) return null
+      const entry = this.entryOf(sql, sessionId, row, images)
+      return entry
+        ? { head: { agentId: head.agentId, acpSessionId: head.acpSessionId }, entry }
+        : null
+    }, null)
   }
 
   /** The session's user messages with their titles, oldest first; null without a stored thread. */

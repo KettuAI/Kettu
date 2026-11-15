@@ -774,6 +774,12 @@ describe('attachments', () => {
     rejects(() => posix['sessions.blob']({ sessionId: 's', hash: '../../etc/passwd' }))
     rejects(() => posix['sessions.blob']({ sessionId: 's', hash: hash.toUpperCase() }))
     rejects(() => posix['sessions.blob']({ hash }))
+    expect(posix['sessions.entry']({ sessionId: 's', entryId: 'toolu_1', more: 1 })).toEqual({
+      sessionId: 's',
+      entryId: 'toolu_1',
+    })
+    rejects(() => posix['sessions.entry']({ sessionId: 's' }))
+    rejects(() => posix['sessions.entry']({ sessionId: 's', entryId: 'x'.repeat(1025) }))
     expect(posix['attachments.read']({ id: 'a1', more: 1 })).toEqual({ id: 'a1' })
     rejects(() => posix['attachments.remove']({}))
     expect(posix['attachments.held']({ ids: ['a1', 'a2'] })).toEqual({ ids: ['a1', 'a2'] })

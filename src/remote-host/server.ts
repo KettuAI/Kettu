@@ -61,6 +61,7 @@ import {
   parseHello,
   RESUME_MS,
   RESUME_VERSION,
+  TOOL_DIGESTS_FEATURE,
   type Addresses,
   type Closing,
   type ClosingReason,
@@ -803,6 +804,7 @@ class DeviceConnection {
       name: device.name,
       ...(hello.features?.includes(BROWSER_FEATURE) ? { browser: true as const } : {}),
       ...(hello.features?.includes(IMAGE_REFS_FEATURE) ? { imageRefs: true as const } : {}),
+      ...(hello.features?.includes(TOOL_DIGESTS_FEATURE) ? { toolDigests: true as const } : {}),
     })
     if (this.state !== 'opening') return port?.close()
     if (!port) return this.close('unavailable')

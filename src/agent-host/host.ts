@@ -61,7 +61,7 @@ import {
   type MarketResults,
 } from '@shared/market-publish'
 import { HARNESSES_FOLDER, KETTU_HOME_FOLDER } from '@shared/storage'
-import type { AgentId, FromDevice } from '@shared/thread'
+import type { AgentId, DigestedThreadEntry, FromDevice, ThreadEntry } from '@shared/thread'
 import { agentOptionsFile, AgentOptionsStore, startModeIn } from './agent-options'
 import { listedModels } from './claude/user-settings'
 import { STOP_TIMINGS } from './agent-process'
@@ -176,6 +176,7 @@ import {
   type JsonFile,
 } from './storage'
 import { GitHubStar, gitHubStarFile } from './github-star'
+import { digestEntries } from './threads/digest'
 import type { ImageMode } from './threads/model'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { UsageManager, type UsageTimings } from './usage/manager'
@@ -207,6 +208,14 @@ function brief(
 /** A window, and a device that said so, read stored images by hash; other devices get bytes. */
 function imagesFor(device: PortDevice | null): ImageMode {
   return device && !device.imageRefs ? 'inline' : 'refs'
+}
+
+/** A page as a device reads it: with long tool outputs and inputs as digests, when it said so. */
+function digestsFor<T extends { entries: ThreadEntry[] }>(
+  device: PortDevice | null,
+  page: T,
+): T | (Omit<T, 'entries'> & { entries: DigestedThreadEntry[] }) {
+  return device?.toolDigests ? digestEntries(page) : page
 }
 
 /** What a message or answer from a paired device's port keeps of it; none from a window. */
@@ -2349,11 +2358,14 @@ export class AgentHost {
       'sessions.prepare': (params, { portId }) => sessions.prepare(params, portId),
       'sessions.discard': ({ sessionId }) => sessions.discard(sessionId),
       'sessions.import': (params) => sessions.importSession(params),
-      'sessions.open': ({ sessionId }, { device }) => sessions.open(sessionId, imagesFor(device)),
-      'sessions.snapshot': ({ sessionId, from }, { device }) =>
-        sessions.snapshot(sessionId, from, imagesFor(device)),
-      'sessions.page': ({ sessionId, before, from }, { device }) =>
-        sessions.page(sessionId, before, from, imagesFor(device)),
+      'sessions.open': async ({ sessionId }, { device }) =>
+        digestsFor(device, await sessions.open(sessionId, imagesFor(device))),
+      'sessions.snapshot': async ({ sessionId, from }, { device }) =>
+        digestsFor(device, await sessions.snapshot(sessionId, from, imagesFor(device))),
+      'sessions.page': async ({ sessionId, before, from }, { device }) =>
+        digestsFor(device, await sessions.page(sessionId, before, from, imagesFor(device))),
+      'sessions.entry': ({ sessionId, entryId }, { device }) =>
+        sessions.entry(sessionId, entryId, imagesFor(device)),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
       'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),
