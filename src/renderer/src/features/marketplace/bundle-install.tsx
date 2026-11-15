@@ -3,8 +3,13 @@
 // written until the user confirms. Values for its environment go to the key store, values for
 // its arguments to the host, which writes them into the server's command line.
 
-import { useState, type FormEvent } from 'react'
-import { CommandLineIcon, PackageIcon } from '@hugeicons/core-free-icons'
+import { useState, type FormEvent, type ReactNode } from 'react'
+import {
+  CommandLineIcon,
+  Delete02Icon,
+  PackageIcon,
+  PlusSignIcon,
+} from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import {
   kettuId,
@@ -18,7 +23,7 @@ import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { TextField } from '@renderer/components/affect/text-field'
 import { toast } from '@renderer/components/ui/toast'
-import { SettingSwitch } from '@renderer/features/settings/controls'
+import { IconAction, SetButton, SettingSwitch } from '@renderer/features/settings/controls'
 import { bytes } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
@@ -89,6 +94,82 @@ export function BundleNote({ bundle }: { bundle: BundleRef }) {
   )
 }
 
+/**
+ * A value the bundle takes several of, one field each, kept as one line per value as the host
+ * reads it.
+ */
+function ListField({
+  input,
+  label,
+  hint,
+  value,
+  onChange,
+  choose,
+  autoFocus,
+}: {
+  input: BundleInput
+  label: ReactNode
+  hint: string
+  value: string
+  onChange: (value: string) => void
+  choose: ((set: (folder: string) => void) => Promise<void>) | null
+  autoFocus: boolean
+}) {
+  const { t } = useTranslation('marketplace')
+  const rows = value.split('\n')
+  const setRow = (at: number, row: string) =>
+    onChange(rows.map((r, i) => (i === at ? row.replace(/[\r\n]/g, '') : r)).join('\n'))
+  return (
+    <div className="k-mkt-install__list">
+      {rows.map((row, i) => (
+        <div key={i} className="k-mkt-install__input">
+          <TextField
+            size="sm"
+            type={input.type === 'number' ? 'number' : 'text'}
+            autoFocus={autoFocus && i === 0}
+            autoComplete="off"
+            spellCheck={false}
+            min={input.min}
+            max={input.max}
+            label={i === 0 ? label : undefined}
+            aria-label={i === 0 ? undefined : input.title}
+            hint={i === rows.length - 1 ? hint : undefined}
+            value={row}
+            onChange={(event) => setRow(i, event.target.value)}
+          />
+          {choose && (
+            <Button
+              size="sm"
+              variant="secondary"
+              type="button"
+              onClick={() => void choose((folder) => setRow(i, folder))}
+            >
+              {t('bundle.choose')}
+            </Button>
+          )}
+          {rows.length > 1 && (
+            <IconAction
+              label={t('dialogs.add.remove', { name: row.trim() || input.title })}
+              icon={Delete02Icon}
+              onClick={() => onChange(rows.filter((_, j) => j !== i).join('\n'))}
+            />
+          )}
+        </div>
+      ))}
+      <span>
+        <SetButton
+          size="sm"
+          type="button"
+          icon={<Icon icon={PlusSignIcon} size={14} />}
+          onClick={() => onChange(`${value}\n`)}
+        >
+          {t('bundle.addValue')}
+        </SetButton>
+      </span>
+    </div>
+  )
+}
+
 /** The bundle's form: the agents, what it runs, and a field for each value it asks for. */
 function BundleForm({
   plan,
@@ -106,7 +187,11 @@ function BundleForm({
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
       plan.inputs.flatMap((input) => {
-        const value = plan.previous?.[input.key] ?? (input.secret ? undefined : input.default)
+        const value =
+          plan.previous?.[input.key] ??
+          (input.secret ? undefined : input.default) ??
+          // A switch shows off, so off is its value until it is turned on.
+          (input.type === 'boolean' ? 'false' : undefined)
         return value === undefined ? [] : [[input.key, value]]
       }),
     ),
@@ -174,12 +259,26 @@ function BundleForm({
           )
         }
         const choose =
-          input.type === 'directory' && hostId === null && !input.multiple
-            ? async () => {
+          input.type === 'directory' && hostId === null
+            ? async (put: (folder: string) => void) => {
                 const folder = await api.dialogs.openProject()
-                if (folder) set(input.key, folder)
+                if (folder) put(folder)
               }
             : null
+        if (input.multiple && !input.secret) {
+          return (
+            <ListField
+              key={input.key}
+              input={input}
+              label={label}
+              hint={hint}
+              value={values[input.key] ?? ''}
+              onChange={(value) => set(input.key, value)}
+              choose={choose}
+              autoFocus={i === 0}
+            />
+          )
+        }
         return (
           <div key={input.key} className="k-mkt-install__input">
             <TextField
@@ -196,7 +295,12 @@ function BundleForm({
               onChange={(event) => set(input.key, event.target.value)}
             />
             {choose && (
-              <Button size="sm" variant="secondary" type="button" onClick={() => void choose()}>
+              <Button
+                size="sm"
+                variant="secondary"
+                type="button"
+                onClick={() => void choose((folder) => set(input.key, folder))}
+              >
                 {t('bundle.choose')}
               </Button>
             )}

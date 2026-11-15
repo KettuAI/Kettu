@@ -393,6 +393,18 @@
 .k-mkt-install__input > button {
   margin-top: 29px;
 }
+.k-mkt-install__list {
+  display: grid;
+  gap: 6px;
+}
+.k-mkt-install__list .k-mkt-install__input {
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-columns: auto;
+}
+.k-mkt-install__list .k-mkt-install__input:not(:first-child) > button {
+  margin-top: 0;
+}
 
 /* Connect: the wait while the user signs in at the service, the device code, and why it failed */
 .k-mkt-connect {

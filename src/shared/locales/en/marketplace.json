@@ -930,8 +930,9 @@
     "runs": "Will run",
     "nodeRuntime": "Kettu’s Node.js",
     "blockedTitle": "Can’t install {{name}} here",
+    "addValue": "Add another",
     "choose": "Choose…",
-    "multipleHint": "One per line.",
+    "multipleHint": "Add as many as you need.",
     "keepHint": "Leave empty to keep the value you set before.",
     "updateSubmit": "Update"
   }
