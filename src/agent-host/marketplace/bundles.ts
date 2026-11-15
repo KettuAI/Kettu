@@ -183,7 +183,11 @@ export interface BundlesDeps {
   nodeVersion: string
   /** A listing's page and its current version's files, as the Kettu Marketplace gives them. */
   listing(id: string): Promise<CommunityListing>
-  download(id: string, kind: PublishKind): Promise<{ files: DownloadedFile[] }>
+  /** A listing's current version and its files, which it reads again. */
+  download(
+    id: string,
+    kind: PublishKind,
+  ): Promise<{ listing: MarketListing; files: DownloadedFile[] }>
   /** A command on the agents' PATH, or null. */
   find(command: string): Promise<string | null>
   /** The servers the settings keep now. */
@@ -231,7 +235,7 @@ export class MarketBundlesService {
     }
     const { listing, bundle } = page
     if (!bundle || !safeFilePath(listing.version)) throw refuse(t('marketBundle.noBundle'))
-    const data = await this.bytes(id, bundle)
+    const data = await this.bytes(listing, bundle)
     const { files, manifest } = await unpackBundle(data)
     const read = readManifest(manifest, this.deps.platform)
     const final = path.join(this.root, listing.id, listing.version)
@@ -406,7 +410,8 @@ export class MarketBundlesService {
     }
   }
 
-  private async bytes(id: string, bundle: BundleRef): Promise<Buffer> {
+  /** The bundle the page named, at the version it named; a newer one is refused for a retry. */
+  private async bytes(listing: MarketListing, bundle: BundleRef): Promise<Buffer> {
     if (bundle.from === 'url') {
       return fetchBundle(
         this.deps.fetch ?? fetch,
@@ -415,10 +420,16 @@ export class MarketBundlesService {
         BUNDLE_LIMITS.download,
       )
     }
-    // Each file is checked against its size and SHA-256 as it downloads.
-    const { files } = await this.deps.download(id, 'mcp-server')
-    const file = files.length === 1 ? files[0] : undefined
+    // Each file is checked against its version's list as it downloads, but the list is read
+    // again: the version must still be the one the page named, and the file the one it listed.
+    const downloaded = await this.deps.download(listing.id, 'mcp-server')
+    if (downloaded.listing.version !== listing.version) throw refuse(t('marketBundle.changed'))
+    const file = downloaded.files.length === 1 ? downloaded.files[0] : undefined
     if (!file || file.path !== bundle.path) throw refuse(t('marketBundle.noBundle'))
+    const sha256 = createHash('sha256').update(file.data).digest('hex')
+    if (file.data.byteLength !== bundle.size || sha256 !== bundle.sha256.toLowerCase()) {
+      throw refuse(t('marketBundle.mismatch'))
+    }
     return file.data
   }
 

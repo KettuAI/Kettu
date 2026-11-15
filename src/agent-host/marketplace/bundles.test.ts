@@ -96,6 +96,8 @@ function service(
     servers?: () => MarketServer[]
     fetch?: typeof fetch
     find?: (command: string) => Promise<string | null>
+    /** What the download gives, when the listing changed after its page was read. */
+    downloaded?: { version?: string; data?: Buffer }
   } = {},
 ) {
   const ref = over.ref ?? {
@@ -118,7 +120,11 @@ function service(
     home: '/Users/bea',
     nodeVersion: '24.0.0',
     listing: () => Promise.resolve(page),
-    download: () => Promise.resolve({ files: [{ path: 'echo.mcpb', data }] }),
+    download: () =>
+      Promise.resolve({
+        listing: listing(over.downloaded?.version ?? over.version),
+        files: [{ path: 'echo.mcpb', data: over.downloaded?.data ?? data }],
+      }),
     find: over.find ?? ((command) => Promise.resolve(`/usr/bin/${command}`)),
     servers: over.servers ?? (() => []),
     ...(over.fetch ? { fetch: over.fetch } : {}),
@@ -229,6 +235,28 @@ describe('MarketBundlesService', () => {
       'abcdefgh23',
     )
     expect(plan.token).not.toBeNull()
+  })
+
+  it('refuses an uploaded bundle that is not the one its page named, keeping nothing', async () => {
+    const data = await bundle()
+    const other = await bundle({ 'extra.js': '1' })
+    const page = (size: number, sha256: string): BundleRef => ({
+      from: 'upload',
+      path: 'echo.mcpb',
+      size,
+      sha256,
+    })
+    await expect(
+      service(data, { ref: page(data.byteLength + 1, sha(data)) }).prepare('abcdefgh23'),
+    ).rejects.toThrow(/checksum/)
+    await expect(
+      service(data, { ref: page(data.byteLength, sha(other)) }).prepare('abcdefgh23'),
+    ).rejects.toThrow(/checksum/)
+    await expect(
+      service(data, { downloaded: { version: '1.1.0', data: other } }).prepare('abcdefgh23'),
+    ).rejects.toThrow(/changed/)
+    expect(await written()).toEqual([])
+    expect(spawned.calls).toBe(0)
   })
 
   it('removes a staged bundle on cancel', async () => {
