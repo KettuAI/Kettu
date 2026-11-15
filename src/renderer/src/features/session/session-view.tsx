@@ -221,7 +221,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                       <Button size="xs" variant="outline" onClick={retry}>
                         {t('common:actions.retry')}
                       </Button>
-                      <Button size="xs" onClick={() => openAgents(null)}>
+                      <Button size="xs" onClick={() => openAgents(summary.agentId)}>
                         {t('view.signIn')}
                       </Button>
                     </AlertAction>
