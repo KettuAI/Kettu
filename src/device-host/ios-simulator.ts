@@ -266,6 +266,7 @@ export class IosSimulatorDriver implements DeviceDriver {
       height: plan.height,
       screen: plan.screen,
       radii: plan.radii,
+      body: plan.body,
       images,
     }
   }

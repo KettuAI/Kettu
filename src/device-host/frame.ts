@@ -12,6 +12,7 @@ export interface FramePlan {
   height: number
   screen: DeviceFrameRect
   radii: [number, number, number, number]
+  body: DeviceFrameRect & { radius: number }
   images: Array<DeviceFrameRect & { image: string; button?: FrameButtonPlan }>
   /** Each pressable button's HID page and usage, by name; clients only name the button. */
   hid: Map<string, { page: number; usage: number }>
@@ -91,6 +92,8 @@ export function framePlan(value: unknown): FramePlan | null {
         points(corners.bottomLeft) ?? radius,
       ]
     : [radius, radius, radius, radius]
+  // Without its own radius, the body's corner follows the screen's around the bezel.
+  const bodyRadius = points(chrome.outerCornerRadius) ?? radii[0] + screen.x - body.x
 
   const hid: FramePlan['hid'] = new Map()
   const buttons = (Array.isArray(chrome.buttons) ? chrome.buttons : []).flatMap((value) => {
@@ -152,5 +155,14 @@ export function framePlan(value: unknown): FramePlan | null {
   }
   for (const button of buttons) if (button.onTop) images.push(button.picture)
   if (images.length > MAX_IMAGES) return null
-  return { chrome: id, width, height, screen, radii, images, hid }
+  return {
+    chrome: id,
+    width,
+    height,
+    screen,
+    radii,
+    body: { ...body, radius: bodyRadius },
+    images,
+    hid,
+  }
 }

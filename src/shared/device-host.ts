@@ -142,6 +142,11 @@ export interface DeviceFrame {
   screen: DeviceFrameRect
   /** The screen's corner radii in points: top left, top right, bottom right, bottom left. */
   radii: [number, number, number, number]
+  /**
+   * The device's body without the room its buttons stick out into, and its corner radius in
+   * points. An older host sends none.
+   */
+  body?: DeviceFrameRect & { radius: number }
   images: Array<DeviceFrameRect & { png: ArrayBuffer; button?: DeviceFrameButton }>
 }
 
