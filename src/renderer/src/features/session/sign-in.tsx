@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ComputerTerminal01Icon, Login03Icon, RefreshIcon } from '@hugeicons/core-free-icons'
+import {
+  ComputerTerminal01Icon,
+  Key01Icon,
+  Login03Icon,
+  RefreshIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import type { AgentAuthMethod } from '@shared/agent-host'
@@ -17,6 +22,7 @@ import {
 } from '@renderer/components/ui/empty'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { CopyButton } from '@renderer/features/git/branch-popover'
+import { openHostSettingsItem } from '@renderer/features/settings/host-sections'
 import { errorMessage, hostAt } from '@renderer/lib/host'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 
@@ -136,6 +142,59 @@ export function SignIn({
                     data-icon="inline-start"
                   />
                   {t('signIn.signedIn')}
+                </Button>
+              </div>
+            </div>
+          ) : method.type === 'env' ? (
+            // The key is set on the agent's page; the agent has nothing to authenticate.
+            <div
+              key={method.id}
+              className="flex w-full flex-col gap-2 rounded-xl bg-card p-3 text-left shadow-card"
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="text-ui font-medium">{method.name}</span>
+                {method.description && (
+                  <span className="text-xs text-muted-foreground">{method.description}</span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {t('signIn.envHint', { agent: name })}
+                </span>
+              </div>
+              {method.envVars && method.envVars.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted px-2.5 py-1.5">
+                  {method.envVars.map((variable) => (
+                    <span key={variable.name} className="text-xs">
+                      <code className="font-mono" data-selectable="">
+                        {variable.name}
+                      </code>
+                      {variable.optional && (
+                        <span className="text-muted-foreground"> · {t('signIn.optional')}</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1.5">
+                <Button
+                  size="compact"
+                  onClick={() => openHostSettingsItem(hostId, 'agents', agentId)}
+                >
+                  <HugeiconsIcon
+                    icon={Key01Icon}
+                    strokeWidth={1.9}
+                    aria-hidden
+                    data-icon="inline-start"
+                  />
+                  {t('signIn.inSettings')}
+                </Button>
+                <Button variant="outline" size="compact" onClick={onRetry}>
+                  <HugeiconsIcon
+                    icon={RefreshIcon}
+                    strokeWidth={1.9}
+                    aria-hidden
+                    data-icon="inline-start"
+                  />
+                  {t('signIn.keySet')}
                 </Button>
               </div>
             </div>

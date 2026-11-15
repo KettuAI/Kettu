@@ -608,7 +608,11 @@
     "noMethods": "{{agent}} did not say how to sign in. Sign in with its own command line, then retry.",
     "copyCommand": "Copy command",
     "inTerminal": "Sign in in terminal",
-    "signedIn": "I've signed in, retry"
+    "signedIn": "I've signed in, retry",
+    "envHint": "Set it on {{agent}}'s page in Settings › Agents.",
+    "inSettings": "Set in Settings",
+    "keySet": "I've set it, retry",
+    "optional": "Optional"
   },
   "takeover": {
     "title": "{{agent}} took over",
