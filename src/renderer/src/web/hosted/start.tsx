@@ -21,7 +21,7 @@ import type { PairingNotice } from '../pairing-page'
 import type { WebSettings } from '../settings'
 import { keepStorage, loadDevice, saveDevice, type WebDevice } from '../storage'
 import { HostedAccount } from './account'
-import { accountUrl, relayUrl } from './config'
+import { accountUrl, regionListKeys, relayUrl } from './config'
 import { HOSTED_FEATURES, HostedRelay } from './relay-regions'
 import { clearBrowser } from './clear'
 import {
@@ -112,7 +112,7 @@ let relays: HostedRelay | null = null
 /** The relay regions and tokens, once per page, for the account signed in. */
 function relaysOf(account: HostedAccount): HostedRelay {
   if (!relays) {
-    relays = new HostedRelay(account, relayUrl, accountUrl)
+    relays = new HostedRelay(account, relayUrl, accountUrl, regionListKeys)
     void relays.start()
   }
   return relays

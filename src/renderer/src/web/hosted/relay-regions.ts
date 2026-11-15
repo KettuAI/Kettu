@@ -55,10 +55,12 @@ export class HostedRelay {
     private readonly account: HostedAccount,
     private readonly main: string,
     accountUrl: string,
+    keys: Readonly<Record<string, string>>,
   ) {
     this.api = new AccountApi(accountUrl, (url, init) => fetch(url, init))
     this.source = new RegionSource({
       main,
+      keys,
       // The browser revalidates with the ETag itself, which a header of the page's own would
       // turn into a preflight.
       fetchList: async (url) => {

@@ -6,3 +6,5 @@ declare const __KETTU_HOSTED__: boolean
 declare const __KETTU_ACCOUNT_URL__: string
 /** The relay a development build of the hosted client uses; empty for the project's. */
 declare const __KETTU_RELAY_URL__: string
+/** The region list keys a development relay signs with; empty for the project's. */
+declare const __KETTU_REGION_KEYS__: string

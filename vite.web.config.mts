@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => {
       __KETTU_HOSTED__: JSON.stringify(hosted),
       __KETTU_ACCOUNT_URL__: JSON.stringify(hosted ? (process.env.KETTU_ACCOUNT_URL ?? '') : ''),
       __KETTU_RELAY_URL__: JSON.stringify(hosted ? (process.env.KETTU_RELAY_URL ?? '') : ''),
+      __KETTU_REGION_KEYS__: JSON.stringify(hosted ? (process.env.KETTU_REGION_KEYS ?? '') : ''),
     },
     resolve: {
       alias: [
