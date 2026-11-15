@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -72,6 +72,9 @@ function mineListing(over: Partial<MineListing> = {}): MineListing {
   }
 }
 
+/** `~/.kettu/plugins` in the tests' home, beside the host's data. */
+const pluginsRoot = () => path.join(root, 'home', '.kettu', 'plugins')
+
 const sha = (data: string | Buffer) => createHash('sha256').update(data).digest('hex')
 
 const SKILL = '---\nname: changelog-writer\ndescription: One line per change.\n---\n\nWrite it.\n'
@@ -107,6 +110,7 @@ function service(
 ) {
   return new MarketCommunityService({
     userDataPath: root,
+    pluginsRoot: pluginsRoot(),
     file: communityFile(root, log),
     log,
     account: () => (extra.account === undefined ? ACCOUNT : extra.account),
@@ -478,6 +482,96 @@ describe('MarketCommunityService', () => {
         plugins: { author: { name: string } }[]
       }
       expect(market.plugins.map((p) => p.author.name)).toEqual(['amigoer'])
+    })
+
+    it('keeps the local marketplace outside the app’s data, which may be removed without it', async () => {
+      const community = service(plugin())
+      await community.installPlugin('abcdefgh23', 'claude-code', 'user', null)
+      const local = community.local('claude-code')
+      expect(local.dir).toBe(path.join(pluginsRoot(), 'claude-code'))
+      expect(
+        await readFile(path.join(local.dir, 'plugins', 'hello', 'commands', 'hi.md'), 'utf8'),
+      ).toBe('Say hi')
+      expect((await written()).filter((file) => file.startsWith('marketplace'))).toEqual([])
+    })
+
+    it('keeps the plugins another Kettu data folder listed whose folders are still there', async () => {
+      const local = service(plugin()).local('claude-code')
+      await mkdir(path.join(local.dir, 'plugins', 'theirs'), { recursive: true })
+      await mkdir(path.dirname(local.file), { recursive: true })
+      await writeFile(
+        local.file,
+        JSON.stringify({
+          name: 'kettu-marketplace',
+          plugins: [
+            { name: 'theirs', source: './plugins/theirs', version: '2.0.0' },
+            { name: 'gone', source: './plugins/gone', version: '1.0.0' },
+          ],
+        }),
+      )
+      await service(plugin()).installPlugin('abcdefgh23', 'claude-code', 'user', null)
+      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
+        plugins: { name: string; version: string }[]
+      }
+      expect(market.plugins.map((p) => [p.name, p.version])).toEqual([
+        ['hello', '1.0.0'],
+        ['theirs', '2.0.0'],
+      ])
+    })
+
+    it('moves the local marketplace kept in the app’s data before, leaving a link there', async () => {
+      const legacy = path.join(root, 'marketplace', 'kettu-plugins', 'claude-code')
+      await mkdir(path.join(legacy, 'plugins', 'hello'), { recursive: true })
+      await mkdir(path.join(legacy, '.claude-plugin'), { recursive: true })
+      await writeFile(path.join(legacy, 'plugins', 'hello', 'README.md'), 'Hi')
+      await writeFile(path.join(legacy, '.claude-plugin', 'marketplace.json'), '{"plugins":[]}')
+      const community = service(plugin())
+      expect(await community.moveLegacy()).toEqual(['claude-code'])
+      const local = community.local('claude-code')
+      expect(await readFile(path.join(local.dir, 'plugins', 'hello', 'README.md'), 'utf8')).toBe(
+        'Hi',
+      )
+      expect((await lstat(legacy)).isSymbolicLink()).toBe(true)
+      expect(await realpath(legacy)).toBe(await realpath(local.dir))
+      expect(await community.moveLegacy()).toEqual([])
+    })
+
+    it('adds what it moves to a local marketplace another data folder moved first', async () => {
+      const legacy = path.join(root, 'marketplace', 'kettu-plugins', 'claude-code')
+      await mkdir(path.join(legacy, 'plugins', 'hello', '.claude-plugin'), { recursive: true })
+      await writeFile(path.join(legacy, 'plugins', 'hello', '.claude-plugin', 'plugin.json'), '{}')
+      await mkdir(path.join(root, 'state'), { recursive: true })
+      await writeFile(
+        path.join(root, 'state', 'market-community.json'),
+        JSON.stringify({
+          version: 1,
+          plugins: {
+            abcdefgh23: {
+              listingId: 'abcdefgh23',
+              harness: 'claude-code',
+              name: 'hello',
+              version: '1.0.0',
+              handle: 'amigoer',
+              slug: 'hello',
+            },
+          },
+        }),
+      )
+      const community = service(plugin())
+      const local = community.local('claude-code')
+      await mkdir(path.join(local.dir, 'plugins', 'theirs'), { recursive: true })
+      await mkdir(path.dirname(local.file), { recursive: true })
+      await writeFile(
+        local.file,
+        JSON.stringify({ plugins: [{ name: 'theirs', source: './plugins/theirs' }] }),
+      )
+      expect(await community.moveLegacy()).toEqual(['claude-code'])
+      expect((await readdir(path.join(local.dir, 'plugins'))).sort()).toEqual(['hello', 'theirs'])
+      const market = JSON.parse(await readFile(local.file, 'utf8')) as {
+        plugins: { name: string }[]
+      }
+      expect(market.plugins.map((p) => p.name)).toEqual(['hello', 'theirs'])
+      expect(await realpath(legacy)).toBe(await realpath(local.dir))
     })
   })
 })

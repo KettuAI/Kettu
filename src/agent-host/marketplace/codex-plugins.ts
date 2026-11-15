@@ -1,6 +1,7 @@
 // Codex's plugins and skills through the agent's own app-server: its local and curated
 // marketplaces, never the remote catalog of ChatGPT apps, and the skills Codex has of its own.
 
+import path from 'node:path'
 import type {
   AgentOwnSkill,
   CatalogPlugin,
@@ -168,6 +169,24 @@ export async function installLocalCodexPlugin(
   const installed = list.installed.find((plugin) => plugin.id === `${name}@${KETTU_PLUGINS}`)
   if (!installed) throw new Error(`Codex did not list ${name}@${KETTU_PLUGINS} as installed`)
   return installed
+}
+
+/**
+ * Points the agent's registration of the Kettu Marketplace's local marketplace at `dir`, whose
+ * marketplace file is `file`, when it names another folder; adding it again under its name moves
+ * it and keeps its plugins. Resolves to whether it moved.
+ */
+export async function pointLocalCodexMarketplace(
+  request: CodexRequest,
+  agentId: AgentId,
+  dir: string,
+  file: string,
+): Promise<boolean> {
+  const { marketplaces } = await listCodexPlugins(request, agentId)
+  const known = marketplaces.find((marketplace) => marketplace.name === KETTU_PLUGINS)
+  if (!known || path.resolve(known.source) === path.resolve(file)) return false
+  await request<MarketplaceAddResponse>('marketplace/add', { source: dir })
+  return true
 }
 
 export async function uninstallCodexPlugin(request: CodexRequest, id: string): Promise<void> {

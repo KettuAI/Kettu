@@ -508,6 +508,25 @@ export async function addMarketplace(cli: ClaudeCli, source: string): Promise<Pl
 }
 
 /**
+ * Points the agent's registration of the Kettu Marketplace's local marketplace at `dir`, and adds
+ * it when there is none and `add` says so. Never removes it first: removing a marketplace
+ * uninstalls every plugin from it, while adding it again under its name only moves it. Resolves
+ * to whether the agent's marketplaces changed.
+ */
+export async function pointLocalMarketplace(
+  cli: ClaudeCli,
+  dir: string,
+  add: boolean,
+): Promise<boolean> {
+  const known = (await listMarketplaces(cli)).find((m) => m.name === KETTU_PLUGINS)
+  if (known ? path.resolve(known.installLocation ?? known.source) === path.resolve(dir) : !add) {
+    return false
+  }
+  await change(cli, ['marketplace', 'add', dir])
+  return true
+}
+
+/**
  * Installs a plugin of the Kettu Marketplace's local marketplace at `dir`, or updates one the
  * scope already has; the agent gets the marketplace first, which reads the folder as it is.
  */
@@ -518,11 +537,7 @@ export async function installLocalPlugin(
   at: PluginScope,
   projectPath: string | null,
 ): Promise<InstalledPlugin> {
-  const known = (await listMarketplaces(cli)).find((m) => m.name === KETTU_PLUGINS)
-  const same = !!known && path.resolve(known.installLocation ?? known.source) === path.resolve(dir)
-  // One the user's data left behind in another folder.
-  if (known && !same) await change(cli, ['marketplace', 'remove', KETTU_PLUGINS])
-  if (!same) await change(cli, ['marketplace', 'add', dir])
+  await pointLocalMarketplace(cli, dir, true)
   const id = `${name}@${KETTU_PLUGINS}`
   const here = (plugin: InstalledPlugin) =>
     plugin.id === id && plugin.scope === at && (at === 'user' || plugin.projectPath === projectPath)

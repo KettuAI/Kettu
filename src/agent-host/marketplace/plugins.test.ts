@@ -3,6 +3,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { CatalogPlugin } from '@shared/marketplace'
+import type { ProgramOptions, ProgramRun } from '../adapter-install'
+import { TextRing } from '../ring'
+import type { CodexRequest } from './codex-plugins'
 import { MarketPluginsService, pluginsFile } from './plugins'
 
 function plugin(name: string, installs: number | null = 10): CatalogPlugin {
@@ -151,5 +154,145 @@ describe('a cached read of the plugins', () => {
     const answer = await plugins.plugins()
     expect(asked).toEqual(['claude-code'])
     expect(answer.stale).toBeUndefined()
+  })
+})
+
+describe("the Kettu Marketplace's local marketplace in an agent", () => {
+  const ran = (stdout: string): ProgramRun => ({
+    code: 0,
+    signal: null,
+    timedOut: false,
+    aborted: false,
+    output: new TextRing(1024),
+    stdout,
+  })
+
+  function claudeService(installed: string, marketplaces = '[]') {
+    const calls: string[] = []
+    const plugins = new MarketPluginsService({
+      file: pluginsFile(dir, log),
+      log,
+      platform: 'darwin',
+      agents: async () => ['claude-code', 'claude-code~work'],
+      program: async () => ({ program: '/opt/claude', env: {} }),
+      appServer: async () => {
+        throw new Error('not started in this test')
+      },
+      run: async (options: ProgramOptions) => {
+        const args = options.args.join(' ')
+        calls.push(args)
+        if (args === 'plugin list --json') return ran(installed)
+        if (args === 'plugin marketplace list --json') return ran(marketplaces)
+        return ran('{"outcome":"ok"}')
+      },
+    })
+    return { plugins, calls }
+  }
+
+  function codexService(installed: boolean) {
+    const calls: { method: string; params: unknown }[] = []
+    const request = (async (method: string, params?: unknown) => {
+      calls.push({ method, params })
+      if (method !== 'plugin/list') return {}
+      return {
+        marketplaces: [
+          {
+            name: 'kettu-marketplace',
+            path: '/old/codex/.agents/plugins/marketplace.json',
+            plugins: [
+              {
+                id: 'hello@kettu-marketplace',
+                name: 'hello',
+                version: '1.0.0',
+                localVersion: null,
+                source: { type: 'local' },
+                installed,
+                enabled: true,
+                installPolicy: 'AVAILABLE',
+                availability: 'AVAILABLE',
+                interface: null,
+              },
+            ],
+          },
+        ],
+        marketplaceLoadErrors: [],
+        featuredPluginIds: [],
+      }
+    }) as CodexRequest
+    const plugins = new MarketPluginsService({
+      file: pluginsFile(dir, log),
+      log,
+      platform: 'darwin',
+      agents: async () => ['codex'],
+      program: async () => null,
+      appServer: async () => request,
+    })
+    return { plugins, calls }
+  }
+
+  it('goes with the last plugin installed from it', async () => {
+    const { plugins, calls } = claudeService('[]')
+    await plugins.uninstall('claude-code', 'hello@kettu-marketplace', 'user', null)
+    expect(calls).toEqual([
+      'plugin uninstall hello@kettu-marketplace --scope user --json',
+      'plugin list --json',
+      'plugin marketplace remove kettu-marketplace --json',
+    ])
+  })
+
+  it('stays while a plugin from it is installed in any project', async () => {
+    const { plugins, calls } = claudeService(
+      '[{"id":"other@kettu-marketplace","scope":"project","enabled":true,"projectPath":"/repo"}]',
+    )
+    await plugins.uninstall('claude-code', 'hello@kettu-marketplace', 'user', null)
+    expect(calls.some((args) => args.includes('marketplace remove'))).toBe(false)
+  })
+
+  it('is not looked at when a plugin of another marketplace is uninstalled', async () => {
+    const { plugins, calls } = claudeService('[]')
+    await plugins.uninstall('claude-code', 'review@claude-plugins-official', 'user', null)
+    expect(calls).toEqual(['plugin uninstall review@claude-plugins-official --scope user --json'])
+  })
+
+  it('goes from Codex with the last plugin installed from it', async () => {
+    const { plugins, calls } = codexService(false)
+    await plugins.uninstall('codex', 'hello@kettu-marketplace', 'user', null)
+    expect(calls.map((call) => call.method)).toEqual([
+      'plugin/uninstall',
+      'plugin/list',
+      'marketplace/remove',
+    ])
+    expect(calls[2]!.params).toEqual({ marketplaceName: 'kettu-marketplace' })
+  })
+
+  it('moves to a new folder only in the agents that have it elsewhere', async () => {
+    const { plugins, calls } = claudeService(
+      '[]',
+      '[{"name":"kettu-marketplace","source":"directory","path":"/old/claude-code","installLocation":"/old/claude-code"}]',
+    )
+    await plugins.pointLocal('claude-code', {
+      dir: '/home/.kettu/plugins/claude-code',
+      file: '/home/.kettu/plugins/claude-code/.claude-plugin/marketplace.json',
+    })
+    expect(calls.filter((args) => args !== 'plugin marketplace list --json')).toEqual([
+      'plugin marketplace add /home/.kettu/plugins/claude-code --json',
+      'plugin marketplace add /home/.kettu/plugins/claude-code --json',
+    ])
+    const none = claudeService('[]', '[]')
+    await none.plugins.pointLocal('claude-code', {
+      dir: '/home/.kettu/plugins/claude-code',
+      file: '/home/.kettu/plugins/claude-code/.claude-plugin/marketplace.json',
+    })
+    expect(none.calls).toEqual(['plugin marketplace list --json', 'plugin marketplace list --json'])
+  })
+
+  it('moves to a new folder in Codex without removing it', async () => {
+    const { plugins, calls } = codexService(true)
+    await plugins.pointLocal('codex', {
+      dir: '/home/.kettu/plugins/codex',
+      file: '/home/.kettu/plugins/codex/.agents/plugins/marketplace.json',
+    })
+    expect(calls.map((call) => call.method)).toEqual(['plugin/list', 'marketplace/add'])
+    expect(calls[1]!.params).toEqual({ source: '/home/.kettu/plugins/codex' })
   })
 })
