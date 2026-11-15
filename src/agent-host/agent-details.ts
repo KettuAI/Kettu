@@ -264,11 +264,11 @@ export function configLocations(
       ]
     }
     case 'kimi': {
-      const moved = variable('KIMI_SHARE_DIR')
-      const folder = moved ?? p.join(home, '.kimi')
-      // Its docs name no global instructions file, so the folder and config.toml are all it shows.
+      const moved = variable('KIMI_CODE_HOME')
+      const folder = moved ?? p.join(home, '.kimi-code')
+      // Kimi Code stores its account, config and history in this directory.
       return [
-        { id: 'folder', candidates: [folder], env: moved ? 'KIMI_SHARE_DIR' : null },
+        { id: 'folder', candidates: [folder], env: moved ? 'KIMI_CODE_HOME' : null },
         { id: 'settings', candidates: [p.join(folder, 'config.toml')], env: null },
       ]
     }
