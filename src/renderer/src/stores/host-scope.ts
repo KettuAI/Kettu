@@ -58,6 +58,8 @@ export interface ScopeApi {
   showItem(path: string): Promise<void>
   getInfo(): Promise<AppInfo>
   restart(process: 'agent' | 'terminal'): Promise<void>
+  /** Sets or clears a variable an agent of the host starts with; the value is never read back. */
+  setAgentEnv: KettuApi['marketplace']['setAgentEnv']
 }
 
 /** A store the host sections only read. */
@@ -101,6 +103,8 @@ export const LOCAL_SCOPE: HostScope = {
     getInfo: () => window.kettu.app.getInfo(),
     restart: (process) =>
       process === 'agent' ? window.kettu.agents.restart() : window.kettu.terminals.restart(),
+    setAgentEnv: (agentId, variable, value) =>
+      window.kettu.marketplace.setAgentEnv(agentId, variable, value),
   },
   useSettingsStore,
   useAgentsStore,
@@ -405,6 +409,8 @@ function createScope(hostId: string): OtherScope {
         return read
       },
       restart: (process) => done(admin('host.restart', { process })),
+      setAgentEnv: (agentId, variable, value) =>
+        admin('marketplace.setAgentEnv', { agentId, variable, value }),
     },
     useSettingsStore: settings,
     useAgentsStore: createAgentsStore(request),

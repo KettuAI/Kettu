@@ -777,12 +777,15 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
 
 function AgentEnvKeyRow({
   agentId,
+  agentName,
   variable,
 }: {
   agentId: AgentId
+  agentName: string
   variable: { name: string; optional: boolean; set: boolean }
 }) {
   const { t } = useTranslation(['settings', 'common'])
+  const { api } = useHostScope()
   const [value, setValue] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -790,7 +793,7 @@ function AgentEnvKeyRow({
     setBusy(true)
     setError(null)
     try {
-      await window.kettu.marketplace.setAgentEnv(agentId, variable.name, next)
+      await api.setAgentEnv(agentId, variable.name, next)
       setValue('')
     } catch (e) {
       setError(errorMessage(e))
@@ -803,7 +806,7 @@ function AgentEnvKeyRow({
       text={
         <RowText
           name={variable.name}
-          description={variable.set ? t('agents.key.set', { name: agentId }) : ''}
+          description={variable.set ? t('agents.key.envSet', { name: agentName }) : ''}
         />
       }
     >
@@ -820,7 +823,7 @@ function AgentEnvKeyRow({
         />
         <div className="flex gap-2">
           <SetButton disabled={busy || !value.trim()} onClick={() => void save(value)}>
-            {t('agents.key.setButton')}
+            {t('agents.key.save')}
           </SetButton>
           {variable.set && (
             <SetButton variant="ghost" disabled={busy} onClick={() => void save(null)}>
@@ -957,6 +960,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                     <AgentEnvKeyRow
                       key={`${method.id}:${variable.name}`}
                       agentId={status.id}
+                      agentName={status.name}
                       variable={variable}
                     />
                   )),
