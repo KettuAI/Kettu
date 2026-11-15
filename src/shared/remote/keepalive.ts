@@ -64,6 +64,18 @@ export class Keepalive {
     this.heardAt = this.now()
   }
 
+  /**
+   * Pings now unless a ping is out, as after the network changed under the connection; silence
+   * then ends it as after any ping.
+   */
+  pingNow(): void {
+    if (this.stopped || this.pingedAt !== null) return
+    if (this.timer) clearTimeout(this.timer)
+    this.pingedAt = this.now()
+    this.options.ping()
+    this.schedule(this.options.answerMs)
+  }
+
   stop(): void {
     this.stopped = true
     if (this.timer) clearTimeout(this.timer)
