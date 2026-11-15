@@ -84,7 +84,14 @@ export function SignIn({
           <AgentTile agent={agentId} hostId={hostId} />
         </EmptyMedia>
         <EmptyTitle>{t('signIn.title', { agent: name })}</EmptyTitle>
-        <EmptyDescription>{t('signIn.description', { agent: name })}</EmptyDescription>
+        <EmptyDescription>
+          {t(
+            methods.some((method) => method.type === 'env')
+              ? 'signIn.descriptionWithKey'
+              : 'signIn.description',
+            { agent: name },
+          )}
+        </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="max-w-[440px] gap-3">
         {methods.length === 0 && (
