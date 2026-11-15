@@ -33,11 +33,14 @@ export function ListingFrame({
   back,
   label,
   rise,
+  banner,
   children,
 }: {
   back: () => void
   label?: string
   rise?: boolean
+  /** Shown in place of Back, with its own way out. */
+  banner?: ReactNode
   children: ReactNode
 }) {
   const { t } = useTranslation('marketplace')
@@ -47,10 +50,12 @@ export function ListingFrame({
         rise ? 'ui-as-integrations k-mkt-listing ui-as-rise' : 'ui-as-integrations k-mkt-listing'
       }
     >
-      <button type="button" className="k-mkt-back" onClick={back}>
-        <Icon icon={ArrowLeft01Icon} size={15} />
-        {label ?? t('listing.back')}
-      </button>
+      {banner ?? (
+        <button type="button" className="k-mkt-back" onClick={back}>
+          <Icon icon={ArrowLeft01Icon} size={15} />
+          {label ?? t('listing.back')}
+        </button>
+      )}
       <MarketAway>{children}</MarketAway>
     </div>
   )

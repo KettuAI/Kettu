@@ -19,7 +19,9 @@ import { errorMessage } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { publishedStore, type PublishedStoreHook } from '@renderer/stores/market-published'
+import { openMarketplace } from '@renderer/stores/view'
 import type { ListingDialog } from './publish-dialogs'
+import { previewItem } from './published-keys'
 import { askAgent, folderShown, listingName } from './published-model'
 
 /** The Published store of the page's host. */
@@ -115,6 +117,21 @@ export function listingMenu(
       icon: PencilEdit02Icon,
       onSelect: () => open({ kind: 'details', listing }),
     },
+    // Others can open neither an Only me listing nor one with no version yet.
+    listing.visibility === 'private' || listing.current === null
+      ? {
+          label: t('published.menu.viewAsOthers'),
+          description: t('published.menu.viewAsOthersPrivate'),
+          icon: ViewIcon,
+          disabled: true,
+          onSelect: () => {},
+        }
+      : {
+          label: t('published.menu.viewAsOthers'),
+          description: t('published.menu.viewAsOthersLine'),
+          icon: ViewIcon,
+          onSelect: () => openMarketplace({ item: previewItem(listing.id), tab: 'published' }),
+        },
     ...(unlisted
       ? [
           {

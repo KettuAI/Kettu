@@ -6,6 +6,7 @@ import type { MarketPublished } from '@shared/market-publish'
 export const KETTU_ITEM = 'builtin:kettu'
 
 const PUBLISHED_PREFIX = 'published:'
+const PREVIEW_PREFIX = 'preview:'
 
 /** The `item` of one of the account's own listings. */
 export function publishedItem(id: string): string {
@@ -14,6 +15,15 @@ export function publishedItem(id: string): string {
 
 export function publishedIdOf(item: string): string | null {
   return item.startsWith(PUBLISHED_PREFIX) ? item.slice(PUBLISHED_PREFIX.length) || null : null
+}
+
+/** The `item` of one of the account's own listings as other people see it. */
+export function previewItem(id: string): string {
+  return `${PREVIEW_PREFIX}${id}`
+}
+
+export function previewIdOf(item: string): string | null {
+  return item.startsWith(PREVIEW_PREFIX) ? item.slice(PREVIEW_PREFIX.length) || null : null
 }
 
 /**
@@ -25,7 +35,7 @@ export function publishedTitle(
   item: string,
 ): string | null | undefined {
   if (item === KETTU_ITEM) return 'Kettu'
-  const id = publishedIdOf(item)
+  const id = publishedIdOf(item) ?? previewIdOf(item)
   if (id === null) return undefined
   return published?.mine?.listings.find((listing) => listing.id === id)?.name ?? null
 }

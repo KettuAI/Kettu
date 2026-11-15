@@ -2,10 +2,11 @@
 // and the account's own Only me items. Their rows, install forms and listing, which install and
 // keep each item like the other sources' and offer the listing's newer version as an update.
 
-import { useEffect, useId, useState, type FormEvent } from 'react'
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AiBrain01Icon,
   Alert02Icon,
+  ArrowLeft01Icon,
   CodeIcon,
   CommandLineIcon,
   Flag02Icon,
@@ -13,6 +14,7 @@ import {
   RefreshIcon,
   SparklesIcon,
   Tick02Icon,
+  ViewIcon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
@@ -33,6 +35,8 @@ import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { backTo } from '@renderer/app/history'
 import { Segmented, SetButton, SettingSelect } from '@renderer/features/settings/controls'
 import {
   SettingsDialogBody,
@@ -75,6 +79,8 @@ import { AgentPicker } from './install'
 import { InstallButton, KeptControls, Runs } from './listing'
 import { asksFirst, itemKey, oauthFlow, updateFor } from './model'
 import { ListingFrame, ListingSkeleton } from './parts'
+import { usePublishedStore } from './published-hooks'
+import { publishedItem } from './published-keys'
 import { InstallRow } from './plugins'
 import { AddControl, ItemRow, KindTag, QuietNote, type ItemKind } from './rows'
 import { KeptSkillControls } from './skills'
@@ -462,6 +468,120 @@ export function CommunityListingPage({
   )
 }
 
+/**
+ * One of the account's own listings as other people see it, read from the service like any
+ * listing and shown as what the owner's own record says others get.
+ */
+export function CommunityPreviewPage({ id, tab }: { id: string; tab: MarketplaceTab }) {
+  const { t } = useTranslation('marketplace')
+  const { useMarketplaceStore } = useHostScope()
+  const store = usePublishedStore()
+  const published = store((s) => s.published)
+  useEffect(() => {
+    if (!store.getState().published) void store.getState().load()
+  }, [store])
+  const mine = published?.mine?.listings.find((l) => l.id === id) ?? null
+  const page = useCommunityListing(id, true)
+  const own = () =>
+    backTo({ kind: 'marketplace', item: publishedItem(id), tab: 'published' }, () =>
+      openMarketplace({ item: publishedItem(id), tab: 'published' }),
+    )
+  const frame = (line: string | null, children: ReactNode) => (
+    <ListingFrame back={own} banner={<PreviewBar line={line} back={own} />} rise>
+      {children}
+    </ListingFrame>
+  )
+  if (!mine) {
+    return frame(
+      null,
+      published ? <Gone title={t('published.listing.missingTitle')} /> : <ListingSkeleton />,
+    )
+  }
+  if (mine.takenDown) {
+    return frame(
+      t('community.preview.takenDown'),
+      <Gone title={t('community.takenDownTitle')} text={t('community.takenDown')} />,
+    )
+  }
+  if (mine.visibility === 'private') {
+    return frame(
+      null,
+      <Gone title={t('community.preview.private')} text={t('community.preview.privateText')} />,
+    )
+  }
+  const line = t(
+    mine.visibility === 'unlisted' ? 'community.preview.unlisted' : 'community.preview.public',
+  )
+  if (page.listing?.state !== 'listed') {
+    return frame(
+      line,
+      page.error ? (
+        <ListingProblem
+          title={t('community.readFailed')}
+          text={page.error}
+          retry={() => void useMarketplaceStore.getState().loadCommunityListing(id, true)}
+        />
+      ) : (
+        <ListingSkeleton />
+      ),
+    )
+  }
+  return frame(
+    line,
+    <Listed
+      listing={page.listing.listing}
+      server={page.listing.server}
+      tab={tab}
+      back={own}
+      preview
+    />,
+  )
+}
+
+/** The bar over a preview: whose view it is, why, and the way back to the owner's page. */
+function PreviewBar({ line, back }: { line: string | null; back: () => void }) {
+  const { t } = useTranslation('marketplace')
+  return (
+    <div className="k-mkt-preview" role="status">
+      <Icon icon={ViewIcon} size={16} />
+      <span className="k-mkt-preview__text">
+        <b>{t('community.preview.title')}</b>
+        {line && <small>{line}</small>}
+      </span>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={<Icon icon={ArrowLeft01Icon} size={14} />}
+        onClick={back}
+      >
+        {t('community.preview.back')}
+      </Button>
+    </div>
+  )
+}
+
+function Gone({ title, text }: { title: string; text?: string }) {
+  return (
+    <div className="ui-as-empty">
+      <b className="ui-as-empty__title">{title}</b>
+      {text && <p className="ui-as-empty__text">{text}</p>}
+    </div>
+  )
+}
+
+/** Install as others would see it, drawn but off, since the owner previews and installs elsewhere. */
+function PreviewInstall({ listing }: { listing: MarketListing }) {
+  const { t } = useTranslation('marketplace')
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span tabIndex={0} />}>
+        <Button disabled>{listing.kind === 'skill' ? t('row.add') : t('row.install')}</Button>
+      </TooltipTrigger>
+      <TooltipContent>{t('community.preview.installOff')}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function ListingProblem({
   title,
   text,
@@ -534,15 +654,19 @@ function Listed({
   server,
   tab,
   back,
+  preview = false,
 }: {
   listing: MarketListing
   server: CatalogServer | null
   tab: MarketplaceTab
   back: () => void
+  /** As others see it: no sign of the owner, nothing installed here, Install and Report off. */
+  preview?: boolean
 }) {
   const { t } = useTranslation('marketplace')
   const [reporting, setReporting] = useState(false)
-  const installed = useInstalledHere(listing)
+  const installedHere = useInstalledHere(listing)
+  const installed = preview ? false : installedHere
   return (
     <>
       <header className="k-mkt-head">
@@ -553,13 +677,19 @@ function Listed({
             <KindTag kind={KIND[listing.kind]} harness={listing.harness} />
           </span>
           <span className="k-mkt-head__pub">
-            {listing.mine ? t('community.byYou', { handle: listing.handle }) : listing.handle}
+            {listing.mine && !preview
+              ? t('community.byYou', { handle: listing.handle })
+              : listing.handle}
             <span className="k-mkt-head__trust">{t('community.trust')}</span>
           </span>
           {listing.description && <span className="k-mkt-head__line">{listing.description}</span>}
         </span>
         <span className="k-mkt-head__act">
-          <Actions listing={listing} server={server} back={back} />
+          {preview ? (
+            <PreviewInstall listing={listing} />
+          ) : (
+            <Actions listing={listing} server={server} back={back} />
+          )}
         </span>
       </header>
 
@@ -568,7 +698,7 @@ function Listed({
       <div className="k-mkt-body">
         <div className="k-mkt-body__main">
           {listing.about && <p className="k-mkt-about k-mkt-about--text">{listing.about}</p>}
-          {listing.kind === 'plugin' && <PluginInstallsOf listing={listing} />}
+          {listing.kind === 'plugin' && !preview && <PluginInstallsOf listing={listing} />}
           <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
           {listing.kind === 'mcp-server' &&
             (server ? (
@@ -602,13 +732,21 @@ function Listed({
             <dt>{t('listing.side.listedIn')}</dt>
             <dd>{t('community.source')}</dd>
           </dl>
-          <button type="button" className="k-mkt-report" onClick={() => setReporting(true)}>
-            <Icon icon={Flag02Icon} size={13} />
-            {t('community.report')}
-          </button>
+          {/* No one reports their own listing; the preview draws it where others see it, off. */}
+          {(preview || !listing.mine) && (
+            <button
+              type="button"
+              className="k-mkt-report"
+              disabled={preview}
+              onClick={() => setReporting(true)}
+            >
+              <Icon icon={Flag02Icon} size={13} />
+              {t('community.report')}
+            </button>
+          )}
         </aside>
       </div>
-      <ReportDialog listing={listing} open={reporting} onOpenChange={setReporting} />
+      {!preview && <ReportDialog listing={listing} open={reporting} onOpenChange={setReporting} />}
       <Related listing={listing} tab={tab} />
     </>
   )
