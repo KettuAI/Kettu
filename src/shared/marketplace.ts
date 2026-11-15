@@ -153,7 +153,7 @@ export const MARKET_NAME = /^[a-z0-9][a-z0-9_-]{0,47}$/
 
 /** A skill Kettu keeps, stored in the host settings' `marketplace.skills`; its files live on the host. */
 export interface MarketSkill {
-  id: string // anthropics/skills:pdf, github:<owner>/<repo>/<path>, local:<uuid> or kettu:<listing>
+  id: string // <owner>/<repo>:<name> from the catalog, github:<owner>/<repo>/<path>, local:<uuid> or kettu:<listing>
   name: string // the skill's own name, from its SKILL.md
   description: string
   source: 'catalog' | 'github' | 'local' | 'kettu'
@@ -163,16 +163,66 @@ export interface MarketSkill {
   on: boolean
 }
 
+/**
+ * How far a catalog repository's publisher is vouched for: the maker of the agent, an organization
+ * whose domain GitHub verified, or neither.
+ */
+export type SkillTrust = 'official' | 'verified' | 'community'
+
 /** A skill the catalog lists, from a repository the app knows. */
 export interface CatalogSkill {
-  id: string
+  id: string // <owner>/<repo>:<name>
   name: string
   description: string
   publisher: string
   official: boolean
+  trust?: SkillTrust // absent from older hosts, whose catalog is Anthropic's alone
   repository: string // https URL
   path: string // the skill's folder in the repository
   version: string | null // the commit the catalog was read at
+  // Its SKILL.md's own words, an SPDX id read from a license file, or the name of a file that
+  // holds terms Kettu does not know; null when nothing says. Absent from older hosts.
+  license?: string | null
+  allowedTools?: string[] // its `allowed-tools`, used without asking; absent from older hosts
+}
+
+/** A repository of the skills catalog, as the host last read it. */
+export interface SkillRepository {
+  id: string // <owner>/<repo>
+  publisher: string
+  trust: SkillTrust
+  url: string // https URL
+  read: boolean // whether the host has a copy; a `cached` answer reads none it lacks
+  error: string | null // why the last read failed; the skills then come from the copy before
+  stale?: boolean // as MarketCatalog's, for this repository's copy
+}
+
+/** One repository of the catalog, read on its own. */
+export interface MarketSkillRepository {
+  repository: SkillRepository
+  skills: CatalogSkill[]
+}
+
+// GitHub's own rules for an account's name, and the characters a repository's name may hold.
+const GITHUB_OWNER = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/
+const GITHUB_REPO = /^[A-Za-z0-9._-]{1,100}$/
+// A skill's name as the Agent Skills specification has it.
+export const SKILL_NAME = /^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/
+
+/** A repository's `<owner>/<repo>`, or null when it could not name one on GitHub. */
+export function skillRepositoryId(text: string): { owner: string; repo: string } | null {
+  const [owner = '', repo = '', ...rest] = text.split('/')
+  if (rest.length > 0 || !GITHUB_OWNER.test(owner) || !GITHUB_REPO.test(repo)) return null
+  return repo === '.' || repo === '..' ? null : { owner, repo }
+}
+
+/** A catalog skill's id, `<owner>/<repo>:<name>`, read into its parts; null for anything else. */
+export function catalogSkillId(id: string): { repository: string; name: string } | null {
+  const colon = id.indexOf(':')
+  if (colon < 0) return null
+  const repository = id.slice(0, colon)
+  const name = id.slice(colon + 1)
+  return skillRepositoryId(repository) && SKILL_NAME.test(name) ? { repository, name } : null
 }
 
 /** Where a skill to add comes from. */
@@ -195,8 +245,9 @@ export interface AgentOwnSkill {
 export interface MarketSkills {
   catalog: CatalogSkill[]
   own: AgentOwnSkill[]
-  error: string | null // why the catalog could not be read; it then comes from the cache
+  error: string | null // the repositories that could not be read and why; theirs come from the cache
   stale?: boolean // as MarketCatalog's
+  repositories?: SkillRepository[] // in the catalog's order; absent from older hosts
 }
 
 /** The harnesses that install plugins themselves. */

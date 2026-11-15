@@ -1,30 +1,64 @@
-// The top-level scalars of a SKILL.md's YAML frontmatter, which is all a skill's listing needs:
-// plain, quoted, folded and literal values. Nested maps and lists are passed over.
+// The top-level values of a SKILL.md's YAML frontmatter, which is all a skill's listing needs:
+// plain, quoted, folded and literal scalars, and lists of scalars. Nested maps are passed over.
 
-/** The frontmatter's top-level scalars by key; empty when the file has none. */
-export function frontmatter(text: string): Record<string, string> {
+/** Each top-level key with its value's first line and the lines under it. */
+function entries(text: string): { key: string; raw: string; more: string[] }[] {
   const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
-  if (lines[0]?.trim() !== '---') return {}
+  if (lines[0]?.trim() !== '---') return []
   const end = lines.findIndex((line, index) => index > 0 && /^(---|\.\.\.)\s*$/.test(line))
-  if (end === -1) return {}
+  if (end === -1) return []
   const body = lines.slice(1, end)
-  const out: Record<string, string> = {}
+  const out: { key: string; raw: string; more: string[] }[] = []
   let index = 0
   while (index < body.length) {
     const match = /^([A-Za-z0-9_-]+):(?:\s+(.*?))?\s*$/.exec(body[index]!)
     index++
     if (!match) continue
-    // The lines indented under the key: a block scalar's text, or a plain value's continuation.
+    // The lines under the key: a block scalar's text, a plain value's continuation or a list,
+    // whose items YAML lets start at the key's own indent.
     const more: string[] = []
-    while (index < body.length && (body[index]!.trim() === '' || /^\s/.test(body[index]!))) {
+    while (
+      index < body.length &&
+      (body[index]!.trim() === '' || /^\s/.test(body[index]!) || /^-(\s|$)/.test(body[index]!))
+    ) {
       more.push(body[index]!)
       index++
     }
     while (more.length > 0 && more[more.length - 1]!.trim() === '') more.pop()
-    const value = scalar(match[2] ?? '', more)
-    if (value !== null) out[match[1]!] = value
+    out.push({ key: match[1]!, raw: match[2] ?? '', more })
   }
   return out
+}
+
+/** The frontmatter's top-level scalars by key; empty when the file has none. */
+export function frontmatter(text: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const { key, raw, more } of entries(text)) {
+    const value = scalar(raw, more)
+    if (value !== null) out[key] = value
+  }
+  return out
+}
+
+/** The frontmatter's top-level lists of scalars by key, block or flow style. */
+export function frontmatterLists(text: string): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const { key, raw, more } of entries(text)) {
+    if (raw === '' && /^\s*-(\s|$)/.test(more[0] ?? '')) {
+      out[key] = more
+        .filter((line) => /^\s*-(\s|$)/.test(line))
+        .map((line) => item(line.replace(/^\s*-\s*/, '')))
+    } else if (/^\[.*\]$/.test(raw.replace(/\s+#.*$/, ''))) {
+      const inner = raw.replace(/\s+#.*$/, '').slice(1, -1)
+      out[key] = inner.trim() === '' ? [] : inner.split(',').map(item)
+    }
+  }
+  return out
+}
+
+function item(text: string): string {
+  const value = text.replace(/\s+#.*$/, '').trim()
+  return value.startsWith('"') || value.startsWith("'") ? (quoted(value) ?? value) : value
 }
 
 function scalar(raw: string, more: string[]): string | null {

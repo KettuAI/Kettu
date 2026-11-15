@@ -19,13 +19,17 @@ import { asksFirst, oauthFlow } from './model'
 import type { TileSubject } from './tile-art'
 import { ItemTile } from './tiles'
 
-/** The official badge, for what the maker of the service or the harness publishes. */
-export function OfficialBadge() {
+/**
+ * The official badge, for what the maker of the service or the harness publishes; `label` names
+ * another level it stands for, such as a verified publisher.
+ */
+export function OfficialBadge({ label }: { label?: string }) {
   const { t } = useTranslation('marketplace')
+  const text = label ?? t('listing.official')
   return (
-    <span className="ui-as-int-row__badge k-mkt-official" title={t('listing.official')}>
+    <span className="ui-as-int-row__badge k-mkt-official" title={text}>
       <Icon icon={CheckmarkBadge01Icon} size={14} />
-      <span className="sr-only">{t('listing.official')}</span>
+      <span className="sr-only">{text}</span>
     </span>
   )
 }

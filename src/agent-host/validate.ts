@@ -26,7 +26,12 @@ import {
   type MemoryDraft,
   type MemoryScope,
 } from '@shared/memory'
-import type { PluginScope, SkillSource } from '@shared/marketplace'
+import {
+  catalogSkillId,
+  skillRepositoryId,
+  type PluginScope,
+  type SkillSource,
+} from '@shared/marketplace'
 import {
   DIRECTORY_CURSOR,
   HANDLE,
@@ -1062,9 +1067,7 @@ function skillSource(value: unknown, platform: Platform): SkillSource {
   const o = fields(value)
   if (o.kind === 'catalog') {
     const id = string(o, 'id', ID_CHARS)
-    if (!/^anthropics\/skills:[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$/.test(id)) {
-      throw invalidParams('id is not a skill of the catalog')
-    }
+    if (!catalogSkillId(id)) throw invalidParams('id is not a skill of the catalog')
     return { kind: 'catalog', id }
   }
   if (o.kind === 'github') {
@@ -1363,6 +1366,13 @@ export function createValidators(platform: Platform): Validators {
       return { agentId: agentId(o), name }
     },
     'market.skills': marketRead,
+    'market.skillRepository': (params) => {
+      const o = fields(params)
+      const id = string(o, 'id', ID_CHARS)
+      if (!skillRepositoryId(id)) throw invalidParams('id is not a repository such as owner/repo')
+      const refresh = optionalFlag(o, 'refresh')
+      return { id, ...(refresh === undefined ? {} : { refresh }) }
+    },
     'market.addSkill': (params) => ({ source: skillSource(fields(params).source, platform) }),
     'market.answerPublish': (params) => {
       const o = fields(params)

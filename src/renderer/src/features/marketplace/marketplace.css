@@ -201,6 +201,13 @@
   line-height: 18px;
   color: var(--muted);
 }
+.k-mkt-stale > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.k-mkt-stale > button {
+  flex: none;
+}
 
 /* What could not be read, quietly over the sections */
 .k-mkt-notes {

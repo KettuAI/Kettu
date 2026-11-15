@@ -198,7 +198,18 @@ describe('createValidators', () => {
     expect(add({ kind: 'local', path: '/home/me/skill' })).toEqual({
       source: { kind: 'local', path: '/home/me/skill' },
     })
+    expect(add({ kind: 'catalog', id: 'trailofbits/skills:semgrep' })).toEqual({
+      source: { kind: 'catalog', id: 'trailofbits/skills:semgrep' },
+    })
     rejects(() => add({ kind: 'catalog', id: 'anthropics/skills:../x' }))
+    rejects(() => add({ kind: 'catalog', id: '../skills:pdf' }))
+    rejects(() => add({ kind: 'catalog', id: 'pdf' }))
+    expect(posix['market.skillRepository']({ id: 'openai/skills', refresh: true })).toEqual({
+      id: 'openai/skills',
+      refresh: true,
+    })
+    rejects(() => posix['market.skillRepository']({ id: 'openai/../skills' }))
+    rejects(() => posix['market.skillRepository']({ id: 'openai' }))
     rejects(() => add({ kind: 'github', url: 'https://example.com/a/b' }))
     rejects(() => add({ kind: 'local', path: 'relative/skill' }))
     rejects(() => add({ kind: 'npm', id: 'x' }))

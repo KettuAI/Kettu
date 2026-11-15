@@ -21,6 +21,8 @@ import type {
   MarketCatalog,
   MarketPlugins,
   MarketSkills,
+  SkillRepository,
+  SkillTrust,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
 import type { WorkflowEntry } from '@shared/workflow'
@@ -199,6 +201,7 @@ interface Sources {
   search: MarketSearchState | null
   communityPages: Record<string, CommunityPages>
   loadMoreCommunity(scope: CommunityScope): void
+  retrySkillRepository(id: string): Promise<void>
 }
 
 /** The Community kind a tab lists; null for all of them. */
@@ -246,6 +249,8 @@ function useSources(): Sources {
       communityPages,
       loadMoreCommunity: (scope: CommunityScope) =>
         void useMarketplaceStore.getState().loadMoreCommunity(scope),
+      retrySkillRepository: (id: string) =>
+        useMarketplaceStore.getState().loadSkillRepository(id, true),
     }),
     [
       catalog,
@@ -493,25 +498,60 @@ function pluginSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
   ]
 }
 
-/** Skills without a query: one section per publisher, the official ones first. */
+const TRUST_ORDER: Record<SkillTrust, number> = { official: 0, verified: 1, community: 2 }
+
+/**
+ * Skills without a query: one section per publisher, the official ones first, then the verified;
+ * a repository not read yet shows its rows on their way, and one that failed says so with Retry.
+ */
 function skillSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
   if (!src.skills) {
     return src.skillsPending
       ? [{ id: 'skills-pending', title: null, entries: [], pending: 6 }]
       : communitySections(src, t, 'skill')
   }
-  const groups = new Map<string, CatalogSkill[]>()
-  for (const skill of src.skills.catalog) {
-    groups.set(skill.publisher, [...(groups.get(skill.publisher) ?? []), skill])
+  const groups = new Map<string, { skills: CatalogSkill[]; repositories: SkillRepository[] }>()
+  const group = (publisher: string) => {
+    const found = groups.get(publisher) ?? { skills: [], repositories: [] }
+    groups.set(publisher, found)
+    return found
   }
+  // An older host lists no repositories: its catalog is grouped by what it says of each skill.
+  for (const repository of src.skills.repositories ?? []) {
+    group(repository.publisher).repositories.push(repository)
+  }
+  for (const skill of src.skills.catalog) group(skill.publisher).skills.push(skill)
+  const rank = ({
+    skills,
+    repositories,
+  }: {
+    skills: CatalogSkill[]
+    repositories: SkillRepository[]
+  }) =>
+    Math.min(
+      ...repositories.map((r) => TRUST_ORDER[r.trust]),
+      ...skills.map((s) => TRUST_ORDER[s.trust ?? (s.official ? 'official' : 'community')]),
+    )
   return [...groups]
-    .sort(([, a], [, b]) => Number(b.some((s) => s.official)) - Number(a.some((s) => s.official)))
-    .map(([publisher, list]): Section => ({
-      id: `publisher-${publisher}`,
-      title: t('sections.from', { publisher }),
-      entries: list.map(skillEntry),
-      pending: 0,
-    }))
+    .sort(([, a], [, b]) => rank(a) - rank(b))
+    .map(([publisher, { skills, repositories }]): Section => {
+      const failed = repositories.find((r) => r.error !== null)
+      const failure = failed && (
+        <QuietNote action={<Retry onRetry={() => src.retrySkillRepository(failed.id)} />}>
+          {t(skills.length > 0 ? 'notes.skillRepositoryStale' : 'notes.skillRepository', {
+            repository: failed.id,
+            error: failed.error,
+          })}
+        </QuietNote>
+      )
+      return {
+        id: `publisher-${publisher}`,
+        title: t('sections.from', { publisher }),
+        entries: skills.map(skillEntry),
+        pending: repositories.some((r) => !r.read && r.error === null) ? 2 : 0,
+        ...(failure && { note: failure }),
+      }
+    })
     .concat(communitySections(src, t, 'skill'))
 }
 
@@ -967,7 +1007,8 @@ function Notes({
       )
     }
   }
-  if (skills && ((skillsError && !src.skills) || src.skills?.error)) {
+  // A host that lists its repositories says which failed in their own sections.
+  if (skills && ((skillsError && !src.skills) || (src.skills?.error && !src.skills.repositories))) {
     notes.push(
       <QuietNote key="skills" action={<Retry onRetry={() => store().loadSkills(true)} />}>
         {t('notes.skills', { error: skillsError ?? src.skills?.error })}

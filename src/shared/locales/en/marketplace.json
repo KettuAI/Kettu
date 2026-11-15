@@ -169,7 +169,9 @@
     "backToDirectory": "Back to the Marketplace",
     "signsIn": "Signs in with {{service}} in your browser",
     "signsInDevice": "Connects with a code at {{service}}",
-    "signsInNote": "Kettu keeps the sign-in; no agent sees the token"
+    "signsInNote": "Kettu keeps the sign-in; no agent sees the token",
+    "verified": "Verified publisher",
+    "community": "Community"
   },
   "installed": {
     "builtIn": "Built in",
@@ -337,7 +339,9 @@
     "catalog": "Couldn’t reach the MCP Registry: {{error}}",
     "search": "Couldn’t search the MCP Registry: {{error}}",
     "community": "Couldn’t read the Kettu Marketplace: {{error}}",
-    "communityMore": "Couldn’t read more of the Kettu Marketplace: {{error}}"
+    "communityMore": "Couldn’t read more of the Kettu Marketplace: {{error}}",
+    "skillRepository": "Couldn’t read {{repository}}: {{error}}",
+    "skillRepositoryStale": "Couldn’t read {{repository}} again, so these may be out of date: {{error}}"
   },
   "empty": {
     "pluginsTitle": "No plugins to show",
@@ -397,9 +401,13 @@
     "howItWorks": "An agent reads a skill when a task calls for it, so it costs little until then.",
     "side": {
       "path": "Folder",
-      "folder": "Copied from"
+      "folder": "Copied from",
+      "license": "License"
     },
-    "remove": "Remove…"
+    "remove": "Remove…",
+    "tools": "Lets the agent use these tools without asking",
+    "toolsShort": "Uses without asking",
+    "nameTaken": "You’ve already added a skill named {{name}}, from {{from}}. Remove it first: an agent keeps only one of two skills with the same name."
   },
   "connect": {
     "title": "Connect {{name}}",

@@ -3,14 +3,16 @@
 
 import { useState, type FormEvent } from 'react'
 import {
+  Alert02Icon,
   Delete02Icon,
   Folder01Icon,
   MoreHorizontalIcon,
+  Shield01Icon,
   Tick02Icon,
   UserMultiple02Icon,
 } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import type { CatalogSkill, MarketSkill } from '@shared/marketplace'
+import type { CatalogSkill, MarketSkill, SkillTrust } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
 import { Dropdown, Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
@@ -66,13 +68,32 @@ export function SkillRow({
   )
 }
 
-/** Install: all agents or some; the host copies the skill's files, then Kettu keeps it. */
+/**
+ * The skill Kettu keeps under another id with this name, and where it is from: an agent keeps only
+ * one of two skills with one name, so the host refuses the second.
+ */
+function useSameName(skill: CatalogSkill): { name: string; from: string } | null {
+  const scope = useHostScope()
+  const other = scope.useSettingsStore((s) =>
+    s.settings.marketplace.skills.find((x) => x.name === skill.name && x.id !== skill.id),
+  )
+  if (!other) return null
+  return { name: other.name, from: catalogSkill(scope, other.id)?.publisher ?? other.origin }
+}
+
+/**
+ * Install: all agents or some; the host copies the skill's files, then Kettu keeps it. The tools it
+ * lets the agent use without asking are named first.
+ */
 function SkillInstallForm({ skill, onDone }: { skill: CatalogSkill; onDone: () => void }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const [agents, setAgents] = useState<AgentChoice>('all')
+  const taken = useSameName(skill)
+  const tools = skill.allowedTools ?? []
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    if (taken) return
     onDone()
     void installSkill(scope, { kind: 'catalog', id: skill.id }, agents, skill.id)
   }
@@ -80,14 +101,51 @@ function SkillInstallForm({ skill, onDone }: { skill: CatalogSkill; onDone: () =
     <form className="k-mkt-install" onSubmit={submit}>
       <b>{t('install.title', { name: displayTitle(skill.name) })}</b>
       <span>{t('skill.installNote')}</span>
-      <div className="k-mkt-install__field">
-        <small>{t('install.useIn')}</small>
-        <AgentPicker value={agents} onChange={setAgents} label={t('install.useIn')} forSkills />
-      </div>
-      <Button size="sm" type="submit">
+      {tools.length > 0 && (
+        <div className="k-mkt-install__runs">
+          <Icon icon={Shield01Icon} size={13} />
+          <span>
+            <small>{t('skill.toolsShort')}</small>
+            <code className="k-mkt-mono" data-selectable="">
+              {tools.join(', ')}
+            </code>
+          </span>
+        </div>
+      )}
+      {taken ? (
+        <em className="k-mkt-warn">
+          <Icon icon={Alert02Icon} size={13} />
+          {t('skill.nameTaken', taken)}
+        </em>
+      ) : (
+        <div className="k-mkt-install__field">
+          <small>{t('install.useIn')}</small>
+          <AgentPicker value={agents} onChange={setAgents} label={t('install.useIn')} forSkills />
+        </div>
+      )}
+      <Button size="sm" type="submit" disabled={!!taken}>
         {t('install.submit')}
       </Button>
     </form>
+  )
+}
+
+/** A publisher's trust level beside its name: the badge for official and verified ones. */
+function TrustLevel({ trust }: { trust: SkillTrust }) {
+  const { t } = useTranslation('marketplace')
+  const label =
+    trust === 'official'
+      ? t('listing.official')
+      : trust === 'verified'
+        ? t('listing.verified')
+        : t('listing.community')
+  return (
+    <>
+      {trust !== 'community' && <OfficialBadge label={label} />}
+      <span className="k-mkt-head__trust" aria-hidden={trust !== 'community'}>
+        {label}
+      </span>
+    </>
   )
 }
 
@@ -132,6 +190,11 @@ export function SkillListing({
   const description = entry?.description ?? kept?.description ?? null
   const publisher = entry?.publisher ?? null
   const official = entry?.official ?? false
+  const trust: SkillTrust | null = entry
+    ? (entry.trust ?? (official ? 'official' : 'community'))
+    : null
+  const license = entry?.license ?? null
+  const tools = entry?.allowedTools ?? []
   const repository = entry?.repository ?? (kept?.source === 'github' ? kept.origin : null)
   const version = kept?.version ?? entry?.version ?? null
   const marks = kept && kept.agents !== 'all' ? kept.agents : allAgents.map((a) => a.id)
@@ -156,14 +219,7 @@ export function SkillListing({
           {(publisher || kept?.source === 'local') && (
             <span className="k-mkt-head__pub">
               {publisher ?? t('listing.addedByYou')}
-              {official && (
-                <>
-                  <OfficialBadge />
-                  <span className="k-mkt-head__trust" aria-hidden>
-                    {t('listing.official')}
-                  </span>
-                </>
-              )}
+              {trust && <TrustLevel trust={trust} />}
             </span>
           )}
           {description && <span className="k-mkt-head__line">{description}</span>}
@@ -203,6 +259,22 @@ export function SkillListing({
         <div className="k-mkt-body__main">
           {description && <p className="k-mkt-about">{description}</p>}
           <p className="k-mkt-section-note">{t('skill.howItWorks')}</p>
+          {tools.length > 0 && (
+            <section>
+              <h3>{t('listing.runs')}</h3>
+              <div className="k-mkt-list">
+                <div className="k-mkt-item">
+                  <Icon icon={Shield01Icon} size={15} />
+                  <span>
+                    <b>{t('skill.tools')}</b>
+                    <small className="k-mkt-mono" data-selectable="">
+                      {tools.join(', ')}
+                    </small>
+                  </span>
+                </div>
+              </div>
+            </section>
+          )}
         </div>
         <aside className="k-mkt-side">
           <dl>
@@ -211,8 +283,18 @@ export function SkillListing({
                 <dt>{t('listing.side.publisher')}</dt>
                 <dd>
                   {publisher}
-                  {official && <OfficialBadge />}
+                  {trust && trust !== 'community' && (
+                    <OfficialBadge
+                      label={trust === 'official' ? t('listing.official') : t('listing.verified')}
+                    />
+                  )}
                 </dd>
+              </>
+            )}
+            {license && (
+              <>
+                <dt>{t('skill.side.license')}</dt>
+                <dd>{license}</dd>
               </>
             )}
             {repository && (

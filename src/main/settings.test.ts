@@ -244,6 +244,24 @@ describe('items from the Kettu Marketplace in a patch', () => {
     }
   })
 
+  it('keeps a catalog skill from any repository by owner/repo and name', () => {
+    const catalog = {
+      ...skill,
+      id: 'trailofbits/skills:semgrep',
+      name: 'semgrep',
+      source: 'catalog',
+      origin: 'https://github.com/trailofbits/skills',
+    }
+    expect(validateSettingsPatch({ marketplace: { skills: [catalog] } })).toEqual({
+      marketplace: { skills: [catalog] },
+    })
+    for (const id of ['semgrep', '../skills:semgrep', 'trailofbits/skills:Semgrep']) {
+      expect(() =>
+        validateSettingsPatch({ marketplace: { skills: [{ ...catalog, id }] } }),
+      ).toThrow()
+    }
+  })
+
   it('refuses an id or origin that names no listing', () => {
     for (const bad of [
       { ...skill, id: 'kettu:../x' },
