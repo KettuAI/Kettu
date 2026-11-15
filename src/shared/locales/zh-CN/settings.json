@@ -620,6 +620,7 @@
     "signOut": "退出登录",
     "needsSignIn": "{{name}} 需要你先登录。",
     "signInTitle": "登录 {{name}} 后才能使用",
+    "signInOnComputer": "{{method}}会在 {{name}} 所在的电脑上打开浏览器，请到那台电脑上登录。",
     "launch": "启动命令",
     "copyLaunch": "复制启动命令",
     "reinstall": "重新安装",

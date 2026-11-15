@@ -23,8 +23,17 @@ import {
 import { Spinner } from '@renderer/components/ui/spinner'
 import { CopyButton } from '@renderer/features/git/branch-popover'
 import { openHostSettingsItem } from '@renderer/features/settings/host-sections'
-import { errorMessage, hostAt } from '@renderer/lib/host'
-import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
+import { errorMessage } from '@renderer/lib/host'
+import { isWeb } from '@renderer/lib/platform'
+import {
+  agentName,
+  agentsOn,
+  cancelAgentSignIn,
+  openSignInPage,
+  signInAgent,
+  useAgentsStore,
+  useSignInPage,
+} from '@renderer/stores/agents'
 
 const NO_METHODS: AgentAuthMethod[] = []
 
@@ -49,6 +58,11 @@ export function SignIn({
   const name = agentName(agentId, hostId)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const page = useSignInPage(hostId, agentId)
+  // A device, or this window on another host: an agent method that hands over no page opens its
+  // browser on the computer the agent runs on.
+  const remote = isWeb || hostId !== null
+  const listed = page === null ? methods : NO_METHODS
 
   useEffect(
     () =>
@@ -68,8 +82,7 @@ export function SignIn({
     setBusy(method.id)
     setError(null)
     try {
-      await hostAt(hostId, 'agents.authenticate', { agentId, methodId: method.id })
-      onRetry()
+      if (await signInAgent(hostId, agentId, method.id)) onRetry()
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -94,10 +107,39 @@ export function SignIn({
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="max-w-[440px] gap-3">
+        {page !== null && (
+          <div className="flex w-full flex-col gap-2 rounded-xl bg-card p-3 text-left shadow-card">
+            <div className="flex flex-col gap-0.5">
+              <span className="flex items-center gap-1.5 text-ui font-medium">
+                <Spinner className="size-3" />
+                {t('signIn.pageOpen')}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {t('signIn.pageOpenHint', { agent: name })}
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              <Button variant="outline" size="compact" onClick={() => openSignInPage(page)}>
+                {t('signIn.openPageAgain')}
+              </Button>
+              <Button
+                variant="outline"
+                size="compact"
+                onClick={() =>
+                  void cancelAgentSignIn(hostId, agentId).catch((e: unknown) =>
+                    setError(errorMessage(e)),
+                  )
+                }
+              >
+                {t('common:actions.cancel')}
+              </Button>
+            </div>
+          </div>
+        )}
         {methods.length === 0 && (
           <p className="text-ui text-muted-foreground">{t('signIn.noMethods', { agent: name })}</p>
         )}
-        {methods.map((method) =>
+        {listed.map((method) =>
           method.type === 'terminal' && method.command ? (
             <div
               key={method.id}
@@ -202,6 +244,29 @@ export function SignIn({
                     data-icon="inline-start"
                   />
                   {t('signIn.keySet')}
+                </Button>
+              </div>
+            </div>
+          ) : method.type === 'agent' && remote && !method.delegated ? (
+            <div
+              key={method.id}
+              className="flex w-full flex-col gap-2 rounded-xl bg-card p-3 text-left shadow-card"
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="text-ui font-medium">{method.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t('signIn.onComputer', { agent: name })}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <Button variant="outline" size="compact" onClick={onRetry}>
+                  <HugeiconsIcon
+                    icon={RefreshIcon}
+                    strokeWidth={1.9}
+                    aria-hidden
+                    data-icon="inline-start"
+                  />
+                  {t('signIn.signedIn')}
                 </Button>
               </div>
             </div>

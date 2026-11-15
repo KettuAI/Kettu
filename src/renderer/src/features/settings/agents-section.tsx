@@ -48,6 +48,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
+import { isWeb } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -56,7 +57,14 @@ import {
   readHostAgentOptions,
   useAgentOptionsStore,
 } from '@renderer/stores/agent-options'
-import { addableHarnesses, usePlanReadings, type AgentsStoreHook } from '@renderer/stores/agents'
+import {
+  addableHarnesses,
+  cancelAgentSignIn,
+  signInAgent,
+  usePlanReadings,
+  useSignInPage,
+  type AgentsStoreHook,
+} from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { hostOfSession, useSessionsStore } from '@renderer/stores/sessions'
@@ -848,6 +856,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
   const running = status.state === 'ready'
   const providerMode = status.providers !== undefined
   const terminalSignIn = status.authMethods.find((m) => m.type === 'terminal' && m.command)
+  const signInPage = useSignInPage(hostId, status.id)
 
   const actions = (
     <>
@@ -892,12 +901,13 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             <SignInNotice
               status={status}
               busy={busy}
+              page={signInPage}
+              remote={isWeb || hostId !== null}
               {...(hostId === null && {
                 onTerminal: (command: string) => signInTerminal(status, command),
               })}
-              onAuthenticate={(methodId) =>
-                act(() => request('agents.authenticate', { agentId: status.id, methodId }))
-              }
+              onAuthenticate={(methodId) => act(() => signInAgent(hostId, status.id, methodId))}
+              onCancel={() => act(() => cancelAgentSignIn(hostId, status.id))}
             />
           </div>
         )}

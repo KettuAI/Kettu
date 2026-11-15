@@ -275,6 +275,91 @@ function without<T>(
   return Object.fromEntries(Object.entries(record).filter(([id]) => id !== agentId))
 }
 
+/** A sign-in this window started: its page once the agent handed one over, else null. */
+interface StartedSignIn {
+  token: number
+  page: string | null
+  cancelled: boolean
+}
+
+/**
+ * The agents' sign-ins this window started, by host and agent. Another host's events reach every
+ * window of the app, so only the window that asked opens the page.
+ */
+const useStartedSignIns = create<{ started: Record<string, StartedSignIn> }>()(() => ({
+  started: {},
+}))
+
+let signInToken = 0
+
+const signInKey = (hostId: string | null, agentId: AgentId): string => `${hostId ?? ''}\n${agentId}`
+
+function setStarted(
+  key: string,
+  change: (current: StartedSignIn | undefined) => StartedSignIn | null,
+) {
+  useStartedSignIns.setState((state) => {
+    const next = change(state.started[key])
+    const started = { ...state.started }
+    if (next) started[key] = next
+    else delete started[key]
+    return { started }
+  })
+}
+
+/**
+ * Signs an agent in with one of its own methods. A page it hands over opens on this device; false
+ * when the sign-in was cancelled here.
+ */
+export async function signInAgent(
+  hostId: string | null,
+  agentId: AgentId,
+  methodId: string,
+): Promise<boolean> {
+  const key = signInKey(hostId, agentId)
+  const token = ++signInToken
+  setStarted(key, () => ({ token, page: null, cancelled: false }))
+  try {
+    await hostAt(hostId, 'agents.authenticate', { agentId, methodId })
+    return true
+  } catch (e) {
+    if (useStartedSignIns.getState().started[key]?.cancelled) return false
+    throw e
+  } finally {
+    setStarted(key, (current) => (current?.token === token ? null : (current ?? null)))
+  }
+}
+
+/** Stops the agent's sign-in this window started. */
+export async function cancelAgentSignIn(hostId: string | null, agentId: AgentId): Promise<void> {
+  const key = signInKey(hostId, agentId)
+  setStarted(key, (current) => (current ? { ...current, cancelled: true } : null))
+  await hostAt(hostId, 'agents.cancelSignIn', { agentId })
+}
+
+/** `agents.signInLink`: opens the page in this device's browser, if this window asked for it. */
+export function receiveSignInLink(hostId: string | null, agentId: AgentId, url: string): void {
+  const key = signInKey(hostId, agentId)
+  const current = useStartedSignIns.getState().started[key]
+  const protocol = URL.parse(url)?.protocol
+  if (!current || current.cancelled || (protocol !== 'https:' && protocol !== 'http:')) return
+  setStarted(key, () => ({ ...current, page: url }))
+  openSignInPage(url)
+}
+
+/** Opens a sign-in page in a new tab of the browser, the system's on the desktop. */
+export function openSignInPage(url: string): void {
+  window.open(url, '_blank', 'noreferrer')
+}
+
+/** The page the agent's sign-in this window started handed over, while it waits; else null. */
+export function useSignInPage(hostId: string | null, agentId: AgentId): string | null {
+  return useStartedSignIns((state) => {
+    const started = state.started[signInKey(hostId, agentId)]
+    return started && !started.cancelled ? started.page : null
+  })
+}
+
 /** Runs an install or update request; true when it finished, false when it failed. */
 async function taskRequest(
   store: AgentsStoreHook,

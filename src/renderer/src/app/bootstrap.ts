@@ -32,7 +32,12 @@ import {
   preparedRemoved,
   receivePrepared,
 } from '@renderer/features/session/new-session/prepared'
-import { hostAgentChanged, hostAgentRemoved, useAgentsStore } from '@renderer/stores/agents'
+import {
+  hostAgentChanged,
+  hostAgentRemoved,
+  receiveSignInLink,
+  useAgentsStore,
+} from '@renderer/stores/agents'
 import {
   artifactsChanged,
   artifactsHostClosed,
@@ -141,6 +146,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
       return
     case 'agent.options':
       receiveAgentOptions(event.options, hostId)
+      return
+    case 'agents.signInLink':
+      receiveSignInLink(hostId, event.agentId, event.url)
       return
     case 'routine.changed':
       useRoutinesStore.getState().receive(event.routine, hostId)

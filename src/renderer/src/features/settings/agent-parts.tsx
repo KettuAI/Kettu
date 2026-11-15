@@ -20,7 +20,7 @@ import { errorMessage } from '@renderer/lib/host'
 import { newestLimits } from '@renderer/lib/plan-readings'
 import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
-import { usePlanReadings } from '@renderer/stores/agents'
+import { openSignInPage, usePlanReadings } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { limitsReadable, percent, useAction } from './agent-helpers'
 import { CommandLine, ControlError, IconAction, Meter, SetButton, Spin } from './controls'
@@ -55,25 +55,60 @@ export function DismissButton({ onClick }: { onClick: () => void }) {
 /**
  * What an agent that needs a sign-in asks: its command in a terminal, or a way it signs in itself.
  * Without `onTerminal`, as for another host whose terminal this window cannot open, the command is
- * only shown to copy.
+ * only shown to copy. While the page a sign-in handed over is open here, it says so, with Cancel.
  */
 export function SignInNotice({
   status,
   busy,
+  page,
+  remote,
   onTerminal,
   onAuthenticate,
+  onCancel,
 }: {
   status: AgentStatus
   busy: boolean
+  /** The sign-in page this window opened, while the agent waits for it. */
+  page: string | null
+  /** This window is a device of the agent's host, which sees no browser the agent opens there. */
+  remote: boolean
   onTerminal?: (command: string) => void
   onAuthenticate: (methodId: string) => void
+  onCancel: () => void
 }) {
-  const { t } = useTranslation(['settings', 'session'])
+  const { t } = useTranslation(['settings', 'session', 'common'])
+  if (page !== null) {
+    return (
+      <Notice
+        variant="info"
+        icon={<Spin />}
+        title={t('session:signIn.pageOpen')}
+        action={
+          <>
+            <SetButton onClick={() => openSignInPage(page)}>
+              {t('session:signIn.openPageAgain')}
+            </SetButton>
+            <SetButton variant="ghost" onClick={onCancel}>
+              {t('common:actions.cancel')}
+            </SetButton>
+          </>
+        }
+      >
+        {t('session:signIn.pageOpenHint', { agent: status.name })}
+      </Notice>
+    )
+  }
   const inTerminal = status.authMethods.filter((m) => m.type === 'terminal' && m.command)
   const first = inTerminal[0]
+  // A method that opens a browser where the agent runs cannot be finished from here.
+  const elsewhere = status.authMethods.find((m) => remote && m.type === 'agent' && !m.delegated)
   // An `env` method is filled in on the agent's page; the agent has nothing to authenticate.
   const others = status.authMethods.filter(
-    (m) => m !== first && m.type !== 'env' && (onTerminal || m.type !== 'terminal'),
+    (m) =>
+      m !== first &&
+      m.type !== 'env' &&
+      (onTerminal || m.type !== 'terminal') &&
+      !(remote && m.type === 'agent' && !m.delegated),
   )
   return (
     <Notice
@@ -120,7 +155,14 @@ export function SignInNotice({
         )
       }
     >
-      {first?.description}
+      {(first?.description || elsewhere) && (
+        <>
+          {first?.description && <div>{first.description}</div>}
+          {elsewhere && (
+            <div>{t('agents.signInOnComputer', { method: elsewhere.name, name: status.name })}</div>
+          )}
+        </>
+      )}
     </Notice>
   )
 }

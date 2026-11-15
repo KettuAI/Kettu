@@ -595,7 +595,11 @@
     "envHint": "在设置 › Agent 里 {{agent}} 的页面上填写。",
     "inSettings": "去设置里填写",
     "keySet": "我已填好，重试",
-    "optional": "可选"
+    "optional": "可选",
+    "pageOpen": "等待浏览器",
+    "pageOpenHint": "{{agent}} 的登录页面已在这台设备的浏览器中打开，请在那里完成登录。",
+    "openPageAgain": "再次打开页面",
+    "onComputer": "这种方式会在 {{agent}} 所在的电脑上打开浏览器，请到那台电脑上登录，然后重试。"
   },
   "takeover": {
     "title": "由 {{agent}} 接手",

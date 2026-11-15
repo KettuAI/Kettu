@@ -613,7 +613,11 @@
     "envHint": "Set it on {{agent}}'s page in Settings › Agents.",
     "inSettings": "Set in Settings",
     "keySet": "I've set it, retry",
-    "optional": "Optional"
+    "optional": "Optional",
+    "pageOpen": "Waiting for the browser",
+    "pageOpenHint": "The sign-in page for {{agent}} opened in this device's browser. Finish signing in there.",
+    "openPageAgain": "Open the page again",
+    "onComputer": "This opens a browser on the computer {{agent}} runs on, so sign in there, then retry."
   },
   "takeover": {
     "title": "{{agent}} took over",

@@ -33,6 +33,7 @@ import {
   type ConfigOption,
   type HarnessId,
 } from '@shared/thread'
+import { DELEGATED_SIGN_IN } from './acp/sign-in'
 import {
   installAdapter,
   NPM_INSTALL_ARGS,
@@ -363,6 +364,8 @@ class Slot {
   /** The removal of the hidden session that read the options, once its `session/new` answered. */
   optionsRemoval: Promise<void> | null = null
   progress = new TextRing(8 * 1024)
+  /** Stops the sign-in in progress; the agent is not stopped for being idle while it runs. */
+  signInAbort: AbortController | null = null
   idleTimer: ReturnType<typeof setTimeout> | null = null
   progressTimer: ReturnType<typeof setTimeout> | null = null
   lastStatus = ''
@@ -2174,7 +2177,7 @@ export class AgentManager {
     }
     slot.idleTimer ??= setTimeout(() => {
       slot.idleTimer = null
-      if (this.hooks.liveSessions(agentId) === 0) {
+      if (this.hooks.liveSessions(agentId) === 0 && !slot.signInAbort) {
         this.deps.diagnostics.event(agentId, 'idle stop')
         void this.stop(agentId)
       }
@@ -2914,7 +2917,16 @@ export class AgentManager {
     this.emit(slot)
   }
 
-  async authenticate(agentId: AgentId, methodId: string): Promise<void> {
+  /**
+   * Runs one of the agent's own sign-in methods for the client that asked, where a page the agent
+   * hands over opens. A paired device may not start one that opens a browser on this computer
+   * instead, which nobody there may see. A new sign-in stops one still in progress.
+   */
+  async authenticate(
+    agentId: AgentId,
+    methodId: string,
+    client: { device: boolean; openLink(url: string): void },
+  ): Promise<void> {
     const runtime = await this.ensureReady(agentId)
     const method = runtime.init.authMethods.find((m) => m.id === methodId)
     if (!method) throw invalidParams(`${this.name(agentId)} has no sign-in method ${methodId}`)
@@ -2926,15 +2938,37 @@ export class AgentManager {
     if (method.type !== 'agent') {
       throw invalidParams(`${method.name} runs in a terminal; use its command instead`)
     }
-    try {
-      await runtime.connection.authenticate(methodId)
-    } catch (error) {
-      throw agentError(error)
-    }
     const slot = this.slot(agentId)
+    if (client.device && !handsOverPage(slot.def, methodId)) {
+      throw new HostError('forbidden', t('agent.signInOnComputer', { agent: slot.name }))
+    }
+    slot.signInAbort?.abort()
+    const abort = new AbortController()
+    slot.signInAbort = abort
+    try {
+      await runtime.connection.authenticate(methodId, {
+        openLink: client.openLink,
+        signal: abort.signal,
+      })
+    } catch (error) {
+      if (abort.signal.aborted) {
+        throw new HostError('agent_error', t('agent.signInCancelled', { agent: slot.name }))
+      }
+      throw agentError(error)
+    } finally {
+      if (slot.signInAbort === abort) {
+        slot.signInAbort = null
+        this.sessionsChanged(agentId)
+      }
+    }
     slot.signIn = 'signed-in'
     this.emit(slot)
     this.hooks.signedIn(agentId)
+  }
+
+  /** Stops the agent's sign-in in progress, whose `authenticate` then rejects. */
+  cancelSignIn(agentId: AgentId): void {
+    this.slots.get(agentId)?.signInAbort?.abort()
   }
 
   async logout(agentId: AgentId): Promise<void> {
@@ -3194,11 +3228,16 @@ export class AgentManager {
     const signInFolder = (active ?? config)?.chosen
     const folderEnv: Record<string, string> =
       signInFolder && slot.def.configVariable ? { [slot.def.configVariable]: signInFolder } : {}
-    const authMethods: AgentAuthMethod[] = (init?.authMethods ?? []).map((method) => ({
+    const declared = init?.authMethods ?? []
+    // Mistral Vibe offers its browser sign-in twice, under one name, once the client takes its page.
+    const delegates = declared.some((method) => method.id === DELEGATED_SIGN_IN)
+    const shown = declared.filter((method) => !delegates || method.id !== 'browser-auth')
+    const authMethods: AgentAuthMethod[] = shown.map((method) => ({
       id: method.id,
       name: method.name,
       ...(method.description ? { description: method.description } : {}),
       type: method.type,
+      ...(method.type === 'agent' && handsOverPage(slot.def, method.id) ? { delegated: true } : {}),
       ...(method.type === 'env' && method.envVars
         ? {
             envVars: method.envVars.map((variable) => ({
@@ -3516,6 +3555,11 @@ function settledWithin(promise: Promise<void>, ms: number): Promise<void> {
   ]).finally(() => {
     if (timer) clearTimeout(timer)
   })
+}
+
+/** Whether an agent method hands its sign-in page to the client, rather than opening a browser here. */
+function handsOverPage(def: AgentDefinition, methodId: string): boolean {
+  return methodId === DELEGATED_SIGN_IN || (def.pageSignIns?.includes(methodId) ?? false)
 }
 
 /** Maps a failed request to the agent to the port error the renderer acts on. */

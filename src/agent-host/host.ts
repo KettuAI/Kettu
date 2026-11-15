@@ -2267,7 +2267,13 @@ export class AgentHost {
         return agents.userPrograms()
       },
       'agents.environment': () => this.env.info(),
-      'agents.authenticate': ({ agentId, methodId }) => agents.authenticate(agentId, methodId),
+      'agents.authenticate': ({ agentId, methodId }, ctx) =>
+        agents.authenticate(agentId, methodId, {
+          device: ctx.device !== null,
+          openLink: (url) =>
+            this.hub.send([ctx.portId], { type: 'agents.signInLink', agentId, url }),
+        }),
+      'agents.cancelSignIn': ({ agentId }) => agents.cancelSignIn(agentId),
       'agents.logout': ({ agentId }) => agents.logout(agentId),
       'agents.providerAction': (input) => agents.providerAction(input),
       'agents.retry': ({ agentId }) => agents.retry(agentId),

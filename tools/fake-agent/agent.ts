@@ -198,6 +198,48 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     void client.notify('_auth/status_update', { authStatus: authStatus() }).catch(() => {})
   }
 
+  /**
+   * Sends the sign-in page through the client, then stands for the browser flow the user finishes:
+   * FAKE_AGENT_PAGE_LOGIN_MS, not scaled, 8 s by default.
+   */
+  const pageSignIn = async (
+    client: AgentContext,
+    requestId: string | number | null,
+    signal: AbortSignal,
+  ): Promise<void> => {
+    const elicitationId = nextId('sign-in')
+    try {
+      const answer = await client.request(
+        methods.client.elicitation.create,
+        {
+          mode: 'url',
+          requestId,
+          elicitationId,
+          message: 'Sign in to the fake agent to continue.',
+          url: env.FAKE_AGENT_SIGN_IN_URL ?? 'https://example.com/?fake-agent-sign-in',
+        },
+        { cancellationSignal: signal },
+      )
+      if (answer.action !== 'accept') {
+        throw RequestError.authRequired(undefined, 'The sign-in was not opened')
+      }
+      const waitMs = Number(env.FAKE_AGENT_PAGE_LOGIN_MS ?? '') || 8000
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, waitMs)
+        const stop = (): void => {
+          clearTimeout(timer)
+          resolve()
+        }
+        signal.addEventListener('abort', stop, { once: true })
+      })
+      if (signal.aborted) throw RequestError.requestCancelled()
+      signedIn = true
+      pushAuthStatus()
+    } finally {
+      void client.notify(methods.client.elicitation.complete, { elicitationId }).catch(() => {})
+    }
+  }
+
   const requireSignedIn = (): void => {
     const marker = loginMarkerPath(env)
     if (!signedIn && existsSync(marker)) {
@@ -518,6 +560,14 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       const authMethods: AuthMethod[] = [
         { id: 'fake-login', name: 'Fake sign-in', description: 'Signs in without a browser' },
       ]
+      // Like Factory Droid's device pairing: its page as a URL elicitation tied to `authenticate`.
+      if (clientCapabilities.elicitation?.url) {
+        authMethods.push({
+          id: 'fake-page-login',
+          name: 'Sign in in a browser',
+          description: 'Sends its sign-in page for the client to open',
+        })
+      }
       if (clientCapabilities.auth?.terminal) {
         authMethods.push({
           id: 'fake-terminal-login',
@@ -592,7 +642,11 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
         ? [{ label: 'Fake Pro', email: 'developer@example.com', active: true }]
         : [],
     }))
-    .onRequest(methods.agent.authenticate, (ctx) => {
+    .onRequest(methods.agent.authenticate, async (ctx) => {
+      if (ctx.params.methodId === 'fake-page-login') {
+        await pageSignIn(ctx.client, ctx.requestId, ctx.signal)
+        return {}
+      }
       if (ctx.params.methodId !== 'fake-login') {
         throw RequestError.invalidParams(undefined, `Unknown auth method ${ctx.params.methodId}`)
       }
