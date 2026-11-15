@@ -6,6 +6,7 @@
 import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { isAgentId } from '@shared/agents'
+import { HANDLE, LISTING_ID, VERSION } from '@shared/market-publish'
 import {
   isStepPick,
   WORKFLOW_FILE_BYTES,
@@ -71,10 +72,38 @@ function originOf(value: unknown): WorkflowOrigin | null | undefined {
   if (value.kind === 'agent' && typeof value.sessionId === 'string' && isAgentId(value.agentId)) {
     return { kind: 'agent', sessionId: value.sessionId, agentId: value.agentId }
   }
+  if (
+    value.kind === 'community' &&
+    typeof value.listingId === 'string' &&
+    LISTING_ID.test(value.listingId) &&
+    typeof value.version === 'string' &&
+    VERSION.test(value.version) &&
+    typeof value.handle === 'string' &&
+    HANDLE.test(value.handle) &&
+    typeof value.slug === 'string' &&
+    HANDLE.test(value.slug)
+  ) {
+    const { listingId, version, handle, slug } = value
+    return { kind: 'community', listingId, version, handle, slug }
+  }
   return undefined
 }
 
-const SOURCES: ReadonlySet<unknown> = new Set(['github', 'file', 'agent', 'user'])
+const SOURCES: ReadonlySet<unknown> = new Set(['github', 'file', 'agent', 'user', 'community'])
+
+/** Where a workflow from the Kettu Marketplace came from. */
+export type CommunityOrigin = Extract<WorkflowOrigin, { kind: 'community' }>
+
+let officialNames: string[] | null = null
+
+/** The official workflow named `name`, whatever the case; null when none is. */
+export function officialNamed(name: string): string | null {
+  officialNames ??= OFFICIAL_WORKFLOWS.flatMap(
+    ({ text }) => parseWorkflow(text).workflow?.name ?? [],
+  )
+  const key = name.trim().toLowerCase()
+  return officialNames.find((official) => official.toLowerCase() === key) ?? null
+}
 
 /** Parses the file; an entry or pin that does not read is dropped alone. */
 export function parseWorkflowsFile(data: Record<string, unknown>): WorkflowsFile | string {
@@ -86,6 +115,8 @@ export function parseWorkflowsFile(data: Record<string, unknown>): WorkflowsFile
     if (
       !SOURCES.has(raw.source) ||
       origin === undefined ||
+      // Only a listing's install is the Kettu Marketplace's, and it always names its listing.
+      (raw.source === 'community') !== (origin?.kind === 'community') ||
       typeof raw.addedAt !== 'number' ||
       !isNullableString(raw.approved)
     ) {
@@ -359,6 +390,49 @@ export class WorkflowLibrary {
     return this.write(source.text, 'file', { kind: 'file', name: source.name })
   }
 
+  /** The Kettu Marketplace's listings the library has a workflow of. */
+  listingIds(): string[] {
+    return Object.values(this.data.entries).flatMap((record) =>
+      record.origin?.kind === 'community' ? [record.origin.listingId] : [],
+    )
+  }
+
+  /**
+   * Writes a listing's workflow, unapproved: in place of the version of it the library has, which
+   * stays approved only if the text is the same, or as a new workflow. One that does not read, or
+   * that an official workflow's name is, is refused with why and nothing is written.
+   */
+  async installListing(
+    text: string,
+    origin: CommunityOrigin,
+  ): Promise<{ entry: WorkflowEntry; updated: boolean }> {
+    if (Buffer.byteLength(text, 'utf8') > WORKFLOW_FILE_BYTES)
+      throw invalidParams(t('workflow.tooLarge'))
+    const read = parseWorkflow(text)
+    if (!read.workflow) {
+      const problem = read.problems[0]
+      throw invalidParams(
+        t('workflow.listingProblem', {
+          problem: problem ? `${problem.at} ${problem.message}`.trim() : '',
+        }),
+      )
+    }
+    const official = officialNamed(read.workflow.name)
+    if (official) throw new HostError('conflict', t('workflow.officialName', { name: official }))
+    const id = Object.entries(this.data.entries).find(
+      ([, record]) =>
+        record.origin?.kind === 'community' && record.origin.listingId === origin.listingId,
+    )?.[0]
+    if (id === undefined)
+      return { entry: await this.write(text, 'community', origin), updated: false }
+    await mkdir(this.deps.dir, { recursive: true })
+    await writeFileAtomic(this.fileOf(id), text)
+    this.data.entries[id]!.origin = { ...origin }
+    this.save()
+    this.deps.changed?.()
+    return { entry: (await this.read(id)).entry, updated: true }
+  }
+
   /**
    * Reads a GitHub workflow again; a changed file replaces it and waits for approval again. Resolves
    * to whether it changed.
@@ -508,11 +582,8 @@ export class WorkflowLibrary {
   }
 
   private officialClash(name: string): WorkflowProblem | null {
-    const key = name.trim().toLowerCase()
-    const official = this.official.find((read) => read.workflow?.name.toLowerCase() === key)
-    return official
-      ? { at: 'name', message: `an official workflow is named "${official.workflow!.name}"` }
-      : null
+    const official = officialNamed(name)
+    return official ? { at: 'name', message: `an official workflow is named "${official}"` } : null
   }
 
   private entryOf(read: Read, source: WorkflowSource): WorkflowEntry {

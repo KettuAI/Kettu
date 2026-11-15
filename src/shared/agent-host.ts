@@ -799,6 +799,9 @@ export interface HostContract {
     params: { id: string; agentId: AgentId; scope: PluginScope; projectPath?: string }
     result: InstalledPlugin
   }
+  // Downloads a workflow listing's current version, checks every file and the workflow, and writes
+  // it into the workflow library unapproved, in place of the version it has of the listing.
+  'market.addCommunityWorkflow': { params: { id: string }; result: WorkflowEntry }
   'market.reportCommunity': { params: { id: string; message: string }; result: void }
   // A server listing's MCP bundle, in two steps: prepare downloads, checks and stages it and says
   // what it runs and asks for, running nothing; commit moves it into place with the values its
@@ -1509,6 +1512,7 @@ export const HOST_METHODS = [
   'market.communityListing',
   'market.communityInstalled',
   'market.installCommunityPlugin',
+  'market.addCommunityWorkflow',
   'market.reportCommunity',
   'market.bundlePrepare',
   'market.bundleCommit',

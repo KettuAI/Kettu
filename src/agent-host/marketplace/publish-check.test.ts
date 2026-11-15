@@ -121,6 +121,104 @@ describe('checkFolder', () => {
     expect(check.problems[0]!.message).toMatch(/cannot tell what this folder is/)
   })
 
+  describe('a workflow', () => {
+    const WORKFLOW = `format: 1
+name: Release notes
+description: Draft the release notes from what merged, then let you review them.
+steps:
+  - id: gather
+    name: Gather
+    prompt: List what merged.
+    tools:
+      mcp: [github]
+    outcomes:
+      - name: Done
+        to: draft
+  - id: draft
+    name: Draft
+    prompt: Draft the notes.
+    you_review: true
+    tools:
+      skills: [changelog-writer]
+    outcomes:
+      - name: Done
+        end: done
+`
+
+    it('reads it with the library’s parser, its README as the listing’s text', async () => {
+      await put({ 'workflow.yaml': WORKFLOW, 'README.md': '# Release notes\n\nUse it weekly.\n' })
+      const check = await checkFolder(root)
+      expect(check.problems).toEqual([])
+      expect(check).toMatchObject({
+        kind: 'workflow',
+        harness: null,
+        manifest: 'workflow.yaml',
+        slug: 'release-notes',
+        name: 'Release notes',
+        description: 'Draft the release notes from what merged, then let you review them.',
+        about: '# Release notes\n\nUse it weekly.',
+        version: null,
+        adds: [
+          { label: 'steps', items: ['Gather', 'Draft'] },
+          { label: 'waits', items: ['Draft'] },
+          { label: 'servers', items: ['github'] },
+          { label: 'skills', items: ['changelog-writer'] },
+        ],
+        runs: [],
+      })
+      expect(check.files.map((file) => file.path)).toEqual(['README.md', 'workflow.yaml'])
+    })
+
+    it('refuses one with every problem the parser finds, before anything uploads', async () => {
+      await put({
+        'workflow.yaml': WORKFLOW.replace('to: draft', 'to: review').replace(
+          'format: 1',
+          'format: 2',
+        ),
+      })
+      const check = await checkFolder(root)
+      expect(check.kind).toBe('workflow')
+      expect(check.problems.length).toBeGreaterThan(1)
+      expect(check.problems.every((p) => p.path === 'workflow.yaml')).toBe(true)
+      expect(check.problems.map((p) => p.message).join('\n')).toMatch(/format/)
+      expect(check.problems.map((p) => p.message).join('\n')).toMatch(/review/)
+      expect(check.slug).toBeNull()
+    })
+
+    it('refuses an official workflow’s name, one without a description and one not in UTF-8', async () => {
+      await put({ 'workflow.yaml': WORKFLOW.replace('Release notes', 'feature DEVELOPMENT') })
+      expect((await checkFolder(root)).problems).toEqual([
+        {
+          path: 'workflow.yaml',
+          message:
+            'An official workflow is named "Feature development". Give this one another name.',
+        },
+      ])
+      const bare = await put(
+        { 'workflow.yaml': WORKFLOW.replace(/^description: .*\n/m, '') },
+        path.join(root, 'bare'),
+      )
+      expect((await checkFolder(bare)).problems).toEqual([
+        { path: 'workflow.yaml', message: 'It has no description.' },
+      ])
+      const latin1 = await put(
+        { 'workflow.yaml': Buffer.from(WORKFLOW.replace('notes', 'notés'), 'latin1') },
+        path.join(root, 'latin1'),
+      )
+      expect((await checkFolder(latin1)).problems).toEqual([
+        { path: 'workflow.yaml', message: 'It is not UTF-8 text.' },
+      ])
+    })
+
+    it('needs a name a listing can be called by', async () => {
+      await put({ 'workflow.yaml': WORKFLOW.replace('name: Release notes', 'name: 发布说明') })
+      const check = await checkFolder(root)
+      expect(check.slug).toBeNull()
+      expect(check.problems).toHaveLength(1)
+      expect(check.problems[0]!.message).toMatch(/no Latin letters or digits/)
+    })
+  })
+
   it('reads an MCP server from its server.json, uploading no file but a bundle', async () => {
     const server = {
       name: 'io.github.someone/weather',

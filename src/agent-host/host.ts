@@ -546,14 +546,17 @@ export class AgentHost {
       log,
       account: () => this.marketAccount,
       call: (call) => this.marketCall(call),
-      kept: () =>
-        [...this.settings.marketplace.skills, ...this.settings.marketplace.mcp].flatMap(
+      kept: () => [
+        ...[...this.settings.marketplace.skills, ...this.settings.marketplace.mcp].flatMap(
           (item) => listingIdOf(item.id) ?? [],
         ),
+        ...this.workflowLibrary.listingIds(),
+      ],
       installPlugin: (agentId, local, name, scope, projectPath) =>
         this.marketPlugins.installLocal(agentId, local, name, scope, projectPath),
       pluginInstalled: (harness, pluginId) =>
         this.marketPlugins.installedAnywhere(harness, pluginId),
+      installWorkflow: (text, origin) => this.workflowLibrary.installListing(text, origin),
     })
     this.marketBundles = new MarketBundlesService({
       userDataPath: options.userDataPath,
@@ -2384,6 +2387,7 @@ export class AgentHost {
         this.marketCommunity.installed(refresh === true),
       'market.installCommunityPlugin': ({ id, agentId, scope, projectPath }) =>
         this.marketCommunity.installPlugin(id, agentId, scope, projectPath ?? null),
+      'market.addCommunityWorkflow': ({ id }) => this.marketCommunity.installWorkflow(id),
       'market.reportCommunity': ({ id, message }) => this.marketCommunity.report(id, message),
       'market.bundlePrepare': ({ id }) => this.marketBundles.prepare(id),
       'market.bundleCommit': ({ token, values }) => this.marketBundles.commit(token, values),

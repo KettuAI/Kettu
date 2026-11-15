@@ -95,12 +95,14 @@ export interface WorkflowProblem {
 // The library.
 
 /** Official workflows ship with Kettu; the rest are the user's, by how they came. */
-export type WorkflowSource = 'official' | 'github' | 'file' | 'agent' | 'user'
+export type WorkflowSource = 'official' | 'github' | 'file' | 'agent' | 'user' | 'community'
 
 export type WorkflowOrigin =
   | { kind: 'github'; url: string } // the file's page or raw URL as given
   | { kind: 'file'; name: string } // the file name the user picked
   | { kind: 'agent'; sessionId: string; agentId: AgentId }
+  // A listing of the Kettu Marketplace and the version installed.
+  | { kind: 'community'; listingId: string; version: string; handle: string; slug: string }
 
 /**
  * Whether a workflow may start tasks: an official one always; one of the library only while its

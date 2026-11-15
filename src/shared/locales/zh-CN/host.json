@@ -613,7 +613,9 @@
     "tooLarge": "工作流 文件超过了 256 KB",
     "libraryFull": "你的 工作流 库满了",
     "downloadFailed": "没能下载这个 工作流：{{error}}",
-    "downloadStatus": "GitHub 对这个 工作流 返回了 {{status}}"
+    "downloadStatus": "GitHub 对这个 工作流 返回了 {{status}}",
+    "listingProblem": "这个工作流有问题，所以什么都没装：{{problem}}",
+    "officialName": "已经有一个官方工作流叫 {{name}}，所以没装这一个。"
   },
   "tasks": {
     "notFound": "没有这个需求",
@@ -668,7 +670,8 @@
     "otherKind": "这一项是另一种东西。",
     "otherHarness": "这个插件是给另一种 Agent 的。",
     "noManifest": "这个插件没有带名字的 {{file}}，装不了。",
-    "nameTaken": "已经装了 Kettu 的 Marketplace 里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。"
+    "nameTaken": "已经装了 Kettu 的 Marketplace 里另一个叫 {{name}} 的插件（{{other}}）。先卸载它。",
+    "noWorkflow": "这一项没有 UTF-8 文本的 workflow.yaml，所以什么都没装。"
   },
   "marketBundle": {
     "invalid": "这个 MCP 包装不了：{{reason}}",

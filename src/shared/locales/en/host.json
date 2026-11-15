@@ -616,7 +616,9 @@
     "tooLarge": "The workflow file is larger than 256 KB",
     "libraryFull": "Your workflow library is full",
     "downloadFailed": "Could not download the workflow: {{error}}",
-    "downloadStatus": "GitHub answered {{status}} for the workflow"
+    "downloadStatus": "GitHub answered {{status}} for the workflow",
+    "listingProblem": "The workflow has a problem, so nothing was installed: {{problem}}",
+    "officialName": "An official workflow is named {{name}}, so this one wasn’t installed."
   },
   "tasks": {
     "notFound": "No such task",
@@ -671,7 +673,8 @@
     "otherKind": "This listing is another kind of item.",
     "otherHarness": "This plugin is for another agent.",
     "noManifest": "The plugin has no {{file}} with a name, so it can’t be installed.",
-    "nameTaken": "Another plugin named {{name}} from the Kettu Marketplace is installed ({{other}}). Uninstall it first."
+    "nameTaken": "Another plugin named {{name}} from the Kettu Marketplace is installed ({{other}}). Uninstall it first.",
+    "noWorkflow": "The listing has no workflow.yaml in UTF-8 text, so nothing was installed."
   },
   "marketBundle": {
     "invalid": "This MCP bundle can’t be installed: {{reason}}",

@@ -58,6 +58,7 @@ import { PublishedListingPage } from './published-listing'
 import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
 import { AddButton, ItemRow, OfficialBadge } from './rows'
 import { SkillListing } from './skills'
+import { useListingWorkflow } from './workflow-actions'
 import { WorkflowListing } from './workflow-listing'
 import { serverSubject } from './tile-art'
 import { ItemTile } from './tiles'
@@ -87,13 +88,20 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
   }
   if (ref?.kind === 'skill') return <SkillListing id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'workflow') return <WorkflowListing id={ref.id} tab={tab} back={back} />
-  if (ref?.kind === 'community') return <CommunityListingPage id={ref.id} tab={tab} back={back} />
+  if (ref?.kind === 'community') return <CommunityPage id={ref.id} tab={tab} back={back} />
   if (ref?.kind === 'mcp') return <McpListing id={ref.id} tab={tab} back={back} />
   return (
     <ListingFrame back={back}>
       <Missing back={back} />
     </ListingFrame>
   )
+}
+
+/** A listing of the Kettu Marketplace; once its workflow is in the library, that workflow's page. */
+function CommunityPage({ id, tab, back }: { id: string; tab: MarketplaceTab; back: () => void }) {
+  const workflow = useListingWorkflow(id)
+  if (workflow) return <WorkflowListing id={workflow.id} tab={tab} back={back} />
+  return <CommunityListingPage id={id} tab={tab} back={back} />
 }
 
 function McpListing({ id, tab, back }: { id: string; tab: MarketplaceTab; back: () => void }) {

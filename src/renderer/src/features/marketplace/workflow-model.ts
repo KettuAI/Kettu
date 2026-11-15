@@ -39,12 +39,23 @@ export function awaitsApproval(entry: WorkflowEntry): boolean {
   return entry.approval === 'pending' || entry.approval === 'changed'
 }
 
-/** The directory's three groups: Kettu's own, the files the user added, and theirs or an agent's. */
-export type WorkflowGroup = 'official' | 'added' | 'yours'
+/**
+ * The directory's groups: Kettu's own, the Kettu Marketplace's, the files the user added, and theirs
+ * or an agent's.
+ */
+export type WorkflowGroup = 'official' | 'community' | 'added' | 'yours'
 
 export function workflowGroup(entry: WorkflowEntry): WorkflowGroup {
   if (entry.source === 'official') return 'official'
+  if (entry.source === 'community') return 'community'
   return entry.source === 'github' || entry.source === 'file' ? 'added' : 'yours'
+}
+
+/** The listing of the Kettu Marketplace a workflow came from; null for any other. */
+export function listingOrigin(
+  entry: WorkflowEntry,
+): Extract<WorkflowEntry['origin'], { kind: 'community' }> | null {
+  return entry.origin?.kind === 'community' ? entry.origin : null
 }
 
 export function workflowName(entry: WorkflowEntry, locale: string): string {
@@ -128,6 +139,18 @@ export function workflowTools(workflow: Workflow): { mcp: string[]; skills: stri
     for (const name of step.tools.skills) skills.add(name)
   }
   return { mcp: [...mcp], skills: [...skills] }
+}
+
+/** The MCP servers and Skills its steps name that the host does not have, from its problems. */
+export function missingTools(entry: WorkflowEntry): string[] {
+  const names = new Set<string>()
+  for (const problem of entry.problems) {
+    const at = /^steps\[(\d+)\]\.tools\.(mcp|skills)\[(\d+)\]$/.exec(problem.at)
+    const step = at ? entry.workflow?.steps[Number(at[1])] : undefined
+    const name = at && step?.tools[at[2] as 'mcp' | 'skills'][Number(at[3])]
+    if (name) names.add(name)
+  }
+  return [...names]
 }
 
 /** The repository a GitHub file URL points into, as owner/repo. */

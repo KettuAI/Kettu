@@ -1103,7 +1103,8 @@
     "kind": {
       "skill": "Skill",
       "plugin": "Plugin",
-      "mcp-server": "MCP server"
+      "mcp-server": "MCP server",
+      "workflow": "Workflow"
     },
     "visibility": {
       "public": "Everyone",
@@ -1119,6 +1120,7 @@
       "codex": "Codex"
     },
     "everyAgent": "Every agent",
+    "stepAgents": "Claude Code and Codex",
     "visibleTo": "Visible to",
     "asBefore": "as before",
     "adds": "Adds",
@@ -1129,6 +1131,13 @@
       "hooks": "Hooks",
       "servers": "MCP server"
     },
+    "workflowGroup": {
+      "steps": "Steps",
+      "waits": "Waits for you at",
+      "servers": "Names MCP servers",
+      "skills": "Names Skills"
+    },
+    "stepsBy": "Steps run by",
     "worksWith": "Works with",
     "runs": "Runs",
     "changes": "Changes",

@@ -70,7 +70,7 @@ function unexpected(what: string): MarketApiError {
 const isCount = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 const text = (value: unknown): string | null => (typeof value === 'string' ? value : null)
-const KINDS: readonly PublishKind[] = ['skill', 'plugin', 'mcp-server']
+const KINDS: readonly PublishKind[] = ['skill', 'workflow', 'plugin', 'mcp-server']
 const VISIBILITIES: readonly ListingVisibility[] = ['public', 'private', 'unlisted']
 
 function kindOf(value: unknown): PublishKind | null {

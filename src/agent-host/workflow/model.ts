@@ -175,6 +175,7 @@ const SOURCES: ReadonlySet<unknown> = new Set<WorkflowSource>([
   'file',
   'agent',
   'user',
+  'community',
 ])
 const LANE_STATES: ReadonlySet<unknown> = new Set(['open', 'merged', 'abandoned', 'removed'])
 

@@ -22,7 +22,9 @@ import {
   type MarketResults,
   type MarketVersionFiles,
   type MineListing,
+  type PublishAdds,
   type PublishDraft,
+  type PublishKind,
   type PublishManifest,
   type PublishOrigin,
   type PublishVisibility,
@@ -50,7 +52,7 @@ const COMPARE_FILES = 40
 const COMPARE_BYTES = 256 * 1024
 
 export const MARKET_INSTRUCTIONS =
-  'The marketplace_* tools publish the user’s own skills, plugins and MCP servers to the Kettu ' +
+  'The marketplace_* tools publish the user’s own skills, workflows, plugins and MCP servers to the Kettu ' +
   'Marketplace. Publish only when the user asks. Check a folder with marketplace_check and fix ' +
   'what it reports before marketplace_publish; every publish and unlisting waits for the user to ' +
   'confirm it in this session.'
@@ -61,12 +63,15 @@ export const MARKET_TOOLS: Tool[] = [
     title: 'Check a folder for the Kettu Marketplace',
     description:
       'Checks a folder before it is published to the Kettu Marketplace, uploading nothing. It ' +
-      'tells what the folder is (a skill with SKILL.md, a Claude Code plugin with ' +
-      '.claude-plugin/plugin.json, a Codex plugin with .codex-plugin/plugin.json, an MCP server ' +
-      'with server.json, or an MCP bundle .mcpb file), its name, description and version, the ' +
-      'files that would upload and their size, what an install adds and runs, whether the user ' +
-      'published it before, and every problem that keeps it from being published, such as a ' +
-      'missing field, too many files or a secret in a file. Fix the problems, then check again.',
+      'tells what the folder is (a skill with SKILL.md, a workflow with workflow.yaml and an ' +
+      'optional README.md, a Claude Code plugin with .claude-plugin/plugin.json, a Codex plugin ' +
+      'with .codex-plugin/plugin.json, an MCP server with server.json, or an MCP bundle .mcpb ' +
+      'file), its name, description and version, the files that would upload and their size, ' +
+      'what an install adds and runs (for a workflow, its steps, those that wait for the user and ' +
+      'the MCP servers and Skills they name), whether the user published it before, and every ' +
+      'problem that keeps it from being published, such as a missing field, a workflow.yaml the ' +
+      'workflow format refuses, too many files or a secret in a file. Fix the problems, then ' +
+      'check again.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -92,8 +97,8 @@ export const MARKET_TOOLS: Tool[] = [
       'minutes; nothing is uploaded until they press Publish. If they choose Not now or do not ' +
       'answer, nothing is uploaded and it is kept as a draft they can publish later: do not call ' +
       'it again unless they ask. Plugins and MCP servers take the version in their manifest; a ' +
-      'skill gets 1.0.0 first, then the next patch version unless you pass one. For a new ' +
-      'version, write short notes on what changed.',
+      'skill or a workflow gets 1.0.0 first, then the next patch version unless you pass one. ' +
+      'For a new version, write short notes on what changed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -113,7 +118,8 @@ export const MARKET_TOOLS: Tool[] = [
         version: {
           type: 'string',
           maxLength: 64,
-          description: 'A skill’s version, such as 1.2.0, when the next patch is not right.',
+          description:
+            'A skill’s or workflow’s version, such as 1.2.0, when the next patch is not right.',
         },
         notes: {
           type: 'string',
@@ -333,7 +339,17 @@ function listingName(listing: Pick<MineListing, 'handle' | 'slug'>): string {
   return `@${listing.handle}/${listing.slug}`
 }
 
-const KIND_NAMES = { skill: 'skill', plugin: 'plugin', 'mcp-server': 'MCP server' } as const
+const KIND_NAMES = {
+  skill: 'skill',
+  workflow: 'workflow',
+  plugin: 'plugin',
+  'mcp-server': 'MCP server',
+} as const
+
+/** A skill and a workflow have no version of their own: Kettu numbers them. */
+function numbered(kind: PublishKind | null | undefined): boolean {
+  return kind === 'skill' || kind === 'workflow'
+}
 
 export class MarketTools {
   constructor(private readonly deps: MarketToolsDeps) {}
@@ -573,7 +589,7 @@ export class MarketTools {
     const taken = listing?.versions.map((v) => v.version) ?? []
     if (soft && wanted !== null && taken.includes(wanted)) wanted = null
     let version: string | null = check.version
-    if (check.kind === 'skill') {
+    if (numbered(check.kind)) {
       version = wanted ?? (listing ? nextPatch(taken) : '1.0.0')
     } else if (wanted !== null && check.version !== null && wanted !== check.version) {
       problems.push({
@@ -583,11 +599,10 @@ export class MarketTools {
     }
     if (version !== null && taken.includes(version)) {
       problems.push({
-        path: check.kind === 'skill' ? undefined : (check.manifest ?? undefined),
-        message:
-          check.kind === 'skill'
-            ? `Version ${version} of ${listingName(listing!)} is published already. Pass a higher version.`
-            : `Version ${version} of ${listingName(listing!)} is published already. Raise the version in ${check.manifest}.`,
+        path: numbered(check.kind) ? undefined : (check.manifest ?? undefined),
+        message: numbered(check.kind)
+          ? `Version ${version} of ${listingName(listing!)} is published already. Pass a higher version.`
+          : `Version ${version} of ${listingName(listing!)} is published already. Raise the version in ${check.manifest}.`,
       })
     }
     return {
@@ -618,6 +633,7 @@ export class MarketTools {
           `"${check.name}" (${check.slug}) ${plan.version ?? ''}, ${check.files.length} files, ` +
           `${sizeText(check.bytes)}, from ${plan.folder}.`.replace(' ,', ','),
       )
+      if (check.kind === 'workflow') lines.push(...workflowLines(check.adds))
       if (listing) {
         lines.push(
           `It would be a new version of ${listingName(listing)}, now at ${listing.current ?? 'no live version'}.`,
@@ -1055,9 +1071,22 @@ export class MarketTools {
   }
 }
 
-/** The version a draft keeps: a skill's, which Kettu chose; the others' manifests say theirs. */
+/**
+ * The version a draft keeps: a skill's or a workflow's, which Kettu chose; the others' manifests
+ * say theirs.
+ */
 function draftVersion(draft: PublishDraft | null): string | null {
-  return draft?.manifest.kind === 'skill' ? draft.manifest.version : null
+  return draft && numbered(draft.manifest.kind) ? draft.manifest.version : null
+}
+
+/** A workflow's steps, those that wait for the user and the tools they name, for the agent. */
+function workflowLines(adds: readonly PublishAdds[]): string[] {
+  const of = (label: string) => adds.find((group) => group.label === label)?.items ?? []
+  const lines = [`Steps: ${of('steps').join(' → ')}.`]
+  if (of('waits').length > 0) lines.push(`Waits for the user at: ${of('waits').join(', ')}.`)
+  const tools = [...of('servers'), ...of('skills')]
+  if (tools.length > 0) lines.push(`Names the MCP servers and Skills: ${tools.join(', ')}.`)
+  return lines
 }
 
 function comparable(file: CheckedFile, oldSize: number): boolean {

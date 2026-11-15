@@ -40,6 +40,8 @@ import { useEntry, useEntryAnimation } from '../use-thread'
 import { useAnswering } from './use-answering'
 
 const EVERY_AGENT = ['claude-code', 'codex', 'opencode', 'pi'] as const
+// The agents that do a workflow's steps.
+const STEP_AGENTS = ['claude-code', 'codex'] as const
 const VISIBILITY_ICON = {
   public: Globe02Icon,
   private: SquareLock02Icon,
@@ -51,9 +53,16 @@ function PublishTile({ item }: { item: Ask['item'] }) {
   const art = tileArt(
     item.kind === 'skill'
       ? { kind: 'skill', name: item.slug }
-      : item.kind === 'plugin'
-        ? { kind: 'plugin', harness: item.harness ?? 'claude-code', id: item.slug, category: null }
-        : { kind: 'mcp', id: item.slug, brand: null },
+      : item.kind === 'workflow'
+        ? { kind: 'workflow', id: item.slug, source: 'community' }
+        : item.kind === 'plugin'
+          ? {
+              kind: 'plugin',
+              harness: item.harness ?? 'claude-code',
+              id: item.slug,
+              category: null,
+            }
+          : { kind: 'mcp', id: item.slug, brand: null },
   )
   const glyph = art.type === 'glyph' ? art : null
   return (
@@ -122,9 +131,22 @@ function Check({ children }: { children: ReactNode }) {
   )
 }
 
-/** The agents an install works with: a plugin's harness, else every agent Kettu runs. */
+/**
+ * The agents an install works with: a plugin's harness, the agents that do a workflow's steps,
+ * else every agent Kettu runs.
+ */
 function WorksWith({ item }: { item: Ask['item'] }) {
   const { t } = useTranslation('session')
+  if (item.kind === 'workflow') {
+    return (
+      <span className="ks-pub-agents">
+        {STEP_AGENTS.map((agent) => (
+          <AgentMark key={agent} agent={agent} size={13} dot={null} />
+        ))}
+        {t('marketPublish.stepAgents')}
+      </span>
+    )
+  }
   if (item.kind === 'plugin' && item.harness) {
     return (
       <span className="ks-pub-agents">
@@ -157,8 +179,13 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
           <dd className="ks-pub-adds">
             {entry.adds.map((group) => (
               <span key={group.label}>
-                {t(`marketPublish.addsGroup.${group.label}`, { defaultValue: group.label })}{' '}
-                <span className="ks-pub-mono">{group.items.join(', ')}</span>
+                {t(
+                  `marketPublish.${entry.item.kind === 'workflow' ? 'workflowGroup' : 'addsGroup'}.${group.label}`,
+                  { defaultValue: group.label },
+                )}{' '}
+                <span className="ks-pub-mono">
+                  {group.items.join(group.label === 'steps' ? ' → ' : ', ')}
+                </span>
               </span>
             ))}
           </dd>
@@ -166,7 +193,11 @@ function Facts({ entry, visibility }: { entry: Ask; visibility: ReactNode }) {
       )}
       {publish && (
         <div>
-          <dt>{t('marketPublish.worksWith')}</dt>
+          <dt>
+            {entry.item.kind === 'workflow'
+              ? t('marketPublish.stepsBy')
+              : t('marketPublish.worksWith')}
+          </dt>
           <dd>
             <WorksWith item={entry.item} />
           </dd>
