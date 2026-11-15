@@ -1,0 +1,31 @@
+{
+  "button": {
+    "star": "Star",
+    "starring": "正在 Star…",
+    "starred": "已 Star",
+    "inBrowser": "在浏览器里打开 GitHub 上的 KettuAI/Kettu",
+    "withGh": "用这台电脑上的 GitHub CLI 给 KettuAI/Kettu 点 Star，不会打开浏览器"
+  },
+  "card": {
+    "label": "在 GitHub 上 Star Kettu",
+    "lead": "喜欢 Kettu 的话，",
+    "ask": "给它点一颗 Star 吧。",
+    "thanks": "谢谢你的 Star！",
+    "close": "关闭"
+  },
+  "line": {
+    "text": "Kettu 免费开源。",
+    "thanks": "谢谢你的 Star！",
+    "close": "关闭"
+  },
+  "onboarding": {
+    "title": "Kettu 免费开源",
+    "body": "在 GitHub 上点一颗 Star，能帮更多人找到它。"
+  },
+  "menu": {
+    "star": "在 GitHub 上 Star Kettu",
+    "starring": "正在 Star…",
+    "starred": "已在 GitHub 上 Star"
+  },
+  "toast": "已 Star KettuAI/Kettu，谢谢你！"
+}

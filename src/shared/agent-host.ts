@@ -452,6 +452,17 @@ export interface McpStatus {
 }
 
 /** Where the agent environment came from, for Settings › Agents. */
+/** The GitHub star prompt as this host keeps it. */
+export interface GitHubStarState {
+  /** Whether gh can star here; null until it has been asked, when a click tries it anyway. */
+  gh: boolean | null
+  starred: boolean
+  /** The one-time card over the account row shows. */
+  card: boolean
+  /** New session's line shows. */
+  line: boolean
+}
+
 export interface EnvironmentInfo {
   source: 'pending' | 'login-shell' | 'inherited' | 'fallback'
   shell: string | null
@@ -1077,6 +1088,14 @@ export interface HostContract {
   'git.avatarUrl': { params: { login: string }; result: string | null }
   'git.currentPullRequest': { params: { projectPath: string }; result: PullRequest | null }
   'git.tools': { params: void; result: GitTools }
+  // Kettu's own repository through this host's gh; the repository is fixed, never a parameter.
+  'star.state': { params: void; result: GitHubStarState }
+  // Stars it on the user's click; false when gh could not, and the client opens the page instead.
+  'star.add': { params: void; result: boolean }
+  // The card or New session's line was closed.
+  'star.dismiss': { params: void; result: void }
+  // The repository page opened in place of a star, so the prompts end.
+  'star.opened': { params: void; result: void }
   // A draft's attachment, kept until it is sent or removed; see attachments in the session model.
   // `grantId`: a file or folder main granted for a pick or a drop. `projectPath` and `path`: one
   // an `@` mention named, relative to the project and checked as `files.read` checks a path.
@@ -1553,6 +1572,10 @@ export const HOST_METHODS = [
   'git.avatarUrl',
   'git.currentPullRequest',
   'git.tools',
+  'star.state',
+  'star.add',
+  'star.dismiss',
+  'star.opened',
   'attachments.add',
   'attachments.read',
   'attachments.update',
@@ -1648,6 +1671,7 @@ export type HostEvent =
   | { type: 'git.pr'; projectPath: string; pr: PullRequest | null }
   | { type: 'git.reference'; url: string; found: IssueLookup } // to the ports watching `url`
   | { type: 'git.tools'; tools: GitTools }
+  | { type: 'star.changed'; state: GitHubStarState }
   | { type: 'usage.changed' } // the figures changed; a page showing them reads again
   | { type: 'market.keysChanged' } // the Marketplace's keys changed; a page showing them reads again
   // The account, what it published or the drafts changed; Marketplace › Published reads again.

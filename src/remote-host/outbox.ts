@@ -349,6 +349,7 @@ const WHOLE_STATES: ReadonlySet<string> = new Set([
   'projects.changed',
   'environment.changed',
   'git.tools',
+  'star.changed',
   'usage.changed',
   'usage.status',
   'artifacts.changed',

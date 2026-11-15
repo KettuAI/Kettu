@@ -15,11 +15,13 @@ import {
   RepeatIcon,
   Settings02Icon,
   SidebarLeftIcon,
+  StarIcon,
   Store01Icon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import { newSession, openProjectDialog } from '@renderer/app/actions'
+import { starFromPalette } from '@renderer/features/github-star/palette'
 import { FolderClosedMark, Icon } from '@renderer/components/affect/app-shell'
 import {
   CommandMenu,
@@ -109,6 +111,9 @@ function runAction(action: SearchAction): void {
       break
     case 'toggleSidebar':
       toggleSidebar()
+      break
+    case 'starKettu':
+      starFromPalette()
       break
   }
 }
@@ -270,6 +275,7 @@ const ACTION_ICON: Record<SearchAction, IconSvgElement> = {
   openSettings: Settings02Icon,
   showShortcuts: KeyboardIcon,
   toggleSidebar: SidebarLeftIcon,
+  starKettu: StarIcon,
 }
 
 const KIND_ICON: Record<ArtifactKind, IconSvgElement> = {

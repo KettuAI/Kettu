@@ -50,6 +50,7 @@ import {
   syncReferences,
   useGitStore,
 } from '@renderer/stores/git'
+import { loadGitHubStar, receiveGitHubStar } from '@renderer/stores/github-star'
 import { marketConnectionChanged, marketKeysChanged } from '@renderer/stores/marketplace'
 import { marketPublishedChanged } from '@renderer/stores/market-published'
 import { memoryChanged } from '@renderer/stores/memory'
@@ -165,6 +166,11 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
   if (event.type === 'memory.changed') memoryChanged(hostId)
   // The rest is each host's own: another host's goes to its Settings, if they have shown it.
   if (hostId !== null && event.type === 'usage.changed') usageChanged(hostId)
+  // Only this window's own host is asked to star, as the prompts show its record.
+  if (event.type === 'star.changed') {
+    if (hostId === null) receiveGitHubStar(event.state)
+    return
+  }
   if (hostId !== null) return hostScopeEvent(hostId, event)
   switch (event.type) {
     case 'environment.changed':
@@ -219,6 +225,7 @@ export async function loadHostState(): Promise<void> {
     loadSessionState(),
     loadAgents(),
     loadGitTools(),
+    loadGitHubStar(),
     loadUsageStatus(),
     loadToday(),
   ])
@@ -421,6 +428,7 @@ export function bootstrap(): Promise<unknown> {
   const sessionState = loadSessionState()
   void loadAgents()
   void loadGitTools()
+  void loadGitHubStar()
   // Leaving the launch view waits for the session list, not for the agents or git tools, whose
   // detection and `gh auth status` can take seconds.
   void Promise.allSettled([settingsReady, sessionState]).then(finishLaunch)

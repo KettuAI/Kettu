@@ -43,7 +43,8 @@
       "openMarketplace": "Open Marketplace",
       "openSettings": "Open Settings",
       "showShortcuts": "Show keyboard shortcuts",
-      "toggleSidebar": "Toggle sidebar"
+      "toggleSidebar": "Toggle sidebar",
+      "starKettu": "Star Kettu on GitHub"
     },
     "showAll": "Show all {{count}}",
     "sessionCount_one": "{{count}} session",

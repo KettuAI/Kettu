@@ -15,6 +15,7 @@ import type {
   RepositoryVisibility,
 } from '@shared/git'
 import type { GitEntry, ToolKind } from '@shared/thread'
+import type { StarCheck } from './star'
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 
@@ -108,6 +109,10 @@ export interface GitServiceApi {
   currentBranch(projectPath: string): string | null
   tools(): Promise<GitTools>
   reloadTools(): Promise<GitTools>
+  /** Whether the user starred Kettu's own repository, through their gh. */
+  starred(): Promise<StarCheck>
+  /** Stars Kettu's own repository through the user's gh; false when gh could not. */
+  star(): Promise<boolean>
   setEnvironment(env: NodeJS.ProcessEnv): void
   setBackgroundFetch(enabled: boolean): void
   /** Session events, for refreshes and for attributing commits and pushes to a session. */

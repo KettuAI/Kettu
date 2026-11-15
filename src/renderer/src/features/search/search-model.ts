@@ -16,6 +16,7 @@ export type SearchAction =
   | 'openSettings'
   | 'showShortcuts'
   | 'toggleSidebar'
+  | 'starKettu'
 
 export const SEARCH_ACTIONS: readonly SearchAction[] = [
   'newSession',
@@ -27,6 +28,7 @@ export const SEARCH_ACTIONS: readonly SearchAction[] = [
   'openSettings',
   'showShortcuts',
   'toggleSidebar',
+  'starKettu',
 ]
 
 export type SearchScope = 'all' | 'sessions' | 'artifacts' | 'routines' | 'projects' | 'settings'

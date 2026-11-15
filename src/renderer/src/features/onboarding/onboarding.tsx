@@ -49,6 +49,7 @@ import { Language } from '@renderer/features/settings/sections'
 import { errorMessage } from '@renderer/lib/host'
 import { hasBand } from '@renderer/lib/platform'
 import { cancelSignIn, signIn, useAccountStore } from '@renderer/stores/account'
+import { OnboardingStar } from '@renderer/features/github-star/star-prompts'
 import { menuAgents, useAgentsStore } from '@renderer/stores/agents'
 import { prefersReducedMotion, useSettingsStore } from '@renderer/stores/settings'
 import { AgentsStage, BrowserStage, CloudDiagram, FoxStage, NoAgentsStage } from './stage'
@@ -608,6 +609,7 @@ function Agents({
             <Icon icon={CheckmarkCircle02Icon} size={13} />
             {t('agents.note')}
           </p>
+          <OnboardingStar />
         </>
       )}
     </Split>

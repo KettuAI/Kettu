@@ -636,6 +636,13 @@
   --composer-ultra-1: #e879f9;
   --composer-ultra-2: #8b5cf6;
   --composer-ultra-3: #3b82f6;
+  /* The GitHub star card: the glow behind its Star button from its crest down, and the colors
+     flowing through its ask. */
+  --star-glow-1: color-mix(in srgb, var(--tile-amber) 85%, var(--send));
+  --star-glow-2: var(--send);
+  --star-glow-3: color-mix(in srgb, var(--send) 70%, var(--danger));
+  --star-text-amber: color-mix(in srgb, var(--tile-amber) 85%, var(--send));
+  --star-text-peach: color-mix(in srgb, var(--send) 45%, var(--tile-amber));
 
   /* The artifact canvas: the colors its notes take, a sticky's paper and ink, the snapping guides
      and the one ink every agent's pointer and outline share. */

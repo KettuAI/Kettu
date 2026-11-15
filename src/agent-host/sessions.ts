@@ -327,6 +327,8 @@ export interface SessionEvents {
   /** The session was shown or marked read, so its turn was seen. */
   seen(sessionId: string): void
   busy(counts: BusyCounts): void
+  /** A turn of a session the user started themselves ended normally. */
+  completed(sessionId: string): void
 }
 
 /** The artifacts service and the Marketplace's servers, as the sessions pass them to their agents. */
@@ -6888,6 +6890,9 @@ export class SessionManager {
     // A run's end notifies as the routine's, once, and a step's as its task's, so its session
     // sends nothing here.
     if (!routineTurn) {
+      if (stopReason === 'end_turn' && live.record.origin === 'user' && !live.record.startedBy) {
+        this.deps.events.completed(live.id)
+      }
       const reply = stopReason === 'end_turn' ? replySummary(live.thread) : null
       const changed = stopReason === 'end_turn' ? changedFiles(live.thread) : 0
       const text = reply ?? turnEndText(stopReason)

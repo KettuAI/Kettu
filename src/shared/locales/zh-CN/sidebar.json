@@ -43,7 +43,8 @@
       "openMarketplace": "打开 Marketplace",
       "openSettings": "打开设置",
       "showShortcuts": "显示快捷键",
-      "toggleSidebar": "切换侧边栏"
+      "toggleSidebar": "切换侧边栏",
+      "starKettu": "在 GitHub 上 Star Kettu"
     },
     "showAll": "显示全部 {{count}} 条",
     "sessionCount_other": "{{count}} 个会话",
