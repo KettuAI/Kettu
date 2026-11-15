@@ -78,7 +78,13 @@ export interface DialRegions {
   /** The relays to try, in order, of those the host named. */
   endpoints(hostId: string, named: string[]): RelayEndpoint[]
   dialed(url: string, outcome: RelayAttempt): void
-  drained(url: string): void
+  /** The region a connection joined through drains; `leave` closes that connection. */
+  drained(url: string, leave: () => void): void
+}
+
+/** The project's relays among those a host named, the main one included. */
+export function namedRelays(relay: HostRelay): string[] {
+  return [...new Set([...relay.urls, relayUrl])].filter((url) => trustedRelay(url, relayUrl))
 }
 
 /**
@@ -92,7 +98,7 @@ export function relayDial(
   missed: (problem: RelayProblem | null) => void,
   regions: DialRegions,
 ): Dial {
-  const named = [...new Set([...relay.urls, relayUrl])].filter((url) => trustedRelay(url, relayUrl))
+  const named = namedRelays(relay)
   return async () => {
     const access = await token()
     if (!access) {
@@ -108,11 +114,7 @@ export function relayDial(
       openSocket: (url) => new WebSocket(url),
       timeoutMs: RELAY_TIMEOUT_MS,
       attempted: (url, outcome) => regions.dialed(url, outcome),
-      // A region that drains is left by connecting again, which resumes the session.
-      drained: (url) => {
-        regions.drained(url)
-        joined?.close()
-      },
+      drained: (url) => regions.drained(url, () => joined?.close()),
     })
     if (result.kind === 'joined') {
       missed(null)

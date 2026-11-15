@@ -1173,9 +1173,12 @@
     "via": {
       "direct": "直连",
       "directAt": "直连 · {{address}}",
+      "lan": "同一网络",
+      "lanAt": "同一网络 · {{address}}",
       "ssh": "SSH",
       "sshAt": "SSH · {{target}}",
-      "relay": "Kettu 中继"
+      "relay": "Kettu 中继",
+      "relayAt": "Kettu 中继 · {{region}}"
     },
     "failed": {
       "not_connected": "{{name}} 没有连上，等它在线后再试。",
@@ -1396,6 +1399,7 @@
       "serviceKey": "这台电脑的密钥存在只有当前用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
       "serviceKey_web": "{{host}} 的密钥存在只有它的用户能读的文件里，因为开机就启动的服务不能指望钥匙串已经解锁。",
       "offLine": "已关闭",
+      "firewall": "同一网络里的设备会直接连到这台电脑，所以系统可能会问一次是否允许 Kettu 接受传入连接。",
       "relay": "在哪都连得上"
     },
     "hostName": {

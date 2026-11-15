@@ -59,8 +59,10 @@ import {
   IMAGE_REFS_FEATURE,
   negotiate,
   parseHello,
+  parsePromote,
   RESUME_MS,
   RESUME_VERSION,
+  STANDBY_FEATURE,
   TOOL_DIGESTS_FEATURE,
   type Addresses,
   type Closing,
@@ -69,6 +71,7 @@ import {
   type Hello,
   type HostRenamed,
   type Renamed,
+  type Standby,
   type TerminalAccess,
   type Welcome,
 } from '@shared/remote/protocol'
@@ -440,8 +443,14 @@ export class RemoteServer {
 
   /** The session a hello's token names, when it is `deviceId`'s and still kept; the token is spent. */
   takeSession(token: string, deviceId: string): DeviceSession | null {
-    const session = this.tokens.get(token)
+    const session = this.findSession(token, deviceId)
     this.tokens.delete(token)
+    return session
+  }
+
+  /** The same without spending the token, for a connection that joins as the standby. */
+  findSession(token: string, deviceId: string): DeviceSession | null {
+    const session = this.tokens.get(token)
     return session?.live && session.device.id === deviceId ? session : null
   }
 
@@ -813,12 +822,14 @@ class DeviceConnection {
     }
     this.device = device
     if (hello.resume && version >= RESUME_VERSION && !joining) {
+      if (hello.standby === 'join') {
+        const kept = this.server.findSession(hello.resume.token, device.id)
+        if (!kept?.join(this)) return this.end()
+        return this.joined(kept)
+      }
       const kept = this.server.takeSession(hello.resume.token, device.id)
-      if (kept?.resume(this, hello.resume.received)) {
-        this.session = kept
-        this.state = 'session'
-        this.keepAlive(kept.version)
-        return this.server.resumed(this)
+      if (kept?.resume(this, hello.resume.received, hello.standby === 'keep')) {
+        return this.joined(kept)
       }
       // Its device received what the host never sent: that session cannot go on.
       kept?.end()
@@ -839,6 +850,21 @@ class DeviceConnection {
     session.start(this)
     this.keepAlive(version)
     this.server.started(this, session)
+  }
+
+  /** The connection now belongs to a session that was there before it, as active or standby. */
+  private joined(session: DeviceSession): void {
+    this.session = session
+    this.state = 'session'
+    this.keepAlive(session.version)
+    this.server.resumed(this)
+  }
+
+  /** Tells the device this connection is its session's standby now. */
+  standingBy(): void {
+    this.channel
+      ?.send({ kind: 'json', value: { type: 'standby' } satisfies Standby })
+      .catch(() => {})
   }
 
   /**
@@ -976,8 +1002,12 @@ class DeviceSession {
   private readonly role: Welcome['role'] = 'owner'
   private state: SessionState = 'open'
   private connection: DeviceConnection | null = null
+  /** A second connection the device keeps open, carrying only pings, to take the session over. */
+  private standby: DeviceConnection | null = null
   private readonly outbox: Outbox
   private readonly resumable: boolean
+  /** Whether the session keeps a standby: it needs the keepalive to notice one that went. */
+  private readonly standbys: boolean
   private token: string | null = null
   private awayTimer: ReturnType<typeof setTimeout> | null = null
   private closing: Promise<void> | null = null
@@ -1024,6 +1054,7 @@ class DeviceSession {
     const { options } = server
     this.port = port
     this.resumable = version >= RESUME_VERSION
+    this.standbys = version >= KEEPALIVE_VERSION
     this.outbox = new Outbox({
       acks: this.resumable,
       limits: options.outboxLimits,
@@ -1116,16 +1147,21 @@ class DeviceSession {
    * Goes on on `connection`, whose device received the first `received` of the messages sent
    * here; false when it cannot have, and the session cannot go on.
    */
-  resume(connection: DeviceConnection, received: number): boolean {
+  resume(connection: DeviceConnection, received: number, keep = false): boolean {
     if (!this.live || !this.resumable || !this.outbox.canResume(received)) return false
     if (this.awayTimer) clearTimeout(this.awayTimer)
     this.awayTimer = null
     const previous = this.connection
     this.connection = connection
     this.state = 'open'
-    // After the switch, so its end is not taken for this session's.
+    if (this.standby === connection) this.standby = null
+    // After the switch, so its end is not taken for this session's. The device stopped using the
+    // previous one, even when it is this one, so what it had half sent there it sends again.
     if (previous) {
-      previous.drop()
+      if (previous !== connection) {
+        if (keep && this.standbys) this.standBy(previous)
+        else previous.drop()
+      }
       this.uploads.dropUnfinished()
       this.forwards.dropConnections()
     }
@@ -1175,8 +1211,37 @@ class DeviceSession {
     this.send(message)
   }
 
+  /** Keeps `connection` beside the session's own as its standby; false when it cannot. */
+  join(connection: DeviceConnection): boolean {
+    if (!this.live || !this.standbys || connection === this.connection) return false
+    this.standBy(connection)
+    return true
+  }
+
+  /** `connection` becomes the standby, in place of the one before. */
+  private standBy(connection: DeviceConnection): void {
+    const previous = this.standby
+    this.standby = connection
+    if (previous && previous !== connection) previous.drop()
+    connection.standingBy()
+  }
+
+  /**
+   * The device takes the session over on its standby, or on its own connection after a move
+   * that failed; the session ends when it cannot go on from what the device received.
+   */
+  private promote(connection: DeviceConnection, received: number): void {
+    if (this.resume(connection, received)) return
+    this.server.options.log('info', `Device ${this.device.id}'s standby could not take over`)
+    this.end()
+  }
+
   /** A connection of the session ended: the session waits for its device, or ends with it. */
   detached(connection: DeviceConnection): void {
+    if (connection === this.standby) {
+      this.standby = null
+      return
+    }
     if (connection !== this.connection) return
     this.connection = null
     this.outbox.detach()
@@ -1206,8 +1271,8 @@ class DeviceSession {
     port?.close()
     this.terminal?.close(null)
     this.devices?.close(null)
-    const connection = this.connection
-    this.closing = (connection ? connection.sayClosing(reason) : Promise.resolve()).then(() =>
+    const connections = [this.connection, this.standby].filter((kept) => kept !== null)
+    this.closing = Promise.all(connections.map((kept) => kept.sayClosing(reason))).then(() =>
       this.end(),
     )
     return this.closing
@@ -1235,8 +1300,11 @@ class DeviceSession {
     this.terminal?.close(null)
     this.devices?.close(null)
     const connection = this.connection
+    const standby = this.standby
     this.connection = null
+    this.standby = null
     connection?.drop()
+    standby?.drop()
     this.server.sessionEnded(this)
   }
 
@@ -1266,8 +1334,17 @@ class DeviceSession {
     if (this.live) this.send({ type: 'renamed', name } satisfies Renamed)
   }
 
-  /** A message from the device on `connection`, which only the current one may send. */
+  /**
+   * A message from the device on `connection`, which only the current one may send; the standby
+   * may only take the session over.
+   */
   receive(connection: DeviceConnection, message: ChannelMessage): void {
+    if (this.standbys && message.kind === 'json' && this.live) {
+      const received = parsePromote(message.value)
+      if (received !== null && (connection === this.standby || connection === this.connection)) {
+        return this.promote(connection, received)
+      }
+    }
     if (connection !== this.connection || this.state !== 'open') return
     if (message.kind === 'bytes') {
       if (this.forwards.bytes(message.stream, message.data)) return
@@ -1291,6 +1368,7 @@ class DeviceSession {
           ? [PUSH_FEATURE]
           : []),
         ...(this.regionsOffered ? [REGIONS_CHANNEL_FEATURE] : []),
+        ...(this.standbys ? [STANDBY_FEATURE] : []),
       ],
       role: this.role,
       device: { id: this.device.id, name: this.device.name },

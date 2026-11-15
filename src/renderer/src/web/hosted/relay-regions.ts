@@ -205,9 +205,11 @@ export class HostedRelay {
     if (outcome === 'unreachable') this.source.failed()
   }
 
-  drained(url: string): void {
+  /** A region that drains is tried last for a while, and left by connecting again. */
+  drained(url: string, leave: () => void): void {
     this.devices.drain(url)
     this.source.failed()
+    leave()
   }
 
   private offered(link: HostLink): boolean {

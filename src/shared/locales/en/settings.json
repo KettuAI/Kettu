@@ -1182,9 +1182,12 @@
     "via": {
       "direct": "Direct",
       "directAt": "Direct · {{address}}",
+      "lan": "Same network",
+      "lanAt": "Same network · {{address}}",
       "ssh": "SSH",
       "sshAt": "SSH · {{target}}",
-      "relay": "Kettu relay"
+      "relay": "Kettu relay",
+      "relayAt": "Kettu relay · {{region}}"
     },
     "failed": {
       "not_connected": "{{name}} is not connected. Try again once it is online.",
@@ -1406,6 +1409,7 @@
       "serviceKey": "This computer’s key is kept in a file only your user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
       "serviceKey_web": "{{host}}’s key is kept in a file only its user can read, because a service that starts with the computer cannot count on an unlocked keyring.",
       "offLine": "Off",
+      "firewall": "Devices on the same network connect to it directly, so the system may ask once whether Kettu can accept incoming connections.",
       "relay": "reachable from anywhere"
     },
     "hostName": {

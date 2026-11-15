@@ -18,7 +18,7 @@ import { Icon } from '@renderer/components/affect/app-shell'
 import { useRefresh } from '@renderer/components/refresh'
 import { errorMessage } from '@renderer/lib/host'
 import { useHostContext, useHostHas } from '@renderer/lib/host-features'
-import { isWeb } from '@renderer/lib/platform'
+import { isMac, isWeb, isWindows } from '@renderer/lib/platform'
 import { useNow } from '@renderer/lib/use-now'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openSettingsItem } from '@renderer/stores/view'
@@ -117,12 +117,14 @@ export function ThisBrowserBadge({
 
 /** Under the status card's title: whether remote access runs, and the devices online. */
 function RemoteStatusLine({ on }: { on: boolean }) {
-  const { useRemoteStore } = useHostScope()
+  const { useRemoteStore, hostId } = useHostScope()
   const { t } = useTranslation('settings')
   const status = useRemoteStore((s) => s.status)
   if (on) return <RemoteStatusRow status={status} />
+  // Listening for devices on the same network may bring up the system's firewall prompt here.
+  const prompts = !isWeb && hostId === null && (isMac || isWindows)
   return (
-    <StatusLine>
+    <StatusLine {...(prompts ? { hint: t('remote.status.firewall') } : {})}>
       <span aria-hidden className="k-dot" />
       {t('remote.status.offLine')}
     </StatusLine>

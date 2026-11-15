@@ -1,7 +1,8 @@
 import type { TFunction } from 'i18next'
 import type { Platform } from '@shared/platform'
-import { addressText } from '@shared/remote/address'
+import { addressText, isLocalHost } from '@shared/remote/address'
 import type { HostChangeFailure, HostStatus } from '@shared/remote/hosts'
+import type { DirectAddress } from '@shared/remote/protocol'
 import { mediumAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { isWeb } from '@renderer/lib/platform'
@@ -18,9 +19,17 @@ export function platformName(platform: Platform | string): string {
   return platform
 }
 
+/** A direct address as its path: the same network for a private one, direct for the rest. */
+function directAt(t: TFunction<'settings'>, address: DirectAddress): string {
+  const text = addressText(address)
+  return isLocalHost(address.host)
+    ? t('hosts.via.lanAt', { address: text })
+    : t('hosts.via.directAt', { address: text })
+}
+
 /**
- * How a host is reached: over SSH at the address the user typed, or direct, with the address that
- * answered while it is online.
+ * How a host is reached: over SSH at the address the user typed, through the relay with its
+ * region, or direct, with the address that answered while it is online.
  */
 export function routeText(
   t: TFunction<'settings'>,
@@ -29,9 +38,10 @@ export function routeText(
   if (host.ssh) return t('hosts.via.sshAt', { target: host.ssh.target })
   const { connection } = host
   if (connection.state !== 'online') return t('hosts.via.direct')
-  return 'relay' in connection
-    ? t('hosts.via.relay')
-    : t('hosts.via.directAt', { address: addressText(connection.address) })
+  if (!('relay' in connection)) return directAt(t, connection.address)
+  return connection.region
+    ? t('hosts.via.relayAt', { region: connection.region })
+    : t('hosts.via.relay')
 }
 
 /** The route alone, as the sidebar names it beside a host online. */
@@ -41,9 +51,9 @@ export function routeName(
 ): string {
   if (host.ssh) return t('hosts.via.ssh')
   const { connection } = host
-  return connection.state === 'online' && 'relay' in connection
-    ? t('hosts.via.relay')
-    : t('hosts.via.direct')
+  if (connection.state !== 'online') return t('hosts.via.direct')
+  if ('relay' in connection) return t('hosts.via.relay')
+  return isLocalHost(connection.address.host) ? t('hosts.via.lan') : t('hosts.via.direct')
 }
 
 /** The line under a host's name: its system, Kettu's version and how it is reached. */
@@ -103,9 +113,7 @@ export function webHostLine(t: TFunction<'settings'>, host: WebHost): string {
   return [
     host.platform && platformName(host.platform),
     host.version && t('hosts.version', { version: host.version }),
-    host.address
-      ? t('hosts.via.directAt', { address: addressText(host.address) })
-      : t('hosts.via.relay'),
+    host.address ? directAt(t, host.address) : t('hosts.via.relay'),
   ]
     .filter((part): part is string => !!part)
     .join(' · ')

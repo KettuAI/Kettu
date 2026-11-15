@@ -15,7 +15,7 @@ import type { Hello } from '@shared/remote/protocol'
 import { useWebHostStore } from '@renderer/stores/web-host'
 import { deviceName, type BrowserDevice } from '../device-name'
 import { launchApp } from '../launch'
-import type { HostLink } from '@shared/remote/link'
+import type { HostLink, LinkRoute } from '@shared/remote/link'
 import type { Paired, PairFailure, PairProgress } from '@shared/remote/pair'
 import type { PairingNotice } from '../pairing-page'
 import type { WebSettings } from '../settings'
@@ -27,6 +27,7 @@ import { clearBrowser } from './clear'
 import {
   currentHost,
   loadHosts,
+  namedRelays,
   relayDial,
   RelayMiss,
   saveHosts,
@@ -107,16 +108,19 @@ function reloadOnStaleChunks(): void {
   })
 }
 
-let relays: HostedRelay | null = null
+let hostedRelay: HostedRelay | null = null
 
 /** The relay regions and tokens, once per page, for the account signed in. */
 function relaysOf(account: HostedAccount): HostedRelay {
-  if (!relays) {
-    relays = new HostedRelay(account, relayUrl, accountUrl, regionListKeys)
-    void relays.start()
+  if (!hostedRelay) {
+    hostedRelay = new HostedRelay(account, relayUrl, accountUrl, regionListKeys)
+    void hostedRelay.start()
   }
-  return relays
+  return hostedRelay
 }
+
+/** The host's regions a browser races and compares: the best few, as the whole path ranks them. */
+const MAX_ROUTES = 3
 
 export async function startHosted(base: HostedBase): Promise<void> {
   reloadOnStaleChunks()
@@ -337,18 +341,38 @@ async function showApp(
   let linked: HostLink | null = null
   // The host closes this browser's connection as it removes it; nothing more is kept then.
   let clearing = false
+  const relays = relaysOf(account)
+  // A try that fails while connected compared another region, which is no problem of the page's.
+  const missed = (problem: RelayProblem | null): void => {
+    if (problem !== null && linked?.state.kind === 'connected') return
+    problems.report(problem)
+    // The relay refuses a sign-in the service ended as it does another account's.
+    if (problem === 'wrong_account') void account.check()
+  }
+  /** The route through the host's region at `url` alone. */
+  const routeTo = (url: string): LinkRoute => {
+    const key = `relay ${url}`
+    return {
+      key,
+      relay: true,
+      dial: relayDial(shown.relay, () => relays.token(), missed, {
+        // Asked after the token, so a region it may not go to is never dialed.
+        endpoints: (hostId, named) =>
+          relays.endpoints(hostId, named).filter((endpoint) => endpoint.url === url),
+        dialed: (dialed, outcome) => relays.dialed(dialed, outcome),
+        drained: (drained, leave) =>
+          relays.drained(drained, () => (linked ? linked.drained(key, leave) : leave())),
+      }),
+    }
+  }
   await launchApp(
     {
-      dial: relayDial(
-        shown.relay,
-        () => relaysOf(account).token(),
-        (problem) => {
-          problems.report(problem)
-          // The relay refuses a sign-in the service ended as it does another account's.
-          if (problem === 'wrong_account') void account.check()
-        },
-        relaysOf(account),
-      ),
+      dial: relayDial(shown.relay, () => relays.token(), missed, relays),
+      routes: () =>
+        relays
+          .endpoints(shown.relay.id, namedRelays(shown.relay))
+          .slice(0, MAX_ROUTES)
+          .map(({ url }) => routeTo(url)),
       features: HOSTED_FEATURES,
       key: device.key,
       hostKey: shown.hostKey,
