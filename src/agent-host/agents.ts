@@ -2918,6 +2918,11 @@ export class AgentManager {
     const runtime = await this.ensureReady(agentId)
     const method = runtime.init.authMethods.find((m) => m.id === methodId)
     if (!method) throw invalidParams(`${this.name(agentId)} has no sign-in method ${methodId}`)
+    if (method.type === 'env') {
+      throw invalidParams(
+        t('agent.keyInSettings', { method: method.name, agent: this.name(agentId) }),
+      )
+    }
     if (method.type !== 'agent') {
       throw invalidParams(`${method.name} runs in a terminal; use its command instead`)
     }

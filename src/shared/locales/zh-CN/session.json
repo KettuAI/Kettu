@@ -590,7 +590,11 @@
     "noMethods": "{{agent}} 没有说明登录方式。请在它自己的命令行中登录，然后重试。",
     "copyCommand": "复制命令",
     "inTerminal": "在终端中登录",
-    "signedIn": "我已登录，重试"
+    "signedIn": "我已登录，重试",
+    "envHint": "在设置 › Agent 里 {{agent}} 的页面上填写。",
+    "inSettings": "去设置里填写",
+    "keySet": "我已填好，重试",
+    "optional": "可选"
   },
   "takeover": {
     "title": "由 {{agent}} 接手",
