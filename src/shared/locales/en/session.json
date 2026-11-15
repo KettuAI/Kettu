@@ -605,6 +605,7 @@
   "signIn": {
     "title": "Sign in to {{agent}}",
     "description": "{{agent}} needs you to sign in before it can start. Kettu never sees your credentials.",
+    "descriptionWithKey": "{{agent}} needs you to sign in before it can start.",
     "noMethods": "{{agent}} did not say how to sign in. Sign in with its own command line, then retry.",
     "copyCommand": "Copy command",
     "inTerminal": "Sign in in terminal",
