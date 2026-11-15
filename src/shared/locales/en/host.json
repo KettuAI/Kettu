@@ -671,5 +671,31 @@
     "otherHarness": "This plugin is for another agent.",
     "noManifest": "The plugin has no {{file}} with a name, so it can’t be installed.",
     "nameTaken": "Another plugin named {{name}} from the Kettu Marketplace is installed ({{other}}). Uninstall it first."
+  },
+  "marketBundle": {
+    "invalid": "This MCP bundle can’t be installed: {{reason}}",
+    "notZip": "it isn’t a zip archive.",
+    "tooMany": "it holds more files than a bundle may.",
+    "tooLarge": "it’s larger than a bundle may be once unpacked.",
+    "unsafePath": "it names a path Kettu won’t write, {{path}}.",
+    "notFile": "{{path}} is a link or something else that isn’t a plain file.",
+    "noManifest": "it has no readable manifest.json.",
+    "field": "its manifest has no valid {{field}}.",
+    "noEntry": "{{path}} isn’t in it.",
+    "variable": "{{where}} uses {{variable}}, which Kettu doesn’t know.",
+    "platform": "It runs only on {{platforms}}.",
+    "node": "It needs Node.js {{range}}, and Kettu’s is {{version}}.",
+    "needsPython": "It needs Python 3, which isn’t on this computer. Install it from https://www.python.org, then try again.",
+    "needsUv": "It needs uv, which isn’t on this computer. Install it from https://docs.astral.sh/uv, then try again.",
+    "needsCommand": "It needs {{command}}, which isn’t on this computer.",
+    "secretArg": "It would put {{title}}, a secret, on the command line, where other users of this computer could read it.",
+    "mixed": "Its {{name}} variable mixes a value you fill in with other text, which Kettu can’t keep in the keychain.",
+    "missing": "Fill in {{title}}.",
+    "badValue": "{{title}} isn’t a valid value.",
+    "expired": "This install waited too long. Click Install again.",
+    "noBundle": "This listing has no MCP bundle.",
+    "downloadFailed": "Couldn’t download the bundle: {{reason}}",
+    "tooBig": "The bundle is larger than {{mb}} MB, so nothing was installed.",
+    "mismatch": "The bundle didn’t match its checksum, so nothing was installed."
   }
 }
