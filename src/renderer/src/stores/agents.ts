@@ -330,7 +330,7 @@ export const AGENT_NAMES: Record<HarnessId, string> = {
   bob: 'Bob',
   minimax: 'MiniMax Code',
   cursor: 'Cursor',
-  kimi: 'Kimi Code CLI',
+  kimi: 'Kimi Code',
   amp: 'Amp',
   goose: 'goose',
   kilo: 'Kilo Code',

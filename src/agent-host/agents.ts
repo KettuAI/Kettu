@@ -3137,6 +3137,12 @@ export class AgentManager {
     folderEnv: Record<string, string>,
   ): string {
     const env = { ...display.env, ...method.env, ...folderEnv }
+    if (slot.def.id === 'kimi' && method.id === 'login') {
+      return formatCommand(
+        { command: display.command, args: [display.args[0], '--login'], env },
+        this.deps.platform,
+      )
+    }
     if (method.command) {
       return formatCommand({ command: method.command, args: method.args, env }, this.deps.platform)
     }
