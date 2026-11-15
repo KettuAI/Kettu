@@ -56,3 +56,19 @@ it("carries the latest plan's progress in the session's summary", async () => {
   )
   expect(window.summary(id)?.plan).toEqual({ done: 4, total: 4, current: null })
 })
+
+it("carries the running turn's start in the session's summary", async () => {
+  const { window, id } = await readySession()
+  expect(window.summary(id)?.turnStartedAt).toBeNull()
+  const before = Date.now()
+  await window.request('sessions.prompt', {
+    sessionId: id,
+    content: [{ type: 'text', text: '/plan --step 300' }],
+  })
+  await window.until(() => window.summary(id)?.status === 'running')
+  const started = window.summary(id)?.turnStartedAt
+  expect(started).toBeGreaterThanOrEqual(before)
+  expect(started).toBeLessThanOrEqual(Date.now())
+  await window.until(() => window.summary(id)?.status === 'ready')
+  expect(window.summary(id)?.turnStartedAt).toBeNull()
+})

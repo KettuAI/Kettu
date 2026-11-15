@@ -552,6 +552,8 @@ export interface SessionSummary {
   agentWorktree?: { path: string; branch: string | null } // one its agent made for this subagent
   // Its latest plan's progress; null without one and for a closed session; absent from older hosts
   plan?: PlanProgress | null
+  // When its running turn started; null between turns; absent from older hosts
+  turnStartedAt?: number | null
 }
 
 /** How far a session's latest plan got, as its summary carries it. */
