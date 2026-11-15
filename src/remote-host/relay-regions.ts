@@ -461,6 +461,19 @@ export class RemoteRegions {
     this.regionFailed()
   }
 
+  // Peer to peer.
+
+  /** The STUN servers of the verified list, as `host:port`; none while the relay is not in use. */
+  stun(): string[] {
+    if (!this.running || !this.options.relayOn()) return []
+    return this.source.list?.stun ?? []
+  }
+
+  /** A peer to peer attempt ended, for the day's report. */
+  punched(opened: boolean): void {
+    this.stats.punched(opened)
+  }
+
   // The report.
 
   /** Sends the day before's report, once a day, to a main relay that takes it. */

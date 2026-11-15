@@ -187,6 +187,16 @@ export class HostedRelay {
     void this.devices.received(hostId, message).then((resolved) => this.times.measure(resolved))
   }
 
+  /** The STUN servers of the verified list, as `host:port`. */
+  stun(): string[] {
+    return this.source.list?.stun ?? []
+  }
+
+  /** A peer to peer attempt ended, for the day's report. */
+  punched(opened: boolean): void {
+    this.stats?.punched(opened)
+  }
+
   dialed(url: string, outcome: RelayAttempt): void {
     if (outcome === 'answered') return
     const id = this.idOf(url)
