@@ -92,6 +92,7 @@ export type MainToHost =
       type: 'host:market-keys'
       values: Record<string, Record<string, string>>
       oauth?: Record<string, string>
+      agentEnv?: Record<string, Record<string, string>>
     }
   | { type: 'host:busy-request'; requestId: number }
   // A problem report's bundle, answered by host:report. The parent adds its own part; the host

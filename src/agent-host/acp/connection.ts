@@ -48,6 +48,7 @@ import { isStopReason } from '../session-updates'
 import {
   KNOWN_UPDATES,
   mapAuthStatus,
+  mapReportedAuthStatus,
   mapConfig,
   mapModelUsage,
   mapPermissionOptions,
@@ -128,6 +129,7 @@ type AuthMethodMeta = {
   type?: unknown
   args?: unknown
   env?: unknown
+  'env-var'?: unknown
   'terminal-auth'?: { command?: unknown; args?: unknown } | null
 }
 
@@ -161,7 +163,10 @@ function namedCommand(meta: AuthMethodMeta | null | undefined): {
 function authMethod(method: AuthMethod): AuthMethodInfo {
   const meta = method._meta as AuthMethodMeta | null | undefined
   const named = namedCommand(meta)
-  const declared = 'type' in method && method.type === 'terminal'
+  const declaredType = (method as AuthMethod & { type?: unknown }).type
+  const declared = declaredType === 'terminal'
+  const envDeclared =
+    declaredType === 'env_var' || meta?.type === 'env_var' || meta?.type === 'env-var'
   const terminal = declared || named !== null || meta?.type === 'terminal'
   const declaredArgs = (method as { args?: string[] }).args ?? []
   const args = named?.args ?? (declared ? declaredArgs : stringList(meta?.args))
@@ -172,10 +177,20 @@ function authMethod(method: AuthMethod): AuthMethodInfo {
     id: method.id,
     name: method.name,
     ...(method.description ? { description: method.description } : {}),
-    type: terminal ? 'terminal' : 'agent',
+    type: terminal ? 'terminal' : envDeclared ? 'env' : 'agent',
     ...(named ? { command: named.command } : {}),
     args: terminal ? args : [],
     env: terminal ? env : {},
+    ...(envDeclared
+      ? {
+          envVars: Object.entries(stringMap(meta?.env ?? (method as { env?: unknown }).env)).map(
+            ([name, value]) => ({
+              name,
+              optional: value === 'optional',
+            }),
+          ),
+        }
+      : {}),
   }
 }
 
@@ -288,6 +303,18 @@ export class AcpConnection implements AgentConnection {
           ? { outcome: { outcome: 'cancelled' } }
           : { outcome: { outcome: 'selected', optionId: picked.optionId } }
       })
+      .onNotification(
+        'auth/status_update',
+        (params: unknown) => params,
+        (ctx) => {
+          const status = mapReportedAuthStatus(ctx.params)
+          if (!status) hooks.ignored(null, 'auth/status_update with an unknown shape')
+          else {
+            hooks.authState?.(status.state)
+            if (status.account) hooks.account(status.account)
+          }
+        },
+      )
       .onNotification(
         '_auth/status_update',
         (params: unknown) => params,
@@ -520,6 +547,7 @@ export class AcpConnection implements AgentConnection {
         forkAtMessage: session.fork != null && forksAtMessage(init.agentInfo),
         ownTitles: ownTitles(init.agentInfo),
         logout: caps.auth?.logout != null,
+        authStatus: caps.auth?.status != null,
         // `_session/steering`, an extension advertised in the response's own `_meta`.
         steering:
           (init._meta as { steering?: { supported?: unknown } } | null | undefined)?.steering
@@ -752,6 +780,19 @@ export class AcpConnection implements AgentConnection {
 
   async authenticate(methodId: string): Promise<void> {
     await this.call(() => this.connection.agent.request(methods.agent.authenticate, { methodId }))
+  }
+
+  async readAuthStatus(): Promise<void> {
+    const response = await this.call(() =>
+      this.connection.agent.request(methods.agent.auth.status, {}),
+    )
+    const status = mapReportedAuthStatus(response)
+    if (!status) {
+      this.hooks.ignored(null, 'auth/status with an unknown shape')
+      return
+    }
+    this.hooks.authState?.(status.state)
+    if (status.account) this.hooks.account(status.account)
   }
 
   async logout(): Promise<void> {

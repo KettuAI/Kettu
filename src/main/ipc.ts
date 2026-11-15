@@ -746,6 +746,15 @@ export function registerIpcHandlers({
   handle('sharing:set-auto', 1, (_, enabled) => sharing.setAuto(enabled))
   // The store checks the patch against the server's spec in the settings.
   handle('marketplace:set-keys', 1, (_, patch) => marketKeys.set(patch))
+  handle('marketplace:set-agent-env', 3, (_, agentId, variable, value) => {
+    if (typeof agentId !== 'string' || typeof variable !== 'string') {
+      throw new TypeError('The agent and environment variable must be named')
+    }
+    if (value !== null && typeof value !== 'string') {
+      throw new TypeError('The environment value must be text or null')
+    }
+    return marketKeys.setAgentEnv(agentId, variable, value)
+  })
 
   handle('remote:status', 0, () => remoteStatus())
   // Each code belongs to the page that opened it, which alone hears it and answers it.

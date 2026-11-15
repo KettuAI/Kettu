@@ -180,7 +180,10 @@ export interface HostAdminDeps {
   updates: AdminUpdates | null
   themes: AdminThemes
   /** The Marketplace's keys, which check an untrusted patch themselves. */
-  marketKeys: { set(patch: unknown): Promise<MarketKeyState> }
+  marketKeys: {
+    set(patch: unknown): Promise<MarketKeyState>
+    setAgentEnv(agentId: string, variable: string, value: string | null): Promise<void>
+  }
   /** An artifact version's preview as a data URL; null where the host cannot capture, as the daemon. */
   thumbnail: ((id: unknown, version: unknown, layout: unknown) => Promise<string | null>) | null
   /** A page as a PNG; the host's own windows render it, so the daemon has none. */
@@ -381,6 +384,17 @@ export class HostAdmin {
       }
       case 'marketplace.setKeys':
         return this.deps.marketKeys.set(fields(params).patch)
+      case 'marketplace.setAgentEnv': {
+        const { agentId, variable, value } = fields(params)
+        if (
+          typeof agentId !== 'string' ||
+          typeof variable !== 'string' ||
+          (value !== null && typeof value !== 'string')
+        ) {
+          throw new TypeError('The agent environment key request is invalid')
+        }
+        return this.deps.marketKeys.setAgentEnv(agentId, variable, value)
+      }
       case 'remote.status':
         return this.deps.remoteStatus()
       case 'remote.pair': {

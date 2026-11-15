@@ -147,8 +147,8 @@ describe('the Marketplace key store', () => {
     await keys.set({ serverId: github.id, values: { Authorization: TOKEN } })
     await keys.set({ serverId: github.id, values: { Authorization: null } })
     expect(pushed).toEqual([
-      { values: { [github.id]: { Authorization: TOKEN } }, oauth: {} },
-      { values: {}, oauth: {} },
+      { values: { [github.id]: { Authorization: TOKEN } }, oauth: {}, agentEnv: {} },
+      { values: {}, oauth: {}, agentEnv: {} },
     ])
     expect(keys.state()).toEqual({})
   })
@@ -195,7 +195,11 @@ describe('the Marketplace key store', () => {
     keys.prune()
     await keys.flush()
     expect(keys.values()).toEqual({ [notes.id]: { NOTES_TOKEN: 'n0tes' } })
-    expect(pushed.at(-1)).toEqual({ values: { [notes.id]: { NOTES_TOKEN: 'n0tes' } }, oauth: {} })
+    expect(pushed.at(-1)).toEqual({
+      values: { [notes.id]: { NOTES_TOKEN: 'n0tes' } },
+      oauth: {},
+      agentEnv: {},
+    })
     expect((await load()).values()).toEqual({ [notes.id]: { NOTES_TOKEN: 'n0tes' } })
   })
 
@@ -254,7 +258,7 @@ describe('the Marketplace key store', () => {
   })
 
   it('leaves a file from a newer version as it is and refuses to change it', async () => {
-    const text = '{"version":3,"encrypted":true,"contents":"x"}'
+    const text = '{"version":4,"encrypted":true,"contents":"x"}'
     await writeFile(marketKeysFile(dir), text)
     const keys = await load()
     await expect(
@@ -265,7 +269,7 @@ describe('the Marketplace key store', () => {
 })
 
 describe('OAuth sign-ins in the key store', () => {
-  const empty: MarketKeysPush = { values: {}, oauth: {} }
+  const empty: MarketKeysPush = { values: {}, oauth: {}, agentEnv: {} }
 
   it('keeps a sign-in encrypted beside the keys and reads it back', async () => {
     const keys = await load()
@@ -274,6 +278,7 @@ describe('OAuth sign-ins in the key store', () => {
     const pushedLast: MarketKeysPush = {
       values: { [github.id]: { Authorization: TOKEN } },
       oauth: { [linear.id]: SIGN_IN },
+      agentEnv: {},
     }
     expect(pushed.at(-1)).toEqual(pushedLast)
     expect(await fileText()).not.toContain('SECRET')
@@ -363,9 +368,24 @@ describe('OAuth sign-ins in the key store', () => {
     )
     const keys = await load()
     await keys.flush()
-    expect(keys.contentsForHost()).toEqual({ values, oauth: {} })
+    expect(keys.contentsForHost()).toEqual({ values, oauth: {}, agentEnv: {} })
     const stored = JSON.parse(await fileText()) as Record<string, unknown>
-    expect(stored.version).toBe(2)
+    expect(stored.version).toBe(3)
     expect((await load()).values()).toEqual(values)
+  })
+})
+
+describe('agent environment keys in the key store', () => {
+  it('stores, pushes, and clears values without exposing them in key state', async () => {
+    const keys = await load()
+    await keys.setAgentEnv('glm-agent', 'ZHIPU_API_KEY', 'SECRET')
+    expect(keys.agentEnvState()).toEqual({ 'glm-agent': ['ZHIPU_API_KEY'] })
+    expect(pushed.at(-1)?.agentEnv).toEqual({ 'glm-agent': { ZHIPU_API_KEY: 'SECRET' } })
+    expect(await fileText()).not.toContain('SECRET')
+    expect((await load()).contentsForHost().agentEnv).toEqual({
+      'glm-agent': { ZHIPU_API_KEY: 'SECRET' },
+    })
+    await keys.setAgentEnv('glm-agent', 'ZHIPU_API_KEY', null)
+    expect(keys.agentEnvState()).toEqual({})
   })
 })

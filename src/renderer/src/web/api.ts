@@ -330,6 +330,8 @@ export function webApi(link: HostLink, settings: WebSettings, context: WebHostCo
     },
     marketplace: {
       setKeys: (patch) => admin('marketplace.setKeys', { patch }),
+      setAgentEnv: (agentId, variable, value) =>
+        admin('marketplace.setAgentEnv', { agentId, variable, value }),
     },
     remote: {
       status: () => admin('remote.status'),

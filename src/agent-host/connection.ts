@@ -68,6 +68,7 @@ export interface SessionTarget {
 export interface ConnectionHooks {
   traffic(direction: 'in' | 'out', message: unknown): void
   account(account: AgentAccount): void
+  authState?(state: 'authenticated' | 'unauthenticated' | 'not_required' | 'unknown'): void
   /** Something the agent sent that Kettu does not use. */
   ignored(sessionId: string | null, what: string): void
   log(level: 'info' | 'warn' | 'error', message: string): void
@@ -77,7 +78,8 @@ export interface AuthMethodInfo {
   id: string
   name: string
   description?: string
-  type: 'agent' | 'terminal'
+  type: 'agent' | 'terminal' | 'env'
+  envVars?: { name: string; optional: boolean }[]
   /** The program a terminal sign-in runs, when the agent names it instead of deriving it. */
   command?: string
   args: string[]
@@ -104,6 +106,7 @@ export interface AgentInit {
     /** How its own session titles arrive, or null when Kettu writes one. */
     ownTitles: OwnTitles | null
     logout: boolean
+    authStatus?: boolean
     /** Messages sent into a running turn. */
     steering: boolean
     /** MCP servers over HTTP, which the artifacts service needs. */
@@ -330,6 +333,7 @@ export interface AgentConnection {
 
   initialize(appVersion: string, signal?: AbortSignal): Promise<AgentInit>
   authenticate(methodId: string): Promise<void>
+  readAuthStatus?(): Promise<void>
   logout(): Promise<void>
 
   newSession(cwd: string, options?: SessionOptions): Promise<OpenedSession>

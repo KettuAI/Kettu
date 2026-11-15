@@ -775,6 +775,65 @@ function AgentPageLine({ status }: { status: AgentStatus }) {
   )
 }
 
+function AgentEnvKeyRow({
+  agentId,
+  variable,
+}: {
+  agentId: AgentId
+  variable: { name: string; optional: boolean; set: boolean }
+}) {
+  const { t } = useTranslation(['settings', 'common'])
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const save = async (next: string | null): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      await window.kettu.marketplace.setAgentEnv(agentId, variable.name, next)
+      setValue('')
+    } catch (e) {
+      setError(errorMessage(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <RowFrame
+      text={
+        <RowText
+          name={variable.name}
+          description={variable.set ? t('agents.key.set', { name: agentId }) : ''}
+        />
+      }
+    >
+      <div className="kettu-sd__stack">
+        <input
+          type="password"
+          value={value}
+          autoComplete="off"
+          spellCheck={false}
+          aria-label={variable.name}
+          placeholder={variable.name}
+          className={DIALOG_MONO_FIELD}
+          onChange={(event) => setValue(event.target.value)}
+        />
+        <div className="flex gap-2">
+          <SetButton disabled={busy || !value.trim()} onClick={() => void save(value)}>
+            {t('agents.key.setButton')}
+          </SetButton>
+          {variable.set && (
+            <SetButton variant="ghost" disabled={busy} onClick={() => void save(null)}>
+              {t('agents.key.clear')}
+            </SetButton>
+          )}
+        </div>
+        <ControlError error={error} />
+      </div>
+    </RowFrame>
+  )
+}
+
 function AgentPageBody({ status }: { status: AgentStatus }) {
   const { hostId, request } = useHostScope()
   const { t } = useTranslation(['settings', 'common'])
@@ -891,6 +950,17 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
                 <Fact name={t('agents.email')}>{status.account.email}</Fact>
               )}
               {status.apiKey && <ApiKeyRow status={status} />}
+              {status.authMethods
+                .filter((method) => method.type === 'env')
+                .flatMap((method) =>
+                  (method.envVars ?? []).map((variable) => (
+                    <AgentEnvKeyRow
+                      key={`${method.id}:${variable.name}`}
+                      agentId={status.id}
+                      variable={variable}
+                    />
+                  )),
+                )}
               {((terminalSignIn && hostId === null) ||
                 (status.canLogout && status.signIn === 'signed-in')) && (
                 <RowFrame

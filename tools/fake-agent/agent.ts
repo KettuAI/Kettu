@@ -185,9 +185,17 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       : { kind: 'none', label: 'Not logged in' }
 
   const pushAuthStatus = (): void => {
-    void connection?.client
-      .notify('_auth/status_update', { authStatus: authStatus() })
+    const client = connection?.client
+    if (!client) return
+    void client
+      .notify(methods.client.auth.statusUpdate, {
+        state: signedIn ? 'authenticated' : 'unauthenticated',
+        accounts: signedIn
+          ? [{ label: 'Fake Pro', email: 'developer@example.com', active: true }]
+          : [],
+      })
       .catch(() => {})
+    void client.notify('_auth/status_update', { authStatus: authStatus() }).catch(() => {})
   }
 
   const requireSignedIn = (): void => {
@@ -519,6 +527,13 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           args: ['--login'],
         })
       }
+      if (env.FAKE_AGENT_ENV_VAR) {
+        authMethods.push({
+          id: 'fake-api-key',
+          name: 'API key',
+          _meta: { type: 'env_var', env: { [env.FAKE_AGENT_ENV_VAR]: 'required' } },
+        })
+      }
       // Like Kimi, Amp and Kilo, a command published only in the metadata the client advertises.
       if (clientCapabilities._meta?.['terminal-auth'] === true && env.FAKE_AGENT_NAMED_LOGIN) {
         authMethods.push({
@@ -553,8 +568,7 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
           },
           mcpCapabilities: { http: !without.has('mcp'), sse: false },
           sessionCapabilities: sessionCapabilities(),
-          auth: { logout: {} },
-          _meta: { authStatus: {} },
+          auth: { logout: {}, status: {} },
         },
         authMethods,
         agentInfo: {
@@ -569,6 +583,15 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
       setTimeout(pushAuthStatus, 0)
       return response
     })
+    .onRequest(methods.agent.auth.status, () => ({
+      state:
+        signedIn || (env.FAKE_AGENT_ENV_VAR && env[env.FAKE_AGENT_ENV_VAR])
+          ? 'authenticated'
+          : 'unauthenticated',
+      accounts: signedIn
+        ? [{ label: 'Fake Pro', email: 'developer@example.com', active: true }]
+        : [],
+    }))
     .onRequest(methods.agent.authenticate, (ctx) => {
       if (ctx.params.methodId !== 'fake-login') {
         throw RequestError.invalidParams(undefined, `Unknown auth method ${ctx.params.methodId}`)

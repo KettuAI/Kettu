@@ -202,6 +202,10 @@ export interface HostAdminContract {
    * of the window does; answers which inputs are set, never their values.
    */
   'marketplace.setKeys': { params: { patch: MarketKeysPatch }; result: MarketKeyState }
+  'marketplace.setAgentEnv': {
+    params: { agentId: string; variable: string; value: string | null }
+    result: void
+  }
   'remote.status': { params: undefined; result: RemoteStatus }
   /** Opens a pairing code whose progress goes to this device alone; null while remote access is off. */
   'remote.pair': { params: undefined; result: number | null }
@@ -292,6 +296,7 @@ const METHODS: Record<HostAdminMethod, true> = {
   'settings.setAgentBinary': true,
   'settings.setShellPath': true,
   'marketplace.setKeys': true,
+  'marketplace.setAgentEnv': true,
   'remote.status': true,
   'remote.pair': true,
   'remote.closePairing': true,
