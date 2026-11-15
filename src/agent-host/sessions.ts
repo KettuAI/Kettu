@@ -61,7 +61,6 @@ import {
   type AgentId,
   type ConfigOption,
   type FormValues,
-  type HarnessId,
   type FromDevice,
   type FromSession,
   type MemoryWriteEntry,
@@ -258,12 +257,6 @@ import { recordRows } from './usage/record'
 
 /** What a step may do without asking until it reports: edit and run commands in its folder. */
 const STEP_SCOPE: PermissionScope = { level: 'commands', web: false }
-
-/** The mode of each harness that asks before it acts, so a step's requests reach Kettu. */
-const STEP_MODES: Partial<Record<HarnessId, string>> = {
-  'claude-code': 'default',
-  codex: 'workspace-write',
-}
 
 export interface SessionTimings {
   /** Patches of a session are flushed at most this often. */
@@ -521,8 +514,8 @@ interface PendingRequest {
 }
 
 /**
- * The mode of a session another session's agent started: the starter's rank, null for one Kettu
- * cannot rank, the mode it asked for, and the ceiling, known once the agent's own mode is.
+ * The mode of a session another session's agent or a workflow started: the starter's rank, null
+ * for none Kettu can rank, the mode it asked for, and the ceiling, known once the agent's own mode is.
  */
 interface StartedModeHold {
   starter: ModeRank | null
@@ -641,7 +634,7 @@ interface Live {
   routineScope: PermissionScope | null
   routineTurnStarted: boolean
   routineTurnEnded: boolean
-  /** A session another session's agent started: what its mode is held to. */
+  /** A session another session's agent or a workflow started: what its mode is held to. */
   startedMode: StartedModeHold | null
   /** Since when nothing has needed its agent, and since when no port has shown it in front. */
   idleSince: number | null
@@ -3775,8 +3768,9 @@ export class SessionManager {
   }
 
   /**
-   * A workflow step's session: top-level with `origin: 'task'`, in its task's folder, in the mode that
-   * asks before it acts, so Kettu answers inside the step's scope; the step's prompt goes first.
+   * A workflow step's session: top-level with `origin: 'task'`, in its task's folder, in the agent's
+   * start mode held as a started session's is, so never full access or a plan mode; Kettu answers
+   * the requests that still reach it inside the step's scope. The step's prompt goes first.
    * A worktree it is handed is the task's: removing the session never removes it.
    */
   async createStep(params: TaskStepStart): Promise<SessionSummary> {
@@ -3807,7 +3801,7 @@ export class SessionManager {
     const live = this.makeLive(record, false, 'starting')
     live.unread = false
     live.used = true
-    live.routineMode = STEP_MODES[harnessOf(params.agentId)] ?? null
+    live.startedMode = { starter: null, wanted: null, ceiling: null }
     const content: UserContent[] = [{ type: 'text', text: params.prompt }]
     live.first = { content, entryId: this.addPrompt(live, content, now) }
     this.touch(live.id)
@@ -4310,9 +4304,7 @@ export class SessionManager {
       return
     }
     // A run starts in the strictest mode that still asks, before anything is sent.
-    if (live.record.origin === 'routine' || live.record.origin === 'task') {
-      await this.applyRoutineMode(live, runtime.connection)
-    }
+    if (live.record.origin === 'routine') await this.applyRoutineMode(live, runtime.connection)
     if (live.startedMode) await this.applyStartedMode(live, runtime.connection)
     this.update(live, { status: 'ready' })
     this.deps.agents.signedIn(agentId)

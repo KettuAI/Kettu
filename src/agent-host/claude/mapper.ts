@@ -195,11 +195,15 @@ export class ClaudeMapper {
   readonly replayed: ReplayedSubagent[] = []
   /** In a subagent's replay: its parent, whose prompt its first message is. */
   private prompter: { parentId: string; messageId: string } | null = null
+  /** The model of each subagent that wrote since the last `resized`, by its session. */
+  private readonly subagentModels = new Map<string, string>()
 
   constructor(
     /** The session's own id, Claude Code's. */
     readonly sessionId: string,
     private readonly cwd: string,
+    /** The context window Claude Code runs a model in, as far as it is known. */
+    private readonly windowOf: (model: string) => number | null = () => null,
   ) {}
 
   /** The session a message belongs to: a subagent's, or this one. */
@@ -421,16 +425,46 @@ export class ClaudeMapper {
         deliveries.push({ sessionId, map: (ctx) => this.toolUse(ctx, block, sessionId, true) })
       }
     }
-    if (!replaying && sessionId === this.sessionId && message.message.usage) {
-      const usage = message.message.usage
-      deliveries.push({ sessionId, map: (ctx) => this.contextUsed(ctx, usage) })
+    const usage = message.message.usage
+    if (!replaying && usage) {
+      // A subagent's own requests fill its own context, in the window of the model it runs on.
+      const model = sessionId === this.sessionId ? null : message.message.model
+      if (model) this.subagentModels.set(sessionId, model)
+      const window = model ? this.windowOf(model) : null
+      deliveries.push({ sessionId, map: (ctx) => this.contextUsed(ctx, usage, window) })
     }
+    return deliveries
+  }
+
+  /**
+   * The windows of the subagents that wrote since the last call, now that Claude Code reported its
+   * models' own windows with a result.
+   */
+  resized(): Delivery[] {
+    const deliveries: Delivery[] = []
+    for (const [sessionId, model] of this.subagentModels) {
+      const size = this.windowOf(model)
+      if (size === null) continue
+      deliveries.push({
+        sessionId,
+        map: (ctx) => {
+          const out = output()
+          const usage = ctx.thread.session.usage
+          if (usage && usage.size !== size) {
+            out.patches.push({ op: 'session.update', changes: { usage: { ...usage, size } } })
+          }
+          return out
+        },
+      })
+    }
+    this.subagentModels.clear()
     return deliveries
   }
 
   private contextUsed(
     ctx: MapperContext,
     usage: NonNullable<AssistantMessage['message']['usage']>,
+    window: number | null = null,
   ): MapperOutput {
     const out = output()
     const previous = ctx.thread.session.usage
@@ -438,13 +472,14 @@ export class ClaudeMapper {
     // A provider that counts no request tokens sends zeros; that is no count, not an empty context.
     if (counted === 0 && (previous?.used ?? 0) > 0) return out
     const used = counted + (usage.output_tokens ?? 0)
-    if (previous?.used === used) return out
+    const size = window ?? previous?.size ?? DEFAULT_CONTEXT_WINDOW
+    if (previous?.used === used && previous.size === size) return out
     out.patches.push({
       op: 'session.update',
       changes: {
         usage: {
           used,
-          size: previous?.size ?? DEFAULT_CONTEXT_WINDOW,
+          size,
           cost: previous?.cost ?? null,
           tokens: previous?.tokens ?? null,
           ...(previous?.cache ? { cache: previous.cache } : {}),

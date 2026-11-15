@@ -2781,6 +2781,97 @@ describe('subagents', () => {
       { kind: 'agent', id: 'm:msg_s', markdown: 'Seen' },
     ])
   })
+
+  /** Starts a subagent on each of `models` from one turn, its session registered as `task-<n>`. */
+  async function subagentsOn(s: Awaited<ReturnType<typeof setup>>, models: string[]) {
+    const parent = new Target()
+    const children = models.map(() => new Target())
+    const { sessionId } = await s.connection.newSession('/repo')
+    s.connection.register(sessionId, parent)
+    children.forEach((child, i) => s.connection.register(`task-${i + 1}`, child))
+    let query!: FakeQuery
+    s.sdk.script = (q) => {
+      query = q
+      q.running()
+      models.forEach((model, i) => {
+        const n = i + 1
+        q.emit(
+          assistant(q, `msg_${n}`, [
+            {
+              type: 'tool_use',
+              id: `toolu_${n}`,
+              name: 'Agent',
+              input: { description: `Look ${n}`, prompt: 'Find it', model },
+            },
+          ]),
+          {
+            type: 'system',
+            subtype: 'task_started',
+            task_id: `task-${n}`,
+            tool_use_id: `toolu_${n}`,
+            description: `Look ${n}`,
+            subagent_type: 'general-purpose',
+            task_type: 'local_agent',
+            prompt: 'Find it',
+            session_id: q.sessionId,
+          } as SdkMessage,
+          {
+            type: 'assistant',
+            message: {
+              id: `msg_c${n}`,
+              model,
+              content: [{ type: 'text', text: 'Found' }],
+              usage: {
+                input_tokens: 2,
+                cache_read_input_tokens: 8_000,
+                cache_creation_input_tokens: 2_000 * n,
+                output_tokens: 10,
+              },
+            },
+            parent_tool_use_id: `toolu_${n}`,
+            agent_id: `task-${n}`,
+            uuid: `uuid-c${n}`,
+            session_id: q.sessionId,
+          } as SdkMessage,
+        )
+      })
+    }
+    const turn = s.connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+    await settle()
+    return { parent, children, query: () => query, turn }
+  }
+
+  it("counts a subagent's context against the auto-compact window set for its model", async () => {
+    const s = await setup()
+    s.sdk.settings = {
+      autoCompactWindow: 500_000,
+      modelSettings: { 'claude-haiku-5-5': { autoCompactWindow: 150_000 } },
+    }
+    const { children, query, turn } = await subagentsOn(s, [
+      'claude-sonnet-5-5',
+      'claude-haiku-5-5',
+    ])
+    expect(children[0]!.thread.session.usage).toMatchObject({ used: 10_012, size: 500_000 })
+    expect(children[1]!.thread.session.usage).toMatchObject({ used: 12_012, size: 150_000 })
+    query().finish()
+    await turn
+  })
+
+  it("narrows a subagent's window to its model's own once Claude Code reports it", async () => {
+    const s = await setup()
+    s.sdk.settings = { autoCompactWindow: 500_000 }
+    const { children, query, turn } = await subagentsOn(s, ['claude-haiku-5-5'])
+    expect(children[0]!.thread.session.usage).toMatchObject({ size: 500_000 })
+    query().finish({
+      modelUsage: {
+        'claude-opus-5': { contextWindow: 1_000_000 },
+        'claude-haiku-5-5': { contextWindow: 200_000 },
+      } as never,
+    })
+    await turn
+    await settle()
+    expect(children[0]!.thread.session.usage).toMatchObject({ used: 10_012, size: 200_000 })
+  })
 })
 
 describe('background tasks', () => {

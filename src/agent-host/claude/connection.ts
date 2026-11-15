@@ -10,6 +10,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import type { AgentAccount, ContextBreakdown, PlanLimit } from '@shared/agent-host'
+import { canonicalClaudeModel } from '@shared/agents'
 import type { ConfigOption, PendingElicitation, TokenTotals, ToolEntry } from '@shared/thread'
 import {
   AgentRequestError,
@@ -42,6 +43,12 @@ import {
   type MapperEffect,
   type MapperOutput,
 } from '../session-updates'
+import {
+  compactWindows,
+  contextWindow,
+  NO_COMPACT_WINDOWS,
+  type CompactWindows,
+} from './compact-window'
 import {
   availableModes,
   buildConfig,
@@ -226,6 +233,8 @@ interface Session {
   resumed: boolean
   /** The latest running totals by model; undefined until the query's first result. */
   totals: Record<string, ModelUsage> | undefined
+  /** The auto-compact windows its settings and environment set. */
+  compact: CompactWindows
   /** Whether Claude Code sends its state changes, which end a turn. */
   states: boolean
   /** Claude Code has not gone idle since it last ran, as while background agents hold it. */
@@ -832,13 +841,15 @@ export class ClaudeConnection implements AgentConnection {
       ? (wanted as PermissionMode)
       : 'default'
     const input = new Input()
+    const windowOf = (model: string): number | null =>
+      contextWindow(session.compact, model, ownWindow(session.totals, model))
     const session: Session = {
       id: sessionId,
       cwd,
       options,
       query: null,
       input,
-      mapper: new ClaudeMapper(sessionId, cwd),
+      mapper: new ClaudeMapper(sessionId, cwd, windowOf),
       models: [],
       modes,
       choices: {
@@ -854,6 +865,7 @@ export class ClaudeConnection implements AgentConnection {
       turn: null,
       resumed: how.resume,
       totals: undefined,
+      compact: settings.known ? compactWindows(settings.values, this.env) : NO_COMPACT_WINDOWS,
       states: false,
       busy: false,
       model: null,
@@ -1228,6 +1240,7 @@ export class ClaudeConnection implements AgentConnection {
       sessionId: session.id,
       map: (ctx) => usageOutput(ctx, result.total_cost_usd, window),
     })
+    for (const delivery of session.mapper.resized()) this.deliver(delivery)
     if (!turn) return
     turn.tokens = addTokenTotals(turn.tokens, tokenTotals(result.usage ?? {}))
     for (const [model, tokens] of spent) {
@@ -2216,6 +2229,18 @@ export class ClaudeConnection implements AgentConnection {
       ...(from ? { from } : {}),
     })
   }
+}
+
+/** The window Claude Code reported for a model of the session's, under any spelling of it. */
+function ownWindow(totals: Record<string, ModelUsage> | undefined, model: string): number | null {
+  if (!totals) return null
+  const exact = totals[model]?.contextWindow
+  if (exact) return exact
+  const canonical = canonicalClaudeModel(model)
+  for (const [key, usage] of Object.entries(totals)) {
+    if (usage.contextWindow && canonicalClaudeModel(key) === canonical) return usage.contextWindow
+  }
+  return null
 }
 
 /** The session's cost so far and its context window, after a result. */
