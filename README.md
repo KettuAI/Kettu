@@ -39,11 +39,6 @@ All your coding agents, side by side in one window that looks good and feels rig
   <img src="./assets/picture-workflows.webp" width="49%" alt="The Feature development workflow as a flowchart: research, design, plan, build, code review and ship">
 </p>
 
-<p>
-  <img src="./assets/picture-marketplace.webp" width="49%" alt="The Marketplace, listing plugins, skills and MCP servers to install">
-  <img src="./assets/picture-dark.webp" width="49%" alt="The same two sessions side by side in dark mode">
-</p>
-
 ### Agents and sessions
 
 - **47 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings. Turn one off without losing its sessions.
@@ -80,11 +75,6 @@ All your coding agents, side by side in one window that looks good and feels rig
 - **Search**: one command palette for sessions, artifacts, routines, projects, settings and actions.
 
 ### Mobile devices
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-mobile-dark.webp">
-  <img src="./assets/feature-mobile-light.webp" alt="Codex drives an iPhone 17 simulator beside its session to check a page in dark mode, with Take over above the device">
-</picture>
 
 - **Right beside the session**: iOS simulators, Android emulators and real iPhones and Android phones, each in a frame with its hardware buttons.
 - **For you and the agent**: tap, swipe and type on the screen yourself, or let the agent open apps and pages, tap, type, switch between light and dark and take screenshots. Take over at any time.

@@ -39,11 +39,6 @@
   <img src="./assets/picture-workflows.webp" width="49%" alt="「功能开发」工作流的流程图：调研、设计、计划、实现、代码审查和发布">
 </p>
 
-<p>
-  <img src="./assets/picture-marketplace.webp" width="49%" alt="Marketplace 列出可以安装的插件、Skills 和 MCP 服务器">
-  <img src="./assets/picture-dark.webp" width="49%" alt="深色模式下并排的同样两个会话">
-</p>
-
 ### Agent 与会话
 
 - **47 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。暂时不用的可以关掉，会话不会丢。
@@ -80,11 +75,6 @@
 - **搜索**：在一个命令面板里搜会话、Artifacts、Routines、项目、设置和操作。
 
 ### 移动设备
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-mobile-dark.webp">
-  <img src="./assets/feature-mobile-light.webp" alt="Codex 在会话旁边操作 iPhone 17 模拟器，检查网页的深色模式，设备上方有接手按钮">
-</picture>
 
 - **就在会话旁边**：iOS 模拟器、Android 模拟器，以及 iPhone 和 Android 真机，各自装在带实体按键的外框里。
 - **你和 Agent 都能操作**：你可以直接在屏幕上点按、滑动和输入，也可以让 Agent 打开应用和网页、点按、输入、切换浅色和深色、截图，你随时可以接手。
