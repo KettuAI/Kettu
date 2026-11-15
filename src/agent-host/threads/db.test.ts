@@ -361,6 +361,19 @@ describe('the thread database', () => {
       ),
       { kind: 'turn_end', id: 'end0', stopReason: 'end_turn', durationMs: 4000 },
       user('u1'),
+      {
+        kind: 'plan',
+        id: 'p0',
+        items: [{ content: 'Old', priority: 'medium', status: 'pending' }],
+      },
+      {
+        kind: 'plan',
+        id: 'p1',
+        items: [
+          { content: 'Read', priority: 'medium', status: 'completed' },
+          { content: 'Write', priority: 'medium', status: 'in_progress' },
+        ],
+      },
       artifact('w2', 'art_a', 'Plan v2', 'update'),
       artifact('w3', 'art_b', 'Sketch', 'delete'),
       reply('a1', 'Merged https://github.com/KettuAI/cloud/pull/7 and https://example.com/x.'),
@@ -380,6 +393,10 @@ describe('the thread database', () => {
         ],
         reply: 'Also see https://github.com/KettuAI/Kettu/pull/30',
         turnMs: 9000,
+        plan: [
+          { content: 'Read', priority: 'medium', status: 'completed' },
+          { content: 'Write', priority: 'medium', status: 'in_progress' },
+        ],
       },
     })
     expect(db.outputs('missing')).toBeNull()

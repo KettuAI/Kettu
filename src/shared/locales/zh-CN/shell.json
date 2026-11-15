@@ -79,6 +79,7 @@
     },
     "places": {
       "newSession": "新建会话",
+      "overview": "总览",
       "usage": "用量",
       "routines": "例程",
       "newRoutine": "新建例程",

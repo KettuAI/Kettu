@@ -981,6 +981,8 @@ export class ThreadDb {
       }
       const reply = optionalText(sql.lastReply.get(sessionId, OUTPUT_REPLY)?.markdown)
       const ms = sql.lastTurnMs.get(sessionId)?.ms
+      const latest = sql.latestPlan.get(sessionId)
+      const planEntry = latest ? this.entryOf(sql, sessionId, latest, 'refs') : null
       return {
         head: { agentId: stored.agentId, acpSessionId: stored.acpSessionId },
         outputs: {
@@ -988,6 +990,7 @@ export class ThreadDb {
           references: references.slice(0, OUTPUT_REFERENCES),
           reply,
           turnMs: typeof ms === 'number' || typeof ms === 'bigint' ? Number(ms) : null,
+          plan: planEntry?.kind === 'plan' ? planEntry.items : null,
         },
       }
     }, null)

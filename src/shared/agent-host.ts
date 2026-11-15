@@ -116,6 +116,7 @@ import type {
   ConfigOption,
   OlderPage,
   PatchBatch,
+  PlanItem,
   PromptCache,
   ProjectHooksDecision,
   ProjectMcpDecision,
@@ -558,6 +559,10 @@ export interface SessionOutputs {
   reply: string | null
   /** How long its last ended turn took, in ms. */
   turnMs: number | null
+  /** Its latest plan's items; absent from older hosts. */
+  plan?: PlanItem[] | null
+  /** When its running turn started; absent from older hosts. */
+  turnStartedAt?: number | null
 }
 
 /**

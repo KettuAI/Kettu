@@ -28,6 +28,8 @@ export function placeTitle(place: HistoryPlace): string {
       return sessionTitle(useSessionsStore.getState().byId[place.sessionId] ?? {})
     case 'new':
       return t('history.places.newSession')
+    case 'overview':
+      return t('history.places.overview')
     case 'usage':
       return t('history.places.usage')
     case 'routines':

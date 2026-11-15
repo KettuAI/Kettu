@@ -2623,11 +2623,18 @@ export class SessionManager {
     const record = live?.record ?? this.recordOf(sessionId)
     if (live) this.checkpoint(live)
     const store = this.deps.threads
-    const none: SessionOutputs = { artifacts: [], references: [], reply: null, turnMs: null }
+    const none: SessionOutputs = {
+      artifacts: [],
+      references: [],
+      reply: null,
+      turnMs: null,
+      turnStartedAt: live?.thread.session.turnStartedAt ?? null,
+    }
     if (!store || !record.acpSessionId) return none
     try {
       const stored = await store.outputs(record.id)
-      return stored && this.isCurrent(record, stored.head) ? stored.outputs : none
+      if (!stored || !this.isCurrent(record, stored.head)) return none
+      return { ...stored.outputs, turnStartedAt: none.turnStartedAt }
     } catch (error) {
       this.deps.diagnostics.log(
         'warn',

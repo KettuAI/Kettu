@@ -18,6 +18,7 @@ import { useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
 import { useSessionFolder } from '@renderer/lib/session-folder'
 
+const OverviewPage = lazy(() => import('@renderer/features/overview/overview-page'))
 const UsagePage = lazy(() => import('@renderer/features/usage/usage-page'))
 const RoutinesPage = lazy(() => import('@renderer/features/routines/routines-page'))
 const RoutinePage = lazy(() => import('@renderer/features/routines/routine-page'))
@@ -27,7 +28,7 @@ const MarketplacePage = lazy(() => import('@renderer/features/marketplace/market
 const TaskPage = lazy(() => import('@renderer/features/tasks/task-page'))
 
 /**
- * What the main area shows: the split of sessions and New session, the usage page, the routines
+ * What the main area shows: the split of sessions and New session, the Overview, the usage page, the routines
  * pages, the Artifacts page, an artifact, the Marketplace or a task. A page shows alone, and the
  * split waits as it was.
  */
@@ -62,6 +63,15 @@ export function MainArea() {
     showProjects(folders ? [...new Set(folders.split('\n'))] : [])
   }, [paths, worktrees])
 
+  if (main.kind === 'overview') {
+    return (
+      <PageSheet>
+        <Suspense fallback={null}>
+          <OverviewPage />
+        </Suspense>
+      </PageSheet>
+    )
+  }
   if (main.kind === 'usage') {
     return (
       <PageSheet>

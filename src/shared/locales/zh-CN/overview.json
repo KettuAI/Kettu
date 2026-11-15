@@ -1,0 +1,73 @@
+{
+  "title": "总览",
+  "description_other": "{{count}} 个任务和会话有需要你看的内容",
+  "separator": " · ",
+  "noPlan": "没有 Plan",
+  "nothingYet": "还没有",
+  "allDone": "全部完成",
+  "idle": "空闲",
+  "more": "+{{count}}",
+  "expand": "显示子会话",
+  "collapse": "收起子会话",
+  "subSessions_other": "{{count}} 个子会话",
+  "views": {
+    "label": "视图",
+    "inbox": "Inbox",
+    "flow": "Flow",
+    "timeline": "Timeline"
+  },
+  "groupBy": {
+    "label": "分组",
+    "state": "按状态",
+    "project": "按项目"
+  },
+  "filter": {
+    "label": "状态",
+    "all": "全部",
+    "none": "这个状态下没有内容。"
+  },
+  "states": {
+    "ready": "可交付",
+    "you": "等你处理",
+    "running": "运行中",
+    "stopped": "已停下"
+  },
+  "stateNotes": {
+    "ready": "已完成，你还没看",
+    "you": "在等你回答",
+    "running": "",
+    "stopped": "失败或卡住"
+  },
+  "columns": {
+    "name": "任务或会话",
+    "steps": "步骤",
+    "now": "现状",
+    "output": "产出"
+  },
+  "now": {
+    "step": "{{step}} · {{state}}",
+    "requests_other": "{{count}} 个请求在等你回答",
+    "failed": "上一轮失败了",
+    "working": "进行中",
+    "finished": "已完成"
+  },
+  "timeline": {
+    "now": "现在",
+    "earlier": "早于这段时间"
+  },
+  "inbox": {
+    "clear": "现在没有需要你处理的。"
+  },
+  "detail": {
+    "outputs": "可以收的",
+    "pullRequest": "Pull request",
+    "artifact": "Artifact",
+    "subSessions": "子会话",
+    "openTask": "打开任务",
+    "openSession": "打开会话"
+  },
+  "empty": {
+    "title": "一切安静",
+    "text": "任务和会话在运行、等你、停下，或完成后有你没看过的内容时，会出现在这里。"
+  }
+}
