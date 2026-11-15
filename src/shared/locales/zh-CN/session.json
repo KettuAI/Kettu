@@ -580,8 +580,8 @@
       "worktreeHint": "需求在自己的 worktree 和分支上进行。",
       "worktreeNote": "需求在自己的 worktree 里进行，从 <base>{{base}}</base> 切出新分支，发出时由 Kettu 起名。",
       "textOnly": "需求只能是文字：去掉附件后再发出。",
-      "firstStepAgent": "谁做第一步",
-      "stepAgents": "工作流的步骤只能由 Claude Code 和 Codex 的 Agent 来做：请选其中一个。"
+      "stepAgents": "工作流的步骤只能由 Claude Code 和 Codex 的 Agent 来做：请选其中一个。",
+      "previewFoot": "Pace：{{pace}} · Auto 的步骤开始时才选人"
     }
   },
   "signIn": {
@@ -969,9 +969,6 @@
     "pinnedHint": "在这个工作流的 Marketplace 页面上为每个需求固定",
     "backToAuto": "改回 Auto",
     "whoDoes": "谁做{{step}}",
-    "whoDoesEach": "每一步由谁做",
-    "autoExplained": "Auto 步骤开始时，由交接给它的 Agent 来选",
-    "paceExplained": "Pace 会告诉每个做选择的 Agent；这里的选择只对本需求有效。",
     "pinEveryTask": "为每个需求固定步骤",
     "suggest": {
       "title": "作为工作流来做？",

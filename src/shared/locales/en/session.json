@@ -598,8 +598,8 @@
       "worktreeHint": "A task works in a worktree and on a branch of its own.",
       "worktreeNote": "A task works in its own worktree, on a new branch cut from <base>{{base}}</base>. Kettu names it when you send.",
       "textOnly": "A task takes text only: remove the attachments to send it.",
-      "firstStepAgent": "Who does the first step",
-      "stepAgents": "Only Claude Code and Codex agents work on workflow steps: choose one of them."
+      "stepAgents": "Only Claude Code and Codex agents work on workflow steps: choose one of them.",
+      "previewFoot": "Pace: {{pace}} · Auto steps are picked when they start"
     }
   },
   "signIn": {
@@ -1008,9 +1008,6 @@
     "pinnedHint": "Pinned for every task of this workflow, on its Marketplace page",
     "backToAuto": "Back to Auto",
     "whoDoes": "Who does {{step}}",
-    "whoDoesEach": "Who does each step",
-    "autoExplained": "Auto steps are picked by the agent that hands off to them, when they start",
-    "paceExplained": "Pace is told to every agent that picks; a pick here counts for this task only.",
     "pinEveryTask": "Pin steps for every task",
     "suggest": {
       "title": "Run this as a workflow?",

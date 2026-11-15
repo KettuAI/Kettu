@@ -101,17 +101,10 @@ import { AgentGuide } from './new-session/agent-guide'
 import { useGuideStatuses } from './new-session/guide-statuses'
 import { agentNeed, canStart, noAgentCanStart, startValues } from './new-session/start-options'
 import { useStartConfig } from './new-session/use-start-config'
-import { AgentMenu } from './new-session/agent-menu'
 import { openTask } from './new-session/open-task'
-import {
-  chooseWorkflow,
-  taskPins,
-  taskStarted,
-  useWorkflowChoice,
-} from './new-session/workflow-choice'
+import { chooseWorkflow, taskStarted, useWorkflowChoice } from './new-session/workflow-choice'
 import { WorkflowMenu, TaskWorktreeNote, TaskWorktreeTag } from './new-session/workflow-menu'
-import { modelOptionId, runsSteps } from './new-session/workflow-picks'
-import { TaskStepsCard } from './new-session/workflow-steps'
+import { runsSteps } from './new-session/workflow-picks'
 import { WorktreeTrayTag } from './worktree/worktree-tag'
 import { currentBase, useWorktreeStatus } from './new-session/worktree-base'
 import { WorktreeMenu, WorktreeNote } from './new-session/worktree-menu'
@@ -393,7 +386,7 @@ function DraftComposer({
     if (!agentId || !taskProject) return
     const taken = box.take()
     const base = gitStatus ? currentBase(gitStatus) : null
-    const { pace, pins } = useWorkflowChoice.getState()
+    const { pace } = useWorkflowChoice.getState()
     try {
       const view = await useTasksStore.getState().start(
         {
@@ -403,7 +396,6 @@ function DraftComposer({
           pace,
           agentId,
           options,
-          pins: taskPins({ pins }, entry.id),
           ...(base ? { worktree: { base } } : {}),
         },
         hostId,
@@ -627,6 +619,7 @@ function DraftComposer({
                   <WorkflowMenu
                     hostId={hostId}
                     workflowId={workflow?.id ?? null}
+                    firstAgentId={agentId}
                     onChoose={(id) => {
                       chooseWorkflow(taskProject.path, id)
                       requestAnimationFrame(() => editor.current?.focus())
@@ -668,30 +661,7 @@ function DraftComposer({
           <NoAgentLine waitingForNode={waitingForNode} hostId={hostId} />
         )}
       </div>
-      {workflow ? (
-        <TaskStepsCard
-          entry={workflow}
-          hostId={hostId}
-          first={
-            <AgentMenu
-              agentId={agentId}
-              hostId={hostId}
-              label={t('newSession.workflow.firstStepAgent')}
-              only={runsSteps}
-              triggerClassName="h-7.5 max-w-64 rounded-lg bg-card shadow-outline hover:bg-hover"
-              onChoose={(id, model) => {
-                choose(id)
-                const modelId = modelOptionId(
-                  optionsOn(useAgentOptionsStore.getState(), hostId)[id],
-                )
-                if (model !== null && modelId) setOption(hostId, id, modelId, model)
-              }}
-            />
-          }
-        />
-      ) : (
-        children
-      )}
+      {children}
     </>
   )
 }
