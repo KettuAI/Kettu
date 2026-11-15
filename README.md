@@ -22,10 +22,7 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 </div>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshot-dark.webp">
-  <img src="./assets/screenshot-light.webp" alt="Kettu with a Codex session that fixed a streak bug and asks to run the tests, while a Claude Code session works and others wait for you in the sidebar">
-</picture>
+<img src="./assets/picture-cover.webp" alt="Kettu with two Claude Code sessions side by side: one asks to edit a file and shows the diff, the other asks a question with options to pick">
 
 > [!NOTE]
 > Kettu is an early preview. The desktop app has found its shape, and its details still change quickly. Please [report](https://github.com/KettuAI/Kettu/issues) what you find.
@@ -34,10 +31,11 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 ### Agents and sessions
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-sessions-dark.webp">
-  <img src="./assets/feature-sessions-light.webp" alt="Two Codex sessions side by side: one asks which day the week starts on in a question card, the other has finished a dark mode with one changed file">
-</picture>
+<img src="./assets/picture-sessions.webp" alt="Two sessions side by side in one window, with the sidebar showing which sessions wait for you">
+
+<img src="./assets/picture-control.webp" alt="A permission card that shows the diff of the file Claude Code wants to edit, with Deny, Allow once and Always allow">
+
+<img src="./assets/picture-workflows.webp" alt="The Feature development workflow as a flowchart: research, design, plan, build, code review and ship">
 
 - **47 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings. Turn one off without losing its sessions.
 - **Side by side**: run sessions in parallel and split the window into up to nine panes. The sidebar shows which one is working, which one is waiting for you and which one is done.
@@ -59,10 +57,9 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 ### Workbench
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-workbench-dark.webp">
-  <img src="./assets/feature-workbench-light.webp" alt="A Codex session beside the canvas editor, which shows the weekly habit report the agent made">
-</picture>
+<img src="./assets/picture-artifacts.webp" alt="A session beside the weekly habit report page that the agent made">
+
+<img src="./assets/picture-marketplace.webp" alt="The Marketplace, listing plugins, skills and MCP servers to install">
 
 - **Diffs**: see which files the agent changed and how.
 - **Files**: read, preview and edit project files in tabs.
@@ -103,12 +100,16 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 ### iPhone and iPad
 
+<img src="./assets/picture-ios.webp" alt="Kettu on two iPhones: the list of sessions with the ones that need you first, and a session asking to edit a file">
+
 - **Your sessions in your pocket**: every session on every computer in one list, with the ones that need you first. In [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ).
 - **Answer from anywhere**: allow or deny a command, answer an agent's questions, approve its plan, reply, or start a new session.
 - **Notifications**: know when a session needs you, and answer from the lock screen.
 - **Artifacts, Routines and usage**: open what your agents made, run a routine and see your plan limits.
 
 ### Looks
+
+<img src="./assets/picture-dark.webp" alt="The same two sessions side by side in dark mode">
 
 - Light and dark modes that follow your system and fade across the whole window at once, themes from the catalog or your own, English and Simplified Chinese, and the frosted macOS sidebar.
 
