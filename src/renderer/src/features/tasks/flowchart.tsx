@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { SparklesIcon, Tick02Icon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { RoundView, StepPick, TaskView, WaitingView } from '@shared/workflow'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { TurnDots } from '@renderer/features/session/turn-dots'
 import { Glyph } from '@renderer/features/shell/glyph'
 import { runningFor } from '@renderer/lib/format'
@@ -12,7 +12,6 @@ import { hostOfPath } from '@renderer/lib/host-paths'
 import { useNow } from '@renderer/lib/use-now'
 import { cn } from '@renderer/lib/utils'
 import { useSessionsStore } from '@renderer/stores/sessions'
-import { prefersReducedMotion } from '@renderer/stores/settings'
 import { openSession } from '@renderer/stores/view'
 import { END_SIZE, headOf, layoutFlow, NODE_H, NODE_W, pathOf, type FlowEdge } from './flow-layout'
 import {
@@ -60,94 +59,64 @@ function factsOf(view: TaskView, stepId: string): StepFacts {
   }
 }
 
-/** The step a flowchart selects first: the one that needs you, else the one at work, else the furthest. */
-function firstSelected(view: TaskView): string {
-  const order = view.workflow.steps.map((s) => view.steps.find((x) => x.id === s.id)!)
-  return (
-    order.find((s) => s.state === 'needs_you' || s.state === 'error')?.id ??
-    order.find((s) => s.state === 'running')?.id ??
-    (view.at !== null ? view.workflow.steps[view.at - 1]?.id : undefined) ??
-    view.workflow.steps[0]!.id
-  )
-}
-
 /**
- * The task's workflow as a flowchart: each step with who does it and its state, solid arrows for the
- * path taken and quiet ones for the rest, arrows back dashed with how often they were taken; the
- * step picked shows its details under the chart.
+ * The task's workflow as a flowchart: each step with who does it, who picked it and its state,
+ * solid arrows for the path taken and quiet ones for the rest, arrows back dashed with how often
+ * they were taken. A step with a session opens it; one not started yet can be pinned.
  */
 export function Flowchart({ view }: { view: TaskView }) {
   const layout = useMemo(() => layoutFlow(view.workflow), [view.workflow])
-  const [selected, setSelected] = useState(() => firstSelected(view))
-  const details = useRef<HTMLDivElement>(null)
-  // A step picked on a tall chart shows its details, which sit under it.
-  const select = (id: string) => {
-    setSelected(id)
-    requestAnimationFrame(() =>
-      details.current?.scrollIntoView({
-        block: 'nearest',
-        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-      }),
-    )
-  }
   const taken = (edge: FlowEdge) => arrowsOf(view, edge).some((arrow) => arrow.taken > 0)
   // Quiet arrows first, so the path taken is drawn over them.
   const edges = [...layout.edges].sort((a, b) => Number(taken(a)) - Number(taken(b)))
   return (
-    <div className="flex flex-col gap-4">
-      <div className="overflow-x-auto pb-1">
-        <div
-          role="group"
-          aria-label={view.title}
-          className="relative mx-auto"
-          style={{ width: layout.width, height: layout.height }}
+    <div className="overflow-x-auto pb-1">
+      <div
+        role="group"
+        aria-label={view.title}
+        className="relative mx-auto"
+        style={{ width: layout.width, height: layout.height }}
+      >
+        <svg
+          aria-hidden
+          width={layout.width}
+          height={layout.height}
+          className="pointer-events-none absolute inset-0 fill-none"
         >
-          <svg
-            aria-hidden
-            width={layout.width}
-            height={layout.height}
-            className="pointer-events-none absolute inset-0 fill-none"
-          >
-            {edges.map((edge) => (
-              <Arrow key={edge.id} edge={edge} taken={taken(edge)} />
+          {edges.map((edge) => (
+            <Arrow key={edge.id} edge={edge} taken={taken(edge)} />
+          ))}
+          {layout.edges
+            .filter((edge) => edge.join)
+            .map((edge) => (
+              <circle
+                key={`dot:${edge.id}`}
+                cx={edge.points.at(-1)![0]}
+                cy={edge.points.at(-1)![1] - 6}
+                r={3}
+                className={taken(edge) ? 'fill-(--focus)' : 'fill-(--thread-line-strong)'}
+              />
             ))}
-            {layout.edges
-              .filter((edge) => edge.join)
-              .map((edge) => (
-                <circle
-                  key={`dot:${edge.id}`}
-                  cx={edge.points.at(-1)![0]}
-                  cy={edge.points.at(-1)![1] - 6}
-                  r={3}
-                  className={taken(edge) ? 'fill-(--focus)' : 'fill-(--thread-line-strong)'}
-                />
-              ))}
-          </svg>
-          {layout.nodes.map((node) => (
-            <Node
-              key={node.id}
-              view={view}
-              facts={factsOf(view, node.id)}
-              selected={selected === node.id}
-              onSelect={() => select(node.id)}
-              style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
-            />
-          ))}
-          {layout.edges.map((edge) => (
-            <EdgeLabel key={`label:${edge.id}`} view={view} edge={edge} taken={taken(edge)} />
-          ))}
-          {layout.ends.map((end) => (
-            <EndMark
-              key={end.end}
-              end={end.end}
-              reached={view.end === end.end}
-              style={{ left: end.x, top: end.y }}
-            />
-          ))}
-        </div>
-      </div>
-      <div ref={details} className="scroll-mb-4">
-        <NodeDetails key={selected} view={view} facts={factsOf(view, selected)} />
+        </svg>
+        {layout.nodes.map((node) => (
+          <Node
+            key={node.id}
+            view={view}
+            facts={factsOf(view, node.id)}
+            style={{ left: node.x, top: node.y, width: NODE_W, height: NODE_H }}
+          />
+        ))}
+        {layout.edges.map((edge) => (
+          <EdgeLabel key={`label:${edge.id}`} view={view} edge={edge} taken={taken(edge)} />
+        ))}
+        {layout.ends.map((end) => (
+          <EndMark
+            key={end.end}
+            end={end.end}
+            reached={view.end === end.end}
+            style={{ left: end.x, top: end.y }}
+          />
+        ))}
       </div>
     </div>
   )
@@ -274,24 +243,25 @@ function WhoMark({ facts, hostId }: { facts: StepFacts; hostId: string | null })
 function Node({
   view,
   facts,
-  selected,
-  onSelect,
   style,
 }: {
   view: TaskView
   facts: StepFacts
-  selected: boolean
-  onSelect: () => void
   style: React.CSSProperties
 }) {
   const { t } = useTranslation('tasks')
+  const [pinning, setPinning] = useState(false)
   const hostId = hostOfPath(view.projectPath)
   const models = useModelText(hostId, facts.pick)
+  const sessionId = facts.round?.sessionId
+  const session = useSessionsStore((s) => (sessionId ? s.byId[sessionId] : undefined))
+  const live = view.rounds.some((r) => r.stepId === facts.id && LIVE.has(r.state))
+  const canPin = !session && view.status === 'running' && facts.by === 'agent' && !live
   const who =
     facts.by === 'you'
       ? t('flow.you')
       : facts.pick
-        ? (models.model ?? pickLine(facts.pick, hostId, { model: null, effort: null }))
+        ? pickLine(facts.pick, hostId, models)
         : t('flow.auto')
   const line =
     facts.by === 'you'
@@ -301,21 +271,28 @@ function Node({
         : facts.waiting?.pick
           ? pickedByText(facts.waiting.pick.pickedBy, view)
           : whoPicksText(view, facts.id)
+  const reason = facts.round?.reason ?? facts.waiting?.pick?.reason
+  const action = session
+    ? t('asking.open')
+    : canPin
+      ? view.pins[facts.id]
+        ? t('pin.change')
+        : t('pin.open')
+      : null
+  const title =
+    [action, reason ? t('timeline.why', { reason }) : null].filter(Boolean).join('\n') || undefined
   const notReached = facts.state === 'not_reached' && !facts.round
-  return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={onSelect}
-      style={style}
-      className={cn(
-        'absolute z-1 flex flex-col gap-1.5 rounded-xl bg-(--thread-card) px-3 py-2.5 text-left shadow-(--thread-card-shadow) outline-none hover:shadow-(--shell-card-shadow-hover) focus-visible:ring-[1.5px] focus-visible:ring-(--focus)',
-        facts.state === 'running' && 'shadow-[0_0_0_1px_var(--focus)]',
-        facts.state === 'waiting' &&
-          'bg-transparent shadow-none outline-1 outline-(--thread-line-strong) outline-dashed',
-        selected && 'shadow-[0_0_0_1.5px_var(--focus),0_0_0_4.5px_var(--shell-accent-soft)]',
-      )}
-    >
+  const className = cn(
+    'absolute z-1 flex flex-col gap-1.5 rounded-xl bg-(--thread-card) px-3 py-2.5 text-left shadow-(--thread-card-shadow) outline-none',
+    action &&
+      'hover:shadow-(--shell-card-shadow-hover) focus-visible:ring-[1.5px] focus-visible:ring-(--focus)',
+    facts.state === 'running' && 'shadow-[0_0_0_1px_var(--focus)]',
+    facts.state === 'waiting' &&
+      'bg-transparent shadow-none outline-1 outline-(--thread-line-strong) outline-dashed',
+    pinning && 'shadow-[0_0_0_1.5px_var(--focus),0_0_0_4.5px_var(--shell-accent-soft)]',
+  )
+  const body = (
+    <>
       <span className="flex min-w-0 items-center gap-2">
         <WhoMark facts={facts} hostId={hostId} />
         <span className="flex min-w-0 flex-col">
@@ -334,7 +311,40 @@ function Node({
       <span className="flex min-w-0 items-center gap-1.5">
         <StateBadge facts={facts} view={view} />
       </span>
-    </button>
+    </>
+  )
+  if (session) {
+    return (
+      <button
+        type="button"
+        title={title}
+        onClick={() => openSession(session.id, session.projectPath)}
+        style={style}
+        className={className}
+      >
+        {body}
+      </button>
+    )
+  }
+  if (canPin) {
+    return (
+      <Popover open={pinning} onOpenChange={setPinning}>
+        <PopoverTrigger
+          render={<button type="button" title={title} style={style} className={className} />}
+        >
+          {body}
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto max-w-[min(32rem,90vw)]">
+          <span className="px-0.5 text-small font-medium text-(--thread-ink)">{facts.name}</span>
+          <PinEditor view={view} stepId={facts.id} onDone={() => setPinning(false)} />
+        </PopoverContent>
+      </Popover>
+    )
+  }
+  return (
+    <div title={title} style={style} className={className}>
+      {body}
+    </div>
   )
 }
 
@@ -355,8 +365,7 @@ function StateBadge({ facts, view }: { facts: StepFacts; view: TaskView }) {
   }
   if (!facts.word) return <Badge variant="neutral">{t('flow.notStarted')}</Badge>
   const label = t(`state.${facts.word}`)
-  const extra =
-    round && round.n > 1 ? t('round', { n: round.n }) : facts.state === 'done' ? time : null
+  const extra = round && round.n > 1 ? t('round', { n: round.n }) : time
   return (
     <>
       <Badge
@@ -391,111 +400,4 @@ function waitsOn(view: TaskView, stepId: string): string[] {
       return state === 'running' || state === 'needs_you' || state === 'waiting'
     })
     .map((s) => stepTitle(view.workflow, s.id))
-}
-
-/** The step picked on the chart: who does it and why, its state and branch, and what to do. */
-function NodeDetails({ view, facts }: { view: TaskView; facts: StepFacts }) {
-  const { t } = useTranslation('tasks')
-  const [pinning, setPinning] = useState(false)
-  const hostId = hostOfPath(view.projectPath)
-  const models = useModelText(hostId, facts.pick)
-  const round = facts.round
-  const step = view.workflow.steps.find((s) => s.id === facts.id)!
-  const session = useSessionsStore((s) => (round?.sessionId ? s.byId[round.sessionId] : undefined))
-  const live = view.rounds.some((r) => r.stepId === facts.id && LIVE.has(r.state))
-  const canPin = view.status === 'running' && step.by === 'agent' && !live
-  const sent = round?.sentBack
-  const now = useNow()
-  const rows: [string, ReactNode][] = []
-  rows.push([
-    t('details.agent'),
-    step.by === 'you'
-      ? t('flow.you')
-      : facts.pick
-        ? pickLine(facts.pick, hostId, models)
-        : t('flow.auto'),
-  ])
-  if (round) rows.push([t('details.picked'), pickedByText(round.pickedBy, view)])
-  else if (facts.waiting?.pick)
-    rows.push([t('details.picked'), pickedByText(facts.waiting.pick.pickedBy, view)])
-  else if (step.by === 'agent') rows.push([t('details.picks'), whoPicksText(view, facts.id)])
-  const reason = round?.reason ?? facts.waiting?.pick?.reason
-  if (reason) rows.push([t('details.why'), t('details.quoted', { text: reason })])
-  rows.push([
-    t('details.status'),
-    [
-      facts.word ? t(`state.${facts.word}`) : t('flow.notStarted'),
-      round?.startedAt != null ? runningFor((round.endedAt ?? now) - round.startedAt) : null,
-      round && round.n > 1 ? t('round', { n: round.n }) : null,
-      round?.outcome ? t('details.outcome', { outcome: round.outcome }) : null,
-    ]
-      .filter(Boolean)
-      .join(t('separator')),
-  ])
-  if (round?.branch) {
-    rows.push([
-      t('details.branch'),
-      <code key="branch" className="font-mono text-code">
-        {round.branch}
-      </code>,
-    ])
-  }
-  if (step.reviewOf.length > 0) {
-    rows.push([
-      t('details.reviews'),
-      step.reviewOf.map((id) => stepTitle(view.workflow, id)).join(t('and')),
-    ])
-  }
-  if (!round && step.hint) rows.push([t('details.hint'), t('details.quoted', { text: step.hint })])
-  if (sent) {
-    const from = sent.by === 'person' ? t('picked.person') : stepTitle(view.workflow, sent.stepId)
-    rows.push([
-      t('details.sentBack'),
-      <span key="sent" className="whitespace-pre-wrap">
-        {[`${from}: ${sent.note ?? sent.outcome ?? ''}`, ...sent.comments].join('\n')}
-      </span>,
-    ])
-  }
-  return (
-    <section
-      aria-label={t('details.label', { step: facts.name })}
-      className="overflow-hidden rounded-2xl bg-(--thread-card) shadow-(--thread-card-shadow)"
-    >
-      <header className="flex min-h-12 flex-wrap items-center gap-2 py-2 pr-2.5 pl-3.5">
-        <WhoMark facts={facts} hostId={hostId} />
-        <b className="text-small font-medium text-(--thread-ink)">{facts.name}</b>
-        <StateBadge facts={facts} view={view} />
-        <span className="flex-1" />
-        {canPin && !pinning && (
-          <Button size="sm" variant="outline" onClick={() => setPinning(true)}>
-            {view.pins[facts.id] ? t('details.changePin') : t('details.pin')}
-          </Button>
-        )}
-        {session && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => openSession(session.id, session.projectPath)}
-          >
-            {t('asking.open')}
-          </Button>
-        )}
-      </header>
-      {pinning && (
-        <div className="border-t border-(--thread-line) px-3.5 py-3">
-          <PinEditor view={view} stepId={facts.id} onDone={() => setPinning(false)} />
-        </div>
-      )}
-      <dl className="grid grid-cols-[fit-content(150px)_minmax(0,1fr)] gap-x-5 gap-y-1.5 border-t border-(--thread-line) px-3.5 py-3 text-small">
-        {rows.map(([label, value]) => (
-          <div key={label} className="contents">
-            <dt className="whitespace-nowrap text-(--thread-muted)">{label}</dt>
-            <dd className="min-w-0 text-(--thread-ink)" data-selectable="">
-              {value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  )
 }

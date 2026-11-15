@@ -158,6 +158,8 @@
     "notePlaceholder": "A note for the step’s agent (optional)"
   },
   "pin": {
+    "open": "Pin for this task…",
+    "change": "Change the pin…",
     "confirm": "Pin for this task",
     "auto": "Back to Auto",
     "onlySteps": "Only Claude Code and Codex agents can do steps."
@@ -175,22 +177,6 @@
       "done": "Done",
       "dropped": "Not worth doing"
     }
-  },
-  "details": {
-    "label": "{{step}} details",
-    "agent": "Agent and model",
-    "picked": "Who picked",
-    "picks": "Who picks",
-    "why": "Why",
-    "quoted": "“{{text}}”",
-    "status": "Status",
-    "outcome": "Reported {{outcome}}",
-    "branch": "Branch",
-    "reviews": "Reviews",
-    "hint": "Hint for the pick",
-    "sentBack": "Sent back with",
-    "pin": "Pin for this task…",
-    "changePin": "Change the pin…"
   },
   "composer": {
     "label": "Add to the task",
