@@ -61,6 +61,7 @@ const READS = new Set([
   'readFirstOptions',
   'readOptions',
   'replay',
+  'requests',
   'runs',
   'search',
   'snapshot',

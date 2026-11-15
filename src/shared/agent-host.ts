@@ -550,6 +550,16 @@ export interface SessionSummary {
   prepared?: PreparedInfo // a prepared session, outside the index until its first message
   worktree?: SessionWorktree // the worktree it works in; absent when it works in projectPath
   agentWorktree?: { path: string; branch: string | null } // one its agent made for this subagent
+  // Its latest plan's progress; null without one and for a closed session; absent from older hosts
+  plan?: PlanProgress | null
+}
+
+/** How far a session's latest plan got, as its summary carries it. */
+export interface PlanProgress {
+  done: number
+  total: number
+  /** The step in progress, by its index from 0, and the first line of its text; null for none. */
+  current: { index: number; text: string } | null
 }
 
 /** What a session made, read from its stored thread for its card in the sidebar. */
@@ -960,6 +970,9 @@ export interface HostContract {
   }
   // One entry whole, as a device whose page held its tool output as a digest opens it.
   'sessions.entry': { params: { sessionId: string; entryId: string }; result: ThreadEntry }
+  // What waits for the user's answer in the session, in thread order: what its summary's
+  // `permissionCount` counts. Empty for a closed session, where nothing waits.
+  'sessions.requests': { params: { sessionId: string }; result: { entries: ThreadEntry[] } }
   'sessions.outline': { params: { sessionId: string }; result: { entries: OutlineEntry[] } }
   // What the session made, for its card in the sidebar; empty for a session without a thread.
   'sessions.outputs': { params: { sessionId: string }; result: SessionOutputs }
@@ -1521,6 +1534,7 @@ export const HOST_METHODS = [
   'sessions.snapshot',
   'sessions.page',
   'sessions.entry',
+  'sessions.requests',
   'sessions.outline',
   'sessions.outputs',
   'sessions.outlineTitles',

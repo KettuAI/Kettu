@@ -15,6 +15,7 @@ import {
   type ImportableSession,
   type OutlineEntry,
   type OutlineTitle,
+  type PlanProgress,
   type ReturnedMessage,
   type SessionAttention,
   type SessionOutputs,
@@ -682,6 +683,48 @@ function waitingCount(live: Live): number {
   )
 }
 
+/** The entries of what waits, in thread order: the same requests `waitingCount` counts. */
+function waitingEntries(live: Live): ThreadEntry[] {
+  const ids = new Set([
+    ...[...live.permissions.values()].map(({ toolEntryId }) => toolEntryId),
+    ...live.origins.values(),
+    ...live.apps.values(),
+    ...live.setups.values(),
+    ...(live.ask ? [live.ask.entryId] : []),
+  ])
+  const at = (id: string): number => live.positions.get(id) ?? Number.MAX_SAFE_INTEGER
+  return [...ids]
+    .sort((a, b) => at(a) - at(b))
+    .flatMap((id) => {
+      const entry = live.thread.byId[id]
+      return entry ? [entry] : []
+    })
+}
+
+/** The latest plan's progress; null without a plan, or for one without steps. */
+function planProgress({ order, byId }: ThreadState): PlanProgress | null {
+  for (let i = order.length - 1; i >= 0; i--) {
+    const entry = byId[order[i]!]
+    if (entry?.kind !== 'plan') continue
+    const { items } = entry
+    if (items.length === 0) return null
+    const index = items.findIndex((item) => item.status === 'in_progress')
+    return {
+      done: items.filter((item) => item.status === 'completed').length,
+      total: items.length,
+      current: index === -1 ? null : { index, text: firstLine(items[index]!.content) },
+    }
+  }
+  return null
+}
+
+/** Whether a patch can change the latest plan, which the session's summary carries. */
+function changesPlan(thread: ThreadState, patch: Patch): boolean {
+  if (patch.op === 'entry.add') return patch.entry.kind === 'plan'
+  if (patch.op === 'entry.update') return thread.byId[patch.id]?.kind === 'plan'
+  return patch.op === 'thread.reset'
+}
+
 /** The ids of what waits: each permission's request id, and the entry id of the others. */
 function waitingIds(live: Live): string[] {
   return [
@@ -1140,6 +1183,7 @@ export class SessionManager {
       pinnedAt: record.pinnedAt ?? null,
       archivedAt: record.archivedAt ?? null,
       acpSessionId: record.acpSessionId || null,
+      plan: live ? planProgress(live.thread) : null,
       ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
       ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared
@@ -1271,6 +1315,7 @@ export class SessionManager {
   }
 
   private emit(live: Live, patches: readonly Patch[]): void {
+    let plan = false
     for (const patch of patches) {
       if (patch.op === 'thread.reset') {
         const keeper = new ReplayKeeper(live.thread)
@@ -1281,12 +1326,15 @@ export class SessionManager {
         for (const entry of keeper.before(patch.entry)) this.apply(live, { op: 'entry.add', entry })
       }
       if (!this.apply(live, patch)) continue
+      plan ||= changesPlan(live.thread, patch)
       if (keeper && patch.op === 'entry.add') {
         for (const entry of keeper.after(patch.entry)) this.apply(live, { op: 'entry.add', entry })
       }
     }
     this.scheduleFlush(live)
     this.scheduleCheckpoint(live)
+    // A replay ends with a summary of its own, which carries the plan it brought back.
+    if (plan && !live.replaying) this.touch(live.id)
   }
 
   /** Applies one patch and queues it to send; false for one the thread could not take. */
@@ -2616,6 +2664,21 @@ export class SessionManager {
         : undefined
     if (!entry) throw notFound(`Session ${sessionId} has no entry ${entryId}`)
     return settled(entry)
+  }
+
+  /** What waits for the user's answer in a session, for a client that shows only that. */
+  async requests(
+    sessionId: string,
+    images: ImageMode = 'refs',
+  ): Promise<{ entries: ThreadEntry[] }> {
+    this.recordOf(sessionId)
+    const live = this.live.get(sessionId)
+    if (!live) return { entries: [] }
+    return this.withBytes(live, images, () => {
+      // Patches go out first, so the patches after the entries are the ones they do not hold.
+      this.flushPatches(live)
+      return { entries: waitingEntries(live) }
+    })
   }
 
   // The message outline.

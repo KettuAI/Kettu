@@ -1603,6 +1603,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { sessionId: sessionId(o), entryId: string(o, 'entryId', ACP_ID_CHARS) }
     },
+    'sessions.requests': session,
     'sessions.outline': session,
     'sessions.outputs': session,
     'sessions.outlineTitles': session,
