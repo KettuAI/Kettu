@@ -29,13 +29,22 @@
 
 ## 功能
 
+<p>
+  <img src="./assets/picture-sessions.webp" width="49%" alt="两个会话并排在一个窗口里，侧边栏标出哪些会话在等你">
+  <img src="./assets/picture-control.webp" width="49%" alt="授权卡片显示 Claude Code 想编辑的文件的 diff，有拒绝、允许一次和始终允许">
+</p>
+
+<p>
+  <img src="./assets/picture-artifacts.webp" width="49%" alt="会话旁边是 Agent 做的每周习惯报告页面">
+  <img src="./assets/picture-workflows.webp" width="49%" alt="「功能开发」工作流的流程图：调研、设计、计划、实现、代码审查和发布">
+</p>
+
+<p>
+  <img src="./assets/picture-marketplace.webp" width="49%" alt="Marketplace 列出可以安装的插件、Skills 和 MCP 服务器">
+  <img src="./assets/picture-dark.webp" width="49%" alt="深色模式下并排的同样两个会话">
+</p>
+
 ### Agent 与会话
-
-<img src="./assets/picture-sessions.webp" alt="两个会话并排在一个窗口里，侧边栏标出哪些会话在等你">
-
-<img src="./assets/picture-control.webp" alt="授权卡片显示 Claude Code 想编辑的文件的 diff，有拒绝、允许一次和始终允许">
-
-<img src="./assets/picture-workflows.webp" alt="「功能开发」工作流的流程图：调研、设计、计划、实现、代码审查和发布">
 
 - **47 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。暂时不用的可以关掉，会话不会丢。
 - **并排**：多个会话同时跑，窗口最多分成九格。侧边栏标出哪个在干活、哪个在等你、哪个做完了。
@@ -56,10 +65,6 @@
 - **用量**：按天、模型和项目统计 token 和费用，每个账号的套餐额度画成圆环。
 
 ### 工作台
-
-<img src="./assets/picture-artifacts.webp" alt="会话旁边是 Agent 做的每周习惯报告页面">
-
-<img src="./assets/picture-marketplace.webp" alt="Marketplace 列出可以安装的插件、Skills 和 MCP 服务器">
 
 - **Diff**：Agent 改了哪些文件、改了什么，一目了然。
 - **文件**：用标签页查看、预览和编辑项目文件。
@@ -108,8 +113,6 @@
 - **Artifacts、Routines 和用量**：打开 Agent 做的东西，运行一个 Routine，查看套餐额度。
 
 ### 外观
-
-<img src="./assets/picture-dark.webp" alt="深色模式下并排的同样两个会话">
 
 - 跟着系统切换、整个窗口一起平滑过渡的浅色和深色模式，主题库里的主题或你自己的主题，简体中文和英文，macOS 毛玻璃侧边栏。
 
