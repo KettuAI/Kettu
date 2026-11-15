@@ -30,7 +30,7 @@ import { currentLocale, i18n } from '@renderer/lib/i18n'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
 import { installServer, setServerOn } from './actions'
-import { CommunityListingPage } from './community'
+import { CommunityListingPage, CommunityPreviewPage } from './community'
 import { ConnectButton, ConnectionControls } from './connect'
 import { AgentsDialog, KeysDialog, UninstallDialog } from './dialogs'
 import {
@@ -55,7 +55,7 @@ import { ExternalLink, ListingFrame, ListingSkeleton, Missing } from './parts'
 import { PluginListing } from './plugins'
 import { BuiltinServerPage } from './builtin'
 import { PublishedListingPage } from './published-listing'
-import { KETTU_ITEM, publishedIdOf } from './published-keys'
+import { KETTU_ITEM, previewIdOf, publishedIdOf } from './published-keys'
 import { AddButton, ItemRow, OfficialBadge } from './rows'
 import { SkillListing } from './skills'
 import { WorkflowListing } from './workflow-listing'
@@ -80,6 +80,8 @@ export function ListingPage({ item, tab }: { item: string; tab: MarketplaceTab }
   if (item === KETTU_ITEM) return <BuiltinServerPage tab={tab} back={back} />
   const publishedId = publishedIdOf(item)
   if (publishedId) return <PublishedListingPage id={publishedId} back={back} />
+  const previewId = previewIdOf(item)
+  if (previewId) return <CommunityPreviewPage id={previewId} tab={tab} />
   if (ref?.kind === 'plugin') {
     return <PluginListing harness={ref.harness} id={ref.id} tab={tab} back={back} />
   }
