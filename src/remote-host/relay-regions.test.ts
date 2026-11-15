@@ -150,6 +150,48 @@ describe('a host on the relay regions', () => {
     await vi.advanceTimersByTimeAsync(60_000)
     expect(t.relays.relay(HK).hosts.has(t.id)).toBe(false)
   })
+
+  it('signs in again through a region whose pin changed', async () => {
+    const t = await host()
+    const socketUrl = `wss://203.0.113.7:7443/v1/hosts/${t.id}`
+    const rotated = 'Q'.repeat(43)
+    t.relay.setPlan([
+      { id: 'main', url: MAIN },
+      { id: 'hk-1', url: HK },
+      { id: 'sh-1', url: SH, pin: rotated },
+    ])
+    await expect.poll(() => t.relays.pins.get(socketUrl)).toBe(rotated)
+    await expect
+      .poll(() => t.relay.status.map((r) => [r.id, r.pin, r.connection.state]))
+      .toEqual([
+        ['main', undefined, 'connected'],
+        ['hk-1', undefined, 'connected'],
+        ['sh-1', rotated, 'connected'],
+      ])
+  })
+
+  it('renews its token on no region it is leaving, so the access token stays on the main relay', async () => {
+    const t = await host()
+    t.relays.accounts.set('access-token', 'account')
+    const result = await dialRelay({
+      relays: [{ url: SH, pin: PIN }],
+      id: t.id,
+      token: 'relay-token',
+      openSocket: t.relays.openSocket,
+      timeoutMs: 5000,
+    })
+    expect(result.kind).toBe('joined')
+    await expect.poll(() => t.accepted.length).toBe(1)
+
+    // The relay token is gone: the main relay alone, with the access token.
+    t.relay.setPlan([{ id: 'main', url: MAIN }])
+    t.relay.setToken('access-token')
+    await expect.poll(() => t.relays.relay(MAIN).renewed).toEqual(['access-token'])
+    // Still there for the device joined through it, on the relay token it signed in with.
+    expect(t.relays.relay(SH).hosts.has(t.id)).toBe(true)
+    expect(t.relays.relay(SH).renewed).toEqual([])
+    expect(t.relays.relay(HK).renewed).toEqual([])
+  })
 })
 
 describe('the channel messages for regions', () => {
@@ -168,15 +210,13 @@ describe('the channel messages for regions', () => {
     const prefers: [string, unknown][] = []
     const seen: string[] = []
     let rtt = 40
+    let more: { id: string; rtt: number | null }[] = []
     const serverRegions: ServerRegions = {
       offered: () => options.offered,
       message: () => ({
         type: 'relay.regions',
         list: vectors.regions.signed,
-        regions: [
-          { id: 'main', rtt: 180 },
-          { id: 'hk-1', rtt },
-        ],
+        regions: [{ id: 'main', rtt: 180 }, { id: 'hk-1', rtt }, ...more],
       }),
       preferred: (deviceId, value) => prefers.push([deviceId, value]),
       seen: (deviceId) => seen.push(deviceId),
@@ -253,7 +293,16 @@ describe('the channel messages for regions', () => {
     cleanups.push(() => client.stop())
     client.start()
     await expect.poll(() => client.list()[0]?.connection.state).toBe('online')
-    return { server, known, received, prefers, seen, changed, setRtt: (ms: number) => (rtt = ms) }
+    return {
+      server,
+      known,
+      received,
+      prefers,
+      seen,
+      changed,
+      setRtt: (ms: number) => (rtt = ms),
+      signIn: (id: string) => (more = [...more, { id, rtt: null }]),
+    }
   }
 
   it('tells a device that reads them the host’s regions, and the host the device’s fastest', async () => {
@@ -281,6 +330,17 @@ describe('the channel messages for regions', () => {
     t.server.regionsChanged()
     await new Promise((done) => setTimeout(done, 50))
     expect(t.received).toHaveLength(1)
+    // A region signed in to meanwhile goes at once, the new round trip with it.
+    t.signIn('sh-1')
+    t.server.regionsChanged()
+    await expect.poll(() => t.received.length).toBe(2)
+    expect(t.received[1]![1]).toMatchObject({
+      regions: [
+        { id: 'main', rtt: 180 },
+        { id: 'hk-1', rtt: 90 },
+        { id: 'sh-1', rtt: null },
+      ],
+    })
   })
 
   it('names the feature only with a list, and sends the regions only to a device that reads them', async () => {

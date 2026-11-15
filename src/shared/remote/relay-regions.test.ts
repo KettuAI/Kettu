@@ -72,10 +72,21 @@ describe('the signed region list', () => {
     expect(serial.current).toBe(42)
   })
 
-  it('adds development keys only as well-formed id=key pairs', () => {
-    const keys = regionKeys(`${v.key.id}=${v.key.publicKey}, bad=AAAA, =x`)
-    expect(keys).toEqual({ ...REGION_KEYS, t1: v.key.publicKey })
-    expect(regionKeys(undefined)).toEqual(REGION_KEYS)
+  it('adds development keys only as well-formed id=key pairs, and never for the project relay', () => {
+    const local = 'http://relay.kettu.localhost:8798'
+    const pair = `${v.key.id}=${v.key.publicKey}`
+    expect(regionKeys(local, `${pair}, bad=AAAA, =x`)).toEqual({
+      ...REGION_KEYS,
+      t1: v.key.publicKey,
+    })
+    expect(regionKeys(local, undefined)).toEqual(REGION_KEYS)
+    for (const main of [
+      'https://relay.kettu.sh',
+      'https://relay.kettu.sh/',
+      'https://relay.kettu.sh.',
+    ]) {
+      expect(regionKeys(main, `r1=${v.key.publicKey}`)).toEqual(REGION_KEYS)
+    }
   })
 })
 

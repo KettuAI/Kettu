@@ -1443,8 +1443,7 @@ export class HostClient {
     const client = this.options.relay
     const fetchJson = client?.fetchJson
     if (!client || !fetchJson) return { state: 'unavailable' }
-    const token = client.token()
-    if (!token) return { state: 'signed_out' }
+    if (!client.token()) return { state: 'signed_out' }
     let regions: Parameters<typeof relayList>[1] = []
     try {
       const { status, body } = await fetchJson(`${client.main}${relayInfoPath()}`)
@@ -1454,6 +1453,9 @@ export class HostClient {
     } catch {
       // The main relay alone is asked.
     }
+    // The token and where it may go, read together: either may have changed meanwhile.
+    const token = client.token()
+    if (!token) return { state: 'signed_out' }
     const listed = relayList(client.main, regions).map((region) => region.url)
     const relays = client.regions ? client.regions.allowed(listed) : listed
     const answers = await Promise.all(

@@ -144,10 +144,11 @@ export class HostedRelay {
 
   /**
    * The relays the token last given may go to: any with a relay token, or while the main relay
-   * takes none or has not said; the main relay alone with the access token once it does.
+   * takes none; the main relay alone with the access token once it does, or before it said.
    */
   allowed(urls: string[]): string[] {
-    if (this.relayOnly || !this.features?.includes(RELAY_TOKENS_FEATURE)) return urls
+    if (this.relayOnly) return urls
+    if (this.features !== null && !this.features.includes(RELAY_TOKENS_FEATURE)) return urls
     return urls.filter((url) => url === this.main)
   }
 

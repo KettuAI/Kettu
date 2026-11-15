@@ -7,6 +7,7 @@
 
 import {
   MAX_REGIONS,
+  RELAY_URL,
   decodeRelayBytes,
   relayOrigin,
   trustedRelay,
@@ -117,9 +118,14 @@ export function parseSignedRegionList(value: unknown): SignedRegionList | null {
   return { key, payload, signature }
 }
 
-/** The built-in keys, with those `KETTU_REGION_KEYS` adds for a development relay. */
-export function regionKeys(extra: string | undefined): Record<string, string> {
+/**
+ * The keys a list from `main` may be signed with: the built-in ones, with those `KETTU_REGION_KEYS`
+ * adds or replaces for a development relay; never for the project's relay, however it is written.
+ */
+export function regionKeys(main: string, extra: string | undefined): Record<string, string> {
   const keys: Record<string, string> = { ...REGION_KEYS }
+  const host = URL.parse(main)?.hostname.replace(/\.$/, '')
+  if (!host || host === URL.parse(RELAY_URL)!.hostname) return keys
   for (const pair of (extra ?? '').split(',')) {
     const [id, key] = pair.trim().split('=')
     if (id && key && KEY_ID.test(id) && decodeRelayBytes(key)?.length === ED25519_KEY_BYTES) {

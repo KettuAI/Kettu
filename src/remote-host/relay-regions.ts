@@ -46,10 +46,10 @@ import { jsonOf, relayRequest } from './relay-net'
 const REQUEST_TIMEOUT_MS = 15_000
 /** How long one `GET /v1/ping` may take. */
 const PING_TIMEOUT_MS = 5_000
-/** How often the main relay's features are read again. */
-const FEATURES_MS = 6 * 60 * 60_000
-/** How often the regions are timed again when due and a report is looked for. */
-const TICK_MS = 60 * 60_000
+/** How often the main relay's features are read again, as main reads them for the tokens. */
+const FEATURES_MS = 10 * 60_000
+/** How often the features are read and the regions timed again when due, and a report looked for. */
+const TICK_MS = 10 * 60_000
 /** The first look for a report after the start. */
 const FIRST_REPORT_MS = 60_000
 /** The most devices whose preferred regions are kept. */
@@ -60,6 +60,8 @@ interface Preference {
   /** The regions' ids, as the device sent them. */
   ids: string[]
   list: SignedRegionList
+  /** Its list's serial: below the newest seen, the list may name regions since withdrawn. */
+  serial: number
   /** The regions, as its list gave them. */
   regions: ListedRegion[]
 }
@@ -242,7 +244,6 @@ export class RemoteRegions {
     const active = this.options.accessToken() !== null
     if (active && !this.running) {
       this.running = true
-      void this.readFeatures().then(() => this.startList())
       this.tick = setInterval(() => this.onTick(), TICK_MS)
       this.tick.unref?.()
       this.firstReport = setTimeout(() => void this.report(), FIRST_REPORT_MS)
@@ -251,12 +252,14 @@ export class RemoteRegions {
       this.halt()
     }
     this.replan()
+    if (this.running) void this.readFeatures().then(() => this.featuresRead())
   }
 
-  stop(): void {
+  /** Stops, writing what is kept; settles once it is written. */
+  async stop(): Promise<void> {
     this.stopped = true
     this.halt()
-    void Promise.all([
+    await Promise.all([
       this.files.regions.flush(),
       this.files.preferences.flush(),
       this.files.stats.flush(),
@@ -272,12 +275,14 @@ export class RemoteRegions {
     this.firstReport = null
   }
 
-  private startList(): void {
+  /** What the main relay offers is known: the list to read, and where the tokens may go. */
+  private featuresRead(): void {
     if (this.running && this.features?.includes(REGIONS_FEATURE)) this.source.start()
+    this.replan()
   }
 
   private onTick(): void {
-    void this.readFeatures().then(() => this.startList())
+    void this.readFeatures().then(() => this.featuresRead())
     if (this.options.device) void this.times.measure(this.devices.ownRegions())
     void this.report()
     this.prunePreferences()
@@ -323,11 +328,21 @@ export class RemoteRegions {
 
   // The host's side.
 
-  /** The regions to sign in to: by the region rules with a relay token, else `GET /v1`'s. */
+  /**
+   * The regions to sign in to: by the region rules with a relay token; with the access token, the
+   * main relay alone once it takes relay tokens or before it said, else `GET /v1`'s (null).
+   */
   plan(): RelayRegion[] | null {
+    if (this.options.relayToken() === null) {
+      const takesRelayTokens =
+        this.features === null || this.features.includes(RELAY_TOKENS_FEATURE)
+      return takesRelayTokens ? [{ id: 'main', url: this.options.main }] : null
+    }
     const own = this.source.list
-    if (!own || this.options.relayToken() === null) return null
+    if (!own) return null
+    const newest = this.source.serial.current
     const preferred = [...this.preferences.values()]
+      .filter((preference) => preference.serial >= newest)
       .sort((a, b) => b.seenAt - a.seenAt)
       .flatMap((preference) => preference.regions)
     return hostRegions({ main: this.options.main, own, preferred })
@@ -376,6 +391,7 @@ export class RemoteRegions {
       seenAt: this.now(),
       ids: message.regions,
       list: message.list,
+      serial: list.serial,
       regions,
     })
     for (const region of regions) this.ids.set(region.url, region.id)
@@ -407,7 +423,7 @@ export class RemoteRegions {
     if (!this.running) return
     this.source.failed()
     // Until the main relay said what it offers, only it gets a token; ask it again.
-    if (this.features === null) void this.readFeatures().then(() => this.startList())
+    if (this.features === null) void this.readFeatures().then(() => this.featuresRead())
   }
 
   /** A region the host is signed in to said it drains. */
@@ -515,10 +531,11 @@ export class RemoteRegions {
       // Kept from a list that verified when it came; checked again rather than trusted.
       const list = await verifyRegionList(entry.list, this.options.main, this.options.keys)
       if (!list) continue
+      this.source.serial.take(list.serial)
       const regions = entry.ids
         .map((id) => list.regions.find((region) => region.id === id))
         .filter((region): region is ListedRegion => region?.state === 'active')
-      this.preferences.set(deviceId, { ...entry, regions })
+      this.preferences.set(deviceId, { ...entry, serial: list.serial, regions })
     }
     if (this.prunePreferences()) this.savePreferences()
   }

@@ -1150,15 +1150,16 @@ class DeviceSession {
   }
 
   private sendRegions(): void {
-    if (this.state !== 'open' || !this.readsRegions || this.regionsTimer) return
+    if (this.state !== 'open' || !this.readsRegions) return
     const message = this.server.options.regions?.message()
     if (!message) return
     const shape = `${message.list.payload} ${message.regions.map((region) => region.id).join()}`
     const rtts = message.regions.map((region) => region.rtt).join()
     const now = (this.server.options.now ?? Date.now)()
     const sent = this.regionsSent
+    // Only a change of round trips alone waits; the list or the regions go at once.
     if (sent?.shape === shape) {
-      if (sent.rtts === rtts) return
+      if (sent.rtts === rtts || this.regionsTimer) return
       const wait = sent.at + REGIONS_RTT_MS - now
       if (wait > 0) {
         this.regionsTimer = setTimeout(() => {
@@ -1168,6 +1169,8 @@ class DeviceSession {
         return
       }
     }
+    if (this.regionsTimer) clearTimeout(this.regionsTimer)
+    this.regionsTimer = null
     this.regionsSent = { shape, rtts, at: now }
     this.send(message)
   }

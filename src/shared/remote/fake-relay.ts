@@ -149,6 +149,8 @@ export class FakeRelayServer {
   readonly hosts = new Map<string, Host>()
   /** Every socket made, in order. */
   readonly sockets: FakeSocket[] = []
+  /** The tokens hosts renewed theirs with, in order. */
+  readonly renewed: string[] = []
   private readonly waiting = new Map<string, Waiting>()
   private readonly joined = new Map<FakeSocket, FakeSocket>()
   /** Device sockets whose `connect` asked to hear of a drain. */
@@ -248,6 +250,7 @@ export class FakeRelayServer {
         if (!account || account !== this.hosts.get(id)?.account) {
           return this.refuse(socket, RELAY_CLOSE.unauthorized)
         }
+        this.renewed.push(message.token)
         return
       }
       if (signedIn) return this.refuse(socket, RELAY_CLOSE.malformed)

@@ -2,6 +2,7 @@
 // list, where each token may go, the regions a host signs in to with its devices' preferences, and
 // the daily report.
 
+import { createPrivateKey, sign } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -46,12 +47,29 @@ const MAIN = vectors.regions.main
 const KEYS = { ...REGION_KEYS, [vectors.regions.key.id]: vectors.regions.key.publicKey }
 const DEVICE = '0123456789abcdef0123456789abcdef'
 const OTHER = 'fedcba9876543210fedcba9876543210'
-const cleanups: (() => void)[] = []
+const cleanups: (() => Promise<void> | void)[] = []
+// The test key t1's private half, for lists the vectors do not hold.
+const T1 = createPrivateKey({
+  key: Buffer.concat([
+    Buffer.from('302e020100300506032b657004220420', 'hex'),
+    Buffer.from(vectors.regions.key.seed, 'base64url'),
+  ]),
+  format: 'der',
+  type: 'pkcs8',
+})
 
-afterEach(() => {
-  for (const cleanup of cleanups.splice(0)) cleanup()
-  answers.posted.length = 0
+function signedList(serial: number) {
+  const body = { v: 1, serial, issuedAt: 1763300000000, place: { country: 'CN', asn: 4134 } }
+  const regions = [{ id: 'main', name: 'Global', url: MAIN, state: 'active' }]
+  const payload = Buffer.from(JSON.stringify({ ...body, regions, stun: [] })).toString('base64url')
+  const text = Buffer.from(`${vectors.regions.context}${payload}`)
+  return { key: 't1', payload, signature: sign(null, text, T1).toString('base64url') }
+}
+
+afterEach(async () => {
   vi.useRealTimers()
+  answers.posted.length = 0
+  for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
 })
 
 async function regions(options: {
@@ -90,10 +108,10 @@ describe('the remote host’s relay regions', () => {
     await expect.poll(() => t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'hk-1', 'sh-1'])
     expect(t.regions.allowed([MAIN, 'https://hk-1.relay.kettu.sh'])).toHaveLength(2)
 
-    // The access token alone: back to the main relay's own regions, which are then only itself.
+    // The access token alone: the main relay alone, whatever the list and GET /v1 name.
     t.setRelayToken(null)
     t.regions.update()
-    expect(t.plans.at(-1)).toBeNull()
+    expect(t.plans.at(-1)).toEqual([{ id: 'main', url: MAIN }])
     expect(t.regions.allowed([MAIN, 'https://hk-1.relay.kettu.sh'])).toEqual([MAIN])
     expect(t.regions.ranked('any')).toBeNull()
     expect(t.regions.preferMessage()).toBeNull()
@@ -101,7 +119,10 @@ describe('the remote host’s relay regions', () => {
 
   it('gives the access token to any relay named while the main relay takes no relay token', async () => {
     const t = await regions({ features: ['hosts'], relayToken: null })
+    // Until the main relay said, the main relay alone.
+    expect(t.plans[0]).toEqual([{ id: 'main', url: MAIN }])
     await expect.poll(() => t.regions.allowed([MAIN, 'https://hk.relay.kettu.sh'])).toHaveLength(2)
+    expect(t.plans.at(-1)).toBeNull()
     expect(t.regions.offered).toBe(false)
   })
 
@@ -142,6 +163,21 @@ describe('the remote host’s relay regions', () => {
       regions: ['main'],
       list: vectors.regions.regionRules.signed,
     })
+    expect(t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'hk-1', 'sh-1'])
+  })
+
+  it('signs in to no region a device preferred from a list older than the newest seen', async () => {
+    const t = await regions({ features: ['regions', 'relay-tokens'], relayToken: 'relay-token' })
+    await expect.poll(() => t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'hk-1', 'sh-1'])
+    await t.regions.preferred(DEVICE, {
+      type: 'relay.prefer',
+      regions: ['sh-2'],
+      list: vectors.regions.regionRules.signed,
+    })
+    expect(t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'hk-1', 'sh-1', 'sh-2'])
+    // Another device holds a newer list, in which sh-2 may be gone: the older choice waits for
+    // the device to send it again from its own newer list.
+    await t.regions.preferred(OTHER, { type: 'relay.prefer', regions: [], list: signedList(44) })
     expect(t.plans.at(-1)?.map((r) => r.id)).toEqual(['main', 'hk-1', 'sh-1'])
   })
 

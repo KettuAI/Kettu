@@ -21,13 +21,7 @@ import { parseSshTarget } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { PUSH_URL } from '@shared/remote/push'
 import type { DiscoveredHosts } from '@shared/remote/discovery'
-import {
-  RELAY_URL,
-  hostProfile,
-  importRelayKey,
-  isRelayHostId,
-  relayHostId,
-} from '@shared/remote/relay'
+import { hostProfile, importRelayKey, isRelayHostId, relayHostId } from '@shared/remote/relay'
 import { RelayHost } from '@shared/remote/relay-host'
 import { REGION_KEYS_ENV, regionKeys } from '@shared/remote/relay-regions'
 import type { Transport } from '@shared/remote/transport'
@@ -423,7 +417,7 @@ export function startRemoteHost(
         userDataPath: message.userDataPath,
         main,
         // Only a development relay may bring keys of its own.
-        keys: regionKeys(main === RELAY_URL ? undefined : process.env[REGION_KEYS_ENV]),
+        keys: regionKeys(main, process.env[REGION_KEYS_ENV]),
         app: message.sshPort === undefined ? 'desktop' : 'daemon',
         device: message.device !== undefined,
         accessToken: () => relayToken,
@@ -821,10 +815,10 @@ export function startRemoteHost(
           process.exit(0)
         }
         withRunning(async () => {
-          regions?.stop()
+          const kept = regions?.stop()
           const stopped = serving.then((current) => stopServing(current, reason))
           serving = stopped
-          await Promise.all([stopped, client?.stop()])
+          await Promise.all([stopped, client?.stop(), kept])
           send({ type: 'remote-host:stopped' })
           // Lets remote-host:stopped leave before the process ends.
           setImmediate(() => process.exit(0))

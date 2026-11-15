@@ -581,11 +581,12 @@ export class RelayHost {
       for (const control of this.controls) control.pause()
       return
     }
+    // A region being left keeps the token it signed in with, which outlasts its leaving; the new
+    // one may be the access token, which a region of the signed list must never get.
     for (const control of this.controls) {
       if (had) control.renewed(token)
       else control.start()
     }
-    for (const control of this.leaving) control.renewed(token)
   }
 
   /** The profile changed, as when the host was renamed or no longer lets devices find it. */
@@ -660,10 +661,13 @@ export class RelayHost {
     )
     const next = wanted.slice(0, MAX_REGIONS)
     const kept: Control[] = []
+    // A region whose pin changed is a new one: its socket was let through by the old pin.
+    const sameRelay = (entry: Control, region: RelayRegion): boolean =>
+      entry.region.url === region.url && entry.region.pin === region.pin
     for (const region of next) {
-      let control = this.controls.find((entry) => entry.region.url === region.url)
+      let control = this.controls.find((entry) => sameRelay(entry, region))
       if (!control) {
-        control = [...this.leaving].find((entry) => entry.region.url === region.url)
+        control = [...this.leaving].find((entry) => sameRelay(entry, region))
         if (control) {
           this.leaving.delete(control)
           control.stay()

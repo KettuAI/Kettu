@@ -83,14 +83,14 @@ export interface DialRegions {
 
 /**
  * Dials the host through its relays, the project's main one included, with the token `token`
- * gives; `missed` hears why a try did not join. With `regions`, the host's regions go first in
- * the order of the whole path.
+ * gives; `missed` hears why a try did not join. `regions` says which relays that token may go to,
+ * the host's regions first in the order of the whole path.
  */
 export function relayDial(
   relay: HostRelay,
   token: () => Promise<string | null>,
   missed: (problem: RelayProblem | null) => void,
-  regions?: DialRegions,
+  regions: DialRegions,
 ): Dial {
   const named = [...new Set([...relay.urls, relayUrl])].filter((url) => trustedRelay(url, relayUrl))
   return async () => {
@@ -102,15 +102,15 @@ export function relayDial(
     let joined: Transport | null = null
     const result = await dialRelay({
       // Asked after the token, which says which relays may get it.
-      relays: regions ? regions.endpoints(relay.id, named) : named,
+      relays: regions.endpoints(relay.id, named),
       id: relay.id,
       token: access,
       openSocket: (url) => new WebSocket(url),
       timeoutMs: RELAY_TIMEOUT_MS,
-      attempted: (url, outcome) => regions?.dialed(url, outcome),
+      attempted: (url, outcome) => regions.dialed(url, outcome),
       // A region that drains is left by connecting again, which resumes the session.
       drained: (url) => {
-        regions?.drained(url)
+        regions.drained(url)
         joined?.close()
       },
     })
