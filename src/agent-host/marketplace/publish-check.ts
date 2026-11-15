@@ -9,6 +9,7 @@ import path from 'node:path'
 import JSZip from 'jszip'
 import { displayTitle, specRuns } from '@shared/marketplace'
 import {
+  HANDLE,
   LISTING_ABOUT_CHARS,
   LISTING_DESCRIPTION_CHARS,
   PUBLISH_LIMITS,
@@ -19,6 +20,8 @@ import {
   type PublishHarness,
   type PublishKind,
 } from '@shared/market-publish'
+import { parseWorkflow } from '../workflow/format'
+import { officialNamed } from '../workflow/library'
 import { frontmatter } from './frontmatter'
 import { catalogServer } from './registry'
 import { SKILL_NAME } from './skills'
@@ -44,7 +47,7 @@ export interface FolderCheck {
   /** One line, and the whole text when that is longer. */
   description: string | null
   about: string | null
-  /** The version its manifest names; a skill names none. */
+  /** The version its manifest names; a skill and a workflow name none. */
   version: string | null
   /** An MCP server's `server.json`. */
   server: Record<string, unknown> | null
@@ -69,6 +72,8 @@ const CLAUDE_PLUGIN = '.claude-plugin/plugin.json'
 const CODEX_PLUGIN = '.codex-plugin/plugin.json'
 const SKILL_FILE = 'SKILL.md'
 const SERVER_FILE = 'server.json'
+export const WORKFLOW_FILE = 'workflow.yaml'
+const README = 'README.md'
 
 /**
  * A private key: its header and then its body, on the next lines or after an escaped `\n` as in a
@@ -336,6 +341,78 @@ function readSkill(check: FolderCheck, file: CheckedFile): void {
   if (description) Object.assign(check, describe(description))
 }
 
+/** The bytes as UTF-8 text; null when they are not. */
+export function utf8(data: Buffer): string | null {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(data)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * A workflow, read by the library's own parser: any problem it finds, or an official workflow's
+ * name, keeps it from being published. Its README is the listing's text.
+ */
+function readWorkflow(check: FolderCheck, file: CheckedFile): void {
+  const source = utf8(file.data)
+  if (source === null) {
+    check.problems.push({ path: WORKFLOW_FILE, message: 'It is not UTF-8 text.' })
+    return
+  }
+  const read = parseWorkflow(source)
+  if (!read.workflow) {
+    for (const problem of read.problems) {
+      check.problems.push({
+        path: WORKFLOW_FILE,
+        message: problem.at ? `${problem.at}: ${problem.message}` : problem.message,
+      })
+    }
+    return
+  }
+  const { workflow } = read
+  const official = officialNamed(workflow.name)
+  if (official) {
+    check.problems.push({
+      path: WORKFLOW_FILE,
+      message: `An official workflow is named "${official}". Give this one another name.`,
+    })
+  }
+  const slug = toHandle(workflow.name)
+  if (HANDLE.test(slug)) check.slug = slug
+  else {
+    check.problems.push({
+      path: WORKFLOW_FILE,
+      message: `The name "${workflow.name}" has no Latin letters or digits to name the listing by. Name it in English and give other languages under locales.`,
+    })
+  }
+  check.name = workflow.name
+  if (workflow.description.trim()) Object.assign(check, describe(workflow.description))
+  else check.problems.push(missing(WORKFLOW_FILE, 'description'))
+  const readme = check.files.find((item) => item.path === README)
+  const about = readme?.text ? readme.data.toString('utf8').trim() : ''
+  if (about.length > LISTING_ABOUT_CHARS) {
+    check.problems.push({
+      path: README,
+      message: `It is longer than ${LISTING_ABOUT_CHARS} characters, the most a listing's text may be.`,
+    })
+  } else if (about) check.about = about
+  const named = (kind: 'mcp' | 'skills') => [
+    ...new Set(workflow.steps.flatMap((step) => step.tools[kind])),
+  ]
+  check.adds = [
+    { label: 'steps', items: workflow.steps.map((step) => step.name) },
+    {
+      label: 'waits',
+      items: workflow.steps
+        .filter((step) => step.by === 'you' || step.youReview)
+        .map((s) => s.name),
+    },
+    { label: 'servers', items: named('mcp') },
+    { label: 'skills', items: named('skills') },
+  ].filter((group) => group.items.length > 0)
+}
+
 function readPlugin(check: FolderCheck, file: CheckedFile, harness: PublishHarness): void {
   const manifest = json(file, check.problems)
   if (!manifest) return
@@ -509,8 +586,10 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
     return check
   }
   const at = (file: string) => path.join(target, ...file.split('/'))
-  const [claude, codex, skill, server] = await Promise.all(
-    [CLAUDE_PLUGIN, CODEX_PLUGIN, SKILL_FILE, SERVER_FILE].map((file) => exists(at(file))),
+  const [claude, codex, skill, server, workflow] = await Promise.all(
+    [CLAUDE_PLUGIN, CODEX_PLUGIN, SKILL_FILE, SERVER_FILE, WORKFLOW_FILE].map((file) =>
+      exists(at(file)),
+    ),
   )
   if (claude && codex) {
     check.problems.push({
@@ -559,9 +638,18 @@ export async function checkFolder(target: string): Promise<FolderCheck> {
     }
     return finish(check)
   }
+  if (workflow) {
+    check.files = await walk(target, check.problems)
+    check.bytes = check.files.reduce((sum, file) => sum + file.size, 0)
+    check.kind = 'workflow'
+    check.manifest = WORKFLOW_FILE
+    const file = check.files.find((item) => item.path === WORKFLOW_FILE)
+    if (file) readWorkflow(check, file)
+    return finish(check)
+  }
   check.problems.push({
     message:
-      'Kettu cannot tell what this folder is. A skill has a SKILL.md, a plugin a .claude-plugin/plugin.json or .codex-plugin/plugin.json, and an MCP server a server.json.',
+      'Kettu cannot tell what this folder is. A skill has a SKILL.md, a workflow a workflow.yaml, a plugin a .claude-plugin/plugin.json or .codex-plugin/plugin.json, and an MCP server a server.json.',
   })
   return check
 }

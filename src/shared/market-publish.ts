@@ -2,8 +2,8 @@
 // calls the agent host makes through main or the daemon, which alone hold the access token, and
 // the drafts a host keeps of what was not published.
 
-/** What a listing is: a skill, a plugin of one harness, or an MCP server. */
-export type PublishKind = 'skill' | 'plugin' | 'mcp-server'
+/** What a listing is: a skill, a workflow, a plugin of one harness, or an MCP server. */
+export type PublishKind = 'skill' | 'workflow' | 'plugin' | 'mcp-server'
 export type PublishHarness = 'claude-code' | 'codex'
 /** `unlisted`: taken out by its publisher; people who have it keep it and its updates. */
 export type ListingVisibility = 'public' | 'private' | 'unlisted'
@@ -32,7 +32,8 @@ export interface MarketPublisher {
 
 /**
  * One group of what an install adds, by a key the clients translate: `skills`, `commands`,
- * `agents`, `hooks` or `servers`.
+ * `agents`, `hooks` or `servers`; a workflow's are `steps`, `waits` and the `servers` and `skills`
+ * its steps name.
  */
 export interface PublishAdds {
   label: string

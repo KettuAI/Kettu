@@ -1397,8 +1397,14 @@ export function createValidators(platform: Platform): Validators {
       const q = optionalString(o, 'q', MARKET_QUERY_MAX)?.trim()
       if (q !== undefined && /\p{Cc}/u.test(q)) throw invalidParams('q must be on one line')
       const kind = o.kind
-      if (kind !== undefined && kind !== 'skill' && kind !== 'plugin' && kind !== 'mcp-server') {
-        throw invalidParams('kind must be skill, plugin or mcp-server')
+      if (
+        kind !== undefined &&
+        kind !== 'skill' &&
+        kind !== 'workflow' &&
+        kind !== 'plugin' &&
+        kind !== 'mcp-server'
+      ) {
+        throw invalidParams('kind must be skill, workflow, plugin or mcp-server')
       }
       const cursor = optionalString(o, 'cursor', 256)
       if (cursor !== undefined && !DIRECTORY_CURSOR.test(cursor)) {
@@ -1424,6 +1430,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { id: listingId(o), agentId: agentId(o), ...pluginPlace(o, platform) }
     },
+    'market.addCommunityWorkflow': (params) => ({ id: listingId(fields(params)) }),
     'market.reportCommunity': (params) => {
       const o = fields(params)
       const message = string(o, 'message', REPORT_CHARS).trim()

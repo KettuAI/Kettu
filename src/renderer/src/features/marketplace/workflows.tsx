@@ -1,8 +1,15 @@
-// Workflows in the Marketplace's directory: their rows, the workflow tab's three groups, their section on
+// Workflows in the Marketplace's directory: their rows, the workflow tab's four groups, their section on
 // Installed, and adding one from a GitHub file or a .yaml file. They come from the host's workflow
-// library, not the catalogs.
+// library, not the catalogs, but for the Community group's listings not added yet.
 
-import { useId, useState, type CSSProperties, type FormEvent } from 'react'
+import {
+  Fragment,
+  useId,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { File02Icon, GithubIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import type { WorkflowEntry } from '@shared/workflow'
@@ -21,14 +28,24 @@ import {
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { busyKey } from '@renderer/stores/marketplace'
 import { openMarketplace, type MarketplaceTab } from '@renderer/stores/view'
+import { useBusy } from './hooks'
 import { itemKey } from './model'
-import { addWorkflowFile, retryWorkflows, showAdded, useWorkflows } from './workflow-actions'
+import {
+  addCommunityWorkflow,
+  addWorkflowFile,
+  retryWorkflows,
+  showAdded,
+  useWorkflowStanding,
+  useWorkflows,
+} from './workflow-actions'
 import { InstalledCheck, ItemRow, KindTag, QuietNote, SkeletonRows } from './rows'
 import {
   flowLine,
   githubRepo,
   isWorkflowFileUrl,
+  listingOrigin,
   workflowGroup,
   workflowMatches,
   workflowName,
@@ -39,20 +56,25 @@ import {
 import { workflowSubject } from './tile-art'
 import { PlainTile } from './tiles'
 
-/** Who a workflow comes from, after its name: Kettu, a repository's owner, a file, an agent or you. */
+/**
+ * Who a workflow comes from, after its name: Kettu, a publisher of the Kettu Marketplace, a
+ * repository's owner, a file, an agent or you.
+ */
 export function WorkflowByline({ entry }: { entry: WorkflowEntry }) {
   const { t } = useTranslation('marketplace')
   const origin = entry.origin
   const text =
     entry.source === 'official'
       ? t('workflow.by.kettu')
-      : origin?.kind === 'github'
-        ? t('workflow.by.github', { owner: githubRepo(origin.url)?.split('/')[0] ?? 'GitHub' })
-        : entry.source === 'file'
-          ? t('workflow.by.file')
-          : entry.source === 'agent'
-            ? t('workflow.by.agent')
-            : t('workflow.by.you')
+      : origin?.kind === 'community'
+        ? t('workflow.by.community', { handle: origin.handle })
+        : origin?.kind === 'github'
+          ? t('workflow.by.github', { owner: githubRepo(origin.url)?.split('/')[0] ?? 'GitHub' })
+          : entry.source === 'file'
+            ? t('workflow.by.file')
+            : entry.source === 'agent'
+              ? t('workflow.by.agent')
+              : t('workflow.by.you')
   return <span className="k-workflow-by">{text}</span>
 }
 
@@ -87,11 +109,17 @@ export function WorkflowRow({
   showKind?: boolean
   fresh?: boolean
 }) {
-  const { i18n } = useTranslation('marketplace')
+  const { t, i18n } = useTranslation('marketplace')
   const locale = i18n.language
   const name = workflowName(entry, locale)
   const state = workflowState(entry)
+  const { update, takenDown } = useWorkflowStanding(entry)
   const open = () => openMarketplace({ item: itemKey({ kind: 'workflow', id: entry.id }), tab })
+  const standing = update
+    ? t('workflow.newVersion', { version: update })
+    : takenDown
+      ? t('community.takenDownLine')
+      : null
   return (
     <ItemRow
       title={name}
@@ -102,11 +130,13 @@ export function WorkflowRow({
           <WorkflowByline entry={entry} />
         </>
       }
-      line={rowLine(entry, locale)}
+      line={[standing, rowLine(entry, locale)].filter(Boolean).join(' · ') || null}
       fresh={fresh}
       onOpen={open}
       end={
-        state === 'ready' ? (
+        update ? (
+          <WorkflowUpdateButton entry={entry} name={name} tab={tab} size="md" />
+        ) : state === 'ready' ? (
           <InstalledCheck name={name} onOpen={open} />
         ) : (
           <WorkflowStateBadge state={state} />
@@ -116,10 +146,58 @@ export function WorkflowRow({
   )
 }
 
-const GROUPS: readonly WorkflowGroup[] = ['official', 'added', 'yours']
+/** Update: the listing's newer version replaces the file, and waits for approval at once. */
+export function WorkflowUpdateButton({
+  entry,
+  name,
+  tab,
+  size,
+  version,
+}: {
+  entry: WorkflowEntry
+  name: string
+  tab: MarketplaceTab
+  size?: 'md'
+  /** Named on the button, as a listing's page names it. */
+  version?: string
+}) {
+  const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
+  const listingId = listingOrigin(entry)?.listingId ?? ''
+  const busy = useBusy(busyKey('community', listingId))
+  return (
+    <Button
+      size={size}
+      variant={size ? 'secondary' : 'primary'}
+      loading={busy}
+      aria-label={t('row.action', { action: t('workflow.update.button'), name })}
+      onClick={() =>
+        !busy && void addCommunityWorkflow(scope, { id: listingId, name }, { update: true, tab })
+      }
+    >
+      {busy
+        ? t('community.updating')
+        : version
+          ? t('community.update', { version })
+          : t('workflow.update.button')}
+    </Button>
+  )
+}
 
-/** The workflow tab: what a workflow is, then Official, Added from GitHub and Yours. */
-export function WorkflowSections({ query }: { query: string }) {
+const GROUPS: readonly WorkflowGroup[] = ['official', 'community', 'added', 'yours']
+
+/**
+ * The workflow tab: what a workflow is, then Official, Community, Added from GitHub and Yours.
+ * `community` is the Community group, drawn by the directory since it pages through the Kettu
+ * Marketplace; null when it has nothing to show for the query.
+ */
+export function WorkflowSections({
+  query,
+  community,
+}: {
+  query: string
+  community: ReactNode | null
+}) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
   const { entries, loaded, error } = useWorkflows()
@@ -131,7 +209,7 @@ export function WorkflowSections({ query }: { query: string }) {
     return (
       <>
         <p className="k-workflow-intro">{t('workflow.intro')}</p>
-        {GROUPS.map((group) => (
+        {GROUPS.filter((group) => group !== 'community').map((group) => (
           <section key={group} className="ui-as-int-section" aria-busy>
             <h2 className="ui-as-int-section__title">{t(`workflow.groups.${group}`)}</h2>
             <SkeletonRows rows={2} />
@@ -148,7 +226,7 @@ export function WorkflowSections({ query }: { query: string }) {
       </QuietNote>
     </div>
   )
-  if (searching && shown.length === 0) {
+  if (searching && shown.length === 0 && !community) {
     return (
       <>
         {note}
@@ -168,6 +246,7 @@ export function WorkflowSections({ query }: { query: string }) {
       {!searching && <p className="k-workflow-intro">{t('workflow.intro')}</p>}
       {note}
       {GROUPS.map((group, index) => {
+        if (group === 'community') return <Fragment key={group}>{community}</Fragment>
         const rows = shown.filter((entry) => workflowGroup(entry) === group)
         if (searching && rows.length === 0) return null
         return (

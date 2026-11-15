@@ -1,5 +1,6 @@
 // A workflow's page: what it is for, its flow, each step with who does it, what it lets agents do,
-// and its file; the approval for one the user has not approved, or that changed since.
+// and its file; the approval for one the user has not approved, or that changed since, and Update
+// for one from the Kettu Marketplace whose listing has a newer version.
 
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import {
@@ -7,6 +8,7 @@ import {
   ArrowRight01Icon,
   CommandLineIcon,
   Delete02Icon,
+  Flag02Icon,
   MoreHorizontalIcon,
   PlugSocketIcon,
   RefreshIcon,
@@ -44,6 +46,7 @@ import { openSession, openSettings, type MarketplaceTab } from '@renderer/stores
 import { ConfirmDialog } from './dialogs'
 import { homeShort } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton } from './parts'
+import { ReportDialog } from './report-dialog'
 import { KindTag, OfficialBadge } from './rows'
 import {
   awaitsApproval,
@@ -52,6 +55,8 @@ import {
   flowLine,
   githubPage,
   githubRepo,
+  listingOrigin,
+  missingTools,
   outcomeTarget,
   pinNames,
   pinOf,
@@ -64,8 +69,8 @@ import {
   workflowTools,
   waitsForYou,
 } from './workflow-model'
-import { retryWorkflows, useWorkflows } from './workflow-actions'
-import { WorkflowByline, WorkflowRow, WorkflowStateBadge } from './workflows'
+import { retryWorkflows, useWorkflowStanding, useWorkflows } from './workflow-actions'
+import { WorkflowByline, WorkflowRow, WorkflowStateBadge, WorkflowUpdateButton } from './workflows'
 import { workflowSubject } from './tile-art'
 import { ItemTile } from './tiles'
 
@@ -115,6 +120,7 @@ export function WorkflowListing({
 
   const workflow = entry.workflow
   const state = workflowState(entry)
+  const listed = listingOrigin(entry)
   const name = workflowName(entry, locale)
   const description = workflowDescription(entry, locale)
   const related = entries
@@ -138,6 +144,11 @@ export function WorkflowListing({
                   {t('listing.official')}
                 </span>
               </>
+            ) : listed ? (
+              <>
+                {listed.handle}
+                <span className="k-mkt-head__trust">{t('community.trust')}</span>
+              </>
             ) : (
               <>
                 {t('workflow.yours')}
@@ -150,6 +161,7 @@ export function WorkflowListing({
           {workflow && <span className="k-mkt-head__line">{flowLine(workflow, locale)}</span>}
         </span>
         <span className="k-mkt-head__act">
+          <HeadUpdate entry={entry} name={name} tab={tab} />
           {state === 'ready' ? (
             <span className="k-mkt-head__on">
               <Icon icon={Tick02Icon} size={14} />
@@ -192,6 +204,21 @@ export function WorkflowListing({
       )}
     </ListingFrame>
   )
+}
+
+/** Update, while the listing a workflow came from has a newer version than the one added. */
+function HeadUpdate({
+  entry,
+  name,
+  tab,
+}: {
+  entry: WorkflowEntry
+  name: string
+  tab: MarketplaceTab
+}) {
+  const { update } = useWorkflowStanding(entry)
+  if (!update) return null
+  return <WorkflowUpdateButton entry={entry} name={name} tab={tab} version={update} />
 }
 
 /** Check for update on a GitHub workflow, and Delete on any of the user's. */
@@ -408,6 +435,8 @@ function Approval({
         )}{' '}
         {t('workflow.approval.check')}
       </>
+    ) : origin?.kind === 'community' ? (
+      `${t('workflow.approval.communityText', { publisher: origin.handle, version: origin.version })} ${t('workflow.approval.check')}`
     ) : origin?.kind === 'github' ? (
       `${t('workflow.approval.githubText', { repo: githubRepo(origin.url) ?? 'GitHub' })} ${t('workflow.approval.check')}`
     ) : origin?.kind === 'file' ? (
@@ -416,11 +445,20 @@ function Approval({
       `${t('workflow.approval.userText')} ${t('workflow.approval.check')}`
     )
 
+  const missing = missingTools(entry)
   return (
     <div className="k-workflow-approve">
       <ApprovalCard
         title={title}
-        description={description}
+        description={
+          missing.length > 0 ? (
+            <>
+              {description} {t('workflow.approval.missingTools', { tools: missing.join(', ') })}
+            </>
+          ) : (
+            description
+          )
+        }
         icon={<Icon icon={UserCheck01Icon} size={16} />}
         status="pending"
         allowAlways={false}
@@ -512,13 +550,15 @@ function Facts({ entry }: { entry: WorkflowEntry }) {
   const from =
     entry.source === 'official'
       ? t('workflow.from.official')
-      : origin?.kind === 'github'
-        ? (githubRepo(origin.url) ?? 'GitHub')
-        : origin?.kind === 'file'
-          ? origin.name
-          : origin?.kind === 'agent'
-            ? t('workflow.from.agent', { agent: agentName(origin.agentId) })
-            : t('workflow.from.you')
+      : origin?.kind === 'community'
+        ? t('community.source')
+        : origin?.kind === 'github'
+          ? (githubRepo(origin.url) ?? 'GitHub')
+          : origin?.kind === 'file'
+            ? origin.name
+            : origin?.kind === 'agent'
+              ? t('workflow.from.agent', { agent: agentName(origin.agentId) })
+              : t('workflow.from.you')
   const backs = workflow ? workflow.steps.flatMap((step) => backArrowsOf(workflow, step)) : []
   return (
     <div className="k-mkt-facts k-workflow-facts">
@@ -536,6 +576,12 @@ function Facts({ entry }: { entry: WorkflowEntry }) {
         <small>{t('listing.facts.source')}</small>
         <b title={from}>{from}</b>
       </span>
+      {origin?.kind === 'community' && (
+        <span>
+          <small>{t('listing.facts.version')}</small>
+          <b className="k-mkt-mono">{origin.version}</b>
+        </span>
+      )}
       {entry.addedAt !== null && (
         <span>
           <small>{t('workflow.facts.added')}</small>
@@ -998,7 +1044,8 @@ function FileSection({ entry, open: openAtFirst }: { entry: WorkflowEntry; open:
 }
 
 function Side({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow | null }) {
-  const { t } = useTranslation('marketplace')
+  const { t, i18n } = useTranslation('marketplace')
+  const [reporting, setReporting] = useState(false)
   const origin = entry.origin
   const tools = workflow ? workflowTools(workflow) : null
   const session = useSessionsStore((s) =>
@@ -1015,6 +1062,8 @@ function Side({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow | 
               {t('workflow.by.kettu')}
               <OfficialBadge />
             </>
+          ) : origin?.kind === 'community' ? (
+            origin.handle
           ) : origin?.kind === 'github' ? (
             (githubRepo(origin.url)?.split('/')[0] ?? 'GitHub')
           ) : (
@@ -1023,6 +1072,16 @@ function Side({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow | 
         </dd>
         <dt>{t('workflow.side.kind')}</dt>
         <dd>{t('kind.workflow')}</dd>
+        {origin?.kind === 'community' && (
+          <>
+            <dt>{t('community.side.name')}</dt>
+            <dd className="k-mkt-mono" data-selectable="">
+              @{origin.handle}/{origin.slug}
+            </dd>
+            <dt>{t('listing.side.listedIn')}</dt>
+            <dd>{t('community.source')}</dd>
+          </>
+        )}
         {origin?.kind === 'github' && (
           <>
             <dt>{t('listing.side.repository')}</dt>
@@ -1069,6 +1128,22 @@ function Side({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow | 
           </>
         )}
       </dl>
+      {origin?.kind === 'community' && (
+        <>
+          <button type="button" className="k-mkt-report" onClick={() => setReporting(true)}>
+            <Icon icon={Flag02Icon} size={13} />
+            {t('community.report')}
+          </button>
+          <ReportDialog
+            listing={{
+              id: origin.listingId,
+              name: workflow ? workflowName(entry, i18n.language) : entry.name,
+            }}
+            open={reporting}
+            onOpenChange={setReporting}
+          />
+        </>
+      )}
     </aside>
   )
 }

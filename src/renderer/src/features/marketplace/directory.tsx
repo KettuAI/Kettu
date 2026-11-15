@@ -127,7 +127,7 @@ interface Section {
   entries: Entry[]
   /** Skeleton rows after the entries, for a source still on its way. */
   pending: number
-  /** A line in place of the rows, such as what signing in would show. */
+  /** A line in place of the rows, such as what signing in would show; under the rows it has. */
   note?: ReactNode
   /** The service's further pages, for a section read a page at a time. */
   more?: SectionMore
@@ -203,7 +203,15 @@ interface Sources {
 
 /** The Community kind a tab lists; null for all of them. */
 const tabKind = (tab: MarketplaceTab): PublishKind | null =>
-  tab === 'plugins' ? 'plugin' : tab === 'skills' ? 'skill' : tab === 'mcp' ? 'mcp-server' : null
+  tab === 'plugins'
+    ? 'plugin'
+    : tab === 'skills'
+      ? 'skill'
+      : tab === 'mcp'
+        ? 'mcp-server'
+        : tab === 'workflow'
+          ? 'workflow'
+          : null
 
 /** The part of the Kettu Marketplace's directory a tab shows for a query, or without one. */
 function communityScope(tab: MarketplaceTab, query: string): CommunityScope {
@@ -295,6 +303,66 @@ function communitySections(
       more: moreOf(src, scope, pages),
     },
   ]
+}
+
+/**
+ * The workflow tab's Community group: the workflows this host added from it and the account's own
+ * Only me listings first, then the rest by installs, a page at a time; null when a search finds
+ * nothing in it.
+ */
+function workflowCommunity(
+  src: Sources,
+  t: TFunction<'marketplace'>,
+  query: string,
+): Section | null {
+  const title = t('sections.community')
+  const locale = currentLocale()
+  const added = src.workflows.filter(
+    (entry) => entry.source === 'community' && workflowMatches(entry, query, locale),
+  )
+  const listings = new Set(
+    added.flatMap((entry) => (entry.origin?.kind === 'community' ? [entry.origin.listingId] : [])),
+  )
+  const scope = communityScope('workflow', query)
+  const pages = src.communityPages[communityScopeKey(scope)]
+  const loading = !pages || (pages.at === 0 && pages.loading)
+  const signedOut = !loading && !pages.signedIn
+  const items = loading || signedOut ? [] : [...pages.yours, ...pages.items]
+  const seen = new Set<string>()
+  const rest = items.filter((item) => {
+    if (listings.has(item.id) || seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
+  const section: Section = {
+    id: 'community',
+    title,
+    entries: [...added.map(workflowEntry), ...rest.map(communityEntry)],
+    pending: loading ? 2 : 0,
+    ...(signedOut ? { note: <CommunitySignedOut /> } : {}),
+    ...(pages && !loading && !signedOut ? { more: moreOf(src, scope, pages) } : {}),
+  }
+  if (section.entries.length === 0 && section.pending === 0 && !section.note) {
+    if (query) return null
+    section.note = <p className="k-mkt-section-note">{t('workflow.communityEmpty')}</p>
+  }
+  return section
+}
+
+/** The workflow tab, its Community group paged like the other tabs'. */
+function WorkflowTab({ query }: { query: string }) {
+  const { t } = useTranslation('marketplace')
+  const src = useSources()
+  const section = useMemo(() => workflowCommunity(src, t, query), [src, t, query])
+  return (
+    <>
+      <Notes tab="workflow" registry={null} query={query} />
+      <WorkflowSections
+        query={query}
+        community={section && <SectionView tab="workflow" section={section} index={1} />}
+      />
+    </>
+  )
 }
 
 function moreOf(src: Sources, scope: CommunityScope, pages: CommunityPages): SectionMore {
@@ -566,7 +634,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   }, [registry, useMarketplaceStore])
 
   // The Kettu Marketplace is read by the service a page at a time, each kind and search on its own.
-  const lists = tab !== 'installed' && tab !== 'workflow' && tab !== 'published'
+  const lists = tab !== 'installed' && tab !== 'published'
   const communityKey = lists ? communityScopeKey(communityScope(tab, filter)) : null
   useEffect(() => {
     const store = useMarketplaceStore.getState()
@@ -700,7 +768,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           </div>
         ) : tab === 'workflow' ? (
           <div key={`workflow|${filter}`}>
-            <WorkflowSections query={filter} />
+            <WorkflowTab query={filter} />
           </div>
         ) : (
           <div key={`${tab}|${filter}`}>
@@ -780,7 +848,7 @@ function SectionView({
   const { useMarketplaceStore } = useHostScope()
   const extra = useMarketplaceStore((s) => s.more[key] ?? 0)
   if (section.title === null) return <SkeletonSection rows={section.pending} />
-  if (section.note) {
+  if (section.note && section.entries.length === 0) {
     return (
       <section className="ui-as-int-section ui-as-rise" style={{ '--i': index } as CSSProperties}>
         <h2 className="ui-as-int-section__title">{section.title}</h2>
@@ -812,6 +880,7 @@ function SectionView({
             <SkeletonRow key={`pending-${i}`} />
           ))}
       </div>
+      {section.note}
       {more?.error && (
         <QuietNote action={<Retry onRetry={async () => more.load()} />}>
           {t('notes.communityMore', { error: more.error })}

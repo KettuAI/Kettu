@@ -19,6 +19,7 @@ import {
   writeFolder,
   type LocalMarketplace,
 } from './community'
+import { WorkflowLibrary, workflowsFile } from '../workflow/library'
 import { MarketCallError } from './publish-tools'
 import { MarketSkillsService, skillsCatalogFile } from './skills'
 
@@ -103,6 +104,7 @@ function service(
     account?: MarketAccount | null
     installs?: { agentId: AgentId; local: LocalMarketplace; name: string }[]
     installed?: boolean
+    workflows?: WorkflowLibrary
   } = {},
 ) {
   return new MarketCommunityService({
@@ -164,7 +166,23 @@ function service(
       return Promise.resolve(plugin)
     },
     pluginInstalled: () => Promise.resolve(extra.installed ?? false),
+    installWorkflow: (text, origin) => {
+      if (!extra.workflows) throw new Error('no workflow library')
+      return extra.workflows.installListing(text, origin)
+    },
   })
+}
+
+/** The host's workflow library, kept in its own files under the host's data. */
+async function workflowLibrary(): Promise<WorkflowLibrary> {
+  const lib = new WorkflowLibrary({
+    dir: path.join(root, 'workflows'),
+    file: workflowsFile(root, log),
+    knownTools: () => ({ mcp: new Set(), skills: new Set() }),
+    log,
+  })
+  await lib.load()
+  return lib
 }
 
 function skills(community: MarketCommunityService) {
@@ -478,6 +496,146 @@ describe('MarketCommunityService', () => {
         plugins: { author: { name: string } }[]
       }
       expect(market.plugins.map((p) => p.author.name)).toEqual(['amigoer'])
+    })
+  })
+  describe('workflows', () => {
+    const WORKFLOW = `format: 1
+name: Release notes
+description: Draft the release notes, then let you review them.
+steps:
+  - id: draft
+    name: Draft
+    prompt: Draft the notes.
+    you_review: true
+    outcomes:
+      - name: Done
+        end: done
+`
+    const workflowListing = (over: Partial<MarketListing> = {}) =>
+      listing({ kind: 'workflow', slug: 'release-notes', name: 'Release notes', ...over })
+    const published = (over: Partial<Fake> = {}) =>
+      fake({
+        listings: { abcdefgh23: workflowListing() },
+        files: { 'workflow.yaml': WORKFLOW, 'README.md': '# Release notes\n' },
+        ...over,
+      })
+
+    it('keeps an installed listing in the library unapproved, with its listing and version', async () => {
+      const f = published()
+      const lib = await workflowLibrary()
+      const entry = await service(f, { workflows: lib }).installWorkflow('abcdefgh23')
+      expect(entry).toMatchObject({
+        id: 'release-notes',
+        source: 'community',
+        approval: 'pending',
+        origin: {
+          kind: 'community',
+          listingId: 'abcdefgh23',
+          version: '1.0.0',
+          handle: 'amigoer',
+          slug: 'release-notes',
+        },
+      })
+      await lib.flush()
+      const stored = JSON.parse(
+        await readFile(path.join(root, 'state', 'workflows.json'), 'utf8'),
+      ) as { entries: Record<string, unknown> }
+      expect(stored.entries['release-notes']).toEqual({
+        source: 'community',
+        origin: {
+          kind: 'community',
+          listingId: 'abcdefgh23',
+          version: '1.0.0',
+          handle: 'amigoer',
+          slug: 'release-notes',
+        },
+        addedAt: expect.any(Number) as number,
+        approved: null,
+      })
+      expect(await readFile(path.join(root, 'workflows', 'release-notes.yaml'), 'utf8')).toBe(
+        WORKFLOW,
+      )
+      const again = await workflowLibrary()
+      expect(again.listingIds()).toEqual(['abcdefgh23'])
+      expect((await again.read('release-notes')).entry).toMatchObject({
+        source: 'community',
+        approval: 'pending',
+      })
+      expect(f.calls).toContainEqual({
+        kind: 'install',
+        id: 'abcdefgh23',
+        version: '1.0.0',
+        reason: 'install',
+      })
+    })
+
+    it('replaces the installed version on update, which waits for approval again', async () => {
+      const f = published()
+      const lib = await workflowLibrary()
+      const community = service(f, { workflows: lib })
+      const first = await community.installWorkflow('abcdefgh23')
+      await lib.approve(first.id, first.hash)
+      const next = WORKFLOW.replace('Draft the notes.', 'Draft the notes from the merged PRs.')
+      f.listings.abcdefgh23 = workflowListing({ version: '1.0.1', versions: ['1.0.0', '1.0.1'] })
+      f.files['workflow.yaml'] = next
+      const updated = await community.installWorkflow('abcdefgh23')
+      expect(updated).toMatchObject({
+        id: first.id,
+        approval: 'changed',
+        origin: { kind: 'community', version: '1.0.1' },
+      })
+      await expect(lib.resolve(first.id)).rejects.toMatchObject({ code: 'restricted' })
+      expect((await lib.list()).filter((entry) => entry.source === 'community')).toHaveLength(1)
+      expect(f.calls).toContainEqual({
+        kind: 'install',
+        id: 'abcdefgh23',
+        version: '1.0.1',
+        reason: 'update',
+      })
+    })
+
+    it('refuses a file whose SHA-256 does not match, and writes nothing', async () => {
+      const f = published({ sent: { 'README.md': sha('something else') } })
+      const lib = await workflowLibrary()
+      await expect(service(f, { workflows: lib }).installWorkflow('abcdefgh23')).rejects.toThrow(
+        /README\.md/,
+      )
+      expect(await written()).toEqual([])
+      expect(f.calls.some((call) => call.kind === 'install')).toBe(false)
+    })
+
+    it('refuses a workflow.yaml the workflow format refuses, saying why', async () => {
+      const f = published({
+        files: { 'workflow.yaml': WORKFLOW.replace('end: done', 'to: nowhere') },
+      })
+      const lib = await workflowLibrary()
+      await expect(service(f, { workflows: lib }).installWorkflow('abcdefgh23')).rejects.toThrow(
+        /nowhere/,
+      )
+      expect(await written()).toEqual([])
+    })
+
+    it('refuses a workflow named like an official one, and a listing without workflow.yaml', async () => {
+      const lib = await workflowLibrary()
+      const clash = published({
+        files: { 'workflow.yaml': WORKFLOW.replace('Release notes', 'Fix a bug') },
+      })
+      await expect(
+        service(clash, { workflows: lib }).installWorkflow('abcdefgh23'),
+      ).rejects.toMatchObject({ code: 'conflict' })
+      const none = published({ files: { 'README.md': '# Release notes\n' } })
+      await expect(service(none, { workflows: lib }).installWorkflow('abcdefgh23')).rejects.toThrow(
+        /workflow\.yaml/,
+      )
+      expect(await written()).toEqual([])
+    })
+
+    it('installs nothing of a listing of another kind', async () => {
+      const f = fake()
+      const lib = await workflowLibrary()
+      await expect(service(f, { workflows: lib }).installWorkflow('abcdefgh23')).rejects.toThrow()
+      expect(f.calls.some((call) => call.kind === 'file')).toBe(false)
+      expect(await written()).toEqual([])
     })
   })
 })

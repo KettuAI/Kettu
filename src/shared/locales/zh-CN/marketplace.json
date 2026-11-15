@@ -116,7 +116,9 @@
     "updated": "{{name}} 已更新到 {{version}}",
     "updateFailed": "{{name}} 没能更新：{{error}}",
     "reported": "报告已发给 Kettu 的 Marketplace",
-    "listingFailed": "没能读到这一项：{{error}}"
+    "listingFailed": "没能读到这一项：{{error}}",
+    "workflowAdded": "已添加 {{name}}。批准之后就能用它开始需求。",
+    "workflowUpdated": "{{name}} 已更新到 {{version}}。批准新版本之后才能用。"
   },
   "listing": {
     "back": "Marketplace",
@@ -435,7 +437,8 @@
       "github": "{{owner}} · 社区",
       "file": "来自文件",
       "agent": "由 Agent 创建",
-      "you": "由你编写"
+      "you": "由你编写",
+      "community": "{{handle}} · 社区"
     },
     "yours": "你的",
     "state": {
@@ -454,7 +457,8 @@
       "official": "官方",
       "added": "从 GitHub 添加",
       "addedOrFile": "从 GitHub 或文件添加",
-      "yours": "你的"
+      "yours": "你的",
+      "community": "社区"
     },
     "yoursEmpty": "还没有。在任意会话里让 Agent 帮你写一个，它会在这里等你批准。",
     "readFailed": "无法读取工作流：{{error}}",
@@ -464,7 +468,8 @@
     "related": {
       "official": "更多官方工作流",
       "added": "你添加的其他工作流",
-      "yours": "你的其他工作流"
+      "yours": "你的其他工作流",
+      "community": "更多社区的工作流"
     },
     "add": {
       "rowTitle": "添加别人分享的工作流",
@@ -487,7 +492,8 @@
       "checking": "正在检查…",
       "changed": "{{name}} 有改动；批准新版本后才能使用",
       "same": "{{name}} 已是最新",
-      "failed": "无法检查 {{name}} 的更新：{{error}}"
+      "failed": "无法检查 {{name}} 的更新：{{error}}",
+      "button": "更新"
     },
     "remove": {
       "menu": "删除…",
@@ -513,7 +519,9 @@
       "fileNote": "你要批准的版本",
       "notRead": "文件还在读取中。",
       "changedWhileShown": "你查看时文件被改动了。这是新版本，请再看一遍再批准。",
-      "failed": "无法批准：{{error}}"
+      "failed": "无法批准：{{error}}",
+      "communityText": "从 Kettu 的 Marketplace 添加，发布者 {{publisher}}，版本 {{version}}。",
+      "missingTools": "它点名的这些 MCP 服务器或技能还没装进这台电脑的 Kettu：{{tools}}。装好之后它才能开始需求。"
     },
     "file": {
       "title": "文件",
@@ -596,7 +604,9 @@
       "skills": "技能",
       "madeIn": "创建它的会话",
       "sessionGone": "已不在的会话"
-    }
+    },
+    "newVersion": "有新版本 {{version}}",
+    "communityEmpty": "这里还没有。大家发布到 Kettu 的 Marketplace 的工作流会出现在这里。"
   },
   "community": {
     "skillNote": "Kettu 从 Kettu 的 Marketplace 下载它、逐个核对文件，存在这台电脑上，开会话时交给这些 Agent。",
@@ -631,7 +641,8 @@
     "kinds": {
       "mcp": "MCP 服务器",
       "plugin": "插件",
-      "skill": "技能"
+      "skill": "技能",
+      "workflow": "工作流"
     },
     "side": {
       "trust": "信任级别",
@@ -654,7 +665,8 @@
     "update": "更新到 {{version}}",
     "updating": "正在更新",
     "updateLine": "有 {{version}}",
-    "takenDownLine": "已下架"
+    "takenDownLine": "已下架",
+    "workflowTools": "你批准之后，并且它点名的每个 MCP 服务器和技能都已装进这台电脑的 Kettu，它才能开始需求。"
   },
   "published": {
     "publish": "发布",

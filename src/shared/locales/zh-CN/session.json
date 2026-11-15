@@ -1054,7 +1054,8 @@
     "kind": {
       "skill": "Skill",
       "plugin": "插件",
-      "mcp-server": "MCP 服务器"
+      "mcp-server": "MCP 服务器",
+      "workflow": "工作流"
     },
     "visibility": {
       "public": "所有人",
@@ -1070,6 +1071,7 @@
       "codex": "Codex"
     },
     "everyAgent": "所有 Agent",
+    "stepAgents": "Claude Code 和 Codex",
     "visibleTo": "谁能看到",
     "asBefore": "和之前一样",
     "adds": "会加",
@@ -1080,6 +1082,13 @@
       "hooks": "Hook",
       "servers": "MCP 服务器"
     },
+    "workflowGroup": {
+      "steps": "步骤",
+      "waits": "等你的步骤",
+      "servers": "点名的 MCP 服务器",
+      "skills": "点名的 Skill"
+    },
+    "stepsBy": "步骤由谁做",
     "worksWith": "适用于",
     "runs": "会运行",
     "changes": "改动",

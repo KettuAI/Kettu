@@ -116,7 +116,9 @@
     "updated": "{{name}} updated to {{version}}",
     "updateFailed": "Couldn’t update {{name}}: {{error}}",
     "reported": "Report sent to the Kettu Marketplace",
-    "listingFailed": "Couldn’t read the listing: {{error}}"
+    "listingFailed": "Couldn’t read the listing: {{error}}",
+    "workflowAdded": "Added {{name}}. Approve it to start tasks with it.",
+    "workflowUpdated": "{{name}} updated to {{version}}. Approve the new version to use it."
   },
   "listing": {
     "back": "Marketplace",
@@ -435,7 +437,8 @@
       "github": "{{owner}} · Community",
       "file": "From a file",
       "agent": "Made by an agent",
-      "you": "Written by you"
+      "you": "Written by you",
+      "community": "{{handle}} · Community"
     },
     "yours": "Yours",
     "state": {
@@ -454,7 +457,8 @@
       "official": "Official",
       "added": "Added from GitHub",
       "addedOrFile": "Added from GitHub or a file",
-      "yours": "Yours"
+      "yours": "Yours",
+      "community": "Community"
     },
     "yoursEmpty": "None yet. Ask an agent in any session to write one for you; it waits here for your approval.",
     "readFailed": "Couldn’t read the workflows: {{error}}",
@@ -464,7 +468,8 @@
     "related": {
       "official": "More official workflows",
       "added": "More workflows you added",
-      "yours": "More of yours"
+      "yours": "More of yours",
+      "community": "More from the community"
     },
     "add": {
       "rowTitle": "Add a workflow someone shared",
@@ -487,7 +492,8 @@
       "checking": "Checking…",
       "changed": "{{name}} changed; approve the new version to use it",
       "same": "{{name}} is up to date",
-      "failed": "Couldn’t check {{name}} for an update: {{error}}"
+      "failed": "Couldn’t check {{name}} for an update: {{error}}",
+      "button": "Update"
     },
     "remove": {
       "menu": "Delete…",
@@ -513,7 +519,9 @@
       "fileNote": "The version you approve",
       "notRead": "The file is still being read.",
       "changedWhileShown": "The file changed while you were looking at it. This is the new version; look at it again before you approve.",
-      "failed": "Couldn’t approve it: {{error}}"
+      "failed": "Couldn’t approve it: {{error}}",
+      "communityText": "Added from {{publisher}} on the Kettu Marketplace, version {{version}}.",
+      "missingTools": "It names MCP servers or Skills that aren’t installed in Kettu on this computer: {{tools}}. Install them before it can start a task."
     },
     "file": {
       "title": "File",
@@ -596,7 +604,9 @@
       "skills": "Skills",
       "madeIn": "Made in",
       "sessionGone": "A session that is gone"
-    }
+    },
+    "newVersion": "New version {{version}}",
+    "communityEmpty": "Nothing here yet. Workflows people publish to the Kettu Marketplace show up here."
   },
   "community": {
     "skillNote": "Kettu downloads it from the Kettu Marketplace, checks every file, keeps it on this computer and hands it to these agents when a session starts.",
@@ -631,7 +641,8 @@
     "kinds": {
       "mcp": "MCP server",
       "plugin": "Plugin",
-      "skill": "Skill"
+      "skill": "Skill",
+      "workflow": "Workflow"
     },
     "side": {
       "trust": "Trust level",
@@ -654,7 +665,8 @@
     "update": "Update to {{version}}",
     "updating": "Updating",
     "updateLine": "{{version}} available",
-    "takenDownLine": "Taken down"
+    "takenDownLine": "Taken down",
+    "workflowTools": "It can start a task once you approve it and every MCP server and Skill it names is installed in Kettu on this computer."
   },
   "published": {
     "publish": "Publish",

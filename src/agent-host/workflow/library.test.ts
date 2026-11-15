@@ -4,7 +4,13 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { usableWorkflow } from '@shared/workflow'
 import { HostError } from '../errors'
-import { emptyWorkflowsFile, githubRawUrl, WorkflowLibrary, type WorkflowsFile } from './library'
+import {
+  emptyWorkflowsFile,
+  githubRawUrl,
+  parseWorkflowsFile,
+  WorkflowLibrary,
+  type WorkflowsFile,
+} from './library'
 
 const dirs: string[] = []
 
@@ -92,6 +98,28 @@ describe('the workflow library', () => {
     expect(saved().autoPick).toEqual({ codex: true })
     lib.setSettings({ autoPick: { codex: null } })
     expect(lib.autoPick('codex', true).allowed).toBe(false)
+  })
+
+  it('keeps a listing’s record only with its listing and version, and only as the Marketplace’s', () => {
+    const origin = {
+      kind: 'community',
+      listingId: 'abcdefgh23',
+      version: '1.0.1',
+      handle: 'amigoer',
+      slug: 'release-notes',
+    }
+    const record = { source: 'community', origin, addedAt: 1, approved: null }
+    const file = parseWorkflowsFile({
+      entries: {
+        'release-notes': record,
+        'no-version': { ...record, origin: { ...origin, version: 'latest' } },
+        'bad-listing': { ...record, origin: { ...origin, listingId: '../x' } },
+        'as-github': { ...record, source: 'github' },
+        'no-listing': { ...record, origin: null },
+      },
+    })
+    expect(file).toMatchObject({ entries: { 'release-notes': record } })
+    expect(Object.keys((file as WorkflowsFile).entries)).toEqual(['release-notes'])
   })
 
   it('takes only GitHub file addresses', () => {

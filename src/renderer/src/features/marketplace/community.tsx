@@ -1,8 +1,9 @@
 // The Kettu Marketplace in the directory: what people published, at the Community trust level,
 // and the account's own Only me items. Their rows, install forms and listing, which install and
-// keep each item like the other sources' and offer the listing's newer version as an update.
+// keep each item like the other sources' and offer the listing's newer version as an update; a
+// workflow added from it has the library's page instead.
 
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AiBrain01Icon,
   Alert02Icon,
@@ -10,10 +11,12 @@ import {
   CodeIcon,
   CommandLineIcon,
   Flag02Icon,
+  Flowchart01Icon,
   PlugSocketIcon,
   RefreshIcon,
   SparklesIcon,
   Tick02Icon,
+  UserCheck01Icon,
   ViewIcon,
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
@@ -32,22 +35,12 @@ import type { AgentId } from '@shared/thread'
 import { Icon, Popover } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
-import { Dialog, DialogClose } from '@renderer/components/ui/dialog'
 import { Skeleton } from '@renderer/components/ui/skeleton'
-import { Textarea } from '@renderer/components/ui/textarea'
 import { toast } from '@renderer/components/ui/toast'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { backTo } from '@renderer/app/history'
-import { Segmented, SetButton, SettingSelect } from '@renderer/features/settings/controls'
-import {
-  SettingsDialogBody,
-  SettingsDialogContent,
-  SettingsDialogFooter,
-  SettingsDialogHeader,
-  SettingsField,
-} from '@renderer/features/settings/settings-dialog'
+import { Segmented, SettingSelect } from '@renderer/features/settings/controls'
 import { basename, count, mediumAgo } from '@renderer/lib/format'
-import { errorMessage } from '@renderer/lib/host'
 import { i18n } from '@renderer/lib/i18n'
 import { isWeb } from '@renderer/lib/platform'
 import { signIn, useAccountStore } from '@renderer/stores/account'
@@ -59,7 +52,6 @@ import {
   installCommunityPlugin,
   installServer,
   installSkill,
-  reportCommunity,
   updateCommunityPlugin,
   updateCommunityServer,
   updateCommunitySkill,
@@ -83,23 +75,26 @@ import { asksFirst, itemKey, oauthFlow, updateFor } from './model'
 import { ListingFrame, ListingSkeleton } from './parts'
 import { usePublishedStore } from './published-hooks'
 import { publishedItem } from './published-keys'
+import { ReportDialog } from './report-dialog'
 import { InstallRow } from './plugins'
 import { AddControl, ItemRow, KindTag, QuietNote, type ItemKind } from './rows'
 import { KeptSkillControls } from './skills'
 import { communitySubject } from './tile-art'
 import { ItemTile } from './tiles'
+import { addCommunityWorkflow, useListingWorkflow } from './workflow-actions'
 
 // Bound to the namespace only: each call reads the language shown at the time.
 const tm = i18n.getFixedT(null, 'marketplace')
 
-// The most a report says, as the service takes it.
-const REPORT_CHARS = 2000
-
 const KIND = {
   skill: 'skill',
+  workflow: 'workflow',
   plugin: 'plugin',
   'mcp-server': 'mcp',
 } as const satisfies Record<PublishKind, ItemKind>
+
+// The agents that do a workflow's steps.
+const STEP_AGENTS = ['claude-code', 'codex'] as const satisfies readonly AgentId[]
 
 /** The kind, then who published it. */
 function CommunityTag({ item, showKind }: { item: CommunityItem; showKind: boolean }) {
@@ -132,7 +127,7 @@ export function CommunityRow({
       line={[installsLabel(item.installs), item.description].filter(Boolean).join(' · ')}
       fresh={fresh}
       onOpen={open}
-      end={<CommunityAction item={item} onOpen={open} />}
+      end={<CommunityAction item={item} tab={tab} onOpen={open} />}
     />
   )
 }
@@ -150,9 +145,21 @@ function useCommunityPlugin(listingId: string, harness: CommunityItem['harness']
   return { record, installs: record ? installs : [] }
 }
 
-/** A row's action: Add for a skill, Install for a plugin or a server, the check once installed. */
-function CommunityAction({ item, onOpen }: { item: CommunityItem; onOpen: () => void }) {
+/**
+ * A row's action: Add for a skill or a workflow, Install for a plugin or a server, the check once
+ * installed.
+ */
+function CommunityAction({
+  item,
+  tab,
+  onOpen,
+}: {
+  item: CommunityItem
+  tab: MarketplaceTab
+  onOpen: () => void
+}) {
   if (item.kind === 'skill') return <SkillAction item={item} onOpen={onOpen} />
+  if (item.kind === 'workflow') return <WorkflowAction item={item} tab={tab} onOpen={onOpen} />
   if (item.kind === 'plugin') return <PluginAction item={item} onOpen={onOpen} />
   return <ServerAction item={item} onOpen={onOpen} />
 }
@@ -201,6 +208,31 @@ function SkillForm({
         {t('install.submit')}
       </Button>
     </form>
+  )
+}
+
+/** Add, with no agent to choose: the workflow goes into the library, where its approval waits. */
+function WorkflowAction({
+  item,
+  tab,
+  onOpen,
+}: {
+  item: CommunityItem
+  tab: MarketplaceTab
+  onOpen: () => void
+}) {
+  const { t } = useTranslation('marketplace')
+  const scope = useHostScope()
+  const added = useListingWorkflow(item.id)
+  const busy = useBusy(busyKey('community', item.id))
+  return (
+    <AddControl
+      name={item.name}
+      label={t('row.add')}
+      state={busy ? 'busy' : added ? 'on' : 'off'}
+      onOpen={onOpen}
+      onAdd={() => void addCommunityWorkflow(scope, item, { tab })}
+    />
   )
 }
 
@@ -584,7 +616,11 @@ function PreviewInstall({ listing }: { listing: MarketListing }) {
   return (
     <Tooltip>
       <TooltipTrigger render={<span tabIndex={0} />}>
-        <Button disabled>{listing.kind === 'skill' ? t('row.add') : t('row.install')}</Button>
+        <Button disabled>
+          {listing.kind === 'skill' || listing.kind === 'workflow'
+            ? t('row.add')
+            : t('row.install')}
+        </Button>
       </TooltipTrigger>
       <TooltipContent>{t('community.preview.installOff')}</TooltipContent>
     </Tooltip>
@@ -699,7 +735,7 @@ function Listed({
           {preview ? (
             <PreviewInstall listing={listing} />
           ) : (
-            <Actions listing={listing} server={server} bundle={bundle} back={back} />
+            <Actions listing={listing} server={server} bundle={bundle} tab={tab} back={back} />
           )}
         </span>
       </header>
@@ -710,7 +746,11 @@ function Listed({
         <div className="k-mkt-body__main">
           {listing.about && <p className="k-mkt-about k-mkt-about--text">{listing.about}</p>}
           {listing.kind === 'plugin' && !preview && <PluginInstallsOf listing={listing} />}
-          <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
+          {listing.kind === 'workflow' ? (
+            <WorkflowAdds adds={listing.adds} />
+          ) : (
+            <Adds adds={listing.adds} kind={listing.kind} installed={installed} />
+          )}
           {listing.kind === 'mcp-server' &&
             (server ? (
               <ServerRuns listing={listing} server={server} />
@@ -763,7 +803,10 @@ function Listed({
   )
 }
 
-/** Whether this host has the listing: its skill or server kept, or its plugin in an agent. */
+/**
+ * Whether this host has the listing: its skill or server kept, its plugin in an agent, or its
+ * workflow in the library.
+ */
 function useInstalledHere(listing: MarketListing): boolean {
   const { useSettingsStore } = useHostScope()
   const id = kettuId(listing.id)
@@ -773,7 +816,8 @@ function useInstalledHere(listing: MarketListing): boolean {
       s.settings.marketplace.mcp.some((x) => x.id === id),
   )
   const { installs } = useCommunityPlugin(listing.id, listing.harness)
-  return kept || installs.length > 0
+  const workflow = useListingWorkflow(listing.id)
+  return kept || installs.length > 0 || workflow !== null
 }
 
 /** Others of the same publisher, else of the same kind, from the directory. */
@@ -810,24 +854,31 @@ function Facts({ listing }: { listing: MarketListing }) {
   const { t } = useTranslation('marketplace')
   const agents = useChoosableAgents()
   const updated = Date.parse(listing.updatedAt)
+  const steps = listing.kind === 'workflow'
   const marks: AgentId[] = listing.harness
     ? [listing.harness]
-    : agents.slice(0, 6).map((agent) => agent.id)
+    : steps
+      ? [...STEP_AGENTS]
+      : agents.slice(0, 6).map((agent) => agent.id)
   return (
     <div className="k-mkt-facts">
       <span>
-        <small>{t('listing.facts.worksWith')}</small>
+        <small>{steps ? t('workflow.facts.runBy') : t('listing.facts.worksWith')}</small>
         <b className="k-mkt-facts__agents">
           {marks.map((agent) => (
             <AgentMark
               key={agent}
               agent={agent}
               size={15}
-              dot={listing.harness ? null : undefined}
+              dot={listing.harness || steps ? null : undefined}
             />
           ))}
           <span className="k-mkt-facts__text">
-            {listing.harness ? AGENT_NAMES[listing.harness] : t('listing.everyAgent')}
+            {listing.harness
+              ? AGENT_NAMES[listing.harness]
+              : steps
+                ? t('more.two', { first: AGENT_NAMES['claude-code'], second: AGENT_NAMES.codex })
+                : t('listing.everyAgent')}
           </span>
         </b>
       </span>
@@ -895,6 +946,45 @@ function Adds({
   )
 }
 
+/**
+ * What a workflow listing does, as the publisher's check listed it: its steps in order, those that
+ * wait for you, and the MCP servers and Skills its steps name.
+ */
+function WorkflowAdds({ adds }: { adds: PublishAdds[] | undefined }) {
+  const { t } = useTranslation('marketplace')
+  const of = (label: string) => adds?.find((group) => group.label === label)?.items ?? []
+  const steps = of('steps')
+  const waits = of('waits')
+  const tools = [...of('servers'), ...of('skills')]
+  if (steps.length === 0) return null
+  const items: { icon: IconSvgElement; label: string; detail: string }[] = [
+    { icon: Flowchart01Icon, label: t('workflow.facts.steps'), detail: steps.join(' → ') },
+  ]
+  if (waits.length > 0) {
+    items.push({ icon: UserCheck01Icon, label: t('workflow.needs.wait'), detail: waits.join(', ') })
+  }
+  if (tools.length > 0) {
+    items.push({ icon: PlugSocketIcon, label: t('workflow.needs.tools'), detail: tools.join(', ') })
+  }
+  return (
+    <section>
+      <h3>{t('workflow.flow.title')}</h3>
+      <div className="k-mkt-list">
+        {items.map((item) => (
+          <div key={item.label} className="k-mkt-item">
+            <Icon icon={item.icon} size={15} />
+            <span>
+              <b>{item.label}</b>
+              <small>{item.detail}</small>
+            </span>
+          </div>
+        ))}
+      </div>
+      {tools.length > 0 && <p className="k-mkt-section-note">{t('community.workflowTools')}</p>}
+    </section>
+  )
+}
+
 /** A bundle's page: what it runs once installed, before that how it installs. */
 function BundleRuns({ listing, bundle }: { listing: MarketListing; bundle: BundleRef }) {
   const { useSettingsStore } = useHostScope()
@@ -923,11 +1013,13 @@ function Actions({
   listing,
   server,
   bundle,
+  tab,
   back,
 }: {
   listing: MarketListing
   server: CatalogServer | null
   bundle: BundleRef | null
+  tab: MarketplaceTab
   back: () => void
 }) {
   const { t } = useTranslation('marketplace')
@@ -977,6 +1069,18 @@ function Actions({
           <SkillForm item={listing} onDone={() => setOpen(false)} />
         </Popover>
       </span>
+    )
+  }
+
+  if (listing.kind === 'workflow') {
+    // Once added, the workflow's own page shows in place of this one.
+    return (
+      <Button
+        loading={busy}
+        onClick={() => !busy && void addCommunityWorkflow(scope, listing, { tab, stay: true })}
+      >
+        {busy ? t('install.installing') : t('row.add')}
+      </Button>
     )
   }
 
@@ -1105,81 +1209,5 @@ function PluginInstalls({ record, title }: { record: CommunityPlugin; title: str
         ))}
       </div>
     </section>
-  )
-}
-
-/** A short message about the listing to the Kettu Marketplace, which sends nothing else. */
-function ReportDialog({
-  listing,
-  open,
-  onOpenChange,
-}: {
-  listing: MarketListing
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <SettingsDialogContent>
-        {open && <ReportForm listing={listing} onDone={() => onOpenChange(false)} />}
-      </SettingsDialogContent>
-    </Dialog>
-  )
-}
-
-function ReportForm({ listing, onDone }: { listing: MarketListing; onDone: () => void }) {
-  const { t } = useTranslation(['marketplace', 'common'])
-  const scope = useHostScope()
-  const id = useId()
-  const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const ready = message.trim() !== ''
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!ready || busy) return
-    setBusy(true)
-    setError(null)
-    try {
-      await reportCommunity(scope, listing.id, message.trim())
-      onDone()
-    } catch (e) {
-      setError(errorMessage(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form onSubmit={(event) => void submit(event)}>
-      <SettingsDialogHeader title={t('community.reportTitle', { name: listing.name })}>
-        {t('community.reportDescription')}
-      </SettingsDialogHeader>
-      <SettingsDialogBody>
-        <SettingsField
-          label={t('community.reportLabel')}
-          htmlFor={`${id}-message`}
-          hint={error ?? undefined}
-        >
-          <Textarea
-            id={`${id}-message`}
-            autoFocus
-            rows={5}
-            maxLength={REPORT_CHARS}
-            placeholder={t('community.reportPlaceholder')}
-            value={message}
-            aria-invalid={error ? true : undefined}
-            onChange={(event) => setMessage(event.target.value)}
-          />
-        </SettingsField>
-      </SettingsDialogBody>
-      <SettingsDialogFooter>
-        <DialogClose render={<SetButton size="md" variant="ghost" />}>
-          {t('common:actions.cancel')}
-        </DialogClose>
-        <SetButton size="md" variant="primary" type="submit" loading={busy} disabled={!ready}>
-          {t('community.reportSend')}
-        </SetButton>
-      </SettingsDialogFooter>
-    </form>
   )
 }

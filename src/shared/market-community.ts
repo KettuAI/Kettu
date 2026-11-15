@@ -1,6 +1,7 @@
 // Installing from the Kettu Marketplace: what the host lists of it, a listing's page, and where an
 // installed item stands with its listing. Skills and MCP servers from it are kept like any other,
-// with ids of `kettu:` and the listing's id; plugins go through a local marketplace of each harness.
+// with ids of `kettu:` and the listing's id; plugins go through a local marketplace of each harness;
+// workflows go into the workflow library, which records the listing and version.
 
 import type { CatalogServer } from './marketplace'
 import {
@@ -90,7 +91,10 @@ export interface CommunityPlugin {
 
 export interface CommunityInstalled {
   plugins: CommunityPlugin[]
-  /** By listing id, for every skill, MCP server and plugin installed from the Kettu Marketplace. */
+  /**
+   * By listing id, for every skill, workflow, MCP server and plugin installed from the Kettu
+   * Marketplace.
+   */
   standings: Record<string, CommunityStanding>
 }
 

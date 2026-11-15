@@ -97,6 +97,7 @@ export function communitySubject(
   item: Pick<CommunityItem, 'id' | 'kind' | 'harness' | 'slug'>,
 ): TileSubject {
   if (item.kind === 'skill') return skillSubject(item.slug)
+  if (item.kind === 'workflow') return workflowSubject({ id: item.slug, source: 'community' })
   if (item.kind === 'plugin') {
     return pluginSubject({
       harness: item.harness ?? 'claude-code',
@@ -191,6 +192,7 @@ const WORKFLOW_COLOR: Record<WorkflowSource, string> = {
   file: 'var(--tile-slate)',
   agent: 'var(--tile-cyan)',
   user: 'var(--tile-violet)',
+  community: 'var(--tile-teal)',
 }
 
 const HARNESS_COLOR: Record<PluginHarness, string> = {

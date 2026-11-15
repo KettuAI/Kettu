@@ -1,7 +1,8 @@
 // The Kettu Marketplace as the host installs from it: its public listings and the account's own
 // Only me ones, read through main or the daemon; a version's files, downloaded only on Install and
-// each checked against the SHA-256 the service gave before anything is written; and the plugins,
-// kept in a local marketplace of each harness that the harness installs them from.
+// each checked against the SHA-256 the service gave before anything is written; the plugins, kept
+// in a local marketplace of each harness that the harness installs them from; and the workflows,
+// written into the workflow library to wait for the user's approval.
 
 import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
@@ -32,9 +33,12 @@ import {
 } from '@shared/market-publish'
 import type { CatalogServer, InstalledPlugin, PluginScope } from '@shared/marketplace'
 import { harnessOf, type AgentId } from '@shared/thread'
+import type { WorkflowEntry } from '@shared/workflow'
 import { HostError } from '../errors'
 import { t } from '../i18n'
 import { JsonFile, type LogFn } from '../storage'
+import type { CommunityOrigin } from '../workflow/library'
+import { WORKFLOW_FILE, utf8 } from './publish-check'
 import { MarketCallError } from './publish-tools'
 import { catalogServer } from './registry'
 
@@ -225,6 +229,14 @@ export interface CommunityDeps {
   ): Promise<InstalledPlugin>
   /** Whether any agent of the harness still has the plugin, as its harness lists them now. */
   pluginInstalled(harness: PublishHarness, pluginId: string): Promise<boolean>
+  /**
+   * Writes a workflow listing's file into the workflow library, unapproved, or refuses it; `updated`
+   * when it replaced the version the library had.
+   */
+  installWorkflow(
+    text: string,
+    origin: CommunityOrigin,
+  ): Promise<{ entry: WorkflowEntry; updated: boolean }>
   now?: () => number
 }
 
@@ -469,6 +481,27 @@ export class MarketCommunityService {
     )
     this.installing = run.catch(() => undefined)
     return run
+  }
+
+  /**
+   * Adds a workflow listing's current version to the workflow library, or updates the one it has:
+   * every file is checked before its `workflow.yaml` is read, and the library refuses one that does
+   * not read. It waits there for the user's approval.
+   */
+  async installWorkflow(id: string): Promise<WorkflowEntry> {
+    const { listing, files } = await this.download(id, 'workflow')
+    const file = files.find((item) => item.path === WORKFLOW_FILE)
+    const text = file ? utf8(file.data) : null
+    if (text === null) throw refuse(t('marketCommunity.noWorkflow'))
+    const { entry, updated } = await this.deps.installWorkflow(text, {
+      kind: 'community',
+      listingId: listing.id,
+      version: listing.version,
+      handle: listing.handle,
+      slug: listing.slug,
+    })
+    void this.count(listing.id, listing.version, updated ? 'update' : 'install')
+    return entry
   }
 
   /** The plugins installed from the Kettu Marketplace and where each installed item stands. */
