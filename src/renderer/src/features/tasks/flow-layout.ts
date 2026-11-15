@@ -1,6 +1,7 @@
 // Where the flowchart draws a workflow: the steps in rows from the top, forward arrows going down and
 // steps that run side by side in one row, arrows back on lanes beside the rows. Laid out from the
-// Workflow's own order, since no graph layout library is part of the app.
+// Workflow's own order, since no graph layout library is part of the app. `sideways` turns a layout
+// to run from the left instead.
 
 import { isBackArrow, type Workflow, type TaskEnd } from '@shared/workflow'
 
@@ -8,15 +9,42 @@ export const NODE_W = 268
 export const NODE_H = 140
 export const END_SIZE = 28
 export const COL_GAP = 36
-const ROW_GAP = 90
-/** From the rows to the first lane, and between lanes. */
-const LANE_START = 36
-const LANE_GAP = 20
-/** Beyond the outermost lane, room for the labels that start at their lanes. */
-const LABEL_ROOM = 220
-/** Between arrows back that leave or enter one side of a step. */
-const SLOT = 22
-const PAD = 12
+
+/** Sizes the layout works in, across the rows (`nodeW`, `colGap`) and down them (the rest). */
+export interface FlowMetrics {
+  nodeW: number
+  nodeH: number
+  endSize: number
+  colGap: number
+  rowGap: number
+  /** From the rows to the first lane, and between lanes. */
+  laneStart: number
+  laneGap: number
+  /** Beyond the outermost lane, room for the labels that start at their lanes. */
+  labelRoom: number
+  /** Between arrows back that leave or enter one side of a step. */
+  slot: number
+  /** From a step's top or bottom to the first arrow back at its side. */
+  inset: number
+  /** From a step's side to an arrow back that leaves or enters it at its top or bottom. */
+  bend: number
+  pad: number
+}
+
+export const TASK_METRICS: FlowMetrics = {
+  nodeW: NODE_W,
+  nodeH: NODE_H,
+  endSize: END_SIZE,
+  colGap: COL_GAP,
+  rowGap: 90,
+  laneStart: 36,
+  laneGap: 20,
+  labelRoom: 220,
+  slot: 22,
+  inset: 22,
+  bend: 24,
+  pad: 12,
+}
 
 export type Point = [number, number]
 
@@ -79,7 +107,15 @@ function rowsOf(workflow: Workflow): Map<string, number> {
 }
 
 /** Lays out the workflow; every coordinate is in the chart's own box, from its top left. */
-export function layoutFlow(workflow: Workflow): FlowLayout {
+export function layoutFlow(workflow: Workflow, m: FlowMetrics = TASK_METRICS): FlowLayout {
+  const { nodeW: NODE_W, nodeH: NODE_H, endSize: END_SIZE, colGap: COL_GAP, rowGap: ROW_GAP } = m
+  const {
+    laneStart: LANE_START,
+    laneGap: LANE_GAP,
+    labelRoom: LABEL_ROOM,
+    slot: SLOT,
+    pad: PAD,
+  } = m
   const rows = rowsOf(workflow)
   const rowCount = Math.max(...rows.values()) + 1
   const byRow: string[][] = Array.from({ length: rowCount }, () => [])
@@ -114,7 +150,7 @@ export function layoutFlow(workflow: Workflow): FlowLayout {
   const room = (count: number) => (count ? LANE_START + (count - 1) * LANE_GAP + LABEL_ROOM : 0)
   const leftRoom = room(lanes.left.length)
   // Arrows that skip rows forward go down a lane at the left.
-  const skipRoom = 30
+  const skipRoom = (LANE_START * 5) / 6
 
   const originX = PAD + Math.max(leftRoom, skipRoom)
   const rowY = (row: number) => PAD + row * (NODE_H + ROW_GAP)
@@ -162,7 +198,7 @@ export function layoutFlow(workflow: Workflow): FlowLayout {
         let points: Point[]
         if (targetRow > from.row + 1) {
           // Down the side, clear of the rows it passes.
-          const lane = originX - 18 - j * 6
+          const lane = originX - LANE_START / 2 - j * 6
           const before = ty - ROW_GAP / 2
           points = [
             [exitX, bottom],
@@ -216,16 +252,16 @@ export function layoutFlow(workflow: Workflow): FlowLayout {
       const entry = entries.get(back.to) ?? 0
       exits.set(back.from, exit + 1)
       entries.set(back.to, entry + 1)
-      const outY = from.y + NODE_H - 22 - exit * SLOT
-      const inY = to.y + 22 + entry * SLOT
+      const outY = from.y + NODE_H - m.inset - exit * SLOT
+      const inY = to.y + m.inset + entry * SLOT
       const out: Point[] = open(back.from)
         ? [
             [sideX(from), outY],
             [x, outY],
           ]
         : [
-            [sideX(from) - dir * (24 + exit * 12), from.y + NODE_H],
-            [sideX(from) - dir * (24 + exit * 12), from.y + NODE_H + 12 + exit * 6],
+            [sideX(from) - dir * (m.bend + exit * 12), from.y + NODE_H],
+            [sideX(from) - dir * (m.bend + exit * 12), from.y + NODE_H + 12 + exit * 6],
             [x, from.y + NODE_H + 12 + exit * 6],
           ]
       const into: Point[] = open(back.to)
@@ -235,8 +271,8 @@ export function layoutFlow(workflow: Workflow): FlowLayout {
           ]
         : [
             [x, to.y - 12 - entry * 6],
-            [sideX(to) - dir * (24 + entry * 12), to.y - 12 - entry * 6],
-            [sideX(to) - dir * (24 + entry * 12), to.y],
+            [sideX(to) - dir * (m.bend + entry * 12), to.y - 12 - entry * 6],
+            [sideX(to) - dir * (m.bend + entry * 12), to.y],
           ]
       edges.push({
         id: `${back.from}/${back.outcome}/${back.to}/back`,
@@ -285,4 +321,16 @@ export function headOf(points: Point[]): string {
   return dx
     ? `M${x - 5 * dx} ${y - 3.5}L${x} ${y}L${x - 5 * dx} ${y + 3.5}`
     : `M${x - 3.5} ${y - 5 * dy}L${x} ${y}L${x + 3.5} ${y - 5 * dy}`
+}
+
+/** A layout turned to run from the left: rows become columns and the lanes run above and below. */
+export function sideways(layout: FlowLayout): FlowLayout {
+  const turn = ([x, y]: Point): Point => [y, x]
+  return {
+    width: layout.height,
+    height: layout.width,
+    nodes: layout.nodes.map((n) => ({ ...n, x: n.y, y: n.x })),
+    ends: layout.ends.map((e) => ({ ...e, x: e.y, y: e.x })),
+    edges: layout.edges.map((e) => ({ ...e, points: e.points.map(turn), label: turn(e.label) })),
+  }
 }

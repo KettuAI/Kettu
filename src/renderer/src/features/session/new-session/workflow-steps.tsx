@@ -1,14 +1,7 @@
 import type { ReactNode } from 'react'
 import { ArrowRight02Icon, SparklesIcon, UserIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
-import {
-  PACES,
-  type Pace,
-  type Workflow,
-  type WorkflowEntry,
-  type WorkflowStep,
-  type StepPick,
-} from '@shared/workflow'
+import { PACES, type Pace, type Workflow, type WorkflowStep, type StepPick } from '@shared/workflow'
 import type { AgentId } from '@shared/thread'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { SegmentedControl } from '@renderer/components/affect/segmented-control'
@@ -17,8 +10,6 @@ import { cn } from '@renderer/lib/utils'
 import { optionsOn, picksOf, useAgentOptionsStore } from '@renderer/stores/agent-options'
 import { agentName } from '@renderer/stores/agents'
 import { AgentMenu } from './agent-menu'
-import { openWorkflowMarketplace } from './open-task'
-import { choosePace, pinStep, taskPins, useWorkflowChoice } from './workflow-choice'
 import {
   listOf,
   localStepName,
@@ -291,61 +282,5 @@ export function WhoChain({
       })}
       {trailing}
     </p>
-  )
-}
-
-/**
- * New session's "Who does each step" with a workflow chosen, under the composer: Pace at its top
- * right, then a row per step, `first` being the tray's agent; picks here count for this task only.
- */
-export function TaskStepsCard({
-  entry,
-  hostId,
-  first,
-}: {
-  entry: WorkflowEntry & { workflow: Workflow }
-  hostId: string | null
-  first: ReactNode
-}) {
-  const { t } = useTranslation('session')
-  const pace = useWorkflowChoice((s) => s.pace)
-  const pins = useWorkflowChoice((s) => taskPins(s, entry.id))
-  return (
-    <section
-      aria-labelledby="new-task-steps"
-      className="mt-4.5 w-full max-w-160 shrink-0 overflow-hidden rounded-card bg-card shadow-card animate-in fade-in slide-in-from-bottom-1 animation-duration-(--duration-slow) ease-out-quint"
-    >
-      <header className="flex items-center justify-between gap-3 px-4 py-3 shadow-[inset_0_-0.5px_0_var(--color-border-soft)]">
-        <span className="flex min-w-0 flex-col gap-0.5">
-          <h2 id="new-task-steps" className="text-ui font-medium text-primary">
-            {t('workflow.whoDoesEach')}
-          </h2>
-          <span className="text-meta text-secondary">{t('workflow.autoExplained')}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2 text-meta text-secondary">
-          {t('workflow.pace')}
-          <PaceControl value={pace} onChange={choosePace} />
-        </span>
-      </header>
-      <StepRows
-        workflow={entry.workflow}
-        workflowPins={entry.pins}
-        taskPins={pins}
-        hostId={hostId}
-        first={first}
-        onPin={(stepId, pick) => pinStep(entry.id, stepId, pick)}
-        className="shadow-[inset_0_-0.5px_0_var(--color-border-soft)]"
-      />
-      <footer className="flex items-center justify-between gap-3 px-4 py-2.5 text-meta text-tertiary">
-        <span className="min-w-0">{t('workflow.paceExplained')}</span>
-        <button
-          type="button"
-          className="shrink-0 text-meta text-link hover:underline"
-          onClick={() => openWorkflowMarketplace(entry.id)}
-        >
-          {t('workflow.pinEveryTask')}
-        </button>
-      </footer>
-    </section>
   )
 }
