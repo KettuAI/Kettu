@@ -109,6 +109,9 @@ export class AccountNetworkError extends Error {
 
 const isText = (value: unknown): value is string => typeof value === 'string' && value.length > 0
 
+/** The longest relay token taken, as long as a relay message carries. */
+const MAX_RELAY_TOKEN = 4096
+
 const isCount = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 
@@ -269,6 +272,23 @@ export class AccountApi {
     const id = body?.id
     if (typeof id !== 'string' || !REPORT_ID.test(id)) throw this.unexpected('/api/v1/reports')
     return id
+  }
+
+  /**
+   * A relay token for the access token: only the relays take it, and only for about an hour, so
+   * the relays never hold anything that can act on the account.
+   */
+  async relayToken(accessToken: string): Promise<{ token: string; expiresAt: number }> {
+    const body = await this.request('/api/v1/relay/token', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    const token = body?.token
+    const expiresAt = body?.expiresAt
+    if (!isText(token) || token.length > MAX_RELAY_TOKEN || !isCount(expiresAt)) {
+      throw this.unexpected('/api/v1/relay/token')
+    }
+    return { token, expiresAt }
   }
 
   private async token(fields: Record<string, string>): Promise<TokenSet> {

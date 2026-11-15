@@ -26,6 +26,8 @@ export interface LaunchOptions {
   /** The connection pairing left open, which the link takes as its first. */
   paired: Paired | null
   client: Hello['client']
+  /** What the hello names beyond the shared link's own, as the hosted build's regions. */
+  features?: string[]
   settings: WebSettings
   /** Where this browser reaches the host directly; null through the relay. */
   address: DirectAddress | null
@@ -48,7 +50,7 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
     dial: options.dial,
     hostKey: options.hostKey,
     key: options.key,
-    hello: hello(options.client),
+    hello: withFeatures(hello(options.client), options.features ?? []),
     ...(options.paired ? { adopt: options.paired } : {}),
     visible: () => document.visibilityState === 'visible',
   })
@@ -111,6 +113,10 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
   await bootstrap()
   renderApp(root)
   return link
+}
+
+function withFeatures(said: Hello, features: string[]): Hello {
+  return features.length > 0 ? { ...said, features: [...(said.features ?? []), ...features] } : said
 }
 
 async function offerReload(): Promise<void> {

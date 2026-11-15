@@ -164,6 +164,8 @@ export class Hosts {
   private relayKey: string | null
   /** The account's access token, as the remote host was last given it. */
   private token: string | null = null
+  /** The relay token the relays get in its place, once the main relay takes them. */
+  private relayToken: string | null = null
   /** Use the Kettu relay, as the remote host was last told. */
   private sentRelay: boolean | null = null
   private resetting: Promise<void> | null = null
@@ -408,11 +410,15 @@ export class Hosts {
     return { state: 'on', relays: this.remoteStatus?.relays ?? [] }
   }
 
-  /** A fresh access token, or null once signed out, which closes every relay socket. */
-  setToken(token: string | null): void {
-    if (token === this.token) return
+  /**
+   * A fresh access token, or null once signed out, which closes every relay socket; with the relay
+   * token the relays get in its place once the main relay takes them.
+   */
+  setToken(token: string | null, relay: string | null = null): void {
+    if (token === this.token && relay === this.relayToken) return
     this.token = token
-    this.remote.post({ type: 'remote-host:token', token })
+    this.relayToken = relay
+    this.remote.post({ type: 'remote-host:token', token, relay })
     // Without a sign-in, direct connections are the devices' only way, and held on.
     this.directChanged()
   }
@@ -856,6 +862,7 @@ export class Hosts {
       url: this.options.relayUrl,
       enabled: this.sentRelay,
       token: this.token,
+      relayToken: this.relayToken,
       ...(this.relayKey ? { key: this.relayKey } : {}),
     }
   }

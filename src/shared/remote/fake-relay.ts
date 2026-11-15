@@ -3,6 +3,7 @@
 // tokens as the relay does. Not for production.
 
 import {
+  DRAIN_FEATURE,
   HOSTS_FEATURE,
   MAX_DEVICE_CONNECTIONS,
   MAX_LISTED_HOSTS,
@@ -148,8 +149,12 @@ export class FakeRelayServer {
   readonly hosts = new Map<string, Host>()
   /** Every socket made, in order. */
   readonly sockets: FakeSocket[] = []
+  /** The tokens hosts renewed theirs with, in order. */
+  readonly renewed: string[] = []
   private readonly waiting = new Map<string, Waiting>()
   private readonly joined = new Map<FakeSocket, FakeSocket>()
+  /** Device sockets whose `connect` asked to hear of a drain. */
+  private readonly drainable = new Set<FakeSocket>()
 
   constructor(
     readonly origin: string,
@@ -192,6 +197,13 @@ export class FakeRelayServer {
   /** Closes the host's control socket, as when the relay restarts. */
   drop(id: string, code = 1006): void {
     this.hosts.get(id)?.socket.closed(code)
+  }
+
+  /** The region is being emptied: says so to every host and to the devices that asked. */
+  drain(): void {
+    const text = JSON.stringify({ type: 'drain' })
+    for (const host of this.hosts.values()) host.socket.receive(text)
+    for (const device of this.drainable) if (this.joined.has(device)) device.receive(text)
   }
 
   open(url: string): FakeSocket {
@@ -238,6 +250,7 @@ export class FakeRelayServer {
         if (!account || account !== this.hosts.get(id)?.account) {
           return this.refuse(socket, RELAY_CLOSE.unauthorized)
         }
+        this.renewed.push(message.token)
         return
       }
       if (signedIn) return this.refuse(socket, RELAY_CLOSE.malformed)
@@ -275,6 +288,7 @@ export class FakeRelayServer {
       if (!message || [...this.waiting.values()].some((entry) => entry.device === socket)) {
         return this.refuse(socket, RELAY_CLOSE.malformed)
       }
+      if (message.features?.includes(DRAIN_FEATURE)) this.drainable.add(socket)
       const host = this.hosts.get(id)
       if (!host) return this.refuse(socket, RELAY_CLOSE.offline)
       if (this.accounts.get(message.token) !== host.account) {
@@ -322,6 +336,7 @@ export class FakeRelayServer {
     for (const [token, waiting] of this.waiting) {
       if (waiting.device === socket) this.waiting.delete(token)
     }
+    this.drainable.delete(socket)
     for (const [id, host] of this.hosts) {
       if (host.socket !== socket) continue
       this.hosts.delete(id)
@@ -338,6 +353,8 @@ export class FakeRelayServer {
 export class FakeRelays {
   /** The account each access token belongs to. */
   readonly accounts = new Map<string, string>()
+  /** The pin each socket was opened with, by its URL, for a region at an IP address. */
+  readonly pins = new Map<string, string>()
   private readonly servers = new Map<string, FakeRelayServer>()
 
   relay(url: string): FakeRelayServer {
@@ -349,7 +366,8 @@ export class FakeRelays {
   }
 
   /** Opens a socket to a relay's path, as `new WebSocket(url)` does. */
-  readonly openSocket = (url: string): WebSocket => {
+  readonly openSocket = (url: string, pin?: string): WebSocket => {
+    if (pin) this.pins.set(url, pin)
     const parsed = new URL(url)
     const origin = `${parsed.protocol === 'wss:' ? 'https:' : 'http:'}//${parsed.host}`
     return this.relay(origin).open(url) as unknown as WebSocket

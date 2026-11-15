@@ -21,7 +21,8 @@ import type { PairingNotice } from '../pairing-page'
 import type { WebSettings } from '../settings'
 import { keepStorage, loadDevice, saveDevice, type WebDevice } from '../storage'
 import { HostedAccount } from './account'
-import { accountUrl } from './config'
+import { accountUrl, regionListKeys, relayUrl } from './config'
+import { HOSTED_FEATURES, HostedRelay } from './relay-regions'
 import { clearBrowser } from './clear'
 import {
   currentHost,
@@ -104,6 +105,17 @@ function reloadOnStaleChunks(): void {
     event.preventDefault()
     location.reload()
   })
+}
+
+let relays: HostedRelay | null = null
+
+/** The relay regions and tokens, once per page, for the account signed in. */
+function relaysOf(account: HostedAccount): HostedRelay {
+  if (!relays) {
+    relays = new HostedRelay(account, relayUrl, accountUrl, regionListKeys)
+    void relays.start()
+  }
+  return relays
 }
 
 export async function startHosted(base: HostedBase): Promise<void> {
@@ -216,8 +228,9 @@ async function showPairing(
       {
         dial: relayDial(
           code.relay,
-          () => account.accessToken(),
+          () => relaysOf(account).token(),
           () => {},
+          relaysOf(account),
         ),
         payload: code,
         key,
@@ -313,6 +326,7 @@ async function showApp(
         link: linked,
         others: kept.hosts.filter((h) => h.relay.id !== shown.relay.id),
         account,
+        relays: relaysOf(account),
         key: device.key,
         client: base.client,
       })
@@ -327,13 +341,15 @@ async function showApp(
     {
       dial: relayDial(
         shown.relay,
-        () => account.accessToken(),
+        () => relaysOf(account).token(),
         (problem) => {
           problems.report(problem)
           // The relay refuses a sign-in the service ended as it does another account's.
           if (problem === 'wrong_account') void account.check()
         },
+        relaysOf(account),
       ),
+      features: HOSTED_FEATURES,
       key: device.key,
       hostKey: shown.hostKey,
       known: { name: shown.name, deviceName: shown.deviceName },
@@ -364,6 +380,7 @@ async function showApp(
       },
       overrides: (link, api) => {
         linked = link
+        relaysOf(account).attach(link, shown.relay)
         problems.follow(link)
         useWebHostStore.setState({ others: othersOf(kept, shown) })
         return {

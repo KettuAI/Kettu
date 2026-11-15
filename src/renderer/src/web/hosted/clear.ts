@@ -9,6 +9,7 @@ import { hello, HostLink } from '@shared/remote/link'
 import { clearAll } from '../storage'
 import type { HostedAccount } from './account'
 import { relayDial, type HostedHost } from './hosts'
+import type { HostedRelay } from './relay-regions'
 
 /** How long one host has to connect and remove this browser. */
 const REMOVE_MS = 8000
@@ -19,6 +20,8 @@ export interface ClearOptions {
   /** The account's other hosts, reached each for the moment it takes. */
   others: HostedHost[]
   account: HostedAccount
+  /** The relay regions and the token the relays get. */
+  relays: HostedRelay
   key: KeyPair
   client: Hello['client']
 }
@@ -51,13 +54,14 @@ async function removeOver(link: HostLink, ms: number): Promise<void> {
 }
 
 export async function clearBrowser(options: ClearOptions): Promise<void> {
-  const { account, key, client } = options
+  const { account, relays, key, client } = options
   const others = options.others.map(async (host) => {
     const link = new HostLink({
       dial: relayDial(
         host.relay,
-        () => account.accessToken(),
+        () => relays.token(),
         () => {},
+        relays,
       ),
       hostKey: host.hostKey,
       key,

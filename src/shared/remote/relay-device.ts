@@ -1,10 +1,13 @@
 // A device's side of the relay: asks each of a host's relays in turn to join it to the host, the
 // next one starting when the one before has not joined in a moment, and keeps the first that
-// does. Runs on the standard WebSocket API alone, so the desktop app and the web client share it.
+// does. It asks each to say when its region drains, which it may later do on the joined socket.
+// Runs on the standard WebSocket API alone, so the desktop app and the web client share it.
 
 import {
   CONNECT_TIMEOUT_MS,
+  connectMessage,
   connectSocketPath,
+  isDrain,
   isJoined,
   relayRefusal,
   relaySocketUrl,
@@ -26,14 +29,27 @@ export type RelayDialResult =
   | { kind: 'unreachable' }
   | { kind: 'aborted' }
 
+/** A relay to try: its origin, and the pin of its certificate when it is at an IP address. */
+export interface RelayEndpoint {
+  url: string
+  pin?: string
+}
+
+/** How one relay's try ended, for the day's report. */
+export type RelayAttempt = 'joined' | 'unreachable' | 'answered'
+
 export interface RelayDialOptions {
-  /** The relays' origins, in the order to try them. */
-  relays: string[]
+  /** The relays, in the order to try them. */
+  relays: (string | RelayEndpoint)[]
   /** The host's relay id. */
   id: string
-  /** This device's Kettu access token. */
+  /** This device's relay token, or its access token where the relays take no other. */
   token: string
-  openSocket(url: string): WebSocket
+  openSocket(url: string, pin?: string): WebSocket
+  /** A relay's try ended: it joined, it could not be reached, or it answered without joining. */
+  attempted?(relay: string, outcome: RelayAttempt): void
+  /** The relay that joined says its region drains; the session should move. */
+  drained?(relay: string): void
   /** How long the whole try has. */
   timeoutMs: number
   staggerMs?: number
@@ -42,7 +58,8 @@ export interface RelayDialOptions {
 
 /** Joins the host through the first relay that can, or says why none did. */
 export function dialRelay(options: RelayDialOptions): Promise<RelayDialResult> {
-  const { relays, id, token, openSocket, timeoutMs, signal } = options
+  const { id, token, openSocket, timeoutMs, signal } = options
+  const relays = options.relays.map((relay) => (typeof relay === 'string' ? { url: relay } : relay))
   const stagger = options.staggerMs ?? RELAY_STAGGER_MS
   return new Promise((resolve) => {
     const sockets = new Set<WebSocket>()
@@ -80,11 +97,13 @@ export function dialRelay(options: RelayDialOptions): Promise<RelayDialResult> {
     const abort = (): void => finish({ kind: 'aborted' })
     const timer = setTimeout(() => finish(verdict()), timeoutMs)
 
-    const attempt = (relay: string): void => {
+    const attempt = (endpoint: RelayEndpoint): void => {
+      const relay = endpoint.url
       let socket: WebSocket
       try {
-        socket = openSocket(relaySocketUrl(relay, connectSocketPath(id)))
+        socket = openSocket(relaySocketUrl(relay, connectSocketPath(id)), endpoint.pin)
       } catch {
+        options.attempted?.(relay, 'unreachable')
         return settled()
       }
       sockets.add(socket)
@@ -93,11 +112,21 @@ export function dialRelay(options: RelayDialOptions): Promise<RelayDialResult> {
       const onMessage = (event: MessageEvent): void => {
         if (done || !isJoined(event.data)) return
         cleanup()
+        options.attempted?.(relay, 'joined')
+        const { drained } = options
+        if (drained) {
+          const onDrain = (later: MessageEvent): void => {
+            if (!isDrain(later.data)) return
+            socket.removeEventListener('message', onDrain)
+            drained(relay)
+          }
+          socket.addEventListener('message', onDrain)
+        }
         finish({ kind: 'joined', socket, relay })
       }
       const onOpen = (): void => {
         opened = true
-        socket.send(JSON.stringify({ type: 'connect', token }))
+        socket.send(JSON.stringify(connectMessage(token)))
       }
       const onClose = (event: CloseEvent): void => {
         cleanup()
@@ -107,6 +136,7 @@ export function dialRelay(options: RelayDialOptions): Promise<RelayDialResult> {
           // A relay that closed without a reason answered, but said nothing of the host.
           refusals.push(reason ?? 'offline')
         }
+        if (!done) options.attempted?.(relay, opened ? 'answered' : 'unreachable')
         settled()
       }
       const cleanup = (): void => {

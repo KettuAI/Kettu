@@ -296,6 +296,17 @@ export class Account {
     }
   }
 
+  /**
+   * A relay token of the signed-in account, which only the relays take, for about an hour.
+   * Rejects when none can be had now; throws `NotSignedIn` when signed out.
+   */
+  relayToken(): Promise<{ token: string; expiresAt: number }> {
+    return this.withAccessToken(
+      (token) => this.options.api.relayToken(token),
+      (error) => error instanceof AccountServiceError && error.code === 'invalid_token',
+    )
+  }
+
   /** Reads the stored sign-in again, as after `kettu login` or `kettu logout` wrote it. */
   async reload(): Promise<void> {
     if (this.signingIn) return

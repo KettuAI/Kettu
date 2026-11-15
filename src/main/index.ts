@@ -19,7 +19,7 @@ import { matchLocale, resolveLocale, type Locale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
 import { HOSTS_FILE, type HostsStatus } from '@shared/remote/hosts'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
-import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
+import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { RemoteStatus } from '@shared/remote/status'
 import type { ComputerHold } from '@shared/computer-use'
 import { stepZoom, type SettingsFile, type ZoomStep } from '@shared/settings'
@@ -78,7 +78,7 @@ import {
   type IdentityCipher,
 } from './remote-identity'
 import { watchPresence } from './presence'
-import { RelayToken } from './relay-token'
+import { RelayFeatures, RelayToken, readRelayFeatures } from './relay-token'
 import { readJsonFile } from './json-file'
 import { MarketKeys, marketKeysFile } from './market-keys'
 import { MarketUnauthorized, runMarketCall } from './market-api'
@@ -566,14 +566,17 @@ async function start(): Promise<void> {
   // What the relay, push and the account's hosts go by: a sign-in with Kettu's services on.
   const accountInUse = (): boolean => cloudOn() && signedIn()
   const relayOn = (): boolean => settings.get().remote.relay && cloudOn()
+  const mainRelay = new RelayFeatures(() => readRelayFeatures(relayUrl))
   const relayToken = new RelayToken({
     current: () => account.currentToken(),
+    exchange: async () =>
+      (await mainRelay.has(RELAY_TOKENS_FEATURE)) ? account.relayToken() : null,
     signedIn: accountInUse,
     needed: () =>
       settings.get().remote.enabled ||
       remoteHost.pairingHosts ||
       (remoteHost.hosts?.length ?? 0) > 0,
-    send: (token) => remoteHost.setToken(token),
+    send: (token, relay) => remoteHost.setToken(token, relay),
   })
   /** The sign-in changed: the relay's token, and the direct connections it holds on without one. */
   function accountChanged(): void {

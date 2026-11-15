@@ -50,7 +50,12 @@ import {
   trustedRelay,
   type HostRelay,
 } from '@shared/remote/relay'
-import { dialRelay } from '@shared/remote/relay-device'
+import { dialRelay, type RelayAttempt, type RelayEndpoint } from '@shared/remote/relay-device'
+import {
+  REGIONS_CHANNEL_FEATURE,
+  type RankedRegion,
+  type RelayPreferMessage,
+} from '@shared/remote/relay-regions'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import {
   BROWSER_FEATURE,
@@ -118,13 +123,38 @@ export function retryDelay(failures: number): number {
   return Math.round(base * (0.8 + Math.random() * 0.4))
 }
 
+/** The relay regions as this computer reaches hosts through them. */
+export interface ClientRegions {
+  /** A host's `relay.regions`. */
+  hostRegions(hostId: string, value: unknown): Promise<void>
+  /** The host's regions in the order to try them; null where those of `GET /v1` are used. */
+  ranked(hostId: string): RankedRegion[] | null
+  /** What to tell a host of this computer's fastest regions; null before they are timed. */
+  preferMessage(): RelayPreferMessage | null
+  /** A relay's try ended, for the day's report. */
+  dialed(url: string, outcome: RelayAttempt): void
+  /** The relay a session went through says its region drains. */
+  drained(url: string): void
+  /**
+   * Of the relays a welcome, a code or `GET /v1` named, those that may get the token in hand: all
+   * with a relay token or where the main relay takes none, else the main relay alone.
+   */
+  allowed(urls: string[]): string[]
+}
+
 /** The Kettu relay, as this computer reaches hosts through it. */
 export interface RelayClient {
   /** The main relay's origin, tried for every host on the relay. */
   main: string
-  /** This computer's access token now; null while it is signed in to no Kettu account. */
+  /**
+   * What this computer gives the relays now: its relay token, or its access token where they
+   * take no other; null while it is signed in to no Kettu account.
+   */
   token(): string | null
-  openSocket(url: string): WebSocket
+  /** Opens a socket to a relay, through the pin of a region at an IP address. */
+  openSocket(url: string, pin?: string): WebSocket
+  /** The relay regions; without them, the relays of `GET /v1` in their order. */
+  regions?: ClientRegions
   /**
    * Reads JSON from a relay's URL, with the access token as a bearer token when given; rejects
    * when the relay cannot be reached. Without it the account's hosts cannot be listed.
@@ -168,6 +198,8 @@ export interface HostClientOptions {
   now?: () => number
   /** When a quiet host is pinged and given up, DEVICE_KEEPALIVE unless a test shortens it. */
   keepalive?: KeepaliveTimings
+  /** A host's ranked relay regions changed: it said its regions, or this computer timed its own. */
+  regionsChanged?(hostId: string): void
 }
 
 type SessionEnd = { welcomed: boolean; reason: ClosingReason | null }
@@ -330,7 +362,13 @@ const IGNORED: SessionHandlers = {
 }
 
 /** The session's own messages, which main never hears. */
-const OWN: ReadonlySet<unknown> = new Set(['addresses', 'renamed', 'host.renamed', 'terminal'])
+const OWN: ReadonlySet<unknown> = new Set([
+  'addresses',
+  'renamed',
+  'host.renamed',
+  'terminal',
+  'relay.regions',
+])
 
 /** The connection to one known host, tried again with backoff until it is forgotten. */
 class HostLink {
@@ -495,7 +533,7 @@ class HostLink {
     const hello = { ...this.client.hello(), ...(resume ? { resume } : {}) }
     const route = host.ssh ?? null
     const forward = route ? new SshForward(this.client.ssh, route.target) : null
-    const relay = route ? null : this.client.relayRoute(host.relay, this.lastRelay)
+    const relay = route ? null : this.client.relayRoute(host.relay, this.lastRelay, this.id)
     const result = await dial({
       addresses: route ? [{ host: SSH_LOOPBACK, port: route.port }] : host.addresses,
       connect: forward?.connect ?? this.client.connect,
@@ -603,6 +641,15 @@ class HostLink {
     // The host read main's requests up to the one it names; the rest go again.
     this.requests.attach(session.wire(), resumed ? welcome.resumed!.request : 0)
     if (!resumed) void this.openPort(session, ++this.sessions)
+    this.sendPreference()
+  }
+
+  /** Tells a host that hears of them this computer's fastest relay regions. */
+  sendPreference(): void {
+    const session = this.session
+    if (!session?.open || !session.welcome!.features.includes(REGIONS_CHANNEL_FEATURE)) return
+    const prefer = this.client.options.relay?.regions?.preferMessage()
+    if (prefer) session.send(prefer)
   }
 
   private async openPort(session: HostSession, sessions: number): Promise<void> {
@@ -634,6 +681,15 @@ class HostLink {
     const value = message.value
     if (typeof value !== 'object' || value === null) return
     const { type, allowed } = value as { type?: unknown; allowed?: unknown }
+    if (type === 'relay.regions') {
+      const regions = this.client.options.relay?.regions
+      if (regions && session.welcome!.features.includes(REGIONS_CHANNEL_FEATURE)) {
+        void regions
+          .hostRegions(this.id, value)
+          .then(() => this.client.options.regionsChanged?.(this.id))
+      }
+      return
+    }
     // The owner allowed devices the terminal, or stopped allowing it.
     if (type === 'terminal' && this.connection.state === 'online') {
       return this.set(online(viaOf(this.connection), allowed === true))
@@ -1249,28 +1305,78 @@ export class HostClient {
    * first; why there is none, as while this computer is signed in to no account; or null for a
    * host not on the relay.
    */
-  relayRoute(relay: HostRelay | undefined, last: string | null): RelayRoute | RelayProblem | null {
+  relayRoute(
+    relay: HostRelay | undefined,
+    last: string | null,
+    hostId?: string,
+  ): RelayRoute | RelayProblem | null {
     const client = this.options.relay
     if (!relay || !client) return null
     const token = client.token()
     if (!token) return 'signed_out'
     // The account's token goes only to the project's relays, whatever a code or a host names.
-    const relays = [...new Set([...relay.urls, client.main])].filter((url) =>
+    const named = [...new Set([...relay.urls, client.main])].filter((url) =>
       trustedRelay(url, client.main),
     )
-    if (last && relays.includes(last)) relays.sort((a, b) => (a === last ? -1 : b === last ? 1 : 0))
+    const urls = client.regions ? client.regions.allowed(named) : named
+    if (last && urls.includes(last)) urls.sort((a, b) => (a === last ? -1 : b === last ? 1 : 0))
+    // The host's regions by the whole path first, then those a welcome or a code named.
+    const ranked = hostId ? (this.relayRegions(hostId) ?? []) : []
+    const relays: RelayEndpoint[] = [
+      ...ranked.map((region) =>
+        region.pin ? { url: region.url, pin: region.pin } : { url: region.url },
+      ),
+      ...urls.filter((url) => !ranked.some((region) => region.url === url)).map((url) => ({ url })),
+    ]
+    return this.relayVia(relay.id, token, relays)
+  }
+
+  /**
+   * A host's relay regions in the order to try them, each with the whole path's round trip when
+   * known; null before the host said which it is signed in to, or where the relays take the
+   * access token and so only those of `GET /v1` are used.
+   */
+  relayRegions(hostId: string): RankedRegion[] | null {
+    return this.options.relay?.regions?.ranked(hostId) ?? null
+  }
+
+  /**
+   * This computer timed its regions again, so every host's rank anew; with `prefer`, its fastest
+   * changed too, which each host that hears of them is told.
+   */
+  regionsChanged(prefer: boolean): void {
+    for (const link of this.links.values()) {
+      if (prefer) link.sendPreference()
+      this.options.regionsChanged?.(link.id)
+    }
+  }
+
+  /** Joins the host with relay id `id` through the first of `relays` that can. */
+  relayVia(id: string, token: string, relays: RelayEndpoint[]): RelayRoute {
+    const client = this.options.relay!
+    const regions = client.regions
     return async (signal) => {
+      let joined: { close(): void } | null = null
       const result = await dialRelay({
         relays,
-        id: relay.id,
+        id,
         token,
         openSocket: client.openSocket,
         timeoutMs: this.timeoutMs,
         signal,
+        attempted: (url, outcome) => regions?.dialed(url, outcome),
+        // Until a session can move to another path, a region that drains is left by reconnecting.
+        drained: (url) => {
+          regions?.drained(url)
+          joined?.close()
+        },
       })
       switch (result.kind) {
-        case 'joined':
-          return { transport: await webSocketTransport(result.socket, true), relay: result.relay }
+        case 'joined': {
+          const transport = await webSocketTransport(result.socket, true)
+          joined = transport
+          return { transport, relay: result.relay }
+        }
         case 'offline':
           throw new RelayMissed('host_offline')
         case 'forbidden':
@@ -1298,7 +1404,11 @@ export class HostClient {
       protocol: { min: MIN_PROTOCOL_VERSION, max: PROTOCOL_VERSION },
       client: this.options.client,
       // Main runs the browser calls of the turns this computer sends.
-      features: [BROWSER_FEATURE, IMAGE_REFS_FEATURE],
+      features: [
+        BROWSER_FEATURE,
+        IMAGE_REFS_FEATURE,
+        ...(this.options.relay?.regions ? [REGIONS_CHANNEL_FEATURE] : []),
+      ],
     }
     if (model === undefined) return hello
     const name = normalizeDeviceName(this.options.name()) ?? 'Kettu'
@@ -1333,8 +1443,7 @@ export class HostClient {
     const client = this.options.relay
     const fetchJson = client?.fetchJson
     if (!client || !fetchJson) return { state: 'unavailable' }
-    const token = client.token()
-    if (!token) return { state: 'signed_out' }
+    if (!client.token()) return { state: 'signed_out' }
     let regions: Parameters<typeof relayList>[1] = []
     try {
       const { status, body } = await fetchJson(`${client.main}${relayInfoPath()}`)
@@ -1344,7 +1453,11 @@ export class HostClient {
     } catch {
       // The main relay alone is asked.
     }
-    const relays = relayList(client.main, regions).map((region) => region.url)
+    // The token and where it may go, read together: either may have changed meanwhile.
+    const token = client.token()
+    if (!token) return { state: 'signed_out' }
+    const listed = relayList(client.main, regions).map((region) => region.url)
+    const relays = client.regions ? client.regions.allowed(listed) : listed
     const answers = await Promise.all(
       relays.map(async (url) => {
         try {

@@ -57,7 +57,8 @@
       "{\"type\":\"challenge\",\"nonce\":\"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc\"}",
       "{\"type\":\"ready\"}",
       "{\"type\":\"incoming\",\"token\":\"BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc\"}",
-      "{\"type\":\"replaced\"}"
+      "{\"type\":\"replaced\"}",
+      "{\"type\":\"drain\"}"
     ],
     "invalid": [
       "{\"type\":\"challenge\",\"nonce\":\"short\"}",
@@ -67,8 +68,16 @@
     ]
   },
   "deviceMessages": {
-    "valid": ["{\"type\":\"connect\",\"token\":\"access-token\"}"],
-    "invalid": ["{\"type\":\"connect\"}", "{\"type\":\"connect\",\"token\":7}", "ping"]
+    "valid": [
+      "{\"type\":\"connect\",\"token\":\"access-token\"}",
+      "{\"type\":\"connect\",\"token\":\"access-token\",\"features\":[\"drain\"]}"
+    ],
+    "invalid": [
+      "{\"type\":\"connect\"}",
+      "{\"type\":\"connect\",\"token\":7}",
+      "ping",
+      "{\"type\":\"connect\",\"token\":\"access-token\",\"features\":\"drain\"}"
+    ]
   },
   "info": {
     "answer": {
@@ -136,5 +145,387 @@
         "error": "unauthorized"
       }
     ]
+  },
+  "regions": {
+    "comment": "A list signed with the test key t1 (RFC 8032 section 7.1, test 2); the main relay is https://relay.kettu.sh",
+    "key": {
+      "id": "t1",
+      "seed": "TM0Imyj_ltqdtsNG7BFOD1uKMZ81q6Yk2oz27U-4pvs",
+      "publicKey": "PUAXw-hDiVqStwqnTRt-vJyYLM8uxJaMwM1V8Sr0Zgw"
+    },
+    "main": "https://relay.kettu.sh",
+    "context": "kettu-regions/1\n",
+    "signed": {
+      "key": "t1",
+      "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+      "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+    },
+    "payload": {
+      "v": 1,
+      "serial": 42,
+      "issuedAt": 1763200000000,
+      "place": {
+        "country": "CN",
+        "asn": 4134
+      },
+      "regions": [
+        {
+          "id": "hk-1",
+          "name": "Hong Kong",
+          "country": "HK",
+          "url": "https://hk-1.relay.kettu.sh",
+          "state": "active"
+        },
+        {
+          "id": "sh-1",
+          "name": "Shanghai",
+          "country": "CN",
+          "url": "https://203.0.113.7:7443",
+          "pin": "A1l5acSz3nk-OfVkdXoabfGkc-1e1RuvNnxBpGujxxw",
+          "state": "active"
+        },
+        {
+          "id": "tyo-2",
+          "name": "Tokyo",
+          "country": "JP",
+          "url": "https://tyo-2.relay.kettu.sh",
+          "state": "probe"
+        },
+        {
+          "id": "main",
+          "name": "Global",
+          "url": "https://relay.kettu.sh",
+          "state": "active"
+        }
+      ],
+      "stun": ["hk-1.relay.kettu.sh:3478", "203.0.113.7:3478"]
+    },
+    "list": {
+      "serial": 42,
+      "issuedAt": 1763200000000,
+      "place": {
+        "country": "CN",
+        "asn": 4134
+      },
+      "regions": [
+        {
+          "id": "hk-1",
+          "name": "Hong Kong",
+          "country": "HK",
+          "url": "https://hk-1.relay.kettu.sh",
+          "pin": null,
+          "state": "active"
+        },
+        {
+          "id": "sh-1",
+          "name": "Shanghai",
+          "country": "CN",
+          "url": "https://203.0.113.7:7443",
+          "pin": "A1l5acSz3nk-OfVkdXoabfGkc-1e1RuvNnxBpGujxxw",
+          "state": "active"
+        },
+        {
+          "id": "tyo-2",
+          "name": "Tokyo",
+          "country": "JP",
+          "url": "https://tyo-2.relay.kettu.sh",
+          "pin": null,
+          "state": "probe"
+        },
+        {
+          "id": "main",
+          "name": "Global",
+          "country": null,
+          "url": "https://relay.kettu.sh",
+          "pin": null,
+          "state": "active"
+        }
+      ],
+      "stun": ["hk-1.relay.kettu.sh:3478", "203.0.113.7:3478"]
+    },
+    "lowerSerial": {
+      "key": "t1",
+      "payload": "eyJ2IjoxLCJzZXJpYWwiOjQxLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+      "signature": "YMs1JtQa1_96ngjjxGFytoqxjTI7F3eBr9WtVdZZtxxVww1S6tB9ArsE5cNEX0sLlvjKVxTeOH0JYQ5h8soUAg"
+    },
+    "regionRules": {
+      "signed": {
+        "key": "t1",
+        "payload": "eyJ2IjoxLCJzZXJpYWwiOjQzLCJpc3N1ZWRBdCI6MTc2MzIwMDYwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJvdXRzaWRlIiwibmFtZSI6Ik91dHNpZGUiLCJ1cmwiOiJodHRwczovL3JlbGF5LmV4YW1wbGUuY29tIiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoiaXAtbm8tcGluIiwibmFtZSI6Ik5vIHBpbiIsInVybCI6Imh0dHBzOi8vMTk4LjUxLjEwMC4xOjc0NDMiLCJzdGF0ZSI6ImFjdGl2ZSJ9LHsiaWQiOiJuby1wb3J0IiwibmFtZSI6Ik5vIHBvcnQiLCJ1cmwiOiJodHRwczovLzE5OC41MS4xMDAuMiIsInBpbiI6IkExbDVhY1N6M25rLU9mVmtkWG9hYmZHa2MtMWUxUnV2Tm54QnBHdWp4eHciLCJzdGF0ZSI6ImFjdGl2ZSJ9LHsiaWQiOiJwaW5uZWQtbmFtZSIsIm5hbWUiOiJQaW5uZWQgbmFtZSIsInVybCI6Imh0dHBzOi8vcGlubmVkLnJlbGF5LmtldHR1LnNoOjc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoicGxhaW4taHR0cCIsIm5hbWUiOiJQbGFpbiIsInVybCI6Imh0dHA6Ly8xOTguNTEuMTAwLjM6NzQ0MyIsInBpbiI6IkExbDVhY1N6M25rLU9mVmtkWG9hYmZHa2MtMWUxUnV2Tm54QnBHdWp4eHciLCJzdGF0ZSI6ImFjdGl2ZSJ9LHsiaWQiOiJzaG9ydC1waW4iLCJuYW1lIjoiU2hvcnQgcGluIiwidXJsIjoiaHR0cHM6Ly8xOTguNTEuMTAwLjQ6NzQ0MyIsInBpbiI6IkFBQUEiLCJzdGF0ZSI6ImFjdGl2ZSJ9LHsiaWQiOiJCYWRfSWQiLCJuYW1lIjoiQmFkIGlkIiwidXJsIjoiaHR0cHM6Ly9iYWQucmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9LHsiaWQiOiJkcmFpbmVkIiwibmFtZSI6IkRyYWluZWQiLCJ1cmwiOiJodHRwczovL2RyYWluZWQucmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImRyYWluaW5nIn0seyJpZCI6InNoLTIiLCJuYW1lIjoiU2hhbmdoYWkgMiIsImNvdW50cnkiOiJDTiIsInVybCI6Imh0dHBzOi8vWzIwMDE6ZGI4Ojo3XTo3NDQzIiwicGluIjoiQTFsNWFjU3ozbmstT2ZWa2RYb2FiZkdrYy0xZTFSdXZObnhCcEd1anh4dyIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6Im1haW4iLCJuYW1lIjoiR2xvYmFsIiwidXJsIjoiaHR0cHM6Ly9yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn1dLCJzdHVuIjpbIjIwMy4wLjExMy43OjM0NzgiLCJub3QgYSBzZXJ2ZXIiLCJbMjAwMTpkYjg6OjddOjM0NzgiXX0",
+        "signature": "5qPZO0RIJ-f1UQmeKaZYVVL2RaDJRO30fB97GOje8S-49LrFuL7GQn960PPeyJ0giS3ldqzK2IMQX4Y_ddNEDg"
+      },
+      "kept": ["sh-2", "main"],
+      "stun": ["203.0.113.7:3478", "[2001:db8::7]:3478"]
+    },
+    "refused": {
+      "unknownKey": {
+        "key": "r9",
+        "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+        "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+      },
+      "tampered": {
+        "key": "t1",
+        "payload": "eyJ2IjoxLCJzZXJpYWwiOjk5LCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+        "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+      },
+      "badSignature": {
+        "key": "t1",
+        "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+        "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXAA"
+      }
+    }
+  },
+  "drain": {
+    "comment": "What a region being emptied sends as text: on a host's control socket after ready, and on a device's joined socket when its connect named the drain feature",
+    "message": "{\"type\":\"drain\"}",
+    "connect": "{\"type\":\"connect\",\"token\":\"access-token\",\"features\":[\"drain\"]}"
+  },
+  "channel": {
+    "comment": "Messages on the encrypted channel, sent only when the welcome names the feature relay-regions; a host sends relay.regions only to a device whose hello names it too",
+    "feature": "relay-regions",
+    "regions": {
+      "valid": [
+        {
+          "type": "relay.regions",
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          },
+          "regions": [
+            {
+              "id": "main",
+              "rtt": 182
+            },
+            {
+              "id": "hk-1",
+              "rtt": 41
+            },
+            {
+              "id": "sh-1",
+              "rtt": null
+            }
+          ]
+        },
+        {
+          "type": "relay.regions",
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          },
+          "regions": []
+        }
+      ],
+      "invalid": [
+        {
+          "type": "relay.regions",
+          "regions": [
+            {
+              "id": "main",
+              "rtt": 182
+            }
+          ]
+        },
+        {
+          "type": "relay.regions",
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          },
+          "regions": [
+            {
+              "id": "main",
+              "rtt": "182"
+            }
+          ]
+        },
+        {
+          "type": "relay.regions",
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          },
+          "regions": [
+            {
+              "id": "Main",
+              "rtt": 182
+            }
+          ]
+        },
+        {
+          "type": "relay.regions",
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          },
+          "regions": [
+            {
+              "id": "main",
+              "rtt": -1
+            }
+          ]
+        },
+        {
+          "type": "relay.regions",
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          },
+          "regions": [
+            {
+              "id": "r0",
+              "rtt": 1
+            },
+            {
+              "id": "r1",
+              "rtt": 1
+            },
+            {
+              "id": "r2",
+              "rtt": 1
+            },
+            {
+              "id": "r3",
+              "rtt": 1
+            },
+            {
+              "id": "r4",
+              "rtt": 1
+            },
+            {
+              "id": "r5",
+              "rtt": 1
+            },
+            {
+              "id": "r6",
+              "rtt": 1
+            },
+            {
+              "id": "r7",
+              "rtt": 1
+            },
+            {
+              "id": "r8",
+              "rtt": 1
+            }
+          ]
+        },
+        {
+          "type": "relay.regions",
+          "list": {
+            "key": "t1",
+            "payload": "!",
+            "signature": "x"
+          },
+          "regions": []
+        }
+      ],
+      "ranked": {
+        "comment": "The device's own leg to each region plus the host's; unknown either way goes last, in the host's order",
+        "device": {
+          "https://relay.kettu.sh": 30,
+          "https://hk-1.relay.kettu.sh": 20,
+          "https://203.0.113.7:7443": 5
+        },
+        "order": ["hk-1", "main", "sh-1"],
+        "rtt": [61, 212, null]
+      }
+    },
+    "prefer": {
+      "valid": [
+        {
+          "type": "relay.prefer",
+          "regions": ["hk-1", "sh-1"],
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          }
+        },
+        {
+          "type": "relay.prefer",
+          "regions": ["main"],
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          }
+        }
+      ],
+      "invalid": [
+        {
+          "type": "relay.prefer",
+          "regions": ["hk-1", "sh-1", "main"],
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          }
+        },
+        {
+          "type": "relay.prefer",
+          "regions": ["hk-1"]
+        },
+        {
+          "type": "relay.prefer",
+          "regions": ["HK-1"],
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          }
+        },
+        {
+          "type": "relay.prefer",
+          "regions": "hk-1",
+          "list": {
+            "key": "t1",
+            "payload": "eyJ2IjoxLCJzZXJpYWwiOjQyLCJpc3N1ZWRBdCI6MTc2MzIwMDAwMDAwMCwicGxhY2UiOnsiY291bnRyeSI6IkNOIiwiYXNuIjo0MTM0fSwicmVnaW9ucyI6W3siaWQiOiJoay0xIiwibmFtZSI6IkhvbmcgS29uZyIsImNvdW50cnkiOiJISyIsInVybCI6Imh0dHBzOi8vaGstMS5yZWxheS5rZXR0dS5zaCIsInN0YXRlIjoiYWN0aXZlIn0seyJpZCI6InNoLTEiLCJuYW1lIjoiU2hhbmdoYWkiLCJjb3VudHJ5IjoiQ04iLCJ1cmwiOiJodHRwczovLzIwMy4wLjExMy43Ojc0NDMiLCJwaW4iOiJBMWw1YWNTejNuay1PZlZrZFhvYWJmR2tjLTFlMVJ1dk5ueEJwR3VqeHh3Iiwic3RhdGUiOiJhY3RpdmUifSx7ImlkIjoidHlvLTIiLCJuYW1lIjoiVG9reW8iLCJjb3VudHJ5IjoiSlAiLCJ1cmwiOiJodHRwczovL3R5by0yLnJlbGF5LmtldHR1LnNoIiwic3RhdGUiOiJwcm9iZSJ9LHsiaWQiOiJtYWluIiwibmFtZSI6Ikdsb2JhbCIsInVybCI6Imh0dHBzOi8vcmVsYXkua2V0dHUuc2giLCJzdGF0ZSI6ImFjdGl2ZSJ9XSwic3R1biI6WyJoay0xLnJlbGF5LmtldHR1LnNoOjM0NzgiLCIyMDMuMC4xMTMuNzozNDc4Il19",
+            "signature": "iCv-QpCxxRkNXvtCCJuLSA216xa5cCMojlLOz3bqLegLl17h2vISkRdcoyXufZGNMK1FjvwdhVaDEU0yQtlXCQ"
+          }
+        }
+      ]
+    }
+  },
+  "report": {
+    "comment": "What POST /v1/reports takes with the relay token as bearer: one per install and local day, for the day before, regions by median and 90th percentile (nearest rank) of their round trips, null for a region no probe of which succeeded that day",
+    "rtts": [40, 41, 42, 48, 50, 52, 60, 70, 90, 120],
+    "body": {
+      "v": 1,
+      "day": "2026-11-14",
+      "app": "desktop",
+      "regions": [
+        {
+          "id": "hk-1",
+          "rttMedian": 50,
+          "rttP90": 90,
+          "connects": 12,
+          "failures": 1
+        },
+        {
+          "id": "sh-1",
+          "rttMedian": null,
+          "rttP90": null,
+          "connects": 0,
+          "failures": 3
+        }
+      ],
+      "p2p": {
+        "attempts": 0,
+        "opened": 0
+      }
+    }
+  },
+  "relayToken": {
+    "comment": "POST /api/v1/relay/token on the account service with the access token as bearer answers this; the token is opaque to clients",
+    "answer": {
+      "token": "kr1.opaque-relay-token",
+      "expiresAt": 1763203600000
+    }
   }
 }
