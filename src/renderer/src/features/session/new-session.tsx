@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Alert02Icon, GitBranchIcon, GitCommitIcon } from '@hugeicons/core-free-icons'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
+import { StarLine } from '@renderer/features/github-star/star-prompts'
 import type { Project, SessionSummary, StartNotice } from '@shared/agent-host'
 import type { AgentId, SlashCommand, UserContent } from '@shared/thread'
 import { usableWorkflow, type Workflow, type WorkflowEntry } from '@shared/workflow'
@@ -200,6 +201,7 @@ export function NewSessionView({
           </DraftComposer>
         </section>
       </ColumnScroller>
+      {!parent && <StarLine hidden={holdsMessage} />}
       <DropOverlay shown={drop.over} starting={false} agentName="" />
     </div>
   )

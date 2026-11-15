@@ -1,0 +1,265 @@
+/* The GitHub star prompts: the shared star, the sidebar card's glow and New session's line. */
+
+.kstar {
+  display: inline-grid;
+  color: var(--send);
+}
+.kstar-fill path {
+  fill: currentColor;
+}
+.kstar-pop {
+  animation: kstar-pop 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes kstar-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  38% {
+    transform: scale(1.4);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.kstar-anchor {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.kstar-burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.kstar-burst i {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--s);
+  height: var(--s);
+  margin: calc(var(--s) / -2);
+  border-radius: 50%;
+  background: var(--send);
+  opacity: 0;
+  animation: kstar-fly 680ms cubic-bezier(0.2, 0.7, 0.3, 1) var(--d) forwards;
+}
+.kstar-burst i[data-amber] {
+  background: var(--tile-amber);
+}
+.kstar-burst i[data-star] {
+  border-radius: 0;
+  clip-path: polygon(
+    50% 0%,
+    61% 35%,
+    98% 35%,
+    68% 57%,
+    79% 91%,
+    50% 70%,
+    21% 91%,
+    32% 57%,
+    2% 35%,
+    39% 35%
+  );
+}
+@keyframes kstar-fly {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateY(-4px) scale(0.5);
+  }
+  65% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(calc(-1 * var(--r))) scale(1);
+  }
+}
+.kstar-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  margin: -11px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px var(--send);
+  opacity: 0;
+  animation: kstar-ring 620ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes kstar-ring {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.1);
+  }
+}
+
+/* Starred: the label settles to the faint ink, the star keeps the fox. */
+.kstar-btn[data-starred] {
+  color: var(--shell-muted);
+  pointer-events: none;
+}
+.kstar-btn:disabled {
+  opacity: 1;
+}
+
+/* The sidebar card: affectUI's Gradient Floor glowing up behind the Star button. Its clip is a
+   layer of its own, so the corner close button stays whole. */
+.kstar-card {
+  isolation: isolate;
+}
+.kstar-floor-clip {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.kstar-floor {
+  --ui-gf-bg: transparent;
+  position: absolute !important;
+  inset: 0;
+  opacity: 0.42;
+  transition: opacity 600ms ease;
+}
+.kstar-card[data-busy] .kstar-floor {
+  opacity: 0.6;
+}
+.kstar-card[data-starred] .kstar-floor {
+  opacity: 0.85;
+}
+[data-theme='dark'] .kstar-floor {
+  opacity: 0.5;
+}
+[data-theme='dark'] .kstar-floor .ui-gf-layer--light {
+  opacity: 0.25;
+}
+.kstar-floor stop:nth-child(1) {
+  stop-color: var(--star-glow-1);
+}
+.kstar-floor stop:nth-child(2) {
+  stop-color: var(--star-glow-2);
+}
+.kstar-floor stop:nth-child(3) {
+  stop-color: var(--star-glow-3);
+}
+
+/* New session's line, at the foot of the main area and out of the composer's way. */
+.kstar-foot-slot {
+  position: absolute;
+  right: 0;
+  bottom: 18px;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.kstar-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--composer-faint);
+  white-space: nowrap;
+  pointer-events: auto;
+  transition: opacity 180ms ease;
+}
+.kstar-foot[data-hidden] {
+  visibility: hidden;
+  opacity: 0;
+}
+.kstar-foot__close {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: var(--composer-faint);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.kstar-foot:hover .kstar-foot__close,
+.kstar-foot:focus-within .kstar-foot__close {
+  opacity: 1;
+}
+.kstar-foot__close:hover {
+  color: var(--shell-ink);
+  background: var(--bg-hover);
+}
+
+/* Onboarding's last step. */
+.kstar-onb {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 12px;
+  padding: 10px 12px 10px 14px;
+}
+.kstar-onb__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--bg-app);
+  box-shadow: inset 0 0 0 0.5px var(--border-default);
+}
+.kstar-onb__text {
+  flex: 1;
+  min-width: 0;
+}
+.kstar-onb__text b {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+.kstar-onb__text small {
+  display: block;
+  font-size: 12px;
+  color: var(--shell-muted);
+}
+
+:is(.kettu-settings, .kettu-sd) .k-about > .k-row:has(.kstar-about) {
+  display: flex;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kstar-pop {
+    animation: none;
+  }
+  .kstar-burst {
+    display: none;
+  }
+}
+:root[data-reduce-motion='always'] {
+  & .kstar-pop {
+    animation: none;
+  }
+  & .kstar-burst {
+    display: none;
+  }
+  & .kstar-card .ui-gt__fill {
+    animation: none;
+    transition: none;
+    clip-path: inset(-0.25em);
+  }
+  & .kstar-card .ui-gt__base {
+    color: transparent;
+    transition: none;
+  }
+}

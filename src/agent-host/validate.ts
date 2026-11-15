@@ -1929,6 +1929,10 @@ export function createValidators(platform: Platform): Validators {
     },
     'git.currentPullRequest': project,
     'git.tools': none,
+    'star.state': none,
+    'star.add': none,
+    'star.dismiss': none,
+    'star.opened': none,
     'media.open': (params) => {
       const o = fields(params)
       return { ...mediaFile(o), sessionId: sessionId(o) }

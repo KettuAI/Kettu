@@ -13,6 +13,7 @@ import { useHostContext } from '@renderer/lib/host-features'
 import { useNow } from '@renderer/lib/use-now'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { checkForUpdates, useUpdatesStore } from '@renderer/stores/updates'
+import { AboutStarButton } from '@renderer/features/github-star/star-prompts'
 import { ControlError, LinkButton, SetButton, SettingSelect, Skel, Spin } from './controls'
 import { FlashMark, PageHeader, RowText } from './rows'
 import { useApply } from './use-apply'
@@ -50,6 +51,7 @@ export function AboutHero({ info }: { info: AppInfo | null }) {
           <LinkButton href={SOURCE_URL} icon={<Icon icon={GithubIcon} size={14} />}>
             {t('about.github.name')}
           </LinkButton>
+          <AboutStarButton />
         </span>
       </div>
     </>

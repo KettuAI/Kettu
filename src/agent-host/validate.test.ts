@@ -21,6 +21,14 @@ describe('createValidators', () => {
     rejects(() => posix['agents.list']({ extra: 1 }))
   })
 
+  it('takes no repository or anything else for a star, which is always Kettu’s own', () => {
+    for (const method of ['star.state', 'star.add', 'star.dismiss', 'star.opened'] as const) {
+      expect(posix[method](undefined)).toBeUndefined()
+      rejects(() => posix[method]({ repository: 'someone/else' }))
+      rejects(() => posix[method]({ args: ['repo', 'delete'] }))
+    }
+  })
+
   it('returns only the known fields', () => {
     expect(posix['sessions.open']({ sessionId: 's', other: 'x' })).toEqual({ sessionId: 's' })
     expect(posix['agents.check']({})).toEqual({})

@@ -174,6 +174,7 @@ import {
   type AgentUpdatesFile,
   type JsonFile,
 } from './storage'
+import { GitHubStar, gitHubStarFile } from './github-star'
 import type { ImageMode } from './threads/model'
 import { ThreadStore, type ThreadWorkerFactory } from './threads/store'
 import { UsageManager, type UsageTimings } from './usage/manager'
@@ -345,6 +346,7 @@ export class AgentHost {
   private readonly remembered: JsonFile<AgentsFile>
   /** What the last update check found, so a found update shows after a restart. */
   private readonly updates: JsonFile<AgentUpdatesFile>
+  private readonly star: GitHubStar
   /** Each agent's config options from its last new session, for New session. */
   private readonly agentOptions: AgentOptionsStore
   /** New session's prepared sessions not yet adopted or removed, for the host after a crash. */
@@ -486,6 +488,12 @@ export class AgentHost {
     this.scratch = new ScratchFolders(path.join(options.userDataPath, 'scratch'), platform)
     this.remembered = agentsFile(options.userDataPath, log)
     this.updates = agentUpdatesFile(options.userDataPath, log)
+    this.star = new GitHubStar({
+      file: gitHubStarFile(options.userDataPath, log),
+      git: () => this.git,
+      changed: (state) => this.broadcast({ type: 'star.changed', state }),
+      log,
+    })
     this.agentOptions = new AgentOptionsStore({
       file: agentOptionsFile(options.userDataPath, log),
       changed: (changed) =>
@@ -934,6 +942,7 @@ export class AgentHost {
         waiting: (sessions) => options.send({ type: 'host:waiting', sessions }),
         seen: (sessionId) => options.send({ type: 'host:seen', sessionId }),
         busy: (counts) => options.send({ type: 'host:busy-changed', ...counts }),
+        completed: () => void this.star.turnCompleted(),
       },
     })
     this.routines = new RoutinesManager({
@@ -1165,7 +1174,10 @@ export class AgentHost {
       git.onPullRequest((projectPath, pr) =>
         this.sendToRetainers(projectPath, { type: 'git.pr', projectPath, pr }),
       ),
-      git.onTools((tools) => this.broadcast({ type: 'git.tools', tools })),
+      git.onTools((tools) => {
+        this.broadcast({ type: 'git.tools', tools })
+        this.star.recheck()
+      }),
       git.onBranchPullRequests((projectPath) => this.sessions.pullRequestsChanged(projectPath)),
       git.onReferenceChanged((url, found) => {
         this.hub.send(git.referenceWatchers(url), { type: 'git.reference', url, found })
@@ -2023,6 +2035,7 @@ export class AgentHost {
         this.sessions.flush(),
         this.remembered.flush(),
         this.updates.flush(),
+        this.star.flush(),
         this.trees.close(),
         this.agentOptions.flush(),
         this.preparedRecords.flush(),
@@ -2484,6 +2497,16 @@ export class AgentHost {
       'git.currentPullRequest': ({ projectPath }) =>
         this.gitProjectCall(projectPath, (g, p) => g.currentPullRequest(p)),
       'git.tools': () => this.gitCall((g) => g.tools()),
+      'star.state': async () => {
+        await this.env.ready()
+        return this.star.state()
+      },
+      'star.add': async () => {
+        await this.env.ready()
+        return this.star.star()
+      },
+      'star.dismiss': () => this.star.dismiss(),
+      'star.opened': () => this.star.opened(),
       'attachments.add': ({ source, thumb }) =>
         'projectPath' in source
           ? this.filesCall(source.projectPath, async (root) => {

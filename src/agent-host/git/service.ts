@@ -45,6 +45,7 @@ import {
   switchBranch,
 } from './operations'
 import { createReferenceWatcher, REFERENCE_REFRESH_MS } from './references'
+import { checkStarred, starRepository } from './star'
 import { createRepoCache, emptyStatus, readStatus, type RepoCache } from './status'
 import { watchGitDir, type GitDirWatch, type WatchFn } from './watch'
 
@@ -1125,6 +1126,10 @@ export function createGitService(
     },
 
     tools: getTools,
+
+    starred: () => track(checkStarred(exec, homedir())),
+
+    star: () => track(starRepository(exec, homedir())),
 
     async reloadTools() {
       const tools = await track(probeTools(exec, homedir()))

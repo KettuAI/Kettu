@@ -1,0 +1,31 @@
+{
+  "button": {
+    "star": "Star",
+    "starring": "Starring…",
+    "starred": "Starred",
+    "inBrowser": "Opens KettuAI/Kettu on GitHub in your browser",
+    "withGh": "Stars KettuAI/Kettu with your GitHub CLI, without opening the browser"
+  },
+  "card": {
+    "label": "Star Kettu on GitHub",
+    "lead": "If you like Kettu, ",
+    "ask": "give it a star.",
+    "thanks": "Thanks for the star!",
+    "close": "Close"
+  },
+  "line": {
+    "text": "Kettu is free and open source.",
+    "thanks": "Thank you for the star!",
+    "close": "Close"
+  },
+  "onboarding": {
+    "title": "Kettu is free and open source",
+    "body": "A star on GitHub helps others find it."
+  },
+  "menu": {
+    "star": "Star Kettu on GitHub",
+    "starring": "Starring…",
+    "starred": "Starred on GitHub"
+  },
+  "toast": "Starred KettuAI/Kettu. Thank you!"
+}
