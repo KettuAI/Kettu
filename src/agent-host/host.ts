@@ -2366,6 +2366,8 @@ export class AgentHost {
         digestsFor(device, await sessions.page(sessionId, before, from, imagesFor(device))),
       'sessions.entry': ({ sessionId, entryId }, { device }) =>
         sessions.entry(sessionId, entryId, imagesFor(device)),
+      'sessions.requests': ({ sessionId }, { device }) =>
+        sessions.requests(sessionId, imagesFor(device)),
       'sessions.outline': ({ sessionId }) => sessions.outline(sessionId),
       'sessions.outputs': ({ sessionId }) => sessions.outputs(sessionId),
       'sessions.outlineTitles': ({ sessionId }) => sessions.outlineTitles(sessionId),

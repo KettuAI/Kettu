@@ -780,6 +780,8 @@ describe('attachments', () => {
     })
     rejects(() => posix['sessions.entry']({ sessionId: 's' }))
     rejects(() => posix['sessions.entry']({ sessionId: 's', entryId: 'x'.repeat(1025) }))
+    expect(posix['sessions.requests']({ sessionId: 's', more: 1 })).toEqual({ sessionId: 's' })
+    rejects(() => posix['sessions.requests']({}))
     expect(posix['attachments.read']({ id: 'a1', more: 1 })).toEqual({ id: 'a1' })
     rejects(() => posix['attachments.remove']({}))
     expect(posix['attachments.held']({ ids: ['a1', 'a2'] })).toEqual({ ids: ['a1', 'a2'] })
