@@ -39,6 +39,11 @@ All your coding agents, side by side in one window that looks good and feels rig
   <img src="./assets/picture-workflows.webp" width="49%" alt="The Feature development workflow as a flowchart: research, design, plan, build, code review and ship">
 </p>
 
+<p>
+  <img src="./assets/picture-marketplace.webp" width="49%" alt="The Marketplace, listing plugins, skills and MCP servers to install">
+  <img src="./assets/picture-dark.webp" width="49%" alt="The same two sessions side by side in dark mode">
+</p>
+
 ### Agents and sessions
 
 - **47 agents**: Claude Code, Codex, OpenCode, Pi and more, with your own installs, accounts and settings. Turn one off without losing its sessions.

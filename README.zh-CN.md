@@ -39,6 +39,11 @@
   <img src="./assets/picture-workflows.webp" width="49%" alt="「功能开发」工作流的流程图：调研、设计、计划、实现、代码审查和发布">
 </p>
 
+<p>
+  <img src="./assets/picture-marketplace.webp" width="49%" alt="Marketplace 列出可以安装的插件、Skills 和 MCP 服务器">
+  <img src="./assets/picture-dark.webp" width="49%" alt="深色模式下并排的同样两个会话">
+</p>
+
 ### Agent 与会话
 
 - **47 个 Agent**：Claude Code、Codex、OpenCode、Pi 等，用你自己的安装、账号和设置。暂时不用的可以关掉，会话不会丢。
