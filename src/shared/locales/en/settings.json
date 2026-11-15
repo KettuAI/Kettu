@@ -876,7 +876,8 @@
       "noteClaude": "Claude Code keeps the key in the settings.json of this agent’s folder; Kettu keeps no copy and never reads it back. {{command}} in a terminal with this folder uses it too.",
       "noteCodex": "Codex keeps the key through its own codex login; Kettu keeps no copy. For another provider, set it up in this folder’s config.toml.",
       "baseUrlOptional": "Base URL (optional)",
-      "modelOptional": "Model (optional)"
+      "modelOptional": "Model (optional)",
+      "envSet": "Set. Kettu keeps it and passes it only to {{name}} when it starts."
     },
     "needsSignInLine": "needs you to sign in",
     "signInPill": "Sign in",

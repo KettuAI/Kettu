@@ -95,7 +95,7 @@ export function startAgentHost(control: ControlChannel<MainToHost, HostToMain>):
         withHost((h) => h.updateSettings(message.settings))
         break
       case 'host:market-keys':
-        withHost((h) => h.setMarketKeys(message.values, message.oauth))
+        withHost((h) => h.setMarketKeys(message.values, message.oauth, message.agentEnv))
         break
       case 'host:market-account':
         withHost((h) => h.setMarketAccount(message.account))

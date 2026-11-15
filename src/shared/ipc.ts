@@ -372,6 +372,10 @@ export interface IpcInvokeContract {
   'sharing:unpublish': { args: [id: string]; result: SharingResult }
   // Fills or clears inputs of a server the settings keep; answers which inputs are set, never values.
   'marketplace:set-keys': { args: [patch: MarketKeysPatch]; result: MarketKeyState }
+  'marketplace:set-agent-env': {
+    args: [agentId: string, variable: string, value: string | null]
+    result: void
+  }
   'remote:status': { args: []; result: RemoteStatus }
   // A pairing code for this page, voiding any other; null while remote access is not on. Its
   // progress comes as `remote:pairing` under the id.
@@ -710,6 +714,7 @@ export interface KettuApi {
      * clears one. Answers which inputs of each server are set.
      */
     setKeys(patch: MarketKeysPatch): Promise<MarketKeyState>
+    setAgentEnv(agentId: string, variable: string, value: string | null): Promise<void>
   }
   /** Remote access: devices paired with this computer, and pairing more. */
   remote: {

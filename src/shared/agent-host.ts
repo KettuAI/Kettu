@@ -219,7 +219,8 @@ export interface AgentAuthMethod {
   id: string
   name: string
   description?: string
-  type: 'agent' | 'terminal'
+  type: 'agent' | 'terminal' | 'env'
+  envVars?: { name: string; optional: boolean; set: boolean }[]
   command?: string // for terminal methods: the agent's named command or its launch, quoted
 }
 
@@ -339,6 +340,7 @@ export interface AgentStatus {
     context: boolean // what fills the context from its own report (`/context`)
     liveContext: boolean // what fills the context from its connection through a running turn
     account: boolean // names its account through `_auth/status_update` as it starts
+    authStatus?: boolean // supports ACP's draft `auth/status`
     mcpHttp: boolean | null // MCP servers over HTTP: from `initialize` or the one remembered
     prompt: PromptCapabilities | null // what a prompt may carry; null until the agent has started
   }

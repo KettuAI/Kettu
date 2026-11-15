@@ -71,8 +71,9 @@ export function SignInNotice({
   const { t } = useTranslation(['settings', 'session'])
   const inTerminal = status.authMethods.filter((m) => m.type === 'terminal' && m.command)
   const first = inTerminal[0]
+  // An `env` method is filled in on the agent's page; the agent has nothing to authenticate.
   const others = status.authMethods.filter(
-    (m) => m !== first && (onTerminal || m.type !== 'terminal'),
+    (m) => m !== first && m.type !== 'env' && (onTerminal || m.type !== 'terminal'),
   )
   return (
     <Notice

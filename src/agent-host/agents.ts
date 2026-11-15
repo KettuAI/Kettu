@@ -264,6 +264,7 @@ export interface AgentManagerDeps extends DriverOverrides {
   rememberUpdates?(file: AgentUpdatesFile): void
   /** The environment the agent's own process starts with, from the one it would have. */
   launchEnv?(agentId: AgentId, env: Env): Env
+  envKeyIsSet?(agentId: AgentId, variable: string): boolean
 }
 
 /** An install that was stopped on purpose, which leaves the agent as it was rather than failed. */
@@ -957,6 +958,13 @@ export class AgentManager {
       slot.runtime = runtime
       slot.state = 'ready'
       slot.detail = null
+      if (init.capabilities.authStatus && connection.readAuthStatus) {
+        try {
+          await connection.readAuthStatus()
+        } catch (error) {
+          diagnostics.log('warn', `${slot.name}: auth/status failed: ${(error as Error).message}`)
+        }
+      }
       diagnostics.event(agentId, 'ready', init.version ?? undefined)
       this.emit(slot)
       return runtime
@@ -2315,6 +2323,15 @@ export class AgentManager {
         }
       },
       account: (account) => this.setAccount(slot, account),
+      authState: (state) => {
+        if (state === 'authenticated') slot.signIn = 'signed-in'
+        else if (state === 'not_required') slot.signIn = 'signed-in'
+        else if (state === 'unauthenticated') {
+          slot.signIn = 'required'
+          slot.account = null
+        }
+        this.emit(slot)
+      },
       ignored: (sessionId, what) => diagnostics.ignored(agentId, sessionId, what),
       log: (level, message) => diagnostics.log(level, `${slot.name}: ${message}`),
     }
@@ -3005,6 +3022,11 @@ export class AgentManager {
     await this.credentialsChanged(slot)
   }
 
+  async agentEnvChanged(agentId: AgentId): Promise<void> {
+    const slot = this.registeredSlot(agentId)
+    await this.credentialsChanged(slot)
+  }
+
   // Claude Code's common settings.
 
   /** A Claude Code agent's auto-compact windows and prompt cache duration, from its settings file. */
@@ -3172,10 +3194,30 @@ export class AgentManager {
       name: method.name,
       ...(method.description ? { description: method.description } : {}),
       type: method.type,
+      ...(method.type === 'env' && method.envVars
+        ? {
+            envVars: method.envVars.map((variable) => ({
+              ...variable,
+              set: this.deps.envKeyIsSet?.(agentId, variable.name) ?? false,
+            })),
+          }
+        : {}),
       ...(method.type === 'terminal'
         ? { command: this.signInCommand(slot, display, method, folderEnv) }
         : {}),
     }))
+    if (slot.def.id === 'qwen' && this.has(agentId)) {
+      authMethods.push({
+        id: 'qwen-terminal-login',
+        name: 'Sign in with a subscription',
+        type: 'terminal',
+        command: formatCommand({ ...display, args: [] }, platform),
+      })
+    }
+    if (slot.def.id === 'kilo') {
+      const method = authMethods.find((item) => item.type === 'terminal')
+      if (method) method.command = formatCommand({ ...display, args: ['auth', 'login'] }, platform)
+    }
     if (slot.def.id === 'opencode' && this.has(agentId)) {
       authMethods.push({
         id: 'opencode-login',
@@ -3291,7 +3333,10 @@ export class AgentManager {
         reports: this.hasLimits(slot.id),
         context: this.hasContext(slot.id),
         liveContext: this.driver(slot).reads?.context === true,
-        account: slot.def.id === 'opencode' || (slot.def.reportsAccount ?? false),
+        account:
+          slot.def.id === 'opencode' ||
+          (slot.def.reportsAccount ?? false) ||
+          (capabilities?.authStatus ?? false),
         mcpHttp: capabilities?.mcpHttp ?? null,
         prompt: capabilities?.prompt ?? null,
       },

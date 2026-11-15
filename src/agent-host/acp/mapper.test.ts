@@ -23,6 +23,7 @@ import {
   CARRIED_DATA_LIMIT,
   contentRef,
   mapAuthStatus,
+  mapReportedAuthStatus,
   mapConfig,
   mapModelUsage,
   mapPermissionOptions,
@@ -1216,6 +1217,25 @@ describe('extensions and helpers', () => {
     })
     expect(mapAuthStatus({ authStatus: { kind: 'weird', label: 'x' } })).toBeNull()
     expect(mapAuthStatus(null)).toBeNull()
+  })
+
+  it('maps ACP auth status without carrying account metadata', () => {
+    expect(
+      mapReportedAuthStatus({
+        state: 'authenticated',
+        accounts: [
+          { label: 'Team', email: 'dev@example.com', active: true, _meta: { token: 'secret' } },
+        ],
+      }),
+    ).toEqual({
+      state: 'authenticated',
+      account: { kind: 'account', label: 'Team', email: 'dev@example.com' },
+    })
+    expect(mapReportedAuthStatus({ state: 'unauthenticated', accounts: [] })).toEqual({
+      state: 'unauthenticated',
+      account: null,
+    })
+    expect(mapReportedAuthStatus({ state: 'unexpected' })).toBeNull()
   })
 
   it('reads rate limits defensively', () => {

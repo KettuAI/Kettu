@@ -636,6 +636,41 @@ export function mapAuthStatus(params: unknown): AgentAccount | null {
   return { kind: kind as AgentAccount['kind'], label, email }
 }
 
+/** Maps ACP's draft auth state without carrying its credentials or arbitrary metadata. */
+export function mapReportedAuthStatus(params: unknown): {
+  state: 'authenticated' | 'unauthenticated' | 'not_required' | 'unknown'
+  account: AgentAccount | null
+} | null {
+  if (typeof params !== 'object' || params === null) return null
+  const value = params as { state?: unknown; accounts?: unknown }
+  if (
+    value.state !== 'authenticated' &&
+    value.state !== 'unauthenticated' &&
+    value.state !== 'not_required' &&
+    value.state !== 'unknown'
+  )
+    return null
+  const accounts = Array.isArray(value.accounts) ? value.accounts : []
+  const active = accounts.find(
+    (item) =>
+      typeof item === 'object' && item !== null && (item as { active?: unknown }).active === true,
+  )
+  const selected = active ?? accounts[0]
+  const record =
+    typeof selected === 'object' && selected !== null ? (selected as Record<string, unknown>) : null
+  return {
+    state: value.state,
+    account:
+      value.state === 'authenticated' && record && typeof record.label === 'string'
+        ? {
+            kind: 'account',
+            label: record.label,
+            email: typeof record.email === 'string' ? record.email : null,
+          }
+        : null,
+  }
+}
+
 export function mapTokenTotals(usage: acp.Usage | null | undefined): TokenTotals | null {
   if (!usage) return null
   return {
@@ -915,12 +950,7 @@ export function mapSessionUpdate(update: acp.SessionUpdate, ctx: MapperContext):
       mapSessionMessage(ctx, out, update, null)
       break
     case 'session_message_chunk':
-      mapSessionMessage(
-        ctx,
-        out,
-        { messageId: update.messageId, senderSessionId: update.senderSessionId },
-        update.content,
-      )
+      mapSessionMessage(ctx, out, { messageId: update.messageId }, update.content)
       break
     default:
       out.effects.push({

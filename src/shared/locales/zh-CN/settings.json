@@ -869,7 +869,8 @@
       "noteClaude": "key 交给 Claude Code，存进这个 Agent 配置目录里的 settings.json；Kettu 不留副本，也不读回。终端里用这个目录运行 {{command}} 也能用。",
       "noteCodex": "key 经 Codex 自己的 codex login 保存；Kettu 不留副本。要接别的服务商，在这个目录的 config.toml 里自己配。",
       "baseUrlOptional": "Base URL（可选）",
-      "modelOptional": "模型（可选）"
+      "modelOptional": "模型（可选）",
+      "envSet": "已设置。Kettu 保存它，只在 {{name}} 启动时交给它。"
     },
     "needsSignInLine": "需要你登录",
     "signInPill": "登录",

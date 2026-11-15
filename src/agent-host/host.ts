@@ -422,6 +422,7 @@ export class AgentHost {
   private readonly browserSites = new Map<string, string>()
   /** The values of the Marketplace servers' inputs from main, held only in memory. */
   private marketKeys: MarketKeys = new Map()
+  private agentEnvKeys: Record<string, Record<string, string>> = {}
   /** The Marketplace's catalog of MCP servers, from the registry. */
   private readonly marketCatalog: MarketCatalogService
   /** The sign-ins of the Marketplace's OAuth servers. */
@@ -816,7 +817,12 @@ export class AgentHost {
       authCommands: (commands) => options.send({ type: 'host:auth-commands', commands }),
       remember: (file) => this.remembered.save(file),
       rememberUpdates: (file) => this.updates.save(file),
-      launchEnv: (agentId, env) => this.marketSkills.launchEnv(agentId, env),
+      launchEnv: (agentId, env) => ({
+        ...this.marketSkills.launchEnv(agentId, env),
+        ...(this.agentEnvKeys[agentId] ?? {}),
+      }),
+      envKeyIsSet: (agentId, variable) =>
+        typeof this.agentEnvKeys[agentId]?.[variable] === 'string',
     })
     const routineHooks: RoutineSessionHooksRef = { current: null }
     const taskHooks: TaskSessionHooksRef = { current: null }
@@ -1424,7 +1430,7 @@ export class AgentHost {
    * `host:market-keys`: every value of the Marketplace servers' inputs, replacing those before.
    * They stay in memory and go only into what agents are handed; a malformed message is dropped.
    */
-  setMarketKeys(values: unknown, oauth?: unknown): void {
+  setMarketKeys(values: unknown, oauth?: unknown, agentEnv?: unknown): void {
     const keys = parseMarketKeys(values)
     const signIns = oauth === undefined ? undefined : parseSignIns(oauth)
     if (!keys || signIns === null) {
@@ -1433,6 +1439,41 @@ export class AgentHost {
     }
     const previous = this.marketKeys
     this.marketKeys = keys
+    const previousAgentEnv = this.agentEnvKeys
+    if (typeof agentEnv === 'object' && agentEnv !== null && !Array.isArray(agentEnv)) {
+      this.agentEnvKeys = Object.fromEntries(
+        Object.entries(agentEnv).flatMap(([id, vars]) =>
+          typeof vars === 'object' && vars !== null && !Array.isArray(vars)
+            ? [
+                [
+                  id,
+                  Object.fromEntries(
+                    Object.entries(vars).filter(
+                      (entry): entry is [string, string] => typeof entry[1] === 'string',
+                    ),
+                  ),
+                ],
+              ]
+            : [],
+        ),
+      )
+    }
+    for (const agentId of new Set([
+      ...Object.keys(previousAgentEnv),
+      ...Object.keys(this.agentEnvKeys),
+    ])) {
+      if (
+        JSON.stringify(previousAgentEnv[agentId] ?? {}) !==
+        JSON.stringify(this.agentEnvKeys[agentId] ?? {})
+      ) {
+        void this.agents.agentEnvChanged(agentId as AgentId).catch((error: unknown) => {
+          this.diagnostics.log(
+            'warn',
+            `Could not restart ${agentId} after its key changed: ${(error as Error).message}`,
+          )
+        })
+      }
+    }
     this.marketChanged(this.settings.marketplace.mcp, previous)
     if (signIns) this.signInsPushed(signIns)
     this.hub.broadcast({ type: 'market.keysChanged' })

@@ -25,10 +25,11 @@ export type MarketKeyValues = Record<string, Record<string, string>>
 export interface MarketKeysPush {
   values: MarketKeyValues
   oauth: Record<string, string>
+  agentEnv: Record<string, Record<string, string>>
 }
 
 // Version 1 held only the input values.
-const VERSION = 2
+const VERSION = 3
 const FILE_MODE = 0o600
 /** The most a value may hold, in UTF-8 bytes. */
 export const MAX_KEY_BYTES = 8192
@@ -62,6 +63,7 @@ type Keys = Map<string, Map<string, string>>
 interface Contents {
   keys: Keys
   oauth: Map<string, string>
+  agentEnv: Map<string, Map<string, string>>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -129,19 +131,24 @@ function parseOAuth(raw: unknown): Map<string, string> | null {
 }
 
 /** What a file of `version` holds: version 1 kept the input values alone. */
-function parseContents(raw: unknown, version: 1 | 2): Contents | null {
+function parseContents(raw: unknown, version: 1 | 2 | 3): Contents | null {
   if (version === 1) {
     const keys = parseValues(raw)
-    return keys && { keys, oauth: new Map() }
+    return keys && { keys, oauth: new Map(), agentEnv: new Map() }
   }
   if (!isRecord(raw)) return null
   const keys = parseValues(raw.values)
   const oauth = parseOAuth(raw.oauth)
-  return keys && oauth && { keys, oauth }
+  const agentEnv = version === 3 ? parseValues(raw.agentEnv) : new Map()
+  return keys && oauth && agentEnv && { keys, oauth, agentEnv }
 }
 
-function contentsObject({ keys, oauth }: Contents): MarketKeysPush {
-  return { values: toObject(keys), oauth: Object.fromEntries(oauth) }
+function contentsObject({ keys, oauth, agentEnv }: Contents): MarketKeysPush {
+  return {
+    values: toObject(keys),
+    oauth: Object.fromEntries(oauth),
+    agentEnv: toObject(agentEnv),
+  }
 }
 
 /** Whether a server signs in with OAuth, so the store may keep a sign-in for it. */
@@ -159,8 +166,8 @@ function toObject(keys: Keys): MarketKeyValues {
  * The contents without the keys of servers and inputs the settings no longer have, nor the sign-in
  * of a server that is gone or no longer signs in with OAuth.
  */
-function pruned({ keys, oauth }: Contents, servers: readonly MarketServer[]): Contents {
-  const next: Contents = { keys: new Map(), oauth: new Map() }
+function pruned({ keys, oauth, agentEnv }: Contents, servers: readonly MarketServer[]): Contents {
+  const next: Contents = { keys: new Map(), oauth: new Map(), agentEnv }
   for (const server of servers) {
     const inputs = keys.get(server.id)
     if (inputs) {
@@ -231,7 +238,7 @@ export class MarketKeys {
   static async load(options: MarketKeysOptions): Promise<MarketKeys> {
     const { file, cipher, log } = options
     const read = await readJsonFile(file)
-    let contents: Contents = { keys: new Map(), oauth: new Map() }
+    let contents: Contents = { keys: new Map(), oauth: new Map(), agentEnv: new Map() }
     let readOnly: string | null = null
     let resave = false
     const quarantine = async (reason: string): Promise<void> => {
@@ -256,7 +263,7 @@ export class MarketKeys {
         readOnly = 'The keys were saved by a newer version of Kettu'
       } else if (
         !isRecord(raw) ||
-        (version !== 1 && version !== VERSION) ||
+        (version !== 1 && version !== 2 && version !== VERSION) ||
         typeof raw.encrypted !== 'boolean'
       ) {
         await quarantine('not a keys file')
@@ -314,6 +321,37 @@ export class MarketKeys {
     return toObject(this.contents.keys)
   }
 
+  agentEnvState(): Record<string, string[]> {
+    return Object.fromEntries(
+      [...this.contents.agentEnv].map(([id, vars]) => [id, [...vars.keys()]]),
+    )
+  }
+
+  async setAgentEnv(agentId: string, variable: string, value: string | null): Promise<void> {
+    if (
+      !agentId ||
+      agentId.length > MAX_SERVER_ID ||
+      !variable ||
+      variable.length > MAX_INPUT_NAME
+    ) {
+      throw invalid('The agent and environment variable must be named')
+    }
+    await this.run(async () => {
+      if (this.readOnly) throw new MarketKeysError('unavailable', this.readOnly)
+      const vars = new Map(this.contents.agentEnv.get(agentId))
+      if (value === null) vars.delete(variable)
+      else {
+        const problem = valueProblem(value, false)
+        if (problem) throw invalid(`The value of "${variable}" ${problem}`)
+        vars.set(variable, value)
+      }
+      const agentEnv = new Map(this.contents.agentEnv)
+      if (vars.size) agentEnv.set(agentId, vars)
+      else agentEnv.delete(agentId)
+      await this.commit({ ...this.contents, agentEnv }, true)
+    })
+  }
+
   /** Everything the agent host is sent: the values, and every OAuth sign-in. */
   contentsForHost(): MarketKeysPush {
     return contentsObject(this.contents)
@@ -345,7 +383,7 @@ export class MarketKeys {
       const keys: Keys = new Map(this.contents.keys)
       if (inputs.size > 0) keys.set(server.id, inputs)
       else keys.delete(server.id)
-      const next = { keys, oauth: this.contents.oauth }
+      const next = { keys, oauth: this.contents.oauth, agentEnv: this.contents.agentEnv }
       await this.commit(pruned(next, this.options.servers()), true)
       return this.state()
     })
@@ -376,7 +414,7 @@ export class MarketKeys {
       const oauth = new Map(this.contents.oauth)
       if (state === null) oauth.delete(serverId)
       else oauth.set(serverId, state)
-      const next = { keys: this.contents.keys, oauth }
+      const next = { keys: this.contents.keys, oauth, agentEnv: this.contents.agentEnv }
       if (sameContents(next, this.contents)) {
         this.options.changed(this.contentsForHost())
         return true
@@ -420,7 +458,7 @@ export class MarketKeys {
 
   private async save(contents: Contents): Promise<void> {
     const { file, cipher, plainTextAllowed } = this.options
-    if (contents.keys.size === 0 && contents.oauth.size === 0) {
+    if (contents.keys.size === 0 && contents.oauth.size === 0 && contents.agentEnv.size === 0) {
       await rm(file, { force: true })
       return
     }
