@@ -175,6 +175,8 @@ export function createMarketplaceStore(
   let skillsRead = 0
   // By scope key; a first page read voids any read of the same scope still on its way.
   const communityReads = new Map<string, number>()
+  // The search asked for last; an answer to an earlier one is dropped, never kept over it.
+  let searchKey: string | null = null
   let installedRead = 0
   let installedAt = 0
   // When each list was last known to be within the host's keeping time.
@@ -323,8 +325,10 @@ export function createMarketplaceStore(
       const key = communityScopeKey(scope)
       const id = (communityReads.get(key) ?? 0) + 1
       communityReads.set(key, id)
+      if (scope.q) searchKey = key
       const put = (pages: CommunityPages) =>
         set((s) => {
+          if (scope.q && searchKey !== key) return {}
           const all = { ...s.communityPages, [key]: pages }
           // One search is kept at a time, the one typed last.
           if (scope.q) {
@@ -351,7 +355,7 @@ export function createMarketplaceStore(
           ...(scope.q ? { q: scope.q } : {}),
           ...(refresh ? { refresh } : {}),
         })
-        if (communityReads.get(key) !== id) return
+        if (communityReads.get(key) !== id || (scope.q && searchKey !== key)) return
         put({
           signedIn: page.signedIn,
           items: page.items,
@@ -369,7 +373,7 @@ export function createMarketplaceStore(
           ),
         }))
       } catch (e) {
-        if (communityReads.get(key) !== id) return
+        if (communityReads.get(key) !== id || (scope.q && searchKey !== key)) return
         put({ ...get().communityPages[key]!, loading: false, error: errorMessage(e), at: 0 })
       }
     },
@@ -416,6 +420,7 @@ export function createMarketplaceStore(
       }
     },
     clearCommunitySearch() {
+      searchKey = null
       const pages = get().communityPages
       const kept = Object.fromEntries(Object.entries(pages).filter(([key]) => key.endsWith('\0')))
       if (Object.keys(kept).length === Object.keys(pages).length) return
