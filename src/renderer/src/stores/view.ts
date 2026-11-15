@@ -50,6 +50,8 @@ type PageView =
       parentId?: string
     }
   | { kind: 'usage' } // the usage page, opened from the sidebar
+  // The Overview page, opened from the sidebar: every task and session that has something to say.
+  | { kind: 'overview' }
   // The Routines page, opened from the sidebar; with a null routine id, New routine, which an
   // example on the empty Routines page fills in.
   | { kind: 'routines' }
@@ -542,6 +544,13 @@ function handPanel(
     sidePane: withPane(withPane(s.sidePane, from, null), to, s.sidePane[from] ?? null),
     sideArtifact,
   }
+}
+
+export function openOverview(): void {
+  useViewStore.setState((s) => ({
+    main: { kind: 'overview' },
+    settings: { ...s.settings, open: false },
+  }))
 }
 
 export function openUsage(): void {

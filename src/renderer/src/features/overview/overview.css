@@ -1,0 +1,785 @@
+/* The Overview page on affectUI: a page of the shell whose rows share one set of marks, tags and
+   chips across its views. Colors come from the shell's variables and the theme's tokens. */
+
+.k-ov {
+  --ov-done: var(--thread-done);
+  --ov-run: var(--thread-fox);
+  --ov-you: var(--warning);
+  --ov-err: var(--danger);
+  position: relative;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.k-ov__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.k-ov__tools {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.k-ov-view {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.k-ov-empty {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
+}
+.k-ov-clear {
+  margin: 16px 4px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* State dots, wherever a state is named */
+.k-ov [data-state] > i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.k-ov [data-state='ready'] > i {
+  background: var(--ov-done);
+}
+.k-ov [data-state='you'] > i {
+  background: var(--ov-you);
+}
+.k-ov [data-state='running'] > i {
+  background: var(--ov-run);
+}
+.k-ov [data-state='stopped'] > i {
+  background: var(--ov-err);
+}
+
+/* The counts, which filter */
+.k-ov-counts {
+  display: flex;
+  gap: 8px;
+  margin: 20px 0 14px;
+}
+.k-ov-counts button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 11px;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--muted);
+  transition: background-color 140ms ease;
+}
+.k-ov-counts button:hover {
+  background: var(--chip);
+}
+.k-ov-counts b {
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.k-ov-counts span {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.k-ov-counts button[data-state='ready'] b {
+  color: var(--ov-done);
+}
+.k-ov-counts button[data-state='you'] b {
+  color: var(--ov-you);
+}
+.k-ov-counts button[data-state='running'] b {
+  color: var(--ov-run);
+}
+.k-ov-counts button[data-state='stopped'] b {
+  color: var(--ov-err);
+}
+.k-ov-counts button[aria-selected='true'] {
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  color: var(--ink);
+}
+.k-ov-counts button[data-state='all'] {
+  margin-left: auto;
+}
+
+/* The table */
+.k-ov-table {
+  margin-top: 0;
+  overflow: hidden;
+}
+.k-ov-tr,
+.k-ov-tlr {
+  position: relative;
+  display: grid;
+  align-items: center;
+  gap: 0 10px;
+  min-height: 52px;
+  padding: 8px 14px 8px 8px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+  font-size: 13px;
+  color: var(--text);
+}
+.k-ov-tr {
+  grid-template-columns:
+    14px 20px minmax(170px, 1fr) minmax(300px, 2.6fr) minmax(140px, 0.9fr)
+    minmax(110px, 0.7fr) 56px;
+}
+.k-ov-tlr {
+  grid-template-columns: 20px 220px minmax(0, 1fr) 64px;
+  padding-left: 16px;
+}
+.k-ov-th {
+  min-height: 34px;
+  padding-block: 0;
+  box-shadow: none;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--faint);
+}
+/* The row's own button lies under its cells; only what is interactive in them takes the pointer. */
+.k-ov-open {
+  position: absolute;
+  inset: 0;
+  transition: background-color 140ms ease;
+}
+.k-ov-open:hover {
+  background: var(--chip);
+}
+.k-ov-tr > :not(.k-ov-open),
+.k-ov-tlr > :not(.k-ov-open) {
+  position: relative;
+  pointer-events: none;
+}
+.k-ov-chev button,
+.k-ov-outs > * {
+  pointer-events: auto;
+}
+.k-ov-chev {
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+}
+.k-ov-chev button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 5px;
+}
+.k-ov-chev button:hover {
+  background: var(--chip);
+  color: var(--text);
+}
+.k-ov-mark {
+  display: grid;
+  place-items: center;
+}
+.k-ov-name {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  text-align: left;
+}
+.k-ov-name b {
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 19px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-ov-name small {
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-ov-gh {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 16px;
+  background: var(--line-soft);
+  box-shadow: inset 0 0.5px 0 var(--line);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.k-ov-gh b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.k-ov-gh span {
+  font-variant-numeric: tabular-nums;
+}
+.k-ov-gh small {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--faint);
+}
+.k-ov-gh--bare {
+  height: auto;
+  margin: 16px 6px 6px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+.k-ov-roll {
+  display: inline-flex;
+  gap: 14px;
+  margin-left: 10px;
+  font-size: 12px;
+}
+.k-ov-roll span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Step tags: one line, only the step in front is filled */
+.k-ov-tags {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+.k-ov-tags > span {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 22px;
+  height: 24px;
+  padding: 0 4px;
+  overflow: hidden;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--faint);
+  white-space: nowrap;
+}
+.k-ov-tags em {
+  min-width: 0;
+  overflow: hidden;
+  font-style: normal;
+  text-overflow: ellipsis;
+}
+.k-ov-tags > span[data-look='done'] {
+  color: var(--muted);
+}
+.k-ov-tags
+  > span:is([data-look='running'], [data-look='you'], [data-look='error'], [data-look='waiting']) {
+  flex: none;
+  max-width: 220px;
+  margin: 0 2px;
+  padding: 0 7px 0 5px;
+}
+.k-ov-tags > span[data-look='running'] {
+  background: color-mix(in srgb, var(--ov-run) 10%, transparent);
+  color: var(--ov-run);
+}
+.k-ov-tags > span[data-look='you'] {
+  background: color-mix(in srgb, var(--ov-you) 9%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ov-you) 30%, transparent);
+  color: var(--ov-you);
+}
+.k-ov-tags > span[data-look='error'] {
+  background: color-mix(in srgb, var(--ov-err) 9%, transparent);
+  color: var(--ov-err);
+}
+.k-ov-tags > span[data-look='waiting'] {
+  background: var(--chip);
+  color: var(--text);
+}
+.k-ov-sm {
+  display: grid;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  place-items: center;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+  color: var(--card);
+}
+.k-ov-sm[data-look='done'] {
+  background: var(--ov-done);
+  box-shadow: none;
+}
+.k-ov-sm[data-look='error'] {
+  background: var(--ov-err);
+  box-shadow: none;
+}
+.k-ov-sm[data-look='you'] {
+  background: var(--ov-you);
+  box-shadow: none;
+}
+.k-ov-sm[data-look='running'] {
+  box-shadow: none;
+}
+.k-ov-sm[data-look='waiting'] {
+  box-sizing: border-box;
+  border: 1.5px dashed var(--faint);
+  box-shadow: none;
+}
+.k-ov-noplan,
+.k-ov-none {
+  font-size: 12px;
+  color: var(--faint);
+}
+
+.k-ov-now {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 12.5px;
+  line-height: 18px;
+}
+.k-ov-now[data-state='you'] {
+  color: var(--ov-you);
+}
+.k-ov-now[data-state='stopped'] {
+  color: var(--ov-err);
+}
+
+.k-ov-outs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-width: 0;
+}
+.k-ov-out {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: 22px;
+  padding: 0 7px 0 6px;
+  border-radius: 6px;
+  background: var(--chip);
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.k-ov-out:hover {
+  background: var(--chip-hover);
+}
+.k-ov-out b {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  color: var(--ink);
+  text-overflow: ellipsis;
+}
+.k-ov-out small {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.k-ov-out[data-kind='pr'] svg {
+  color: var(--ov-done);
+}
+.k-ov-out[data-kind='artifact'] svg {
+  color: var(--accent);
+}
+.k-ov-more {
+  font-size: 12px;
+  color: var(--faint);
+}
+.k-ov-end {
+  display: grid;
+  justify-items: end;
+}
+.k-ov-time {
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* A session's sub-sessions */
+.k-ov-kid {
+  min-height: 40px;
+  padding-block: 4px;
+  background: var(--line-soft);
+  box-shadow: none;
+}
+.k-ov-kid .k-ov-name b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.k-ov-kid .k-ov-name b span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-ov-branch {
+  align-self: stretch;
+  margin: -4px 0;
+}
+.k-ov-branch::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 9px;
+  width: 1px;
+  background: var(--line-strong);
+}
+.k-ov-kid[data-last] .k-ov-branch::before {
+  bottom: 50%;
+}
+.k-ov-branch::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  width: 10px;
+  height: 1px;
+  background: var(--line-strong);
+}
+.k-ov-kidnow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-ov-kidnow[data-state='you'] {
+  color: var(--ov-you);
+}
+.k-ov-kidnow[data-state='stopped'] {
+  color: var(--ov-err);
+}
+
+/* Timeline */
+.k-ov-axis {
+  position: relative;
+  align-self: stretch;
+}
+.k-ov-axis em {
+  position: absolute;
+  top: 50%;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  transform: translate(-50%, -50%);
+}
+.k-ov-axis em[data-now] {
+  right: 0;
+  font-weight: 600;
+  color: var(--ov-run);
+  transform: translateY(-50%);
+}
+.k-ov-track {
+  align-self: stretch;
+  min-height: 36px;
+  margin: -8px 0;
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--ov-run) 40%, transparent);
+}
+.k-ov-track u {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line-soft);
+}
+.k-ov-earlier {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  font-size: 11.5px;
+  color: var(--faint);
+  transform: translateY(-50%);
+}
+.k-ov-bar {
+  position: absolute;
+  top: 50%;
+  box-sizing: border-box;
+  min-width: 3px;
+  height: 22px;
+  margin-top: -11px;
+  padding: 0 6px;
+  overflow: hidden;
+  border-right: 2px solid var(--card);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ov-done) 18%, transparent);
+  font-size: 11.5px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--ov-done);
+  white-space: nowrap;
+}
+/* A bar too short for a word keeps its color alone. */
+.k-ov-bar {
+  container-type: inline-size;
+}
+@container (max-width: 34px) {
+  .k-ov-bar > span {
+    display: none;
+  }
+}
+.k-ov-bar[data-open] {
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
+}
+.k-ov-bar[data-look='running'] {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--ov-run) 14%, transparent),
+    color-mix(in srgb, var(--ov-run) 30%, transparent)
+  );
+  color: var(--ov-run);
+}
+.k-ov-bar[data-look='you'] {
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--ov-you) 8%, transparent) 0 5px,
+    color-mix(in srgb, var(--ov-you) 22%, transparent) 5px 10px
+  );
+  color: var(--ov-you);
+}
+.k-ov-bar[data-look='error'] {
+  background: color-mix(in srgb, var(--ov-err) 16%, transparent);
+  color: var(--ov-err);
+}
+.k-ov-bar[data-look='waiting'] {
+  background: var(--chip);
+  color: var(--muted);
+}
+
+/* Inbox */
+.k-ov-inbox {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+  align-items: start;
+  gap: 20px;
+  margin-top: 8px;
+}
+.k-ov-inbox__list {
+  min-width: 0;
+}
+.k-ov-ir {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  padding: 5px 10px;
+  border-radius: 9px;
+  transition: background-color 140ms ease;
+}
+.k-ov-ir:hover {
+  background: var(--chip);
+}
+.k-ov-ir[data-active] {
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+}
+.k-ov-rest {
+  display: grid;
+  gap: 4px;
+  margin-top: 18px;
+}
+.k-ov-fold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--chip);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-ov-fold b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.k-ov-fold span {
+  flex: 1;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.k-ov-fold svg {
+  color: var(--faint);
+}
+.k-ov-detail {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  margin-top: 16px;
+}
+.k-ov-detail__body {
+  flex: 1;
+  padding: 20px 24px 8px;
+}
+.k-ov-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.k-ov-verdict[data-state='ready'] {
+  color: var(--ov-done);
+}
+.k-ov-verdict[data-state='you'] {
+  color: var(--ov-you);
+}
+.k-ov-verdict[data-state='stopped'] {
+  color: var(--ov-err);
+}
+.k-ov-detail h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 4px;
+  font-size: 19px;
+  line-height: 27px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+  color: var(--strong);
+}
+.k-ov-detail__sub {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-ov-detail__now {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--ink);
+}
+.k-ov-detail__now[data-state='you'] {
+  color: var(--ov-you);
+}
+.k-ov-detail__now[data-state='stopped'] {
+  color: var(--ov-err);
+}
+.k-ov-detail h3 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 22px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.k-ov-detail h3 span {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.k-ov-takes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.k-ov-takes .k-ov-out {
+  height: 28px;
+  padding: 0 10px 0 8px;
+  font-size: 12.5px;
+}
+.k-ov-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 30px;
+  box-shadow: inset 0 0.5px 0 var(--line);
+  font-size: 13px;
+  color: var(--faint);
+}
+.k-ov-list li:first-child {
+  box-shadow: none;
+}
+.k-ov-list li > span,
+.k-ov-list li > button {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-ov-list li > button:hover {
+  text-decoration: underline;
+}
+.k-ov-list li[data-look='done'] {
+  color: var(--text);
+}
+.k-ov-list li[data-look='running'],
+.k-ov-list li[data-look='waiting'] {
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-ov-list li[data-look='you'] {
+  font-weight: 500;
+  color: var(--ov-you);
+}
+.k-ov-list li[data-look='error'] {
+  font-weight: 500;
+  color: var(--ov-err);
+}
+.k-ov-list em {
+  display: inline-flex;
+  flex: none;
+  gap: 10px;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+.k-ov-detail__foot {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 20px 18px;
+}
+
+/* Short of room, the steps behind the one in front keep their ticks and drop their names. */
+@container k-page (max-width: 1180px) {
+  .k-ov-tags > span[data-look='done'] {
+    flex: none;
+    min-width: 0;
+    padding: 0 2px;
+  }
+  .k-ov-tags > span[data-look='done'] em {
+    display: none;
+  }
+}
+@container k-page (max-width: 900px) {
+  .k-ov-tr {
+    grid-template-columns: 14px 20px minmax(150px, 1fr) minmax(200px, 1.6fr) minmax(120px, 1fr) 56px;
+  }
+  .k-ov-tr > .k-ov-outs,
+  .k-ov-th > :nth-child(6) {
+    display: none;
+  }
+  .k-ov-inbox {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .k-ov-detail {
+    position: static;
+  }
+}

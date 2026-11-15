@@ -1,0 +1,76 @@
+{
+  "title": "Overview",
+  "description_one": "{{count}} task or session has something for you to see",
+  "description_other": "{{count}} tasks and sessions have something for you to see",
+  "separator": " · ",
+  "noPlan": "No plan",
+  "nothingYet": "Nothing yet",
+  "allDone": "all done",
+  "idle": "Idle",
+  "more": "+{{count}}",
+  "expand": "Show sub-sessions",
+  "collapse": "Hide sub-sessions",
+  "subSessions_one": "{{count}} sub-session",
+  "subSessions_other": "{{count}} sub-sessions",
+  "views": {
+    "label": "View",
+    "inbox": "Inbox",
+    "flow": "Flow",
+    "timeline": "Timeline"
+  },
+  "groupBy": {
+    "label": "Group by",
+    "state": "By state",
+    "project": "By project"
+  },
+  "filter": {
+    "label": "State",
+    "all": "All",
+    "none": "Nothing in this state."
+  },
+  "states": {
+    "ready": "Ready to deliver",
+    "you": "Needs you",
+    "running": "Running",
+    "stopped": "Stopped"
+  },
+  "stateNotes": {
+    "ready": "Finished, and you have not looked yet",
+    "you": "Waiting for your answer",
+    "running": "",
+    "stopped": "Failed or stuck"
+  },
+  "columns": {
+    "name": "Task or session",
+    "steps": "Steps",
+    "now": "Now",
+    "output": "Output"
+  },
+  "now": {
+    "step": "{{step}} · {{state}}",
+    "requests_one": "{{count}} request is waiting for your answer",
+    "requests_other": "{{count}} requests are waiting for your answer",
+    "failed": "The last turn failed",
+    "working": "Working",
+    "finished": "Finished"
+  },
+  "timeline": {
+    "now": "Now",
+    "earlier": "Earlier than this"
+  },
+  "inbox": {
+    "clear": "Nothing needs you right now."
+  },
+  "detail": {
+    "outputs": "To take",
+    "pullRequest": "Pull request",
+    "artifact": "Artifact",
+    "subSessions": "Sub-sessions",
+    "openTask": "Open task",
+    "openSession": "Open session"
+  },
+  "empty": {
+    "title": "All quiet",
+    "text": "Tasks and sessions show here while they run, wait for you, stop, or finish with something you have not seen."
+  }
+}

@@ -17,6 +17,7 @@ import type main from './locales/en/main.json'
 import type marketplace from './locales/en/marketplace.json'
 import type onboarding from './locales/en/onboarding.json'
 import type report from './locales/en/report.json'
+import type overview from './locales/en/overview.json'
 import type routines from './locales/en/routines.json'
 import type session from './locales/en/session.json'
 import type settings from './locales/en/settings.json'
@@ -52,6 +53,7 @@ declare module 'i18next' {
       marketplace: typeof marketplace
       onboarding: typeof onboarding
       report: typeof report
+      overview: typeof overview
       routines: typeof routines
       session: typeof session
       settings: typeof settings

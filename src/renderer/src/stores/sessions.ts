@@ -176,6 +176,15 @@ export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[
   )
 }
 
+/** Every top-level session on any host that is not archived, as trees, pinned ones included. */
+export function liveTree(byId: Record<string, SessionSummary>): SessionNode[] {
+  return buildTree(
+    byId,
+    (s) => listedOrigin(s),
+    (s) => !s.archivedAt,
+  )
+}
+
 /** Whether the session is a pinned top-level session not archived, or one of its sub-sessions. */
 export function inPinnedTree(byId: Record<string, SessionSummary>, s: SessionSummary): boolean {
   let root = s

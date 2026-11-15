@@ -7,6 +7,7 @@ import {
   RepeatIcon,
   Settings01Icon,
   Store01Icon,
+  ViewIcon,
 } from '@hugeicons/core-free-icons'
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { TaskRing } from '@renderer/features/tasks/task-ring'
@@ -46,6 +47,8 @@ function PageIcon({ place }: { place: HistoryPlace }) {
   switch (place.kind) {
     case 'settings':
       return <Glyph icon={Settings01Icon} size={15} />
+    case 'overview':
+      return <Glyph icon={ViewIcon} size={15} />
     case 'usage':
       return <Glyph icon={Analytics01Icon} size={15} />
     case 'routines':

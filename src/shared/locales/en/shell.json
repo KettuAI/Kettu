@@ -79,6 +79,7 @@
     },
     "places": {
       "newSession": "New session",
+      "overview": "Overview",
       "usage": "Usage",
       "routines": "Routines",
       "newRoutine": "New routine",
