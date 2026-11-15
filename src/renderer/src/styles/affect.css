@@ -1900,6 +1900,12 @@ li[data-row-exit='dust'] > * {
 .kp-devrow:disabled {
   opacity: 0.4;
 }
+/* Over the device, so the light around it passes under them. */
+.kp-pane[data-pane='devices'] > .kp-head,
+.kp-device-ask {
+  position: relative;
+  z-index: 1;
+}
 /* An agent's request, under the head. */
 .kp-device-ask {
   flex: none;

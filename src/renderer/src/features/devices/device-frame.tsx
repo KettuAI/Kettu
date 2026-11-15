@@ -20,10 +20,13 @@ import { cn } from '@renderer/lib/utils'
 
 type Size = { width: number; height: number }
 type Rect = Size & { x: number; y: number }
+type Body = Rect & { radius: number }
 
 /** Bezel and screen corner of the plain frame, as parts of the screen's shorter side. */
 const PLAIN_BEZEL = 0.045
 const PLAIN_CORNER = 0.09
+/** Points Xcode's body pictures take to fade in at their edge, which the light starts under. */
+const SOFT_EDGE = 2
 
 interface Layout {
   /** The upright device, in its own units. */
@@ -33,7 +36,10 @@ interface Layout {
   radii: [number, number, number, number]
   /** Clockwise degrees the device is turned on screen. */
   turn: number
-  body: number | null
+  /** The device without the buttons that stick out past it: what the light goes around. */
+  body: Body
+  /** No frame pictures: Kettu draws the body itself. */
+  plain: boolean
 }
 
 /**
@@ -63,19 +69,30 @@ function layoutOf(frame: Frame | null, picture: Size, orientation: DeviceOrienta
       screen: frame.screen,
       radii: frame.radii,
       turn,
-      body: null,
+      // A host from before the body leaves the whole frame as the body.
+      body: frame.body ?? {
+        x: 0,
+        y: 0,
+        width: frame.width,
+        height: frame.height,
+        radius: frame.radii[0] + frame.screen.x,
+      },
+      plain: false,
     }
   }
   const short = Math.min(picture.width, picture.height)
   const bezel = short * PLAIN_BEZEL
   const corner = short * PLAIN_CORNER
+  const width = picture.width + bezel * 2
+  const height = picture.height + bezel * 2
   return {
-    width: picture.width + bezel * 2,
-    height: picture.height + bezel * 2,
+    width,
+    height,
     screen: { x: bezel, y: bezel, ...picture },
     radii: [corner, corner, corner, corner],
     turn,
-    body: corner + bezel,
+    body: { x: 0, y: 0, width, height, radius: corner + bezel },
+    plain: true,
   }
 }
 
@@ -157,8 +174,15 @@ export function DeviceFrame({
   )
   const px = (value: number): number => value * scale
   const tap = agent?.at ? onPicture(agent.at, layout.turn) : null
-  // The light goes around the device's body, the screen's corner and bezel on a simulator's frame.
-  const bodyRadius = layout.body !== null ? px(layout.body) : px(layout.radii[0] + layout.screen.x)
+  const { body } = layout
+  const edge = layout.plain ? 0 : SOFT_EDGE
+  const lit: Body = {
+    x: body.x + edge,
+    y: body.y + edge,
+    width: body.width - edge * 2,
+    height: body.height - edge * 2,
+    radius: body.radius - edge,
+  }
   const place = (rect: Rect) => ({
     left: px(rect.x),
     top: px(rect.y),
@@ -179,29 +203,32 @@ export function DeviceFrame({
           transform: `translate(-50%, -50%) rotate(${layout.turn}deg)`,
         }}
       >
-        <AnimatePresence>
-          {agent?.light && (
-            <SurfaceLight
-              key="light"
-              placement="outside"
-              act={agent.act}
-              at={
-                tap
-                  ? {
-                      x: px(layout.screen.x + tap.x * layout.screen.width),
-                      y: px(layout.screen.y + tap.y * layout.screen.height),
-                    }
-                  : null
-              }
-              radius={bodyRadius}
-            />
-          )}
-        </AnimatePresence>
-        {layout.body !== null && (
+        {/* Behind the frame's pictures, so the buttons that stick out past the body stay over it. */}
+        <div className="pointer-events-none absolute z-0" style={place(lit)}>
+          <AnimatePresence>
+            {agent?.light && (
+              <SurfaceLight
+                key="light"
+                placement="outside"
+                act={agent.act}
+                at={
+                  tap
+                    ? {
+                        x: px(layout.screen.x - lit.x + tap.x * layout.screen.width),
+                        y: px(layout.screen.y - lit.y + tap.y * layout.screen.height),
+                      }
+                    : null
+                }
+                radius={px(lit.radius)}
+              />
+            )}
+          </AnimatePresence>
+        </div>
+        {layout.plain && (
           <div
             aria-hidden
             className="absolute inset-0 bg-(--pane-phone) shadow-[0_0_0_var(--hairline)_var(--border-default),inset_0_0_0_1.5px_var(--pane-phone-edge)]"
-            style={{ borderRadius: px(layout.body) }}
+            style={{ borderRadius: px(body.radius) }}
           />
         )}
         {images.map((image, index) =>
