@@ -1184,6 +1184,7 @@ export class SessionManager {
       archivedAt: record.archivedAt ?? null,
       acpSessionId: record.acpSessionId || null,
       plan: live ? planProgress(live.thread) : null,
+      turnStartedAt: live?.thread.session.turnStartedAt ?? null,
       ...(record.worktree ? { worktree: this.worktreeSummary(record.worktree) } : {}),
       ...(record.agentWorktree ? { agentWorktree: { ...record.agentWorktree } } : {}),
       ...(live?.prepared
