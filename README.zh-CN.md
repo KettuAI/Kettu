@@ -92,10 +92,7 @@
 
 ### 随处可用
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-devices-dark.webp">
-  <img src="./assets/feature-devices-light.webp" alt="同一个会话同时在桌面和手机浏览器里打开，顶栏显示手机正在查看">
-</picture>
+<img src="./assets/picture-ios.webp" alt="两台 iPhone 上的 Kettu：需要你处理的排在最前的会话列表，和一个请求编辑文件的会话">
 
 - **任何浏览器、任何网络**：打开 [app.kettu.sh](https://app.kettu.sh)，经 Kettu 的中继连回你的电脑，不用 VPN，也不用开端口。
 - **你自己的网络**：手机、平板或浏览器扫码配对，经 Wi-Fi、VPN 或 SSH 转发继续你的会话，不用账号。
@@ -104,8 +101,6 @@
 - **端到端加密**：中间经过的任何一方都读不到你的会话，中继也一样。
 
 ### iPhone 和 iPad
-
-<img src="./assets/picture-ios.webp" alt="两台 iPhone 上的 Kettu：需要你处理的排在最前的会话列表，和一个请求编辑文件的会话">
 
 - **会话装进口袋**：每台电脑上的会话都在一个列表里，需要你处理的排在最前面。正在 [TestFlight 公开测试](https://testflight.apple.com/join/zsbFyAPQ)。
 - **随时随地回应**：允许或拒绝一条命令，回答 Agent 的问题，批准它的计划，回复，或者新建会话。

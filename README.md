@@ -92,10 +92,7 @@ All your coding agents, side by side in one window that looks good and feels rig
 
 ### Everywhere
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./assets/feature-devices-dark.webp">
-  <img src="./assets/feature-devices-light.webp" alt="The same session open on the desktop and in a phone's browser, with the phone shown in the top bar">
-</picture>
+<img src="./assets/picture-ios.webp" alt="Kettu on two iPhones: the list of sessions with the ones that need you first, and a session asking to edit a file">
 
 - **Any browser, any network**: open [app.kettu.sh](https://app.kettu.sh) and reach your computers through the Kettu relay, with no VPN and no open port.
 - **Your own network**: pair a phone, tablet or browser with a QR code and carry on over Wi-Fi, a VPN or an SSH forward, without an account.
@@ -104,8 +101,6 @@ All your coding agents, side by side in one window that looks good and feels rig
 - **End-to-end encrypted**: nothing in between can read your sessions, the relay included.
 
 ### iPhone and iPad
-
-<img src="./assets/picture-ios.webp" alt="Kettu on two iPhones: the list of sessions with the ones that need you first, and a session asking to edit a file">
 
 - **Your sessions in your pocket**: every session on every computer in one list, with the ones that need you first. In [public beta on TestFlight](https://testflight.apple.com/join/zsbFyAPQ).
 - **Answer from anywhere**: allow or deny a command, answer an agent's questions, approve its plan, reply, or start a new session.
