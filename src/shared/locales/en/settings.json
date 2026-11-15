@@ -948,7 +948,27 @@
       }
     },
     "signInCopied": "No project is open, so the sign-in command was copied.",
-    "signInCopyFailed": "No project is open and the sign-in command could not be copied."
+    "signInCopyFailed": "No project is open and the sign-in command could not be copied.",
+    "workflow": {
+      "group": "Workflows",
+      "keywords": "Workflow suggest auto pick steps tasks flow",
+      "suggest": {
+        "name": "Agents can suggest a workflow",
+        "description": "In a regular session, an agent offers a workflow when it thinks the work needs one, and it starts only when you click Start. Turned off, agents don’t see the feature."
+      },
+      "auto": {
+        "group": "Agents Auto can pick",
+        "note": "When a step is Auto, the agent handing off to it picks one of these, with its model and effort. You can still pin any of them to a step on the workflow’s page in the Marketplace.",
+        "apiKeys": "Only Claude Code and Codex agents can run steps, so no other agent is listed. An agent signed in with an API key starts off here, since every step it runs is paid by the token.",
+        "noneTitle": "No Claude Code or Codex agent",
+        "noneHint": "Steps run on Claude Code and Codex. Add one of them to let Auto pick it.",
+        "rowName": "Auto can pick {{agent}}",
+        "switch": "Auto can pick {{agent}}",
+        "offByDefault": "Off by default: paid by the token",
+        "reset": "Use the defaults",
+        "readFailed": "Couldn’t read the workflow settings"
+      }
+    }
   },
   "about": {
     "version": {

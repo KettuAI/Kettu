@@ -3,6 +3,7 @@ import { isMac } from '@renderer/lib/platform'
 import { useArtifactsStore } from '@renderer/stores/artifacts'
 import { useRoutinesStore } from '@renderer/stores/routines'
 import { useSessionsStore } from '@renderer/stores/sessions'
+import { useTasksStore } from '@renderer/stores/tasks'
 import {
   goBack,
   goForward,
@@ -28,7 +29,8 @@ export function historyKey(platform: string): 'y' | 'h' {
 
 /**
  * Whether a view of the history can still show: its session, or a sub-session's parent, is still
- * listed and not archived, its routine not deleted, its artifact not deleted for good.
+ * listed and not archived, its routine not deleted, its task not deleted or archived, its artifact
+ * not deleted for good.
  */
 export function canShow(view: HistoryView): boolean {
   if (view.kind === 'session') return listed(view.sessionId)
@@ -36,6 +38,11 @@ export function canShow(view: HistoryView): boolean {
   if (view.kind === 'routine') {
     const { byId, loaded } = useRoutinesStore.getState()
     return view.routineId === null || !loaded || view.routineId in byId
+  }
+  if (view.kind === 'task') {
+    const { summaries, loaded } = useTasksStore.getState()
+    const task = summaries[view.taskId]
+    return task ? !task.archivedAt : !loaded
   }
   if (view.kind === 'artifact') {
     const { list, deleted } = useArtifactsStore.getState()

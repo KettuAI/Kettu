@@ -9,6 +9,7 @@ import {
   ComputerTerminal01Icon,
   DashboardSquare02Icon,
   Flag01Icon,
+  Flowchart01Icon,
   Message01Icon,
   SmartPhone01Icon,
   Store01Icon,
@@ -41,6 +42,7 @@ const GROUPS: { id: McpToolGroup; icon: IconSvgElement }[] = [
   { id: 'terminal', icon: ComputerTerminal01Icon },
   { id: 'memory', icon: Brain01Icon },
   { id: 'reports', icon: Flag01Icon },
+  { id: 'workflows', icon: Flowchart01Icon },
 ]
 
 /** Tool names a group's row shows before "+ N more". */

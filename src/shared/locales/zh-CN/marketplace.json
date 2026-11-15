@@ -1,12 +1,12 @@
 {
   "page": {
     "title": "Marketplace",
-    "description": "给你的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
-    "descriptionThisMac": "给这台 Mac 上的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
-    "descriptionThisComputer": "给这台电脑上的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
-    "descriptionOn": "给 {{host}} 上的 Agent 用的插件、技能和 MCP 服务器，来自你所用工具的开发者，以及社区。",
-    "descriptionAllMac": "显示全部主机时，这里管理的是这台 Mac。选择某一台主机，就能管理它的插件、技能和 MCP 服务器。",
-    "descriptionAllComputer": "显示全部主机时，这里管理的是这台电脑。选择某一台主机，就能管理它的插件、技能和 MCP 服务器。",
+    "description": "给你的 Agent 用的插件、技能、MCP 服务器和工作流，来自你所用工具的开发者，以及社区。",
+    "descriptionThisMac": "给这台 Mac 上的 Agent 用的插件、技能、MCP 服务器和工作流，来自你所用工具的开发者，以及社区。",
+    "descriptionThisComputer": "给这台电脑上的 Agent 用的插件、技能、MCP 服务器和工作流，来自你所用工具的开发者，以及社区。",
+    "descriptionOn": "给 {{host}} 上的 Agent 用的插件、技能、MCP 服务器和工作流，来自你所用工具的开发者，以及社区。",
+    "descriptionAllMac": "显示全部主机时，这里管理的是这台 Mac。选择某一台主机，就能管理它的插件、技能、MCP 服务器和工作流。",
+    "descriptionAllComputer": "显示全部主机时，这里管理的是这台电脑。选择某一台主机，就能管理它的插件、技能、MCP 服务器和工作流。",
     "search": "搜索 Marketplace",
     "tabs": {
       "all": "全部",
@@ -14,6 +14,7 @@
       "installed": "已安装",
       "plugins": "插件",
       "skills": "技能",
+      "workflow": "工作流",
       "published": "已发布"
     },
     "searchPublished": "搜索你发布的"
@@ -28,7 +29,11 @@
     "skillGithub": "来自 GitHub 的技能…",
     "skillGithubLine": "一个仓库，或仓库中的一个文件夹",
     "skillFolder": "来自文件夹的技能…",
-    "skillFolderLine": "含有 SKILL.md 的文件夹"
+    "skillFolderLine": "含有 SKILL.md 的文件夹",
+    "workflowGithub": "来自 GitHub 的工作流…",
+    "workflowGithubLine": "GitHub 仓库中的一个文件",
+    "workflowFile": "来自文件的工作流…",
+    "workflowFileLine": "这台电脑上的一个 .yaml 文件"
   },
   "sections": {
     "featured": "精选",
@@ -45,6 +50,7 @@
     "plugins": "插件",
     "skills": "技能",
     "mcp": "MCP 服务器",
+    "workflow": "工作流",
     "community": "社区",
     "yours": "你的"
   },
@@ -180,7 +186,8 @@
     "ownNote": "每个 Agent 自己保存的技能和 MCP 服务器。Kettu 只显示它们，要修改请在 Agent 中进行。",
     "mcpConfig": "MCP 配置",
     "offIn": "在 {{agents}} 中已关闭",
-    "notCreated": "{{path}} · 尚未创建"
+    "notCreated": "{{path}} · 尚未创建",
+    "workflows": "工作流"
   },
   "kettu": {
     "note": "Artifacts、会话和浏览器都通过 Kettu 自带的服务器提供给每个 Agent。",
@@ -315,7 +322,8 @@
   "kind": {
     "mcp": "MCP",
     "plugin": "插件",
-    "skill": "技能"
+    "skill": "技能",
+    "workflow": "工作流"
   },
   "notes": {
     "plugins": "无法列出插件：{{error}}",
@@ -415,6 +423,176 @@
     "reconnect": "重新连接",
     "disconnect": "断开连接",
     "remove": "移除…"
+  },
+  "workflow": {
+    "intro": "工作流是一张流程图，让几个 Agent 合作完成一件事。每一步由谁来做，在它开始时由交棒给它的 Agent 选，除非你固定了一个。能用的工作流会出现在新建会话里，Agent 也能在对话中建议使用它。",
+    "by": {
+      "kettu": "Kettu",
+      "github": "{{owner}} · 社区",
+      "file": "来自文件",
+      "agent": "由 Agent 创建",
+      "you": "由你编写"
+    },
+    "yours": "你的",
+    "state": {
+      "pending": "等你批准",
+      "changed": "已改动",
+      "problems": "有问题",
+      "unreadable": "无法读取"
+    },
+    "stateTitle": {
+      "pending": "你批准之后，它才能开始需求。",
+      "changed": "批准之后它又被改过；再批准一次才能使用。",
+      "problems": "修好它的问题之后，它才能开始需求。",
+      "unreadable": "它的文件读不出一个工作流。"
+    },
+    "groups": {
+      "official": "官方",
+      "added": "从 GitHub 添加",
+      "addedOrFile": "从 GitHub 或文件添加",
+      "yours": "你的"
+    },
+    "yoursEmpty": "还没有。在任意会话里让 Agent 帮你写一个，它会在这里等你批准。",
+    "readFailed": "无法读取工作流：{{error}}",
+    "readFailedTitle": "无法读取工作流",
+    "missingTitle": "找不到这个工作流",
+    "missingText": "它可能已被删除。",
+    "related": {
+      "official": "更多官方工作流",
+      "added": "你添加的其他工作流",
+      "yours": "你的其他工作流"
+    },
+    "add": {
+      "rowTitle": "添加别人分享的工作流",
+      "rowLine": "粘贴 GitHub 文件地址，或选择一个 .yaml 文件",
+      "rowButton": "添加…",
+      "title": "添加工作流",
+      "description": "粘贴 GitHub 上一个工作流文件的地址，或选择一个 .yaml 文件。你批准之后，它才能开始需求。",
+      "url": "GitHub 文件地址",
+      "urlHint": "文件在 GitHub 上的页面或原始文件地址。",
+      "urlInvalid": "请输入 GitHub 仓库中一个文件的地址。",
+      "urlPlaceholder": "https://github.com/owner/repo/blob/main/workflow.yaml",
+      "chooseFile": "选择文件…",
+      "submit": "添加",
+      "failed": "无法添加工作流：{{error}}",
+      "notYaml": "请选择 .yaml 或 .yml 文件。",
+      "tooLarge": "文件超过 {{size}} KB。"
+    },
+    "update": {
+      "check": "检查更新",
+      "checking": "正在检查…",
+      "changed": "{{name}} 有改动；批准新版本后才能使用",
+      "same": "{{name}} 已是最新",
+      "failed": "无法检查 {{name}} 的更新：{{error}}"
+    },
+    "remove": {
+      "menu": "删除…",
+      "title": "删除 {{name}}？",
+      "body": "它的文件和固定都会删除。已经在用它的需求会按各自的副本继续。",
+      "confirm": "删除"
+    },
+    "approval": {
+      "title": "你批准之后才能使用这个工作流",
+      "agentTitle": "这个工作流由 Agent 创建，你批准之后才能使用。",
+      "changedTitle": "批准之后，这个工作流又被改过",
+      "changedText": "批准这个版本之前，它不能开始需求。再看一遍每一步和它的文件，然后决定。",
+      "agentText": "{{agent}} 在一个会话里用 create_workflow 写了它。",
+      "agentInBefore": "{{agent}} 在会话“",
+      "agentInAfter": "”里用 create_workflow 写了它。",
+      "untitled": "未命名会话",
+      "githubText": "从 GitHub 上的 {{repo}} 添加。",
+      "fileText": "从 {{file}} 添加。",
+      "userText": "放进这台主机工作流文件夹的一个文件。",
+      "check": "看看每一步做什么、要用的工具、在哪里等你，然后决定。你批准的是这个版本；以后的任何改动都要再批准。",
+      "approve": "批准",
+      "delete": "删除",
+      "fileNote": "你要批准的版本",
+      "notRead": "文件还在读取中。",
+      "changedWhileShown": "你查看时文件被改动了。这是新版本，请再看一遍再批准。",
+      "failed": "无法批准：{{error}}"
+    },
+    "file": {
+      "title": "文件",
+      "show": "显示",
+      "hide": "隐藏",
+      "failed": "无法读取文件：{{error}}",
+      "gone": "文件已不在。"
+    },
+    "problems": {
+      "title_one": "{{count}} 个问题让它不能开始需求",
+      "title_other": "{{count}} 个问题让它不能开始需求",
+      "unreadable": "文件读不出一个工作流"
+    },
+    "from": {
+      "official": "Kettu 的工作流",
+      "agent": "由 {{agent}} 创建",
+      "you": "由你编写"
+    },
+    "facts": {
+      "runBy": "步骤由谁做",
+      "added": "添加于",
+      "steps": "步骤",
+      "stepsWait_one": "{{steps}} · {{count}} 步等你",
+      "stepsWait_other": "{{steps}} · {{count}} 步等你",
+      "sendBack": "退回",
+      "sendBackLimit_one": "每条最多 {{count}} 次",
+      "sendBackLimit_other": "每条最多 {{count}} 次"
+    },
+    "flow": {
+      "title": "流程",
+      "back_one": "{{from}} 可以退回到 {{to}}（{{outcome}}），最多 {{count}} 次。",
+      "back_other": "{{from}} 可以退回到 {{to}}（{{outcome}}），最多 {{count}} 次。",
+      "dropped": "{{from}} 可以结束需求：{{outcome}}。"
+    },
+    "you": "你",
+    "youReview": "你审阅",
+    "end": {
+      "done": "完成",
+      "dropped": "放弃"
+    },
+    "auto": "Auto",
+    "steps": {
+      "title": "步骤",
+      "autoAgents": "Auto 能选的 Agent",
+      "step": "步骤",
+      "forPicker": "给选人的提示",
+      "who": "谁来做",
+      "more": "更多",
+      "less": "收起",
+      "outcomes": "结果",
+      "upTo_one": "最多 {{count}} 次",
+      "upTo_other": "最多 {{count}} 次",
+      "yourStep": "你的步骤：Kettu 会问你，等你回答",
+      "first": "第一步：你开始时选的 Agent",
+      "reviews": "审查 {{steps}}；不能是同一个 Agent 加同一个模型",
+      "hint": "“{{hint}}”",
+      "uses": "使用 {{tools}}"
+    },
+    "pin": {
+      "afterApproval": "批准后能固定",
+      "notStepAgent": "只有 Claude Code 和 Codex 的 Agent 能做步骤。",
+      "failed": "无法固定：{{error}}",
+      "autoLabel": "{{step}} 由谁来做：Auto",
+      "backToAuto": "改回 Auto",
+      "pinnedLabel": "{{step}} 由谁来做：已固定"
+    },
+    "needs": {
+      "title": "它让 Agent",
+      "titlePending": "批准之后，它让 Agent",
+      "work": "在需求的文件夹里修改文件、运行命令",
+      "tools": "使用这些 MCP 服务器和技能",
+      "wait": "停下来等你"
+    },
+    "side": {
+      "none": "无",
+      "you": "你",
+      "kind": "种类",
+      "file": "文件",
+      "mcp": "MCP 服务器",
+      "skills": "技能",
+      "madeIn": "创建它的会话",
+      "sessionGone": "已不在的会话"
+    }
   },
   "community": {
     "skillNote": "Kettu 从 Kettu 的 Marketplace 下载它、逐个核对文件，存在这台电脑上，开会话时交给这些 Agent。",
@@ -703,7 +881,8 @@
       "devices": "移动设备",
       "terminal": "终端",
       "memory": "记忆",
-      "reports": "问题报告"
+      "reports": "问题报告",
+      "workflows": "工作流"
     },
     "new": "新",
     "whileSignedIn": "登录 Kettu 时提供",

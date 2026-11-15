@@ -61,6 +61,14 @@ import {
   type PlanToolsDeps,
 } from '../plan-tool'
 import {
+  isWorkflowToolName,
+  WORKFLOW_INSTRUCTIONS,
+  WORKFLOW_TOOL_NAMES,
+  WORKFLOW_TOOLS,
+  WorkflowTools,
+  type WorkflowToolsDeps,
+} from '../workflow/tools'
+import {
   isReportToolName,
   REPORT_INSTRUCTIONS,
   REPORT_TOOL,
@@ -112,7 +120,7 @@ const SERVICE_TOOLS: Tool[] = [
 ]
 
 /** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS}`
+const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS} ${WORKFLOW_INSTRUCTIONS}`
 
 /** The group each of Kettu's tools is listed in on its server's page in the Marketplace. */
 const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
@@ -129,6 +137,7 @@ const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
       [TERMINAL_TOOLS, 'terminal'],
       [MEMORY_TOOLS, 'memory'],
       [REPORT_TOOLS, 'reports'],
+      [WORKFLOW_TOOLS, 'workflows'],
     ] as const
   ).flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const)),
 )
@@ -193,6 +202,8 @@ export interface ArtifactServiceDeps extends ArtifactToolsDeps {
   terminals?: Omit<TerminalToolDeps, 'sessionOf' | 'folderOf'>
   /** The computer use tools; without it the service lists none. */
   computer?: ComputerCalls
+  /** The workflow tools; without them the service lists none. */
+  workflow?: WorkflowToolsDeps
   /**
    * The Marketplace tools, listed only while the host is signed in to a Kettu account with Kettu's
    * services on; without them none.
@@ -246,6 +257,7 @@ function entry(url: string, token: string): McpServer[] {
         REPORT_TOOL,
         ...MEMORY_TOOL_NAMES,
         ...SESSION_TOOLS.map((tool) => tool.name),
+        ...WORKFLOW_TOOL_NAMES,
         ...MARKET_AUTO_ALLOW,
       ],
       prompt: PLAN_PROMPT,
@@ -296,6 +308,7 @@ export class ArtifactService {
   private readonly deviceTools: DeviceTools | null
   private readonly terminalTools: TerminalTools | null
   private readonly dataTools: DataTools | null
+  private readonly workflowTools: WorkflowTools | null
   private sdk: Promise<Sdk> | null = null
   /** Why the last `start()` could not listen; cleared once it does. */
   private startError: string | null = null
@@ -309,6 +322,7 @@ export class ArtifactService {
     this.planTools = new PlanTools(deps.plan)
     this.reportTools = new ReportTools(deps.report)
     this.memoryTools = deps.memory ? new MemoryTools(deps.memory) : null
+    this.workflowTools = deps.workflow ? new WorkflowTools(deps.workflow) : null
     this.serviceTools = deps.computer ? [...SERVICE_TOOLS, ...COMPUTER_TOOLS] : SERVICE_TOOLS
     this.instructions = deps.computer
       ? `${SERVICE_INSTRUCTIONS} ${COMPUTER_INSTRUCTIONS}`
@@ -427,12 +441,14 @@ export class ArtifactService {
     return this.deps.market?.on === true
   }
 
-  /** The tools `tools/list` answers now. */
-  private listedTools(): Tool[] {
+  /** What `tools/list` answers now; a step's session alone gets the step's tools. */
+  private listedTools(grant?: Grant): Tool[] {
+    const sessionId = grant && 'sessionId' in grant ? grant.sessionId : null
     return [
       ...this.serviceTools,
       ...(this.memoryOn ? MEMORY_TOOLS : []),
       ...(this.marketOn ? MARKET_TOOLS : []),
+      ...(this.workflowTools?.listed(sessionId) ?? []),
     ]
   }
 
@@ -682,7 +698,7 @@ export class ArtifactService {
       { capabilities: { tools: {} }, instructions },
     )
     server.setRequestHandler(ListToolsRequestSchema, () => ({
-      tools: this.listedTools(),
+      tools: this.listedTools(grant),
     }))
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: input, _meta: meta } = request.params
@@ -696,6 +712,14 @@ export class ArtifactService {
       if (isSessionToolName(name)) {
         try {
           return await this.sessionTools.call(caller, name, input)
+        } catch (error) {
+          this.deps.log('error', `${name} failed: ${(error as Error).message}`)
+          throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)
+        }
+      }
+      if (this.workflowTools && isWorkflowToolName(name)) {
+        try {
+          return await this.workflowTools.call(caller, name, input)
         } catch (error) {
           this.deps.log('error', `${name} failed: ${(error as Error).message}`)
           throw new McpError(ErrorCode.InternalError, `${name} failed: ${(error as Error).message}`)

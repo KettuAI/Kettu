@@ -353,6 +353,7 @@ const WHOLE_STATES: ReadonlySet<string> = new Set([
   'usage.status',
   'artifacts.changed',
   'memory.changed',
+  'workflows.changed',
   'remote.changed',
   'sharing.changed',
   'updates.changed',
@@ -415,6 +416,10 @@ function stateKey(value: unknown): string | null {
       return idKey('routine', fields.routineId)
     case 'routine.run':
       return idKey('routine.run', of('run').id)
+    case 'task.changed':
+      return idKey('task', of('task').id)
+    case 'task.removed':
+      return idKey('task', fields.taskId)
     default:
       return typeof kind === 'string' && WHOLE_STATES.has(kind) ? kind : null
   }

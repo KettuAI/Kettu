@@ -54,7 +54,17 @@ export function PrBadge({
   /** The pointer came onto the badge, whose card takes the place of the row's own. */
   onEnter: () => void
 }) {
-  const prs = sessionPullRequests(summary)
+  return <PullRequestsBadge prs={sessionPullRequests(summary)} onEnter={onEnter} />
+}
+
+/** The badge for a list of pull requests, such as those on a task's branch. */
+export function PullRequestsBadge({
+  prs,
+  onEnter,
+}: {
+  prs: SessionPullRequest[]
+  onEnter: () => void
+}) {
   const label = useBadgeLabel(prs)
   const self = useRef<HTMLSpanElement>(null)
   // The host keeps the ones that can still change current while the row is shown.

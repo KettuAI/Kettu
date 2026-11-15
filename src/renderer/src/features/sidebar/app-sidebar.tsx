@@ -32,6 +32,8 @@ import { cn } from '@renderer/lib/utils'
 import { isAway, shownHosts, useOtherHost, useOtherHosts } from '@renderer/stores/hosts'
 import { useProjectsStore } from '@renderer/stores/projects'
 import {
+  byActivity,
+  byPin,
   hostGroup,
   hostOfSession,
   inPinnedTree,
@@ -39,11 +41,15 @@ import {
   noProjectGroup,
   pinnedTree,
   sessionTree,
+  sidebarRows,
   sidebarTabStop,
   type SessionNode,
+  type SidebarRow,
   type SidebarTabStop,
+  listedOrigin,
   useSessionsStore,
 } from '@renderer/stores/sessions'
+import { listedTasks, pinnedTasks, useTasksStore } from '@renderer/stores/tasks'
 import { openSettings, PINNED_GROUP, showAllRows, useViewStore } from '@renderer/stores/view'
 import { HostEmpty, HostHeading, NeedsYouGroup } from './host-groups'
 import { useHostLabel } from './host-label'
@@ -54,8 +60,9 @@ import { ProjectMenuItems } from './project-menu'
 import { visibleProjects } from './project-group'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
-import { keepInSight, limitRows, ROWS_SHOWN } from './row-limit'
+import { limitRows, rowInSight, ROWS_SHOWN } from './row-limit'
 import { SessionRow } from './session-row'
+import { TaskRow } from './task-row'
 
 /**
  * The sidebar's list under its menu, in App Shell's look: Pinned, then the projects as folders
@@ -71,7 +78,19 @@ export function SidebarList() {
   const loadError = useProjectsStore((s) => s.error)
   const sessionsError = useSessionsStore((s) => s.error)
   // The list follows which projects show and its Tab stop; each group follows its own sessions.
-  const shownProjects = useSessionsStore(useShallow((s) => visibleProjects(projects, s.byId)))
+  const tasks = useTasksStore((s) => s.summaries)
+  const taskPaths = useTasksStore(
+    useShallow((s) => [
+      ...new Set(
+        Object.values(s.summaries)
+          .filter((task) => !task.pinnedAt && !task.archivedAt)
+          .map((task) => task.projectPath),
+      ),
+    ]),
+  )
+  const shownProjects = useSessionsStore(
+    useShallow((s) => visibleProjects(projects, s.byId, taskPaths)),
+  )
   const main = useViewStore((s) => s.main)
   const collapsedProjects = useViewStore((s) => s.collapsedProjects)
   const expandedParents = useViewStore((s) => s.expandedParents)
@@ -93,6 +112,7 @@ export function SidebarList() {
         { main, collapsedProjects, expandedParents, hosts, away },
         s.byId,
         shownProjects,
+        tasks,
       ),
     ),
   )
@@ -195,7 +215,7 @@ function HostSection({
   const own = projects.filter((project) => hostOfPath(project.path) === hostId)
   const scratch = useSessionsStore((s) =>
     Object.values(s.byId).some(
-      (x) => x.scratch && x.origin !== 'routine' && !x.archivedAt && hostOfSession(x) === hostId,
+      (x) => x.scratch && listedOrigin(x) && !x.archivedAt && hostOfSession(x) === hostId,
     ),
   )
   const key = hostGroup(hostId)
@@ -230,8 +250,8 @@ function HostSection({
 }
 
 /**
- * A project's folder and its sessions, or with a null project those started with No project on
- * `hostId`, if any. An offline host's offer nothing to start.
+ * A project's folder and its sessions and tasks, the latest first, or with a null project the
+ * sessions started with No project on `hostId`, if any. An offline host's offer nothing to start.
  */
 function ProjectGroup({
   project,
@@ -251,7 +271,9 @@ function ProjectGroup({
   const name = project?.name ?? t('project.noProject')
   const open = useViewStore((s) => !s.collapsedProjects[key])
   const allShown = useViewStore((s) => !!s.allRowsShown[key])
-  const shownId = useViewStore((s) => (s.main.kind === 'session' ? s.main.sessionId : null))
+  const shownId = useViewStore((s) =>
+    s.main.kind === 'session' ? s.main.sessionId : s.main.kind === 'task' ? s.main.taskId : null,
+  )
   const [moreOpen, setMoreOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const summaries = useSessionsStore(
@@ -268,8 +290,12 @@ function ProjectGroup({
       [summaries, projectPath, hostId],
     ),
   )
+  const tasks = useTasksStore(
+    useShallow((s) => (project ? listedTasks(s.summaries, project.path) : [])),
+  )
+  const rows = useMemo(() => sidebarRows(tree, tasks, byActivity), [tree, tasks])
   if (!project && tree.length === 0) return null
-  const limited = limitRows(tree, allShown, (node) => keepInSight(node, shownId))
+  const limited = limitRows(rows, allShown, (row) => rowInSight(row, shownId))
   // Importing reads the agents' own lists, which only this computer's do.
   const local = hostId === null
 
@@ -373,16 +399,16 @@ function ProjectGroup({
           )}
         </span>
       </div>
-      {open && tree.length > 0 && (
+      {open && rows.length > 0 && (
         <ul className="ui-as-chat-folder__chats">
           <RenameScope value={key}>
             <AnimatePresence initial={false}>
-              {limited.rows.map((node) => (
-                <SessionRow key={node.summary.id} node={node} tabStopId={tabStopId} indent />
+              {limited.rows.map((row) => (
+                <GroupRow key={row.id} row={row} tabStopId={tabStopId} indent />
               ))}
             </AnimatePresence>
           </RenameScope>
-          {(limited.hidden > 0 || allShown) && tree.length > ROWS_SHOWN && (
+          {(limited.hidden > 0 || allShown) && rows.length > ROWS_SHOWN && (
             <li className="flex">
               <button
                 type="button"
@@ -401,6 +427,25 @@ function ProjectGroup({
         </ul>
       )}
     </>
+  )
+}
+
+/** A session's row or a task's, as a group lists it. */
+function GroupRow({
+  row,
+  tabStopId,
+  indent,
+  showHost,
+}: {
+  row: SidebarRow
+  tabStopId: string | null
+  indent?: boolean
+  showHost?: boolean
+}) {
+  return row.kind === 'session' ? (
+    <SessionRow node={row.node} tabStopId={tabStopId} indent={indent} showHost={showHost} />
+  ) : (
+    <TaskRow task={row.task} tabStopId={tabStopId} indent={indent} showHost={showHost} />
   )
 }
 
@@ -437,8 +482,8 @@ function toggleGroup(key: string): void {
 }
 
 /**
- * The pinned sessions across the projects, above them, while there are any; with other hosts, of
- * the hosts shown, each row naming its host. Its title folds it.
+ * The pinned sessions and tasks across the projects, above them, while there are any; with other
+ * hosts, of the hosts shown, each row naming its host. Its title folds it.
  */
 function PinnedGroup({
   stop,
@@ -461,7 +506,15 @@ function PinnedGroup({
       [summaries, hosts],
     ),
   )
-  if (tree.length === 0) return null
+  const tasks = useTasksStore(
+    useShallow((s) =>
+      pinnedTasks(s.summaries).filter(
+        (task) => !hosts || hosts.includes(hostOfPath(task.projectPath)),
+      ),
+    ),
+  )
+  const rows = useMemo(() => sidebarRows(tree, tasks, byPin), [tree, tasks])
+  if (rows.length === 0) return null
   const toggle = () => toggleGroup(PINNED_GROUP)
   const tabStopId = stop?.kind === 'session' ? stop.id : null
   return (
@@ -491,13 +544,8 @@ function PinnedGroup({
         <ul className="flex flex-col">
           <RenameScope value={PINNED_GROUP}>
             <AnimatePresence initial={false}>
-              {tree.map((node) => (
-                <SessionRow
-                  key={node.summary.id}
-                  node={node}
-                  tabStopId={tabStopId}
-                  showHost={!!hosts}
-                />
+              {rows.map((row) => (
+                <GroupRow key={row.id} row={row} tabStopId={tabStopId} showHost={!!hosts} />
               ))}
             </AnimatePresence>
           </RenameScope>

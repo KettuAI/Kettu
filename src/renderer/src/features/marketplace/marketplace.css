@@ -898,6 +898,441 @@
   color: var(--text-tertiary);
 }
 
+/* workflows: who a workflow comes from after its name, and what keeps it from starting tasks */
+.k-workflow-by {
+  flex: none;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--faint);
+}
+.k-workflow-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--tone-amber-fill);
+  box-shadow: inset 0 0 0 0.5px var(--tone-amber-edge);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tone-amber);
+  white-space: nowrap;
+}
+.k-workflow-state::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--tone-amber-dot);
+}
+.k-workflow-state[data-tone='bad'] {
+  background: var(--danger-tint);
+  box-shadow: none;
+  color: var(--danger);
+}
+.k-workflow-state[data-tone='bad']::before {
+  background: var(--danger);
+}
+.k-workflow-intro {
+  max-width: 720px;
+  margin: 22px 0 -6px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
+}
+
+/* A workflow's page */
+.k-workflow-facts {
+  grid-template-columns: minmax(0, 1.5fr);
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+.k-workflow-h3 {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.k-workflow-h3__link {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.k-workflow-you {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--tone-amber-fill);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--tone-amber);
+  white-space: nowrap;
+}
+
+/* The flow: the steps as chips in order, then what sends work back or ends the task */
+.k-workflow-flow {
+  padding: 14px;
+}
+.k-workflow-flow__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.k-workflow-flow__step {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--faint);
+}
+.k-workflow-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 0.5px var(--line-strong);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.k-workflow-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 2px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.k-workflow-end > i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--faint);
+}
+.k-workflow-flow__notes {
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+
+/* Each step: what it does, the words for whoever picks, who does it */
+.k-workflow-steps__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-areas: 'node cap who';
+  gap: 14px;
+  align-items: start;
+  padding: 10px 14px;
+}
+.k-workflow-steps__row + .k-workflow-steps__row {
+  box-shadow: inset 0 0.5px 0 var(--line);
+}
+.k-workflow-steps__row[data-head] {
+  padding-block: 8px;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.k-workflow-steps__node,
+.k-workflow-steps__cap,
+.k-workflow-steps__who {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.k-workflow-steps__node {
+  grid-area: node;
+}
+.k-workflow-steps__cap {
+  grid-area: cap;
+}
+.k-workflow-steps__who {
+  grid-area: who;
+}
+.k-workflow-steps__node > b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-workflow-steps small {
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--muted);
+}
+.k-workflow-steps__prompt {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+.k-workflow-steps__prompt > span {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.k-workflow-steps__prompt[data-open] {
+  display: block;
+}
+.k-workflow-steps__prompt[data-open] > span {
+  display: block;
+  margin-bottom: 2px;
+  white-space: pre-wrap;
+}
+.k-workflow-steps__prompt > .k-mkt-link {
+  flex: none;
+}
+.k-workflow-steps__outcomes {
+  display: grid;
+  gap: 1px;
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text);
+}
+.k-workflow-steps__outcomes > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.k-workflow-steps__outcomes svg {
+  flex: none;
+  color: var(--faint);
+}
+.k-workflow-steps__limit {
+  color: var(--faint);
+}
+
+/* Who does a step: Auto's violet sparkle, or the pinned agent, model and effort */
+.k-workflow-auto {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--agent-violet);
+}
+.k-workflow-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.k-workflow-agent__model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-workflow-agent__effort {
+  flex: none;
+  color: var(--muted);
+}
+.k-workflow-who {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.k-workflow-who[data-busy] {
+  cursor: progress;
+}
+.k-workflow-pick {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border-radius: 8px;
+  background: var(--card);
+  box-shadow:
+    inset 0 0 0 0.5px var(--line-strong),
+    var(--card-shadow);
+}
+.k-workflow-pick--button {
+  gap: 6px;
+  max-width: 100%;
+  height: 28px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  transition: background-color 140ms ease;
+}
+.k-workflow-pick--button:hover {
+  background: var(--hover);
+}
+.k-workflow-pick--button > svg:last-child {
+  flex: none;
+  color: var(--faint);
+}
+.k-workflow-pick--button .k-workflow-agent {
+  min-width: 0;
+  min-height: 0;
+  font-size: 12.5px;
+}
+.k-workflow-pick--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The approval of a workflow the user has not approved */
+.k-workflow-approve {
+  margin-top: 22px;
+}
+.k-workflow-approve .ui-apc__title,
+.k-workflow-approve .ui-apc__desc {
+  white-space: normal;
+}
+.k-workflow-approve__file {
+  display: grid;
+  gap: 8px;
+}
+.k-workflow-approve__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12.5px;
+}
+.k-workflow-approve__head b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-workflow-approve__head small {
+  font-size: 12px;
+  color: var(--faint);
+}
+.k-workflow-approve__notice {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--tone-amber);
+}
+.k-workflow-file {
+  max-height: 420px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  font-family: var(--code-face);
+  font-size: 11.5px;
+  line-height: 18px;
+  color: var(--text);
+  white-space: pre;
+  tab-size: 2;
+}
+/* The card's preview scrolls the file, which wraps so no line is hidden from the approval. */
+.k-workflow-approve .ui-apc__preview {
+  max-height: 280px;
+}
+.k-workflow-approve .k-workflow-file {
+  max-height: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.k-workflow-file:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.k-workflow-file__skeleton {
+  height: 120px;
+  border-radius: 10px;
+}
+
+/* What the file has wrong, each where it was found */
+.k-workflow-problems {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--danger-tint);
+}
+.k-workflow-problems > b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.k-workflow-problems > ul {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.k-workflow-problems li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--text);
+}
+.k-workflow-problems code {
+  color: var(--danger);
+}
+.k-workflow-side__file > .k-mkt-mono {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Narrower, the words for whoever picks go under the step, so who does it keeps its room. */
+@container ui-as-main (max-width: 1100px) {
+  .k-workflow-steps__row {
+    grid-template-columns: minmax(0, 1fr) minmax(176px, auto);
+    grid-template-areas:
+      'node who'
+      'cap who';
+    row-gap: 6px;
+  }
+  .k-workflow-steps__row[data-head] > :nth-child(2),
+  .k-workflow-steps__cap:empty {
+    display: none;
+  }
+}
+@container ui-as-main (max-width: 640px) {
+  .k-workflow-steps__row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'node' 'cap' 'who';
+  }
+  .k-workflow-steps__row[data-head] {
+    display: none;
+  }
+}
+@container ui-as-main (max-width: 760px) {
+  .k-workflow-facts {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.k-workflow-flow__and {
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
 /* The Kettu Marketplace: who published a row, after its kind, shrinking before the name does */
 .k-mkt-publisher {
   flex: 0 1 auto;

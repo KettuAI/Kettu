@@ -23,6 +23,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { BrandIcon } from '@renderer/components/brand'
 import { Pill, SettingSwitch } from '@renderer/features/settings/controls'
 import { PlaceAction } from '@renderer/features/settings/places'
+import { currentLocale } from '@renderer/lib/i18n'
 import { useHostScope, type HostScope } from '@renderer/stores/host-scope'
 import { busyKey } from '@renderer/stores/marketplace'
 import { openMarketplace } from '@renderer/stores/view'
@@ -56,6 +57,9 @@ import {
 } from './model'
 import { KETTU_ITEM } from './published-keys'
 import { ItemRow, MoreButton, QuietNote, SkeletonRows } from './rows'
+import { workflowMatches } from './workflow-model'
+import { useWorkflows } from './workflow-actions'
+import { InstalledWorkflows } from './workflows'
 import { pluginSubject, serverSubject, skillSubject } from './tile-art'
 import { PlainTile } from './tiles'
 
@@ -77,11 +81,14 @@ export function InstalledView({ query }: { query: string }) {
   const plugins = useInstalledPlugins(query)
   const own = useOwn(query)
   const markets = useMarketplaces(query)
+  const workflows = useWorkflows().entries.filter((entry) =>
+    workflowMatches(entry, query, currentLocale()),
+  )
   const searching = query.trim() !== ''
   const nothing =
     searching &&
     !matchesText(['Kettu'], query) &&
-    servers.length + skills.length + (plugins?.length ?? 0) === 0 &&
+    servers.length + skills.length + workflows.length + (plugins?.length ?? 0) === 0 &&
     own.folders.length + own.places.length + markets.length === 0
   if (nothing) {
     return (
@@ -115,6 +122,7 @@ export function InstalledView({ query }: { query: string }) {
           </div>
         )}
       </Section>
+      <InstalledWorkflows query={query} index={3} />
       <PluginsSection plugins={plugins} searching={searching} />
       <OwnSection own={own} searching={searching} />
       <MarketplacesSection markets={markets} />

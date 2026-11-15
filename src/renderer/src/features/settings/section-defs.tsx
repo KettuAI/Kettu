@@ -50,6 +50,7 @@ import { useHostScope } from '@renderer/stores/host-scope'
 import { useUpdatesStore } from '@renderer/stores/updates'
 import { openAgentSettings, openHarnessSettings, openSettingsItem } from '@renderer/stores/view'
 import { AboutHero, AutomaticUpdates, DownloadSource, NoUpdates, UpdateRow } from './about-section'
+import { useWorkflowRows } from './workflow-settings'
 import {
   AgentListItem,
   AgentPage,
@@ -639,6 +640,8 @@ export function useAgentsSection(): SectionDef {
   const { useAgentsStore } = useHostScope()
   const en = english()
   const agents = useAgentsStore(useShallow((s) => usableAgents(s.order, s.byId)))
+  const workflowRows = useWorkflowRows()
+  // The footer goes under the list, so the workflow groups after it keep their own notes.
   const list: GroupDef =
     agents.length === 0
       ? {
@@ -646,12 +649,14 @@ export function useAgentsSection(): SectionDef {
           label: t('agents.groups.list', onHost),
           actions: <AgentsGroupActions />,
           unlabeled: true,
+          note: <AgentsFooter />,
         }
       : {
           id: 'agents',
           label: t('agents.groups.list', onHost),
           count: agents.length,
           actions: <AgentsGroupActions />,
+          note: <AgentsFooter />,
         }
   const row = (status: AgentStatus): RowDef => ({
     id: status.id,
@@ -670,15 +675,15 @@ export function useAgentsSection(): SectionDef {
     title: t('sections.agents'),
     description: t('pages.agents', onHost),
     icon: AiBrain01Icon,
-    rows:
-      agents.length === 0
+    rows: [
+      ...(agents.length === 0
         ? [
             {
               id: 'no-agents',
               name: t('agents.empty.title'),
               keywords: t('agents.empty.keywords'),
               group: list,
-              layout: 'custom',
+              layout: 'custom' as const,
               render: () => <NoAgents />,
             },
           ]
@@ -692,11 +697,12 @@ export function useAgentsSection(): SectionDef {
               keywords: t('agents.add.keywords'),
               group: list,
               searchOnly: true,
-              layout: 'custom',
+              layout: 'custom' as const,
               render: () => null,
             },
-          ],
-    footer: <AgentsFooter />,
+          ]),
+      ...workflowRows,
+    ],
     itemPage: (agentId) => <AgentPage agentId={agentId as AgentId} />,
   }
 }

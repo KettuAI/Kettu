@@ -73,7 +73,7 @@ export interface SessionView {
   createdAt: number
   updatedAt: number
   parentId: string | null // the parent session, for sub-sessions
-  origin: 'user' | 'subagent' | 'routine'
+  origin: 'user' | 'subagent' | 'routine' | 'task'
   subagent: SubagentInfo | null // set when origin is 'subagent'
   routine: RoutineRef | null // set when origin is 'routine'
   queue: QueuedPrompt[] // prompts waiting for the running turn to end, oldest first
@@ -672,7 +672,7 @@ export interface ToolEntry {
     | {
         optionId: string
         kind: PermissionKind
-        by?: 'routine'
+        by?: 'routine' | 'task'
         device?: FromDevice
         name?: string
         questions?: AnsweredQuestion[]
@@ -694,6 +694,11 @@ export interface ToolEntry {
   planVersion?: number
   // A request from an MCP server, kept once answered: what it asked, without the form's fields.
   elicitation?: { server: string; kind: 'form' | 'url'; url?: string }
+  /**
+   * What a call of one of Kettu's workflow tools returned beside its text, which its card draws; absent
+   * where the harness did not pass it on, such as Claude Code for a call that returned an error.
+   */
+  structured?: Record<string, unknown>
 }
 
 export type ToolContent =

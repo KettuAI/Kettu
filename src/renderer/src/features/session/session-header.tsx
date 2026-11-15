@@ -12,6 +12,8 @@ import { usePane } from '@renderer/features/split/pane-context'
 import { usePaneDragSource } from '@renderer/features/split/session-drag-model'
 import { PrBarChip } from '@renderer/features/git/pr-bar-chip'
 import { HeaderTools, SessionMoreMenu } from '@renderer/features/shell/header-tools'
+import { StepRoundBadge, TaskCrumb } from '@renderer/features/tasks/step-crumb'
+import { useStepSessionTitle } from '@renderer/features/tasks/use-task'
 import { PlanChip } from './plan-chip'
 import { ViewersChip } from './viewers-chip'
 import { WorktreeBarChip } from './worktree/worktree-tag'
@@ -91,7 +93,8 @@ export function SessionHeader({
   // The field starts at the button's width, so a short title does not jump wider.
   const [titleWidth, setTitleWidth] = useState(0)
   const measureTitle = () => setTitleWidth(titleButtonRef.current?.offsetWidth ?? 0)
-  const title = sessionTitle(summary)
+  const stepTitle = useStepSessionTitle(summary)
+  const title = stepTitle ?? sessionTitle(summary)
   const pane = usePane()
   const archived = useSessionsStore((s) => sessionArchived(s.byId, summary.id))
 
@@ -118,6 +121,7 @@ export function SessionHeader({
           </>
         )}
         {parent && <ParentLink parent={parent} />}
+        {summary.task && <TaskCrumb summary={summary} />}
         <span className="grid w-4 shrink-0 place-items-center">
           {summary.origin === 'subagent' ? (
             <Icon icon={AiChat02Icon} size={16} />
@@ -148,6 +152,7 @@ export function SessionHeader({
             }}
           />
         )}
+        {summary.task && <StepRoundBadge summary={summary} />}
         <SessionMoreMenu
           summary={summary}
           session={session}

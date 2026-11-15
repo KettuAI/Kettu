@@ -85,6 +85,7 @@
       "artifacts": "Artifacts",
       "recentlyDeleted": "Artifacts › 最近删除",
       "artifact": "Artifact",
+      "task": "需求",
       "marketplace": "Marketplace",
       "marketplaceItem": "Marketplace › {{item}}",
       "settings": "设置 › {{section}}",

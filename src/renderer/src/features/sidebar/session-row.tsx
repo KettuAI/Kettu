@@ -66,9 +66,9 @@ import { useRenaming } from './use-renaming'
  * A row's padding before its mark, as App Shell's chat rows: a session in a project's folder lines
  * up with the folder's name; a sub-session's row starts past its parent's tree line.
  */
-const ROW_PAD = 6
-const INDENT_PAD = 30
-const NESTED_STEP = 22
+export const ROW_PAD = 6
+export const INDENT_PAD = 30
+export const NESTED_STEP = 22
 
 export const SessionRow = memo(function SessionRow({
   node,
@@ -442,7 +442,7 @@ export const SessionRow = memo(function SessionRow({
  * The line from a parent down along its sub-sessions, with a tick to each; on the last it turns
  * with a short curve and stops.
  */
-function TreeLine({ last, left }: { last: boolean; left: number }) {
+export function TreeLine({ last, left }: { last: boolean; left: number }) {
   return (
     <span
       aria-hidden

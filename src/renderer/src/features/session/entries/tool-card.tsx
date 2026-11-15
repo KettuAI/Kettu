@@ -9,6 +9,8 @@ import { revealWaiting } from './helpers'
 import { PermissionEntry } from './permission-card'
 import { PlanCard, PlanSettled } from './plan-card'
 import { AnsweredAsk, OptionQuestionCard, QuestionCard } from './question-card'
+import { WorkflowToolCard } from './workflow-cards'
+import { workflowCardOf } from './workflow-tools'
 import { StepCard } from './tool-call'
 import { stepFacts, useToolCallLabels } from './tool-call-model'
 
@@ -59,6 +61,18 @@ export const ToolCard = memo(function ToolCard({
     if (entry.question !== undefined) {
       return <OptionQuestionCard key={permission.requestId} {...props} />
     }
+  }
+  // Kettu's own workflow tools, once a call ended, as cards of their own.
+  if (workflowCardOf(entry)) {
+    return (
+      <WorkflowToolCard
+        ref={ref}
+        sessionId={sessionId}
+        entry={entry}
+        agentName={agentName}
+        className={animation}
+      />
+    )
   }
   if (entry.planVersion !== undefined) {
     return (

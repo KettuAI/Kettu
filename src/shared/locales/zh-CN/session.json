@@ -564,6 +564,24 @@
       },
       "found": "已在这台电脑上找到",
       "redetect": "重新检测"
+    },
+    "workflow": {
+      "label": "工作流",
+      "chat": "对话",
+      "chatHint": "和一个 Agent 对话，和普通会话一样",
+      "heading": "工作流",
+      "unreadableHint": "文件读不出来",
+      "blocked": {
+        "approval": "待批准",
+        "changed": "已改动，待批准",
+        "unreadable": "读不出来"
+      },
+      "findMore": "在 Marketplace 里找更多工作流…",
+      "worktreeHint": "需求在自己的 worktree 和分支上进行。",
+      "worktreeNote": "需求在自己的 worktree 里进行，从 <base>{{base}}</base> 切出新分支，发出时由 Kettu 起名。",
+      "textOnly": "需求只能是文字：去掉附件后再发出。",
+      "firstStepAgent": "谁做第一步",
+      "stepAgents": "工作流的步骤只能由 Claude Code 和 Codex 的 Agent 来做：请选其中一个。"
     }
   },
   "signIn": {
@@ -929,6 +947,111 @@
     "agentWorktree": "在自己的 worktree <branch/> 里工作过",
     "agentWorktreeUnnamed": "在自己的 worktree 里工作过",
     "copyPath": "复制路径"
+  },
+  "workflow": {
+    "pace": "Pace",
+    "paces": {
+      "quick": "快速",
+      "balanced": "均衡",
+      "thorough": "周全"
+    },
+    "auto": "Auto",
+    "you": "你",
+    "youReview": "你来审",
+    "source": {
+      "first": "第一步",
+      "pinned": "已固定",
+      "task": "本需求",
+      "you": "你"
+    },
+    "reviews": "审查{{steps}}",
+    "hint": "“{{hint}}”",
+    "pinnedHint": "在这个工作流的 Marketplace 页面上为每个需求固定",
+    "backToAuto": "改回 Auto",
+    "whoDoes": "谁做{{step}}",
+    "whoDoesEach": "每一步由谁做",
+    "autoExplained": "Auto 步骤开始时，由交接给它的 Agent 来选",
+    "paceExplained": "Pace 会告诉每个做选择的 Agent；这里的选择只对本需求有效。",
+    "pinEveryTask": "为每个需求固定步骤",
+    "suggest": {
+      "title": "作为工作流来做？",
+      "description": "每一步一个会话。",
+      "descriptionReview_other": "每一步一个会话；{{steps}}等你审。",
+      "label": "{{agent}} 的建议 · 等你回答",
+      "workflow": "工作流",
+      "steps_other": "{{count}} 步",
+      "task": "需求 · {{agent}} 写的，可以修改",
+      "taskLabel": "需求",
+      "who": "每一步由谁做 · Auto 步骤开始时再选",
+      "edit": "修改",
+      "doneEditing": "完成",
+      "start": "开始",
+      "decline": "不用，直接做",
+      "declineMessage": "这个不用工作流，你直接做吧。",
+      "unusable": "{{workflow}} 现在不能开始需求。换一个工作流，或者不用工作流直接做。",
+      "missing": "这个工作流已经不在库里了。换一个，或者不用工作流直接做。",
+      "emptyTask": "先写好需求。",
+      "started": "已作为需求开始",
+      "openTask": "打开",
+      "declined": "不用工作流，直接做",
+      "chooseWorkflow": "选择工作流"
+    },
+    "saved": {
+      "pending": "已保存“{{name}}”，等你批准",
+      "approved": "“{{name}}”已批准",
+      "changed": "“{{name}}”在你批准后改动过",
+      "removed": "“{{name}}”已经不在库里了",
+      "refused": "工作流没有保存",
+      "refusedHint": "{{agent}} 可以改好这些问题后重新保存。",
+      "approveHint": "在 Marketplace 里批准之前，什么都不能用它。",
+      "open": "在 Marketplace 中打开",
+      "madeBy": "{{agent}} 写的"
+    },
+    "check": {
+      "report": "报告 · {{outcome}}",
+      "reportPlain": "报告",
+      "pick": "选择 · {{steps}}",
+      "accepted": "已接受",
+      "refused": "已拒绝",
+      "lines": {
+        "report": {
+          "step_open": "这一步可以报告",
+          "outcome": "“{{outcome}}”是这一步的结果之一",
+          "outcomePlain": "报告的是这一步的结果之一",
+          "note": "要交的说明已经写好",
+          "document": "要交的文档是在这一步里写的",
+          "committed": "改动都已提交",
+          "merged": "合并已提交",
+          "picks": "选择都成立"
+        },
+        "pick": {
+          "step": "{{step}}在等这个选择",
+          "agent": "{{agent}} 存在且已开启",
+          "allowed": "Auto 可以选 {{agent}}",
+          "model": "{{agent}} 有 {{model}}",
+          "modelPlain": "{{agent}} 有这个模型",
+          "effort": "{{effort}} 是它支持的 effort",
+          "effortPlain": "它支持这个 effort",
+          "tools": "这一步的工具可以交给它",
+          "limit": "它的套餐用量没有用完",
+          "review": "它不审查自己做的事"
+        }
+      },
+      "next": {
+        "review": "{{step}}现在等你审。",
+        "pick": "接下来由 {{agent}} 选择谁做{{steps}}。",
+        "endDone": "需求完成了。",
+        "endDropped": "需求以放弃结束。",
+        "retryReport": "{{agent}} 改好后会重新报告。",
+        "retryPick": "{{agent}} 会重新选择。",
+        "stuck": "被拒绝的次数太多：需求在等你。",
+        "start_other": "接下来开始{{steps}}。",
+        "wait_other": "{{steps}}在等其他分支。",
+        "person_other": "{{steps}}在等你。"
+      },
+      "showDetails": "Kettu 的回复",
+      "hideDetails": "收起"
+    }
   },
   "marketPublish": {
     "kind": {

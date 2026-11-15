@@ -5,6 +5,7 @@ import type { ArtifactState } from '@shared/artifacts'
 import type { ArtifactCall } from '../artifacts/model'
 import type { RuntimeCall } from '../artifacts/runtime/calls'
 import type { RoutineCall } from '../routines/calls'
+import type { TaskCall } from '../workflow/model'
 import type { ImageMode, ThreadWrite } from './model'
 
 /**
@@ -64,6 +65,7 @@ export type ThreadRequest =
   | { id: number; op: 'artifact'; call: ArtifactCall }
   | { id: number; op: 'runtime'; call: RuntimeCall }
   | { id: number; op: 'routine'; call: RoutineCall }
+  | { id: number; op: 'task'; call: TaskCall }
   | { id: number; op: 'close' }
 
 export type ThreadReply =

@@ -162,6 +162,38 @@ export interface AgentDefinition {
    * project's own, relative to its folder, and `listCommand` lists them in a session.
    */
   mcpConfig?: { project: string; listCommand?: string }
+  /** What Kettu knows of the models it lists, for an agent that picks who does a workflow step. */
+  modelNotes?: readonly ModelNote[]
+}
+
+/**
+ * A model Kettu knows: matched by a model's id or menu value, ranked from 1 (smallest) up within
+ * its harness, with its API price when confirmed and a line on when it fits.
+ */
+export interface ModelNote {
+  /** Lowercase ids and menu values it is listed by, such as `claude-opus-5-5` and `opus`. */
+  match: readonly string[]
+  name: string
+  rank: number
+  /** US dollars per million tokens. */
+  price?: { input: number; output: number }
+  note: string
+}
+
+/** The note of a listed model, by its menu value or resolved id. */
+export function modelNoteOf(
+  notes: readonly ModelNote[] | undefined,
+  model: { value: string; modelId?: string },
+): ModelNote | null {
+  const keys = [model.value, model.modelId]
+    .filter((key): key is string => typeof key === 'string')
+    .map((key) =>
+      key
+        .toLowerCase()
+        .replace(/\[[^\]]*\]$/, '')
+        .replace(/-\d{8}$/, ''),
+    )
+  return notes?.find((note) => keys.some((key) => note.match.includes(key))) ?? null
 }
 
 export function protocolOf(def: AgentDefinition): AgentProtocol {

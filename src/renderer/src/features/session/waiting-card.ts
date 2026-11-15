@@ -1,4 +1,5 @@
 import { useThreadsStore } from '@renderer/stores/threads'
+import { openSuggestion } from './entries/workflow-tools'
 
 /** The first card in the thread that waits for the user's answer. */
 export function firstWaiting(sessionId: string): string | null {
@@ -16,7 +17,8 @@ export function firstWaiting(sessionId: string): string | null {
       (entry?.kind === 'market_publish' && entry.outcome === null)
     if (waiting) return id
   }
-  return null
+  // A suggestion to start a task waits below the work, so the requests above go first.
+  return openSuggestion(sessionId, state)
 }
 
 /** Esc, Enter, Mod+Enter, or a number key 1 to 9. */

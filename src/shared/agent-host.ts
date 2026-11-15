@@ -91,6 +91,17 @@ import type {
   RoutinesProblem,
 } from './routines'
 import type { AgentColor } from './settings'
+import type {
+  SessionTaskRef,
+  WorkflowAddSource,
+  WorkflowEntry,
+  WorkflowSettings,
+  WorkflowSettingsChange,
+  StepPick,
+  TaskStart,
+  TaskSummary,
+  TaskView,
+} from './workflow'
 import type { ClockRequest, UsageScope, UsageStatus, UsageSummary, UsageTotal } from './usage'
 import type {
   AgentId,
@@ -399,6 +410,7 @@ export type McpToolGroup =
   | 'terminal'
   | 'memory'
   | 'reports'
+  | 'workflows'
 
 export interface McpToolSummary {
   name: string
@@ -501,8 +513,9 @@ export interface SessionSummary {
   createdAt: number
   updatedAt: number
   parentId: string | null
-  origin: 'user' | 'subagent' | 'routine'
+  origin: 'user' | 'subagent' | 'routine' | 'task'
   routine: RoutineRef | null // a routine's run, listed under its routine rather than its project
+  task?: SessionTaskRef | null // a workflow step's session, listed under its task; absent from older hosts
   description: string | null // a subagent's purpose, as its parent described it
   missing: boolean // a subagent the parent's replay did not mention
   branch: string | null // the branch checked out when its last turn ended
@@ -817,6 +830,67 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
+  // Workflows: the official ones and the user's library. See workflow.
+  'workflows.list': { params: void; result: WorkflowEntry[] }
+  'workflows.read': {
+    params: { workflowId: string }
+    result: { entry: WorkflowEntry; text: string | null }
+  }
+  // Unapproved until `workflows.approve` names the hash the user was shown.
+  'workflows.add': { params: WorkflowAddSource; result: WorkflowEntry }
+  // Reads a GitHub workflow again; a changed file waits for approval again.
+  'workflows.update': {
+    params: { workflowId: string }
+    result: { entry: WorkflowEntry; changed: boolean }
+  }
+  'workflows.approve': { params: { workflowId: string; hash: string }; result: WorkflowEntry }
+  'workflows.remove': { params: { workflowId: string }; result: void }
+  // Who does a step for every task of the workflow; null goes back to Auto.
+  'workflows.pin': {
+    params: { workflowId: string; stepId: string; pick: StepPick | null }
+    result: WorkflowEntry
+  }
+  'workflows.settings': { params: void; result: WorkflowSettings }
+  'workflows.setSettings': { params: WorkflowSettingsChange; result: WorkflowSettings }
+  // Tasks: a requirement run through a workflow, one session per step.
+  'tasks.list': { params: void; result: TaskSummary[] }
+  'tasks.get': { params: { taskId: string }; result: TaskView }
+  // The summaries of its steps' sessions still there, which the session list leaves out.
+  'tasks.sessions': { params: { taskId: string }; result: SessionSummary[] }
+  // `from` is the session whose agent suggested it.
+  'tasks.start': { params: TaskStart & { from?: { sessionId: string } }; result: TaskView }
+  // Approves what a step handed in, or sends it back to the same step with a note.
+  'tasks.review': {
+    params: { taskId: string; roundId: string; approve: boolean; note?: string }
+    result: TaskView
+  }
+  // The user's outcome on a step the workflow gives them.
+  'tasks.answer': {
+    params: { taskId: string; roundId: string; outcome: string; note?: string }
+    result: TaskView
+  }
+  // Lets a step that waits for the user go on.
+  'tasks.retry': { params: { taskId: string; stepId: string; note?: string }; result: TaskView }
+  'tasks.cancel': { params: { taskId: string }; result: TaskView }
+  // A task that is not running, with its steps' sessions.
+  'tasks.delete': { params: { taskId: string }; result: void }
+  // A note for the running steps and every later one.
+  'tasks.note': { params: { taskId: string; text: string }; result: TaskView }
+  // Who does a step for this task only; null goes back to what the workflow's page says.
+  'tasks.pin': {
+    params: { taskId: string; stepId: string; pick: StepPick | null }
+    result: TaskView
+  }
+  'tasks.update': {
+    params: {
+      taskId: string
+      title?: string
+      pinned?: boolean
+      archived?: boolean
+      unread?: boolean
+    }
+    result: TaskView
+  }
   // The window's prepared session for New session; `replace` opens a new one even when it holds one.
   'sessions.prepare': {
     params: {
@@ -1435,6 +1509,27 @@ export const HOST_METHODS = [
   'routines.cancelRun',
   'routines.runs',
   'routines.markSeen',
+  'workflows.list',
+  'workflows.read',
+  'workflows.add',
+  'workflows.update',
+  'workflows.approve',
+  'workflows.remove',
+  'workflows.pin',
+  'workflows.settings',
+  'workflows.setSettings',
+  'tasks.list',
+  'tasks.get',
+  'tasks.sessions',
+  'tasks.start',
+  'tasks.review',
+  'tasks.answer',
+  'tasks.retry',
+  'tasks.cancel',
+  'tasks.delete',
+  'tasks.note',
+  'tasks.pin',
+  'tasks.update',
   'permissions.respond',
   'git.status',
   'git.unwatch',
@@ -1592,6 +1687,9 @@ export type HostEvent =
   | { type: 'artifacts.consentsChanged' }
   | { type: 'routine.changed'; routine: RoutineView } // a routine, its state or its next run
   | { type: 'routine.removed'; routineId: string }
+  | { type: 'task.changed'; task: TaskView }
+  | { type: 'task.removed'; taskId: string }
+  | { type: 'workflows.changed' } // the workflow library or its settings changed; a page showing it reads again
   | { type: 'routine.run'; run: RoutineRun } // a run's status changed
   // To the port of the desktop app that sent the turn: a call for its main to run on the session's
   // page, answered by `browser.answer`.

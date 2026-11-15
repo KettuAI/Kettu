@@ -22,7 +22,10 @@ import { compareVersions } from '@shared/market-publish'
 import { harnessOf } from '@shared/agents'
 import type { AgentId, HarnessId } from '@shared/thread'
 import { basename } from '@renderer/lib/format'
+import { currentLocale } from '@renderer/lib/i18n'
 import type { HostScope } from '@renderer/stores/host-scope'
+import { workflowsKey, useWorkflowsStore } from '@renderer/stores/workflows'
+import { workflowName } from './workflow-model'
 import { publishedStore } from '@renderer/stores/market-published'
 import { publishedTitle } from './published-keys'
 
@@ -126,18 +129,19 @@ export function findListing(scope: HostScope, id: string, kept: MarketServer[]):
 }
 
 /**
- * What a listing shows: an MCP server, a harness's plugin or a skill, by its id, or a listing of
- * the Kettu Marketplace, by the listing's.
+ * What a listing shows: an MCP server, a harness's plugin, a skill or a workflow, by its id, or a
+ * listing of the Kettu Marketplace, by the listing's.
  */
 export type ItemRef =
   | { kind: 'mcp'; id: string }
   | { kind: 'plugin'; harness: PluginHarness; id: string }
   | { kind: 'skill'; id: string }
+  | { kind: 'workflow'; id: string }
   | { kind: 'community'; id: string }
 
 /**
- * The `item` of a listing's view: `mcp:<id>`, `plugin:<harness>/<id>`, `skill:<id>` or
- * `community:<listing>`.
+ * The `item` of a listing's view: `mcp:<id>`, `plugin:<harness>/<id>`, `skill:<id>`,
+ * `workflow:<id>` or `community:<listing>`.
  */
 export function itemKey(ref: ItemRef): string {
   return ref.kind === 'plugin' ? `plugin:${ref.harness}/${ref.id}` : `${ref.kind}:${ref.id}`
@@ -148,7 +152,9 @@ export function parseItem(key: string): ItemRef | null {
   const kind = key.slice(0, colon)
   const rest = key.slice(colon + 1)
   if (colon < 0 || !rest) return null
-  if (kind === 'mcp' || kind === 'skill' || kind === 'community') return { kind, id: rest }
+  if (kind === 'mcp' || kind === 'skill' || kind === 'workflow' || kind === 'community') {
+    return { kind, id: rest }
+  }
   if (kind !== 'plugin') return null
   const slash = rest.indexOf('/')
   const harness = rest.slice(0, slash)
@@ -162,6 +168,12 @@ export function listingTitle(scope: HostScope, key: string): string | null {
   if (own !== undefined) return own
   const ref = parseItem(key)
   if (!ref) return null
+  if (ref.kind === 'workflow') {
+    const entry = useWorkflowsStore
+      .getState()
+      .byHost[workflowsKey(scope.hostId)]?.entries.find((e) => e.id === ref.id)
+    return entry ? workflowName(entry, currentLocale()) : null
+  }
   const { mcp, skills } = scope.useSettingsStore.getState().settings.marketplace
   if (ref.kind === 'community') return communityItem(scope, ref.id)?.name ?? null
   if (ref.kind === 'mcp') return findListing(scope, ref.id, mcp)?.title ?? null

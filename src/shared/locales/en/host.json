@@ -110,8 +110,6 @@
   "attention": {
     "browserOrigin": "Wants to open {{site}}",
     "deviceAccess": "Wants to use {{device}}",
-    "marketPublish": "Wants to publish {{name}} to the Kettu Marketplace",
-    "marketUnlist": "Wants to unlist {{name}} from the Kettu Marketplace",
     "computerApp": "Wants to use {{app}}",
     "computerSetup": "Wants to use your computer",
     "controlAsk": {
@@ -137,7 +135,9 @@
     "asks": "Asks: {{question}}",
     "done": "{{title}} · done",
     "withChanges_one": "{{text}} {{count}} file changed.",
-    "withChanges_other": "{{text}} {{count}} files changed."
+    "withChanges_other": "{{text}} {{count}} files changed.",
+    "marketPublish": "Wants to publish {{name}} to the Kettu Marketplace",
+    "marketUnlist": "Wants to unlist {{name}} from the Kettu Marketplace"
   },
   "routines": {
     "busy": "This routine already has a run working",
@@ -601,6 +601,39 @@
   },
   "artifacts": {
     "formatUpgraded": "Moved to version {{format}} of its type’s format"
+  },
+  "workflow": {
+    "unusable": "{{name}} cannot be used: {{problem}}",
+    "notApproved": "Approve {{name}} before starting a task with it",
+    "notFound": "No such workflow",
+    "changedSinceShown": "The workflow changed since you saw it. Look at it again before approving it.",
+    "invalid": "The workflow has problems to fix first",
+    "officialKept": "Official workflows cannot be removed",
+    "noSuchStep": "The workflow has no such step for an agent",
+    "notGithub": "Give the address of a file on GitHub",
+    "notFromGithub": "Only a workflow added from GitHub can be updated",
+    "tooLarge": "The workflow file is larger than 256 KB",
+    "libraryFull": "Your workflow library is full",
+    "downloadFailed": "Could not download the workflow: {{error}}",
+    "downloadStatus": "GitHub answered {{status}} for the workflow"
+  },
+  "tasks": {
+    "notFound": "No such task",
+    "noStep": "No such step on this task",
+    "cannotStep": "{{agent}} cannot do workflow steps",
+    "notReviewing": "This step waits for no review",
+    "notPerson": "This step waits for no answer",
+    "noOutcome": "{{step}} has no outcome “{{outcome}}”",
+    "ended": "The task has ended",
+    "nothingToRetry": "This step waits for nothing to retry",
+    "stillRunning": "Cancel the task before deleting it",
+    "noteEmpty": "A note needs text",
+    "cannotPin": "This step has started, so it cannot be pinned now",
+    "needsYou": "{{title}} needs you",
+    "needsYouBody": "{{step}} · {{workflow}}",
+    "done": "{{title}} is done",
+    "dropped": "{{title}} ended without being done",
+    "endedBody": "{{workflow}} · {{steps}} steps"
   },
   "marketPublish": {
     "handleInvalid": "A publisher name is 1 to 32 lowercase letters, digits and hyphens, starting and ending with a letter or digit.",

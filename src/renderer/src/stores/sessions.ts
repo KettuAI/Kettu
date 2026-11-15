@@ -1,8 +1,10 @@
 import { create } from 'zustand'
 import type { Project, SessionSummary } from '@shared/agent-host'
+import type { TaskSummary } from '@shared/workflow'
 import { errorMessage, host } from '@renderer/lib/host'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { i18n } from '@renderer/lib/i18n'
+import { listedTasks, needingTasks, pinnedTasks, startedSteps, taskExpanded } from './tasks'
 import { NO_PROJECT_GROUP, PINNED_GROUP, THIS_COMPUTER, type MainView } from './view'
 
 interface SessionsStore {
@@ -32,6 +34,11 @@ function listed(summary: SessionSummary): SessionSummary {
   return at === undefined || summary.archivedAt ? summary : { ...summary, archivedAt: at }
 }
 
+/** Sessions listed under their projects: a routine's runs and a task's steps are listed elsewhere. */
+export function listedOrigin(summary: Pick<SessionSummary, 'origin'>): boolean {
+  return summary.origin !== 'routine' && summary.origin !== 'task'
+}
+
 export const useSessionsStore = create<SessionsStore>()((set) => ({
   byId: {},
   loaded: false,
@@ -40,8 +47,7 @@ export const useSessionsStore = create<SessionsStore>()((set) => ({
     // The list leaves out a routine's run sessions; one that is open stays for its view, which
     // the host still knows, and its removal comes as a session.removed event.
     const kept = (summary: SessionSummary) =>
-      hostOfPath(summary.projectPath) !== hostId ||
-      (hostId === null && summary.origin === 'routine')
+      hostOfPath(summary.projectPath) !== hostId || (hostId === null && !listedOrigin(summary))
     set((state) => ({
       byId: {
         ...Object.fromEntries(Object.entries(state.byId).filter(([, summary]) => kept(summary))),
@@ -131,7 +137,7 @@ export function sessionTree(
   return buildTree(
     byId,
     (s) =>
-      s.origin !== 'routine' &&
+      listedOrigin(s) &&
       (projectPath === null
         ? s.scratch && hostOfSession(s) === hostId
         : s.projectPath === projectPath),
@@ -143,7 +149,7 @@ export function sessionTree(
 export function pinnedTree(byId: Record<string, SessionSummary>): SessionNode[] {
   return buildTree(
     byId,
-    (s) => s.origin !== 'routine',
+    (s) => listedOrigin(s),
     (s) => !!s.pinnedAt && !s.archivedAt,
   ).sort((a, b) => (a.summary.pinnedAt ?? 0) - (b.summary.pinnedAt ?? 0))
 }
@@ -156,7 +162,7 @@ export function needsYouTree(byId: Record<string, SessionSummary>): SessionNode[
   return (
     buildTree(
       byId,
-      (s) => s.origin !== 'routine',
+      (s) => listedOrigin(s),
       (s) => !s.archivedAt,
     )
       .filter((node) => node.permissionCount > 0 || node.summary.attention === 'error')
@@ -197,10 +203,7 @@ export function archivedSessions(
   return Object.values(byId)
     .filter(
       (s) =>
-        s.origin !== 'routine' &&
-        s.parentId === null &&
-        !!s.archivedAt &&
-        hostOfSession(s) === hostId,
+        listedOrigin(s) && s.parentId === null && !!s.archivedAt && hostOfSession(s) === hostId,
     )
     .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
 }
@@ -294,6 +297,31 @@ function sameNode(a: SessionNode, b: SessionNode): boolean {
   )
 }
 
+/** A row of a sidebar group: a session with its sub-sessions, or a task with its steps. */
+export type SidebarRow =
+  | { kind: 'session'; id: string; node: SessionNode }
+  | { kind: 'task'; id: string; task: TaskSummary }
+
+/** A group's sessions and tasks in one list, by `order` of each. */
+export function sidebarRows(
+  nodes: readonly SessionNode[],
+  tasks: readonly TaskSummary[],
+  order: (row: SidebarRow) => number,
+): SidebarRow[] {
+  return [
+    ...nodes.map((node): SidebarRow => ({ kind: 'session', id: node.summary.id, node })),
+    ...tasks.map((task): SidebarRow => ({ kind: 'task', id: task.id, task })),
+  ].sort((a, b) => order(a) - order(b))
+}
+
+/** Latest activity first, as a project's group lists its rows. */
+export const byActivity = (row: SidebarRow): number =>
+  -(row.kind === 'session' ? row.node.summary.updatedAt : row.task.updatedAt)
+
+/** In the order they were pinned, as Pinned lists its rows. */
+export const byPin = (row: SidebarRow): number =>
+  (row.kind === 'session' ? row.node.summary.pinnedAt : row.task.pinnedAt) ?? 0
+
 /** The sessions in sidebar order, flattened, for Mod+Shift+[ and ]. */
 export function flattenTree(nodes: SessionNode[], expanded: (id: string) => boolean): string[] {
   const out: string[] = []
@@ -331,68 +359,105 @@ export function hostGroup(hostId: string | null): string {
   return `host:${hostId ?? THIS_COMPUTER}`
 }
 
-/** The list's one Tab stop: a session's row, or a group's header by its key. */
+/** The list's one Tab stop: a row by its id, as `visibleOrder` names it, or a group's header. */
 export type SidebarTabStop = { kind: 'session'; id: string } | { kind: 'group'; key: string }
 
 /**
- * The sessions the sidebar lists, in its order: Pinned, then each project's, then No project's.
- * A collapsed group or parent leaves out the rows it hides.
+ * The rows the sidebar lists, in its order: Pinned, then each project's, then No project's. A
+ * collapsed group, parent or task leaves out the rows it hides. A row is a session's id, a task's,
+ * or a task's step: its session's id, or `taskId/stepId` for a person's step.
  */
 export function visibleOrder(
   view: SidebarView,
   byId: Record<string, SessionSummary>,
   projects: readonly Project[],
+  tasks: Record<string, TaskSummary> = {},
 ): string[] {
   const expanded = (id: string) => view.expandedParents[id] ?? false
   const hosts = view.hosts ?? [null]
   const shown = (node: SessionNode) => hosts.includes(hostOfSession(node.summary))
-  const reachable = (node: SessionNode) => !view.away?.includes(hostOfSession(node.summary) ?? '')
+  const shownTask = (task: TaskSummary) => hosts.includes(hostOfPath(task.projectPath))
+  const reachable = (path: string) => !view.away?.includes(hostOfPath(path) ?? '')
+  const flatten = (rows: SidebarRow[], open = true): string[] =>
+    rows.flatMap((row) =>
+      row.kind === 'session'
+        ? flattenTree([row.node], open ? expanded : () => false)
+        : [
+            row.id,
+            ...(open && taskExpanded(view, row.id, byId)
+              ? startedSteps(row.task).map((step) => step.id)
+              : []),
+          ],
+    )
   const order = [
-    ...(view.hosts ? needsYouTree(byId).filter((n) => shown(n) && reachable(n)) : []).map(
-      (node) => node.summary.id,
-    ),
+    ...(view.hosts
+      ? flatten(
+          sidebarRows(
+            needsYouTree(byId).filter((n) => shown(n) && reachable(n.summary.projectPath)),
+            needingTasks(tasks).filter((t) => shownTask(t) && reachable(t.projectPath)),
+            byActivity,
+          ),
+          false,
+        )
+      : []),
     ...(view.collapsedProjects[PINNED_GROUP]
       ? []
-      : flattenTree(pinnedTree(byId).filter(shown), expanded)),
+      : flatten(
+          sidebarRows(pinnedTree(byId).filter(shown), pinnedTasks(tasks).filter(shownTask), byPin),
+        )),
     ...hosts.flatMap((hostId) =>
       view.collapsedProjects[hostGroup(hostId)]
         ? []
         : [
             ...projects
               .filter((p) => hostOfPath(p.path) === hostId && !view.collapsedProjects[p.path])
-              .flatMap((p) => flattenTree(sessionTree(byId, p.path), expanded)),
+              .flatMap((p) =>
+                flatten(
+                  sidebarRows(sessionTree(byId, p.path), listedTasks(tasks, p.path), byActivity),
+                ),
+              ),
             ...(view.collapsedProjects[noProjectGroup(hostId)]
               ? []
               : flattenTree(sessionTree(byId, null, hostId), expanded)),
           ],
     ),
   ]
-  // A session Needs you lists is listed in its project as well; the keys visit it once.
+  // A row Needs you lists is listed in its project as well; the keys visit it once.
   return [...new Set(order)]
 }
 
 /**
- * The list's one Tab stop: the shown session's row while the list shows it, otherwise the first
- * group header, then no stop at all while the list has no rows.
+ * The list's one Tab stop: the row in front while the list shows it, a session's, a task's or a
+ * step's; otherwise the first group header, then no stop at all while the list has no rows.
  */
 export function sidebarTabStop(
   view: SidebarView,
   byId: Record<string, SessionSummary>,
   projects: readonly Project[],
+  tasks: Record<string, TaskSummary> = {},
 ): SidebarTabStop | null {
-  const order = visibleOrder(view, byId, projects)
-  if (view.main.kind === 'session' && order.includes(view.main.sessionId)) {
-    return { kind: 'session', id: view.main.sessionId }
-  }
+  const order = visibleOrder(view, byId, projects, tasks)
+  const front =
+    view.main.kind === 'session'
+      ? view.main.sessionId
+      : view.main.kind === 'task'
+        ? view.main.taskId
+        : null
+  if (front !== null && order.includes(front)) return { kind: 'session', id: front }
   const hosts = view.hosts ?? [null]
   const shown = (node: SessionNode) => hosts.includes(hostOfSession(node.summary))
-  if (pinnedTree(byId).some(shown)) return { kind: 'group', key: PINNED_GROUP }
+  const shownTask = (task: TaskSummary) => hosts.includes(hostOfPath(task.projectPath))
+  if (pinnedTree(byId).some(shown) || pinnedTasks(tasks).some(shownTask)) {
+    return { kind: 'group', key: PINNED_GROUP }
+  }
   for (const hostId of hosts) {
     if (view.hosts && view.collapsedProjects[hostGroup(hostId)]) {
       return { kind: 'group', key: hostGroup(hostId) }
     }
     const project = projects.find(
-      (p) => hostOfPath(p.path) === hostId && sessionTree(byId, p.path).length > 0,
+      (p) =>
+        hostOfPath(p.path) === hostId &&
+        (sessionTree(byId, p.path).length > 0 || listedTasks(tasks, p.path).length > 0),
     )
     if (project) return { kind: 'group', key: project.path }
     if (sessionTree(byId, null, hostId).length > 0) {

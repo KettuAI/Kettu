@@ -1,0 +1,116 @@
+# Kettu's official workflow for a change across a frontend and a backend, built side by side.
+format: 1
+name: Frontend + backend
+description: Split the work and its interface, build the frontend and the backend at once on their own branches, test them together, review, then ship.
+locales:
+  zh-CN:
+    name: 前端 + 后端
+    description: 先拆分工作和接口，前端和后端各在自己的分支上同时开发，合起来做集成测试，审查后发布。
+    steps:
+      split: 拆分
+      frontend: 前端
+      backend: 后端
+      integration-test: 集成测试
+      code-review: 代码审查
+      ship: 发布
+send_back_limit: 3
+steps:
+  - id: split
+    name: Split
+    hand_in: document
+    hint: The interface both sides build to; prefer a strong model.
+    prompt: |
+      Split the requirement into its frontend and backend work. Write a document artifact with
+      the interface between them (endpoints or calls, their data and errors), what each side
+      builds, and how they will be tested together. If shared code such as types belongs to the
+      interface, add it now and commit it, since both sides start from this commit. Commit before
+      you report.
+
+      If you were sent back, address every point you were given.
+    outcomes:
+      - name: Done
+        to: [frontend, backend]
+
+  - id: frontend
+    name: Frontend
+    hand_in: note
+    hint: Interface work; pick by how much the screens change.
+    prompt: |
+      Build the frontend part of the split, to the interface in the split's document. Work only
+      on the frontend; the backend is built at the same time on another branch. Add tests where
+      the project tests its interface, run the frontend's checks, and commit your work on the
+      current branch before you report.
+
+      If you were sent back, fix every point you were given.
+    outcomes:
+      - name: Done
+        to: integration-test
+
+  - id: backend
+    name: Backend
+    hand_in: note
+    hint: Data and logic; pick a strong model for anything that changes stored data.
+    prompt: |
+      Build the backend part of the split, to the interface in the split's document. Work only
+      on the backend; the frontend is built at the same time on another branch. Add tests for
+      the core of the change, run the backend's checks, and commit your work on the current
+      branch before you report.
+
+      If you were sent back, fix every point you were given.
+    outcomes:
+      - name: Done
+        to: integration-test
+
+  - id: integration-test
+    name: Integration test
+    hand_in: outcome
+    review_of: [frontend, backend]
+    hint: Running both sides together; a mid-size model is usually enough.
+    prompt: |
+      Both sides are merged into this folder. Run them together and test the interface end to
+      end as the split's document says, and run the project's checks. Do not fix what you find.
+
+      Report Passed when everything works. Otherwise report the side the problem is on, and list
+      in your note every problem with how to reproduce it.
+    outcomes:
+      - name: Passed
+        to: code-review
+      - name: Frontend problem
+        to: frontend
+      - name: Backend problem
+        to: backend
+
+  - id: code-review
+    name: Code review
+    hand_in: outcome
+    review_of: [frontend, backend]
+    hint: Review on another agent than the ones that built it when one is available.
+    prompt: |
+      Review the whole change on this branch against the split's document. Read the diff from the
+      branch's base, and look for bugs, missing tests and a frontend and backend that disagree.
+      Do not change any file.
+
+      Report Approved when it is ready to ship. Report Changes needed when it is not, and list in
+      your note every problem; the work goes back to the split.
+    outcomes:
+      - name: Approved
+        to: ship
+      - name: Changes needed
+        to: split
+
+  - id: ship
+    name: Ship
+    hand_in: outcome
+    hint: Mechanical work; the fastest model is enough.
+    prompt: |
+      Ship the change: push the branch, open a pull request with a short description of what
+      changed on each side and why, and wait for its checks. When they pass, merge it as the
+      repository does.
+
+      Report Merged once it is merged. Report Checks failed when a check fails because of the
+      change, and say in your note which check failed and what it said.
+    outcomes:
+      - name: Merged
+        end: done
+      - name: Checks failed
+        to: split

@@ -87,11 +87,11 @@ const tm = i18n.getFixedT(null, 'marketplace')
 // The most a report says, as the service takes it.
 const REPORT_CHARS = 2000
 
-const KIND: Record<PublishKind, ItemKind> = {
+const KIND = {
   skill: 'skill',
   plugin: 'plugin',
   'mcp-server': 'mcp',
-}
+} as const satisfies Record<PublishKind, ItemKind>
 
 /** The kind, then who published it. */
 function CommunityTag({ item, showKind }: { item: CommunityItem; showKind: boolean }) {

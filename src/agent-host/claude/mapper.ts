@@ -46,6 +46,8 @@ import type {
   UserMessage,
 } from './sdk'
 import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
+import { SERVICE_NAME } from '../service-name'
+import { workflowToolStructured } from '../workflow/tools'
 import { PLAN_TOOLS, resultContent, startsBackgroundWork, SUBAGENT_TOOLS, toolView } from './tools'
 
 /** Output for one session, built against its thread when it is delivered. */
@@ -56,6 +58,9 @@ export interface Delivery {
 }
 
 const output = (): MapperOutput => ({ patches: [], effects: [] })
+
+/** Claude Code's name for a tool of Kettu's own MCP server starts with this. */
+const KETTU_PREFIX = `mcp__${SERVICE_NAME}__`
 
 /** Claude Code's model name for the messages it writes itself, such as an error. */
 export const SYNTHETIC_MODEL = '<synthetic>'
@@ -589,9 +594,13 @@ export class ClaudeMapper {
     if (entry?.kind !== 'tool') return out
     const status: ToolEntry['status'] = block.is_error === true ? 'failed' : 'completed'
     const content = resultContent(name, block, structured, entry.content)
+    const own = name.startsWith(KETTU_PREFIX)
+      ? workflowToolStructured(name.slice(KETTU_PREFIX.length), structured)
+      : undefined
     const changes = {
       status,
       ...(content ? { content } : {}),
+      ...(own ? { structured: own } : {}),
       ...(name === 'ExitPlanMode' && status === 'completed' ? { title: 'Exited Plan Mode' } : {}),
     }
     out.patches.push({ op: 'entry.update', id, changes })

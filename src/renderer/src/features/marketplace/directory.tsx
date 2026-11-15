@@ -1,9 +1,11 @@
-// The Marketplace's directory: its tabs, search and Add over sections of plugins, skills and MCP
-// servers. Each source fills its sections as it answers; the rest show at once.
+// The Marketplace's directory: its tabs, search and Add over sections of plugins, skills, MCP
+// servers and workflows. Each source fills its sections as it answers; the rest show at once.
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   Add01Icon,
+  File02Icon,
+  Flowchart01Icon,
   Folder01Icon,
   GithubIcon,
   PlugSocketIcon,
@@ -21,6 +23,7 @@ import type {
   MarketSkills,
 } from '@shared/marketplace'
 import { displayTitle } from '@shared/marketplace'
+import type { WorkflowEntry } from '@shared/workflow'
 import type { CommunityDirectory, CommunityItem } from '@shared/market-community'
 import type { PublishKind } from '@shared/market-publish'
 import {
@@ -32,6 +35,7 @@ import {
 } from '@renderer/components/affect/app-shell'
 import { Button } from '@renderer/components/affect/button'
 import { mediumAgo } from '@renderer/lib/format'
+import { currentLocale } from '@renderer/lib/i18n'
 import { isMac, isWeb } from '@renderer/lib/platform'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { useAccountStore } from '@renderer/stores/account'
@@ -74,15 +78,19 @@ import {
   SkeletonSection,
 } from './rows'
 import { SkillRow } from './skills'
+import { workflowMatches, workflowName } from './workflow-model'
+import { addWorkflowFromFile, retryWorkflows, useWorkflows } from './workflow-actions'
+import { AddWorkflowDialog, WorkflowRow, WorkflowSections } from './workflows'
 import {
   communitySubject,
   pluginSubject,
   serverSubject,
   skillSubject,
+  workflowSubject,
   type TileSubject,
 } from './tile-art'
 
-const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'installed']
+const TABS: readonly MarketplaceTab[] = ['all', 'plugins', 'skills', 'mcp', 'workflow', 'installed']
 /** With Published last, while the host's Kettu account is signed in with Kettu's services on. */
 const SIGNED_IN_TABS: readonly MarketplaceTab[] = [...TABS, 'published']
 
@@ -107,6 +115,7 @@ type Entry =
   | { kind: 'mcp'; key: string; title: string; subject: TileSubject; server: CatalogServer }
   | { kind: 'plugin'; key: string; title: string; subject: TileSubject; plugin: CatalogPlugin }
   | { kind: 'skill'; key: string; title: string; subject: TileSubject; skill: CatalogSkill }
+  | { kind: 'workflow'; key: string; title: string; subject: TileSubject; workflow: WorkflowEntry }
   | { kind: 'community'; key: string; title: string; subject: TileSubject; item: CommunityItem }
 
 interface Section {
@@ -142,6 +151,14 @@ const skillEntry = (skill: CatalogSkill): Entry => ({
   skill,
 })
 
+const workflowEntry = (workflow: WorkflowEntry): Entry => ({
+  kind: 'workflow',
+  key: itemKey({ kind: 'workflow', id: workflow.id }),
+  title: workflowName(workflow, currentLocale()),
+  subject: workflowSubject(workflow),
+  workflow,
+})
+
 const communityEntry = (item: CommunityItem): Entry => ({
   kind: 'community',
   key: itemKey({ kind: 'community', id: item.id }),
@@ -166,6 +183,8 @@ interface Sources {
   pluginsPending: boolean
   skills: MarketSkills | null
   skillsPending: boolean
+  workflows: WorkflowEntry[]
+  workflowsPending: boolean
   search: MarketSearchState | null
   community: CommunityDirectory | null
   communityPending: boolean
@@ -181,6 +200,8 @@ function useSources(): Sources {
   const skills = useMarketplaceStore((s) => s.skills)
   const skillsPending = useMarketplaceStore((s) => !s.skills && !s.skillsError)
   const search = useMarketplaceStore((s) => s.search)
+  const { entries: workflows, loaded: workflowsLoaded } = useWorkflows()
+  const workflowsPending = !workflowsLoaded
   const community = useMarketplaceStore((s) => s.community)
   const communityPending = useMarketplaceStore((s) => !s.community && !s.communityError)
   const communitySearch = useMarketplaceStore((s) => s.communitySearch)
@@ -192,6 +213,8 @@ function useSources(): Sources {
       pluginsPending,
       skills,
       skillsPending,
+      workflows,
+      workflowsPending,
       search,
       community,
       communityPending,
@@ -204,6 +227,8 @@ function useSources(): Sources {
       pluginsPending,
       skills,
       skillsPending,
+      workflows,
+      workflowsPending,
       search,
       community,
       communityPending,
@@ -282,7 +307,7 @@ function sectionTitle(id: string, t: TFunction<'marketplace'>): string {
   }
 }
 
-/** All without a query: Featured, From Anthropic and For Codex, then the MCP categories. */
+/** All without a query: Featured, From Anthropic, For Codex and workflow, then the MCP categories. */
 function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
   const plugins = [...(src.plugins?.catalog ?? [])].sort(byInstalls)
   const skills = src.skills?.catalog ?? []
@@ -321,6 +346,12 @@ function allSections(src: Sources, t: TFunction<'marketplace'>): Section[] {
       title: t('sections.codex'),
       entries: plugins.filter((p) => p.harness === 'codex').map(pluginEntry),
       pending: src.pluginsPending ? 4 : 0,
+    },
+    {
+      id: 'workflows',
+      title: t('sections.workflow'),
+      entries: src.workflows.map(workflowEntry),
+      pending: src.workflowsPending ? 2 : 0,
     },
     ...mcpSections(src, t, 'featured'),
     ...communitySections(src, t, null),
@@ -413,6 +444,16 @@ function foundSections(
       pending: src.skillsPending ? 2 : 0,
     })
   }
+  if (tab === 'all') {
+    sections.push({
+      id: 'found-workflows',
+      title: t('sections.workflow'),
+      entries: src.workflows
+        .filter((s) => workflowMatches(s, query, currentLocale()))
+        .map(workflowEntry),
+      pending: src.workflowsPending ? 2 : 0,
+    })
+  }
   if (tab === 'all' || tab === 'mcp') {
     if (registry !== null) {
       const search = src.search?.query === registry ? src.search : null
@@ -453,7 +494,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
   const scope = useHostScope()
   const { useMarketplaceStore } = scope
   const query = useMarketplaceStore((s) => s.query)
-  const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | null>(null)
+  const [dialog, setDialog] = useState<'mcp' | 'marketplace' | 'skill' | 'workflow' | null>(null)
   const namesHosts = useNamesHosts()
   const windowHost = useWindowHost()
   const hostName = useHostName()
@@ -465,6 +506,7 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
     plugins: t('page.tabs.plugins'),
     skills: t('page.tabs.skills'),
     mcp: t('page.tabs.mcp'),
+    workflow: t('page.tabs.workflow'),
     installed: t('page.tabs.installed'),
     published: t('page.tabs.published'),
   }
@@ -579,6 +621,18 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
                     icon: PlugSocketIcon,
                     onSelect: () => setDialog('mcp'),
                   },
+                  {
+                    label: t('add.workflowGithub'),
+                    description: t('add.workflowGithubLine'),
+                    icon: Flowchart01Icon,
+                    onSelect: () => setDialog('workflow'),
+                  },
+                  {
+                    label: t('add.workflowFile'),
+                    description: t('add.workflowFileLine'),
+                    icon: File02Icon,
+                    onSelect: () => addWorkflowFromFile(scope),
+                  },
                 ]}
                 trigger={({ open, toggle }) => (
                   <Button
@@ -603,6 +657,10 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
           <div key="installed">
             <InstalledView query={filter} />
           </div>
+        ) : tab === 'workflow' ? (
+          <div key={`workflow|${filter}`}>
+            <WorkflowSections query={filter} />
+          </div>
         ) : (
           <div key={`${tab}|${filter}`}>
             <Sections tab={tab} query={filter} registry={registry} />
@@ -620,6 +678,10 @@ export function Directory({ tab }: { tab: MarketplaceTab }) {
         <AddSkillDialog
           open={dialog === 'skill'}
           onOpenChange={(open) => setDialog(open ? 'skill' : null)}
+        />
+        <AddWorkflowDialog
+          open={dialog === 'workflow'}
+          onOpenChange={(open) => setDialog(open ? 'workflow' : null)}
         />
       </MarketAway>
     </div>
@@ -722,6 +784,9 @@ function EntryRow({ entry, tab, fresh }: { entry: Entry; tab: MarketplaceTab; fr
   if (entry.kind === 'skill') {
     return <SkillRow skill={entry.skill} tab={tab} showKind={showKind} fresh={fresh} />
   }
+  if (entry.kind === 'workflow') {
+    return <WorkflowRow entry={entry.workflow} tab={tab} showKind={showKind} fresh={fresh} />
+  }
   const server = entry.server
   const open = () => openMarketplace({ item: entry.key, tab })
   return (
@@ -747,6 +812,8 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
   const pluginsError = useMarketplaceStore((s) => s.pluginsError)
   const skillsError = useMarketplaceStore((s) => s.skillsError)
   const store = useMarketplaceStore.getState
+  const scope = useHostScope()
+  const workflows = useWorkflows()
   const notes: ReactNode[] = []
   const plugins = tab === 'all' || tab === 'plugins'
   const skills = tab === 'all' || tab === 'skills'
@@ -783,6 +850,13 @@ function Notes({ tab, registry }: { tab: MarketplaceTab; registry: string | null
           : fetchedAt === null
             ? t('catalog.stale')
             : t('catalog.staleSince', { ago: mediumAgo(fetchedAt) })}
+      </QuietNote>,
+    )
+  }
+  if (tab === 'all' && workflows.error && workflows.entries.length === 0) {
+    notes.push(
+      <QuietNote key="workflows" action={<Retry onRetry={() => retryWorkflows(scope)} />}>
+        {t('workflow.readFailed', { error: workflows.error })}
       </QuietNote>,
     )
   }

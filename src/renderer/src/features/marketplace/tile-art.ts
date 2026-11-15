@@ -10,6 +10,7 @@ import {
   BookOpen01Icon,
   BrowserIcon,
   Briefcase01Icon,
+  BugIcon,
   Calculator01Icon,
   CheckListIcon,
   CodeIcon,
@@ -18,8 +19,11 @@ import {
   Database01Icon,
   Doc01Icon,
   FlashIcon,
+  Flowchart01Icon,
+  GitForkIcon,
   GitPullRequestIcon,
   Image01Icon,
+  LicenseDraftIcon,
   Location01Icon,
   Mail01Icon,
   Message01Icon,
@@ -40,6 +44,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import type { IconSvgElement } from '@hugeicons/react'
 import type { PluginHarness } from '@shared/marketplace'
+import type { WorkflowSource } from '@shared/workflow'
 import { KETTU_PLUGINS, kettuId, type CommunityItem } from '@shared/market-community'
 import { brandMark, type Mark } from './brand-marks'
 import { pluginName } from './model'
@@ -56,6 +61,7 @@ export type TileSubject =
       marks?: boolean
     }
   | { kind: 'skill'; name: string }
+  | { kind: 'workflow'; id: string; source: WorkflowSource }
 
 export type TileSize = 'small' | 'row' | 'big'
 
@@ -79,6 +85,12 @@ export const pluginSubject = (plugin: {
 })
 
 export const skillSubject = (name: string): TileSubject => ({ kind: 'skill', name })
+
+export const workflowSubject = (workflow: { id: string; source: WorkflowSource }): TileSubject => ({
+  kind: 'workflow',
+  id: workflow.id,
+  source: workflow.source,
+})
 
 /** A listing's tile: its kind's glyph, never a maker's mark, since anyone may take a name. */
 export function communitySubject(
@@ -164,6 +176,23 @@ const CATEGORIES: [RegExp, IconSvgElement][] = [
   [/develop|engineer|code/, CodeIcon],
 ]
 
+// Kettu's own workflows, on the fox's tile.
+const OFFICIAL_WORKFLOWS: Record<string, IconSvgElement> = {
+  'feature-development': Flowchart01Icon,
+  'fix-a-bug': BugIcon,
+  'frontend-backend': GitForkIcon,
+  'technical-design': LicenseDraftIcon,
+}
+
+// The user's workflows, colored by how they came.
+const WORKFLOW_COLOR: Record<WorkflowSource, string> = {
+  official: 'var(--brand-kettu-tile)',
+  github: 'var(--tile-sky)',
+  file: 'var(--tile-slate)',
+  agent: 'var(--tile-cyan)',
+  user: 'var(--tile-violet)',
+}
+
 const HARNESS_COLOR: Record<PluginHarness, string> = {
   'claude-code': 'var(--brand-claude)',
   codex: 'var(--brand-codex-3)',
@@ -184,6 +213,10 @@ export function tileArt(subject: TileSubject): Art {
     return glyph
       ? { type: 'glyph', icon: glyph.icon, color: glyph.color ?? 'var(--tile-slate)' }
       : { type: 'glyph', icon: PlugSocketIcon, color: 'var(--tile-slate)' }
+  }
+  if (subject.kind === 'workflow') {
+    const icon = subject.source === 'official' ? OFFICIAL_WORKFLOWS[subject.id] : undefined
+    return { type: 'glyph', icon: icon ?? Flowchart01Icon, color: WORKFLOW_COLOR[subject.source] }
   }
   if (subject.kind === 'skill') {
     const glyph = SKILLS[subject.name]

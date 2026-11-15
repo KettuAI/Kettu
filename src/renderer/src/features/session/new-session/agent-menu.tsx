@@ -96,10 +96,24 @@ export function AgentMenu({
   modelOnly = false,
   defaultOpen = false,
   onClose,
+  emptyLabel,
+  triggerClassName,
+  label: buttonLabel,
+  only,
+  action = null,
 }: {
   agentId: AgentId | null
   onChoose: (agentId: AgentId, model: string | null) => void
   modelOnly?: boolean
+  /** The button's label while no agent is chosen, in place of "Choose an agent". */
+  emptyLabel?: ReactNode
+  triggerClassName?: string
+  /** The button's accessible name, in place of "Agent and model". */
+  label?: string
+  /** The agents it lists, when only some can do the work. */
+  only?: (status: AgentStatus) => boolean
+  /** An action under the list that answers for the menu, such as going back to Auto. */
+  action?: { label: string; icon: ReactNode; onSelect: () => void } | null
   /** Opens as it mounts, for a menu another control opened in its place. */
   defaultOpen?: boolean
   /** It closed, chosen or not, for Base UI's reason, or none when it closed itself. */
@@ -121,7 +135,7 @@ export function AgentMenu({
   const statuses = useAgentsStore(
     useShallow((s) => {
       const { order, byId } = agentsOn(s, hostId)
-      const listed = menuAgents(usableAgents(order, byId))
+      const listed = menuAgents(usableAgents(order, byId)).filter((status) => !only || only(status))
       return modelOnly ? listed.filter((status) => status.id === agentId) : listed
     }),
   )
@@ -314,12 +328,20 @@ export function AgentMenu({
               <Button
                 variant="quiet"
                 size="sm"
-                aria-label={t('newSession.agentMenu.label')}
-                className="min-w-0 shrink gap-1 overflow-hidden px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25"
+                aria-label={buttonLabel ?? t('newSession.agentMenu.label')}
+                className={cn(
+                  'min-w-0 shrink gap-1 overflow-hidden px-2.25 text-control font-normal has-data-[icon=inline-end]:pr-2.25',
+                  triggerClassName,
+                )}
               />
             }
           >
-            <AgentButtonLabel agentId={agentId} values={values} hostId={hostId} />
+            <AgentButtonLabel
+              agentId={agentId}
+              values={values}
+              hostId={hostId}
+              emptyLabel={emptyLabel}
+            />
           </ComboboxTrigger>
         )}
         <ComboboxContent align="end" sideOffset={6} className="flex flex-col">
@@ -423,6 +445,25 @@ export function AgentMenu({
               </div>
             </Tabs>
           )}
+          {action && (
+            <>
+              <Separator className="bg-border-soft" />
+              <div className="p-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2 px-2 text-ui font-normal"
+                  onClick={() => {
+                    close()
+                    action.onSelect()
+                  }}
+                >
+                  {action.icon}
+                  {action.label}
+                </Button>
+              </div>
+            </>
+          )}
           {/* Settings set up this computer's agents, not another host's. */}
           {hostId === null && !modelOnly && (
             <>
@@ -460,15 +501,21 @@ function AgentButtonLabel({
   agentId,
   values,
   hostId,
+  emptyLabel,
 }: {
   agentId: AgentId | null
   values?: OptionValues
   hostId: string | null
+  emptyLabel?: ReactNode
 }) {
   const { t } = useTranslation('session')
   const config = useStartConfig(agentId, values, hostId)
   if (!agentId) {
-    return <span className="truncate text-foreground">{t('newSession.chooseAgentShort')}</span>
+    return (
+      emptyLabel ?? (
+        <span className="truncate text-foreground">{t('newSession.chooseAgentShort')}</span>
+      )
+    )
   }
   const model = config?.find((o) => o.category === 'model')
   const effort = config?.find((o) => o.category === 'thought_level')
