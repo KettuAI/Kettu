@@ -1,11 +1,14 @@
-// The host's side of the relay: a control socket on every relay while it has an access token,
-// each signed in with the host's key, and one more socket for every device the relay announces,
-// handed on as a device connection like a direct one. Runs on the standard WebSocket API alone,
-// so the remote host runs it under Electron and Node.js alike.
+// The host's side of the relay: a control socket on every relay while it has a token, each signed
+// in with the host's key, and one more socket for every device the relay announces, handed on as
+// a device connection like a direct one. The relays are the regions of `GET /v1`, or those the
+// region rules picked from the signed list; each control socket times its pings for the host's
+// leg, and a region that drains is left once no device is joined through it. Runs on the
+// standard WebSocket API alone, so the remote host runs it under Electron and Node.js alike.
 
 import {
   ACCEPT_TIMEOUT_MS,
   HOSTS_FEATURE,
+  RELAY_TOKENS_FEATURE,
   MAX_REGIONS,
   PING,
   PONG,
@@ -64,6 +67,12 @@ export interface RelayHostTimings {
   conflictWindowMs: number
   /** How often the region list is read again. */
   regionsMs: number
+  /** How long a region left behind keeps the devices joined through it. */
+  leaveMs: number
+  /** How long a region that said it drains is not signed in to again. */
+  drainedMs: number
+  /** Round trips a control socket keeps for the host's leg, whose median it reports. */
+  rttSamples: number
 }
 
 export const RELAY_HOST_TIMINGS: RelayHostTimings = {
@@ -75,6 +84,9 @@ export const RELAY_HOST_TIMINGS: RelayHostTimings = {
   conflicts: 3,
   conflictWindowMs: 10 * 60_000,
   regionsMs: 6 * 60 * 60_000,
+  leaveMs: 10 * 60_000,
+  drainedMs: 30 * 60_000,
+  rttSamples: 5,
 }
 
 export interface RelayHostOptions {
@@ -83,9 +95,10 @@ export interface RelayHostOptions {
   /** The host's relay id, derived from `key`. */
   id: string
   key: RelayKey
-  openSocket(url: string): WebSocket
-  /** Reads JSON from a relay's URL; rejects when it cannot. */
-  fetchInfo(url: string): Promise<unknown>
+  /** Opens a socket to a relay, checking its certificate by `pin` when it has one. */
+  openSocket(url: string, pin?: string): WebSocket
+  /** Reads JSON from a relay's URL, through its pin when it has one; rejects when it cannot. */
+  fetchInfo(url: string, pin?: string): Promise<unknown>
   /** A device's socket, open and joined by the relay, to become a device connection. */
   accepted(socket: WebSocket, relay: string): void
   /**
@@ -95,6 +108,16 @@ export interface RelayHostOptions {
   profile?(): RelayHostProfile | null
   /** A relay's state or the list changed. */
   changed(): void
+  /** A region said it drains: the host reads the list again and signs in elsewhere. */
+  drained?(region: RelayRegion): void
+  /** A region could not be reached or did not answer, reason to read the list again. */
+  failed?(region: RelayRegion): void
+  /** A sign-in to a region was made or failed, for the day's report. */
+  connected?(region: RelayRegion, ok: boolean): void
+  /** A round trip timed on a region's control socket, in milliseconds. */
+  measured?(region: RelayRegion, rtt: number): void
+  /** The host's leg to a region changed, or the regions it is signed in to did. */
+  legsChanged?(): void
   log(level: 'info' | 'warn' | 'error', message: string): void
   /** The regions a run before read, until the main relay answers. */
   regions?: RelayRegion[]
@@ -117,6 +140,14 @@ class Control {
   private listsHosts: boolean | null = null
   /** The profile the relay holds from this socket, as JSON; null for none. */
   private sentProfile: string | null = null
+  /** Whether the socket now open has signed in. */
+  private ready = false
+  /** When the ping waiting for its `pong` went out. */
+  private pingAt: number | null = null
+  private readonly rtts: number[] = []
+  /** Left out of the regions to sign in to: closes once no device is joined through it. */
+  leaving = false
+  private leaveTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     private readonly host: RelayHost,
@@ -154,9 +185,40 @@ class Control {
     else if (!this.socket && this.connection.state !== 'conflict') this.retry()
   }
 
+  /** The host's leg: the median of the last round trips timed, null before the first. */
+  get rtt(): number | null {
+    if (this.rtts.length === 0) return null
+    const sorted = [...this.rtts].sort((a, b) => a - b)
+    return sorted[Math.floor((sorted.length - 1) / 2)]!
+  }
+
+  /** Devices joined through this relay now. */
+  get devices(): number {
+    return this.accepted.size
+  }
+
+  /**
+   * No longer one to sign in to: closes at once without devices joined through it, else once the
+   * last of them is gone or `ms` have passed, taking no new device meanwhile.
+   */
+  leave(ms: number): void {
+    if (this.leaving) return
+    this.leaving = true
+    if (this.accepted.size === 0 || !this.socket) return this.host.left(this)
+    this.leaveTimer = setTimeout(() => this.host.left(this), ms)
+  }
+
+  /** One to sign in to again. */
+  stay(): void {
+    this.leaving = false
+    if (this.leaveTimer) clearTimeout(this.leaveTimer)
+    this.leaveTimer = null
+  }
+
   /** Signed out, or the host stops: the control socket and the device sockets close. */
   close(): void {
     this.closed = true
+    this.stay()
     this.end()
     for (const socket of this.accepted) closeSocket(socket, 1000)
     this.accepted.clear()
@@ -177,25 +239,26 @@ class Control {
     const socket = this.socket
     this.socket = null
     this.sentProfile = null
+    this.ready = false
     if (socket) closeSocket(socket, 1000)
   }
 
   private open(): void {
     const url = relaySocketUrl(this.region.url, hostSocketPath(this.options.id))
     let socket: WebSocket
+    this.ready = false
     try {
-      socket = this.options.openSocket(url)
+      socket = this.options.openSocket(url, this.region.pin)
     } catch (error) {
       this.options.log('warn', `Cannot open the relay socket: ${(error as Error).message}`)
       return this.failed('unreachable')
     }
     this.socket = socket
     let opened = false
-    let ready = false
     // From the socket's opening, the challenge and its answer take well within this.
     this.timer = setTimeout(() => {
       this.timer = null
-      if (this.socket === socket && !ready) this.dropped(socket, 'no_answer')
+      if (this.socket === socket && !this.ready) this.dropped(socket, 'no_answer')
     }, SIGN_IN_TIMEOUT_MS * 2)
     socket.addEventListener('open', () => {
       opened = true
@@ -203,7 +266,10 @@ class Control {
     socket.addEventListener('message', (event) => {
       if (this.socket !== socket) return
       const data: unknown = event.data
-      if (data === PONG) return this.heard()
+      if (data === PONG) {
+        this.timed()
+        return this.heard()
+      }
       const message = parseRelayToHost(data)
       if (!message) return this.dropped(socket, 'closed')
       this.heard()
@@ -211,15 +277,21 @@ class Control {
         case 'challenge':
           return void this.signIn(socket, message.nonce)
         case 'ready':
-          if (ready) return
-          ready = true
+          if (this.ready) return
+          this.ready = true
           this.clearTimer()
           this.failures = 0
+          this.options.connected?.(this.region, true)
           this.set({ state: 'connected' })
+          // The first round trip at once, for the host's leg; then as the keepalive goes.
+          this.sendPing()
           this.schedulePing()
           return void this.sendProfile()
         case 'incoming':
-          if (ready) this.acceptDevice(message.token)
+          if (this.ready && !this.leaving) this.acceptDevice(message.token)
+          return
+        case 'drain':
+          if (this.ready) this.host.drained(this)
           return
         case 'replaced':
           return
@@ -236,6 +308,17 @@ class Control {
     })
   }
 
+  /** A `pong`: the round trip of the ping waiting for it. */
+  private timed(): void {
+    if (this.pingAt === null) return
+    const rtt = Math.max(0, Math.round(this.host.now() - this.pingAt))
+    this.pingAt = null
+    this.rtts.push(rtt)
+    if (this.rtts.length > this.timings.rttSamples) this.rtts.shift()
+    this.options.measured?.(this.region, rtt)
+    this.host.legsChanged()
+  }
+
   /**
    * Sends the host's profile when it changed since the socket's last, to a relay that takes it;
    * null only to take back one sent on this socket, so a host never listed sends nothing.
@@ -248,7 +331,7 @@ class Control {
     if (this.listsHosts === null) {
       try {
         const url = `${this.region.url}${relayInfoPath()}`
-        const info = parseRelayInfo(await this.options.fetchInfo(url))
+        const info = parseRelayInfo(await this.options.fetchInfo(url, this.region.pin))
         // Read again on the next change when the relay could not say.
         if (info) this.listsHosts = info.features.includes(HOSTS_FEATURE)
       } catch {
@@ -285,7 +368,7 @@ class Control {
     const url = relaySocketUrl(this.region.url, acceptSocketPath(this.options.id, token))
     let socket: WebSocket
     try {
-      socket = this.options.openSocket(url)
+      socket = this.options.openSocket(url, this.region.pin)
     } catch {
       return
     }
@@ -299,7 +382,10 @@ class Control {
       socket.removeEventListener('close', failed)
       if (this.closed || !this.host.token) return closeSocket(socket, 1000)
       this.accepted.add(socket)
-      socket.addEventListener('close', () => this.accepted.delete(socket))
+      socket.addEventListener('close', () => {
+        this.accepted.delete(socket)
+        if (this.leaving && this.accepted.size === 0) this.host.left(this)
+      })
       this.options.accepted(socket, this.region.url)
     }
     socket.addEventListener('open', opened, { once: true })
@@ -307,7 +393,12 @@ class Control {
   }
 
   private ended(error: RelayHostError, code: number): void {
+    const wasReady = this.ready
+    this.ready = false
     if (this.closed || !this.host.token) return
+    // A region left behind is not signed in to again.
+    if (this.leaving) return this.host.left(this)
+    if (!wasReady) this.attemptFailed(error)
     if (code === RELAY_CLOSE.replaced) {
       const now = this.host.now()
       this.replacedAt = [...this.replacedAt, now].filter(
@@ -341,23 +432,40 @@ class Control {
     }, delay)
   }
 
+  /** A try that ended before its sign-in, which the day's report counts. */
+  private attemptFailed(error: RelayHostError): void {
+    if (error === 'replaced') return
+    this.options.connected?.(this.region, false)
+    if (error === 'unreachable' || error === 'no_answer') this.options.failed?.(this.region)
+  }
+
   /** Ends a socket that misbehaved or went quiet; its close event tries again. */
   private dropped(socket: WebSocket, error: RelayHostError): void {
     if (this.socket !== socket) return
+    const wasReady = this.ready
     this.socket = null
     this.sentProfile = null
+    this.ready = false
     this.clearTimer()
     this.stopPings()
     closeSocket(socket, 1000)
+    if (this.leaving) return this.host.left(this)
+    if (!wasReady) this.attemptFailed(error)
     this.failed(error)
   }
 
+  private sendPing(): void {
+    this.pingAt = this.host.now()
+    this.sendText(PING)
+  }
+
   private schedulePing(): void {
-    this.stopPings()
+    // A ping in flight keeps its time: its pong still counts.
+    if (this.pingTimer) clearTimeout(this.pingTimer)
     this.pingTimer = setTimeout(() => {
       const socket = this.socket
       if (!socket) return
-      this.sendText(PING)
+      this.sendPing()
       this.pingTimer = setTimeout(() => this.dropped(socket, 'no_answer'), this.timings.pongMs)
     }, this.timings.pingMs)
   }
@@ -370,6 +478,7 @@ class Control {
   private stopPings(): void {
     if (this.pingTimer) clearTimeout(this.pingTimer)
     this.pingTimer = null
+    this.pingAt = null
   }
 
   private clearTimer(): void {
@@ -400,12 +509,23 @@ function closeSocket(socket: WebSocket, code: number): void {
   }
 }
 
-/** Every relay the host signs in to: the main one and the regions it lists. */
+/**
+ * Every relay the host signs in to: the main one and the regions `GET /v1` lists, or the regions
+ * the region rules picked once there is a plan.
+ */
 export class RelayHost {
   readonly timings: RelayHostTimings
   readonly now: () => number
   token: string | null = null
   private controls: Control[] = []
+  /** Regions no longer signed in to, kept while devices are joined through them. */
+  private readonly leaving = new Set<Control>()
+  /** The regions `GET /v1` listed. */
+  private listed: RelayRegion[] = []
+  /** The regions the region rules picked; null to use those `GET /v1` lists. */
+  private plan: RelayRegion[] | null = null
+  /** Regions that said they drain, by origin, and until when they are passed over. */
+  private readonly draining = new Map<string, number>()
   private regionTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
   private started = false
@@ -413,7 +533,8 @@ export class RelayHost {
   constructor(readonly options: RelayHostOptions) {
     this.timings = { ...RELAY_HOST_TIMINGS, ...options.timings }
     this.now = options.now ?? Date.now
-    this.list(options.regions ?? [])
+    this.listed = options.regions ?? []
+    this.apply()
   }
 
   /** The relays, in order, each with how it is doing. */
@@ -426,6 +547,13 @@ export class RelayHost {
     return this.controls.map(({ region }) => region)
   }
 
+  /** The relays signed in to now, each with the host's leg to it. */
+  legs(): (RelayRegion & { hostRtt: number | null })[] {
+    return this.controls
+      .filter((control) => control.connection.state === 'connected')
+      .map(({ region, rtt }) => ({ ...region, hostRtt: rtt }))
+  }
+
   /** Reads the regions and signs in wherever a token allows; again every few hours. */
   start(): void {
     if (this.started || this.stopped) return
@@ -434,12 +562,22 @@ export class RelayHost {
     for (const control of this.controls) control.start()
   }
 
-  /** The access token to sign in with, renewed or gone: null signs out of every relay. */
+  /** The regions the region rules picked, the main relay first; null to use `GET /v1`'s. */
+  setPlan(regions: RelayRegion[] | null): void {
+    if (this.stopped) return
+    if (JSON.stringify(regions) === JSON.stringify(this.plan)) return
+    this.plan = regions
+    this.apply()
+  }
+
+  /** The token to sign in with, renewed or gone: null signs out of every relay. */
   setToken(token: string | null): void {
     if (this.stopped || token === this.token) return
     const had = this.token
     this.token = token
     if (!token) {
+      for (const control of this.leaving) control.close()
+      this.leaving.clear()
       for (const control of this.controls) control.pause()
       return
     }
@@ -447,6 +585,7 @@ export class RelayHost {
       if (had) control.renewed(token)
       else control.start()
     }
+    for (const control of this.leaving) control.renewed(token)
   }
 
   /** The profile changed, as when the host was renamed or no longer lets devices find it. */
@@ -464,6 +603,29 @@ export class RelayHost {
     if (this.regionTimer) clearTimeout(this.regionTimer)
     this.regionTimer = null
     for (const control of this.controls) control.close()
+    for (const control of this.leaving) control.close()
+    this.leaving.clear()
+  }
+
+  /** A region said it drains: passed over for a while, and left once its devices are gone. */
+  drained(control: Control): void {
+    const { region } = control
+    if (region.url === relayOrigin(this.options.main)) return
+    this.options.log('info', `Relay region ${region.id} is draining; signing in elsewhere`)
+    this.draining.set(region.url, this.now() + this.timings.drainedMs)
+    this.options.drained?.(region)
+    this.apply()
+  }
+
+  /** A region left behind has no device joined through it, or waited long enough. */
+  left(control: Control): void {
+    if (!this.leaving.delete(control)) return
+    control.close()
+    this.legsChanged()
+  }
+
+  legsChanged(): void {
+    this.options.legsChanged?.()
   }
 
   private async readRegions(): Promise<void> {
@@ -471,7 +633,12 @@ export class RelayHost {
     try {
       const info = parseRelayInfo(await this.options.fetchInfo(`${main}${relayInfoPath()}`))
       if (!info) throw new Error('it is not a Kettu relay of this protocol')
-      if (!this.stopped) this.list(info.regions)
+      if (!this.stopped) {
+        // A main relay that takes relay tokens gives its regions in the signed list, which the
+        // plan brings with a relay token; the access token goes to the main relay alone.
+        this.listed = info.features.includes(RELAY_TOKENS_FEATURE) ? [] : info.regions
+        this.apply()
+      }
     } catch (error) {
       // The list read before stays.
       this.options.log('warn', `Cannot read the relay regions: ${(error as Error).message}`)
@@ -480,24 +647,49 @@ export class RelayHost {
     this.regionTimer = setTimeout(() => void this.readRegions(), this.timings.regionsMs)
   }
 
-  /** Signs in to each relay of the list, keeping those it had and leaving the others. */
-  private list(regions: RelayRegion[]): void {
-    const next = relayList(this.options.main, regions)
+  /**
+   * Signs in to each relay to use, keeping those it had; one no longer to use is left once no
+   * device is joined through it.
+   */
+  private apply(): void {
+    const now = this.now()
+    for (const [url, until] of this.draining) if (until <= now) this.draining.delete(url)
+    const main = relayOrigin(this.options.main)
+    const wanted = (this.plan ?? relayList(this.options.main, this.listed)).filter(
+      (region) => region.url === main || !this.draining.has(region.url),
+    )
+    const next = wanted.slice(0, MAX_REGIONS)
     const kept: Control[] = []
     for (const region of next) {
-      const control =
-        this.controls.find((entry) => entry.region.url === region.url) ?? new Control(this, region)
-      kept.push(control)
+      let control = this.controls.find((entry) => entry.region.url === region.url)
+      if (!control) {
+        control = [...this.leaving].find((entry) => entry.region.url === region.url)
+        if (control) {
+          this.leaving.delete(control)
+          control.stay()
+        }
+      }
+      kept.push(control ?? new Control(this, region))
     }
     const same =
       kept.length === this.controls.length &&
-      kept.every((control, i) => control === this.controls[i] && next[i]!.id === control.region.id)
+      kept.every(
+        (control, i) =>
+          control === this.controls[i] &&
+          next[i]!.id === control.region.id &&
+          next[i]!.pin === control.region.pin,
+      )
     if (same) return
-    for (const control of this.controls) if (!kept.includes(control)) control.close()
+    for (const control of this.controls) {
+      if (kept.includes(control)) continue
+      this.leaving.add(control)
+      control.leave(this.timings.leaveMs)
+    }
     kept.forEach((control, i) => (control.region = next[i]!))
     this.controls = kept
     if (this.started) for (const control of this.controls) control.start()
     this.options.changed()
+    this.legsChanged()
   }
 }
 

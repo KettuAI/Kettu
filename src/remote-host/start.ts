@@ -21,8 +21,15 @@ import { parseSshTarget } from '@shared/remote/hosts'
 import { parsePairingLink } from '@shared/remote/pairing'
 import { PUSH_URL } from '@shared/remote/push'
 import type { DiscoveredHosts } from '@shared/remote/discovery'
-import { hostProfile, importRelayKey, isRelayHostId, relayHostId } from '@shared/remote/relay'
+import {
+  RELAY_URL,
+  hostProfile,
+  importRelayKey,
+  isRelayHostId,
+  relayHostId,
+} from '@shared/remote/relay'
 import { RelayHost } from '@shared/remote/relay-host'
+import { REGION_KEYS_ENV, regionKeys } from '@shared/remote/relay-regions'
 import type { Transport } from '@shared/remote/transport'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import type { DirectSettings } from '@shared/settings'
@@ -36,6 +43,8 @@ import { HostStore, uniqueAddresses } from './hosts'
 import { LoopbackListener } from './loopback'
 import { DeviceNotifications, parseAttention, parseWaiting } from './notifications'
 import { PairingCodes } from './pairing'
+import { jsonOf, openRelaySocket, relayRequest } from './relay-net'
+import { RemoteRegions } from './relay-regions'
 import { RelaySwitch } from './relay-switch'
 import { RemoteServer } from './server'
 import { clearUploads } from './uploads'
@@ -49,26 +58,26 @@ const RELAY_INFO_TIMEOUT_MS = 15_000
 /** How long each read of the account's hosts on a relay may take. */
 const RELAY_HOSTS_TIMEOUT_MS = 8_000
 
-async function fetchRelayInfo(url: string): Promise<unknown> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(RELAY_INFO_TIMEOUT_MS) })
-  if (!response.ok) throw new Error(`it answered ${response.status}`)
-  return response.json()
+async function fetchRelayInfo(url: string, pin?: string): Promise<unknown> {
+  const response = await relayRequest(url, {
+    ...(pin ? { pin } : {}),
+    timeoutMs: RELAY_INFO_TIMEOUT_MS,
+  })
+  if (response.status !== 200) throw new Error(`it answered ${response.status}`)
+  return jsonOf(response.text)
 }
 
-/** Reads JSON from a relay, with the access token as a bearer token when given. */
+/** Reads JSON from a relay, with the relay's token as a bearer token when given. */
 async function fetchRelayJson(
   url: string,
   token?: string,
 ): Promise<{ status: number; body: unknown }> {
-  const response = await fetch(url, {
+  const response = await relayRequest(url, {
     headers: token ? { authorization: `Bearer ${token}` } : {},
-    signal: AbortSignal.timeout(RELAY_HOSTS_TIMEOUT_MS),
+    timeoutMs: RELAY_HOSTS_TIMEOUT_MS,
   })
-  const body: unknown = await response.json().catch(() => null)
-  return { status: response.status, body }
+  return { status: response.status, body: jsonOf(response.text) }
 }
-
-const openSocket = (url: string): WebSocket => new WebSocket(url)
 
 export interface RemoteHostDeps {
   /** A port to the agent host for a device's session, or null while the agent host is down. */
@@ -130,10 +139,19 @@ export function startRemoteHost(
   let hostName = ''
   // Whether devices may use the terminal; each server starts with it and hears when it changes.
   let terminal = false
-  // The relay: its main origin, Use the Kettu relay, and the account's access token now.
+  // The relay: its main origin, Use the Kettu relay, and the account's access token now, which
+  // the push gateway takes; with the relay token the relays get in its place once they take them.
   let relayUrl: string | null = null
   let relayEnabled = false
   let relayToken: string | null = null
+  let relayOnlyToken: string | null = null
+  /** What the relays get: the relay token, or the access token where they take no other. */
+  const relayCredential = (): string | null =>
+    relayToken === null ? null : (relayOnlyToken ?? relayToken)
+  // The region list, the host's regions, this computer's leg to each and the day's report.
+  let regions: RemoteRegions | null = null
+  // What serves devices now, for the regions to reach.
+  let live: Serving | null = null
   // The push gateway, what waits for the user now and whether they are at the desktop app, which
   // a server starting later begins with.
   let pushUrl = PUSH_URL
@@ -177,11 +195,12 @@ export function startRemoteHost(
       ? await importRelayKey(Buffer.from(options.relayKey, 'base64'))
       : null
     const relayId = relayKey ? await relayHostId(relayKey.publicKey) : null
-    // The host's relay while it uses it, for welcomes and pairing codes.
+    // The host's relay while it uses it, for welcomes and pairing codes: the regions with a
+    // domain alone, since only a signed list may bring one at an IP address.
     const onRelay = (): { id: string; urls: string[] } | null => {
       const current = relay.current
       return current && relayId && relayEnabled
-        ? { id: relayId, urls: current.relays.map((r) => r.url) }
+        ? { id: relayId, urls: current.relays.filter((r) => !r.pin).map((r) => r.url) }
         : null
     }
     const discovery = new DiscoveryRequests({
@@ -201,7 +220,7 @@ export function startRemoteHost(
       refused: server.refused,
       direct: direct.status,
       ...(loopback ? { sshPort: loopback.port } : {}),
-      relays: relay.current && relayEnabled && relayToken ? relay.current.status : [],
+      relays: relay.current && relayEnabled && relayCredential() ? relay.current.status : [],
     })
     let ready = false
     const changed = (): void => {
@@ -223,6 +242,17 @@ export function startRemoteHost(
       changed,
       log,
       relay: onRelay,
+      ...(regions
+        ? {
+            regions: {
+              offered: () => regions?.offered ?? false,
+              message: () => regions?.regionsMessage(relay.current?.legs() ?? []) ?? null,
+              preferred: (deviceId: string, value: unknown) =>
+                void regions?.preferred(deviceId, value),
+              seen: (deviceId: string) => regions?.seen(deviceId),
+            },
+          }
+        : {}),
       notifications: () => notifications,
     })
     const notifications =
@@ -240,30 +270,36 @@ export function startRemoteHost(
         : null
     notifications?.setWaiting(waiting)
     if (present !== null) notifications?.setPresent(present)
-    const relay = new RelaySwitch(() =>
-      relayKey && relayId && relayUrl
-        ? new RelayHost({
-            main: relayUrl,
-            id: relayId,
-            key: relayKey,
-            openSocket,
-            fetchInfo: fetchRelayInfo,
-            // Each device the relay joins is a connection like a direct one, which may also ask
-            // to be added as a device of the account.
-            accepted: (socket) =>
-              void webSocketTransport(socket, true).then(
-                (transport) => server.accept(transport, 'relay'),
-                () => {},
-              ),
-            profile: () =>
-              discovery.on
-                ? hostProfile(staticKey.publicKey, server.options.host.name, platform)
-                : null,
-            changed,
-            log,
-          })
-        : null,
-    )
+    const relay = new RelaySwitch(() => {
+      if (!relayKey || !relayId || !relayUrl) return null
+      const host = new RelayHost({
+        main: relayUrl,
+        id: relayId,
+        key: relayKey,
+        openSocket: openRelaySocket,
+        fetchInfo: fetchRelayInfo,
+        // Each device the relay joins is a connection like a direct one, which may also ask to be
+        // added as a device of the account.
+        accepted: (socket) =>
+          void webSocketTransport(socket, true).then(
+            (transport) => server.accept(transport, 'relay'),
+            () => {},
+          ),
+        profile: () =>
+          discovery.on
+            ? hostProfile(staticKey.publicKey, server.options.host.name, platform)
+            : null,
+        changed,
+        drained: () => regions?.hostDrained(),
+        failed: () => regions?.regionFailed(),
+        connected: (region, ok) => regions?.hostConnected(region, ok),
+        measured: (region, rtt) => regions?.hostMeasured(region, rtt),
+        legsChanged: () => server.regionsChanged(),
+        log,
+      })
+      host.setPlan(regions?.plan() ?? null)
+      return host
+    })
     const direct = new DirectListener({ server, changed, log, webRoot: init!.webRoot ?? null })
     // Ready once direct connections listen or have failed, so the first status says which.
     await direct.apply(options.direct)
@@ -271,12 +307,13 @@ export function startRemoteHost(
     const loopback =
       sshPort === undefined ? null : await LoopbackListener.start(server, sshPort, log)
     server.startSweeping()
-    relay.set(relayEnabled, relayToken)
+    relay.set(relayEnabled, relayCredential())
     const report = (): void => {
       ready = true
       changed()
     }
     const started: Serving = { server, direct, relay, loopback, notifications, discovery, report }
+    live = started
     applyDiscovery(started)
     return started
   }
@@ -284,7 +321,7 @@ export function startRemoteHost(
   /** Takes discovery requests while discoverable, on the relay and signed in, and says so there. */
   function applyDiscovery({ discovery, relay }: Serving): void {
     discovery.setEnabled(
-      discoverable && relay.current !== null && relayEnabled && relayToken !== null,
+      discoverable && relay.current !== null && relayEnabled && relayCredential() !== null,
     )
     relay.current?.profileChanged()
   }
@@ -294,6 +331,7 @@ export function startRemoteHost(
     reason: 'remote_off' | 'stopping',
   ): Promise<null> {
     if (!current) return null
+    if (live === current) live = null
     current.notifications?.stop()
     current.discovery.setEnabled(false)
     current.relay.stop()
@@ -320,9 +358,10 @@ export function startRemoteHost(
         ? {
             relay: {
               main: relayUrl,
-              token: () => relayToken,
-              openSocket,
+              token: relayCredential,
+              openSocket: openRelaySocket,
               fetchJson: fetchRelayJson,
+              ...(regions ? { regions } : {}),
             },
           }
         : {}),
@@ -352,6 +391,9 @@ export function startRemoteHost(
       relayUrl = message.relay.url
       relayEnabled = message.relay.enabled === true
       relayToken = typeof message.relay.token === 'string' ? message.relay.token : null
+      const relayOnly = message.relay.relayToken
+      relayOnlyToken = relayToken && typeof relayOnly === 'string' ? relayOnly : null
+      regions = await loadRegions(message, relayUrl)
     }
     // Without its own key the app still serves devices, and the other way round.
     let reportHosts: (() => void) | null = null
@@ -368,10 +410,34 @@ export function startRemoteHost(
     const relayKey = typeof message.relay?.key === 'string' ? message.relay.key : undefined
     const started = privateKey ? serve({ privateKey, plainTextKey, direct, relayKey }) : null
     if (started) serving = started
-    const current = await started
+    const first = await started
     send({ type: 'remote-host:ready' })
-    current?.report()
+    first?.report()
     reportHosts?.()
+    regions?.update()
+  }
+
+  async function loadRegions(message: Init, main: string): Promise<RemoteRegions | null> {
+    try {
+      return await RemoteRegions.load({
+        userDataPath: message.userDataPath,
+        main,
+        // Only a development relay may bring keys of its own.
+        keys: regionKeys(main === RELAY_URL ? undefined : process.env[REGION_KEYS_ENV]),
+        app: message.sshPort === undefined ? 'desktop' : 'daemon',
+        device: message.device !== undefined,
+        accessToken: () => relayToken,
+        relayToken: () => relayOnlyToken,
+        relayOn: () => relayEnabled,
+        plan: (plan) => live?.relay.current?.setPlan(plan),
+        hostChanged: () => live?.server.regionsChanged(),
+        timesChanged: (prefer) => client?.regionsChanged(prefer),
+        log,
+      })
+    } catch (error) {
+      log('error', `Cannot keep the relay regions: ${(error as Error).message}`)
+      return null
+    }
   }
 
   function withRunning(run: () => unknown): boolean {
@@ -474,8 +540,9 @@ export function startRemoteHost(
         break
       case 'remote-host:relay':
         relayEnabled = message.enabled === true
+        regions?.update()
         withServing((current) => {
-          current.relay.set(relayEnabled, relayToken)
+          current.relay.set(relayEnabled, relayCredential())
           applyDiscovery(current)
           current.server.options.changed()
         })
@@ -496,16 +563,19 @@ export function startRemoteHost(
         }
         break
       case 'remote-host:token': {
-        const had = relayToken
+        const had = relayCredential()
         relayToken = typeof message.token === 'string' ? message.token : null
+        relayOnlyToken = relayToken && typeof message.relay === 'string' ? message.relay : null
+        const now = relayCredential()
+        withRunning(() => regions?.update())
         withServing((current) => {
-          current.relay.current?.setToken(relayEnabled ? relayToken : null)
+          current.relay.current?.setToken(relayEnabled ? now : null)
           applyDiscovery(current)
         })
         // Hosts not reached for want of a sign-in are tried now.
-        if (!had && relayToken) withRunning(() => client?.resume())
+        if (!had && now) withRunning(() => client?.resume())
         // Without a token the relay may not be used, so links through it end too.
-        if (had && !relayToken) withRunning(() => client?.leaveRelay())
+        if (had && !now) withRunning(() => client?.leaveRelay())
         break
       }
       case 'remote-host:relay-retry':
@@ -751,6 +821,7 @@ export function startRemoteHost(
           process.exit(0)
         }
         withRunning(async () => {
+          regions?.stop()
           const stopped = serving.then((current) => stopServing(current, reason))
           serving = stopped
           await Promise.all([stopped, client?.stop()])

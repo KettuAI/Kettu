@@ -116,6 +116,8 @@ export type RelayToHost =
   | { type: 'ready' }
   | { type: 'incoming'; token: string }
   | { type: 'replaced' }
+  /** The region is being emptied: the host signs in elsewhere and leaves it. Only once `ready`. */
+  | { type: 'drain' }
 
 /** What a host sends on its control socket. */
 export type HostToRelay =
@@ -142,6 +144,18 @@ export interface RelayListedHost extends RelayHostProfile {
 /** The feature of a relay that takes hosts' profiles and lists them on `GET /v1/hosts`. */
 export const HOSTS_FEATURE = 'hosts'
 
+/** The main relay answers `GET /v1/regions` with the signed region list. */
+export const REGIONS_FEATURE = 'regions'
+
+/** The relays take relay tokens from the account service in place of the access token. */
+export const RELAY_TOKENS_FEATURE = 'relay-tokens'
+
+/** A region being emptied says so on the sockets of hosts and of devices that asked. */
+export const DRAIN_FEATURE = 'drain'
+
+/** The main relay takes the daily round trip reports on `POST /v1/reports`. */
+export const REPORTS_FEATURE = 'reports'
+
 /** The longest name a profile carries. */
 export const MAX_PROFILE_NAME = 64
 
@@ -156,14 +170,22 @@ const X25519_KEY_BYTES = 32
 const MAX_FEATURES = 8
 const MAX_FEATURE = 32
 
-/** What a device sends first, and what the relay answers once the host accepted. */
-export type DeviceToRelay = { type: 'connect'; token: string }
-export type RelayToDevice = { type: 'joined' }
+/**
+ * What a device sends first, and what the relay answers once the host accepted; with DRAIN_FEATURE
+ * among its features, the relay may later send `drain` on the joined socket as text.
+ */
+export type DeviceToRelay = { type: 'connect'; token: string; features?: string[] }
+export type RelayToDevice = { type: 'joined' } | { type: 'drain' }
 
-/** A region `GET /v1` lists. */
+/** A region `GET /v1` lists, or one of the signed list with the pin of its certificate. */
 export interface RelayRegion {
   id: string
   url: string
+  /**
+   * The base64url SHA-256 of the region's certificate's SubjectPublicKeyInfo, which alone
+   * vouches for a region at an IP address; only a verified signed list gives one.
+   */
+  pin?: string
 }
 
 /** What `GET /v1` answers. */
@@ -257,6 +279,12 @@ export function relaySocketUrl(origin: string, path: string): string {
 }
 
 export const relayInfoPath = (): string => '/v1'
+/** The signed region list for the request's location, on the main relay. */
+export const regionsPath = (): string => '/v1/regions'
+/** Answers 204 on every region, for timing a round trip. */
+export const pingPath = (): string => '/v1/ping'
+/** Takes the daily round trip report, on the main relay. */
+export const reportsPath = (): string => '/v1/reports'
 export const hostSocketPath = (id: string): string => `/v1/hosts/${id}`
 export const connectSocketPath = (id: string): string => `/v1/hosts/${id}/connect`
 export const acceptSocketPath = (id: string, token: string): string =>
@@ -401,6 +429,7 @@ export function parseRelayToHost(text: unknown): RelayToHost | null {
       return isRelayToken(message.token) ? { type: 'incoming', token: message.token } : null
     case 'ready':
     case 'replaced':
+    case 'drain':
       return { type: message.type }
     default:
       return null
@@ -432,12 +461,32 @@ export function parseHostToRelay(text: unknown): HostToRelay | null {
 export function parseDeviceToRelay(text: unknown): DeviceToRelay | null {
   const message = parseJson(text)
   if (message?.type !== 'connect' || !isAccessToken(message.token)) return null
-  return { type: 'connect', token: message.token }
+  const { features } = message
+  if (features !== undefined && !Array.isArray(features)) return null
+  const kept = (features ?? [])
+    .slice(0, MAX_FEATURES)
+    .filter(
+      (feature): feature is string =>
+        typeof feature === 'string' && feature.length > 0 && feature.length <= MAX_FEATURE,
+    )
+  return kept.length > 0
+    ? { type: 'connect', token: message.token, features: kept }
+    : { type: 'connect', token: message.token }
+}
+
+/** A device's `connect`, asking the relay to say when the region drains. */
+export function connectMessage(token: string): DeviceToRelay {
+  return { type: 'connect', token, features: [DRAIN_FEATURE] }
 }
 
 /** Whether a text message from the relay on a device's socket is `joined`. */
 export function isJoined(text: unknown): boolean {
   return parseJson(text)?.type === 'joined'
+}
+
+/** Whether a text message from the relay on a joined device's socket is `drain`. */
+export function isDrain(text: unknown): boolean {
+  return parseJson(text)?.type === 'drain'
 }
 
 /** A one-time token or nonce for the relay to hand out: 32 random bytes in base64url. */

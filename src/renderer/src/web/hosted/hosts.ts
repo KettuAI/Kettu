@@ -1,10 +1,11 @@
 // The hosts the hosted web client paired with, kept for each Kettu account apart, so another account
 // signed in on the same browser never lists them; and how it reaches one, through the relays it
-// signs in to. The account's access token goes only to the project's relays.
+// signs in to. The account's tokens go only to the project's relays.
 
 import type { RelayProblem } from '@shared/remote/hosts'
 import { trustedRelay, type HostRelay } from '@shared/remote/relay'
-import { dialRelay } from '@shared/remote/relay-device'
+import { dialRelay, type RelayAttempt, type RelayEndpoint } from '@shared/remote/relay-device'
+import type { Transport } from '@shared/remote/transport'
 import { webSocketTransport } from '@shared/remote/websocket-transport'
 import type { Dial } from '@shared/remote/link'
 import { HOSTED_STORE, run } from '../storage'
@@ -72,34 +73,51 @@ export class RelayMiss extends Error {
   }
 }
 
+/** The relay regions as a dial uses them: ranked, and told how each try went. */
+export interface DialRegions {
+  /** The relays to try, in order, of those the host named. */
+  endpoints(hostId: string, named: string[]): RelayEndpoint[]
+  dialed(url: string, outcome: RelayAttempt): void
+  drained(url: string): void
+}
+
 /**
- * Dials the host through its relays, the project's main one included, with the account's token;
- * `missed` hears why a try did not join.
+ * Dials the host through its relays, the project's main one included, with the token `token`
+ * gives; `missed` hears why a try did not join. With `regions`, the host's regions go first in
+ * the order of the whole path.
  */
 export function relayDial(
   relay: HostRelay,
   token: () => Promise<string | null>,
   missed: (problem: RelayProblem | null) => void,
+  regions?: DialRegions,
 ): Dial {
-  const relays = [...new Set([...relay.urls, relayUrl])].filter((url) =>
-    trustedRelay(url, relayUrl),
-  )
+  const named = [...new Set([...relay.urls, relayUrl])].filter((url) => trustedRelay(url, relayUrl))
   return async () => {
     const access = await token()
     if (!access) {
       missed('signed_out')
       throw new RelayMiss('signed_out')
     }
+    let joined: Transport | null = null
     const result = await dialRelay({
-      relays,
+      // Asked after the token, which says which relays may get it.
+      relays: regions ? regions.endpoints(relay.id, named) : named,
       id: relay.id,
       token: access,
       openSocket: (url) => new WebSocket(url),
       timeoutMs: RELAY_TIMEOUT_MS,
+      attempted: (url, outcome) => regions?.dialed(url, outcome),
+      // A region that drains is left by connecting again, which resumes the session.
+      drained: (url) => {
+        regions?.drained(url)
+        joined?.close()
+      },
     })
     if (result.kind === 'joined') {
       missed(null)
-      return webSocketTransport(result.socket, true)
+      joined = await webSocketTransport(result.socket, true)
+      return joined
     }
     const problem: RelayProblem =
       result.kind === 'offline'

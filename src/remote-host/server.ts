@@ -91,6 +91,7 @@ import {
   type StreamRef,
 } from '@shared/remote/streams'
 import { decodeRelayBytes, encodeRelayBytes, type HostRelay } from '@shared/remote/relay'
+import { REGIONS_CHANNEL_FEATURE, type RelayRegionsMessage } from '@shared/remote/relay-regions'
 import type { Transport } from '@shared/remote/transport'
 import type { LogFn } from '../agent-host/storage'
 import type { ActivityLog } from './activity'
@@ -141,6 +142,20 @@ const REMOTE_HOST_ONLY: ReadonlySet<string> = new Set<HostMethod>([
 /** The longest name a device may give a frame's stream. */
 const STREAM_CHARS = 128
 
+/** A device hears the host's round trips again at most this often when nothing else changed. */
+const REGIONS_RTT_MS = 60_000
+
+/** The relay regions as devices hear of them, and their preferences, which the host keeps. */
+export interface ServerRegions {
+  /** Whether the host holds a verified region list, which welcomes then name. */
+  offered(): boolean
+  message(): RelayRegionsMessage | null
+  /** A device's `relay.prefer`, checked there. */
+  preferred(deviceId: string, value: unknown): void
+  /** A device connected, which keeps its preference. */
+  seen(deviceId: string): void
+}
+
 export interface RemoteServerOptions {
   staticKey: KeyPair
   devices: DeviceStore
@@ -161,6 +176,8 @@ export interface RemoteServerOptions {
   terminal?: boolean
   /** The host's id on the Kettu relay and its relays while it uses the relay, for welcomes. */
   relay?(): HostRelay | null
+  /** The relay regions, which devices that read them hear of; none without the relay. */
+  regions?: ServerRegions
   /** The devices' notifications, which a host without its signing key has none of. */
   notifications?(): DeviceNotifications | null
   /** A port to the terminal host for a device's terminals, or null while it cannot have one. */
@@ -329,6 +346,11 @@ export class RemoteServer {
     for (const session of this.sessions) {
       if (deviceId === null || session.device.id === deviceId) session.adminEvent(event)
     }
+  }
+
+  /** The region list or the host's regions changed: the devices that read them hear it. */
+  regionsChanged(): void {
+    for (const session of this.sessions) session.regionsChanged()
   }
 
   /** The host's new name: the devices connected now hear it, and the next welcomes carry it. */
@@ -507,6 +529,8 @@ interface Discovery {
 /** One connection of a device: its handshake and hello, then the session it opened or resumed. */
 class DeviceConnection {
   device: PairedDevice | null = null
+  /** Whether the device's hello said it reads `relay.regions`. */
+  readsRegions = false
   /** The removed device whose key the handshake named, told why at its hello. */
   private removed: RemovedDevice | null = null
   private state: ConnectionState = 'handshake'
@@ -769,6 +793,7 @@ class DeviceConnection {
     const hello = parseHello(value)
     if (!hello) return this.failPairing('invalid')
     clearTimeout(this.timer)
+    this.readsRegions = hello.features?.includes(REGIONS_CHANNEL_FEATURE) === true
     const version = negotiate(hello.protocol)
     if (typeof version !== 'number') return this.failPairing(version)
     const joining = this.pairing !== null || this.discovery !== null
@@ -983,6 +1008,12 @@ class DeviceSession {
   /** The sessions the device last said it shows in front, and the pace it last asked for. */
   private shown = new Set<string>()
   private paceMs = 0
+  /** Whether the last welcome named the regions, and whether the device reads them. */
+  private regionsOffered = false
+  private readsRegions = false
+  /** What the device last heard of the regions, and when; and the send held back meanwhile. */
+  private regionsSent: { shape: string; rtts: string; at: number } | null = null
+  private regionsTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     private readonly server: RemoteServer,
@@ -1078,6 +1109,7 @@ class DeviceSession {
       this.toDevice(data)
     })
     port.onClose(() => void this.close('unavailable'))
+    this.welcomed()
   }
 
   /**
@@ -1100,7 +1132,44 @@ class DeviceSession {
     this.welcome(connection, { request: this.lastRequest })
     this.outbox.attach({ channel: connection.channel!, transport: connection.transport }, received)
     if (this.readingPaused) connection.transport.pause()
+    this.welcomed()
     return true
+  }
+
+  /** After each welcome: a device that reads the regions hears them at once. */
+  private welcomed(): void {
+    if (!this.readsRegions) return
+    this.server.options.regions?.seen(this.device.id)
+    this.regionsSent = null
+    this.sendRegions()
+  }
+
+  /** The regions changed: heard at once, or within a minute when only a round trip did. */
+  regionsChanged(): void {
+    this.sendRegions()
+  }
+
+  private sendRegions(): void {
+    if (this.state !== 'open' || !this.readsRegions || this.regionsTimer) return
+    const message = this.server.options.regions?.message()
+    if (!message) return
+    const shape = `${message.list.payload} ${message.regions.map((region) => region.id).join()}`
+    const rtts = message.regions.map((region) => region.rtt).join()
+    const now = (this.server.options.now ?? Date.now)()
+    const sent = this.regionsSent
+    if (sent?.shape === shape) {
+      if (sent.rtts === rtts) return
+      const wait = sent.at + REGIONS_RTT_MS - now
+      if (wait > 0) {
+        this.regionsTimer = setTimeout(() => {
+          this.regionsTimer = null
+          this.sendRegions()
+        }, wait)
+        return
+      }
+    }
+    this.regionsSent = { shape, rtts, at: now }
+    this.send(message)
   }
 
   /** A connection of the session ended: the session waits for its device, or ends with it. */
@@ -1147,6 +1216,8 @@ class DeviceSession {
     this.state = 'closed'
     if (this.awayTimer) clearTimeout(this.awayTimer)
     this.awayTimer = null
+    if (this.regionsTimer) clearTimeout(this.regionsTimer)
+    this.regionsTimer = null
     this.server.forgetToken(this.token)
     this.token = null
     this.outbox.close()
@@ -1205,6 +1276,8 @@ class DeviceSession {
   /** The welcome, straight on the channel ahead of everything the outbox sends again. */
   private welcome(connection: DeviceConnection, resumed: Welcome['resumed'] | null): void {
     if (this.resumable) this.token = this.server.issueToken(this, this.token)
+    this.regionsOffered = this.server.options.regions?.offered() === true
+    this.readsRegions = this.regionsOffered && connection.readsRegions
     const welcome: Welcome = {
       type: 'welcome',
       protocol: this.version,
@@ -1214,6 +1287,7 @@ class DeviceSession {
         ...(this.version >= PUSH_VERSION && this.server.options.notifications?.()
           ? [PUSH_FEATURE]
           : []),
+        ...(this.regionsOffered ? [REGIONS_CHANNEL_FEATURE] : []),
       ],
       role: this.role,
       device: { id: this.device.id, name: this.device.name },
@@ -1239,6 +1313,9 @@ class DeviceSession {
       case 'pace':
         if (typeof ms === 'number' && Number.isFinite(ms)) this.paceMs = ms
         return this.outbox.pace(ms)
+      case 'relay.prefer':
+        if (this.regionsOffered) this.server.options.regions?.preferred(this.device.id, value)
+        return
       case 'rename':
         void this.server.renameDevice(this.device.id, name, 'device').then((renamed) => {
           if (!renamed) {

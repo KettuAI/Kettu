@@ -24,7 +24,7 @@ import { matchLocale } from '@shared/locale'
 import type { MarketAccount } from '@shared/market-publish'
 import { addressKey, MAX_OWN_ADDRESSES } from '@shared/remote/address'
 import { PUSH_URL, PUSH_URL_ENV, pushUrlFrom } from '@shared/remote/push'
-import { RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
+import { RELAY_TOKENS_FEATURE, RELAY_URL, RELAY_URL_ENV, relayUrlFrom } from '@shared/remote/relay'
 import type { HostAdmin } from '../main/host-admin'
 import { Account, NotSignedIn } from '../main/account'
 import { accountBaseUrl, AccountApi, clientInfo, DAEMON_CLIENT } from '../main/account/service'
@@ -32,7 +32,7 @@ import { accountFile } from '../main/account/store'
 import { MarketUnauthorized, runMarketCall } from '../main/market-api'
 import { createLogger } from '../main/log'
 import { MarketKeys, marketKeysFile } from '../main/market-keys'
-import { RelayToken } from '../main/relay-token'
+import { RelayFeatures, RelayToken, readRelayFeatures } from '../main/relay-token'
 import { nodeSystemReleaseForRun } from '../main/system-name'
 import type { RemoteIdentity } from '../main/remote-identity'
 import { SettingsStore } from '../main/settings'
@@ -459,11 +459,14 @@ export async function startDaemon(options: DaemonOptions): Promise<RunningDaemon
   hosts = running
   if (account) {
     const signed = account
+    const mainRelay = new RelayFeatures(() => readRelayFeatures(relayUrl))
     relayToken = new RelayToken({
       current: () => signed.currentToken(),
+      exchange: async () =>
+        (await mainRelay.has(RELAY_TOKENS_FEATURE)) ? signed.relayToken() : null,
       signedIn,
       needed: () => true,
-      send: (token) => running.setToken(token),
+      send: (token, relay) => running.setToken(token, relay),
     })
   }
   admin = await startDaemonAdmin({

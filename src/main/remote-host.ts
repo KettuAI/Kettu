@@ -171,6 +171,8 @@ export class RemoteHost {
   private discoveryRequest: DiscoveryRequestEvent | null = null
   /** The account's access token, which the process signs in to the relay and other hosts with. */
   private token: string | null = null
+  /** The relay token the relays get in its place, once the main relay takes them. */
+  private relayToken: string | null = null
   private relayIdentity: RemoteIdentity | null = null
   private quitting = false
   private failed = false
@@ -363,12 +365,14 @@ export class RemoteHost {
 
   /**
    * A fresh access token of the account this computer is signed in to, or null once it is not;
-   * the process signs in to the relay and reaches other hosts through it with it.
+   * the process signs in to the relay and reaches other hosts through it with it, or with `relay`,
+   * the relay token, once the main relay takes them.
    */
-  setToken(token: string | null): void {
-    if (token === this.token) return
+  setToken(token: string | null, relay: string | null = null): void {
+    if (token === this.token && relay === this.relayToken) return
     this.token = token
-    this.host?.post({ type: 'remote-host:token', token })
+    this.relayToken = relay
+    this.host?.post({ type: 'remote-host:token', token, relay })
   }
 
   /** Tries every relay now, after a conflict or an error. */
@@ -792,6 +796,7 @@ export class RemoteHost {
       url: this.deps.relayUrl,
       enabled: this.relayOn,
       token: this.token,
+      relayToken: this.relayToken,
       ...(key ? { key } : {}),
     }
   }

@@ -490,8 +490,9 @@ export type MainToRemoteHost =
   // This computer's user saw the same code on both screens, or not, which ends the pairing.
   | { type: 'remote-host:pair-match'; pairId: number; match: boolean }
   // A fresh access token of the account this computer is signed in to, or null once signed out,
-  // which closes every relay socket. Never logged.
-  | { type: 'remote-host:token'; token: string | null }
+  // which closes every relay socket; with it, once the main relay takes them, a relay token that
+  // the relays get in its place. Never logged.
+  | { type: 'remote-host:token'; token: string | null; relay?: string | null }
   // Retry on the relay: tries every relay now, a conflict included.
   | { type: 'remote-host:relay-retry' }
   // Remote access turned off: devices hear `remote_off` and nothing listens, while the
@@ -569,6 +570,11 @@ export interface RelayInit {
   key?: string
   /** The account's access token; null while this computer is not signed in. Never logged. */
   token: string | null
+  /**
+   * The relay token the relays get in the access token's place, once the main relay takes them;
+   * null or absent before. Never logged.
+   */
+  relayToken?: string | null
 }
 
 /** What the remote host reports to main, for Settings. */
