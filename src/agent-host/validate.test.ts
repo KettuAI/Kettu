@@ -250,6 +250,26 @@ describe('createValidators', () => {
     rejects(() => posix['market.connect']({ serverId: 'kettu:../x' }))
   })
 
+  it('checks the requests that install an MCP bundle', () => {
+    const token = '0b6e3f8a-2c1d-4e5f-9a8b-7c6d5e4f3a2b'
+    expect(posix['market.bundlePrepare']({ id: 'abcdefgh23' })).toEqual({ id: 'abcdefgh23' })
+    rejects(() => posix['market.bundlePrepare']({ id: '../x' }))
+    expect(posix['market.bundleCommit']({ token, values: { dir: '/a', n_2: '3' } })).toEqual({
+      token,
+      values: { dir: '/a', n_2: '3' },
+    })
+    rejects(() => posix['market.bundleCommit']({ token: '../partial', values: {} }))
+    rejects(() => posix['market.bundleCommit']({ token, values: [] }))
+    rejects(() => posix['market.bundleCommit']({ token, values: { 'a.b': 'x' } }))
+    rejects(() => posix['market.bundleCommit']({ token, values: { dir: 1 } }))
+    rejects(() => posix['market.bundleCommit']({ token, values: { dir: 'a\0b' } }))
+    rejects(() => posix['market.bundleCommit']({ token, values: { dir: 'x'.repeat(16_385) } }))
+    const many = Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`k${i}`, 'x']))
+    rejects(() => posix['market.bundleCommit']({ token, values: many }))
+    expect(posix['market.bundleCancel']({ token })).toEqual({ token })
+    rejects(() => posix['market.bundleCancel']({ token: token.toUpperCase() }))
+  })
+
   it('checks the listing ids, versions and changes of Marketplace › Published', () => {
     expect(posix['market.account'](undefined)).toBeUndefined()
     expect(posix['market.published']({})).toBeUndefined()

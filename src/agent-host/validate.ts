@@ -88,6 +88,7 @@ import {
 } from '@shared/thread'
 import { FORM_FIELDS, FORM_KEY_CHARS } from './elicitation'
 import { invalidParams } from './errors'
+import { bundleToken } from './marketplace/bundles'
 import { TASK_ID } from './workflow/model'
 import { isCompletablePath } from './path-completion'
 import { isAbsolutePath } from './paths'
@@ -109,6 +110,10 @@ const SHOWN_SESSIONS = 9
 // The Marketplace's search, which the registry matches against server names.
 const MARKET_QUERY_MIN = 3
 const MARKET_QUERY_MAX = 100
+// What a bundle's install form sends for its arguments: values by user_config key.
+const BUNDLE_VALUES = 64
+const BUNDLE_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/
+const BUNDLE_VALUE_CHARS = 16_384
 // Attachments the drafts name, checked once at launch.
 const HELD_ATTACHMENTS = 100_000
 const INSTALL_METHODS: ReadonlySet<unknown> = new Set<AgentInstallMethod['id']>([
@@ -1424,6 +1429,35 @@ export function createValidators(platform: Platform): Validators {
       const message = string(o, 'message', REPORT_CHARS).trim()
       if (message === '') throw invalidParams('message must say what the problem is')
       return { id: listingId(o), message }
+    },
+    'market.bundlePrepare': (params) => ({ id: listingId(fields(params)) }),
+    'market.bundleCommit': (params) => {
+      const o = fields(params)
+      if (!bundleToken(o.token)) throw invalidParams('token must name a staged bundle')
+      const values = o.values
+      if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+        throw invalidParams('values must be an object')
+      }
+      const entries = Object.entries(values)
+      if (entries.length > BUNDLE_VALUES) throw invalidParams('values has too many entries')
+      for (const [key, value] of entries) {
+        if (!BUNDLE_KEY.test(key)) throw invalidParams('values must be keyed by user_config keys')
+        if (
+          typeof value !== 'string' ||
+          value.length > BUNDLE_VALUE_CHARS ||
+          value.includes('\0')
+        ) {
+          throw invalidParams(
+            `values.${key} must be a string of at most ${BUNDLE_VALUE_CHARS} characters`,
+          )
+        }
+      }
+      return { token: o.token, values: Object.fromEntries(entries) as Record<string, string> }
+    },
+    'market.bundleCancel': (params) => {
+      const o = fields(params)
+      if (!bundleToken(o.token)) throw invalidParams('token must name a staged bundle')
+      return { token: o.token }
     },
     'market.account': none,
     'market.published': none,
