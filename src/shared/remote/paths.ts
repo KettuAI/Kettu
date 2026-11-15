@@ -1,4 +1,4 @@
-// Ranking the paths a device has to a host: direct addresses, the relay, and later peer to peer.
+// Ranking the paths a device has to a host: its direct addresses and the relay.
 // Each path's round trip is the median of its last few samples, pings on open connections and
 // handshakes on candidates; recent failures push a path down, a path without a relay wins when
 // round trips are close, and a device moves only to a clearly faster path or off a failing one.
