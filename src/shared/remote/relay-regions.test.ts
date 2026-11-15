@@ -169,10 +169,13 @@ describe('the daily round trip report', () => {
     return new Date(y, m - 1, d, hour).getTime()
   }
 
-  it('reports the median and the 90th percentile by nearest rank, with the counts', () => {
+  it('reports the median and the 90th percentile by nearest rank, null for a region never timed', () => {
     const stats = {
       day: report.body.day,
-      regions: { 'hk-1': { rtts: report.rtts, connects: 12, failures: 1 } },
+      regions: {
+        'hk-1': { rtts: report.rtts, connects: 12, failures: 1 },
+        'sh-1': { rtts: [], connects: 0, failures: 3 },
+      },
       p2p: { attempts: 0, opened: 0 },
     }
     expect(reportBody(stats, 'desktop')).toEqual(report.body)
@@ -185,6 +188,7 @@ describe('the daily round trip report', () => {
     for (const rtt of report.rtts) stats.sample('hk-1', rtt)
     for (let i = 0; i < 12; i++) stats.connected('hk-1', true)
     stats.connected('hk-1', false)
+    for (let i = 0; i < 3; i++) stats.connected('sh-1', false)
     expect(stats.due('desktop')).toBeNull()
 
     now = at('2026-11-15', 9)

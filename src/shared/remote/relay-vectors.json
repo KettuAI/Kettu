@@ -493,7 +493,7 @@
     }
   },
   "report": {
-    "comment": "What POST /v1/reports takes with the relay token as bearer: one per install and local day, for the day before, regions by median and 90th percentile (nearest rank) of their round trips",
+    "comment": "What POST /v1/reports takes with the relay token as bearer: one per install and local day, for the day before, regions by median and 90th percentile (nearest rank) of their round trips, null for a region no probe of which succeeded that day",
     "rtts": [40, 41, 42, 48, 50, 52, 60, 70, 90, 120],
     "body": {
       "v": 1,
@@ -506,6 +506,13 @@
           "rttP90": 90,
           "connects": 12,
           "failures": 1
+        },
+        {
+          "id": "sh-1",
+          "rttMedian": null,
+          "rttP90": null,
+          "connects": 0,
+          "failures": 3
         }
       ],
       "p2p": {

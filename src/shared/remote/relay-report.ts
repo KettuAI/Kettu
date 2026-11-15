@@ -8,8 +8,9 @@ export type ReportApp = 'desktop' | 'daemon' | 'web' | 'ios'
 
 export interface RegionReport {
   id: string
-  rttMedian: number
-  rttP90: number
+  /** Null when no probe of the region succeeded that day. */
+  rttMedian: number | null
+  rttP90: number | null
   connects: number
   failures: number
 }
@@ -107,12 +108,10 @@ export function reportBody(stats: DayStats, app: ReportApp): RelayReportBody {
   const regions: RegionReport[] = []
   for (const [id, entry] of Object.entries(stats.regions)) {
     const rtt = percentiles(entry.rtts)
-    // The report carries a region's round trip; one never timed that day has none to give.
-    if (!rtt) continue
     regions.push({
       id,
-      rttMedian: rtt.median,
-      rttP90: rtt.p90,
+      rttMedian: rtt?.median ?? null,
+      rttP90: rtt?.p90 ?? null,
       connects: entry.connects,
       failures: entry.failures,
     })
