@@ -421,10 +421,13 @@ export function createMarketplaceStore(
     },
     clearCommunitySearch() {
       searchKey = null
+      // Counts only go up, so a read still on its way never matches one made after this.
+      for (const [key, id] of communityReads) {
+        if (!key.endsWith('\0')) communityReads.set(key, id + 1)
+      }
       const pages = get().communityPages
       const kept = Object.fromEntries(Object.entries(pages).filter(([key]) => key.endsWith('\0')))
       if (Object.keys(kept).length === Object.keys(pages).length) return
-      for (const key of Object.keys(pages)) if (!(key in kept)) communityReads.delete(key)
       set({ communityPages: kept })
     },
     async loadCommunityListing(id, refresh = false) {
