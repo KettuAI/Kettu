@@ -112,6 +112,43 @@ export function summarizeParams(params: unknown): Record<string, unknown> | unde
   return summary
 }
 
+/** A paired device's request answered this long after it arrived is logged with its answer. */
+export const SLOW_ANSWER_MS = 250
+
+/** A paired device's answer this large, in bytes, is logged with how long it took. */
+export const LARGE_ANSWER_BYTES = 64 * 1024
+
+export interface DeviceAnswer {
+  device: string
+  /** From the request's arrival to its answer, waiting for a free slot included. */
+  ms: number
+  /** Of `ms`, how long the request waited for a free slot. */
+  waitedMs: number
+  /** The answer's JSON in UTF-8, binary values counted as their bytes. */
+  bytes: number
+  /** It got the answer of an identical read already in flight. */
+  shared: boolean
+  /** The error's code when it failed. */
+  error?: string
+}
+
+/**
+ * Logs a paired device's answer at `info` when it was slow or large, so a slow screen on a device
+ * splits into the host's time and the network's. Call it under the request's operation.
+ */
+export function logDeviceAnswer(method: string, answer: DeviceAnswer): void {
+  if (answer.ms < SLOW_ANSWER_MS && answer.bytes < LARGE_ANSWER_BYTES) return
+  const { device, ms, waitedMs, bytes, shared, error } = answer
+  writeLog('info', 'request', `${method} answered`, {
+    device,
+    ms,
+    ...(waitedMs > 0 ? { waitedMs } : {}),
+    bytes,
+    ...(shared ? { shared } : {}),
+    ...(error ? { error } : {}),
+  })
+}
+
 /** How long a client's repeats of its last request are counted before the count is written. */
 export const REQUEST_REPEAT_MS = 10_000
 

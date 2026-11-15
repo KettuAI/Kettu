@@ -14,9 +14,10 @@ import { hostRequestLimit } from '@shared/host-request-limits'
 import type { PortChannel } from '@shared/port-channel'
 import type { FromPort, PortError } from '@shared/port-rpc'
 import { withOperation, writeLog } from '@shared/log/process-log'
-import { isReadMethod, logRequest } from '@shared/log/requests'
+import { isReadMethod, logDeviceAnswer, logRequest } from '@shared/log/requests'
 import { forbiddenToDevices } from '@shared/remote/allow-list'
 import type { PortDevice } from '@shared/remote/device'
+import { findPlaces, isBinary } from '@shared/remote/places'
 import { HostError, isHostError } from './errors'
 
 export interface RequestContext {
@@ -125,6 +126,22 @@ function withoutImageRefs<T>(value: T): T {
     if (next !== item) (out ??= { ...record })[key] = next
   }
   return (out ?? value) as T
+}
+
+/** A response's size as a device receives it: its JSON in UTF-8, binary values as their bytes. */
+function responseBytes(response: FromPort<HostEvent>): number {
+  if (findPlaces({ response }, 'response', isBinary).length === 0) {
+    return Buffer.byteLength(JSON.stringify(response))
+  }
+  let binary = 0
+  // The holder's own value, since a Buffer's toJSON runs before the replacer sees it.
+  const json = JSON.stringify(response, function (this: Record<string, unknown>, key, value) {
+    const own = this[key]
+    if (!isBinary(own)) return value as unknown
+    binary += own.byteLength
+    return null
+  })
+  return Buffer.byteLength(json) + binary
 }
 
 function toPortError(error: unknown): PortError {
@@ -254,13 +271,14 @@ export class PortHub {
       this.deps.log('warn', `Port ${portId} sent a request without a numeric id`)
       return
     }
-    const reply = (response: FromPort<HostEvent>): void => {
+    const arrived = performance.now()
+    const reply = (response: FromPort<HostEvent>): FromPort<HostEvent> | null => {
       // The page may have gone while the request ran.
-      if (!this.ports.has(portId)) return
+      if (!this.ports.has(portId)) return null
       const bytesOnly = response.type === 'response' && !this.readsImageRefs(portId)
-      channel.send(
-        bytesOnly ? { ...response, result: withoutImageRefs(response.result) } : response,
-      )
+      const sent = bytesOnly ? { ...response, result: withoutImageRefs(response.result) } : response
+      channel.send(sent)
+      return sent
     }
     const method = message.method
     if (typeof method !== 'string' || !METHODS.has(method)) {
@@ -283,19 +301,37 @@ export class PortHub {
     }
     const op = `${portId}.${id}`
     const ctx = { portId, device: device ?? null }
-    const run = (): Promise<Outcome> =>
-      withOperation(op, () => this.dispatch(method as HostMethod, message.params, ctx)).then(
+    let ran = arrived
+    const run = (): Promise<Outcome> => {
+      ran = performance.now()
+      return withOperation(op, () => this.dispatch(method as HostMethod, message.params, ctx)).then(
         (result): Outcome => ({ ok: true, result }),
         (error: unknown): Outcome => ({ ok: false, error }),
       )
+    }
     const load = this.loads.get(portId)
     const { outcome, shared } =
       load && device
         ? this.throttled(load, device.id, method, message.params, run)
         : { outcome: run(), shared: false }
+    const answer = (response: FromPort<HostEvent>): void => {
+      const sent = reply(response)
+      if (!sent || !device) return
+      const done = performance.now()
+      withOperation(op, () =>
+        logDeviceAnswer(method, {
+          device: device.id,
+          ms: Math.round(done - arrived),
+          waitedMs: Math.round(ran - arrived),
+          bytes: responseBytes(sent),
+          shared,
+          ...(sent.type === 'error' ? { error: sent.error.code } : {}),
+        }),
+      )
+    }
     const settled = await outcome
     if (settled === 'busy') {
-      reply({
+      answer({
         type: 'error',
         id,
         error: { code: 'busy', message: 'This device has too many requests waiting' },
@@ -303,14 +339,14 @@ export class PortHub {
       return
     }
     if (settled.ok) {
-      reply({ type: 'response', id, result: settled.result })
+      answer({ type: 'response', id, result: settled.result })
       return
     }
     const { error } = settled
     const portError = toPortError(error)
     // The request whose answer it shared logged the failure.
     if (shared) {
-      reply({ type: 'error', id, error: portError })
+      answer({ type: 'error', id, error: portError })
       return
     }
     if (portError.code === 'internal') {
@@ -318,7 +354,7 @@ export class PortHub {
     } else if (!isReadMethod(method)) {
       withOperation(op, () => writeLog('info', 'request', `${method} failed: ${portError.code}`))
     }
-    reply({ type: 'error', id, error: portError })
+    answer({ type: 'error', id, error: portError })
   }
 
   /**
