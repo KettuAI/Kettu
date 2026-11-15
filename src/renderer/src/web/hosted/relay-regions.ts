@@ -20,6 +20,7 @@ import {
   REGIONS_CHANNEL_FEATURE,
   parseRelayRegions,
   type RelayPreferMessage,
+  type RelayRegionsMessage,
 } from '@shared/remote/relay-regions'
 import { RelayStats, parseRelayStats } from '@shared/remote/relay-report'
 import { DeviceRegions, RegionSource, RegionTimes } from '@shared/remote/region-source'
@@ -164,15 +165,26 @@ export class HostedRelay {
   /** The link to a host: hears its regions, and tells it this browser's fastest. */
   attach(link: HostLink, host: HostRelay): void {
     this.links.set(host.id, link)
+    // The link hands on what followed the welcome before it says it is connected; the host sends
+    // its regions right after the welcome, so they wait for it.
+    let early: RelayRegionsMessage | null = null
     link.onMessage((message) => {
-      if (message.type !== 'relay.regions' || !this.offered(link)) return
+      if (message.type !== 'relay.regions') return
       const parsed = parseRelayRegions(message)
       if (!parsed) return
-      void this.devices.received(host.id, parsed).then((resolved) => this.times.measure(resolved))
+      if (link.state.kind !== 'connected') early = parsed
+      else if (this.offered(link)) this.regionsOf(host.id, parsed)
     })
     link.onState((state) => {
-      if (state.kind === 'connected') this.sendPreference(link)
+      if (state.kind !== 'connected') return
+      if (early && this.offered(link)) this.regionsOf(host.id, early)
+      early = null
+      this.sendPreference(link)
     })
+  }
+
+  private regionsOf(hostId: string, message: RelayRegionsMessage): void {
+    void this.devices.received(hostId, message).then((resolved) => this.times.measure(resolved))
   }
 
   dialed(url: string, outcome: RelayAttempt): void {
