@@ -528,6 +528,7 @@ export class RelayHost {
   /** Regions that said they drain, by origin, and until when they are passed over. */
   private readonly draining = new Map<string, number>()
   private regionTimer: ReturnType<typeof setTimeout> | null = null
+  private drainTimer: ReturnType<typeof setTimeout> | null = null
   private stopped = false
   private started = false
 
@@ -604,6 +605,8 @@ export class RelayHost {
     this.stopped = true
     if (this.regionTimer) clearTimeout(this.regionTimer)
     this.regionTimer = null
+    if (this.drainTimer) clearTimeout(this.drainTimer)
+    this.drainTimer = null
     for (const control of this.controls) control.close()
     for (const control of this.leaving) control.close()
     this.leaving.clear()
@@ -656,6 +659,16 @@ export class RelayHost {
   private apply(): void {
     const now = this.now()
     for (const [url, until] of this.draining) if (until <= now) this.draining.delete(url)
+    // Picks again once the first region passed over may be used, whatever else changes by then.
+    if (this.drainTimer) clearTimeout(this.drainTimer)
+    this.drainTimer = null
+    if (this.draining.size > 0 && !this.stopped) {
+      const next = Math.min(...this.draining.values())
+      this.drainTimer = setTimeout(() => {
+        this.drainTimer = null
+        this.apply()
+      }, next - now)
+    }
     const main = relayOrigin(this.options.main)
     const wanted = (this.plan ?? relayList(this.options.main, this.listed)).filter(
       (region) => region.url === main || !this.draining.has(region.url),

@@ -13,6 +13,7 @@ import { importRelayKey, newRelaySeed, relayHostId } from '@shared/remote/relay'
 import { dialRelay } from '@shared/remote/relay-device'
 import { RelayHost } from '@shared/remote/relay-host'
 import {
+  DRAINED_MS,
   REGIONS_CHANNEL_FEATURE,
   REGION_KEYS,
   hostRegions,
@@ -79,7 +80,7 @@ async function host(options: { leaveMs?: number } = {}) {
   await expect
     .poll(() => relay.status.map((r) => r.connection.state))
     .toEqual(['connected', 'connected', 'connected'])
-  return { relays, relay, id, accepted, drained }
+  return { relays, relay, id, accepted, drained, advance: (ms: number) => (now += ms) }
 }
 
 describe('a host on the relay regions', () => {
@@ -106,6 +107,20 @@ describe('a host on the relay regions', () => {
     // Not signed in to again while it drains, whatever the plan says.
     t.relay.setPlan(hostRegions({ main: MAIN, own: await ownList(), preferred: [] }))
     expect(t.relay.relays.map((r) => r.id)).toEqual(['main', 'sh-1'])
+  })
+
+  it('signs in again to a region that drained once it was passed over long enough', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    cleanups.push(() => void vi.useRealTimers())
+    const t = await host()
+    t.relays.relay(HK).drain()
+    await expect.poll(() => t.relay.relays.map((r) => r.id)).toEqual(['main', 'sh-1'])
+    // Nothing else changes meanwhile: the plan is the same as before the drain.
+    t.advance(DRAINED_MS)
+    await vi.advanceTimersByTimeAsync(DRAINED_MS)
+    await expect
+      .poll(() => t.relay.status.map((r) => `${r.id}:${r.connection.state}`))
+      .toEqual(['main:connected', 'hk-1:connected', 'sh-1:connected'])
   })
 
   it('stays on a draining region until its last device goes, and the device hears it drain', async () => {
