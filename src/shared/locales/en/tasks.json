@@ -176,7 +176,19 @@
     "end": {
       "done": "Done",
       "dropped": "Not worth doing"
-    }
+    },
+    "kind": {
+      "agent": "Agent",
+      "review": "Review",
+      "auto": "Auto",
+      "you": "You"
+    },
+    "reported": "Reported {{outcome}}",
+    "reviews": "Reviews {{steps}}",
+    "picksAtStart": "Picked when it starts",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "fit": "Fit to window"
   },
   "composer": {
     "label": "Add to the task",

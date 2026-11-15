@@ -176,7 +176,19 @@
     "end": {
       "done": "完成",
       "dropped": "不值得做"
-    }
+    },
+    "kind": {
+      "agent": "Agent",
+      "review": "审查",
+      "auto": "Auto",
+      "you": "你"
+    },
+    "reported": "上报了 {{outcome}}",
+    "reviews": "审查 {{steps}}",
+    "picksAtStart": "开始时再选",
+    "zoomIn": "放大",
+    "zoomOut": "缩小",
+    "fit": "适应窗口"
   },
   "composer": {
     "label": "补充需求",
