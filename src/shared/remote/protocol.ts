@@ -88,6 +88,34 @@ export interface Hello {
    * resumed it, and how many of the host's messages the device received on it since.
    */
   resume?: ResumeRequest
+  /**
+   * With `resume`, to a host whose welcome named STANDBY_FEATURE: `keep` moves the session here
+   * and keeps the connection it was on as its standby; `join` makes this connection the standby.
+   */
+  standby?: StandbyRequest
+}
+
+export type StandbyRequest = 'keep' | 'join'
+
+/**
+ * The welcome's feature of a host that keeps one standby connection per session: a device moving
+ * its session keeps the relay connection open, carrying only pings, and promotes it at once when
+ * the path it moved to fails.
+ */
+export const STANDBY_FEATURE = 'standby'
+
+/** The host's word on a connection that became its session's standby. */
+export interface Standby {
+  type: 'standby'
+}
+
+/**
+ * The device takes the session over on its standby, or on the connection a failed move left: the
+ * host answers as it does a resuming hello, with a welcome naming what it read.
+ */
+export interface StandbyPromote {
+  type: 'standby.promote'
+  received: number
 }
 
 export interface ResumeRequest {
@@ -250,7 +278,10 @@ function isClientField(value: unknown): value is string {
 /** A hello as the host reads it, or null when it is not one. */
 export function parseHello(value: unknown): Hello | null {
   if (typeof value !== 'object' || value === null) return null
-  const { type, protocol, client, device, resume, features } = value as Record<string, unknown>
+  const { type, protocol, client, device, resume, features, standby } = value as Record<
+    string,
+    unknown
+  >
   if (type !== 'hello' || typeof protocol !== 'object' || protocol === null) return null
   const { min, max } = protocol as Record<string, unknown>
   if (!isVersion(min) || !isVersion(max) || min > max) return null
@@ -261,12 +292,22 @@ export function parseHello(value: unknown): Hello | null {
   const pairing = parsePairingDevice(device)
   if (pairing) hello.device = pairing
   const resuming = parseResume(resume)
-  if (resuming) hello.resume = resuming
+  if (resuming) {
+    hello.resume = resuming
+    if (standby === 'keep' || standby === 'join') hello.standby = standby
+  }
   if (Array.isArray(features)) {
     const kept = features.slice(0, MAX_FEATURES).filter(isClientField)
     if (kept.length > 0) hello.features = kept
   }
   return hello
+}
+
+/** A `standby.promote`'s count, or null when the value is not one. */
+export function parsePromote(value: unknown): number | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { type, received } = value as Record<string, unknown>
+  return type === 'standby.promote' && isCount(received) ? received : null
 }
 
 function parseResume(value: unknown): ResumeRequest | null {

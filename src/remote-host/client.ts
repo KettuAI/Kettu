@@ -5,10 +5,12 @@
 // acknowledges what it receives, resumes with the welcome's token, keeps main's port, and sends
 // again the requests the host did not read.
 
+import { networkInterfaces } from 'node:os'
 import type { BrowserForward } from '@shared/browser'
 import type { PortChannel } from '@shared/port-channel'
 import { Acknowledger } from '@shared/remote/acks'
 import type { ChannelMessage } from '@shared/remote/channel'
+import { addressKey } from '@shared/remote/address'
 import { normalizeDeviceName, isDeviceModel } from '@shared/remote/device'
 import { startDeviceChannel, type DeviceChannel } from '@shared/remote/device-channel'
 import {
@@ -26,6 +28,13 @@ import {
   type Ping,
   type Pong,
 } from '@shared/remote/keepalive'
+import {
+  PathTimes,
+  PROBE_TIMEOUT_MS,
+  rankPaths,
+  shouldMove,
+  type PathRef,
+} from '@shared/remote/paths'
 import {
   PAIR_HOST_TIMEOUT_MS,
   type HostConnection,
@@ -59,6 +68,7 @@ import {
   PROTOCOL_VERSION,
   RESUME_MS,
   RESUME_VERSION,
+  STANDBY_FEATURE,
   parseAddresses,
   parseClosing,
   parseHostRenamed,
@@ -68,11 +78,21 @@ import {
   type Hello,
   type Welcome,
 } from '@shared/remote/protocol'
+import { AsideConnection } from '@shared/remote/standby'
 import { BYTES_FEATURE } from '@shared/remote/streams'
 import type { LogFn } from '../agent-host/storage'
 import { compareVersions } from '../agent-host/versions'
 import { ClientForwards } from './client-forwards'
-import { dial, RelayMissed, type Connect, type RelayRoute, type Via } from './dial'
+import {
+  dial,
+  pathKey,
+  probe,
+  RelayMissed,
+  type Candidate,
+  type Connect,
+  type RelayRoute,
+  type Via,
+} from './dial'
 import { publicKeyBytes } from './devices'
 import { connectTransport } from './direct'
 import type { HostStore } from './hosts'
@@ -99,6 +119,18 @@ import {
 
 /** How long a known host has from the handshake to its welcome. */
 const WELCOME_TIMEOUT_MS = 15_000
+
+/** How long a standby has to answer the promotion with a welcome. */
+const PROMOTE_TIMEOUT_MS = 5_000
+
+/** How often the network interfaces are read for a change, which compares the paths again. */
+const NETWORK_CHECK_MS = 5_000
+
+/** How long after a welcome on the relay the direct addresses are tried. */
+const COMPARE_AFTER_MS = 3_000
+
+/** How long after a standby ended another is joined. */
+const REJOIN_MS = 10_000
 
 /** The longest wait between tries, which a host that needs an update also waits. */
 const MAX_RETRY_MS = 60_000
@@ -168,6 +200,8 @@ export interface HostClientOptions {
   now?: () => number
   /** When a quiet host is pinged and given up, DEVICE_KEEPALIVE unless a test shortens it. */
   keepalive?: KeepaliveTimings
+  /** How often the network interfaces are read for a change; null reads them never. */
+  networkCheckMs?: number | null
 }
 
 type SessionEnd = { welcomed: boolean; reason: ClosingReason | null }
@@ -195,12 +229,15 @@ class HostSession {
   private timer: ReturnType<typeof setTimeout> | null = null
   /** From version 3, notices a host that stopped answering on an open connection. */
   private keepalive: Keepalive | null = null
+  private pingedAt: number | null = null
 
   constructor(
     readonly channel: DeviceChannel,
     readonly via: Via,
     private readonly log: LogFn,
     private readonly timings: KeepaliveTimings = DEVICE_KEEPALIVE,
+    /** A ping's round trip on this connection. */
+    private readonly rtt?: (ms: number) => void,
   ) {}
 
   get open(): boolean {
@@ -256,12 +293,34 @@ class HostSession {
     this.channel.close()
   }
 
+  /** Pings now, as after the network changed, so a connection that went is noticed soon. */
+  pingNow(): void {
+    this.keepalive?.pingNow()
+  }
+
+  /**
+   * Gives the connection up without ending it, as a move does with the one it leaves: nothing more
+   * is read or handled here, and its end is not the session's.
+   */
+  release(): DeviceChannel {
+    this.over = true
+    if (this.timer) clearTimeout(this.timer)
+    this.keepalive?.stop()
+    this.waiting.length = 0
+    this.handlers = IGNORED
+    return this.channel
+  }
+
   private receive(value: unknown): void {
     if (this.over) return
     if (this.keepalive) {
       this.keepalive.heard()
       const own = keepaliveMessage(value)
       if (own === 'ping') this.send({ type: 'pong' } satisfies Pong)
+      if (own === 'pong' && this.pingedAt !== null) {
+        this.rtt?.(Date.now() - this.pingedAt)
+        this.pingedAt = null
+      }
       if (own) return
     }
     const type = (value as { type?: unknown } | null)?.type
@@ -280,7 +339,10 @@ class HostSession {
       if (welcome.protocol >= KEEPALIVE_VERSION) {
         this.keepalive = new Keepalive({
           ...this.timings,
-          ping: () => this.send({ type: 'ping' } satisfies Ping),
+          ping: () => {
+            this.pingedAt = Date.now()
+            this.send({ type: 'ping' } satisfies Ping)
+          },
           // Ended now as if the network went, so the link reconnects and resumes the session: a
           // stopped host never finishes the close.
           silent: () => {
@@ -361,6 +423,24 @@ class HostLink {
   private streams = 1
   /** The relay that joined last, tried first next time. */
   private lastRelay: string | null = null
+  /** Each path's round trips and failures, which moving to the fastest goes by. */
+  private readonly times = new PathTimes()
+  /** A connection that takes the session over, by a move or a promotion, until its welcome. */
+  private taking: HostSession | null = null
+  /** The connection a move left, until the host makes it the standby or it ends. */
+  private aside: AsideConnection<Via> | null = null
+  /** Whether the move asked the host to keep that connection as the standby. */
+  private keepAside = false
+  /** The relay connection kept beside a session on a path without one, once the host took it. */
+  private standby: AsideConnection<Via> | null = null
+  /** What the last welcome's host offers: resuming the session, and keeping a standby for it. */
+  private resumable = false
+  private standbys = false
+  private comparing = false
+  private joining = false
+  private compareTimer: ReturnType<typeof setTimeout> | null = null
+  private compareAt = 0
+  private joinTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(
     private readonly client: HostClient,
@@ -397,6 +477,17 @@ class HostLink {
   start(): void {
     if (this.host?.removed) return this.set({ state: 'stopped', reason: 'removed' })
     void this.connect()
+  }
+
+  /**
+   * The computer woke or its network changed: a host not connected is tried now, and the paths to
+   * one that is are compared again, its connection pinged so one that went is noticed soon.
+   */
+  wake(): void {
+    const session = this.session
+    if (this.closed || !session?.open) return this.retry()
+    session.pingNow()
+    this.compareSoon(0)
   }
 
   /** Tries now, as after the computer woke, unless the host said not to. */
@@ -448,6 +539,7 @@ class HostLink {
    */
   leaveRelay(): void {
     if (this.closed) return
+    for (const kept of [this.aside, this.standby]) if (kept && 'relay' in kept.via) kept.close()
     if (this.session && 'relay' in this.session.via) return this.session.close()
     if (this.trying) {
       this.cancel()
@@ -459,6 +551,10 @@ class HostLink {
   close(): void {
     this.closed = true
     this.cancel()
+    if (this.compareTimer) clearTimeout(this.compareTimer)
+    if (this.joinTimer) clearTimeout(this.joinTimer)
+    this.compareTimer = null
+    this.joinTimer = null
     this.drop()
     this.lose()
   }
@@ -478,9 +574,11 @@ class HostLink {
   private drop(): void {
     const session = this.session
     this.session = null
+    this.taking = null
     this.acks.pause()
     this.requests.detach()
     session?.close()
+    this.closeAsides()
   }
 
   private async connect(): Promise<void> {
@@ -500,7 +598,9 @@ class HostLink {
       addresses: route ? [{ host: SSH_LOOPBACK, port: route.port }] : host.addresses,
       connect: forward?.connect ?? this.client.connect,
       relay: typeof relay === 'function' ? relay : null,
-      start: (transport) => startDeviceChannel({ transport, hostKey, key: options.key, hello }),
+      start: (transport) =>
+        startDeviceChannel({ transport, hostKey, key: options.key, hello: null }),
+      hello,
       timeoutMs: route ? this.client.sshTimeoutMs : this.client.timeoutMs,
       signal: trying.signal,
     })
@@ -516,9 +616,248 @@ class HostLink {
       return this.failed(problem ?? (typeof relay === 'string' ? relay : undefined))
     }
     if ('relay' in result.via) this.lastRelay = result.via.relay
-    const session = new HostSession(result.channel, result.via, options.log, options.keepalive)
+    this.times.sample(pathKey(result.via), result.channel.handshakeMs)
+    const session = this.newSession(result.channel, result.via)
     this.session = session
     session.start(this.handlersFor(session, resume !== null), WELCOME_TIMEOUT_MS)
+  }
+
+  /** A connection past its handshake, whose pings time its path. */
+  private newSession(channel: DeviceChannel, via: Via): HostSession {
+    const { options } = this.client
+    const key = pathKey(via)
+    const session: HostSession = new HostSession(
+      channel,
+      via,
+      options.log,
+      options.keepalive,
+      (ms) => {
+        // A ping far slower than before: another path may do better now.
+        if (this.times.sample(key, ms) && this.session === session) this.compareSoon(0)
+      },
+    )
+    return session
+  }
+
+  /** Compares the paths after `delay`, once, however often it is asked meanwhile, the soonest. */
+  private compareSoon(delay: number): void {
+    if (this.closed || (this.compareTimer && this.compareAt <= Date.now() + delay)) return
+    if (this.compareTimer) clearTimeout(this.compareTimer)
+    this.compareAt = Date.now() + delay
+    this.compareTimer = setTimeout(() => {
+      this.compareTimer = null
+      void this.compare()
+    }, delay)
+  }
+
+  /**
+   * Tries the host's other paths, each to a finished handshake, and moves the session to the best
+   * when it is clearly faster than the one it is on.
+   */
+  private async compare(): Promise<void> {
+    const session = this.session
+    const host = this.host
+    if (this.closed || this.comparing || this.taking || !session?.open || !host || host.ssh) return
+    if (!this.resumable || this.resumeToken === null) return
+    const candidates = this.candidates(host, session.via)
+    const standby = this.standby?.standby ? this.standby : null
+    if (candidates.length === 0 && !standby) return
+    this.comparing = true
+    const { options } = this.client
+    const hostKey = publicKeyBytes(host.publicKey)!
+    const probed = await probe(
+      candidates,
+      (transport) => startDeviceChannel({ transport, hostKey, key: options.key, hello: null }),
+      PROBE_TIMEOUT_MS,
+    )
+    this.comparing = false
+    for (const { via, key, channel } of probed) {
+      if (channel && via) this.times.sample(pathKey(via), channel.handshakeMs)
+      else this.times.failed(key)
+    }
+    const opened = probed.flatMap(({ via, channel }) =>
+      via && channel ? [{ key: pathKey(via), relay: 'relay' in via, via, channel }] : [],
+    )
+    if (this.session !== session || !session.open || this.taking) {
+      for (const { channel } of opened) channel.close()
+      return
+    }
+    const current: PathRef = { key: pathKey(session.via), relay: 'relay' in session.via }
+    const kept: PathRef[] = standby
+      ? [{ key: pathKey(standby.via), relay: 'relay' in standby.via }]
+      : []
+    const [best] = rankPaths([current, ...kept, ...opened], this.times)
+    const move = best && shouldMove(current, best, this.times, false) ? best : null
+    const target = opened.find((path) => path === move) ?? null
+    for (const path of opened) if (path !== target) path.channel.close()
+    if (target) return this.move(target.channel, target.via)
+    // The standby is the faster path: it takes the session over and the direct path goes.
+    if (move && standby && move === kept[0]) this.promote(standby)
+  }
+
+  /** The paths to try beside `current`: the other direct addresses, and the relay without a standby. */
+  private candidates(host: KnownHost, current: Via): Candidate[] {
+    const list: Candidate[] = []
+    for (const address of host.addresses) {
+      if ('address' in current && addressKey(address) === addressKey(current.address)) continue
+      list.push({
+        key: pathKey({ address }),
+        open: async (signal) => ({
+          transport: await this.client.connect(address, signal),
+          via: { address },
+        }),
+      })
+    }
+    const relay =
+      'relay' in current || this.standby ? null : this.client.relayRoute(host.relay, this.lastRelay)
+    if (typeof relay === 'function') {
+      list.push({
+        key: pathKey({ relay: this.lastRelay ?? this.client.options.relay?.main ?? '' }),
+        open: async (signal) => {
+          const joined = await relay(signal)
+          return { transport: joined.transport, via: { relay: joined.relay } }
+        },
+      })
+    }
+    return list
+  }
+
+  /**
+   * Moves the session to a connection past its handshake. From the hello on, the old connection
+   * carries nothing of the session: the host sends again on the new one what came after what was
+   * counted here, and says which requests it read. Leaving the relay, it is kept as the standby.
+   */
+  private move(channel: DeviceChannel, via: Via): void {
+    const from = this.session
+    const token = this.resumeToken
+    if (!from?.open || token === null) return channel.close()
+    const keep = this.standbys && 'relay' in from.via && !('relay' in via)
+    this.forwards.dropConnections()
+    this.acks.pause()
+    this.requests.detach()
+    this.aside?.close()
+    this.aside = this.setAside(from.release(), from.via)
+    this.keepAside = keep
+    if ('relay' in via) this.lastRelay = via.relay
+    const session = this.newSession(channel, via)
+    this.session = session
+    this.taking = session
+    session.start(this.handlersFor(session, true), WELCOME_TIMEOUT_MS)
+    session.send({
+      ...this.client.hello(),
+      resume: { token, received: this.acks.received },
+      ...(keep ? { standby: 'keep' as const } : {}),
+    } satisfies Hello)
+    this.client.options.log(
+      'info',
+      `Moving to host ${this.id} over ${'relay' in via ? 'the relay' : 'a direct address'}`,
+    )
+  }
+
+  /**
+   * Takes the session over on a connection kept aside: the standby, or the one a failed move left,
+   * which the host may still have as the session's own. Nothing shows a drop meanwhile.
+   */
+  private promote(aside: AsideConnection<Via>): void {
+    if (aside === this.aside) this.aside = null
+    if (aside === this.standby) this.standby = null
+    const from = this.session
+    if (from && from !== this.taking) from.release().close()
+    this.forwards.dropConnections()
+    this.acks.pause()
+    this.requests.detach()
+    const session = this.newSession(aside.promote(this.acks.received), aside.via)
+    this.session = session
+    this.taking = session
+    session.start(this.handlersFor(session, true), PROMOTE_TIMEOUT_MS)
+    this.client.options.log('info', `Taking the session to host ${this.id} over on the standby`)
+  }
+
+  /** A connection aside of the session, whose pings time its path. */
+  private setAside(channel: DeviceChannel, via: Via): AsideConnection<Via> {
+    const key = pathKey(via)
+    const { keepalive } = this.client.options
+    const aside: AsideConnection<Via> = new AsideConnection(channel, via, {
+      ...(keepalive ? { timings: keepalive } : {}),
+      rtt: (ms) => this.times.sample(key, ms),
+      standingBy: () => this.standingBy(aside),
+      ended: () => {
+        if (aside !== this.aside && aside !== this.standby) return
+        if (aside === this.aside) this.aside = null
+        if (aside === this.standby) this.standby = null
+        // Joined again after a while, so a relay that keeps dropping it is not dialed in a loop.
+        this.joinSoon()
+      },
+    })
+    return aside
+  }
+
+  /** Joins a standby again later, for a session still on a path without one. */
+  private joinSoon(): void {
+    if (this.closed || this.joinTimer) return
+    this.joinTimer = setTimeout(() => {
+      this.joinTimer = null
+      const session = this.session
+      if (session?.open && !this.taking) void this.joinStandby(session)
+    }, REJOIN_MS)
+  }
+
+  /** The host made `aside` the standby: once a move that left it is done, it is the link's. */
+  private standingBy(aside: AsideConnection<Via>): void {
+    if (aside !== this.aside || this.taking) return
+    this.aside = null
+    this.setStandby(aside)
+  }
+
+  private setStandby(aside: AsideConnection<Via>): void {
+    const before = this.standby
+    this.standby = aside
+    if (before && before !== aside) before.close()
+  }
+
+  private closeAsides(): void {
+    const { aside, standby } = this
+    this.aside = null
+    this.standby = null
+    aside?.close()
+    standby?.close()
+  }
+
+  /**
+   * Opens a relay connection that the host keeps as the session's standby, for a session on a
+   * path without a relay, so losing that path loses nothing.
+   */
+  private async joinStandby(session: HostSession): Promise<void> {
+    const host = this.host
+    const token = this.resumeToken
+    if (this.joining || this.standby || this.aside || !this.standbys || token === null) return
+    if (!host || host.ssh || 'relay' in session.via) return
+    const relay = this.client.relayRoute(host.relay, this.lastRelay)
+    if (typeof relay !== 'function') return
+    this.joining = true
+    const { options } = this.client
+    const hostKey = publicKeyBytes(host.publicKey)!
+    const result = await dial({
+      addresses: [],
+      connect: this.client.connect,
+      relay,
+      start: (transport) =>
+        startDeviceChannel({ transport, hostKey, key: options.key, hello: null }),
+      hello: {
+        ...this.client.hello(),
+        resume: { token, received: this.acks.received },
+        standby: 'join',
+      } satisfies Hello,
+      timeoutMs: this.client.timeoutMs,
+    })
+    this.joining = false
+    if (result.kind !== 'open') return
+    if (this.closed || this.session !== session || !session.open || this.standby || this.aside) {
+      return result.channel.close()
+    }
+    if ('relay' in result.via) this.lastRelay = result.via.relay
+    this.times.sample(pathKey(result.via), result.channel.handshakeMs)
+    this.standby = this.setAside(result.channel, result.via)
   }
 
   /**
@@ -603,6 +942,34 @@ class HostLink {
     // The host read main's requests up to the one it names; the rest go again.
     this.requests.attach(session.wire(), resumed ? welcome.resumed!.request : 0)
     if (!resumed) void this.openPort(session, ++this.sessions)
+    this.resumable = welcome.protocol >= RESUME_VERSION
+    this.standbys = welcome.features.includes(STANDBY_FEATURE)
+    const moved = this.taking === session
+    if (moved) this.taking = null
+    if (moved) {
+      this.client.options.log(
+        'info',
+        `Host ${this.id}'s session is on ${'relay' in session.via ? 'the relay' : 'a direct address'}`,
+      )
+    }
+    this.settleAside(resumed)
+    // A session on a path without a relay keeps one on standby; one on the relay tries the rest.
+    if (!('relay' in session.via)) void this.joinStandby(session)
+    else if (this.host?.addresses.length) this.compareSoon(COMPARE_AFTER_MS)
+  }
+
+  /** A welcome after a move: the connection it left becomes the standby once the host says so. */
+  private settleAside(resumed: boolean): void {
+    const aside = this.aside
+    if (!aside) return
+    if (!resumed || !this.keepAside) {
+      this.aside = null
+      aside.close()
+      return
+    }
+    if (!aside.standby) return
+    this.aside = null
+    this.setStandby(aside)
   }
 
   private async openPort(session: HostSession, sessions: number): Promise<void> {
@@ -654,6 +1021,8 @@ class HostLink {
       addresses: merged(answered, addresses, host.addresses),
     })
     this.client.options.changed()
+    // The host may have joined a network this computer is on.
+    if ('relay' in answered && addresses.length > 0) this.compareSoon(COMPARE_AFTER_MS)
   }
 
   private ended(session: HostSession, { welcomed, reason }: SessionEnd): void {
@@ -661,22 +1030,28 @@ class HostLink {
     if (this.closed) return
     this.acks.pause()
     this.requests.detach()
+    // A move or a promotion that failed before its welcome leaves the session the host kept.
+    const taking = this.taking === session
+    if (taking) this.taking = null
     const { hosts } = this.client.options
     if (welcomed) hosts.online(this.id)
+    if (reason === null) this.times.failed(pathKey(session.via))
     // A host that says why ends the session; one that just went keeps it for a while.
     const kept =
-      welcomed &&
-      reason === null &&
-      this.resumeToken !== null &&
-      (session.welcome?.protocol ?? 0) >= RESUME_VERSION
+      (welcomed || taking) && reason === null && this.resumeToken !== null && this.resumable
     if (kept) {
-      this.keptUntil = Date.now() + RESUME_MS
-      if (this.keptTimer) clearTimeout(this.keptTimer)
-      this.keptTimer = setTimeout(() => {
-        this.keptTimer = null
-        this.expireKept()
-      }, RESUME_MS)
-    } else if (welcomed) {
+      // Counted from the first drop, which a promotion or a move after it does not put off.
+      if (!this.keptTimer) {
+        this.keptUntil = Date.now() + RESUME_MS
+        this.keptTimer = setTimeout(() => {
+          this.keptTimer = null
+          this.expireKept()
+        }, RESUME_MS)
+      }
+      // The connection a move left, or the standby, takes the session over at once.
+      const aside = this.aside?.open ? this.aside : this.standby?.standby ? this.standby : null
+      if (aside) return this.promote(aside)
+    } else if (welcomed || taking) {
       this.lose()
     }
     if (reason === 'removed') {
@@ -688,7 +1063,7 @@ class HostLink {
       this.set({ state: 'stopped', reason })
       return this.schedule(MAX_RETRY_MS)
     }
-    if (!welcomed) return this.failed()
+    if (!welcomed && !taking) return this.failed()
     // Reconnecting in place: the host shows as offline only once a try fails.
     this.failures = 0
     this.set({ state: 'connecting' })
@@ -697,6 +1072,7 @@ class HostLink {
 
   /** The host's session is gone, or no longer to be resumed: main's port for it closes. */
   private lose(): void {
+    this.closeAsides()
     this.sessions++
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.keptTimer = null
@@ -737,6 +1113,22 @@ class HostLink {
   private set(connection: HostConnection): void {
     this.connection = connection
     this.client.options.changed()
+  }
+}
+
+/** The addresses of this computer's interfaces, which change with the network it is on. */
+function networkPrint(): string {
+  try {
+    return Object.entries(networkInterfaces())
+      .flatMap(([name, entries]) =>
+        (entries ?? [])
+          .filter((entry) => !entry.internal)
+          .map((entry) => `${name} ${entry.address}`),
+      )
+      .sort()
+      .join('\n')
+  } catch {
+    return ''
   }
 }
 
@@ -782,8 +1174,9 @@ class Pairing {
           hostKey: payload.hostKey,
           key: options.key,
           psk: payload.secret,
-          hello: this.client.hello(model),
+          hello: null,
         }),
+      hello: this.client.hello(model),
       timeoutMs: this.client.timeoutMs,
       signal: this.aborting.signal,
     })
@@ -1109,7 +1502,8 @@ class SshAdding {
       addresses: [{ host: SSH_LOOPBACK, port: info.port }],
       connect: forward.connect,
       start: (transport) =>
-        startDeviceChannel({ transport, hostKey, key: options.key, hello: this.client.hello() }),
+        startDeviceChannel({ transport, hostKey, key: options.key, hello: null }),
+      hello: this.client.hello(),
       timeoutMs: this.client.sshTimeoutMs,
       signal: this.aborting.signal,
     })
@@ -1234,6 +1628,8 @@ export class HostClient {
   private readonly links = new Map<string, HostLink>()
   private readonly pairings = new Map<number, Pairing | SshAdding | DiscoveryPairing>()
   private stopped = false
+  private networkTimer: ReturnType<typeof setInterval> | null = null
+  private network = ''
 
   constructor(readonly options: HostClientOptions) {
     this.connect = options.connect ?? connectTransport
@@ -1283,9 +1679,21 @@ export class HostClient {
     }
   }
 
-  /** Starts a connection to each known host. */
+  /** Starts a connection to each known host, and watches the network for a change. */
   start(): void {
     for (const host of this.options.hosts.list()) this.linkFor(host.id).start()
+    const every =
+      this.options.networkCheckMs === undefined ? NETWORK_CHECK_MS : this.options.networkCheckMs
+    if (every === null || this.networkTimer) return
+    this.network = networkPrint()
+    this.networkTimer = setInterval(() => {
+      const network = networkPrint()
+      if (network === this.network) return
+      this.network = network
+      this.options.log('info', 'The network changed; comparing the paths to hosts again')
+      for (const link of this.links.values()) link.wake()
+    }, every)
+    this.networkTimer.unref?.()
   }
 
   list(): HostStatus[] {
@@ -1465,13 +1873,19 @@ export class HostClient {
     for (const link of this.links.values()) link.leaveRelay()
   }
 
-  /** The computer woke, maybe on another network: the hosts not connected are tried now. */
+  /**
+   * The computer woke, maybe on another network: the hosts not connected are tried now, and the
+   * paths to those that are compared again.
+   */
   resume(): void {
-    for (const link of this.links.values()) link.retry()
+    this.network = networkPrint()
+    for (const link of this.links.values()) link.wake()
   }
 
   async stop(): Promise<void> {
     this.stopped = true
+    if (this.networkTimer) clearInterval(this.networkTimer)
+    this.networkTimer = null
     for (const pairing of [...this.pairings.values()]) pairing.close()
     for (const link of this.links.values()) link.close()
     this.links.clear()

@@ -26,7 +26,9 @@ import { DeviceStore } from './devices'
 import { DiscoveryRequests } from './discovery'
 import { DeviceNotifications } from './notifications'
 import { PairingCodes } from './pairing'
+import { dial } from './dial'
 import { RemoteServer, type RemoteServerOptions } from './server'
+import type { Transport } from '@shared/remote/transport'
 import { connectDevice, type TestDevice, type TestDeviceOptions } from './testing/device'
 import { memoryPorts, memoryTransports } from './testing/memory'
 
@@ -183,6 +185,7 @@ async function setup(
   return {
     agent,
     server,
+    hostKey,
     devices,
     activity,
     pairing,
@@ -404,7 +407,10 @@ describe("a device's notifications", () => {
   it('are offered from version 4, kept with the device, and never reach the agent host', async () => {
     const t = await setup({ push: true })
     const device = await t.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
-    expect(await device.first).toMatchObject({ protocol: 4, features: ['bytes', 'push'] })
+    expect(await device.first).toMatchObject({
+      protocol: 4,
+      features: ['bytes', 'push', 'standby'],
+    })
     const state = await ask(device, 'notifications.set', {
       target,
       choices: { routines: true, muted: ['s1'] },
@@ -430,13 +436,13 @@ describe("a device's notifications", () => {
   it('are not offered to an older device, or by a host without its signing key', async () => {
     const t = await setup({ push: true })
     const older = await t.connect(undefined, { protocol: { min: 1, max: 3 } })
-    expect(await older.first).toMatchObject({ protocol: 3, features: ['bytes'] })
+    expect(await older.first).toMatchObject({ protocol: 3, features: ['bytes', 'standby'] })
     await expect(ask(older, 'notifications.get', undefined)).rejects.toMatchObject({
       code: 'unavailable',
     })
     const plain = await setup()
     const device = await plain.connect(undefined, { protocol: { min: 1, max: PROTOCOL_VERSION } })
-    expect(await device.first).toMatchObject({ features: ['bytes'] })
+    expect(await device.first).toMatchObject({ features: ['bytes', 'standby'] })
     await expect(ask(device, 'notifications.set', { target })).rejects.toMatchObject({
       code: 'unavailable',
     })
@@ -513,6 +519,171 @@ describe('a device session after its connection drops', () => {
 
   it('waits the foreground window for a device in the foreground', async () => {
     expect((await dropAndReturn(0)).resumed).toBeUndefined()
+  })
+})
+
+describe('a device session moving to another path', () => {
+  const protocol = { min: 1, max: PROTOCOL_VERSION }
+  const renames = (messages: unknown[]): string[] =>
+    messages
+      .filter((message) => (message as { type?: unknown }).type === 'host.renamed')
+      .map((message) => (message as { name: string }).name)
+  const typeOf = (message: unknown) => (message as { type?: unknown }).type
+
+  /** A connection of the phone with a hello of its own, counting from `received`. */
+  function open(t: Awaited<ReturnType<typeof setup>>, hello: object, received = 0) {
+    const [deviceEnd, hostEnd] = memoryTransports()
+    t.server.accept(hostEnd)
+    return connectDevice({
+      transport: deviceEnd,
+      hostKey: t.hostKey.publicKey,
+      key: t.phoneKey,
+      hello: { protocol, ...hello },
+      received,
+    })
+  }
+
+  it('goes on on the new connection with nothing lost or repeated, keeping the old as standby', async () => {
+    const t = await setup()
+    const relay = await t.connect(undefined, { protocol })
+    const welcome = (await relay.first) as { resume: string; features: string[] }
+    expect(welcome.features).toContain('standby')
+    t.server.setHostName('A1')
+    t.server.setHostName('A2')
+    await expect.poll(() => renames(relay.messages)).toEqual(['A1', 'A2'])
+
+    // From its hello on the new path the device reads nothing of its session on the old one.
+    const received = relay.received()
+    const before = renames(relay.messages)
+    const seen = relay.messages.length
+    const direct = await open(
+      t,
+      { resume: { token: welcome.resume, received }, standby: 'keep' },
+      received,
+    )
+    // These leave on the old connection while the hello is on its way.
+    t.server.setHostName('B1')
+    t.server.setHostName('B2')
+    expect(await direct.first).toMatchObject({ type: 'welcome', resumed: { request: 0 } })
+    t.server.setHostName('C1')
+    await expect.poll(() => renames(direct.messages)).toEqual(['B1', 'B2', 'C1'])
+    expect([...before, ...renames(direct.messages)]).toEqual(['A1', 'A2', 'B1', 'B2', 'C1'])
+
+    // The old connection is the standby: nothing of the session comes on it after it says so.
+    await expect.poll(() => relay.messages.slice(seen).map(typeOf)).toContain('standby')
+    const standingBy = relay.messages.indexOf(
+      relay.messages.slice(seen).find((message) => typeOf(message) === 'standby'),
+    )
+    expect(renames(relay.messages.slice(standingBy))).toEqual([])
+    expect(t.server.online()).toEqual([t.phone.id])
+  })
+
+  it('promotes the standby when the path it moved to fails, going on from what came', async () => {
+    const t = await setup()
+    const relay = await t.connect(undefined, { protocol })
+    const welcome = (await relay.first) as { resume: string }
+    t.server.setHostName('A1')
+    await expect.poll(() => renames(relay.messages)).toEqual(['A1'])
+    const received = relay.received()
+    const direct = await open(
+      t,
+      { resume: { token: welcome.resume, received }, standby: 'keep' },
+      received,
+    )
+    const moved = (await direct.first) as { resume: string }
+    await expect.poll(() => relay.messages.map(typeOf)).toContain('standby')
+    t.server.setHostName('B1')
+    await expect.poll(() => renames(direct.messages)).toEqual(['B1'])
+
+    // The direct path goes; the standby takes the session over at once, without a handshake.
+    direct.close()
+    await expect.poll(() => t.server.online()).toEqual([])
+    t.server.setHostName('C1')
+    const promoted = relay.messages.length
+    await relay.send({ type: 'standby.promote', received: direct.received() })
+    await expect.poll(() => relay.messages.slice(promoted).map(typeOf)).toContain('welcome')
+    const again = relay.messages.slice(promoted)
+    expect(again[0]).toMatchObject({ type: 'welcome', resumed: { request: 0 } })
+    expect((again[0] as { resume: string }).resume).not.toBe(moved.resume)
+    t.server.setHostName('D1')
+    await expect.poll(() => renames(relay.messages.slice(promoted))).toEqual(['C1', 'D1'])
+    expect(t.server.online()).toEqual([t.phone.id])
+  })
+
+  it('takes a joining connection as the standby without spending the token', async () => {
+    const t = await setup()
+    const direct = await t.connect(undefined, { protocol })
+    const welcome = (await direct.first) as { resume: string }
+    const relay = await open(t, { resume: { token: welcome.resume, received: 0 }, standby: 'join' })
+    expect(await relay.first).toEqual({ type: 'standby' })
+    t.server.setHostName('A1')
+    await expect.poll(() => renames(direct.messages)).toEqual(['A1'])
+    expect(relay.messages).toEqual([])
+
+    // The welcome's token still resumes the session.
+    direct.close()
+    await expect.poll(() => t.server.online()).toEqual([])
+    const back = await open(t, { resume: { token: welcome.resume, received: direct.received() } })
+    expect(await back.first).toMatchObject({ type: 'welcome', resumed: { request: 0 } })
+  })
+
+  it('ends a joining connection whose session is gone', async () => {
+    const t = await setup()
+    const relay = await open(t, { resume: { token: 'gone', received: 0 }, standby: 'join' })
+    expect(await relay.closing).toBeNull()
+    expect(relay.messages).toEqual([])
+    expect(t.agentPorts).toEqual([])
+  })
+
+  it('is resumed through the route that wins a dial, the slower one saying nothing', async () => {
+    const t = await setup()
+    const first = await t.connect(undefined, { protocol })
+    const { resume: token } = (await first.first) as { resume: string }
+    first.close()
+    await expect.poll(() => t.server.online()).toEqual([])
+
+    // The slow route's answer comes last, but what it sends reaches the host first. Each end hears
+    // its messages, and then the close, `ms` late.
+    const late = (transport: Transport, ms: number): Transport => ({
+      ...transport,
+      onMessage: (listener) =>
+        transport.onMessage((message) => void setTimeout(() => listener(message), ms)),
+      onClose: (listener) => transport.onClose(() => void setTimeout(listener, ms)),
+    })
+    const routes: Record<string, { up: number; down: number }> = {
+      fast: { up: 40, down: 0 },
+      slow: { up: 0, down: 60 },
+    }
+    const result = await dial({
+      addresses: [
+        { host: 'fast', port: 1 },
+        { host: 'slow', port: 1 },
+      ],
+      connect: async (address) => {
+        const [deviceEnd, hostEnd] = memoryTransports()
+        const { up, down } = routes[address.host]!
+        t.server.accept(late(hostEnd, up))
+        return late(deviceEnd, down)
+      },
+      start: (transport) =>
+        startDeviceChannel({
+          transport,
+          hostKey: t.hostKey.publicKey,
+          key: t.phoneKey,
+          hello: null,
+        }),
+      hello: {
+        type: 'hello',
+        protocol,
+        client: { kind: 'ios', version: '1.0.0', platform: 'ios' },
+        resume: { token, received: first.received() },
+      },
+      timeoutMs: 5_000,
+    })
+    if (result.kind !== 'open') throw new Error(`Not open: ${result.kind}`)
+    const welcome = await new Promise((resolve) => result.channel.onMessage(resolve))
+    expect(welcome).toMatchObject({ type: 'welcome', resumed: { request: 0 } })
+    expect(t.agentPorts).toHaveLength(1)
   })
 })
 

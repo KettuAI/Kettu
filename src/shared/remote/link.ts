@@ -5,6 +5,8 @@
 // good once the host says this device may not connect.
 // A host of version 2 keeps the session through a drop for a while: the link acknowledges what it
 // receives, resumes with the welcome's token, and sends again the requests the host did not read.
+// Given several routes, as a relay's regions, it races them to a finished handshake, says hello on
+// the winner alone, and later moves the session to a route clearly faster than the one it is on.
 
 import type { PortError, PortErrorCode } from '../port-rpc'
 import { Acknowledger } from './acks'
@@ -21,6 +23,7 @@ import {
   type Pong,
 } from './keepalive'
 import type { KeyPair } from './noise'
+import { PathTimes, PROBE_TIMEOUT_MS, rankPaths, shouldMove } from './paths'
 import { bytesOf, isBinary } from './places'
 import {
   IMAGE_REFS_FEATURE,
@@ -35,6 +38,7 @@ import {
   type Pace,
   type Welcome,
 } from './protocol'
+import { AsideConnection } from './standby'
 import type { Transport } from './transport'
 import { webSocketTransport } from './websocket-transport'
 
@@ -43,6 +47,9 @@ const HIGH_WATER = 256 * 1024
 
 /** How long a known host has from the handshake to its welcome. */
 const WELCOME_TIMEOUT_MS = 15_000
+
+/** How long a connection kept aside has to answer its promotion with a welcome. */
+const PROMOTE_TIMEOUT_MS = 5_000
 
 /** The longest wait between tries. */
 const MAX_RETRY_MS = 30_000
@@ -99,6 +106,13 @@ export function retryDelay(failures: number): number {
 /** Opens a transport to the host; tests give one of their own. */
 export type Dial = () => Promise<Transport>
 
+/** One way to the host: a key that names it for ranking, whether a relay carries it, its dial. */
+export interface LinkRoute {
+  key: string
+  relay: boolean
+  dial: Dial
+}
+
 export function dialWebSocket(url: string): Dial {
   return () => webSocketTransport(new WebSocket(url))
 }
@@ -132,11 +146,17 @@ interface Download {
 interface Session {
   channel: DeviceChannel
   transport: Transport
+  route: LinkRoute
   welcome: Welcome
   closing: ClosingReason | null
   /** From version 3, notices a host that stopped answering on an open connection. */
   keepalive: Keepalive | null
+  /** When the last ping went, until its pong times the route. */
+  pingedAt: number | null
 }
+
+/** A connection kept aside of the session, and how it reaches the host. */
+type Aside = AsideConnection<{ route: LinkRoute; transport: Transport }>
 
 /** A connection whose handshake is done, waiting for the host's first word. */
 export interface Opened {
@@ -206,11 +226,13 @@ export function hello(client: Hello['client'], device?: Hello['device']): Hello 
 
 export interface HostLinkOptions {
   dial: Dial
+  /** The routes to race and move between, read at each try; `dial` alone, without a relay, when absent. */
+  routes?: () => LinkRoute[]
   hostKey: Uint8Array
   key: KeyPair
   hello: Hello
   /** A connection pairing left open and welcomed, which the link takes as its first. */
-  adopt?: { opened: Opened; welcome: Welcome; later: Later[] }
+  adopt?: { opened: Opened; welcome: Welcome; later: Later[]; route?: LinkRoute }
   /** Whether the page is in front; a link in the back waits to reconnect until it is. */
   visible?: () => boolean
   retryDelay?: (failures: number) => number
@@ -249,8 +271,21 @@ export class HostLink {
   private readonly adminListeners = new Set<(event: HostAdminEvent) => void>()
   private readonly stateListeners = new Set<(state: LinkState) => void>()
   private readonly messageListeners = new Set<(message: Record<string, unknown>) => void>()
+  /** Each route's round trips and failures, which moving to the fastest goes by. */
+  private readonly times = new PathTimes()
+  /** Moving the session to another route, or taking it over on a connection kept aside. */
+  private taking = false
+  private comparing = false
+  private compareTimer: ReturnType<typeof setTimeout> | null = null
+  private compareAt = 0
+  /** The connection a move left, until its move is welcomed or it takes the session back. */
+  private aside: Aside | null = null
 
   constructor(private readonly options: HostLinkOptions) {}
+
+  private routes(): LinkRoute[] {
+    return this.options.routes?.() ?? [{ key: 'host', relay: false, dial: this.options.dial }]
+  }
 
   get state(): LinkState {
     return this.current
@@ -258,13 +293,23 @@ export class HostLink {
 
   start(): void {
     const adopted = this.options.adopt
-    if (adopted) this.welcomed(adopted.opened, adopted.welcome, adopted.later, false)
-    else void this.connect()
+    if (adopted) {
+      const route = adopted.route ?? this.routes()[0]!
+      this.welcomed(adopted.opened, adopted.welcome, adopted.later, false, route)
+    } else void this.connect()
   }
 
-  /** Tries at once, as when the page comes to the front or the network comes back. */
+  /**
+   * Tries at once, as when the page comes to the front or the network changed; connected, it
+   * pings the host, so a connection that went is noticed soon, and compares the routes again.
+   */
   wake(): void {
-    if (this.stopped || this.session || this.connecting) return
+    if (this.stopped || this.connecting || this.taking) return
+    const session = this.session
+    if (session) {
+      session.keepalive?.pingNow()
+      return this.compareSoon(0)
+    }
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     void this.connect()
@@ -273,9 +318,12 @@ export class HostLink {
   stop(): void {
     this.stopped = true
     if (this.timer) clearTimeout(this.timer)
+    if (this.compareTimer) clearTimeout(this.compareTimer)
     this.acks.pause()
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.session?.channel.close()
+    this.aside?.close()
+    this.aside = null
   }
 
   /** How often the host may send patches, in milliseconds; 0 as they come. */
@@ -397,18 +445,19 @@ export class HostLink {
   }
 
   private async connect(): Promise<void> {
-    if (this.stopped || this.session || this.connecting) return
+    if (this.stopped || this.session || this.connecting || this.taking) return
     this.connecting = true
     let opened: Opened
+    let route: LinkRoute
     const resume = this.resumeToken
       ? { token: this.resumeToken, received: this.acks.received }
       : null
     try {
-      opened = await openChannel(this.options.dial, {
-        hostKey: this.options.hostKey,
-        key: this.options.key,
-        hello: resume ? { ...this.options.hello, resume } : this.options.hello,
-      })
+      ;({ opened, route } = await this.race(this.routes()))
+      // Said on the winner alone, so a losing route never spends the token.
+      void opened.channel
+        .send(resume ? { ...this.options.hello, resume } : this.options.hello)
+        .catch(() => opened.channel.close())
     } catch (error) {
       this.connecting = false
       // The host took the WebSocket and dropped the handshake: it may not know this key now.
@@ -419,10 +468,11 @@ export class HostLink {
       return this.retry()
     }
     this.drops = 0
+    this.times.sample(route.key, opened.channel.handshakeMs)
     const answer = await awaitWelcome(opened, WELCOME_TIMEOUT_MS)
     this.connecting = false
     if ('welcome' in answer) {
-      return this.welcomed(opened, answer.welcome, answer.later, resume !== null)
+      return this.welcomed(opened, answer.welcome, answer.later, resume !== null, route)
     }
     const reason = answer.closing
     if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
@@ -456,12 +506,28 @@ export class HostLink {
   }
 
   /** `askedResume`: the hello named the last session, which the host may have kept. */
-  private welcomed(opened: Opened, welcome: Welcome, later: Later[], askedResume: boolean): void {
-    const session: Session = { ...opened, welcome, closing: null, keepalive: null }
+  private welcomed(
+    opened: Opened,
+    welcome: Welcome,
+    later: Later[],
+    askedResume: boolean,
+    route: LinkRoute,
+  ): void {
+    const session: Session = {
+      ...opened,
+      route,
+      welcome,
+      closing: null,
+      keepalive: null,
+      pingedAt: null,
+    }
     if (welcome.protocol >= KEEPALIVE_VERSION) {
       session.keepalive = new Keepalive({
         ...(this.options.keepalive ?? DEVICE_KEEPALIVE),
-        ping: () => void session.channel.send({ type: 'ping' } satisfies Ping).catch(() => {}),
+        ping: () => {
+          session.pingedAt = Date.now()
+          void session.channel.send({ type: 'ping' } satisfies Ping).catch(() => {})
+        },
         // Ended now as if the network went, so the link reconnects and resumes the session: a
         // stopped host never finishes the close.
         silent: () => {
@@ -473,6 +539,9 @@ export class HostLink {
     const resumed = askedResume && welcome.resumed !== undefined
     if (this.keptTimer) clearTimeout(this.keptTimer)
     this.keptTimer = null
+    // A move's welcome: the connection it left goes, the host having dropped it too.
+    this.aside?.close()
+    this.aside = null
     if (!resumed) {
       // The host has none of the last session, so what was in flight on it is lost.
       this.lose(linkError('host_restarted', 'The connection to the host ended'))
@@ -519,11 +588,17 @@ export class HostLink {
     if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
       return this.end(reason)
     }
+    if (reason === null) this.times.failed(session.route.key)
+    this.dropped(reason, resumable(session))
+  }
+
+  /** The session's connection went: it is resumed when the host keeps it, or begun anew. */
+  private dropped(reason: ClosingReason | null, resumes: boolean): void {
     // A host that says why ends the session; one that just went keeps it for a while.
-    if (reason !== null || !resumable(session)) this.resumeToken = null
+    if (reason !== null || !resumes) this.resumeToken = null
     if (this.resumeToken === null) {
       this.lose(linkError('host_restarted', 'The connection to the host ended'))
-    } else {
+    } else if (!this.keptTimer) {
       this.keptUntil = Date.now() + RESUME_MS
       this.keptTimer = setTimeout(() => {
         this.keptTimer = null
@@ -531,6 +606,164 @@ export class HostLink {
       }, RESUME_MS)
     }
     this.retry(reason)
+  }
+
+  /** Compares the routes after `delay`, once, however often it is asked meanwhile, the soonest. */
+  private compareSoon(delay: number): void {
+    if (this.stopped || (this.compareTimer && this.compareAt <= Date.now() + delay)) return
+    if (this.compareTimer) clearTimeout(this.compareTimer)
+    this.compareAt = Date.now() + delay
+    this.compareTimer = setTimeout(() => {
+      this.compareTimer = null
+      void this.compare()
+    }, delay)
+  }
+
+  /**
+   * Opens the other routes to a finished handshake each, for their round trips, and moves the
+   * session to the best when it is clearly faster than the one it is on.
+   */
+  private async compare(): Promise<void> {
+    const session = this.session
+    if (this.stopped || this.connecting || this.taking || this.comparing || !session) return
+    if (!resumable(session) || this.resumeToken === null) return
+    const others = this.routes().filter((route) => route.key !== session.route.key)
+    if (others.length === 0) return
+    this.comparing = true
+    const probed = await Promise.all(others.map((route) => this.probe(route)))
+    this.comparing = false
+    const opened = probed.flatMap(({ opened, ...route }) => (opened ? [{ ...route, opened }] : []))
+    for (const path of probed) {
+      if (path.opened) this.times.sample(path.key, path.opened.channel.handshakeMs)
+      else this.times.failed(path.key)
+    }
+    const current = { key: session.route.key, relay: session.route.relay }
+    const ranked: { key: string; relay: boolean }[] = rankPaths([current, ...opened], this.times)
+    const best = opened.find((path) => path === ranked[0])
+    const moving = this.session === session && !this.taking && !this.stopped
+    const target = moving && best && shouldMove(current, best, this.times, false) ? best : null
+    for (const path of opened) if (path !== target) path.opened.channel.close()
+    if (target) await this.move(target.opened, target)
+  }
+
+  /** A route's connection past its handshake, without a hello, or null within the probe's time. */
+  private async probe(route: LinkRoute): Promise<LinkRoute & { opened: Opened | null }> {
+    let transport: Transport | null = null
+    let late = false
+    const timer = setTimeout(() => {
+      late = true
+      transport?.close()
+    }, PROBE_TIMEOUT_MS)
+    try {
+      transport = await route.dial()
+      if (late) throw new Error('Too late')
+      const { opened } = await startDeviceChannel({
+        transport,
+        hostKey: this.options.hostKey,
+        key: this.options.key,
+        hello: null,
+      })
+      return { ...route, opened: { channel: await opened, transport } }
+    } catch {
+      transport?.close()
+      return { ...route, opened: null }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /** Every route at once; the first to finish its handshake wins and the others are closed. */
+  private race(routes: LinkRoute[]): Promise<{ opened: Opened; route: LinkRoute }> {
+    return new Promise((resolve, reject) => {
+      let failed = 0
+      let dropped = false
+      let done = false
+      for (const route of routes) {
+        void (async () => {
+          let transport: Transport | null = null
+          try {
+            transport = await route.dial()
+            if (done) return transport.close()
+            const { opened } = await startDeviceChannel({
+              transport,
+              hostKey: this.options.hostKey,
+              key: this.options.key,
+              hello: null,
+            })
+            const channel = await opened
+            if (done) return channel.close()
+            done = true
+            resolve({ opened: { channel, transport }, route })
+          } catch (error) {
+            transport?.close()
+            if (error instanceof HandshakeDropped) dropped = true
+            if (++failed === routes.length && !done) {
+              done = true
+              reject(dropped ? new HandshakeDropped() : error)
+            }
+          }
+        })()
+      }
+      if (routes.length === 0) reject(new Error('No route to the host'))
+    })
+  }
+
+  /**
+   * Moves the session to a connection past its handshake. From the hello on, the old connection
+   * carries nothing of the session: the host sends again on the new one what came after what was
+   * counted here, and says which requests it read. A move that fails takes the session back on
+   * the old connection.
+   */
+  private async move(opened: Opened, route: LinkRoute): Promise<void> {
+    const from = this.session
+    const token = this.resumeToken
+    if (!from || token === null) return opened.channel.close()
+    this.taking = true
+    from.keepalive?.stop()
+    this.session = null
+    this.acks.pause()
+    this.aside = new AsideConnection(
+      from.channel,
+      { route: from.route, transport: from.transport },
+      { ...(this.options.keepalive ? { timings: this.options.keepalive } : {}) },
+    )
+    void opened.channel
+      .send({ ...this.options.hello, resume: { token, received: this.acks.received } })
+      .catch(() => opened.channel.close())
+    const answer = await awaitWelcome(opened, WELCOME_TIMEOUT_MS)
+    this.taking = false
+    if (this.stopped) return opened.channel.close()
+    if ('welcome' in answer) return this.welcomed(opened, answer.welcome, answer.later, true, route)
+    this.times.failed(route.key)
+    this.fallBack(answer.closing)
+  }
+
+  /** A try to take the session over failed: the connection a move left takes it back, if open. */
+  private fallBack(reason: ClosingReason | null): void {
+    const aside = this.aside
+    this.aside = null
+    if (reason === null && aside?.open && this.resumeToken !== null) return void this.promote(aside)
+    aside?.close()
+    if (reason === 'removed' || reason === 'update_client' || reason === 'update_host') {
+      return this.end(reason)
+    }
+    this.dropped(reason, true)
+  }
+
+  /** Takes the session over on a connection kept aside; nothing shows a drop meanwhile. */
+  private async promote(aside: Aside): Promise<void> {
+    this.taking = true
+    const opened: Opened = {
+      channel: aside.promote(this.acks.received),
+      transport: aside.via.transport,
+    }
+    const answer = await awaitWelcome(opened, PROMOTE_TIMEOUT_MS)
+    this.taking = false
+    if (this.stopped) return opened.channel.close()
+    if ('welcome' in answer) {
+      return this.welcomed(opened, answer.welcome, answer.later, true, aside.via.route)
+    }
+    this.fallBack(answer.closing)
   }
 
   /**
@@ -621,6 +854,13 @@ export class HostLink {
       session.keepalive.heard()
       const own = keepaliveMessage(value)
       if (own === 'ping') void session.channel.send({ type: 'pong' } satisfies Pong).catch(() => {})
+      if (own === 'pong' && session.pingedAt !== null) {
+        // A ping far slower than before: another route may do better now.
+        if (this.times.sample(session.route.key, Date.now() - session.pingedAt)) {
+          this.compareSoon(0)
+        }
+        session.pingedAt = null
+      }
       if (own) return
     }
     const message = value as Record<string, unknown>

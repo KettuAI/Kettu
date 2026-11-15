@@ -23,6 +23,8 @@ export interface DeviceChannelOptions {
 export interface DeviceChannel {
   /** The finished handshake's hash, which both sides share. */
   readonly handshakeHash: Uint8Array
+  /** Milliseconds from the handshake's first message out to the host's answer in: a round trip. */
+  readonly handshakeMs: number
   /** Each JSON message from the host, in order; the ones before a listener is set wait for it. */
   onMessage(listener: (value: unknown) => void): void
   /** Each part of the host's byte streams, in order with the JSON; dropped without a listener. */
@@ -70,6 +72,8 @@ export async function startDeviceChannel(
   let settle!: { resolve: (channel: DeviceChannel) => void; reject: (error: unknown) => void }
   let settled = false
   const opened = new Promise<DeviceChannel>((resolve, reject) => (settle = { resolve, reject }))
+  let sentAt = 0
+  let handshakeMs = 0
   // A refusal can come before the caller takes `opened`; it still hears it there.
   opened.catch(() => {})
   const fail = (error: unknown): void => {
@@ -82,6 +86,9 @@ export async function startDeviceChannel(
   const api: DeviceChannel = {
     get handshakeHash() {
       return handshake.handshakeHash
+    },
+    get handshakeMs() {
+      return handshakeMs
     },
     onMessage: (next) => {
       listener = next
@@ -117,6 +124,7 @@ export async function startDeviceChannel(
       if (settled) return
       try {
         await handshake.readMessage(message)
+        handshakeMs = Date.now() - sentAt
         channel = new Channel(await handshake.split(), {
           write: (frame) => transport.send(frame),
           message: (received) => {
@@ -135,7 +143,9 @@ export async function startDeviceChannel(
     })
   })
   try {
-    transport.send(await handshake.writeMessage())
+    const first = await handshake.writeMessage()
+    sentAt = Date.now()
+    transport.send(first)
   } catch (error) {
     fail(error)
   }

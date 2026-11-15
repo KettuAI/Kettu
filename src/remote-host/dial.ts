@@ -1,5 +1,6 @@
 // Reaching a host at every address it may be at and through the relay, all at once: the first
-// handshake to finish wins and the other connections are closed.
+// handshake to finish wins and the other connections are closed. Only the winner says hello, so a
+// losing route never spends the resume token the hello carries.
 
 import { HandshakeDropped, type DeviceChannel } from '@shared/remote/device-channel'
 import type { RelayProblem } from '@shared/remote/hosts'
@@ -39,8 +40,10 @@ export interface DialOptions {
   connect: Connect
   /** The relay, tried alongside the addresses; absent for a host without one. */
   relay?: RelayRoute | null
-  /** Starts the handshake on a connection, as `startDeviceChannel` does. */
+  /** Starts the handshake on a connection without a hello, as `startDeviceChannel` does. */
   start(transport: Transport): Promise<{ opened: Promise<DeviceChannel> }>
+  /** The first message on the winning connection alone; none when absent. */
+  hello?: unknown
   timeoutMs: number
   signal?: AbortSignal
 }
@@ -51,7 +54,7 @@ export interface DialOptions {
  * host's, while the host may still answer at another.
  */
 export function dial(options: DialOptions): Promise<DialResult> {
-  const { addresses, connect, relay, start, timeoutMs, signal } = options
+  const { addresses, connect, relay, start, hello, timeoutMs, signal } = options
   return new Promise((resolve) => {
     const connecting = new AbortController()
     const waiting = new Set<Transport>()
@@ -95,6 +98,8 @@ export function dial(options: DialOptions): Promise<DialResult> {
         const channel = await opened
         waiting.delete(transport)
         if (done) return channel.close()
+        // A failed send ends the connection, which its taker then hears.
+        if (hello !== undefined) channel.send(hello).catch(() => channel.close())
         finish({ kind: 'open', channel, via })
       } catch (error) {
         waiting.delete(transport)
@@ -121,4 +126,84 @@ export function dial(options: DialOptions): Promise<DialResult> {
       })
     }
   })
+}
+
+/** A path to try beside the one a session is on; `key` names it for its failures. */
+export interface Candidate {
+  key: string
+  open(signal: AbortSignal): Promise<{ transport: Transport; via: Via }>
+}
+
+/** A candidate's outcome: its channel past the handshake and its path, or nulls when it failed. */
+export interface Probed {
+  key: string
+  via: Via | null
+  channel: DeviceChannel | null
+}
+
+/**
+ * Opens every candidate at once and finishes its handshake without a hello, for its round trip.
+ * Settles once each opened or failed, or after `timeoutMs`, which fails the rest; the channels are
+ * the caller's to move to or close.
+ */
+export function probe(
+  candidates: readonly Candidate[],
+  start: DialOptions['start'],
+  timeoutMs: number,
+): Promise<Probed[]> {
+  return new Promise((resolve) => {
+    const aborting = new AbortController()
+    const results = new Map<Candidate, { via: Via; channel: DeviceChannel } | null>()
+    const waiting = new Set<Transport>()
+    let done = false
+    const finish = (): void => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      aborting.abort(new Error('Probing is over'))
+      for (const transport of waiting) transport.close()
+      resolve(
+        candidates.map((candidate) => {
+          const opened = results.get(candidate)
+          return opened
+            ? { key: candidate.key, ...opened }
+            : { key: candidate.key, via: null, channel: null }
+        }),
+      )
+    }
+    const settle = (candidate: Candidate, opened: { via: Via; channel: DeviceChannel } | null) => {
+      if (done) return void opened?.channel.close()
+      results.set(candidate, opened)
+      if (results.size === candidates.length) finish()
+    }
+    const timer = setTimeout(finish, timeoutMs)
+    if (candidates.length === 0) return finish()
+    for (const candidate of candidates) {
+      void (async () => {
+        let transport: Transport
+        let via: Via
+        try {
+          ;({ transport, via } = await candidate.open(aborting.signal))
+        } catch {
+          return settle(candidate, null)
+        }
+        if (done) return transport.close()
+        waiting.add(transport)
+        try {
+          const channel = await (await start(transport)).opened
+          waiting.delete(transport)
+          settle(candidate, { via, channel })
+        } catch {
+          waiting.delete(transport)
+          transport.close()
+          settle(candidate, null)
+        }
+      })()
+    }
+  })
+}
+
+/** The key that names a path when ranking. */
+export function pathKey(via: Via): string {
+  return 'relay' in via ? `relay ${via.relay}` : `direct ${via.address.host}:${via.address.port}`
 }

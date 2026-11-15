@@ -11,7 +11,7 @@ import {
   type Welcome,
 } from '@shared/remote/protocol'
 import { webApi } from './api'
-import { hello, HostLink, type Dial } from '@shared/remote/link'
+import { hello, HostLink, type Dial, type LinkRoute } from '@shared/remote/link'
 import { startMediaWorker } from './media'
 import mediaWorker from './media-worker.ts?worker&url'
 import type { Paired } from '@shared/remote/pair'
@@ -19,6 +19,8 @@ import type { WebSettings } from './settings'
 
 export interface LaunchOptions {
   dial: Dial
+  /** The routes to the host the link races and moves between; `dial` alone when absent. */
+  routes?: () => LinkRoute[]
   key: KeyPair
   hostKey: Uint8Array
   /** The names this browser kept from the last welcome, shown until the next one. */
@@ -46,6 +48,9 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
   let known = options.known
   const link = new HostLink({
     dial: options.dial,
+    routes:
+      options.routes ??
+      (() => [{ key: 'host', relay: options.address === null, dial: options.dial }]),
     hostKey: options.hostKey,
     key: options.key,
     hello: hello(options.client),
@@ -71,6 +76,9 @@ export async function launchApp(options: LaunchOptions, root: HTMLElement): Prom
     if (document.visibilityState === 'visible') link.wake()
   })
   window.addEventListener('online', () => link.wake())
+  // Another network, as Wi-Fi joined or left: the routes are compared again.
+  const connection = (navigator as Navigator & { connection?: EventTarget }).connection
+  connection?.addEventListener('change', () => link.wake())
 
   const remember = (next: { name: string; deviceName: string }, welcome: Welcome | null): void => {
     if (!welcome && next.name === known.name && next.deviceName === known.deviceName) return
