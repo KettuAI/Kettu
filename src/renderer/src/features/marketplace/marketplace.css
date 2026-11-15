@@ -110,6 +110,18 @@
 .ui-as-int-add[data-state='busy'] {
   cursor: progress;
 }
+/* Installed: a green check on the success tint in place of Integrations' dark tile, which
+   outweighed the Install and Connect beside it. */
+.k-mkt-scroll .ui-as-int-add[data-state='on'] {
+  background: var(--success-tint);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 22%, transparent);
+  color: var(--success);
+}
+.k-mkt-scroll .ui-as-int-add[data-state='on']:hover {
+  background: var(--success-tint);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--success) 40%, transparent);
+  color: var(--success);
+}
 /* Doubled, to outrank Integrations' gray badge whichever sheet comes later. */
 .ui-as-int-row__badge.k-mkt-official {
   color: var(--accent);
