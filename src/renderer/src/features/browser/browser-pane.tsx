@@ -243,7 +243,8 @@ export function BrowserPane({ panel, maximized }: { panel: string; maximized: bo
         )}
       </PaneHead>
       <div className="kp-body">
-        {url && state ? (
+        {/* A page without an address, such as a popup still at about:blank, is on screen too. */}
+        {state && (url || state.page) ? (
           <>
             <div className="kp-addr-row">
               <PanelButton

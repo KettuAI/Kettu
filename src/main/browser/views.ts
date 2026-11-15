@@ -34,7 +34,7 @@ import { MAX_LIVE_TABS, TabStrip, tabsToRelease } from './tabs'
 
 const log = createLogger('browser')
 
-/** What a page gets before the pane reports its bounds. */
+/** The size a page renders at, off screen, until the pane reports its frame. */
 export const DEFAULT_BOUNDS: BrowserBounds = { x: 0, y: 0, width: 1280, height: 800, radius: 0 }
 
 /** How long a navigation an agent asked for may take. */
@@ -87,6 +87,8 @@ interface Browser {
   sessionId: string
   strip: TabStrip
   bounds: BrowserBounds
+  /** Whether the pane reported a frame; until then `bounds` is a default and no page shows. */
+  framed: boolean
   shown: boolean
   frozen: boolean
   /** The session's agent, as the pane names it, for the overlay's pill. */
@@ -329,8 +331,14 @@ export class BrowserViews {
 
   setBounds(sessionId: string, bounds: BrowserBounds): void {
     const browser = this.browser(sessionId)
+    const first = !browser.framed
     browser.bounds = bounds
+    browser.framed = true
     for (const tab of this.tabsOf(browser)) this.place(tab)
+    if (first) {
+      this.present(browser)
+      this.syncOverlay()
+    }
   }
 
   /** The user's own navigation, in the selected tab, or a new one when the browser has none. */
@@ -572,6 +580,7 @@ export class BrowserViews {
         sessionId,
         strip: new TabStrip(),
         bounds: DEFAULT_BOUNDS,
+        framed: false,
         shown: false,
         frozen: false,
         agent: null,
@@ -649,7 +658,7 @@ export class BrowserViews {
    */
   private present(browser: Browser): void {
     const selected = browser.strip.selected
-    const visible = browser.shown && !browser.frozen
+    const visible = browser.shown && !browser.frozen && browser.framed
     for (const tab of this.tabsOf(browser)) {
       const on = visible && tab.id === selected
       if (on) {
@@ -818,7 +827,13 @@ export class BrowserViews {
   /** Whether the pane shows this tab now. */
   private isShown(tab: Tab): boolean {
     const browser = this.browsers.get(tab.sessionId)
-    return !!browser && browser.shown && !browser.frozen && browser.strip.selected === tab.id
+    return (
+      !!browser &&
+      browser.shown &&
+      !browser.frozen &&
+      browser.framed &&
+      browser.strip.selected === tab.id
+    )
   }
 
   /** Makes the tab's page, adopting a popup's contents that Chromium made for `window.open`. */
@@ -1259,6 +1274,7 @@ export class BrowserViews {
     const window = this.deps.window()
     const contents = this.contentsOf(tab)
     if (!tab.view || !contents || !window || window.isDestroyed()) return null
+    if (!this.browsers.get(tab.sessionId)?.framed) return null
     const { x, y, width, height, radius } = this.boundsOf(tab)
     return {
       sessionId: tab.sessionId,
@@ -1368,6 +1384,7 @@ export class BrowserViews {
       selected: browser.strip.selected,
       agentTab: browser.strip.agent,
       url: selected ? this.urlOf(selected) : null,
+      page: contents !== null,
       title: selected?.lastTitle ?? null,
       loading: selected?.loading ?? false,
       canGoBack: contents?.navigationHistory.canGoBack() ?? false,

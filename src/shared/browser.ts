@@ -84,6 +84,8 @@ export interface BrowserState {
   /** The tab the agent works in; null until it uses one. */
   agentTab: string | null
   url: string | null
+  /** Whether the selected tab has a page, which main shows even before it has an address. */
+  page: boolean
   title: string | null
   loading: boolean
   canGoBack: boolean
