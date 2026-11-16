@@ -210,7 +210,10 @@
     "notOnDisk": "It isn't a file on disk, so it can't be attached.",
     "theAgent": "The agent",
     "folderOtherHost": "A folder on this computer can't go to a session on another host. Attach the files in it instead.",
-    "tooLargeOtherHost": "Over {{limit}}, too large to send to another host."
+    "tooLargeOtherHost": "Over {{limit}}, too large to send to another host.",
+    "sideChat": "Side chat",
+    "btw": "Side chat: ask without interrupting the turn or adding to the conversation",
+    "sideNoAttachments": "A side question takes no attachments"
   },
   "history": {
     "label": "History"

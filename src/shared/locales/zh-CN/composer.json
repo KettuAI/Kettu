@@ -202,7 +202,10 @@
     "notOnDisk": "它不是磁盘上的文件，无法添加。",
     "theAgent": "Agent",
     "folderOtherHost": "这台电脑上的文件夹不能发到另一台主机上的会话，请改为添加里面的文件。",
-    "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台主机。"
+    "tooLargeOtherHost": "超过 {{limit}}，太大，无法发到另一台主机。",
+    "sideChat": "侧聊",
+    "btw": "侧聊：问一句，不打断这一轮，也不进对话",
+    "sideNoAttachments": "侧聊不带附件"
   },
   "history": {
     "label": "历史"

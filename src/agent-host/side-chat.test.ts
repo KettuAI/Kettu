@@ -83,7 +83,10 @@ describe('the stored side chat', () => {
         { ...entry('bad'), status: 'thinking' },
         { ...entry('bad2'), question: 3 },
         ...many,
-        entry('live', { status: 'answering', steps: [{ kind: 'read', title: 'a.ts' }, { x: 1 }] }),
+        {
+          ...entry('live', { status: 'answering' }),
+          steps: [{ kind: 'read', title: 'a.ts' }, { x: 1 }],
+        },
       ],
     })
     expect(parsed?.answerAgent).toBe('codex')

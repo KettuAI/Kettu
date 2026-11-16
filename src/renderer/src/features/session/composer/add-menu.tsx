@@ -1,6 +1,7 @@
 import {
   AtIcon,
   Attachment01Icon,
+  BubbleChatQuestionIcon,
   Camera01Icon,
   CommandLineIcon,
   FolderAddIcon,
@@ -24,10 +25,13 @@ export function useAddMenu({
   box,
   agentName,
   commands,
+  onSideChat,
 }: {
   box: PromptBoxState
   agentName: string
   commands: readonly SlashCommand[]
+  /** Opens the session's side chat; absent where there is none. */
+  onSideChat?: () => void
 }): { sections: ComposerAddSection[]; onAttach: (id: string) => void; disabled?: string } {
   const { t } = useTranslation('composer')
   const { disabled, full, remote, source, editor, update, sessionId } = box
@@ -109,6 +113,20 @@ export function useAddMenu({
           : []),
       ],
     },
+    ...(onSideChat
+      ? [
+          {
+            rows: [
+              {
+                id: 'side-chat',
+                label: t('attachments.sideChat'),
+                icon: <Glyph icon={BubbleChatQuestionIcon} />,
+                shortcut: formatShortcut('Mod+J'),
+              },
+            ],
+          },
+        ]
+      : []),
   ]
   const startMention = () => {
     const current = editor.current?.text() ?? source.text
@@ -121,6 +139,7 @@ export function useAddMenu({
     else if (id === 'screenshot') box.screenshot()
     else if (id === 'mention') startMention()
     else if (id === 'commands') update('/')
+    else if (id === 'side-chat') onSideChat?.()
     // The menu hands the focus back to its button; the text takes it after that.
     if (id === 'mention' || id === 'commands') requestAnimationFrame(() => box.focus())
   }

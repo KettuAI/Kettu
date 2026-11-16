@@ -24,7 +24,8 @@ import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
-import { openAgentSettings, shownPanel, useViewStore } from '@renderer/stores/view'
+import { openAgentSettings, shownPanel, toggleSideChat, useViewStore } from '@renderer/stores/view'
+import { useNarrow } from '@renderer/features/side-chat/use-narrow'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
 import { Composer } from './composer/composer'
@@ -51,6 +52,7 @@ import { sessionFolder } from '@renderer/lib/session-folder'
 import { WorktreeGoneComposer, WorktreeState } from './worktree/worktree-state'
 
 const BoardRail = lazy(() => import('@renderer/features/board/board-pane'))
+const SideChatRail = lazy(() => import('@renderer/features/side-chat/side-chat-rail'))
 
 /** A session: its thread, and the composer or the subagent bar under it. */
 export function SessionView({ sessionId }: { sessionId: string }) {
@@ -88,6 +90,11 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   const lit = computer && session?.computer?.control !== 'you' && !paneShown
   // The board sits at the right of the thread and the composer; a sub-agent's page has none.
   const board = useViewStore((s) => !!s.boardOpen[sessionId]) && summary.origin !== 'subagent'
+  // The side chat takes the board's place; a window too narrow for both gets it over the thread.
+  const sideChat =
+    useViewStore((s) => !!s.sideChatOpen[sessionId]) && summary.origin !== 'subagent' && !board
+  const row = useRef<HTMLDivElement>(null)
+  const narrow = useNarrow(row, sideChat)
 
   useEffect(() => {
     preloadRenderers()
@@ -189,7 +196,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
   return (
     <div className="ks-session relative flex h-full min-h-0 flex-col" {...drop.handlers}>
       <SessionHeader summary={summary} session={session} />
-      <div className="flex min-h-0 flex-1">
+      <div ref={row} className="relative flex min-h-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <ProjectPathContext value={folder}>
             {/* The drop zone covers the thread and leaves the composer in view. */}
@@ -330,6 +337,23 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
         {board && (
           <Suspense fallback={null}>
             <BoardRail sessionId={sessionId} />
+          </Suspense>
+        )}
+        {sideChat && narrow && (
+          <div
+            aria-hidden
+            className="absolute inset-0 z-10"
+            onClick={() => toggleSideChat(sessionId, false)}
+          />
+        )}
+        {sideChat && (
+          <Suspense fallback={null}>
+            <SideChatRail
+              sessionId={sessionId}
+              agentId={summary.agentId}
+              hostId={hostId}
+              overlay={narrow}
+            />
           </Suspense>
         )}
       </div>

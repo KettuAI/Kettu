@@ -32,6 +32,7 @@ import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { showSending, useThreadsStore } from '@renderer/stores/threads'
 import { useViewStore } from '@renderer/stores/view'
+import { askSide, openSideChat, sideQuestionOf } from '@renderer/stores/side-chat'
 import { endedOnRejection } from '../turn-phase'
 import { TrayStyles } from './affect-styles'
 import { attachmentContent, attachmentsBlock, type AttachmentsBlock } from './attachments'
@@ -204,7 +205,39 @@ export function Composer({
         : (blocked?.message ?? null)
   const queueKey = sendKey === 'enter' ? 'Enter' : 'Mod+Enter'
   const steerKey = sendKey === 'enter' ? 'Mod+Enter' : 'Mod+Shift+Enter'
-  const add = useAddMenu({ box, agentName, commands: session.commands })
+  // `/btw` is Kettu's own: what follows it is asked in the side chat, beside the turn, never queued.
+  const sideOn = session.sideChat !== undefined
+  const commands = useMemo(
+    () =>
+      sideOn
+        ? [
+            { name: 'btw', description: t('attachments.btw') },
+            ...session.commands.filter((command) => command.name !== 'btw'),
+          ]
+        : session.commands,
+    [sideOn, session.commands, t],
+  )
+  const askBeside = (): boolean => {
+    if (!sideOn) return false
+    const question = sideQuestionOf(box.editor.current?.text() ?? box.source.text)
+    if (question === null) return false
+    if (attachments.length > 0) {
+      setError(t('attachments.sideNoAttachments'))
+      return true
+    }
+    const taken = box.take()
+    openSideChat(sessionId)
+    if (question !== '') {
+      askSide(sessionId, question, null).catch((reason: unknown) => box.restore(taken)(reason))
+    }
+    return true
+  }
+  const add = useAddMenu({
+    box,
+    agentName,
+    commands,
+    ...(sideOn ? { onSideChat: () => openSideChat(sessionId) } : {}),
+  })
 
   // An agent that is gone takes no settings; the one picked to carry on shows its own.
   const config = pendingConfig ?? (mustSwitch ? [] : session.config)
@@ -249,6 +282,7 @@ export function Composer({
   // Both go through the host's queue, which sends at once when the session is free; a message
   // that hands the session to another agent goes as that agent's first turn.
   const send = (now = { canSend, canQueue }) => {
+    if (askBeside()) return
     if (pending && now.canSend) handOver()
     else if (now.canSend || now.canQueue) queue(false, now.canSend)
   }
@@ -416,6 +450,10 @@ export function Composer({
       running &&
       steering &&
       (sendKey === 'enter' ? isMod(event) && !event.shiftKey : isMod(event) && event.shiftKey)
+    if ((sends || steers) && askBeside()) {
+      event.preventDefault()
+      return
+    }
     if (steers) {
       event.preventDefault()
       if (now.canQueue) queue(true)
@@ -492,7 +530,7 @@ export function Composer({
             agentId={session.agentId}
             hostId={hostId}
             agentName={agentName}
-            commands={session.commands}
+            commands={commands}
             placeholder={placeholder}
             label={t('prompt.label', { agent: agentName })}
             size={{
