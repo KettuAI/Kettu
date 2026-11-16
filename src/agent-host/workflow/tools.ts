@@ -308,7 +308,6 @@ function workflowListing(entry: WorkflowEntry) {
     id: entry.id,
     name: entry.name,
     description: entry.workflow?.description ?? '',
-    official: entry.source === 'official',
     steps: (entry.workflow?.steps ?? []).map((step) => ({
       id: step.id,
       name: step.name,

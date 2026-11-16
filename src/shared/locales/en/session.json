@@ -595,6 +595,7 @@
         "unreadable": "Can't be read"
       },
       "findMore": "Find more workflows in the Marketplace…",
+      "addFromMarketplace": "Add a workflow from the Marketplace",
       "worktreeHint": "A task works in a worktree and on a branch of its own.",
       "worktreeNote": "A task works in its own worktree, on a new branch cut from <base>{{base}}</base>. Kettu names it when you send.",
       "textOnly": "A task takes text only: remove the attachments to send it.",

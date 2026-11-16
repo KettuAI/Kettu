@@ -319,6 +319,7 @@ function itemOf(listing: MarketListing): CommunityItem {
     ...(listing.harness ? { harness: listing.harness } : {}),
     description: listing.description,
     visibility: listing.visibility,
+    official: listing.official,
     version: listing.version,
     installs: listing.visibility === 'private' ? null : listing.installs,
     updatedAt: listing.updatedAt,
@@ -335,6 +336,7 @@ function mineItem(listing: MineListing): CommunityItem {
     ...(listing.harness ? { harness: listing.harness } : {}),
     description: listing.description,
     visibility: listing.visibility,
+    official: listing.official,
     version: listing.current,
     installs: null,
     updatedAt: listing.updatedAt,
@@ -567,6 +569,7 @@ export class MarketCommunityService {
       version: listing.version,
       handle: listing.handle,
       slug: listing.slug,
+      official: listing.official,
     })
     void this.count(listing.id, listing.version, updated ? 'update' : 'install')
     return entry

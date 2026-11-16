@@ -1,4 +1,4 @@
-// Workflows in the Marketplace's directory: their rows, the workflow tab's four groups, their section on
+// Workflows in the Marketplace's directory: their rows, the workflow tab's three groups, their section on
 // Installed, and adding one from a GitHub file or a .yaml file. They come from the host's workflow
 // library, not the catalogs, but for the Community group's listings not added yet.
 
@@ -40,7 +40,7 @@ import {
   useWorkflowStanding,
   useWorkflows,
 } from './workflow-actions'
-import { InstalledCheck, ItemRow, KindTag, QuietNote, SkeletonRows } from './rows'
+import { InstalledCheck, ItemRow, KettuMark, KindTag, QuietNote, SkeletonRows } from './rows'
 import {
   flowLine,
   githubRepo,
@@ -57,24 +57,30 @@ import { workflowSubject } from './tile-art'
 import { PlainTile } from './tiles'
 
 /**
- * Who a workflow comes from, after its name: Kettu, a publisher of the Kettu Marketplace, a
- * repository's owner, a file, an agent or you.
+ * Who a workflow comes from, after its name: a publisher of the Kettu Marketplace, with the Kettu
+ * mark for Kettu's own, a repository's owner, a file, an agent or you.
  */
 export function WorkflowByline({ entry }: { entry: WorkflowEntry }) {
   const { t } = useTranslation('marketplace')
   const origin = entry.origin
+  if (origin?.kind === 'community' && origin.official) {
+    return (
+      <>
+        <span className="k-workflow-by">{origin.handle}</span>
+        <KettuMark />
+      </>
+    )
+  }
   const text =
-    entry.source === 'official'
-      ? t('workflow.by.kettu')
-      : origin?.kind === 'community'
-        ? t('workflow.by.community', { handle: origin.handle })
-        : origin?.kind === 'github'
-          ? t('workflow.by.github', { owner: githubRepo(origin.url)?.split('/')[0] ?? 'GitHub' })
-          : entry.source === 'file'
-            ? t('workflow.by.file')
-            : entry.source === 'agent'
-              ? t('workflow.by.agent')
-              : t('workflow.by.you')
+    origin?.kind === 'community'
+      ? t('workflow.by.community', { handle: origin.handle })
+      : origin?.kind === 'github'
+        ? t('workflow.by.github', { owner: githubRepo(origin.url)?.split('/')[0] ?? 'GitHub' })
+        : entry.source === 'file'
+          ? t('workflow.by.file')
+          : entry.source === 'agent'
+            ? t('workflow.by.agent')
+            : t('workflow.by.you')
   return <span className="k-workflow-by">{text}</span>
 }
 
@@ -184,10 +190,10 @@ export function WorkflowUpdateButton({
   )
 }
 
-const GROUPS: readonly WorkflowGroup[] = ['official', 'community', 'added', 'yours']
+const GROUPS: readonly WorkflowGroup[] = ['community', 'added', 'yours']
 
 /**
- * The workflow tab: what a workflow is, then Official, Community, Added from GitHub and Yours.
+ * The workflow tab: what a workflow is, then Community, Added from GitHub and Yours.
  * `community` is the Community group, drawn by the directory since it pages through the Kettu
  * Marketplace; null when it has nothing to show for the query.
  */
@@ -298,7 +304,7 @@ function AddWorkflowRow({ onAdd }: { onAdd: () => void }) {
   )
 }
 
-/** Installed's workflow section: every workflow the host keeps, Kettu's own with them. */
+/** Installed's workflow section: every workflow the host keeps. */
 export function InstalledWorkflows({ query, index }: { query: string; index: number }) {
   const { t } = useTranslation('marketplace')
   const scope = useHostScope()
@@ -318,6 +324,8 @@ export function InstalledWorkflows({ query, index }: { query: string; index: num
         <QuietNote action={<RetryButton onRetry={() => retryWorkflows(scope)} />}>
           {t('workflow.readFailed', { error })}
         </QuietNote>
+      ) : entries.length === 0 ? (
+        <p className="k-mkt-section-note">{t('installed.noWorkflows')}</p>
       ) : (
         <div className="ui-as-int-grid">
           {shown.map((entry) => (

@@ -613,7 +613,6 @@
     "notFound": "No such workflow",
     "changedSinceShown": "The workflow changed since you saw it. Look at it again before approving it.",
     "invalid": "The workflow has problems to fix first",
-    "officialKept": "Official workflows cannot be removed",
     "noSuchStep": "The workflow has no such step for an agent",
     "notGithub": "Give the address of a file on GitHub",
     "notFromGithub": "Only a workflow added from GitHub can be updated",
@@ -621,8 +620,7 @@
     "libraryFull": "Your workflow library is full",
     "downloadFailed": "Could not download the workflow: {{error}}",
     "downloadStatus": "GitHub answered {{status}} for the workflow",
-    "listingProblem": "The workflow has a problem, so nothing was installed: {{problem}}",
-    "officialName": "An official workflow is named {{name}}, so this one wasn’t installed."
+    "listingProblem": "The workflow has a problem, so nothing was installed: {{problem}}"
   },
   "tasks": {
     "notFound": "No such task",

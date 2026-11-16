@@ -610,7 +610,6 @@
     "notFound": "没有这个 工作流",
     "changedSinceShown": "这个 工作流 在你看过之后改了，请再看一遍再批准。",
     "invalid": "这个 工作流 有问题，要先改好",
-    "officialKept": "官方 工作流 不能删除",
     "noSuchStep": "这个 工作流 里没有这一步，或者这一步不是 Agent 做的",
     "notGithub": "请给出 GitHub 上一个文件的地址",
     "notFromGithub": "只有从 GitHub 加的 工作流 才能更新",
@@ -618,8 +617,7 @@
     "libraryFull": "你的 工作流 库满了",
     "downloadFailed": "没能下载这个 工作流：{{error}}",
     "downloadStatus": "GitHub 对这个 工作流 返回了 {{status}}",
-    "listingProblem": "这个工作流有问题，所以什么都没装：{{problem}}",
-    "officialName": "已经有一个官方工作流叫 {{name}}，所以没装这一个。"
+    "listingProblem": "这个工作流有问题，所以什么都没装：{{problem}}"
   },
   "tasks": {
     "notFound": "没有这个需求",

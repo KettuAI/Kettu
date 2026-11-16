@@ -10,7 +10,6 @@ import {
   BookOpen01Icon,
   BrowserIcon,
   Briefcase01Icon,
-  BugIcon,
   Calculator01Icon,
   CheckListIcon,
   CodeIcon,
@@ -20,10 +19,8 @@ import {
   Doc01Icon,
   FlashIcon,
   Flowchart01Icon,
-  GitForkIcon,
   GitPullRequestIcon,
   Image01Icon,
-  LicenseDraftIcon,
   Location01Icon,
   Mail01Icon,
   Message01Icon,
@@ -177,17 +174,8 @@ const CATEGORIES: [RegExp, IconSvgElement][] = [
   [/develop|engineer|code/, CodeIcon],
 ]
 
-// Kettu's own workflows, on the fox's tile.
-const OFFICIAL_WORKFLOWS: Record<string, IconSvgElement> = {
-  'feature-development': Flowchart01Icon,
-  'fix-a-bug': BugIcon,
-  'frontend-backend': GitForkIcon,
-  'technical-design': LicenseDraftIcon,
-}
-
 // The user's workflows, colored by how they came.
 const WORKFLOW_COLOR: Record<WorkflowSource, string> = {
-  official: 'var(--brand-kettu-tile)',
   github: 'var(--tile-sky)',
   file: 'var(--tile-slate)',
   agent: 'var(--tile-cyan)',
@@ -217,8 +205,7 @@ export function tileArt(subject: TileSubject): Art {
       : { type: 'glyph', icon: PlugSocketIcon, color: 'var(--tile-slate)' }
   }
   if (subject.kind === 'workflow') {
-    const icon = subject.source === 'official' ? OFFICIAL_WORKFLOWS[subject.id] : undefined
-    return { type: 'glyph', icon: icon ?? Flowchart01Icon, color: WORKFLOW_COLOR[subject.source] }
+    return { type: 'glyph', icon: Flowchart01Icon, color: WORKFLOW_COLOR[subject.source] }
   }
   if (subject.kind === 'skill') {
     const glyph = SKILLS[subject.name]

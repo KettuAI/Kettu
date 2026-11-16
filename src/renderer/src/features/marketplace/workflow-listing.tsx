@@ -47,7 +47,7 @@ import { ConfirmDialog } from './dialogs'
 import { homeShort } from './model'
 import { ExternalLink, ListingFrame, ListingSkeleton } from './parts'
 import { ReportDialog } from './report-dialog'
-import { KindTag, OfficialBadge } from './rows'
+import { KettuMark, KindTag } from './rows'
 import {
   awaitsApproval,
   backArrowsOf,
@@ -136,18 +136,13 @@ export function WorkflowListing({
             <KindTag kind="workflow" />
           </span>
           <span className="k-mkt-head__pub">
-            {entry.source === 'official' ? (
-              <>
-                {t('workflow.by.kettu')}
-                <OfficialBadge />
-                <span className="k-mkt-head__trust" aria-hidden>
-                  {t('listing.official')}
-                </span>
-              </>
-            ) : listed ? (
+            {listed ? (
               <>
                 {listed.handle}
-                <span className="k-mkt-head__trust">{t('community.trust')}</span>
+                {listed.official && <KettuMark />}
+                <span className="k-mkt-head__trust">
+                  {listed.official ? t('listing.official') : t('community.trust')}
+                </span>
               </>
             ) : (
               <>
@@ -235,7 +230,6 @@ function WorkflowMenu({
   const scope = useHostScope()
   const [removing, setRemoving] = useState(false)
   const [checking, setChecking] = useState(false)
-  if (entry.source === 'official') return null
   const check = async () => {
     setChecking(true)
     try {
@@ -548,17 +542,15 @@ function Facts({ entry }: { entry: WorkflowEntry }) {
   const origin = entry.origin
   const yours = workflow ? workflow.steps.filter(waitsForYou).length : 0
   const from =
-    entry.source === 'official'
-      ? t('workflow.from.official')
-      : origin?.kind === 'community'
-        ? t('community.source')
-        : origin?.kind === 'github'
-          ? (githubRepo(origin.url) ?? 'GitHub')
-          : origin?.kind === 'file'
-            ? origin.name
-            : origin?.kind === 'agent'
-              ? t('workflow.from.agent', { agent: agentName(origin.agentId) })
-              : t('workflow.from.you')
+    origin?.kind === 'community'
+      ? t('community.source')
+      : origin?.kind === 'github'
+        ? (githubRepo(origin.url) ?? 'GitHub')
+        : origin?.kind === 'file'
+          ? origin.name
+          : origin?.kind === 'agent'
+            ? t('workflow.from.agent', { agent: agentName(origin.agentId) })
+            : t('workflow.from.you')
   const backs = workflow ? workflow.steps.flatMap((step) => backArrowsOf(workflow, step)) : []
   return (
     <div className="k-mkt-facts k-workflow-facts">
@@ -1057,13 +1049,11 @@ function Side({ entry, workflow }: { entry: WorkflowEntry; workflow: Workflow | 
       <dl>
         <dt>{t('listing.side.publisher')}</dt>
         <dd>
-          {entry.source === 'official' ? (
+          {origin?.kind === 'community' ? (
             <>
-              {t('workflow.by.kettu')}
-              <OfficialBadge />
+              {origin.handle}
+              {origin.official && <KettuMark />}
             </>
-          ) : origin?.kind === 'community' ? (
-            origin.handle
           ) : origin?.kind === 'github' ? (
             (githubRepo(origin.url)?.split('/')[0] ?? 'GitHub')
           ) : (

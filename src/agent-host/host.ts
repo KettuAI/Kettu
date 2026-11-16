@@ -366,7 +366,7 @@ export class AgentHost {
   readonly sessions: SessionManager
   /** The saved routines and the lifecycle of their runs. */
   readonly routines: RoutinesManager
-  /** The workflows, official and the user's. */
+  /** The user's workflow library. */
   readonly workflowLibrary: WorkflowLibrary
   /** The tasks that run through workflows. */
   readonly tasks: TaskEngine

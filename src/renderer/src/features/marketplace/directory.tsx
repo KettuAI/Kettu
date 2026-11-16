@@ -364,7 +364,7 @@ function WorkflowTab({ query }: { query: string }) {
       <Notes tab="workflow" registry={null} query={query} />
       <WorkflowSections
         query={query}
-        community={section && <SectionView tab="workflow" section={section} index={1} />}
+        community={section && <SectionView tab="workflow" section={section} index={0} />}
       />
     </>
   )

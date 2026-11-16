@@ -34,6 +34,12 @@ export function OfficialBadge({ label }: { label?: string }) {
   )
 }
 
+/** The Kettu mark, after the name of the publisher Kettu publishes its own listings as. */
+export function KettuMark() {
+  const { t } = useTranslation('marketplace')
+  return <OfficialBadge label={t('community.kettu')} />
+}
+
 export type ItemKind = 'mcp' | 'plugin' | 'skill' | 'workflow'
 
 /** The kind of an item, and for a plugin the harness it belongs to. */
@@ -50,7 +56,7 @@ export function KindTag({ kind, harness }: { kind: ItemKind; harness?: PluginHar
 /**
  * A row: its tile, name and line open its listing, when it has one; `end` sits at the row's end.
  * `icon` stands in for the item's tile, such as an agent's mark. The official badge shows on the
- * listing only, since every row carrying one crowds the list.
+ * listing only, since every row carrying one crowds the list; the Kettu mark, rare, is the exception.
  */
 export function ItemRow({
   title,

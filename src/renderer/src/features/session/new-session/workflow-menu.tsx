@@ -33,6 +33,7 @@ const CHAT = ''
  * is, or a workflow of the host's library that runs the message as a task, one session per step.
  * A workflow waiting for approval, changed since, or unreadable is listed but cannot be chosen.
  * With a workflow chosen, the menu sets the task's pace and hovering shows the workflow's chart.
+ * With none in the library, the menu holds Chat and the way to add one from the Marketplace.
  */
 export function WorkflowMenu({
   hostId,
@@ -52,6 +53,7 @@ export function WorkflowMenu({
   const pace = useWorkflowChoice((s) => s.pace)
   const [menuOpen, setMenuOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const none = loaded && !error && entries.length === 0
   const chosen = workflowId ? entries.find((entry) => entry.id === workflowId) : undefined
   const usable =
     chosen?.workflow && workflowBlocked(chosen) === null
@@ -93,55 +95,59 @@ export function WorkflowMenu({
                 </span>
               </span>
             </DropdownMenuRadioItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>{t('newSession.workflow.heading')}</DropdownMenuLabel>
-              {!loaded ? (
-                <div className="flex flex-col gap-1 px-1 pb-1" aria-hidden>
-                  {[0, 1, 2].map((i) => (
-                    <Skeleton key={i} className="h-10 w-full rounded-lg" />
-                  ))}
-                </div>
-              ) : error && entries.length === 0 ? (
-                <p className="px-2 py-1.5 text-meta text-danger">{error}</p>
-              ) : (
-                entries.map((entry) => {
-                  const blocked = workflowBlocked(entry)
-                  return (
-                    <DropdownMenuRadioItem
-                      key={entry.id}
-                      value={entry.id}
-                      closeOnClick
-                      disabled={blocked !== null}
-                      className="py-1.5 data-disabled:opacity-100"
-                    >
-                      <MenuGlyph icon={WORKFLOW_ICON} />
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className={blocked ? 'truncate text-tertiary' : 'truncate'}>
-                          {workflowName(entry)}
-                        </span>
-                        <span className="truncate text-meta text-tertiary">
-                          {entry.workflow
-                            ? stepChain(entry.workflow)
-                            : t('newSession.workflow.unreadableHint')}
-                        </span>
-                      </span>
-                      {blocked && (
-                        <span
-                          className={
-                            blocked === 'unreadable'
-                              ? 'shrink-0 text-small text-danger'
-                              : 'shrink-0 text-small text-warning'
-                          }
+            {!none && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>{t('newSession.workflow.heading')}</DropdownMenuLabel>
+                  {!loaded ? (
+                    <div className="flex flex-col gap-1 px-1 pb-1" aria-hidden>
+                      {[0, 1, 2].map((i) => (
+                        <Skeleton key={i} className="h-10 w-full rounded-lg" />
+                      ))}
+                    </div>
+                  ) : error && entries.length === 0 ? (
+                    <p className="px-2 py-1.5 text-meta text-danger">{error}</p>
+                  ) : (
+                    entries.map((entry) => {
+                      const blocked = workflowBlocked(entry)
+                      return (
+                        <DropdownMenuRadioItem
+                          key={entry.id}
+                          value={entry.id}
+                          closeOnClick
+                          disabled={blocked !== null}
+                          className="py-1.5 data-disabled:opacity-100"
                         >
-                          {t(`newSession.workflow.blocked.${blocked}`)}
-                        </span>
-                      )}
-                    </DropdownMenuRadioItem>
-                  )
-                })
-              )}
-            </DropdownMenuGroup>
+                          <MenuGlyph icon={WORKFLOW_ICON} />
+                          <span className="flex min-w-0 flex-1 flex-col">
+                            <span className={blocked ? 'truncate text-tertiary' : 'truncate'}>
+                              {workflowName(entry)}
+                            </span>
+                            <span className="truncate text-meta text-tertiary">
+                              {entry.workflow
+                                ? stepChain(entry.workflow)
+                                : t('newSession.workflow.unreadableHint')}
+                            </span>
+                          </span>
+                          {blocked && (
+                            <span
+                              className={
+                                blocked === 'unreadable'
+                                  ? 'shrink-0 text-small text-danger'
+                                  : 'shrink-0 text-small text-warning'
+                              }
+                            >
+                              {t(`newSession.workflow.blocked.${blocked}`)}
+                            </span>
+                          )}
+                        </DropdownMenuRadioItem>
+                      )
+                    })
+                  )}
+                </DropdownMenuGroup>
+              </>
+            )}
           </DropdownMenuRadioGroup>
           {usable && (
             <>
@@ -153,10 +159,17 @@ export function WorkflowMenu({
             </>
           )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => openMarketplace()}>
-            <MenuGlyph icon={Store01Icon} />
-            {t('newSession.workflow.findMore')}
-          </DropdownMenuItem>
+          {none ? (
+            <DropdownMenuItem onClick={() => openMarketplace({ tab: 'workflow' })}>
+              <MenuGlyph icon={Store01Icon} />
+              {t('newSession.workflow.addFromMarketplace')}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={() => openMarketplace()}>
+              <MenuGlyph icon={Store01Icon} />
+              {t('newSession.workflow.findMore')}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       {usable && (

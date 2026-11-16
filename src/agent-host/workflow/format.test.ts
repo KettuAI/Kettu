@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { parseWorkflow, workflowHash, toolProblems } from './format'
-import { OFFICIAL_WORKFLOWS } from './official'
 
 const STEPS = `
 steps:
@@ -30,14 +29,6 @@ function problemsOf(text: string): string[] {
 }
 
 describe('Workflow files', () => {
-  it('reads every official workflow without a problem', () => {
-    for (const { id, text } of OFFICIAL_WORKFLOWS) {
-      const read = parseWorkflow(text)
-      expect(read.problems, id).toEqual([])
-      expect(read.workflow?.steps.length, id).toBeGreaterThan(1)
-    }
-  })
-
   it('reads steps, arrows back, reviews and defaults', () => {
     const read = parseWorkflow(workflow(STEPS))
     expect(read.problems).toEqual([])

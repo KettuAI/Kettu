@@ -185,15 +185,11 @@ steps:
       expect(check.slug).toBeNull()
     })
 
-    it('refuses an official workflow’s name, one without a description and one not in UTF-8', async () => {
-      await put({ 'workflow.yaml': WORKFLOW.replace('Release notes', 'feature DEVELOPMENT') })
-      expect((await checkFolder(root)).problems).toEqual([
-        {
-          path: 'workflow.yaml',
-          message:
-            'An official workflow is named "Feature development". Give this one another name.',
-        },
-      ])
+    it('takes the name of a workflow Kettu once shipped, and refuses one without a description or not in UTF-8', async () => {
+      await put({ 'workflow.yaml': WORKFLOW.replace('Release notes', 'Feature development') })
+      const check = await checkFolder(root)
+      expect(check.problems).toEqual([])
+      expect(check.slug).toBe('feature-development')
       const bare = await put(
         { 'workflow.yaml': WORKFLOW.replace(/^description: .*\n/m, '') },
         path.join(root, 'bare'),

@@ -189,6 +189,7 @@
     "skills": "技能",
     "noSkills": "Kettu 还没有保存任何技能。可以在“技能”中安装。",
     "noServers": "Kettu 还没有保存任何 MCP 服务器。可以在“MCP 服务器”中安装。",
+    "noWorkflows": "Kettu 还没有任何工作流。可以在“工作流”中添加。",
     "own": "Agent 自己的",
     "ownNote": "每个 Agent 自己保存的技能和 MCP 服务器。Kettu 只显示它们，要修改请在 Agent 中进行。",
     "mcpConfig": "MCP 配置",
@@ -441,7 +442,6 @@
   "workflow": {
     "intro": "工作流是一张流程图，让几个 Agent 合作完成一件事。每一步由谁来做，在它开始时由交棒给它的 Agent 选，除非你固定了一个。能用的工作流会出现在新建会话里，Agent 也能在对话中建议使用它。",
     "by": {
-      "kettu": "Kettu",
       "github": "{{owner}} · 社区",
       "file": "来自文件",
       "agent": "由 Agent 创建",
@@ -462,7 +462,6 @@
       "unreadable": "它的文件读不出一个工作流。"
     },
     "groups": {
-      "official": "官方",
       "added": "从 GitHub 添加",
       "addedOrFile": "从 GitHub 或文件添加",
       "yours": "你的",
@@ -474,7 +473,6 @@
     "missingTitle": "找不到这个工作流",
     "missingText": "它可能已被删除。",
     "related": {
-      "official": "更多官方工作流",
       "added": "你添加的其他工作流",
       "yours": "你的其他工作流",
       "community": "更多社区的工作流"
@@ -544,7 +542,6 @@
       "unreadable": "文件读不出一个工作流"
     },
     "from": {
-      "official": "Kettu 的工作流",
       "agent": "由 {{agent}} 创建",
       "you": "由你编写"
     },
@@ -642,6 +639,7 @@
     "takenDownKept": "{{name}} 已从 Kettu 的 Marketplace 下架。你装的留到你移除为止，不再更新。",
     "byYou": "{{handle}} · 你",
     "trust": "社区",
+    "kettu": "Kettu",
     "source": "Kettu 的 Marketplace",
     "onlyMe": "只有我",
     "cannotRun": "Kettu 运行不了这个 MCP 服务器：它没有指向 Kettu 能运行的包或 https 远程地址。",

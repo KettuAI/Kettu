@@ -96,7 +96,8 @@ export interface TaskRecord {
   text: string
   workflowId: string
   workflowName: string
-  workflowSource: WorkflowSource
+  /** `official` for a workflow that shipped with Kettu before v0.1.2; no new task gets it. */
+  workflowSource: WorkflowSource | 'official'
   workflowHash: string
   /** Locked when the task started. */
   workflow: Workflow
@@ -169,7 +170,7 @@ const STATUSES: ReadonlySet<unknown> = new Set<TaskStatus>([
   'dropped',
   'cancelled',
 ])
-const SOURCES: ReadonlySet<unknown> = new Set<WorkflowSource>([
+const SOURCES: ReadonlySet<unknown> = new Set<TaskRecord['workflowSource']>([
   'official',
   'github',
   'file',

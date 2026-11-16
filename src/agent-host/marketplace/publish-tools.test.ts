@@ -51,6 +51,7 @@ function listing(over: Partial<MineListing> = {}): MineListing {
     kind: 'skill',
     description: 'One line per change.',
     visibility: 'public',
+    official: false,
     current: '1.0.0',
     versions: [
       {

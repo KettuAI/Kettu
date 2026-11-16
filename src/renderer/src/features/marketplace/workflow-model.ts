@@ -39,14 +39,10 @@ export function awaitsApproval(entry: WorkflowEntry): boolean {
   return entry.approval === 'pending' || entry.approval === 'changed'
 }
 
-/**
- * The directory's groups: Kettu's own, the Kettu Marketplace's, the files the user added, and theirs
- * or an agent's.
- */
-export type WorkflowGroup = 'official' | 'community' | 'added' | 'yours'
+/** The directory's groups: the Kettu Marketplace's, the files the user added, and theirs or an agent's. */
+export type WorkflowGroup = 'community' | 'added' | 'yours'
 
 export function workflowGroup(entry: WorkflowEntry): WorkflowGroup {
-  if (entry.source === 'official') return 'official'
   if (entry.source === 'community') return 'community'
   return entry.source === 'github' || entry.source === 'file' ? 'added' : 'yours'
 }

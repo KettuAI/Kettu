@@ -1,5 +1,5 @@
-// The workflows a host can run: the official ones Kettu ships and the user's library, one YAML file per
-// workflow under `<userData>/workflows`. A library workflow is usable only while its file's hash is the one the
+// The workflows a host can run: the user's library, one YAML file per workflow under
+// `<userData>/workflows`. A library workflow is usable only while its file's hash is the one the
 // user approved, so an agent cannot write itself an unchecked flow. The user's pins and the workflow
 // switches in Settings live beside it in `state/workflows.json`, never in the workflow files.
 
@@ -25,7 +25,6 @@ import { HostError, invalidParams, notFound } from '../errors'
 import { t } from '../i18n'
 import { JsonFile, writeFileAtomic, type LogFn, type Migration } from '../storage'
 import { parseWorkflow, workflowHash, toolProblems } from './format'
-import { OFFICIAL_WORKFLOWS } from './official'
 
 export const WORKFLOWS_VERSION = 1
 // No older formats exist yet; each future version adds its step here, with a test.
@@ -34,10 +33,8 @@ const FETCH_TIMEOUT_MS = 15_000
 const MAX_LIBRARY = 200
 const ID = /^[a-z0-9][a-z0-9-]*$/
 
-type LibrarySource = Exclude<WorkflowSource, 'official'>
-
 export interface LibraryRecord {
-  source: LibrarySource
+  source: WorkflowSource
   origin: WorkflowOrigin | null
   addedAt: number
   /** The hash the user approved; null until they do. */
@@ -84,7 +81,14 @@ function originOf(value: unknown): WorkflowOrigin | null | undefined {
     HANDLE.test(value.slug)
   ) {
     const { listingId, version, handle, slug } = value
-    return { kind: 'community', listingId, version, handle, slug }
+    return {
+      kind: 'community',
+      listingId,
+      version,
+      handle,
+      slug,
+      official: value.official === true,
+    }
   }
   return undefined
 }
@@ -93,17 +97,6 @@ const SOURCES: ReadonlySet<unknown> = new Set(['github', 'file', 'agent', 'user'
 
 /** Where a workflow from the Kettu Marketplace came from. */
 export type CommunityOrigin = Extract<WorkflowOrigin, { kind: 'community' }>
-
-let officialNames: string[] | null = null
-
-/** The official workflow named `name`, whatever the case; null when none is. */
-export function officialNamed(name: string): string | null {
-  officialNames ??= OFFICIAL_WORKFLOWS.flatMap(
-    ({ text }) => parseWorkflow(text).workflow?.name ?? [],
-  )
-  const key = name.trim().toLowerCase()
-  return officialNames.find((official) => official.toLowerCase() === key) ?? null
-}
 
 /** Parses the file; an entry or pin that does not read is dropped alone. */
 export function parseWorkflowsFile(data: Record<string, unknown>): WorkflowsFile | string {
@@ -123,7 +116,7 @@ export function parseWorkflowsFile(data: Record<string, unknown>): WorkflowsFile
       continue
     }
     entries[id] = {
-      source: raw.source as LibrarySource,
+      source: raw.source as WorkflowSource,
       origin,
       addedAt: raw.addedAt,
       approved: raw.approved,
@@ -238,21 +231,10 @@ export class WorkflowLibrary {
   private data: WorkflowsFile = emptyWorkflowsFile()
   private readonly fetch: typeof fetch
   private readonly now: () => number
-  private readonly official: Read[]
 
   constructor(private readonly deps: WorkflowLibraryDeps) {
     this.fetch = deps.fetch ?? fetch
     this.now = deps.now ?? Date.now
-    this.official = OFFICIAL_WORKFLOWS.map(({ id, text }) => {
-      const read = parseWorkflow(text)
-      return {
-        id,
-        text,
-        problems: read.problems,
-        workflow: read.workflow,
-        hash: workflowHash(text),
-      }
-    })
   }
 
   async load(): Promise<void> {
@@ -288,15 +270,10 @@ export class WorkflowLibrary {
 
   async list(): Promise<WorkflowEntry[]> {
     const library = await this.readLibrary()
-    return [
-      ...this.official.map((read) => this.entryOf(read, 'official')),
-      ...library.map((read) => this.entryOf(read, this.data.entries[read.id]?.source ?? 'user')),
-    ]
+    return library.map((read) => this.entryOf(read, this.data.entries[read.id]?.source ?? 'user'))
   }
 
   async read(workflowId: string): Promise<{ entry: WorkflowEntry; text: string | null }> {
-    const official = this.official.find((read) => read.id === workflowId)
-    if (official) return { entry: this.entryOf(official, 'official'), text: official.text }
     const read = await this.readOne(workflowId)
     const source = this.data.entries[workflowId]?.source ?? 'user'
     return { entry: this.entryOf(read, source), text: read.text }
@@ -332,8 +309,6 @@ export class WorkflowLibrary {
   // Changes.
 
   async approve(workflowId: string, hash: string): Promise<WorkflowEntry> {
-    if (this.official.some((read) => read.id === workflowId))
-      return (await this.read(workflowId)).entry
     const read = await this.readOne(workflowId)
     if (read.text === null) throw notFound(t('workflow.notFound'))
     // The user approves what they saw: a file changed since then must be looked at again.
@@ -353,9 +328,6 @@ export class WorkflowLibrary {
   }
 
   async remove(workflowId: string): Promise<void> {
-    if (this.official.some((read) => read.id === workflowId)) {
-      throw new HostError('restricted', t('workflow.officialKept'))
-    }
     if (!ID.test(workflowId)) throw notFound(t('workflow.notFound'))
     await rm(this.fileOf(workflowId), { force: true })
     delete this.data.entries[workflowId]
@@ -399,8 +371,8 @@ export class WorkflowLibrary {
 
   /**
    * Writes a listing's workflow, unapproved: in place of the version of it the library has, which
-   * stays approved only if the text is the same, or as a new workflow. One that does not read, or
-   * that an official workflow's name is, is refused with why and nothing is written.
+   * stays approved only if the text is the same, or as a new workflow. One that does not read is
+   * refused with why and nothing is written.
    */
   async installListing(
     text: string,
@@ -417,8 +389,6 @@ export class WorkflowLibrary {
         }),
       )
     }
-    const official = officialNamed(read.workflow.name)
-    if (official) throw new HostError('conflict', t('workflow.officialName', { name: official }))
     const id = Object.entries(this.data.entries).find(
       ([, record]) =>
         record.origin?.kind === 'community' && record.origin.listingId === origin.listingId,
@@ -465,14 +435,12 @@ export class WorkflowLibrary {
     if (!read.workflow) return { problems: read.problems }
     const tools = toolProblems(read.workflow, this.deps.knownTools())
     if (tools.length > 0) return { problems: tools }
-    const clash = this.officialClash(read.workflow.name)
-    if (clash) return { problems: [clash] }
     return this.write(text, 'agent', { kind: 'agent', ...by })
   }
 
   private async write(
     text: string,
-    source: LibrarySource,
+    source: WorkflowSource,
     origin: WorkflowOrigin,
   ): Promise<WorkflowEntry> {
     if (Buffer.byteLength(text, 'utf8') > WORKFLOW_FILE_BYTES)
@@ -480,7 +448,7 @@ export class WorkflowLibrary {
     const read = parseWorkflow(text)
     const existing = await this.readLibrary()
     if (existing.length >= MAX_LIBRARY) throw new HostError('restricted', t('workflow.libraryFull'))
-    const taken = new Set([...this.official.map((r) => r.id), ...existing.map((r) => r.id)])
+    const taken = new Set(existing.map((r) => r.id))
     const base = workflowSlug(
       read.workflow?.name ?? path.parse(origin.kind === 'file' ? origin.name : '').name,
     )
@@ -581,33 +549,15 @@ export class WorkflowLibrary {
     return { id, text: null, workflow: null, hash: '', problems: [] }
   }
 
-  private officialClash(name: string): WorkflowProblem | null {
-    const official = officialNamed(name)
-    return official ? { at: 'name', message: `an official workflow is named "${official}"` } : null
-  }
-
   private entryOf(read: Read, source: WorkflowSource): WorkflowEntry {
-    const record = source === 'official' ? null : this.data.entries[read.id]
+    const record = this.data.entries[read.id]
     const problems = [...read.problems]
-    if (read.text === null && problems.length === 0 && source !== 'official') {
+    if (read.text === null && problems.length === 0) {
       problems.push({ at: '', message: 'the file is gone' })
     }
-    if (read.workflow) {
-      problems.push(...toolProblems(read.workflow, this.deps.knownTools()))
-      if (source !== 'official') {
-        const clash = this.officialClash(read.workflow.name)
-        if (clash) problems.push(clash)
-      }
-    }
-    let approval: WorkflowEntry['approval'] = 'official'
-    if (source !== 'official') {
-      approval =
-        record?.approved == null
-          ? 'pending'
-          : record.approved === read.hash
-            ? 'approved'
-            : 'changed'
-    }
+    if (read.workflow) problems.push(...toolProblems(read.workflow, this.deps.knownTools()))
+    const approval: WorkflowEntry['approval'] =
+      record?.approved == null ? 'pending' : record.approved === read.hash ? 'approved' : 'changed'
     return {
       id: read.id,
       source,
@@ -617,7 +567,7 @@ export class WorkflowLibrary {
       approval,
       hash: read.hash,
       origin: record?.origin ?? null,
-      file: source === 'official' ? null : this.fileOf(read.id),
+      file: this.fileOf(read.id),
       addedAt: record?.addedAt ?? null,
       pins: this.livePins(read.id, read.workflow),
     }

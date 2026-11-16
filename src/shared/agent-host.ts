@@ -907,7 +907,7 @@ export interface HostContract {
   }
   // The routine's page is shown: its ended runs count as seen.
   'routines.markSeen': { params: { routineId: string }; result: void }
-  // Workflows: the official ones and the user's library. See workflow.
+  // Workflows: the user's library. See workflow.
   'workflows.list': { params: void; result: WorkflowEntry[] }
   'workflows.read': {
     params: { workflowId: string }

@@ -1490,6 +1490,18 @@ describe('Workflow tasks', () => {
     db.close()
   })
 
+  it('still reads a task whose workflow shipped with Kettu', () => {
+    const file = tempFile()
+    const db = open(file)
+    db.taskPut({ task: structuredClone(task('t-000000000001', 1)) as never })
+    db.close()
+    const again = open(file)
+    expect(again.taskAll()).toMatchObject([
+      { id: 't-000000000001', workflowId: 'fix-a-bug', workflowSource: 'official' },
+    ])
+    again.close()
+  })
+
   it('leaves out a stored task that does not read, and says so', () => {
     const file = tempFile()
     const db = open(file)

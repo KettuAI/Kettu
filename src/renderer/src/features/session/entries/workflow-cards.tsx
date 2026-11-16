@@ -538,7 +538,7 @@ function SavedCard({
     ? 'pending'
     : !library
       ? 'removed'
-      : library.approval === 'approved' || library.approval === 'official'
+      : library.approval === 'approved'
         ? 'approved'
         : library.approval === 'changed'
           ? 'changed'
