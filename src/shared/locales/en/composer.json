@@ -56,7 +56,10 @@
     "strip": "From your next message, {{agent}} takes over with the earlier conversation.",
     "summarize": "Summarize first",
     "summarizeHint": "{{agent}} reads the earlier conversation and sums it up before it carries on, on its own usage.",
-    "undo": "Undo"
+    "undo": "Undo",
+    "stopTitle": "Stop background work and switch to {{agent}}?",
+    "stopBody": "These run in {{current}} and stop when the session switches:",
+    "stopConfirm": "Stop and switch"
   },
   "outOfCredit": {
     "modelTitle": "{{model}} is out of credit",

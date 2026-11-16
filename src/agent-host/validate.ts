@@ -110,6 +110,8 @@ const URL_CHARS = 2_048
 const PROMPT_ITEMS = 1_000
 // Sessions with a draft, which the one-time removal keeps.
 const KEPT_SESSIONS = 10_000
+// Sessions one archive or delete may take at once, as a selection in the sidebar can.
+const STAKED_SESSIONS = 10_000
 // The panes a split view shows at most, which a window reports as in front.
 const SHOWN_SESSIONS = 9
 // The Marketplace's search, which the registry matches against server names.
@@ -1642,6 +1644,16 @@ export function createValidators(platform: Platform): Validators {
       return { sessionId: sessionId(o), content: promptContent(o.content) }
     },
     'sessions.cancel': session,
+    'sessions.runningWork': (params) => {
+      const o = fields(params)
+      if (!Array.isArray(o.sessionIds)) throw invalidParams('sessionIds must be a list')
+      if (o.sessionIds.length > STAKED_SESSIONS) {
+        throw invalidParams(`sessionIds holds more than ${STAKED_SESSIONS}`)
+      }
+      return {
+        sessionIds: o.sessionIds.map((value) => sessionId({ sessionId: value })),
+      }
+    },
     'sessions.stopTask': (params) => {
       const o = fields(params)
       return { sessionId: sessionId(o), taskId: string(o, 'taskId', ID_CHARS) }

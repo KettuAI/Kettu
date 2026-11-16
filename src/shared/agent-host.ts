@@ -20,7 +20,7 @@ import type { ComputerAppDecision } from './computer-use'
 import type { ControlOutcome } from './control'
 import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
-import type { ArtifactContentFile } from './host-control'
+import type { ArtifactContentFile, BackgroundWork } from './host-control'
 import type {
   CatalogServer,
   ConnectStart,
@@ -575,6 +575,19 @@ export interface SessionSummary {
   turnStartedAt?: number | null
 }
 
+/**
+ * What ending a session's agent stops: its turn, what waits for the user's answer and what it runs
+ * in the background. Its subagents count with it; the commands of its terminals are not here.
+ */
+export interface RunningWork extends BackgroundWork {
+  sessionId: string
+  agentId: AgentId
+  title: string | null
+  turn: boolean
+  /** Requests waiting for the user: approvals, questions, plan approvals and MCP requests. */
+  waiting: number
+}
+
 /** How far a session's latest plan got, as its summary carries it. */
 export interface PlanProgress {
   done: number
@@ -1017,6 +1030,8 @@ export interface HostContract {
   'sessions.show': { params: { sessionIds: string[] }; result: void }
   'sessions.prompt': { params: { sessionId: string; content: UserContent[] }; result: void }
   'sessions.cancel': { params: { sessionId: string }; result: void }
+  // What ending these sessions and their sub-sessions would stop, for the ones with any.
+  'sessions.runningWork': { params: { sessionIds: string[] }; result: { sessions: RunningWork[] } }
   // Stops one background task of the session, as the session board's Stop does.
   'sessions.stopTask': { params: { sessionId: string; taskId: string }; result: void }
   // The end of a background task's output, at most 8 KiB, for the session board.
@@ -1579,6 +1594,7 @@ export const HOST_METHODS = [
   'sessions.show',
   'sessions.prompt',
   'sessions.cancel',
+  'sessions.runningWork',
   'sessions.stopTask',
   'sessions.taskOutput',
   'sessions.retry',

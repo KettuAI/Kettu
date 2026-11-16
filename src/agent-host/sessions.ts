@@ -17,6 +17,7 @@ import {
   type OutlineTitle,
   type PlanProgress,
   type ReturnedMessage,
+  type RunningWork,
   type SessionAttention,
   type SessionOutputs,
   type SessionPullRequest,
@@ -36,7 +37,12 @@ import type {
   ComputerSetupOutcome,
   ComputerSetupStep,
 } from '@shared/computer-use'
-import type { AttentionRequest, BusyCounts, BusySession } from '@shared/host-control'
+import type {
+  AttentionRequest,
+  BackgroundWork,
+  BusyCounts,
+  BusySession,
+} from '@shared/host-control'
 import type { Platform } from '@shared/platform'
 import type { PortDevice } from '@shared/remote/device'
 import type { PermissionScope } from '@shared/routines'
@@ -5110,28 +5116,102 @@ export class SessionManager {
     if (live.scheduled > 0) return 'scheduled'
     if (waitingCount(live) > 0) return 'waiting'
     if (this.contextRuns.has(live.id)) return 'context'
+    const [first] = this.workingSubagents(live)
+    if (first) return first.waiting ? 'subagent waiting' : 'subagent'
+    return null
+  }
+
+  private holdsAgent(live: Live): boolean {
+    return this.holdReason(live) !== null
+  }
+
+  /**
+   * The session's subagents that run or wait for the user. Once the agent listed its background
+   * work, a running one counts only while that list says work runs.
+   */
+  private workingSubagents(live: Live): { child: Live; waiting: boolean }[] {
+    const out: { child: Live; waiting: boolean }[] = []
     for (const record of this.descendants(live.id, 'subagent')) {
       const child = this.live.get(record.id)
       if (!child) continue
       const childStatus = child.thread.session.status
       if (child.permissions.size > 0 || childStatus === 'awaiting_permission') {
-        return 'subagent waiting'
+        out.push({ child, waiting: true })
+        continue
       }
-      if (live.backgroundListed) continue
+      if (live.backgroundListed && !live.background) continue
       if (
         child.childRunning ||
         child.background ||
         childStatus === 'running' ||
         childStatus === 'starting'
       ) {
-        return 'subagent'
+        out.push({ child, waiting: false })
       }
     }
-    return null
+    return out
   }
 
-  private holdsAgent(live: Live): boolean {
-    return this.holdReason(live) !== null
+  /** What the session runs beside a turn, as `holdReason` counts it; null when nothing. */
+  private backgroundWork(live: Live): BackgroundWork | null {
+    const commands: string[] = []
+    const tasks: string[] = []
+    for (const task of live.thread.session.background ?? []) {
+      if (task.status !== 'running') continue
+      ;(task.kind === 'shell' ? commands : tasks).push(task.title)
+    }
+    const subagents = this.workingSubagents(live).map(
+      ({ child }) =>
+        child.thread.session.subagent?.description ??
+        child.thread.session.title ??
+        t('session.untitled'),
+    )
+    const named = commands.length + tasks.length + subagents.length > 0
+    const unnamed = live.background && !named
+    if (!named && !unnamed && live.scheduled === 0) return null
+    return { commands, tasks, subagents, scheduled: live.scheduled, unnamed }
+  }
+
+  /** What ending the session's agent would stop; null when nothing runs. */
+  private workOf(live: Live): RunningWork | null {
+    const status = live.thread.session.status
+    const turn = live.turn !== null || status === 'running'
+    const waiting = waitingCount(live)
+    const background = this.backgroundWork(live)
+    if (!turn && waiting === 0 && !background) return null
+    return {
+      sessionId: live.id,
+      agentId: live.record.agentId,
+      title: live.record.customTitle ?? live.thread.session.title ?? live.record.title,
+      turn,
+      waiting,
+      commands: background?.commands ?? [],
+      tasks: background?.tasks ?? [],
+      subagents: background?.subagents ?? [],
+      scheduled: background?.scheduled ?? 0,
+      unnamed: background?.unnamed ?? false,
+    }
+  }
+
+  /**
+   * What ending these sessions and their sub-sessions would stop, for the ones with any: a session
+   * not in memory runs nothing. Subagents count with the session that started them.
+   */
+  runningWork(sessionIds: readonly string[]): RunningWork[] {
+    const seen = new Set<string>()
+    const out: RunningWork[] = []
+    for (const id of sessionIds) {
+      const record = this.live.get(id)?.record ?? this.records.get(id)
+      if (!record) continue
+      for (const item of [record, ...this.descendants(id)]) {
+        if (item.origin === 'subagent' || seen.has(item.id)) continue
+        seen.add(item.id)
+        const live = this.live.get(item.id)
+        const work = live ? this.workOf(live) : null
+        if (work) out.push(work)
+      }
+    }
+    return out
   }
 
   /** The session a subagent's work belongs to, which is released with its subagents. */
@@ -6956,9 +7036,13 @@ export class SessionManager {
     const byAgent = live.archiveAfterTurn
     if (byAgent !== null) {
       live.archiveAfterTurn = null
+      // Nothing but this turn ran when the agent asked; what runs now, the turn started, and the
+      // archive would stop it unseen.
+      const left = this.workLeft(live)
       // After the turn's own entries, so the notice and the close come once it has ended. A
       // session being closed or deleted already is left as the user asked.
-      if (!live.closing) {
+      if (left && !live.closing) queueMicrotask(() => this.notArchivedNotice(live, byAgent, left))
+      else if (!live.closing) {
         // The archive would cancel the next prompt's turn, so it waits for Resume, as after Stop.
         this.pauseQueue(live)
         queueMicrotask(() => {
@@ -8159,6 +8243,40 @@ export class SessionManager {
     this.deps.events.ended(all.map((item) => item.id))
   }
 
+  /**
+   * What an archive at the end of this turn would stop, named as the notice lists it: the
+   * session's background work and anything its sub-sessions run. Null when nothing.
+   */
+  private workLeft(live: Live): string | null {
+    const names: string[] = []
+    for (const work of this.runningWork([live.id])) {
+      const own = work.sessionId === live.id
+      if (!own && (work.turn || work.waiting > 0)) names.push(work.title ?? t('session.untitled'))
+      names.push(...work.commands, ...work.tasks, ...work.subagents)
+      if (work.scheduled > 0) names.push(t('notice.scheduledJobs', { count: work.scheduled }))
+      if (work.unnamed) names.push(t('notice.backgroundWork'))
+    }
+    return names.length > 0 ? names.join(t('notice.listSeparator')) : null
+  }
+
+  /** The archive an agent asked for did not happen: the turn left work running. */
+  private notArchivedNotice(live: Live, byAgent: string, work: string): void {
+    if (this.live.get(live.id) !== live) return
+    this.emit(live, [
+      {
+        op: 'entry.add',
+        entry: {
+          kind: 'notice',
+          id: this.nextId(live),
+          severity: 'info',
+          title: t('notice.notArchivedByAgent.title', { agent: byAgent }),
+          description: t('notice.notArchivedByAgent.description', { work }),
+          after: agentEntryBefore(live.thread),
+        },
+      },
+    ])
+  }
+
   /** The info notice an archived session's thread gets, "Claude Code archived this session". */
   private archiveNotice(sessionId: string, byAgent: string): void {
     const live = this.live.get(sessionId)
@@ -9176,16 +9294,21 @@ export class SessionManager {
 
   // For main.
 
+  /** The sessions quitting would stop: a turn runs or waits, or work runs beside one. */
   busy(): BusySession[] {
     const out: BusySession[] = []
     for (const live of this.live.values()) {
       const status = live.thread.session.status
-      if (status === 'running' || status === 'awaiting_permission') {
+      const turn = status === 'running' || status === 'awaiting_permission'
+      // A subagent's work counts with the session that started it.
+      const background = live.record.origin === 'subagent' ? null : this.backgroundWork(live)
+      if (turn || background) {
         out.push({
           sessionId: live.id,
           agentId: live.record.agentId,
           title: live.thread.session.title,
-          turnStartedAt: live.thread.session.turnStartedAt,
+          turnStartedAt: turn ? live.thread.session.turnStartedAt : null,
+          background,
         })
       }
     }

@@ -164,10 +164,10 @@
     "atStakeFolder_other": "Its folder <name>{{name}}</name> has <files>{{count}} uncommitted files</files>.",
     "atStakeUnknown": "Kettu couldn’t check its folder <name>{{name}}</name> for uncommitted files.",
     "archiveInstead": "Archive instead",
-    "archiveRunningTitle_one": "Archive and end its terminals?",
-    "archiveRunningTitle_other": "Archive and end their terminals?",
-    "archiveRunningBody": "Still running: <command>{{commands}}</command>. Archiving ends the terminals, and Undo does not bring them back.",
-    "archiveRunningConfirm": "Archive",
+    "archiveRunningTitle": "Stop running work and archive?",
+    "archiveRunningBody": "Archiving stops these, and Undo does not bring them back:",
+    "archiveRunningConfirm": "Stop and archive",
+    "deleteStops": "Deleting stops these:",
     "open": "Open",
     "forkFromHere": "Fork from here",
     "runItWith": "Run it with",
@@ -193,6 +193,18 @@
     "archivedSome": "Archived {{done}} of {{total}} sessions. {{error}}",
     "deleteCount": "Delete {{count}}…",
     "moreFor": "More for {{title}}"
+  },
+  "work": {
+    "turn": "Current turn",
+    "waiting_one": "{{count}} request waiting",
+    "waiting_other": "{{count}} requests waiting",
+    "command": "Background command",
+    "task": "Background task",
+    "subagent": "Sub-agent",
+    "scheduled_one": "{{count}} scheduled job",
+    "scheduled_other": "{{count}} scheduled jobs",
+    "background": "Background work",
+    "terminal": "Terminal"
   },
   "import": {
     "title": "Import sessions into {{project}}",

@@ -106,6 +106,8 @@ import {
   type SessionMenuPlace,
 } from './session-menu-model'
 import { confirmArchive } from './archive-confirm-model'
+import { workAtStake, type WorkItem } from './running-work'
+import { RunningWorkList } from './running-work-list'
 import { dissolveRows } from './row-dust'
 import { markReturning } from './row-exit'
 import { sessionPullRequests } from './session-prs'
@@ -138,9 +140,9 @@ function useInFront(sessionId: string): boolean {
 }
 
 /**
- * Archives with a toast that undoes it for six seconds, once confirmed when their terminals run a
- * command. Undo takes back the ones that archived; the toast names the failure when some did not,
- * since a second toast would replace it.
+ * Archives with a toast that undoes it for six seconds, once confirmed when anything of theirs
+ * runs, which archiving stops. Undo takes back the ones that archived; the toast names the failure
+ * when some did not, since a second toast would replace it.
  */
 function archiveWithUndo(ids: readonly string[], title: string): void {
   void confirmArchive(ids).then((archive) => {
@@ -969,6 +971,21 @@ function useAtStake(paths: readonly string[], open: boolean): Map<string, AtStak
   return open && read?.key === key ? read.stake : null
 }
 
+/** What deleting the sessions would stop, read each time the dialog opens. */
+function useWorkAtStake(ids: readonly string[], open: boolean): WorkItem[] | null {
+  const key = ids.join('\n')
+  const [read, setRead] = useState<{ key: string; items: WorkItem[] } | null>(null)
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    void workAtStake(key.split('\n')).then((items) => !cancelled && setRead({ key, items }))
+    return () => {
+      cancelled = true
+    }
+  }, [key, open])
+  return open && read?.key === key ? read.items : null
+}
+
 /**
  * Deletes one by one: their rows in sight turn to dust, and one whose delete fails comes back.
  * First asks about the worktrees no other session uses, since the host keeps them on delete and
@@ -1006,10 +1023,13 @@ async function deleteUnlessAtStake(
   confirm: () => void,
 ): Promise<void> {
   const paths = [...new Set(summaries.flatMap((s) => stakeFolder(s) ?? []))]
-  const stakes = await Promise.all(paths.map(readAtStake))
+  const [stakes, work] = await Promise.all([
+    Promise.all(paths.map(readAtStake)),
+    workAtStake(summaries.map((s) => s.id)),
+  ])
   const files = stakes.map((stake) => stake.files)
   const withChildren = summaries.some((s) => descendantCount(s.id) > 0)
-  if (!canDeleteAtOnce(files, withChildren)) return confirm()
+  if (work.length > 0 || !canDeleteAtOnce(files, withChildren)) return confirm()
   clearSelection()
   try {
     await deleteAll(summaries.map((summary) => summary.id))
@@ -1048,6 +1068,10 @@ export function DeleteSessionDialog({
   const count = open ? targets.reduce((sum, s) => sum + descendantCount(s.id), 0) : 0
   const stake = useAtStake(
     targets.flatMap((s) => stakeFolder(s) ?? []),
+    open,
+  )
+  const work = useWorkAtStake(
+    targets.map((s) => s.id),
     open,
   )
   // The branch of each worktree Kettu made for them, which the note names with it.
@@ -1117,6 +1141,12 @@ export function DeleteSessionDialog({
                 </span>
               </div>
             ))}
+        {work && work.length > 0 && (
+          <div className="text-control leading-normal text-secondary">
+            {t('row.deleteStops')}
+            <RunningWorkList items={work} className="mt-1.5" />
+          </div>
+        )}
         <AlertDialogDescription className="text-small text-tertiary">
           {count > 0
             ? t('row.deleteBodyWithSub', { count })

@@ -3,7 +3,7 @@
 // project come from the service, which knows them from the token or the call's `_meta`.
 
 import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js'
-import type { AgentStatus } from '@shared/agent-host'
+import type { AgentStatus, RunningWork } from '@shared/agent-host'
 import { harnessOf, START_MODE_CHARS } from '@shared/agents'
 import { longer } from '@shared/artifacts'
 import {
@@ -74,7 +74,9 @@ export interface SessionToolsDeps {
   history(sessionId: string): Promise<RenderedTurn[]>
   /** Sets the agent's title; a user's title still wins. */
   rename(sessionId: string, title: string): void
-  /** Archives the caller once its running turn ends, however it ends. */
+  /** What ending the session and its sub-sessions would stop, for the ones with any. */
+  work(sessionId: string): RunningWork[]
+  /** Archives the caller once its running turn ends, unless that turn left work running. */
   archiveAfterTurn(sessionId: string, agentName: string): void
   /** Archives a session that is not working, at once. */
   archiveNow(sessionId: string, agentName: string): Promise<void>
@@ -431,7 +433,8 @@ export const SESSION_TOOLS: Tool[] = [
     title: 'Archive session',
     description:
       'Archives your session once its running turn ends, or a session you started at once when ' +
-      'it is not working.',
+      'it is not working. Refused while background commands, subagents or scheduled jobs of the ' +
+      'session still run; the result names them.',
     inputSchema: object({ id: ID }),
     outputSchema: output({ id: ID, archived: { type: 'string', enum: ['now', 'after_turn'] } }),
     annotations: { destructiveHint: false, openWorldHint: false },
@@ -538,6 +541,52 @@ function busy(session: ToolSession): SessionToolError {
     'busy',
     `"${titleOf(session)}" is ${toolStatus(session.status)}. Wait for its turn to end.`,
   )
+}
+
+/** The caller's own work stops archiving it; its running turn and what that waits on do not. */
+function stillRunningHere(running: string[]): SessionToolError {
+  return new SessionToolError(
+    'busy',
+    `Not archived: this session still runs ${listed(running)}. ` +
+      'Stop that work or wait for it to end, then archive again.',
+  )
+}
+
+function stillRunning(session: ToolSession, running: string[]): SessionToolError {
+  return new SessionToolError(
+    'busy',
+    `"${titleOf(session)}" still runs ${listed(running)}. Wait for it to end, then archive it.`,
+  )
+}
+
+/**
+ * What archiving would stop, as the agent is told: `ownTurn`'s turn and the requests it waits on
+ * are left out, since they end before an archive at the end of the turn.
+ */
+function workNames(work: readonly RunningWork[], targetId: string, ownTurn: boolean): string[] {
+  const out: string[] = []
+  for (const item of work) {
+    const own = item.sessionId === targetId
+    const where = own ? '' : ` in "${item.title ?? 'Untitled session'}"`
+    if (item.turn && !(own && ownTurn)) out.push(own ? 'its turn' : `a turn${where}`)
+    if (item.waiting > 0 && !(own && ownTurn)) {
+      out.push(`${count(item.waiting, 'request', 'requests')} waiting for the user${where}`)
+    }
+    for (const name of item.commands) out.push(`background command "${name}"${where}`)
+    for (const name of item.tasks) out.push(`background task "${name}"${where}`)
+    for (const name of item.subagents) out.push(`subagent "${name}"${where}`)
+    if (item.scheduled > 0) {
+      out.push(`${count(item.scheduled, 'scheduled job', 'scheduled jobs')}${where}`)
+    }
+    if (item.unnamed) out.push(`background work${where}`)
+  }
+  return out
+}
+
+/** "a", "a and b", "a, b and c". */
+function listed(items: readonly string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`
 }
 
 function limitError(limit: StartLimitInfo): SessionToolError {
@@ -880,13 +929,17 @@ export class SessionTools {
     const session = this.target(caller, id(o))
     const agentName = this.deps.agentName(caller.sessionId)
     if (session.id === caller.sessionId) {
+      const running = workNames(this.deps.work(session.id), session.id, true)
+      if (running.length > 0) throw stillRunningHere(running)
       this.deps.archiveAfterTurn(session.id, agentName)
-      return result('This session will be archived when its turn ends.', {
-        id: session.id,
-        archived: 'after_turn',
-      })
+      return result(
+        'This session will be archived when its turn ends, unless the turn leaves work running.',
+        { id: session.id, archived: 'after_turn' },
+      )
     }
     if (!canTarget(session, caller.sessionId)) throw notAllowed()
+    const running = workNames(this.deps.work(session.id), session.id, false)
+    if (running.length > 0) throw stillRunning(session, running)
     if (WORKING.has(session.status)) throw busy(session)
     await this.deps.archiveNow(session.id, agentName)
     return result(`Archived "${titleOf(session)}".`, { id: session.id, archived: 'now' })

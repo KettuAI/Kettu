@@ -27,6 +27,7 @@ import { AgentMenu } from '@renderer/features/session/new-session/agent-menu'
 import { readFirstOptions } from '@renderer/features/session/new-session/prepared'
 import { startConfig } from '@renderer/features/session/new-session/start-options'
 import { Glyph } from '@renderer/features/shell/glyph'
+import { runningWorkOf, workItems, type WorkItem } from '@renderer/features/sidebar/running-work'
 import { setPaneSelection, useArtifactsStore } from '@renderer/stores/artifacts'
 import { useSettingsStore } from '@renderer/stores/settings'
 import { showSending, useThreadsStore } from '@renderer/stores/threads'
@@ -48,6 +49,7 @@ import { useAddMenu } from './add-menu'
 import { PromptBox } from './prompt-box'
 import { RunningButton, SendButton } from './send-button'
 import { SessionPlace } from './session-place'
+import { SwitchConfirm } from './switch-confirm'
 import { SwitchStrip } from './switch-strip'
 import { SpeedButton } from './speed'
 import { CacheButton, ContextButton } from './usage'
@@ -246,16 +248,35 @@ export function Composer({
     return { taken, sent, content }
   }
 
+  // The background work the session's agent would stop by switching, while the user is asked.
+  const [switchWork, setSwitchWork] = useState<WorkItem[] | null>(null)
+  const checkingSwitch = useRef(false)
   const handOver = () => {
-    if (!pending) return
+    if (!pending || checkingSwitch.current) return
+    checkingSwitch.current = true
+    void runningWorkOf([sessionId]).then((work) => {
+      checkingSwitch.current = false
+      // A turn or a request in wait already keeps the message from going; sub-sessions go on.
+      const items = work
+        .filter((item) => item.sessionId === sessionId)
+        .flatMap((item) => workItems(item, true))
+      if (items.length > 0) setSwitchWork(items)
+      else switchNow()
+    })
+  }
+
+  // Reads the pending switch again: the user may have changed it while the work was read.
+  const switchNow = () => {
+    const now = useAgentSwitchStore.getState().pending[sessionId]
+    if (!now) return
     const { taken, sent, content } = takeContent()
-    const options = Object.keys(pending.values).length > 0 ? { options: pending.values } : {}
+    const options = Object.keys(now.values).length > 0 ? { options: now.values } : {}
     host('sessions.switchAgent', {
       sessionId,
-      agentId: pending.agentId,
+      agentId: now.agentId,
       content,
       ...options,
-      ...(pending.summarize ? { summarize: true } : {}),
+      ...(now.summarize ? { summarize: true } : {}),
     })
       .then(() => setPendingSwitch(sessionId, null))
       .catch((reason: unknown) => {
@@ -586,6 +607,15 @@ export function Composer({
             </span>
           </div>
         }
+      />
+      <SwitchConfirm
+        items={switchWork}
+        agentName={agentName}
+        currentName={ownName}
+        onAnswer={(go) => {
+          setSwitchWork(null)
+          if (go) switchNow()
+        }}
       />
     </div>
   )

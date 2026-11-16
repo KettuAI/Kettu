@@ -45,6 +45,21 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it('takes a bounded list of session ids for the running work ending them would stop', () => {
+    expect(posix['sessions.runningWork']({ sessionIds: ['a', 'b'], other: 1 })).toEqual({
+      sessionIds: ['a', 'b'],
+    })
+    expect(posix['sessions.runningWork']({ sessionIds: [] })).toEqual({ sessionIds: [] })
+    rejects(() => posix['sessions.runningWork']({}))
+    rejects(() => posix['sessions.runningWork']({ sessionIds: 'a' }))
+    rejects(() => posix['sessions.runningWork']({ sessionIds: [1] }))
+    rejects(() => posix['sessions.runningWork']({ sessionIds: [''] }))
+    rejects(() => posix['sessions.runningWork']({ sessionIds: ['x'.repeat(257)] }))
+    rejects(() =>
+      posix['sessions.runningWork']({ sessionIds: Array.from({ length: 10_001 }, () => 's') }),
+    )
+  })
+
   it('takes a session and a bounded task id for a background task', () => {
     for (const method of ['sessions.stopTask', 'sessions.taskOutput'] as const) {
       expect(posix[method]({ sessionId: 's', taskId: 'b1', other: 1 })).toEqual({

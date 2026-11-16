@@ -743,6 +743,7 @@ export class AgentHost {
         list: (projectPath) => this.sessions.toolSessions(projectPath),
         lastReply: (sessionId) => this.sessions.lastReply(sessionId),
         rename: (sessionId, title) => this.sessions.renameByAgent(sessionId, title),
+        work: (sessionId) => this.sessions.runningWork([sessionId]),
         archiveAfterTurn: (sessionId, agentName) =>
           this.sessions.archiveWhenIdle(sessionId, agentName),
         archiveNow: (sessionId, agentName) => this.sessions.archiveByAgent(sessionId, agentName),
@@ -2454,6 +2455,7 @@ export class AgentHost {
       'sessions.prompt': ({ sessionId, content }, { portId, device }) =>
         sessions.prompt(sessionId, content, portId, fromDevice(device)),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
+      'sessions.runningWork': ({ sessionIds }) => ({ sessions: sessions.runningWork(sessionIds) }),
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),
       'sessions.taskOutput': ({ sessionId, taskId }) => sessions.taskOutput(sessionId, taskId),
       'sessions.retry': ({ sessionId }, { portId }) => sessions.retry(sessionId, portId),
