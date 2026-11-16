@@ -627,8 +627,17 @@ interface Live {
   startValues: Record<string, string | boolean>
   /** A turn the host ended after a Stop the agent did not confirm, until its prompt is answered. */
   unansweredCancel: Turn | null
-  /** It started work that runs on after its tool call, which Claude Code reports no end of. */
+  /**
+   * Work runs on after its tool call ended. An agent that says when that work ends sets it back;
+   * for one that does not, it stays set until the agent exits.
+   */
   background: boolean
+  /** The agent sent its full list of background work, background subagents among it. */
+  backgroundListed: boolean
+  /** Jobs the agent scheduled to wake the session later, such as cron and /loop wakeups. */
+  scheduled: number
+  /** Why it last kept its agent while idle, so a change of reason is logged once. */
+  held: string | null
   /** The agent runs a turn of its own, which shows as the session's once no other turn runs. */
   agentTurn: boolean
   /** Set while it is a prepared session, not yet in the index. */
@@ -2923,6 +2932,9 @@ export class SessionManager {
       startValues: {},
       unansweredCancel: null,
       background: false,
+      backgroundListed: false,
+      scheduled: 0,
+      held: null,
       agentTurn: false,
       prepared: null,
       routineMode: null,
@@ -3389,6 +3401,15 @@ export class SessionManager {
         break
       case 'background':
         live.background = true
+        this.refreshRelease(live)
+        break
+      case 'backgroundRunning':
+        live.background = effect.running
+        live.backgroundListed = effect.listed
+        this.refreshRelease(live)
+        break
+      case 'scheduled':
+        live.scheduled = effect.jobs
         this.refreshRelease(live)
         break
       case 'tasks':
@@ -5075,25 +5096,42 @@ export class SessionManager {
   // Releasing: an idle session lets its agent go, so a Claude Code CLI runs only for the sessions
   // in use. Its thread is stored, and it attaches again with `session/resume` once used.
 
-  /** Whether a session needs its agent now: work runs, waits for the user, or runs on unseen. */
-  private holdsAgent(live: Live): boolean {
+  /**
+   * Why a session needs its agent now, or null: work runs, waits for the user, or runs on unseen.
+   * Once the agent listed its background work, that list alone says whether subagents run, so a
+   * subagent whose end never came does not keep the agent; one waiting for the user still does.
+   */
+  private holdReason(live: Live): string | null {
     const { status } = live.thread.session
-    if (status !== 'ready' && status !== 'closed') return true
-    if (live.turn || live.opening || live.attaching || live.background) return true
-    if (waitingCount(live) > 0 || this.contextRuns.has(live.id)) return true
-    return this.descendants(live.id, 'subagent').some((record) => {
+    if (status !== 'ready' && status !== 'closed') return status
+    if (live.turn) return 'turn'
+    if (live.opening || live.attaching) return 'attach'
+    if (live.background) return 'background'
+    if (live.scheduled > 0) return 'scheduled'
+    if (waitingCount(live) > 0) return 'waiting'
+    if (this.contextRuns.has(live.id)) return 'context'
+    for (const record of this.descendants(live.id, 'subagent')) {
       const child = this.live.get(record.id)
-      if (!child) return false
+      if (!child) continue
       const childStatus = child.thread.session.status
-      return (
+      if (child.permissions.size > 0 || childStatus === 'awaiting_permission') {
+        return 'subagent waiting'
+      }
+      if (live.backgroundListed) continue
+      if (
         child.childRunning ||
         child.background ||
-        child.permissions.size > 0 ||
         childStatus === 'running' ||
-        childStatus === 'awaiting_permission' ||
         childStatus === 'starting'
-      )
-    })
+      ) {
+        return 'subagent'
+      }
+    }
+    return null
+  }
+
+  private holdsAgent(live: Live): boolean {
+    return this.holdReason(live) !== null
   }
 
   /** The session a subagent's work belongs to, which is released with its subagents. */
@@ -5116,13 +5154,21 @@ export class SessionManager {
       live.releaseTimer = null
     }
     if (this.stopped || live.closing || !live.saved || live.record.origin === 'subagent') return
-    if (this.holdsAgent(live)) {
+    const held = this.holdReason(live)
+    if (held !== null) {
       live.idleSince = null
+      // A turn is no news; what keeps an idle session's agent is.
+      if (held !== live.held && held !== 'turn' && held !== 'running') {
+        this.deps.diagnostics.event(live.record.agentId, 'session held', `${live.id}: ${held}`)
+      }
+      live.held = held
       return
     }
+    live.held = null
     const now = this.now()
     live.idleSince ??= now
     const { releaseHiddenMs, releaseShownMs, releaseUnusedMs } = this.timings
+    const why = !live.used ? 'unused' : this.inFront(live.id) ? 'idle in view' : 'out of view'
     const due = !live.used
       ? live.idleSince + releaseUnusedMs
       : this.inFront(live.id)
@@ -5132,7 +5178,7 @@ export class SessionManager {
       () => {
         live.releaseTimer = null
         if (this.live.get(live.id) !== live) return
-        if (this.now() >= due && !live.closing && !this.holdsAgent(live)) this.release(live)
+        if (this.now() >= due && !live.closing && !this.holdsAgent(live)) this.release(live, why)
         else this.refreshRelease(live)
       },
       Math.max(0, due - now),
@@ -5140,9 +5186,9 @@ export class SessionManager {
   }
 
   /** Stores the session's thread, closes its agent's session and its subagents, and drops it. */
-  private release(live: Live): void {
+  private release(live: Live, why: string): void {
     if (this.releasing.has(live.id)) return
-    this.deps.diagnostics.event(live.record.agentId, 'session released', live.id)
+    this.deps.diagnostics.event(live.record.agentId, 'session released', `${live.id}: ${why}`)
     const run = this.closeAll([...this.descendants(live.id, 'subagent'), live.record], true)
       .catch((error: unknown) => {
         this.deps.diagnostics.log(
@@ -7419,6 +7465,8 @@ export class SessionManager {
   /** The agent's background work ended with its process: its tasks are gone from the list. */
   private endBackground(live: Live): void {
     live.background = false
+    live.backgroundListed = false
+    live.scheduled = 0
     if (live.thread.session.background?.length) this.update(live, { background: [] })
   }
 

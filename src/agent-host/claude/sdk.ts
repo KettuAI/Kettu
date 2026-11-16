@@ -78,6 +78,21 @@ export type PostModelSwitchHook = (
   options: { signal: AbortSignal },
 ) => Promise<Record<string, never>>
 
+/** The session's main thread stopped at the end of a turn. */
+export interface StopHookInput {
+  hook_event_name: 'Stop'
+  session_id: string
+  stop_hook_active: boolean
+  /** The cron jobs, wakeups and `/loop`s that will wake the session later; older CLIs leave it out. */
+  session_crons?: unknown[]
+}
+
+export type StopHook = (
+  input: StopHookInput,
+  toolUseId: string | undefined,
+  options: { signal: AbortSignal },
+) => Promise<Record<string, never>>
+
 /** A request from an MCP server for the user: a form to fill in, or a page to open. */
 export interface ElicitationRequest {
   serverName: string
@@ -179,7 +194,10 @@ export interface QueryOptions {
   /** Without it the SDK declines every MCP server's request that no hook answers. */
   onElicitation?: OnElicitation
   /** Callbacks Claude Code runs on its hook events, even with `disableAllHooks`. */
-  hooks?: { PostModelSwitch?: { hooks: PostModelSwitchHook[] }[] }
+  hooks?: {
+    PostModelSwitch?: { hooks: PostModelSwitchHook[] }[]
+    Stop?: { hooks: StopHook[] }[]
+  }
   mcpServers?: Record<string, McpServerConfig>
   /** Plugin folders loaded for the session beside the user's own plugins. */
   plugins?: { type: 'local'; path: string }[]

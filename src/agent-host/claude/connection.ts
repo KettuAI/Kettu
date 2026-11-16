@@ -239,6 +239,8 @@ interface Session {
   states: boolean
   /** Claude Code has not gone idle since it last ran, as while background agents hold it. */
   busy: boolean
+  /** The jobs its Stop hook last said will wake it later, such as cron and /loop wakeups. */
+  jobs: number
   /** The latest main-thread model. */
   model: string | null
   /** The main thread's message uuids, by API message id, for a fork point. */
@@ -868,6 +870,7 @@ export class ClaudeConnection implements AgentConnection {
       compact: settings.known ? compactWindows(settings.values, this.env) : NO_COMPACT_WINDOWS,
       states: false,
       busy: false,
+      jobs: 0,
       model: null,
       uuids: new Map(),
       commands: [],
@@ -966,6 +969,18 @@ export class ClaudeConnection implements AgentConnection {
             hooks: [
               async (switched) => {
                 this.modelSwitched(session, switched)
+                return {}
+              },
+            ],
+          },
+        ],
+        Stop: [
+          {
+            hooks: [
+              async (stopped) => {
+                if (Array.isArray(stopped.session_crons)) {
+                  this.scheduled(session, stopped.session_crons.length)
+                }
                 return {}
               },
             ],
@@ -1099,6 +1114,7 @@ export class ClaudeConnection implements AgentConnection {
     query?.close()
     for (const delivery of session.mapper.endAll('cancelled')) this.deliver(delivery)
     for (const delivery of session.mapper.endBackground()) this.deliver(delivery)
+    this.scheduled(session, 0)
     for (const [task, root] of this.children) if (root === session.id) this.children.delete(task)
     if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
     return new Promise((resolve) => {
@@ -1134,6 +1150,7 @@ export class ClaudeConnection implements AgentConnection {
       session.stale = true
       for (const delivery of session.mapper.endAll('error')) this.deliver(delivery)
       for (const delivery of session.mapper.endBackground()) this.deliver(delivery)
+      this.scheduled(session, 0)
     }
     const turn = session.turn
     if (!turn) return
@@ -1284,6 +1301,7 @@ export class ClaudeConnection implements AgentConnection {
     const turn = session.turn
     if (!turn) return
     session.turn = null
+    for (const delivery of session.mapper.workSettled()) this.deliver(delivery)
     if (turn.error && !turn.cancelled) {
       // A turn that failed to sign in reopens its query, which reads the sign-in again.
       if (turn.error.kind === 'auth_required') session.stale = true
@@ -1821,6 +1839,16 @@ export class ClaudeConnection implements AgentConnection {
       )
     }
     return session.ultracodeDefault
+  }
+
+  /** Tells the session how many jobs will wake it later, when that changed. */
+  private scheduled(session: Session, jobs: number): void {
+    if (session.jobs === jobs) return
+    session.jobs = jobs
+    this.deliver({
+      sessionId: session.id,
+      map: () => ({ patches: [], effects: [{ kind: 'scheduled', jobs }] }),
+    })
   }
 
   /** A model the user switched to in Claude Code, with `/model` or its picker, is their choice. */

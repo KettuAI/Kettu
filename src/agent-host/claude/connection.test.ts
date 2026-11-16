@@ -3150,6 +3150,173 @@ describe('background tasks', () => {
     query.finish()
     await turn
   })
+
+  const runs = (target: Target) =>
+    target.effects.flatMap((effect) =>
+      effect.kind === 'backgroundRunning'
+        ? [{ running: effect.running, listed: effect.listed }]
+        : [],
+    )
+
+  it('says when a background command stops running, so the session can be let go', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [{ task_id: 'b1', task_type: 'local_bash', description: 'Serve' }],
+      }),
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'b1',
+        description: 'Serve',
+        task_type: 'local_bash',
+        is_backgrounded: true,
+      }),
+    )
+    await settle()
+    expect(runs(target)).toEqual([{ running: true, listed: true }])
+    query.emit(
+      system(query, {
+        subtype: 'task_notification',
+        task_id: 'b1',
+        status: 'completed',
+        summary: 'done',
+        output_file: '',
+      }),
+      system(query, { subtype: 'background_tasks_changed', tasks: [] }),
+    )
+    await settle()
+    expect(runs(target)).toEqual([
+      { running: true, listed: true },
+      { running: false, listed: true },
+    ])
+    query.finish()
+    await turn
+  })
+
+  it('counts background subagents as running work, and ambient tasks as none', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [
+          {
+            task_id: 'agent-1',
+            task_type: 'local_agent',
+            subagent_type: 'Explore',
+            description: 'Look',
+          },
+          { task_id: 'watch-1', task_type: 'local_bash', description: 'Watch', ambient: true },
+        ],
+      }),
+    )
+    await settle()
+    expect(runs(target).at(-1)).toEqual({ running: true, listed: true })
+    query.emit(
+      system(query, {
+        subtype: 'background_tasks_changed',
+        tasks: [
+          { task_id: 'watch-1', task_type: 'local_bash', description: 'Watch', ambient: true },
+        ],
+      }),
+    )
+    await settle()
+    expect(runs(target).at(-1)).toEqual({ running: false, listed: true })
+    query.finish()
+    await turn
+  })
+
+  it('keeps a command backgrounded by a Claude Code that sends no list as running', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'b1',
+        description: 'Serve',
+        task_type: 'local_bash',
+        is_backgrounded: true,
+      }),
+    )
+    await settle()
+    expect(runs(target)).toEqual([{ running: true, listed: false }])
+    query.emit(
+      system(query, {
+        subtype: 'task_updated',
+        task_id: 'b1',
+        patch: { status: 'completed' },
+      }),
+    )
+    await settle()
+    expect(runs(target).at(-1)).toEqual({ running: false, listed: false })
+    query.finish()
+    await turn
+  })
+
+  it('says again as a turn ends that nothing runs, as when a command never started', async () => {
+    const { target, query, turn } = await open()
+    query.emit(
+      system(query, {
+        subtype: 'task_started',
+        task_id: 'b1',
+        description: 'Serve',
+        task_type: 'local_bash',
+        is_backgrounded: true,
+      }),
+      system(query, { subtype: 'task_updated', task_id: 'b1', patch: { status: 'completed' } }),
+      // A second command whose permission is then denied: it never starts.
+      assistant(query, 'msg_c', [
+        {
+          type: 'tool_use',
+          id: 'toolu_c',
+          name: 'Bash',
+          input: { command: 'sleep 60', run_in_background: true },
+        },
+      ]),
+    )
+    await settle()
+    const kinds = () =>
+      target.effects.flatMap((effect) =>
+        effect.kind === 'background' || effect.kind === 'backgroundRunning'
+          ? [effect.kind === 'background' ? 'started' : effect.running ? 'running' : 'none']
+          : [],
+      )
+    expect(kinds().at(-1)).toBe('started')
+    query.finish()
+    await turn
+    expect(kinds().at(-1)).toBe('none')
+  })
+
+  it('reads the scheduled jobs that will wake the session from its Stop hook', async () => {
+    const { s, target, sessionId, query, turn } = await open()
+    const stop = s.sdk.last.options.hooks?.Stop?.[0]?.hooks[0]
+    expect(stop).toBeDefined()
+    const signal = new AbortController().signal
+    const fire = (crons: unknown[] | undefined) =>
+      stop!(
+        {
+          hook_event_name: 'Stop',
+          session_id: sessionId,
+          stop_hook_active: false,
+          ...(crons ? { session_crons: crons } : {}),
+        },
+        undefined,
+        { signal },
+      )
+    const jobs = () =>
+      target.effects.flatMap((effect) => (effect.kind === 'scheduled' ? [effect.jobs] : []))
+    await fire([{ id: 'c1', cron: '*/5 * * * *', recurring: true, prompt: 'check' }])
+    await settle()
+    expect(jobs()).toEqual([1])
+    // A Claude Code that does not say keeps what was known.
+    await fire(undefined)
+    await settle()
+    expect(jobs()).toEqual([1])
+    await fire([])
+    await settle()
+    expect(jobs()).toEqual([1, 0])
+    query.finish()
+    await turn
+  })
 })
 
 describe('prompt content', () => {
