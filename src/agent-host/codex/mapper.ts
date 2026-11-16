@@ -11,6 +11,7 @@ import type {
   ToolEntry,
   UserContent,
 } from '@shared/thread'
+import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import { replayedBlock } from '../acp/mapper'
 import { hasMessage, t } from '../i18n'
 import { planMarkdown, planRevision } from '../plan-revision'
@@ -244,11 +245,16 @@ export class ThreadMapper {
   private readonly reasoningParts = new Map<string, ReasoningParts>()
   /** Thoughts with a summary, whose raw reasoning is not shown beside it. */
   private readonly summarized = new Set<string>()
+  /** When the thread last sent the model something: a message, a tool's result, a request's end. */
+  private sentAt: number | null = null
+  /** When the request running now first showed output, if it has. */
+  private firstOutputAt: number | null = null
 
   /** Maps one notification; null for one this mapper does not take. */
   notification(method: string, params: unknown, ctx: MapperContext): MapperOutput | null {
     const out = output()
     const p = params as Record<string, unknown>
+    if (!ctx.replaying) this.timeOutput(ctx, out, method, p)
     switch (method) {
       case 'item/started':
         this.item(ctx, out, p.item as ThreadItem, false)
@@ -765,6 +771,48 @@ export class ThreadMapper {
       return
     }
     addEntry(ctx, out, { kind: 'compaction', id, status, summary: '' })
+  }
+
+  /**
+   * Times each request for its speed. A request ends with its token usage; it went out with the
+   * user's message, a tool's result or the end of the request before it. Hidden reasoning shows
+   * nothing while it is written, so a request with any is timed from when it went out.
+   */
+  private timeOutput(
+    ctx: MapperContext,
+    out: MapperOutput,
+    method: string,
+    p: Record<string, unknown>,
+  ): void {
+    switch (method) {
+      case 'item/agentMessage/delta':
+      case 'item/plan/delta':
+      case 'item/reasoning/summaryTextDelta':
+      case 'item/reasoning/textDelta':
+        this.firstOutputAt ??= ctx.now
+        return
+      case 'item/completed': {
+        const type = (p.item as ThreadItem | undefined)?.type
+        if (type !== 'agentMessage' && type !== 'reasoning' && type !== 'plan')
+          this.sentAt = ctx.now
+        return
+      }
+      case 'thread/tokenUsage/updated': {
+        const last = (p.tokenUsage as ThreadTokenUsage | undefined)?.last
+        const firstOutputAt = this.firstOutputAt
+        const sentAt = latestTime(this.sentAt, ctx.thread.session.turnStartedAt)
+        this.firstOutputAt = null
+        this.sentAt = ctx.now
+        // A compaction reports a total with no input or output.
+        if (!last || ctx.cancelling || (last.inputTokens === 0 && last.outputTokens === 0)) return
+        const streamed = last.reasoningOutputTokens > 0 ? null : firstOutputAt
+        const sample = timeRequest(last.outputTokens, sentAt, streamed, ctx.now)
+        const session = ctx.thread.session
+        const speed = sample && addSpeedSample(session.speed, sample, session.turnStartedAt)
+        if (speed) out.patches.push({ op: 'session.update', changes: { speed } })
+        return
+      }
+    }
   }
 
   private usage(ctx: MapperContext, out: MapperOutput, usage: ThreadTokenUsage): void {

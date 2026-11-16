@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentAccount } from '@shared/agent-host'
 import {
   applyPatches,
@@ -735,6 +735,95 @@ describe('a turn', () => {
     ])
     query.finish()
     await running
+  })
+
+  it("times the main thread's requests, streamed from their first output, whole from sending", async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      target.thread = applyPatches(target.thread, [
+        { op: 'session.update', changes: { turnStartedAt: 9_000 } },
+      ])
+      s.sdk.script = (query) => query.running()
+      const running = s.connection.prompt(sessionId, [{ type: 'text', text: 'Hi' }])
+      await settle()
+      const query = s.sdk.last
+      const at = async (time: number, ...messages: SdkMessage[]) => {
+        vi.setSystemTime(time)
+        query.emit(...messages)
+        await settle()
+      }
+      const start = (id: string, output = 1, extra = {}): SdkMessage =>
+        stream(
+          query,
+          { type: 'message_start', message: { id, usage: { output_tokens: output } } },
+          extra,
+        )
+      const end = (tokens: number, extra = {}): SdkMessage[] => [
+        stream(query, { type: 'message_delta', usage: { output_tokens: tokens } }, extra),
+        stream(query, { type: 'message_stop' }, extra),
+      ]
+      const toolResult = {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }],
+        },
+        parent_tool_use_id: null,
+        session_id: query.sessionId,
+      } as SdkMessage
+
+      await at(10_000, start('msg_1'))
+      await at(
+        11_000,
+        stream(query, {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'toolu_1', name: 'Bash', input: {} },
+        }),
+      )
+      await at(12_000, ...end(200))
+      // Streamed: from message_start to message_stop, its first token from the turn's start.
+      expect(target.thread.session.speed).toEqual({
+        last: { tokens: 200, ms: 2_000, approx: false, firstTokenMs: 1_000 },
+        recent: [{ rate: 100, approx: false }],
+        turn: { since: 9_000, tokens: 200, ms: 2_000, requests: 1, approx: 0 },
+        session: { tokens: 200, ms: 2_000, requests: 1, approx: 0 },
+      })
+
+      await at(15_000, toolResult)
+      // A subagent's request is its own, not the main thread's.
+      const child = { parent_tool_use_id: 'toolu_9' }
+      await at(15_100, start('msg_s', 1, child))
+      await at(15_500, start('msg_2'))
+      await at(16_100, ...end(500, child))
+      await at(16_500, ...end(300))
+      expect(target.thread.session.speed).toMatchObject({
+        last: { tokens: 300, ms: 1_000, approx: false, firstTokenMs: 500 },
+        recent: [
+          { rate: 100, approx: false },
+          { rate: 300, approx: false },
+        ],
+        turn: { tokens: 500, ms: 3_000, requests: 2 },
+      })
+
+      // Too few tokens say nothing about speed.
+      await at(17_000, start('msg_3'))
+      await at(18_000, ...end(40))
+      expect(target.thread.session.speed?.session.requests).toBe(2)
+
+      // Sent whole, its message_start already counting all of it: timed from the tool result.
+      await at(20_000, toolResult)
+      await at(24_000, start('msg_4', 600))
+      await at(24_010, ...end(600))
+      expect(target.thread.session.speed).toMatchObject({
+        last: { tokens: 600, ms: 4_010, approx: true, firstTokenMs: null },
+        turn: { tokens: 1_100, ms: 7_010, requests: 3, approx: 1 },
+      })
+      query.finish()
+      await running
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('reads context summaries from the running query without sending another prompt', async () => {

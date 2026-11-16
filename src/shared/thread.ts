@@ -21,6 +21,7 @@ import type {
 } from './computer-use'
 import { isComputerSetupStep } from './computer-use'
 import type { ContextReport } from './context'
+import type { OutputSpeed } from './output-speed'
 import type {
   ListingVisibility,
   MarketProblem,
@@ -85,6 +86,8 @@ export interface SessionView {
    * oldest first. Absent for an agent that reports none.
    */
   background?: BackgroundTaskView[]
+  /** Ephemeral: how fast the model writes, for an agent whose stream times its requests. */
+  speed?: OutputSpeed
 }
 
 /** A command or monitor an agent runs beside its turn, as the session board lists it. */

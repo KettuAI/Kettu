@@ -11,6 +11,7 @@ import type {
   ToolEntry,
   ToolKind,
 } from '@shared/thread'
+import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import { fenced } from '../codex/mapper'
 import { t } from '../i18n'
 import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
@@ -274,6 +275,8 @@ export class SessionMapper {
   private readonly jobs = new Map<string, Job>()
   private contextWindow: number | null = null
   private planId: string | null = null
+  /** When the session last sent the model something, for the next message's speed. */
+  private sentAt: number | null = null
 
   constructor(private readonly cwd: string) {}
 
@@ -298,6 +301,7 @@ export class SessionMapper {
   /** Maps one event; null for one this mapper does not take. */
   event(event: SessionEvent, ctx: MapperContext): MapperOutput | null {
     const out = output()
+    if (!ctx.replaying) this.timeMessage(ctx, out, event)
     switch (event.type) {
       case 'assistant/message':
         this.message(ctx, out, event.data as EventData['assistant/message'])
@@ -349,6 +353,32 @@ export class SessionMapper {
         return null
     }
     return out
+  }
+
+  /**
+   * Times each request for its speed. dsh sends a message only once it is whole, so the request is
+   * timed from when it went out: the turn's start, a tool's result, a retry or the message before.
+   */
+  private timeMessage(ctx: MapperContext, out: MapperOutput, event: SessionEvent): void {
+    switch (event.type) {
+      case 'turn/start':
+      case 'tool/result':
+      case 'request/context':
+      case 'llm/retry':
+        this.sentAt = ctx.now
+        return
+      case 'assistant/message': {
+        const data = event.data as EventData['assistant/message']
+        const sentAt = latestTime(this.sentAt, ctx.thread.session.turnStartedAt)
+        this.sentAt = ctx.now
+        if (!data.usage || data.interrupted || ctx.cancelling) return
+        const sample = timeRequest(data.usage.outputTokens, sentAt, null, ctx.now)
+        const session = ctx.thread.session
+        const speed = sample && addSpeedSample(session.speed, sample, session.turnStartedAt)
+        if (speed) out.patches.push({ op: 'session.update', changes: { speed } })
+        return
+      }
+    }
   }
 
   private message(

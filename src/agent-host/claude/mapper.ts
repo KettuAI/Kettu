@@ -9,6 +9,7 @@ import type {
   ToolEntry,
   UserContent,
 } from '@shared/thread'
+import { addSpeedSample, latestTime, timeRequest } from '@shared/output-speed'
 import { t } from '../i18n'
 import {
   appendContent,
@@ -49,6 +50,15 @@ import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
 import { SERVICE_NAME } from '../service-name'
 import { workflowToolStructured } from '../workflow/tools'
 import { PLAN_TOOLS, resultContent, startsBackgroundWork, SUBAGENT_TOOLS, toolView } from './tools'
+
+/** When a main-thread request went out and started its output, and its output tokens. */
+interface RequestTiming {
+  startedAt: number
+  sentAt: number | null
+  /** The output tokens message_start already counted. */
+  startTokens: number
+  tokens: number
+}
 
 /** Output for one session, built against its thread when it is delivered. */
 export interface Delivery {
@@ -203,6 +213,10 @@ export class ClaudeMapper {
   private prompter: { parentId: string; messageId: string } | null = null
   /** The model of each subagent that wrote since the last `resized`, by its session. */
   private readonly subagentModels = new Map<string, string>()
+  /** When the main thread last sent the model something: a tool result, a retry or a message's end. */
+  private lastSentAt: number | null = null
+  /** The main thread's request streaming now, timed for its speed. */
+  private timing: RequestTiming | null = null
 
   constructor(
     /** The session's own id, Claude Code's. */
@@ -226,8 +240,11 @@ export class ClaudeMapper {
         return this.streamEvent(message as StreamEvent)
       case 'assistant':
         return this.assistant(message as AssistantMessage, false)
-      case 'user':
-        return this.user(message as UserMessage, false)
+      case 'user': {
+        const user = message as UserMessage
+        if (!user.parent_tool_use_id && !user.agent_id) this.lastSentAt = Date.now()
+        return this.user(user, false)
+      }
       case 'system':
         return this.system(message as SystemMessage)
       case 'rate_limit_event': {
@@ -291,6 +308,14 @@ export class ClaudeMapper {
         const id = event.message?.id
         if (id) this.lanes.set(lane, id)
         if (lane !== '' || !id) return []
+        // The first content block arrives with message_start, so it times the output's start.
+        const already = event.message?.usage?.output_tokens ?? 0
+        this.timing = {
+          startedAt: Date.now(),
+          sentAt: this.lastSentAt,
+          startTokens: already,
+          tokens: 0,
+        }
         const usage = event.message?.usage
         return [{ sessionId, map: (ctx) => this.request(ctx, usage) }]
       }
@@ -320,6 +345,19 @@ export class ClaudeMapper {
         const messageId = this.lanes.get(lane)
         if (!messageId) return []
         return [{ sessionId, map: (ctx) => this.written(ctx, messageId) }]
+      }
+      case 'message_delta': {
+        const tokens = event.usage?.output_tokens
+        if (lane === '' && this.timing && typeof tokens === 'number') this.timing.tokens = tokens
+        return []
+      }
+      case 'message_stop': {
+        const timing = this.timing
+        if (lane !== '' || !timing) return []
+        const endedAt = Date.now()
+        this.timing = null
+        this.lastSentAt = endedAt
+        return [{ sessionId, map: (ctx) => this.speed(ctx, timing, endedAt) }]
       }
       default:
         return []
@@ -465,6 +503,22 @@ export class ClaudeMapper {
     }
     this.subagentModels.clear()
     return deliveries
+  }
+
+  /**
+   * One request's speed. It went out at the turn's start or the main thread's latest input. A
+   * message whose message_start already counts all its output was not streamed but sent whole, so
+   * it is timed from when the request went out.
+   */
+  private speed(ctx: MapperContext, timing: RequestTiming, endedAt: number): MapperOutput {
+    const out = output()
+    const session = ctx.thread.session
+    const sentAt = latestTime(timing.sentAt, session.turnStartedAt)
+    const whole = timing.startTokens >= timing.tokens
+    const sample = timeRequest(timing.tokens, sentAt, whole ? null : timing.startedAt, endedAt)
+    const speed = sample && addSpeedSample(session.speed, sample, session.turnStartedAt)
+    if (speed) out.patches.push({ op: 'session.update', changes: { speed } })
+    return out
   }
 
   private contextUsed(
@@ -862,9 +916,12 @@ export class ClaudeMapper {
   private system(message: SystemMessage): Delivery[] | null {
     const parent = this.sessionId
     switch (message.subtype) {
+      case 'api_retry':
+        // The request goes out again, so its first token is timed from the retry.
+        this.lastSentAt = Date.now()
+        return []
       case 'init':
       case 'session_state_changed':
-      case 'api_retry':
       case 'hook_started':
       case 'hook_progress':
       case 'hook_response':

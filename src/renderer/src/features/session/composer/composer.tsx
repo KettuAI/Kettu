@@ -49,6 +49,7 @@ import { PromptBox } from './prompt-box'
 import { RunningButton, SendButton } from './send-button'
 import { SessionPlace } from './session-place'
 import { SwitchStrip } from './switch-strip'
+import { SpeedButton } from './speed'
 import { CacheButton, ContextButton } from './usage'
 import { useOutOfCredit } from './use-out-of-credit'
 import type { Select } from './use-pick'
@@ -563,6 +564,7 @@ export function Composer({
               </p>
             )}
             <span className="kettu-tray__group kettu-tray__group--end">
+              <SpeedButton speed={session.speed} />
               <CacheButton cache={timed} running={running} used={session.usage?.used ?? 0} />
               <AgentMarkHost.Provider value={hostId}>
                 <ContextButton
