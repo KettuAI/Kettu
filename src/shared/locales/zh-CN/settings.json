@@ -656,6 +656,7 @@
     "notReported": "未提供",
     "planLimits": "套餐限额",
     "usageNotReported": "{{name}} 不提供套餐用量。",
+    "usageAfterSignIn": "{{name}} 登录后，套餐用量会显示在这里。",
     "usageReasons": {
       "vendor-disallows": "Google 不允许其他应用读取此用量。",
       "harness-does-not-offer": "此 Agent 未提供套餐用量读取方式。",

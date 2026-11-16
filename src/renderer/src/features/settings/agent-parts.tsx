@@ -355,6 +355,8 @@ export function UsageGroup({
         <p className="k-reading">{limitsReason}</p>
       ) : reading && status.capabilities.reports ? (
         <p className="k-reading">{t('agents.readingUsage')}</p>
+      ) : status.signIn === 'required' && status.capabilities.reports ? (
+        <p className="k-reading">{t('agents.usageAfterSignIn', { name: status.name })}</p>
       ) : limitsReadable(status) && (!running || readError) ? (
         <RowGroup>
           <RowFrame text={<RowText name={t('agents.planLimits')} />}>

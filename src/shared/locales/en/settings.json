@@ -660,6 +660,7 @@
     "notReported": "Not reported",
     "planLimits": "Plan limits",
     "usageNotReported": "{{name}} does not report plan usage.",
+    "usageAfterSignIn": "Plan usage shows here once {{name}} is signed in.",
     "usageReasons": {
       "vendor-disallows": "Google does not allow other apps to read it.",
       "harness-does-not-offer": "This agent does not offer a plan usage read.",
