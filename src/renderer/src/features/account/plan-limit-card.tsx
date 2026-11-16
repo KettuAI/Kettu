@@ -99,11 +99,12 @@ function CardFace({ card }: { card: PlanCard }) {
                   { model: w.model },
                 )
               : t(`common:planWindow.${w.window}`)
-            // Model groups have windows of two lengths each, so their lines name the length too.
+            // Model groups have windows of two lengths each, so their lines name the length and
+            // the group's initial, which fit the card; the full names are in its details.
             const short = !w.model
               ? t(`composer:usage.shortWindow.${w.window}`)
               : groups
-                ? `${t(`composer:usage.shortWindow.${w.window}`)} ${w.model}`
+                ? `${t(`composer:usage.shortWindow.${w.window}`)} ${w.model.charAt(0).toUpperCase()}`
                 : w.model
             return (
               <span key={w.id} className="flex min-w-0 flex-col gap-px">
