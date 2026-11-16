@@ -61,6 +61,7 @@ import { marketPublishedChanged } from '@renderer/stores/market-published'
 import { memoryChanged } from '@renderer/stores/memory'
 import { useProjectsStore } from '@renderer/stores/projects'
 import { routinesHostClosed, routinesHostOpened, useRoutinesStore } from '@renderer/stores/routines'
+import { useIdleReleaseStore } from '@renderer/stores/idle-release'
 import { useWorkflowsStore } from '@renderer/stores/workflows'
 import { tasksHostClosed, tasksHostOpened, useTasksStore } from '@renderer/stores/tasks'
 import { useSessionsStore } from '@renderer/stores/sessions'
@@ -168,6 +169,9 @@ function onHostEvent(event: HostEvent, hostId: string | null = null): void {
     case 'workflows.changed':
       useWorkflowsStore.getState().changed(hostId)
       return
+    case 'idleRelease.changed':
+      useIdleReleaseStore.getState().receive(hostId, event.state)
+      return
   }
   receiveArtifactEvent(event, hostId)
   if (event.type === 'artifacts.changed') artifactsChanged(hostId)
@@ -229,6 +233,7 @@ function loadAgents(): Promise<void> {
 
 /** Loads everything the shell shows; also runs after the agent host comes back. */
 export async function loadHostState(): Promise<void> {
+  useIdleReleaseStore.getState().reload(null)
   await Promise.allSettled([
     loadSessionState(),
     loadAgents(),

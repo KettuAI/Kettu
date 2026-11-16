@@ -131,6 +131,8 @@ export interface AgentInit {
 
 export interface SessionSetup {
   config: ConfigOption[]
+  /** The version of the harness's program that runs the session, when the agent says. */
+  harnessVersion?: string
 }
 
 /** A session the agent opened, with its own id for it. */

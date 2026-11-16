@@ -271,11 +271,20 @@ interface Session {
   quiet: boolean
   /** Its Claude Code process, while it runs. */
   process: ChildProcess | null
+  /** That process's Claude Code version, when it says. */
+  version: string | undefined
 }
 
 interface Pending {
   at: number
   items: Delivery[]
+}
+
+function setupOf(session: Session): SessionSetup {
+  return {
+    config: session.config,
+    ...(session.version !== undefined ? { harnessVersion: session.version } : {}),
+  }
 }
 
 function newTurn(
@@ -640,7 +649,7 @@ export class ClaudeConnection implements AgentConnection {
   async newSession(cwd: string, options: SessionOptions = {}): Promise<OpenedSession> {
     const sessionId = randomUUID()
     const session = await this.open(sessionId, cwd, options, { resume: false })
-    return { sessionId, config: session.config }
+    return { sessionId, ...setupOf(session) }
   }
 
   async loadSession(
@@ -683,9 +692,9 @@ export class ClaudeConnection implements AgentConnection {
     options: SessionOptions = {},
   ): Promise<SessionSetup> {
     const open = this.sessions.get(sessionId)
-    if (open?.query && !open.stale) return { config: open.config }
+    if (open?.query && !open.stale) return setupOf(open)
     const session = await this.open(sessionId, cwd, options, { resume: true })
-    return { config: session.config }
+    return setupOf(session)
   }
 
   async forkSession(
@@ -717,7 +726,7 @@ export class ClaudeConnection implements AgentConnection {
       sdk.forkSession(sessionId, { dir: cwd, ...(upTo ? { upToMessageId: upTo } : {}) }),
     )
     const session = await this.open(forked.sessionId, cwd, options, { resume: true })
-    return { sessionId: forked.sessionId, config: session.config }
+    return { sessionId: forked.sessionId, ...setupOf(session) }
   }
 
   /**
@@ -890,6 +899,7 @@ export class ClaudeConnection implements AgentConnection {
       },
       quiet: how.quiet === true,
       process: null,
+      version: undefined,
     }
     const flags: Record<string, unknown> = {}
     // Through the SDK, Claude Code runs the hooks of a folder's own settings without asking.
@@ -1036,6 +1046,7 @@ export class ClaudeConnection implements AgentConnection {
       session.choices.effort = settings.values.effortLevel
     }
     session.choices.fast = init.fast_mode_state !== undefined && init.fast_mode_state !== 'off'
+    if (typeof init.claude_code_version === 'string') session.version = init.claude_code_version
     session.commands = init.commands ?? []
     session.config = buildConfig(
       session.models,

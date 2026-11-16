@@ -959,6 +959,49 @@
     },
     "signInCopied": "No project is open, so the sign-in command was copied.",
     "signInCopyFailed": "No project is open and the sign-in command could not be copied.",
+    "idle": {
+      "group": "Idle sessions",
+      "keywords": "idle release memory process prompt cache Claude Code",
+      "release": {
+        "name": "Release idle sessions’ agents",
+        "description": "Ending an idle session’s agent process frees memory. Your next message brings it back, and its first reply comes a few seconds later. Sessions with running work are not affected. For Claude Code for now.",
+        "auto": "Auto",
+        "custom": "Custom",
+        "never": "Never"
+      },
+      "auto": {
+        "plenty": "Memory is plentiful: released {{outOfView}} after leaving view or after {{inView}} idle in view.",
+        "plentyLimit": "Memory is plentiful: released {{outOfView}} after leaving view or after {{inView}} idle in view, at most {{limit}} idle.",
+        "tight": "Memory is tight: released {{outOfView}} after leaving view or after {{inView}} idle in view.",
+        "tightLimit": "Memory is tight: released {{outOfView}} after leaving view or after {{inView}} idle in view, at most {{limit}} idle.",
+        "unknown": "The memory state could not be read: released {{outOfView}} after leaving view or after {{inView}} idle in view.",
+        "critical": "Memory is critical: idle sessions are released now.",
+        "noneKept": "This computer has little memory: idle sessions are released now."
+      },
+      "outOfView": {
+        "name": "After leaving view",
+        "description": "How long a session you are not looking at keeps its agent once idle."
+      },
+      "inView": {
+        "name": "In view",
+        "description": "How long a session on screen keeps its agent while idle."
+      },
+      "limit": {
+        "name": "Idle processes at most",
+        "description": "Beyond it, the session used least recently is released first.",
+        "none": "No limit"
+      },
+      "cacheNote": "Neither waits past a session’s prompt cache, after which its next turn writes the cache again anyway.",
+      "never": "Idle sessions keep their agent. Archiving, deleting, switching agent and quitting Kettu still end it.",
+      "minutes_one": "{{count}} minute",
+      "minutes_other": "{{count}} minutes",
+      "hours_one": "{{count}} hour",
+      "hours_other": "{{count}} hours",
+      "fallback": {
+        "title": "Claude Code {{version}} lost the prompt cache after resuming",
+        "body": "Twice in a row, a session resumed on this version read less than half of its context from the prompt cache. So idle sessions keep their agent until their cache expires, over the settings below, until Claude Code updates to another version. When memory is critical they are still released."
+      }
+    },
     "workflow": {
       "group": "Workflows",
       "keywords": "Workflow suggest auto pick steps tasks flow",

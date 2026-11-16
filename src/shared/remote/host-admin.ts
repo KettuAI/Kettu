@@ -48,6 +48,7 @@ export const HOST_SETTING_KEYS = {
   mcp: 'all',
   marketplace: 'all',
   startModes: 'all',
+  idleSessions: 'all',
   updates: 'all',
   usage: ['fromComputer'],
   remote: 'all',
@@ -65,6 +66,7 @@ export interface HostSettingsPart {
   mcp: SettingsFile['mcp']
   marketplace: SettingsFile['marketplace']
   startModes: SettingsFile['startModes']
+  idleSessions: SettingsFile['idleSessions']
   updates: SettingsFile['updates']
   usage: Pick<SettingsFile['usage'], 'fromComputer'>
   remote: SettingsFile['remote']

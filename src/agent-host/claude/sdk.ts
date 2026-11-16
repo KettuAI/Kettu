@@ -384,6 +384,8 @@ export interface InitializeAnswer {
   models: ModelInfo[]
   account?: AccountInfo
   fast_mode_state?: string
+  /** The version of the Claude Code process that runs the session's turns. */
+  claude_code_version?: string
 }
 
 export interface ContextUsageAnswer {

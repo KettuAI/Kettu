@@ -45,6 +45,13 @@ describe('createValidators', () => {
     rejects(() => posix['agents.logout']({ agentId: 'unknown-agent' }))
   })
 
+  it('takes nothing for the idle sessions’ rule, which the host decides alone', () => {
+    expect(posix['sessions.idleRelease'](undefined)).toBeUndefined()
+    expect(posix['sessions.idleRelease']({})).toBeUndefined()
+    rejects(() => posix['sessions.idleRelease']({ memory: 'plenty' }))
+    rejects(() => posix['sessions.idleRelease']({ fallback: ['2.1.325'] }))
+  })
+
   it('takes a bounded list of session ids for the running work ending them would stop', () => {
     expect(posix['sessions.runningWork']({ sessionIds: ['a', 'b'], other: 1 })).toEqual({
       sessionIds: ['a', 'b'],

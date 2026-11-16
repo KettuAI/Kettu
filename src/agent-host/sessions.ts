@@ -136,7 +136,11 @@ import {
   type Attachments,
 } from './attachments'
 import { agentError, type AgentManager, type AgentRuntime } from './agents'
-import { OPTION_IDS as CLAUDE_OPTION_IDS } from './claude/config'
+import {
+  DEFAULT_EFFORT as CLAUDE_DEFAULT_EFFORT,
+  DEFAULT_MODEL as CLAUDE_DEFAULT_MODEL,
+  OPTION_IDS as CLAUDE_OPTION_IDS,
+} from './claude/config'
 import {
   COLLABORATION_ID as CODEX_COLLABORATION_ID,
   MODE_ID as CODEX_MODE_ID,
@@ -184,6 +188,7 @@ import { planRevision } from './plan-revision'
 import { watchSettings, type PreparedRecords, type WatchTarget } from './prepared'
 import type { Projects } from './projects'
 import type { CacheTtlReader } from './prompt-cache'
+import { missedCache, type IdleRelease } from './idle-release'
 import {
   REPORT_LIMIT,
   reportText,
@@ -236,6 +241,7 @@ import {
   SYNTHETIC_MODE_ID,
   type MapperEffect,
   type MapperOutput,
+  type RequestCache,
   type SubagentState,
   type TurnScope,
 } from './session-updates'
@@ -425,6 +431,8 @@ export interface SessionManagerDeps {
   }
   /** Reads how long a session's prompt cache lasts from the agent's own transcript. */
   cacheTtl?: CacheTtlReader
+  /** When idle Claude Code sessions let their agent go; without it they follow `timings`. */
+  idleRelease?: IdleRelease
   /** The attachments drafts and queued prompts hold; without it a prompt carries none. */
   attachments?: Attachments
   /** The artifacts service; without it every attach passes no MCP servers. */
@@ -661,6 +669,13 @@ interface Live {
   idleSince: number | null
   hiddenSince: number | null
   releaseTimer: ReturnType<typeof setTimeout> | null
+  /** The version of the harness's program its agent runs, when the agent says. */
+  harnessVersion: string | null
+  /**
+   * Set as it resumes within its prompt cache's lifetime, until its first request says how much
+   * of the cache it read: the context it had before, in tokens.
+   */
+  resumeRead: { before: number; lastRequestAt: number; expiresAt: number } | null
   contextTimer: ReturnType<typeof setTimeout> | null
   contextDueAt: number
   contextDirty: boolean
@@ -687,6 +702,33 @@ const ANSWERS_KEPT = 50
  */
 function originKey(owner: string, requestId: number): string {
   return `${owner}:${requestId}`
+}
+
+const MINUTE = 60_000
+/** How long a prompt cache lasts when the agent's own records do not say. */
+const CACHE_TTL_MS = 5 * MINUTE
+
+/** When the session's prompt cache expires, from its main thread's latest request, if any. */
+function cacheExpiresAt(live: Live): number | null {
+  const cache = live.thread.session.usage?.cache
+  return cache ? cache.lastRequestAt + (cache.ttl ?? CACHE_TTL_MS) : null
+}
+
+/**
+ * Claude Code takes its effort from the command line it resumes with, not from the session, so a
+ * resumed session's effort and model go out again even when they look unchanged. A default needs
+ * nothing: it is what that command line resolves to.
+ */
+function resentOnResume(
+  agentId: AgentId,
+  values: Record<string, string | boolean>,
+): ReadonlySet<string> | undefined {
+  if (harnessOf(agentId) !== 'claude-code') return undefined
+  const { model, effort } = CLAUDE_OPTION_IDS
+  const resent = new Set<string>()
+  if (values[model] !== undefined && values[model] !== CLAUDE_DEFAULT_MODEL) resent.add(model)
+  if (values[effort] !== undefined && values[effort] !== CLAUDE_DEFAULT_EFFORT) resent.add(effort)
+  return resent
 }
 
 /** The requests that wait for the user: permissions, new sites, first uses of apps and setups. */
@@ -950,6 +992,10 @@ export class SessionManager {
   private readonly reviving = new Map<string, Promise<Live>>()
   /** Idle sessions being let go, by id. */
   private readonly releasing = new Map<string, Promise<void>>()
+  /** A look at the idle limit is due once the current work is done. */
+  private limitCheck = false
+  /** Sessions let go for idleness since this host started, whose resume the cache guard checks. */
+  private readonly idleReleased = new Set<string>()
   /** Transcript reads waiting to run, by session id. */
   private readonly cacheReads = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly timings: SessionTimings
@@ -2954,6 +3000,8 @@ export class SessionManager {
       idleSince: null,
       hiddenSince: this.inFront(record.id) ? null : this.now(),
       releaseTimer: null,
+      harnessVersion: null,
+      resumeRead: null,
       contextTimer: null,
       contextDueAt: 0,
       contextDirty: false,
@@ -3428,6 +3476,7 @@ export class SessionManager {
         this.agentTurn(live, effect)
         break
       case 'request':
+        if (live.resumeRead) this.checkResumeRead(live, effect.cache)
         this.refreshContext(live, this.timings.contextDebounceMs)
         // A turn's transcript is read as it ends; a request between turns has a read of its own.
         if (live.turn) live.turn.requested = true
@@ -4224,6 +4273,7 @@ export class SessionManager {
     live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
+    this.attachedOn(live, setup.harnessVersion, false)
     // The cache names values the session no longer lists, so it is read before it takes them.
     const cached = this.deps.options?.get(agentId)?.config ?? []
     const own = setup.config
@@ -4413,6 +4463,7 @@ export class SessionManager {
     live.record.acpSessionId = setup.sessionId
     this.stampConfig(live.record)
     this.attach(live, runtime.connection)
+    this.attachedOn(live, setup.harnessVersion, false)
     live.failure = null
     const { agentId } = live.record
     const own = setup.config
@@ -4588,7 +4639,14 @@ export class SessionManager {
       restore = false,
       from,
       stop,
-    }: { restore?: boolean; from?: ConfigOption[]; stop?: () => boolean } = {},
+      resend,
+    }: {
+      restore?: boolean
+      from?: ConfigOption[]
+      stop?: () => boolean
+      /** Options sent even when they look unchanged, since the agent may not have kept them. */
+      resend?: ReadonlySet<string>
+    } = {},
   ): Promise<ConfigOption[]> {
     const { agentId, acpSessionId } = live.record
     let held = from
@@ -4602,7 +4660,9 @@ export class SessionManager {
         restore &&
         option?.category === 'model' &&
         Object.keys(options).some((wanted) => !config.some((o) => o.id === wanted))
-      if (value === undefined || (option?.value === value && !offerMissing)) continue
+      if (value === undefined || (option?.value === value && !offerMissing && !resend?.has(id))) {
+        continue
+      }
       if (!option || !isValueOf(option, value)) {
         this.deps.diagnostics.log(
           'warn',
@@ -5250,27 +5310,185 @@ export class SessionManager {
     live.held = null
     const now = this.now()
     live.idleSince ??= now
+    const plan = this.releaseAt(live, now)
+    if (plan) {
+      const { due, why } = plan
+      live.releaseTimer = setTimeout(
+        () => {
+          live.releaseTimer = null
+          if (this.live.get(live.id) !== live) return
+          if (this.now() >= due && !live.closing && !this.holdsAgent(live)) this.release(live, why)
+          else this.refreshRelease(live)
+        },
+        Math.max(0, due - now),
+      )
+    }
+    if (this.deps.idleRelease && harnessOf(live.record.agentId) === 'claude-code') {
+      this.checkIdleLimitSoon()
+    }
+  }
+
+  /**
+   * When an idle session lets its agent go, and why; null while nothing ends it for idleness.
+   * Claude Code's follow the idle rule, the others `timings`.
+   */
+  private releaseAt(live: Live, now: number): { due: number; why: string } | null {
+    const idleSince = live.idleSince ?? now
     const { releaseHiddenMs, releaseShownMs, releaseUnusedMs } = this.timings
-    const why = !live.used ? 'unused' : this.inFront(live.id) ? 'idle in view' : 'out of view'
-    const due = !live.used
-      ? live.idleSince + releaseUnusedMs
-      : this.inFront(live.id)
-        ? live.idleSince + releaseShownMs
-        : Math.max(live.idleSince, live.hiddenSince ?? now) + releaseHiddenMs
-    live.releaseTimer = setTimeout(
-      () => {
-        live.releaseTimer = null
-        if (this.live.get(live.id) !== live) return
-        if (this.now() >= due && !live.closing && !this.holdsAgent(live)) this.release(live, why)
-        else this.refreshRelease(live)
-      },
-      Math.max(0, due - now),
+    if (!live.used) return { due: idleSince + releaseUnusedMs, why: 'unused' }
+    const front = this.inFront(live.id)
+    const hiddenFrom = Math.max(idleSince, live.hiddenSince ?? now)
+    const idle = this.deps.idleRelease
+    if (!idle || harnessOf(live.record.agentId) !== 'claude-code') {
+      return front
+        ? { due: idleSince + releaseShownMs, why: 'idle in view' }
+        : { due: hiddenFrom + releaseHiddenMs, why: 'out of view' }
+    }
+    const rule = idle.rule()
+    if (!rule) return null
+    if (rule.now) return { due: now, why: 'memory critical' }
+    const expiry = cacheExpiresAt(live)
+    // Never sooner than the shortest wait, as when an attach sent nothing to renew the cache.
+    const floor = idleSince + releaseUnusedMs
+    // On a version whose resumes lost the cache, a released session would write it all again.
+    if (expiry !== null && this.cacheGuarded(live)) {
+      return { due: Math.max(expiry, floor), why: 'cache expired' }
+    }
+    let due = front ? idleSince + rule.inView * MINUTE : hiddenFrom + rule.outOfView * MINUTE
+    let why = front ? 'idle in view' : 'out of view'
+    // Past it the next turn writes the whole context again anyway, and the process saves little.
+    if (expiry !== null && expiry < due) {
+      due = expiry
+      why = 'cache expired'
+    }
+    return { due: Math.max(due, floor), why }
+  }
+
+  /** Its version lost the cache on resumes, so it keeps its agent until the cache expires. */
+  private cacheGuarded(live: Live): boolean {
+    const idle = this.deps.idleRelease
+    if (!idle || idle.memoryState() === 'critical') return false
+    return idle.guard.holds(live.harnessVersion)
+  }
+
+  /** A Claude Code session whose agent runs and is idle, which the idle limit counts. */
+  private idleProcess(live: Live): boolean {
+    return (
+      live.record.origin !== 'subagent' &&
+      harnessOf(live.record.agentId) === 'claude-code' &&
+      live.saved &&
+      !live.prepared &&
+      !live.closing &&
+      !this.releasing.has(live.id) &&
+      live.connection !== null &&
+      live.thread.session.status === 'ready' &&
+      this.holdReason(live) === null
     )
+  }
+
+  private checkIdleLimitSoon(): void {
+    if (this.limitCheck) return
+    this.limitCheck = true
+    queueMicrotask(() => {
+      this.limitCheck = false
+      this.checkIdleLimit()
+    })
+  }
+
+  /**
+   * Over the rule's limit, the least recently used idle sessions let their agent go: those out of
+   * view by when they left it or went idle, then those in view by how long they have been idle.
+   */
+  private checkIdleLimit(): void {
+    const limit = this.deps.idleRelease?.rule()?.limit
+    if (limit === null || limit === undefined || this.stopped) return
+    const idle = [...this.live.values()].filter((live) => this.idleProcess(live))
+    let over = idle.length - limit
+    if (over <= 0) return
+    const now = this.now()
+    const order = (live: Live): [number, number] =>
+      this.inFront(live.id)
+        ? [1, live.idleSince ?? now]
+        : [0, Math.max(live.idleSince ?? now, live.hiddenSince ?? now)]
+    idle.sort((a, b) => {
+      const [frontA, atA] = order(a)
+      const [frontB, atB] = order(b)
+      return frontA - frontB || atA - atB
+    })
+    for (const live of idle) {
+      if (over <= 0) break
+      if (this.cacheGuarded(live) && (cacheExpiresAt(live) ?? 0) > now) continue
+      over--
+      this.release(live, 'over limit')
+    }
+  }
+
+  /** The idle rule, the memory state or a fallback changed: every idle session is armed again. */
+  idleRulesChanged(): void {
+    for (const live of this.live.values()) {
+      if (live.record.origin !== 'subagent') this.refreshRelease(live)
+    }
+  }
+
+  /**
+   * Notes the harness version a session attached on, and for a resume within its prompt cache's
+   * lifetime, that its first request is to say how much of the cache it read.
+   */
+  private attachedOn(live: Live, version: string | undefined, resumed: boolean): void {
+    live.resumeRead = null
+    if (version === undefined) return
+    live.harnessVersion = version
+    const idle = this.deps.idleRelease
+    if (!idle) return
+    if (idle.guard.seen(live.record.agentId, version)) {
+      this.deps.diagnostics.log('info', `Claude Code is now ${version}: the cache fallback ended`)
+      idle.notify()
+    }
+    // A session the quit let go, not an idle release, says nothing about releasing: across runs
+    // the agent may start with other servers and instructions.
+    const released = this.idleReleased.delete(live.id)
+    const usage = live.thread.session.usage
+    const cache = usage?.cache
+    if (!resumed || !released || !cache || !usage.used) return
+    const expiresAt = cacheExpiresAt(live)
+    if (expiresAt !== null && expiresAt > this.now()) {
+      live.resumeRead = { before: usage.used, lastRequestAt: cache.lastRequestAt, expiresAt }
+    }
+  }
+
+  /**
+   * The first request after a resume within the cache's lifetime: one that read under half the
+   * context the session had is a miss, and two in a row on a version put it in fallback.
+   */
+  private checkResumeRead(live: Live, cache: RequestCache | undefined): void {
+    const check = live.resumeRead
+    live.resumeRead = null
+    const idle = this.deps.idleRelease
+    const version = live.harnessVersion
+    if (!check || !cache || !idle || version === null) return
+    const now = this.now()
+    if (now >= check.expiresAt) return
+    const missed = missedCache({ before: check.before, ...cache })
+    this.deps.diagnostics.event(
+      live.record.agentId,
+      missed ? 'cache missed after resume' : 'cache read after resume',
+      `${live.id}: Claude Code ${version}, ${Math.round((now - check.lastRequestAt) / 1000)} s ` +
+        `after the last request, read ${cache.read} and wrote ${cache.written} tokens of ` +
+        `${check.before} before`,
+    )
+    if (!idle.guard.resumed(version, missed)) return
+    this.deps.diagnostics.log(
+      'warn',
+      `Claude Code ${version} lost the prompt cache on two resumes in a row: its idle sessions ` +
+        'keep their agent until the cache expires',
+    )
+    idle.notify()
   }
 
   /** Stores the session's thread, closes its agent's session and its subagents, and drops it. */
   private release(live: Live, why: string): void {
     if (this.releasing.has(live.id)) return
+    if (harnessOf(live.record.agentId) === 'claude-code') this.idleReleased.add(live.id)
     const reason = why === 'unused' && live.typed ? 'typed, nothing sent' : why
     this.deps.diagnostics.event(live.record.agentId, 'session released', `${live.id}: ${reason}`)
     const run = this.closeAll([...this.descendants(live.id, 'subagent'), live.record], true)
@@ -5400,6 +5618,8 @@ export class SessionManager {
     // session attaches waits for it instead of being dropped.
     if (record.acpSessionId !== '') connection.reopen(record.acpSessionId)
     let config: ConfigOption[]
+    let version: string | undefined
+    let resumed = false
     if (record.acpSessionId === '') {
       // An agent taking the session over that never had it.
       config = await this.renew(
@@ -5415,9 +5635,14 @@ export class SessionManager {
     } else if (caps.resumeSession) {
       const attach = await this.attachOptions(live.id, record, runtime)
       try {
-        config = (
-          await connection.resumeSession(record.acpSessionId, await this.cwdOf(live), attach)
-        ).config
+        const setup = await connection.resumeSession(
+          record.acpSessionId,
+          await this.cwdOf(live),
+          attach,
+        )
+        config = setup.config
+        version = setup.harnessVersion
+        resumed = !carry
       } catch (error) {
         if (carry) {
           // The session it had is gone, so it starts over with the whole conversation.
@@ -5450,10 +5675,12 @@ export class SessionManager {
     const wanted = carry
       ? this.takeoverValues(record.agentId, config, carry)
       : carryMode(own, config)
-    config = await this.applyStartOptions(live, connection, agentValues(wanted), {
+    const values = agentValues(wanted)
+    config = await this.applyStartOptions(live, connection, values, {
       restore: !carry,
       from: config,
       stop: () => gone() || connection.isClosed,
+      resend: resumed ? resentOnResume(record.agentId, values) : undefined,
     })
     if (gone()) {
       await this.closeUnseen(live, runtime)
@@ -5461,6 +5688,7 @@ export class SessionManager {
     }
     if (connection.isClosed) throw new AgentRequestError('closed', 'The agent connection closed')
     this.attach(live, connection)
+    this.attachedOn(live, version, resumed)
     this.opened(live, config)
     for (const child of this.descendants(live.id, 'subagent')) {
       const childLive = this.live.get(child.id)
@@ -9065,6 +9293,7 @@ export class SessionManager {
     this.missing.delete(sessionId)
     this.watchers.delete(sessionId)
     this.seqs.delete(sessionId)
+    this.idleReleased.delete(sessionId)
     if (record?.origin === 'routine') this.deps.routine?.current?.sessionGone(sessionId)
     if (record?.origin === 'task') this.deps.task?.current?.sessionGone(sessionId)
     if (known) this.deps.events.removed(sessionId, portIds)

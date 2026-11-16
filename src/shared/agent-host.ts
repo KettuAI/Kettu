@@ -21,6 +21,7 @@ import type { ControlOutcome } from './control'
 import type { ContextBreakdown } from './context'
 import type { DeviceFileContent, FileContent, FileList, FileSearch, FileWritten } from './files'
 import type { ArtifactContentFile, BackgroundWork } from './host-control'
+import type { IdleReleaseState } from './idle-release'
 import type {
   CatalogServer,
   ConnectStart,
@@ -1035,6 +1036,8 @@ export interface HostContract {
   'sessions.cancel': { params: { sessionId: string }; result: void }
   // What ending these sessions and their sub-sessions would stop, for the ones with any.
   'sessions.runningWork': { params: { sessionIds: string[] }; result: { sessions: RunningWork[] } }
+  // The memory state, the rule idle Claude Code sessions follow and any version in fallback.
+  'sessions.idleRelease': { params: void; result: IdleReleaseState }
   // Stops one background task of the session, as the session board's Stop does.
   'sessions.stopTask': { params: { sessionId: string; taskId: string }; result: void }
   // The end of a background task's output, at most 8 KiB, for the session board.
@@ -1599,6 +1602,7 @@ export const HOST_METHODS = [
   'sessions.attachEarly',
   'sessions.cancel',
   'sessions.runningWork',
+  'sessions.idleRelease',
   'sessions.stopTask',
   'sessions.taskOutput',
   'sessions.retry',
@@ -1796,6 +1800,7 @@ export type HostEvent =
       error?: string
     }
   | { type: 'usage.status'; status: UsageStatus }
+  | { type: 'idleRelease.changed'; state: IdleReleaseState }
   | { type: 'artifacts.changed' } // the list changed; a page showing it reads again
   | { type: 'artifacts.version'; id: string; version: number }
   // `clients` are the other clients showing it, as `session.viewers` names them for the receiver.
