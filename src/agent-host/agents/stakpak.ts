@@ -5,6 +5,7 @@ const BASE = 'https://github.com/stakpak/agent/releases/download/v0.3.88'
 
 export const STAKPAK: AgentDefinition = {
   id: 'stakpak',
+  limitsReason: 'not-yet-supported',
   name: 'Stakpak',
   registryId: 'stakpak',
   launch: { kind: 'binary', command: 'stakpak', args: ['acp'] },
