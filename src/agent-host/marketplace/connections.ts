@@ -20,6 +20,7 @@ import {
   isCancelled,
   parseSignIn,
   probe,
+  RenewalRefused,
   renew,
   timedFetch,
   type Login,
@@ -28,6 +29,8 @@ import {
 
 /** Renewed this long before it expires. */
 export const RENEW_EARLY_MS = 5 * 60_000
+/** After a renewal failed on the way, the next one waits this long. */
+const RENEW_RETRY_MS = 30_000
 
 /** How a server reaches its agents: directly, through the proxy with a token, or not at all. */
 export type Access = 'open' | 'proxy' | null
@@ -55,11 +58,10 @@ function oauthServer(server: MarketServer | undefined): OAuthServer | null {
   return server && server.spec.type === 'http' && server.spec.oauth ? (server as OAuthServer) : null
 }
 
-/** Why a renewal failed: the service's OAuth error, or the failure's own message. */
-function refusal(error: unknown): string {
+/** Why a renewal failed, in a line for the log. */
+function failure(error: unknown): string {
   const { message, errorCode } = error as { message?: string; errorCode?: string }
-  if (message) return message
-  return `The service refused to renew the token${errorCode ? `: ${errorCode}` : ''}`
+  return message || errorCode || 'unknown error'
 }
 
 export class MarketConnectionsService {
@@ -71,6 +73,8 @@ export class MarketConnectionsService {
   private readonly errors = new Map<string, string>()
   private readonly logins = new Map<string, { serverId: string; login: Login }>()
   private readonly renewing = new Map<string, Promise<string | null>>()
+  /** When a renewal that failed on the way may be tried again, by server id. */
+  private readonly retryAt = new Map<string, number>()
   private readonly fetch: typeof fetch
   private readonly now: () => number
   private lastSaved = 0
@@ -200,17 +204,20 @@ export class MarketConnectionsService {
 
   /**
    * A token for the proxy to send: the kept one, renewed first when it expires within five
-   * minutes. Null when the server is not connected or needs signing in again.
+   * minutes, or kept until it expires while renewing fails on the way. Null when the server is not
+   * connected, needs signing in again or has only an expired token.
    */
   async token(serverId: string): Promise<string | null> {
     const server = oauthServer(this.deps.servers().find((item) => item.id === serverId))
     const sign = server ? this.current(server) : null
     if (!sign?.tokens || sign.reconnect) return null
-    const { expiresAt, refresh } = sign.tokens
-    if (refresh && expiresAt !== undefined && expiresAt - this.now() < RENEW_EARLY_MS) {
-      return this.renewed(serverId, sign.tokens.access)
+    const { access, expiresAt, refresh } = sign.tokens
+    if (!refresh || expiresAt === undefined || expiresAt - this.now() >= RENEW_EARLY_MS) {
+      return access
     }
-    return sign.tokens.access
+    const renewed = await this.renewed(serverId, access)
+    if (renewed !== null) return renewed
+    return this.signs.get(serverId) === sign && expiresAt > this.now() ? access : null
   }
 
   /**
@@ -233,10 +240,16 @@ export class MarketConnectionsService {
     return running
   }
 
+  /**
+   * Null when the token cannot be renewed now. Only a refusal leaves the server to be connected
+   * again; a renewal that failed on the way, such as on a network or service error, keeps the
+   * sign-in and is tried again after a while.
+   */
   private async renewNow(serverId: string, used: string): Promise<string | null> {
     const sign = this.signs.get(serverId)
     if (!sign?.tokens) return null
     if (sign.tokens.access !== used) return sign.tokens.access
+    if ((this.retryAt.get(serverId) ?? 0) > this.now()) return null
     try {
       const next = await renew(sign, timedFetch(this.fetch), () => this.stamp())
       if (this.signs.get(serverId) !== sign) return this.signs.get(serverId)?.tokens?.access ?? null
@@ -244,9 +257,14 @@ export class MarketConnectionsService {
       return next.tokens!.access
     } catch (error) {
       if (this.signs.get(serverId) !== sign) return null
-      const reason = refusal(error)
-      this.deps.log('warn', `The token for ${serverId} could not be renewed: ${reason}`)
-      this.save(serverId, { ...sign, savedAt: this.stamp(), reconnect: reason })
+      const reason = failure(error)
+      if (error instanceof RenewalRefused) {
+        this.deps.log('warn', `The token for ${serverId} could not be renewed: ${reason}`)
+        this.save(serverId, { ...sign, savedAt: this.stamp(), reconnect: reason })
+      } else {
+        this.retryAt.set(serverId, this.now() + RENEW_RETRY_MS)
+        this.deps.log('warn', `Renewing the token for ${serverId} failed; trying again: ${reason}`)
+      }
       return null
     }
   }
@@ -279,6 +297,7 @@ export class MarketConnectionsService {
   /** Keeps a sign-in here and with main, and tells the clients. */
   private save(serverId: string, sign: SignIn, loginId?: string): void {
     this.signs.set(serverId, sign)
+    this.retryAt.delete(serverId)
     this.errors.delete(serverId)
     this.cleared.delete(serverId)
     this.deps.keep(serverId, JSON.stringify(sign))

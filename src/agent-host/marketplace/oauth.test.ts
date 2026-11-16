@@ -7,6 +7,7 @@ import {
   isCancelled,
   parseSignIn,
   probe,
+  RenewalRefused,
   renew,
   type SignIn,
 } from './oauth'
@@ -289,14 +290,31 @@ describe('renew', () => {
     expect(seen.tokens[0]!.get('resource')).toBe(MCP)
   })
 
-  it('fails when the service refuses or there is nothing to renew with', async () => {
+  it('is refused when the service refuses or there is nothing to renew with', async () => {
     const { fetcher } = authorizationServer()
     await expect(
       renew({ ...sign, tokens: { ...sign.tokens!, refresh: 'stale' } }, fetcher, () => 0),
-    ).rejects.toThrow()
+    ).rejects.toThrow(RenewalRefused)
     await expect(
       renew({ ...sign, tokens: { access: 'a', type: 'Bearer' } }, fetcher, () => 0),
-    ).rejects.toThrow(/cannot be renewed/)
+    ).rejects.toThrow(RenewalRefused)
+  })
+
+  it('is not refused when the service or its metadata fails to answer', async () => {
+    const { fetcher } = authorizationServer()
+    const down = (async (input: string | URL | Request, init?: RequestInit) =>
+      new URL(String(input)).pathname === '/token'
+        ? json({ error: 'temporarily_unavailable' }, 503)
+        : fetcher(input, init)) as typeof fetch
+    const failed = await renew(sign, down, () => 0).catch((error: unknown) => error)
+    expect(failed).toBeInstanceOf(Error)
+    expect(failed).not.toBeInstanceOf(RenewalRefused)
+
+    const { fetcher: nowhere, calls } = fakeFetch({})
+    const unread = await renew(sign, nowhere, () => 0).catch((error: unknown) => error)
+    expect(unread).toBeInstanceOf(Error)
+    expect(unread).not.toBeInstanceOf(RenewalRefused)
+    expect(calls.some((call) => call.method === 'POST')).toBe(false)
   })
 })
 
