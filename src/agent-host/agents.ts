@@ -2646,7 +2646,10 @@ export class AgentManager {
     this.emit(slot)
   }
 
-  /** Runs the agent's report in a hidden session; null when it gave none Kettu can read. */
+  /**
+   * Runs the agent's report in a hidden session; null when the agent cannot run one. A report
+   * Kettu cannot read is a failed read, whose error never quotes the agent's reply.
+   */
   private async reportLimits(
     slot: Slot,
     runtime: AgentRuntime,
@@ -2676,11 +2679,14 @@ export class AgentManager {
     const usage = messages
       .map((text) => report.parse(text, now))
       .findLast((parsed) => parsed !== null)
-    if (!usage) {
-      log(`${slot.name}: ${report.command} gave no report Kettu can read`)
-      return null
-    }
-    return { usage, now }
+    if (usage) return { usage, now }
+    // No hidden session ran the report, which `runReport` logged.
+    if (!runtime.connection.hiddenSessions) return null
+    log(`${slot.name}: ${report.command} gave no report Kettu can read`)
+    throw new HostError(
+      'agent_error',
+      t('agent.unreadableLimits', { agent: slot.name, command: report.command }),
+    )
   }
 
   private limitsError(slot: Slot, error: unknown): HostError {

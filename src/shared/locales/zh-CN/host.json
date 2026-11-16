@@ -185,6 +185,7 @@
     "signInCancelled": "{{agent}} 的登录已取消。",
     "noOptions": "{{agent}} 在 {{seconds}} 秒内没有给出模型",
     "noLimits": "{{agent}} 在 {{seconds}} 秒内没有给出套餐限额",
+    "unreadableLimits": "Kettu 没能从 {{agent}} 的 {{command}} 回复里读出套餐限额",
     "initializeTimeout": "{{agent}} 没有在 {{seconds}} 秒内响应 initialize。",
     "exit": {
       "code": "{{agent}} 已退出，退出码 {{code}}",

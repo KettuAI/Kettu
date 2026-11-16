@@ -38,3 +38,16 @@ it('keeps a failed limits read of a running agent in its status until a read suc
   expect(read?.limits.length).toBeGreaterThan(0)
   expect(read?.limitsError).toBeUndefined()
 })
+
+it('takes a limits report it cannot read for a failed read, without quoting the reply', async () => {
+  const host = await startTestHost({ agentEnv: { FAKE_AGENT_USAGE: 'unreadable' } })
+  hosts.push(host)
+  const window = host.connect()
+
+  await expect(
+    window.request('agents.refreshLimits', { agentId: 'fake-agent', force: true }),
+  ).rejects.toThrow()
+  const failed = fakeStatus(window)
+  expect(failed).toMatchObject({ state: 'ready', limits: [], limitsError: expect.any(String) })
+  expect(failed?.limitsError).not.toContain('subscription plans')
+})

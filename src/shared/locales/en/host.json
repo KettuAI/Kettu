@@ -186,6 +186,7 @@
     "signInCancelled": "The sign-in to {{agent}} was cancelled.",
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
+    "unreadableLimits": "Kettu could not find plan limits in {{agent}}'s {{command}} reply",
     "initializeTimeout": "{{agent}} did not answer initialize within {{seconds}} s.",
     "exit": {
       "code": "{{agent}} exited with code {{code}}",

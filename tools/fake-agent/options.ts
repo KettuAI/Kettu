@@ -105,7 +105,7 @@ export const SCENARIO_DESCRIPTIONS: Record<ScenarioName, { description: string; 
   },
   usage: {
     description: "The plan limits, as Claude Code's /usage reports them",
-    hint: '--plain',
+    hint: '--plain --unreadable',
   },
   status: { description: "The plan limits, as Codex's /status reports them" },
   context: { description: "What fills the context, as Claude Code's /context reports it" },
@@ -166,6 +166,9 @@ export interface ScenarioOptions {
   exitCode: number
   entries: number // large-history: the entries its replay synthesizes
   plain: boolean // usage: Claude Code's own text, as the adapter forwards it when its report fails
+  // usage: a reply without limits, as an account without a plan gets; FAKE_AGENT_USAGE=unreadable
+  // gives it to the `/usage` Kettu runs itself.
+  unreadable: boolean
   stepMs: number // plan: how long each step's tool call runs
   holdMs: number // requests: open after its request; error: before it fails; not scaled
   thenMs: number | null // requests: when it answers by itself after the turn, not scaled
@@ -275,6 +278,8 @@ export function chooseScenario(prompt: string, env: Env): ScenarioChoice {
     exitCode: parseNumber(flagValue(args, 'code')) ?? 3,
     entries: historyEntries(env, parseNumber(flagValue(args, 'entries'))),
     plain: flagValue(args, 'plain') !== undefined,
+    unreadable:
+      flagValue(args, 'unreadable') !== undefined || env.FAKE_AGENT_USAGE === 'unreadable',
     stepMs: parseNumber(flagValue(args, 'step')) ?? 300,
     holdMs: parseNumber(flagValue(args, 'hold')) ?? 0,
     thenMs: parseNumber(flagValue(args, 'then')),

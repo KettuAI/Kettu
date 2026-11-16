@@ -1190,6 +1190,11 @@ async function plainUsage(turn: Turn): Promise<StopReason> {
 
 /** `/usage` as claude-agent-acp 0.94 formats it, with the windows sendUsage pushes. */
 const usage: Scenario = async (turn) => {
+  if (turn.options.unreadable) {
+    const reply = '/usage is only available for subscription plans.'
+    await stream(turn, reply, { chunks: [reply], delayMs: 0 })
+    return 'end_turn'
+  }
   if (turn.options.plain) return plainUsage(turn)
   const { fiveHour, weekly } = planWindows(turn.session.turns)
   const now = Date.now()
