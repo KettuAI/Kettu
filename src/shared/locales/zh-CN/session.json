@@ -605,7 +605,8 @@
     "title": "由 {{agent}} 接手",
     "carried_other": "由 {{agent}} 接手 · 带上前面 {{count}} 轮",
     "omitted_other": "带过去的内容。还有 {{count}} 轮没带，它能用读历史的工具取回。",
-    "whole": "带过去的内容。"
+    "whole": "带过去的内容。",
+    "summarize": "已要求它先总结前面的对话再接着做"
   },
   "view": {
     "couldntOpen": "无法打开此会话",
