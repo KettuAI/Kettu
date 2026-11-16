@@ -98,4 +98,13 @@ describe('readerOpen', () => {
     expect(readerOpen(later, '3000.12.1')).toBe(true)
     expect(readerOpen(later, '3000.11.200')).toBe(false)
   })
+
+  it('opens on a run of checked versions and no further', () => {
+    const run = { version: '0.7.0', through: '0.7.7', read: vi.fn() }
+    expect(readerOpen(run, '0.7.0')).toBe(true)
+    expect(readerOpen(run, '0.7.4')).toBe(true)
+    expect(readerOpen(run, '0.7.7')).toBe(true)
+    expect(readerOpen(run, '0.7.8')).toBe(false)
+    expect(readerOpen(run, '0.2.7')).toBe(false)
+  })
 })
