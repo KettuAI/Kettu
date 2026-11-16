@@ -322,7 +322,9 @@ export class AcpConnection implements AgentConnection {
           hooks.log('warn', `Permission request for unknown session ${ctx.params.sessionId}`)
           return { outcome: { outcome: 'cancelled' } }
         }
-        const toolCall = this.agy ? fromAgy(ctx.params.toolCall) : ctx.params.toolCall
+        const toolCall = this.agy
+          ? (fromAgy(ctx.params.toolCall, true) ?? ctx.params.toolCall)
+          : ctx.params.toolCall
         const { entryId, output } = mapPermissionToolCall(toolCall, target.context())
         const answer = await target.requestPermission(
           {
@@ -435,7 +437,9 @@ export class AcpConnection implements AgentConnection {
     ) {
       return mapSessionUpdate(update, ctx)
     }
-    return mapSessionUpdate(fromAgy(update), ctx)
+    const shown = ctx.thread.byId[`t:${update.toolCallId}`] !== undefined
+    const call = fromAgy(update, shown)
+    return call ? mapSessionUpdate(call, ctx) : { patches: [], effects: [] }
   }
 
   private deliver(sessionId: string, update: SessionUpdate): void {

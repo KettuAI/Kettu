@@ -6,6 +6,7 @@ import {
   methods,
   type AgentContext,
   type SessionUpdate,
+  type ToolCallUpdate,
 } from '@agentclientprotocol/sdk/unstable'
 import { describe, expect, it } from 'vitest'
 import {
@@ -128,7 +129,7 @@ const update = (sessionId: string, value: unknown) => ({
 })
 
 describe("agy's tool calls", () => {
-  it('show commands, their output, files and diffs', async () => {
+  it('show commands, their output, files and diffs, and hide what Kettu shows itself', async () => {
     const { connection } = connect('1.5.9', async (client, sessionId) => {
       for (const value of recorded) {
         await client.notify(methods.client.session.update, update(sessionId, value))
@@ -206,9 +207,42 @@ describe("agy's tool calls", () => {
       }),
       expect.objectContaining({ title: 'File .', toolKind: 'read', status: 'failed' }),
       expect.objectContaining({ title: 'File notes.txt', toolKind: 'edit', status: 'completed' }),
-      expect.objectContaining({ title: 'Run mcp_kettu_set_plan', status: 'completed' }),
-      expect.objectContaining({ title: 'Run mcp_kettu_remember', status: 'failed' }),
+      // The plan shows in the top bar; a memory write that failed wrote nothing, so it keeps a row.
+      expect.objectContaining({ title: 'mcp__kettu__remember', status: 'failed' }),
       expect.objectContaining({ title: 'Run mcp_kettu_list_sessions', status: 'completed' }),
+    ])
+    connection.close()
+  })
+
+  it('keep the row of a Kettu call that asked for permission', async () => {
+    const call = recorded.find((value) => value.name === 'mcp_kettu_set_plan')!
+    const { connection } = connect('1.5.9', async (client, sessionId) => {
+      await client.notify(methods.client.session.update, update(sessionId, call))
+      await client.request(methods.client.session.requestPermission, {
+        sessionId,
+        toolCall: { ...call, status: 'pending' } as ToolCallUpdate,
+        options: [
+          { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+          { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+        ],
+      })
+      await client.notify(
+        methods.client.session.update,
+        update(sessionId, { ...call, sessionUpdate: 'tool_call_update', status: 'completed' }),
+      )
+    })
+    await connection.initialize('1.0.0')
+    const { sessionId } = await connection.newSession('/tmp/agy-probe')
+    const { target, entries } = threadTarget()
+    connection.register(sessionId, target)
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+
+    expect(entries()).toEqual([
+      expect.objectContaining({
+        kind: 'tool',
+        title: 'Run mcp_kettu_set_plan',
+        status: 'completed',
+      }),
     ])
     connection.close()
   })
