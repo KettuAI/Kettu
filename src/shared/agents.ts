@@ -130,6 +130,7 @@ export const USER_PROGRAM_HARNESSES: readonly HarnessId[] = [
   'hermes',
   'muse',
   'codewhale',
+  'antigravity',
 ]
 
 /**

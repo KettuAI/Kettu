@@ -127,6 +127,14 @@ describe('adding the agents the first start found', () => {
     await store.flush()
   })
 
+  it('adds Antigravity, which runs the user agy, after the others', async () => {
+    const store = await SettingsStore.load(dir)
+    const next = store.firstStart(['antigravity', 'codex'])
+    expect(next.agents.antigravity).toEqual({ enabled: true })
+    expect(next.general.defaultAgent).toBe('codex')
+    await store.flush()
+  })
+
   it('leaves a harness the user removed before as it is', async () => {
     await save({
       version: 1,
