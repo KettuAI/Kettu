@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const CODEWHALE: AgentDefinition = {
   id: 'codewhale',
+  limitsReason: 'model-provider-managed',
   name: 'CodeWhale',
   registryId: 'codewhale',
   launch: { kind: 'binary', command: 'codewhale', args: ['serve', '--acp'] },

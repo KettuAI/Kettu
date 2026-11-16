@@ -5,6 +5,7 @@ const BASE = 'https://github.com/crow-cli/crow-cli/releases/download/v0.1.24'
 
 export const CROW_CLI: AgentDefinition = {
   id: 'crow-cli',
+  limitsReason: 'model-provider-managed',
   name: 'crow-cli',
   registryId: 'crow-cli',
   launch: { kind: 'binary', command: 'crow-cli', args: ['acp'] },

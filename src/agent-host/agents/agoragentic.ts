@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const AGORAGENTIC: AgentDefinition = {
   id: 'agoragentic',
+  limitsReason: 'not-yet-supported',
   name: 'Agoragentic',
   registryId: 'agoragentic-acp',
   launch: {

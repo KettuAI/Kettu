@@ -4,6 +4,7 @@ const RELEASE = 'https://github.com/getkimchi/kimchi/releases/download/v1.22.0'
 
 export const KIMCHI: AgentDefinition = {
   id: 'kimchi',
+  limitsReason: 'not-yet-supported',
   name: 'Kimchi',
   registryId: 'kimchi',
   launch: { kind: 'binary', command: 'kimchi', args: ['--mode', 'acp'] },

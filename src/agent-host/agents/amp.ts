@@ -4,6 +4,7 @@ const RELEASE = 'https://github.com/tao12345666333/amp-acp/releases/download/v0.
 
 export const AMP: AgentDefinition = {
   id: 'amp',
+  limitsReason: 'not-yet-supported',
   name: 'Amp',
   registryId: 'amp-acp',
   // The archive holds the adapter itself, which speaks ACP without arguments; `amp` on PATH is

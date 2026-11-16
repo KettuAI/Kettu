@@ -157,7 +157,11 @@ export interface PlanLimit {
 }
 
 export type LimitsReason =
-  'vendor-disallows' | 'harness-does-not-offer' | 'administrator-managed' | 'model-provider-managed'
+  | 'vendor-disallows'
+  | 'harness-does-not-offer'
+  | 'administrator-managed'
+  | 'model-provider-managed'
+  | 'not-yet-supported'
 
 export interface ProviderBalance {
   label: string

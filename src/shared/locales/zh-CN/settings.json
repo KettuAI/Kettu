@@ -660,7 +660,8 @@
       "vendor-disallows": "Google 不允许其他应用读取此用量。",
       "harness-does-not-offer": "此 Agent 未提供套餐用量读取方式。",
       "administrator-managed": "套餐用量由管理员管理。",
-      "model-provider-managed": "套餐用量由你的模型服务商管理。"
+      "model-provider-managed": "套餐用量由你的模型服务商管理。",
+      "not-yet-supported": "Kettu 暂时还不能读取这个 Agent 的套餐用量。"
     },
     "spend": {
       "group": "花费",

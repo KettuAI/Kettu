@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const FAST_AGENT: AgentDefinition = {
   id: 'fast-agent',
+  limitsReason: 'model-provider-managed',
   name: 'fast-agent',
   registryId: 'fast-agent',
   launch: { kind: 'uvx', package: 'fast-agent-acp', version: '0.10.1', args: ['-x'] },

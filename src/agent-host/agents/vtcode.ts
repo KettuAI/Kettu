@@ -7,6 +7,7 @@ const BASE = 'https://github.com/vinhnx/VTCode/releases/download/0.96.14'
 
 export const VTCODE: AgentDefinition = {
   id: 'vtcode',
+  limitsReason: 'model-provider-managed',
   name: 'VT Code',
   registryId: 'vtcode',
   launch: { kind: 'binary', command: 'vtcode', args: ['acp'] },

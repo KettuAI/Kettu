@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const MINION: AgentDefinition = {
   id: 'minion',
+  limitsReason: 'model-provider-managed',
   name: 'Minion Code',
   registryId: 'minion-code',
   launch: { kind: 'uvx', package: 'minion-code', version: '0.1.45', args: ['acp'] },

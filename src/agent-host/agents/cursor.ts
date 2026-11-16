@@ -4,6 +4,7 @@ const LAB = 'https://downloads.cursor.com/lab/2026.10.22-27dcf5f'
 
 export const CURSOR: AgentDefinition = {
   id: 'cursor',
+  limitsReason: 'harness-does-not-offer',
   name: 'Cursor',
   registryId: 'cursor',
   launch: { kind: 'binary', command: 'cursor-agent', args: ['acp'] },

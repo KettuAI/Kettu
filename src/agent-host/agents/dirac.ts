@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const DIRAC: AgentDefinition = {
   id: 'dirac',
+  limitsReason: 'model-provider-managed',
   name: 'Dirac',
   registryId: 'dirac',
   launch: { kind: 'package', package: 'dirac-cli', version: '0.5.24', args: ['--acp'] },

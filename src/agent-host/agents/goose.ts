@@ -4,6 +4,7 @@ const RELEASE = 'https://github.com/block/goose/releases/download/v1.56.0'
 
 export const GOOSE: AgentDefinition = {
   id: 'goose',
+  limitsReason: 'model-provider-managed',
   name: 'goose',
   registryId: 'goose',
   launch: { kind: 'binary', command: 'goose', args: ['acp'] },

@@ -4,6 +4,7 @@ const RELEASE = 'https://github.com/burin-labs/harn/releases/download/v0.10.180'
 
 export const HARN: AgentDefinition = {
   id: 'harn',
+  limitsReason: 'model-provider-managed',
   name: 'Harn',
   registryId: 'harn',
   launch: { kind: 'binary', command: 'harn', args: ['serve', 'acp'] },

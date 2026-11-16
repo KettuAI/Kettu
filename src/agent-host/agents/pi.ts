@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const PI: AgentDefinition = {
   id: 'pi',
+  limitsReason: 'model-provider-managed',
   name: 'Pi',
   registryId: 'pi-acp',
   // pi-acp keeps one live session per process, so every session gets an adapter process of its own.

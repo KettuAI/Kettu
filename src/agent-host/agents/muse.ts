@@ -5,6 +5,7 @@ const RELEASE = `https://lookaside.facebook.com/lookaside/muse/download/?channel
 
 export const MUSE: AgentDefinition = {
   id: 'muse',
+  limitsReason: 'harness-does-not-offer',
   name: 'Muse Code',
   registryId: 'muse',
   // The ACP mode is a vendor preview behind this gate, which a release may remove.

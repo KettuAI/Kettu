@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const NOVA: AgentDefinition = {
   id: 'nova',
+  limitsReason: 'not-yet-supported',
   name: 'Nova',
   registryId: 'nova',
   launch: { kind: 'package', package: '@compass-ai/nova', version: '1.1.60', args: ['acp'] },

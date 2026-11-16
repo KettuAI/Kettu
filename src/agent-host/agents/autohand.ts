@@ -2,6 +2,7 @@ import type { AgentDefinition } from '../catalog'
 
 export const AUTOHAND: AgentDefinition = {
   id: 'autohand',
+  limitsReason: 'not-yet-supported',
   name: 'Autohand Code',
   registryId: 'autohand',
   launch: { kind: 'package', package: '@autohandai/autohand-acp', version: '0.2.1' },
