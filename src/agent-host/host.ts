@@ -2454,6 +2454,7 @@ export class AgentHost {
       'sessions.show': ({ sessionIds }, { portId }) => sessions.show(sessionIds, portId),
       'sessions.prompt': ({ sessionId, content }, { portId, device }) =>
         sessions.prompt(sessionId, content, portId, fromDevice(device)),
+      'sessions.attachEarly': ({ sessionId }) => sessions.attachEarly(sessionId),
       'sessions.cancel': ({ sessionId }) => sessions.cancel(sessionId),
       'sessions.runningWork': ({ sessionIds }) => ({ sessions: sessions.runningWork(sessionIds) }),
       'sessions.stopTask': ({ sessionId, taskId }) => sessions.stopTask(sessionId, taskId),

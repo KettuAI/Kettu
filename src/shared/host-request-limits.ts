@@ -111,6 +111,7 @@ export const HOST_REQUEST_LIMITS: Readonly<Record<HostMethod, number | null>> = 
   'sessions.unwatch': HOST_MS,
   'sessions.show': HOST_MS,
   'sessions.prompt': AGENT_MS,
+  'sessions.attachEarly': AGENT_MS,
   'sessions.cancel': AGENT_MS,
   'sessions.runningWork': HOST_MS,
   'sessions.stopTask': AGENT_MS,

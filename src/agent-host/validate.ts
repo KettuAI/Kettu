@@ -1643,6 +1643,7 @@ export function createValidators(platform: Platform): Validators {
       const o = fields(params)
       return { sessionId: sessionId(o), content: promptContent(o.content) }
     },
+    'sessions.attachEarly': session,
     'sessions.cancel': session,
     'sessions.runningWork': (params) => {
       const o = fields(params)
