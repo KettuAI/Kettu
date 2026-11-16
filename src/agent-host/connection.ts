@@ -72,6 +72,8 @@ export interface ConnectionHooks {
   authState?(state: 'authenticated' | 'unauthenticated' | 'not_required' | 'unknown'): void
   /** Something the agent sent that Kettu does not use. */
   ignored(sessionId: string | null, what: string): void
+  /** The agent refused its signed-in account as one its vendor moved to another harness. */
+  accountRefused?(): void
   log(level: 'info' | 'warn' | 'error', message: string): void
 }
 

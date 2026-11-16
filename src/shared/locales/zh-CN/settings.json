@@ -1788,6 +1788,11 @@
     "manageAgents": "在 Agent 里管理",
     "versionOut": "{{version}} 已发布",
     "removedLine": "已从 Kettu 卸载",
+    "movedAccounts": {
+      "title": "{{name}} 适合谁用",
+      "refused": "{{agent}} 用不了这个账号",
+      "open": "打开 {{name}}"
+    },
     "uninstall": {
       "name": "卸载 {{name}}",
       "description": "删除 Kettu 为它安装的包；你自己的程序、登录和配置都保留。",

@@ -200,6 +200,7 @@
     "keyInSettings": "{{method}} 要在设置 › Agent 里 {{agent}} 的页面上填写",
     "signInOnComputer": "{{agent}} 在它所在的电脑上打开浏览器登录，请到那台电脑上登录。",
     "signInCancelled": "{{agent}} 的登录已取消。",
+    "geminiAccountMoved": "Gemini CLI 不再支持个人 Google 账号：Google 已把它们转到 Google Antigravity。请用这个账号使用 Google Antigravity，或者给 Gemini CLI 改用 Gemini API 或 Vertex AI 的 key 登录。",
     "noOptions": "{{agent}} 在 {{seconds}} 秒内没有给出模型",
     "noLimits": "{{agent}} 在 {{seconds}} 秒内没有给出套餐限额",
     "unreadableLimits": "Kettu 没能从 {{agent}} 的 {{command}} 回复里读出套餐限额",
@@ -263,6 +264,7 @@
     "requiresFailed": "{{agent}} 无法读取 {{command}} 的版本：{{reason}} {{hint}}",
     "scriptMissing": "{{script}} 不存在。",
     "antigravityInstallNotice": "官方安装程序会把 agy 装到 ~/.local/bin，并在你的 Shell 配置文件里把它加入 PATH。",
+    "geminiAudience": "Gemini CLI 供 Gemini Code Assist Standard 和 Enterprise、Code Assist for GitHub 以及付费的 Gemini API 或 Vertex AI key 使用。自 2026 年 6 月 18 日起，Google 把个人 Google 账号（免费版和 Google AI Pro、Ultra）转到了 Google Antigravity。",
     "hermesInstallNotice": "官方安装程序会修改你的 Shell 配置文件，将 ~/.local/bin 加入 PATH。安装包含 ACP，会跳过浏览器和 computer-use 组件。",
     "hint": {
       "node": "请从 nodejs.org 安装 Node.js，然后在设置中点击「重新加载环境」。",

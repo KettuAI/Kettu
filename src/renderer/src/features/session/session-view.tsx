@@ -19,13 +19,20 @@ import { StepSentBack } from '@renderer/features/tasks/step-crumb'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { errorMessage, host } from '@renderer/lib/host'
 import { isMac } from '@renderer/lib/platform'
+import { AccountMovedAlert } from '@renderer/features/agents/moved-accounts'
 import { PersonalPlanFirstUse } from '@renderer/features/agents/personal-plan-notice'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
 import { ensureFiles, ensureFreshFiles } from '@renderer/stores/files'
 import { isAway, useOtherHost } from '@renderer/stores/hosts'
 import { hostOfSession, sessionArchived, useSessionsStore } from '@renderer/stores/sessions'
 import { focusSession, reloadSession, useThreadsStore } from '@renderer/stores/threads'
-import { openAgentSettings, shownPanel, toggleSideChat, useViewStore } from '@renderer/stores/view'
+import {
+  openAgentSettings,
+  openHarnessSettings,
+  shownPanel,
+  toggleSideChat,
+  useViewStore,
+} from '@renderer/stores/view'
 import { useNarrow } from '@renderer/features/side-chat/use-narrow'
 import { DropOverlay } from './attachments/drop-overlay'
 import { useFileDrop } from './attachments/use-file-drop'
@@ -76,6 +83,10 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
     (s) => agentsOn(s, hostId).byId[summary.agentId]?.registered === false,
   )
   const agentStatus = useAgentsStore((s) => agentsOn(s, hostId).byId[summary.agentId])
+  const movedTo = agentStatus?.movedAccounts?.to
+  const movedToName = useAgentsStore(
+    (s) => (movedTo && agentsOn(s, hostId).byId[movedTo]?.harnessName) || movedTo,
+  )
   const agentOff = useAgentsStore(
     (s) => agentsOn(s, hostId).byId[summary.agentId]?.disabled === true,
   )
@@ -212,7 +223,21 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
           <div style={{ paddingRight: gutter }}>
             <div className="px-8 pb-6">
               <div className="mx-auto flex w-full max-w-(--thread-column) flex-col gap-2">
-                {session && status === 'failed' && (
+                {session &&
+                status === 'failed' &&
+                movedTo &&
+                agentStatus?.movedAccounts?.refused ? (
+                  <AccountMovedAlert
+                    agent={name}
+                    to={movedToName ?? movedTo}
+                    message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
+                    onRetry={retry}
+                    onOpen={() => {
+                      openHostSettings(hostId)
+                      openHarnessSettings(movedTo)
+                    }}
+                  />
+                ) : session && status === 'failed' ? (
                   <FailedState
                     title={t('view.stopped', { agent: name })}
                     message={session.error?.message ?? t('view.couldNotContinue', { agent: name })}
@@ -220,7 +245,7 @@ function SessionBody({ summary }: { summary: SessionSummary }) {
                     onRetry={retry}
                     report={{ hostId: otherHost?.id ?? null, sessionId, agentId: summary.agentId }}
                   />
-                )}
+                ) : null}
                 {session && status === 'auth_required' && !empty && (
                   <Alert variant="warning" className="has-data-[slot=alert-action]:pr-36">
                     <HugeiconsIcon icon={AlertCircleIcon} strokeWidth={1.9} aria-hidden />

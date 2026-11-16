@@ -22,6 +22,7 @@ import { limitLevel } from '@renderer/lib/plan-limit'
 import { useNow } from '@renderer/lib/use-now'
 import { openSignInPage, usePlanReadings } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
+import { openHarnessSettings } from '@renderer/stores/view'
 import { limitsReadable, percent, useAction } from './agent-helpers'
 import { CommandLine, ControlError, IconAction, Meter, SetButton, Spin } from './controls'
 import { Group, GroupLabel, Notice, RowFrame, RowGroup, RowShell, RowText } from './rows'
@@ -57,6 +58,38 @@ export function DismissButton({ onClick }: { onClick: () => void }) {
  * Without `onTerminal`, as for another host whose terminal this window cannot open, the command is
  * only shown to copy. While the page a sign-in handed over is open here, it says so, with Cancel.
  */
+/**
+ * Who a harness whose vendor moved some accounts elsewhere is still for, and the way to the harness
+ * they went to: on its Harness page always, on an agent's page once it refused its account.
+ */
+export function MovedAccountsNotice({ status }: { status: AgentStatus }) {
+  const { useAgentsStore } = useHostScope()
+  const { t } = useTranslation('settings')
+  const moved = status.movedAccounts
+  const to = useAgentsStore((s) => (moved && s.byId[moved.to]?.harnessName) || moved?.to)
+  if (!moved || !to) return null
+  return (
+    <Notice
+      variant={moved.refused ? 'warning' : 'info'}
+      title={
+        moved.refused
+          ? t('harnesses.movedAccounts.refused', { agent: status.name })
+          : t('harnesses.movedAccounts.title', { name: status.harnessName })
+      }
+      action={
+        <SetButton
+          variant={moved.refused ? 'primary' : 'secondary'}
+          onClick={() => openHarnessSettings(moved.to)}
+        >
+          {t('harnesses.movedAccounts.open', { name: to })}
+        </SetButton>
+      }
+    >
+      {moved.audience}
+    </Notice>
+  )
+}
+
 export function SignInNotice({
   status,
   busy,

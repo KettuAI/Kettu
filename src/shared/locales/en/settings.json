@@ -1807,6 +1807,11 @@
     "manageAgents": "Manage in Agents",
     "versionOut": "{{version}} is out",
     "removedLine": "Removed from Kettu",
+    "movedAccounts": {
+      "title": "Who {{name}} is for",
+      "refused": "{{agent}} can't use this account",
+      "open": "Open {{name}}"
+    },
     "uninstall": {
       "name": "Uninstall {{name}}",
       "description": "Removes what Kettu installed for it. Your own program and configuration stay.",

@@ -44,7 +44,9 @@ import {
   type SessionTarget,
   type SignInClient,
 } from '../connection'
+import type { MovedAccounts } from '../catalog'
 import type { AgentTransport, MessageTransport } from '../driver'
+import { t } from '../i18n'
 import { isStopReason, type MapperContext, type MapperOutput } from '../session-updates'
 import { compareVersions } from '../versions'
 import { ANTIGRAVITY_TIER_VERSION, antigravityTier } from '../vendor-usage/antigravity'
@@ -120,6 +122,8 @@ export interface AcpOptions {
   startupNote?: boolean
   /** It runs Kettu's extension, which takes Kettu's MCP service from the session router. */
   kettuExtension?: boolean
+  /** Accounts its vendor moved to another harness, whose refusal is no sign-in to ask for. */
+  movedAccounts?: MovedAccounts
 }
 
 export type AcpHooks = ConnectionHooks & AcpOptions
@@ -593,6 +597,14 @@ export class AcpConnection implements AgentConnection {
   private toError(error: unknown): AgentRequestError {
     if (error instanceof AgentRequestError) return error
     if (error instanceof RequestError) {
+      const moved = this.hooks.movedAccounts
+      if (moved?.refusal.test(error.message)) {
+        this.hooks.accountRefused?.()
+        return new AgentRequestError('agent_error', t(moved.refused), error.code, {
+          movedTo: moved.to,
+          refusal: error.message,
+        })
+      }
       if (error.code === AUTH_REQUIRED) {
         return new AgentRequestError('auth_required', error.message, error.code, error.data)
       }

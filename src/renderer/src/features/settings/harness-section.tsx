@@ -52,7 +52,15 @@ import {
 } from '@renderer/stores/agents'
 import { useHostScope } from '@renderer/stores/host-scope'
 import { openAgentSettings, openHarnessSettings } from '@renderer/stores/view'
-import { ConfigFrame, DismissButton, Fact, Log, LogCopyButton, TaskLog } from './agent-parts'
+import {
+  ConfigFrame,
+  DismissButton,
+  Fact,
+  Log,
+  LogCopyButton,
+  MovedAccountsNotice,
+  TaskLog,
+} from './agent-parts'
 import { installKind, startInstall, type InstallKind, type SettingsHook } from './harness-install'
 import { harnessVersion, useAction, VENDORS } from './agent-helpers'
 import {
@@ -619,6 +627,7 @@ function HarnessPageBody({ status }: { status: AgentStatus }) {
           </p>
         )}
 
+        {status.movedAccounts && <MovedAccountsNotice status={status} />}
         <TaskNotice status={status} installed={installed} />
         {status.uninstalled && <UninstalledNotice status={status} />}
         {kind && <InstallNotice status={status} kind={kind} />}
