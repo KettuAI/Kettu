@@ -2,6 +2,7 @@ import {
   Archive01Icon,
   ComputerTerminal01Icon,
   Download04Icon,
+  FolderMinusIcon,
   FolderOpenIcon,
   GitBranchIcon,
   PencilEdit02Icon,
@@ -15,7 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from '@renderer/components/ui/dropdown-menu'
-import { MenuGlyph } from '@renderer/features/shell/glyph'
+import { Glyph, MenuGlyph } from '@renderer/features/shell/glyph'
 import { openWorktreeSettings } from '@renderer/features/worktrees/worktree-settings-model'
 import { hostOfPath } from '@renderer/lib/host-paths'
 import { fileManagerName, formatShortcut, isWeb } from '@renderer/lib/platform'
@@ -27,14 +28,16 @@ import { openProjectTerminal } from './project-menu-model'
 /**
  * A project's actions. A context menu is a Base UI menu, so the same items serve the project
  * row's context menu and its More button. A project whose folder is gone keeps only what needs
- * no folder.
+ * no folder, Remove included.
  */
 export function ProjectMenuItems({
   project,
   onImport,
+  onRemove,
 }: {
   project: Project
   onImport: () => void
+  onRemove: () => void
 }) {
   const { t } = useTranslation('sidebar')
   const terminal = useTerminalAllowed(project.path)
@@ -89,6 +92,13 @@ export function ProjectMenuItems({
         <DropdownMenuItem onClick={() => openSettings('archived')}>
           <MenuGlyph icon={Archive01Icon} />
           {t('project.menu.showArchived')}
+        </DropdownMenuItem>
+      </DropdownMenuGroup>
+      <DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onRemove}>
+          <Glyph icon={FolderMinusIcon} size={15} />
+          {t('project.menu.remove')}
         </DropdownMenuItem>
       </DropdownMenuGroup>
     </>

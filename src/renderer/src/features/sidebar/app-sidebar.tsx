@@ -59,6 +59,7 @@ import { InsecureCard } from './insecure-card'
 import { signInLabel, useNotices } from './notices'
 import { ProjectMenuItems } from './project-menu'
 import { visibleProjects } from './project-group'
+import { RemoveProjectDialog } from './remove-project'
 import { GroupRenameHints } from './rename-hints'
 import { RenameScope } from './rename-scope'
 import { limitRows, rowInSight, ROWS_SHOWN } from './row-limit'
@@ -277,6 +278,8 @@ function ProjectGroup({
   )
   const [moreOpen, setMoreOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  // Null until Remove project is first asked for, so the dialog mounts only then.
+  const [removing, setRemoving] = useState<boolean | null>(null)
   const summaries = useSessionsStore(
     useShallow((s) =>
       Object.values(s.byId).filter((x) =>
@@ -346,7 +349,11 @@ function ProjectGroup({
     <TooltipContent side="right">{t('project.noProjectTooltip')}</TooltipContent>
   )
   const menuItems = project && local && (
-    <ProjectMenuItems project={project} onImport={() => onImport(project)} />
+    <ProjectMenuItems
+      project={project}
+      onImport={() => onImport(project)}
+      onRemove={() => setRemoving(true)}
+    />
   )
 
   return (
@@ -426,6 +433,9 @@ function ProjectGroup({
           )}
           <GroupRenameHints scope={key} />
         </ul>
+      )}
+      {project && removing !== null && (
+        <RemoveProjectDialog project={project} open={removing} onOpenChange={setRemoving} />
       )}
     </>
   )
