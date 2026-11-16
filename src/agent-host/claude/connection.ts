@@ -892,8 +892,11 @@ export class ClaudeConnection implements AgentConnection {
     // Through the SDK, Claude Code runs the hooks of a folder's own settings without asking.
     session.hooksHeld = !hidden && (await this.hooksHeld(cwd, options, settings))
     if (hidden || session.hooksHeld) flags.disableAllHooks = true
-    // A page's question reads none of the user's settings but how they sign in, which may be there.
-    if (bare) Object.assign(flags, signInSettings((await this.settings(cwd, ['user'])).values))
+    // A page's question and a limits read take none of the user's settings but how they sign in,
+    // which may be there: without it a gateway's token goes unseen and its limits read as a plan's.
+    if (bare || hidden === 'limits') {
+      Object.assign(flags, signInSettings((await this.settings(cwd, ['user'])).values))
+    }
     // Through the SDK, Claude Code starts the servers of a folder's .mcp.json without asking.
     session.held = bare ? [] : await this.heldServers(cwd, options)
     if (session.held.length > 0) flags.disabledMcpjsonServers = session.held

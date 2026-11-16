@@ -167,7 +167,13 @@ export function usageCards(
       const balances = agent.balances ?? []
       const shown = limits.length > 0 || balances.length > 0 || usedHere.includes(agent.id)
       if (!shown) continue
-      if (limits.length === 0 && balances.length === 0 && !agent.capabilities.reports) {
+      // An API key or a gateway pays per request: with nothing read, it has no plan to wait for.
+      const perRequest = agent.account?.kind === 'api_key' || agent.account?.kind === 'gateway'
+      if (
+        limits.length === 0 &&
+        balances.length === 0 &&
+        (perRequest || !agent.capabilities.reports)
+      ) {
         if (!unreported.some((other) => other.name === agent.name)) unreported.push(agent)
         continue
       }

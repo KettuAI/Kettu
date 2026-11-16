@@ -176,13 +176,15 @@ export function createFakeAgent(options: FakeAgentOptions = {}): AgentApp {
     })
 
   const authStatus = (): Record<string, unknown> =>
-    signedIn
-      ? {
-          kind: 'account',
-          label: 'Fake Pro',
-          account: { plan: 'pro', email: 'developer@example.com' },
-        }
-      : { kind: 'none', label: 'Not logged in' }
+    signedIn && env.FAKE_AGENT_GATEWAY === '1'
+      ? { kind: 'gateway', label: 'Custom model gateway' }
+      : signedIn
+        ? {
+            kind: 'account',
+            label: 'Fake Pro',
+            account: { plan: 'pro', email: 'developer@example.com' },
+          }
+        : { kind: 'none', label: 'Not logged in' }
 
   const pushAuthStatus = (): void => {
     const client = connection?.client

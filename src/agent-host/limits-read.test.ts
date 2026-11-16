@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, expect, it } from 'vitest'
 import type { AgentStatus } from '@shared/agent-host'
@@ -50,4 +50,37 @@ it('takes a limits report it cannot read for a failed read, without quoting the 
   const failed = fakeStatus(window)
   expect(failed).toMatchObject({ state: 'ready', limits: [], limitsError: expect.any(String) })
   expect(failed?.limitsError).not.toContain('subscription plans')
+})
+
+it('drops the plan windows kept from before once an agent goes through a gateway', async () => {
+  const dir = await tempFolder('kettu-gateway-limits-')
+  await mkdir(path.join(dir, 'state'), { recursive: true })
+  const window5h = {
+    window: 'five_hour',
+    label: '5-hour',
+    usedPercent: 50,
+    resetsAt: null,
+    state: 'ok',
+    observedAt: 1,
+  }
+  await writeFile(
+    path.join(dir, 'state', 'agents.json'),
+    JSON.stringify({
+      version: 1,
+      agents: {
+        'fake-agent': {
+          account: { kind: 'account', label: 'Fake Pro', email: 'developer@example.com' },
+          limits: [window5h],
+        },
+      },
+    }),
+  )
+  const host = await startTestHost({ userDataPath: dir, agentEnv: { FAKE_AGENT_GATEWAY: '1' } })
+  hosts.push(host)
+  const window = host.connect()
+
+  // A session starts the agent, which reports its account, without reading its limits.
+  await window.request('sessions.create', { agentId: 'fake-agent', projectPath: host.project })
+  await window.until(() => fakeStatus(window)?.account?.kind === 'gateway')
+  expect(fakeStatus(window)?.limits).toEqual([])
 })

@@ -2361,6 +2361,8 @@ export class AgentManager {
       before.label === account.label &&
       before.email === account.email
     slot.account = same && before.tier ? { ...account, tier: before.tier } : account
+    // A gateway has no plan: windows kept from a sign-in before it would show as its limits.
+    if (account.kind === 'gateway') slot.limits.clear()
     slot.signIn = account.kind === 'none' ? 'required' : 'signed-in'
     this.emit(slot)
     if (wasRequired && slot.signIn === 'signed-in') this.hooks.signedIn(slot.id)
