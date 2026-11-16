@@ -1156,7 +1156,7 @@ function ProgramGroup({ status }: { status: AgentStatus }) {
   if (!command) return null
   const version = harnessVersion(status)
   const method = status.cli?.method ?? null
-  const path = override ?? installed?.path ?? null
+  const path = override ?? installed?.path ?? status.binaryPath ?? null
   const problem = installed?.problem
   const note = installed?.variable
     ? t('agents.setBy', { env: installed.variable })

@@ -3480,6 +3480,10 @@ export class AgentManager {
       launchCommand: formatCommand(display, platform),
       binaryOverride: harnessSettings?.binaryPath ?? null,
       binaryCommand: launch.kind === 'binary' ? launch.command : null,
+      binaryPath:
+        launch.kind === 'binary' && detection?.state === 'available'
+          ? (detection.spec?.command ?? null)
+          : null,
       update,
       updateCheckedAt: this.checksUpdates(h) ? h.checkedAt : null,
       // Skipped when every update on offer was dismissed: Kettu's package's and the CLI's.
