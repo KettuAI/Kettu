@@ -227,22 +227,6 @@ export class SessionToolError extends Error {
   }
 }
 
-/** The service's `instructions` gain this paragraph, after the artifact tools'. */
-export const SESSION_INSTRUCTIONS =
-  "You can manage Kettu sessions in your project: list them, read another session's latest " +
-  'reply, rename or archive your own session or one you started, start a session for a separate ' +
-  'task with its first prompt, and send a session you started a follow-up. A session you start ' +
-  "can run another of the user's agents, which list_agents shows, for example to review your " +
-  'work. Its permission mode is never wider than yours; ask for a narrower one, such as a ' +
-  'read-only mode for a review that must leave the files alone. Archive your own ' +
-  'session only when the user asked you to or your work is clearly done. A session you start ' +
-  'runs on its own: when a turn you asked it for ends, Kettu sends you a message saying so and ' +
-  'you read its reply with get_session, so never wait for it in a loop. A follow-up waits in its ' +
-  'queue while it works; send_message with now puts it into the running turn, only for a session ' +
-  'that must change course at once. When you took a session ' +
-  `over from another agent, ${HISTORY_TOOL} reads the earlier turns it was given only in part; ` +
-  'it also reads the turns of a session you started, such as a reply get_session cut short.'
-
 // Schemas.
 
 type Schema = Record<string, unknown>
@@ -451,6 +435,8 @@ export const SESSION_TOOLS: Tool[] = [
     ),
     outputSchema: output({ ...INFO, mode_lowered: { type: 'boolean' } }, INFO_REQUIRED),
     annotations: { destructiveHint: false, openWorldHint: true },
+    // Claude Code defers MCP tools behind a search; an entry tool must be listed from the start.
+    _meta: { 'anthropic/alwaysLoad': true },
   },
   {
     name: HISTORY_TOOL,

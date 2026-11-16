@@ -1,6 +1,6 @@
 // Marketplace › Installed, in the directory's rows: Kettu's own server, the MCP servers and skills
-// Kettu keeps, the plugins each agent has, then what the agents keep themselves, which Kettu only
-// shows, and the plugin marketplaces they read.
+// Kettu keeps, its own skills among them, the plugins each agent has, then what the agents keep
+// themselves, which Kettu only shows, and the plugin marketplaces they read.
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Delete02Icon, RefreshIcon, Store01Icon } from '@hugeicons/core-free-icons'
@@ -10,6 +10,7 @@ import {
   displayTitle,
   specRuns,
   type AgentOwnSkill,
+  type BuiltinSkill,
   type InstalledPlugin,
   type MarketServer,
   type MarketSkill,
@@ -78,6 +79,7 @@ export function InstalledView({ query }: { query: string }) {
   useSkillsRead()
   const servers = useKeptServers(query)
   const skills = useKeptSkills(query)
+  const builtIn = useBuiltinSkills(query)
   const plugins = useInstalledPlugins(query)
   const own = useOwn(query)
   const markets = useMarketplaces(query)
@@ -88,7 +90,8 @@ export function InstalledView({ query }: { query: string }) {
   const nothing =
     searching &&
     !matchesText(['Kettu'], query) &&
-    servers.length + skills.length + workflows.length + (plugins?.length ?? 0) === 0 &&
+    servers.length + builtIn.length + skills.length + workflows.length + (plugins?.length ?? 0) ===
+      0 &&
     own.folders.length + own.places.length + markets.length === 0
   if (nothing) {
     return (
@@ -111,11 +114,19 @@ export function InstalledView({ query }: { query: string }) {
           </div>
         )}
       </Section>
-      <Section title={t('installed.skills')} count={skills.length} index={2} hide={searching}>
-        {skills.length === 0 ? (
+      <Section
+        title={t('installed.skills')}
+        count={builtIn.length + skills.length}
+        index={2}
+        hide={searching}
+      >
+        {builtIn.length + skills.length === 0 ? (
           <p className="k-mkt-section-note">{t('installed.noSkills')}</p>
         ) : (
           <div className="ui-as-int-grid">
+            {builtIn.map((skill) => (
+              <BuiltinSkillRow key={skill.name} skill={skill} />
+            ))}
             {skills.map((skill) => (
               <KeptSkillRow key={skill.id} skill={skill} />
             ))}
@@ -390,6 +401,26 @@ function KeptRow({ server, listing }: { server: MarketServer; listing: Listing }
           />
         )
       }
+    />
+  )
+}
+
+/** Kettu's own skills, matching the search; none from a host older than them. */
+function useBuiltinSkills(query: string): BuiltinSkill[] {
+  const { useMarketplaceStore } = useHostScope()
+  const builtIn = useMarketplaceStore((s) => s.skills?.builtIn ?? null)
+  return (builtIn ?? []).filter((skill) => matchesText([skill.name, skill.description], query))
+}
+
+/** A skill Kettu ships, which comes with its own server: built in, with nothing to turn off. */
+function BuiltinSkillRow({ skill }: { skill: BuiltinSkill }) {
+  const { t } = useTranslation('marketplace')
+  return (
+    <ItemRow
+      title={displayTitle(skill.name)}
+      icon={<BrandIcon size={30} className="k-mkt-kettu-tile" />}
+      tag={<Pill>{t('kettu.builtIn')}</Pill>}
+      line={skill.description}
     />
   )
 }

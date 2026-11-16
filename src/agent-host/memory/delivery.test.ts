@@ -23,7 +23,7 @@ async function reply(port: TestPort, sessionId: string, text: string): Promise<s
   return replies().at(-1)!.markdown
 }
 
-it('hands memory ahead of the first prompt that is not a slash command, once', async () => {
+it("hands Kettu's guide and memory ahead of the first prompt that is not a slash command, once", async () => {
   host = await startTestHost()
   const window = host.connect()
   await window.request('memory.save', {
@@ -46,8 +46,34 @@ it('hands memory ahead of the first prompt that is not a slash command, once', a
   expect(await reply(window, id, '/recall')).toBe('You have not said anything before.')
   await reply(window, id, 'hello')
   const recalled = await reply(window, id, '/recall')
-  expect(recalled).toMatch(/^Your last message was: <kettu-memory>/)
+  // An agent that takes no skills is pointed at the guide's topics.
+  expect(recalled).toMatch(/^Your last message was: <kettu-guide>\n[^<]*read_kettu_guide/)
+  expect(recalled).toContain('</kettu-guide>\n\n<kettu-memory>')
   expect(recalled).toContain('Replies in Chinese')
   expect(recalled.endsWith('</kettu-memory>\n\nhello')).toBe(true)
   expect(await reply(window, id, '/recall')).toBe('Your last message was: /recall')
+})
+
+it('hands memory turned on in a session with its next prompt, and the guide again with it', async () => {
+  host = await startTestHost()
+  const window = host.connect()
+  await window.request('memory.setEnabled', { enabled: false })
+  const { id } = await window.request('sessions.create', {
+    agentId: 'fake-agent',
+    projectPath: host.project,
+  })
+  await window.open(id)
+  await window.untilStatus(id, 'ready')
+
+  await reply(window, id, 'hello')
+  const first = await reply(window, id, '/recall')
+  expect(first).toMatch(/^Your last message was: <kettu-guide>/)
+  expect(first).not.toContain('<kettu-memory>')
+  expect(first.endsWith('</kettu-guide>\n\nhello')).toBe(true)
+
+  await window.request('memory.setEnabled', { enabled: true })
+  await reply(window, id, 'again')
+  const next = await reply(window, id, '/recall')
+  expect(next).toMatch(/^Your last message was: <kettu-guide>/)
+  expect(next.endsWith('</kettu-memory>\n\nagain')).toBe(true)
 })

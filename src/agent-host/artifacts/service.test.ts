@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import type { Tool } from '@modelcontextprotocol/sdk/types.js'
 import type { MarketTools } from '../marketplace/publish-tools'
+import { PLAN_PROMPT } from '../plan-tool'
 import { ArtifactService, type AgentProcess, type ArtifactServiceDeps } from './service'
 
 const services: ArtifactService[] = []
@@ -65,6 +67,79 @@ describe('the servers a session attaches with', () => {
         [...expected].sort(),
       )
     }
+  })
+})
+
+/** What the service answers a request of an agent's, as a session's token reaches it. */
+async function rpc<T>(service: ArtifactService, method: string, params: unknown): Promise<T> {
+  const [server] = service.servers('s1', '/repo')
+  if (!server || server.type !== 'http') throw new Error('No server')
+  const response = await fetch(server.url, {
+    method: 'POST',
+    headers: {
+      ...Object.fromEntries(server.headers.map((header) => [header.name, header.value])),
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  })
+  const body = (await response.json()) as { result: T }
+  return body.result
+}
+
+const INITIALIZE = {
+  protocolVersion: '2025-06-18',
+  capabilities: {},
+  clientInfo: { name: 'test', version: '1' },
+}
+
+/** A service with memory, the Marketplace, computer use and workflow suggestions on. */
+async function everythingOn(): Promise<ArtifactService> {
+  const deps = {
+    log: () => {},
+    plan: {},
+    sessions: {},
+    memory: { service: { enabled: true } },
+    market: { on: true },
+    computer: { call: () => Promise.reject(new Error('not in this test')) },
+    workflow: { library: { suggest: true }, isStep: () => false },
+  } as unknown as ArtifactServiceDeps
+  const service = new ArtifactService(deps)
+  services.push(service)
+  await service.start()
+  return service
+}
+
+describe("the service's instructions", () => {
+  // Claude Code keeps only the first 4096 characters of a server's instructions.
+  it('stay within 4096 characters with memory, the Marketplace and computer use on', async () => {
+    const service = await everythingOn()
+    const { instructions } = await rpc<{ instructions?: string }>(service, 'initialize', INITIALIZE)
+    expect(instructions).toBeTypeOf('string')
+    expect(instructions!.length).toBeLessThanOrEqual(4096)
+  })
+})
+
+describe('what an agent reads before it searches its tools', () => {
+  // Claude Code and Codex put a server's prompt into their own instructions.
+  it("is Kettu's guide and the plan paragraph in the server's prompt", async () => {
+    const service = await everythingOn()
+    const [server] = service.servers('s1', '/repo')
+    expect(server?.type === 'http' && server.prompt).toBe(
+      `${service.guidePrompt(true)}\n\n${PLAN_PROMPT}`,
+    )
+  })
+
+  // Claude Code defers MCP tools behind a search, so an entry tool it does not list goes unused.
+  it('lists the plan tool and the entries to artifacts, sessions and workflows from the start', async () => {
+    const service = await everythingOn()
+    const { tools } = await rpc<{ tools: Tool[] }>(service, 'tools/list', {})
+    const loaded = tools
+      .filter((tool) => tool._meta?.['anthropic/alwaysLoad'] === true)
+      .map((tool) => tool.name)
+    expect(loaded.sort()).toEqual(
+      ['create_artifact', 'set_plan', 'start_session', 'suggest_workflow'].sort(),
+    )
   })
 })
 

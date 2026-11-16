@@ -343,12 +343,16 @@ function mapMessageChunk(
   }
 }
 
-/** Kettu's memory index ahead of a session's first prompt, and the blank line the host adds. */
-const MEMORY_AHEAD = /^\s*<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2}/
+/**
+ * What Kettu sends ahead of a session's first prompt, its guide, its memory index or both, and
+ * the blank lines the host adds.
+ */
+const AHEAD =
+  /^\s*(?:<kettu-guide>[\s\S]*?<\/kettu-guide>(?:\r?\n){0,2}(?:<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2})?|<kettu-memory>[\s\S]*?<\/kettu-memory>(?:\r?\n){0,2})/
 
-/** A replayed user message's text without the memory index Kettu sent ahead of it. */
-export function withoutMemory(text: string): string {
-  return text.replace(MEMORY_AHEAD, '')
+/** A replayed user message's text without what Kettu sent ahead of it. */
+export function withoutAhead(text: string): string {
+  return text.replace(AHEAD, '')
 }
 
 function mapUserChunk(ctx: MapperContext, out: Output, chunk: acp.ContentChunk): void {
@@ -385,8 +389,8 @@ function mapUserChunk(ctx: MapperContext, out: Output, chunk: acp.ContentChunk):
   }
   let content = chunk.content
   if (content.type === 'text') {
-    const text = withoutMemory(content.text)
-    // A chunk of the memory index alone starts no message; the chunk after it does.
+    const text = withoutAhead(content.text)
+    // A chunk of what went ahead alone starts no message; the chunk after it does.
     if (text === '' && content.text !== '') return
     content = { ...content, text }
   }

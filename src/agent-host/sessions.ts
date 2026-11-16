@@ -385,6 +385,11 @@ export interface SessionMcp {
   /** The session left memory, closed, released or deleted: its token ends. */
   detached(sessionId: string): void
   turnEnded(sessionId: string): void
+  /**
+   * The paragraph on where Kettu's tools are and when to use them, for an agent that takes it
+   * ahead of its prompt rather than in instructions of its own.
+   */
+  guide(agentId: AgentId): string
 }
 
 /** Kettu's memory as sessions hand it to their agents and write what their agents propose. */
@@ -459,8 +464,14 @@ export interface SessionManagerDeps {
   attachments?: Attachments
   /** The artifacts service; without it every attach passes no MCP servers. */
   mcp?: SessionMcp
-  /** The Marketplace's skills an attach of the agent's session passes; without it none. */
-  skills?: (agentId: AgentId) => Pick<SessionOptions, 'skillRoots' | 'localPlugins'>
+  /**
+   * The skills an attach of the agent's session passes, Kettu's own with them when `kettu`, the
+   * session reaching Kettu's server; without it none.
+   */
+  skills?: (
+    agentId: AgentId,
+    kettu: boolean,
+  ) => Promise<Pick<SessionOptions, 'skillRoots' | 'localPlugins'>>
   /** Kettu's memory; without it no session is handed any. */
   memory?: SessionMemoryDeps
   /** The prepared sessions not yet adopted or removed, kept for the host after a crash. */
@@ -3064,21 +3075,23 @@ export class SessionManager {
   }
 
   /**
-   * What an attach of the session hands its agent: the Marketplace's skills, the MCP servers, the
-   * artifacts service to an agent that takes MCP over HTTP while Kettu's server is on for it, then
-   * the Marketplace's servers meant for its agent, and Kettu's memory while it is on.
+   * What an attach of the session hands its agent: the Marketplace's skills, Kettu's own with them
+   * while the session reaches Kettu's server, the MCP servers, the artifacts service to an agent
+   * that takes MCP over HTTP while Kettu's server is on for it, then the Marketplace's servers
+   * meant for its agent, and Kettu's memory while it is on.
    */
   private async attachOptions(
     sessionId: string,
     record: SessionRecord,
     runtime: AgentRuntime | null | undefined,
   ): Promise<SessionOptions> {
-    const skills = this.deps.skills?.(record.agentId) ?? {}
     const projectMcp = this.projectMcpGate(sessionId)
     const projectHooks = this.projectHooksGate(sessionId)
     const own = this.kettuServers(sessionId, record, runtime)
     const kettuService = this.kettuService(sessionId, record, runtime)
-    const memory = await this.memoryFor(sessionId, record, own.length > 0 || kettuService !== null)
+    const reached = own.length > 0 || kettuService !== null
+    const skills = (await this.deps.skills?.(record.agentId, reached)) ?? {}
+    const memory = await this.memoryFor(sessionId, record, reached)
     return {
       mcpServers: [...own, ...this.libraryServers(sessionId, record, runtime, own)],
       ...skills,
@@ -3423,7 +3436,7 @@ export class SessionManager {
   private applyOutput(live: Live, output: MapperOutput): void {
     if (live.closing) return
     if (output.patches.length > 0) this.emit(live, output.patches)
-    // A compacted context lost the memory sent ahead of a prompt, so the next prompt sends it again.
+    // A compacted context lost what went ahead of a prompt, so the next prompt sends it again.
     if (
       !live.replaying &&
       live.record.memorySentTo !== undefined &&
@@ -5017,9 +5030,18 @@ export class SessionManager {
     this.configChanged(agentId)
   }
 
-  /** Kettu's memory was turned on or off: every prepared session started with the old setting. */
+  /**
+   * Kettu's memory was turned on or off: every prepared session started with the old setting, and
+   * an open session that takes it ahead of its prompts gets it with its next one.
+   */
   memorySwitched(): void {
-    for (const live of [...this.live.values()]) if (live.prepared) void this.dropPrepared(live)
+    for (const live of [...this.live.values()]) {
+      if (live.prepared) void this.dropPrepared(live)
+      else if (live.record.memorySentTo !== undefined) {
+        delete live.record.memorySentTo
+        this.persist(live)
+      }
+    }
   }
 
   /**
@@ -6394,18 +6416,25 @@ export class SessionManager {
   }
 
   /**
-   * The memory text that goes ahead of the prompt, before anything carried, for an agent that
-   * takes it in no instructions of the session's own: with the first prompt its own session gets,
-   * and again after its context was compacted. The thread shows the message as the user wrote it.
+   * What goes ahead of the prompt, before anything carried, for an agent that takes no
+   * instructions of the session's own: Kettu's guide while the session reaches Kettu's server, and
+   * Kettu's memory while it is on. With the first prompt its own session gets, and again after its
+   * context was compacted; the thread shows the message as the user wrote it.
    */
-  private async memoryAhead(live: Live, connection: AgentConnection): Promise<string | null> {
+  private async aheadText(live: Live, connection: AgentConnection): Promise<string | null> {
     const { record } = live
     if (connection.ownInstructions || record.memorySentTo === record.acpSessionId) return null
     const runtime = this.deps.agents.runtime(record.agentId)
     const tools =
       this.kettuServers(live.id, record, runtime).length > 0 ||
       this.kettuService(live.id, record, runtime) !== null
-    return (await this.memoryFor(live.id, record, tools))?.text ?? null
+    const guide =
+      tools && this.deps.mcp
+        ? `<kettu-guide>\n${this.deps.mcp.guide(record.agentId)}\n</kettu-guide>`
+        : null
+    const memory = (await this.memoryFor(live.id, record, tools))?.text ?? null
+    const ahead = [guide, memory].filter((text): text is string => text !== null)
+    return ahead.length > 0 ? ahead.join('\n\n') : null
   }
 
   /** The agent that had the session before any takeover. */
@@ -7263,16 +7292,14 @@ export class SessionManager {
       const carried = carry
         ? await this.withCarried(live, connection, carry, resolved.wire)
         : resolved.wire
-      // A slash command must open the prompt to be one, so memory waits for the next prompt.
-      const memory = opensWithCommand(resolved.wire)
-        ? null
-        : await this.memoryAhead(live, connection)
+      // A slash command must open the prompt to be one, so what goes ahead waits for the next.
+      const ahead = opensWithCommand(resolved.wire) ? null : await this.aheadText(live, connection)
       if (turn.ended) return
       let wire = carried
-      if (memory) {
+      if (ahead) {
         live.record.memorySentTo = live.record.acpSessionId
         this.persist(live)
-        wire = [{ type: 'text', text: `${memory}\n\n` }, ...carried]
+        wire = [{ type: 'text', text: `${ahead}\n\n` }, ...carried]
       }
       const sending = connection.prompt(live.record.acpSessionId, wire).finally(() => {
         if (live.unansweredCancel === turn) live.unansweredCancel = null

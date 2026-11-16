@@ -2,16 +2,17 @@
 // reaches with a token of its own, or for OpenCode with its process and folder's token. Streamable
 // HTTP in plain JSON, one stateless transport per request.
 
+import { DEVICE_TOOLS, DeviceTools, isDeviceToolName, type DeviceToolDeps } from '../devices/tools'
 import {
-  DEVICE_INSTRUCTIONS,
-  DEVICE_TOOLS,
-  DeviceTools,
-  isDeviceToolName,
-  type DeviceToolDeps,
-} from '../devices/tools'
+  callGuide,
+  GUIDE_TOOL,
+  guidePrompt,
+  guideTool,
+  serviceInstructions,
+  type GuideFlags,
+} from '../guide/guide'
 import {
   isTerminalToolName,
-  TERMINAL_INSTRUCTIONS,
   TERMINAL_TOOLS,
   TerminalTools,
   type TerminalToolDeps,
@@ -30,7 +31,6 @@ import type { McpToolGroup, McpToolSummary } from '@shared/agent-host'
 import {
   isMarketToolName,
   MARKET_AUTO_ALLOW,
-  MARKET_INSTRUCTIONS,
   MARKET_PUBLISH,
   MARKET_TOOLS,
   MARKET_UNLIST,
@@ -41,20 +41,13 @@ import type { LogFn } from '../storage'
 import {
   SessionTools,
   isSessionToolName,
-  SESSION_INSTRUCTIONS,
   SESSION_TOOLS,
   type SessionToolsDeps,
 } from '../session-tools'
-import {
-  BrowserTools,
-  BROWSER_INSTRUCTIONS,
-  BROWSER_TOOLS,
-  isBrowserToolName,
-} from './browser-tools'
+import { BrowserTools, BROWSER_TOOLS, isBrowserToolName } from './browser-tools'
 import {
   isPlanToolName,
   PlanTools,
-  PLAN_INSTRUCTIONS,
   PLAN_PROMPT,
   PLAN_TOOL,
   PLAN_TOOLS,
@@ -62,7 +55,6 @@ import {
 } from '../plan-tool'
 import {
   isWorkflowToolName,
-  WORKFLOW_INSTRUCTIONS,
   WORKFLOW_TOOL_NAMES,
   WORKFLOW_TOOLS,
   WorkflowTools,
@@ -70,16 +62,14 @@ import {
 } from '../workflow/tools'
 import {
   isReportToolName,
-  REPORT_INSTRUCTIONS,
   REPORT_TOOL,
   REPORT_TOOLS,
   ReportTools,
   type ReportToolsDeps,
 } from '../report-tool'
-import { COMPUTER_INSTRUCTIONS, COMPUTER_TOOLS } from '../computer/tools'
+import { COMPUTER_TOOLS } from '../computer/tools'
 import {
   isMemoryToolName,
-  MEMORY_INSTRUCTIONS,
   MEMORY_TOOL_NAMES,
   MEMORY_TOOLS,
   MemoryTools,
@@ -88,14 +78,7 @@ import {
 import { artifactWrite, type ArtifactWrite } from './entries'
 import type { ArtifactData } from './runtime/data'
 import { DATA_TOOLS, DataTools, isDataToolName } from './runtime/data-tools'
-import {
-  ArtifactTools,
-  INSTRUCTIONS,
-  isToolName,
-  TOOLS,
-  type ArtifactToolsDeps,
-  type Caller,
-} from './tools'
+import { ArtifactTools, isToolName, TOOLS, type ArtifactToolsDeps, type Caller } from './tools'
 
 export { SERVICE_NAME }
 export const SERVICE_PATH = '/mcp'
@@ -119,9 +102,6 @@ const SERVICE_TOOLS: Tool[] = [
   ...TERMINAL_TOOLS,
 ]
 
-/** The service's `instructions`: the artifact tools', the session tools' and the browser's. */
-const SERVICE_INSTRUCTIONS = `${INSTRUCTIONS} ${SESSION_INSTRUCTIONS} ${PLAN_INSTRUCTIONS} ${REPORT_INSTRUCTIONS} ${BROWSER_INSTRUCTIONS} ${DEVICE_INSTRUCTIONS} ${TERMINAL_INSTRUCTIONS} ${WORKFLOW_INSTRUCTIONS}`
-
 /** The group each of Kettu's tools is listed in on its server's page in the Marketplace. */
 const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
   (
@@ -139,7 +119,9 @@ const TOOL_GROUPS: ReadonlyMap<string, McpToolGroup> = new Map(
       [REPORT_TOOLS, 'reports'],
       [WORKFLOW_TOOLS, 'workflows'],
     ] as const
-  ).flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const)),
+  )
+    .flatMap(([tools, group]) => tools.map((tool) => [tool.name, group] as const))
+    .concat([[GUIDE_TOOL, 'sessions']]),
 )
 /** The tools that wait for the user's answer in the session before they act. */
 const ASKING_TOOLS: ReadonlySet<string> = new Set([MARKET_PUBLISH, MARKET_UNLIST])
@@ -242,7 +224,7 @@ function newToken(): string {
   return token
 }
 
-function entry(url: string, token: string): McpServer[] {
+function entry(url: string, token: string, prompt: string): McpServer[] {
   return [
     {
       type: 'http',
@@ -260,7 +242,7 @@ function entry(url: string, token: string): McpServer[] {
         ...WORKFLOW_TOOL_NAMES,
         ...MARKET_AUTO_ALLOW,
       ],
-      prompt: PLAN_PROMPT,
+      prompt,
       secret: true,
     },
   ]
@@ -313,7 +295,6 @@ export class ArtifactService {
   /** Why the last `start()` could not listen; cleared once it does. */
   private startError: string | null = null
   private readonly serviceTools: Tool[]
-  private readonly instructions: string
 
   constructor(private readonly deps: ArtifactServiceDeps) {
     this.tools = new ArtifactTools(deps)
@@ -324,9 +305,6 @@ export class ArtifactService {
     this.memoryTools = deps.memory ? new MemoryTools(deps.memory) : null
     this.workflowTools = deps.workflow ? new WorkflowTools(deps.workflow) : null
     this.serviceTools = deps.computer ? [...SERVICE_TOOLS, ...COMPUTER_TOOLS] : SERVICE_TOOLS
-    this.instructions = deps.computer
-      ? `${SERVICE_INSTRUCTIONS} ${COMPUTER_INSTRUCTIONS}`
-      : SERVICE_INSTRUCTIONS
     const browserCall = deps.browserCall
     this.browserTools = new BrowserTools({
       call: (request, caller) =>
@@ -441,10 +419,34 @@ export class ArtifactService {
     return this.deps.market?.on === true
   }
 
+  /** The features that are on, which decide what agents are told and which skills they get. */
+  get guideFlags(): GuideFlags {
+    return {
+      computer: this.deps.computer !== undefined,
+      market: this.marketOn,
+      suggest: this.workflowTools?.suggests ?? false,
+      memory: this.memoryOn,
+    }
+  }
+
+  /**
+   * The paragraph that goes into an agent's own instructions, or ahead of its first prompt: where
+   * Kettu's tools are, and the skills or the guide's topics that say when to use them.
+   */
+  guidePrompt(skills: boolean): string {
+    return guidePrompt(this.guideFlags, skills)
+  }
+
+  /** The prompt an agent that reads the servers' prompts puts into its instructions. */
+  private prompt(): string {
+    return `${guidePrompt(this.guideFlags, true)}\n\n${PLAN_PROMPT}`
+  }
+
   /** What `tools/list` answers now; a step's session alone gets the step's tools. */
   private listedTools(grant?: Grant): Tool[] {
     const sessionId = grant && 'sessionId' in grant ? grant.sessionId : null
     return [
+      guideTool(this.guideFlags),
       ...this.serviceTools,
       ...(this.memoryOn ? MEMORY_TOOLS : []),
       ...(this.marketOn ? MARKET_TOOLS : []),
@@ -470,7 +472,7 @@ export class ArtifactService {
   servers(sessionId: string, project: string): McpServer[] {
     const url = this.url
     if (!url) return []
-    return entry(url, this.sessionGrant(sessionId, project, true).token)
+    return entry(url, this.sessionGrant(sessionId, project, true).token, this.prompt())
   }
 
   /**
@@ -510,7 +512,7 @@ export class ArtifactService {
   folderServers(process: AgentProcess, folder: string, sessionId: string): McpServer[] {
     const url = this.url
     if (!url) return []
-    return entry(url, this.folderGrant(process, folder, sessionId, true).token)
+    return entry(url, this.folderGrant(process, folder, sessionId, true).token, this.prompt())
   }
 
   private folderGrant(
@@ -688,11 +690,8 @@ export class ArtifactService {
   /** A server for one request with the token, as a stateless transport needs. */
   private mcpServer(sdk: Sdk, grant: Grant): Server {
     const { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } = sdk
-    const instructions = [
-      this.instructions,
-      ...(this.memoryOn ? [MEMORY_INSTRUCTIONS] : []),
-      ...(this.marketOn ? [MARKET_INSTRUCTIONS] : []),
-    ].join(' ')
+    const flags = this.guideFlags
+    const instructions = serviceInstructions(flags)
     const server = new sdk.Server(
       { name: SERVICE_NAME, title: 'Kettu', version: this.deps.appVersion },
       { capabilities: { tools: {} }, instructions },
@@ -709,6 +708,7 @@ export class ArtifactService {
           'The call names no session of this agent in this folder',
         )
       }
+      if (name === GUIDE_TOOL) return callGuide(input, flags)
       if (isSessionToolName(name)) {
         try {
           return await this.sessionTools.call(caller, name, input)

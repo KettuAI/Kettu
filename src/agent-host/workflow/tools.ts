@@ -41,13 +41,6 @@ const MAX_PICKS = 10
 const OUTCOME_CHARS = 60
 const ID_CHARS = 64
 
-export const WORKFLOW_INSTRUCTIONS =
-  `A workflow runs a requirement as a task through steps the user approved, each step in its own ` +
-  `session. When a requirement fits one of the workflows ${LIST_WORKFLOWS_TOOL} lists, you may suggest it ` +
-  `with ${SUGGEST_WORKFLOW_TOOL}; the user decides. Write a new workflow with ${CREATE_WORKFLOW_TOOL} only when the ` +
-  `user asks for one. A step's session reports with ${REPORT_TOOL} and picks who does the next ` +
-  `steps with ${PICK_TOOL}.`
-
 const CHECKS_SCHEMA = {
   type: 'array',
   items: {
@@ -110,6 +103,8 @@ export const WORKFLOW_TOOLS: Tool[] = [
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    // Claude Code defers MCP tools behind a search; an entry tool must be listed from the start.
+    _meta: { 'anthropic/alwaysLoad': true },
   },
   {
     name: CREATE_WORKFLOW_TOOL,
@@ -327,6 +322,11 @@ function checksText(lines: { check: string; ok: boolean; detail: string | null }
 export class WorkflowTools {
   constructor(private readonly deps: WorkflowToolsDeps) {}
 
+  /** Whether the user lets agents suggest workflows, which lists the tools for it. */
+  get suggests(): boolean {
+    return this.deps.library.suggest
+  }
+
   /** The tools the session sees: a step's own two, or the others. */
   listed(sessionId: string | null): Tool[] {
     if (sessionId !== null && this.deps.isStep(sessionId)) {
@@ -335,7 +335,7 @@ export class WorkflowTools {
     return WORKFLOW_TOOLS.filter(
       (tool) =>
         tool.name === CREATE_WORKFLOW_TOOL ||
-        (this.deps.library.suggest && SUGGEST_TOOL_NAMES.includes(tool.name)),
+        (this.suggests && SUGGEST_TOOL_NAMES.includes(tool.name)),
     )
   }
 

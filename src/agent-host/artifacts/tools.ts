@@ -10,7 +10,6 @@ import {
 import {
   ARTIFACT_ENTRY,
   ARTIFACT_PATH_CHARS,
-  ARTIFACT_RESERVED,
   artifactFileType,
   artifactPathProblem,
   caseClash,
@@ -77,114 +76,6 @@ const MINUTE_MS = 60_000
 const MIB = 1024 * 1024
 /** The paths a refusal names when it lists a version's files. */
 const LISTED_PATHS = 20
-
-const CDNS =
-  'cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh, cdn.tailwindcss.com, ' +
-  'fonts.googleapis.com and fonts.gstatic.com'
-
-/** What read_artifact_guide answers, by topic. */
-export const GUIDE = {
-  files:
-    `An artifact is a set of files: ${ARTIFACT_ENTRY}, the page Kettu opens, and the styles, ` +
-    'scripts, images, fonts and data it uses, which it loads by relative paths such as ' +
-    '`styles/app.css` or `./data/sales.json`, never starting with `/`. A path uses `/` between ' +
-    'folders and has no `.` or `..` segment, backslash, control character or any of : * ? " < > |. ' +
-    'Paths are case-sensitive, and no two may differ only in case. Paths starting with ' +
-    `\`${ARTIFACT_RESERVED}\` are Kettu's. Scripts, styles and fonts may also load from ${CDNS}; ` +
-    'nothing else loads, so bring any other library or asset as a file of the artifact. Draw icons ' +
-    'in the page itself, as inline `<svg>` or as `<symbol>`s in the page used with ' +
-    '`<use href="#id">`, never with `<use>` from a separate sprite file: Kettu loads that whole ' +
-    'file again for each icon. Give each ' +
-    "file's text in content, at most 5 MiB, or in source the path of a file in your working " +
-    'directory, at most 20 MiB, which Kettu reads itself: use source for images, fonts and large ' +
-    'or binary files, so their bytes never pass through you; one call carries at most 16 MiB in ' +
-    'all. HTML files must be UTF-8. A version ' +
-    `holds at most ${VERSION_FILES} files and 64 MiB. update_artifact changes only the files it ` +
-    'names. read_artifact lists the files of a version and returns the text of one at a time; ' +
-    'images and other binary files are listed, not returned.',
-  canvas:
-    'A canvas holds several pages side by side, such as design options, the screens of a flow or ' +
-    'slides. Make it with files: one HTML file per page, which loads what the pages share by ' +
-    `relative paths, and ${CANVAS_FILE}, which lays them out, such as ` +
-    '`{"canvases": [{"id": "flow", "name": "Sign-up flow"}, {"id": "done", "name": "All set"}], ' +
-    '"pages": [{"id": "welcome", "canvas": "flow", "name": "Welcome", "file": "welcome.html", ' +
-    '"width": 1440, "height": 900}]}`. An id is 1 to 64 letters, digits, - or _. width and height ' +
-    "are the page's viewport in CSS pixels, 64 to 8000, 1280 by 800 if left out; x and y place it " +
-    'and may be left out, so Kettu puts it after the other pages of its canvas. Canvases are shown ' +
-    'one at a time, as the pages of a design tool: put pages that belong side by side on one canvas ' +
-    'and others on a canvas of their own; a canvas may be left out of a page when there is one. The ' +
-    "user's interface calls a canvas a page and a page a frame, so when the user speaks of a page " +
-    'they may mean a canvas. Plan the canvases and the page names first, then write one page per ' +
-    'file: never put several pages in one file, and keep shared styles in shared files but the ' +
-    'icons in each page (topic files). Once the ' +
-    `canvas exists, change its layout with canvas operations in update_artifact rather than by rewriting ${CANVAS_FILE}: ` +
-    '`{"op": "add", "object": {"type": "page", "id": "privacy", "name": "Privacy", "file": ' +
-    '"privacy.html", "canvas": "flow"}}` (also type canvas or note), `{"op": "set", ' +
-    '"id": "welcome", "key": "x", "value": 0}`, `{"op": "remove", "id": "privacy"}` or `{"op": ' +
-    '"order", "id": "welcome", "index": 0}`. They merge with what the user does on the canvas ' +
-    `meanwhile, while a ${CANVAS_FILE} written as a file is refused when the user changed the ` +
-    "layout since your base version. Write a page's file in the call that adds the page. The user " +
-    'may draw notes on the canvas: text, stickies, pen strokes, shapes and arrows between pages; ' +
-    `read ${CANVAS_FILE} to see them, and once you have done what a sticky asks, set its done to ` +
-    'true. A page may declare parameters the user can tweak on the canvas, in a ' +
-    '`<script type="application/json" data-kettu-params>` in its head such as `{"accent": {"type": ' +
-    '"color", "label": "Accent", "value": "#0060e2"}}`; a type is color, text, number (with min, max ' +
-    'and step), boolean or choice (with options), and a name is lowercase letters, digits and -. ' +
-    "Kettu sets each one as a CSS variable such as `--accent` on the page's root and as an " +
-    'attribute such as `data-accent` on `<html>`, so style the page with them.',
-  runtime:
-    'A page asks Kettu for more than a static page can do with `await kettu.use(name)`, which ' +
-    'resolves to an object of functions, or to null when the artifact does not declare the ' +
-    'capability, the user did not allow it, or the page runs where it is not offered, such as a ' +
-    'published link. Always check for null and keep the page useful without it. Declare what ' +
-    'the pages use in capabilities when you create or update the artifact; the declaration ' +
-    'belongs to the version, and changing it makes a new one. ' +
-    "db, the artifact's own documents, which you read and write too with read_artifact_data and " +
-    "write_artifact_data: `const db = await kettu.use('db')`; `db.get(collection, id)` gives " +
-    '`{collection, id, value, version, updatedAt}` or null; `db.set(collection, id, value, ' +
-    '{baseVersion})`, `db.update(collection, id, patch, {baseVersion})` and `db.delete(collection, ' +
-    'id, {baseVersion})` refuse with code conflict when baseVersion is not the version read (0 ' +
-    'for a new document); `db.list(collection, {after, limit})` gives `{docs, next}`; ' +
-    "`db.query(collection, {where: [['done', '==', false], ['due', '<', 20]], orderBy: ['due', " +
-    "'asc'], limit})` gives the documents; `db.collections()`; `const stop = db.watch(collection, " +
-    "change => ...)` gets each change, `{type: 'set', collection, id, value, version}` or " +
-    "`{type: 'delete', collection, id}`, the page's own and yours. A document is at most 1 MiB of " +
-    "JSON and an artifact's data at most 256 MiB; the user is not asked. " +
-    "files, the project's folder, read-only: `const files = await kettu.use('files')`; " +
-    "`await files.list('src')` gives `[{name, path, type, size}]` with type file or folder; " +
-    "`await files.read('package.json')` gives its text, `files.read('logo.png', {as: 'bytes'})` a " +
-    'Uint8Array. Nothing under .git, at most 20 MiB a file, and null for an artifact under No ' +
-    'project; the user is asked once. ' +
-    "sample, one question to the user's agent: `const sample = await kettu.use('sample')`; " +
-    "`await sample.ask(question, {onText: t => ...})` gives the answer's text, streamed to " +
-    "onText as it comes; `{format: 'json'}` gives the parsed JSON, and `images: ['data:image/png;" +
-    "base64,...']` adds up to 4 images. Each question stands alone, with no tools, files or " +
-    'memory of the last, at most two at a time and ten a minute; the user is asked once. ' +
-    'An artifact that declares files or sample loads nothing from the CDNs: bring every ' +
-    'library, style and font as a file of the artifact. A refused call rejects with ' +
-    '`{code, message}`, code one of not_declared, not_allowed, unsupported, invalid, too_large, ' +
-    'rate_limited, conflict, not_found or failed.',
-} as const
-
-type GuideTopic = keyof typeof GUIDE
-
-/** The service's `instructions`, which an agent reads when it connects. */
-export const INSTRUCTIONS =
-  'Kettu shows artifacts to the user: pages for them to look at or use, such as reports, slide ' +
-  `decks, design options and prototypes, each a set of files whose entry page is ${ARTIFACT_ENTRY}. ` +
-  'Use create_artifact for something the user should see, not for files of the project you are ' +
-  'working on. Files have relative paths, and paths starting with ' +
-  `${ARTIFACT_RESERVED} are Kettu's; scripts, styles and fonts load only from the artifact's own ` +
-  `files and from ${CDNS}. For a page that is one HTML file, create_artifact with html is enough; ` +
-  'read_artifact_guide explains adding styles, scripts, images and other files (topic files) and ' +
-  'laying out several pages on a canvas (topic canvas). A document or a slide deck is made from ' +
-  'a type instead, which Kettu shows and exports: list_artifact_types, read_artifact_type, then ' +
-  'create_artifact_from_type. To change an artifact, read it, then call update_artifact with the ' +
-  'version you read; if it changed since, read it again. A page can keep data, read the ' +
-  "project's files and ask the user's agent through kettu.use, which gives null where that is " +
-  'not allowed, so check before use (topic runtime). The user may also edit an artifact and ' +
-  'leave comments on it: read_comments shows them; once you have changed what one asks, say ' +
-  'what you changed with reply_comment and close it with resolve_comment.'
 
 export type ToolErrorCode =
   'not_found' | 'deleted' | 'conflict' | 'edit_not_found' | 'too_large' | 'invalid' | 'rate_limited'
@@ -302,7 +193,7 @@ const CAPABILITIES: Schema = {
   items: { type: 'string', enum: [...DECLARED_CAPABILITIES] },
   uniqueItems: true,
   description:
-    'What the pages use through kettu.use; read_artifact_guide topic runtime explains them.',
+    'What the pages use through kettu.use; read_kettu_guide topic runtime explains them.',
 }
 const NOTE: Schema = {
   type: 'string',
@@ -368,7 +259,7 @@ export const TOOLS: Tool[] = [
     description:
       'Makes a new artifact at version 1 and returns its id, which update_artifact and ' +
       `read_artifact take. Give html for a page of one file, or files with ${ARTIFACT_ENTRY} ` +
-      'among them; read_artifact_guide explains files and canvases of several pages.',
+      'among them; read_kettu_guide explains files and canvases of several pages.',
     inputSchema: object(
       {
         title: TITLE,
@@ -381,6 +272,8 @@ export const TOOLS: Tool[] = [
     ),
     outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
+    // Claude Code defers MCP tools behind a search; an entry tool must be listed from the start.
+    _meta: { 'anthropic/alwaysLoad': true },
   },
   {
     name: 'read_artifact',
@@ -456,7 +349,7 @@ export const TOOLS: Tool[] = [
       'stay as they are, and when any part fails nothing changes. Each edit replaces old_text, ' +
       'which must occur exactly once in its file as the files and edits before it left it. Or ' +
       'give a title alone to rename it, which makes no version. For a canvas, canvas changes its ' +
-      'layout with operations (read_artifact_guide topic canvas).',
+      'layout with operations (read_kettu_guide topic canvas).',
     inputSchema: object(
       {
         id: ID,
@@ -492,7 +385,7 @@ export const TOOLS: Tool[] = [
           items: { type: 'object' },
           description:
             `Operations on a canvas's ${CANVAS_FILE}, applied in order after files: add, set, ` +
-            'remove or order (read_artifact_guide topic canvas).',
+            'remove or order (read_kettu_guide topic canvas).',
         },
         title: TITLE,
         note: NOTE,
@@ -501,20 +394,6 @@ export const TOOLS: Tool[] = [
     ),
     outputSchema: output({ id: ID, version: VERSION, pages: PAGES }),
     annotations: { ...ON_ARTIFACTS, destructiveHint: false, idempotentHint: false },
-  },
-  {
-    name: 'read_artifact_guide',
-    title: 'Read artifact guide',
-    description:
-      'Explains how to write artifacts, by topic: files (styles, scripts, images, paths and ' +
-      'limits), canvas (several pages in one artifact) or runtime (data, project files and ' +
-      "questions to the user's agent through kettu.use).",
-    inputSchema: object(
-      { topic: { type: 'string', enum: Object.keys(GUIDE), description: 'What to read about.' } },
-      ['topic'],
-    ),
-    outputSchema: output({ topic: { type: 'string' }, text: { type: 'string' } }),
-    annotations: { ...ON_ARTIFACTS, readOnlyHint: true },
   },
   {
     name: 'list_artifacts',
@@ -1145,8 +1024,6 @@ export class ArtifactTools {
             'note',
           ]),
         )
-      case 'read_artifact_guide':
-        return Promise.resolve(this.guide(args(input, ['topic'])))
       case 'list_artifacts':
         return this.list(caller, args(input, ['query', 'limit']))
       case 'delete_artifact':
@@ -1639,7 +1516,7 @@ export class ArtifactTools {
           (!reached.files.some((f) => f.path === CANVAS_FILE) && reached.version.pages < 2))
       ) {
         throw invalid(
-          `${artifactId} is not a canvas, so it takes no canvas operations; read_artifact_guide ` +
+          `${artifactId} is not a canvas, so it takes no canvas operations; read_kettu_guide ` +
             'topic canvas explains making one.',
         )
       }
@@ -1721,15 +1598,6 @@ export class ArtifactTools {
         { id: artifactId, version, pages: draft.pages },
       )
     }
-  }
-
-  private guide(o: Args): CallToolResult {
-    const topic = o.topic
-    if (typeof topic !== 'string' || !Object.hasOwn(GUIDE, topic)) {
-      throw invalid(`topic must be one of ${Object.keys(GUIDE).join(', ')}.`)
-    }
-    const text = GUIDE[topic as GuideTopic]
-    return result(text, { topic, text })
   }
 
   private async list(caller: Caller, o: Args): Promise<CallToolResult> {

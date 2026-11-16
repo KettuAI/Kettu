@@ -327,8 +327,9 @@ export interface SessionRecord {
   /** A worktree its agent made for a subagent, which Kettu shows and never removes. */
   agentWorktree?: { path: string; branch: string | null }
   /**
-   * The agent's own session that got Kettu's memory ahead of a prompt, for an agent that takes it
-   * no other way; cleared when that session's context is compacted, so the next prompt carries it.
+   * The agent's own session that got Kettu's guide and memory ahead of a prompt, for an agent that
+   * takes them no other way; cleared when that session's context is compacted, so the next prompt
+   * carries them.
    */
   memorySentTo?: string
 }

@@ -242,12 +242,19 @@ export interface AgentOwnSkill {
   plugin: string | null // the plugin it came with, by id
 }
 
+/** A skill Kettu ships, handed to every agent that reaches Kettu's own server; never removed. */
+export interface BuiltinSkill {
+  name: string
+  description: string
+}
+
 export interface MarketSkills {
   catalog: CatalogSkill[]
   own: AgentOwnSkill[]
   error: string | null // the repositories that could not be read and why; theirs come from the cache
   stale?: boolean // as MarketCatalog's
   repositories?: SkillRepository[] // in the catalog's order; absent from older hosts
+  builtIn?: BuiltinSkill[] // Kettu's own, for the features that are on; absent from older hosts
 }
 
 /** The harnesses that install plugins themselves. */
