@@ -157,6 +157,11 @@
       "days": "{{count}} 天"
     },
     "windowUsed": "{{window}}：已用 {{percent}}%。",
+    "prepaidBalance": "预付余额",
+    "units": {
+      "credits": "积分",
+      "premiumRequests": "高级请求"
+    },
     "showMore_other": "再显示 {{count}} 个",
     "showFewer": "收起",
     "near_other": "· {{count}} 个接近上限"

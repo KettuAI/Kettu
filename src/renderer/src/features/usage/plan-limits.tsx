@@ -7,7 +7,7 @@ import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { PlanRings } from '@renderer/components/plan-rings'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { countdown, planReset } from '@renderer/features/sidebar/plan-usage'
-import { limitLabel, longAgo, shortAgo } from '@renderer/lib/format'
+import { limitLabel, longAgo, planAmount, planBalance, shortAgo } from '@renderer/lib/format'
 import { errorMessage } from '@renderer/lib/host'
 import { currentLocale } from '@renderer/lib/i18n'
 import type { LimitWay } from '@renderer/lib/plan-readings'
@@ -154,6 +154,24 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
   const failed = card.state === 'failed'
   const shortName = useShortWindow()
   const where = [...new Set(card.places.map((place) => hostName(place.hostId)))]
+  const balanceRows = (card.balances ?? []).map((balance) => (
+    <span key={`${balance.label}/${balance.currency}`} className="k-u-plan__balance">
+      <span>
+        {balance.label === 'Prepaid balance' ? t('limits.prepaidBalance') : balance.label}
+      </span>
+      <b>
+        {planBalance(
+          balance.amount,
+          balance.currency,
+          balance.currency === 'credits'
+            ? t('limits.units.credits')
+            : balance.currency === 'requests'
+              ? t('limits.units.premiumRequests')
+              : balance.currency,
+        )}
+      </b>
+    </span>
+  ))
   const age = !failed && card.readAt !== null && now - card.readAt > STALE && (
     <span className="k-u-plan__age" title={t('limits.read', { ago: longAgo(card.readAt, now) })}>
       <Icon icon={Clock01Icon} size={12} />
@@ -180,13 +198,17 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
           <span aria-hidden className="k-u-plan__reading">
             <span className="k-u-bone" style={{ width: '80%' }} />
             <span className="k-u-bone" style={{ width: '60%' }} />
+            {balanceRows}
           </span>
         </div>
       ) : card.rings.length === 0 ? (
         <div className="k-u-plan__body">
           <span aria-hidden className="k-u-rings--empty" />
-          <span className="k-u-plan__none" data-failed={failed || undefined}>
-            {failed ? t('limits.neverRead') : t('limits.notYet')}
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="k-u-plan__none" data-failed={failed || undefined}>
+              {failed ? t('limits.neverRead') : t('limits.notYet')}
+            </span>
+            {balanceRows}
           </span>
         </div>
       ) : (
@@ -206,24 +228,43 @@ function PlanCard({ card, named, now }: { card: UsageCard; named: boolean; now: 
               const name = limitLabel(ring.limit)
               const reset =
                 ring.limit.resetsAt === null ? null : planReset(ring.limit.resetsAt, now)
+              const unit =
+                ring.limit.amount?.unit === 'credits'
+                  ? t('limits.units.credits')
+                  : ring.limit.amount?.unit === 'requests'
+                    ? t('limits.units.premiumRequests')
+                    : ring.limit.amount?.unit
               return (
-                <span key={ring.limit.window} className="k-u-plan__line">
-                  <span aria-hidden className="k-u-plan__win">
-                    {shortName(ring.limit)}
+                <div key={ring.limit.window} className="k-u-plan__window">
+                  <span className="k-u-plan__line">
+                    <span aria-hidden className="k-u-plan__win">
+                      {shortName(ring.limit)}
+                    </span>
+                    <b aria-hidden className="k-num" data-level={ring.level}>
+                      {ring.reached && ring.limit.resetsAt! > now
+                        ? t('limits.backIn', { time: countdown(ring.limit.resetsAt! - now)! })
+                        : `${ring.percent}%`}
+                    </b>
+                    {reset && <small aria-hidden>{reset}</small>}
+                    <span className="sr-only">
+                      {t('limits.windowUsed', { window: name, percent: ring.percent })}
+                      {reset && ` ${reset}`}
+                    </span>
                   </span>
-                  <b aria-hidden className="k-num" data-level={ring.level}>
-                    {ring.reached && ring.limit.resetsAt! > now
-                      ? t('limits.backIn', { time: countdown(ring.limit.resetsAt! - now)! })
-                      : `${ring.percent}%`}
-                  </b>
-                  {reset && <small aria-hidden>{reset}</small>}
-                  <span className="sr-only">
-                    {t('limits.windowUsed', { window: name, percent: ring.percent })}
-                    {reset && ` ${reset}`}
-                  </span>
-                </span>
+                  {ring.limit.amount && (
+                    <span className="k-u-plan__amount">
+                      {planAmount(
+                        ring.limit.amount.used,
+                        ring.limit.amount.total,
+                        ring.limit.amount.unit,
+                        unit ?? ring.limit.amount.unit,
+                      )}
+                    </span>
+                  )}
+                </div>
               )
             })}
+            {balanceRows}
             {failed && card.readAt !== null && (
               <span className="k-u-plan__last">
                 {t('limits.lastRead', { ago: longAgo(card.readAt, now) })}

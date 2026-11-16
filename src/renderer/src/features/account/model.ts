@@ -1,5 +1,5 @@
 import type { AccountStatus } from '@shared/account'
-import type { AgentAccount, PlanLimit } from '@shared/agent-host'
+import type { AgentAccount, PlanLimit, ProviderBalance } from '@shared/agent-host'
 import type { AgentId } from '@shared/thread'
 import type { UpdateStatus } from '@shared/updates'
 import { planName } from '@renderer/features/tray/model'
@@ -56,6 +56,7 @@ export interface CardWindow {
   /** The whole percentage used; 0 once its reset has passed, since the window starts again. */
   percent: number
   level: LimitLevel
+  amount?: PlanLimit['amount']
 }
 
 /** One account's card in the account menu, an OpenCode provider's included. */
@@ -75,6 +76,7 @@ export interface PlanCard {
   windows: CardWindow[]
   /** Every window and the plan, for the card's details. */
   limits: PlanLimit[]
+  balances: ProviderBalance[]
   account: AgentAccount | null
 }
 
@@ -93,6 +95,7 @@ function cardWindows(limits: readonly PlanLimit[], now: number): CardWindow[] {
       model: perModel ? (/^Weekly · (.+)$/.exec(limit.label)?.[1] ?? limit.label) : null,
       percent: stale ? 0 : Math.round(limit.usedPercent),
       level: stale ? 'ok' : limitLevel(limit),
+      ...(limit.amount ? { amount: limit.amount } : {}),
     })
   }
   // A window for one model sits inside the weekly ring it narrows.
@@ -138,7 +141,8 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
       return (agent.providers ?? []).flatMap((provider) => {
         const limits = provider.usage?.limits ?? []
         const windows = cardWindows(limits, now)
-        if (windows.length === 0) return []
+        const balances = provider.usage?.balances ?? []
+        if (windows.length === 0 && balances.length === 0) return []
         return [
           {
             key: `${key}:${provider.id}`,
@@ -150,13 +154,15 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
             tier: null,
             windows,
             limits,
+            balances,
             account: { kind: 'external', label: provider.name, email: null },
           },
         ]
       })
     }
     const windows = cardWindows(limits, now)
-    if (windows.length === 0) return []
+    const balances = agent.balances ?? []
+    if (windows.length === 0 && balances.length === 0) return []
     return [
       {
         key,
@@ -168,6 +174,7 @@ export function planCards(accounts: readonly AccountAgent[], now: number): PlanC
         tier: planTier(agent.account),
         windows,
         limits,
+        balances,
         account: agent.account,
       },
     ]
@@ -185,7 +192,8 @@ export function tightestWindow(card: PlanCard): CardWindow {
   return card.windows.reduce((a, b) => (windowRank(b) > windowRank(a) ? b : a))
 }
 
-const cardRank = (card: PlanCard): number => windowRank(tightestWindow(card))
+const cardRank = (card: PlanCard): number =>
+  card.windows.length > 0 ? windowRank(tightestWindow(card)) : -1
 
 /**
  * The card of the account `key` names: its own, or for an OpenCode agent the tightest of its

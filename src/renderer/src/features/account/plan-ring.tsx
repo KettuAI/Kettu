@@ -50,7 +50,10 @@ function useAccountsWithLimits(): AccountAgent[] {
   const shown = useShownHostAgents()
   const readings = usePlanReadings()
   return useMemo(
-    () => accountAgents(shown, readings).filter((a) => a.limits.length > 0),
+    () =>
+      accountAgents(shown, readings).filter(
+        (a) => a.limits.length > 0 || (a.agent.balances?.length ?? 0) > 0,
+      ),
     [shown, readings],
   )
 }
@@ -108,7 +111,7 @@ export function PlanRing() {
   if (cards.length === 0) return null
 
   const card = current ? currentCard(cards, current.key) : null
-  const tightest = card ? tightestWindow(card) : null
+  const tightest = card?.windows.length ? tightestWindow(card) : null
   const label =
     card && tightest
       ? t('sidebar:account.ring', {

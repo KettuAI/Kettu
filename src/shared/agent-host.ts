@@ -156,6 +156,9 @@ export interface PlanLimit {
   amount?: { used: number; total: number; unit: string }
 }
 
+export type LimitsReason =
+  'vendor-disallows' | 'harness-does-not-offer' | 'administrator-managed' | 'model-provider-managed'
+
 export interface ProviderBalance {
   label: string
   amount: number
@@ -312,7 +315,7 @@ export interface AgentStatus {
   /** A harness's balance at its vendor, read on its own: DeepSeek Harness on an API key. */
   balance?: AgentProvider['usage']
   balances?: ProviderBalance[]
-  limitsReason?: string
+  limitsReason?: LimitsReason
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   detail: string | null // install hint or error message
   installUrl: string | null

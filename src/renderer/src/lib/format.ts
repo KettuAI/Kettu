@@ -244,6 +244,19 @@ export function money(amount: number, currency: string): string {
   return new Intl.NumberFormat(currentLocale(), { style: 'currency', currency }).format(amount)
 }
 
+/** A plan window's used and total amount, or a currency amount for a money-denominated window. */
+export function planAmount(used: number, total: number, unit: string, unitLabel = unit): string {
+  if (/^[A-Z]{3}$/.test(unit)) return `${money(used, unit)} / ${money(total, unit)}`
+  const number = new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 2 })
+  return `${number.format(used)} / ${number.format(total)} ${unitLabel}`
+}
+
+/** A balance expressed either as money or as a count of its own units. */
+export function planBalance(amount: number, unit: string, unitLabel = unit): string {
+  if (/^[A-Z]{3}$/.test(unit)) return money(amount, unit)
+  return `${new Intl.NumberFormat(currentLocale(), { maximumFractionDigits: 2 }).format(amount)} ${unitLabel}`
+}
+
 /** The last part of a path, for either separator. */
 export function basename(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, '')

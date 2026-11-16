@@ -297,6 +297,9 @@ export function UsageGroup({
   // The account's newest reading, which may be another host's.
   const limits = newestLimits(usePlanReadings(), status)
   const observed = Math.max(0, ...limits.map((l) => l.observedAt)) || null
+  const limitsReason = status.limitsReason
+    ? t(`agents.usageReasons.${status.limitsReason}` as 'agents.usageReasons.vendor-disallows')
+    : null
   const actions =
     limits.length > 0 && limitsReadable(status) ? (
       <>
@@ -346,6 +349,8 @@ export function UsageGroup({
             )
           })}
         </RowGroup>
+      ) : limitsReason ? (
+        <p className="k-reading">{limitsReason}</p>
       ) : reading && status.capabilities.reports ? (
         <p className="k-reading">{t('agents.readingUsage')}</p>
       ) : limitsReadable(status) && !running ? (
