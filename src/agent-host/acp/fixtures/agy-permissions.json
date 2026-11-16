@@ -1,0 +1,108 @@
+[
+  {
+    "toolCall": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_1748951000870840191",
+      "name": "mcp_kettu_set_plan",
+      "args": {
+        "steps": [
+          {
+            "content": "A",
+            "status": "in_progress"
+          },
+          {
+            "content": "B",
+            "status": "pending"
+          }
+        ],
+        "toolSummary": "Set plan"
+      },
+      "status": "pending",
+      "kind": "other",
+      "title": "Run mcp_kettu_set_plan",
+      "rawInput": {
+        "steps": [
+          {
+            "content": "A",
+            "status": "in_progress"
+          },
+          {
+            "content": "B",
+            "status": "pending"
+          }
+        ],
+        "toolSummary": "Set plan"
+      }
+    },
+    "options": [
+      {
+        "optionId": "allow",
+        "name": "Allow",
+        "kind": "allow_once"
+      },
+      {
+        "optionId": "deny",
+        "name": "Deny",
+        "kind": "reject_once"
+      }
+    ]
+  },
+  {
+    "toolCall": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_11262555015812703435",
+      "name": "mcp_kettu_remember",
+      "args": {
+        "text": "probe",
+        "toolSummary": "Save probe memory"
+      },
+      "status": "pending",
+      "kind": "other",
+      "title": "Run mcp_kettu_remember",
+      "rawInput": {
+        "text": "probe",
+        "toolSummary": "Save probe memory"
+      }
+    },
+    "options": [
+      {
+        "optionId": "allow",
+        "name": "Allow",
+        "kind": "allow_once"
+      },
+      {
+        "optionId": "deny",
+        "name": "Deny",
+        "kind": "reject_once"
+      }
+    ]
+  },
+  {
+    "toolCall": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "call_8666465540504123530",
+      "name": "mcp_kettu_list_sessions",
+      "args": {
+        "toolSummary": "List sessions"
+      },
+      "status": "pending",
+      "kind": "other",
+      "title": "Run mcp_kettu_list_sessions",
+      "rawInput": {
+        "toolSummary": "List sessions"
+      }
+    },
+    "options": [
+      {
+        "optionId": "allow",
+        "name": "Allow",
+        "kind": "allow_once"
+      },
+      {
+        "optionId": "deny",
+        "name": "Deny",
+        "kind": "reject_once"
+      }
+    ]
+  }
+]

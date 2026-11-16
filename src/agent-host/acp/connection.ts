@@ -59,7 +59,7 @@ import {
   mapSessionUpdate,
   mapTokenTotals,
 } from './mapper'
-import { fromAgy } from './agy-tools'
+import { agyAllowOnce, agyAutoAllowed, fromAgy } from './agy-tools'
 import { forkPointMeta, forksAtMessage } from './fork-point'
 import {
   DELETE_AGAIN_MS,
@@ -300,6 +300,8 @@ export class AcpConnection implements AgentConnection {
   private removal: Removal | null = null
   /** Hidden sessions an agent keeps once prompted: open to read, never to prompt. */
   private readonly unprompted = new Set<string>()
+  /** agy's names for the tools each session's MCP servers run without asking. */
+  private readonly autoAllowed = new Map<string, ReadonlySet<string>>()
   /** The version the agent named in `initialize`. */
   private version: string | null = null
   /** The sign-in in progress, which the next `authenticate` written out runs for. */
@@ -321,6 +323,15 @@ export class AcpConnection implements AgentConnection {
           // Never approve without the user: a request for an unknown session is declined.
           hooks.log('warn', `Permission request for unknown session ${ctx.params.sessionId}`)
           return { outcome: { outcome: 'cancelled' } }
+        }
+        if (this.agy) {
+          // agy asks for every MCP tool; Kettu's own run without asking, as Claude Code's do.
+          const optionId = agyAllowOnce(
+            ctx.params.toolCall,
+            ctx.params.options,
+            this.autoAllowed.get(ctx.params.sessionId),
+          )
+          if (optionId) return { outcome: { outcome: 'selected', optionId } }
         }
         const toolCall = this.agy
           ? (fromAgy(ctx.params.toolCall, true) ?? ctx.params.toolCall)
@@ -423,6 +434,10 @@ export class AcpConnection implements AgentConnection {
       abort: (reason) => writer.abort(reason),
     })
     return { readable, writable }
+  }
+
+  private allowWithoutAsking(sessionId: string, options: SessionOptions): void {
+    if (this.agy) this.autoAllowed.set(sessionId, agyAutoAllowed(options.mcpServers))
   }
 
   /** Whether the agent is agy, whose tool calls take a shape of their own. */
@@ -668,6 +683,7 @@ export class AcpConnection implements AgentConnection {
       }),
     )
     this.readPlan(response._meta)
+    this.allowWithoutAsking(response.sessionId, options)
     if (options.hidden && !promptsHidden(this.removal)) this.unprompted.add(response.sessionId)
     // pi-acp 0.0.34 repeats the startup note its answer carries as the session's first message.
     const startup = (response._meta as { piAcp?: { startupInfo?: unknown } } | null | undefined)
@@ -696,6 +712,7 @@ export class AcpConnection implements AgentConnection {
       }),
     )
     this.readPlan(response._meta)
+    this.allowWithoutAsking(sessionId, options)
     return { config: this.config(response.configOptions, response.modes) }
   }
 
@@ -714,6 +731,7 @@ export class AcpConnection implements AgentConnection {
       }),
     )
     this.readPlan(response._meta)
+    this.allowWithoutAsking(sessionId, options)
     return { config: this.config(response.configOptions, response.modes) }
   }
 
@@ -737,6 +755,7 @@ export class AcpConnection implements AgentConnection {
         ...(forkMeta ? { _meta: forkMeta } : {}),
       }),
     )
+    this.allowWithoutAsking(response.sessionId, options)
     return {
       sessionId: response.sessionId,
       config: this.config(response.configOptions, response.modes),
@@ -745,12 +764,14 @@ export class AcpConnection implements AgentConnection {
 
   async closeSession(sessionId: string): Promise<void> {
     await this.call(() => this.connection.agent.request(methods.agent.session.close, { sessionId }))
+    this.autoAllowed.delete(sessionId)
   }
 
   async deleteSession(sessionId: string): Promise<void> {
     await this.call(() =>
       this.connection.agent.request(methods.agent.session.delete, { sessionId }),
     )
+    this.autoAllowed.delete(sessionId)
   }
 
   async listSessions(

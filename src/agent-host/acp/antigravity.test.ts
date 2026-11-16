@@ -19,6 +19,7 @@ import {
 import type { ConnectionHooks, SessionTarget } from '../connection'
 import { newTurnScope } from '../session-updates'
 import { AcpConnection, inProcessTransport } from './connection'
+import requests from './fixtures/agy-permissions.json'
 import recorded from './fixtures/agy-tools.json'
 
 const TIER = { name: 'Google AI Pro', id: 'g1-pro-tier', upgradeUri: 'https://example.com' }
@@ -100,6 +101,7 @@ function threadTarget() {
   })
   let n = 0
   const scope = newTurnScope()
+  const asked: string[] = []
   const target: SessionTarget = {
     context: () => ({
       thread,
@@ -114,13 +116,14 @@ function threadTarget() {
       thread = applyPatches(thread, output.patches)
     },
     requestPermission: async (request) => {
+      asked.push(request.toolCallId)
       target.apply(request.output)
       return { optionId: 'allow' }
     },
     send: () => {},
     startMode: () => null,
   }
-  return { target, entries: (): ThreadEntry[] => threadEntries(thread) }
+  return { target, asked, entries: (): ThreadEntry[] => threadEntries(thread) }
 }
 
 const update = (sessionId: string, value: unknown) => ({
@@ -243,6 +246,60 @@ describe("agy's tool calls", () => {
         title: 'Run mcp_kettu_set_plan',
         status: 'completed',
       }),
+    ])
+    connection.close()
+  })
+})
+
+describe("agy's permission requests", () => {
+  it("allow Kettu's pre-approved tools once without a card, and ask for any other", async () => {
+    const [plan, remember, list] = requests
+    const command = recorded[0]!
+    const answers: unknown[] = []
+    const { connection } = connect('1.5.9', async (client, sessionId) => {
+      const ask = async (toolCall: { toolCallId: string }, options: unknown[]) => {
+        const progress = { ...toolCall, status: 'in_progress' }
+        await client.notify(methods.client.session.update, update(sessionId, progress))
+        const params = { sessionId, toolCall, options } as never
+        answers.push(await client.request(methods.client.session.requestPermission, params))
+        const done = { ...toolCall, sessionUpdate: 'tool_call_update', status: 'completed' }
+        await client.notify(methods.client.session.update, update(sessionId, done))
+      }
+      await ask(plan!.toolCall, plan!.options)
+      await ask(list!.toolCall, list!.options)
+      await ask(remember!.toolCall, remember!.options)
+      await ask(command, plan!.options)
+    })
+    await connection.initialize('1.0.0')
+    // The set Claude Code and Codex are given for Kettu's service; here without the memory write.
+    const { sessionId } = await connection.newSession('/tmp/agy-probe', {
+      mcpServers: [
+        {
+          type: 'http',
+          name: 'kettu',
+          url: 'http://127.0.0.1:1/mcp',
+          headers: [],
+          autoAllow: ['set_plan', 'list_sessions'],
+        },
+        { type: 'http', name: 'other', url: 'http://127.0.0.1:2/mcp', headers: [], autoAllow: [] },
+      ],
+    })
+    const { target, asked, entries } = threadTarget()
+    connection.register(sessionId, target)
+    await connection.prompt(sessionId, [{ type: 'text', text: 'go' }])
+
+    expect(answers).toEqual([
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+      { outcome: { outcome: 'selected', optionId: 'allow' } },
+    ])
+    // Only the memory write outside the set and the command waited for the user.
+    expect(asked).toEqual([remember!.toolCall.toolCallId, command.toolCallId])
+    expect(entries().map((entry) => (entry.kind === 'tool' ? entry.title : entry.kind))).toEqual([
+      'Run mcp_kettu_list_sessions',
+      'mcp__kettu__remember',
+      'echo hi',
     ])
     connection.close()
   })

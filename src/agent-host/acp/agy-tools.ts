@@ -4,6 +4,7 @@
 
 import type * as acp from '@agentclientprotocol/sdk/unstable'
 import { fenced } from '../codex/mapper'
+import type { McpServer } from '../connection'
 import { isClaudeRowlessCall, isClaudeRowWhenFailed } from '../plan-tool'
 import { SERVICE_NAME } from '../service-name'
 import { toLf } from '../session-updates'
@@ -24,6 +25,31 @@ function record(value: unknown): Record<string, unknown> | null {
 function toolName(update: acp.ToolCallUpdate): string | null {
   const name = (update as { name?: unknown }).name
   return typeof name === 'string' ? name : null
+}
+
+/**
+ * agy's names for the tools a session's MCP servers run without asking, the set Claude Code's and
+ * Codex's settings are given.
+ */
+export function agyAutoAllowed(servers: readonly McpServer[] | undefined): ReadonlySet<string> {
+  return new Set(
+    (servers ?? []).flatMap((server) =>
+      server.type === 'stdio'
+        ? []
+        : (server.autoAllow ?? []).map((tool) => `mcp_${server.name}_${tool}`),
+    ),
+  )
+}
+
+/** The option that allows a call once, for a call of one of those tools; null for any other. */
+export function agyAllowOnce(
+  toolCall: acp.ToolCallUpdate,
+  options: readonly acp.PermissionOption[],
+  allowed: ReadonlySet<string> | undefined,
+): string | null {
+  const name = toolName(toolCall)
+  if (name === null || !allowed?.has(name)) return null
+  return options.find((option) => option.kind === 'allow_once')?.optionId ?? null
 }
 
 /** What a finished command printed, and its exit code; null for a result of another shape. */
