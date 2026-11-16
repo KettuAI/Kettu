@@ -26,6 +26,6 @@ export const ANTIGRAVITY: AgentDefinition = {
   // `authenticate` with this method switches agy to the key in its environment; the key alone
   // does not (agy 1.5.9).
   keySignIn: { method: 'gemini-api-key', variable: 'GEMINI_API_KEY' },
-  // Google and Gemini Enterprise sign in by running `agy` itself.
+  // Google and Gemini Enterprise sign in through agy's own terminal sign-in.
   terminalSignIn: { replaces: ['oauth-personal', 'oauth-business'] },
 }

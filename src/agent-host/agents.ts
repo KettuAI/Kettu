@@ -665,9 +665,10 @@ export class AgentManager {
     h.requiresVersion =
       effective.state === 'available' ? (effective.requires?.version ?? null) : null
     // A binary agent's own version is asked in the background, so detection never waits for it.
+    // A routed program's launch command is the runtime the router runs on, not the program.
     const program =
       h.def.launch.kind === 'binary' && effective.state === 'available'
-        ? (effective.spec?.command ?? null)
+        ? (effective.cli?.path ?? effective.spec?.command ?? null)
         : null
     if (program !== h.binaryProgram) {
       h.binaryProgram = program
@@ -3512,21 +3513,21 @@ export class AgentManager {
       }
     }
     if (terminalSignIn && this.has(agentId)) {
-      const first = authMethods.findIndex((item) => terminalSignIn.replaces.includes(item.id))
       const replaced = authMethods.filter((item) => terminalSignIn.replaces.includes(item.id))
-      if (replaced.length > 0) {
-        authMethods.splice(
-          0,
-          authMethods.length,
-          ...authMethods.filter((m) => !replaced.includes(m)),
-        )
-        authMethods.splice(Math.max(first, 0), 0, {
-          id: `${slot.def.id}-terminal-login`,
-          name: replaced.map((item) => item.name).join(' / '),
-          type: 'terminal',
-          command: formatCommand({ ...display, args: [] }, platform),
-        })
-      }
+      // agy 1.5.9 declares its terminal sign-in itself to a client that runs one; it goes first.
+      const own = authMethods.find((item) => item.type === 'terminal')
+      const kept = authMethods.filter((item) => !replaced.includes(item) && item !== own)
+      const terminal: AgentAuthMethod | null =
+        own ??
+        (replaced.length > 0
+          ? {
+              id: `${slot.def.id}-terminal-login`,
+              name: replaced.map((item) => item.name).join(' / '),
+              type: 'terminal',
+              command: formatCommand({ ...display, args: [] }, platform),
+            }
+          : null)
+      authMethods.splice(0, authMethods.length, ...(terminal ? [terminal] : []), ...kept)
     }
     if (slot.def.id === 'qwen' && this.has(agentId)) {
       authMethods.push({
