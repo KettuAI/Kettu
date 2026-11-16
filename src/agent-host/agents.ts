@@ -390,6 +390,8 @@ class Slot {
   keySignInPending = false
   /** The method a `sharesSignIn` agent is signed in with, as its own files name it; null unknown. */
   signInMethod: string | null = null
+  /** It refused its account as one of its `movedAccounts`, until a sign-in or session succeeds. */
+  accountRefused = false
   idleTimer: ReturnType<typeof setTimeout> | null = null
   progressTimer: ReturnType<typeof setTimeout> | null = null
   lastStatus = ''
@@ -2364,6 +2366,11 @@ export class AgentManager {
       },
       ignored: (sessionId, what) => diagnostics.ignored(agentId, sessionId, what),
       log: (level, message) => diagnostics.log(level, `${slot.name}: ${message}`),
+      accountRefused: () => {
+        if (slot.accountRefused) return
+        slot.accountRefused = true
+        this.emit(slot)
+      },
     }
   }
 
@@ -3119,8 +3126,9 @@ export class AgentManager {
   /** A session request succeeded, so the agent is signed in. */
   signedIn(agentId: AgentId): void {
     const slot = this.slots.get(agentId)
-    if (!slot || slot.signIn === 'signed-in') return
+    if (!slot || (slot.signIn === 'signed-in' && !slot.accountRefused)) return
     slot.signIn = 'signed-in'
+    slot.accountRefused = false
     this.emit(slot)
   }
 
@@ -3169,6 +3177,7 @@ export class AgentManager {
       }
     }
     slot.signIn = 'signed-in'
+    slot.accountRefused = false
     this.emit(slot)
     this.hooks.signedIn(agentId)
     void this.readSignInMethod(slot)
@@ -3605,6 +3614,15 @@ export class AgentManager {
       ...(limitsReason ? { limitsReason } : {}),
       ...(slot.def.sharesSignIn ? { sharesSignIn: true } : {}),
       ...(slot.signInMethod === 'oauth-personal' ? { personalSignIn: true } : {}),
+      ...(slot.def.movedAccounts
+        ? {
+            movedAccounts: {
+              to: slot.def.movedAccounts.to,
+              audience: t(slot.def.movedAccounts.audience),
+              refused: slot.accountRefused,
+            },
+          }
+        : {}),
       limits: [...slot.limits.values()],
       ...(slot.limitsError ? { limitsError: slot.limitsError } : {}),
       detail: slot.detail ?? h.adapterNote,

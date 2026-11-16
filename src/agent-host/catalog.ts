@@ -151,6 +151,12 @@ export interface AgentDefinition {
   startupNote?: true
   /** Pushes `_auth/status_update` as it starts, naming its account. */
   reportsAccount?: boolean
+  /**
+   * Accounts its vendor moved to another harness, which it now refuses: the refusal's words, where
+   * they went, who it is still for, and Kettu's message in place of the refusal, since signing in
+   * again never helps.
+   */
+  movedAccounts?: MovedAccounts
   limitsReason?: LimitsReason
   /**
    * Its agent sign-in methods that send their page as a URL elicitation, which opens on the client
@@ -217,6 +223,13 @@ export function modelNoteOf(
         .replace(/-\d{8}$/, ''),
     )
   return notes?.find((note) => keys.some((key) => note.match.includes(key))) ?? null
+}
+
+export interface MovedAccounts {
+  refusal: RegExp
+  to: HarnessId
+  audience: HostKey
+  refused: HostKey
 }
 
 export function protocolOf(def: AgentDefinition): AgentProtocol {
@@ -294,6 +307,7 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     SIGIT,
     AGORAGENTIC,
     AUTOHAND,
+    ANTIGRAVITY,
     GEMINI,
     COPILOT,
     QWEN,
@@ -313,7 +327,6 @@ export function buildCatalog(fakeAgentPath: string | null): AgentDefinition[] {
     CODEWHALE,
     HARN,
     KIMCHI,
-    ANTIGRAVITY,
     DEVIN,
     CORTEX_CODE,
     CORUST_AGENT,

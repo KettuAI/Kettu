@@ -80,7 +80,14 @@ import {
   toggleTerminal,
   useViewStore,
 } from '@renderer/stores/view'
-import { Fact, ListMeter, SignInNotice, SpendGroup, UsageGroup } from './agent-parts'
+import {
+  Fact,
+  ListMeter,
+  MovedAccountsNotice,
+  SignInNotice,
+  SpendGroup,
+  UsageGroup,
+} from './agent-parts'
 import { AgentProviders, ProviderBalances } from './agent-providers'
 import {
   currentLimits,
@@ -900,6 +907,7 @@ function AgentPageBody({ status }: { status: AgentStatus }) {
             )}
           </p>
         )}
+        {status.movedAccounts?.refused && <MovedAccountsNotice status={status} />}
         {!providerMode && r.kind === 'sign-in' && status.authMethods.length > 0 && (
           <div>
             <SignInNotice

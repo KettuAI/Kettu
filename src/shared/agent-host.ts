@@ -332,6 +332,11 @@ export interface AgentStatus {
   sharesSignIn?: boolean
   /** Signed in with a personal account on a plan whose terms limit third-party apps. */
   personalSignIn?: boolean
+  /**
+   * Accounts its vendor moved to another harness: that harness, who this one is still for, and
+   * whether the agent refused its signed-in account as one of them (Gemini CLI to Antigravity).
+   */
+  movedAccounts?: { to: HarnessId; audience: string; refused: boolean }
   limits: PlanLimit[] // subscription windows, see plan limits in the session model
   limitsError?: string // why the last limits read failed, until one succeeds; `limits` stay
   detail: string | null // install hint or error message

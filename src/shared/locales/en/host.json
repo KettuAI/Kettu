@@ -202,6 +202,7 @@
     "keyInSettings": "{{method}} is set on {{agent}}'s page in Settings › Agents",
     "signInOnComputer": "{{agent}} signs in through a browser on the computer it runs on, so sign in there.",
     "signInCancelled": "The sign-in to {{agent}} was cancelled.",
+    "geminiAccountMoved": "Gemini CLI no longer takes personal Google accounts: Google moved them to Google Antigravity. Use this account in Google Antigravity; Gemini CLI still works with Gemini Code Assist Standard or Enterprise and with paid Gemini API or Vertex AI keys.",
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
     "unreadableLimits": "Kettu could not find plan limits in {{agent}}'s {{command}} reply",
@@ -266,6 +267,7 @@
     "requiresFailed": "{{agent}} could not read the version of {{command}}: {{reason}} {{hint}}",
     "scriptMissing": "{{script}} does not exist.",
     "antigravityInstallNotice": "The official installer puts agy in ~/.local/bin and adds it to PATH in your shell configuration files.",
+    "geminiAudience": "Gemini CLI is for Gemini Code Assist Standard and Enterprise, Code Assist for GitHub, and paid Gemini API or Vertex AI keys. Since June 18, 2026, Google serves personal Google accounts, free or Google AI Pro and Ultra, in Google Antigravity.",
     "hermesInstallNotice": "The official installer adds ~/.local/bin to PATH in your shell configuration files. ACP is included; browser and computer-use components are skipped.",
     "hint": {
       "node": "Install Node.js from nodejs.org, then reload the environment in Settings.",

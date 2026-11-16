@@ -1,0 +1,16 @@
+{
+  "agent": "gemini-cli 0.66.0, signed in with a personal Google AI Pro account, 2026-11-16",
+  "authenticate": {
+    "params": { "methodId": "oauth-personal" },
+    "error": {
+      "code": -32000,
+      "message": "This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google"
+    }
+  },
+  "session/new": {
+    "error": {
+      "code": -32000,
+      "message": "This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products: https://antigravity.google"
+    }
+  }
+}

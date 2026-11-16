@@ -616,6 +616,8 @@
     "couldNotContinue": "{{agent}} 无法继续此会话。",
     "signInToContinue": "登录 {{agent}} 以继续",
     "historyStays": "历史记录会保留在这里，会话会从中断的地方继续。",
+    "accountMoved": "{{agent}} 用不了这个账号",
+    "openHarness": "打开 {{name}}",
     "signIn": "登录…",
     "agentRemoved": "{{agent}} 已移除",
     "agentRemovedBody": "历史仍留在这里。可以在输入框里选另一个 Agent 接着做，或重新添加这个 Agent。",

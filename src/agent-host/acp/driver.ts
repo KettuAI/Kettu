@@ -13,5 +13,6 @@ export const ACP_DRIVER: ProcessDriver = {
       levelsAsModes: def.levelsAsModes ?? false,
       startupNote: def.startupNote ?? false,
       kettuExtension: spec?.kettuExtension === true,
+      ...(def.movedAccounts ? { movedAccounts: def.movedAccounts } : {}),
     }),
 }

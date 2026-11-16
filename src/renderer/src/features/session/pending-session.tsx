@@ -10,13 +10,15 @@ import {
 import { AgentMark } from '@renderer/components/agents/agent-mark'
 import { Button } from '@renderer/components/ui/button'
 import { InputGroup, InputGroupTextarea } from '@renderer/components/ui/input-group'
+import { AccountMovedAlert } from '@renderer/features/agents/moved-accounts'
+import { openHostSettings } from '@renderer/features/settings/host-sections'
 import { HeaderTools } from '@renderer/features/shell/header-tools'
 import { NoDrag, TopBar } from '@renderer/features/shell/top-bar'
 import { usePane } from '@renderer/features/split/pane-context'
 import { useScrollbarGutter } from '@renderer/hooks/use-scrollbar-gutter'
 import { routeOf } from '@renderer/lib/host'
 import { agentName, agentsOn, useAgentsStore } from '@renderer/stores/agents'
-import { newSessionPanel } from '@renderer/stores/view'
+import { newSessionPanel, openHarnessSettings } from '@renderer/stores/view'
 import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import {
   ColumnScroller,
@@ -39,6 +41,11 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
   const installing = useAgentsStore(
     (s) => agentsOn(s, hostId).byId[pending.agentId]?.state === 'installing',
   )
+  const status = useAgentsStore((s) => agentsOn(s, hostId).byId[pending.agentId])
+  const movedTo = status?.movedAccounts?.to
+  const movedToName = useAgentsStore(
+    (s) => (movedTo && agentsOn(s, hostId).byId[movedTo]?.harnessName) || movedTo,
+  )
   const parent = useSessionsStore((s) => (pending.parentId ? s.byId[pending.parentId] : undefined))
   const retry = useCallback(() => retryPendingSession(), [])
   const gutter = useScrollbarGutter()
@@ -54,6 +61,23 @@ export function PendingSessionView({ pending }: { pending: PendingSession }) {
           panel={pending.projectPath ? newSessionPanel(pending.projectPath) : null}
           onRetry={retry}
         />
+      </ColumnScroller>
+    )
+  } else if (error && movedTo && status?.movedAccounts?.refused) {
+    body = (
+      <ColumnScroller>
+        <div className="ks-thread__column mx-auto w-full px-8 pt-8">
+          <AccountMovedAlert
+            agent={name}
+            to={movedToName ?? movedTo}
+            message={error.message}
+            onRetry={retry}
+            onOpen={() => {
+              openHostSettings(hostId)
+              openHarnessSettings(movedTo)
+            }}
+          />
+        </div>
       </ColumnScroller>
     )
   } else if (error) {
