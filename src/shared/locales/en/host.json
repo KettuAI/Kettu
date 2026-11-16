@@ -202,7 +202,7 @@
     "keyInSettings": "{{method}} is set on {{agent}}'s page in Settings › Agents",
     "signInOnComputer": "{{agent}} signs in through a browser on the computer it runs on, so sign in there.",
     "signInCancelled": "The sign-in to {{agent}} was cancelled.",
-    "geminiAccountMoved": "Gemini CLI no longer takes personal Google accounts: Google moved them to Google Antigravity. Use Google Antigravity with this account, or sign Gemini CLI in with a Gemini API or Vertex AI key.",
+    "geminiAccountMoved": "Gemini CLI no longer takes personal Google accounts: Google moved them to Google Antigravity. Use this account in Google Antigravity; Gemini CLI still works with Gemini Code Assist Standard or Enterprise and with paid Gemini API or Vertex AI keys.",
     "noOptions": "{{agent}} gave no models within {{seconds}} s",
     "noLimits": "{{agent}} gave no plan limits within {{seconds}} s",
     "unreadableLimits": "Kettu could not find plan limits in {{agent}}'s {{command}} reply",

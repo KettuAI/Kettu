@@ -200,7 +200,7 @@
     "keyInSettings": "{{method}} 要在设置 › Agent 里 {{agent}} 的页面上填写",
     "signInOnComputer": "{{agent}} 在它所在的电脑上打开浏览器登录，请到那台电脑上登录。",
     "signInCancelled": "{{agent}} 的登录已取消。",
-    "geminiAccountMoved": "Gemini CLI 不再支持个人 Google 账号：Google 已把它们转到 Google Antigravity。请用这个账号使用 Google Antigravity，或者给 Gemini CLI 改用 Gemini API 或 Vertex AI 的 key 登录。",
+    "geminiAccountMoved": "Gemini CLI 不再支持个人 Google 账号：Google 已把它们转到 Google Antigravity。这个账号请在 Google Antigravity 里使用；Gemini CLI 仍可用于 Gemini Code Assist Standard 或 Enterprise，以及付费的 Gemini API 或 Vertex AI key。",
     "noOptions": "{{agent}} 在 {{seconds}} 秒内没有给出模型",
     "noLimits": "{{agent}} 在 {{seconds}} 秒内没有给出套餐限额",
     "unreadableLimits": "Kettu 没能从 {{agent}} 的 {{command}} 回复里读出套餐限额",
