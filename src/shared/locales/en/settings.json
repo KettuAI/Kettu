@@ -1074,9 +1074,11 @@
   },
   "archived": {
     "description": "{{project}} · archived {{when}}",
+    "parent": "Sub-session of “{{title}}”",
     "group": "Archived",
     "restore": "Restore",
     "restored": "Restored to {{project}}",
+    "restoredUnder": "Restored under “{{title}}”",
     "delete": "Delete…",
     "deleted": "The session is deleted",
     "emptyTitle": "No archived sessions",

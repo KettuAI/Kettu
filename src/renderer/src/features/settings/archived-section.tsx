@@ -10,7 +10,7 @@ import { DeleteSessionDialog } from '@renderer/features/sidebar/session-menu'
 import { errorMessage } from '@renderer/lib/host'
 import { mediumAgo } from '@renderer/lib/format'
 import { useNow } from '@renderer/lib/use-now'
-import { sessionTitle } from '@renderer/stores/sessions'
+import { sessionTitle, useSessionsStore } from '@renderer/stores/sessions'
 import { ItemLine, Thing } from './rows'
 import { ControlError, IconAction, SetButton } from './controls'
 
@@ -66,22 +66,33 @@ export function ArchivedRow({
   const near = useNearView(ref, !eager, '.kettu-settings__page')
   const [idle, setIdle] = useState(false)
   const [opened] = useState(Date.now)
+  const parent = useParentTitle(summary)
   useEffect(() => (eager ? undefined : drawWhenIdle(() => setIdle(true))), [eager])
-  if (eager || near || idle) return <FullRow summary={summary} where={where} />
+  if (eager || near || idle) return <FullRow summary={summary} where={where} parent={parent} />
   return (
     <div ref={ref} className="ui-sg-row">
-      <RowThing summary={summary} where={where} now={opened} />
+      <RowThing summary={summary} where={where} parent={parent} now={opened} />
     </div>
   )
+}
+
+/** The title of the session a sub-session belongs to, or null for a top-level one. */
+function useParentTitle(summary: SessionSummary): string | null {
+  return useSessionsStore((s) => {
+    const parent = summary.parentId ? s.byId[summary.parentId] : undefined
+    return parent ? sessionTitle(parent) : null
+  })
 }
 
 function RowThing({
   summary,
   where,
+  parent,
   now,
 }: {
   summary: SessionSummary
   where: string
+  parent: string | null
   now: number
 }) {
   const { t } = useTranslation('settings')
@@ -96,11 +107,20 @@ function RowThing({
           when: summary.archivedAt ? mediumAgo(summary.archivedAt, now) : '',
         })}
       </ItemLine>
+      {parent !== null && <ItemLine>{t('archived.parent', { title: parent })}</ItemLine>}
     </Thing>
   )
 }
 
-function FullRow({ summary, where }: { summary: SessionSummary; where: string }) {
+function FullRow({
+  summary,
+  where,
+  parent,
+}: {
+  summary: SessionSummary
+  where: string
+  parent: string | null
+}) {
   const { t } = useTranslation('settings')
   const now = useNow()
   const [deleting, setDeleting] = useState(false)
@@ -110,14 +130,18 @@ function FullRow({ summary, where }: { summary: SessionSummary; where: string })
     setError(null)
     try {
       await unarchiveSession(summary.id)
-      toast(t('archived.restored', { project: where }))
+      toast(
+        parent === null
+          ? t('archived.restored', { project: where })
+          : t('archived.restoredUnder', { title: parent }),
+      )
     } catch (e) {
       setError(errorMessage(e))
     }
   }
   return (
     <div className="ui-sg-row">
-      <RowThing summary={summary} where={where} now={now} />
+      <RowThing summary={summary} where={where} parent={parent} now={now} />
       <ControlError error={error} />
       <span className="ui-sg-control">
         <SetButton onClick={() => void restore()}>{t('archived.restore')}</SetButton>

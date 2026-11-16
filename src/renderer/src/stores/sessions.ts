@@ -204,7 +204,11 @@ export function sessionArchived(byId: Record<string, SessionSummary>, sessionId:
   return false
 }
 
-/** A host's archived top-level sessions, this computer's by default, latest archived first. */
+/**
+ * A host's archived sessions, this computer's by default, latest archived first: the top-level
+ * ones, and sub-sessions archived on their own while their parent is not. One archived with its
+ * parent stays inside the parent's entry.
+ */
 export function archivedSessions(
   byId: Record<string, SessionSummary>,
   hostId: string | null = null,
@@ -212,7 +216,11 @@ export function archivedSessions(
   return Object.values(byId)
     .filter(
       (s) =>
-        listedOrigin(s) && s.parentId === null && !!s.archivedAt && hostOfSession(s) === hostId,
+        listedOrigin(s) &&
+        s.origin !== 'subagent' &&
+        !!s.archivedAt &&
+        hostOfSession(s) === hostId &&
+        !(s.parentId && sessionArchived(byId, s.parentId)),
     )
     .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0))
 }

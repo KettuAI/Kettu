@@ -1067,9 +1067,11 @@
   },
   "archived": {
     "description": "{{project}} · {{when}}归档",
+    "parent": "“{{title}}”的子会话",
     "group": "已归档",
     "restore": "恢复",
     "restored": "已恢复到 {{project}}",
+    "restoredUnder": "已恢复到“{{title}}”下",
     "delete": "删除…",
     "deleted": "会话已删除",
     "emptyTitle": "没有已归档的会话",
