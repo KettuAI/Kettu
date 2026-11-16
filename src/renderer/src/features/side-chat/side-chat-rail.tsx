@@ -83,7 +83,8 @@ export default function SideChatRail({ sessionId, agentId, hostId, overlay }: Pr
   const count = entries.length
   const last = entries[entries.length - 1]
   const lastLength = last?.answer.length ?? 0
-  const lastCount = useRef(count)
+  // From 0, so the column opens at its newest answer.
+  const lastCount = useRef(0)
   useLayoutEffect(() => {
     const box = scroller.current
     if (!box) return
@@ -158,7 +159,9 @@ export default function SideChatRail({ sessionId, agentId, hostId, overlay }: Pr
       <div className="kc-head">
         <PaneIcon icon={BubbleChatQuestionIcon} size={15} />
         <span className="kc-head__title">{t('sideChat.title')}</span>
-        <span className="kc-head__note">{note}</span>
+        <span className="kc-head__note" title={note}>
+          {note}
+        </span>
         <button
           type="button"
           className="kp-tool kc-head__tool"

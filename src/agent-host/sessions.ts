@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url'
 import {
   ALREADY_ANSWERED,
   REMOVED_WHILE_STARTING,
+  type AgentStatus,
   type AttachmentBytes,
   type ContextBreakdown,
   type ImportableSession,
@@ -8195,9 +8196,21 @@ export class SessionManager {
         (agentId) =>
           agentId !== record.agentId &&
           !this.deps.agents.isDisabled(agentId) &&
-          answersForOthers(agentId),
+          answersForOthers(agentId) &&
+          this.sideUsable(agentId),
       )
       .map((agentId) => ({ agentId, name: this.deps.agents.name(agentId) }))
+  }
+
+  /** An agent the user has and can start: added, installed and shown, not a catalog entry. */
+  private sideUsable(agentId: AgentId): boolean {
+    const status = this.deps.agents.status(agentId)
+    return (
+      status.registered !== false &&
+      !status.uninstalled &&
+      !status.hidden &&
+      !UNUSABLE_STATES.has(status.state)
+    )
   }
 
   /** Stops what the sessions' side questions run and drops what is kept for them. */
@@ -10008,6 +10021,13 @@ function storedSide(
     sideChat: { ...view.sideChat, answerAgent: stored.answerAgent, entries: stored.entries },
   }
 }
+
+// An agent in one of these needs the user before it can answer anything.
+const UNUSABLE_STATES: ReadonlySet<AgentStatus['state']> = new Set([
+  'not-installed',
+  'node-missing',
+  'node-outdated',
+])
 
 const cutAnswer = (text: string): string =>
   text.length > SIDE_ANSWER_CHARS ? text.slice(0, SIDE_ANSWER_CHARS) : text
