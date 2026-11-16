@@ -5,7 +5,7 @@
 import { open, readdir, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import type { Platform } from '@shared/platform'
-import type { AgentId } from '@shared/thread'
+import { harnessOf, type AgentId } from '@shared/thread'
 import { projectsFolder } from './usage/readers/claude'
 
 const MINUTE = 60_000
@@ -21,11 +21,15 @@ const FOLDER_LIMIT = 200
 const SESSION_ID = /^[A-Za-z0-9_-]+$/
 const REMEMBERED = 1_000
 
-/** How long a session's cache lasts, in ms, when the agent's own records say; else null. */
+/**
+ * How long a session's cache lasts, in ms, when the agent's own records say; else null.
+ * `configDir` is the configuration folder the session was created with, null for the default.
+ */
 export type CacheTtlReader = (
   agentId: AgentId,
   projectPath: string,
   acpSessionId: string,
+  configDir: string | null,
 ) => Promise<number | null>
 
 interface Line {
@@ -161,11 +165,11 @@ export function claudeCacheTtl(deps: {
   log(level: 'info' | 'warn' | 'error', message: string): void
 }): CacheTtlReader {
   const found = new Map<string, string>()
-  return async (agentId, projectPath, acpSessionId) => {
-    if (agentId !== 'claude-code') return null
+  return async (agentId, projectPath, acpSessionId, configDir) => {
+    if (harnessOf(agentId) !== 'claude-code') return null
     let file = found.get(acpSessionId)
     if (!file || !(await isFile(file))) {
-      const root = projectsFolder(await deps.env(), deps.home, deps.platform)
+      const root = projectsFolder(await deps.env(), deps.home, deps.platform, configDir)
       file = (await findClaudeTranscript(root, projectPath, acpSessionId)) ?? undefined
       if (!file) return null
       found.delete(acpSessionId)

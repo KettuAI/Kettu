@@ -56,8 +56,14 @@ interface Pending {
   bytes: number
 }
 
-export function projectsFolder(env: ScanContext['env'], home: string, platform: Platform): string {
-  const config = configLocations(AGENT_ID, (name) => env[name], home, platform).find(
+/** `chosen` is an agent's own configuration folder, which wins over the environment's. */
+export function projectsFolder(
+  env: ScanContext['env'],
+  home: string,
+  platform: Platform,
+  chosen: string | null = null,
+): string {
+  const config = configLocations(AGENT_ID, (name) => env[name], home, platform, chosen).find(
     (item) => item.id === 'folder',
   )?.candidates[0]
   if (!config) throw new Error('Claude Code has no configuration folder')
