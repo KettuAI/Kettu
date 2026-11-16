@@ -1,5 +1,9 @@
 import { memo, useState } from 'react'
-import { ArrowDataTransferHorizontalIcon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowDataTransferHorizontalIcon,
+  ArrowRight01Icon,
+  TextCheckIcon,
+} from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -78,6 +82,17 @@ export const TakeoverEntry = memo(function TakeoverEntry({ sessionId, entryId }:
               ? t('takeover.omitted', { count: entry.omitted })
               : t('takeover.whole')}
           </p>
+          {entry.summarize && (
+            <p className="mb-1.5 flex items-center gap-1.5 text-xs text-tertiary">
+              <HugeiconsIcon
+                icon={TextCheckIcon}
+                strokeWidth={1.9}
+                aria-hidden
+                className="size-3.5 shrink-0"
+              />
+              {t('takeover.summarize')}
+            </p>
+          )}
           <pre className="max-h-80 overflow-auto font-sans text-xs/5 whitespace-pre-wrap text-muted-foreground">
             {entry.carried}
           </pre>

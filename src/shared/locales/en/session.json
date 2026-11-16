@@ -625,7 +625,8 @@
     "carried_other": "{{agent}} took over · with {{count}} earlier turns",
     "omitted_one": "What it was given. 1 earlier turn was left out; it can read it with the history tool.",
     "omitted_other": "What it was given. {{count}} earlier turns were left out; it can read them with the history tool.",
-    "whole": "What it was given."
+    "whole": "What it was given.",
+    "summarize": "Asked to summarize the conversation before carrying on"
   },
   "view": {
     "couldntOpen": "Couldn't open this session",
