@@ -17,6 +17,9 @@ patchedDependencies:
   '@shadcn/react@0.3.1':
     hash: d37d944084d6bf7912561042021583dcbb59042a2d4607821b335ed2c8615238
     path: patches/@shadcn__react@0.3.1.patch
+  streamdown@2.7.1:
+    hash: 8f0984a9b6cf258f76d0beef150ece77691ac00182c8d35992196bf84ef3f168
+    path: patches/streamdown@2.7.1.patch
 
 importers:
 
@@ -241,7 +244,7 @@ importers:
         version: 4.5.0
       streamdown:
         specifier: 2.7.1
-        version: 2.7.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 2.7.1(patch_hash=8f0984a9b6cf258f76d0beef150ece77691ac00182c8d35992196bf84ef3f168)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3
@@ -9770,7 +9773,7 @@ snapshots:
 
   stdin-discarder@0.2.2: {}
 
-  streamdown@2.7.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  streamdown@2.7.1(patch_hash=8f0984a9b6cf258f76d0beef150ece77691ac00182c8d35992196bf84ef3f168)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       clsx: 2.1.1
       hast-util-to-jsx-runtime: 2.3.6

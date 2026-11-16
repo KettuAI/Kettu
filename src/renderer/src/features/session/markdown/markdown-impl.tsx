@@ -320,7 +320,9 @@ function MarkdownImpl({
 
 /**
  * affectUI's answer: streamed words rise out of a soft blur. A short stagger and backlog keep the
- * words up with an agent's pace; Streamdown's 40 ms per word falls behind any real stream.
+ * words up with an agent's pace; Streamdown's 40 ms per word falls behind any real stream. Its
+ * 4 ms floor per word is patched out, so text that arrives at once all starts within the backlog
+ * instead of leaving the rest blank for seconds (each CJK character is a word).
  */
 const REVEAL = {
   animation: 'blurIn',
